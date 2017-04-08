@@ -1,0 +1,10 @@
+[package]
+name = "libp2p-host"
+version = "0.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+
+[dependencies]
+multiaddr = "0.2.0"
+futures = "0.1"
+tokio-io = "0.1"
+libp2p-transport = { path = "../libp2p-transport" }
