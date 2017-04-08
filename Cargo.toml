@@ -4,4 +4,4 @@ version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 
 [workspace]
-members = ["libp2p-transport"]
+members = ["libp2p-transport", "libp2p-host"]
