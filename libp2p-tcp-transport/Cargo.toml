@@ -1,10 +1,11 @@
 [package]
-name = "libp2p-transport"
+name = "libp2p-tcp-transport"
 version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 
 [dependencies]
-multiaddr = "0.2.0"
+libp2p-transport = { path = "../libp2p-transport" }
 futures = "0.1"
-tokio-io = "0.1"
+multiaddr = "0.2.0"
 tokio-core = "0.1"
+tokio-io = "0.1"
