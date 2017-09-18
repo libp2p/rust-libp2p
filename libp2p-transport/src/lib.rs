@@ -2,7 +2,6 @@
 
 extern crate futures;
 extern crate tokio_io;
-extern crate tokio_core;
 
 /// Multi-address re-export.
 pub extern crate multiaddr;
@@ -12,7 +11,6 @@ use futures::{IntoFuture, Future};
 use futures::stream::Stream;
 use std::io::Error as IoError;
 use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_core::reactor::Handle;
 
 // Something more strongly-typed?
 pub type ProtocolId = String;
@@ -52,10 +50,10 @@ pub trait Transport {
 
     /// Listen on the given multi-addr.
     /// Returns the address back if it isn't supported.
-    fn listen_on(&mut self, handle: &Handle, addr: Multiaddr) -> Result<Self::Listener, Multiaddr>;
+    fn listen_on(&mut self, addr: Multiaddr) -> Result<Self::Listener, Multiaddr>;
 
     /// Dial to the given multi-addr.
     /// Returns either a future which may resolve to a connection,
     /// or gives back the multiaddress.
-    fn dial(&mut self, handle: &Handle, addr: Multiaddr) -> Result<Self::Dial, Multiaddr>;
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, Multiaddr>;
 }

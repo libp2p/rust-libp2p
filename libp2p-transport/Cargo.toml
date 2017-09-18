@@ -7,4 +7,3 @@ authors = ["Parity Technologies <admin@parity.io>"]
 multiaddr = "0.2.0"
 futures = "0.1"
 tokio-io = "0.1"
-tokio-core = "0.1"
