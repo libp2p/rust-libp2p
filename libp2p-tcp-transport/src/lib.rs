@@ -7,7 +7,7 @@ extern crate futures;
 use std::io::Error as IoError;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tokio_core::reactor::Core;
-use tokio_core::net::{TcpStream, TcpListener};
+use tokio_core::net::{TcpStream, TcpListener, TcpStreamNew};
 use futures::Future;
 use futures::stream::Stream;
 use multiaddr::{Multiaddr, Protocol};
@@ -26,14 +26,14 @@ impl Tcp {
 }
 
 impl Transport for Tcp {
-    /// The raw connection.
-    type RawConn = TcpStream;
+	/// The raw connection.
+	type RawConn = TcpStream;
 
-    /// The listener produces incoming connections.
-    type Listener = Box<Stream<Item=Self::RawConn, Error=IoError>>;
+	/// The listener produces incoming connections.
+	type Listener = Box<Stream<Item=Self::RawConn, Error=IoError>>;
 
-    /// A future which indicates currently dialing to a peer.
-    type Dial = Box<Future<Item=Self::RawConn, Error=IoError>>;
+	/// A future which indicates currently dialing to a peer.
+	type Dial = TcpStreamNew;
 
 	/// Listen on the given multi-addr.
 	/// Returns the address back if it isn't supported.
@@ -53,7 +53,7 @@ impl Transport for Tcp {
 	/// or gives back the multiaddress.
 	fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, Multiaddr> {
 		if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
-			Ok(Box::new(TcpStream::connect(&socket_addr, &self.event_loop.handle())))
+			Ok(TcpStream::connect(&socket_addr, &self.event_loop.handle()))
 		} else {
 			Err(addr)
 		}
