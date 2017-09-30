@@ -6,7 +6,9 @@ extern crate tokio_io;
 /// Multi-address re-export.
 pub extern crate multiaddr;
 
-use futures::*;
+use multiaddr::Multiaddr;
+use futures::{IntoFuture, Future};
+use futures::stream::Stream;
 use std::io::Error as IoError;
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -17,7 +19,7 @@ pub type PeerId = String;
 /// A logical wire between us and a peer. We can read and write through this asynchronously.
 ///
 /// You can have multiple `Socket`s between you and any given peer.
-pub trait Socket: AsyncRead + AsyncWrite { 
+pub trait Socket: AsyncRead + AsyncWrite {
     /// Get the protocol ID this socket uses.
     fn protocol_id(&self) -> ProtocolId;
 
@@ -31,10 +33,8 @@ pub trait Conn {
     type Socket;
 
     /// Initiate a socket between you and the peer on the given protocol.
-    fn make_socket(&self, proto: ProtocolId) -> BoxFuture<Self::Socket, IoError>;
+    fn make_socket(&self, proto: ProtocolId) -> Box<Future<Item=Self::Socket, Error=IoError>>;
 }
-
-pub struct MultiAddr; // stub for multiaddr crate type.
 
 /// A transport is a stream producing incoming connections.
 /// These are transports or wrappers around them.
@@ -50,10 +50,10 @@ pub trait Transport {
 
     /// Listen on the given multi-addr.
     /// Returns the address back if it isn't supported.
-    fn listen_on(&mut self, addr: MultiAddr) -> Result<Self::Listener, MultiAddr>;
+    fn listen_on(&mut self, addr: Multiaddr) -> Result<Self::Listener, Multiaddr>;
 
     /// Dial to the given multi-addr.
     /// Returns either a future which may resolve to a connection,
     /// or gives back the multiaddress.
-    fn dial(&mut self, addr: MultiAddr) -> Result<Self::Dial, MultiAddr>;
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, Multiaddr>;
 }
