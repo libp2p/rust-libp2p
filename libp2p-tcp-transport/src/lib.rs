@@ -84,74 +84,83 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, &Multiaddr>  
 	}
 }
 
-#[test]
-fn multiaddr_to_tcp_conversion() {
-	use std::net::{Ipv6Addr};
+#[cfg(test)]
+mod tests {
+	use super::{Tcp, multiaddr_to_socketaddr};
+	use std;
+	use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+	use tokio_io;
+	use futures::Future;
+	use futures::stream::Stream;
+	use multiaddr::Multiaddr;
+	use transport::Transport;
 
-	assert_eq!(
-		multiaddr_to_socketaddr(&Multiaddr::new("/ip4/127.0.0.1/tcp/12345").unwrap()),
-		Ok(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 12345))
-	);
-	assert_eq!(
-		multiaddr_to_socketaddr(&Multiaddr::new("/ip4/255.255.255.255/tcp/8080").unwrap()),
-		Ok(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)), 8080))
-	);
-	assert_eq!(
-		multiaddr_to_socketaddr(&Multiaddr::new("/ip6/::1/tcp/12345").unwrap()),
-		Ok(SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), 12345))
-	);
-	assert_eq!(
-		multiaddr_to_socketaddr(&Multiaddr::new("/ip6/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/tcp/8080").unwrap()),
-		Ok(SocketAddr::new(IpAddr::V6(Ipv6Addr::new(65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535)), 8080))
-	);
-}
+	#[test]
+	fn multiaddr_to_tcp_conversion() {
+		use std::net::{Ipv6Addr};
 
-#[test]
-fn communicating_between_dialer_and_listener() {
-	use std::io::Write;
+		assert_eq!(
+			multiaddr_to_socketaddr(&Multiaddr::new("/ip4/127.0.0.1/tcp/12345").unwrap()),
+			Ok(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 12345))
+		);
+		assert_eq!(
+			multiaddr_to_socketaddr(&Multiaddr::new("/ip4/255.255.255.255/tcp/8080").unwrap()),
+			Ok(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)), 8080))
+		);
+		assert_eq!(
+			multiaddr_to_socketaddr(&Multiaddr::new("/ip6/::1/tcp/12345").unwrap()),
+			Ok(SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), 12345))
+		);
+		assert_eq!(
+			multiaddr_to_socketaddr(&Multiaddr::new("/ip6/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/tcp/8080").unwrap()),
+			Ok(SocketAddr::new(IpAddr::V6(Ipv6Addr::new(65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535)), 8080))
+		);
+	}
 
-	/// This thread is running the listener
-	/// while the main thread runs the dialer
-	std::thread::spawn(move || {
+	#[test]
+	fn communicating_between_dialer_and_listener() {
+		use std::io::Write;
+
+		/// This thread is running the listener
+		/// while the main thread runs the dialer
+		std::thread::spawn(move || {
+			let addr = Multiaddr::new("/ip4/127.0.0.1/tcp/12345").unwrap();
+			let mut tcp = Tcp::new().unwrap();
+			let handle = tcp.event_loop.handle();
+			let listener = tcp.listen_on(addr).unwrap().for_each(|sock| {
+				// Define what to do with the socket that just connected to us
+				// Which in this case is read 3 bytes
+				let handle_conn = tokio_io::io::read_exact(sock, [0; 3]).map(|(_, buf)| {
+					assert_eq!(buf, [1,2,3])
+				}).map_err(|err| {
+					panic!("IO error {:?}", err)
+				});
+
+				// Spawn the future as a concurrent task
+				handle.spawn(handle_conn);
+
+				Ok(())
+			});
+
+			tcp.event_loop.run(listener).unwrap();
+		});
+		std::thread::sleep(std::time::Duration::from_millis(100));
 		let addr = Multiaddr::new("/ip4/127.0.0.1/tcp/12345").unwrap();
 		let mut tcp = Tcp::new().unwrap();
-		let handle = tcp.event_loop.handle();
-		let listener = tcp.listen_on(addr).unwrap().for_each(|sock| {
-			println!("Listening");
-			// Define what to do with the socket that just connected to us
-			// Which in this case is read 3 bytes
-			let handle_conn = tokio_io::io::read_exact(sock, [0; 3]).map(|(_, buf)| {
-				println!("Actually read {:?}", buf);
-				assert_eq!(buf, [1,2,3])
-			}).map_err(|err| {
-				panic!("IO error {:?}", err)
-			});
-			println!("handling");
-
-			// Spawn the future as a concurrent task
-			handle.spawn(handle_conn);
-
-			Ok(())
-		});
-		println!("starting loop");
-
-		tcp.event_loop.run(listener).unwrap();
-	});
-	let addr = Multiaddr::new("/ip4/127.0.0.1/tcp/12345").unwrap();
-	let mut tcp = Tcp::new().unwrap();
-	// Obtain a future socket through dialing
-	let socket = tcp.dial(addr.clone()).unwrap();
-	// Define what to do with the socket once it's obtained
-	let action = socket.then(|sock| {
-		match sock {
-			Ok(mut s) => {
-				let written = s.write(&[0x1,0x2,0x3]).unwrap();
-				Ok(written)
+		// Obtain a future socket through dialing
+		let socket = tcp.dial(addr.clone()).unwrap();
+		// Define what to do with the socket once it's obtained
+		let action = socket.then(|sock| {
+			match sock {
+				Ok(mut s) => {
+					let written = s.write(&[0x1,0x2,0x3]).unwrap();
+					Ok(written)
+				}
+				Err(x) => Err(x)
 			}
-			Err(x) => Err(x)
-		}
-	});
-	// Execute the future in our event loop
-	tcp.event_loop.run(action).unwrap();
-	std::thread::sleep(std::time::Duration::from_millis(1000));
+		});
+		// Execute the future in our event loop
+		tcp.event_loop.run(action).unwrap();
+		std::thread::sleep(std::time::Duration::from_millis(100));
+	}
 }
