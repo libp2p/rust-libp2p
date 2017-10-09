@@ -2,7 +2,12 @@ extern crate base58;
 
 use base58::ToBase58;
 
+/// A PeerId is a reference to a multihash
+/// Ideally we would want to store the Multihash object directly here but because
+/// the multihash package is lacking some things right now, lets store a reference to
+/// some bytes that represent the full bytes of the multihash
 pub struct PeerId<'a> {
+	/// Rereference to multihash bytes
 	multihash: &'a [u8]
 }
 
@@ -12,6 +17,8 @@ impl<'a> PeerId<'a> {
 		PeerId { multihash: mh }
 	}
 
+	/// Outputs the multihash as a Base58 string,
+	/// this is what we use as our stringified version of the ID
 	pub fn to_base58(&self) -> String {
 		self.multihash.to_base58()
 	}
