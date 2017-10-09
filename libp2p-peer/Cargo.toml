@@ -1,0 +1,10 @@
+[package]
+name = "libp2p-peer"
+version = "0.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+
+[dependencies]
+base58 = "0.1"
+
+[dev-dependencies]
+multihash = "0.6"

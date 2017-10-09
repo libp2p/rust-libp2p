@@ -4,6 +4,7 @@ members = [
     "multistream-select",
     "datastore",
     "libp2p-host",
+    "libp2p-peer",
     "libp2p-transport",
     "libp2p-tcp-transport",
 ]
