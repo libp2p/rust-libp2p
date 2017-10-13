@@ -17,6 +17,9 @@ impl<T> MemoryPeerstore<T> {
 }
 
 impl<T> Peerstore<T> for MemoryPeerstore<T> {
+	fn add_peer(&mut self, peer_id: PeerId, peer_info: PeerInfo<T>) {
+		self.store.insert(peer_id, peer_info);
+	}
 	/// Returns a list of peers in this Peerstore
 	fn peers(&self) -> Vec<&PeerId> {
 		// this is terrible but I honestly can't think of any other way than to hand off ownership
@@ -113,14 +116,16 @@ impl<T> Peerstore<T> for MemoryPeerstore<T> {
 #[cfg(test)]
 mod tests {
 	use peer::PeerId;
-	use super::{Peerstore, MemoryPeerstore};
+	use super::{PeerInfo, Peerstore, MemoryPeerstore};
 
 	#[test]
 	fn insert_get_and_list() {
 		let peer_id = PeerId::new(vec![1,2,3]);
+		let peer_info = PeerInfo::new();
 		let mut peer_store: MemoryPeerstore<u8> = MemoryPeerstore::new();
-		peer_store.put(&peer_id, "test", 123u8);
-		let got = peer_store.get(&peer_id, "test").expect("should be able to fetch");
+		peer_store.add_peer(peer_id.clone(), peer_info);
+		peer_store.put_data(&peer_id, "test".into(), 123u8).unwrap();
+		let got = peer_store.get_data(&peer_id, "test").expect("should be able to fetch");
 		assert_eq!(*got, 123u8);
 	}
 }

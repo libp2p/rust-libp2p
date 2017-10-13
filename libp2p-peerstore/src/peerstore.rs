@@ -21,6 +21,13 @@ pub struct PeerInfo<T> {
 }
 
 impl<T> PeerInfo<T> {
+	pub fn new() -> PeerInfo<T> {
+		PeerInfo {
+			public_key: vec![],
+			addrs: vec![],
+			data: HashMap::new(),
+		}
+	}
 	pub fn get_public_key(&self) -> &[u8] {
 		&self.public_key
 	}
@@ -46,6 +53,9 @@ impl<T> PeerInfo<T> {
 }
 
 pub trait Peerstore<T> {
+	/// Add a peer to this peer store
+	fn add_peer(&mut self, peer_id: PeerId, peer_info: PeerInfo<T>);
+
 	/// Returns a list of peers in this Peerstore
 	fn peers(&self) -> Vec<&PeerId>;
 
