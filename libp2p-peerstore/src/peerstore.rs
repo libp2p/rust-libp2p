@@ -1,56 +1,7 @@
-use std::time;
-use std::collections::{HashMap, HashSet};
 use multiaddr::Multiaddr;
 use peer::PeerId;
-
-error_chain! {
-	errors {
-		NoSuchPeer(p: PeerId) {
-			description("tried operating on Peerstore with unknown PeerID")
-			display("invalid PeerId: '{}'", p)
-		}
-	}
-}
-
-pub type TTL = time::Duration;
-
-pub struct PeerInfo<T> {
-	public_key: Vec<u8>,
-	addrs: Vec<Multiaddr>,
-	data: HashMap<String, T>,
-}
-
-impl<T> PeerInfo<T> {
-	pub fn new() -> PeerInfo<T> {
-		PeerInfo {
-			public_key: vec![],
-			addrs: vec![],
-			data: HashMap::new(),
-		}
-	}
-	pub fn get_public_key(&self) -> &[u8] {
-		&self.public_key
-	}
-	pub fn set_public_key(&mut self, key: Vec<u8>) {
-		self.public_key = key;
-	}
-	pub fn get_addrs(&self) -> &[Multiaddr] {
-		&self.addrs
-	}
-	pub fn set_addrs(&mut self, addrs: Vec<Multiaddr>) {
-		self.addrs = addrs;
-	}
-	pub fn add_addr(&mut self, addr: Multiaddr) {
-		self.addrs.push(addr); // TODO: This is stupid, a more advanced thing using TTLs need to be implemented
-		self.addrs.dedup();
-	}
-	pub fn get_data(&self, key: &str) -> Option<&T> {
-		self.data.get(key)
-	}
-	pub fn set_data(&mut self, key: String, val: T) -> Option<T> {
-		self.data.insert(key, val)
-	}
-}
+use peer_info::PeerInfo;
+use super::TTL;
 
 pub trait Peerstore<T> {
 	/// Add a peer to this peer store
@@ -65,8 +16,8 @@ pub trait Peerstore<T> {
 	/// Try to get a property for a given peer
 	fn get_data(&self, peer_id: &PeerId, key: &str) -> Option<&T>;
 
-	/// Try to set a property for a given peer
-	fn put_data(&mut self, peer_id: &PeerId, key: String, val: T) -> Result<()>;
+	/// Set a property for a given peer
+	fn put_data(&mut self, peer_id: &PeerId, key: String, val: T);
 
 	/// Adds an address to a peer
 	fn add_addr(&mut self, peer_id: &PeerId, addr: Multiaddr, ttl: TTL);

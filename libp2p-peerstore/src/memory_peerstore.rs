@@ -2,6 +2,8 @@ use std::collections::{HashMap, HashSet};
 use std::collections::hash_map;
 use multiaddr::Multiaddr;
 use peer::PeerId;
+use peer_info::PeerInfo;
+use super::TTL;
 use peerstore::*;
 
 pub struct MemoryPeerstore<T> {
@@ -39,14 +41,13 @@ impl<T> Peerstore<T> for MemoryPeerstore<T> {
 			Some(peer_info) => peer_info.get_data(key),
 		}
 	}
-	/// Try to set a property for a given peer
-	fn put_data(&mut self, peer_id: &PeerId, key: String, val: T) -> Result<()> {
+	/// Set a property for a given peer
+	fn put_data(&mut self, peer_id: &PeerId, key: String, val: T) {
 		match self.store.get_mut(peer_id) {
-			None => Err(Error::from_kind(ErrorKind::NoSuchPeer((*peer_id).clone()))),
+			None => (),
 			Some(mut peer_info) => {
 				peer_info.set_data(key, val);
-				Ok(())
-			}
+			},
 		}
 	}
 
