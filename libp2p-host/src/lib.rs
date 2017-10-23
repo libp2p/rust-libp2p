@@ -4,7 +4,8 @@ extern crate futures;
 extern crate libp2p_transport as transport;
 
 use futures::{Future, IntoFuture, BoxFuture};
-use transport::{ProtocolId, MultiAddr, Socket};
+use transport::{ProtocolId, Socket};
+use transport::multiaddr::Multiaddr;
 
 /// Produces a future for each incoming `Socket`.
 pub trait Handler<S: Socket> {
@@ -84,5 +85,5 @@ pub trait Host {
     }
 
     /// Addresses we're listening on.
-    fn listen_addrs(&self) -> Vec<MultiAddr>;
+    fn listen_addrs(&self) -> Vec<Multiaddr>;
 }
