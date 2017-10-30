@@ -19,21 +19,24 @@ pub type PeerId = String;
 /// A logical wire between us and a peer. We can read and write through this asynchronously.
 ///
 /// You can have multiple `Socket`s between you and any given peer.
-pub trait Socket: AsyncRead + AsyncWrite {
+pub trait Socket: AsyncRead + AsyncWrite + Sized {
+    type Conn: Conn<Socket = Self>;
+
     /// Get the protocol ID this socket uses.
     fn protocol_id(&self) -> ProtocolId;
 
     /// Access the underlying connection.
-    fn conn(&self) -> &Conn<Socket=Self>;
+    fn conn(&self) -> &Self::Conn;
 }
 
 /// A connection between you and a peer.
 pub trait Conn {
     /// The socket type this connection manages.
     type Socket;
+    type SocketFuture: IntoFuture<Item = Self::Socket, Error = IoError>;
 
     /// Initiate a socket between you and the peer on the given protocol.
-    fn make_socket(&self, proto: ProtocolId) -> Box<Future<Item=Self::Socket, Error=IoError>>;
+    fn make_socket(&self, proto: ProtocolId) -> Self::SocketFuture;
 }
 
 /// A transport is a stream producing incoming connections.
@@ -43,10 +46,10 @@ pub trait Transport {
     type RawConn: AsyncRead + AsyncWrite;
 
     /// The listener produces incoming connections.
-    type Listener: Stream<Item=Self::RawConn>;
+    type Listener: Stream<Item = Self::RawConn>;
 
     /// A future which indicates currently dialing to a peer.
-    type Dial: IntoFuture<Item=Self::RawConn, Error=IoError>;
+    type Dial: IntoFuture<Item = Self::RawConn, Error = IoError>;
 
     /// Listen on the given multi-addr.
     /// Returns the address back if it isn't supported.
