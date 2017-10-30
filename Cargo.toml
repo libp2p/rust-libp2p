@@ -5,6 +5,11 @@ members = [
     "datastore",
     "libp2p-host",
     "libp2p-peerstore",
+    "libp2p-secio",
     "libp2p-transport",
     "libp2p-tcp-transport",
 ]
+
+[replace]
+# Ring has a feature merged in master that hasn't been published yet ; remove this after 0.12.2
+"ring:0.12.1" = { git = "https://github.com/briansmith/ring" }

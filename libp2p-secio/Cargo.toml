@@ -1,0 +1,15 @@
+[package]
+name = "libp2p-secio"
+version = "0.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+
+[dependencies]
+bytes = "0.4"
+futures = "0.1"
+protobuf = "1.4.2"
+rand = "0.3.17"
+ring = { version = "0.12.1", features = ["rsa_signing"] }
+rust-crypto = "^0.2"
+tokio-core = "0.1.6"
+tokio-io = "0.1.0"
+untrusted = "0.6.0"
