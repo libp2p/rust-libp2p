@@ -27,9 +27,9 @@ impl DecoderState {
         self.shift += 7;
 
         if byte & 0x80 == 0 {
-            Err(self)
-        } else {
             Ok(self.accumulator)
+        } else {
+            Err(self)
         }
     }
 }
@@ -93,7 +93,7 @@ pub fn decode<R: Read>(stream: R) -> io::Result<BigUint> {
         out = out | (BigUint::from(i & 0x7F) << shift);
         shift += 7;
 
-        if i & 0x80 != 0 {
+        if i & 0x80 == 0 {
             finished_cleanly = true;
             break;
         }
