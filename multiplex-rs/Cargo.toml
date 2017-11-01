@@ -1,0 +1,14 @@
+[package]
+name = "multiplex"
+version = "0.1.0"
+authors = ["Vurich <jackefransham@gmail.com>"]
+
+[dependencies]
+bytes = "0.4.5"
+num-traits = "0.1.40"
+num-bigint = "0.1.40"
+tokio-io = "0.1"
+futures = "0.1"
+parking_lot = "0.4.8"
+libp2p-stream-muxer = { path = "../libp2p-stream-muxer" }
+varint = { path = "../varint-rs" }

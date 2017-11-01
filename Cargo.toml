@@ -2,13 +2,15 @@
 members = [
     "multistream-select",
     "datastore",
+    "multihash",
     "example",
     "libp2p-peerstore",
     "libp2p-ping",
     "libp2p-secio",
     "libp2p-swarm",
-    "libp2p-tcp-transport",
     "rw-stream-sink",
+    "varint-rs",
+    "multiplex-rs"
 ]
 
 [replace]
