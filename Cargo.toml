@@ -2,6 +2,6 @@
 members = [
     "multistream-select",
     "libp2p-host",
-    "libp2p-transport",
+    "libp2p-swarm",
     "libp2p-tcp-transport",
 ]

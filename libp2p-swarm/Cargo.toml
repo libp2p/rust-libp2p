@@ -1,5 +1,5 @@
 [package]
-name = "libp2p-transport"
+name = "libp2p-swarm"
 version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 

@@ -1,4 +1,4 @@
-extern crate libp2p_transport as transport;
+extern crate libp2p_swarm as swarm;
 extern crate tokio_core;
 extern crate tokio_io;
 extern crate multiaddr;
@@ -11,7 +11,7 @@ use tokio_core::net::{TcpStream, TcpListener, TcpStreamNew};
 use futures::Future;
 use futures::stream::Stream;
 use multiaddr::{Multiaddr, Protocol};
-use transport::Transport;
+use swarm::Transport;
 
 pub struct Tcp {
     pub event_loop: Core,
@@ -102,7 +102,7 @@ mod tests {
     use futures::Future;
     use futures::stream::Stream;
     use multiaddr::Multiaddr;
-    use transport::Transport;
+    use swarm::Transport;
 
     #[test]
     fn multiaddr_to_tcp_conversion() {
