@@ -3,10 +3,10 @@ members = [
     "multihash",
     "multistream-select",
     "datastore",
-    "libp2p-host",
+    "example",
     "libp2p-peerstore",
     "libp2p-secio",
-    "libp2p-transport",
+    "libp2p-swarm",
     "libp2p-tcp-transport",
     "rw-stream-sink",
 ]

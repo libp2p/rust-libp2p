@@ -1,4 +1,26 @@
-extern crate libp2p_transport as transport;
+// Copyright 2017 Parity Technologies (UK) Ltd.
+// 
+// Permission is hereby granted, free of charge, to any person obtaining a 
+// copy of this software and associated documentation files (the "Software"), 
+// to deal in the Software without restriction, including without limitation 
+// the rights to use, copy, modify, merge, publish, distribute, sublicense, 
+// and/or sell copies of the Software, and to permit persons to whom the 
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in 
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS 
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+// DEALINGS IN THE SOFTWARE.
+
+//! Implementation of the libp2p `Transport` trait for TCP/IP.
+
+extern crate libp2p_swarm as swarm;
 extern crate tokio_core;
 extern crate tokio_io;
 extern crate multiaddr;
@@ -6,20 +28,25 @@ extern crate futures;
 
 use std::io::Error as IoError;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use tokio_core::reactor::Core;
+use tokio_core::reactor::Handle;
 use tokio_core::net::{TcpStream, TcpListener, TcpStreamNew};
 use futures::Future;
 use futures::stream::Stream;
 use multiaddr::{Multiaddr, Protocol};
-use transport::Transport;
+use swarm::Transport;
 
+/// Represents a TCP/IP transport capability for libp2p.
+///
+/// Each `Tcp` struct is tied to a tokio reactor. The TCP sockets created by libp2p will need to
+/// be progressed by running the futures and streams obtained by libp2p through the tokio reactor.
+#[derive(Debug, Clone)]
 pub struct Tcp {
-    pub event_loop: Core,
+    event_loop: Handle,
 }
 
 impl Tcp {
-    pub fn new() -> Result<Tcp, IoError> {
-        Ok(Tcp { event_loop: Core::new()? })
+    pub fn new(handle: Handle) -> Result<Tcp, IoError> {
+        Ok(Tcp { event_loop: handle })
     }
 }
 
@@ -35,11 +62,11 @@ impl Transport for Tcp {
 
     /// Listen on the given multi-addr.
     /// Returns the address back if it isn't supported.
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<Self::Listener, Multiaddr> {
+    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, (Self, Multiaddr)> {
         if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
             Ok(Box::new(
                 futures::future::result(
-                    TcpListener::bind(&socket_addr, &self.event_loop.handle()),
+                    TcpListener::bind(&socket_addr, &self.event_loop),
                 ).map(|listener| {
                     // Pull out a stream of sockets for incoming connections
                     listener.incoming().map(|x| x.0)
@@ -47,18 +74,18 @@ impl Transport for Tcp {
                     .flatten_stream(),
             ))
         } else {
-            Err(addr)
+            Err((self, addr))
         }
     }
 
     /// Dial to the given multi-addr.
     /// Returns either a future which may resolve to a connection,
     /// or gives back the multiaddress.
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, Multiaddr> {
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
         if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
-            Ok(TcpStream::connect(&socket_addr, &self.event_loop.handle()))
+            Ok(TcpStream::connect(&socket_addr, &self.event_loop))
         } else {
-            Err(addr)
+            Err((self, addr))
         }
     }
 }
@@ -98,11 +125,12 @@ mod tests {
     use super::{Tcp, multiaddr_to_socketaddr};
     use std;
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+    use tokio_core::reactor::Core;
     use tokio_io;
     use futures::Future;
     use futures::stream::Stream;
     use multiaddr::Multiaddr;
-    use transport::Transport;
+    use swarm::Transport;
 
     #[test]
     fn multiaddr_to_tcp_conversion() {
@@ -156,9 +184,10 @@ mod tests {
         use std::io::Write;
 
         std::thread::spawn(move || {
+            let mut core = Core::new().unwrap();
             let addr = Multiaddr::new("/ip4/127.0.0.1/tcp/12345").unwrap();
-            let mut tcp = Tcp::new().unwrap();
-            let handle = tcp.event_loop.handle();
+            let tcp = Tcp::new(core.handle()).unwrap();
+            let handle = core.handle();
             let listener = tcp.listen_on(addr).unwrap().for_each(|sock| {
                 // Define what to do with the socket that just connected to us
                 // Which in this case is read 3 bytes
@@ -172,11 +201,12 @@ mod tests {
                 Ok(())
             });
 
-            tcp.event_loop.run(listener).unwrap();
+            core.run(listener).unwrap();
         });
         std::thread::sleep(std::time::Duration::from_millis(100));
         let addr = Multiaddr::new("/ip4/127.0.0.1/tcp/12345").unwrap();
-        let mut tcp = Tcp::new().unwrap();
+        let mut core = Core::new().unwrap();
+        let tcp = Tcp::new(core.handle()).unwrap();
         // Obtain a future socket through dialing
         let socket = tcp.dial(addr.clone()).unwrap();
         // Define what to do with the socket once it's obtained
@@ -188,7 +218,7 @@ mod tests {
             Err(x) => Err(x),
         });
         // Execute the future in our event loop
-        tcp.event_loop.run(action).unwrap();
+        core.run(action).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
 }
