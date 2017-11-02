@@ -10,9 +10,7 @@ fn main() {
     let tcp = Tcp::new(core.handle()).unwrap();
 
     let swarm = swarm::Swarm::with_details(tcp);
-    swarm.listen(swarm::multiaddr::Multiaddr::new("/ip4/0.0.0.0/tcp/10333").unwrap());
+    swarm.listen(swarm::multiaddr::Multiaddr::new("/ip4/127.0.0.1/tcp/10333").unwrap());
 
-    loop {
-        core.turn(None);
-    }
+    core.run(swarm.run()).unwrap();
 }
