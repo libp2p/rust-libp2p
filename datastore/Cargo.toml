@@ -1,0 +1,10 @@
+[package]
+name = "datastore"
+version = "0.1.0"
+authors = ["pierre <pierre.krieger1708@gmail.com>"]
+
+[dependencies]
+base64 = "0.7"
+futures = "0.1"
+serde_json = "1.0"
+tempfile = "2.2"
