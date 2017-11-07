@@ -1,6 +1,7 @@
 extern crate base64;
 #[macro_use]
 extern crate futures;
+extern crate parking_lot;
 extern crate serde_json;
 extern crate tempfile;
 
