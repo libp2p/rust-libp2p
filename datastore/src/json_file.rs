@@ -14,7 +14,7 @@ use std::io::Error as IoError;
 use std::io::ErrorKind as IoErrorKind;
 use std::io::Read;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use parking_lot::Mutex;
 use tempfile::NamedTempFile;
 
 /// Implementation of `Datastore` that uses a single plain JSON file.
@@ -83,7 +83,7 @@ impl JsonFileDatastore {
         ))?;
         let mut temporary_file = NamedTempFile::new_in(self_path_parent)?;
 
-        let content = self.content.lock().unwrap();
+        let content = self.content.lock();
         to_writer(&mut temporary_file, &*content)?;
         temporary_file.sync_data()?;
 
@@ -101,12 +101,12 @@ impl JsonFileDatastore {
 
 impl Datastore for JsonFileDatastore {
     fn put(&self, key: Cow<str>, value: Vec<u8>) {
-        let mut content = self.content.lock().unwrap();
+        let mut content = self.content.lock();
         content.insert(key.into_owned(), Value::String(base64::encode(&value)));
     }
 
     fn get(&self, key: &str) -> Option<Vec<u8>> {
-        let content = self.content.lock().unwrap();
+        let content = self.content.lock();
         // If the JSON is malformed, we just ignore the value.
         content.get(key).and_then(|val| match val {
             &Value::String(ref s) => base64::decode(s).ok(),
@@ -115,12 +115,12 @@ impl Datastore for JsonFileDatastore {
     }
 
     fn has(&self, key: &str) -> bool {
-        let content = self.content.lock().unwrap();
+        let content = self.content.lock();
         content.contains_key(key)
     }
 
     fn delete(&self, key: &str) -> bool {
-        let mut content = self.content.lock().unwrap();
+        let mut content = self.content.lock();
         content.remove(key).is_some()
     }
 
@@ -128,7 +128,7 @@ impl Datastore for JsonFileDatastore {
         &'a self,
         query: Query,
     ) -> Box<Stream<Item = (String, Vec<u8>), Error = IoError> + 'a> {
-        let content = self.content.lock().unwrap();
+        let content = self.content.lock();
 
         let keys_only = query.keys_only;
 
@@ -151,10 +151,13 @@ impl Datastore for JsonFileDatastore {
             Some((key.clone(), value))
         }));
 
+        // `content_stream` reads from the content of the `Mutex`, so we need to clone the data
+        // into a `Vec` before returning.
         let collected = naive_apply_query(content_stream, query)
             .collect()
             .wait()
-            .unwrap();
+            .expect("can only fail if either `naive_apply_query` or `content_stream` produce \
+                     an error, which cann't happen");
         let output_stream = iter_ok(collected.into_iter());
         Box::new(output_stream) as Box<_>
     }
