@@ -1,3 +1,20 @@
+// Copyright 2017 Parity Technologies (UK) Ltd.
+
+// Libp2p-rs is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+
+// Libp2p-rs is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+
+// You should have received a copy of the GNU General Public License
+// along with Libp2p-rs.  If not, see <http://www.gnu.org/licenses/>.
+
+//! Contains the `Listener` wrapper, which allows raw communications with a dialer.
+
 use bytes::BytesMut;
 use futures::{Async, AsyncSink, Future, Poll, Sink, StartSend, Stream};
 use protocol::DialerToListenerMessage;
@@ -89,7 +106,7 @@ impl<R> Sink for Listener<R>
 				}
 			}
 
-			ListenerToDialerMessage::ProtocolsListResponse { list } => {
+			ListenerToDialerMessage::ProtocolsListResponse { list: _list } => {
 				unimplemented!()
 			}
 		}
