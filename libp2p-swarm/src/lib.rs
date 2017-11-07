@@ -17,9 +17,11 @@ use tokio_io::{AsyncRead, AsyncWrite};
 /// Multi-address re-export.
 pub extern crate multiaddr;
 
+mod socket;
 pub mod transport;
 
-pub use self::transport::{ProtocolId, PeerId, Socket, Conn, Transport};
+pub use self::socket::{ProtocolId, PeerId, Socket, Conn};
+pub use self::transport::Transport;
 
 /// A `Swarm` is the core of libp2p. It is what links the various components (transports, security,
 /// multiplex, discovery, etc.) together.
