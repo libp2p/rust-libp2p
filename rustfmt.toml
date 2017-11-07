@@ -14,3 +14,4 @@ format_strings=false
 hard_tabs=true
 wrap_match_arms=false
 error_on_line_overflow=false
+where_style="Legacy"

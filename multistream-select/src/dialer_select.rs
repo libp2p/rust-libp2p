@@ -1,4 +1,3 @@
-
 use ProtocolChoiceError;
 use bytes::Bytes;
 use futures::{Future, Sink, Stream};
@@ -26,11 +25,10 @@ pub fn dialer_select_proto<'a, R, I, M, P>(
 	inner: R,
 	protocols: I,
 ) -> Box<Future<Item = (P, R), Error = ProtocolChoiceError> + 'a>
-where
-	R: AsyncRead + AsyncWrite + 'a,
-	I: Iterator<Item = (Bytes, M, P)> + 'a,
-	M: FnMut(&Bytes, &Bytes) -> bool + 'a,
-	P: 'a,
+	where R: AsyncRead + AsyncWrite + 'a,
+	      I: Iterator<Item = (Bytes, M, P)> + 'a,
+	      M: FnMut(&Bytes, &Bytes) -> bool + 'a,
+	      P: 'a
 {
 	// We choose between the "serial" and "parallel" strategies based on the number of protocols.
 	if protocols.size_hint().1.map(|n| n <= 3).unwrap_or(false) {
@@ -49,10 +47,9 @@ pub fn dialer_select_proto_serial<'a, R, I, P>(
 	inner: R,
 	mut protocols: I,
 ) -> Box<Future<Item = (P, R), Error = ProtocolChoiceError> + 'a>
-where
-	R: AsyncRead + AsyncWrite + 'a,
-	I: Iterator<Item = (Bytes, P)> + 'a,
-	P: 'a,
+	where R: AsyncRead + AsyncWrite + 'a,
+	      I: Iterator<Item = (Bytes, P)> + 'a,
+	      P: 'a
 {
 	let future = Dialer::new(inner)
         .from_err()
@@ -106,11 +103,10 @@ pub fn dialer_select_proto_parallel<'a, R, I, M, P>(
 	inner: R,
 	protocols: I,
 ) -> Box<Future<Item = (P, R), Error = ProtocolChoiceError> + 'a>
-where
-	R: AsyncRead + AsyncWrite + 'a,
-	I: Iterator<Item = (Bytes, M, P)> + 'a,
-	M: FnMut(&Bytes, &Bytes) -> bool + 'a,
-	P: 'a,
+	where R: AsyncRead + AsyncWrite + 'a,
+	      I: Iterator<Item = (Bytes, M, P)> + 'a,
+	      M: FnMut(&Bytes, &Bytes) -> bool + 'a,
+	      P: 'a
 {
 	let future = Dialer::new(inner)
 		.from_err()

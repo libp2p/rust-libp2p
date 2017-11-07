@@ -1,4 +1,3 @@
-
 use ProtocolChoiceError;
 use bytes::Bytes;
 use futures::{Future, Sink, Stream};
@@ -28,11 +27,10 @@ pub fn listener_select_proto<'a, R, I, M, P>(
 	inner: R,
 	protocols: I,
 ) -> Box<Future<Item = (P, R), Error = ProtocolChoiceError> + 'a>
-where
-	R: AsyncRead + AsyncWrite + 'a,
-	I: Iterator<Item = (Bytes, M, P)> + Clone + 'a,
-	M: FnMut(&Bytes, &Bytes) -> bool + 'a,
-	P: 'a,
+	where R: AsyncRead + AsyncWrite + 'a,
+	      I: Iterator<Item = (Bytes, M, P)> + Clone + 'a,
+	      M: FnMut(&Bytes, &Bytes) -> bool + 'a,
+	      P: 'a
 {
 	let future = Listener::new(inner).from_err().and_then(move |listener| {
 

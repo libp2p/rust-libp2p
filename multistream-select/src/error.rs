@@ -1,4 +1,3 @@
-
 use protocol::MultistreamSelectError;
 use std::io::Error as IoError;
 

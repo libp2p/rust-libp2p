@@ -16,14 +16,12 @@ pub struct Listener<R> {
 }
 
 impl<R> Listener<R>
-where
-	R: AsyncRead + AsyncWrite,
+    where R: AsyncRead + AsyncWrite
 {
 	/// Takes ownership of a socket and starts the handshake. If the handshake succeeds, the
 	/// future returns a `Listener`.
 	pub fn new<'a>(inner: R) -> Box<Future<Item = Listener<R>, Error = MultistreamSelectError> + 'a>
-	where
-		R: 'a,
+		where R: 'a
 	{
 		// TODO: use Jack's lib instead
 		let inner = LengthDelimitedBuilder::new().length_field_length(1).new_framed(inner);
@@ -53,8 +51,7 @@ where
 }
 
 impl<R> Sink for Listener<R>
-where
-	R: AsyncRead + AsyncWrite,
+    where R: AsyncRead + AsyncWrite
 {
 	type SinkItem = ListenerToDialerMessage;
 	type SinkError = MultistreamSelectError;
@@ -105,8 +102,7 @@ where
 }
 
 impl<R> Stream for Listener<R>
-where
-	R: AsyncRead + AsyncWrite,
+    where R: AsyncRead + AsyncWrite
 {
 	type Item = DialerToListenerMessage;
 	type Error = MultistreamSelectError;
