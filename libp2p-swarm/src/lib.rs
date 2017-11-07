@@ -1,6 +1,7 @@
 //! Transport and I/O primitives for libp2p.
 
 extern crate bytes;
+#[macro_use]
 extern crate futures;
 extern crate multistream_select;
 extern crate tokio_io;
