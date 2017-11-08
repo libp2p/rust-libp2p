@@ -22,7 +22,7 @@ mod connec_upgrade;
 mod socket;
 pub mod transport;
 
-pub use self::connec_upgrade::{ConnectionUpgrade, PlainText};
+pub use self::connec_upgrade::{AbstractConnUpgr, ConnectionUpgrade, PlainText};
 pub use self::socket::{ProtocolId, PeerId, Socket, Conn};
 pub use self::transport::Transport;
 
@@ -31,6 +31,7 @@ pub use self::transport::Transport;
 pub struct Swarm<T> {       // TODO: provide a default for T
     transports: Mutex<T>,
     listeners: Mutex<Vec<Box<Future<Item = (), Error = IoError>>>>,
+    security_protocols: Vec<(Bytes, fn(&Bytes,&Bytes)->bool, Arc<AbstractConnUpgr>)>,
 }
 
 // TODO: work in progress
@@ -43,12 +44,28 @@ impl<T> Swarm<T> {
         Self::with_details(Default::default())
     }
 
+    /// Adds a connection upgrade protocol.
+    ///
+    /// This function registers a new protocol that can be used to upgrade a connection.
+    // TODO: does the dialer try this protocol every time?
+    pub fn add_connection_upgrade<C>(&mut self, protocol_name: Bytes, upgrade: C)
+        where C: ConnectionUpgrade<Box<AsyncReadWrite>> + 'static
+    {
+        self.security_protocols.insert(0, (protocol_name, <Bytes as PartialEq>::eq as fn(&Bytes, &Bytes)->bool, Arc::new(upgrade)));
+    }
+
     /// Builds a swarm and lets you initialize the transports list.
     #[inline]
     pub fn with_details(transports: T) -> Self {
+        let security_protocols = vec![
+            (Bytes::from("/plaintext/1.0.0"), <Bytes as PartialEq>::eq as fn(&Bytes, &Bytes)->bool,
+                                              Arc::new(PlainText) as Arc<_>)
+        ];
+
         Swarm {
             transports: Mutex::new(transports),
             listeners: Mutex::new(Vec::new()),      // TODO: with_capacity with the number of multiaddrs
+            security_protocols: security_protocols,
         }
     }
 
@@ -63,18 +80,7 @@ impl<T> Swarm<T> where T: Transport, T::Listener: 'static, T::RawConn: 'static {
     // TODO: produce a future that is signalled when listening starts, like the JS API
     #[inline]
     pub fn listen(&self, addr: Multiaddr) {
-        trait AbstractConnUpgr { fn upgrade(&self, Box<AsyncReadWrite>) -> Box<AsyncReadWrite>; }
-        impl<T> AbstractConnUpgr for T where T: ConnectionUpgrade<Box<AsyncReadWrite>>, T::Output: 'static {
-            #[inline]
-            fn upgrade(&self, i: Box<AsyncReadWrite>) -> Box<AsyncReadWrite> {
-                Box::new(self.upgrade(i))
-            }
-        }
-
-        let security_protocols = vec![
-            (Bytes::from("/plaintext/1.0.0"), <Bytes as PartialEq>::eq,
-                                                    Arc::new(PlainText) as Arc<AbstractConnUpgr>)
-        ].into_iter();
+        let security_protocols = self.security_protocols.clone().into_iter();
 
         let multiplex_protocols = vec![
             (Bytes::from("/multiplex/1.0.0"), <Bytes as PartialEq>::eq, 0)
