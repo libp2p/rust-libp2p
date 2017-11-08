@@ -87,14 +87,10 @@ impl JsonFileDatastore {
         to_writer(&mut temporary_file, &*content)?;
         temporary_file.sync_data()?;
 
-        // It is possible that `persist` fails for a legitimate reason (eg. persisting across
-        // filesystems won't work).
-        let temporary_file = match temporary_file.persist(&self.path) {
-            Ok(_) => return Ok(()),
-            Err(err) => err.file,
-        };
-
-        fs::copy(temporary_file.path(), &self.path)?;
+        // Note that `persist` will fail if we try to persist across filesystems. However that
+        // shouldn't happen since we created the temporary file in the same directory as the final
+        // path.
+        temporary_file.persist(&self.path)?;
         Ok(())
     }
 }
