@@ -25,3 +25,5 @@ Architecture of the crates of this repository:
 - `multistream-select`: Implementation of the `multistream-select` protocol, which is used to
   negotiate a protocol over a newly-established connection with a peer, or after a connection
   upgrade.
+- `rw-stream-sink`: Utility library that makes it possible to wrap around a tokio `Stream + Sink`
+  of bytes and implements `AsyncRead + AsyncWrite`.
