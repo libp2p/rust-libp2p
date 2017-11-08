@@ -1,4 +1,4 @@
-extern crate libp2p_transport as transport;
+extern crate libp2p_swarm as swarm;
 extern crate tokio_core;
 extern crate tokio_io;
 extern crate multiaddr;
@@ -6,20 +6,20 @@ extern crate futures;
 
 use std::io::Error as IoError;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use tokio_core::reactor::Core;
+use tokio_core::reactor::Handle;
 use tokio_core::net::{TcpStream, TcpListener, TcpStreamNew};
 use futures::Future;
 use futures::stream::Stream;
 use multiaddr::{Multiaddr, Protocol};
-use transport::Transport;
+use swarm::Transport;
 
 pub struct Tcp {
-    pub event_loop: Core,
+    event_loop: Handle,
 }
 
 impl Tcp {
-    pub fn new() -> Result<Tcp, IoError> {
-        Ok(Tcp { event_loop: Core::new()? })
+    pub fn new(handle: Handle) -> Result<Tcp, IoError> {
+        Ok(Tcp { event_loop: handle })
     }
 }
 
@@ -39,7 +39,7 @@ impl Transport for Tcp {
         if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
             Ok(Box::new(
                 futures::future::result(
-                    TcpListener::bind(&socket_addr, &self.event_loop.handle()),
+                    TcpListener::bind(&socket_addr, &self.event_loop),
                 ).map(|listener| {
                     // Pull out a stream of sockets for incoming connections
                     listener.incoming().map(|x| x.0)
@@ -56,7 +56,7 @@ impl Transport for Tcp {
     /// or gives back the multiaddress.
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, Multiaddr> {
         if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
-            Ok(TcpStream::connect(&socket_addr, &self.event_loop.handle()))
+            Ok(TcpStream::connect(&socket_addr, &self.event_loop))
         } else {
             Err(addr)
         }
@@ -98,11 +98,12 @@ mod tests {
     use super::{Tcp, multiaddr_to_socketaddr};
     use std;
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+    use tokio_core::reactor::Core;
     use tokio_io;
     use futures::Future;
     use futures::stream::Stream;
     use multiaddr::Multiaddr;
-    use transport::Transport;
+    use swarm::Transport;
 
     #[test]
     fn multiaddr_to_tcp_conversion() {
@@ -154,9 +155,10 @@ mod tests {
         use std::io::Write;
 
         std::thread::spawn(move || {
+            let mut core = Core::new().unwrap();
             let addr = Multiaddr::new("/ip4/127.0.0.1/tcp/12345").unwrap();
-            let mut tcp = Tcp::new().unwrap();
-            let handle = tcp.event_loop.handle();
+            let mut tcp = Tcp::new(core.handle()).unwrap();
+            let handle = core.handle();
             let listener = tcp.listen_on(addr).unwrap().for_each(|sock| {
                 // Define what to do with the socket that just connected to us
                 // Which in this case is read 3 bytes
@@ -170,11 +172,12 @@ mod tests {
                 Ok(())
             });
 
-            tcp.event_loop.run(listener).unwrap();
+            core.run(listener).unwrap();
         });
         std::thread::sleep(std::time::Duration::from_millis(100));
         let addr = Multiaddr::new("/ip4/127.0.0.1/tcp/12345").unwrap();
-        let mut tcp = Tcp::new().unwrap();
+        let mut core = Core::new().unwrap();
+        let mut tcp = Tcp::new(core.handle()).unwrap();
         // Obtain a future socket through dialing
         let socket = tcp.dial(addr.clone()).unwrap();
         // Define what to do with the socket once it's obtained
@@ -186,7 +189,7 @@ mod tests {
             Err(x) => Err(x),
         });
         // Execute the future in our event loop
-        tcp.event_loop.run(action).unwrap();
+        core.run(action).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
 }

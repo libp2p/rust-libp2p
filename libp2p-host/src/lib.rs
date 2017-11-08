@@ -1,11 +1,11 @@
 //! "Host" abstraction for transports, listener addresses, peer store.
 
 extern crate futures;
-extern crate libp2p_transport as transport;
+extern crate libp2p_swarm as swarm;
 
 use futures::{Future, IntoFuture};
-use transport::{ProtocolId, Socket};
-use transport::multiaddr::Multiaddr;
+use swarm::{ProtocolId, Socket};
+use swarm::multiaddr::Multiaddr;
 
 /// Produces a future for each incoming `Socket`.
 pub trait Handler<S: Socket> {
