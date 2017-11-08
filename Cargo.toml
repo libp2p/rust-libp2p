@@ -5,6 +5,7 @@ members = [
     "libp2p-swarm",
     "libp2p-secio",
     "libp2p-tcp-transport",
+    "rw-stream-sink",
 ]
 
 [replace]
