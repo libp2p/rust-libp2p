@@ -18,9 +18,11 @@ use tokio_io::{AsyncRead, AsyncWrite};
 /// Multi-address re-export.
 pub extern crate multiaddr;
 
+mod connec_upgrade;
 mod socket;
 pub mod transport;
 
+pub use self::connec_upgrade::{ConnectionUpgrade, PlainText};
 pub use self::socket::{ProtocolId, PeerId, Socket, Conn};
 pub use self::transport::Transport;
 
@@ -106,20 +108,3 @@ impl<T> Swarm<T> where T: Transport, T::Listener: 'static, T::RawConn: 'static {
 
 pub trait AsyncReadWrite: AsyncRead + AsyncWrite {}
 impl<T> AsyncReadWrite for T where T: AsyncRead + AsyncWrite {}
-
-pub trait ConnectionUpgrade<C> {
-    type Output: AsyncRead + AsyncWrite;
-    fn upgrade(&self, i: C) -> Self::Output;
-}
-
-pub struct PlainText;
-
-impl<C> ConnectionUpgrade<C> for PlainText
-    where C: AsyncRead + AsyncWrite
-{
-    type Output = C;
-    #[inline]
-    fn upgrade(&self, i: C) -> C {
-        i
-    }
-}
