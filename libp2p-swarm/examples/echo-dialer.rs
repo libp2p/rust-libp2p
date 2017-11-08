@@ -10,6 +10,7 @@ fn main() {
     let tcp = Tcp::new(core.handle()).unwrap();
 
     let swarm = swarm::Swarm::with_details(tcp);
+    swarm.add_connection_upgrade();
     swarm.dial(swarm::multiaddr::Multiaddr::new("/ip4/127.0.0.1/tcp/4001").unwrap());
 
     core.run(swarm.run()).unwrap();

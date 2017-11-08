@@ -100,7 +100,7 @@ impl<T> Swarm<T> where T: Transport, T::Dial: 'static, T::RawConn: 'static {    
                     .map_err(|err| panic!("{:?}", err))      // TODO:
             })
             .and_then(|(chosen_sec, connection)| {
-                Ok(AbstractConnUpgr::upgrade(&*chosen_sec, Box::new(connection) as Box<_>))
+                AbstractConnUpgr::upgrade(&*chosen_sec, Box::new(connection) as Box<_>)
             })
             // Negociate the multiplex.
             .and_then(move |connection| {
@@ -137,7 +137,7 @@ impl<T> Swarm<T> where T: Transport, T::Listener: 'static, T::RawConn: 'static {
                     .map_err(|err| panic!("{:?}", err))      // TODO:
             })
             .and_then(|(chosen_sec, connection)| {
-                Ok(AbstractConnUpgr::upgrade(&*chosen_sec, Box::new(connection) as Box<_>))
+                AbstractConnUpgr::upgrade(&*chosen_sec, Box::new(connection) as Box<_>)
             })
             // Negociate the multiplex.
             .and_then(move |connection| {
