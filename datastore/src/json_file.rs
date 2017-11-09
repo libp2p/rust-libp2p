@@ -1,3 +1,22 @@
+// Copyright 2017 Parity Technologies (UK) Ltd.
+// 
+// Permission is hereby granted, free of charge, to any person obtaining a 
+// copy of this software and associated documentation files (the "Software"), 
+// to deal in the Software without restriction, including without limitation 
+// the rights to use, copy, modify, merge, publish, distribute, sublicense, 
+// and/or sell copies of the Software, and to permit persons to whom the 
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in 
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS 
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+// DEALINGS IN THE SOFTWARE.
 
 use Datastore;
 use base64;
@@ -74,6 +93,10 @@ impl JsonFileDatastore {
     }
 
     /// Flushes the content of the datastore to the disk.
+    ///
+    /// This function can only fail in case of a disk access error. If an error occurs, any change
+    /// to the datastore that was performed since the last successful flush will be lost. No data
+    /// will be corrupted.
     pub fn flush(&self) -> Result<(), IoError> {
         // Create a temporary file in the same directory as the destination, which avoids the
         // problem of having a file cleaner delete our file while we use it.
@@ -162,7 +185,13 @@ impl Datastore for JsonFileDatastore {
 impl Drop for JsonFileDatastore {
     #[inline]
     fn drop(&mut self) {
-        let _ = self.flush(); // What do we do in case of error? :-/
+        // Unfortunately there's not much we can do here in case of an error, as panicking would be
+        // very bad. Similar to `File`, the user should take care to call `flush()` before dropping
+        // the datastore.
+        //
+        // If an error happens here, any change since the last successful flush will be lost, but
+        // the data will not be corrupted.
+        let _ = self.flush();
     }
 }
 
