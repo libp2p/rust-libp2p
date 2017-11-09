@@ -1,0 +1,8 @@
+[package]
+name = "varint"
+version = "0.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+
+[dependencies]
+num-bigint = "0.1.40"
+futures = "0.1.16"
