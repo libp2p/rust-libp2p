@@ -6,12 +6,14 @@ extern crate varint;
 extern crate num_bigint;
 extern crate num_traits;
 extern crate parking_lot;
+extern crate circular_buffer;
 
 use bytes::Bytes;
+use circular_buffer::CircularBuffer;
 use futures::prelude::*;
 use libp2p_stream_muxer::StreamMuxer;
 use parking_lot::Mutex;
-use std::collections::{HashSet, HashMap};
+use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::sync::Arc;
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -35,7 +37,7 @@ enum NextMultiplexState {
     Ignore,
 }
 
-enum MultiplexState {
+enum MultiplexReadState {
     Header { state: varint::DecoderState },
     BodyLength {
         state: varint::DecoderState,
@@ -53,10 +55,14 @@ enum MultiplexState {
     Ignore { remaining_bytes: usize },
 }
 
-impl Default for MultiplexState {
+impl Default for MultiplexReadState {
     fn default() -> Self {
-        MultiplexState::Header { state: Default::default() }
+        MultiplexReadState::Header { state: Default::default() }
     }
+}
+
+struct MultiplexWriteState {
+    buffer: CircularBuffer<[u8; 1024]>,
 }
 
 // TODO: Add writing. We should also add some form of "pending packet" so that we can always open at
@@ -72,9 +78,9 @@ impl Default for MultiplexState {
 //       Since if we receive a message to a closed stream we just drop it anyway.
 struct MultiplexShared<T> {
     // We use `Option` in order to take ownership of heap allocations within `DecoderState` and
-    // `BytesMut`. If this is ever observably `None` then something has panicked and the `Mutex`
-    // will be poisoned.
-    read_state: Option<MultiplexState>,
+    // `BytesMut`. If this is ever observably `None` then something has panicked or the underlying
+    // stream returned an error.
+    read_state: Option<MultiplexReadState>,
     stream: T,
     // true if the stream is open, false otherwise
     open_streams: HashMap<usize, bool>,
@@ -122,13 +128,14 @@ unsafe fn create_buffer_for<R: AsyncRead>(capacity: usize, inner: &R) -> bytes::
     buffer
 }
 
-fn read_stream<T: AsyncRead>(
-    mut stream_data: Option<(usize, &mut [u8])>,
+fn read_stream<'a, O: Into<Option<(usize, &'a mut [u8])>>, T: AsyncRead>(
     lock: &mut MultiplexShared<T>,
+    stream_data: O,
 ) -> io::Result<usize> {
     use num_traits::cast::ToPrimitive;
-    use MultiplexState::*;
+    use MultiplexReadState::*;
 
+    let mut stream_data = stream_data.into();
     let stream_has_been_gracefully_closed = stream_data
         .as_ref()
         .and_then(|&(id, _)| lock.open_streams.get(&id))
@@ -201,8 +208,8 @@ fn read_stream<T: AsyncRead>(
                         )?;
 
                         lock.read_state = Some(match next {
-                            Ignore => MultiplexState::Ignore { remaining_bytes: length },
-                            NewStream(substream_id) => MultiplexState::NewStream {
+                            Ignore => MultiplexReadState::Ignore { remaining_bytes: length },
+                            NewStream(substream_id) => MultiplexReadState::NewStream {
                                 // This is safe as long as we only use `lock.stream` to write to
                                 // this field
                                 name: unsafe { create_buffer_for(length, &lock.stream) },
@@ -215,12 +222,12 @@ fn read_stream<T: AsyncRead>(
                                     .map(|is_open| *is_open)
                                     .unwrap_or(false);
                                 if is_open {
-                                    MultiplexState::ParsingMessageBody {
+                                    MultiplexReadState::ParsingMessageBody {
                                         remaining_bytes: length,
                                         substream_id,
                                     }
                                 } else {
-                                    MultiplexState::Ignore { remaining_bytes: length }
+                                    MultiplexReadState::Ignore { remaining_bytes: length }
                                 }
                             }
                         });
@@ -276,7 +283,7 @@ fn read_stream<T: AsyncRead>(
                 remaining_bytes,
             } => {
                 if let Some((ref mut id, ref mut buf)) = stream_data {
-                    use MultiplexState::*;
+                    use MultiplexReadState::*;
 
                     if substream_id == *id {
                         if remaining_bytes == 0 {
@@ -357,7 +364,7 @@ impl<T: AsyncRead> Read for Substream<T> {
             None => return Err(io::Error::from(io::ErrorKind::WouldBlock)),
         };
 
-        read_stream(Some((self.id, buf)), &mut lock)
+        read_stream(&mut lock, (self.id, buf))
     }
 }
 
@@ -456,7 +463,7 @@ impl<T: AsyncRead> Stream for InboundStream<T> {
         };
 
         // Attempt to make progress, but don't block if we can't
-        match read_stream(None, &mut lock) {
+        match read_stream(&mut lock, None) {
             Ok(_) => (),
             Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => (),
             Err(err) => return Err(err),

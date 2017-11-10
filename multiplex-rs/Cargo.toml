@@ -12,3 +12,4 @@ futures = "0.1"
 parking_lot = "0.4.8"
 libp2p-stream-muxer = { path = "../libp2p-stream-muxer" }
 varint = { path = "../varint-rs" }
+circular-buffer = { path = "../circular-buffer" }
