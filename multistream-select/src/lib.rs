@@ -35,11 +35,13 @@
 
 extern crate bytes;
 extern crate futures;
+extern crate smallvec;
 extern crate tokio_core;
 extern crate tokio_io;
 
 mod dialer_select;
 mod error;
+mod length_delimited;
 mod listener_select;
 mod tests;
 

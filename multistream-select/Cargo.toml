@@ -6,5 +6,6 @@ authors = ["Parity Technologies <admin@parity.io>"]
 [dependencies]
 bytes = "0.4"
 futures = { version = "0.1" }
+smallvec = "0.5"
 tokio-core = "0.1"
 tokio-io = "0.1"
