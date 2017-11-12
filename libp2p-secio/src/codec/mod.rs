@@ -40,9 +40,6 @@ pub type FullCodec<S> = DecoderMiddleware<EncoderMiddleware<length_delimited::Fr
 ///
 /// The conversion between the stream/sink items and the socket is done with the given cipher and
 /// hash algorithm (which are generally decided during the handshake).
-///
-/// > **Note**: The encoding block size could theoretically be determined from `cipher_encoding`,
-/// >           but the underlying library doesn't allow doing that.
 pub fn full_codec<S>(
 	socket: length_delimited::Framed<S>,
 	cipher_encoding: Box<SynchronousStreamCipher>,

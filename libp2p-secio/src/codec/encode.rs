@@ -63,15 +63,18 @@ impl<S> Sink for EncoderMiddleware<S>
 	type SinkError = S::SinkError;
 
 	fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
-		let mut out_buffer = BytesMut::new();
+		let capacity = item.len() + self.hmac_key.digest_algorithm().output_len;
+
+		let mut out_buffer = BytesMut::with_capacity(capacity);
 		// Note: Alternatively to `extend`, we could also call `advance_mut()`, which will add
 		//		 uninitialized bytes to the buffer. But that's unsafe.
 		out_buffer.extend((0..item.len()).map(|_| 0));
 		self.cipher_state.process(&item, &mut out_buffer);
 
 		let signature = hmac::sign(&self.hmac_key, &out_buffer);
-		out_buffer.reserve(signature.as_ref().len());
 		out_buffer.put_slice(signature.as_ref());
+
+		debug_assert_eq!(out_buffer.len(), capacity);
 
 		self.raw_sink.start_send(out_buffer)
 	}
