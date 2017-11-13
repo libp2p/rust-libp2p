@@ -28,6 +28,7 @@ use futures::StartSend;
 use futures::sink::Sink;
 use futures::stream::Stream;
 use ring::hmac;
+use std::iter;
 
 /// Wraps around a `Sink`. Encodes the buffers passed to it and passes it to the underlying sink.
 ///
@@ -57,7 +58,7 @@ impl<S> EncoderMiddleware<S> {
 }
 
 impl<S> Sink for EncoderMiddleware<S>
-    where S: Sink<SinkItem = BytesMut>
+	where S: Sink<SinkItem = BytesMut>
 {
 	type SinkItem = BytesMut;
 	type SinkError = S::SinkError;
@@ -68,7 +69,7 @@ impl<S> Sink for EncoderMiddleware<S>
 		let mut out_buffer = BytesMut::with_capacity(capacity);
 		// Note: Alternatively to `extend`, we could also call `advance_mut()`, which will add
 		//		 uninitialized bytes to the buffer. But that's unsafe.
-		out_buffer.extend((0..item.len()).map(|_| 0));
+		out_buffer.extend(iter::repeat(0).take(item.len()));
 		self.cipher_state.process(&item, &mut out_buffer);
 
 		let signature = hmac::sign(&self.hmac_key, &out_buffer);
@@ -86,7 +87,7 @@ impl<S> Sink for EncoderMiddleware<S>
 }
 
 impl<S> Stream for EncoderMiddleware<S>
-    where S: Stream
+	where S: Stream
 {
 	type Item = S::Item;
 	type Error = S::Error;

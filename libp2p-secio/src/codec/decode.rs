@@ -62,7 +62,7 @@ impl<S> DecoderMiddleware<S> {
 
 impl<S> Stream for DecoderMiddleware<S>
 	where S: Stream<Item = BytesMut>,
-	      S::Error: Into<SecioError>
+		  S::Error: Into<SecioError>
 {
 	type Item = Vec<u8>;
 	type Error = SecioError;
@@ -98,7 +98,7 @@ impl<S> Stream for DecoderMiddleware<S>
 }
 
 impl<S> Sink for DecoderMiddleware<S>
-    where S: Sink
+	where S: Sink
 {
 	type SinkItem = S::SinkItem;
 	type SinkError = S::SinkError;

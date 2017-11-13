@@ -64,7 +64,7 @@ pub struct SecioMiddleware<S> {
 }
 
 impl<S> SecioMiddleware<S>
-    where S: AsyncRead + AsyncWrite
+	where S: AsyncRead + AsyncWrite
 {
 	/// Attempts to perform a handshake on the given socket.
 	///
@@ -98,7 +98,7 @@ impl<S> SecioMiddleware<S>
 }
 
 impl<S> Sink for SecioMiddleware<S>
-    where S: AsyncRead + AsyncWrite
+	where S: AsyncRead + AsyncWrite
 {
 	type SinkItem = BytesMut;
 	type SinkError = IoError;
@@ -115,7 +115,7 @@ impl<S> Sink for SecioMiddleware<S>
 }
 
 impl<S> Stream for SecioMiddleware<S>
-    where S: AsyncRead + AsyncWrite
+	where S: AsyncRead + AsyncWrite
 {
 	type Item = Vec<u8>;
 	type Error = SecioError;

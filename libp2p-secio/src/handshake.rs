@@ -132,283 +132,283 @@ pub fn handshake<'a, S: 'a>(
 		length_delimited::Builder::new().big_endian().length_field_length(4).new_framed(socket);
 
 	let future = future::ok::<_, SecioError>(context)
-        // Generate our nonce.
-        .and_then(|mut context| {
-            context.rng.fill(&mut context.local_nonce)
-                .map_err(|_| SecioError::NonceGenerationFailed)?;
-            Ok(context)
-        })
+		// Generate our nonce.
+		.and_then(|mut context| {
+			context.rng.fill(&mut context.local_nonce)
+				.map_err(|_| SecioError::NonceGenerationFailed)?;
+			Ok(context)
+		})
 
-        // Send our proposition with our nonce, public key and supported protocols.
-        .and_then(|mut context| {
-            let mut public_key = PublicKeyProtobuf::new();
-            public_key.set_Type(KeyTypeProtobuf::RSA);
-            public_key.set_Data(context.local_public_key.clone());
-            context.local_public_key_in_protobuf_bytes = public_key.write_to_bytes().unwrap();
+		// Send our proposition with our nonce, public key and supported protocols.
+		.and_then(|mut context| {
+			let mut public_key = PublicKeyProtobuf::new();
+			public_key.set_Type(KeyTypeProtobuf::RSA);
+			public_key.set_Data(context.local_public_key.clone());
+			context.local_public_key_in_protobuf_bytes = public_key.write_to_bytes().unwrap();
 
-            let mut proposition = Propose::new();
-            proposition.set_rand(context.local_nonce.clone().to_vec());
-            proposition.set_pubkey(context.local_public_key_in_protobuf_bytes.clone());
-            proposition.set_exchanges(algo_support::exchanges::PROPOSITION_STRING.into());
-            proposition.set_ciphers(algo_support::ciphers::PROPOSITION_STRING.into());
-            proposition.set_hashes(algo_support::hashes::PROPOSITION_STRING.into());
-            let proposition_bytes = proposition.write_to_bytes().unwrap();
-            context.local_proposition_bytes = proposition_bytes.clone();
+			let mut proposition = Propose::new();
+			proposition.set_rand(context.local_nonce.clone().to_vec());
+			proposition.set_pubkey(context.local_public_key_in_protobuf_bytes.clone());
+			proposition.set_exchanges(algo_support::exchanges::PROPOSITION_STRING.into());
+			proposition.set_ciphers(algo_support::ciphers::PROPOSITION_STRING.into());
+			proposition.set_hashes(algo_support::hashes::PROPOSITION_STRING.into());
+			let proposition_bytes = proposition.write_to_bytes().unwrap();
+			context.local_proposition_bytes = proposition_bytes.clone();
 
-            socket.send(BytesMut::from(proposition_bytes.clone()))
-                .from_err()
-                .map(|s| (s, context))
-        })
+			socket.send(BytesMut::from(proposition_bytes.clone()))
+				.from_err()
+				.map(|s| (s, context))
+		})
 
-        // Receive the remote's proposition.
-        .and_then(move |(socket, mut context)| {
-            socket.into_future()
-                .map_err(|(e, _)| e.into())
-                .and_then(move |(prop_raw, socket)| {
-                    match prop_raw {
-                        Some(p) => context.remote_proposition_bytes = p,
-                        None => {
-                            let err = IoError::new(IoErrorKind::BrokenPipe, "unexpected eof");
-                            return Err(err.into())
-                        },
-                    };
+		// Receive the remote's proposition.
+		.and_then(move |(socket, mut context)| {
+			socket.into_future()
+				.map_err(|(e, _)| e.into())
+				.and_then(move |(prop_raw, socket)| {
+					match prop_raw {
+						Some(p) => context.remote_proposition_bytes = p,
+						None => {
+							let err = IoError::new(IoErrorKind::BrokenPipe, "unexpected eof");
+							return Err(err.into())
+						},
+					};
 
-                    let mut prop = {
-                        protobuf_parse_from_bytes::<Propose>(&context.remote_proposition_bytes)
-                            .map_err(|_| SecioError::HandshakeParsingFailure)?
-                    };
-                    context.remote_public_key_in_protobuf_bytes = prop.take_pubkey();
-                    let mut pubkey = {
-                        let bytes = &context.remote_public_key_in_protobuf_bytes;
-                        protobuf_parse_from_bytes::<PublicKeyProtobuf>(bytes)
-                            .map_err(|_| SecioError::HandshakeParsingFailure)?
-                    };
+					let mut prop = {
+						protobuf_parse_from_bytes::<Propose>(&context.remote_proposition_bytes)
+							.map_err(|_| SecioError::HandshakeParsingFailure)?
+					};
+					context.remote_public_key_in_protobuf_bytes = prop.take_pubkey();
+					let mut pubkey = {
+						let bytes = &context.remote_public_key_in_protobuf_bytes;
+						protobuf_parse_from_bytes::<PublicKeyProtobuf>(bytes)
+							.map_err(|_| SecioError::HandshakeParsingFailure)?
+					};
 
-                    // TODO: For now we suppose that the key is in the RSA format because that's
-                    //       the only thing the Go and JS implementations support.
-                    match pubkey.get_Type() {
-                        KeyTypeProtobuf::RSA => (),
-                        _ => {
-                            let err = IoError::new(IoErrorKind::Other, "unsupported protocol");
-                            return Err(err.into());
-                        },
-                    };
-                    context.remote_public_key = pubkey.take_Data();
-                    context.remote_nonce = prop.take_rand();
-                    Ok((prop, socket, context))
-                })
-        })
+					// TODO: For now we suppose that the key is in the RSA format because that's
+					//       the only thing the Go and JS implementations support.
+					match pubkey.get_Type() {
+						KeyTypeProtobuf::RSA => (),
+						_ => {
+							let err = IoError::new(IoErrorKind::Other, "unsupported protocol");
+							return Err(err.into());
+						},
+					};
+					context.remote_public_key = pubkey.take_Data();
+					context.remote_nonce = prop.take_rand();
+					Ok((prop, socket, context))
+				})
+		})
 
-        // Decide which algorithms to use (thanks to the remote's proposition).
-        .and_then(move |(remote_prop, socket, mut context)| {
-            // In order to determine which protocols to use, we compute two hashes and choose
-            // based on which hash is larger.
-            context.hashes_ordering = {
-                let oh1 = {
-                    let mut ctx = digest::Context::new(&digest::SHA256);
-                    ctx.update(&context.remote_public_key_in_protobuf_bytes);
-                    ctx.update(&context.local_nonce);
-                    ctx.finish()
-                };
+		// Decide which algorithms to use (thanks to the remote's proposition).
+		.and_then(move |(remote_prop, socket, mut context)| {
+			// In order to determine which protocols to use, we compute two hashes and choose
+			// based on which hash is larger.
+			context.hashes_ordering = {
+				let oh1 = {
+					let mut ctx = digest::Context::new(&digest::SHA256);
+					ctx.update(&context.remote_public_key_in_protobuf_bytes);
+					ctx.update(&context.local_nonce);
+					ctx.finish()
+				};
 
-                let oh2 = {
-                    let mut ctx = digest::Context::new(&digest::SHA256);
-                    ctx.update(&context.local_public_key_in_protobuf_bytes);
-                    ctx.update(&context.remote_nonce);
-                    ctx.finish()
-                };
+				let oh2 = {
+					let mut ctx = digest::Context::new(&digest::SHA256);
+					ctx.update(&context.local_public_key_in_protobuf_bytes);
+					ctx.update(&context.remote_nonce);
+					ctx.finish()
+				};
 
-                oh1.as_ref().cmp(&oh2.as_ref())
-            };
+				oh1.as_ref().cmp(&oh2.as_ref())
+			};
 
-            context.chosen_exchange = {
-                let list = &remote_prop.get_exchanges();
-                Some(algo_support::exchanges::select_best(context.hashes_ordering, list)?)
-            };
-            context.chosen_cipher = {
-                let list = &remote_prop.get_ciphers();
-                Some(algo_support::ciphers::select_best(context.hashes_ordering, list)?)
-            };
-            context.chosen_hash = {
-                let list = &remote_prop.get_hashes();
-                Some(algo_support::hashes::select_best(context.hashes_ordering, list)?)
-            };
+			context.chosen_exchange = {
+				let list = &remote_prop.get_exchanges();
+				Some(algo_support::exchanges::select_best(context.hashes_ordering, list)?)
+			};
+			context.chosen_cipher = {
+				let list = &remote_prop.get_ciphers();
+				Some(algo_support::ciphers::select_best(context.hashes_ordering, list)?)
+			};
+			context.chosen_hash = {
+				let list = &remote_prop.get_hashes();
+				Some(algo_support::hashes::select_best(context.hashes_ordering, list)?)
+			};
 
-            Ok((socket, context))
-        })
+			Ok((socket, context))
+		})
 
-        // Generate an ephemeral key for the negotiation.
-        .and_then(|(socket, context)| {
-            let tmp_priv_key = EphemeralPrivateKey::generate(&agreement::ECDH_P256, &context.rng)
-                .map_err(|_| SecioError::EphemeralKeyGenerationFailed)?;
-            Ok((socket, context, tmp_priv_key))
-        })
+		// Generate an ephemeral key for the negotiation.
+		.and_then(|(socket, context)| {
+			let tmp_priv_key = EphemeralPrivateKey::generate(&agreement::ECDH_P256, &context.rng)
+				.map_err(|_| SecioError::EphemeralKeyGenerationFailed)?;
+			Ok((socket, context, tmp_priv_key))
+		})
 
-        // Send the ephemeral pub key to the remote in an `Exchange` struct. The `Exchange` also
-        // contains a signature of the two propositions encoded with our static public key.
-        .and_then(|(socket, mut context, tmp_priv)| {
-            let exchange = {
-                let local_tmp_pub_key = &mut context.local_tmp_pub_key[..tmp_priv.public_key_len()];
-                tmp_priv.compute_public_key(local_tmp_pub_key).unwrap();
-                context.local_tmp_priv_key = Some(tmp_priv);
+		// Send the ephemeral pub key to the remote in an `Exchange` struct. The `Exchange` also
+		// contains a signature of the two propositions encoded with our static public key.
+		.and_then(|(socket, mut context, tmp_priv)| {
+			let exchange = {
+				let local_tmp_pub_key = &mut context.local_tmp_pub_key[..tmp_priv.public_key_len()];
+				tmp_priv.compute_public_key(local_tmp_pub_key).unwrap();
+				context.local_tmp_priv_key = Some(tmp_priv);
 
-                let mut data_to_sign = context.local_proposition_bytes.clone();
-                data_to_sign.extend_from_slice(&context.remote_proposition_bytes);
-                data_to_sign.extend_from_slice(local_tmp_pub_key);
+				let mut data_to_sign = context.local_proposition_bytes.clone();
+				data_to_sign.extend_from_slice(&context.remote_proposition_bytes);
+				data_to_sign.extend_from_slice(local_tmp_pub_key);
 
-                let mut exchange = Exchange::new();
-                exchange.set_epubkey(local_tmp_pub_key.to_vec());
-                exchange.set_signature({
-                    let mut state = match RSASigningState::new(context.local_private_key.clone()) {
-                        Ok(s) => s,
-                        Err(_) => return Err(SecioError::SigningFailure),
-                    };
-                    let mut signature = vec![0; context.local_private_key.public_modulus_len()];
-                    match state.sign(&RSA_PKCS1_SHA256, &context.rng, &data_to_sign,
-                                     &mut signature)
-                    {
-                        Ok(_) => (),
-                        Err(_) => return Err(SecioError::SigningFailure),
-                    };
+				let mut exchange = Exchange::new();
+				exchange.set_epubkey(local_tmp_pub_key.to_vec());
+				exchange.set_signature({
+					let mut state = match RSASigningState::new(context.local_private_key.clone()) {
+						Ok(s) => s,
+						Err(_) => return Err(SecioError::SigningFailure),
+					};
+					let mut signature = vec![0; context.local_private_key.public_modulus_len()];
+					match state.sign(&RSA_PKCS1_SHA256, &context.rng, &data_to_sign,
+									 &mut signature)
+					{
+						Ok(_) => (),
+						Err(_) => return Err(SecioError::SigningFailure),
+					};
 
-                    signature
-                });
-                exchange
-            };
+					signature
+				});
+				exchange
+			};
 
-            let local_exch = exchange.write_to_bytes()
-                .expect("can only fail if the protobuf msg is malformed, which can't happen for \
-                         this message in particular");
-            Ok((BytesMut::from(local_exch), socket, context))
-        })
+			let local_exch = exchange.write_to_bytes()
+				.expect("can only fail if the protobuf msg is malformed, which can't happen for \
+						 this message in particular");
+			Ok((BytesMut::from(local_exch), socket, context))
+		})
 
-        // Send our local `Exchange`.
-        .and_then(|(local_exch, socket, context)| {
-            socket.send(local_exch)
-                .from_err()
-                .map(|s| (s, context))
-        })
+		// Send our local `Exchange`.
+		.and_then(|(local_exch, socket, context)| {
+			socket.send(local_exch)
+				.from_err()
+				.map(|s| (s, context))
+		})
 
-        // Receive the remote's `Exchange`.
-        .and_then(move |(socket, context)| {
-            socket.into_future()
-                .map_err(|(e, _)| e.into())
-                .and_then(move |(raw, socket)| {
-                    let raw = match raw {
-                        Some(r) => r,
-                        None => {
-                            let err = IoError::new(IoErrorKind::BrokenPipe, "unexpected eof");
-                            return Err(err.into())
-                        },
-                    };
+		// Receive the remote's `Exchange`.
+		.and_then(move |(socket, context)| {
+			socket.into_future()
+				.map_err(|(e, _)| e.into())
+				.and_then(move |(raw, socket)| {
+					let raw = match raw {
+						Some(r) => r,
+						None => {
+							let err = IoError::new(IoErrorKind::BrokenPipe, "unexpected eof");
+							return Err(err.into())
+						},
+					};
 
-                    let remote_exch = protobuf_parse_from_bytes::<Exchange>(&raw)
-                                            .map_err(|_| SecioError::HandshakeParsingFailure)?;
-                    Ok((remote_exch, socket, context))
-                })
-        })
+					let remote_exch = protobuf_parse_from_bytes::<Exchange>(&raw)
+											.map_err(|_| SecioError::HandshakeParsingFailure)?;
+					Ok((remote_exch, socket, context))
+				})
+		})
 
-        // Check the validity of the remote's `Exchange`. This verifies that the remote was really
-        // the sender of its proposition, and that it is the owner of both its global and ephemeral
-        // keys.
-        .and_then(|(remote_exch, socket, context)| {
-            let mut data_to_verify = context.remote_proposition_bytes.clone();
-            data_to_verify.extend_from_slice(&context.local_proposition_bytes);
-            data_to_verify.extend_from_slice(remote_exch.get_epubkey());
+		// Check the validity of the remote's `Exchange`. This verifies that the remote was really
+		// the sender of its proposition, and that it is the owner of both its global and ephemeral
+		// keys.
+		.and_then(|(remote_exch, socket, context)| {
+			let mut data_to_verify = context.remote_proposition_bytes.clone();
+			data_to_verify.extend_from_slice(&context.local_proposition_bytes);
+			data_to_verify.extend_from_slice(remote_exch.get_epubkey());
 
-            // TODO: The ring library doesn't like some stuff in our DER public key, therefore
-            //       we scrap the first 24 bytes of the key. A proper fix would be to write a DER
-            //       parser, but that's not trivial.
-            match signature_verify(&RSA_PKCS1_2048_8192_SHA256,
-                                UntrustedInput::from(&context.remote_public_key[24..]),
-                                UntrustedInput::from(&data_to_verify),
-                                UntrustedInput::from(remote_exch.get_signature()))
-            {
-                Ok(()) => (),
-                Err(_) => return Err(SecioError::SignatureVerificationFailed),
-            }
+			// TODO: The ring library doesn't like some stuff in our DER public key, therefore
+			//       we scrap the first 24 bytes of the key. A proper fix would be to write a DER
+			//       parser, but that's not trivial.
+			match signature_verify(&RSA_PKCS1_2048_8192_SHA256,
+								UntrustedInput::from(&context.remote_public_key[24..]),
+								UntrustedInput::from(&data_to_verify),
+								UntrustedInput::from(remote_exch.get_signature()))
+			{
+				Ok(()) => (),
+				Err(_) => return Err(SecioError::SignatureVerificationFailed),
+			}
 
-            Ok((remote_exch, socket, context))
-        })
+			Ok((remote_exch, socket, context))
+		})
 
-        // Generate a key from the local ephemeral private key and the remote ephemeral public key,
-        // derive from it a ciper key, an iv, and a hmac key, and build the encoder/decoder.
-        .and_then(|(remote_exch, socket, mut context)| {
-            let local_priv_key = context.local_tmp_priv_key.take()
-                .expect("we filled this Option earlier, and extract it now");
-            let codec = agreement::agree_ephemeral(local_priv_key,
-                                                   &context.chosen_exchange.clone().unwrap(),
-                                                   UntrustedInput::from(remote_exch.get_epubkey()),
-                                                   SecioError::SecretGenerationFailed,
-                                                   |key_material| {
-                let key = SigningKey::new(context.chosen_hash.unwrap(), key_material);
+		// Generate a key from the local ephemeral private key and the remote ephemeral public key,
+		// derive from it a ciper key, an iv, and a hmac key, and build the encoder/decoder.
+		.and_then(|(remote_exch, socket, mut context)| {
+			let local_priv_key = context.local_tmp_priv_key.take()
+				.expect("we filled this Option earlier, and extract it now");
+			let codec = agreement::agree_ephemeral(local_priv_key,
+												   &context.chosen_exchange.clone().unwrap(),
+												   UntrustedInput::from(remote_exch.get_epubkey()),
+												   SecioError::SecretGenerationFailed,
+												   |key_material| {
+				let key = SigningKey::new(context.chosen_hash.unwrap(), key_material);
 
-                let chosen_cipher = context.chosen_cipher.unwrap();
-                let (cipher_key_size, iv_size) = match chosen_cipher {
-                    KeySize::KeySize128 => (16, 16),
-                    KeySize::KeySize256 => (32, 16),
-                    _ => panic!()
-                };
+				let chosen_cipher = context.chosen_cipher.unwrap();
+				let (cipher_key_size, iv_size) = match chosen_cipher {
+					KeySize::KeySize128 => (16, 16),
+					KeySize::KeySize256 => (32, 16),
+					_ => panic!()
+				};
 
-                let mut longer_key = vec![0u8; 2 * (iv_size + cipher_key_size + 20)];
-                stretch_key(&key, &mut longer_key);
+				let mut longer_key = vec![0u8; 2 * (iv_size + cipher_key_size + 20)];
+				stretch_key(&key, &mut longer_key);
 
-                let (local_infos, remote_infos) = {
-                    let (first_half, second_half) = longer_key.split_at(longer_key.len() / 2);
-                    match context.hashes_ordering {
-                        Ordering::Equal => panic!(),
-                        Ordering::Less => (second_half, first_half),
-                        Ordering::Greater => (first_half, second_half),
-                    }
-                };
+				let (local_infos, remote_infos) = {
+					let (first_half, second_half) = longer_key.split_at(longer_key.len() / 2);
+					match context.hashes_ordering {
+						Ordering::Equal => panic!(),
+						Ordering::Less => (second_half, first_half),
+						Ordering::Greater => (first_half, second_half),
+					}
+				};
 
-                let (encoding_cipher, encoding_hmac) = {
-                    let (iv, rest) = local_infos.split_at(iv_size);
-                    let (cipher_key, mac_key) = rest.split_at(cipher_key_size);
-                    let hmac = SigningKey::new(&context.chosen_hash.clone().unwrap(), mac_key);
-                    let cipher = ctr(chosen_cipher, cipher_key, iv);
-                    (cipher, hmac)
-                };
+				let (encoding_cipher, encoding_hmac) = {
+					let (iv, rest) = local_infos.split_at(iv_size);
+					let (cipher_key, mac_key) = rest.split_at(cipher_key_size);
+					let hmac = SigningKey::new(&context.chosen_hash.clone().unwrap(), mac_key);
+					let cipher = ctr(chosen_cipher, cipher_key, iv);
+					(cipher, hmac)
+				};
 
-                let (decoding_cipher, decoding_hmac) = {
-                    let (iv, rest) = remote_infos.split_at(iv_size);
-                    let (cipher_key, mac_key) = rest.split_at(cipher_key_size);
-                    let hmac = VerificationKey::new(&context.chosen_hash.clone().unwrap(), mac_key);
-                    let cipher = ctr(chosen_cipher, cipher_key, iv);
-                    (cipher, hmac)
-                };
+				let (decoding_cipher, decoding_hmac) = {
+					let (iv, rest) = remote_infos.split_at(iv_size);
+					let (cipher_key, mac_key) = rest.split_at(cipher_key_size);
+					let hmac = VerificationKey::new(&context.chosen_hash.clone().unwrap(), mac_key);
+					let cipher = ctr(chosen_cipher, cipher_key, iv);
+					(cipher, hmac)
+				};
 
-                Ok(full_codec(socket, Box::new(encoding_cipher), encoding_hmac,
-                              Box::new(decoding_cipher), decoding_hmac))
-            })?;
+				Ok(full_codec(socket, Box::new(encoding_cipher), encoding_hmac,
+							  Box::new(decoding_cipher), decoding_hmac))
+			})?;
 
-            Ok((codec, context))
-        })
+			Ok((codec, context))
+		})
 
-        // We send back their nonce to check if the connection works.
-        .and_then(|(codec, mut context)| {
-            let remote_nonce = mem::replace(&mut context.remote_nonce, Vec::new());
-            codec.send(BytesMut::from(remote_nonce))
-                .map(|s| (s, context))
-                .from_err()
-        })
+		// We send back their nonce to check if the connection works.
+		.and_then(|(codec, mut context)| {
+			let remote_nonce = mem::replace(&mut context.remote_nonce, Vec::new());
+			codec.send(BytesMut::from(remote_nonce))
+				.map(|s| (s, context))
+				.from_err()
+		})
 
-        // Check that the received nonce is correct.
-        .and_then(|(codec, context)| {
-            codec.into_future()
-                .map_err(|(e, _)| e)
-                .and_then(move |(nonce, rest)| {
-                    match nonce {
-                        Some(ref n) if n == &context.local_nonce => {
-                            Ok((rest, context.remote_public_key))
-                        },
-                        None => {
-                            Err(IoError::new(IoErrorKind::BrokenPipe, "unexpected eof").into())
-                        },
-                        _ => Err(SecioError::NonceVerificationFailed)
-                    }
-                })
-        });
+		// Check that the received nonce is correct.
+		.and_then(|(codec, context)| {
+			codec.into_future()
+				.map_err(|(e, _)| e)
+				.and_then(move |(nonce, rest)| {
+					match nonce {
+						Some(ref n) if n == &context.local_nonce => {
+							Ok((rest, context.remote_public_key))
+						},
+						None => {
+							Err(IoError::new(IoErrorKind::BrokenPipe, "unexpected eof").into())
+						},
+						_ => Err(SecioError::NonceVerificationFailed)
+					}
+				})
+		});
 
 	Box::new(future)
 }
@@ -444,8 +444,11 @@ fn stretch_key(key: &SigningKey, result: &mut [u8]) {
 #[cfg(test)]
 mod tests {
 	use super::handshake;
+	use super::stretch_key;
 	use futures::Future;
 	use futures::Stream;
+	use ring::digest::SHA256;
+	use ring::hmac::SigningKey;
 	use ring::signature::RSAKeyPair;
 	use std::sync::Arc;
 	use tokio_core::net::TcpListener;
@@ -473,9 +476,9 @@ mod tests {
 		let listener_addr = listener.local_addr().unwrap();
 
 		let server = listener.incoming()
-		                     .into_future()
-		                     .map_err(|(e, _)| e.into())
-		                     .and_then(move |(connec, _)| {
+							 .into_future()
+							 .map_err(|(e, _)| e.into())
+							 .and_then(move |(connec, _)| {
 			handshake(connec.unwrap().0, public_key1, private_key1)
 		});
 
@@ -484,5 +487,266 @@ mod tests {
 			.and_then(move |stream| handshake(stream, public_key2, private_key2));
 
 		core.run(server.join(client)).unwrap();
+	}
+
+	#[test]
+	fn stretch() {
+		let mut output = [0u8; 32];
+
+		let key1 = SigningKey::new(&SHA256, &[]);
+		stretch_key(&key1, &mut output);
+		assert_eq!(
+			&output,
+			&[
+				103,
+				144,
+				60,
+				199,
+				85,
+				145,
+				239,
+				71,
+				79,
+				198,
+				85,
+				164,
+				32,
+				53,
+				143,
+				205,
+				50,
+				48,
+				153,
+				10,
+				37,
+				32,
+				85,
+				1,
+				226,
+				61,
+				193,
+				1,
+				154,
+				120,
+				207,
+				80,
+			]
+		);
+
+		let key2 = SigningKey::new(
+			&SHA256,
+			&[
+				157,
+				166,
+				80,
+				144,
+				77,
+				193,
+				198,
+				6,
+				23,
+				220,
+				87,
+				220,
+				191,
+				72,
+				168,
+				197,
+				54,
+				33,
+				219,
+				225,
+				84,
+				156,
+				165,
+				37,
+				149,
+				224,
+				244,
+				32,
+				170,
+				79,
+				125,
+				35,
+				171,
+				26,
+				178,
+				176,
+				92,
+				168,
+				22,
+				27,
+				205,
+				44,
+				229,
+				61,
+				152,
+				21,
+				222,
+				81,
+				241,
+				81,
+				116,
+				236,
+				74,
+				166,
+				89,
+				145,
+				5,
+				162,
+				108,
+				230,
+				55,
+				54,
+				9,
+				17,
+			],
+		);
+		stretch_key(&key2, &mut output);
+		assert_eq!(
+			&output,
+			&[
+				39,
+				151,
+				182,
+				63,
+				180,
+				175,
+				224,
+				139,
+				42,
+				131,
+				130,
+				116,
+				55,
+				146,
+				62,
+				31,
+				157,
+				95,
+				217,
+				15,
+				73,
+				81,
+				10,
+				83,
+				243,
+				141,
+				64,
+				227,
+				103,
+				144,
+				99,
+				121,
+			]
+		);
+
+		let key3 = SigningKey::new(
+			&SHA256,
+			&[
+				98,
+				219,
+				94,
+				104,
+				97,
+				70,
+				139,
+				13,
+				185,
+				110,
+				56,
+				36,
+				66,
+				3,
+				80,
+				224,
+				32,
+				205,
+				102,
+				170,
+				59,
+				32,
+				140,
+				245,
+				86,
+				102,
+				231,
+				68,
+				85,
+				249,
+				227,
+				243,
+				57,
+				53,
+				171,
+				36,
+				62,
+				225,
+				178,
+				74,
+				89,
+				142,
+				151,
+				94,
+				183,
+				231,
+				208,
+				166,
+				244,
+				130,
+				130,
+				209,
+				248,
+				65,
+				19,
+				48,
+				127,
+				127,
+				55,
+				82,
+				117,
+				154,
+				124,
+				108,
+			],
+		);
+		stretch_key(&key3, &mut output);
+		assert_eq!(
+			&output,
+			&[
+				28,
+				39,
+				158,
+				206,
+				164,
+				16,
+				211,
+				194,
+				99,
+				43,
+				208,
+				36,
+				24,
+				141,
+				90,
+				93,
+				157,
+				236,
+				238,
+				111,
+				170,
+				0,
+				60,
+				11,
+				49,
+				174,
+				177,
+				121,
+				30,
+				12,
+				182,
+				25,
+			]
+		);
 	}
 }

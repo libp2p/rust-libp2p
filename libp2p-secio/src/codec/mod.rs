@@ -150,12 +150,12 @@ mod tests {
 			});
 
 		let fin = server.join(client)
-		                .from_err::<SecioError>()
-		                .and_then(|(server, client)| {
+						.from_err::<SecioError>()
+						.and_then(|(server, client)| {
 			client.send(BytesMut::from(&data_clone[..])).map(move |_| server).from_err()
 		})
-		                .and_then(|server| server.into_future().map_err(|(e, _)| e.into()))
-		                .map(|recved| recved.0.unwrap().to_vec());
+						.and_then(|server| server.into_future().map_err(|(e, _)| e.into()))
+						.map(|recved| recved.0.unwrap().to_vec());
 
 		let received = core.run(fin).unwrap();
 		assert_eq!(received, data);
