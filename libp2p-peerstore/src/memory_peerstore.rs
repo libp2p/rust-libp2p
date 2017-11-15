@@ -1,132 +1,123 @@
-use std::collections::{HashMap, HashSet};
-use std::collections::hash_map;
-use multiaddr::Multiaddr;
-use peer::PeerId;
-use peer_info::PeerInfo;
+// Copyright 2017 Parity Technologies (UK) Ltd.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+
+//! Implementation of the `Peerstore` trait that simple stores peers in memory.
+
 use super::TTL;
-use peerstore::*;
+use PeerId;
+use multiaddr::Multiaddr;
+use multihash::Multihash;
+use owning_ref::OwningRefMut;
+use peer_info::{PeerInfo, AddAddrBehaviour};
+use peerstore::{Peerstore, PeerAccess};
+use std::collections::HashMap;
+use std::iter;
+use std::sync::{Mutex, MutexGuard};
+use std::vec::IntoIter as VecIntoIter;
 
-pub struct MemoryPeerstore<T> {
-	store: HashMap<PeerId, PeerInfo<T>>,
+/// Implementation of the `Peerstore` trait that simply stores the peer information in memory.
+pub struct MemoryPeerstore {
+	store: Mutex<HashMap<Multihash, PeerInfo>>,
 }
 
-impl<T> MemoryPeerstore<T> {
-	pub fn new() -> MemoryPeerstore<T> {
-		MemoryPeerstore {
-			store: HashMap::new(),
-		}
+impl MemoryPeerstore {
+	/// Initializes a new `MemoryPeerstore`. The database is initially empty.
+	#[inline]
+	pub fn empty() -> MemoryPeerstore {
+		MemoryPeerstore { store: Mutex::new(HashMap::new()) }
 	}
 }
 
-impl<T> Peerstore<T> for MemoryPeerstore<T> {
-	fn add_peer(&mut self, peer_id: PeerId, peer_info: PeerInfo<T>) {
-		self.store.insert(peer_id, peer_info);
+impl Default for MemoryPeerstore {
+	#[inline]
+	fn default() -> MemoryPeerstore {
+		MemoryPeerstore::empty()
 	}
-	/// Returns a list of peers in this Peerstore
-	fn peers(&self) -> Vec<&PeerId> {
-		// this is terrible but I honestly can't think of any other way than to hand off ownership
-		// through this type of allocation or handing off the entire hashmap and letting people do what they
-		// want with that
-		self.store.keys().collect()
-	}
-	/// Returns the PeerInfo for a specific peer in this peer store, or None if it doesn't exist.
-	fn peer_info(&self, peer_id: &PeerId) -> Option<&PeerInfo<T>> {
-		self.store.get(peer_id)
+}
+
+impl<'a> Peerstore for &'a MemoryPeerstore {
+	type PeerAccess = MemoryPeerstoreAccess<'a>;
+	type PeersIter = VecIntoIter<PeerId>;
+
+	fn peer(self, peer_id: &PeerId) -> Option<Self::PeerAccess> {
+		let lock = self.store.lock().unwrap();
+		OwningRefMut::new(lock)
+			.try_map_mut(|n| n.get_mut(peer_id).ok_or(()))
+			.ok()
+			.map(MemoryPeerstoreAccess)
 	}
 
-	/// Try to get a property for a given peer
-	fn get_data(&self, peer_id: &PeerId, key: &str) -> Option<&T> {
-		match self.store.get(peer_id) {
-			None => None,
-			Some(peer_info) => peer_info.get_data(key),
-		}
-	}
-	/// Set a property for a given peer
-	fn put_data(&mut self, peer_id: &PeerId, key: String, val: T) {
-		match self.store.get_mut(peer_id) {
-			None => (),
-			Some(mut peer_info) => {
-				peer_info.set_data(key, val);
-			},
-		}
+	fn peer_or_create(self, peer_id: &PeerId) -> Self::PeerAccess {
+		let lock = self.store.lock().unwrap();
+		let r = OwningRefMut::new(lock)
+			.map_mut(|n| n.entry(peer_id.clone()).or_insert_with(|| PeerInfo::new()));
+		MemoryPeerstoreAccess(r)
 	}
 
-	/// Adds an address to a peer
-	fn add_addr(&mut self, peer_id: &PeerId, addr: Multiaddr, ttl: TTL) {
-		match self.store.get_mut(peer_id) {
-			None => (),
-			Some(peer_info) => peer_info.add_addr(addr),
-		}
+	fn peers(self) -> Self::PeersIter {
+		let lock = self.store.lock().unwrap();
+		lock.keys().cloned().collect::<Vec<_>>().into_iter()
+	}
+}
+
+// Note: Rust doesn't provide a `MutexGuard::map` method, otherwise we could directly store a
+// 		 `MutexGuard<'a, (&'a Multihash, &'a PeerInfo)>`.
+pub struct MemoryPeerstoreAccess<'a>(OwningRefMut<MutexGuard<'a, HashMap<Multihash, PeerInfo>>, PeerInfo>);
+
+impl<'a> PeerAccess for MemoryPeerstoreAccess<'a> {
+	type AddrsIter = VecIntoIter<Multiaddr>;
+
+	#[inline]
+	fn addrs(&self) -> Self::AddrsIter {
+		self.0.addrs().cloned().collect::<Vec<_>>().into_iter()
 	}
 
-	// AddAddrs gives AddrManager addresses to use, with a given ttl
-	// (time-to-live), after which the address is no longer valid.
-	// If the manager has a longer TTL, the operation is a no-op for that address
-	fn add_addrs(&mut self, peer_id: &PeerId, addrs: Vec<Multiaddr>, ttl: TTL) {
-		match self.store.get_mut(peer_id) {
-			None => (),
-			Some(peer_info) => {
-				for addr in addrs {
-					peer_info.add_addr(addr)
-				}
-			},
-		}
+	#[inline]
+	fn add_addr(&mut self, addr: Multiaddr, ttl: TTL) {
+		self.0.add_addr(addr, ttl, AddAddrBehaviour::IgnoreTtlIfInferior);
 	}
 
-	// SetAddr calls mgr.SetAddrs(p, addr, ttl)
-	fn set_addr(&mut self, peer_id: &PeerId, addr: Multiaddr, ttl: TTL) {
-		self.set_addrs(peer_id, vec![addr], ttl)
+	#[inline]
+	fn set_addr_ttl(&mut self, addr: Multiaddr, ttl: TTL) {
+		self.0.add_addr(addr, ttl, AddAddrBehaviour::OverwriteTtl);
 	}
 
-	// SetAddrs sets the ttl on addresses. This clears any TTL there previously.
-	// This is used when we receive the best estimate of the validity of an address.
-	fn set_addrs(&mut self, peer_id: &PeerId, addrs: Vec<Multiaddr>, ttl: TTL) {
-		match self.store.get_mut(peer_id) {
-			None => (),
-			Some(peer_info) => peer_info.set_addrs(addrs),
-		}
+	#[inline]
+	fn clear_addrs(&mut self) {
+		self.0.set_addrs(iter::empty());
 	}
 
-	/// Returns all known (and valid) addresses for a given peer
-	fn addrs(&self, peer_id: &PeerId) -> &[Multiaddr] {
-		match self.store.get(peer_id) {
-			None => &[],
-			Some(peer_info) => peer_info.get_addrs(),
-		}
+	#[inline]
+	fn get_pub_key(&self) -> Option<&[u8]> {
+		self.0.public_key()
 	}
 
-	/// Removes all previously stored addresses
-	fn clear_addrs(&mut self, peer_id: &PeerId) {
-		match self.store.get_mut(peer_id) {
-			None => (),
-			Some(peer_info) => peer_info.set_addrs(vec![]),
-		}
-	}
-
-	/// Get public key for a peer
-	fn get_pub_key(&self, peer_id: &PeerId) -> Option<&[u8]> {
-		self.store.get(peer_id).map(|peer_info| peer_info.get_public_key())
-	}
-
-	/// Set public key for a peer
-	fn set_pub_key(&mut self, peer_id: &PeerId, key: Vec<u8>) {
-		self.store.get_mut(peer_id).map(|peer_info| peer_info.set_public_key(key));
+	#[inline]
+	fn set_pub_key(&mut self, key: Vec<u8>) {
+		self.0.set_public_key(key);
 	}
 }
 
 #[cfg(test)]
 mod tests {
-	use peer::PeerId;
-	use super::{PeerInfo, Peerstore, MemoryPeerstore};
-
-	#[test]
-	fn insert_get_and_list() {
-		let peer_id = PeerId::new(vec![1,2,3]);
-		let peer_info = PeerInfo::new();
-		let mut peer_store: MemoryPeerstore<u8> = MemoryPeerstore::new();
-		peer_store.add_peer(peer_id.clone(), peer_info);
-		peer_store.put_data(&peer_id, "test".into(), 123u8).unwrap();
-		let got = peer_store.get_data(&peer_id, "test").expect("should be able to fetch");
-		assert_eq!(*got, 123u8);
-	}
+	peerstore_tests!({
+		::memory_peerstore::MemoryPeerstore::empty()
+	});
 }

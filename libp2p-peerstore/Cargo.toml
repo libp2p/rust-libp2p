@@ -4,6 +4,14 @@ version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 
 [dependencies]
-error-chain = "0.11"
+base58 = "0.1.0"
+datastore = { path = "../datastore" }
+futures = "0.1.0"
+owning_ref = "0.3.3"
 multiaddr = "0.2"
-libp2p-peer = { path = "../libp2p-peer" }
+multihash = { path = "../multihash" }
+serde = "1.0"
+serde_derive = "1.0"
+
+[dev-dependencies]
+tempfile = "2.2"

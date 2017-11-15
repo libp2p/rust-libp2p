@@ -18,35 +18,37 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! Implementation of `Datastore` that uses a single plain JSON file for storage.
+
 use Datastore;
+use chashmap::{CHashMap, WriteGuard};
 use futures::Future;
 use futures::stream::{Stream, iter_ok};
-use parking_lot::Mutex;
 use query::{Query, naive_apply_query};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Map, from_value, to_value, from_reader, to_writer};
 use serde_json::value::Value;
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::fs;
 use std::io::Cursor;
 use std::io::Error as IoError;
 use std::io::ErrorKind as IoErrorKind;
 use std::io::Read;
+use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use tempfile::NamedTempFile;
 
 /// Implementation of `Datastore` that uses a single plain JSON file.
 pub struct JsonFileDatastore<T>
-	where T: Serialize + DeserializeOwned
+	where T: Serialize + DeserializeOwned + Clone
 {
 	path: PathBuf,
-	content: Mutex<HashMap<String, T>>,
+	content: CHashMap<String, T>,
 }
 
 impl<T> JsonFileDatastore<T>
-	where T: Serialize + DeserializeOwned
+    where T: Serialize + DeserializeOwned + Clone
 {
 	/// Opens or creates the datastore. If the path refers to an existing path, then this function
 	/// will attempt to load an existing set of values from it (which can result in an error).
@@ -59,7 +61,7 @@ impl<T> JsonFileDatastore<T>
 		if !path.exists() {
 			return Ok(JsonFileDatastore {
 				path: path,
-				content: Mutex::new(HashMap::new()),
+				content: CHashMap::new(),
 			});
 		}
 
@@ -74,12 +76,12 @@ impl<T> JsonFileDatastore<T>
 			let mut first_byte = [0];
 			if file.read(&mut first_byte)? == 0 {
 				// File is empty.
-				HashMap::new()
+				CHashMap::new()
 			} else {
 				match from_reader::<_, Value>(Cursor::new(first_byte).chain(file)) {
-					Ok(Value::Null) => HashMap::new(),
+					Ok(Value::Null) => CHashMap::new(),
 					Ok(Value::Object(map)) => {
-						let mut out = HashMap::with_capacity(map.len());
+						let mut out = CHashMap::with_capacity(map.len());
 						for (key, value) in map.into_iter() {
 							let value = match from_value(value) {
 								Ok(v) => v,
@@ -99,10 +101,7 @@ impl<T> JsonFileDatastore<T>
 			}
 		};
 
-		Ok(JsonFileDatastore {
-			path: path,
-			content: Mutex::new(content),
-		})
+		Ok(JsonFileDatastore { path: path, content: content })
 	}
 
 	/// Flushes the content of the datastore to the disk.
@@ -110,22 +109,24 @@ impl<T> JsonFileDatastore<T>
 	/// This function can only fail in case of a disk access error. If an error occurs, any change
 	/// to the datastore that was performed since the last successful flush will be lost. No data
 	/// will be corrupted.
-	pub fn flush(&self) -> Result<(), IoError> {
+	pub fn flush(&self) -> Result<(), IoError>
+		where T: Clone
+	{
 		// Create a temporary file in the same directory as the destination, which avoids the
 		// problem of having a file cleaner delete our file while we use it.
 		let self_path_parent = self.path
-								   .parent()
-								   .ok_or(IoError::new(
+		                           .parent()
+		                           .ok_or(IoError::new(
 			IoErrorKind::Other,
 			"couldn't get parent directory of destination",
 		))?;
 		let mut temporary_file = NamedTempFile::new_in(self_path_parent)?;
 
-		let content = self.content.lock();
+		let content = self.content.clone().into_iter();
 		to_writer(
 			&mut temporary_file,
-			&content.iter().map(|(k, v)| (k.clone(), to_value(v).unwrap())).collect::<Map<_, _>>(),
-		)?; // TODO: panic!
+			&content.map(|(k, v)| (k, to_value(v).unwrap())).collect::<Map<_, _>>(),
+		)?;
 		temporary_file.sync_data()?;
 
 		// Note that `persist` will fail if we try to persist across filesystems. However that
@@ -136,60 +137,75 @@ impl<T> JsonFileDatastore<T>
 	}
 }
 
-impl<T> Datastore<T> for JsonFileDatastore<T>
-	where T: Clone + Serialize + DeserializeOwned + Default + Ord + 'static
+impl<'a, T> Datastore<T> for &'a JsonFileDatastore<T>
+	where T: Clone + Serialize + DeserializeOwned + Default + PartialOrd + 'static
 {
+	type Entry = JsonFileDatastoreEntry<'a, T>;
+	type QueryResult = Box<Stream<Item = (String, T), Error = IoError> + 'a>;
+
 	#[inline]
-	fn put(&self, key: Cow<str>, value: T) {
-		let mut content = self.content.lock();
-		content.insert(key.into_owned(), value);
+	fn lock(self, key: Cow<str>) -> Option<Self::Entry> {
+		self.content.get_mut(&key.into_owned()).map(JsonFileDatastoreEntry)
 	}
 
-	fn get(&self, key: &str) -> Option<T> {
-		let content = self.content.lock();
-		// If the JSON is malformed, we just ignore the value.
-		content.get(key).cloned()
+	#[inline]
+	fn lock_or_create(self, key: Cow<str>) -> Self::Entry {
+		loop {
+			self.content.upsert(key.clone().into_owned(), || Default::default(), |_| {});
+
+			// There is a slight possibility that another thread will delete our value in this
+			// small interval. If this happens, we just loop and reinsert the value again until
+			// we can acquire a lock.
+			if let Some(v) = self.content.get_mut(&key.clone().into_owned()) {
+				return JsonFileDatastoreEntry(v);
+			}
+		}
 	}
 
-	fn has(&self, key: &str) -> bool {
-		let content = self.content.lock();
-		content.contains_key(key)
+	#[inline]
+	fn put(self, key: Cow<str>, value: T) {
+		self.content.insert(key.into_owned(), value);
 	}
 
-	fn delete(&self, key: &str) -> bool {
-		let mut content = self.content.lock();
-		content.remove(key).is_some()
+	#[inline]
+	fn get(self, key: &str) -> Option<T> {
+		self.content.get(&key.to_owned()).map(|v| v.clone())
 	}
 
-	fn query<'a>(
-		&'a self,
-		query: Query<T>,
-	) -> Box<Stream<Item = (String, T), Error = IoError> + 'a> {
-		let content = self.content.lock();
+	#[inline]
+	fn has(self, key: &str) -> bool {
+		self.content.contains_key(&key.to_owned())
+	}
+
+	#[inline]
+	fn delete(self, key: &str) -> Option<T> {
+		self.content.remove(&key.to_owned())
+	}
+
+	fn query(self, query: Query<T>) -> Self::QueryResult {
+		let content = self.content.clone();
 
 		let keys_only = query.keys_only;
 
-		let content_stream = iter_ok(content.iter().filter_map(|(key, value)| {
+		let content_stream = iter_ok(content.into_iter().filter_map(|(key, value)| {
 			// Skip values that are malformed.
-			let value = if keys_only { Default::default() } else { value.clone() };
-
-			Some((key.clone(), value))
+			let value = if keys_only { Default::default() } else { value };
+			Some((key, value))
 		}));
 
 		// `content_stream` reads from the content of the `Mutex`, so we need to clone the data
 		// into a `Vec` before returning.
-		let collected = naive_apply_query(content_stream, query)
-			.collect()
-			.wait()
-			.expect("can only fail if either `naive_apply_query` or `content_stream` produce \
-					 an error, which cann't happen");
+		let collected = naive_apply_query(content_stream, query).collect().wait().expect(
+			"can only fail if either `naive_apply_query` or `content_stream` produce \
+					 an error, which cann't happen",
+		);
 		let output_stream = iter_ok(collected.into_iter());
 		Box::new(output_stream) as Box<_>
 	}
 }
 
 impl<T> Drop for JsonFileDatastore<T>
-	where T: Serialize + DeserializeOwned
+    where T: Serialize + DeserializeOwned + Clone
 {
 	#[inline]
 	fn drop(&mut self) {
@@ -200,6 +216,27 @@ impl<T> Drop for JsonFileDatastore<T>
 		// If an error happens here, any change since the last successful flush will be lost, but
 		// the data will not be corrupted.
 		let _ = self.flush();
+	}
+}
+
+/// Implementation of `Datastore` that uses a single plain JSON file.
+pub struct JsonFileDatastoreEntry<'a, T>(WriteGuard<'a, String, T>) where T: 'a;
+
+impl<'a, T> Deref for JsonFileDatastoreEntry<'a, T>
+    where T: 'a
+{
+	type Target = T;
+
+	fn deref(&self) -> &T {
+		&*self.0
+	}
+}
+
+impl<'a, T> DerefMut for JsonFileDatastoreEntry<'a, T>
+    where T: 'a
+{
+	fn deref_mut(&mut self) -> &mut T {
+		&mut *self.0
 	}
 }
 
@@ -259,9 +296,9 @@ mod tests {
 			limit: u64::max_value(),
 			keys_only: false,
 		})
-							 .collect()
-							 .wait()
-							 .unwrap();
+		                     .collect()
+		                     .wait()
+		                     .unwrap();
 
 		assert_eq!(query[0].0, "foo4");
 		assert_eq!(query[0].1, &[10, 11, 12]);
