@@ -19,14 +19,15 @@
 // DEALINGS IN THE SOFTWARE.
 
 use Datastore;
-use base64;
 use futures::Future;
 use futures::stream::{Stream, iter_ok};
 use query::{Query, naive_apply_query};
-use serde_json::{from_reader, to_writer};
-use serde_json::map::Map;
+use serde::Serialize;
+use serde::de::DeserializeOwned;
+use serde_json::{Map, from_value, to_value, from_reader, to_writer};
 use serde_json::value::Value;
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::fs;
 use std::io::Cursor;
 use std::io::Error as IoError;
@@ -37,16 +38,20 @@ use parking_lot::Mutex;
 use tempfile::NamedTempFile;
 
 /// Implementation of `Datastore` that uses a single plain JSON file.
-pub struct JsonFileDatastore {
+pub struct JsonFileDatastore<T>
+    where T: Serialize + DeserializeOwned
+{
     path: PathBuf,
-    content: Mutex<Map<String, Value>>,
+    content: Mutex<HashMap<String, T>>,
 }
 
-impl JsonFileDatastore {
+impl<T> JsonFileDatastore<T>
+    where T: Serialize + DeserializeOwned
+{
     /// Opens or creates the datastore. If the path refers to an existing path, then this function
     /// will attempt to load an existing set of values from it (which can result in an error).
     /// Otherwise if the path doesn't exist, a new empty datastore will be created.
-    pub fn new<P>(path: P) -> Result<JsonFileDatastore, IoError>
+    pub fn new<P>(path: P) -> Result<JsonFileDatastore<T>, IoError>
     where
         P: Into<PathBuf>,
     {
@@ -55,7 +60,7 @@ impl JsonFileDatastore {
         if !path.exists() {
             return Ok(JsonFileDatastore {
                 path: path,
-                content: Mutex::new(Map::new()),
+                content: Mutex::new(HashMap::new()),
             });
         }
 
@@ -70,18 +75,33 @@ impl JsonFileDatastore {
             let mut first_byte = [0];
             if file.read(&mut first_byte)? == 0 {
                 // File is empty.
-                Map::new()
+                HashMap::new()
             } else {
                 match from_reader::<_, Value>(Cursor::new(first_byte).chain(file)) {
-                    Ok(Value::Null) => Map::new(),
-                    Ok(Value::Object(map)) => map,
+                    Ok(Value::Null) => HashMap::new(),
+                    Ok(Value::Object(map)) => {
+                        let mut out = HashMap::with_capacity(map.len());
+                        for (key, value) in map.into_iter() {
+                            let value = match from_value(value) {
+                                Ok(v) => v,
+                                Err(err) => return Err(IoError::new(
+                                    IoErrorKind::InvalidData,
+                                    err,
+                                )),
+                            };
+                            out.insert(key, value);
+                        }
+                        out
+                    },
                     Ok(_) => {
                         return Err(IoError::new(
                             IoErrorKind::InvalidData,
                             "expected JSON object",
                         ));
                     }
-                    Err(err) => return Err(IoError::new(IoErrorKind::InvalidData, err)),
+                    Err(err) => {
+                        return Err(IoError::new(IoErrorKind::InvalidData, err));
+                    },
                 }
             }
         };
@@ -107,7 +127,8 @@ impl JsonFileDatastore {
         let mut temporary_file = NamedTempFile::new_in(self_path_parent)?;
 
         let content = self.content.lock();
-        to_writer(&mut temporary_file, &*content)?;
+        to_writer(&mut temporary_file,
+                  &content.iter().map(|(k, v)| (k.clone(), to_value(v).unwrap())).collect::<Map<_, _>>())?;        // TODO: panic!
         temporary_file.sync_data()?;
 
         // Note that `persist` will fail if we try to persist across filesystems. However that
@@ -118,19 +139,19 @@ impl JsonFileDatastore {
     }
 }
 
-impl Datastore for JsonFileDatastore {
-    fn put(&self, key: Cow<str>, value: Vec<u8>) {
+impl<T> Datastore<T> for JsonFileDatastore<T>
+    where T: Clone + Serialize + DeserializeOwned + Default + Ord + 'static
+{
+    #[inline]
+    fn put(&self, key: Cow<str>, value: T) {
         let mut content = self.content.lock();
-        content.insert(key.into_owned(), Value::String(base64::encode(&value)));
+        content.insert(key.into_owned(), value);
     }
 
-    fn get(&self, key: &str) -> Option<Vec<u8>> {
+    fn get(&self, key: &str) -> Option<T> {
         let content = self.content.lock();
         // If the JSON is malformed, we just ignore the value.
-        content.get(key).and_then(|val| match val {
-            &Value::String(ref s) => base64::decode(s).ok(),
-            _ => None,
-        })
+        content.get(key).cloned()
     }
 
     fn has(&self, key: &str) -> bool {
@@ -145,8 +166,8 @@ impl Datastore for JsonFileDatastore {
 
     fn query<'a>(
         &'a self,
-        query: Query,
-    ) -> Box<Stream<Item = (String, Vec<u8>), Error = IoError> + 'a> {
+        query: Query<T>,
+    ) -> Box<Stream<Item = (String, T), Error = IoError> + 'a> {
         let content = self.content.lock();
 
         let keys_only = query.keys_only;
@@ -154,17 +175,9 @@ impl Datastore for JsonFileDatastore {
         let content_stream = iter_ok(content.iter().filter_map(|(key, value)| {
             // Skip values that are malformed.
             let value = if keys_only {
-                Vec::with_capacity(0)
+                Default::default()
             } else {
-                match value {
-                    &Value::String(ref s) => {
-                        match base64::decode(s) {
-                            Ok(s) => s,
-                            Err(_) => return None,
-                        }
-                    }
-                    _ => return None,
-                }
+                value.clone()
             };
 
             Some((key.clone(), value))
@@ -182,7 +195,9 @@ impl Datastore for JsonFileDatastore {
     }
 }
 
-impl Drop for JsonFileDatastore {
+impl<T> Drop for JsonFileDatastore<T>
+    where T: Serialize + DeserializeOwned
+{
     #[inline]
     fn drop(&mut self) {
         // Unfortunately there's not much we can do here in case of an error, as panicking would be
@@ -206,7 +221,7 @@ mod tests {
     #[test]
     fn open_and_flush() {
         let temp_file = NamedTempFile::new().unwrap();
-        let datastore = JsonFileDatastore::new(temp_file.path()).unwrap();
+        let datastore = JsonFileDatastore::<Vec<u8>>::new(temp_file.path()).unwrap();
         datastore.flush().unwrap();
     }
 
@@ -214,13 +229,13 @@ mod tests {
     fn values_store_and_reload() {
         let temp_file = NamedTempFile::new().unwrap();
 
-        let datastore = JsonFileDatastore::new(temp_file.path()).unwrap();
+        let datastore = JsonFileDatastore::<Vec<u8>>::new(temp_file.path()).unwrap();
         datastore.put("foo".into(), vec![1, 2, 3]);
         datastore.put("bar".into(), vec![0, 255, 127]);
         datastore.flush().unwrap();
         drop(datastore);
 
-        let reload = JsonFileDatastore::new(temp_file.path()).unwrap();
+        let reload = JsonFileDatastore::<Vec<u8>>::new(temp_file.path()).unwrap();
         assert_eq!(reload.get("bar").unwrap(), &[0, 255, 127]);
         assert_eq!(reload.get("foo").unwrap(), &[1, 2, 3]);
     }
@@ -229,9 +244,9 @@ mod tests {
     fn query_basic() {
         let temp_file = NamedTempFile::new().unwrap();
 
-        let datastore = JsonFileDatastore::new(temp_file.path()).unwrap();
-        datastore.put("foo1".into(), vec![1, 2, 3]);
-        datastore.put("foo2".into(), vec![4, 5, 6]);
+        let datastore = JsonFileDatastore::<Vec<u8>>::new(temp_file.path()).unwrap();
+        datastore.put("foo1".into(), vec![6, 7, 8]);
+        datastore.put("foo2".into(), vec![6, 7, 8]);
         datastore.put("foo3".into(), vec![7, 8, 9]);
         datastore.put("foo4".into(), vec![10, 11, 12]);
         datastore.put("foo5".into(), vec![13, 14, 15]);
@@ -243,8 +258,8 @@ mod tests {
                 prefix: "fo".into(),
                 filters: vec![
                     Filter {
-                        ty: FilterTy::ValueCompare(vec![6, 7, 8].into()),
-                        operation: FilterOp::Greater,
+                        ty: FilterTy::ValueCompare(&vec![6, 7, 8].into()),
+                        operation: FilterOp::NotEqual,
                     },
                 ],
                 orders: vec![Order::ByKeyDesc],

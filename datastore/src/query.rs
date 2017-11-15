@@ -31,11 +31,11 @@ use std::vec::IntoIter as VecIntoIter;
 /// The various modifications of the dataset are applied in the same order as the fields (prefix,
 /// filters, orders, skip, limit).
 #[derive(Debug, Clone)]
-pub struct Query<'a> {
+pub struct Query<'a, T: 'a> {
     /// Only the keys that start with `prefix` will be returned.
     pub prefix: Cow<'a, str>,
     /// Filters to apply on the results.
-    pub filters: Vec<Filter<'a>>,
+    pub filters: Vec<Filter<'a, T>>,
     /// How to order the keys. Applied sequentially.
     pub orders: Vec<Order>,
     /// Number of elements to skip from at the start of the results.
@@ -48,30 +48,29 @@ pub struct Query<'a> {
 
 /// A filter to apply to the results set.
 #[derive(Debug, Clone)]
-pub struct Filter<'a> {
+pub struct Filter<'a, T: 'a> {
     /// Type of filter and value to compare with.
-    pub ty: FilterTy<'a>,
+    pub ty: FilterTy<'a, T>,
     /// Comparison operation.
     pub operation: FilterOp,
 }
 
 /// Type of filter and value to compare with.
 #[derive(Debug, Clone)]
-pub enum FilterTy<'a> {
+pub enum FilterTy<'a, T: 'a> {
     /// Compare the key with a reference value.
     KeyCompare(Cow<'a, str>),
     /// Compare the value with a reference value.
-    ValueCompare(Cow<'a, [u8]>),
+    ValueCompare(&'a T),
 }
 
-/// Filtering operation. Keep in mind that anything else than `Equal` and `NotEqual` is a bit
-/// blurry.
+/// Filtering operation.
 #[derive(Debug, Copy, Clone)]
 pub enum FilterOp {
-    Less,
-    LessOrEqual,
     Equal,
     NotEqual,
+    Less,
+    LessOrEqual,
     Greater,
     GreaterOrEqual,
 }
@@ -90,9 +89,10 @@ pub enum Order {
 }
 
 /// Naively applies a query on a set of results.
-pub fn naive_apply_query<'a, S>(stream: S, query: Query<'a>)
-        -> StreamTake<StreamSkip<NaiveKeysOnlyApply<NaiveApplyOrdered<NaiveFiltersApply<'a, NaivePrefixApply<'a, S>, VecIntoIter<Filter<'a>>>>>>>
-    where S: Stream<Item = (String, Vec<u8>), Error = IoError> + 'a
+pub fn naive_apply_query<'a, S, V>(stream: S, query: Query<'a, V>)
+        -> StreamTake<StreamSkip<NaiveKeysOnlyApply<NaiveApplyOrdered<NaiveFiltersApply<'a, NaivePrefixApply<'a, S>, VecIntoIter<Filter<'a, V>>>, V>>>>
+    where S: Stream<Item = (String, V), Error = IoError> + 'a,
+          V: Clone + Ord + Default + 'static
 {
     let prefixed = naive_apply_prefix(stream, query.prefix);
     let filtered = naive_apply_filters(prefixed, query.filters.into_iter());
@@ -103,18 +103,18 @@ pub fn naive_apply_query<'a, S>(stream: S, query: Query<'a>)
 
 /// Skips the `skip` first element of a stream and only returns `limit` elements.
 #[inline]
-pub fn naive_apply_skip_limit<S>(stream: S, skip: u64, limit: u64) -> StreamTake<StreamSkip<S>>
+pub fn naive_apply_skip_limit<S, T>(stream: S, skip: u64, limit: u64) -> StreamTake<StreamSkip<S>>
 where
-    S: Stream<Item = (String, Vec<u8>), Error = IoError>,
+    S: Stream<Item = (String, T), Error = IoError>,
 {
     stream.skip(skip).take(limit)
 }
 
 /// Filters the result of a stream to empty values if `keys_only` is true.
 #[inline]
-pub fn naive_apply_keys_only<S>(stream: S, keys_only: bool) -> NaiveKeysOnlyApply<S>
+pub fn naive_apply_keys_only<S, T>(stream: S, keys_only: bool) -> NaiveKeysOnlyApply<S>
 where
-    S: Stream<Item = (String, Vec<u8>), Error = IoError>,
+    S: Stream<Item = (String, T), Error = IoError>,
 {
     NaiveKeysOnlyApply {
         keys_only: keys_only,
@@ -129,18 +129,19 @@ pub struct NaiveKeysOnlyApply<S> {
     stream: S,
 }
 
-impl<S> Stream for NaiveKeysOnlyApply<S>
+impl<S, T> Stream for NaiveKeysOnlyApply<S>
 where
-    S: Stream<Item = (String, Vec<u8>), Error = IoError>,
+    S: Stream<Item = (String, T), Error = IoError>,
+    T: Default
 {
-    type Item = (String, Vec<u8>);
+    type Item = (String, T);
     type Error = IoError;
 
     #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         if self.keys_only {
             Ok(Async::Ready(try_ready!(self.stream.poll()).map(|mut v| {
-                v.1 = Vec::new();
+                v.1 = Default::default();
                 v
             })))
         } else {
@@ -151,9 +152,9 @@ where
 
 /// Filters the result of a stream to only keep the results with a prefix.
 #[inline]
-pub fn naive_apply_prefix<'a, S>(stream: S, prefix: Cow<'a, str>) -> NaivePrefixApply<'a, S>
+pub fn naive_apply_prefix<'a, S, T>(stream: S, prefix: Cow<'a, str>) -> NaivePrefixApply<'a, S>
 where
-    S: Stream<Item = (String, Vec<u8>), Error = IoError>,
+    S: Stream<Item = (String, T), Error = IoError>,
 {
     NaivePrefixApply {
         prefix: prefix,
@@ -168,11 +169,11 @@ pub struct NaivePrefixApply<'a, S> {
     stream: S,
 }
 
-impl<'a, S> Stream for NaivePrefixApply<'a, S>
+impl<'a, S, T> Stream for NaivePrefixApply<'a, S>
 where
-    S: Stream<Item = (String, Vec<u8>), Error = IoError>,
+    S: Stream<Item = (String, T), Error = IoError>,
 {
-    type Item = (String, Vec<u8>);
+    type Item = (String, T);
     type Error = IoError;
 
     #[inline]
@@ -193,11 +194,12 @@ where
 
 /// Applies orderings on the stream data. Will simply pass data through if the list of orderings
 /// is empty. Otherwise will need to collect.
-pub fn naive_apply_ordered<'a, S, I>(stream: S, orders_iter: I) -> NaiveApplyOrdered<'a, S>
+pub fn naive_apply_ordered<'a, S, I, V>(stream: S, orders_iter: I) -> NaiveApplyOrdered<'a, S, V>
 where
-    S: Stream<Item = (String, Vec<u8>), Error = IoError> + 'a,
+    S: Stream<Item = (String, V), Error = IoError> + 'a,
     I: IntoIterator<Item = Order>,
     I::IntoIter: 'a,
+    V: Ord + 'static,
 {
     let orders_iter = orders_iter.into_iter();
     if orders_iter.size_hint().1 == Some(0) {
@@ -231,20 +233,20 @@ where
 }
 
 /// Returned by `naive_apply_ordered`.
-pub struct NaiveApplyOrdered<'a, S> {
-    inner: NaiveApplyOrderedInner<'a, S>,
+pub struct NaiveApplyOrdered<'a, S, T> {
+    inner: NaiveApplyOrderedInner<'a, S, T>,
 }
 
-enum NaiveApplyOrderedInner<'a, S> {
+enum NaiveApplyOrderedInner<'a, S, T> {
     PassThrough(S),
-    Collected(Box<Stream<Item = (String, Vec<u8>), Error = IoError> + 'a>),
+    Collected(Box<Stream<Item = (String, T), Error = IoError> + 'a>),
 }
 
-impl<'a, S> Stream for NaiveApplyOrdered<'a, S>
+impl<'a, S, V> Stream for NaiveApplyOrdered<'a, S, V>
 where
-    S: Stream<Item = (String, Vec<u8>), Error = IoError>,
+    S: Stream<Item = (String, V), Error = IoError>,
 {
-    type Item = (String, Vec<u8>);
+    type Item = (String, V);
     type Error = IoError;
 
     #[inline]
@@ -258,10 +260,11 @@ where
 
 /// Filters the result of a stream to apply a set of filters.
 #[inline]
-pub fn naive_apply_filters<'a, S, I>(stream: S, filters: I) -> NaiveFiltersApply<'a, S, I>
+pub fn naive_apply_filters<'a, S, I, V>(stream: S, filters: I) -> NaiveFiltersApply<'a, S, I>
 where
-    S: Stream<Item = (String, Vec<u8>), Error = IoError>,
-    I: Iterator<Item = Filter<'a>> + Clone,
+    S: Stream<Item = (String, V), Error = IoError>,
+    I: Iterator<Item = Filter<'a, V>> + Clone,
+    V: 'a
 {
     NaiveFiltersApply {
         filters: filters,
@@ -278,15 +281,16 @@ pub struct NaiveFiltersApply<'a, S, I> {
     marker: PhantomData<&'a ()>,
 }
 
-impl<'a, S, I> Stream for NaiveFiltersApply<'a, S, I>
+impl<'a, S, I, T> Stream for NaiveFiltersApply<'a, S, I>
 where
     S: Stream<
-        Item = (String, Vec<u8>),
+        Item = (String, T),
         Error = IoError,
     >,
-    I: Iterator<Item = Filter<'a>> + Clone,
+    I: Iterator<Item = Filter<'a, T>> + Clone,
+    T: Ord + 'a,
 {
-    type Item = (String, Vec<u8>);
+    type Item = (String, T);
     type Error = IoError;
 
     #[inline]
@@ -309,14 +313,16 @@ where
 }
 
 #[inline]
-fn naive_filter_test(entry: &(String, Vec<u8>), filter: &Filter) -> bool {
+fn naive_filter_test<T>(entry: &(String, T), filter: &Filter<T>) -> bool
+    where T: Ord
+{
     let (expected_ordering, revert_expected) = match filter.operation {
+        FilterOp::Equal => (Ordering::Equal, false),
+        FilterOp::NotEqual => (Ordering::Equal, true),
         FilterOp::Less => (Ordering::Less, false),
-        FilterOp::LessOrEqual => (Ordering::Greater, true),
-        FilterOp::Equal => (Ordering::Less, false),
-        FilterOp::NotEqual => (Ordering::Less, true),
-        FilterOp::Greater => (Ordering::Greater, false),
         FilterOp::GreaterOrEqual => (Ordering::Less, true),
+        FilterOp::Greater => (Ordering::Greater, false),
+        FilterOp::LessOrEqual => (Ordering::Greater, true),
     };
 
     match filter.ty {
@@ -324,7 +330,7 @@ fn naive_filter_test(entry: &(String, Vec<u8>), filter: &Filter) -> bool {
             ((&*entry.0).cmp(&**ref_value) == expected_ordering) != revert_expected
         }
         FilterTy::ValueCompare(ref ref_value) => {
-            ((&*entry.1).cmp(&**ref_value) == expected_ordering) != revert_expected
+            (entry.1.cmp(&**ref_value) == expected_ordering) != revert_expected
         }
     }
 }

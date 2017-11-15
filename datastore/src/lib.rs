@@ -22,6 +22,7 @@ extern crate base64;
 #[macro_use]
 extern crate futures;
 extern crate parking_lot;
+extern crate serde;
 extern crate serde_json;
 extern crate tempfile;
 
@@ -36,13 +37,13 @@ pub use self::json_file::JsonFileDatastore;
 pub use self::query::{Query, Order, Filter, FilterTy, FilterOp};
 
 /// Abstraction over any struct that can store `(key, value)` pairs.
-pub trait Datastore {
+pub trait Datastore<T> {
     /// Sets the value of a key.
-    fn put(&self, key: Cow<str>, value: Vec<u8>);
+    fn put(&self, key: Cow<str>, value: T);
 
     /// Returns the value corresponding to this key.
     // TODO: use higher-kinded stuff once stable to provide a more generic "accessor" for the data
-    fn get(&self, key: &str) -> Option<Vec<u8>>;
+    fn get(&self, key: &str) -> Option<T>;
 
     /// Returns true if the datastore contains the given key.
     fn has(&self, key: &str) -> bool;
@@ -56,6 +57,6 @@ pub trait Datastore {
     /// responsibility to pick the right implementation for the right job.
     fn query<'a>(
         &'a self,
-        query: Query,
-    ) -> Box<Stream<Item = (String, Vec<u8>), Error = IoError> + 'a>;
+        query: Query<T>,
+    ) -> Box<Stream<Item = (String, T), Error = IoError> + 'a>;
 }
