@@ -23,7 +23,7 @@
 use protocol::MultistreamSelectError;
 use std::io::Error as IoError;
 
-/// Error that can happen when negociating a protocol with the remote.
+/// Error that can happen when negotiating a protocol with the remote.
 #[derive(Debug)]
 pub enum ProtocolChoiceError {
 	/// Error in the protocol.
