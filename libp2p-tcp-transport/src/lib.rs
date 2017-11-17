@@ -108,6 +108,8 @@ mod tests {
     fn multiaddr_to_tcp_conversion() {
         use std::net::Ipv6Addr;
 
+        assert!(multiaddr_to_socketaddr(&Multiaddr::new("/ip4/127.0.0.1/udp/1234").unwrap()).is_err());
+
         assert_eq!(
             multiaddr_to_socketaddr(&Multiaddr::new("/ip4/127.0.0.1/tcp/12345").unwrap()),
             Ok(SocketAddr::new(
