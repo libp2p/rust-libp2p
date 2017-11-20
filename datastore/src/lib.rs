@@ -19,9 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 extern crate base64;
+extern crate chashmap;
 #[macro_use]
 extern crate futures;
-extern crate parking_lot;
 extern crate serde;
 extern crate serde_json;
 extern crate tempfile;
@@ -29,34 +29,67 @@ extern crate tempfile;
 use futures::Stream;
 use std::borrow::Cow;
 use std::io::Error as IoError;
+use std::ops::DerefMut;
 
 mod query;
 mod json_file;
 
-pub use self::json_file::JsonFileDatastore;
+pub use self::json_file::{JsonFileDatastore, JsonFileDatastoreEntry};
 pub use self::query::{Query, Order, Filter, FilterTy, FilterOp};
 
 /// Abstraction over any struct that can store `(key, value)` pairs.
 pub trait Datastore<T> {
-	/// Sets the value of a key.
-	fn put(&self, key: Cow<str>, value: T);
+	/// Locked entry.
+	type Entry: DerefMut<Target = T>;
+	/// Output of a query.
+	type QueryResult: Stream<Item = (String, T), Error = IoError>;
 
-	/// Returns the value corresponding to this key.
-	// TODO: use higher-kinded stuff once stable to provide a more generic "accessor" for the data
-	fn get(&self, key: &str) -> Option<T>;
+	/// Sets the value of a key.
+	#[inline]
+	fn put(self, key: Cow<str>, value: T)
+		where Self: Sized
+	{
+		*self.lock_or_create(key) = value;
+	}
+
+	/// Checks if an entry exists, and if so locks it.
+	///
+	/// Trying to lock a value that is already locked will block, therefore you should keep locks
+	/// for a duration that is as short as possible.
+	fn lock(self, key: Cow<str>) -> Option<Self::Entry>;
+
+	/// Locks an entry if it exists, or creates it otherwise.
+	///
+	/// Same as `put` followed with `lock`, except that it is atomic.
+	fn lock_or_create(self, key: Cow<str>) -> Self::Entry;
+
+	/// Returns the value corresponding to this key by cloning it.
+	#[inline]
+	fn get(self, key: &str) -> Option<T>
+		where Self: Sized,
+		      T: Clone
+	{
+		self.lock(key.into()).map(|v| v.clone())
+	}
 
 	/// Returns true if the datastore contains the given key.
-	fn has(&self, key: &str) -> bool;
+	///
+	/// > **Note**: Keep in mind that using this operation is probably racy. A secondary thread
+	/// > 			can delete a key right after you called `has()`. In other words, this function
+	/// >			returns whether an entry with that key existed in the short past.
+	#[inline]
+	fn has(self, key: &str) -> bool
+		where Self: Sized
+	{
+		self.lock(key.into()).is_some()
+	}
 
-	/// Removes the given key from the datastore. Returns true if the key existed.
-	fn delete(&self, key: &str) -> bool;
+	/// Removes the given key from the datastore. Returns the old value if the key existed.
+	fn delete(self, key: &str) -> Option<T>;
 
 	/// Executes a query on the key-value store.
 	///
 	/// This operation is expensive on some implementations and cheap on others. It is your
 	/// responsibility to pick the right implementation for the right job.
-	fn query<'a>(
-		&'a self,
-		query: Query<T>,
-	) -> Box<Stream<Item = (String, T), Error = IoError> + 'a>;
+	fn query(self, query: Query<T>) -> Self::QueryResult;
 }

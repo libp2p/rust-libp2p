@@ -92,7 +92,7 @@ pub enum Order {
 pub fn naive_apply_query<'a, S, V>(stream: S, query: Query<'a, V>)
 		-> StreamTake<StreamSkip<NaiveKeysOnlyApply<NaiveApplyOrdered<NaiveFiltersApply<'a, NaivePrefixApply<'a, S>, VecIntoIter<Filter<'a, V>>>, V>>>>
 	where S: Stream<Item = (String, V), Error = IoError> + 'a,
-		  V: Clone + Ord + Default + 'static
+		  V: Clone + PartialOrd + Default + 'static
 {
 	let prefixed = naive_apply_prefix(stream, query.prefix);
 	let filtered = naive_apply_filters(prefixed, query.filters.into_iter());
@@ -129,7 +129,7 @@ pub struct NaiveKeysOnlyApply<S> {
 
 impl<S, T> Stream for NaiveKeysOnlyApply<S>
 	where S: Stream<Item = (String, T), Error = IoError>,
-		  T: Default
+	      T: Default
 {
 	type Item = (String, T);
 	type Error = IoError;
@@ -188,9 +188,9 @@ impl<'a, S, T> Stream for NaivePrefixApply<'a, S>
 /// is empty. Otherwise will need to collect.
 pub fn naive_apply_ordered<'a, S, I, V>(stream: S, orders_iter: I) -> NaiveApplyOrdered<'a, S, V>
 	where S: Stream<Item = (String, V), Error = IoError> + 'a,
-		  I: IntoIterator<Item = Order>,
-		  I::IntoIter: 'a,
-		  V: Ord + 'static
+	      I: IntoIterator<Item = Order>,
+	      I::IntoIter: 'a,
+	      V: PartialOrd + 'static
 {
 	let orders_iter = orders_iter.into_iter();
 	if orders_iter.size_hint().1 == Some(0) {
@@ -198,26 +198,26 @@ pub fn naive_apply_ordered<'a, S, I, V>(stream: S, orders_iter: I) -> NaiveApply
 	}
 
 	let collected = stream.collect()
-						  .and_then(move |mut collected| {
+	                      .and_then(move |mut collected| {
 		for order in orders_iter {
 			match order {
 				Order::ByValueAsc => {
-					collected.sort_by(|a, b| a.1.cmp(&b.1));
+					collected.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal));
 				}
 				Order::ByValueDesc => {
-					collected.sort_by(|a, b| b.1.cmp(&a.1));
+					collected.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
 				}
 				Order::ByKeyAsc => {
-					collected.sort_by(|a, b| a.0.cmp(&b.0));
+					collected.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(Ordering::Equal));
 				}
 				Order::ByKeyDesc => {
-					collected.sort_by(|a, b| b.0.cmp(&a.0));
+					collected.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(Ordering::Equal));
 				}
 			}
 		}
 		Ok(iter_ok(collected.into_iter()))
 	})
-						  .flatten_stream();
+	                      .flatten_stream();
 
 	NaiveApplyOrdered { inner: NaiveApplyOrderedInner::Collected(Box::new(collected)) }
 }
@@ -251,8 +251,8 @@ impl<'a, S, V> Stream for NaiveApplyOrdered<'a, S, V>
 #[inline]
 pub fn naive_apply_filters<'a, S, I, V>(stream: S, filters: I) -> NaiveFiltersApply<'a, S, I>
 	where S: Stream<Item = (String, V), Error = IoError>,
-		  I: Iterator<Item = Filter<'a, V>> + Clone,
-		  V: 'a
+	      I: Iterator<Item = Filter<'a, V>> + Clone,
+	      V: 'a
 {
 	NaiveFiltersApply {
 		filters: filters,
@@ -271,8 +271,8 @@ pub struct NaiveFiltersApply<'a, S, I> {
 
 impl<'a, S, I, T> Stream for NaiveFiltersApply<'a, S, I>
 	where S: Stream<Item = (String, T), Error = IoError>,
-		  I: Iterator<Item = Filter<'a, T>> + Clone,
-		  T: Ord + 'a
+	      I: Iterator<Item = Filter<'a, T>> + Clone,
+	      T: PartialOrd + 'a
 {
 	type Item = (String, T);
 	type Error = IoError;
@@ -298,7 +298,7 @@ impl<'a, S, I, T> Stream for NaiveFiltersApply<'a, S, I>
 
 #[inline]
 fn naive_filter_test<T>(entry: &(String, T), filter: &Filter<T>) -> bool
-	where T: Ord
+	where T: PartialOrd
 {
 	let (expected_ordering, revert_expected) = match filter.operation {
 		FilterOp::Equal => (Ordering::Equal, false),
@@ -314,7 +314,7 @@ fn naive_filter_test<T>(entry: &(String, T), filter: &Filter<T>) -> bool
 			((&*entry.0).cmp(&**ref_value) == expected_ordering) != revert_expected
 		}
 		FilterTy::ValueCompare(ref ref_value) => {
-			(entry.1.cmp(&**ref_value) == expected_ordering) != revert_expected
+			(entry.1.partial_cmp(&**ref_value) == Some(expected_ordering)) != revert_expected
 		}
 	}
 }

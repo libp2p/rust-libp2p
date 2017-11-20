@@ -1,0 +1,17 @@
+[package]
+name = "libp2p-peerstore"
+version = "0.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+
+[dependencies]
+base58 = "0.1.0"
+datastore = { path = "../datastore" }
+futures = "0.1.0"
+owning_ref = "0.3.3"
+multiaddr = "0.2"
+multihash = { path = "../multihash" }
+serde = "1.0"
+serde_derive = "1.0"
+
+[dev-dependencies]
+tempfile = "2.2"
