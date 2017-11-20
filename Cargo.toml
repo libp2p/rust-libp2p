@@ -8,6 +8,7 @@ members = [
     "libp2p-secio",
     "libp2p-transport",
     "libp2p-tcp-transport",
+    "rw-stream-sink",
 ]
 
 [replace]
