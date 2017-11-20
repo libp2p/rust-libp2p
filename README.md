@@ -12,10 +12,15 @@ organization is very much Work in Progress.
 Architecture of the crates of this repository:
 
 - `datastore`: Utility library whose API provides a key-value storage with multiple possible
-  backends.
+  backends. Used by `peerstore`.
 - `libp2p-host`: Stub. Will probably get reworked or removed.
+- `libp2p-peerstore`: Generic storage for information about remote peers (their multiaddresses and
+  their public key), with multiple possible backends. Each multiaddress also has a time-to-live.
 - `libp2p-tcp-transport`: Implementation of the `Transport` trait for TCP/IP.
 - `libp2p-transport`: Contains the `Transport` trait. Will probably get reworked or removed.
+- `multihash`: Utility library that allows one to represent and manipulate
+  [*multihashes*](https://github.com/multiformats/multihash). A *multihash* is a combination of a
+  hash and its hashing algorithm.
 - `multistream-select`: Implementation of the `multistream-select` protocol, which is used to
   negotiate a protocol over a newly-established connection with a peer, or after a connection
   upgrade.
