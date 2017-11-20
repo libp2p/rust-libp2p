@@ -16,6 +16,7 @@ Architecture of the crates of this repository:
 - `libp2p-host`: Stub. Will probably get reworked or removed.
 - `libp2p-peerstore`: Generic storage for information about remote peers (their multiaddresses and
   their public key), with multiple possible backends. Each multiaddress also has a time-to-live.
+- `libp2p-secio`: Implementation of the `secio` protocol. Encrypts communications.
 - `libp2p-tcp-transport`: Implementation of the `Transport` trait for TCP/IP.
 - `libp2p-transport`: Contains the `Transport` trait. Will probably get reworked or removed.
 - `multihash`: Utility library that allows one to represent and manipulate
