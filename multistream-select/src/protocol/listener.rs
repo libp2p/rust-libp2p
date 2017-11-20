@@ -20,8 +20,9 @@
 
 //! Contains the `Listener` wrapper, which allows raw communications with a dialer.
 
-use bytes::BytesMut;
+use bytes::{Bytes, BytesMut};
 use futures::{Async, AsyncSink, Future, Poll, Sink, StartSend, Stream};
+use length_delimited::LengthDelimitedFramedRead;
 use protocol::DialerToListenerMessage;
 use protocol::ListenerToDialerMessage;
 
@@ -29,12 +30,12 @@ use protocol::MULTISTREAM_PROTOCOL_WITH_LF;
 use protocol::MultistreamSelectError;
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_io::codec::length_delimited::Builder as LengthDelimitedBuilder;
-use tokio_io::codec::length_delimited::Framed as LengthDelimitedFramed;
+use tokio_io::codec::length_delimited::FramedWrite as LengthDelimitedFramedWrite;
 
 /// Wraps around a `AsyncRead+AsyncWrite`. Assumes that we're on the listener's side. Produces and
 /// accepts messages.
 pub struct Listener<R> {
-	inner: LengthDelimitedFramed<R, BytesMut>,
+	inner: LengthDelimitedFramedRead<Bytes, LengthDelimitedFramedWrite<R, BytesMut>>,
 }
 
 impl<R> Listener<R>
@@ -45,8 +46,8 @@ impl<R> Listener<R>
 	pub fn new<'a>(inner: R) -> Box<Future<Item = Listener<R>, Error = MultistreamSelectError> + 'a>
 		where R: 'a
 	{
-		// TODO: use Jack's lib instead
-		let inner = LengthDelimitedBuilder::new().length_field_length(1).new_framed(inner);
+		let write = LengthDelimitedBuilder::new().length_field_length(1).new_write(inner);
+		let inner = LengthDelimitedFramedRead::<Bytes, _>::new(write);
 
 		let future = inner.into_future()
 		                  .map_err(|(e, _)| e.into())
@@ -68,7 +69,7 @@ impl<R> Listener<R>
 	/// `ProtocolAck` has been sent back.
 	#[inline]
 	pub fn into_inner(self) -> R {
-		self.inner.into_inner()
+		self.inner.into_inner().into_inner()
 	}
 }
 
@@ -131,7 +132,7 @@ impl<R> Stream for Listener<R>
 
 	fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
 		loop {
-			let frame = match self.inner.poll() {
+			let mut frame = match self.inner.poll() {
 				Ok(Async::Ready(Some(frame))) => frame,
 				Ok(Async::Ready(None)) => return Ok(Async::Ready(None)),
 				Ok(Async::NotReady) => return Ok(Async::NotReady),
@@ -139,8 +140,8 @@ impl<R> Stream for Listener<R>
 			};
 
 			if frame.get(0) == Some(&b'/') && frame.last() == Some(&b'\n') {
-				let frame = frame.freeze();
-				let protocol = frame.slice_to(frame.len() - 1);
+				let frame_len = frame.len();
+				let protocol = frame.split_to(frame_len - 1);
 				return Ok(Async::Ready(
 					Some(DialerToListenerMessage::ProtocolRequest { name: protocol }),
 				));
