@@ -1,0 +1,9 @@
+[package]
+name = "rw-stream-sink"
+version = "0.1.0"
+authors = ["pierre <pierre.krieger1708@gmail.com>"]
+
+[dependencies]
+bytes = "0.4"
+futures = "0.1"
+tokio-io = "0.1"
