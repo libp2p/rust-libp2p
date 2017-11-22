@@ -10,6 +10,8 @@ num-bigint = "0.1.40"
 tokio-io = "0.1"
 futures = "0.1"
 parking_lot = "0.4.8"
-libp2p-stream-muxer = { path = "../libp2p-stream-muxer" }
+arrayvec = "0.4.6"
+rand = "0.3.17"
+libp2p-swarm = { path = "../libp2p-swarm" }
 varint = { path = "../varint-rs" }
-circular-buffer = { path = "../circular-buffer" }
+error-chain = "0.11.0"

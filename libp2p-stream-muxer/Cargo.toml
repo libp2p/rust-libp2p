@@ -1,8 +1,0 @@
-[package]
-name = "libp2p-stream-muxer"
-version = "0.1.0"
-authors = ["Vurich <jackefransham@gmail.com>"]
-
-[dependencies]
-futures = "0.1"
-tokio-io = "0.1"

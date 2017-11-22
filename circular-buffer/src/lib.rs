@@ -9,62 +9,109 @@
 
 extern crate smallvec;
 
-use std::ops::{Deref, DerefMut, Drop};
+use std::ops::Drop;
 use std::mem::ManuallyDrop;
 
 use smallvec::Array;
+
+use owned_slice::OwnedSlice;
 
 /// A slice that owns its elements, but not their storage. This is useful for things like
 /// `Vec::retain` and `CircularBuffer::pop_slice`, since these functions can return a slice but the
 /// elements of these slices would be leaked after the slice goes out of scope. `OwnedSlice` simply
 /// manually drops all its elements when it goes out of scope.
-#[derive(Debug, Eq, PartialEq)]
-pub struct OwnedSlice<'a, T: 'a>(&'a mut [T]);
+pub mod owned_slice {
+    use std::ops::{Deref, DerefMut, Drop};
+    use std::mem::ManuallyDrop;
 
-impl<'a, T: 'a> OwnedSlice<'a, T> {
-    /// Construct an owned slice from a mutable slice pointer.
-    ///
-    /// # Unsafety
-    /// You must ensure that the memory pointed to by `inner` will not be accessible after the
-    /// lifetime of the `OwnedSlice`.
-    pub unsafe fn new(inner: &'a mut [T]) -> Self {
-        OwnedSlice(inner)
+    /// A slice that owns its elements, but not their storage. This is useful for things like
+    /// `Vec::retain` and `CircularBuffer::pop_slice`, since these functions can return a slice but
+    /// the elements of these slices would be leaked after the slice goes out of scope. `OwnedSlice`
+    /// simply manually drops all its elements when it goes out of scope.
+    #[derive(Debug, Eq, PartialEq)]
+    pub struct OwnedSlice<'a, T: 'a>(&'a mut [T]);
+
+    /// Owning iterator for `OwnedSlice`.
+    pub struct IntoIter<'a, T: 'a> {
+        slice: ManuallyDrop<OwnedSlice<'a, T>>,
+        index: usize,
     }
-}
 
-impl<'a, T> AsRef<[T]> for OwnedSlice<'a, T> {
-    fn as_ref(&self) -> &[T] {
-        self.0
+    impl<'a, T> Iterator for IntoIter<'a, T> {
+        type Item = T;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            use std::ptr;
+
+            let index = self.index;
+
+            if index >= self.slice.len() {
+                return None;
+            }
+
+            self.index += 1;
+
+            unsafe { Some(ptr::read(&self.slice[index])) }
+        }
     }
-}
 
-impl<'a, T> AsMut<[T]> for OwnedSlice<'a, T> {
-    fn as_mut(&mut self) -> &mut [T] {
-        self.0
+    impl<'a, T: 'a> IntoIterator for OwnedSlice<'a, T> {
+        type Item = T;
+        type IntoIter = IntoIter<'a, T>;
+
+        fn into_iter(self) -> Self::IntoIter {
+            IntoIter {
+                slice: ManuallyDrop::new(self),
+                index: 0,
+            }
+        }
     }
-}
 
-impl<'a, T> Deref for OwnedSlice<'a, T> {
-    type Target = [T];
-
-    fn deref(&self) -> &Self::Target {
-        self.0
+    impl<'a, T: 'a> OwnedSlice<'a, T> {
+        /// Construct an owned slice from a mutable slice pointer.
+        ///
+        /// # Unsafety
+        /// You must ensure that the memory pointed to by `inner` will not be accessible after the
+        /// lifetime of the `OwnedSlice`.
+        pub unsafe fn new(inner: &'a mut [T]) -> Self {
+            OwnedSlice(inner)
+        }
     }
-}
 
-impl<'a, T> DerefMut for OwnedSlice<'a, T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.0
+    impl<'a, T> AsRef<[T]> for OwnedSlice<'a, T> {
+        fn as_ref(&self) -> &[T] {
+            self.0
+        }
     }
-}
 
-impl<'a, T> Drop for OwnedSlice<'a, T> {
-    fn drop(&mut self) {
-        use std::ptr;
+    impl<'a, T> AsMut<[T]> for OwnedSlice<'a, T> {
+        fn as_mut(&mut self) -> &mut [T] {
+            self.0
+        }
+    }
 
-        for element in self.iter_mut() {
-            unsafe {
-                ptr::drop_in_place(element);
+    impl<'a, T> Deref for OwnedSlice<'a, T> {
+        type Target = [T];
+
+        fn deref(&self) -> &Self::Target {
+            self.0
+        }
+    }
+
+    impl<'a, T> DerefMut for OwnedSlice<'a, T> {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            self.0
+        }
+    }
+
+    impl<'a, T> Drop for OwnedSlice<'a, T> {
+        fn drop(&mut self) {
+            use std::ptr;
+
+            for element in self.iter_mut() {
+                unsafe {
+                    ptr::drop_in_place(element);
+                }
             }
         }
     }
@@ -82,6 +129,12 @@ pub struct CircularBuffer<B: Array> {
     len: usize,
 }
 
+impl<B: Array> Default for CircularBuffer<B> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<B: Array> PartialEq for CircularBuffer<B>
 where
     B::Item: PartialEq,
@@ -97,7 +150,7 @@ where
             }
         }
 
-        return true;
+        true
     }
 }
 
@@ -148,7 +201,9 @@ impl<B: Array> CircularBuffer<B> {
     /// when the slice goes out of scope), if you're using non-`Drop` types you can use
     /// `pop_slice_leaky`.
     pub fn pop_slice(&mut self) -> Option<OwnedSlice<B::Item>> {
-        self.pop_slice_leaky().map(OwnedSlice)
+        self.pop_slice_leaky().map(
+            |x| unsafe { OwnedSlice::new(x) },
+        )
     }
 
     /// Pop a slice containing the maximum possible contiguous number of elements. Since this buffer
@@ -357,22 +412,72 @@ impl<B: Array> CircularBuffer<B> {
         }
     }
 
-    /// Get a borrow to an element at an index unsafely (causes undefined behaviour if the index is
-    /// out of bounds).
+    /// Get a borrow to an element at an index unsafely (behaviour is undefined if the index is out
+    /// of bounds).
     pub unsafe fn get_unchecked(&self, index: usize) -> &B::Item {
-        use std::mem;
-
-        mem::transmute(self.buffer.ptr().offset(
+        &*self.buffer.ptr().offset(
             ((index + self.start) % B::size()) as isize,
-        ))
+        )
+    }
+
+    /// Get a mutable borrow to an element at an index safely (if the index is out of bounds, return
+    /// `None`).
+    pub fn get_mut(&mut self, index: usize) -> Option<&mut B::Item> {
+        if index < self.len {
+            unsafe { Some(self.get_unchecked_mut(index)) }
+        } else {
+            None
+        }
+    }
+
+    /// Get a mutable borrow to an element at an index unsafely (behaviour is undefined if the index
+    /// is out of bounds).
+    pub unsafe fn get_unchecked_mut(&mut self, index: usize) -> &mut B::Item {
+        &mut *self.buffer.ptr_mut().offset(
+            ((index + self.start) % B::size()) as
+                isize,
+        )
     }
 
     // This is not unsafe because it can only leak data, not cause uninit to be read.
-    fn advance(&mut self, by: usize) {
+    pub fn advance(&mut self, by: usize) {
         assert!(by <= self.len);
 
         self.start = (self.start + by) % B::size();
         self.len -= by;
+    }
+}
+
+impl<B: Array> std::ops::Index<usize> for CircularBuffer<B> {
+    type Output = B::Item;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        if let Some(out) = self.get(index) {
+            out
+        } else {
+            panic!(
+                "index out of bounds: the len is {} but the index is {}",
+                self.len,
+                index
+            );
+        }
+    }
+}
+
+impl<B: Array> std::ops::IndexMut<usize> for CircularBuffer<B> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        // We need to do this because borrowck isn't smart enough to understand enum variants
+        let len = self.len;
+
+        if let Some(out) = self.get_mut(index) {
+            return out;
+        } else {
+            panic!(
+                "index out of bounds: the len is {} but the index is {}",
+                len,
+                index
+            );
+        }
     }
 }
 

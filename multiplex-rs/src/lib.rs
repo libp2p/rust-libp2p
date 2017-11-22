@@ -1,22 +1,56 @@
+// Copyright 2017 Parity Technologies (UK) Ltd.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+
+extern crate arrayvec;
 extern crate bytes;
+#[macro_use]
+extern crate error_chain;
 extern crate futures;
-extern crate libp2p_stream_muxer;
-extern crate tokio_io;
-extern crate varint;
+extern crate libp2p_swarm as swarm;
 extern crate num_bigint;
 extern crate num_traits;
 extern crate parking_lot;
-extern crate circular_buffer;
+extern crate rand;
+extern crate tokio_io;
+extern crate varint;
+
+mod read;
+mod write;
+mod shared;
+mod header;
 
 use bytes::Bytes;
-use circular_buffer::CircularBuffer;
-use futures::prelude::*;
-use libp2p_stream_muxer::StreamMuxer;
+use futures::{Async, Future, Poll};
+use futures::future::{self, FutureResult};
+use header::{MultiplexEnd, MultiplexHeader};
+use swarm::muxing::StreamMuxer;
+use swarm::ConnectionUpgrade;
 use parking_lot::Mutex;
-use std::collections::HashMap;
+use read::{read_stream, MultiplexReadState};
+use shared::{buf_from_slice, ByteBuf, MultiplexShared};
+use std::iter;
 use std::io::{self, Read, Write};
 use std::sync::Arc;
+use std::sync::atomic::{self, AtomicUsize};
 use tokio_io::{AsyncRead, AsyncWrite};
+use write::write_stream;
 
 // So the multiplex is essentially a distributed finite state machine.
 //
@@ -30,338 +64,55 @@ use tokio_io::{AsyncRead, AsyncWrite};
 // In the second state, the substream ID is known. Only this substream can progress until the packet
 // is consumed.
 
-/// Number of bits used for the metadata on multiplex packets
-enum NextMultiplexState {
-    NewStream(usize),
-    ParsingMessageBody(usize),
-    Ignore,
-}
-
-enum MultiplexReadState {
-    Header { state: varint::DecoderState },
-    BodyLength {
-        state: varint::DecoderState,
-        next: NextMultiplexState,
-    },
-    NewStream {
-        substream_id: usize,
-        name: bytes::BytesMut,
-        remaining_bytes: usize,
-    },
-    ParsingMessageBody {
-        substream_id: usize,
-        remaining_bytes: usize,
-    },
-    Ignore { remaining_bytes: usize },
-}
-
-impl Default for MultiplexReadState {
-    fn default() -> Self {
-        MultiplexReadState::Header { state: Default::default() }
-    }
-}
-
-struct MultiplexWriteState {
-    buffer: CircularBuffer<[u8; 1024]>,
-}
-
-// TODO: Add writing. We should also add some form of "pending packet" so that we can always open at
-//       least one new substream. If this is stored on the substream itself then we can open
-//       infinite new substreams.
-//
-//       When we've implemented writing, we should send the close message on `Substream` drop. This
-//       should probably be implemented with some kind of "pending close message" queue. The
-//       priority should go:
-//       1. Open new stream messages
-//       2. Regular messages
-//       3. Close messages
-//       Since if we receive a message to a closed stream we just drop it anyway.
-struct MultiplexShared<T> {
-    // We use `Option` in order to take ownership of heap allocations within `DecoderState` and
-    // `BytesMut`. If this is ever observably `None` then something has panicked or the underlying
-    // stream returned an error.
-    read_state: Option<MultiplexReadState>,
-    stream: T,
-    // true if the stream is open, false otherwise
-    open_streams: HashMap<usize, bool>,
-    // TODO: Should we use a version of this with a fixed size that doesn't allocate and return
-    //       `WouldBlock` if it's full?
-    to_open: HashMap<usize, Bytes>,
-}
-
 pub struct Substream<T> {
-    id: usize,
+    id: u32,
+    end: MultiplexEnd,
     name: Option<Bytes>,
     state: Arc<Mutex<MultiplexShared<T>>>,
+    buffer: Option<io::Cursor<ByteBuf>>,
 }
 
 impl<T> Drop for Substream<T> {
     fn drop(&mut self) {
         let mut lock = self.state.lock();
 
-        lock.open_streams.insert(self.id, false);
+        lock.close_stream(self.id);
     }
 }
 
 impl<T> Substream<T> {
     fn new<B: Into<Option<Bytes>>>(
-        id: usize,
+        id: u32,
+        end: MultiplexEnd,
         name: B,
         state: Arc<Mutex<MultiplexShared<T>>>,
     ) -> Self {
         let name = name.into();
 
-        Substream { id, name, state }
+        Substream {
+            id,
+            end,
+            name,
+            state,
+            buffer: None,
+        }
     }
 
     pub fn name(&self) -> Option<&Bytes> {
         self.name.as_ref()
     }
-}
 
-/// This is unsafe because you must ensure that only the `AsyncRead` that was passed in is later
-/// used to write to the returned buffer.
-unsafe fn create_buffer_for<R: AsyncRead>(capacity: usize, inner: &R) -> bytes::BytesMut {
-    let mut buffer = bytes::BytesMut::with_capacity(capacity);
-    buffer.set_len(capacity);
-    inner.prepare_uninitialized_buffer(&mut buffer);
-    buffer
-}
-
-fn read_stream<'a, O: Into<Option<(usize, &'a mut [u8])>>, T: AsyncRead>(
-    lock: &mut MultiplexShared<T>,
-    stream_data: O,
-) -> io::Result<usize> {
-    use num_traits::cast::ToPrimitive;
-    use MultiplexReadState::*;
-
-    let mut stream_data = stream_data.into();
-    let stream_has_been_gracefully_closed = stream_data
-        .as_ref()
-        .and_then(|&(id, _)| lock.open_streams.get(&id))
-        .map(|is_open| !is_open)
-        .unwrap_or(false);
-
-    let mut on_block: io::Result<usize> = if stream_has_been_gracefully_closed {
-        Ok(0)
-    } else {
-        Err(io::Error::from(io::ErrorKind::WouldBlock))
-    };
-
-    loop {
-        match lock.read_state.take().expect("Logic error or panic") {
-            Header { state: varint_state } => {
-                match varint_state.read(&mut lock.stream).map_err(|_| {
-                    io::Error::from(io::ErrorKind::Other)
-                })? {
-                    Ok(header) => {
-                        let MultiplexHeader {
-                            substream_id,
-                            packet_type,
-                        } = MultiplexHeader::parse(header).map_err(|_| {
-                            io::Error::from(io::ErrorKind::Other)
-                        })?;
-
-                        match packet_type {
-                            PacketType::Open => {
-                                lock.read_state = Some(BodyLength {
-                                    state: Default::default(),
-                                    next: NextMultiplexState::NewStream(substream_id),
-                                })
-                            }
-                            PacketType::Message(_) => {
-                                lock.read_state = Some(BodyLength {
-                                    state: Default::default(),
-                                    next: NextMultiplexState::ParsingMessageBody(substream_id),
-                                })
-                            }
-                            // NOTE: What's the difference between close and reset?
-                            PacketType::Close(_) |
-                            PacketType::Reset(_) => {
-                                lock.read_state = Some(BodyLength {
-                                    state: Default::default(),
-                                    next: NextMultiplexState::Ignore,
-                                });
-
-                                lock.open_streams.remove(&substream_id);
-                            }
-                        }
-                    }
-                    Err(new_state) => {
-                        lock.read_state = Some(Header { state: new_state });
-                        return on_block;
-                    }
-                }
-            }
-            BodyLength {
-                state: varint_state,
-                next,
-            } => {
-                match varint_state.read(&mut lock.stream).map_err(|_| {
-                    io::Error::from(io::ErrorKind::Other)
-                })? {
-                    Ok(length) => {
-                        use NextMultiplexState::*;
-
-                        let length = length.to_usize().ok_or(
-                            io::Error::from(io::ErrorKind::Other),
-                        )?;
-
-                        lock.read_state = Some(match next {
-                            Ignore => MultiplexReadState::Ignore { remaining_bytes: length },
-                            NewStream(substream_id) => MultiplexReadState::NewStream {
-                                // This is safe as long as we only use `lock.stream` to write to
-                                // this field
-                                name: unsafe { create_buffer_for(length, &lock.stream) },
-                                remaining_bytes: length,
-                                substream_id,
-                            },
-                            ParsingMessageBody(substream_id) => {
-                                let is_open = lock.open_streams
-                                    .get(&substream_id)
-                                    .map(|is_open| *is_open)
-                                    .unwrap_or(false);
-                                if is_open {
-                                    MultiplexReadState::ParsingMessageBody {
-                                        remaining_bytes: length,
-                                        substream_id,
-                                    }
-                                } else {
-                                    MultiplexReadState::Ignore { remaining_bytes: length }
-                                }
-                            }
-                        });
-                    }
-                    Err(new_state) => {
-                        lock.read_state = Some(BodyLength {
-                            state: new_state,
-                            next,
-                        });
-
-                        return on_block;
-                    }
-                }
-            }
-            NewStream {
-                substream_id,
-                mut name,
-                remaining_bytes,
-            } => {
-                if remaining_bytes == 0 {
-                    lock.to_open.insert(substream_id, name.freeze());
-
-                    lock.read_state = Some(Default::default());
-                } else {
-                    let cursor_pos = name.len() - remaining_bytes;
-                    let consumed = lock.stream.read(&mut name[cursor_pos..]);
-
-                    match consumed {
-                        Ok(consumed) => {
-                            let new_remaining = remaining_bytes - consumed;
-
-                            lock.read_state = Some(NewStream {
-                                substream_id,
-                                name,
-                                remaining_bytes: new_remaining,
-                            })
-                        }
-                        Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => {
-                            lock.read_state = Some(NewStream {
-                                substream_id,
-                                name,
-                                remaining_bytes,
-                            });
-
-                            return on_block;
-                        }
-                        Err(other) => return Err(other),
-                    }
-                }
-            }
-            ParsingMessageBody {
-                substream_id,
-                remaining_bytes,
-            } => {
-                if let Some((ref mut id, ref mut buf)) = stream_data {
-                    use MultiplexReadState::*;
-
-                    if substream_id == *id {
-                        if remaining_bytes == 0 {
-                            lock.read_state = Some(Default::default());
-                        } else {
-                            let read_result = {
-                                let new_len = buf.len().min(remaining_bytes);
-                                let slice = &mut buf[..new_len];
-
-                                lock.stream.read(slice)
-                            };
-
-                            match read_result {
-                                Ok(consumed) => {
-                                    let new_remaining = remaining_bytes - consumed;
-
-                                    lock.read_state = Some(ParsingMessageBody {
-                                        substream_id,
-                                        remaining_bytes: new_remaining,
-                                    });
-
-                                    on_block = Ok(on_block.unwrap_or(0) + consumed);
-                                }
-                                Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => {
-                                    lock.read_state = Some(ParsingMessageBody {
-                                        substream_id,
-                                        remaining_bytes,
-                                    });
-
-                                    return on_block;
-                                }
-                                Err(other) => return Err(other),
-                            }
-                        }
-                    } else {
-                        lock.read_state = Some(ParsingMessageBody {
-                            substream_id,
-                            remaining_bytes,
-                        });
-
-                        // We cannot make progress here, another stream has to accept this packet
-                        return on_block;
-                    }
-                }
-            }
-            Ignore { mut remaining_bytes } => {
-                let mut ignore_buf: [u8; 256] = [0; 256];
-
-                loop {
-                    if remaining_bytes == 0 {
-                        lock.read_state = Some(Default::default());
-                    } else {
-                        let new_len = ignore_buf.len().min(remaining_bytes);
-                        match lock.stream.read(&mut ignore_buf[..new_len]) {
-                            Ok(consumed) => remaining_bytes -= consumed,
-                            Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => {
-                                lock.read_state = Some(Ignore { remaining_bytes });
-
-                                return on_block;
-                            }
-                            Err(other) => return Err(other),
-                        }
-                    }
-                }
-            }
-        }
+    pub fn id(&self) -> u32 {
+        self.id
     }
 }
 
-// TODO: We always zero the buffer, we should delegate to the inner stream. Maybe use a `RWLock`
-//       instead?
+// TODO: We always zero the buffer, we should delegate to the inner stream.
 impl<T: AsyncRead> Read for Substream<T> {
-    // TODO: Is it wasteful to have all of our substreams try to make progress? Can we use an
-    //       `AtomicBool` or `AtomicUsize` to limit the substreams that try to progress?
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut lock = match self.state.try_lock() {
             Some(lock) => lock,
-            None => return Err(io::Error::from(io::ErrorKind::WouldBlock)),
+            None => return Err(io::ErrorKind::WouldBlock.into()),
         };
 
         read_stream(&mut lock, (self.id, buf))
@@ -372,91 +123,50 @@ impl<T: AsyncRead> AsyncRead for Substream<T> {}
 
 impl<T: AsyncWrite> Write for Substream<T> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        unimplemented!()
+        let mut lock = self.state.try_lock().ok_or(io::ErrorKind::WouldBlock)?;
+
+        let mut buffer = self.buffer
+            .take()
+            .unwrap_or_else(|| io::Cursor::new(buf_from_slice(buf)));
+
+        let out = write_stream(
+            &mut *lock,
+            write::WriteRequest::substream(MultiplexHeader::message(self.id, self.end)),
+            &mut buffer,
+        );
+
+        if buffer.position() < buffer.get_ref().len() as u64 {
+            self.buffer = Some(buffer);
+        }
+
+        out
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        unimplemented!()
+        self.state
+            .try_lock()
+            .ok_or(io::ErrorKind::WouldBlock)?
+            .stream
+            .flush()
     }
 }
 
 impl<T: AsyncWrite> AsyncWrite for Substream<T> {
     fn shutdown(&mut self) -> Poll<(), io::Error> {
-        unimplemented!()
+        Ok(Async::Ready(()))
     }
 }
 
-struct ParseError;
-
-enum MultiplexEnd {
-    Initiator,
-    Receiver,
-}
-
-struct MultiplexHeader {
-    pub packet_type: PacketType,
-    pub substream_id: usize,
-}
-enum PacketType {
-    Open,
-    Close(MultiplexEnd),
-    Reset(MultiplexEnd),
-    Message(MultiplexEnd),
-}
-
-impl MultiplexHeader {
-    // TODO: Use `u128` or another large integer type instead of bigint since we never use more than
-    //       `pointer width + FLAG_BITS` bits and unconditionally allocating 1-3 `u32`s for that is
-    //       ridiculous (especially since even for small numbers we have to allocate 1 `u32`).
-    //       If this is the future and `BigUint` is better-optimised (maybe by using `Bytes`) then
-    //       forget it.
-    fn parse(header: num_bigint::BigUint) -> Result<MultiplexHeader, ParseError> {
-        use num_traits::cast::ToPrimitive;
-
-        const FLAG_BITS: usize = 3;
-
-        // `&header` to make `>>` produce a new `BigUint` instead of consuming the old `BigUint`
-        let substream_id = ((&header) >> FLAG_BITS).to_usize().ok_or(ParseError)?;
-
-        let flag_mask = (2usize << FLAG_BITS) - 1;
-        let flags = header.to_usize().ok_or(ParseError)? & flag_mask;
-
-        // Yes, this is really how it works. No, I don't know why.
-        let packet_type = match flags {
-            0 => PacketType::Open,
-
-            1 => PacketType::Message(MultiplexEnd::Receiver),
-            2 => PacketType::Message(MultiplexEnd::Initiator),
-
-            3 => PacketType::Close(MultiplexEnd::Receiver),
-            4 => PacketType::Close(MultiplexEnd::Initiator),
-
-            5 => PacketType::Reset(MultiplexEnd::Receiver),
-            6 => PacketType::Reset(MultiplexEnd::Initiator),
-
-            _ => return Err(ParseError),
-        };
-
-        Ok(MultiplexHeader {
-            substream_id,
-            packet_type,
-        })
-    }
-}
-
-pub struct Multiplex<T> {
+pub struct InboundFuture<T> {
+    end: MultiplexEnd,
     state: Arc<Mutex<MultiplexShared<T>>>,
 }
 
-pub struct InboundStream<T> {
-    state: Arc<Mutex<MultiplexShared<T>>>,
-}
-
-impl<T: AsyncRead> Stream for InboundStream<T> {
+impl<T: AsyncRead> Future for InboundFuture<T> {
     type Item = Substream<T>;
     type Error = io::Error;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let mut lock = match self.state.try_lock() {
             Some(lock) => lock,
             None => return Ok(Async::NotReady),
@@ -464,8 +174,8 @@ impl<T: AsyncRead> Stream for InboundStream<T> {
 
         // Attempt to make progress, but don't block if we can't
         match read_stream(&mut lock, None) {
-            Ok(_) => (),
-            Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => (),
+            Ok(_) => {}
+            Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => {}
             Err(err) => return Err(err),
         }
 
@@ -479,30 +189,413 @@ impl<T: AsyncRead> Stream for InboundStream<T> {
             "We just checked that this key exists and we have exclusive access to the map, QED",
         );
 
-        Ok(Async::Ready(
-            Some(Substream::new(id, name, self.state.clone())),
-        ))
+        lock.open_stream(id);
+
+        Ok(Async::Ready(Substream::new(
+            id,
+            self.end,
+            name,
+            Arc::clone(&self.state),
+        )))
+    }
+}
+
+pub struct OutboundFuture<T> {
+    meta: Arc<MultiplexMetadata>,
+    current_id: Option<(io::Cursor<ByteBuf>, u32)>,
+    state: Arc<Mutex<MultiplexShared<T>>>,
+}
+
+impl<T> OutboundFuture<T> {
+    fn new(muxer: Multiplex<T>) -> Self {
+        OutboundFuture {
+            current_id: None,
+            meta: muxer.meta,
+            state: muxer.state,
+        }
+    }
+}
+
+fn nonce_to_id(id: usize, end: MultiplexEnd) -> u32 {
+    id as u32 * 2 + if end == MultiplexEnd::Initiator { 1 } else { 0 }
+}
+
+impl<T: AsyncWrite> Future for OutboundFuture<T> {
+    type Item = Substream<T>;
+    type Error = io::Error;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let mut lock = match self.state.try_lock() {
+            Some(lock) => lock,
+            None => return Ok(Async::NotReady),
+        };
+
+        loop {
+            let (mut id_str, id) = self.current_id.take().unwrap_or_else(|| {
+                let next = nonce_to_id(
+                    self.meta.nonce.fetch_add(1, atomic::Ordering::Relaxed),
+                    self.meta.end,
+                );
+                (
+                    io::Cursor::new(buf_from_slice(format!("{}", next).as_bytes())),
+                    next as u32,
+                )
+            });
+
+            match write_stream(
+                &mut *lock,
+                write::WriteRequest::meta(MultiplexHeader::open(id)),
+                &mut id_str,
+            ) {
+                Ok(_) => {
+                    debug_assert!(id_str.position() <= id_str.get_ref().len() as u64);
+                    if id_str.position() == id_str.get_ref().len() as u64 {
+                        if lock.open_stream(id) {
+                            return Ok(Async::Ready(Substream::new(
+                                id,
+                                self.meta.end,
+                                Bytes::from(&id_str.get_ref()[..]),
+                                Arc::clone(&self.state),
+                            )));
+                        }
+                    } else {
+                        self.current_id = Some((id_str, id));
+                        return Ok(Async::NotReady);
+                    }
+                }
+                Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => {
+                    self.current_id = Some((id_str, id));
+
+                    return Ok(Async::NotReady);
+                }
+                Err(other) => return Err(other),
+            }
+        }
+    }
+}
+
+pub struct MultiplexMetadata {
+    nonce: AtomicUsize,
+    end: MultiplexEnd,
+}
+
+pub struct Multiplex<T> {
+    meta: Arc<MultiplexMetadata>,
+    state: Arc<Mutex<MultiplexShared<T>>>,
+}
+
+impl<T> Clone for Multiplex<T> {
+    fn clone(&self) -> Self {
+        Multiplex {
+            meta: self.meta.clone(),
+            state: self.state.clone(),
+        }
+    }
+}
+
+impl<T> Multiplex<T> {
+    pub fn new(stream: T, end: MultiplexEnd) -> Self {
+        Multiplex {
+            meta: Arc::new(MultiplexMetadata {
+                nonce: AtomicUsize::new(0),
+                end,
+            }),
+            state: Arc::new(Mutex::new(MultiplexShared::new(stream))),
+        }
+    }
+
+    pub fn dial(stream: T) -> Self {
+        Self::new(stream, MultiplexEnd::Initiator)
+    }
+
+    pub fn listen(stream: T) -> Self {
+        Self::new(stream, MultiplexEnd::Receiver)
     }
 }
 
 impl<T: AsyncRead + AsyncWrite> StreamMuxer for Multiplex<T> {
     type Substream = Substream<T>;
-    type OutboundSubstreams = Box<Stream<Item = Self::Substream, Error = io::Error>>;
-    type InboundSubstreams = InboundStream<T>;
+    type OutboundSubstream = OutboundFuture<T>;
+    type InboundSubstream = InboundFuture<T>;
 
-    fn inbound(&mut self) -> Self::InboundSubstreams {
-        InboundStream { state: self.state.clone() }
+    fn inbound(self) -> Self::InboundSubstream {
+        InboundFuture {
+            state: Arc::clone(&self.state),
+            end: self.meta.end,
+        }
     }
 
-    fn outbound(&mut self) -> Self::OutboundSubstreams {
-        unimplemented!()
+    fn outbound(self) -> Self::OutboundSubstream {
+        OutboundFuture::new(self)
+    }
+}
+
+pub struct MultiplexConfig;
+
+impl<C> ConnectionUpgrade<C> for MultiplexConfig
+where
+    C: AsyncRead + AsyncWrite,
+{
+    type Output = Multiplex<C>;
+    type Future = FutureResult<Multiplex<C>, io::Error>;
+    type UpgradeIdentifier = ();
+    type NamesIter = iter::Once<(Bytes, ())>;
+
+    #[inline]
+    fn upgrade(self, i: C, _: ()) -> Self::Future {
+        future::ok(Multiplex::dial(i))
+    }
+
+    #[inline]
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once((Bytes::from("/mplex/6.7.0"), ()))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::io;
+
     #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
+    fn can_use_one_stream() {
+        let message = b"Hello, world!";
+
+        let stream = io::Cursor::new(Vec::new());
+
+        let mplex = Multiplex::dial(stream);
+
+        let mut substream = mplex.clone().outbound().wait().unwrap();
+
+        assert!(substream.write(message).is_ok());
+
+        let id = substream.id();
+
+        assert_eq!(
+            substream
+                .name()
+                .and_then(|bytes| { String::from_utf8(bytes.to_vec()).ok() }),
+            Some(id.to_string())
+        );
+
+        let stream = io::Cursor::new(mplex.state.lock().stream.get_ref().clone());
+
+        let mplex = Multiplex::listen(stream);
+
+        let mut substream = mplex.inbound().wait().unwrap();
+
+        assert_eq!(id, substream.id());
+        assert_eq!(
+            substream
+                .name()
+                .and_then(|bytes| { String::from_utf8(bytes.to_vec()).ok() }),
+            Some(id.to_string())
+        );
+
+        let mut buf = vec![0; message.len()];
+
+        assert!(substream.read(&mut buf).is_ok());
+        assert_eq!(&buf, message);
+    }
+
+    #[test]
+    fn can_use_many_streams() {
+        let stream = io::Cursor::new(Vec::new());
+
+        let mplex = Multiplex::dial(stream);
+
+        let mut outbound: Vec<Substream<_>> = vec![
+            mplex.clone().outbound().wait().unwrap(),
+            mplex.clone().outbound().wait().unwrap(),
+            mplex.clone().outbound().wait().unwrap(),
+            mplex.clone().outbound().wait().unwrap(),
+            mplex.clone().outbound().wait().unwrap(),
+        ];
+
+        outbound.sort_by_key(|a| a.id());
+
+        for (i, substream) in outbound.iter_mut().enumerate() {
+            assert!(substream.write(i.to_string().as_bytes()).is_ok());
+        }
+
+        let stream = io::Cursor::new(mplex.state.lock().stream.get_ref().clone());
+
+        let mplex = Multiplex::listen(stream);
+
+        let mut inbound: Vec<Substream<_>> = vec![
+            mplex.clone().inbound().wait().unwrap(),
+            mplex.clone().inbound().wait().unwrap(),
+            mplex.clone().inbound().wait().unwrap(),
+            mplex.clone().inbound().wait().unwrap(),
+            mplex.clone().inbound().wait().unwrap(),
+        ];
+
+        inbound.sort_by_key(|a| a.id());
+
+        for (substream, outbound) in inbound.iter_mut().zip(outbound.iter()) {
+            let id = outbound.id();
+            assert_eq!(id, substream.id());
+            assert_eq!(
+                substream
+                    .name()
+                    .and_then(|bytes| { String::from_utf8(bytes.to_vec()).ok() }),
+                Some(id.to_string())
+            );
+
+            let mut buf = [0; 3];
+            assert_eq!(substream.read(&mut buf).unwrap(), 1);
+        }
+    }
+
+    #[test]
+    fn packets_to_unopened_streams_are_dropped() {
+        use std::iter;
+
+        let message = b"Hello, world!";
+
+        // We use a large dummy length to exercise ignoring data longer than `ignore_buffer.len()`
+        let dummy_length = 1000;
+
+        let input = iter::empty()
+            // Open a stream
+            .chain(varint::encode(MultiplexHeader::open(0).to_u64()))
+            // 0-length body (stream has no name)
+            .chain(varint::encode(0usize))
+
+            // "Message"-type packet for an unopened stream
+            .chain(
+                varint::encode(
+                    // ID for an unopened stream: 1
+                    MultiplexHeader::message(1, MultiplexEnd::Initiator).to_u64(),
+                ).into_iter(),
+            )
+            // Body: `dummy_length` of zeroes
+            .chain(varint::encode(dummy_length))
+            .chain(iter::repeat(0).take(dummy_length))
+
+            // "Message"-type packet for an opened stream
+            .chain(
+                varint::encode(
+                    // ID for an opened stream: 0
+                    MultiplexHeader::message(0, MultiplexEnd::Initiator).to_u64(),
+                ).into_iter(),
+            )
+            .chain(varint::encode(message.len()))
+            .chain(message.iter().cloned())
+
+            .collect::<Vec<_>>();
+
+        let mplex = Multiplex::listen(io::Cursor::new(input));
+
+        let mut substream = mplex.inbound().wait().unwrap();
+
+        assert_eq!(substream.id(), 0);
+        assert_eq!(substream.name(), None);
+
+        let mut buf = vec![0; message.len()];
+
+        assert!(substream.read(&mut buf).is_ok());
+        assert_eq!(&buf, message);
+    }
+
+    #[test]
+    fn can_close_streams() {
+        use std::iter;
+
+        // Dummy data in the body of the close packet (since the de facto protocol is to accept but
+        // ignore this data)
+        let dummy_length = 64;
+
+        let input = iter::empty()
+            // Open a stream
+            .chain(varint::encode(MultiplexHeader::open(0).to_u64()))
+            // 0-length body (stream has no name)
+            .chain(varint::encode(0usize))
+
+            // Immediately close the stream
+            .chain(
+                varint::encode(
+                    // ID for an unopened stream: 1
+                    MultiplexHeader::close(0, MultiplexEnd::Initiator).to_u64(),
+                ).into_iter(),
+            )
+            .chain(varint::encode(dummy_length))
+            .chain(iter::repeat(0).take(dummy_length))
+
+            // Send packet to the closed stream
+            .chain(
+                varint::encode(
+                    // ID for an opened stream: 0
+                    MultiplexHeader::message(0, MultiplexEnd::Initiator).to_u64(),
+                ).into_iter(),
+            )
+            .chain(varint::encode(dummy_length))
+            .chain(iter::repeat(0).take(dummy_length))
+
+            .collect::<Vec<_>>();
+
+        let mplex = Multiplex::listen(io::Cursor::new(input));
+
+        let mut substream = mplex.inbound().wait().unwrap();
+
+        assert_eq!(substream.id(), 0);
+        assert_eq!(substream.name(), None);
+
+        assert_eq!(substream.read(&mut [0; 100][..]).unwrap(), 0);
+    }
+
+    #[test]
+    fn real_world_data() {
+        let data: Vec<u8> = vec![
+            // Open stream 1
+            8,
+            0,
+
+            // Message for stream 1 (length 20)
+            10,
+            20,
+            19,
+            47,
+            109,
+            117,
+            108,
+            116,
+            105,
+            115,
+            116,
+            114,
+            101,
+            97,
+            109,
+            47,
+            49,
+            46,
+            48,
+            46,
+            48,
+            10,
+        ];
+
+        let mplex = Multiplex::listen(io::Cursor::new(data));
+
+        let mut substream = mplex.inbound().wait().unwrap();
+
+        assert_eq!(substream.id(), 1);
+
+        assert_eq!(substream.name(), None);
+
+        let mut out = vec![];
+
+        for _ in 0..20 {
+            let mut buf = [0; 1];
+
+            assert_eq!(substream.read(&mut buf[..]).unwrap(), 1);
+
+            out.push(buf[0]);
+        }
+
+        assert_eq!(out[0], 19);
+        assert_eq!(&out[1..0x14 - 1], b"/multistream/1.0.0");
+        assert_eq!(out[0x14 - 1], 0x0a);
     }
 }

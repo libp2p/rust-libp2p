@@ -5,6 +5,8 @@ authors = ["Parity Technologies <admin@parity.io>"]
 
 [dependencies]
 num-bigint = "0.1.40"
+num-traits = "0.1.40"
 bytes = "0.4.5"
 tokio-io = "0.1"
 futures = "0.1"
+error-chain = "0.11.0"
