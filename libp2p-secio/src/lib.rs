@@ -27,23 +27,32 @@
 //! method will perform a handshake with the host, and return a future that corresponds to the
 //! moment when the handshake succeeds or errored. On success, the future produces a
 //! `SecioMiddleware` that implements `Sink` and `Stream` and can be used to send packets of data.
+//!
+//! However for integration with the rest of `libp2p` you are encouraged to use the
+//! `SecioConnUpgrade` struct instead. This struct implements the `ConnectionUpgrade` trait and
+//! will automatically apply secio on any incoming or outgoing connection.
 
 extern crate bytes;
 extern crate crypto;
 extern crate futures;
+extern crate libp2p_swarm;
 extern crate protobuf;
 extern crate rand;
 extern crate ring;
+extern crate rw_stream_sink;
 extern crate tokio_core;
 extern crate tokio_io;
 extern crate untrusted;
 
 pub use self::error::SecioError;
 
-use bytes::BytesMut;
+use bytes::{Bytes, BytesMut};
 use futures::{Future, Poll, StartSend, Sink, Stream};
+use futures::stream::MapErr as StreamMapErr;
 use ring::signature::RSAKeyPair;
-use std::io::Error as IoError;
+use rw_stream_sink::RwStreamSink;
+use std::io::{Error as IoError, ErrorKind as IoErrorKind};
+use std::iter;
 use std::sync::Arc;
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -53,6 +62,55 @@ mod error;
 mod keys_proto;
 mod handshake;
 mod structs_proto;
+
+/// Implementation of the `ConnectionUpgrade` trait of `libp2p_swarm`. Automatically applies any
+/// secio on any connection.
+#[derive(Clone)]
+pub struct SecioConnUpgrade {
+	/// Public key of the local node. Must match `local_private_key` or an error will happen during
+	/// the handshake.
+	pub local_public_key: Vec<u8>,
+	/// Private key that will be used to prove the identity of the local node.
+	pub local_private_key: Arc<RSAKeyPair>,
+}
+
+impl<S> libp2p_swarm::ConnectionUpgrade<S> for SecioConnUpgrade
+	where S: AsyncRead + AsyncWrite + 'static
+{
+	type Output = RwStreamSink<
+		StreamMapErr<
+			SecioMiddleware<S>,
+			fn(SecioError) -> IoError,
+		>,
+	>;
+	type Future = Box<Future<Item = Self::Output, Error = IoError>>;
+	type NamesIter = iter::Once<(Bytes, ())>;
+	type UpgradeIdentifier = ();
+
+	#[inline]
+	fn protocol_names(&self) -> Self::NamesIter {
+		iter::once(("/secio/1.0.0".into(), ()))
+	}
+
+	#[inline]
+	fn upgrade(self, incoming: S, _: ()) -> Self::Future {
+		let fut = SecioMiddleware::handshake(
+			incoming,
+			self.local_public_key.clone(),
+			self.local_private_key.clone(),
+		);
+		let wrapped = fut.map(|stream_sink| {
+			let mapped = stream_sink.map_err(map_err as fn(_) -> _);
+			RwStreamSink::new(mapped)
+		}).map_err(map_err);
+		Box::new(wrapped)
+	}
+}
+
+#[inline]
+fn map_err(err: SecioError) -> IoError {
+	IoError::new(IoErrorKind::InvalidData, err)
+}
 
 /// Wraps around an object that implements `AsyncRead` and `AsyncWrite`.
 ///

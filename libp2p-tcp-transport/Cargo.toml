@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 
 [dependencies]
-libp2p-transport = { path = "../libp2p-transport" }
+libp2p-swarm = { path = "../libp2p-swarm" }
 futures = "0.1"
 multiaddr = "0.2.0"
 tokio-core = "0.1"
