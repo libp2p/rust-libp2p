@@ -68,13 +68,13 @@ impl<'a> Peerstore for &'a JsonPeerstore {
 
 	#[inline]
 	fn peer(self, peer_id: &PeerId) -> Option<Self::PeerAccess> {
-		let hash = peer_id.clone().as_bytes().to_base58();
+		let hash = peer_id.to_bytes().to_base58();
 		self.store.lock(hash.into()).map(JsonPeerstoreAccess)
 	}
 
 	#[inline]
 	fn peer_or_create(self, peer_id: &PeerId) -> Self::PeerAccess {
-		let hash = peer_id.clone().as_bytes().to_base58();
+		let hash = peer_id.to_bytes().to_base58();
 		JsonPeerstoreAccess(self.store.lock_or_create(hash.into()))
 	}
 
