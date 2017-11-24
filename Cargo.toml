@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "multihash",
     "multistream-select",
     "datastore",
     "example",
