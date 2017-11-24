@@ -17,6 +17,8 @@ Architecture of the crates of this repository:
 - `libp2p-peerstore`: Generic storage for information about remote peers (their multiaddresses and
   their public key), with multiple possible backends. Each multiaddress also has a time-to-live.
   Used by `libp2p-swarm`.
+- `libp2p-ping`: Implementation of the `ping` protocol (the exact protocol is specific to libp2p).
+  Implements the `ConnectionUpgrade` trait of `libp2p-swarm`.
 - `libp2p-secio`: Implementation of the `secio` protocol. Encrypts communications. Implements the
   `ConnectionUpgrade` trait of `libp2p-swarm`.
 - `libp2p-swarm`: Core library that contains all the traits of *libp2p* and plugs things together.

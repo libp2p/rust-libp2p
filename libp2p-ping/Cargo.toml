@@ -1,0 +1,17 @@
+[package]
+name = "libp2p-ping"
+version = "0.1.0"
+authors = ["pierre <pierre.krieger1708@gmail.com>"]
+
+[dependencies]
+bytes = "0.4"
+libp2p-swarm = { path = "../libp2p-swarm" }
+multiaddr = "0.2.0"
+multistream-select = { path = "../multistream-select" }
+futures = "0.1"
+parking_lot = "0.5"
+rand = "0.3"
+tokio-io = "0.1"
+
+[dev-dependencies]
+tokio-core = "0.1"
