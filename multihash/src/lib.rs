@@ -130,11 +130,11 @@ impl FromHex for Multihash {
 
 impl Multihash {
 	/// Returns a byte vec representing the encoded multihash
-	pub fn as_bytes(&mut self) -> Vec<u8> {
+	pub fn to_bytes(&self) -> Vec<u8> {
 		let mut v = Vec::new();
 		v.write_u64::<BigEndian>(self.code).expect("writing to a locally owned vec should never yield I/O errors");
 		v.write_u64::<BigEndian>(self.length).expect("writing to a locally owned vec should never yield I/O errors");
-		v.append(&mut self.digest);
+		v.extend_from_slice(&self.digest);
 		v
 	}
 
@@ -210,7 +210,7 @@ mod tests {
 		};
 		let expected_bytes = vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 32, 44, 38, 180, 107, 104, 255, 198, 143, 249, 155, 69, 60, 29, 48, 65, 52, 19, 66, 45, 112, 100, 131, 191, 160, 249, 138, 94, 136, 98, 102, 231, 174];
 
-		assert_eq!(hash.clone().as_bytes(), expected_bytes);
+		assert_eq!(hash.to_bytes(), expected_bytes);
 
 		assert_eq!(Multihash::decode_bytes(expected_bytes).unwrap(), hash);
 	}
