@@ -58,10 +58,16 @@ pub trait Transport {
 	/// A future which indicates that we are currently dialing to a peer.
 	type Dial: IntoFuture<Item = Self::RawConn, Error = IoError>;
 
-	/// Listen on the given multi-addr.
+	/// Listen on the given multiaddr. Returns a stream of incoming connections, plus a modified
+	/// version of the `Multiaddr`. This new `Multiaddr` is the one that that should be advertised
+	/// to other nodes, instead of the one passed as parameter.
 	///
 	/// Returns the address back if it isn't supported.
-	fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, (Self, Multiaddr)>
+	///
+	/// > **Note**: The reason why we need to change the `Multiaddr` on success is to handle
+	/// > 			situations such as turning `/ip4/127.0.0.1/tcp/0` into
+	/// > 			`/ip4/127.0.0.1/tcp/<actual port>`.
+	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)>
 		where Self: Sized;
 
 	/// Dial to the given multi-addr.
@@ -108,7 +114,7 @@ impl Transport for DeniedTransport {
 	type Dial = Box<Future<Item = Self::RawConn, Error = IoError>>;
 
 	#[inline]
-	fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, (Self, Multiaddr)> {
+	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
 		Err((DeniedTransport, addr))
 	}
 
@@ -133,14 +139,14 @@ impl<A, B> Transport for OrTransport<A, B>
 		<B::Dial as IntoFuture>::Future,
 	>;
 
-	fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, (Self, Multiaddr)> {
+	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
 		let (first, addr) = match self.0.listen_on(addr) {
-			Ok(connec) => return Ok(EitherStream::First(connec)),
+			Ok((connec, addr)) => return Ok((EitherStream::First(connec), addr)),
 			Err(err) => err,
 		};
 
 		match self.1.listen_on(addr) {
-			Ok(connec) => Ok(EitherStream::Second(connec)),
+			Ok((connec, addr)) => Ok((EitherStream::Second(connec), addr)),
 			Err((second, addr)) => Err((OrTransport(first, second), addr)),
 		}
 	}
@@ -543,14 +549,14 @@ impl<'a, T, C> UpgradedNode<T, C>
 	pub fn listen_on(
 		self,
 		addr: Multiaddr,
-	) -> Result<Box<Stream<Item = C::Output, Error = IoError> + 'a>, (Self, Multiaddr)>
+	) -> Result<(Box<Stream<Item = C::Output, Error = IoError> + 'a>, Multiaddr), (Self, Multiaddr)>
 		where C::NamesIter: Clone, // TODO: not elegant
 			  C: Clone
 	{
 		let upgrade = self.upgrade;
 
-		let listening_stream = match self.transports.listen_on(addr) {
-			Ok(l) => l,
+		let (listening_stream, new_addr) = match self.transports.listen_on(addr) {
+			Ok((l, new_addr)) => (l, new_addr),
 			Err((trans, addr)) => {
 				let builder = UpgradedNode {
 					transports: trans,
@@ -580,7 +586,7 @@ impl<'a, T, C> UpgradedNode<T, C>
 				upgrade.upgrade(connection, upgrade_id)
 			});
 
-		Ok(Box::new(stream))
+		Ok((Box::new(stream), new_addr))
 	}
 }
 
@@ -596,7 +602,7 @@ impl<T, C> Transport for UpgradedNode<T, C>
 	type Dial = Box<Future<Item = C::Output, Error = IoError>>;
 
 	#[inline]
-	fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, (Self, Multiaddr)>
+	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)>
 		where Self: Sized
 	{
 		self.listen_on(addr)
