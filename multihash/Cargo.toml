@@ -1,8 +1,0 @@
-[package]
-name = "multihash"
-version = "0.1.0"
-authors = ["Parity Technologies <admin@parity.io>"]
-
-[dependencies]
-hex = "0.2"
-byteorder = "1.1"

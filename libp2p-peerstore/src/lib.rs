@@ -51,5 +51,5 @@ pub mod memory_peerstore;
 mod peerstore;
 mod peer_info;
 
-pub type PeerId = multihash::Multihash;
+pub type PeerId = Vec<u8>;
 pub type TTL = std::time::Duration;

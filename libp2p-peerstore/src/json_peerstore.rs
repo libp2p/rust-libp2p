@@ -26,7 +26,6 @@ use base58::{FromBase58, ToBase58};
 use datastore::{Datastore, Query, JsonFileDatastore, JsonFileDatastoreEntry};
 use futures::{Future, Stream};
 use multiaddr::Multiaddr;
-use multihash::Multihash;
 use peer_info::{PeerInfo, AddAddrBehaviour};
 use peerstore::{Peerstore, PeerAccess};
 use std::io::Error as IoError;
@@ -68,13 +67,13 @@ impl<'a> Peerstore for &'a JsonPeerstore {
 
 	#[inline]
 	fn peer(self, peer_id: &PeerId) -> Option<Self::PeerAccess> {
-		let hash = peer_id.to_bytes().to_base58();
+		let hash = peer_id.to_base58();
 		self.store.lock(hash.into()).map(JsonPeerstoreAccess)
 	}
 
 	#[inline]
 	fn peer_or_create(self, peer_id: &PeerId) -> Self::PeerAccess {
-		let hash = peer_id.to_bytes().to_base58();
+		let hash = peer_id.to_base58();
 		JsonPeerstoreAccess(self.store.lock_or_create(hash.into()))
 	}
 
@@ -91,10 +90,7 @@ impl<'a> Peerstore for &'a JsonPeerstore {
 		let list = query.filter_map(|(key, _)| {
 			// We filter out invalid elements. This can happen if the JSON storage file was
 			// corrupted or manually modified by the user.
-			match key.from_base58() {
-				Ok(bytes) => Multihash::decode_bytes(bytes).ok(),
-				Err(_) => return None,
-			}
+			key.from_base58().ok()
 		})
 		                .collect()
 		                .wait(); // Wait can never block for the JSON datastore.
