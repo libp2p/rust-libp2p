@@ -23,7 +23,6 @@
 use super::TTL;
 use PeerId;
 use multiaddr::Multiaddr;
-use multihash::Multihash;
 use owning_ref::OwningRefMut;
 use peer_info::{PeerInfo, AddAddrBehaviour};
 use peerstore::{Peerstore, PeerAccess};
@@ -34,7 +33,7 @@ use std::vec::IntoIter as VecIntoIter;
 
 /// Implementation of the `Peerstore` trait that simply stores the peer information in memory.
 pub struct MemoryPeerstore {
-	store: Mutex<HashMap<Multihash, PeerInfo>>,
+	store: Mutex<HashMap<PeerId, PeerInfo>>,
 }
 
 impl MemoryPeerstore {
@@ -78,8 +77,8 @@ impl<'a> Peerstore for &'a MemoryPeerstore {
 }
 
 // Note: Rust doesn't provide a `MutexGuard::map` method, otherwise we could directly store a
-// 		 `MutexGuard<'a, (&'a Multihash, &'a PeerInfo)>`.
-pub struct MemoryPeerstoreAccess<'a>(OwningRefMut<MutexGuard<'a, HashMap<Multihash, PeerInfo>>, PeerInfo>);
+// 		 `MutexGuard<'a, (&'a PeerId, &'a PeerInfo)>`.
+pub struct MemoryPeerstoreAccess<'a>(OwningRefMut<MutexGuard<'a, HashMap<PeerId, PeerInfo>>, PeerInfo>);
 
 impl<'a> PeerAccess for MemoryPeerstoreAccess<'a> {
 	type AddrsIter = VecIntoIter<Multiaddr>;
