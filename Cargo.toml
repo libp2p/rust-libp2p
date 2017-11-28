@@ -14,3 +14,5 @@ members = [
 [replace]
 # Ring has a feature merged in master that hasn't been published yet ; remove this after 0.12.2
 "ring:0.12.1" = { git = "https://github.com/briansmith/ring" }
+# Multiaddr has a feature merged in master that hasn't been published yet ; remove this after 0.2.1
+"multiaddr:0.2.0" = { git = "https://github.com/multiformats/rust-multiaddr" }

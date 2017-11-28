@@ -32,7 +32,7 @@ use tokio_core::reactor::Handle;
 use tokio_core::net::{TcpStream, TcpListener, TcpStreamNew};
 use futures::Future;
 use futures::stream::Stream;
-use multiaddr::{Multiaddr, Protocol};
+use multiaddr::{Multiaddr, Protocol, ToMultiaddr};
 use swarm::Transport;
 
 /// Represents a TCP/IP transport capability for libp2p.
@@ -55,7 +55,7 @@ impl Transport for Tcp {
     type RawConn = TcpStream;
 
     /// The listener produces incoming connections.
-    type Listener = Box<Stream<Item = Self::RawConn, Error = IoError>>;
+    type Listener = Box<Stream<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
 
     /// A future which indicates currently dialing to a peer.
     type Dial = TcpStreamNew;
@@ -69,7 +69,11 @@ impl Transport for Tcp {
                     TcpListener::bind(&socket_addr, &self.event_loop),
                 ).map(|listener| {
                     // Pull out a stream of sockets for incoming connections
-                    listener.incoming().map(|x| x.0)
+                    listener.incoming().map(|(sock, addr)| {
+                        let addr = addr.to_multiaddr()
+                            .expect("generating a multiaddr from a socket addr never fails");
+                        (sock, addr)
+                    })
                 })
                     .flatten_stream(),
             ))
@@ -188,7 +192,7 @@ mod tests {
             let addr = Multiaddr::new("/ip4/127.0.0.1/tcp/12345").unwrap();
             let tcp = Tcp::new(core.handle()).unwrap();
             let handle = core.handle();
-            let listener = tcp.listen_on(addr).unwrap().for_each(|sock| {
+            let listener = tcp.listen_on(addr).unwrap().for_each(|(sock, _)| {
                 // Define what to do with the socket that just connected to us
                 // Which in this case is read 3 bytes
                 let handle_conn = tokio_io::io::read_exact(sock, [0; 3])
