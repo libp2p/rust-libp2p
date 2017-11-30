@@ -32,7 +32,7 @@ use tokio_core::reactor::Handle;
 use tokio_core::net::{TcpStream, TcpListener, TcpStreamNew};
 use futures::Future;
 use futures::stream::Stream;
-use multiaddr::{Multiaddr, Protocol};
+use multiaddr::{Multiaddr, Protocol, ToMultiaddr};
 use swarm::Transport;
 
 /// Represents a TCP/IP transport capability for libp2p.
@@ -69,8 +69,8 @@ impl Transport for Tcp {
             // just return the original multiaddr.
             let new_addr = match listener {
                 Ok(ref l) => if let Ok(new_s_addr) = l.local_addr() {
-                    Multiaddr::new(&format!("/ip4/{}/tcp/{}", new_s_addr.ip(), new_s_addr.port()))
-                        .expect("manually-generated multiaddr is always valid")
+                    new_s_addr.to_multiaddr().expect("multiaddr generated from socket addr is \
+                                                      always valid")
                 } else {
                     addr
                 }
