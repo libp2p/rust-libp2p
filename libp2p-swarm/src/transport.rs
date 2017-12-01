@@ -31,11 +31,12 @@
 
 use bytes::Bytes;
 use futures::{Stream, Poll, Async};
-use futures::future::{IntoFuture, Future, ok as future_ok, FutureResult};
+use futures::future::{IntoFuture, Future, ok as future_ok, FutureResult, FromErr};
 use multiaddr::Multiaddr;
 use multistream_select;
 use std::io::{Cursor, Error as IoError, Read, Write};
 use std::iter;
+use std::sync::Arc;
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// A transport is an object that can be used to produce connections by listening or dialing a
@@ -101,6 +102,25 @@ pub trait Transport {
 			upgrade: upgrade,
 		}
 	}
+
+	/// Wraps this transport inside an upgrade. Similar to `with_upgrade`, but more convenient to
+	/// use for small protocols.
+	#[inline]
+	fn with_simple_protocol_upgrade<N, F, O>(self, name: N, upgrade: F)
+											 -> UpgradedNode<Self, SimpleProtocolUpgrade<F>>
+		where Self: Sized,
+			  N: Into<Bytes>,
+			  F: Fn(Self::RawConn) -> O,
+			  O: IntoFuture<Error = IoError>,
+	{
+		UpgradedNode {
+			transports: self,
+			upgrade: SimpleProtocolUpgrade {
+				name: name.into(),
+				upgrade: Arc::new(upgrade),
+			},
+		}
+	}
 }
 
 /// Dummy implementation of `Transport` that just denies every single attempt.
@@ -162,6 +182,48 @@ impl<A, B> Transport for OrTransport<A, B>
 			Err((second, addr)) => Err((OrTransport(first, second), addr)),
 		}
 	}
+}
+
+/// Implementation of `ConnetionUpgrade`. See `with_simple_protocol_upgrade`.
+#[derive(Debug)]
+pub struct SimpleProtocolUpgrade<F> {
+	name: Bytes,
+	// Note: we put the closure `F` in an `Arc` because Rust closures aren't automatically clonable
+	// yet.
+	upgrade: Arc<F>,
+}
+
+impl<F> Clone for SimpleProtocolUpgrade<F> {
+	#[inline]
+	fn clone(&self) -> Self {
+		SimpleProtocolUpgrade {
+			name: self.name.clone(),
+			upgrade: self.upgrade.clone(),
+		}
+	}
+}
+
+impl<C, F, O> ConnectionUpgrade<C> for SimpleProtocolUpgrade<F>
+    where C: AsyncRead + AsyncWrite,
+		  F: Fn(C) -> O,
+		  O: IntoFuture<Error = IoError>,
+{
+    type NamesIter = iter::Once<(Bytes, ())>;
+    type UpgradeIdentifier = ();
+
+    #[inline]
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once(("/echo/1.0.0".into(), ()))
+    }
+
+    type Output = O::Item;
+    type Future = FromErr<O::Future, IoError>;
+
+    #[inline]
+    fn upgrade(self, socket: C, _: ()) -> Self::Future {
+		let upgrade = &self.upgrade;
+		upgrade(socket).into_future().from_err()
+    }
 }
 
 /// Implements `Stream` and dispatches all method calls to either `First` or `Second`.
