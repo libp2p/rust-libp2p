@@ -47,7 +47,7 @@ fn main() {
     let tcp = Tcp::new(core.handle()).unwrap();
     
     let with_secio = tcp
-        .with_upgrade(swarm::PlainText)
+        .with_upgrade(swarm::PlainTextConfig)
         .or_upgrade({
             let private_key = {
                 let pkcs8 = include_bytes!("test-private-key.pk8");
