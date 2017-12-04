@@ -65,7 +65,7 @@ fn main() {
 
     let future = with_echo.listen_on(swarm::multiaddr::Multiaddr::new("/ip4/0.0.0.0/tcp/10333").unwrap())
         .map_err(|_| panic!())
-        .unwrap()
+        .unwrap().0
         .for_each(|socket| {
             loop_fn(socket, |socket| {
                 socket.into_future()

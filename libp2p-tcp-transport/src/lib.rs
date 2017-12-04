@@ -32,7 +32,7 @@ use tokio_core::reactor::Handle;
 use tokio_core::net::{TcpStream, TcpListener, TcpStreamNew};
 use futures::Future;
 use futures::stream::Stream;
-use multiaddr::{Multiaddr, Protocol};
+use multiaddr::{Multiaddr, Protocol, ToMultiaddr};
 use swarm::Transport;
 
 /// Represents a TCP/IP transport capability for libp2p.
@@ -62,17 +62,26 @@ impl Transport for Tcp {
 
     /// Listen on the given multi-addr.
     /// Returns the address back if it isn't supported.
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, (Self, Multiaddr)> {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
-            Ok(Box::new(
-                futures::future::result(
-                    TcpListener::bind(&socket_addr, &self.event_loop),
-                ).map(|listener| {
+            let listener = TcpListener::bind(&socket_addr, &self.event_loop);
+            // We need to build the `Multiaddr` to return from this function. If an error happened,
+            // just return the original multiaddr.
+            let new_addr = match listener {
+                Ok(ref l) => if let Ok(new_s_addr) = l.local_addr() {
+                    new_s_addr.to_multiaddr().expect("multiaddr generated from socket addr is \
+                                                      always valid")
+                } else {
+                    addr
+                }
+                Err(_) => addr,
+            };
+            let future = futures::future::result(listener).map(|listener| {
                     // Pull out a stream of sockets for incoming connections
                     listener.incoming().map(|x| x.0)
                 })
-                    .flatten_stream(),
-            ))
+                    .flatten_stream();
+            Ok((Box::new(future), new_addr))
         } else {
             Err((self, addr))
         }
@@ -91,7 +100,7 @@ impl Transport for Tcp {
 }
 
 // This type of logic should probably be moved into the multiaddr package
-fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, &Multiaddr> {
+fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
     let protocols = addr.protocol();
 
     // TODO: This is nonconforming (since a multiaddr could specify TCP first) but we can't fix that
@@ -114,9 +123,9 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, &Multiaddr> {
                     ));
                 }
             }
-            Err(addr)
+            Err(())
         }
-        _ => Err(addr),
+        _ => Err(()),
     }
 }
 
@@ -188,7 +197,7 @@ mod tests {
             let addr = Multiaddr::new("/ip4/127.0.0.1/tcp/12345").unwrap();
             let tcp = Tcp::new(core.handle()).unwrap();
             let handle = core.handle();
-            let listener = tcp.listen_on(addr).unwrap().for_each(|sock| {
+            let listener = tcp.listen_on(addr).unwrap().0.for_each(|sock| {
                 // Define what to do with the socket that just connected to us
                 // Which in this case is read 3 bytes
                 let handle_conn = tokio_io::io::read_exact(sock, [0; 3])
@@ -220,5 +229,17 @@ mod tests {
         // Execute the future in our event loop
         core.run(action).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+
+    #[test]
+    fn replace_port_0_in_returned_multiaddr() {
+        let core = Core::new().unwrap();
+        let tcp = Tcp::new(core.handle()).unwrap();
+
+        let addr = Multiaddr::new("/ip4/127.0.0.1/tcp/0").unwrap();
+        assert!(addr.to_string().contains("tcp/0"));
+
+        let (_, new_addr) = tcp.listen_on(addr).unwrap();
+        assert!(!new_addr.to_string().contains("tcp/0"));
     }
 }
