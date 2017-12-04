@@ -23,24 +23,19 @@ extern crate futures;
 extern crate libp2p_secio as secio;
 extern crate libp2p_swarm as swarm;
 extern crate libp2p_tcp_transport as tcp;
-extern crate ring;
 extern crate tokio_core;
 extern crate tokio_io;
-extern crate untrusted;
 
 use bytes::Bytes;
 use futures::future::{Future, FutureResult, IntoFuture, loop_fn, Loop};
 use futures::{Stream, Sink};
-use ring::signature::RSAKeyPair;
 use std::io::Error as IoError;
 use std::iter;
-use std::sync::Arc;
 use swarm::{Transport, ConnectionUpgrade};
 use tcp::Tcp;
 use tokio_core::reactor::Core;
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_io::codec::length_delimited;
-use untrusted::Input;
 
 fn main() {
     let mut core = Core::new().unwrap();
@@ -49,15 +44,10 @@ fn main() {
     let with_secio = tcp
         .with_upgrade(swarm::PlainText)
         .or_upgrade({
-            let private_key = {
-                let pkcs8 = include_bytes!("test-private-key.pk8");
-                Arc::new(RSAKeyPair::from_pkcs8(Input::from(&pkcs8[..])).unwrap())
-            };
+            let private_key = include_bytes!("test-private-key.pk8");
             let public_key = include_bytes!("test-public-key.der").to_vec();
-
             secio::SecioConnUpgrade {
-                local_public_key: public_key,
-                local_private_key: private_key,
+                key: secio::SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap(),
             }
         });
 

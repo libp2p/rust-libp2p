@@ -9,7 +9,5 @@ futures = "0.1"
 libp2p-secio = { path = "../libp2p-secio" }
 libp2p-swarm = { path = "../libp2p-swarm" }
 libp2p-tcp-transport = { path = "../libp2p-tcp-transport" }
-ring = { version = "0.12.1", features = ["rsa_signing"] }
 tokio-core = "0.1"
 tokio-io = "0.1"
-untrusted = "0.6"

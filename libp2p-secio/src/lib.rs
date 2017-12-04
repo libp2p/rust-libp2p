@@ -51,10 +51,12 @@ use futures::{Future, Poll, StartSend, Sink, Stream};
 use futures::stream::MapErr as StreamMapErr;
 use ring::signature::RSAKeyPair;
 use rw_stream_sink::RwStreamSink;
+use std::error::Error;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use std::sync::Arc;
 use tokio_io::{AsyncRead, AsyncWrite};
+use untrusted::Input;
 
 mod algo_support;
 mod codec;
@@ -67,11 +69,67 @@ mod structs_proto;
 /// secio on any connection.
 #[derive(Clone)]
 pub struct SecioConnUpgrade {
-	/// Public key of the local node. Must match `local_private_key` or an error will happen during
-	/// the handshake.
-	pub local_public_key: Vec<u8>,
-	/// Private key that will be used to prove the identity of the local node.
-	pub local_private_key: Arc<RSAKeyPair>,
+	/// Private and public keys of the local node.
+	pub key: SecioKeyPair,
+}
+
+/// Private and public keys of the local node.
+///
+/// # Generating offline keys with OpenSSL
+///
+/// ## RSA
+///
+/// Generating the keys:
+///
+/// ```ignore
+/// openssl genrsa -out private.pem 2048
+/// openssl rsa -in private.pem -outform DER -pubout -out public.der
+/// openssl pkcs8 -in private.pem -topk8 -nocrypt -out private.pk8
+/// rm private.pem      # optional
+/// ```
+///
+/// Loading the keys:
+///
+/// ```ignore
+/// ley key_pair = SecioKeyPair::rsa_from_pkcs8(include_bytes!("private.pk8"),
+///												include_bytes!("public.der"));
+/// ```
+///
+#[derive(Clone)]
+pub struct SecioKeyPair {
+	inner: SecioKeyPairInner,
+}
+
+impl SecioKeyPair {
+	pub fn rsa_from_pkcs8<P>(private: &[u8], public: P)
+							 -> Result<SecioKeyPair, Box<Error + Send + Sync>>
+		where P: Into<Vec<u8>>
+	{
+		let private = RSAKeyPair::from_pkcs8(Input::from(&private[..]))
+			.map_err(|err| Box::new(err))?;
+
+		Ok(SecioKeyPair {
+			inner: SecioKeyPairInner::Rsa {
+				public: public.into(),
+				private: Arc::new(private),
+			}
+		})
+	}
+}
+
+// Inner content of `SecioKeyPair`.
+#[derive(Clone)]
+enum SecioKeyPairInner {
+	Rsa {
+		public: Vec<u8>,
+		private: Arc<RSAKeyPair>,
+	}
+}
+
+#[derive(Debug, Clone)]
+pub enum SecioPublicKey<'a> {
+	/// DER format.
+	Rsa(&'a [u8]),
 }
 
 impl<S> libp2p_swarm::ConnectionUpgrade<S> for SecioConnUpgrade
@@ -96,8 +154,7 @@ impl<S> libp2p_swarm::ConnectionUpgrade<S> for SecioConnUpgrade
 	fn upgrade(self, incoming: S, _: ()) -> Self::Future {
 		let fut = SecioMiddleware::handshake(
 			incoming,
-			self.local_public_key.clone(),
-			self.local_private_key.clone(),
+			self.key,
 		);
 		let wrapped = fut.map(|stream_sink| {
 			let mapped = stream_sink.map_err(map_err as fn(_) -> _);
@@ -126,19 +183,17 @@ impl<S> SecioMiddleware<S>
 {
 	/// Attempts to perform a handshake on the given socket.
 	///
-	/// `local_public_key` and `local_private_key` must match. `local_public_key` must be in the
-	/// DER format.
-	///
 	/// On success, produces a `SecioMiddleware` that can then be used to encode/decode
 	/// communications.
 	pub fn handshake<'a>(
 		socket: S,
-		local_public_key: Vec<u8>,
-		local_private_key: Arc<RSAKeyPair>,
+		key_pair: SecioKeyPair,
 	) -> Box<Future<Item = SecioMiddleware<S>, Error = SecioError> + 'a>
 		where S: 'a
 	{
-		let fut = handshake::handshake(socket, local_public_key, local_private_key)
+		let SecioKeyPairInner::Rsa { private, public } = key_pair.inner;
+
+		let fut = handshake::handshake(socket, public, private)
 			.map(|(inner, pubkey)| {
 				SecioMiddleware {
 					inner: inner,
@@ -150,8 +205,8 @@ impl<S> SecioMiddleware<S>
 
 	/// Returns the public key of the remote in the `DER` format.
 	#[inline]
-	pub fn remote_public_key_der(&self) -> &[u8] {
-		&self.remote_pubkey_der
+	pub fn remote_public_key_der(&self) -> SecioPublicKey {
+		SecioPublicKey::Rsa(&self.remote_pubkey_der)
 	}
 }
 
