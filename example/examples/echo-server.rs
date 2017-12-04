@@ -46,7 +46,7 @@ fn main() {
         .or_upgrade({
             let private_key = include_bytes!("test-private-key.pk8");
             let public_key = include_bytes!("test-public-key.der").to_vec();
-            secio::SecioConnUpgrade {
+            secio::SecioConfig {
                 key: secio::SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap(),
             }
         });

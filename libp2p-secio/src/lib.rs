@@ -29,7 +29,7 @@
 //! `SecioMiddleware` that implements `Sink` and `Stream` and can be used to send packets of data.
 //!
 //! However for integration with the rest of `libp2p` you are encouraged to use the
-//! `SecioConnUpgrade` struct instead. This struct implements the `ConnectionUpgrade` trait and
+//! `SecioConfig` struct instead. This struct implements the `ConnectionUpgrade` trait and
 //! will automatically apply secio on any incoming or outgoing connection.
 
 extern crate bytes;
@@ -68,7 +68,7 @@ mod structs_proto;
 /// Implementation of the `ConnectionUpgrade` trait of `libp2p_swarm`. Automatically applies any
 /// secio on any connection.
 #[derive(Clone)]
-pub struct SecioConnUpgrade {
+pub struct SecioConfig {
 	/// Private and public keys of the local node.
 	pub key: SecioKeyPair,
 }
@@ -132,7 +132,7 @@ pub enum SecioPublicKey<'a> {
 	Rsa(&'a [u8]),
 }
 
-impl<S> libp2p_swarm::ConnectionUpgrade<S> for SecioConnUpgrade
+impl<S> libp2p_swarm::ConnectionUpgrade<S> for SecioConfig
 	where S: AsyncRead + AsyncWrite + 'static
 {
 	type Output = RwStreamSink<
