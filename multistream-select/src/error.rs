@@ -21,6 +21,8 @@
 //! Main `ProtocolChoiceError` error.
 
 use protocol::MultistreamSelectError;
+use std::error;
+use std::fmt;
 use std::io::Error as IoError;
 
 /// Error that can happen when negotiating a protocol with the remote.
@@ -47,5 +49,38 @@ impl From<IoError> for ProtocolChoiceError {
 	#[inline]
 	fn from(err: IoError) -> ProtocolChoiceError {
 		MultistreamSelectError::from(err).into()
+	}
+}
+
+impl error::Error for ProtocolChoiceError {
+	#[inline]
+	fn description(&self) -> &str {
+		match *self {
+			ProtocolChoiceError::MultistreamSelectError(_) => {
+				"error in the protocol"
+			},
+			ProtocolChoiceError::UnexpectedMessage => {
+				"received a message from the remote that makes no sense in the current context"
+			},
+			ProtocolChoiceError::NoProtocolFound => {
+				"we don't support any protocol in common with the remote"
+			},
+		}
+	}
+
+	fn cause(&self) -> Option<&error::Error> {
+		match *self {
+			ProtocolChoiceError::MultistreamSelectError(ref err) => {
+				Some(err)
+			}
+			_ => None,
+		}
+	}
+}
+
+impl fmt::Display for ProtocolChoiceError {
+	#[inline]
+	fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+		write!(fmt, "{}", error::Error::description(self))
 	}
 }

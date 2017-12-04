@@ -35,7 +35,7 @@ use futures::future::{IntoFuture, Future, ok as future_ok, FutureResult};
 use multiaddr::Multiaddr;
 use multistream_select;
 use muxing::StreamMuxer;
-use std::io::{Cursor, Error as IoError, Read, Write};
+use std::io::{Cursor, Error as IoError, ErrorKind as IoErrorKind, Read, Write};
 use std::iter;
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -556,7 +556,7 @@ impl<'a, T, C> UpgradedNode<T, C>
 				let iter = upgrade.protocol_names()
 					.map(|(name, id)| (name, <Bytes as PartialEq>::eq, id));
 				let negotiated = multistream_select::dialer_select_proto(connection, iter)
-					.map_err(|err| panic!("{:?}", err));      // TODO:
+					.map_err(|err| IoError::new(IoErrorKind::Other, err));
 				negotiated.map(|(upgrade_id, conn)| (upgrade_id, conn, upgrade))
 			})
 			.and_then(|(upgrade_id, connection, upgrade)| {
@@ -605,14 +605,12 @@ impl<'a, T, C> UpgradedNode<T, C>
 					(n, <Bytes as PartialEq>::eq, t)
 				}
 				let iter = upgrade.protocol_names().map(iter_map);
-				let negotiated = multistream_select::listener_select_proto(connection, iter)
-					.map_err(|err| panic!("{:?}", err));      // TODO:
+				let negotiated = multistream_select::listener_select_proto(connection, iter);
 				negotiated.map(move |(upgrade_id, conn)| (upgrade_id, conn, upgrade, client_addr))
-					.map_err(|_| panic!())    // TODO:
+					.map_err(|err| IoError::new(IoErrorKind::Other, err))
 			})
-			.map_err(|err| panic!("{:?}", err))      // TODO:
 			.and_then(|(upgrade_id, connection, upgrade, client_addr)| {
-				upgrade.upgrade(connection, upgrade_id).map(|c| (c, client_addr))
+				upgrade.upgrade(connection, upgrade_id).map(|s| (s, client_addr))
 			});
 
 		Ok((Box::new(stream), new_addr))
