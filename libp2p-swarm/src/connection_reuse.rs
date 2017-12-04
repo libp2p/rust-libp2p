@@ -159,6 +159,9 @@ impl<S, M> Stream for ConnectionReuseListener<S, M>
 			}
 		};
 
+		// Most of the time, this array will contain 0 or 1 elements, but sometimes it may contain
+		// more and we don't want to panic if that happens. With 8 elements, we can be pretty
+		// confident that this is never going to spill into a `Vec`.
 		let mut connections_to_drop: SmallVec<[_; 8]> = SmallVec::new();
 
 		for (index, &mut (ref mut muxer, ref mut next_incoming, ref client_addr)) in
@@ -170,15 +173,15 @@ impl<S, M> Stream for ConnectionReuseListener<S, M>
 					*next_incoming = new_next;
 					return Ok(Async::Ready(Some((incoming, client_addr.clone()))));
 				}
-				Ok(Async::NotReady) => (),
+				Ok(Async::NotReady) => {},
 				Err(_) => {
 					connections_to_drop.push(index);
 				}
-			};
+			}
 		}
 
 		for &index in connections_to_drop.iter().rev() {
-			self.connections.remove(index);
+			self.connections.swap_remove(index);
 		}
 
 		Ok(Async::NotReady)
