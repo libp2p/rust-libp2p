@@ -12,6 +12,8 @@ rand = "0.3.17"
 ring = { version = "0.12.1", features = ["rsa_signing"] }
 rust-crypto = "^0.2"
 rw-stream-sink = { path = "../rw-stream-sink" }
-tokio-core = "0.1.6"
 tokio-io = "0.1.0"
 untrusted = "0.6.0"
+
+[dev-dependencies]
+tokio-core = "0.1.6"

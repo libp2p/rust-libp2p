@@ -57,6 +57,7 @@ pub fn full_codec<S>(
 
 #[cfg(test)]
 mod tests {
+	extern crate tokio_core;
 	use super::DecoderMiddleware;
 	use super::EncoderMiddleware;
 	use super::full_codec;
@@ -71,9 +72,9 @@ mod tests {
 	use ring::hmac::SigningKey;
 	use ring::hmac::VerificationKey;
 	use std::io::Error as IoError;
-	use tokio_core::net::TcpListener;
-	use tokio_core::net::TcpStream;
-	use tokio_core::reactor::Core;
+	use self::tokio_core::net::TcpListener;
+	use self::tokio_core::net::TcpStream;
+	use self::tokio_core::reactor::Core;
 	use tokio_io::codec::length_delimited::Framed;
 
 	#[test]

@@ -443,6 +443,7 @@ fn stretch_key(key: &SigningKey, result: &mut [u8]) {
 
 #[cfg(test)]
 mod tests {
+	extern crate tokio_core;
 	use super::handshake;
 	use super::stretch_key;
 	use futures::Future;
@@ -451,9 +452,9 @@ mod tests {
 	use ring::hmac::SigningKey;
 	use ring::signature::RSAKeyPair;
 	use std::sync::Arc;
-	use tokio_core::net::TcpListener;
-	use tokio_core::net::TcpStream;
-	use tokio_core::reactor::Core;
+	use self::tokio_core::net::TcpListener;
+	use self::tokio_core::net::TcpStream;
+	use self::tokio_core::reactor::Core;
 	use untrusted::Input;
 
 	#[test]
