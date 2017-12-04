@@ -24,11 +24,16 @@ extern crate bytes;
 #[macro_use]
 extern crate futures;
 extern crate multistream_select;
+extern crate smallvec;
 extern crate tokio_io;
 
 /// Multi-address re-export.
 pub extern crate multiaddr;
 
+mod connection_reuse;
+pub mod muxing;
 pub mod transport;
 
+pub use self::connection_reuse::ConnectionReuse;
+pub use self::muxing::StreamMuxer;
 pub use self::transport::{ConnectionUpgrade, PlainText, Transport, UpgradedNode, OrUpgrade};
