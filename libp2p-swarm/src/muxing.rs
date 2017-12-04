@@ -27,33 +27,35 @@ use tokio_io::{AsyncRead, AsyncWrite};
 /// > **Note**: The methods of this trait consume the object, but if the object implements `Clone`
 /// >           then you can clone it and keep the original in order to open additional substreams.
 pub trait StreamMuxer {
-    /// Type of the object that represents the raw substream where data can be read and written.
-    type Substream: AsyncRead + AsyncWrite;
-    /// Future that will be resolved when a new incoming substream is open.
-    type InboundSubstream: Future<Item = Self::Substream, Error = IoError>;
-    /// Future that will be resolved when the outgoing substream is open.
-    type OutboundSubstream: Future<Item = Self::Substream, Error = IoError>;
+	/// Type of the object that represents the raw substream where data can be read and written.
+	type Substream: AsyncRead + AsyncWrite;
+	/// Future that will be resolved when a new incoming substream is open.
+	type InboundSubstream: Future<Item = Self::Substream, Error = IoError>;
+	/// Future that will be resolved when the outgoing substream is open.
+	type OutboundSubstream: Future<Item = Self::Substream, Error = IoError>;
 
-    /// Produces a future that will be resolved when a new incoming substream arrives.
-    fn inbound(self) -> Self::InboundSubstream;
+	/// Produces a future that will be resolved when a new incoming substream arrives.
+	fn inbound(self) -> Self::InboundSubstream;
 
-    /// Opens a new outgoing substream, and produces a future that will be resolved when it becomes
-    /// available.
-    fn outbound(self) -> Self::OutboundSubstream;
+	/// Opens a new outgoing substream, and produces a future that will be resolved when it becomes
+	/// available.
+	fn outbound(self) -> Self::OutboundSubstream;
 }
 
-impl<T> StreamMuxer for T where T: AsyncRead + AsyncWrite {
-    type Substream = Self;
-    type InboundSubstream = FutureResult<Self, IoError>;       // TODO: use !
-    type OutboundSubstream = FutureResult<Self, IoError>;      // TODO: use !
+impl<T> StreamMuxer for T
+	where T: AsyncRead + AsyncWrite
+{
+	type Substream = Self;
+	type InboundSubstream = FutureResult<Self, IoError>; // TODO: use !
+	type OutboundSubstream = FutureResult<Self, IoError>; // TODO: use !
 
-    #[inline]
-    fn inbound(self) -> Self::InboundSubstream {
-        ok(self)
-    }
+	#[inline]
+	fn inbound(self) -> Self::InboundSubstream {
+		ok(self)
+	}
 
-    #[inline]
-    fn outbound(self) -> Self::OutboundSubstream {
-        ok(self)
-    }
+	#[inline]
+	fn outbound(self) -> Self::OutboundSubstream {
+		ok(self)
+	}
 }

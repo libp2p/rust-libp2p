@@ -549,7 +549,10 @@ impl<'a, T, C> UpgradedNode<T, C>
 	pub fn listen_on(
 		self,
 		addr: Multiaddr,
-	) -> Result<(Box<Stream<Item = (C::Output, Multiaddr), Error = IoError> + 'a>, Multiaddr), (Self, Multiaddr)>
+	) -> Result<
+		(Box<Stream<Item = (C::Output, Multiaddr), Error = IoError> + 'a>, Multiaddr),
+		(Self, Multiaddr),
+	>
 		where C::NamesIter: Clone, // TODO: not elegant
 			  C: Clone
 	{
