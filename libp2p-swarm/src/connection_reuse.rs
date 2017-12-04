@@ -88,9 +88,9 @@ impl<T, C> Transport for ConnectionReuse<T, C>
 	type Listener = ConnectionReuseListener<Box<Stream<Item = (C::Output, Multiaddr), Error = IoError>>, C::Output>;
 	type Dial = Box<Future<Item = Self::RawConn, Error = IoError>>;
 
-	fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, (Self, Multiaddr)> {
-        let listener = match self.inner.listen_on(addr.clone()) {
-            Ok(l) => l,
+	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+        let (listener, new_addr) = match self.inner.listen_on(addr.clone()) {
+            Ok((l, a)) => (l, a),
             Err((inner, addr)) => {
                 return Err((ConnectionReuse {
                     inner: inner,
@@ -98,10 +98,12 @@ impl<T, C> Transport for ConnectionReuse<T, C>
             }
         };
 
-        Ok(ConnectionReuseListener {
+        let listener = ConnectionReuseListener {
             listener: listener.fuse(),
             connections: Vec::new(),
-        })
+        };
+
+        Ok((listener, new_addr))
     }
 
 	fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
