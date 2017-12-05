@@ -18,7 +18,36 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
 // DEALINGS IN THE SOFTWARE.
 
+// TODO: use this once stable ; for now we just copy-paste the content of the README.md
+//#![doc(include = "../README.md")]
+
 //! Implementation of the libp2p `Transport` trait for TCP/IP.
+//!
+//! Uses [the *tokio* library](https://tokio.rs).
+//! 
+//! # Usage
+//! 
+//! Create [a tokio `Core`](https://docs.rs/tokio-core/0.1/tokio_core/reactor/struct.Core.html),
+//! then grab a handle by calling the `handle()` method on it, then create a `TcpConfig` and pass
+//! the handle.
+//!
+//! Example:
+//!
+//! ```
+//! extern crate libp2p_tcp_transport;
+//! extern crate tokio_core;
+//!
+//! use libp2p_tcp_transport::TcpConfig;
+//! use tokio_core::reactor::Core;
+//!
+//! # fn main() {
+//! let mut core = Core::new().unwrap();
+//! let tcp = TcpConfig::new(core.handle());
+//! # }
+//! ```
+//!
+//! The `TcpConfig` structs implements the `Transport` trait of the `swarm` library. See the
+//! documentation of `swarm` and of libp2p in general to learn how to use the `Transport` trait.
 
 extern crate libp2p_swarm as swarm;
 extern crate tokio_core;
@@ -35,22 +64,26 @@ use futures::stream::Stream;
 use multiaddr::{Multiaddr, Protocol, ToMultiaddr};
 use swarm::Transport;
 
-/// Represents a TCP/IP transport capability for libp2p.
+/// Represents the configuration for a TCP/IP transport capability for libp2p.
 ///
-/// Each `Tcp` struct is tied to a tokio reactor. The TCP sockets created by libp2p will need to
-/// be progressed by running the futures and streams obtained by libp2p through the tokio reactor.
+/// Each connection created by this config is tied to a tokio reactor. The TCP sockets created by
+/// libp2p will need to be progressed by running the futures and streams obtained by libp2p
+/// through the tokio reactor.
 #[derive(Debug, Clone)]
-pub struct Tcp {
+pub struct TcpConfig {
     event_loop: Handle,
 }
 
-impl Tcp {
-    pub fn new(handle: Handle) -> Result<Tcp, IoError> {
-        Ok(Tcp { event_loop: handle })
+impl TcpConfig {
+    /// Creates a new configuration object for TCP/IP. The `Handle` is a tokio reactor the
+    /// connections will be created with.
+    #[inline]
+    pub fn new(handle: Handle) -> TcpConfig {
+        TcpConfig { event_loop: handle }
     }
 }
 
-impl Transport for Tcp {
+impl Transport for TcpConfig {
     /// The raw connection.
     type RawConn = TcpStream;
 
@@ -135,7 +168,7 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Tcp, multiaddr_to_socketaddr};
+    use super::{TcpConfig, multiaddr_to_socketaddr};
     use std;
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use tokio_core::reactor::Core;
@@ -199,7 +232,7 @@ mod tests {
         std::thread::spawn(move || {
             let mut core = Core::new().unwrap();
             let addr = Multiaddr::new("/ip4/127.0.0.1/tcp/12345").unwrap();
-            let tcp = Tcp::new(core.handle()).unwrap();
+            let tcp = TcpConfig::new(core.handle());
             let handle = core.handle();
             let listener = tcp.listen_on(addr).unwrap().0.for_each(|(sock, _)| {
                 // Define what to do with the socket that just connected to us
@@ -219,7 +252,7 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(100));
         let addr = Multiaddr::new("/ip4/127.0.0.1/tcp/12345").unwrap();
         let mut core = Core::new().unwrap();
-        let tcp = Tcp::new(core.handle()).unwrap();
+        let tcp = TcpConfig::new(core.handle());
         // Obtain a future socket through dialing
         let socket = tcp.dial(addr.clone()).unwrap();
         // Define what to do with the socket once it's obtained
@@ -238,7 +271,7 @@ mod tests {
     #[test]
     fn replace_port_0_in_returned_multiaddr() {
         let core = Core::new().unwrap();
-        let tcp = Tcp::new(core.handle()).unwrap();
+        let tcp = TcpConfig::new(core.handle());
 
         let addr = Multiaddr::new("/ip4/127.0.0.1/tcp/0").unwrap();
         assert!(addr.to_string().contains("tcp/0"));

@@ -36,7 +36,7 @@ use std::io::Error as IoError;
 use std::iter;
 use std::sync::Arc;
 use swarm::{Transport, ConnectionUpgrade};
-use tcp::Tcp;
+use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_io::codec::length_delimited;
@@ -44,7 +44,7 @@ use untrusted::Input;
 
 fn main() {
     let mut core = Core::new().unwrap();
-    let tcp = Tcp::new(core.handle()).unwrap();
+    let tcp = TcpConfig::new(core.handle());
 
     let with_secio = tcp
         .with_upgrade(swarm::PlainText)
