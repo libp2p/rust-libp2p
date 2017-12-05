@@ -22,6 +22,8 @@
 
 #![cfg(test)]
 
+extern crate tokio_core;
+
 use {listener_select_proto, dialer_select_proto};
 use ProtocolChoiceError;
 use bytes::Bytes;
@@ -29,9 +31,9 @@ use dialer_select::{dialer_select_proto_parallel, dialer_select_proto_serial};
 use futures::{Sink, Stream};
 use futures::Future;
 use protocol::{Dialer, Listener, DialerToListenerMessage, ListenerToDialerMessage};
-use tokio_core::net::TcpListener;
-use tokio_core::net::TcpStream;
-use tokio_core::reactor::Core;
+use self::tokio_core::net::TcpListener;
+use self::tokio_core::net::TcpStream;
+use self::tokio_core::reactor::Core;
 
 #[test]
 fn negotiate_with_self_succeeds() {

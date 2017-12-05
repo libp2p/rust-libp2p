@@ -157,12 +157,13 @@ impl<R> Stream for Dialer<R>
 
 #[cfg(test)]
 mod tests {
+	extern crate tokio_core;
 	use bytes::Bytes;
 	use futures::{Sink, Stream};
 	use futures::Future;
 	use protocol::{Dialer, DialerToListenerMessage, MultistreamSelectError};
-	use tokio_core::net::{TcpListener, TcpStream};
-	use tokio_core::reactor::Core;
+	use self::tokio_core::net::{TcpListener, TcpStream};
+	use self::tokio_core::reactor::Core;
 
 	#[test]
 	fn wrong_proto_name() {
