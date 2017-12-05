@@ -35,7 +35,6 @@ extern crate base58;
 extern crate datastore;
 extern crate futures;
 extern crate multiaddr;
-extern crate multihash;
 extern crate owning_ref;
 extern crate serde;
 #[macro_use]

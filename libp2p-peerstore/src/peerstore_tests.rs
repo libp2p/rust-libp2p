@@ -29,11 +29,11 @@
 
 macro_rules! peerstore_tests {
     ({$create_peerstore:expr} $({$stmt:stmt})*) => {
+        extern crate multihash;
         use std::thread;
         use std::time::Duration;
         use {Peerstore, PeerAccess};
         use multiaddr::Multiaddr;
-        use multihash;
 
         #[test]
         fn initially_empty() {
