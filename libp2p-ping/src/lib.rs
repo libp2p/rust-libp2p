@@ -18,6 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+// TODO: use this once stable ; for now we just copy-paste the content of the README.md
+//#![doc(include = "../README.md")]
+
 //! Handles the `/ipfs/ping/1.0.0` protocol. This allows pinging a remote node and waiting for an
 //! answer.
 //!
@@ -45,6 +48,34 @@
 //! This is probably not a problem in practice, because the nature of the ping protocol is to
 //! determine whether a remote is still alive, and any reasonable user of this crate will close
 //! connections to non-responsive remotes.
+//!
+//! # Example
+//!
+//! ```no_run
+//! extern crate futures;
+//! extern crate libp2p_ping;
+//! extern crate libp2p_swarm;
+//! extern crate libp2p_tcp_transport;
+//! extern crate tokio_core;
+//! 
+//! use futures::Future;
+//! use libp2p_ping::Ping;
+//! use libp2p_swarm::Transport;
+//! 
+//! # fn main() {
+//! let mut core = tokio_core::reactor::Core::new().unwrap();
+//! 
+//! let ping_finished_future = libp2p_tcp_transport::TcpConfig::new(core.handle())
+//!     .with_upgrade(Ping)
+//!     .dial(libp2p_swarm::Multiaddr::new("127.0.0.1:12345").unwrap()).unwrap_or_else(|_| panic!())
+//!     .and_then(|(mut pinger, service)| {
+//!         pinger.ping().map_err(|_| panic!()).select(service).map_err(|_| panic!())
+//!     });
+//! 
+//! // Runs until the ping arrives.
+//! core.run(ping_finished_future).unwrap();
+//! # }
+//! ```
 //!
 
 extern crate bytes;
