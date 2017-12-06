@@ -18,8 +18,16 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
 // DEALINGS IN THE SOFTWARE.
 
+// TODO: use this once stable ; for now we just copy-paste the content of the README.md
+//#![doc(include = "../README.md")]
+
 //! This crate provides the `RwStreamSink` type. It wraps around a `Stream + Sink` that produces
 //! byte arrays, and implements `AsyncRead` and `AsyncWrite`.
+//!
+//! Each call to `write()` will send one packet on the sink. Calls to `read()` will read from
+//! incoming packets.
+//!
+//! > **Note**: This crate is mostly a utility crate and is not at all specific to libp2p.
 
 extern crate bytes;
 extern crate futures;
