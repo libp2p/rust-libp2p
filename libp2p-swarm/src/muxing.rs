@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::future::{Future, FutureResult, ok};
+use futures::future::Future;
 use std::io::Error as IoError;
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -40,22 +40,4 @@ pub trait StreamMuxer {
 	/// Opens a new outgoing substream, and produces a future that will be resolved when it becomes
 	/// available.
 	fn outbound(self) -> Self::OutboundSubstream;
-}
-
-impl<T> StreamMuxer for T
-	where T: AsyncRead + AsyncWrite
-{
-	type Substream = Self;
-	type InboundSubstream = FutureResult<Self, IoError>; // TODO: use !
-	type OutboundSubstream = FutureResult<Self, IoError>; // TODO: use !
-
-	#[inline]
-	fn inbound(self) -> Self::InboundSubstream {
-		ok(self)
-	}
-
-	#[inline]
-	fn outbound(self) -> Self::OutboundSubstream {
-		ok(self)
-	}
 }
