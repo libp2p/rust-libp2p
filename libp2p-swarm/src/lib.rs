@@ -76,7 +76,7 @@
 //! 
 //! # fn main() {
 //! let tokio_core = tokio_core::reactor::Core::new().unwrap();
-//! let tcp_transport = libp2p_tcp_transport::Tcp::new(tokio_core.handle()).unwrap();
+//! let tcp_transport = libp2p_tcp_transport::TcpConfig::new(tokio_core.handle());
 //! let upgraded = tcp_transport.with_upgrade(libp2p_swarm::PlainText);
 //! 
 //! // upgraded.dial(...)   // automatically applies the plain text protocol on the socket
@@ -109,8 +109,8 @@
 //! # fn main() {
 //! let mut core = tokio_core::reactor::Core::new().unwrap();
 //! 
-//! let ping_finished_future = libp2p_tcp_transport::Tcp::new(core.handle()).unwrap()
-//!     // We have a `Tcp` struct that implements `Transport`, and apply a `Ping` upgrade on it.
+//! let ping_finished_future = libp2p_tcp_transport::TcpConfig::new(core.handle())
+//!     // We have a `TcpConfig` struct that implements `Transport`, and apply a `Ping` upgrade on it.
 //!     .with_upgrade(Ping)
 //!     // TODO: right now the only available protocol is ping, but we want to replace it with
 //!     //       something that is more simple to use
