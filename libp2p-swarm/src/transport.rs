@@ -448,11 +448,11 @@ impl<A, B, AId, BId> Iterator for NamesIterChain<A, B>
 /// simply passes communications through without doing anything more.
 ///
 /// > **Note**: Generally used as an alternative to `secio` if a security layer is not desirable.
-// TODO: move `PlainText` to a separate crate?
+// TODO: move `PlainTextConfig` to a separate crate?
 #[derive(Debug, Copy, Clone)]
-pub struct PlainText;
+pub struct PlainTextConfig;
 
-impl<C> ConnectionUpgrade<C> for PlainText
+impl<C> ConnectionUpgrade<C> for PlainTextConfig
 	where C: AsyncRead + AsyncWrite
 {
 	type Output = C;
