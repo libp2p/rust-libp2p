@@ -77,7 +77,7 @@
 //! # fn main() {
 //! let tokio_core = tokio_core::reactor::Core::new().unwrap();
 //! let tcp_transport = libp2p_tcp_transport::TcpConfig::new(tokio_core.handle());
-//! let upgraded = tcp_transport.with_upgrade(libp2p_swarm::PlainText);
+//! let upgraded = tcp_transport.with_upgrade(libp2p_swarm::PlainTextConfig);
 //! 
 //! // upgraded.dial(...)   // automatically applies the plain text protocol on the socket
 //! # }
