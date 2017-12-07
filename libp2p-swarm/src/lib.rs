@@ -43,6 +43,17 @@
 //! // TODO: right now only tcp-transport exists, we need to add an example for chaining
 //! //       multiple transports once that makes sense
 //! 
+//! ## The `MuxedTransport` trait
+//! 
+//! The `MuxedTransport` trait is an extension to the `Transport` trait, and is implemented on
+//! transports that can receive incoming connections on streams that have been opened with `dial()`.
+//! 
+//! The trait provides the `dial_and_listen()` method, which returns both a dialer and a stream of
+//! incoming connections.
+//! 
+//! > **Note**: This trait is mainly implemented for transports that provide stream muxing
+//! >           capabilities.
+//! 
 //! # Connection upgrades
 //! 
 //! Once a socket has been opened with a remote through a `Transport`, it can be *upgraded*. This
@@ -60,14 +71,16 @@
 //! Examples of middleware connection upgrades include `PlainTextConfig` (dummy upgrade) or
 //! `SecioConfig` (encyption layer, provided by the `secio` crate).
 //! 
-//! The output of a middleware connection upgrade must implement the `AsyncRead` and `AsyncWrite`
+//! The output of a middleware connection upgrade implements the `AsyncRead` and `AsyncWrite`
 //! traits, just like sockets do.
 //! 
 //! A middleware can be applied on a transport by using the `with_upgrade` method of the
 //! `Transport` trait. The return value of this method also implements the `Transport` trait, which
 //! means that you can call `dial()` and `listen_on()` on it in order to directly obtain an
-//! upgraded connection or a listener that will yield upgraded connections. An error is produced if
-//! the remote doesn't support the protocol corresponding to the connection upgrade.
+//! upgraded connection or a listener that will yield upgraded connections. Similarly, the
+//! `dial_and_listen()` method will automatically apply the upgrade on both the dialer and the
+//! listener. An error is produced if the remote doesn't support the protocol corresponding to the
+//! connection upgrade.
 //! 
 //! ```
 //! extern crate libp2p_swarm;
@@ -93,10 +106,12 @@
 //! traits, then you can turn the `UpgradedNode` struct into a `ConnectionReuse` struct by calling
 //! `ConnectionReuse::from(upgraded_node)`.
 //! 
-//! The `ConnectionReuse` struct then implements the `Transport` trait, and can be used to dial or
-//! listen to multiaddresses, just like any other transport. The only difference is that dialing
-//! a node will try to open a new substream on an existing connection instead of opening a new
-//! one every time.
+//! The `ConnectionReuse` struct then implements the `Transport` and `MuxedTransport` traits, and
+//! can be used to dial or listen to multiaddresses, just like any other transport. The only
+//! difference is that dialing a node will try to open a new substream on an existing connection
+//! instead of opening a new one every time.
+//! 
+//! > **Note**: Right now the `ConnectionReuse` struct is not fully implemented.
 //! 
 //! TODO: add an example once the multiplex pull request is merged
 //! 
@@ -108,9 +123,9 @@
 //! transport.
 //! 
 //! However the `UpgradedNode` struct returned by `with_upgrade` still provides methods named
-//! `dial` and `listen_on`, which will yield you respectively a `Future` or a `Stream`, which you
-//! can use to obtain the `Output`. This `Output` can then be used in a protocol-specific way to
-//! use the protocol.
+//! `dial`, `listen_on`, and `dial_and_listen`, which will yield you a `Future` or a `Stream`,
+//! which you can use to obtain the `Output`. This `Output` can then be used in a protocol-specific
+//! way to use the protocol.
 //! 
 //! ```no_run
 //! extern crate futures;
