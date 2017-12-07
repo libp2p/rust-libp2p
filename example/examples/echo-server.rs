@@ -26,12 +26,9 @@ extern crate libp2p_tcp_transport as tcp;
 extern crate tokio_core;
 extern crate tokio_io;
 
-use bytes::BytesMut;
 use futures::future::{Future, IntoFuture, loop_fn, Loop};
 use futures::{Stream, Sink};
-use std::io::Error as IoError;
-use std::iter;
-use swarm::{Transport, ConnectionUpgrade};
+use swarm::{Transport, SimpleProtocol};
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 use tokio_io::codec::length_delimited;
@@ -50,9 +47,9 @@ fn main() {
             }
         });
 
-    let with_echo = with_secio.with_simple_protocol_upgrade("/echo/1.0.0", |socket| {
-        Ok(length_delimited::Framed::<_, BytesMut>::new(socket))
-    });
+    let with_echo = with_secio.with_upgrade(SimpleProtocol::new("/echo/1.0.0", |socket| {
+        Ok(length_delimited::Framed::new(socket))
+    }));
 
     let future = with_echo.listen_on(swarm::multiaddr::Multiaddr::new("/ip4/0.0.0.0/tcp/10333").unwrap())
         .unwrap_or_else(|_| panic!()).0

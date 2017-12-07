@@ -102,25 +102,6 @@ pub trait Transport {
 			upgrade: upgrade,
 		}
 	}
-
-	/// Wraps this transport inside an upgrade. Similar to `with_upgrade`, but more convenient to
-	/// use for small protocols.
-	#[inline]
-	fn with_simple_protocol_upgrade<N, F, O>(self, name: N, upgrade: F)
-											 -> UpgradedNode<Self, SimpleProtocolUpgrade<F>>
-		where Self: Sized,
-			  N: Into<Bytes>,
-			  F: Fn(Self::RawConn) -> O,
-			  O: IntoFuture<Error = IoError>,
-	{
-		UpgradedNode {
-			transports: self,
-			upgrade: SimpleProtocolUpgrade {
-				name: name.into(),
-				upgrade: Arc::new(upgrade),
-			},
-		}
-	}
 }
 
 /// Dummy implementation of `Transport` that just denies every single attempt.
@@ -184,26 +165,39 @@ impl<A, B> Transport for OrTransport<A, B>
 	}
 }
 
-/// Implementation of `ConnetionUpgrade`. See `with_simple_protocol_upgrade`.
+/// Implementation of `ConnectionUpgrade`. Convenient to use with small protocols.
 #[derive(Debug)]
-pub struct SimpleProtocolUpgrade<F> {
+pub struct SimpleProtocol<F> {
 	name: Bytes,
 	// Note: we put the closure `F` in an `Arc` because Rust closures aren't automatically clonable
 	// yet.
 	upgrade: Arc<F>,
 }
 
-impl<F> Clone for SimpleProtocolUpgrade<F> {
+impl<F> SimpleProtocol<F> {
+	/// Builds a `SimpleProtocol`.
+	#[inline]
+	pub fn new<N>(name: N, upgrade: F) -> SimpleProtocol<F>
+		where N: Into<Bytes>
+	{
+		SimpleProtocol {
+			name: name.into(),
+			upgrade: Arc::new(upgrade),
+		}
+	}
+}
+
+impl<F> Clone for SimpleProtocol<F> {
 	#[inline]
 	fn clone(&self) -> Self {
-		SimpleProtocolUpgrade {
+		SimpleProtocol {
 			name: self.name.clone(),
 			upgrade: self.upgrade.clone(),
 		}
 	}
 }
 
-impl<C, F, O> ConnectionUpgrade<C> for SimpleProtocolUpgrade<F>
+impl<C, F, O> ConnectionUpgrade<C> for SimpleProtocol<F>
     where C: AsyncRead + AsyncWrite,
 		  F: Fn(C) -> O,
 		  O: IntoFuture<Error = IoError>,
