@@ -65,7 +65,7 @@ mod keys_proto;
 mod handshake;
 mod structs_proto;
 
-/// Implementation of the `ConnectionUpgrade` trait of `libp2p_swarm`. Automatically applies any
+/// Implementation of the `ConnectionUpgrade` trait of `libp2p_swarm`. Automatically applies
 /// secio on any connection.
 #[derive(Clone)]
 pub struct SecioConfig {
@@ -91,7 +91,7 @@ pub struct SecioConfig {
 /// Loading the keys:
 ///
 /// ```ignore
-/// ley key_pair = SecioKeyPair::rsa_from_pkcs8(include_bytes!("private.pk8"),
+/// let key_pair = SecioKeyPair::rsa_from_pkcs8(include_bytes!("private.pk8"),
 ///												include_bytes!("public.der"));
 /// ```
 ///
