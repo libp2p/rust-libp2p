@@ -20,6 +20,8 @@
 
 //! Contains the error structs for the low-level protocol handling.
 
+use std::error;
+use std::fmt;
 use std::io::Error as IoError;
 
 /// Error at the multistream-select layer of communication.
@@ -42,5 +44,41 @@ impl From<IoError> for MultistreamSelectError {
 	#[inline]
 	fn from(err: IoError) -> MultistreamSelectError {
 		MultistreamSelectError::IoError(err)
+	}
+}
+
+impl error::Error for MultistreamSelectError {
+	#[inline]
+	fn description(&self) -> &str {
+		match *self {
+			MultistreamSelectError::IoError(_) => {
+				"I/O error"
+			},
+			MultistreamSelectError::FailedHandshake => {
+				"the remote doesn't use the same multistream-select protocol as we do"
+			},
+			MultistreamSelectError::UnknownMessage => {
+				"received an unknown message from the remote"
+			},
+			MultistreamSelectError::WrongProtocolName => {
+				"protocol names must always start with `/`, otherwise this error is returned"
+			},
+		}
+	}
+
+	fn cause(&self) -> Option<&error::Error> {
+		match *self {
+			MultistreamSelectError::IoError(ref err) => {
+				Some(err)
+			}
+			_ => None,
+		}
+	}
+}
+
+impl fmt::Display for MultistreamSelectError {
+	#[inline]
+	fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+		write!(fmt, "{}", error::Error::description(self))
 	}
 }
