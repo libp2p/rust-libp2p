@@ -45,11 +45,12 @@
 
 use futures::{Future, Stream, Async, Poll};
 use futures::stream::Fuse as StreamFuse;
+use futures::stream;
 use multiaddr::Multiaddr;
 use muxing::StreamMuxer;
 use smallvec::SmallVec;
 use std::io::Error as IoError;
-use transport::{Transport, ConnectionUpgrade, UpgradedNode};
+use transport::{Transport, ConnectionUpgrade, UpgradedNode, MuxedTransport};
 
 /// Allows reusing the same muxed connection multiple times.
 ///
@@ -119,6 +120,39 @@ impl<T, C> Transport for ConnectionReuse<T, C>
 		};
 
 		let future = dial.and_then(|dial| dial.outbound());
+		Ok(Box::new(future) as Box<_>)
+	}
+}
+
+impl<T, C> MuxedTransport for ConnectionReuse<T, C>
+	where T: Transport + 'static, // TODO: 'static :(
+		  C: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :(
+		  C: Clone,
+		  C::Output: StreamMuxer + Clone,
+		  C::NamesIter: Clone // TODO: not elegant
+{
+	type Incoming = Box<Stream<Item = <C::Output as StreamMuxer>::Substream, Error = IoError>>;
+	type DialAndListen = Box<Future<Item = (Self::RawConn, Self::Incoming), Error = IoError>>;
+
+	fn dial_and_listen(self, addr: Multiaddr) -> Result<Self::DialAndListen, (Self, Multiaddr)> {
+		let muxer_dial = match self.inner.dial(addr) {
+			Ok(l) => l,
+			Err((inner, addr)) => {
+				return Err((ConnectionReuse { inner: inner }, addr));
+			}
+		};
+
+		let future = muxer_dial
+			.and_then(|muxer| {
+				let dial = muxer.clone().outbound();
+				dial.map(|d| (d, muxer))
+			})
+			.and_then(|(dial, muxer)| {
+				let listener = stream::repeat(muxer).and_then(|muxer| muxer.inbound());
+				let listener = Box::new(listener) as Box<Stream<Item = _, Error = _>>;
+				Ok((dial, listener))
+			});
+
 		Ok(Box::new(future) as Box<_>)
 	}
 }
