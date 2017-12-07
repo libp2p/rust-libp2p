@@ -207,7 +207,7 @@ impl<C, F, O> ConnectionUpgrade<C> for SimpleProtocol<F>
 
     #[inline]
     fn protocol_names(&self) -> Self::NamesIter {
-        iter::once(("/echo/1.0.0".into(), ()))
+        iter::once((self.name.clone(), ()))
     }
 
     type Output = O::Item;
