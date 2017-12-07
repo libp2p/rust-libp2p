@@ -14,4 +14,5 @@ rand = "0.3"
 tokio-io = "0.1"
 
 [dev-dependencies]
+libp2p-tcp-transport = { path = "../libp2p-tcp-transport" }
 tokio-core = "0.1"
