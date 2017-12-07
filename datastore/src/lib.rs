@@ -39,7 +39,7 @@
 //! 
 //! The `JsonFileDatastore::new` method will attempt to load existing data from the path you pass
 //! as parameter. This path is also where the data will be stored. The content of the store is
-//! flushed on destruction or if you call `flush()`.
+//! flushed on drop or if you call `flush()`.
 //! 
 //! ```no_run
 //! use datastore::Datastore;
@@ -60,9 +60,9 @@
 //! The struct returned by the `query` method implements the `Stream` trait from `futures`,
 //! meaning that the result is asynchronous.
 //! 
-//! > **Note**: For now the `get` and `has` methods are theoretically blocking, but the only
-//! >			available implementation doesn't do any I/O. Maybe these methods will be made
-//! > 			asynchronous in the future, if deemed necessary.
+//! > **Note**: For now the API of the `get` and `has` methods makes them potentially blocking
+//! >           operations, though the only available implementation doesn't block. The API of these
+//! >           methods may become asynchronous in the future if deemed necessary.
 //! 
 //! ```no_run
 //! extern crate datastore;
