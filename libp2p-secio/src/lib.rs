@@ -40,7 +40,6 @@ extern crate protobuf;
 extern crate rand;
 extern crate ring;
 extern crate rw_stream_sink;
-extern crate tokio_core;
 extern crate tokio_io;
 extern crate untrusted;
 
