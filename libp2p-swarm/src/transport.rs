@@ -34,6 +34,7 @@ use futures::{Stream, Poll, Async};
 use futures::future::{IntoFuture, Future, ok as future_ok, FutureResult};
 use multiaddr::Multiaddr;
 use multistream_select;
+use muxing::StreamMuxer;
 use std::io::{Cursor, Error as IoError, Read, Write};
 use std::iter;
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -289,6 +290,31 @@ impl<A, B> Write for EitherSocket<A, B>
 		match self {
 			&mut EitherSocket::First(ref mut a) => a.flush(),
 			&mut EitherSocket::Second(ref mut b) => b.flush(),
+		}
+	}
+}
+
+impl<A, B> StreamMuxer for EitherSocket<A, B>
+	where A: StreamMuxer,
+		  B: StreamMuxer,
+{
+	type Substream = EitherSocket<A::Substream, B::Substream>;
+	type InboundSubstream = EitherTransportFuture<A::InboundSubstream, B::InboundSubstream>;
+	type OutboundSubstream = EitherTransportFuture<A::OutboundSubstream, B::OutboundSubstream>;
+
+	#[inline]
+	fn inbound(self) -> Self::InboundSubstream {
+		match self {
+			EitherSocket::First(a) => EitherTransportFuture::First(a.inbound()),
+			EitherSocket::Second(b) => EitherTransportFuture::Second(b.inbound()),
+		}
+	}
+
+	#[inline]
+	fn outbound(self) -> Self::OutboundSubstream {
+		match self {
+			EitherSocket::First(a) => EitherTransportFuture::First(a.outbound()),
+			EitherSocket::Second(b) => EitherTransportFuture::Second(b.outbound()),
 		}
 	}
 }
