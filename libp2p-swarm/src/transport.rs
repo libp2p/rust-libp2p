@@ -31,12 +31,13 @@
 
 use bytes::Bytes;
 use futures::{Stream, Poll, Async};
-use futures::future::{IntoFuture, Future, ok as future_ok, FutureResult};
+use futures::future::{IntoFuture, Future, ok as future_ok, FutureResult, FromErr};
 use multiaddr::Multiaddr;
 use multistream_select;
 use muxing::StreamMuxer;
 use std::io::{Cursor, Error as IoError, ErrorKind as IoErrorKind, Read, Write};
 use std::iter;
+use std::sync::Arc;
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// A transport is an object that can be used to produce connections by listening or dialing a
@@ -163,6 +164,61 @@ impl<A, B> Transport for OrTransport<A, B>
 			Err((second, addr)) => Err((OrTransport(first, second), addr)),
 		}
 	}
+}
+
+/// Implementation of `ConnectionUpgrade`. Convenient to use with small protocols.
+#[derive(Debug)]
+pub struct SimpleProtocol<F> {
+	name: Bytes,
+	// Note: we put the closure `F` in an `Arc` because Rust closures aren't automatically clonable
+	// yet.
+	upgrade: Arc<F>,
+}
+
+impl<F> SimpleProtocol<F> {
+	/// Builds a `SimpleProtocol`.
+	#[inline]
+	pub fn new<N>(name: N, upgrade: F) -> SimpleProtocol<F>
+		where N: Into<Bytes>
+	{
+		SimpleProtocol {
+			name: name.into(),
+			upgrade: Arc::new(upgrade),
+		}
+	}
+}
+
+impl<F> Clone for SimpleProtocol<F> {
+	#[inline]
+	fn clone(&self) -> Self {
+		SimpleProtocol {
+			name: self.name.clone(),
+			upgrade: self.upgrade.clone(),
+		}
+	}
+}
+
+impl<C, F, O> ConnectionUpgrade<C> for SimpleProtocol<F>
+    where C: AsyncRead + AsyncWrite,
+		  F: Fn(C) -> O,
+		  O: IntoFuture<Error = IoError>,
+{
+    type NamesIter = iter::Once<(Bytes, ())>;
+    type UpgradeIdentifier = ();
+
+    #[inline]
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once((self.name.clone(), ()))
+    }
+
+    type Output = O::Item;
+    type Future = FromErr<O::Future, IoError>;
+
+    #[inline]
+    fn upgrade(self, socket: C, _: ()) -> Self::Future {
+		let upgrade = &self.upgrade;
+		upgrade(socket).into_future().from_err()
+    }
 }
 
 /// Implements `Stream` and dispatches all method calls to either `First` or `Second`.

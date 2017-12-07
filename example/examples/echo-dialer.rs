@@ -26,15 +26,11 @@ extern crate libp2p_tcp_transport as tcp;
 extern crate tokio_core;
 extern crate tokio_io;
 
-use bytes::Bytes;
-use futures::future::{Future, FutureResult, IntoFuture};
-use futures::{Stream, Sink};
-use std::io::Error as IoError;
-use std::iter;
-use swarm::{Transport, ConnectionUpgrade};
+use bytes::BytesMut;
+use futures::{Stream, Sink, Future};
+use swarm::{Transport, SimpleProtocol};
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
-use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_io::codec::length_delimited;
 
 fn main() {
@@ -51,11 +47,12 @@ fn main() {
             }
         });
 
-    let with_echo = with_secio.with_upgrade(Echo);
+    let with_echo = with_secio.with_upgrade(SimpleProtocol::new("/echo/1.0.0", |socket| {
+        Ok(length_delimited::Framed::<_, BytesMut>::new(socket))
+    }));
 
     let dialer = with_echo.dial(swarm::multiaddr::Multiaddr::new("/ip4/127.0.0.1/tcp/10333").unwrap())
-        .map_err(|_| panic!())
-        .unwrap()
+        .unwrap_or_else(|_| panic!())
         .and_then(|f| {
             f.send("hello world".into())
         })
@@ -69,27 +66,4 @@ fn main() {
         });
 
     core.run(dialer).unwrap();
-}
-
-// TODO: copy-pasted from echo-server
-#[derive(Debug, Copy, Clone)]
-pub struct Echo;
-impl<C> ConnectionUpgrade<C> for Echo
-    where C: AsyncRead + AsyncWrite
-{
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
-    type UpgradeIdentifier = ();
-
-    #[inline]
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once(("/echo/1.0.0".into(), ()))
-    }
-
-    type Output = length_delimited::Framed<C>;
-    type Future = FutureResult<Self::Output, IoError>;
-
-    #[inline]
-    fn upgrade(self, socket: C, _: Self::UpgradeIdentifier) -> Self::Future {
-        Ok(length_delimited::Framed::new(socket)).into_future()
-    }
 }

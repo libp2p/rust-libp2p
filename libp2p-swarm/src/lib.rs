@@ -166,3 +166,4 @@ pub use self::connection_reuse::ConnectionReuse;
 pub use self::multiaddr::Multiaddr;
 pub use self::muxing::StreamMuxer;
 pub use self::transport::{ConnectionUpgrade, PlainTextConfig, Transport, UpgradedNode, OrUpgrade};
+pub use self::transport::SimpleProtocol;
