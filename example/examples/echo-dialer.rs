@@ -34,10 +34,15 @@ use tokio_core::reactor::Core;
 use tokio_io::codec::length_delimited;
 
 fn main() {
+    // We start by building the tokio engine that will run all the sockets.
     let mut core = Core::new().unwrap();
-    let tcp = TcpConfig::new(core.handle());
-    
-    let with_secio = tcp
+
+    // Now let's build the transport stack.
+    // We start by creating a `TcpConfig` that indicates that we want TCP/IP.
+    let transport = TcpConfig::new(core.handle())
+
+        // On top of TCP/IP, we will use either the plaintext protocol or the secio protocol,
+        // depending on which one the remote supports.
         .with_upgrade(swarm::PlainTextConfig)
         .or_upgrade({
             let private_key = include_bytes!("test-private-key.pk8");
@@ -45,19 +50,35 @@ fn main() {
             secio::SecioConfig {
                 key: secio::SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap(),
             }
-        });
-
-    let with_echo = with_secio.with_upgrade(SimpleProtocol::new("/echo/1.0.0", |socket| {
-        Ok(length_delimited::Framed::<_, BytesMut>::new(socket))
-    }));
-
-    let dialer = with_echo.dial(swarm::multiaddr::Multiaddr::new("/ip4/127.0.0.1/tcp/10333").unwrap())
-        .unwrap_or_else(|_| panic!())
-        .and_then(|f| {
-            f.send("hello world".into())
         })
-        .and_then(|f| {
-            f.into_future()
+
+        // On top of plaintext or secio, we use the "echo" protocol, which is a custom protocol
+        // just for this example.
+        // For this purpose, we create a `SimpleProtocol` struct.
+        .with_upgrade(SimpleProtocol::new("/echo/1.0.0", |socket| {
+            // This closure is called whenever a stream using the "echo" protocol has been
+            // successfully negotiated. The parameter is the raw socket (implements the AsyncRead
+            // and AsyncWrite traits), and the closure must return an implementation of
+            // `IntoFuture` that can yield any type of object.
+            Ok(length_delimited::Framed::<_, BytesMut>::new(socket))
+        }));
+
+    // We now have a `transport` variable that can be used either to dial nodes or listen to
+    // incoming connections, and that will automatically apply all the selected protocols on top
+    // of any opened stream.
+
+    // We use it to dial `/ip4/127.0.0.1/tcp/10333`.
+    let dialer = transport.dial(swarm::Multiaddr::new("/ip4/127.0.0.1/tcp/10333").unwrap())
+        .unwrap_or_else(|_| panic!("unsupported multiaddr protocol ; should never happen"))
+        .and_then(|echo| {
+            // `echo` is what the closure used when initializing "echo" returns.
+            // Consequently, please note that the `send` method is available only because the type
+            // `length_delimited::Framed` has a `send` method.
+            echo.send("hello world".into())
+        })
+        .and_then(|echo| {
+            // The message has been successfully sent. Now wait for an answer.
+            echo.into_future()
                 .map(|(msg, rest)| {
                     println!("received: {:?}", msg);
                     rest
@@ -65,5 +86,8 @@ fn main() {
                 .map_err(|(err, _)| err)
         });
 
+    // `dialer` is a future that contains all the behaviour that we want, but nothing has actually
+    // started yet. Because we created the `TcpConfig` with tokio, we need to run the future
+    // through the tokio core.
     core.run(dialer).unwrap();
 }
