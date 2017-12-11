@@ -95,6 +95,21 @@ pub fn read_stream<'a, O: Into<Option<(u32, &'a mut [u8])>>, T: AsyncRead>(
         Err(io::ErrorKind::WouldBlock.into())
     };
 
+    if let Some((ref mut id, ..)) = stream_data {
+        // TODO: We can do this only hashing `id` once using the entry API.
+        let write = lock.open_streams
+            .get(id)
+            .and_then(SubstreamMetadata::write_task)
+            .cloned();
+        lock.open_streams.insert(
+            *id,
+            SubstreamMetadata::Open {
+                read: Some(task::current()),
+                write,
+            },
+        );
+    }
+
     loop {
         match lock.read_state.take().unwrap_or_default() {
             Header {
@@ -341,17 +356,6 @@ pub fn read_stream<'a, O: Into<Option<(u32, &'a mut [u8])>>, T: AsyncRead>(
                             task.notify();
                         }
 
-                        let write = lock.open_streams
-                            .get(id)
-                            .and_then(SubstreamMetadata::write_task)
-                            .cloned();
-                        lock.open_streams.insert(
-                            *id,
-                            SubstreamMetadata::Open {
-                                read: Some(task::current()),
-                                write,
-                            },
-                        );
                         // We cannot make progress here, another stream has to accept this packet
                         return on_block;
                     }

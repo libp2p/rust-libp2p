@@ -356,6 +356,7 @@ where
 mod tests {
     use super::*;
     use std::io;
+	use tokio_io::io as tokio;
 
     #[test]
     fn can_use_one_stream() {
@@ -367,7 +368,7 @@ mod tests {
 
         let mut substream = mplex.clone().outbound().wait().unwrap();
 
-        assert!(substream.write(message).is_ok());
+        assert!(tokio::write_all(&mut substream, message).wait().is_ok());
 
         let id = substream.id();
 
@@ -394,7 +395,7 @@ mod tests {
 
         let mut buf = vec![0; message.len()];
 
-        assert!(substream.read(&mut buf).is_ok());
+        assert!(tokio::read(&mut substream, &mut buf).wait().is_ok());
         assert_eq!(&buf, message);
     }
 
@@ -404,35 +405,31 @@ mod tests {
 
         let mplex = Multiplex::dial(stream);
 
-        let mut outbound: Vec<Substream<_>> = vec![
-            mplex.clone().outbound().wait().unwrap(),
-            mplex.clone().outbound().wait().unwrap(),
-            mplex.clone().outbound().wait().unwrap(),
-            mplex.clone().outbound().wait().unwrap(),
-            mplex.clone().outbound().wait().unwrap(),
-        ];
+        let mut outbound: Vec<Substream<_>> = vec![];
+
+        for _ in 0..5 {
+            outbound.push(mplex.clone().outbound().wait().unwrap());
+        }
 
         outbound.sort_by_key(|a| a.id());
 
         for (i, substream) in outbound.iter_mut().enumerate() {
-            assert!(substream.write(i.to_string().as_bytes()).is_ok());
+            assert!(tokio::write_all(substream, i.to_string().as_bytes()).wait().is_ok());
         }
 
         let stream = io::Cursor::new(mplex.state.lock().stream.get_ref().clone());
 
         let mplex = Multiplex::listen(stream);
 
-        let mut inbound: Vec<Substream<_>> = vec![
-            mplex.clone().inbound().wait().unwrap(),
-            mplex.clone().inbound().wait().unwrap(),
-            mplex.clone().inbound().wait().unwrap(),
-            mplex.clone().inbound().wait().unwrap(),
-            mplex.clone().inbound().wait().unwrap(),
-        ];
+        let mut inbound: Vec<Substream<_>> = vec![];
+
+        for _ in 0..5 {
+            inbound.push(mplex.clone().inbound().wait().unwrap());
+        }
 
         inbound.sort_by_key(|a| a.id());
 
-        for (substream, outbound) in inbound.iter_mut().zip(outbound.iter()) {
+        for (mut substream, outbound) in inbound.iter_mut().zip(outbound.iter()) {
             let id = outbound.id();
             assert_eq!(id, substream.id());
             assert_eq!(
@@ -443,7 +440,7 @@ mod tests {
             );
 
             let mut buf = [0; 3];
-            assert_eq!(substream.read(&mut buf).unwrap(), 1);
+            assert_eq!(tokio::read(&mut substream, &mut buf).wait().unwrap().2, 1);
         }
     }
 
@@ -494,7 +491,7 @@ mod tests {
 
         let mut buf = vec![0; message.len()];
 
-        assert!(substream.read(&mut buf).is_ok());
+        assert!(tokio::read(&mut substream, &mut buf).wait().is_ok());
         assert_eq!(&buf, message);
     }
 
@@ -541,7 +538,7 @@ mod tests {
         assert_eq!(substream.id(), 0);
         assert_eq!(substream.name(), None);
 
-        assert_eq!(substream.read(&mut [0; 100][..]).unwrap(), 0);
+        assert_eq!(tokio::read(&mut substream, &mut [0; 100][..]).wait().unwrap().2, 0);
     }
 
     #[test]
@@ -589,7 +586,7 @@ mod tests {
         for _ in 0..20 {
             let mut buf = [0; 1];
 
-            assert_eq!(substream.read(&mut buf[..]).unwrap(), 1);
+            assert_eq!(tokio::read(&mut substream, &mut buf[..]).wait().unwrap().2, 1);
 
             out.push(buf[0]);
         }
