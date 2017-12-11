@@ -150,7 +150,7 @@ impl<S> libp2p_swarm::ConnectionUpgrade<S> for SecioConfig
 	}
 
 	#[inline]
-	fn upgrade(self, incoming: S, _: ()) -> Self::Future {
+	fn upgrade(self, incoming: S, _: (), _: libp2p_swarm::Endpoint) -> Self::Future {
 		let fut = SecioMiddleware::handshake(
 			incoming,
 			self.key,

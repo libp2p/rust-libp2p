@@ -215,7 +215,7 @@ impl<C, F, O> ConnectionUpgrade<C> for SimpleProtocol<F>
     type Future = FromErr<O::Future, IoError>;
 
     #[inline]
-    fn upgrade(self, socket: C, _: ()) -> Self::Future {
+    fn upgrade(self, socket: C, _: (), _: Endpoint) -> Self::Future {
 		let upgrade = &self.upgrade;
 		upgrade(socket).into_future().from_err()
     }
@@ -407,7 +407,17 @@ pub trait ConnectionUpgrade<C: AsyncRead + AsyncWrite> {
 	///
 	/// Because performing the upgrade may not be instantaneous (eg. it may require a handshake),
 	/// this function returns a future instead of the direct output.
-	fn upgrade(self, socket: C, id: Self::UpgradeIdentifier) -> Self::Future;
+	fn upgrade(self, socket: C, id: Self::UpgradeIdentifier, ty: Endpoint)
+			   -> Self::Future;
+}
+
+/// Type of connection for the upgrade.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum Endpoint {
+	/// The socket comes from a dialer.
+	Dialer,
+	/// The socket comes from a listener.
+	Listener,
 }
 
 /// See `or_upgrade()`.
@@ -434,13 +444,15 @@ impl<C, A, B> ConnectionUpgrade<C> for OrUpgrade<A, B>
 	type Future = EitherConnUpgrFuture<A::Future, B::Future>;
 
 	#[inline]
-	fn upgrade(self, socket: C, id: Self::UpgradeIdentifier) -> Self::Future {
+	fn upgrade(self, socket: C, id: Self::UpgradeIdentifier, ty: Endpoint)
+			   -> Self::Future
+	{
 		match id {
 			EitherUpgradeIdentifier::First(id) => {
-				EitherConnUpgrFuture::First(self.0.upgrade(socket, id))
+				EitherConnUpgrFuture::First(self.0.upgrade(socket, id, ty))
 			}
 			EitherUpgradeIdentifier::Second(id) => {
-				EitherConnUpgrFuture::Second(self.1.upgrade(socket, id))
+				EitherConnUpgrFuture::Second(self.1.upgrade(socket, id, ty))
 			}
 		}
 	}
@@ -543,7 +555,7 @@ impl<C> ConnectionUpgrade<C> for PlainTextConfig
 	type NamesIter = iter::Once<(Bytes, ())>;
 
 	#[inline]
-	fn upgrade(self, i: C, _: ()) -> Self::Future {
+	fn upgrade(self, i: C, _: (), _: Endpoint) -> Self::Future {
 		future_ok(i)
 	}
 
@@ -616,7 +628,7 @@ impl<'a, T, C> UpgradedNode<T, C>
 				negotiated.map(|(upgrade_id, conn)| (upgrade_id, conn, upgrade))
 			})
 			.and_then(|(upgrade_id, connection, upgrade)| {
-				upgrade.upgrade(connection, upgrade_id)
+				upgrade.upgrade(connection, upgrade_id, Endpoint::Dialer)
 			});
 
 		Ok(Box::new(future))
@@ -666,7 +678,8 @@ impl<'a, T, C> UpgradedNode<T, C>
 					.map_err(|err| IoError::new(IoErrorKind::Other, err))
 			})
 			.and_then(|(upgrade_id, connection, upgrade, client_addr)| {
-				upgrade.upgrade(connection, upgrade_id).map(|s| (s, client_addr))
+				upgrade.upgrade(connection, upgrade_id, Endpoint::Listener)
+					.map(|s| (s, client_addr))
 			});
 
 		Ok((Box::new(stream), new_addr))
