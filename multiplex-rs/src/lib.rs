@@ -39,9 +39,9 @@ mod header;
 use bytes::Bytes;
 use futures::{Async, Future, Poll};
 use futures::future::{self, FutureResult};
-use header::{MultiplexEnd, MultiplexHeader};
+use header::MultiplexHeader;
 use swarm::muxing::StreamMuxer;
-use swarm::ConnectionUpgrade;
+use swarm::{ConnectionUpgrade, Endpoint};
 use parking_lot::Mutex;
 use read::{read_stream, MultiplexReadState};
 use shared::{buf_from_slice, ByteBuf, MultiplexShared};
@@ -66,7 +66,7 @@ use write::write_stream;
 
 pub struct Substream<T> {
     id: u32,
-    end: MultiplexEnd,
+    end: Endpoint,
     name: Option<Bytes>,
     state: Arc<Mutex<MultiplexShared<T>>>,
     buffer: Option<io::Cursor<ByteBuf>>,
@@ -83,7 +83,7 @@ impl<T> Drop for Substream<T> {
 impl<T> Substream<T> {
     fn new<B: Into<Option<Bytes>>>(
         id: u32,
-        end: MultiplexEnd,
+        end: Endpoint,
         name: B,
         state: Arc<Mutex<MultiplexShared<T>>>,
     ) -> Self {
@@ -158,7 +158,7 @@ impl<T: AsyncWrite> AsyncWrite for Substream<T> {
 }
 
 pub struct InboundFuture<T> {
-    end: MultiplexEnd,
+    end: Endpoint,
     state: Arc<Mutex<MultiplexShared<T>>>,
 }
 
@@ -216,8 +216,8 @@ impl<T> OutboundFuture<T> {
     }
 }
 
-fn nonce_to_id(id: usize, end: MultiplexEnd) -> u32 {
-    id as u32 * 2 + if end == MultiplexEnd::Initiator { 1 } else { 0 }
+fn nonce_to_id(id: usize, end: Endpoint) -> u32 {
+    id as u32 * 2 + if end == Endpoint::Dialer { 1 } else { 0 }
 }
 
 impl<T: AsyncWrite> Future for OutboundFuture<T> {
@@ -276,7 +276,7 @@ impl<T: AsyncWrite> Future for OutboundFuture<T> {
 
 pub struct MultiplexMetadata {
     nonce: AtomicUsize,
-    end: MultiplexEnd,
+    end: Endpoint,
 }
 
 pub struct Multiplex<T> {
@@ -294,7 +294,7 @@ impl<T> Clone for Multiplex<T> {
 }
 
 impl<T> Multiplex<T> {
-    pub fn new(stream: T, end: MultiplexEnd) -> Self {
+    pub fn new(stream: T, end: Endpoint) -> Self {
         Multiplex {
             meta: Arc::new(MultiplexMetadata {
                 nonce: AtomicUsize::new(0),
@@ -305,11 +305,11 @@ impl<T> Multiplex<T> {
     }
 
     pub fn dial(stream: T) -> Self {
-        Self::new(stream, MultiplexEnd::Initiator)
+        Self::new(stream, Endpoint::Dialer)
     }
 
     pub fn listen(stream: T) -> Self {
-        Self::new(stream, MultiplexEnd::Receiver)
+        Self::new(stream, Endpoint::Listener)
     }
 }
 
@@ -342,8 +342,8 @@ where
     type NamesIter = iter::Once<(Bytes, ())>;
 
     #[inline]
-    fn upgrade(self, i: C, _: ()) -> Self::Future {
-        future::ok(Multiplex::dial(i))
+    fn upgrade(self, i: C, _: (), end: Endpoint) -> Self::Future {
+        future::ok(Multiplex::new(i, end))
     }
 
     #[inline]
@@ -466,7 +466,7 @@ mod tests {
             .chain(
                 varint::encode(
                     // ID for an unopened stream: 1
-                    MultiplexHeader::message(1, MultiplexEnd::Initiator).to_u64(),
+                    MultiplexHeader::message(1, Endpoint::Dialer).to_u64(),
                 ).into_iter(),
             )
             // Body: `dummy_length` of zeroes
@@ -477,7 +477,7 @@ mod tests {
             .chain(
                 varint::encode(
                     // ID for an opened stream: 0
-                    MultiplexHeader::message(0, MultiplexEnd::Initiator).to_u64(),
+                    MultiplexHeader::message(0, Endpoint::Dialer).to_u64(),
                 ).into_iter(),
             )
             .chain(varint::encode(message.len()))
@@ -516,7 +516,7 @@ mod tests {
             .chain(
                 varint::encode(
                     // ID for an unopened stream: 1
-                    MultiplexHeader::close(0, MultiplexEnd::Initiator).to_u64(),
+                    MultiplexHeader::close(0, Endpoint::Dialer).to_u64(),
                 ).into_iter(),
             )
             .chain(varint::encode(dummy_length))
@@ -526,7 +526,7 @@ mod tests {
             .chain(
                 varint::encode(
                     // ID for an opened stream: 0
-                    MultiplexHeader::message(0, MultiplexEnd::Initiator).to_u64(),
+                    MultiplexHeader::message(0, Endpoint::Dialer).to_u64(),
                 ).into_iter(),
             )
             .chain(varint::encode(dummy_length))

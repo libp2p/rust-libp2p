@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use swarm::Endpoint;
+
 const FLAG_BITS: usize = 3;
 const FLAG_MASK: usize = (1usize << FLAG_BITS) - 1;
 
@@ -30,12 +32,6 @@ pub mod errors {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum MultiplexEnd {
-    Initiator,
-    Receiver,
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct MultiplexHeader {
     pub packet_type: PacketType,
     pub substream_id: u32,
@@ -44,9 +40,9 @@ pub struct MultiplexHeader {
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum PacketType {
     Open,
-    Close(MultiplexEnd),
-    Reset(MultiplexEnd),
-    Message(MultiplexEnd),
+    Close(Endpoint),
+    Reset(Endpoint),
+    Message(Endpoint),
 }
 
 impl MultiplexHeader {
@@ -57,21 +53,21 @@ impl MultiplexHeader {
         }
     }
 
-    pub fn close(id: u32, end: MultiplexEnd) -> Self {
+    pub fn close(id: u32, end: Endpoint) -> Self {
         MultiplexHeader {
             substream_id: id,
             packet_type: PacketType::Close(end),
         }
     }
 
-    pub fn reset(id: u32, end: MultiplexEnd) -> Self {
+    pub fn reset(id: u32, end: Endpoint) -> Self {
         MultiplexHeader {
             substream_id: id,
             packet_type: PacketType::Reset(end),
         }
     }
 
-    pub fn message(id: u32, end: MultiplexEnd) -> Self {
+    pub fn message(id: u32, end: Endpoint) -> Self {
         MultiplexHeader {
             substream_id: id,
             packet_type: PacketType::Message(end),
@@ -96,14 +92,14 @@ impl MultiplexHeader {
         let packet_type = match flags {
             0 => PacketType::Open,
 
-            1 => PacketType::Message(MultiplexEnd::Receiver),
-            2 => PacketType::Message(MultiplexEnd::Initiator),
+            1 => PacketType::Message(Endpoint::Listener),
+            2 => PacketType::Message(Endpoint::Dialer),
 
-            3 => PacketType::Close(MultiplexEnd::Receiver),
-            4 => PacketType::Close(MultiplexEnd::Initiator),
+            3 => PacketType::Close(Endpoint::Listener),
+            4 => PacketType::Close(Endpoint::Dialer),
 
-            5 => PacketType::Reset(MultiplexEnd::Receiver),
-            6 => PacketType::Reset(MultiplexEnd::Initiator),
+            5 => PacketType::Reset(Endpoint::Listener),
+            6 => PacketType::Reset(Endpoint::Dialer),
 
             _ => {
                 use std::io;
@@ -128,14 +124,14 @@ impl MultiplexHeader {
         let packet_type_id = match self.packet_type {
             PacketType::Open => 0,
 
-            PacketType::Message(MultiplexEnd::Receiver) => 1,
-            PacketType::Message(MultiplexEnd::Initiator) => 2,
+            PacketType::Message(Endpoint::Listener) => 1,
+            PacketType::Message(Endpoint::Dialer) => 2,
 
-            PacketType::Close(MultiplexEnd::Receiver) => 3,
-            PacketType::Close(MultiplexEnd::Initiator) => 4,
+            PacketType::Close(Endpoint::Listener) => 3,
+            PacketType::Close(Endpoint::Dialer) => 4,
 
-            PacketType::Reset(MultiplexEnd::Receiver) => 5,
-            PacketType::Reset(MultiplexEnd::Initiator) => 6,
+            PacketType::Reset(Endpoint::Listener) => 5,
+            PacketType::Reset(Endpoint::Dialer) => 6,
         };
 
         let substream_id = (self.substream_id as u64) << FLAG_BITS;
