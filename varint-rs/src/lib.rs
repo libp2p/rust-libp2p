@@ -67,7 +67,7 @@ const USABLE_BITS_PER_BYTE: usize = 7;
 #[derive(Debug)]
 pub struct EncoderState<T> {
     source: T,
-    // A "chunk" is a section of the contained `BigUint` `USABLE_BITS_PER_BYTE` bits long
+    // A "chunk" is a section of the `source` `USABLE_BITS_PER_BYTE` bits long
     num_chunks: usize,
     cur_chunk: usize,
 }
