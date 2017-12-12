@@ -94,31 +94,64 @@ pub fn write_stream<T: AsyncWrite>(
 
     match (request.request_type, write_request.request_type) {
         (RequestType::Substream, RequestType::Substream) if request.header.substream_id != id => {
-            let read = lock.open_streams
-                .get(&id)
-                .and_then(SubstreamMetadata::read_task)
-                .cloned();
+            use std::mem;
 
-            if let Some(task) = lock.open_streams
-                .get(&request.header.substream_id)
-                .and_then(SubstreamMetadata::write_task)
+            if let Some(cur) = lock.open_streams
+                .entry(id)
+                .or_insert_with(|| SubstreamMetadata::new_open())
+                .write_tasks_mut()
             {
-                task.notify();
+                cur.push(task::current());
             }
 
-            lock.open_streams.insert(
-                id,
-                SubstreamMetadata::Open {
-                    write: Some(task::current()),
-                    read,
-                },
-            );
+            if let Some(tasks) = lock.open_streams
+                .get_mut(&request.header.substream_id)
+                .and_then(SubstreamMetadata::write_tasks_mut)
+                .map(|cur| mem::replace(cur, Default::default()))
+            {
+                for task in tasks {
+                    task.notify();
+                }
+            }
+
             lock.write_state = Some(write_state);
             return on_block;
         }
-        (RequestType::Substream, RequestType::Meta)
-        | (RequestType::Meta, RequestType::Substream) => {
+        (RequestType::Substream, RequestType::Meta) => {
+            use std::mem;
+
             lock.write_state = Some(write_state);
+            lock.meta_write_tasks.push(task::current());
+
+            if let Some(tasks) = lock.open_streams
+                .get_mut(&request.header.substream_id)
+                .and_then(SubstreamMetadata::write_tasks_mut)
+                .map(|cur| mem::replace(cur, Default::default()))
+            {
+                for task in tasks {
+                    task.notify();
+                }
+            }
+
+            return on_block;
+        }
+        (RequestType::Meta, RequestType::Substream) => {
+            use std::mem;
+
+            lock.write_state = Some(write_state);
+
+            if let Some(cur) = lock.open_streams
+                .entry(id)
+                .or_insert_with(|| SubstreamMetadata::new_open())
+                .write_tasks_mut()
+            {
+                cur.push(task::current());
+            }
+
+            for task in mem::replace(&mut lock.meta_write_tasks, Default::default()) {
+                task.notify();
+            }
+
             return on_block;
         }
         _ => {}

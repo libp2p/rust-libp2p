@@ -356,7 +356,7 @@ where
 mod tests {
     use super::*;
     use std::io;
-	use tokio_io::io as tokio;
+    use tokio_io::io as tokio;
 
     #[test]
     fn can_use_one_stream() {
@@ -414,7 +414,11 @@ mod tests {
         outbound.sort_by_key(|a| a.id());
 
         for (i, substream) in outbound.iter_mut().enumerate() {
-            assert!(tokio::write_all(substream, i.to_string().as_bytes()).wait().is_ok());
+            assert!(
+                tokio::write_all(substream, i.to_string().as_bytes())
+                    .wait()
+                    .is_ok()
+            );
         }
 
         let stream = io::Cursor::new(mplex.state.lock().stream.get_ref().clone());
@@ -538,7 +542,13 @@ mod tests {
         assert_eq!(substream.id(), 0);
         assert_eq!(substream.name(), None);
 
-        assert_eq!(tokio::read(&mut substream, &mut [0; 100][..]).wait().unwrap().2, 0);
+        assert_eq!(
+            tokio::read(&mut substream, &mut [0; 100][..])
+                .wait()
+                .unwrap()
+                .2,
+            0
+        );
     }
 
     #[test]
@@ -586,7 +596,10 @@ mod tests {
         for _ in 0..20 {
             let mut buf = [0; 1];
 
-            assert_eq!(tokio::read(&mut substream, &mut buf[..]).wait().unwrap().2, 1);
+            assert_eq!(
+                tokio::read(&mut substream, &mut buf[..]).wait().unwrap().2,
+                1
+            );
 
             out.push(buf[0]);
         }

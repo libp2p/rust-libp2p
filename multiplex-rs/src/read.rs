@@ -81,6 +81,7 @@ pub fn read_stream<'a, O: Into<Option<(u32, &'a mut [u8])>>, T: AsyncRead>(
     stream_data: O,
 ) -> io::Result<usize> {
     use self::MultiplexReadState::*;
+    use std::mem;
 
     let mut stream_data = stream_data.into();
     let stream_has_been_gracefully_closed = stream_data
@@ -95,19 +96,14 @@ pub fn read_stream<'a, O: Into<Option<(u32, &'a mut [u8])>>, T: AsyncRead>(
         Err(io::ErrorKind::WouldBlock.into())
     };
 
-    if let Some((ref mut id, ..)) = stream_data {
-        // TODO: We can do this only hashing `id` once using the entry API.
-        let write = lock.open_streams
-            .get(id)
-            .and_then(SubstreamMetadata::write_task)
-            .cloned();
-        lock.open_streams.insert(
-            *id,
-            SubstreamMetadata::Open {
-                read: Some(task::current()),
-                write,
-            },
-        );
+    if let Some((ref id, ..)) = stream_data {
+        if let Some(cur) = lock.open_streams
+            .entry(*id)
+            .or_insert_with(|| SubstreamMetadata::new_open())
+            .read_tasks_mut()
+        {
+            cur.push(task::current());
+        }
     }
 
     loop {
@@ -349,11 +345,14 @@ pub fn read_stream<'a, O: Into<Option<(u32, &'a mut [u8])>>, T: AsyncRead>(
                             remaining_bytes,
                         });
 
-                        if let Some(task) = lock.open_streams
-                            .get(&substream_id)
-                            .and_then(SubstreamMetadata::read_task)
+                        if let Some(tasks) = lock.open_streams
+                            .get_mut(&substream_id)
+                            .and_then(SubstreamMetadata::read_tasks_mut)
+                            .map(|cur| mem::replace(cur, Default::default()))
                         {
-                            task.notify();
+                            for task in tasks {
+                                task.notify();
+                            }
                         }
 
                         // We cannot make progress here, another stream has to accept this packet
@@ -364,6 +363,16 @@ pub fn read_stream<'a, O: Into<Option<(u32, &'a mut [u8])>>, T: AsyncRead>(
                         substream_id,
                         remaining_bytes,
                     });
+
+                    if let Some(tasks) = lock.open_streams
+                        .get_mut(&substream_id)
+                        .and_then(SubstreamMetadata::read_tasks_mut)
+                        .map(|cur| mem::replace(cur, Default::default()))
+                    {
+                        for task in tasks {
+                            task.notify();
+                        }
+                    }
 
                     // We cannot make progress here, a stream has to accept this packet
                     return on_block;

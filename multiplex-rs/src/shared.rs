@@ -32,13 +32,17 @@ pub type ByteBuf = ArrayVec<[u8; BUF_SIZE]>;
 
 pub enum SubstreamMetadata {
     Closed,
-    Open {
-        read: Option<Task>,
-        write: Option<Task>,
-    },
+    Open { read: Vec<Task>, write: Vec<Task> },
 }
 
 impl SubstreamMetadata {
+    pub fn new_open() -> Self {
+        SubstreamMetadata::Open {
+            read: Default::default(),
+            write: Default::default(),
+        }
+    }
+
     pub fn open(&self) -> bool {
         match *self {
             SubstreamMetadata::Closed => false,
@@ -46,17 +50,17 @@ impl SubstreamMetadata {
         }
     }
 
-    pub fn read_task(&self) -> Option<&Task> {
+    pub fn read_tasks_mut(&mut self) -> Option<&mut Vec<Task>> {
         match *self {
             SubstreamMetadata::Closed => None,
-            SubstreamMetadata::Open { ref read, .. } => read.as_ref(),
+            SubstreamMetadata::Open { ref mut read, .. } => Some(read),
         }
     }
 
-    pub fn write_task(&self) -> Option<&Task> {
+    pub fn write_tasks_mut(&mut self) -> Option<&mut Vec<Task>> {
         match *self {
             SubstreamMetadata::Closed => None,
-            SubstreamMetadata::Open { ref write, .. } => write.as_ref(),
+            SubstreamMetadata::Open { ref mut write, .. } => Some(write),
         }
     }
 }
@@ -72,8 +76,10 @@ pub struct MultiplexShared<T> {
     pub stream: T,
     // true if the stream is open, false otherwise
     pub open_streams: HashMap<u32, SubstreamMetadata>,
+    pub meta_write_tasks: Vec<Task>,
     // TODO: Should we use a version of this with a fixed size that doesn't allocate and return
-    //       `WouldBlock` if it's full?
+    //       `WouldBlock` if it's full? Even if we ignore or size-cap names you can still open 2^32
+    //       streams.
     pub to_open: HashMap<u32, Option<Bytes>>,
 }
 
@@ -83,6 +89,7 @@ impl<T> MultiplexShared<T> {
             read_state: Default::default(),
             write_state: Default::default(),
             open_streams: Default::default(),
+            meta_write_tasks: Default::default(),
             to_open: Default::default(),
             stream: stream,
         }
@@ -92,8 +99,8 @@ impl<T> MultiplexShared<T> {
         self.open_streams
             .entry(id)
             .or_insert(SubstreamMetadata::Open {
-                read: None,
-                write: None,
+                read: Default::default(),
+                write: Default::default(),
             })
             .open()
     }
