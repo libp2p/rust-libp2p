@@ -217,7 +217,7 @@ impl<T> OutboundFuture<T> {
 }
 
 fn nonce_to_id(id: usize, end: Endpoint) -> u32 {
-    id as u32 * 2 + if end == Endpoint::Dialer { 1 } else { 0 }
+    id as u32 * 2 + if end == Endpoint::Dialer { 50 } else { 0 }
 }
 
 impl<T: AsyncWrite> Future for OutboundFuture<T> {
@@ -330,6 +330,7 @@ impl<T: AsyncRead + AsyncWrite> StreamMuxer for Multiplex<T> {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
 pub struct MultiplexConfig;
 
 impl<C> ConnectionUpgrade<C> for MultiplexConfig

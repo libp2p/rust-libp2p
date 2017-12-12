@@ -20,6 +20,7 @@
 
 extern crate bytes;
 extern crate futures;
+extern crate multiplex;
 extern crate libp2p_secio as secio;
 extern crate libp2p_swarm as swarm;
 extern crate libp2p_tcp_transport as tcp;
@@ -52,6 +53,10 @@ fn main() {
             }
         })
 
+        .with_upgrade(multiplex::MultiplexConfig);
+    let transport: swarm::ConnectionReuse<_, _> = transport.into();
+
+    let transport = transport
         // On top of plaintext or secio, we use the "echo" protocol, which is a custom protocol
         // just for this example.
         // For this purpose, we create a `SimpleProtocol` struct.
@@ -68,17 +73,20 @@ fn main() {
     // of any opened stream.
 
     // We use it to dial `/ip4/127.0.0.1/tcp/10333`.
-    let dialer = transport.dial(swarm::Multiaddr::new("/ip4/127.0.0.1/tcp/10333").unwrap())
+    let dialer = transport.dial_and_listen(swarm::Multiaddr::new("/ip4/127.0.0.1/tcp/10333").unwrap())
         .unwrap_or_else(|_| panic!("unsupported multiaddr protocol ; should never happen"))
-        .and_then(|echo| {
+        .and_then(|(echo, incoming)| {
             // `echo` is what the closure used when initializing "echo" returns.
             // Consequently, please note that the `send` method is available only because the type
             // `length_delimited::Framed` has a `send` method.
-            echo.send("hello world".into())
+            echo.send("hello world".into()).map(Option::Some)
+                .select(incoming.for_each(|_| { println!("opened"); Ok(()) }).map(|()| None))
+                .map(|(n, _)| n)
+                .map_err(|(e, _)| e)
         })
         .and_then(|echo| {
             // The message has been successfully sent. Now wait for an answer.
-            echo.into_future()
+            echo.unwrap().into_future()
                 .map(|(msg, rest)| {
                     println!("received: {:?}", msg);
                     rest

@@ -95,6 +95,7 @@ pub fn dialer_select_proto_serial<'a, R, I, P>(
                     })
                     // Once read, analyze the response.
                     .and_then(|(message, rest, proto_name, proto_value)| {
+						if message.is_none() { println!("empty"); }
                         let message = message.ok_or(ProtocolChoiceError::UnexpectedMessage)?;
 
                         match message {
@@ -107,7 +108,7 @@ pub fn dialer_select_proto_serial<'a, R, I, P>(
                             ListenerToDialerMessage::NotAvailable => {
                                 Ok(Loop::Continue(rest))
                             },
-                            _ => Err(ProtocolChoiceError::UnexpectedMessage)
+                            _ => { println!("c {:?}", message); Err(ProtocolChoiceError::UnexpectedMessage) }
                         }
                     })
             })
@@ -140,7 +141,7 @@ pub fn dialer_select_proto_parallel<'a, R, I, M, P>(
 		.and_then(move |(msg, dialer)| {
 			let list = match msg {
 				Some(ListenerToDialerMessage::ProtocolsListResponse { list }) => list,
-				_ => return Err(ProtocolChoiceError::UnexpectedMessage),
+				_ => { println!("b {:?}", msg); return Err(ProtocolChoiceError::UnexpectedMessage) },
 			};
 
 			let mut found = None;
@@ -174,7 +175,7 @@ pub fn dialer_select_proto_parallel<'a, R, I, M, P>(
 			Some(ListenerToDialerMessage::ProtocolAck { ref name }) if name == &proto_name => {
 				Ok((proto_val, dialer.into_inner()))
 			}
-			_ => Err(ProtocolChoiceError::UnexpectedMessage),
+			_ => { println!("a {:?}", msg); Err(ProtocolChoiceError::UnexpectedMessage) },
 		});
 
 	// The "Rust doesn't have impl Trait yet" tax.

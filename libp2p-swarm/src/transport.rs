@@ -786,7 +786,7 @@ impl<'a, T, C> UpgradedNode<T, C>
 					negotiated.map(|(upgrade_id, conn)| (upgrade_id, conn, upgrade2))
 				}
 				.and_then(|(upgrade_id, connection, upgrade)| {
-					upgrade.upgrade(connection, upgrade_id)
+					upgrade.upgrade(connection, upgrade_id, Endpoint::Dialer)
 				});
 
 				let in_stream = in_stream
@@ -803,7 +803,7 @@ impl<'a, T, C> UpgradedNode<T, C>
 							.map_err(|err| IoError::new(IoErrorKind::Other, err))
 					})
 					.and_then(|(upgrade_id, connection, upgrade)| {
-						upgrade.upgrade(connection, upgrade_id)
+						upgrade.upgrade(connection, upgrade_id, Endpoint::Listener)
 					});
 
 				dialer.map(|d| (d, Box::new(in_stream) as Box<Stream<Item = _, Error = _>>))
