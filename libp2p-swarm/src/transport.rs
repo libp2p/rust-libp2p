@@ -529,6 +529,21 @@ pub enum Endpoint {
 	Listener,
 }
 
+/// Extension trait for `ConnectionUpgrade`. Automatically implemented on everything.
+pub trait UpgradeExt {
+	/// Builds a struct that will choose an upgrade between `self` and `other`, depending on what
+	/// the remote supports.
+    fn or_upgrade<T>(self, other: T) -> OrUpgrade<Self, T>
+		where Self: Sized;
+}
+
+impl<T> UpgradeExt for T {
+	#[inline]
+    fn or_upgrade<U>(self, other: U) -> OrUpgrade<Self, U> {
+        OrUpgrade(self, other)
+    }
+}
+
 /// See `or_upgrade()`.
 #[derive(Debug, Copy, Clone)]
 pub struct OrUpgrade<A, B>(A, B);
@@ -691,22 +706,6 @@ where
 	T: Transport + 'a,
 	C: ConnectionUpgrade<T::RawConn> + 'a,
 {
-	/// Builds a new struct that implements `ConnectionUpgrade` that contains both `self` and
-	/// `other_upg`.
-	///
-	/// The returned object will try to negotiate either the protocols of `self` or the protocols
-	/// of `other_upg`, then upgrade the connection to the negogiated protocol.
-	#[inline]
-	pub fn or_upgrade<D>(self, other_upg: D) -> UpgradedNode<T, OrUpgrade<C, D>>
-	where
-		D: ConnectionUpgrade<T::RawConn> + 'a,
-	{
-		UpgradedNode {
-			transports: self.transports,
-			upgrade: OrUpgrade(self.upgrade, other_upg),
-		}
-	}
-
 	/// Tries to dial on the `Multiaddr` using the transport that was passed to `new`, then upgrade
 	/// the connection.
 	///

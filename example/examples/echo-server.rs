@@ -28,7 +28,7 @@ extern crate tokio_io;
 
 use futures::future::{Future, IntoFuture, loop_fn, Loop};
 use futures::{Stream, Sink};
-use swarm::{Transport, SimpleProtocol};
+use swarm::{Transport, UpgradeExt, SimpleProtocol};
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 use tokio_io::codec::length_delimited;
@@ -43,15 +43,20 @@ fn main() {
 
         // On top of TCP/IP, we will use either the plaintext protocol or the secio protocol,
         // depending on which one the remote supports.
-        .with_upgrade(swarm::PlainTextConfig)
-        .or_upgrade({
-            let private_key = include_bytes!("test-private-key.pk8");
-            let public_key = include_bytes!("test-public-key.der").to_vec();
-            secio::SecioConfig {
-                key: secio::SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap(),
-            }
+        .with_upgrade({
+            let plain_text = swarm::PlainTextConfig;
+
+            let secio = {
+                let private_key = include_bytes!("test-private-key.pk8");
+                let public_key = include_bytes!("test-public-key.der").to_vec();
+                secio::SecioConfig {
+                    key: secio::SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap(),
+                }
+            };
+
+            plain_text.or_upgrade(secio)
         })
-        
+
         // On top of plaintext or secio, we use the "echo" protocol, which is a custom protocol
         // just for this example.
         // For this purpose, we create a `SimpleProtocol` struct.
