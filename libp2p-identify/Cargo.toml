@@ -1,0 +1,17 @@
+[package]
+name = "libp2p-identify"
+version = "0.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+
+[dependencies]
+bytes = "0.4"
+futures = "0.1"
+libp2p-peerstore = { path = "../libp2p-peerstore" }
+libp2p-swarm = { path = "../libp2p-swarm" }
+multiaddr = "0.2.0"
+protobuf = "1.4.2"
+tokio-io = "0.1.0"
+
+[dev-dependencies]
+libp2p-tcp-transport = { path = "../libp2p-tcp-transport" }
+tokio-core = "0.1.0"
