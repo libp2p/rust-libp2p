@@ -7,6 +7,7 @@ members = [
     "libp2p-tcp-transport",
     "multistream-select",
     "datastore",
+    "futures-mutex",
     "rw-stream-sink",
     "circular-buffer",
     "varint-rs",

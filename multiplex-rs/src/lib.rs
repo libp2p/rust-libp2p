@@ -23,6 +23,7 @@ extern crate bytes;
 #[macro_use]
 extern crate error_chain;
 extern crate futures;
+extern crate futures_mutex;
 extern crate libp2p_swarm as swarm;
 extern crate num_bigint;
 extern crate num_traits;
@@ -42,7 +43,7 @@ use futures::future::{self, FutureResult};
 use header::MultiplexHeader;
 use swarm::muxing::StreamMuxer;
 use swarm::{ConnectionUpgrade, Endpoint};
-use parking_lot::Mutex;
+use futures_mutex::Mutex;
 use read::{read_stream, MultiplexReadState};
 use shared::{buf_from_slice, ByteBuf, MultiplexShared};
 use std::iter;
@@ -74,7 +75,7 @@ pub struct Substream<T> {
 
 impl<T> Drop for Substream<T> {
     fn drop(&mut self) {
-        let mut lock = self.state.lock();
+        let mut lock = self.state.lock().wait().expect("This should never fail");
 
         lock.close_stream(self.id);
     }
@@ -110,9 +111,9 @@ impl<T> Substream<T> {
 // TODO: We always zero the buffer, we should delegate to the inner stream.
 impl<T: AsyncRead> Read for Substream<T> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let mut lock = match self.state.try_lock() {
-            Some(lock) => lock,
-            None => return Err(io::ErrorKind::WouldBlock.into()),
+        let mut lock = match self.state.poll_lock() {
+            Async::Ready(lock) => lock,
+            Async::NotReady => return Err(io::ErrorKind::WouldBlock.into()),
         };
 
         read_stream(&mut lock, (self.id, buf))
@@ -123,7 +124,10 @@ impl<T: AsyncRead> AsyncRead for Substream<T> {}
 
 impl<T: AsyncWrite> Write for Substream<T> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let mut lock = self.state.try_lock().ok_or(io::ErrorKind::WouldBlock)?;
+        let mut lock = match self.state.poll_lock() {
+            Async::Ready(lock) => lock,
+            Async::NotReady => return Err(io::ErrorKind::WouldBlock.into()),
+        };
 
         let mut buffer = self.buffer
             .take()
@@ -143,11 +147,12 @@ impl<T: AsyncWrite> Write for Substream<T> {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        self.state
-            .try_lock()
-            .ok_or(io::ErrorKind::WouldBlock)?
-            .stream
-            .flush()
+        let mut lock = match self.state.poll_lock() {
+            Async::Ready(lock) => lock,
+            Async::NotReady => return Err(io::ErrorKind::WouldBlock.into()),
+        };
+
+        lock.stream.flush()
     }
 }
 
@@ -167,9 +172,9 @@ impl<T: AsyncRead> Future for InboundFuture<T> {
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let mut lock = match self.state.try_lock() {
-            Some(lock) => lock,
-            None => return Ok(Async::NotReady),
+        let mut lock = match self.state.poll_lock() {
+            Async::Ready(lock) => lock,
+            Async::NotReady => return Ok(Async::NotReady),
         };
 
         // Attempt to make progress, but don't block if we can't
@@ -217,7 +222,7 @@ impl<T> OutboundFuture<T> {
 }
 
 fn nonce_to_id(id: usize, end: Endpoint) -> u32 {
-    id as u32 * 2 + if end == Endpoint::Dialer { 50 } else { 0 }
+    id as u32 * 2 + if end == Endpoint::Dialer { 0 } else { 1 }
 }
 
 impl<T: AsyncWrite> Future for OutboundFuture<T> {
@@ -225,9 +230,9 @@ impl<T: AsyncWrite> Future for OutboundFuture<T> {
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let mut lock = match self.state.try_lock() {
-            Some(lock) => lock,
-            None => return Ok(Async::NotReady),
+        let mut lock = match self.state.poll_lock() {
+            Async::Ready(lock) => lock,
+            Async::NotReady => return Ok(Async::NotReady),
         };
 
         loop {
@@ -380,7 +385,7 @@ mod tests {
             Some(id.to_string())
         );
 
-        let stream = io::Cursor::new(mplex.state.lock().stream.get_ref().clone());
+        let stream = io::Cursor::new(mplex.state.lock().wait().unwrap().stream.get_ref().clone());
 
         let mplex = Multiplex::listen(stream);
 
@@ -422,7 +427,7 @@ mod tests {
             );
         }
 
-        let stream = io::Cursor::new(mplex.state.lock().stream.get_ref().clone());
+        let stream = io::Cursor::new(mplex.state.lock().wait().unwrap().stream.get_ref().clone());
 
         let mplex = Multiplex::listen(stream);
 

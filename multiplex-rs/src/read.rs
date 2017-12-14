@@ -116,7 +116,7 @@ pub fn read_stream<'a, O: Into<Option<(u32, &'a mut [u8])>>, T: AsyncRead>(
                         let header = if let Some(header) = header {
                             header
                         } else {
-                            return Ok(0);
+                            return Ok(on_block.unwrap_or(0));
                         };
 
                         let MultiplexHeader {
@@ -183,7 +183,7 @@ pub fn read_stream<'a, O: Into<Option<(u32, &'a mut [u8])>>, T: AsyncRead>(
                         let length = if let Some(length) = length {
                             length
                         } else {
-                            return Ok(0);
+                            return Ok(on_block.unwrap_or(0));
                         };
 
                         lock.read_state = match next {
@@ -208,7 +208,8 @@ pub fn read_stream<'a, O: Into<Option<(u32, &'a mut [u8])>>, T: AsyncRead>(
                                 let is_open = lock.open_streams
                                     .get(&substream_id)
                                     .map(SubstreamMetadata::open)
-                                    .unwrap_or_else(|| lock.to_open.contains_key(&substream_id));
+                                    .unwrap_or(false);
+                                //.unwrap_or_else(|| lock.to_open.contains_key(&substream_id));
 
                                 if is_open {
                                     Some(MultiplexReadState::ParsingMessageBody {
@@ -286,20 +287,16 @@ pub fn read_stream<'a, O: Into<Option<(u32, &'a mut [u8])>>, T: AsyncRead>(
 
                     if remaining_bytes == 0 {
                         lock.read_state = None;
-
-                        return on_block;
                     } else if substream_id == *id {
                         let number_read = *on_block.as_ref().unwrap_or(&0);
 
-                        if buf.len() == 0 {
-                            return Ok(0);
-                        } else if number_read >= buf.len() {
+                        if number_read >= buf.len() {
                             lock.read_state = Some(ParsingMessageBody {
                                 substream_id,
                                 remaining_bytes,
                             });
 
-                            return on_block;
+                            return Ok(number_read);
                         }
 
                         let read_result = {

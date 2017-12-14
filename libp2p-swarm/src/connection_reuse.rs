@@ -43,14 +43,14 @@
 //! TODO: this whole code is a dummy and should be rewritten after the design has been properly
 //!       figured out.
 
-use futures::{Future, Stream, Async, Poll};
+use futures::{Async, Future, Poll, Stream};
 use futures::stream::Fuse as StreamFuse;
 use futures::stream;
 use multiaddr::Multiaddr;
 use muxing::StreamMuxer;
 use smallvec::SmallVec;
 use std::io::Error as IoError;
-use transport::{Transport, ConnectionUpgrade, UpgradedNode, MuxedTransport};
+use transport::{ConnectionUpgrade, MuxedTransport, Transport, UpgradedNode};
 
 /// Allows reusing the same muxed connection multiple times.
 ///
@@ -59,16 +59,18 @@ use transport::{Transport, ConnectionUpgrade, UpgradedNode, MuxedTransport};
 /// Implements the `Transport` trait.
 #[derive(Clone)]
 pub struct ConnectionReuse<T, C>
-	where T: Transport,
-		  C: ConnectionUpgrade<T::RawConn>
+where
+	T: Transport,
+	C: ConnectionUpgrade<T::RawConn>,
 {
 	// Underlying transport and connection upgrade for when we need to dial or listen.
 	inner: UpgradedNode<T, C>,
 }
 
 impl<T, C> From<UpgradedNode<T, C>> for ConnectionReuse<T, C>
-	where T: Transport,
-		  C: ConnectionUpgrade<T::RawConn>
+where
+	T: Transport,
+	C: ConnectionUpgrade<T::RawConn>,
 {
 	#[inline]
 	fn from(node: UpgradedNode<T, C>) -> ConnectionReuse<T, C> {
@@ -77,20 +79,16 @@ impl<T, C> From<UpgradedNode<T, C>> for ConnectionReuse<T, C>
 }
 
 impl<T, C> Transport for ConnectionReuse<T, C>
-	where T: Transport + 'static, // TODO: 'static :(
-		  C: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :(
-		  C: Clone,
-		  C::Output: StreamMuxer + Clone,
-		  C::NamesIter: Clone // TODO: not elegant
+where
+	T: Transport + 'static,                     // TODO: 'static :(
+	C: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :(
+	C: Clone,
+	C::Output: StreamMuxer + Clone,
+	C::NamesIter: Clone, // TODO: not elegant
 {
 	type RawConn = <C::Output as StreamMuxer>::Substream;
 	type Listener = ConnectionReuseListener<
-		Box<
-			Stream<
-				Item = (C::Output, Multiaddr),
-				Error = IoError,
-			>,
-		>,
+		Box<Stream<Item = (C::Output, Multiaddr), Error = IoError>>,
 		C::Output,
 	>;
 	type Dial = Box<Future<Item = Self::RawConn, Error = IoError>>;
@@ -125,51 +123,54 @@ impl<T, C> Transport for ConnectionReuse<T, C>
 }
 
 impl<T, C> MuxedTransport for ConnectionReuse<T, C>
-	where T: Transport + 'static, // TODO: 'static :(
-		  C: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :(
-		  C: Clone,
-		  C::Output: StreamMuxer + Clone,
-		  C::NamesIter: Clone // TODO: not elegant
+where
+	T: Transport + 'static,                     // TODO: 'static :(
+	C: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :(
+	C: Clone,
+	C::Output: StreamMuxer + Clone,
+	C::NamesIter: Clone, // TODO: not elegant
 {
-	type Incoming = Box<Stream<Item = <C::Output as StreamMuxer>::Substream, Error = IoError>>;
-	type DialAndListen = Box<Future<Item = (Self::RawConn, Self::Incoming), Error = IoError>>;
+	type Incoming = stream::AndThen<
+		stream::Repeat<C::Output, IoError>,
+		fn(C::Output)
+			-> <<C as ConnectionUpgrade<T::RawConn>>::Output as StreamMuxer>::InboundSubstream,
+		<<C as ConnectionUpgrade<T::RawConn>>::Output as StreamMuxer>::InboundSubstream,
+	>;
+	type Outgoing =
+		<<C as ConnectionUpgrade<T::RawConn>>::Output as StreamMuxer>::OutboundSubstream;
+	type DialAndListen = Box<Future<Item = (Self::Incoming, Self::Outgoing), Error = IoError>>;
 
 	fn dial_and_listen(self, addr: Multiaddr) -> Result<Self::DialAndListen, (Self, Multiaddr)> {
-		let muxer_dial = match self.inner.dial(addr) {
-			Ok(l) => l,
-			Err((inner, addr)) => {
-				return Err((ConnectionReuse { inner: inner }, addr));
-			}
-		};
-
-		let future = muxer_dial
-			.and_then(|muxer| {
-				let dial = muxer.clone().outbound();
-				dial.map(|d| (d, muxer))
+		self.inner
+			.dial(addr)
+			.map_err(|(inner, addr)| (ConnectionReuse { inner: inner }, addr))
+			.map(|fut| {
+				fut.map(|muxer| {
+					(
+						stream::repeat(muxer.clone()).and_then(StreamMuxer::inbound as fn(_) -> _),
+						muxer.outbound(),
+					)
+				})
 			})
-			.and_then(|(dial, muxer)| {
-				let listener = stream::repeat(muxer).and_then(|muxer| muxer.inbound());
-				let listener = Box::new(listener) as Box<Stream<Item = _, Error = _>>;
-				Ok((dial, listener))
-			});
-
-		Ok(Box::new(future) as Box<_>)
+			.map(|fut| Box::new(fut) as _)
 	}
 }
 
 /// Implementation of `Stream<Item = (impl AsyncRead + AsyncWrite, Multiaddr)` for the
 /// `ConnectionReuse` struct.
 pub struct ConnectionReuseListener<S, M>
-	where S: Stream<Item = (M, Multiaddr), Error = IoError>,
-		  M: StreamMuxer
+where
+	S: Stream<Item = (M, Multiaddr), Error = IoError>,
+	M: StreamMuxer,
 {
 	listener: StreamFuse<S>,
 	connections: Vec<(M, <M as StreamMuxer>::InboundSubstream, Multiaddr)>,
 }
 
 impl<S, M> Stream for ConnectionReuseListener<S, M>
-	where S: Stream<Item = (M, Multiaddr), Error = IoError>,
-		  M: StreamMuxer + Clone + 'static // TODO: 'static :(
+where
+	S: Stream<Item = (M, Multiaddr), Error = IoError>,
+	M: StreamMuxer + Clone + 'static, // TODO: 'static :(
 {
 	type Item = (M::Substream, Multiaddr);
 	type Error = IoError;
@@ -207,7 +208,7 @@ impl<S, M> Stream for ConnectionReuseListener<S, M>
 					*next_incoming = new_next;
 					return Ok(Async::Ready(Some((incoming, client_addr.clone()))));
 				}
-				Ok(Async::NotReady) => {},
+				Ok(Async::NotReady) => {}
 				Err(_) => {
 					connections_to_drop.push(index);
 				}

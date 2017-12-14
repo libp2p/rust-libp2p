@@ -92,6 +92,10 @@ pub fn write_stream<T: AsyncWrite>(
 
     let id = write_request.header.substream_id;
 
+    if buf.get_ref().len() as u64 - buf.position() == 0 {
+        return Ok(0);
+    }
+
     match (request.request_type, write_request.request_type) {
         (RequestType::Substream, RequestType::Substream) if request.header.substream_id != id => {
             use std::mem;
