@@ -1,14 +1,18 @@
 [workspace]
 members = [
-    "multistream-select",
-    "datastore",
-    "example",
     "libp2p-peerstore",
     "libp2p-ping",
     "libp2p-secio",
     "libp2p-swarm",
     "libp2p-tcp-transport",
+    "multistream-select",
+    "datastore",
+    "futures-mutex",
     "rw-stream-sink",
+    "circular-buffer",
+    "varint-rs",
+    "multiplex-rs",
+    "example",
 ]
 
 [replace]

@@ -7,7 +7,7 @@ authors = ["Parity Technologies <admin@parity.io>"]
 bytes = "0.4"
 multiaddr = "0.2.0"
 multistream-select = { path = "../multistream-select" }
-futures = "0.1"
+futures = { version = "0.1", features = ["use_std"] }
 smallvec = "0.5"
 tokio-io = "0.1"
 

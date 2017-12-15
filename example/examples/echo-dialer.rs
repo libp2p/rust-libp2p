@@ -1,21 +1,21 @@
 // Copyright 2017 Parity Technologies (UK) Ltd.
-// 
-// Permission is hereby granted, free of charge, to any person obtaining a 
-// copy of this software and associated documentation files (the "Software"), 
-// to deal in the Software without restriction, including without limitation 
-// the rights to use, copy, modify, merge, publish, distribute, sublicense, 
-// and/or sell copies of the Software, and to permit persons to whom the 
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
 // Software is furnished to do so, subject to the following conditions:
 //
-// The above copyright notice and this permission notice shall be included in 
+// The above copyright notice and this permission notice shall be included in
 // all copies or substantial portions of the Software.
 //
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS 
-// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
 extern crate bytes;
@@ -23,12 +23,13 @@ extern crate futures;
 extern crate libp2p_secio as secio;
 extern crate libp2p_swarm as swarm;
 extern crate libp2p_tcp_transport as tcp;
+extern crate multiplex;
 extern crate tokio_core;
 extern crate tokio_io;
 
 use bytes::BytesMut;
-use futures::{Stream, Sink, Future};
-use swarm::{Transport, SimpleProtocol};
+use futures::{Future, Sink, Stream};
+use swarm::{SimpleProtocol, Transport};
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 use tokio_io::codec::length_delimited;
@@ -52,6 +53,10 @@ fn main() {
             }
         })
 
+        .with_upgrade(multiplex::MultiplexConfig);
+    let transport: swarm::ConnectionReuse<_, _> = transport.into();
+
+    let transport = transport
         // On top of plaintext or secio, we use the "echo" protocol, which is a custom protocol
         // just for this example.
         // For this purpose, we create a `SimpleProtocol` struct.
@@ -68,17 +73,29 @@ fn main() {
     // of any opened stream.
 
     // We use it to dial `/ip4/127.0.0.1/tcp/10333`.
-    let dialer = transport.dial(swarm::Multiaddr::new("/ip4/127.0.0.1/tcp/10333").unwrap())
+    let dialer = transport
+        .dial_and_listen(swarm::Multiaddr::new("/ip4/127.0.0.1/tcp/10333").unwrap())
         .unwrap_or_else(|_| panic!("unsupported multiaddr protocol ; should never happen"))
-        .and_then(|echo| {
+        .and_then(|(incoming, echo)| {
             // `echo` is what the closure used when initializing "echo" returns.
             // Consequently, please note that the `send` method is available only because the type
             // `length_delimited::Framed` has a `send` method.
-            echo.send("hello world".into())
+            echo.and_then(|echo| echo.send("hello world".into()).map(Option::Some))
+                .select(
+                    incoming
+                        .for_each(|_| {
+                            println!("opened");
+                            Ok(())
+                        })
+                        .map(|()| None),
+                )
+                .map(|(n, _)| n)
+                .map_err(|(e, _)| e)
         })
         .and_then(|echo| {
             // The message has been successfully sent. Now wait for an answer.
-            echo.into_future()
+            echo.unwrap()
+                .into_future()
                 .map(|(msg, rest)| {
                     println!("received: {:?}", msg);
                     rest

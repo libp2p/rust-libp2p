@@ -1,0 +1,18 @@
+[package]
+name = "multiplex"
+version = "0.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+
+[dependencies]
+bytes = "0.4.5"
+num-traits = "0.1.40"
+num-bigint = "0.1.40"
+tokio-io = "0.1"
+futures = "0.1"
+parking_lot = "0.4.8"
+arrayvec = "0.4.6"
+rand = "0.3.17"
+libp2p-swarm = { path = "../libp2p-swarm" }
+varint = { path = "../varint-rs" }
+error-chain = "0.11.0"
+futures-mutex = { path = "../futures-mutex" }

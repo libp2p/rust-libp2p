@@ -107,7 +107,7 @@ pub fn dialer_select_proto_serial<'a, R, I, P>(
                             ListenerToDialerMessage::NotAvailable => {
                                 Ok(Loop::Continue(rest))
                             },
-                            _ => Err(ProtocolChoiceError::UnexpectedMessage)
+                            _ => Err(ProtocolChoiceError::UnexpectedMessage),
                         }
                     })
             })

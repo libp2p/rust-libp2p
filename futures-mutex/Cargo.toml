@@ -1,0 +1,15 @@
+[package]
+name = "futures-mutex"
+version = "0.2.0"
+authors = ["Adam Jacobus <adam.m.jacobus@gmail.com>"]
+license = "Apache-2.0"
+description = "A Mutex for the Future(s)"
+readme = "README.md"
+documentation = "https://docs.rs/futures-mutex"
+repository = "https://github.com/proman21/futures-mutex"
+keywords = ["future", "futures", "mutex", "concurrency"]
+categories = ["asynchronous", "concurrency"]
+
+[dependencies]
+futures = "0.1.14"
+crossbeam = "0.2.10"
