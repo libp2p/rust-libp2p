@@ -23,6 +23,7 @@
 use std::error;
 use std::fmt;
 use std::io::Error as IoError;
+use varint::Error as VarIntError;
 
 /// Error at the multistream-select layer of communication.
 #[derive(Debug)]
@@ -38,12 +39,23 @@ pub enum MultistreamSelectError {
 
 	/// Protocol names must always start with `/`, otherwise this error is returned.
 	WrongProtocolName,
+
+	/// Failure to parse variable-length integer.
+	// TODO: we don't include the actual error, because that would remove Send from the enum
+	VarIntParseError,
 }
 
 impl From<IoError> for MultistreamSelectError {
 	#[inline]
 	fn from(err: IoError) -> MultistreamSelectError {
 		MultistreamSelectError::IoError(err)
+	}
+}
+
+impl From<VarIntError> for MultistreamSelectError {
+	#[inline]
+	fn from(_err: VarIntError) -> MultistreamSelectError {
+		MultistreamSelectError::VarIntParseError
 	}
 }
 
@@ -62,6 +74,9 @@ impl error::Error for MultistreamSelectError {
 			},
 			MultistreamSelectError::WrongProtocolName => {
 				"protocol names must always start with `/`, otherwise this error is returned"
+			},
+			MultistreamSelectError::VarIntParseError => {
+				"failure to parse variable-length integer"
 			},
 		}
 	}

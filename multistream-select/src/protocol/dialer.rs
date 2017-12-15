@@ -25,12 +25,13 @@ use futures::{Async, AsyncSink, Future, Poll, Sink, StartSend, Stream};
 use length_delimited::LengthDelimitedFramedRead;
 use protocol::DialerToListenerMessage;
 use protocol::ListenerToDialerMessage;
-
 use protocol::MULTISTREAM_PROTOCOL_WITH_LF;
 use protocol::MultistreamSelectError;
+use std::io::{Cursor, Read, BufRead};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_io::codec::length_delimited::Builder as LengthDelimitedBuilder;
 use tokio_io::codec::length_delimited::FramedWrite as LengthDelimitedFramedWrite;
+use varint;
 
 /// Wraps around a `AsyncRead+AsyncWrite`. Assumes that we're on the dialer's side. Produces and
 /// accepts messages.
@@ -149,7 +150,32 @@ impl<R> Stream for Dialer<R>
 
 			} else {
 				// A varint number of protocols
-				unimplemented!()
+				let mut reader = Cursor::new(frame);
+				let num_protocols: usize = varint::decode(reader.by_ref())?;
+
+				let mut iter = BufRead::split(reader, b'\r');
+				if !iter.next().ok_or(MultistreamSelectError::UnknownMessage)??.is_empty() {
+					return Err(MultistreamSelectError::UnknownMessage);
+				}
+
+				let mut out = Vec::with_capacity(num_protocols);
+				for proto in iter.by_ref().take(num_protocols) {
+					let mut proto = proto?;
+					let poped = proto.pop();		// Pop the `\n`
+					if poped != Some(b'\n') {
+						return Err(MultistreamSelectError::UnknownMessage);	
+					}
+					out.push(Bytes::from(proto));
+				}
+
+				// Making sure that the number of protocols was correct.
+				if iter.next().is_some() || out.len() != num_protocols {
+					return Err(MultistreamSelectError::UnknownMessage);
+				}
+
+				return Ok(Async::Ready(Some(ListenerToDialerMessage::ProtocolsListResponse {
+					list: out
+				})));
 			}
 		}
 	}

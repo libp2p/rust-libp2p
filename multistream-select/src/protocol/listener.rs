@@ -25,12 +25,12 @@ use futures::{Async, AsyncSink, Future, Poll, Sink, StartSend, Stream};
 use length_delimited::LengthDelimitedFramedRead;
 use protocol::DialerToListenerMessage;
 use protocol::ListenerToDialerMessage;
-
 use protocol::MULTISTREAM_PROTOCOL_WITH_LF;
 use protocol::MultistreamSelectError;
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_io::codec::length_delimited::Builder as LengthDelimitedBuilder;
 use tokio_io::codec::length_delimited::FramedWrite as LengthDelimitedFramedWrite;
+use varint;
 
 /// Wraps around a `AsyncRead+AsyncWrite`. Assumes that we're on the listener's side. Produces and
 /// accepts messages.
@@ -112,8 +112,22 @@ impl<R> Sink for Listener<R>
 				}
 			}
 
-			ListenerToDialerMessage::ProtocolsListResponse { list: _list } => {
-				unimplemented!()
+			ListenerToDialerMessage::ProtocolsListResponse { list } => {
+				let mut out_msg = varint::encode(list.len());
+				for elem in list.iter() {
+					out_msg.push(b'\r');
+					out_msg.extend_from_slice(elem);
+					out_msg.push(b'\n');
+				}
+
+				match self.inner.start_send(BytesMut::from(out_msg)) {
+					Ok(AsyncSink::Ready) => Ok(AsyncSink::Ready),
+					Ok(AsyncSink::NotReady(_)) => {
+						let m = ListenerToDialerMessage::ProtocolsListResponse { list };
+						Ok(AsyncSink::NotReady(m))
+					}
+					Err(err) => Err(err.into()),
+				}
 			}
 		}
 	}
