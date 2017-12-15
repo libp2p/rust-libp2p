@@ -208,8 +208,7 @@ pub fn read_stream<'a, O: Into<Option<(u32, &'a mut [u8])>>, T: AsyncRead>(
                                 let is_open = lock.open_streams
                                     .get(&substream_id)
                                     .map(SubstreamMetadata::open)
-                                    .unwrap_or(false);
-                                //.unwrap_or_else(|| lock.to_open.contains_key(&substream_id));
+                                    .unwrap_or_else(|| lock.to_open.contains_key(&substream_id));
 
                                 if is_open {
                                     Some(MultiplexReadState::ParsingMessageBody {
