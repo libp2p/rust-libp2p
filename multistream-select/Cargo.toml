@@ -8,6 +8,7 @@ bytes = "0.4"
 futures = { version = "0.1" }
 smallvec = "0.5"
 tokio-io = "0.1"
+varint = { path = "../varint-rs" }
 
 [dev-dependencies]
 tokio-core = "0.1"

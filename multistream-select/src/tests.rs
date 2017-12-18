@@ -147,7 +147,6 @@ fn no_protocol_found() {
 }
 
 #[test]
-#[ignore] // TODO: not yet implemented in the listener
 fn select_proto_parallel() {
 	let mut core = Core::new().unwrap();
 

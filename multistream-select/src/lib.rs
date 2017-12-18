@@ -122,6 +122,7 @@ extern crate bytes;
 extern crate futures;
 extern crate smallvec;
 extern crate tokio_io;
+extern crate varint;
 
 mod dialer_select;
 mod error;
