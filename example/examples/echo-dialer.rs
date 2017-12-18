@@ -88,7 +88,11 @@ fn main() {
     // We use it to dial the address.
     let dialer = transport
         .dial_and_listen(swarm::Multiaddr::new(&target_addr).expect("invalid multiaddr"))
-        .unwrap_or_else(|_| panic!("unsupported multiaddr protocol ; should never happen"))
+        // If the multiaddr protocol exists but is not supported, then we get an error containing
+        // the transport and the original multiaddress. Therefore we cannot directly use `unwrap()`
+        // or `expect()`, but have to add a `map_err()` beforehand.
+        .map_err(|(_, addr)| addr).expect("unsupported multiaddr")
+
         .and_then(|(incoming, echo)| {
             // `echo` is what the closure used when initializing "echo" returns.
             // Consequently, please note that the `send` method is available only because the type

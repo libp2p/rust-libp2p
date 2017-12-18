@@ -88,7 +88,10 @@ fn main() {
     // We use it to listen on the address.
     let (listener, address) = transport
         .listen_on(swarm::Multiaddr::new(&listen_addr).expect("invalid multiaddr"))
-        .unwrap_or_else(|_| panic!("unsupported multiaddr protocol ; should never happen"));
+        // If the multiaddr protocol exists but is not supported, then we get an error containing
+        // the transport and the original multiaddress. Therefore we cannot directly use `unwrap()`
+        // or `expect()`, but have to add a `map_err()` beforehand.
+        .map_err(|(_, addr)| addr).expect("unsupported multiaddr");
     println!("Now listening on {:?}", address);
 
     let future = listener
