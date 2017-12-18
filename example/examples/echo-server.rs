@@ -71,34 +71,59 @@ fn main() {
     let future = transport.listen_on(swarm::Multiaddr::new("/ip4/0.0.0.0/tcp/10333").unwrap())
         .unwrap_or_else(|_| panic!("unsupported multiaddr protocol ; should never happen")).0
 
+        .filter_map(|(socket, client_addr)| {
+            let client_addr = client_addr.to_string();
+
+            // This closure is called whenever a new connection has been received. The `socket`
+            // is a `Result<..., IoError>` which contains an error if for example protocol
+            // negotiation or the secio handshake failed. We handle this situation by printing a
+            // message on stderr and ignoring the connection.
+            match socket {
+                Ok(s) => Some((s, client_addr)),
+                Err(err) => {
+                    eprintln!("Failed connection attempt from {}\n => Error: {:?}",
+                              client_addr, err);
+                    None
+                },
+            }
+        })
+
         .for_each(|(socket, client_addr)| {
             // This closure is called whenever a new connection has been received and successfully
             // upgraded to use secio/plaintext and echo.
-            let client_addr = client_addr.to_string();
-            println!("Received connection from {}", client_addr);
+            println!("Successfully negotiated protocol with {}", client_addr);
 
             // We loop forever in order to handle all the messages sent by the client.
-            let client_finished = loop_fn(socket, |socket| {
-                socket.into_future()
-                    .map_err(|(err, _)| err)
-                    .and_then(|(msg, rest)| {
-                        if let Some(msg) = msg {
-                            // One message has been received. We send it back to the client.
-                            Box::new(rest.send(msg).map(|m| Loop::Continue(m)))
-                                as Box<Future<Item = _, Error = _>>
-                        } else {
-                            // End of stream. Connection closed. Breaking the loop.
-                            Box::new(Ok(Loop::Break(())).into_future())
-                                as Box<Future<Item = _, Error = _>>
-                        }
-                    })
-            });
+            let client_finished = {
+                let client_addr = client_addr.clone();
+                loop_fn(socket, move |socket| {
+                    let client_addr = client_addr.clone();
+                    socket.into_future()
+                        .map_err(|(err, _)| err)
+                        .and_then(move |(msg, rest)| {
+                            if let Some(msg) = msg {
+                                // One message has been received. We send it back to the client.
+                                println!("Received a message from {}: {:?}\n => Sending back \
+                                          identical message to remote", client_addr, msg);
+                                Box::new(rest.send(msg).map(|m| Loop::Continue(m)))
+                                    as Box<Future<Item = _, Error = _>>
+                            } else {
+                                // End of stream. Connection closed. Breaking the loop.
+                                println!("Received EOF from {}\n => Dropping connection",
+                                         client_addr);
+                                Box::new(Ok(Loop::Break(())).into_future())
+                                    as Box<Future<Item = _, Error = _>>
+                            }
+                        })
+                })
+            };
 
             // We absorb errors from the `client_finished` future so that an error while processing
-            // a client doesn't propagate and stop the entire server.
+            // a client (eg. if the client unexpectedly disconnects) doesn't propagate and stop the
+            // entire server.
             client_finished.then(move |res| {
                 if let Err(err) = res {
-                    println!("error while processing client {}: {:?}", client_addr, err);
+                    println!("Error while processing client {}: {:?}", client_addr, err);
                 }
                 Ok(())
             })

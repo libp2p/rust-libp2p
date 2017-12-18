@@ -55,7 +55,7 @@ pub trait Transport {
 	type RawConn: AsyncRead + AsyncWrite;
 
 	/// The listener produces incoming connections.
-	type Listener: Stream<Item = (Self::RawConn, Multiaddr), Error = IoError>;
+	type Listener: Stream<Item = (Result<Self::RawConn, IoError>, Multiaddr), Error = IoError>;
 
 	/// A future which indicates that we are currently dialing to a peer.
 	type Dial: IntoFuture<Item = Self::RawConn, Error = IoError>;
@@ -137,7 +137,7 @@ pub struct DeniedTransport;
 impl Transport for DeniedTransport {
 	// TODO: could use `!` for associated types once stable
 	type RawConn = Cursor<Vec<u8>>;
-	type Listener = Box<Stream<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
+	type Listener = Box<Stream<Item = (Result<Self::RawConn, IoError>, Multiaddr), Error = IoError>>;
 	type Dial = Box<Future<Item = Self::RawConn, Error = IoError>>;
 
 	#[inline]
@@ -305,21 +305,21 @@ pub enum EitherListenStream<A, B> {
 	Second(B),
 }
 
-impl<A, B, Sa, Sb> Stream for EitherListenStream<A, B>
+impl<AStream, BStream, AInner, BInner> Stream for EitherListenStream<AStream, BStream>
 where
-	A: Stream<Item = (Sa, Multiaddr), Error = IoError>,
-	B: Stream<Item = (Sb, Multiaddr), Error = IoError>,
+	AStream: Stream<Item = (Result<AInner, IoError>, Multiaddr), Error = IoError>,
+	BStream: Stream<Item = (Result<BInner, IoError>, Multiaddr), Error = IoError>,
 {
-	type Item = (EitherSocket<Sa, Sb>, Multiaddr);
+	type Item = (Result<EitherSocket<AInner, BInner>, IoError>, Multiaddr);
 	type Error = IoError;
 
 	#[inline]
 	fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
 		match self {
 			&mut EitherListenStream::First(ref mut a) => a.poll()
-				.map(|i| i.map(|v| v.map(|(s, a)| (EitherSocket::First(s), a)))),
+				.map(|i| i.map(|v| v.map(|(s, a)| (s.map(EitherSocket::First), a)))),
 			&mut EitherListenStream::Second(ref mut a) => a.poll()
-				.map(|i| i.map(|v| v.map(|(s, a)| (EitherSocket::Second(s), a)))),
+				.map(|i| i.map(|v| v.map(|(s, a)| (s.map(EitherSocket::Second), a)))),
 		}
 	}
 }
@@ -846,10 +846,7 @@ where
 		self,
 		addr: Multiaddr,
 	) -> Result<
-		(
-			Box<Stream<Item = (C::Output, Multiaddr), Error = IoError> + 'a>,
-			Multiaddr,
-		),
+		(Box<Stream<Item = (Result<C::Output, IoError>, Multiaddr), Error = IoError> + 'a>, Multiaddr),
 		(Self, Multiaddr),
 	>
 	where
@@ -870,23 +867,36 @@ where
 			}
 		};
 
+		// Try to negotiate the protocol.
+		// Note that failing to negotiate a protocol will never produce a future with an error.
+		// Instead the `stream` will produce `Ok(Err(...))`.
+		// `stream` can only produce an `Err` if `listening_stream` produces an `Err`.
 		let stream = listening_stream
-            // Try to negotiate the protocol.
-            .and_then(move |(connection, client_addr)| {
-                let upgrade = upgrade.clone();
-                #[inline]
-                fn iter_map<T>((n, t): (Bytes, T)) -> (Bytes, fn(&Bytes,&Bytes)->bool, T) {
-                    (n, <Bytes as PartialEq>::eq, t)
-                }
-                let iter = upgrade.protocol_names().map(iter_map);
-                let negotiated = multistream_select::listener_select_proto(connection, iter);
-                negotiated.map(move |(upgrade_id, conn)| (upgrade_id, conn, upgrade, client_addr))
-                    .map_err(|err| IoError::new(IoErrorKind::Other, err))
-            })
-            .and_then(|(upgrade_id, connection, upgrade, client_addr)| {
-                upgrade.upgrade(connection, upgrade_id, Endpoint::Listener)
-                    .map(|s| (s, client_addr))
-            });
+			// Try to negotiate the protocol
+			.and_then(move |(connection, client_addr)| {
+				// Turn the `Result<impl AsyncRead + AsyncWrite, IoError>` into
+				// a `Result<impl Future<Item = impl AsyncRead + AsyncWrite, Error = IoError>, IoError>`
+				let connection = connection.map(|connection| {
+					let upgrade = upgrade.clone();
+					let iter = upgrade.protocol_names()
+						.map::<_, fn(_) -> _>(|(n, t)| (n, <Bytes as PartialEq>::eq, t));
+					multistream_select::listener_select_proto(connection, iter)
+						.map_err(|err| IoError::new(IoErrorKind::Other, err))
+						.and_then(|(upgrade_id, connection)| {
+							upgrade.upgrade(connection, upgrade_id, Endpoint::Listener)
+						})
+				});
+
+				connection
+					.into_future()
+					.flatten()
+					.then(move |nego_res| {
+						match nego_res {
+							Ok(upgraded) => Ok((Ok(upgraded), client_addr)),
+							Err(err) => Ok((Err(err), client_addr)),
+						}
+					})
+			});
 
 		Ok((Box::new(stream), new_addr))
 	}
@@ -901,7 +911,7 @@ where
 	C: Clone,
 {
 	type RawConn = C::Output;
-	type Listener = Box<Stream<Item = (C::Output, Multiaddr), Error = IoError>>;
+	type Listener = Box<Stream<Item = (Result<C::Output, IoError>, Multiaddr), Error = IoError>>;
 	type Dial = Box<Future<Item = C::Output, Error = IoError>>;
 
 	#[inline]

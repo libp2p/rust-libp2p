@@ -80,6 +80,7 @@ fn main() {
             // `echo` is what the closure used when initializing "echo" returns.
             // Consequently, please note that the `send` method is available only because the type
             // `length_delimited::Framed` has a `send` method.
+            println!("Sending \"hello world\" to listener");
             echo.and_then(|echo| echo.send("hello world".into()).map(Option::Some))
                 .select(
                     incoming
@@ -97,7 +98,7 @@ fn main() {
             echo.unwrap()
                 .into_future()
                 .map(|(msg, rest)| {
-                    println!("received: {:?}", msg);
+                    println!("Received message from listener: {:?}", msg);
                     rest
                 })
                 .map_err(|(err, _)| err)

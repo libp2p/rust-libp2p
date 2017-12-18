@@ -88,7 +88,12 @@ where
 {
 	type RawConn = <C::Output as StreamMuxer>::Substream;
 	type Listener = ConnectionReuseListener<
-		Box<Stream<Item = (C::Output, Multiaddr), Error = IoError>>,
+		Box<
+			Stream<
+				Item = (Result<C::Output, IoError>, Multiaddr),
+				Error = IoError,
+			>,
+		>,
 		C::Output,
 	>;
 	type Dial = Box<Future<Item = Self::RawConn, Error = IoError>>;
@@ -160,26 +165,32 @@ where
 /// `ConnectionReuse` struct.
 pub struct ConnectionReuseListener<S, M>
 where
-	S: Stream<Item = (M, Multiaddr), Error = IoError>,
-	M: StreamMuxer,
+	S: Stream<Item = (Result<M, IoError>, Multiaddr), Error = IoError>,
+	M: StreamMuxer
 {
 	listener: StreamFuse<S>,
 	connections: Vec<(M, <M as StreamMuxer>::InboundSubstream, Multiaddr)>,
 }
 
 impl<S, M> Stream for ConnectionReuseListener<S, M>
-where
-	S: Stream<Item = (M, Multiaddr), Error = IoError>,
-	M: StreamMuxer + Clone + 'static, // TODO: 'static :(
+where S: Stream<Item = (Result<M, IoError>, Multiaddr), Error = IoError>,
+	  M: StreamMuxer + Clone + 'static // TODO: 'static :(
 {
-	type Item = (M::Substream, Multiaddr);
+	type Item = (Result<M::Substream, IoError>, Multiaddr);
 	type Error = IoError;
 
 	fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
 		match self.listener.poll() {
 			Ok(Async::Ready(Some((upgrade, client_addr)))) => {
-				let next_incoming = upgrade.clone().inbound();
-				self.connections.push((upgrade, next_incoming, client_addr));
+				match upgrade {
+					Ok(upgrade) => {
+						let next_incoming = upgrade.clone().inbound();
+						self.connections.push((upgrade, next_incoming, client_addr));
+					},
+					Err(err) => {
+						return Ok(Async::Ready(Some((Err(err), client_addr))));
+					},
+				}
 			}
 			Ok(Async::NotReady) => (),
 			Ok(Async::Ready(None)) => {
@@ -206,7 +217,7 @@ where
 				Ok(Async::Ready(incoming)) => {
 					let mut new_next = muxer.clone().inbound();
 					*next_incoming = new_next;
-					return Ok(Async::Ready(Some((incoming, client_addr.clone()))));
+					return Ok(Async::Ready(Some((Ok(incoming), client_addr.clone()))));
 				}
 				Ok(Async::NotReady) => {}
 				Err(_) => {
