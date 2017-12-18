@@ -167,6 +167,7 @@ extern crate bytes;
 #[macro_use]
 extern crate futures;
 extern crate multistream_select;
+extern crate parking_lot;
 extern crate smallvec;
 extern crate tokio_io;
 
