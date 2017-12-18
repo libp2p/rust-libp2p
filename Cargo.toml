@@ -8,6 +8,7 @@ members = [
     "multistream-select",
     "datastore",
     "futures-mutex",
+    "rust-multiaddr",
     "rw-stream-sink",
     "circular-buffer",
     "varint-rs",

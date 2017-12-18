@@ -69,10 +69,12 @@ impl Multiaddr {
     /// ]);
     /// ```
     ///
+    #[deprecated(note = "Use `string.parse()` instead")]
     pub fn new(input: &str) -> Result<Multiaddr> {
         let mut bytes = Vec::new();
 
         let mut parts = input.split('/');
+        // A multiaddr must start with `/`
         if !parts.next().ok_or(Error::InvalidMultiaddr)?.is_empty() {
             return Err(Error::InvalidMultiaddr);
         }
@@ -119,6 +121,7 @@ impl Multiaddr {
     /// ```
     ///
     #[inline]
+    #[deprecated(note = "Use `self.iter().map(|addr| addr.protocol_id())` instead")]
     pub fn protocol(&self) -> Vec<ProtocolId> {
         self.iter().map(|addr| addr.protocol_id()).collect()
     }
@@ -144,7 +147,7 @@ impl Multiaddr {
         Ok(Multiaddr { bytes: bytes })
     }
 
-    /// Remove the outer most address from itself.
+    /// Remove the outermost address.
     ///
     /// # Examples
     ///
@@ -249,6 +252,16 @@ impl From<AddrComponent> for Multiaddr {
         let mut out = Vec::new();
         addr.write_bytes(&mut out).expect("writing to a Vec never fails");
         Multiaddr { bytes: out }
+    }
+}
+
+impl<'a> IntoIterator for &'a Multiaddr {
+    type Item = AddrComponent;
+    type IntoIter = Iter<'a>;
+
+    #[inline]
+    fn into_iter(self) -> Iter<'a> {
+        Iter(&self.bytes)
     }
 }
 
