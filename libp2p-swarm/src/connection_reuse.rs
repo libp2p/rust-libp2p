@@ -164,8 +164,9 @@ where
 /// Implementation of `Stream<Item = (impl AsyncRead + AsyncWrite, Multiaddr)` for the
 /// `ConnectionReuse` struct.
 pub struct ConnectionReuseListener<S, M>
-where S: Stream<Item = (Result<M, IoError>, Multiaddr), Error = IoError>,
-	  M: StreamMuxer
+where
+	S: Stream<Item = (Result<M, IoError>, Multiaddr), Error = IoError>,
+	M: StreamMuxer
 {
 	listener: StreamFuse<S>,
 	connections: Vec<(M, <M as StreamMuxer>::InboundSubstream, Multiaddr)>,

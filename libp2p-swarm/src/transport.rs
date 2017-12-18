@@ -305,12 +305,12 @@ pub enum EitherListenStream<A, B> {
 	Second(B),
 }
 
-impl<A, B, Sa, Sb> Stream for EitherListenStream<A, B>
+impl<AStream, BStream, AInner, BInner> Stream for EitherListenStream<AStream, BStream>
 where
-	A: Stream<Item = (Result<Sa, IoError>, Multiaddr), Error = IoError>,
-	B: Stream<Item = (Result<Sb, IoError>, Multiaddr), Error = IoError>,
+	AStream: Stream<Item = (Result<AInner, IoError>, Multiaddr), Error = IoError>,
+	BStream: Stream<Item = (Result<BInner, IoError>, Multiaddr), Error = IoError>,
 {
-	type Item = (Result<EitherSocket<Sa, Sb>, IoError>, Multiaddr);
+	type Item = (Result<EitherSocket<AInner, BInner>, IoError>, Multiaddr);
 	type Error = IoError;
 
 	#[inline]
@@ -869,7 +869,7 @@ where
 
 		// Try to negotiate the protocol.
 		// Note that failing to negotiate a protocol will never produce a future with an error.
-		// Instead the `stream` will produce an `Ok(Err(...))`.
+		// Instead the `stream` will produce `Ok(Err(...))`.
 		// `stream` can only produce an `Err` if `listening_stream` produces an `Err`.
 		let stream = listening_stream
 			// Try to negotiate the protocol

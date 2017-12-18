@@ -92,35 +92,38 @@ fn main() {
             // This closure is called whenever a new connection has been received and successfully
             // upgraded to use secio/plaintext and echo.
             println!("Successfully negotiated protocol with {}", client_addr);
-            let client_addr2 = client_addr.clone();
 
             // We loop forever in order to handle all the messages sent by the client.
-            let client_finished = loop_fn(socket, move |socket| {
+            let client_finished = {
                 let client_addr = client_addr.clone();
-                socket.into_future()
-                    .map_err(|(err, _)| err)
-                    .and_then(move |(msg, rest)| {
-                        if let Some(msg) = msg {
-                            // One message has been received. We send it back to the client.
-                            println!("Received a message from {}: {:?}\n => Sending back \
-                                      identical message to remote", client_addr, msg);
-                            Box::new(rest.send(msg).map(|m| Loop::Continue(m)))
-                                as Box<Future<Item = _, Error = _>>
-                        } else {
-                            // End of stream. Connection closed. Breaking the loop.
-                            println!("Received EOF from {}\n => Dropping connection", client_addr);
-                            Box::new(Ok(Loop::Break(())).into_future())
-                                as Box<Future<Item = _, Error = _>>
-                        }
-                    })
-            });
+                loop_fn(socket, move |socket| {
+                    let client_addr = client_addr.clone();
+                    socket.into_future()
+                        .map_err(|(err, _)| err)
+                        .and_then(move |(msg, rest)| {
+                            if let Some(msg) = msg {
+                                // One message has been received. We send it back to the client.
+                                println!("Received a message from {}: {:?}\n => Sending back \
+                                          identical message to remote", client_addr, msg);
+                                Box::new(rest.send(msg).map(|m| Loop::Continue(m)))
+                                    as Box<Future<Item = _, Error = _>>
+                            } else {
+                                // End of stream. Connection closed. Breaking the loop.
+                                println!("Received EOF from {}\n => Dropping connection",
+                                         client_addr);
+                                Box::new(Ok(Loop::Break(())).into_future())
+                                    as Box<Future<Item = _, Error = _>>
+                            }
+                        })
+                })
+            };
 
             // We absorb errors from the `client_finished` future so that an error while processing
             // a client (eg. if the client unexpectedly disconnects) doesn't propagate and stop the
             // entire server.
             client_finished.then(move |res| {
                 if let Err(err) = res {
-                    println!("Error while processing client {}: {:?}", client_addr2, err);
+                    println!("Error while processing client {}: {:?}", client_addr, err);
                 }
                 Ok(())
             })
