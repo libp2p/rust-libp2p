@@ -30,6 +30,7 @@
 //! in a complex chain of protocols negotiation.
 
 use bytes::Bytes;
+use connection_reuse::ConnectionReuse;
 use futures::{Async, Poll, Stream};
 use futures::future::{self, FromErr, Future, FutureResult, IntoFuture};
 use multiaddr::Multiaddr;
@@ -706,6 +707,13 @@ where
 	T: Transport + 'a,
 	C: ConnectionUpgrade<T::RawConn> + 'a,
 {
+	/// Turns this upgraded node into a `ConnectionReuse`. If the `Output` implements the
+	/// `StreamMuxer` trait, the returned object will implement `Transport` and `MuxedTransport`.
+	#[inline]
+	pub fn into_connection_reuse(self) -> ConnectionReuse<T, C> {
+		From::from(self)
+	}
+
 	/// Tries to dial on the `Multiaddr` using the transport that was passed to `new`, then upgrade
 	/// the connection.
 	///
