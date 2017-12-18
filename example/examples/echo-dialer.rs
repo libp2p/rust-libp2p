@@ -29,12 +29,16 @@ extern crate tokio_io;
 
 use bytes::BytesMut;
 use futures::{Future, Sink, Stream};
+use std::env;
 use swarm::{UpgradeExt, SimpleProtocol, Transport};
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 use tokio_io::codec::length_delimited;
 
 fn main() {
+    // Determine which address to dial.
+    let target_addr = env::args().nth(1).unwrap_or("/ip4/127.0.0.1/tcp/10333".to_owned());
+
     // We start by building the tokio engine that will run all the sockets.
     let mut core = Core::new().unwrap();
 
@@ -58,10 +62,14 @@ fn main() {
             plain_text.or_upgrade(secio)
         })
 
-        .with_upgrade(multiplex::MultiplexConfig);
-    let transport: swarm::ConnectionReuse<_, _> = transport.into();
+        // On top of plaintext or secio, we will use the multiplex protocol.
+        .with_upgrade(multiplex::MultiplexConfig)
+        // The object returned by the call to `with_upgrade(MultiplexConfig)` can't be used as a
+        // `Transport` because the output of the upgrade is not a stream but a controller for
+        // muxing. We have to explicitly call `into_connection_reuse()` in order to turn this into
+        // a `Transport`.
+        .into_connection_reuse()
 
-    let transport = transport
         // On top of plaintext or secio, we use the "echo" protocol, which is a custom protocol
         // just for this example.
         // For this purpose, we create a `SimpleProtocol` struct.
@@ -77,10 +85,14 @@ fn main() {
     // incoming connections, and that will automatically apply all the selected protocols on top
     // of any opened stream.
 
-    // We use it to dial `/ip4/127.0.0.1/tcp/10333`.
+    // We use it to dial the address.
     let dialer = transport
-        .dial_and_listen(swarm::Multiaddr::new("/ip4/127.0.0.1/tcp/10333").unwrap())
-        .unwrap_or_else(|_| panic!("unsupported multiaddr protocol ; should never happen"))
+        .dial_and_listen(swarm::Multiaddr::new(&target_addr).expect("invalid multiaddr"))
+        // If the multiaddr protocol exists but is not supported, then we get an error containing
+        // the transport and the original multiaddress. Therefore we cannot directly use `unwrap()`
+        // or `expect()`, but have to add a `map_err()` beforehand.
+        .map_err(|(_, addr)| addr).expect("unsupported multiaddr")
+
         .and_then(|(incoming, echo)| {
             // `echo` is what the closure used when initializing "echo" returns.
             // Consequently, please note that the `send` method is available only because the type

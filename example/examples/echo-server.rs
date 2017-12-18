@@ -23,17 +23,22 @@ extern crate futures;
 extern crate libp2p_secio as secio;
 extern crate libp2p_swarm as swarm;
 extern crate libp2p_tcp_transport as tcp;
+extern crate multiplex;
 extern crate tokio_core;
 extern crate tokio_io;
 
 use futures::future::{Future, IntoFuture, loop_fn, Loop};
 use futures::{Stream, Sink};
+use std::env;
 use swarm::{Transport, UpgradeExt, SimpleProtocol};
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 use tokio_io::codec::length_delimited;
 
 fn main() {
+    // Determine which address to listen to.
+    let listen_addr = env::args().nth(1).unwrap_or("/ip4/0.0.0.0/tcp/10333".to_owned());
+
     // We start by building the tokio engine that will run all the sockets.
     let mut core = Core::new().unwrap();
 
@@ -57,8 +62,16 @@ fn main() {
             plain_text.or_upgrade(secio)
         })
 
-        // On top of plaintext or secio, we use the "echo" protocol, which is a custom protocol
-        // just for this example.
+        // On top of plaintext or secio, we will use the multiplex protocol.
+        .with_upgrade(multiplex::MultiplexConfig)
+        // The object returned by the call to `with_upgrade(MultiplexConfig)` can't be used as a
+        // `Transport` because the output of the upgrade is not a stream but a controller for
+        // muxing. We have to explicitly call `into_connection_reuse()` in order to turn this into
+        // a `Transport`.
+        .into_connection_reuse()
+
+        // On top of both mutiplex and plaintext/secio, we use the "echo" protocol, which is a
+        // custom protocol just for this example.
         // For this purpose, we create a `SimpleProtocol` struct.
         .with_upgrade(SimpleProtocol::new("/echo/1.0.0", |socket| {
             // This closure is called whenever a stream using the "echo" protocol has been
@@ -72,10 +85,16 @@ fn main() {
     // incoming connections, and that will automatically apply all the selected protocols on top
     // of any opened stream.
 
-    // We use it to listen on `/ip4/127.0.0.1/tcp/10333`.
-    let future = transport.listen_on(swarm::Multiaddr::new("/ip4/0.0.0.0/tcp/10333").unwrap())
-        .unwrap_or_else(|_| panic!("unsupported multiaddr protocol ; should never happen")).0
+    // We use it to listen on the address.
+    let (listener, address) = transport
+        .listen_on(swarm::Multiaddr::new(&listen_addr).expect("invalid multiaddr"))
+        // If the multiaddr protocol exists but is not supported, then we get an error containing
+        // the transport and the original multiaddress. Therefore we cannot directly use `unwrap()`
+        // or `expect()`, but have to add a `map_err()` beforehand.
+        .map_err(|(_, addr)| addr).expect("unsupported multiaddr");
+    println!("Now listening on {:?}", address);
 
+    let future = listener
         .filter_map(|(socket, client_addr)| {
             let client_addr = client_addr.to_string();
 
