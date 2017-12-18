@@ -23,7 +23,14 @@ pub struct Multiaddr {
     bytes: Vec<u8>,
 }
 
-impl ToString for Multiaddr {
+impl fmt::Debug for Multiaddr {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.to_string().fmt(f)
+    }
+}
+
+impl fmt::Display for Multiaddr {
     /// Convert a Multiaddr to a string
     ///
     /// # Examples
@@ -35,19 +42,12 @@ impl ToString for Multiaddr {
     /// assert_eq!(address.to_string(), "/ip4/127.0.0.1/udt");
     /// ```
     ///
-    fn to_string(&self) -> String {
-        let mut out = String::new();
-        for s in self.iter() {
-            out.push_str(&s.to_string());
-        }
-        out
-    }
-}
-
-impl fmt::Debug for Multiaddr {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.to_string().fmt(f)
+        for s in self.iter() {
+            s.to_string().fmt(f)?;
+        }
+        Ok(())
     }
 }
 
