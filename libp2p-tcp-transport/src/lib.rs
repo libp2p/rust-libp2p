@@ -56,12 +56,12 @@ extern crate multiaddr;
 extern crate futures;
 
 use std::io::Error as IoError;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::SocketAddr;
 use tokio_core::reactor::Handle;
 use tokio_core::net::{TcpStream, TcpListener, TcpStreamNew};
 use futures::Future;
 use futures::stream::Stream;
-use multiaddr::{Multiaddr, Protocol, ToMultiaddr};
+use multiaddr::{Multiaddr, AddrComponent, ToMultiaddr};
 use swarm::Transport;
 
 /// Represents the configuration for a TCP/IP transport capability for libp2p.
@@ -138,29 +138,18 @@ impl Transport for TcpConfig {
 
 // This type of logic should probably be moved into the multiaddr package
 fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
-    let protocols = addr.protocol();
+    let protocols: Vec<_> = addr.iter().collect();
 
-    // TODO: This is nonconforming (since a multiaddr could specify TCP first) but we can't fix that
-    //       until multiaddrs-rs is improved.
-    match (protocols[0], protocols[1]) {
-        (Protocol::IP4, Protocol::TCP) => {
-            let bs = addr.as_slice();
-            Ok(SocketAddr::new(
-                IpAddr::V4(Ipv4Addr::new(bs[1], bs[2], bs[3], bs[4])),
-                (bs[6] as u16) << 8 | bs[7] as u16,
-            ))
+    if protocols.len() != 2 {
+        return Err(());
+    }
+
+    match (&protocols[0], &protocols[1]) {
+        (&AddrComponent::IP4(ref ip), &AddrComponent::TCP(port)) => {
+            Ok(SocketAddr::new(ip.clone().into(), port))
         }
-        (Protocol::IP6, Protocol::TCP) => {
-            let bs = addr.as_slice();
-            if let Ok(Some(s)) = Protocol::IP6.bytes_to_string(&bs[1..17]) {
-                if let Ok(ipv6addr) = s.parse() {
-                    return Ok(SocketAddr::new(
-                        IpAddr::V6(ipv6addr),
-                        (bs[18] as u16) << 8 | bs[19] as u16,
-                    ));
-                }
-            }
-            Err(())
+        (&AddrComponent::IP6(ref ip), &AddrComponent::TCP(port)) => {
+            Ok(SocketAddr::new(ip.clone().into(), port))
         }
         _ => Err(()),
     }
@@ -278,5 +267,14 @@ mod tests {
 
         let (_, new_addr) = tcp.listen_on(addr).unwrap();
         assert!(!new_addr.to_string().contains("tcp/0"));
+    }
+
+    #[test]
+    fn larger_addr_denied() {
+        let core = Core::new().unwrap();
+        let tcp = TcpConfig::new(core.handle());
+
+        let addr = Multiaddr::new("/ip4/127.0.0.1/tcp/12345/tcp/12345").unwrap();
+        assert!(tcp.listen_on(addr).is_err());
     }
 }
