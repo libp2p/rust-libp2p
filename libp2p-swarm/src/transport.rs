@@ -26,8 +26,8 @@
 //! encryption middleware to the connection).
 //!
 //! Thanks to the `Transport::or_transport`, `Transport::with_upgrade` and
-//! `UpgradeNode::or_upgrade` methods, you can combine multiple transports and/or upgrades together
-//! in a complex chain of protocols negotiation.
+//! `UpgradedNode::or_upgrade` methods, you can combine multiple transports and/or upgrades
+//! together in a complex chain of protocols negotiation.
 
 use bytes::Bytes;
 use connection_reuse::ConnectionReuse;
@@ -56,7 +56,16 @@ pub trait Transport {
 	type RawConn: AsyncRead + AsyncWrite;
 
 	/// The listener produces incoming connections.
-	type Listener: Stream<Item = (Result<Self::RawConn, IoError>, Multiaddr), Error = IoError>;
+	/// 
+	/// An item should be produced whenever a connection is received at the lowest level of the
+	/// transport stack. The item is a `Future` that is signalled once some pre-processing has
+	/// taken place, and that connection has been upgraded to the wanted protocols.
+	type Listener: Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>;
+
+	/// After a connection has been received, we may need to do some asynchronous pre-processing
+	/// on it (eg. an intermediary protocol negotiation). While this pre-processing takes place, we
+	/// want to be able to continue polling on the listener.
+	type ListenerUpgrade: Future<Item = Self::RawConn, Error = IoError>;
 
 	/// A future which indicates that we are currently dialing to a peer.
 	type Dial: IntoFuture<Item = Self::RawConn, Error = IoError>;
@@ -138,7 +147,8 @@ pub struct DeniedTransport;
 impl Transport for DeniedTransport {
 	// TODO: could use `!` for associated types once stable
 	type RawConn = Cursor<Vec<u8>>;
-	type Listener = Box<Stream<Item = (Result<Self::RawConn, IoError>, Multiaddr), Error = IoError>>;
+	type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>>;
+	type ListenerUpgrade = Box<Future<Item = Self::RawConn, Error = IoError>>;
 	type Dial = Box<Future<Item = Self::RawConn, Error = IoError>>;
 
 	#[inline]
@@ -175,6 +185,7 @@ where
 {
 	type RawConn = EitherSocket<A::RawConn, B::RawConn>;
 	type Listener = EitherListenStream<A::Listener, B::Listener>;
+	type ListenerUpgrade = EitherTransportFuture<A::ListenerUpgrade, B::ListenerUpgrade>;
 	type Dial =
 		EitherTransportFuture<<A::Dial as IntoFuture>::Future, <B::Dial as IntoFuture>::Future>;
 
@@ -308,19 +319,19 @@ pub enum EitherListenStream<A, B> {
 
 impl<AStream, BStream, AInner, BInner> Stream for EitherListenStream<AStream, BStream>
 where
-	AStream: Stream<Item = (Result<AInner, IoError>, Multiaddr), Error = IoError>,
-	BStream: Stream<Item = (Result<BInner, IoError>, Multiaddr), Error = IoError>,
+	AStream: Stream<Item = (AInner, Multiaddr), Error = IoError>,
+	BStream: Stream<Item = (BInner, Multiaddr), Error = IoError>,
 {
-	type Item = (Result<EitherSocket<AInner, BInner>, IoError>, Multiaddr);
+	type Item = (EitherTransportFuture<AInner, BInner>, Multiaddr);
 	type Error = IoError;
 
 	#[inline]
 	fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
 		match self {
 			&mut EitherListenStream::First(ref mut a) => a.poll()
-				.map(|i| i.map(|v| v.map(|(s, a)| (s.map(EitherSocket::First), a)))),
+				.map(|i| i.map(|v| v.map(|(s, a)| (EitherTransportFuture::First(s), a)))),
 			&mut EitherListenStream::Second(ref mut a) => a.poll()
-				.map(|i| i.map(|v| v.map(|(s, a)| (s.map(EitherSocket::Second), a)))),
+				.map(|i| i.map(|v| v.map(|(s, a)| (EitherTransportFuture::Second(s), a)))),
 		}
 	}
 }
@@ -853,7 +864,7 @@ where
 		self,
 		addr: Multiaddr,
 	) -> Result<
-		(Box<Stream<Item = (Result<C::Output, IoError>, Multiaddr), Error = IoError> + 'a>, Multiaddr),
+		(Box<Stream<Item = (Box<Future<Item = C::Output, Error = IoError> + 'a>, Multiaddr), Error = IoError> + 'a>, Multiaddr),
 		(Self, Multiaddr),
 	>
 	where
@@ -879,30 +890,22 @@ where
 		// Instead the `stream` will produce `Ok(Err(...))`.
 		// `stream` can only produce an `Err` if `listening_stream` produces an `Err`.
 		let stream = listening_stream
-			// Try to negotiate the protocol
-			.and_then(move |(connection, client_addr)| {
-				// Turn the `Result<impl AsyncRead + AsyncWrite, IoError>` into
-				// a `Result<impl Future<Item = impl AsyncRead + AsyncWrite, Error = IoError>, IoError>`
-				let connection = connection.map(|connection| {
-					let upgrade = upgrade.clone();
-					let iter = upgrade.protocol_names()
-						.map::<_, fn(_) -> _>(|(n, t)| (n, <Bytes as PartialEq>::eq, t));
-					multistream_select::listener_select_proto(connection, iter)
-						.map_err(|err| IoError::new(IoErrorKind::Other, err))
-						.and_then(|(upgrade_id, connection)| {
-							upgrade.upgrade(connection, upgrade_id, Endpoint::Listener)
-						})
-				});
+			.map(move |(connection, client_addr)| {
+				let upgrade = upgrade.clone();
+				let connection = connection
+					// Try to negotiate the protocol
+					.and_then(move |connection| {
+						let iter = upgrade.protocol_names()
+							.map::<_, fn(_) -> _>(|(n, t)| (n, <Bytes as PartialEq>::eq, t));
+						multistream_select::listener_select_proto(connection, iter)
+							.map_err(|err| IoError::new(IoErrorKind::Other, err))
+							.and_then(|(upgrade_id, connection)| {
+								upgrade.upgrade(connection, upgrade_id, Endpoint::Listener)
+							})
+							.into_future()
+					});
 
-				connection
-					.into_future()
-					.flatten()
-					.then(move |nego_res| {
-						match nego_res {
-							Ok(upgraded) => Ok((Ok(upgraded), client_addr)),
-							Err(err) => Ok((Err(err), client_addr)),
-						}
-					})
+				(Box::new(connection) as Box<_>, client_addr)
 			});
 
 		Ok((Box::new(stream), new_addr))
@@ -918,7 +921,8 @@ where
 	C: Clone,
 {
 	type RawConn = C::Output;
-	type Listener = Box<Stream<Item = (Result<C::Output, IoError>, Multiaddr), Error = IoError>>;
+	type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>>;
+	type ListenerUpgrade = Box<Future<Item = C::Output, Error = IoError>>;
 	type Dial = Box<Future<Item = C::Output, Error = IoError>>;
 
 	#[inline]

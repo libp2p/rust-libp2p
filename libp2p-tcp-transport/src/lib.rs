@@ -59,7 +59,7 @@ use std::io::Error as IoError;
 use std::net::SocketAddr;
 use tokio_core::reactor::Handle;
 use tokio_core::net::{TcpStream, TcpListener, TcpStreamNew};
-use futures::Future;
+use futures::future::{self, Future, FutureResult, IntoFuture};
 use futures::stream::Stream;
 use multiaddr::{Multiaddr, AddrComponent, ToMultiaddr};
 use swarm::Transport;
@@ -84,13 +84,9 @@ impl TcpConfig {
 }
 
 impl Transport for TcpConfig {
-    /// The raw connection.
     type RawConn = TcpStream;
-
-    /// The listener produces incoming connections.
-    type Listener = Box<Stream<Item = (Result<Self::RawConn, IoError>, Multiaddr), Error = IoError>>;
-
-    /// A future which indicates currently dialing to a peer.
+    type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>>;
+    type ListenerUpgrade = FutureResult<Self::RawConn, IoError>;
     type Dial = TcpStreamNew;
 
     /// Listen on the given multi-addr.
@@ -109,12 +105,13 @@ impl Transport for TcpConfig {
                 }
                 Err(_) => addr,
             };
-            let future = futures::future::result(listener).map(|listener| {
+
+            let future = future::result(listener).map(|listener| {
                     // Pull out a stream of sockets for incoming connections
                     listener.incoming().map(|(sock, addr)| {
                         let addr = addr.to_multiaddr()
                             .expect("generating a multiaddr from a socket addr never fails");
-                        (Ok(sock), addr)
+                        (Ok(sock).into_future(), addr)
                     })
                 })
                     .flatten_stream();
@@ -224,16 +221,18 @@ mod tests {
             let tcp = TcpConfig::new(core.handle());
             let handle = core.handle();
             let listener = tcp.listen_on(addr).unwrap().0.for_each(|(sock, _)| {
-                // Define what to do with the socket that just connected to us
-                // Which in this case is read 3 bytes
-                let handle_conn = tokio_io::io::read_exact(sock.unwrap(), [0; 3])
-                    .map(|(_, buf)| assert_eq!(buf, [1, 2, 3]))
-                    .map_err(|err| panic!("IO error {:?}", err));
+                sock.and_then(|sock| {
+                    // Define what to do with the socket that just connected to us
+                    // Which in this case is read 3 bytes
+                    let handle_conn = tokio_io::io::read_exact(sock, [0; 3])
+                        .map(|(_, buf)| assert_eq!(buf, [1, 2, 3]))
+                        .map_err(|err| panic!("IO error {:?}", err));
 
-                // Spawn the future as a concurrent task
-                handle.spawn(handle_conn);
+                    // Spawn the future as a concurrent task
+                    handle.spawn(handle_conn);
 
-                Ok(())
+                    Ok(())
+                })
             });
 
             core.run(listener).unwrap();
