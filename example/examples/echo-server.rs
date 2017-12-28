@@ -117,7 +117,7 @@ fn main() {
 
     // We now use the controller to listen on the address.
     let address = swarm_controller
-        .listen_on(swarm::Multiaddr::new(&listen_addr).expect("invalid multiaddr"))
+        .listen_on(listen_addr.parse().expect("invalid multiaddr"))
         // If the multiaddr protocol exists but is not supported, then we get an error containing
         // the original multiaddress.
         .expect("unsupported multiaddr");

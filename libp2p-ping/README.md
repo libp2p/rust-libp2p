@@ -43,7 +43,7 @@ let mut core = tokio_core::reactor::Core::new().unwrap();
 
 let ping_finished_future = libp2p_tcp_transport::TcpConfig::new(core.handle())
     .with_upgrade(Ping)
-    .dial(libp2p_swarm::Multiaddr::new("127.0.0.1:12345").unwrap()).unwrap_or_else(|_| panic!())
+    .dial("127.0.0.1:12345".parse::<libp2p_swarm::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())
     .and_then(|(mut pinger, service)| {
         pinger.ping().map_err(|_| panic!()).select(service).map_err(|_| panic!())
     });

@@ -162,7 +162,7 @@ impl<'de> Deserialize<'de> for PeerInfo {
 		let addrs = {
 			let mut out = Vec::with_capacity(interm.addrs.len());
 			for (addr, since_epoch) in interm.addrs {
-				let addr = match Multiaddr::new(&addr) {
+				let addr = match addr.parse::<Multiaddr>() {
 					Ok(a) => a,
 					Err(err) => return Err(DeserializerError::custom(err)),
 				};

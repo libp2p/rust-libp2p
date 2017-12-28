@@ -148,7 +148,7 @@
 //!     .with_upgrade(Ping)
 //!     // TODO: right now the only available protocol is ping, but we want to replace it with
 //!     //       something that is more simple to use
-//!     .dial(libp2p_swarm::Multiaddr::new("127.0.0.1:12345").unwrap()).unwrap_or_else(|_| panic!())
+//!     .dial("127.0.0.1:12345".parse::<libp2p_swarm::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())
 //!     .and_then(|(mut pinger, service)| {
 //!         pinger.ping().map_err(|_| panic!()).select(service).map_err(|_| panic!())
 //!     });
