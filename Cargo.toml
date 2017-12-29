@@ -17,7 +17,7 @@ members = [
 ]
 
 [replace]
-# Ring has a feature merged in master that hasn't been published yet ; remove this after 0.12.2
-"ring:0.12.1" = { git = "https://github.com/briansmith/ring" }
+# TODO: Update ring and solve conflicts
+"ring:0.12.1" = { git = "https://github.com/briansmith/ring", rev = "3a14ef619559f7d4b69e2286d49c833409eef34a" }
 # Using a local improved version of multiaddr for now
 "multiaddr:0.2.0" = { path = "./rust-multiaddr" }
