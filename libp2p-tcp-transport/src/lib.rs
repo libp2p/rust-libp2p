@@ -109,6 +109,7 @@ impl Transport for TcpConfig {
             let future = future::result(listener).map(|listener| {
                     // Pull out a stream of sockets for incoming connections
                     listener.incoming().map(|(sock, addr)| {
+                        println!("incoming tcp stream");
                         let addr = addr.to_multiaddr()
                             .expect("generating a multiaddr from a socket addr never fails");
                         (Ok(sock).into_future(), addr)

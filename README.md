@@ -23,6 +23,7 @@ Architecture of the crates of this repository:
   `ConnectionUpgrade` trait of `libp2p-swarm`.
 - `libp2p-swarm`: Core library that contains all the traits of *libp2p* and plugs things together.
 - `libp2p-tcp-transport`: Implementation of the `Transport` trait of `libp2p-swarm` for TCP/IP.
+- `libp2p-websocket`: Implementation of the `Transport` trait of `libp2p-swarm` for Websockets.
 - `multistream-select`: Implementation of the `multistream-select` protocol, which is used to
   negotiate a protocol over a newly-established connection with a peer, or after a connection
   upgrade.

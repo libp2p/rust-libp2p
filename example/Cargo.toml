@@ -10,5 +10,6 @@ multiplex = { path = "../multiplex-rs" }
 libp2p-secio = { path = "../libp2p-secio" }
 libp2p-swarm = { path = "../libp2p-swarm" }
 libp2p-tcp-transport = { path = "../libp2p-tcp-transport" }
+libp2p-websocket = { path = "../libp2p-websocket" }
 tokio-core = "0.1"
 tokio-io = "0.1"
