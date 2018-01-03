@@ -48,11 +48,12 @@
 //! The `MuxedTransport` trait is an extension to the `Transport` trait, and is implemented on
 //! transports that can receive incoming connections on streams that have been opened with `dial()`.
 //! 
-//! The trait provides the `dial_and_listen()` method, which returns both a dialer and a stream of
-//! incoming connections.
+//! The trait provides the `next_incoming()` method, which returns a future that will resolve to
+//! the next substream that arrives from a dialed node.
 //! 
 //! > **Note**: This trait is mainly implemented for transports that provide stream muxing
-//! >           capabilities.
+//! >           capabilities, but it can also be implemented in a dummy way by returning an empty
+//! >           iterator.
 //! 
 //! # Connection upgrades
 //! 
@@ -78,7 +79,7 @@
 //! `Transport` trait. The return value of this method also implements the `Transport` trait, which
 //! means that you can call `dial()` and `listen_on()` on it in order to directly obtain an
 //! upgraded connection or a listener that will yield upgraded connections. Similarly, the
-//! `dial_and_listen()` method will automatically apply the upgrade on both the dialer and the
+//! `next_incoming()` method will automatically apply the upgrade on both the dialer and the
 //! listener. An error is produced if the remote doesn't support the protocol corresponding to the
 //! connection upgrade.
 //! 
@@ -123,7 +124,7 @@
 //! transport.
 //! 
 //! However the `UpgradedNode` struct returned by `with_upgrade` still provides methods named
-//! `dial`, `listen_on`, and `dial_and_listen`, which will yield you a `Future` or a `Stream`,
+//! `dial`, `listen_on`, and `next_incoming`, which will yield you a `Future` or a `Stream`,
 //! which you can use to obtain the `Output`. This `Output` can then be used in a protocol-specific
 //! way to use the protocol.
 //! 
