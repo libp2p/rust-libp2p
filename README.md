@@ -28,3 +28,17 @@ Architecture of the crates of this repository:
   upgrade.
 - `rw-stream-sink`: Utility library that makes it possible to wrap around a tokio `Stream + Sink`
   of bytes and implements `AsyncRead + AsyncWrite`.
+
+## About the `impl Trait` syntax
+
+Right now a lot of code of this library uses `Box<Future>` or `Box<Stream>` objects, or forces
+`'static` lifetime bounds.
+
+This is caused by the lack of a stable `impl Trait` syntax in the Rust language. Once this syntax
+is fully implemented and stabilized, it will be possible to change this code to use plain and
+non-static objects instead of boxes.
+
+Progress for the `impl Trait` syntax can be tracked in [this issue of the Rust repository](https://github.com/rust-lang/rust/issues/34511).
+
+Once this syntax is stable in the nightly version, we will consider requiring the nightly version
+of the compiler and switching to this syntax.
