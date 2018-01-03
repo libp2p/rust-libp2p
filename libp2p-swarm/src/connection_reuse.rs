@@ -44,6 +44,7 @@
 //!       figured out.
 
 use futures::{Async, Future, Poll, Stream};
+use futures::future::{IntoFuture, FutureResult};
 use futures::stream::Fuse as StreamFuse;
 use futures::stream;
 use multiaddr::Multiaddr;
@@ -87,15 +88,8 @@ where
 	C::NamesIter: Clone, // TODO: not elegant
 {
 	type RawConn = <C::Output as StreamMuxer>::Substream;
-	type Listener = ConnectionReuseListener<
-		Box<
-			Stream<
-				Item = (Result<C::Output, IoError>, Multiaddr),
-				Error = IoError,
-			>,
-		>,
-		C::Output,
-	>;
+	type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>>;
+	type ListenerUpgrade = FutureResult<Self::RawConn, IoError>;
 	type Dial = Box<Future<Item = Self::RawConn, Error = IoError>>;
 
 	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -108,10 +102,11 @@ where
 
 		let listener = ConnectionReuseListener {
 			listener: listener.fuse(),
+			current_upgrades: Vec::new(),
 			connections: Vec::new(),
 		};
 
-		Ok((listener, new_addr))
+		Ok((Box::new(listener) as Box<_>, new_addr))
 	}
 
 	fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
@@ -163,34 +158,29 @@ where
 
 /// Implementation of `Stream<Item = (impl AsyncRead + AsyncWrite, Multiaddr)` for the
 /// `ConnectionReuse` struct.
-pub struct ConnectionReuseListener<S, M>
+pub struct ConnectionReuseListener<S, F, M>
 where
-	S: Stream<Item = (Result<M, IoError>, Multiaddr), Error = IoError>,
-	M: StreamMuxer
+	S: Stream<Item = (F, Multiaddr), Error = IoError>,
+	F: Future<Item = M, Error = IoError>,
+	M: StreamMuxer,
 {
 	listener: StreamFuse<S>,
+	current_upgrades: Vec<(F, Multiaddr)>,
 	connections: Vec<(M, <M as StreamMuxer>::InboundSubstream, Multiaddr)>,
 }
 
-impl<S, M> Stream for ConnectionReuseListener<S, M>
-where S: Stream<Item = (Result<M, IoError>, Multiaddr), Error = IoError>,
+impl<S, F, M> Stream for ConnectionReuseListener<S, F, M>
+where S: Stream<Item = (F, Multiaddr), Error = IoError>,
+	  F: Future<Item = M, Error = IoError>,
 	  M: StreamMuxer + Clone + 'static // TODO: 'static :(
 {
-	type Item = (Result<M::Substream, IoError>, Multiaddr);
+	type Item = (FutureResult<M::Substream, IoError>, Multiaddr);
 	type Error = IoError;
 
 	fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
 		match self.listener.poll() {
 			Ok(Async::Ready(Some((upgrade, client_addr)))) => {
-				match upgrade {
-					Ok(upgrade) => {
-						let next_incoming = upgrade.clone().inbound();
-						self.connections.push((upgrade, next_incoming, client_addr));
-					},
-					Err(err) => {
-						return Ok(Async::Ready(Some((Err(err), client_addr))));
-					},
-				}
+				self.current_upgrades.push((upgrade, client_addr));
 			}
 			Ok(Async::NotReady) => (),
 			Ok(Async::Ready(None)) => {
@@ -204,11 +194,41 @@ where S: Stream<Item = (Result<M, IoError>, Multiaddr), Error = IoError>,
 				}
 			}
 		};
-
+		
 		// Most of the time, this array will contain 0 or 1 elements, but sometimes it may contain
 		// more and we don't want to panic if that happens. With 8 elements, we can be pretty
 		// confident that this is never going to spill into a `Vec`.
-		let mut connections_to_drop: SmallVec<[_; 8]> = SmallVec::new();
+		let mut upgrades_to_drop: SmallVec<[_; 8]> = SmallVec::new();
+		let mut early_ret = None;
+
+		for (index, &mut (ref mut current_upgrade, ref mut client_addr)) in
+			self.current_upgrades.iter_mut().enumerate()
+		{
+			match current_upgrade.poll() {
+				Ok(Async::Ready(muxer)) => {
+					let next_incoming = muxer.clone().inbound();
+					self.connections.push((muxer, next_incoming, client_addr.clone()));
+					upgrades_to_drop.push(index);
+				},
+				Ok(Async::NotReady) => {},
+				Err(err) => {
+					upgrades_to_drop.push(index);
+					early_ret = Some(Async::Ready(Some((Err(err).into_future(), client_addr.clone()))));
+				},
+			}
+		}
+
+		for &index in upgrades_to_drop.iter().rev() {
+			self.current_upgrades.swap_remove(index);
+		}
+
+		if let Some(early_ret) = early_ret {
+			return Ok(early_ret);
+		}
+
+		// We reuse `upgrades_to_drop`.
+		upgrades_to_drop.clear();
+		let mut connections_to_drop = upgrades_to_drop;
 
 		for (index, &mut (ref mut muxer, ref mut next_incoming, ref client_addr)) in
 			self.connections.iter_mut().enumerate()
@@ -217,7 +237,7 @@ where S: Stream<Item = (Result<M, IoError>, Multiaddr), Error = IoError>,
 				Ok(Async::Ready(incoming)) => {
 					let mut new_next = muxer.clone().inbound();
 					*next_incoming = new_next;
-					return Ok(Async::Ready(Some((Ok(incoming), client_addr.clone()))));
+					return Ok(Async::Ready(Some((Ok(incoming).into_future(), client_addr.clone()))));
 				}
 				Ok(Async::NotReady) => {}
 				Err(_) => {
