@@ -37,20 +37,23 @@
 //!
 //! When called on a `ConnectionReuse`, the `dial` method will try to use a connection that has
 //! already been opened earlier, and open an outgoing substream on it. If none is available, it
-//! will dial the given multiaddress.
+//! will dial the given multiaddress. Dialed node can also spontaneously open new substreams with
+//! us. In order to handle these new substreams you should use the `next_incoming` method of the
+//! `MuxedTransport` trait.
 //! TODO: this raises several questions ^
 //!
 //! TODO: this whole code is a dummy and should be rewritten after the design has been properly
 //!       figured out.
 
-use futures::{Async, Future, Poll, Stream};
-use futures::future::{IntoFuture, FutureResult};
+use futures::future::{self, IntoFuture, FutureResult};
+use futures::{stream, Async, Future, Poll, Stream, task};
 use futures::stream::Fuse as StreamFuse;
-use futures::stream;
 use multiaddr::Multiaddr;
 use muxing::StreamMuxer;
+use parking_lot::Mutex;
 use smallvec::SmallVec;
 use std::io::Error as IoError;
+use std::sync::Arc;
 use transport::{ConnectionUpgrade, MuxedTransport, Transport, UpgradedNode};
 
 /// Allows reusing the same muxed connection multiple times.
@@ -66,6 +69,14 @@ where
 {
 	// Underlying transport and connection upgrade for when we need to dial or listen.
 	inner: UpgradedNode<T, C>,
+	shared: Arc<Mutex<Shared<C::Output>>>,
+}
+
+struct Shared<O> {
+	// List of futures to dialed connections.
+	incoming: Vec<Box<Stream<Item = (O, Multiaddr), Error = future::SharedError<Mutex<Option<IoError>>>>>>,
+	// Tasks to signal when an element is added to `incoming`. Only used when `incoming` is empty.
+	to_signal: Vec<task::Task>,
 }
 
 impl<T, C> From<UpgradedNode<T, C>> for ConnectionReuse<T, C>
@@ -75,7 +86,13 @@ where
 {
 	#[inline]
 	fn from(node: UpgradedNode<T, C>) -> ConnectionReuse<T, C> {
-		ConnectionReuse { inner: node }
+		ConnectionReuse {
+			inner: node,
+			shared: Arc::new(Mutex::new(Shared {
+				incoming: Vec::new(),
+				to_signal: Vec::new(),
+			})),
+		}
 	}
 }
 
@@ -96,7 +113,7 @@ where
 		let (listener, new_addr) = match self.inner.listen_on(addr.clone()) {
 			Ok((l, a)) => (l, a),
 			Err((inner, addr)) => {
-				return Err((ConnectionReuse { inner: inner }, addr));
+				return Err((ConnectionReuse { inner: inner, shared: self.shared }, addr));
 			}
 		};
 
@@ -110,14 +127,30 @@ where
 	}
 
 	fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-		let dial = match self.inner.dial(addr) {
+		let dial = match self.inner.dial(addr.clone()) {
 			Ok(l) => l,
 			Err((inner, addr)) => {
-				return Err((ConnectionReuse { inner: inner }, addr));
+				return Err((ConnectionReuse { inner: inner, shared: self.shared }, addr));
 			}
 		};
 
-		let future = dial.and_then(|dial| dial.outbound());
+		let dial = dial
+			.map_err::<fn(IoError) -> Mutex<Option<IoError>>, _>(|err| Mutex::new(Some(err)))
+			.shared();
+
+		let ingoing = dial.clone()
+			.map(|muxer| stream::repeat(muxer))
+			.flatten_stream()
+			.map(move |muxer| ((&*muxer).clone(), addr.clone()));
+
+		let mut lock = self.shared.lock();
+		lock.incoming.push(Box::new(ingoing) as Box<_>);
+		for task in lock.to_signal.drain(..) { task.notify(); }
+		drop(lock);
+
+		let future = dial
+			.map_err(|err| err.lock().take().expect("error can only be extracted once"))
+			.and_then(|dial| (&*dial).clone().outbound());
 		Ok(Box::new(future) as Box<_>)
 	}
 }
@@ -130,29 +163,15 @@ where
 	C::Output: StreamMuxer + Clone,
 	C::NamesIter: Clone, // TODO: not elegant
 {
-	type Incoming = stream::AndThen<
-		stream::Repeat<C::Output, IoError>,
-		fn(C::Output)
-			-> <<C as ConnectionUpgrade<T::RawConn>>::Output as StreamMuxer>::InboundSubstream,
-		<<C as ConnectionUpgrade<T::RawConn>>::Output as StreamMuxer>::InboundSubstream,
-	>;
-	type Outgoing =
-		<<C as ConnectionUpgrade<T::RawConn>>::Output as StreamMuxer>::OutboundSubstream;
-	type DialAndListen = Box<Future<Item = (Self::Incoming, Self::Outgoing), Error = IoError>>;
+	type Incoming = Box<Future<Item = (<C::Output as StreamMuxer>::Substream, Multiaddr), Error = IoError>>;
 
-	fn dial_and_listen(self, addr: Multiaddr) -> Result<Self::DialAndListen, (Self, Multiaddr)> {
-		self.inner
-			.dial(addr)
-			.map_err(|(inner, addr)| (ConnectionReuse { inner: inner }, addr))
-			.map(|fut| {
-				fut.map(|muxer| {
-					(
-						stream::repeat(muxer.clone()).and_then(StreamMuxer::inbound as fn(_) -> _),
-						muxer.outbound(),
-					)
-				})
-			})
-			.map(|fut| Box::new(fut) as _)
+	#[inline]
+	fn next_incoming(self) -> Self::Incoming {
+		let future = ConnectionReuseIncoming { shared: self.shared.clone() }
+			.and_then(|(out, addr)| {
+				out.inbound().map(|o| (o, addr))
+			});
+		Box::new(future) as Box<_>
 	}
 }
 
@@ -251,5 +270,52 @@ where S: Stream<Item = (F, Multiaddr), Error = IoError>,
 		}
 
 		Ok(Async::NotReady)
+	}
+}
+
+/// Implementation of `Future<Item = (impl AsyncRead + AsyncWrite, Multiaddr)` for the
+/// `ConnectionReuse` struct.
+pub struct ConnectionReuseIncoming<O> {
+	shared: Arc<Mutex<Shared<O>>>,
+}
+
+impl<O> Future for ConnectionReuseIncoming<O>
+	where O: Clone
+{
+	type Item = (O, Multiaddr);
+	type Error = IoError;
+
+	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+		let mut lock = self.shared.lock();
+
+		let mut to_remove = SmallVec::<[_; 8]>::new();
+		let mut ret_value = None;
+
+		for (offset, future) in lock.incoming.iter_mut().enumerate() {
+			match future.poll() {
+				Ok(Async::Ready(Some((value, addr)))) => {
+					ret_value = Some((value.clone(), addr));
+					break;
+				},
+				Ok(Async::Ready(None)) => {
+					to_remove.push(offset);
+				},
+				Ok(Async::NotReady) => {},
+				Err(_) => {
+					to_remove.push(offset);
+				},
+			}
+		}
+
+		for offset in to_remove.into_iter().rev() {
+			lock.incoming.swap_remove(offset);
+		}
+
+		if let Some(ret_value) = ret_value {
+			Ok(Async::Ready(ret_value))
+		} else {
+			lock.to_signal.push(task::current());
+			Ok(Async::NotReady)
+		}
 	}
 }

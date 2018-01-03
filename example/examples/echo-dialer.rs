@@ -30,7 +30,7 @@ extern crate tokio_io;
 use bytes::BytesMut;
 use futures::{Future, Sink, Stream};
 use std::env;
-use swarm::{UpgradeExt, SimpleProtocol, Transport};
+use swarm::{UpgradeExt, SimpleProtocol, Transport, MuxedTransport};
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 use tokio_io::codec::length_delimited;
@@ -68,8 +68,10 @@ fn main() {
         // `Transport` because the output of the upgrade is not a stream but a controller for
         // muxing. We have to explicitly call `into_connection_reuse()` in order to turn this into
         // a `Transport`.
-        .into_connection_reuse()
+        .into_connection_reuse();
 
+    let transport_with_echo = transport
+        .clone()
         // On top of plaintext or secio, we use the "echo" protocol, which is a custom protocol
         // just for this example.
         // For this purpose, we create a `SimpleProtocol` struct.
@@ -86,34 +88,23 @@ fn main() {
     // of any opened stream.
 
     // We use it to dial the address.
-    let dialer = transport
-        .dial_and_listen(swarm::Multiaddr::new(&target_addr).expect("invalid multiaddr"))
+    let dialer = transport_with_echo
+        .dial(swarm::Multiaddr::new(&target_addr).expect("invalid multiaddr"))
         // If the multiaddr protocol exists but is not supported, then we get an error containing
         // the transport and the original multiaddress. Therefore we cannot directly use `unwrap()`
         // or `expect()`, but have to add a `map_err()` beforehand.
         .map_err(|(_, addr)| addr).expect("unsupported multiaddr")
 
-        .and_then(|(incoming, echo)| {
+        .and_then(|echo| {
             // `echo` is what the closure used when initializing "echo" returns.
             // Consequently, please note that the `send` method is available only because the type
             // `length_delimited::Framed` has a `send` method.
             println!("Sending \"hello world\" to listener");
-            echo.and_then(|echo| echo.send("hello world".into()).map(Option::Some))
-                .select(
-                    incoming
-                        .for_each(|_| {
-                            println!("opened");
-                            Ok(())
-                        })
-                        .map(|()| None),
-                )
-                .map(|(n, _)| n)
-                .map_err(|(e, _)| e)
+            echo.send("hello world".into())
         })
         .and_then(|echo| {
             // The message has been successfully sent. Now wait for an answer.
-            echo.unwrap()
-                .into_future()
+            echo.into_future()
                 .map(|(msg, rest)| {
                     println!("Received message from listener: {:?}", msg);
                     rest
@@ -124,5 +115,6 @@ fn main() {
     // `dialer` is a future that contains all the behaviour that we want, but nothing has actually
     // started yet. Because we created the `TcpConfig` with tokio, we need to run the future
     // through the tokio core.
-    core.run(dialer).unwrap();
+    core.run(dialer.map(|_| ()).select(transport.incoming().for_each(|_| Ok(()))))
+        .unwrap_or_else(|_| panic!());
 }
