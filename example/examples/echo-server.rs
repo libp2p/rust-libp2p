@@ -68,27 +68,28 @@ fn main() {
         // `Transport` because the output of the upgrade is not a stream but a controller for
         // muxing. We have to explicitly call `into_connection_reuse()` in order to turn this into
         // a `Transport`.
-        .into_connection_reuse()
-
-        // On top of both mutiplex and plaintext/secio, we use the "echo" protocol, which is a
-        // custom protocol just for this example.
-        // For this purpose, we create a `SimpleProtocol` struct.
-        .with_upgrade(SimpleProtocol::new("/echo/1.0.0", |socket| {
-            // This closure is called whenever a stream using the "echo" protocol has been
-            // successfully negotiated. The parameter is the raw socket (implements the AsyncRead
-            // and AsyncWrite traits), and the closure must return an implementation of
-            // `IntoFuture` that can yield any type of object.
-            Ok(length_delimited::Framed::<_, bytes::BytesMut>::new(socket))
-        }));
+        .into_connection_reuse();
 
     // We now have a `transport` variable that can be used either to dial nodes or listen to
-    // incoming connections, and that will automatically apply all the selected protocols on top
+    // incoming connections, and that will automatically apply secio and multiplex on top
     // of any opened stream.
+
+    // We now prepare the protocol that we are going to negotiate with nodes that open a connection
+    // or substream to our server.
+    let proto = SimpleProtocol::new("/echo/1.0.0", |socket| {
+        // This closure is called whenever a stream using the "echo" protocol has been
+        // successfully negotiated. The parameter is the raw socket (implements the AsyncRead
+        // and AsyncWrite traits), and the closure must return an implementation of
+        // `IntoFuture` that can yield any type of object.
+        Ok(length_delimited::Framed::<_, bytes::BytesMut>::new(socket))
+    });
 
     // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming and
     // outgoing connections for us.
-    let (swarm_controller, swarm_future) = swarm::swarm(transport, |socket, client_addr| {
+    let (swarm_controller, swarm_future) = swarm::swarm(transport, proto, |socket, client_addr| {
         println!("Successfully negotiated protocol with {}", client_addr);
+
+        // The type of `socket` is exactly what the closure of `SimpleProtocol` returns.
 
         // We loop forever in order to handle all the messages sent by the client.
         loop_fn(socket, move |socket| {
