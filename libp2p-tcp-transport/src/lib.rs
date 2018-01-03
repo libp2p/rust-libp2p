@@ -258,11 +258,23 @@ mod tests {
     }
 
     #[test]
-    fn replace_port_0_in_returned_multiaddr() {
+    fn replace_port_0_in_returned_multiaddr_ipv4() {
         let core = Core::new().unwrap();
         let tcp = TcpConfig::new(core.handle());
 
         let addr = Multiaddr::new("/ip4/127.0.0.1/tcp/0").unwrap();
+        assert!(addr.to_string().contains("tcp/0"));
+
+        let (_, new_addr) = tcp.listen_on(addr).unwrap();
+        assert!(!new_addr.to_string().contains("tcp/0"));
+    }
+
+    #[test]
+    fn replace_port_0_in_returned_multiaddr_ipv6() {
+        let core = Core::new().unwrap();
+        let tcp = TcpConfig::new(core.handle());
+
+        let addr = Multiaddr::new("/ip6/::1/tcp/0").unwrap();
         assert!(addr.to_string().contains("tcp/0"));
 
         let (_, new_addr) = tcp.listen_on(addr).unwrap();
