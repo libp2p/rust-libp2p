@@ -21,9 +21,10 @@
 // TODO: use this once stable ; for now we just copy-paste the content of the README.md
 //#![doc(include = "../README.md")]
 
-//! Transport and protocol upgrade system of *libp2p*.
+//! Transport, protocol upgrade and swarm systems of *libp2p*.
 //! 
-//! This crate contains all the core traits and mechanisms of the transport system of *libp2p*.
+//! This crate contains all the core traits and mechanisms of the transport and swarm systems
+//! of *libp2p*.
 //! 
 //! # The `Transport` trait
 //! 
@@ -163,6 +164,44 @@
 //! also implements the `ConnectionUpgrade` trait and will choose one of the protocols amongst the
 //! ones supported.
 //!
+//! # Swarm
+//!
+//! Once you have created an object that implements the `Transport` trait, you can put it in a
+//! *swarm*. This is done by calling the `swarm()` freestanding function with the transport
+//! alongside with a function or a closure that will turn the output of the upgrade (usually an
+//! actual protocol, as explained above) into a `Future` producing `()`.
+//!
+//! ```no_run
+//! extern crate futures;
+//! extern crate libp2p_ping;
+//! extern crate libp2p_swarm;
+//! extern crate libp2p_tcp_transport;
+//! extern crate tokio_core;
+//! 
+//! use futures::Future;
+//! use libp2p_ping::Ping;
+//! use libp2p_swarm::Transport;
+//! 
+//! # fn main() {
+//! let mut core = tokio_core::reactor::Core::new().unwrap();
+//! 
+//! let transport = libp2p_tcp_transport::TcpConfig::new(core.handle())
+//!     .with_dummy_muxing()
+//!     .with_upgrade(Ping);
+//! 
+//! let (swarm_controller, swarm_future) = libp2p_swarm::swarm(transport, |(mut pinger, service), client_addr| {
+//!     pinger.ping().map_err(|_| panic!())
+//!         .select(service).map_err(|_| panic!())
+//!         .map(|_| ())
+//! });
+//! 
+//! // The `swarm_controller` can then be used to do some operations.
+//! swarm_controller.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap());
+//! 
+//! // Runs until everything is finished.
+//! core.run(swarm_future).unwrap();
+//! # }
+//! ```
 
 extern crate bytes;
 #[macro_use]
@@ -176,11 +215,13 @@ extern crate tokio_io;
 pub extern crate multiaddr;
 
 mod connection_reuse;
+pub mod swarm;
 pub mod muxing;
 pub mod transport;
 
 pub use self::connection_reuse::ConnectionReuse;
 pub use self::multiaddr::Multiaddr;
 pub use self::muxing::StreamMuxer;
+pub use self::swarm::{swarm, SwarmController, SwarmFuture};
 pub use self::transport::{ConnectionUpgrade, PlainTextConfig, Transport, UpgradedNode, OrUpgrade};
 pub use self::transport::{Endpoint, SimpleProtocol, MuxedTransport, UpgradeExt};

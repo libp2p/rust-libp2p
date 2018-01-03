@@ -78,70 +78,55 @@ fn main() {
             // successfully negotiated. The parameter is the raw socket (implements the AsyncRead
             // and AsyncWrite traits), and the closure must return an implementation of
             // `IntoFuture` that can yield any type of object.
-            Ok(length_delimited::Framed::new(socket))
+            Ok(length_delimited::Framed::<_, bytes::BytesMut>::new(socket))
         }));
 
     // We now have a `transport` variable that can be used either to dial nodes or listen to
     // incoming connections, and that will automatically apply all the selected protocols on top
     // of any opened stream.
 
-    // We use it to listen on the address.
-    let (listener, address) = transport
+    // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming and
+    // outgoing connections for us.
+    let (swarm_controller, swarm_future) = swarm::swarm(transport, |socket, client_addr| {
+        println!("Successfully negotiated protocol with {}", client_addr);
+
+        // We loop forever in order to handle all the messages sent by the client.
+        loop_fn(socket, move |socket| {
+            let client_addr = client_addr.clone();
+            socket
+                .into_future()
+                .map_err(|(e, _)| e)
+                .and_then(move |(msg, rest)| {
+                    if let Some(msg) = msg {
+                        // One message has been received. We send it back to the client.
+                        println!("Received a message from {}: {:?}\n => Sending back \
+                                identical message to remote", client_addr, msg);
+                        Box::new(rest.send(msg).map(|m| Loop::Continue(m)))
+                            as Box<Future<Item = _, Error = _>>
+                    } else {
+                        // End of stream. Connection closed. Breaking the loop.
+                        println!("Received EOF from {}\n => Dropping connection",
+                                client_addr);
+                        Box::new(Ok(Loop::Break(())).into_future())
+                            as Box<Future<Item = _, Error = _>>
+                    }
+                })
+        })
+    });
+
+    // We now use the controller to listen on the address.
+    let address = swarm_controller
         .listen_on(swarm::Multiaddr::new(&listen_addr).expect("invalid multiaddr"))
         // If the multiaddr protocol exists but is not supported, then we get an error containing
-        // the transport and the original multiaddress. Therefore we cannot directly use `unwrap()`
-        // or `expect()`, but have to add a `map_err()` beforehand.
-        .map_err(|(_, addr)| addr).expect("unsupported multiaddr");
+        // the original multiaddress.
+        .expect("unsupported multiaddr");
+    // The address we actually listen on can be different from the address that was passed to
+    // the `listen_on` function. For example if you pass `/ip4/0.0.0.0/tcp/0`, then the port `0`
+    // will be replaced with the actual port.
     println!("Now listening on {:?}", address);
 
-    let future = listener
-        .for_each(|(socket, client_addr)| {
-            // This closure is called whenever a new connection has been received.
-            // `socket` is a future that will be triggered once the upgrade to secio, multiplex
-            // and echo is complete.
-            let client_addr = client_addr.to_string();
-            println!("Incoming connection from {}", client_addr);
-
-            socket
-                .and_then(move |socket| {
-                    println!("Successfully negotiated protocol with {}", client_addr);
-
-                    // We loop forever in order to handle all the messages sent by the client.
-                    loop_fn(socket, move |socket| {
-                        let client_addr = client_addr.clone();
-                        socket.into_future()
-                            .map_err(|(err, _)| err)
-                            .and_then(move |(msg, rest)| {
-                                if let Some(msg) = msg {
-                                    // One message has been received. We send it back to the client.
-                                    println!("Received a message from {}: {:?}\n => Sending back \
-                                            identical message to remote", client_addr, msg);
-                                    Box::new(rest.send(msg).map(|m| Loop::Continue(m)))
-                                        as Box<Future<Item = _, Error = _>>
-                                } else {
-                                    // End of stream. Connection closed. Breaking the loop.
-                                    println!("Received EOF from {}\n => Dropping connection",
-                                            client_addr);
-                                    Box::new(Ok(Loop::Break(())).into_future())
-                                        as Box<Future<Item = _, Error = _>>
-                                }
-                            })
-                    })
-                })
-
-                // We absorb errors from the future so that an error while processing a client
-                // (eg. if the client unexpectedly disconnects) doesn't propagate and stop the
-                // entire server.
-                .then(move |res| {
-                    if let Err(err) = res {
-                        println!("Error while processing client: {:?}", err);
-                    }
-                    Ok(())
-                })
-        });
-
-    // `future` is a future that contains all the behaviour that we want, but nothing has actually
-    // started yet. Because we created the `TcpConfig` with tokio, we need to run the future
-    // through the tokio core.
-    core.run(future).unwrap();
+    // `swarm_future` is a future that contains all the behaviour that we want, but nothing has
+    // actually started yet. Because we created the `TcpConfig` with tokio, we need to run the
+    // future through the tokio core.
+    core.run(swarm_future).unwrap();
 }
