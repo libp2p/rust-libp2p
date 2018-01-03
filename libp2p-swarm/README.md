@@ -1,8 +1,9 @@
 # libp2p-swarm
 
-Transport and protocol upgrade system of *libp2p*.
+Transport, protocol upgrade and swarm systems of *libp2p*.
 
-This crate contains all the core traits and mechanisms of the transport system of *libp2p*.
+This crate contains all the core traits and mechanisms of the transport and swarm systems
+of *libp2p*.
 
 # The `Transport` trait
 
@@ -27,11 +28,12 @@ multiple times in a row in order to chain as many implementations as you want.
 The `MuxedTransport` trait is an extension to the `Transport` trait, and is implemented on
 transports that can receive incoming connections on streams that have been opened with `dial()`.
 
-The trait provides the `dial_and_listen()` method, which returns both a dialer and a stream of
-incoming connections.
+The trait provides the `next_incoming()` method, which returns a future that will resolve to
+the next substream that arrives from a dialed node.
 
 > **Note**: This trait is mainly implemented for transports that provide stream muxing
->           capabilities.
+>           capabilities, but it can also be implemented in a dummy way by returning an empty
+>           iterator.
 
 # Connection upgrades
 
@@ -57,7 +59,7 @@ A middleware can be applied on a transport by using the `with_upgrade` method of
 `Transport` trait. The return value of this method also implements the `Transport` trait, which
 means that you can call `dial()` and `listen_on()` on it in order to directly obtain an
 upgraded connection or a listener that will yield upgraded connections. Similarly, the
-`dial_and_listen()` method will automatically apply the upgrade on both the dialer and the
+`next_incoming()` method will automatically apply the upgrade on both the dialer and the
 listener. An error is produced if the remote doesn't support the protocol corresponding to the
 connection upgrade.
 
@@ -100,11 +102,11 @@ implement the `AsyncRead` and `AsyncWrite` traits. This means that that the retu
 transport.
 
 However the `UpgradedNode` struct returned by `with_upgrade` still provides methods named
-`dial`, `listen_on`, and `dial_and_listen`, which will yield you a `Future` or a `Stream`,
+`dial`, `listen_on`, and `next_incoming`, which will yield you a `Future` or a `Stream`,
 which you can use to obtain the `Output`. This `Output` can then be used in a protocol-specific
 way to use the protocol.
 
-```no_run
+```rust
 extern crate futures;
 extern crate libp2p_ping;
 extern crate libp2p_swarm;
@@ -115,7 +117,6 @@ use futures::Future;
 use libp2p_ping::Ping;
 use libp2p_swarm::Transport;
 
-# fn main() {
 let mut core = tokio_core::reactor::Core::new().unwrap();
 
 let ping_finished_future = libp2p_tcp_transport::TcpConfig::new(core.handle())
@@ -130,7 +131,6 @@ let ping_finished_future = libp2p_tcp_transport::TcpConfig::new(core.handle())
 
 // Runs until the ping arrives.
 core.run(ping_finished_future).unwrap();
-# }
 ```
 
 ## Grouping protocols
@@ -138,3 +138,39 @@ core.run(ping_finished_future).unwrap();
 You can use the `.or_upgrade()` method to group multiple upgrades together. The return value
 also implements the `ConnectionUpgrade` trait and will choose one of the protocols amongst the
 ones supported.
+
+# Swarm
+
+Once you have created an object that implements the `Transport` trait, you can put it in a
+*swarm*. This is done by calling the `swarm()` freestanding function with the transport
+alongside with a function or a closure that will turn the output of the upgrade (usually an
+actual protocol, as explained above) into a `Future` producing `()`.
+
+```rust
+extern crate futures;
+extern crate libp2p_ping;
+extern crate libp2p_swarm;
+extern crate libp2p_tcp_transport;
+extern crate tokio_core;
+
+use futures::Future;
+use libp2p_ping::Ping;
+use libp2p_swarm::Transport;
+
+let mut core = tokio_core::reactor::Core::new().unwrap();
+
+let transport = libp2p_tcp_transport::TcpConfig::new(core.handle())
+    .with_dummy_muxing();
+
+let (swarm_controller, swarm_future) = libp2p_swarm::swarm(transport, Ping, |(mut pinger, service), client_addr| {
+    pinger.ping().map_err(|_| panic!())
+        .select(service).map_err(|_| panic!())
+        .map(|_| ())
+});
+
+// The `swarm_controller` can then be used to do some operations.
+swarm_controller.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap());
+
+// Runs until everything is finished.
+core.run(swarm_future).unwrap();
+```

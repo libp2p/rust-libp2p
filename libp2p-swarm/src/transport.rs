@@ -118,6 +118,18 @@ pub trait Transport {
 			upgrade: upgrade,
 		}
 	}
+
+	/// Builds a dummy implementation of `MuxedTransport` that uses this transport.
+	/// 
+	/// The resulting object will not actually use muxing. This means that dialing the same node
+	/// twice will result in two different connections instead of two substreams on the same
+	/// connection.
+	#[inline]
+	fn with_dummy_muxing(self) -> DummyMuxing<Self>
+		where Self: Sized
+	{
+		DummyMuxing { inner: self }
+	}
 }
 
 /// Extension trait for `Transport`. Implemented on structs that provide a `Transport` on which
@@ -681,6 +693,53 @@ where
 	#[inline]
 	fn protocol_names(&self) -> Self::NamesIter {
 		iter::once((Bytes::from("/plaintext/1.0.0"), ()))
+	}
+}
+
+/// Dummy implementation of `MuxedTransport` that uses an inner `Transport`.
+#[derive(Debug, Copy, Clone)]
+pub struct DummyMuxing<T> {
+	inner: T,
+}
+
+impl<T> MuxedTransport for DummyMuxing<T>
+	where T: Transport
+{
+	type Incoming = future::Empty<(T::RawConn, Multiaddr), IoError>;
+
+	fn next_incoming(self) -> Self::Incoming
+		where Self: Sized
+	{
+		future::empty()
+	}
+}
+
+impl<T> Transport for DummyMuxing<T>
+	where T: Transport
+{
+	type RawConn = T::RawConn;
+	type Listener = T::Listener;
+	type ListenerUpgrade = T::ListenerUpgrade;
+	type Dial = T::Dial;
+
+	#[inline]
+	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)>
+	where
+		Self: Sized
+	{
+		self.inner.listen_on(addr).map_err(|(inner, addr)| {
+			(DummyMuxing { inner }, addr)
+		})
+	}
+
+	#[inline]
+	fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)>
+	where
+		Self: Sized
+	{
+		self.inner.dial(addr).map_err(|(inner, addr)| {
+			(DummyMuxing { inner }, addr)
+		})
 	}
 }
 
