@@ -74,14 +74,13 @@ impl<C> ConnectionUpgrade<C> for IdentifyProtocol
 {
 	type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
 	type UpgradeIdentifier = ();
+	type Output = Option<IdentifyInfo>;
+	type Future = Box<Future<Item = Self::Output, Error = IoError>>;
 
 	#[inline]
 	fn protocol_names(&self) -> Self::NamesIter {
 		iter::once((Bytes::from("/ipfs/id/1.0.0"), ()))
 	}
-
-	type Output = Option<IdentifyInfo>;
-	type Future = Box<Future<Item = Self::Output, Error = IoError>>;
 
 	fn upgrade(self, socket: C, _: (), ty: Endpoint) -> Self::Future {
 		// TODO: use jack's varint library instead
