@@ -117,7 +117,12 @@ impl<C> ConnectionUpgrade<C> for IdentifyProtocol
 				message.set_observedAddr(info.observed_addr.to_string().into_bytes());
 				message.set_protocols(RepeatedField::from_vec(info.protocols));
 
-				let bytes = message.write_to_bytes().expect("we control the protobuf message");
+				let bytes = message.write_to_bytes()
+					.expect("writing protobuf failed ; should never happen");
+				
+				// On the server side, after sending the information to the client we make the
+				// future produce a `None`. If we were on the client side, this would contain the
+				// information received by the server.
 				let future = socket.send(bytes).map(|_| None);
 				Box::new(future) as Box<_>
 			}
@@ -163,7 +168,7 @@ fn bytes_to_multiaddr(bytes: Vec<u8>) -> Result<Multiaddr, IoError> {
 		Err(err) => return Err(IoError::new(IoErrorKind::InvalidData, err)),
 	};
 
-	match Multiaddr::new(&string) {
+	match string.parse() {
 		Ok(b) => Ok(b),
 		Err(err) => return Err(IoError::new(IoErrorKind::InvalidData, err)),
 	}
@@ -180,7 +185,6 @@ mod tests {
 	use IdentifyProtocol;
 	use futures::{IntoFuture, Future, Stream};
 	use libp2p_swarm::Transport;
-	use libp2p_swarm::multiaddr::Multiaddr;
 
 	#[test]
 	fn basic() {
@@ -191,24 +195,24 @@ mod tests {
 				public_key: vec![1, 2, 3, 4],
 				protocol_version: "ipfs/1.0.0".to_owned(),
 				agent_version: "agent/version".to_owned(),
-				listen_addrs: vec![Multiaddr::new("/ip4/5.6.7.8/tcp/12345").unwrap()],
-				observed_addr: Multiaddr::new("/ip4/1.2.3.4/tcp/9876").unwrap(),
+				listen_addrs: vec!["/ip4/5.6.7.8/tcp/12345".parse().unwrap()],
+				observed_addr: "/ip4/1.2.3.4/tcp/9876".parse().unwrap(),
 				protocols: vec!["ping".to_owned(), "kad".to_owned()],
 			},
 		});
 
 		let (server, addr) = with_proto.clone()
-		                  		       .listen_on(Multiaddr::new("/ip4/127.0.0.1/tcp/0").unwrap())
+		                  		       .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
 		                       		   .unwrap();
 		let server = server.into_future()
-		                   .map(|(n, _)| n)
-		                   .map_err(|(err, _)| err);
+		                   .map_err(|(err, _)| err)
+		                   .and_then(|(n, _)| n.unwrap().0);
 		let dialer = with_proto.dial(addr)
 		                       .unwrap()
 		                       .into_future();
 
 		let (recv, should_be_empty) = core.run(dialer.join(server)).unwrap();
-		assert!(should_be_empty.unwrap().0.unwrap().is_none());
+		assert!(should_be_empty.is_none());
 		let recv = recv.unwrap();
 		assert_eq!(recv.public_key, &[1, 2, 3, 4]);
 	}
