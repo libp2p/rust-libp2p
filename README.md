@@ -14,6 +14,8 @@ Architecture of the crates of this repository:
 - `datastore`: Utility library whose API provides a key-value storage with multiple possible
   backends. Used by `peerstore`.
 - `example`: Example usages of this library.
+- `libp2p-identify`: Protocol implementation that allows a node A to query another node B what
+  information B knows about A. Implements the `ConnectionUpgrade` trait of `libp2p-swarm`.
 - `libp2p-peerstore`: Generic storage for information about remote peers (their multiaddresses and
   their public key), with multiple possible backends. Each multiaddress also has a time-to-live.
   Used by `libp2p-swarm`.
