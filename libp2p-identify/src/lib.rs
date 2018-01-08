@@ -52,6 +52,16 @@ pub struct IdentifyProtocol {
 	pub information: IdentifyInfo,
 }
 
+impl IdentifyProtocol {
+	/// Builds a new `IdentifyProtocol`.
+	#[inline]
+	pub fn new(information: IdentifyInfo) -> IdentifyProtocol {
+		IdentifyProtocol {
+			information
+		}
+	}
+}
+
 /// Information sent from the listener to the dialer.
 #[derive(Debug, Clone)]
 pub struct IdentifyInfo {
@@ -162,15 +172,14 @@ fn parse_proto_msg(msg: BytesMut) -> Result<IdentifyInfo, IoError> {
 
 // Turn a `Vec<u8>` into a `Multiaddr`. If something bad happens, turn it into an `IoError`.
 fn bytes_to_multiaddr(bytes: Vec<u8>) -> Result<Multiaddr, IoError> {
-	let string = match String::from_utf8(bytes) {
-		Ok(b) => b,
-		Err(err) => return Err(IoError::new(IoErrorKind::InvalidData, err)),
-	};
-
-	match string.parse() {
-		Ok(b) => Ok(b),
-		Err(err) => return Err(IoError::new(IoErrorKind::InvalidData, err)),
-	}
+	String::from_utf8(bytes)
+		.map_err(|err| {
+			IoError::new(IoErrorKind::InvalidData, err)
+		})
+		.and_then(|s| {
+			s.parse()
+				.map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
+		})
 }
 
 #[cfg(test)]
@@ -189,16 +198,14 @@ mod tests {
 	fn basic() {
 		let mut core = Core::new().unwrap();
 		let tcp = TcpConfig::new(core.handle());
-		let with_proto = tcp.with_upgrade(IdentifyProtocol {
-			information: IdentifyInfo {
-				public_key: vec![1, 2, 3, 4],
-				protocol_version: "ipfs/1.0.0".to_owned(),
-				agent_version: "agent/version".to_owned(),
-				listen_addrs: vec!["/ip4/5.6.7.8/tcp/12345".parse().unwrap()],
-				observed_addr: "/ip4/1.2.3.4/tcp/9876".parse().unwrap(),
-				protocols: vec!["ping".to_owned(), "kad".to_owned()],
-			},
-		});
+		let with_proto = tcp.with_upgrade(IdentifyProtocol::new(IdentifyInfo {
+			public_key: vec![1, 2, 3, 4],
+			protocol_version: "ipfs/1.0.0".to_owned(),
+			agent_version: "agent/version".to_owned(),
+			listen_addrs: vec!["/ip4/5.6.7.8/tcp/12345".parse().unwrap()],
+			observed_addr: "/ip4/1.2.3.4/tcp/9876".parse().unwrap(),
+			protocols: vec!["ping".to_owned(), "kad".to_owned()],
+		}));
 
 		let (server, addr) = with_proto.clone()
 		                  		       .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
