@@ -31,6 +31,7 @@ extern crate libp2p_peerstore;
 extern crate libp2p_swarm;
 extern crate protobuf;
 extern crate tokio_io;
+extern crate varint;
 
 use bytes::{Bytes, BytesMut};
 use futures::{Future, Stream, Sink};
@@ -42,7 +43,7 @@ use protobuf::repeated::RepeatedField;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_io::codec::length_delimited;
+use varint::VarintCodec;
 
 mod structs_proto;
 
@@ -94,8 +95,7 @@ impl<C> ConnectionUpgrade<C> for IdentifyProtocol
 	}
 
 	fn upgrade(self, socket: C, _: (), ty: Endpoint, remote_addr: &Multiaddr) -> Self::Future {
-		// TODO: use jack's varint library instead
-		let socket = length_delimited::Builder::new().length_field_length(1).new_framed(socket);
+		let socket = socket.framed(VarintCodec::default());
 
 		match ty {
 			Endpoint::Dialer => {
