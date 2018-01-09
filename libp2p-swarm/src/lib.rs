@@ -224,3 +224,4 @@ pub use self::muxing::StreamMuxer;
 pub use self::swarm::{swarm, SwarmController, SwarmFuture};
 pub use self::transport::{ConnectionUpgrade, PlainTextConfig, Transport, UpgradedNode, OrUpgrade};
 pub use self::transport::{Endpoint, SimpleProtocol, MuxedTransport, UpgradeExt};
+pub use self::transport::{DeniedConnectionUpgrade};

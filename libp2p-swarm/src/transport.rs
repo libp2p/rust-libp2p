@@ -534,6 +534,29 @@ pub enum Endpoint {
 	Listener,
 }
 
+/// Implementation of `ConnectionUpgrade` that always fails to negotiate.
+#[derive(Debug, Copy, Clone)]
+pub struct DeniedConnectionUpgrade;
+
+impl<C> ConnectionUpgrade<C> for DeniedConnectionUpgrade
+	where C: AsyncRead + AsyncWrite
+{
+	type NamesIter = iter::Empty<(Bytes, ())>;
+	type UpgradeIdentifier = ();		// TODO: could use `!`
+	type Output = ();		// TODO: could use `!`
+	type Future = Box<Future<Item = (), Error = IoError>>;		// TODO: could use `!`
+
+	#[inline]
+	fn protocol_names(&self) -> Self::NamesIter {
+		iter::empty()
+	}
+
+	#[inline]
+	fn upgrade(self, _: C, _: Self::UpgradeIdentifier, _: Endpoint) -> Self::Future {
+		unreachable!("the denied connection upgrade always fails to negotiate")
+	}
+}
+
 /// Extension trait for `ConnectionUpgrade`. Automatically implemented on everything.
 pub trait UpgradeExt {
 	/// Builds a struct that will choose an upgrade between `self` and `other`, depending on what
