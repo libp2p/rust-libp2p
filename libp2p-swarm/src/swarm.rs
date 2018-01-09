@@ -35,6 +35,7 @@ pub fn swarm<T, C, H, F>(transport: T, upgrade: C, handler: H)
                          -> (SwarmController<T, C>, SwarmFuture<T, C, H, F::Future>)
     where T: MuxedTransport + Clone + 'static,      // TODO: 'static :-/
           C: ConnectionUpgrade<T::RawConn> + Clone + 'static,      // TODO: 'static :-/
+          C::NamesIter: Clone,      // TODO: not elegant
           H: FnMut(C::Output, Multiaddr) -> F,
           F: IntoFuture<Item = (), Error = IoError>,
 {
@@ -170,6 +171,7 @@ pub struct SwarmFuture<T, C, H, F>
 impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
     where T: MuxedTransport + Clone + 'static,      // TODO: 'static :-/,
           C: ConnectionUpgrade<T::RawConn> + Clone + 'static,      // TODO: 'static :-/
+          C::NamesIter: Clone,      // TODO: not elegant
           H: FnMut(C::Output, Multiaddr) -> If,
           If: IntoFuture<Future = F, Item = (), Error = IoError>,
           F: Future<Item = (), Error = IoError>,
@@ -186,6 +188,7 @@ impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
                 self.to_process.push(future::Either::A(handler(connec, client_addr).into_future()));
             },
             Ok(Async::NotReady) => {},
+            // TODO: may not be the best idea because we're killing the whole server
             Err(err) => return Err(err),
         };
 
