@@ -811,7 +811,9 @@ where
 	/// This function returns the next incoming substream. You are strongly encouraged to call it
 	/// if you have a muxed transport.
 	pub fn next_incoming(self) -> Box<Future<Item = (C::Output, Multiaddr), Error = IoError> + 'a>
-		where T: MuxedTransport
+		where T: MuxedTransport,
+			  C::NamesIter: Clone, // TODO: not elegant
+			  C: Clone,
 	{
 		let upgrade = self.upgrade;
 
@@ -819,8 +821,8 @@ where
             // Try to negotiate the protocol.
             .and_then(move |(connection, addr)| {
                 let iter = upgrade.protocol_names()
-                    .map(|(name, id)| (name, <Bytes as PartialEq>::eq, id));
-                let negotiated = multistream_select::dialer_select_proto(connection, iter)
+                    .map::<_, fn(_) -> _>(|(name, id)| (name, <Bytes as PartialEq>::eq, id));
+                let negotiated = multistream_select::listener_select_proto(connection, iter)
                     .map_err(|err| IoError::new(IoErrorKind::Other, err));
                 negotiated.map(|(upgrade_id, conn)| (upgrade_id, conn, upgrade, addr))
             })
