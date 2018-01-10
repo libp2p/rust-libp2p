@@ -168,33 +168,32 @@ mod tests {
     fn multiaddr_to_tcp_conversion() {
         use std::net::Ipv6Addr;
 
-        assert!(multiaddr_to_socketaddr(&Multiaddr::new("/ip4/127.0.0.1/udp/1234").unwrap()).is_err());
+        assert!(multiaddr_to_socketaddr(&"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap()).is_err());
 
         assert_eq!(
-            multiaddr_to_socketaddr(&Multiaddr::new("/ip4/127.0.0.1/tcp/12345").unwrap()),
+            multiaddr_to_socketaddr(&"/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap()),
             Ok(SocketAddr::new(
                 IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
                 12345,
             ))
         );
         assert_eq!(
-            multiaddr_to_socketaddr(&Multiaddr::new("/ip4/255.255.255.255/tcp/8080").unwrap()),
+            multiaddr_to_socketaddr(&"/ip4/255.255.255.255/tcp/8080".parse::<Multiaddr>().unwrap()),
             Ok(SocketAddr::new(
                 IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)),
                 8080,
             ))
         );
         assert_eq!(
-            multiaddr_to_socketaddr(&Multiaddr::new("/ip6/::1/tcp/12345").unwrap()),
+            multiaddr_to_socketaddr(&"/ip6/::1/tcp/12345".parse::<Multiaddr>().unwrap()),
             Ok(SocketAddr::new(
                 IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
                 12345,
             ))
         );
         assert_eq!(
-            multiaddr_to_socketaddr(&Multiaddr::new(
-                "/ip6/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/tcp/8080",
-            ).unwrap()),
+            multiaddr_to_socketaddr(&"/ip6/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/tcp/8080"
+                                     .parse::<Multiaddr>().unwrap()),
             Ok(SocketAddr::new(
                 IpAddr::V6(Ipv6Addr::new(
                     65535,
@@ -217,7 +216,7 @@ mod tests {
 
         std::thread::spawn(move || {
             let mut core = Core::new().unwrap();
-            let addr = Multiaddr::new("/ip4/127.0.0.1/tcp/12345").unwrap();
+            let addr = "/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap();
             let tcp = TcpConfig::new(core.handle());
             let handle = core.handle();
             let listener = tcp.listen_on(addr).unwrap().0.for_each(|(sock, _)| {
@@ -238,7 +237,7 @@ mod tests {
             core.run(listener).unwrap();
         });
         std::thread::sleep(std::time::Duration::from_millis(100));
-        let addr = Multiaddr::new("/ip4/127.0.0.1/tcp/12345").unwrap();
+        let addr = "/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap();
         let mut core = Core::new().unwrap();
         let tcp = TcpConfig::new(core.handle());
         // Obtain a future socket through dialing
@@ -261,7 +260,7 @@ mod tests {
         let core = Core::new().unwrap();
         let tcp = TcpConfig::new(core.handle());
 
-        let addr = Multiaddr::new("/ip4/127.0.0.1/tcp/0").unwrap();
+        let addr = "/ip4/127.0.0.1/tcp/0".parse::<Multiaddr>().unwrap();
         assert!(addr.to_string().contains("tcp/0"));
 
         let (_, new_addr) = tcp.listen_on(addr).unwrap();
@@ -273,7 +272,7 @@ mod tests {
         let core = Core::new().unwrap();
         let tcp = TcpConfig::new(core.handle());
 
-        let addr = Multiaddr::new("/ip6/::1/tcp/0").unwrap();
+        let addr: Multiaddr = "/ip6/::1/tcp/0".parse().unwrap();
         assert!(addr.to_string().contains("tcp/0"));
 
         let (_, new_addr) = tcp.listen_on(addr).unwrap();
@@ -285,7 +284,7 @@ mod tests {
         let core = Core::new().unwrap();
         let tcp = TcpConfig::new(core.handle());
 
-        let addr = Multiaddr::new("/ip4/127.0.0.1/tcp/12345/tcp/12345").unwrap();
+        let addr = "/ip4/127.0.0.1/tcp/12345/tcp/12345".parse::<Multiaddr>().unwrap();
         assert!(tcp.listen_on(addr).is_err());
     }
 }

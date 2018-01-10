@@ -38,7 +38,7 @@ impl fmt::Display for Multiaddr {
     /// ```
     /// use multiaddr::Multiaddr;
     ///
-    /// let address = Multiaddr::new("/ip4/127.0.0.1/udt").unwrap();
+    /// let address: Multiaddr = "/ip4/127.0.0.1/udt".parse().unwrap();
     /// assert_eq!(address.to_string(), "/ip4/127.0.0.1/udt");
     /// ```
     ///
@@ -52,51 +52,6 @@ impl fmt::Display for Multiaddr {
 }
 
 impl Multiaddr {
-    /// Create a new multiaddr based on a string representation, like
-    /// `/ip4/127.0.0.1/udp/1234`.
-    ///
-    /// # Examples
-    ///
-    /// Simple construction
-    ///
-    /// ```
-    /// use multiaddr::Multiaddr;
-    ///
-    /// let address = Multiaddr::new("/ip4/127.0.0.1/udp/1234").unwrap();
-    /// assert_eq!(address.to_bytes(), [
-    ///     4, 127, 0, 0, 1,
-    ///     17, 4, 210
-    /// ]);
-    /// ```
-    ///
-    #[deprecated(note = "Use `string.parse()` instead")]
-    pub fn new(input: &str) -> Result<Multiaddr> {
-        let mut bytes = Vec::new();
-
-        let mut parts = input.split('/');
-        // A multiaddr must start with `/`
-        if !parts.next().ok_or(Error::InvalidMultiaddr)?.is_empty() {
-            return Err(Error::InvalidMultiaddr);
-        }
-
-        while let Some(part) = parts.next() {
-            let protocol: ProtocolId = part.parse()?;
-            let addr_component = match protocol.size() {
-                ProtocolArgSize::Fixed { bytes: 0 } => {
-                    protocol.parse_data("")?     // TODO: bad design
-                },
-                _ => {
-                    let data = parts.next().ok_or(Error::MissingAddress)?;
-                    protocol.parse_data(data)?
-                },
-            };
-
-            addr_component.write_bytes(&mut bytes).expect("writing to a Vec never fails");
-        }
-
-        Ok(Multiaddr { bytes: bytes })
-    }
-
     /// Return a copy to disallow changing the bytes directly
     pub fn to_bytes(&self) -> Vec<u8> {
         self.bytes.to_owned()
@@ -116,7 +71,7 @@ impl Multiaddr {
     /// ```
     /// use multiaddr::{Multiaddr, ProtocolId};
     ///
-    /// let address = Multiaddr::new("/ip4/127.0.0.1").unwrap();
+    /// let address: Multiaddr = "/ip4/127.0.0.1".parse().unwrap();
     /// assert_eq!(address.protocol(), vec![ProtocolId::IP4]);
     /// ```
     ///
@@ -133,9 +88,9 @@ impl Multiaddr {
     /// ```
     /// use multiaddr::Multiaddr;
     ///
-    /// let address = Multiaddr::new("/ip4/127.0.0.1").unwrap();
+    /// let address: Multiaddr = "/ip4/127.0.0.1".parse().unwrap();
     /// let nested = address.encapsulate("/udt").unwrap();
-    /// assert_eq!(nested, Multiaddr::new("/ip4/127.0.0.1/udt").unwrap());
+    /// assert_eq!(nested, "/ip4/127.0.0.1/udt".parse().unwrap());
     /// ```
     ///
     pub fn encapsulate<T: ToMultiaddr>(&self, input: T) -> Result<Multiaddr> {
@@ -154,9 +109,9 @@ impl Multiaddr {
     /// ```
     /// use multiaddr::{Multiaddr, ToMultiaddr};
     ///
-    /// let address = Multiaddr::new("/ip4/127.0.0.1/udt/sctp/5678").unwrap();
+    /// let address: Multiaddr = "/ip4/127.0.0.1/udt/sctp/5678".parse().unwrap();
     /// let unwrapped = address.decapsulate("/udt").unwrap();
-    /// assert_eq!(unwrapped, Multiaddr::new("/ip4/127.0.0.1").unwrap());
+    /// assert_eq!(unwrapped, "/ip4/127.0.0.1".parse().unwrap());
     ///
     /// assert_eq!(
     ///     address.decapsulate("/udt").unwrap(),
@@ -281,8 +236,31 @@ impl FromStr for Multiaddr {
     type Err = Error;
 
     #[inline]
-    fn from_str(s: &str) -> Result<Self> {
-        Multiaddr::new(s)
+    fn from_str(input: &str) -> Result<Self> {
+        let mut bytes = Vec::new();
+
+        let mut parts = input.split('/');
+        // A multiaddr must start with `/`
+        if !parts.next().ok_or(Error::InvalidMultiaddr)?.is_empty() {
+            return Err(Error::InvalidMultiaddr);
+        }
+
+        while let Some(part) = parts.next() {
+            let protocol: ProtocolId = part.parse()?;
+            let addr_component = match protocol.size() {
+                ProtocolArgSize::Fixed { bytes: 0 } => {
+                    protocol.parse_data("")?     // TODO: bad design
+                },
+                _ => {
+                    let data = parts.next().ok_or(Error::MissingAddress)?;
+                    protocol.parse_data(data)?
+                },
+            };
+
+            addr_component.write_bytes(&mut bytes).expect("writing to a Vec never fails");
+        }
+
+        Ok(Multiaddr { bytes: bytes })
     }
 }
 
@@ -337,14 +315,14 @@ impl ToMultiaddr for SocketAddr {
 
 impl ToMultiaddr for SocketAddrV4 {
     fn to_multiaddr(&self) -> Result<Multiaddr> {
-        Multiaddr::new(&format!("/ip4/{}/tcp/{}", self.ip(), self.port()))
+        format!("/ip4/{}/tcp/{}", self.ip(), self.port()).parse()
     }
 }
 
 impl ToMultiaddr for SocketAddrV6 {
     fn to_multiaddr(&self) -> Result<Multiaddr> {
         // TODO: Should how should we handle `flowinfo` and `scope_id`?
-        Multiaddr::new(&format!("/ip6/{}/tcp/{}", self.ip(), self.port()))
+        format!("/ip6/{}/tcp/{}", self.ip(), self.port()).parse()
     }
 }
 
@@ -359,25 +337,25 @@ impl ToMultiaddr for IpAddr {
 
 impl ToMultiaddr for Ipv4Addr {
     fn to_multiaddr(&self) -> Result<Multiaddr> {
-        Multiaddr::new(&format!("/ip4/{}", &self))
+        format!("/ip4/{}", &self).parse()
     }
 }
 
 impl ToMultiaddr for Ipv6Addr {
     fn to_multiaddr(&self) -> Result<Multiaddr> {
-        Multiaddr::new(&format!("/ip6/{}", &self))
+        format!("/ip6/{}", &self).parse()
     }
 }
 
 impl ToMultiaddr for String {
     fn to_multiaddr(&self) -> Result<Multiaddr> {
-        Multiaddr::new(self)
+        self.parse()
     }
 }
 
 impl<'a> ToMultiaddr for &'a str {
     fn to_multiaddr(&self) -> Result<Multiaddr> {
-        Multiaddr::new(self)
+        self.parse()
     }
 }
 
