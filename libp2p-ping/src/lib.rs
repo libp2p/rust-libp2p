@@ -90,6 +90,7 @@ use bytes::{Bytes, BytesMut, BufMut};
 use futures::{Future, Sink, Stream};
 use futures::future::{FutureResult, IntoFuture, loop_fn, Loop};
 use futures::sync::{mpsc, oneshot};
+use libp2p_swarm::Multiaddr;
 use libp2p_swarm::transport::{ConnectionUpgrade, Endpoint};
 use parking_lot::Mutex;
 use rand::Rand;
@@ -124,7 +125,7 @@ impl<C> ConnectionUpgrade<C> for Ping
 	type Future = FutureResult<Self::Output, IoError>;
 
 	#[inline]
-	fn upgrade(self, socket: C, _: Self::UpgradeIdentifier, _: Endpoint)
+	fn upgrade(self, socket: C, _: Self::UpgradeIdentifier, _: Endpoint, _: &Multiaddr)
 				-> Self::Future
 	{
 		// # How does it work?
@@ -277,15 +278,19 @@ mod tests {
 		let server = listener.incoming()
 		                     .into_future()
 		                     .map_err(|(e, _)| e.into())
-		                     .and_then(|(c, _)| Ping.upgrade(c.unwrap().0, (),
-							 								 Endpoint::Listener))
+		                     .and_then(|(c, _)| {
+								 Ping.upgrade(c.unwrap().0, (), Endpoint::Listener,
+											  &"/ip4/127.0.0.1/tcp/10000".parse().unwrap())
+							 })
 		                     .and_then(|(mut pinger, service)| {
 			pinger.ping().map_err(|_| panic!()).select(service).map_err(|_| panic!())
 		});
 
 		let client = TcpStream::connect(&listener_addr, &core.handle())
 			.map_err(|e| e.into())
-			.and_then(|c| Ping.upgrade(c, (), Endpoint::Dialer))
+			.and_then(|c| {
+				Ping.upgrade(c, (), Endpoint::Dialer, &"/ip4/127.0.0.1/tcp/10000".parse().unwrap())
+			})
 			.and_then(|(mut pinger, service)| {
 				pinger.ping().map_err(|_| panic!()).select(service).map_err(|_| panic!())
 			});
@@ -304,13 +309,16 @@ mod tests {
 		let server = listener.incoming()
 		                     .into_future()
 		                     .map_err(|(e, _)| e.into())
-		                     .and_then(|(c, _)| Ping.upgrade(c.unwrap().0, (),
-							 								 Endpoint::Listener))
+		                     .and_then(|(c, _)| {
+								 Ping.upgrade(c.unwrap().0, (), Endpoint::Listener,
+								 			  &"/ip4/127.0.0.1/tcp/10000".parse().unwrap())
+							 })
 		                     .and_then(|(_, service)| service.map_err(|_| panic!()));
 
 		let client = TcpStream::connect(&listener_addr, &core.handle())
 			.map_err(|e| e.into())
-			.and_then(|c| Ping.upgrade(c, (), Endpoint::Dialer))
+			.and_then(|c| Ping.upgrade(c, (), Endpoint::Dialer,
+						  &"/ip4/127.0.0.1/tcp/1000".parse().unwrap()))
 			.and_then(|(mut pinger, service)| {
 				let pings = (0 .. 20).map(move |_| {
 					pinger.ping().map_err(|_| ())

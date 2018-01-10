@@ -297,7 +297,7 @@ where
 	type Future = FromErr<O::Future, IoError>;
 
 	#[inline]
-	fn upgrade(self, socket: C, _: (), _: Endpoint) -> Self::Future {
+	fn upgrade(self, socket: C, _: (), _: Endpoint, _: &Multiaddr) -> Self::Future {
 		let upgrade = &self.upgrade;
 		upgrade(socket).into_future().from_err()
 	}
@@ -522,7 +522,8 @@ pub trait ConnectionUpgrade<C: AsyncRead + AsyncWrite> {
 	///
 	/// Because performing the upgrade may not be instantaneous (eg. it may require a handshake),
 	/// this function returns a future instead of the direct output.
-	fn upgrade(self, socket: C, id: Self::UpgradeIdentifier, ty: Endpoint) -> Self::Future;
+	fn upgrade(self, socket: C, id: Self::UpgradeIdentifier, ty: Endpoint,
+			   remote_addr: &Multiaddr) -> Self::Future;
 }
 
 /// Type of connection for the upgrade.
@@ -552,7 +553,7 @@ impl<C> ConnectionUpgrade<C> for DeniedConnectionUpgrade
 	}
 
 	#[inline]
-	fn upgrade(self, _: C, _: Self::UpgradeIdentifier, _: Endpoint) -> Self::Future {
+	fn upgrade(self, _: C, _: Self::UpgradeIdentifier, _: Endpoint, _: &Multiaddr) -> Self::Future {
 		unreachable!("the denied connection upgrade always fails to negotiate")
 	}
 }
@@ -597,13 +598,15 @@ where
 	type Future = EitherConnUpgrFuture<A::Future, B::Future>;
 
 	#[inline]
-	fn upgrade(self, socket: C, id: Self::UpgradeIdentifier, ty: Endpoint) -> Self::Future {
+	fn upgrade(self, socket: C, id: Self::UpgradeIdentifier, ty: Endpoint,
+			   remote_addr: &Multiaddr) -> Self::Future
+	{
 		match id {
 			EitherUpgradeIdentifier::First(id) => {
-				EitherConnUpgrFuture::First(self.0.upgrade(socket, id, ty))
+				EitherConnUpgrFuture::First(self.0.upgrade(socket, id, ty, remote_addr))
 			}
 			EitherUpgradeIdentifier::Second(id) => {
-				EitherConnUpgrFuture::Second(self.1.upgrade(socket, id, ty))
+				EitherConnUpgrFuture::Second(self.1.upgrade(socket, id, ty, remote_addr))
 			}
 		}
 	}
@@ -709,7 +712,7 @@ where
 	type NamesIter = iter::Once<(Bytes, ())>;
 
 	#[inline]
-	fn upgrade(self, i: C, _: (), _: Endpoint) -> Self::Future {
+	fn upgrade(self, i: C, _: (), _: Endpoint, _: &Multiaddr) -> Self::Future {
 		future::ok(i)
 	}
 
@@ -800,7 +803,7 @@ where
 	) -> Result<Box<Future<Item = C::Output, Error = IoError> + 'a>, (Self, Multiaddr)> {
 		let upgrade = self.upgrade;
 
-		let dialed_fut = match self.transports.dial(addr) {
+		let dialed_fut = match self.transports.dial(addr.clone()) {
 			Ok(f) => f.into_future(),
 			Err((trans, addr)) => {
 				let builder = UpgradedNode {
@@ -821,8 +824,8 @@ where
                     .map_err(|err| IoError::new(IoErrorKind::Other, err));
                 negotiated.map(|(upgrade_id, conn)| (upgrade_id, conn, upgrade))
             })
-            .and_then(|(upgrade_id, connection, upgrade)| {
-                upgrade.upgrade(connection, upgrade_id, Endpoint::Dialer)
+            .and_then(move |(upgrade_id, connection, upgrade)| {
+                upgrade.upgrade(connection, upgrade_id, Endpoint::Dialer, &addr)
             });
 
 		Ok(Box::new(future))
@@ -850,7 +853,7 @@ where
                 negotiated.map(|(upgrade_id, conn)| (upgrade_id, conn, upgrade, addr))
             })
             .and_then(|(upgrade_id, connection, upgrade, addr)| {
-                upgrade.upgrade(connection, upgrade_id, Endpoint::Dialer)
+                upgrade.upgrade(connection, upgrade_id, Endpoint::Dialer, &addr)
 					.map(|u| (u, addr))
             });
 
@@ -895,6 +898,7 @@ where
 		let stream = listening_stream
 			.map(move |(connection, client_addr)| {
 				let upgrade = upgrade.clone();
+				let remote_addr = client_addr.clone();
 				let connection = connection
 					// Try to negotiate the protocol
 					.and_then(move |connection| {
@@ -902,8 +906,9 @@ where
 							.map::<_, fn(_) -> _>(|(n, t)| (n, <Bytes as PartialEq>::eq, t));
 						multistream_select::listener_select_proto(connection, iter)
 							.map_err(|err| IoError::new(IoErrorKind::Other, err))
-							.and_then(|(upgrade_id, connection)| {
-								upgrade.upgrade(connection, upgrade_id, Endpoint::Listener)
+							.and_then(move |(upgrade_id, connection)| {
+								upgrade.upgrade(connection, upgrade_id, Endpoint::Listener,
+												&remote_addr)
 							})
 							.into_future()
 					});

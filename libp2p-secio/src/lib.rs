@@ -95,6 +95,7 @@ pub use self::error::SecioError;
 use bytes::{Bytes, BytesMut};
 use futures::{Future, Poll, StartSend, Sink, Stream};
 use futures::stream::MapErr as StreamMapErr;
+use libp2p_swarm::Multiaddr;
 use ring::signature::RSAKeyPair;
 use rw_stream_sink::RwStreamSink;
 use std::error::Error;
@@ -197,7 +198,7 @@ impl<S> libp2p_swarm::ConnectionUpgrade<S> for SecioConfig
 	}
 
 	#[inline]
-	fn upgrade(self, incoming: S, _: (), _: libp2p_swarm::Endpoint) -> Self::Future {
+	fn upgrade(self, incoming: S, _: (), _: libp2p_swarm::Endpoint, _: &Multiaddr) -> Self::Future {
 		let fut = SecioMiddleware::handshake(
 			incoming,
 			self.key,
