@@ -12,4 +12,4 @@ categories = ["asynchronous", "concurrency"]
 
 [dependencies]
 futures = "0.1.14"
-crossbeam = "0.2.10"
+parking_lot = "0.5.3"
