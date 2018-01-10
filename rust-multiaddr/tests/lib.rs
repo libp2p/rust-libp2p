@@ -17,20 +17,20 @@ fn protocol_to_name() {
 
 
 fn assert_bytes(source: &str, target: &str, protocols: Vec<ProtocolId>) -> () {
-    let address = Multiaddr::new(source).unwrap();
+    let address = source.parse::<Multiaddr>().unwrap();
     assert_eq!(hex::encode(address.to_bytes().as_slice()), target);
-    assert_eq!(address.protocol(), protocols);
+    assert_eq!(address.iter().map(|addr| addr.protocol_id()).collect::<Vec<_>>(), protocols);
 }
 fn ma_valid(source: &str, target: &str, protocols: Vec<ProtocolId>) -> () {
     assert_bytes(source, target, protocols);
-    assert_eq!(Multiaddr::new(source).unwrap().to_string(), source);
+    assert_eq!(source.parse::<Multiaddr>().unwrap().to_string(), source);
 }
 
 #[test]
 fn multiaddr_eq() {
-    let m1 = Multiaddr::new("/ip4/127.0.0.1/udp/1234").unwrap();
-    let m2 = Multiaddr::new("/ip4/127.0.0.1/tcp/1234").unwrap();
-    let m3 = Multiaddr::new("/ip4/127.0.0.1/tcp/1234").unwrap();
+    let m1 = "/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap();
+    let m2 = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().unwrap();
+    let m3 = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().unwrap();
 
     assert_ne!(m1, m2);
     assert_ne!(m2, m1);
@@ -135,7 +135,7 @@ fn construct_fail() {
                      "/p2p-circuit/50"];
 
     for address in &addresses {
-        assert!(Multiaddr::new(address).is_err(), address.to_string());
+        assert!(address.parse::<Multiaddr>().is_err(), address.to_string());
     }
 }
 
@@ -143,17 +143,17 @@ fn construct_fail() {
 #[test]
 fn to_multiaddr() {
     assert_eq!(Ipv4Addr::new(127, 0, 0, 1).to_multiaddr().unwrap(),
-               Multiaddr::new("/ip4/127.0.0.1").unwrap());
+               "/ip4/127.0.0.1".parse::<Multiaddr>().unwrap());
     assert_eq!(Ipv6Addr::new(0x2601, 0x9, 0x4f81, 0x9700, 0x803e, 0xca65, 0x66e8, 0xc21)
                    .to_multiaddr()
                    .unwrap(),
-               Multiaddr::new("/ip6/2601:9:4f81:9700:803e:ca65:66e8:c21").unwrap());
+               "/ip6/2601:9:4f81:9700:803e:ca65:66e8:c21".parse::<Multiaddr>().unwrap());
     assert_eq!("/ip4/127.0.0.1/tcp/1234".to_string().to_multiaddr().unwrap(),
-               Multiaddr::new("/ip4/127.0.0.1/tcp/1234").unwrap());
+               "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().unwrap());
     assert_eq!("/ip6/2601:9:4f81:9700:803e:ca65:66e8:c21".to_multiaddr().unwrap(),
-               Multiaddr::new("/ip6/2601:9:4f81:9700:803e:ca65:66e8:c21").unwrap());
+               "/ip6/2601:9:4f81:9700:803e:ca65:66e8:c21".parse::<Multiaddr>().unwrap());
     assert_eq!(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 1234).to_multiaddr().unwrap(),
-               Multiaddr::new("/ip4/127.0.0.1/tcp/1234").unwrap());
+               "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().unwrap());
     assert_eq!(SocketAddrV6::new(Ipv6Addr::new(0x2601,
                                                0x9,
                                                0x4f81,
@@ -167,5 +167,5 @@ fn to_multiaddr() {
                                  0)
                    .to_multiaddr()
                    .unwrap(),
-               Multiaddr::new("/ip6/2601:9:4f81:9700:803e:ca65:66e8:c21/tcp/1234").unwrap());
+               "/ip6/2601:9:4f81:9700:803e:ca65:66e8:c21/tcp/1234".parse::<Multiaddr>().unwrap());
 }

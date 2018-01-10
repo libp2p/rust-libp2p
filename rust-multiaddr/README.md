@@ -38,7 +38,7 @@ extern crate multiaddr;
 
 use multiaddr::{Multiaddr, ToMultiaddr};
 
-let address = Multiaddr::new("/ip4/127.0.0.1/udp/1234").unwrap();
+let address = "/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap();
 // or directly from a string
 let other = "/ip4/127.0.0.1".to_multiaddr().unwrap();
 

@@ -118,6 +118,18 @@ pub trait Transport {
 			upgrade: upgrade,
 		}
 	}
+
+	/// Builds a dummy implementation of `MuxedTransport` that uses this transport.
+	/// 
+	/// The resulting object will not actually use muxing. This means that dialing the same node
+	/// twice will result in two different connections instead of two substreams on the same
+	/// connection.
+	#[inline]
+	fn with_dummy_muxing(self) -> DummyMuxing<Self>
+		where Self: Sized
+	{
+		DummyMuxing { inner: self }
+	}
 }
 
 /// Extension trait for `Transport`. Implemented on structs that provide a `Transport` on which
@@ -522,6 +534,29 @@ pub enum Endpoint {
 	Listener,
 }
 
+/// Implementation of `ConnectionUpgrade` that always fails to negotiate.
+#[derive(Debug, Copy, Clone)]
+pub struct DeniedConnectionUpgrade;
+
+impl<C> ConnectionUpgrade<C> for DeniedConnectionUpgrade
+	where C: AsyncRead + AsyncWrite
+{
+	type NamesIter = iter::Empty<(Bytes, ())>;
+	type UpgradeIdentifier = ();		// TODO: could use `!`
+	type Output = ();		// TODO: could use `!`
+	type Future = Box<Future<Item = (), Error = IoError>>;		// TODO: could use `!`
+
+	#[inline]
+	fn protocol_names(&self) -> Self::NamesIter {
+		iter::empty()
+	}
+
+	#[inline]
+	fn upgrade(self, _: C, _: Self::UpgradeIdentifier, _: Endpoint) -> Self::Future {
+		unreachable!("the denied connection upgrade always fails to negotiate")
+	}
+}
+
 /// Extension trait for `ConnectionUpgrade`. Automatically implemented on everything.
 pub trait UpgradeExt {
 	/// Builds a struct that will choose an upgrade between `self` and `other`, depending on what
@@ -684,6 +719,53 @@ where
 	}
 }
 
+/// Dummy implementation of `MuxedTransport` that uses an inner `Transport`.
+#[derive(Debug, Copy, Clone)]
+pub struct DummyMuxing<T> {
+	inner: T,
+}
+
+impl<T> MuxedTransport for DummyMuxing<T>
+	where T: Transport
+{
+	type Incoming = future::Empty<(T::RawConn, Multiaddr), IoError>;
+
+	fn next_incoming(self) -> Self::Incoming
+		where Self: Sized
+	{
+		future::empty()
+	}
+}
+
+impl<T> Transport for DummyMuxing<T>
+	where T: Transport
+{
+	type RawConn = T::RawConn;
+	type Listener = T::Listener;
+	type ListenerUpgrade = T::ListenerUpgrade;
+	type Dial = T::Dial;
+
+	#[inline]
+	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)>
+	where
+		Self: Sized
+	{
+		self.inner.listen_on(addr).map_err(|(inner, addr)| {
+			(DummyMuxing { inner }, addr)
+		})
+	}
+
+	#[inline]
+	fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)>
+	where
+		Self: Sized
+	{
+		self.inner.dial(addr).map_err(|(inner, addr)| {
+			(DummyMuxing { inner }, addr)
+		})
+	}
+}
+
 /// Implements the `Transport` trait. Dials or listens, then upgrades any dialed or received
 /// connection.
 ///
@@ -752,7 +834,9 @@ where
 	/// This function returns the next incoming substream. You are strongly encouraged to call it
 	/// if you have a muxed transport.
 	pub fn next_incoming(self) -> Box<Future<Item = (C::Output, Multiaddr), Error = IoError> + 'a>
-		where T: MuxedTransport
+		where T: MuxedTransport,
+			  C::NamesIter: Clone, // TODO: not elegant
+			  C: Clone,
 	{
 		let upgrade = self.upgrade;
 
@@ -760,8 +844,8 @@ where
             // Try to negotiate the protocol.
             .and_then(move |(connection, addr)| {
                 let iter = upgrade.protocol_names()
-                    .map(|(name, id)| (name, <Bytes as PartialEq>::eq, id));
-                let negotiated = multistream_select::dialer_select_proto(connection, iter)
+                    .map::<_, fn(_) -> _>(|(name, id)| (name, <Bytes as PartialEq>::eq, id));
+                let negotiated = multistream_select::listener_select_proto(connection, iter)
                     .map_err(|err| IoError::new(IoErrorKind::Other, err));
                 negotiated.map(|(upgrade_id, conn)| (upgrade_id, conn, upgrade, addr))
             })

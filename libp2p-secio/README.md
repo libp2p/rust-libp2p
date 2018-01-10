@@ -37,7 +37,7 @@ let transport = TcpConfig::new(core.handle())
         }
     });
 
-let future = transport.dial(Multiaddr::new("/ip4/127.0.0.1/tcp/12345").unwrap())
+let future = transport.dial("/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap())
     .unwrap_or_else(|_| panic!("Unable to dial node"))
     .and_then(|connection| {
         // Sends "hello world" on the connection, will be encrypted.

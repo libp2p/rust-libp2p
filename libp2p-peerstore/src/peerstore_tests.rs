@@ -62,7 +62,7 @@ macro_rules! peerstore_tests {
             $($stmt;)*
             let peer_store = $create_peerstore;
             let peer_id = multihash::encode(multihash::Hash::SHA2512, &[1, 2, 3]).unwrap();
-            let addr = Multiaddr::new("/ip4/0.0.0.0/tcp/0").unwrap();
+            let addr = "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap();
 
             peer_store.peer_or_create(&peer_id).add_addr(addr.clone(), Duration::from_millis(5000));
 
@@ -76,7 +76,7 @@ macro_rules! peerstore_tests {
             $($stmt;)*
             let peer_store = $create_peerstore;
             let peer_id = multihash::encode(multihash::Hash::SHA2512, &[1, 2, 3]).unwrap();
-            let addr = Multiaddr::new("/ip4/0.0.0.0/tcp/0").unwrap();
+            let addr = "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap();
 
             peer_store.peer_or_create(&peer_id).add_addr(addr.clone(), Duration::from_millis(0));
             thread::sleep(Duration::from_millis(2));
@@ -90,7 +90,7 @@ macro_rules! peerstore_tests {
             $($stmt;)*
             let peer_store = $create_peerstore;
             let peer_id = multihash::encode(multihash::Hash::SHA2512, &[1, 2, 3]).unwrap();
-            let addr = Multiaddr::new("/ip4/0.0.0.0/tcp/0").unwrap();
+            let addr = "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap();
 
             peer_store.peer_or_create(&peer_id).add_addr(addr.clone(), Duration::from_millis(5000));
             peer_store.peer(&peer_id).unwrap().clear_addrs();
@@ -105,8 +105,8 @@ macro_rules! peerstore_tests {
             let peer_store = $create_peerstore;
             let peer_id = multihash::encode(multihash::Hash::SHA2512, &[1, 2, 3]).unwrap();
 
-            let addr1 = Multiaddr::new("/ip4/0.0.0.0/tcp/0").unwrap();
-            let addr2 = Multiaddr::new("/ip4/0.0.0.1/tcp/0").unwrap();
+            let addr1 = "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap();
+            let addr2 = "/ip4/0.0.0.1/tcp/0".parse::<Multiaddr>().unwrap();
 
             peer_store.peer_or_create(&peer_id).add_addr(addr1.clone(), Duration::from_millis(5000));
             peer_store.peer_or_create(&peer_id).add_addr(addr2.clone(), Duration::from_millis(5000));
@@ -124,8 +124,8 @@ macro_rules! peerstore_tests {
             let peer_store = $create_peerstore;
             let peer_id = multihash::encode(multihash::Hash::SHA2512, &[1, 2, 3]).unwrap();
 
-            let addr1 = Multiaddr::new("/ip4/0.0.0.0/tcp/0").unwrap();
-            let addr2 = Multiaddr::new("/ip4/0.0.0.1/tcp/0").unwrap();
+            let addr1 = "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap();
+            let addr2 = "/ip4/0.0.0.1/tcp/0".parse::<Multiaddr>().unwrap();
 
             peer_store.peer_or_create(&peer_id).add_addr(addr1.clone(), Duration::from_millis(5000));
             peer_store.peer_or_create(&peer_id).add_addr(addr2.clone(), Duration::from_millis(5000));
