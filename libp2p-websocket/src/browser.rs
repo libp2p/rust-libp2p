@@ -49,10 +49,10 @@ impl WsConfig {
 }
 
 impl Transport for WsConfig {
-    type RawConn = Connec;
+    type RawConn = WsConn;
     type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>>;        // TODO: use `!`
     type ListenerUpgrade = Box<Future<Item = Self::RawConn, Error = IoError>>;                      // TODO: use `!`
-    type Dial = FutureThen<oneshot::Receiver<Result<Connec, IoError>>, Result<Connec, IoError>, fn(Result<Result<Connec, IoError>, oneshot::Canceled>) -> Result<Connec, IoError>>;
+    type Dial = FutureThen<oneshot::Receiver<Result<WsConn, IoError>>, Result<WsConn, IoError>, fn(Result<Result<WsConn, IoError>, oneshot::Canceled>) -> Result<WsConn, IoError>>;
 
     #[inline]
     fn listen_on(self, a: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -75,7 +75,7 @@ impl Transport for WsConfig {
 
         // Create the JS `WebSocket` object.
         let websocket = {
-            let val = js!{
+            let val = js! {
                 try {
                     return new WebSocket(@{inner_addr});
                 } catch(e) {
@@ -107,10 +107,10 @@ impl Transport for WsConfig {
             }
         };
 
-        // Create a `open` channel that will be used to communicate the `Connec` that represents
+        // Create a `open` channel that will be used to communicate the `WsConn` that represents
         // the open dialing websocket. Also create a `open_cb` callback that will be used for the
         // `open` message of the websocket.
-        let (open_tx, open_rx) = oneshot::channel::<Result<Connec, IoError>>();
+        let (open_tx, open_rx) = oneshot::channel::<Result<WsConn, IoError>>();
         let open_tx = Arc::new(Mutex::new(Some(open_tx)));
         let websocket_clone = websocket.clone();
         let open_cb = {
@@ -124,18 +124,18 @@ impl Transport for WsConfig {
                 // is not supposed to happen.
                 let message_rx = message_rx.take().expect("the websocket can only open once");
 
-                // Send a `Connec` to the future that was returned by `dial`. Ignoring errors that
+                // Send a `WsConn` to the future that was returned by `dial`. Ignoring errors that
                 // would happen the future has been dropped by the user.
                 let _ = tx
-                    .send(Ok(Connec {
+                    .send(Ok(WsConn {
                         websocket: websocket_clone.clone(),
                         incoming_data: RwStreamSink::new(message_rx.then(|result| {
                             // An `Err` happens here if `message_tx` has been dropped. However
                             // `message_tx` is grabbed by the websocket, which stays alive for as
-                            // long as the `Connec` is alive.
+                            // long as the `WsConn` is alive.
                             match result {
                                 Ok(r) => r,
-                                Err(_) => unreachable!("the message channel outlives the Connec")
+                                Err(_) => unreachable!("the message channel outlives the WsConn")
                             }
                         })),
                     }));
@@ -155,7 +155,7 @@ impl Transport for WsConfig {
                                                   "close event on the websocket")));
         };
 
-        js!{
+        js! {
             var socket = @{websocket};
             var open_cb = @{open_cb};
             var message_cb = @{message_cb};
@@ -191,7 +191,7 @@ impl Transport for WsConfig {
     }
 }
 
-pub struct Connec {
+pub struct WsConn {
     websocket: Reference,
     // Stream of messages that goes through a `RwStreamSink` in order to become a `AsyncRead`.
     incoming_data: RwStreamSink<StreamThen<mpsc::UnboundedReceiver<Result<Vec<u8>, IoError>>,
@@ -200,38 +200,38 @@ pub struct Connec {
                                            >>,
 }
 
-impl Drop for Connec {
+impl Drop for WsConn {
     #[inline]
     fn drop(&mut self) {
         // TODO: apparently there's a memory leak related to callbacks?
-        js!{ @{&self.websocket}.close(); }
+        js! { @{&self.websocket}.close(); }
     }
 }
 
-impl AsyncRead for Connec {
+impl AsyncRead for WsConn {
 }
 
-impl Read for Connec {
+impl Read for WsConn {
     #[inline]
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
         self.incoming_data.read(buf)
     }
 }
 
-impl AsyncWrite for Connec {
+impl AsyncWrite for WsConn {
     #[inline]
     fn shutdown(&mut self) -> Poll<(), IoError> {
         Ok(Async::Ready(()))
     }
 }
 
-impl Write for Connec {
+impl Write for WsConn {
     fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
         let typed_array = TypedArray::from(buf);
 
         // `send` can throw if the websocket isn't open (which can happen if it was closed by the
         // remote).
-        let returned = js!{
+        let returned = js! {
             try {
                 @{&self.websocket}.send(@{typed_array.buffer()});
                 return true;
