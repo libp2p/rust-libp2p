@@ -74,11 +74,9 @@ where
 		};
 
 		let (inner_listen, new_addr) = match self.transport.listen_on(inner_addr) {
-			Ok((listen, inner_new_addr)) => {
+			Ok((listen, mut new_addr)) => {
 				// Need to suffix `/ws` to the listening address.
-				let new_addr = inner_new_addr
-					.encapsulate("/ws")
-					.expect("the /ws suffix is always valid");
+				new_addr.append(AddrComponent::WS);
 				(listen, new_addr)
 			}
 			Err((transport, _)) => {
@@ -91,11 +89,9 @@ where
 			}
 		};
 
-		let listen = inner_listen.map::<_, fn(_) -> _>(|(stream, client_addr)| {
+		let listen = inner_listen.map::<_, fn(_) -> _>(|(stream, mut client_addr)| {
 			// Need to suffix `/ws` to each client address.
-			let client_addr = client_addr
-				.encapsulate("/ws")
-				.expect("the /ws suffix is always valid");
+			client_addr.append(AddrComponent::WS);
 
 			// Upgrade the listener to websockets like the websockets library requires us to do.
 			let upgraded = stream.and_then(|stream| {
@@ -118,8 +114,9 @@ where
                                             OwnedMessage::Binary(data) => Ok(Some(data)),
                                             OwnedMessage::Text(data) => Ok(Some(data.into_bytes())),
                                             OwnedMessage::Close(_) => Ok(None),
-                                            // TODO: pings and pongs ; freaking hard
-                                            _ => unimplemented!()
+                                            // TODO: handle pings and pongs, which is freaking hard
+											//		 for now we close the socket when that happens
+                                            _ => Ok(None)
                                         }
                                     })
                                     // TODO: is there a way to merge both lines into one?
@@ -181,8 +178,9 @@ where
 								OwnedMessage::Binary(data) => Ok(data),
 								OwnedMessage::Text(data) => Ok(data.into_bytes()),
 								// TODO: pings and pongs and close messages need to be
-								//       answered ; and this is really hard
-								_ => unimplemented!(),
+								//       answered ; and this is really hard ; for now we produce
+								//		 an error when that happens
+								_ => Err(IoError::new(IoErrorKind::Other, "unimplemented")),
 							}
 						});
 					let read_write = RwStreamSink::new(framed_data);

@@ -38,21 +38,21 @@ use tokio_io::{AsyncRead, AsyncWrite};
 ///
 /// > **Note**: The `/wss` protocol isn't supported.
 #[derive(Debug, Clone)]
-pub struct WsConfig;
+pub struct BrowserWsConfig;
 
-impl WsConfig {
+impl BrowserWsConfig {
     /// Creates a new configuration object for websocket.
     #[inline]
-    pub fn new() -> WsConfig {
-        WsConfig
+    pub fn new() -> BrowserWsConfig {
+        BrowserWsConfig
     }
 }
 
-impl Transport for WsConfig {
-    type RawConn = WsConn;
+impl Transport for BrowserWsConfig {
+    type RawConn = BrowserWsConn;
     type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>>;        // TODO: use `!`
     type ListenerUpgrade = Box<Future<Item = Self::RawConn, Error = IoError>>;                      // TODO: use `!`
-    type Dial = FutureThen<oneshot::Receiver<Result<WsConn, IoError>>, Result<WsConn, IoError>, fn(Result<Result<WsConn, IoError>, oneshot::Canceled>) -> Result<WsConn, IoError>>;
+    type Dial = FutureThen<oneshot::Receiver<Result<BrowserWsConn, IoError>>, Result<BrowserWsConn, IoError>, fn(Result<Result<BrowserWsConn, IoError>, oneshot::Canceled>) -> Result<BrowserWsConn, IoError>>;
 
     #[inline]
     fn listen_on(self, a: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -107,10 +107,10 @@ impl Transport for WsConfig {
             }
         };
 
-        // Create a `open` channel that will be used to communicate the `WsConn` that represents
+        // Create a `open` channel that will be used to communicate the `BrowserWsConn` that represents
         // the open dialing websocket. Also create a `open_cb` callback that will be used for the
         // `open` message of the websocket.
-        let (open_tx, open_rx) = oneshot::channel::<Result<WsConn, IoError>>();
+        let (open_tx, open_rx) = oneshot::channel::<Result<BrowserWsConn, IoError>>();
         let open_tx = Arc::new(Mutex::new(Some(open_tx)));
         let websocket_clone = websocket.clone();
         let open_cb = {
@@ -124,18 +124,18 @@ impl Transport for WsConfig {
                 // is not supposed to happen.
                 let message_rx = message_rx.take().expect("the websocket can only open once");
 
-                // Send a `WsConn` to the future that was returned by `dial`. Ignoring errors that
+                // Send a `BrowserWsConn` to the future that was returned by `dial`. Ignoring errors that
                 // would happen the future has been dropped by the user.
                 let _ = tx
-                    .send(Ok(WsConn {
+                    .send(Ok(BrowserWsConn {
                         websocket: websocket_clone.clone(),
                         incoming_data: RwStreamSink::new(message_rx.then(|result| {
                             // An `Err` happens here if `message_tx` has been dropped. However
                             // `message_tx` is grabbed by the websocket, which stays alive for as
-                            // long as the `WsConn` is alive.
+                            // long as the `BrowserWsConn` is alive.
                             match result {
                                 Ok(r) => r,
-                                Err(_) => unreachable!("the message channel outlives the WsConn")
+                                Err(_) => unreachable!("the message channel outlives the BrowserWsConn")
                             }
                         })),
                     }));
@@ -191,7 +191,7 @@ impl Transport for WsConfig {
     }
 }
 
-pub struct WsConn {
+pub struct BrowserWsConn {
     websocket: Reference,
     // Stream of messages that goes through a `RwStreamSink` in order to become a `AsyncRead`.
     incoming_data: RwStreamSink<StreamThen<mpsc::UnboundedReceiver<Result<Vec<u8>, IoError>>,
@@ -200,7 +200,7 @@ pub struct WsConn {
                                            >>,
 }
 
-impl Drop for WsConn {
+impl Drop for BrowserWsConn {
     #[inline]
     fn drop(&mut self) {
         // TODO: apparently there's a memory leak related to callbacks?
@@ -208,24 +208,24 @@ impl Drop for WsConn {
     }
 }
 
-impl AsyncRead for WsConn {
+impl AsyncRead for BrowserWsConn {
 }
 
-impl Read for WsConn {
+impl Read for BrowserWsConn {
     #[inline]
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
         self.incoming_data.read(buf)
     }
 }
 
-impl AsyncWrite for WsConn {
+impl AsyncWrite for BrowserWsConn {
     #[inline]
     fn shutdown(&mut self) -> Poll<(), IoError> {
         Ok(Async::Ready(()))
     }
 }
 
-impl Write for WsConn {
+impl Write for BrowserWsConn {
     fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
         let typed_array = TypedArray::from(buf);
 

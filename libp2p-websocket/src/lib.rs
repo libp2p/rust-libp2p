@@ -33,16 +33,16 @@
 //!
 //! # Emscripten
 //!
-//! On emscripten, you can create a `WsConfig` object with `WsConfig::new()`. It can then be used
-//! as a transport.
+//! On emscripten, you can create a `BrowserWsConfig` object with `BrowserWsConfig::new()`. It can
+//! then be used as a transport.
 //!
 //! Listening on a websockets multiaddress isn't supported on emscripten. Dialing a multiaddress
 //! which uses `ws` on top of TCP/IP will automatically use the `XMLHttpRequest` Javascript object.
 //!
 //! ```ignore
-//! use libp2p_websocket::WsConfig;
+//! use libp2p_websocket::BrowserWsConfig;
 //!
-//! let ws_config = WsConfig::new();
+//! let ws_config = BrowserWsConfig::new();
 //! // let _ = ws_config.dial("/ip4/40.41.42.43/tcp/12345/ws".parse().unwrap());
 //! ```
 //!
@@ -51,7 +51,8 @@
 //! On other operating systems, this library doesn't open any socket by itself. Instead it must be
 //! plugged on top of another implementation of `Transport` such as TCP/IP.
 //!
-//! This underlying transport must be passed to the `WsConfig::new()` function.
+//! This underlying transport must be put inside a `WsConfig` object through the
+//! `WsConfig::new()` function.
 //!
 //! ```
 //! extern crate libp2p_swarm;
@@ -91,6 +92,6 @@ mod desktop;
 mod browser;
 
 #[cfg(target_os = "emscripten")]
-pub use self::browser::WsConfig;
+pub use self::browser::{BrowserWsConfig, BrowserWsConn};
 #[cfg(not(target_os = "emscripten"))]
 pub use self::desktop::WsConfig;

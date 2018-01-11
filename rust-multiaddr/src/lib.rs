@@ -102,6 +102,23 @@ impl Multiaddr {
         Ok(Multiaddr { bytes: bytes })
     }
 
+    /// Adds an already-parsed address component to the end of this multiaddr.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use multiaddr::{Multiaddr, AddrComponent};
+    ///
+    /// let mut address: Multiaddr = "/ip4/127.0.0.1".parse().unwrap();
+    /// address.append(AddrComponent::TCP(10000));
+    /// assert_eq!(address, "/ip4/127.0.0.1/tcp/10000".parse().unwrap());
+    /// ```
+    ///
+    #[inline]
+    pub fn append(&mut self, component: AddrComponent) {
+        component.write_bytes(&mut self.bytes).expect("writing to a Vec never fails")
+    }
+
     /// Remove the outermost address.
     ///
     /// # Examples
