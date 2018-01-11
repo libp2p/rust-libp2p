@@ -35,8 +35,6 @@ use tokio_io::{AsyncRead, AsyncWrite};
 ///
 /// This implementation of `Transport` accepts any address that looks like
 /// `/ip4/.../tcp/.../ws` or `/ip6/.../tcp/.../ws`, and connect to the corresponding IP and port.
-///
-/// > **Note**: The `/wss` protocol isn't supported.
 #[derive(Debug, Clone)]
 pub struct BrowserWsConfig;
 
@@ -290,6 +288,12 @@ fn multiaddr_to_target(addr: &Multiaddr) -> Result<String, ()> {
 		}
 		(&AddrComponent::IP6(ref ip), &AddrComponent::TCP(port), &AddrComponent::WS) => {
 			Ok(format!("ws://[{}]:{}/", ip, port))
+		}
+		(&AddrComponent::IP4(ref ip), &AddrComponent::TCP(port), &AddrComponent::WSS) => {
+			Ok(format!("wss://{}:{}/", ip, port))
+		}
+		(&AddrComponent::IP6(ref ip), &AddrComponent::TCP(port), &AddrComponent::WSS) => {
+			Ok(format!("wss://[{}]:{}/", ip, port))
 		}
 		_ => Err(()),
 	}

@@ -31,10 +31,10 @@ use websocket::stream::async::Stream as AsyncStream;
 /// Represents the configuration for a websocket transport capability for libp2p. Must be put on
 /// top of another `Transport`.
 ///
-/// This implementation of `Transport` accepts any address that ends with `/ws`, and will try to
-/// pass the underlying multiaddress to the underlying `Transport`.
+/// This implementation of `Transport` accepts any address that ends with `/ws` or `/wss`, and will
+/// try to pass the underlying multiaddress to the underlying `Transport`.
 ///
-/// > **Note**: The `/wss` protocol isn't supported.
+/// > **Note**: `/wss` is only supported for dialing and not listening.
 #[derive(Debug, Clone)]
 pub struct WsConfig<T> {
 	transport: T,
@@ -143,8 +143,9 @@ where
 
 	fn dial(self, original_addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
 		let mut inner_addr = original_addr.clone();
-		match inner_addr.pop() {
-			Some(AddrComponent::WS) => {}
+		let is_wss = match inner_addr.pop() {
+			Some(AddrComponent::WS) => false,
+			Some(AddrComponent::WSS) => true,
 			_ => return Err((self, original_addr)),
 		};
 
@@ -160,10 +161,10 @@ where
 			}
 		};
 
-		let dial = inner_dial.into_future().and_then(|connec| {
+		let dial = inner_dial.into_future().and_then(move |connec| {
 			// We pass a dummy address to `ClientBuilder` because it is never used anywhere
 			// in the negotiation anyway, and we use `async_connect_on` to pass a stream.
-			ClientBuilder::new("ws://127.0.0.1:80")
+			ClientBuilder::new(if is_wss { "wss://127.0.0.1" } else { "ws://127.0.0.1" })
 				.expect("hard-coded ws address is always valid")
 				.async_connect_on(connec)
 				.map_err(|err| IoError::new(IoErrorKind::Other, err))
