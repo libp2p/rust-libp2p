@@ -1,0 +1,10 @@
+[package]
+name = "libp2p-pki"
+version = "0.1.0"
+authors = ["Vurich <jackefransham@gmail.com>"]
+
+[dependencies]
+asn1 = { path = "../rust-asn1" }
+
+[dev-dependencies]
+base64 = "0.9.0"

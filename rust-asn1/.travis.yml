@@ -1,0 +1,16 @@
+language: rust
+
+rust:
+    - stable
+    - beta
+    - nightly
+
+
+cache: cargo
+
+branches:
+    only:
+        - master
+
+notifications:
+    email: false

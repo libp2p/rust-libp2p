@@ -1,0 +1,14 @@
+[package]
+name = "asn1"
+version = "0.2.0"
+authors = ["Alex Gaynor <alex.gaynor@gmail.com>"]
+repository = "https://github.com/alex/rust-asn1"
+keywords = ["asn1"]
+license = "BSD-3-Clause"
+description = "ASN.1 (DER) serializer for Rust."
+
+[dependencies]
+byteorder = ">= 0.5.0"
+chrono = "0.4.0"
+num = "0.1.41"
+smallvec = "0.6.0"

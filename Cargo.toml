@@ -6,6 +6,7 @@ members = [
     "libp2p-identify",
     "libp2p-peerstore",
     "libp2p-ping",
+    "libp2p-pki",
     "libp2p-secio",
     "libp2p-swarm",
     "libp2p-tcp-transport",
