@@ -49,17 +49,17 @@ mod structs_proto;
 /// Prototype for an upgrade to the identity protocol.
 #[derive(Debug, Clone)]
 pub struct IdentifyProtocol {
-	pub information: IdentifyInfo,
-}
-
-impl IdentifyProtocol {
-	/// Builds a new `IdentifyProtocol`.
-	#[inline]
-	pub fn new(information: IdentifyInfo) -> IdentifyProtocol {
-		IdentifyProtocol {
-			information
-		}
-	}
+	/// Our public key to report to the remote.
+	pub public_key: Vec<u8>,
+	/// Version of the "global" protocol, eg. `ipfs/1.0.0` or `polkadot/1.0.0`.
+	pub protocol_version: String,
+	/// Name and version of the client. Can be thought as similar to the `User-Agent` header
+	/// of HTTP.
+	pub agent_version: String,
+	/// Addresses that we are listening on.
+	pub listen_addrs: Vec<Multiaddr>,
+	/// Protocols supported by us.
+	pub protocols: Vec<String>,
 }
 
 /// Information sent from the listener to the dialer.
@@ -67,13 +67,14 @@ impl IdentifyProtocol {
 pub struct IdentifyInfo {
 	/// Public key of the node.
 	pub public_key: Vec<u8>,
-	/// Version of the "global" protocol, eg. `ipfs/1.0.0`.
+	/// Version of the "global" protocol, eg. `ipfs/1.0.0` or `polkadot/1.0.0`.
 	pub protocol_version: String,
-	/// Name and version. Can be thought as similar to the `User-Agent` header of HTTP.
+	/// Name and version of the client. Can be thought as similar to the `User-Agent` header
+	/// of HTTP.
 	pub agent_version: String,
-	/// Addresses that are listened on.
+	/// Addresses that the remote is listening on.
 	pub listen_addrs: Vec<Multiaddr>,
-	/// Address that the server uses to communicate with the dialer.
+	/// Our own address as reported by the remote.
 	pub observed_addr: Multiaddr,
 	/// Protocols supported by the remote.
 	pub protocols: Vec<String>,
@@ -92,7 +93,7 @@ impl<C> ConnectionUpgrade<C> for IdentifyProtocol
 		iter::once((Bytes::from("/ipfs/id/1.0.0"), ()))
 	}
 
-	fn upgrade(self, socket: C, _: (), ty: Endpoint) -> Self::Future {
+	fn upgrade(self, socket: C, _: (), ty: Endpoint, remote_addr: &Multiaddr) -> Self::Future {
 		// TODO: use jack's varint library instead
 		let socket = length_delimited::Builder::new().length_field_length(1).new_framed(socket);
 
@@ -111,20 +112,18 @@ impl<C> ConnectionUpgrade<C> for IdentifyProtocol
 			}
 
 			Endpoint::Listener => {
-				let info = self.information;
-
-				let listen_addrs = info.listen_addrs
+				let listen_addrs = self.listen_addrs
 				                       .into_iter()
 				                       .map(|addr| addr.to_string().into_bytes())
 				                       .collect();
 
 				let mut message = structs_proto::Identify::new();
-				message.set_agentVersion(info.agent_version);
-				message.set_protocolVersion(info.protocol_version);
-				message.set_publicKey(info.public_key);
+				message.set_agentVersion(self.agent_version);
+				message.set_protocolVersion(self.protocol_version);
+				message.set_publicKey(self.public_key);
 				message.set_listenAddrs(listen_addrs);
-				message.set_observedAddr(info.observed_addr.to_string().into_bytes());
-				message.set_protocols(RepeatedField::from_vec(info.protocols));
+				message.set_observedAddr(remote_addr.to_string().into_bytes());
+				message.set_protocols(RepeatedField::from_vec(self.protocols));
 
 				let bytes = message.write_to_bytes()
 					.expect("writing protobuf failed ; should never happen");
@@ -189,7 +188,6 @@ mod tests {
 
 	use self::libp2p_tcp_transport::TcpConfig;
 	use self::tokio_core::reactor::Core;
-	use IdentifyInfo;
 	use IdentifyProtocol;
 	use futures::{IntoFuture, Future, Stream};
 	use libp2p_swarm::Transport;
@@ -198,14 +196,13 @@ mod tests {
 	fn basic() {
 		let mut core = Core::new().unwrap();
 		let tcp = TcpConfig::new(core.handle());
-		let with_proto = tcp.with_upgrade(IdentifyProtocol::new(IdentifyInfo {
+		let with_proto = tcp.with_upgrade(IdentifyProtocol {
 			public_key: vec![1, 2, 3, 4],
 			protocol_version: "ipfs/1.0.0".to_owned(),
 			agent_version: "agent/version".to_owned(),
 			listen_addrs: vec!["/ip4/5.6.7.8/tcp/12345".parse().unwrap()],
-			observed_addr: "/ip4/1.2.3.4/tcp/9876".parse().unwrap(),
 			protocols: vec!["ping".to_owned(), "kad".to_owned()],
-		}));
+		});
 
 		let (server, addr) = with_proto.clone()
 		                  		       .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())

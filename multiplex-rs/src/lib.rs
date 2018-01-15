@@ -42,7 +42,7 @@ use futures::{Async, Future, Poll};
 use futures::future::{self, FutureResult};
 use header::MultiplexHeader;
 use swarm::muxing::StreamMuxer;
-use swarm::{ConnectionUpgrade, Endpoint};
+use swarm::{ConnectionUpgrade, Endpoint, Multiaddr};
 use futures_mutex::Mutex;
 use read::{read_stream, MultiplexReadState};
 use shared::{buf_from_slice, ByteBuf, MultiplexShared};
@@ -348,7 +348,7 @@ where
     type NamesIter = iter::Once<(Bytes, ())>;
 
     #[inline]
-    fn upgrade(self, i: C, _: (), end: Endpoint) -> Self::Future {
+    fn upgrade(self, i: C, _: (), end: Endpoint, _: &Multiaddr) -> Self::Future {
         future::ok(Multiplex::new(i, end))
     }
 
