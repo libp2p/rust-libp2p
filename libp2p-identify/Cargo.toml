@@ -11,6 +11,7 @@ libp2p-swarm = { path = "../libp2p-swarm" }
 multiaddr = "0.2.0"
 protobuf = "1.4.2"
 tokio-io = "0.1.0"
+varint = { path = "../varint-rs" }
 
 [dev-dependencies]
 libp2p-tcp-transport = { path = "../libp2p-tcp-transport" }
