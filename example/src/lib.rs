@@ -23,7 +23,7 @@ extern crate libp2p_swarm;
 extern crate multiaddr;
 
 use libp2p_peerstore::{PeerAccess, Peerstore};
-use libp2p_swarm::Multiaddr;
+use multiaddr::Multiaddr;
 use std::time::Duration;
 
 /// Stores initial addresses on the given peer store. Uses a very large timeout.
@@ -50,7 +50,7 @@ where
 			.parse::<Multiaddr>()
 			.expect("failed to parse hard-coded multiaddr");
 
-		let ipfs_component = multiaddr.pop().expect("hard-coded multiaddr isn't empty");
+		let ipfs_component = multiaddr.pop().expect("hard-coded multiaddr is empty");
 		let public_key = match ipfs_component {
 			multiaddr::AddrComponent::IPFS(key) => key,
 			_ => panic!("hard-coded multiaddr didn't end with /ipfs/"),
