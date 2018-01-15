@@ -448,7 +448,7 @@ impl<T> Decoder for VarintCodec<T> {
                     }
                 },
                 VarintCodecInner::Poisonned => {
-                    panic!("Poisonned decoder")
+                    panic!("varint codec was poisoned")
                 },
             }
         }
