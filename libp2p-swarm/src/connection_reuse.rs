@@ -199,7 +199,6 @@ where S: Stream<Item = (F, Multiaddr), Error = IoError>,
 	fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
 		match self.listener.poll() {
 			Ok(Async::Ready(Some((upgrade, client_addr)))) => {
-				println!("ready stream");
 				self.current_upgrades.push((upgrade, client_addr));
 			}
 			Ok(Async::NotReady) => (),
