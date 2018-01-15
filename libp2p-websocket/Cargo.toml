@@ -1,0 +1,21 @@
+[package]
+name = "libp2p-websocket"
+version = "0.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+
+[dependencies]
+libp2p-swarm = { path = "../libp2p-swarm" }
+futures = "0.1"
+multiaddr = "0.2.0"
+rw-stream-sink = { path = "../rw-stream-sink" }
+tokio-io = "0.1"
+
+[target.'cfg(not(target_os = "emscripten"))'.dependencies]
+websocket = { version = "0.20.2", default-features = false, features = ["async", "async-ssl"] }
+
+[target.'cfg(target_os = "emscripten")'.dependencies]
+stdweb = { version = "0.1.3", default-features = false }
+
+[target.'cfg(not(target_os = "emscripten"))'.dev-dependencies]
+libp2p-tcp-transport = { path = "../libp2p-tcp-transport" }
+tokio-core = "0.1"

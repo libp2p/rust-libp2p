@@ -9,6 +9,7 @@ members = [
     "libp2p-secio",
     "libp2p-swarm",
     "libp2p-tcp-transport",
+    "libp2p-websocket",
     "multistream-select",
     "datastore",
     "futures-mutex",
