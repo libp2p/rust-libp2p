@@ -6,7 +6,9 @@ authors = ["pierre <pierre.krieger1708@gmail.com>"]
 [dependencies]
 bytes = "0.4"
 futures = "0.1"
+multiaddr = { path = "../rust-multiaddr" }
 multiplex = { path = "../multiplex-rs" }
+libp2p-peerstore = { path = "../libp2p-peerstore" }
 libp2p-secio = { path = "../libp2p-secio" }
 libp2p-swarm = { path = "../libp2p-swarm" }
 libp2p-tcp-transport = { path = "../libp2p-tcp-transport" }
