@@ -3,45 +3,6 @@
 //! API is similar to [`futures::sync::BiLock`](https://docs.rs/futures/0.1.11/futures/sync/struct.BiLock.html)
 //! However, it can be cloned into as many handles as desired.
 //!
-//! ```
-//! extern crate futures;
-//! extern crate futures_mutex;
-//!
-//! use futures::{Future, Poll, Async};
-//! use futures_mutex::Mutex;
-//!
-//! struct AddTwo {
-//!     lock: Mutex<usize>
-//! }
-//!
-//! impl Future for AddTwo {
-//!     type Item = usize;
-//!     type Error = ();
-//!     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-//!         match self.lock.poll_lock() {
-//!             Async::Ready(mut g) => {
-//!                 *g += 2;
-//!                 Ok(Async::Ready(*g))
-//!             },
-//!             Async::NotReady => Ok(Async::NotReady)
-//!         }
-//!     }
-//! }
-//!
-//! fn main() {
-//!     let lock1: Mutex<usize> = Mutex::new(0);
-//!     let lock2 = lock1.clone();
-//!
-//!     let future = AddTwo { lock: lock2 };
-//!
-//!     // This future will return the current value and the recovered lock.
-//!     let used_lock = lock1.into_lock().map(|b| (*b, b.unlock()));
-//!
-//!     let _ = future.join(used_lock).map(|(add_two, (value, _))| {
-//!         assert_eq!(add_two, value);
-//!     }).wait().unwrap();
-//! }
-//! ```
 
 extern crate futures;
 extern crate crossbeam;
@@ -131,17 +92,6 @@ impl<T> Mutex<T> {
         }
     }
 
-    /// Convert this lock into a future that resolves to a guard that allows access to the data.
-    /// This function returns `MutexAcquire<T>`, which resolves to a `MutexGuard<T>`
-    /// guard type.
-    ///
-    /// The returned future will never return an error.
-    pub fn into_lock(self) -> MutexIntoAcquire<T> {
-        MutexIntoAcquire {
-            inner: self
-        }
-    }
-
     /// We unlock the mutex and wait for someone to lock. We try and unpark as many tasks as we
     /// can to prevents dead tasks from deadlocking the mutex, or tasks that have finished their
     /// critical section and were awakened.
@@ -211,66 +161,6 @@ impl<'a, T> Future for MutexAcquire<'a, T> {
     }
 }
 
-/// Future returned by `FutMutex::lock` which resolves to a guard when a lock is acquired.
-#[derive(Debug)]
-pub struct MutexIntoAcquire<T> {
-    inner: Mutex<T>
-}
-
-impl<T> Future for MutexIntoAcquire<T> {
-    type Item = MutexAcquired<T>;
-    type Error = ();
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match self.inner.poll_lock() {
-            Async::Ready(r) => {
-                mem::forget(r);
-                Ok(MutexAcquired {
-                    inner: Mutex{ inner: self.inner.inner.clone() }
-                }.into())
-            },
-            Async::NotReady => Ok(Async::NotReady)
-        }
-    }
-}
-
-#[derive(Debug)]
-/// Resolved value of `FutMutexAcquire<T>` future
-///
-/// This value works like `FutMutexGuard<T>`, providing a RAII guard to the value `T` through
-/// `Deref` and `DerefMut`. Will unlock the lock when dropped; the original `FutMutex` can be
-/// recovered with `unlock()`.
-pub struct MutexAcquired<T> {
-    inner: Mutex<T>
-}
-
-impl<T> MutexAcquired<T> {
-    pub fn unlock(self) -> Mutex<T> {
-        Mutex {
-            inner: self.inner.inner.clone()
-        }
-    }
-}
-
-impl<T> Deref for MutexAcquired<T> {
-    type Target = T;
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.inner.inner.data.get() }
-    }
-}
-
-impl<T> DerefMut for MutexAcquired<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        unsafe { &mut *self.inner.inner.data.get() }
-    }
-}
-
-impl<T> Drop for MutexAcquired<T> {
-    fn drop(&mut self) {
-        self.inner.unlock();
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -337,12 +227,7 @@ mod tests {
             a: Some(lock1),
             remaining: N,
         };
-        let b = stream::iter_ok::<_, ()>(0..N).fold(lock2, |b, _n| {
-            b.into_lock().map(|mut b| {
-                *b += 1;
-                b.unlock()
-            })
-        });
+        let b = a.clone();
 
         let t1 = thread::spawn(move || a.wait());
         let b = b.wait().expect("b error");
@@ -357,6 +242,7 @@ mod tests {
             Async::NotReady => panic!("poll not ready"),
         }
 
+        #[derive(Clone)]
         struct Increment {
             remaining: usize,
             a: Option<Mutex<usize>>,
