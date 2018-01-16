@@ -53,7 +53,7 @@ use tokio_io::{AsyncRead, AsyncWrite};
 /// >           on `Foo`.
 pub trait Transport {
 	/// The raw connection to a peer.
-	type RawConn: AsyncRead + AsyncWrite;
+	type RawConn;
 
 	/// The listener produces incoming connections.
 	/// 
@@ -281,7 +281,6 @@ where
 
 impl<C, F, O> ConnectionUpgrade<C> for SimpleProtocol<F>
 where
-	C: AsyncRead + AsyncWrite,
 	F: Fn(C) -> O,
 	O: IntoFuture<Error = IoError>,
 {
@@ -497,7 +496,7 @@ where
 /// > **Note**: The `upgrade` method of this trait uses `self` and not `&self` or `&mut self`.
 /// >           This has been designed so that you would implement this trait on `&Foo` or
 /// >           `&mut Foo` instead of directly on `Foo`.
-pub trait ConnectionUpgrade<C: AsyncRead + AsyncWrite> {
+pub trait ConnectionUpgrade<C> {
 	/// Iterator returned by `protocol_names`.
 	type NamesIter: Iterator<Item = (Bytes, Self::UpgradeIdentifier)>;
 	/// Type that serves as an identifier for the protocol. This type only exists to be returned
@@ -702,10 +701,7 @@ where
 #[derive(Debug, Copy, Clone)]
 pub struct PlainTextConfig;
 
-impl<C> ConnectionUpgrade<C> for PlainTextConfig
-where
-	C: AsyncRead + AsyncWrite,
-{
+impl<C> ConnectionUpgrade<C> for PlainTextConfig {
 	type Output = C;
 	type Future = FutureResult<C, IoError>;
 	type UpgradeIdentifier = ();
@@ -782,6 +778,7 @@ pub struct UpgradedNode<T, C> {
 impl<'a, T, C> UpgradedNode<T, C>
 where
 	T: Transport + 'a,
+	T::RawConn: AsyncRead + AsyncWrite,
 	C: ConnectionUpgrade<T::RawConn> + 'a,
 {
 	/// Turns this upgraded node into a `ConnectionReuse`. If the `Output` implements the
@@ -923,8 +920,8 @@ where
 impl<T, C> Transport for UpgradedNode<T, C>
 where
 	T: Transport + 'static,
+	T::RawConn: AsyncRead + AsyncWrite,
 	C: ConnectionUpgrade<T::RawConn> + 'static,
-	C::Output: AsyncRead + AsyncWrite,
 	C::NamesIter: Clone, // TODO: not elegant
 	C: Clone,
 {
@@ -947,8 +944,8 @@ where
 impl<T, C> MuxedTransport for UpgradedNode<T, C>
 where
 	T: MuxedTransport + 'static,
+	T::RawConn: AsyncRead + AsyncWrite,
 	C: ConnectionUpgrade<T::RawConn> + 'static,
-	C::Output: AsyncRead + AsyncWrite,
 	C::NamesIter: Clone, // TODO: not elegant
 	C: Clone,
 {

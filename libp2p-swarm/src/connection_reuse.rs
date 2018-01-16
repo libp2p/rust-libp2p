@@ -54,6 +54,7 @@ use parking_lot::Mutex;
 use smallvec::SmallVec;
 use std::io::Error as IoError;
 use std::sync::Arc;
+use tokio_io::{AsyncRead, AsyncWrite};
 use transport::{ConnectionUpgrade, MuxedTransport, Transport, UpgradedNode};
 
 /// Allows reusing the same muxed connection multiple times.
@@ -99,6 +100,7 @@ where
 impl<T, C> Transport for ConnectionReuse<T, C>
 where
 	T: Transport + 'static,                     // TODO: 'static :(
+	T::RawConn: AsyncRead + AsyncWrite,
 	C: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :(
 	C: Clone,
 	C::Output: StreamMuxer + Clone,
@@ -158,6 +160,7 @@ where
 impl<T, C> MuxedTransport for ConnectionReuse<T, C>
 where
 	T: Transport + 'static,                     // TODO: 'static :(
+	T::RawConn: AsyncRead + AsyncWrite,
 	C: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :(
 	C: Clone,
 	C::Output: StreamMuxer + Clone,

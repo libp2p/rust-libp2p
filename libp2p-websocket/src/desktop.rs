@@ -53,7 +53,7 @@ impl<T> WsConfig<T> {
 impl<T> Transport for WsConfig<T>
 where
 	T: Transport + 'static, // TODO: this 'static is pretty arbitrary and is necessary because of the websocket library
-	T::RawConn: Send, // TODO: this Send is pretty arbitrary and is necessary because of the websocket library
+	T::RawConn: AsyncStream + Send, // TODO: this Send is pretty arbitrary and is necessary because of the websocket library
 {
 	type RawConn = Box<AsyncStream>;
 	type Listener = stream::Map<
