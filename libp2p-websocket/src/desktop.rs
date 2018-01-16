@@ -53,15 +53,15 @@ impl<T> WsConfig<T> {
 impl<T> Transport for WsConfig<T>
 where
 	T: Transport + 'static, // TODO: this 'static is pretty arbitrary and is necessary because of the websocket library
-	T::RawConn: AsyncStream + Send, // TODO: this Send is pretty arbitrary and is necessary because of the websocket library
+	T::Output: AsyncStream + Send, // TODO: this Send is pretty arbitrary and is necessary because of the websocket library
 {
-	type RawConn = Box<AsyncStream>;
+	type Output = Box<AsyncStream>;
 	type Listener = stream::Map<
 		T::Listener,
 		fn((<T as Transport>::ListenerUpgrade, Multiaddr)) -> (Self::ListenerUpgrade, Multiaddr),
 	>;
-	type ListenerUpgrade = Box<Future<Item = Self::RawConn, Error = IoError>>;
-	type Dial = Box<Future<Item = Self::RawConn, Error = IoError>>;
+	type ListenerUpgrade = Box<Future<Item = Self::Output, Error = IoError>>;
+	type Dial = Box<Future<Item = Self::Output, Error = IoError>>;
 
 	fn listen_on(
 		self,

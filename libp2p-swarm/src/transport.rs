@@ -53,7 +53,7 @@ use tokio_io::{AsyncRead, AsyncWrite};
 /// >           on `Foo`.
 pub trait Transport {
 	/// The raw connection to a peer.
-	type RawConn;
+	type Output;
 
 	/// The listener produces incoming connections.
 	/// 
@@ -65,10 +65,10 @@ pub trait Transport {
 	/// After a connection has been received, we may need to do some asynchronous pre-processing
 	/// on it (eg. an intermediary protocol negotiation). While this pre-processing takes place, we
 	/// want to be able to continue polling on the listener.
-	type ListenerUpgrade: Future<Item = Self::RawConn, Error = IoError>;
+	type ListenerUpgrade: Future<Item = Self::Output, Error = IoError>;
 
 	/// A future which indicates that we are currently dialing to a peer.
-	type Dial: IntoFuture<Item = Self::RawConn, Error = IoError>;
+	type Dial: IntoFuture<Item = Self::Output, Error = IoError>;
 
 	/// Listen on the given multiaddr. Returns a stream of incoming connections, plus a modified
 	/// version of the `Multiaddr`. This new `Multiaddr` is the one that that should be advertised
@@ -111,7 +111,7 @@ pub trait Transport {
 	fn with_upgrade<U>(self, upgrade: U) -> UpgradedNode<Self, U>
 	where
 		Self: Sized,
-		U: ConnectionUpgrade<Self::RawConn>,
+		U: ConnectionUpgrade<Self::Output>,
 	{
 		UpgradedNode {
 			transports: self,
@@ -136,7 +136,7 @@ pub trait Transport {
 /// the dialed node can dial you back.
 pub trait MuxedTransport: Transport {
 	/// Future resolving to an incoming connection.
-	type Incoming: Future<Item = (Self::RawConn, Multiaddr), Error = IoError>;
+	type Incoming: Future<Item = (Self::Output, Multiaddr), Error = IoError>;
 
 	/// Returns the next incoming substream opened by a node that we dialed ourselves.
 	/// 
@@ -161,10 +161,10 @@ pub struct DeniedTransport;
 
 impl Transport for DeniedTransport {
 	// TODO: could use `!` for associated types once stable
-	type RawConn = Cursor<Vec<u8>>;
+	type Output = Cursor<Vec<u8>>;
 	type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>>;
-	type ListenerUpgrade = Box<Future<Item = Self::RawConn, Error = IoError>>;
-	type Dial = Box<Future<Item = Self::RawConn, Error = IoError>>;
+	type ListenerUpgrade = Box<Future<Item = Self::Output, Error = IoError>>;
+	type Dial = Box<Future<Item = Self::Output, Error = IoError>>;
 
 	#[inline]
 	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -178,7 +178,7 @@ impl Transport for DeniedTransport {
 }
 
 impl MuxedTransport for DeniedTransport {
-	type Incoming = future::Empty<(Self::RawConn, Multiaddr), IoError>;
+	type Incoming = future::Empty<(Self::Output, Multiaddr), IoError>;
 
 	#[inline]
 	fn next_incoming(self) -> Self::Incoming {
@@ -195,7 +195,7 @@ where
 	A: Transport,
 	B: Transport,
 {
-	type RawConn = EitherSocket<A::RawConn, B::RawConn>;
+	type Output = EitherSocket<A::Output, B::Output>;
 	type Listener = EitherListenStream<A::Listener, B::Listener>;
 	type ListenerUpgrade = EitherTransportFuture<A::ListenerUpgrade, B::ListenerUpgrade>;
 	type Dial =
@@ -266,7 +266,7 @@ where
 	A::Incoming: 'static,		// TODO: meh :-/
 	B::Incoming: 'static,		// TODO: meh :-/
 {
-	type Incoming = Box<Future<Item = (EitherSocket<A::RawConn, B::RawConn>, Multiaddr), Error = IoError>>;
+	type Incoming = Box<Future<Item = (EitherSocket<A::Output, B::Output>, Multiaddr), Error = IoError>>;
 
 	#[inline]
 	fn next_incoming(self) -> Self::Incoming {
@@ -727,7 +727,7 @@ pub struct DummyMuxing<T> {
 impl<T> MuxedTransport for DummyMuxing<T>
 	where T: Transport
 {
-	type Incoming = future::Empty<(T::RawConn, Multiaddr), IoError>;
+	type Incoming = future::Empty<(T::Output, Multiaddr), IoError>;
 
 	fn next_incoming(self) -> Self::Incoming
 		where Self: Sized
@@ -739,7 +739,7 @@ impl<T> MuxedTransport for DummyMuxing<T>
 impl<T> Transport for DummyMuxing<T>
 	where T: Transport
 {
-	type RawConn = T::RawConn;
+	type Output = T::Output;
 	type Listener = T::Listener;
 	type ListenerUpgrade = T::ListenerUpgrade;
 	type Dial = T::Dial;
@@ -778,8 +778,8 @@ pub struct UpgradedNode<T, C> {
 impl<'a, T, C> UpgradedNode<T, C>
 where
 	T: Transport + 'a,
-	T::RawConn: AsyncRead + AsyncWrite,
-	C: ConnectionUpgrade<T::RawConn> + 'a,
+	T::Output: AsyncRead + AsyncWrite,
+	C: ConnectionUpgrade<T::Output> + 'a,
 {
 	/// Turns this upgraded node into a `ConnectionReuse`. If the `Output` implements the
 	/// `StreamMuxer` trait, the returned object will implement `Transport` and `MuxedTransport`.
@@ -920,12 +920,12 @@ where
 impl<T, C> Transport for UpgradedNode<T, C>
 where
 	T: Transport + 'static,
-	T::RawConn: AsyncRead + AsyncWrite,
-	C: ConnectionUpgrade<T::RawConn> + 'static,
+	T::Output: AsyncRead + AsyncWrite,
+	C: ConnectionUpgrade<T::Output> + 'static,
 	C::NamesIter: Clone, // TODO: not elegant
 	C: Clone,
 {
-	type RawConn = C::Output;
+	type Output = C::Output;
 	type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>>;
 	type ListenerUpgrade = Box<Future<Item = C::Output, Error = IoError>>;
 	type Dial = Box<Future<Item = C::Output, Error = IoError>>;
@@ -944,8 +944,8 @@ where
 impl<T, C> MuxedTransport for UpgradedNode<T, C>
 where
 	T: MuxedTransport + 'static,
-	T::RawConn: AsyncRead + AsyncWrite,
-	C: ConnectionUpgrade<T::RawConn> + 'static,
+	T::Output: AsyncRead + AsyncWrite,
+	C: ConnectionUpgrade<T::Output> + 'static,
 	C::NamesIter: Clone, // TODO: not elegant
 	C: Clone,
 {

@@ -34,7 +34,7 @@ use {Multiaddr, MuxedTransport};
 pub fn swarm<T, H, F>(transport: T, handler: H)
                       -> (SwarmController<T>, SwarmFuture<T, H, F::Future>)
     where T: MuxedTransport + Clone + 'static,      // TODO: 'static :-/
-          H: FnMut(T::RawConn, Multiaddr) -> F,
+          H: FnMut(T::Output, Multiaddr) -> F,
           F: IntoFuture<Item = (), Error = IoError>,
 {
     let (new_dialers_tx, new_dialers_rx) = mpsc::unbounded();
@@ -103,7 +103,7 @@ impl<T> SwarmController<T>
     // TODO: consider returning a future so that errors can be processed?
     pub fn dial_custom_handler<Df, Dfu>(&self, multiaddr: Multiaddr, and_then: Df)
                                         -> Result<(), Multiaddr>
-        where Df: FnOnce(T::RawConn) -> Dfu + 'static,          // TODO: 'static :-/
+        where Df: FnOnce(T::Output) -> Dfu + 'static,          // TODO: 'static :-/
               Dfu: IntoFuture<Item = (), Error = IoError> + 'static,        // TODO: 'static :-/
     {
         match self.transport.clone().dial(multiaddr) {
@@ -155,7 +155,7 @@ pub struct SwarmFuture<T, H, F>
 
 impl<T, H, If, F> Future for SwarmFuture<T, H, F>
     where T: MuxedTransport + Clone + 'static,      // TODO: 'static :-/,
-          H: FnMut(T::RawConn, Multiaddr) -> If,
+          H: FnMut(T::Output, Multiaddr) -> If,
           If: IntoFuture<Future = F, Item = (), Error = IoError>,
           F: Future<Item = (), Error = IoError>,
 {
