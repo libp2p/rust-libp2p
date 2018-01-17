@@ -57,9 +57,22 @@ impl Multiaddr {
         self.bytes.to_owned()
     }
 
+    /// Returns the raw bytes representation of the multiaddr.
+    #[inline]
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.bytes
+    }
+
     /// Extracts a slice containing the entire underlying vector.
     pub fn as_slice(&self) -> &[u8] {
         &self.bytes
+    }
+
+    /// Builds a `Multiaddr` from its raw bytes representation.
+    #[inline]
+    pub fn from_bytes(bytes: Vec<u8>) -> Multiaddr {
+        // FIXME: OMG WE NEED SAFETY HERE
+        Multiaddr { bytes: bytes }
     }
 
     /// Return a list of protocols

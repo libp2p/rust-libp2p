@@ -174,7 +174,7 @@ impl<T: AsyncRead> Future for InboundFuture<T> {
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let mut lock = match self.state.poll_lock() {
             Async::Ready(lock) => lock,
-            Async::NotReady => return Ok(Async::NotReady),
+            Async::NotReady => { println!("lock not ready"); return Ok(Async::NotReady) },
         };
 
         // Attempt to make progress, but don't block if we can't
@@ -187,6 +187,7 @@ impl<T: AsyncRead> Future for InboundFuture<T> {
         let id = if let Some((id, _)) = lock.to_open.iter().next() {
             *id
         } else {
+            println!("id not ready");
             return Ok(Async::NotReady);
         };
 

@@ -558,12 +558,55 @@ impl<C> ConnectionUpgrade<C> for DeniedConnectionUpgrade
 	}
 }
 
+/// Maps a connection upgrade output to something else.
+#[derive(Debug, Copy, Clone)]
+pub struct ConnectionUpgradeMap<U, F> {
+	inner: U,
+	map: F,
+}
+
+impl<C, U, F, O> ConnectionUpgrade<C> for ConnectionUpgradeMap<U, F>
+	where C: AsyncRead + AsyncWrite,
+		  U: ConnectionUpgrade<C>,
+		  F: FnOnce(U::Output) -> O,
+{
+	type NamesIter = U::NamesIter;
+	type UpgradeIdentifier = U::UpgradeIdentifier;
+	type Output = O;
+	type Future = future::Map<U::Future, F>;
+
+	#[inline]
+	fn protocol_names(&self) -> Self::NamesIter {
+		self.inner.protocol_names()
+	}
+
+	#[inline]
+	fn upgrade(self, connec: C, ident: Self::UpgradeIdentifier, endpoint: Endpoint,
+			   addr: &Multiaddr) -> Self::Future
+	{
+		self.inner
+			.upgrade(connec, ident, endpoint, addr)
+			.map(self.map)
+	}
+}
+
 /// Extension trait for `ConnectionUpgrade`. Automatically implemented on everything.
 pub trait UpgradeExt {
 	/// Builds a struct that will choose an upgrade between `self` and `other`, depending on what
 	/// the remote supports.
     fn or_upgrade<T>(self, other: T) -> OrUpgrade<Self, T>
 		where Self: Sized;
+
+	/// Maps the output of this connection upgrade to something else.
+	#[inline]
+	fn map_upgrade<F>(self, map: F) -> ConnectionUpgradeMap<Self, F>
+		where Self: Sized
+	{
+		ConnectionUpgradeMap {
+			inner: self,
+			map: map,
+		}
+	}
 }
 
 impl<T> UpgradeExt for T {
@@ -846,13 +889,15 @@ where
 		let future = self.transports.next_incoming()
             // Try to negotiate the protocol.
             .and_then(move |(connection, addr)| {
+				println!("got an incoming connec attempt from {:?}", addr);
                 let iter = upgrade.protocol_names()
                     .map::<_, fn(_) -> _>(|(name, id)| (name, <Bytes as PartialEq>::eq, id));
                 let negotiated = multistream_select::listener_select_proto(connection, iter)
-                    .map_err(|err| IoError::new(IoErrorKind::Other, err));
+                    .map_err(|err| { println!("err upgrading incoming: {:?}", err); IoError::new(IoErrorKind::Other, err) });
                 negotiated.map(|(upgrade_id, conn)| (upgrade_id, conn, upgrade, addr))
             })
             .and_then(|(upgrade_id, connection, upgrade, addr)| {
+				println!("incoming upgrade success for {:?}", addr);
                 upgrade.upgrade(connection, upgrade_id, Endpoint::Dialer, &addr)
 					.map(|u| (u, addr))
             });

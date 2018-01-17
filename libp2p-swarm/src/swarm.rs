@@ -19,8 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::io::Error as IoError;
+use std::time::Duration;
 use futures::{IntoFuture, Future, Stream, Async, Poll, future};
 use futures::sync::mpsc;
+use tokio_timer::{self, Timer, Timeout};
 use {ConnectionUpgrade, Multiaddr, MuxedTransport, UpgradedNode};
 
 /// Creates a swarm.
@@ -43,6 +45,8 @@ pub fn swarm<T, C, H, F>(transport: T, upgrade: C, handler: H)
     let (new_listeners_tx, new_listeners_rx) = mpsc::unbounded();
     let (new_toprocess_tx, new_toprocess_rx) = mpsc::unbounded();
 
+    let timer = tokio_timer::wheel().build();
+
     let upgraded = transport.clone().with_upgrade(upgrade);
 
     let future = SwarmFuture {
@@ -61,6 +65,7 @@ pub fn swarm<T, C, H, F>(transport: T, upgrade: C, handler: H)
     let controller = SwarmController {
         transport: transport,
         upgraded: upgraded,
+        timer: timer,
         new_listeners: new_listeners_tx,
         new_dialers: new_dialers_tx,
         new_toprocess: new_toprocess_tx,
@@ -76,6 +81,7 @@ pub struct SwarmController<T, C>
 {
     transport: T,
     upgraded: UpgradedNode<T, C>,
+    timer: Timer,
     new_listeners: mpsc::UnboundedSender<Box<Stream<Item = (Box<Future<Item = C::Output, Error = IoError>>, Multiaddr), Error = IoError>>>,
     new_dialers: mpsc::UnboundedSender<(Box<Future<Item = C::Output, Error = IoError>>, Multiaddr)>,
     new_toprocess: mpsc::UnboundedSender<Box<Future<Item = (), Error = IoError>>>,
@@ -89,6 +95,7 @@ impl<T, C> Clone for SwarmController<T, C>
         SwarmController {
             transport: self.transport.clone(),
             upgraded: self.upgraded.clone(),
+            timer: self.timer.clone(),
             new_listeners: self.new_listeners.clone(),
             new_dialers: self.new_dialers.clone(),
             new_toprocess: self.new_toprocess.clone(),
@@ -111,7 +118,7 @@ impl<T, C> SwarmController<T, C>
     {
         match self.transport.clone().with_upgrade(upgrade).dial(multiaddr.clone()) {
             Ok(dial) => {
-                let dial = Box::new(dial.map(Into::into)) as Box<Future<Item = _, Error = _>>;
+                let dial = Box::new(self.timer.timeout(dial.map(Into::into), Duration::from_secs(2))) as Box<Future<Item = _, Error = _>>;
                 // Ignoring errors if the receiver has been closed, because in that situation
                 // nothing is going to be processed anyway.
                 let _ = self.new_dialers.unbounded_send((dial, multiaddr));
@@ -204,15 +211,21 @@ impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
             },
             Ok(Async::NotReady) => {},
             // TODO: may not be the best idea because we're killing the whole server
-            Err(err) => return Err(err),
+            Err(err) => {
+                println!("err from new incoming: {:?}", err);
+            },//return Err(err),
         };
 
         match self.new_listeners.poll() {
             Ok(Async::Ready(Some(new_listener))) => {
                 self.listeners.push(new_listener);
             },
-            Ok(Async::Ready(None)) | Err(_) => {
+            Ok(Async::Ready(None)) => {
                 // New listener sender has been closed.
+            },
+            Err(err) => {
+                // TODO:
+                println!("err from new listener: {:?}", err);
             },
             Ok(Async::NotReady) => {},
         };
@@ -261,7 +274,10 @@ impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
                 Ok(Async::NotReady) => {
                     self.listeners_upgrade.push((upgrade, addr));
                 },
-                Err(err) => return Err(err),
+                Err(err) => {
+                    // TODO:
+                    println!("error form listener upgrade: {:?}", err);
+                },//return Err(err),
             }
         }
 
@@ -274,7 +290,10 @@ impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
                 Ok(Async::NotReady) => {
                     self.dialers.push((dialer, addr));
                 },
-                Err(err) => return Err(err),
+                Err(err) => {
+                    // TODO:
+                    println!("error from dialer upgrade: {:?}", err);
+                },//return Err(err),
             }
         }
 
