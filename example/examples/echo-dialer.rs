@@ -31,7 +31,7 @@ extern crate tokio_io;
 use bytes::BytesMut;
 use futures::{Future, Sink, Stream};
 use std::env;
-use swarm::{UpgradeExt, SimpleProtocol, Transport, DeniedConnectionUpgrade};
+use swarm::{UpgradeExt, SimpleProtocol, Transport};
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 use tokio_io::codec::length_delimited;
@@ -75,29 +75,29 @@ fn main() {
         // `Transport` because the output of the upgrade is not a stream but a controller for
         // muxing. We have to explicitly call `into_connection_reuse()` in order to turn this into
         // a `Transport`.
-        .into_connection_reuse();
+        .into_connection_reuse()
+
+        // On top of this, use a custom "echo" protocol.
+        .with_upgrade(SimpleProtocol::new("/echo/1.0.0", |socket| {
+            // This closure is called whenever a stream using the "echo" protocol has been
+            // successfully negotiated. The parameter is the raw socket (implements the AsyncRead
+            // and AsyncWrite traits), and the closure must return an implementation of
+            // `IntoFuture` that can yield any type of object.
+            Ok(length_delimited::Framed::<_, BytesMut>::new(socket))
+        }));
 
     // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming
     // connections for us. The second parameter we pass is the connection upgrade that is accepted
     // by the listening part. We don't want to accept anything, so we pass a dummy object that
     // represents a connection that is always denied.
-    let (swarm_controller, swarm_future) = swarm::swarm(transport, DeniedConnectionUpgrade,
+    let (swarm_controller, swarm_future) = swarm::swarm(transport,
         |_socket, _client_addr| -> Result<(), _> {
             unreachable!("All incoming connections should have been denied")
         });
 
-    // Building a struct that represents the protocol that we are going to use for dialing.
-    let proto = SimpleProtocol::new("/echo/1.0.0", |socket| {
-        // This closure is called whenever a stream using the "echo" protocol has been
-        // successfully negotiated. The parameter is the raw socket (implements the AsyncRead
-        // and AsyncWrite traits), and the closure must return an implementation of
-        // `IntoFuture` that can yield any type of object.
-        Ok(length_delimited::Framed::<_, BytesMut>::new(socket))
-    });
-
     // We now use the controller to dial to the address.
     swarm_controller
-        .dial_custom_handler(target_addr.parse().expect("invalid multiaddr"), proto, |echo| {
+        .dial_custom_handler(target_addr.parse().expect("invalid multiaddr"), |echo| {
             // `echo` is what the closure used when initializing `proto` returns.
             // Consequently, please note that the `send` method is available only because the type
             // `length_delimited::Framed` has a `send` method.

@@ -54,6 +54,7 @@ use parking_lot::Mutex;
 use smallvec::SmallVec;
 use std::io::Error as IoError;
 use std::sync::Arc;
+use tokio_io::{AsyncRead, AsyncWrite};
 use transport::{ConnectionUpgrade, MuxedTransport, Transport, UpgradedNode};
 
 /// Allows reusing the same muxed connection multiple times.
@@ -65,7 +66,7 @@ use transport::{ConnectionUpgrade, MuxedTransport, Transport, UpgradedNode};
 pub struct ConnectionReuse<T, C>
 where
 	T: Transport,
-	C: ConnectionUpgrade<T::RawConn>,
+	C: ConnectionUpgrade<T::Output>,
 {
 	// Underlying transport and connection upgrade for when we need to dial or listen.
 	inner: UpgradedNode<T, C>,
@@ -82,7 +83,7 @@ struct Shared<O> {
 impl<T, C> From<UpgradedNode<T, C>> for ConnectionReuse<T, C>
 where
 	T: Transport,
-	C: ConnectionUpgrade<T::RawConn>,
+	C: ConnectionUpgrade<T::Output>,
 {
 	#[inline]
 	fn from(node: UpgradedNode<T, C>) -> ConnectionReuse<T, C> {
@@ -99,15 +100,16 @@ where
 impl<T, C> Transport for ConnectionReuse<T, C>
 where
 	T: Transport + 'static,                     // TODO: 'static :(
-	C: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :(
+	T::Output: AsyncRead + AsyncWrite,
+	C: ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :(
 	C: Clone,
 	C::Output: StreamMuxer + Clone,
 	C::NamesIter: Clone, // TODO: not elegant
 {
-	type RawConn = <C::Output as StreamMuxer>::Substream;
+	type Output = <C::Output as StreamMuxer>::Substream;
 	type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>>;
-	type ListenerUpgrade = FutureResult<Self::RawConn, IoError>;
-	type Dial = Box<Future<Item = Self::RawConn, Error = IoError>>;
+	type ListenerUpgrade = FutureResult<Self::Output, IoError>;
+	type Dial = Box<Future<Item = Self::Output, Error = IoError>>;
 
 	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
 		let (listener, new_addr) = match self.inner.listen_on(addr.clone()) {
@@ -158,7 +160,8 @@ where
 impl<T, C> MuxedTransport for ConnectionReuse<T, C>
 where
 	T: Transport + 'static,                     // TODO: 'static :(
-	C: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :(
+	T::Output: AsyncRead + AsyncWrite,
+	C: ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :(
 	C: Clone,
 	C::Output: StreamMuxer + Clone,
 	C::NamesIter: Clone, // TODO: not elegant
