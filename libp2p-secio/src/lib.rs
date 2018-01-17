@@ -99,6 +99,7 @@ use futures::{Future, Poll, StartSend, Sink, Stream};
 use futures::stream::MapErr as StreamMapErr;
 use libp2p_swarm::Multiaddr;
 use ring::signature::RSAKeyPair;
+use libp2p_swarm::SecurityProvider;
 use rw_stream_sink::RwStreamSink;
 use std::error::Error;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -230,6 +231,12 @@ fn map_err(err: SecioError) -> IoError {
 pub struct SecioMiddleware<S> {
 	inner: codec::FullCodec<S>,
 	remote_pubkey_der: Vec<u8>,
+}
+
+impl<S> SecurityProvider for SecioMiddleware {
+	fn public_key(&self) -> &[u8] {
+		&self.remote_pubkey_der
+	}
 }
 
 impl<S> SecioMiddleware<S>
