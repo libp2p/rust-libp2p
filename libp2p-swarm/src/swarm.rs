@@ -94,7 +94,7 @@ impl<T> SwarmController<T>
     /// upgraded using the `upgrade`, and the output is sent to the handler that was passed when
     /// calling `swarm`.
     // TODO: consider returning a future so that errors can be processed?
-    pub fn dial_to_handler<Du>(&self, multiaddr: Multiaddr) -> Result<(), Multiaddr> {
+    pub fn dial_to_handler(&self, multiaddr: Multiaddr) -> Result<(), Multiaddr> {
         match self.transport.clone().dial(multiaddr.clone()) {
             Ok(dial) => {
                 // Ignoring errors if the receiver has been closed, because in that situation
@@ -166,11 +166,10 @@ pub struct SwarmFuture<T, H, F>
     new_toprocess: mpsc::UnboundedReceiver<Box<Future<Item = (), Error = IoError>>>,
 }
 
-impl<T, H, If, F> Future for SwarmFuture<T, H, F>
-    where T: MuxedTransport + Clone + 'static,      // TODO: 'static :-/,
-          H: FnMut(T::Output, Multiaddr) -> If,
-          If: IntoFuture<Future = F, Item = (), Error = IoError>,
-          F: Future<Item = (), Error = IoError>,
+impl<Trans, Hdler, IntoFut> Future for SwarmFuture<Trans, Hdler, IntoFut::Future>
+    where Trans: MuxedTransport + Clone + 'static,      // TODO: 'static :-/,
+          Hdler: FnMut(Trans::Output, Multiaddr) -> IntoFut,
+          IntoFut: IntoFuture<Item = (), Error = IoError>,
 {
     type Item = ();
     type Error = IoError;
