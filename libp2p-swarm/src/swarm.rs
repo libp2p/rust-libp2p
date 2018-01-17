@@ -81,6 +81,21 @@ pub struct SwarmController<T, C>
     new_toprocess: mpsc::UnboundedSender<Box<Future<Item = (), Error = IoError>>>,
 }
 
+impl<T, C> Clone for SwarmController<T, C>
+    where T: MuxedTransport + Clone + 'static,      // TODO: 'static :-/
+          C: ConnectionUpgrade<T::RawConn> + 'static + Clone,      // TODO: 'static :-/
+{
+    fn clone(&self) -> SwarmController<T, C> {
+        SwarmController {
+            transport: self.transport.clone(),
+            upgraded: self.upgraded.clone(),
+            new_listeners: self.new_listeners.clone(),
+            new_dialers: self.new_dialers.clone(),
+            new_toprocess: self.new_toprocess.clone(),
+        }
+    }
+}
+
 impl<T, C> SwarmController<T, C>
     where T: MuxedTransport + Clone + 'static,      // TODO: 'static :-/
           C: ConnectionUpgrade<T::RawConn> + Clone + 'static,      // TODO: 'static :-/
