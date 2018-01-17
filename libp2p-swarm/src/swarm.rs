@@ -66,12 +66,25 @@ pub fn swarm<T, H, F>(transport: T, handler: H)
 
 /// Allows control of what the swarm is doing.
 pub struct SwarmController<T>
-    where T: MuxedTransport + 'static,      // TODO: 'static :-/
+    where T: MuxedTransport
 {
     transport: T,
     new_listeners: mpsc::UnboundedSender<T::Listener>,
     new_dialers: mpsc::UnboundedSender<(T::Dial, Multiaddr)>,
     new_toprocess: mpsc::UnboundedSender<Box<Future<Item = (), Error = IoError>>>,
+}
+
+impl<T> Clone for SwarmController<T>
+    where T: MuxedTransport + Clone
+{
+    fn clone(&self) -> SwarmController<T> {
+        SwarmController {
+            transport: self.transport.clone(),
+            new_listeners: self.new_listeners.clone(),
+            new_dialers: self.new_dialers.clone(),
+            new_toprocess: self.new_toprocess.clone(),
+        }
+    }
 }
 
 impl<T> SwarmController<T>
