@@ -66,7 +66,7 @@ impl PeerInfo {
 
 	/// Sets the list of addresses and their time-to-live.
 	///
-	/// This removes all previously-stored addresses.
+	/// This removes all previously-stored addresses and replaces them with new ones.
 	#[inline]
 	pub fn set_addrs<I>(&mut self, addrs: I)
 		where I: IntoIterator<Item = (Multiaddr, TTL)>
@@ -77,8 +77,8 @@ impl PeerInfo {
 
 	/// Adds a single address and its time-to-live.
 	///
-	/// If the peer info already knows about that address but with a longer TTL, then the operation
-	/// is a no-op.
+	/// If the peer info already knows about that address, then what happens depends on the
+	/// `behaviour` parameter.
 	pub fn add_addr(&mut self, addr: Multiaddr, ttl: TTL, behaviour: AddAddrBehaviour) {
 		let expires = SystemTime::now() + ttl;
 
