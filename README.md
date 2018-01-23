@@ -45,3 +45,4 @@ Progress for the `impl Trait` syntax can be tracked in [this issue of the Rust r
 
 Once this syntax is stable in the nightly version, we will consider requiring the nightly version
 of the compiler and switching to this syntax.
+

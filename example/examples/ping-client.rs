@@ -29,6 +29,7 @@ extern crate tokio_core;
 extern crate tokio_io;
 
 use futures::Future;
+use futures::sync::oneshot;
 use std::env;
 use swarm::{UpgradeExt, Transport, DeniedConnectionUpgrade};
 use tcp::TcpConfig;
@@ -79,11 +80,13 @@ fn main() {
         });
 
     // We now use the controller to dial to the address.
+    let (tx, rx) = oneshot::channel();
     swarm_controller
         .dial_custom_handler(target_addr.parse().expect("invalid multiaddr"), ping::Ping,
             |(mut pinger, future)| {
                 let ping = pinger.ping().map_err(|_| unreachable!()).inspect(|_| {
                     println!("Received pong from the remote");
+                    let _ = tx.send(());
                 });
                 ping.select(future).map(|_| ()).map_err(|(e, _)| e)
             })
@@ -98,5 +101,5 @@ fn main() {
     // `swarm_future` is a future that contains all the behaviour that we want, but nothing has
     // actually started yet. Because we created the `TcpConfig` with tokio, we need to run the
     // future through the tokio core.
-    core.run(swarm_future).unwrap();
+    core.run(rx.select(swarm_future.map_err(|_| unreachable!())).map_err(|(e, _)| e).map(|_| ())).unwrap();
 }

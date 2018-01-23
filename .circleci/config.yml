@@ -1,0 +1,54 @@
+version: 2
+
+workflows:
+  version: 2
+  build:
+    jobs:
+      - test
+      - integration_test
+
+jobs:
+  test:
+    machine:
+      enabled: true
+      docker_layer_caching: true
+    steps:
+      - checkout
+      - run:
+          name: Enable ipv6
+          command: |
+            cat <<'EOF' | sudo tee /etc/docker/daemon.json
+            {
+              "ipv6": true,
+              "fixed-cidr-v6": "2001:db8:1::/64"
+            }
+            EOF
+            sudo service docker restart
+      - restore_cache:
+          key: test-cache
+      - run:
+          name: Prepare docker container for building
+          command: docker build -t rust-libp2p -f .circleci/images/rust-libp2p/Dockerfile .
+      - run:
+          name: Run tests, inside a docker image
+          command: docker run --rm -v "/cache/cargo/registry:/usr/local/cargo/registry" -v "/cache/target:/app/target" -it rust-libp2p cargo test
+      - save_cache:
+          key: docker-cache
+          paths:
+            - "/cache"
+
+  integration_test:
+    docker:
+      - image: rust
+      - image: ipfs/go-ipfs
+    steps:
+      - checkout
+      - restore_cache:
+          key: integration-test-cache
+      - run:
+          command: cargo run -p example --example ping-client -- /ip4/127.0.0.1/tcp/4001
+      - save_cache:
+          key: integration-test-cache
+          paths:
+            - "~/.cargo"
+            - "./target"
