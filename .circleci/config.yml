@@ -9,11 +9,13 @@ workflows:
 
 jobs:
   test:
-    machine: true
+    machine:
+      enabled: true
+      docker_layer_caching: true
     steps:
       - checkout
       - run:
-          name: enable ipv6
+          name: Enable ipv6
           command: |
             cat <<'EOF' | sudo tee /etc/docker/daemon.json
             {
@@ -23,24 +25,30 @@ jobs:
             EOF
             sudo service docker restart
       - restore_cache:
-          key: project-cache
+          key: test-cache
       - run:
-          name: Build
-          command: cargo build
+          name: Prepare docker container for building
+          command: docker build -t rust-libp2p .
       - run:
-          name: Test
-          command: cargo test
+          name: Run tests, inside a docker image
+          command: docker run --rm -v "/cache/cargo/registry:/usr/local/cargo/registry" -v "/cache/target:/app/target" -it rust-libp2p cargo test
       - save_cache:
-          key: project-cache
+          key: docker-cache
           paths:
-            - "~/.cargo"
-            - "./target"
+            - "/cache"
 
   integration_test:
     docker:
       - image: rust
-      - image: consensysllc/go-ipfs
+      - image: ipfs/go-ipfs
     steps:
       - checkout
+      - restore_cache:
+          key: integration-test-cache
       - run:
-          command: cargo run --example ping
+          command: cargo run -p example --example echo-dialer
+      - save_cache:
+          key: integration-test-cache
+          paths:
+            - "~/.cargo"
+            - "./target"
