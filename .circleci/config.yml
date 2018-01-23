@@ -46,7 +46,7 @@ jobs:
       - restore_cache:
           key: integration-test-cache
       - run:
-          command: cargo run -p example --example echo-dialer
+          command: cargo run -p example --example ping-client
       - save_cache:
           key: integration-test-cache
           paths:
