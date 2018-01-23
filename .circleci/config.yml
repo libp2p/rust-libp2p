@@ -46,7 +46,7 @@ jobs:
       - restore_cache:
           key: integration-test-cache
       - run:
-          command: cargo run -p example --example ping-client
+          command: cargo run -p example --example ping-client -- /ip4/127.0.0.1/tcp/4001
       - save_cache:
           key: integration-test-cache
           paths:
