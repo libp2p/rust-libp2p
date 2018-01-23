@@ -1,8 +1,13 @@
 version: 2
-jobs:
+
+workflows:
+  version: 2
   build:
-    docker:
-      - image: rust
+    jobs:
+      - test
+
+jobs:
+  test:
     machine: true
     steps:
       - checkout
