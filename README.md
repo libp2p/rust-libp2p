@@ -46,8 +46,3 @@ Progress for the `impl Trait` syntax can be tracked in [this issue of the Rust r
 Once this syntax is stable in the nightly version, we will consider requiring the nightly version
 of the compiler and switching to this syntax.
 
--------------------
-
-**NB:** `Dockerfile` in the root is for internal purposes (think "running CI workloads") only. You won't get any useful results trying to use it on production for anything at all.
-
-
