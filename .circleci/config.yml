@@ -5,6 +5,7 @@ workflows:
   build:
     jobs:
       - test
+      - integration_test
 
 jobs:
   test:
@@ -34,3 +35,12 @@ jobs:
           paths:
             - "~/.cargo"
             - "./target"
+
+  integration_test:
+    docker:
+      - image: rust
+      - image: consensysllc/go-ipfs
+    steps:
+      - checkout
+      - run:
+          command: cargo run --example ping
