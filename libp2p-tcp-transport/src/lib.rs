@@ -56,6 +56,7 @@ extern crate multiaddr;
 extern crate futures;
 
 use std::io::Error as IoError;
+use std::iter;
 use std::net::SocketAddr;
 use tokio_core::reactor::Handle;
 use tokio_core::net::{TcpStream, TcpListener, TcpStreamNew};
@@ -130,6 +131,35 @@ impl Transport for TcpConfig {
         } else {
             Err((self, addr))
         }
+    }
+
+    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        let server_protocols: Vec<_> = server.iter().collect();
+        let observed_protocols: Vec<_> = observed.iter().collect();
+
+        if server_protocols.len() != 2 || observed_protocols.len() != 2 {
+            return None;
+        }
+
+        // Check that `server` is a valid TCP/IP address.
+        match (&server_protocols[0], &server_protocols[1]) {
+            (&AddrComponent::IP4(_), &AddrComponent::TCP(_)) |
+            (&AddrComponent::IP6(_), &AddrComponent::TCP(_)) => {}
+            _ => return None,
+        }
+
+        // Check that `observed` is a valid TCP/IP address.
+        match (&observed_protocols[0], &observed_protocols[1]) {
+            (&AddrComponent::IP4(_), &AddrComponent::TCP(_)) |
+            (&AddrComponent::IP6(_), &AddrComponent::TCP(_)) => {}
+            _ => return None,
+        }
+
+        let result = iter::once(observed_protocols[0].clone())
+            .chain(iter::once(server_protocols[1].clone()))
+            .collect();
+
+        Some(result)
     }
 }
 
@@ -286,5 +316,17 @@ mod tests {
 
         let addr = "/ip4/127.0.0.1/tcp/12345/tcp/12345".parse::<Multiaddr>().unwrap();
         assert!(tcp.listen_on(addr).is_err());
+    }
+
+    #[test]
+    fn nat_traversal() {
+        let core = Core::new().unwrap();
+        let tcp = TcpConfig::new(core.handle());
+
+        let server = "/ip4/127.0.0.1/tcp/10000".parse::<Multiaddr>().unwrap();
+        let observed = "/ip4/80.81.82.83/tcp/25000".parse::<Multiaddr>().unwrap();
+
+        let out = tcp.nat_traversal(&server, &observed);
+        assert_eq!(out.unwrap(), "/ip4/80.81.82.83/tcp/10000".parse::<Multiaddr>().unwrap());
     }
 }
