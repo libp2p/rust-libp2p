@@ -65,11 +65,12 @@ impl<T: Transport> Transport for OnlyOnce<T> {
 
 #[test]
 fn client_to_server_outbound() {
-    // Simulate a client sending a message to a server through a multiplex upgrade.
+    // A client opens a connection to a server, then an outgoing substream, then sends a message
+    // on that substream.
 
     let (tx, rx) = mpsc::channel();
 
-    thread::spawn(move || {
+    let bg_thread = thread::spawn(move || {
         let mut core = Core::new().unwrap();
         let transport = TcpConfig::new(core.handle())
             .with_upgrade(multiplex::MultiplexConfig)
@@ -109,13 +110,17 @@ fn client_to_server_outbound() {
         .map(|_| ());
 
     core.run(future).unwrap();
+    bg_thread.join().unwrap();
 }
 
 #[test]
 fn connection_reused_for_dialing() {
+    // A client dials the same multiaddress twice in a row. We check that it uses two substreams
+    // instead of opening two different connections.
+
     let (tx, rx) = mpsc::channel();
 
-    thread::spawn(move || {
+    let bg_thread = thread::spawn(move || {
         let mut core = Core::new().unwrap();
         let transport = OnlyOnce::from(TcpConfig::new(core.handle()))
             .with_upgrade(multiplex::MultiplexConfig)
@@ -181,13 +186,18 @@ fn connection_reused_for_dialing() {
         .map(|_| ());
 
     core.run(future).unwrap();
+    bg_thread.join().unwrap();
 }
 
 #[test]
 fn use_opened_listen_to_dial() {
+    // A server waits for an incoming substream and a message on it, then opens an outgoing
+    // substream on that same connection, that the client has to accept. The client then sends a
+    // message on that new substream.
+
     let (tx, rx) = mpsc::channel();
 
-    thread::spawn(move || {
+    let bg_thread = thread::spawn(move || {
         let mut core = Core::new().unwrap();
         let transport = OnlyOnce::from(TcpConfig::new(core.handle()))
             .with_upgrade(multiplex::MultiplexConfig);
@@ -217,7 +227,9 @@ fn use_opened_listen_to_dial() {
                 assert_eq!(msg, "hello world");
                 muxer.outbound()
             })
-            .map(|client| Framed::<_, BytesMut>::new(client))
+            .map(|client| {
+                Framed::<_, BytesMut>::new(client)
+            })
             .and_then(|client| {
                 client.into_future()
                     .map_err(|(err, _)| err)
@@ -254,4 +266,5 @@ fn use_opened_listen_to_dial() {
         .map(|_| ());
 
     core.run(future).unwrap();
+    bg_thread.join().unwrap();
 }
