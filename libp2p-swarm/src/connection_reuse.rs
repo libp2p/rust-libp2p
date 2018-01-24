@@ -73,9 +73,8 @@ where
 }
 
 struct Shared<M> where M: StreamMuxer {
-	// List of active muxers. If the boolean is true, then we handle this connection in the
-	// `next_incoming` function. Otherwise, it is handled in the `listen_on` function.
-	active_connections: FnvHashMap<Multiaddr, (M, bool)>,
+	// List of active muxers.
+	active_connections: FnvHashMap<Multiaddr, M>,
 
 	// List of pending inbound substreams from dialed nodes.
 	// Only add to this list elements received through `add_to_next_rx`.
@@ -151,7 +150,7 @@ where
 		};
 
 		// If we already have an active connection, use it!
-		if let Some((connec, _)) = self.shared.lock().active_connections.get(&addr).map(|c| c.clone()) {
+		if let Some(connec) = self.shared.lock().active_connections.get(&addr).map(|c| c.clone()) {
 			let future = connec.outbound();
 			return Ok(Box::new(future) as Box<_>);
 		}
@@ -164,7 +163,7 @@ where
 			.and_then(move |connec| {
 				// Always replace the active connection because we are the most recent.
 				let mut lock = shared.lock();
-				lock.active_connections.insert(addr.clone(), (connec.clone(), true));
+				lock.active_connections.insert(addr.clone(), connec.clone());
 				// TODO: doesn't need locking ; the sender could be extracted
 				let _ = lock.add_to_next_tx
 					.unbounded_send((connec.clone(), connec.clone().inbound(), addr));
@@ -243,7 +242,7 @@ where S: Stream<Item = (F, Multiaddr), Error = IoError>,
 					self.connections.push((muxer.clone(), next_incoming, client_addr.clone()));
 					// We overwrite any current active connection to that multiaddr because we
 					// are the freshest possible connection.
-					self.shared.lock().active_connections.insert(client_addr, (muxer, false));
+					self.shared.lock().active_connections.insert(client_addr, muxer);
 				},
 				Ok(Async::NotReady) => {
 					self.current_upgrades.push((current_upgrade, client_addr));
