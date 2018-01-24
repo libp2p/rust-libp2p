@@ -31,7 +31,7 @@ extern crate futures;
 #[macro_use]
 extern crate error_chain;
 
-use bytes::{BufMut, BytesMut, IntoBuf};
+use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
 use futures::{Poll, Async};
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
@@ -421,7 +421,7 @@ impl<T> Default for VarintCodec<T> {
 enum VarintCodecInner {
     WaitingForLen(VarintDecoder<usize>),
     WaitingForData(usize),
-    Poisonned,
+    Poisoned,
 }
 
 impl<T> Decoder for VarintCodec<T> {
@@ -430,7 +430,7 @@ impl<T> Decoder for VarintCodec<T> {
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         loop {
-            match mem::replace(&mut self.inner, VarintCodecInner::Poisonned) {
+            match mem::replace(&mut self.inner, VarintCodecInner::Poisoned) {
                 VarintCodecInner::WaitingForData(len) => {
                     if src.len() >= len {
                         self.inner = VarintCodecInner::WaitingForLen(VarintDecoder::default());
@@ -451,9 +451,7 @@ impl<T> Decoder for VarintCodec<T> {
                         },
                     }
                 },
-                VarintCodecInner::Poisonned => {
-                    panic!("varint codec was poisoned")
-                },
+                VarintCodecInner::Poisoned => panic!("varint codec was poisoned"),
             }
         }
     }
@@ -466,7 +464,7 @@ impl<D> Encoder for VarintCodec<D>
     type Error = io::Error;
 
     fn encode(&mut self, item: D, dst: &mut BytesMut) -> Result<(), io::Error> {
-        let encoded_len = encode(item.as_ref().len());       // TODO: can be optimized by not allocating?
+        let encoded_len = encode(item.as_ref().len());
         dst.put(encoded_len);
         dst.put(item);
         Ok(())
@@ -495,12 +493,14 @@ pub fn decode<R: Read, T: Default + DecoderHelper>(mut input: R) -> errors::Resu
 }
 
 /// Syncronously decode a number from a `Read`
-pub fn encode<T: EncoderHelper + Bits>(input: T) -> Vec<u8> {
+pub fn encode<T: EncoderHelper + Bits>(input: T) -> Bytes {
+    use tokio_io::io::AllowStdIo;
+
     let mut encoder = EncoderState::new(input);
-    let mut out = io::Cursor::new(Vec::with_capacity(1));
+    let mut out = AllowStdIo::new(BytesMut::new().writer());
 
     match T::write(&mut encoder, &mut out).expect("Writing to a vec should never fail, Q.E.D") {
-        Async::Ready(_) => out.into_inner(),
+        Async::Ready(_) => out.into_inner().into_inner().freeze(),
         Async::NotReady => unreachable!(),
     }
 }

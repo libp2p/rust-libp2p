@@ -113,11 +113,13 @@ impl<R> Sink for Listener<R>
 			}
 
 			ListenerToDialerMessage::ProtocolsListResponse { list } => {
+				use std::iter;
+
 				let mut out_msg = varint::encode(list.len());
 				for elem in list.iter() {
-					out_msg.push(b'\r');
+					out_msg.extend(iter::once(b'\r'));
 					out_msg.extend_from_slice(elem);
-					out_msg.push(b'\n');
+					out_msg.extend(iter::once(b'\n'));
 				}
 
 				match self.inner.start_send(BytesMut::from(out_msg)) {
