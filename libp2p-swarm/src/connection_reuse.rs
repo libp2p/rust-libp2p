@@ -253,7 +253,7 @@ where S: Stream<Item = (F, Multiaddr), Error = IoError>,
 					self.current_upgrades.extend(upgrades_to_process);
 					return Ok(Async::Ready(Some((future::err(err), client_addr))));
 				},
-			}	
+			}
 		}
 
 		// Check whether any incoming substream is ready.
@@ -304,31 +304,31 @@ impl<M> Future for ConnectionReuseIncoming<M>
 				Ok(Async::Ready(Some(elem))) => {
 					lock.next_incoming.push(elem);
 				},
-				Ok(Async::NotReady) => {
-					return Ok(Async::NotReady);
-				},
+				Ok(Async::NotReady) => break,
 				Ok(Async::Ready(None)) | Err(_) => {
 					// The sender and receiver are both in the same struct, therefore the link can
 					// never break.
 					unreachable!()
 				},
 			}
+		}
 
-			let mut next_incoming = mem::replace(&mut lock.next_incoming, Vec::new());
-			while let Some((muxer, mut future, addr)) = next_incoming.pop() {
-				match future.poll() {
-					Ok(Async::Ready(value)) => {
-						let next = muxer.clone().inbound();
-						lock.next_incoming.push((muxer, next, addr.clone()));
-						lock.next_incoming.extend(next_incoming);
-						return Ok(Async::Ready((value, addr)));
-					},
-					Ok(Async::NotReady) => {
-						lock.next_incoming.push((muxer, future, addr));
-					},
-					Err(_) => {},
-				}
+		let mut next_incoming = mem::replace(&mut lock.next_incoming, Vec::new());
+		while let Some((muxer, mut future, addr)) = next_incoming.pop() {
+			match future.poll() {
+				Ok(Async::Ready(value)) => {
+					let next = muxer.clone().inbound();
+					lock.next_incoming.push((muxer, next, addr.clone()));
+					lock.next_incoming.extend(next_incoming);
+					return Ok(Async::Ready((value, addr)));
+				},
+				Ok(Async::NotReady) => {
+					lock.next_incoming.push((muxer, future, addr));
+				},
+				Err(_) => {},
 			}
 		}
+
+		Ok(Async::NotReady)
 	}
 }
