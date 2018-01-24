@@ -41,7 +41,7 @@ fn client_to_server_outbound() {
 
     let (tx, rx) = mpsc::channel();
 
-    thread::spawn(move || {
+    let bg_thread = thread::spawn(move || {
         let mut core = Core::new().unwrap();
         let transport = TcpConfig::new(core.handle())
             .with_upgrade(multiplex::MultiplexConfig);
@@ -81,6 +81,7 @@ fn client_to_server_outbound() {
         .map(|_| ());
 
     core.run(future).unwrap();
+    bg_thread.join().unwrap();
 }
 
 #[test]
@@ -89,7 +90,7 @@ fn client_to_server_inbound() {
 
     let (tx, rx) = mpsc::channel();
 
-    thread::spawn(move || {
+    let bg_thread = thread::spawn(move || {
         let mut core = Core::new().unwrap();
         let transport = TcpConfig::new(core.handle())
             .with_upgrade(multiplex::MultiplexConfig);
@@ -129,4 +130,5 @@ fn client_to_server_inbound() {
         .map(|_| ());
 
     core.run(future).unwrap();
+    bg_thread.join().unwrap();
 }
