@@ -17,4 +17,5 @@ tokio-timer = "0.1"
 [dev-dependencies]
 libp2p-ping = { path = "../libp2p-ping" }
 libp2p-tcp-transport = { path = "../libp2p-tcp-transport" }
+multiplex = { path = "../multiplex-rs" }
 tokio-core = "0.1"
