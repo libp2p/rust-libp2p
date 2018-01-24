@@ -41,12 +41,21 @@ jobs:
     docker:
       - image: rust
       - image: ipfs/go-ipfs
+      - image: node
+        command:
+          - git clone https://github.com/libp2p/js-libp2p
+          - cd js-libp2p
+          - git checkout 4c81f39ebe75946feeadf6920101b61e329fb179
+          - cd examples/echo
+          - node ./src/listener.js
     steps:
       - checkout
       - restore_cache:
           key: integration-test-cache
       - run:
           command: cargo run -p example --example ping-client -- /ip4/127.0.0.1/tcp/4001
+      - run:
+          command: cargo run -p example --example echo-dialer -- /ip4/127.0.0.1/tcp/10333
       - save_cache:
           key: integration-test-cache
           paths:
