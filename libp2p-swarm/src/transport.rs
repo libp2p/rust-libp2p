@@ -787,7 +787,9 @@ where
 	/// Turns this upgraded node into a `ConnectionReuse`. If the `Output` implements the
 	/// `StreamMuxer` trait, the returned object will implement `Transport` and `MuxedTransport`.
 	#[inline]
-	pub fn into_connection_reuse(self) -> ConnectionReuse<T, C> {
+	pub fn into_connection_reuse(self) -> ConnectionReuse<T, C>
+		where C::Output: StreamMuxer
+	{
 		From::from(self)
 	}
 
