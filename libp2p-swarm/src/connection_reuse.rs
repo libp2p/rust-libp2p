@@ -73,9 +73,8 @@ where
 }
 
 struct Shared<M> where M: StreamMuxer {
-	// List of active muxers. If the boolean is true, then we handle this connection in the
-	// `next_incoming` function. Otherwise, it is handled in the `listen_on` function.
-	active_connections: FnvHashMap<Multiaddr, (M, bool)>,
+	// List of active muxers.
+	active_connections: FnvHashMap<Multiaddr, M>,
 
 	// List of pending inbound substreams from dialed nodes.
 	// Only add to this list elements received through `add_to_next_rx`.
@@ -151,7 +150,7 @@ where
 		};
 
 		// If we already have an active connection, use it!
-		if let Some((connec, _)) = self.shared.lock().active_connections.get(&addr).map(|c| c.clone()) {
+		if let Some(connec) = self.shared.lock().active_connections.get(&addr).map(|c| c.clone()) {
 			let future = connec.outbound();
 			return Ok(Box::new(future) as Box<_>);
 		}
@@ -164,7 +163,7 @@ where
 			.and_then(move |connec| {
 				// Always replace the active connection because we are the most recent.
 				let mut lock = shared.lock();
-				lock.active_connections.insert(addr.clone(), (connec.clone(), true));
+				lock.active_connections.insert(addr.clone(), connec.clone());
 				// TODO: doesn't need locking ; the sender could be extracted
 				let _ = lock.add_to_next_tx
 					.unbounded_send((connec.clone(), connec.clone().inbound(), addr));
@@ -235,22 +234,21 @@ where S: Stream<Item = (F, Multiaddr), Error = IoError>,
 		// Check whether any upgrade (to a muxer) on an incoming connection is ready.
 		// We extract everything at the start, then insert back the elements that we still want at
 		// the next iteration.
-		let mut upgrades_to_process = mem::replace(&mut self.current_upgrades, Vec::new());
-		while let Some((mut current_upgrade, client_addr)) = upgrades_to_process.pop() {
+        for n in (0 .. self.current_upgrades.len()).rev() {
+            let (mut current_upgrade, client_addr) = self.current_upgrades.swap_remove(n);
 			match current_upgrade.poll() {
 				Ok(Async::Ready(muxer)) => {
 					let next_incoming = muxer.clone().inbound();
 					self.connections.push((muxer.clone(), next_incoming, client_addr.clone()));
 					// We overwrite any current active connection to that multiaddr because we
 					// are the freshest possible connection.
-					self.shared.lock().active_connections.insert(client_addr, (muxer, false));
+					self.shared.lock().active_connections.insert(client_addr, muxer);
 				},
 				Ok(Async::NotReady) => {
 					self.current_upgrades.push((current_upgrade, client_addr));
 				},
 				Err(err) => {
 					// Insert the rest of the pending upgrades, but not the current one.
-					self.current_upgrades.extend(upgrades_to_process);
 					return Ok(Async::Ready(Some((future::err(err), client_addr))));
 				},
 			}	
@@ -259,8 +257,8 @@ where S: Stream<Item = (F, Multiaddr), Error = IoError>,
 		// Check whether any incoming substream is ready.
 		// We extract everything at the start, then insert back the elements that we still want at
 		// the next iteration.
-		let mut connections_to_process = mem::replace(&mut self.connections, Vec::new());
-		while let Some((muxer, mut next_incoming, client_addr)) = connections_to_process.pop() {
+        for n in (0 .. self.connections.len()).rev() {
+            let (muxer, mut next_incoming, client_addr) = self.connections.swap_remove(n);
 			match next_incoming.poll() {
 				Ok(Async::Ready(incoming)) => {
 					let mut new_next = muxer.clone().inbound();
@@ -272,7 +270,6 @@ where S: Stream<Item = (F, Multiaddr), Error = IoError>,
 				}
 				Err(err) => {
 					// Insert the rest of the pending connections, but not the current one.
-					self.connections.extend(connections_to_process);
 					return Ok(Async::Ready(Some((future::err(err), client_addr))));
 				}
 			}
