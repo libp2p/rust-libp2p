@@ -42,12 +42,11 @@ jobs:
       - image: rust
       - image: ipfs/go-ipfs
       - image: node
-        entrypoint: node /root/js-libp2p/examples/echo/src/listener.js
-        command: 
-          - git clone https://github.com/libp2p/js-libp2p
-          - cd js-libp2p
-          - git checkout 4c81f39ebe75946feeadf6920101b61e329fb179
-          - npm install
+        command: git clone https://github.com/libp2p/js-libp2p &&
+                 cd js-libp2p &&
+                 git checkout 4c81f39ebe75946feeadf6920101b61e329fb179 &&
+                 npm install &&
+                 node ./examples/echo/src/listener.js
     steps:
       - checkout
       - restore_cache:
