@@ -30,6 +30,7 @@ extern crate tokio_io;
 
 use bytes::BytesMut;
 use futures::{Future, Sink, Stream};
+use futures::sync::oneshot;
 use std::env;
 use swarm::{UpgradeExt, SimpleProtocol, Transport, DeniedConnectionUpgrade};
 use tcp::TcpConfig;
@@ -96,6 +97,7 @@ fn main() {
     });
 
     // We now use the controller to dial to the address.
+    let (finished_tx, finished_rx) = oneshot::channel();
     swarm_controller
         .dial_custom_handler(target_addr.parse().expect("invalid multiaddr"), proto, |echo| {
             // `echo` is what the closure used when initializing `proto` returns.
@@ -109,6 +111,7 @@ fn main() {
                 })
                 .and_then(|message| {
                     println!("Received message from listener: {:?}", message.unwrap());
+                    finished_tx.send(()).unwrap();
                     Ok(())
                 })
         })
@@ -123,5 +126,9 @@ fn main() {
     // `swarm_future` is a future that contains all the behaviour that we want, but nothing has
     // actually started yet. Because we created the `TcpConfig` with tokio, we need to run the
     // future through the tokio core.
-    core.run(swarm_future).unwrap();
+    let final_future = swarm_future
+        .select(finished_rx.map_err(|_| unreachable!()))
+        .map(|_| ())
+        .map_err(|(err, _)| err);
+    core.run(final_future).unwrap();
 }
