@@ -114,9 +114,9 @@ where
 			libp2p_swarm::swarm(
 				self.transport,
 				server_upgrades,
-				move |upgrade, client_addr| {
+				move |upgrade, client_addr, swarm| {
 					let shared = shared.clone();
-					connection_handler(upgrade, client_addr, shared)
+					connection_handler(upgrade, client_addr, shared, swarm)
 				},
 			)
 		};
@@ -172,29 +172,31 @@ where
 	timeout: Duration,
 
 	// Controls the swarm.
-	swarm: SwarmController<
-		T,
-		OrUpgrade<
-			OrUpgrade<
-				WithSome<
-					protocol::KademliaProtocolConfig,
-					Option<
-						Arc<
-							Mutex<
-								Option<mpsc::UnboundedReceiver<(KadMsg, oneshot::Sender<KadMsg>)>>,
-							>,
-						>,
-					>,
-				>,
-				IdentifyProtocol,
-			>,
-			Ping,
-		>,
-	>,
+	swarm: SwarmType<T>,
 
 	// Shared between the multiple versions of the controller and the futures.
 	shared: Arc<Inner<R, P>>,
 }
+
+type SwarmType<T> = SwarmController<
+	T,
+	OrUpgrade<
+		OrUpgrade<
+			WithSome<
+				protocol::KademliaProtocolConfig,
+				Option<
+					Arc<
+						Mutex<
+							Option<mpsc::UnboundedReceiver<(KadMsg, oneshot::Sender<KadMsg>)>>,
+						>,
+					>,
+				>,
+			>,
+			IdentifyProtocol,
+		>,
+		Ping,
+	>,
+>;
 
 impl<R, P, T> Clone for KademliaSwarmController<R, P, T>
 where
@@ -402,12 +404,14 @@ type UpgradeResult = EitherSocket<
 >;
 
 // Handles an incoming connection on the swarm.
-fn connection_handler<'a, R, P>(
+fn connection_handler<'a, T, R, P>(
 	upgrade: UpgradeResult,
 	client_addr: Multiaddr,
 	shared: Arc<Inner<R, P>>,
+	swarm: SwarmType<T>,
 ) -> Box<Future<Item = (), Error = IoError> + 'a>
 where
+	T: MuxedTransport + Clone,
 	P: Peerstore + Clone + 'a,
 	R: Clone + 'a,
 {
@@ -417,10 +421,24 @@ where
 				Some(rx) => rx.lock().take().unwrap(),
 				None => {
 					let (tx, rx) = mpsc::unbounded();
-					shared.connections.lock().insert(client_addr, tx);
+					shared.connections.lock().insert(client_addr.clone(), tx);
 					rx
 				}
 			};
+
+			// TODO: do correctly
+			let upgrade =
+				IdentifyProtocol {
+					// TODO: meh
+					public_key: Vec::new(),
+					protocol_version: "ipfs/1.0.0".to_owned(),
+					agent_version: "rust-libp2p/0.1.0".to_owned(),
+					listen_addrs: Vec::new(),
+					protocols: Vec::new(),
+				}
+				.map_upgrade(EitherSocket::Second)
+				.map_upgrade(EitherSocket::First);
+			swarm.dial_to_handler(client_addr, upgrade); // TODO: how to handle errs?
 
 			// TODO: send identify requests for unknown hosts?
 			kademlia_handler(kad_bistream, rx, shared)

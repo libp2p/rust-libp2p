@@ -105,9 +105,9 @@ fn main() {
     let (kad_controller, kad_future) = kad_config.build();
 
     for listen_addr in listen_addrs {
-        kad_controller.listen_on(listen_addr.parse().expect("wrong multiaddr"))
+        let addr = kad_controller.listen_on(listen_addr.parse().expect("wrong multiaddr"))
             .expect("unsupported multiaddr");
-        println!("Now listening on {:?}", listen_addr);
+        println!("Now listening on {:?}", addr);
     }
 
     let finish_enum = kad_controller

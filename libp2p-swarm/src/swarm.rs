@@ -38,7 +38,7 @@ pub fn swarm<T, C, H, F>(transport: T, upgrade: C, handler: H)
     where T: MuxedTransport + Clone + 'static,      // TODO: 'static :-/
           C: ConnectionUpgrade<T::RawConn> + Clone + 'static,      // TODO: 'static :-/
           C::NamesIter: Clone,      // TODO: not elegant
-          H: FnMut(C::Output, Multiaddr) -> F,
+          H: FnMut(C::Output, Multiaddr, SwarmController<T, C>) -> F,
           F: IntoFuture<Item = (), Error = IoError>,
 {
     let (new_dialers_tx, new_dialers_rx) = mpsc::unbounded();
@@ -49,26 +49,29 @@ pub fn swarm<T, C, H, F>(transport: T, upgrade: C, handler: H)
 
     let upgraded = transport.clone().with_upgrade(upgrade);
 
-    let future = SwarmFuture {
+    let controller = SwarmController {
+        transport: transport,
         upgraded: upgraded.clone(),
+        timer: timer,
+        new_listeners: new_listeners_tx,
+        new_dialers: new_dialers_tx,
+        new_toprocess: new_toprocess_tx,
+    };
+
+    let next_incoming = upgraded.clone().next_incoming();
+
+    let future = SwarmFuture {
+        controller: controller.clone(),
+        upgraded: upgraded,
         handler: handler,
         new_listeners: new_listeners_rx,
-        next_incoming: upgraded.clone().next_incoming(),
+        next_incoming: next_incoming,
         listeners: Vec::new(),
         listeners_upgrade: Vec::new(),
         dialers: Vec::new(),
         new_dialers: new_dialers_rx,
         to_process: Vec::new(),
         new_toprocess: new_toprocess_rx,
-    };
-
-    let controller = SwarmController {
-        transport: transport,
-        upgraded: upgraded,
-        timer: timer,
-        new_listeners: new_listeners_tx,
-        new_dialers: new_dialers_tx,
-        new_toprocess: new_toprocess_tx,
     };
 
     (controller, future)
@@ -178,6 +181,7 @@ pub struct SwarmFuture<T, C, H, F>
     where T: MuxedTransport + 'static,      // TODO: 'static :-/
           C: ConnectionUpgrade<T::RawConn> + 'static,      // TODO: 'static :-/
 {
+    controller: SwarmController<T, C>,
     upgraded: UpgradedNode<T, C>,
     handler: H,
     new_listeners: mpsc::UnboundedReceiver<Box<Stream<Item = (Box<Future<Item = C::Output, Error = IoError>>, Multiaddr), Error = IoError>>>,
@@ -194,7 +198,7 @@ impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
     where T: MuxedTransport + Clone + 'static,      // TODO: 'static :-/,
           C: ConnectionUpgrade<T::RawConn> + Clone + 'static,      // TODO: 'static :-/
           C::NamesIter: Clone,      // TODO: not elegant
-          H: FnMut(C::Output, Multiaddr) -> If,
+          H: FnMut(C::Output, Multiaddr, SwarmController<T, C>) -> If,
           If: IntoFuture<Future = F, Item = (), Error = IoError>,
           F: Future<Item = (), Error = IoError>,
 {
@@ -269,7 +273,7 @@ impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
             let (mut upgrade, addr) = self.listeners_upgrade.swap_remove(n);
             match upgrade.poll() {
                 Ok(Async::Ready(output)) => {
-                    self.to_process.push(future::Either::A(handler(output, addr).into_future()));
+                    self.to_process.push(future::Either::A(handler(output, addr, self.controller.clone()).into_future()));
                 },
                 Ok(Async::NotReady) => {
                     self.listeners_upgrade.push((upgrade, addr));
@@ -285,7 +289,7 @@ impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
             let (mut dialer, addr) = self.dialers.swap_remove(n);
             match dialer.poll() {
                 Ok(Async::Ready(output)) => {
-                    self.to_process.push(future::Either::A(handler(output, addr).into_future()));
+                    self.to_process.push(future::Either::A(handler(output, addr, self.controller.clone()).into_future()));
                 },
                 Ok(Async::NotReady) => {
                     self.dialers.push((dialer, addr));
