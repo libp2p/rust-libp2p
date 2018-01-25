@@ -47,6 +47,7 @@ jobs:
           - git clone https://github.com/libp2p/js-libp2p
           - cd js-libp2p
           - git checkout 4c81f39ebe75946feeadf6920101b61e329fb179
+          - npm install
     steps:
       - checkout
       - restore_cache:
