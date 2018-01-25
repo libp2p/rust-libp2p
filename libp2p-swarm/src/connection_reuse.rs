@@ -183,6 +183,7 @@ where
 	C::NamesIter: Clone, // TODO: not elegant
 {
 	type Incoming = ConnectionReuseIncoming<C::Output>;
+	type IncomingUpgrade = future::FutureResult<<C::Output as StreamMuxer>::Substream, IoError>;
 
 	#[inline]
 	fn next_incoming(self) -> Self::Incoming {
@@ -290,7 +291,7 @@ pub struct ConnectionReuseIncoming<M>
 impl<M> Future for ConnectionReuseIncoming<M>
 	where M: Clone + StreamMuxer,
 {
-	type Item = (M::Substream, Multiaddr);
+	type Item = (future::FutureResult<M::Substream, IoError>, Multiaddr);
 	type Error = IoError;
 
 	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -317,7 +318,7 @@ impl<M> Future for ConnectionReuseIncoming<M>
 					let next = muxer.clone().inbound();
 					lock.next_incoming.push((muxer, next, addr.clone()));
 					lock.next_incoming.extend(next_incoming);
-					return Ok(Async::Ready((value, addr)));
+					return Ok(Async::Ready((future::ok(value), addr)));
 				},
 				Ok(Async::NotReady) => {
 					lock.next_incoming.push((muxer, future, addr));

@@ -257,7 +257,8 @@ fn use_opened_listen_to_dial() {
         })
         .and_then(|first_connec| {
             transport.clone().next_incoming()
-                .map(|(server, _)| Framed::<_, BytesMut>::new(server))
+                .and_then(|(server,_ )| server)
+                .map(|server| Framed::<_, BytesMut>::new(server))
                 .map(|server| (first_connec, server))
         })
         .and_then(|(_first, second)| {
