@@ -40,8 +40,14 @@ use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 
 fn main() {
-    // Determine which address to listen to.
-    let listen_addr = env::args().nth(1).unwrap_or("/ip4/0.0.0.0/tcp/10333".to_owned());
+    // Determine which addresses to listen to.
+    let listen_addrs = {
+        let mut args = env::args().skip(1).collect::<Vec<_>>();
+        if args.is_empty() {
+            args.push("/ip4/0.0.0.0/tcp/0".to_owned());
+        }
+        args
+    };
 
     // We start by building the tokio engine that will run all the sockets.
     let mut core = Core::new().unwrap();
@@ -98,8 +104,11 @@ fn main() {
 
     let (kad_controller, kad_future) = kad_config.build();
 
-    kad_controller.listen_on(listen_addr.parse().expect("wrong multiaddr"))
-        .expect("unsupported multiaddr");
+    for listen_addr in listen_addrs {
+        kad_controller.listen_on(listen_addr.parse().expect("wrong multiaddr"))
+            .expect("unsupported multiaddr");
+        println!("Now listening on {:?}", listen_addr);
+    }
 
     let finish_enum = kad_controller
         .find_node(my_peer_id.clone())
