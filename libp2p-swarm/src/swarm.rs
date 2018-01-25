@@ -181,7 +181,7 @@ pub struct SwarmFuture<T, C, H, F>
     upgraded: UpgradedNode<T, C>,
     handler: H,
     new_listeners: mpsc::UnboundedReceiver<Box<Stream<Item = (Box<Future<Item = C::Output, Error = IoError>>, Multiaddr), Error = IoError>>>,
-    next_incoming: Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>,
+    next_incoming: Box<Future<Item = (Box<Future<Item = C::Output, Error = IoError>>, Multiaddr), Error = IoError>>,
     listeners: Vec<Box<Stream<Item = (Box<Future<Item = C::Output, Error = IoError>>, Multiaddr), Error = IoError>>>,
     listeners_upgrade: Vec<(Box<Future<Item = C::Output, Error = IoError>>, Multiaddr)>,
     dialers: Vec<(Box<Future<Item = C::Output, Error = IoError>>, Multiaddr)>,
@@ -207,7 +207,7 @@ impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
         match self.next_incoming.poll() {
             Ok(Async::Ready((connec, client_addr))) => {
                 self.next_incoming = self.upgraded.clone().next_incoming();
-                self.to_process.push(future::Either::A(handler(connec, client_addr).into_future()));
+                self.listeners_upgrade.push((connec, client_addr));
             },
             Ok(Async::NotReady) => {},
             // TODO: may not be the best idea because we're killing the whole server
