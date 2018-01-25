@@ -234,8 +234,8 @@ where S: Stream<Item = (F, Multiaddr), Error = IoError>,
 		// Check whether any upgrade (to a muxer) on an incoming connection is ready.
 		// We extract everything at the start, then insert back the elements that we still want at
 		// the next iteration.
-		let mut upgrades_to_process = mem::replace(&mut self.current_upgrades, Vec::new());
-		while let Some((mut current_upgrade, client_addr)) = upgrades_to_process.pop() {
+        for n in (0 .. self.current_upgrades.len()).rev() {
+            let (mut current_upgrade, client_addr) = self.current_upgrades.swap_remove(n);
 			match current_upgrade.poll() {
 				Ok(Async::Ready(muxer)) => {
 					let next_incoming = muxer.clone().inbound();
@@ -249,7 +249,6 @@ where S: Stream<Item = (F, Multiaddr), Error = IoError>,
 				},
 				Err(err) => {
 					// Insert the rest of the pending upgrades, but not the current one.
-					self.current_upgrades.extend(upgrades_to_process);
 					return Ok(Async::Ready(Some((future::err(err), client_addr))));
 				},
 			}
@@ -258,8 +257,8 @@ where S: Stream<Item = (F, Multiaddr), Error = IoError>,
 		// Check whether any incoming substream is ready.
 		// We extract everything at the start, then insert back the elements that we still want at
 		// the next iteration.
-		let mut connections_to_process = mem::replace(&mut self.connections, Vec::new());
-		while let Some((muxer, mut next_incoming, client_addr)) = connections_to_process.pop() {
+        for n in (0 .. self.connections.len()).rev() {
+            let (muxer, mut next_incoming, client_addr) = self.connections.swap_remove(n);
 			match next_incoming.poll() {
 				Ok(Async::Ready(incoming)) => {
 					let mut new_next = muxer.clone().inbound();
@@ -271,7 +270,6 @@ where S: Stream<Item = (F, Multiaddr), Error = IoError>,
 				}
 				Err(err) => {
 					// Insert the rest of the pending connections, but not the current one.
-					self.connections.extend(connections_to_process);
 					return Ok(Async::Ready(Some((future::err(err), client_addr))));
 				}
 			}
