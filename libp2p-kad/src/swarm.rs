@@ -248,9 +248,14 @@ where
 
 	#[inline]
 	fn kbuckets_update(&self, peer: PeerId) {
+		// TODO: is this the right place for this check?
+		if &peer == self.shared.kbuckets.my_id() {
+			return;
+		}
+
 		match self.shared.kbuckets.update(peer, ()) {
 			UpdateOutcome::NeedPing(node_to_ping) => {
-				// TODO:
+				// TODO: return this info somehow
 				println!("need to ping {:?}", node_to_ping);
 			}
 			_ => (),
@@ -532,8 +537,20 @@ where
 									}
 								}
 								KadMsg::FindNodeReq { key, .. } => {
-									// TODO:
-									unimplemented!()
+									let message = KadMsg::FindNodeRes {
+										cluster_level: 10,		// TODO:
+										closer_peers: vec![protocol::Peer {
+											node_id: shared.kbuckets.my_id().clone(),
+											multiaddrs: vec![],
+											connection_ty: protocol::ConnectionType::Connected,
+										}],		// TODO:
+									};
+
+									let future = kad_sink.send(message).map(move |kad_sink| {
+										future::Loop::Continue((kad_sink, rest, send_back_queue))
+									});
+
+									Box::new(future) as Box<_>
 								}
 								other => {
 									// TODO:

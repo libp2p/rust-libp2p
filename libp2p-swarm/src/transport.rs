@@ -916,6 +916,7 @@ where
 						negotiated.map(|(upgrade_id, conn)| (upgrade_id, conn, upgrade))
 					})
 					.and_then(move |(upgrade_id, connection, upgrade)| {
+						println!("negotiated incoming");
 						upgrade.upgrade(connection, upgrade_id, Endpoint::Dialer, &addr2)
 					});
 
