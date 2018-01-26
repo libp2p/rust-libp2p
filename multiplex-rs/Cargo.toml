@@ -16,3 +16,7 @@ libp2p-swarm = { path = "../libp2p-swarm" }
 varint = { path = "../varint-rs" }
 error-chain = "0.11.0"
 futures-mutex = { path = "../futures-mutex" }
+
+[dev-dependencies]
+libp2p-tcp-transport = { path = "../libp2p-tcp-transport" }
+tokio-core = "0.1"
