@@ -142,13 +142,6 @@ where
 	}
 
 	fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-		let dial = match self.inner.dial(addr.clone()) {
-			Ok(l) => l,
-			Err((inner, addr)) => {
-				return Err((ConnectionReuse { inner: inner, shared: self.shared }, addr));
-			}
-		};
-
 		// If we already have an active connection, use it!
 		if let Some(connec) = self.shared.lock().active_connections.get(&addr).map(|c| c.clone()) {
 			let future = connec.outbound();
@@ -156,6 +149,14 @@ where
 		}
 
 		// TODO: handle if we're already in the middle in dialing that same node?
+		// TODO: try dialing again if the existing connection has dropped
+
+		let dial = match self.inner.dial(addr.clone()) {
+			Ok(l) => l,
+			Err((inner, addr)) => {
+				return Err((ConnectionReuse { inner: inner, shared: self.shared }, addr));
+			}
+		};
 
 		let shared = self.shared.clone();
 		let dial = dial
