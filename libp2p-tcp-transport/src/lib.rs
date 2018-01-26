@@ -85,8 +85,8 @@ impl TcpConfig {
 
 impl Transport for TcpConfig {
     type RawConn = TcpStream;
-    type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>>;
-    type ListenerUpgrade = FutureResult<Self::RawConn, IoError>;
+    type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
+    type ListenerUpgrade = FutureResult<(Self::RawConn, Multiaddr), IoError>;
     type Dial = TcpStreamNew;
 
     /// Listen on the given multi-addr.
@@ -111,7 +111,7 @@ impl Transport for TcpConfig {
                     listener.incoming().map(|(sock, addr)| {
                         let addr = addr.to_multiaddr()
                             .expect("generating a multiaddr from a socket addr never fails");
-                        (Ok(sock).into_future(), addr)
+                        Ok((sock, addr)).into_future()
                     })
                 })
                     .flatten_stream();
@@ -219,8 +219,8 @@ mod tests {
             let addr = "/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap();
             let tcp = TcpConfig::new(core.handle());
             let handle = core.handle();
-            let listener = tcp.listen_on(addr).unwrap().0.for_each(|(sock, _)| {
-                sock.and_then(|sock| {
+            let listener = tcp.listen_on(addr).unwrap().0.for_each(|sock| {
+                sock.and_then(|(sock, _)| {
                     // Define what to do with the socket that just connected to us
                     // Which in this case is read 3 bytes
                     let handle_conn = tokio_io::io::read_exact(sock, [0; 3])

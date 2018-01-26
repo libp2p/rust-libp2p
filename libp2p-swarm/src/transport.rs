@@ -60,12 +60,12 @@ pub trait Transport {
 	/// An item should be produced whenever a connection is received at the lowest level of the
 	/// transport stack. The item is a `Future` that is signalled once some pre-processing has
 	/// taken place, and that connection has been upgraded to the wanted protocols.
-	type Listener: Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>;
+	type Listener: Stream<Item = Self::ListenerUpgrade, Error = IoError>;
 
 	/// After a connection has been received, we may need to do some asynchronous pre-processing
 	/// on it (eg. an intermediary protocol negotiation). While this pre-processing takes place, we
 	/// want to be able to continue polling on the listener.
-	type ListenerUpgrade: Future<Item = Self::RawConn, Error = IoError>;
+	type ListenerUpgrade: Future<Item = (Self::RawConn, Multiaddr), Error = IoError>;
 
 	/// A future which indicates that we are currently dialing to a peer.
 	type Dial: IntoFuture<Item = Self::RawConn, Error = IoError>;
@@ -162,8 +162,8 @@ pub struct DeniedTransport;
 impl Transport for DeniedTransport {
 	// TODO: could use `!` for associated types once stable
 	type RawConn = Cursor<Vec<u8>>;
-	type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>>;
-	type ListenerUpgrade = Box<Future<Item = Self::RawConn, Error = IoError>>;
+	type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
+	type ListenerUpgrade = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
 	type Dial = Box<Future<Item = Self::RawConn, Error = IoError>>;
 
 	#[inline]
@@ -197,7 +197,7 @@ where
 {
 	type RawConn = EitherSocket<A::RawConn, B::RawConn>;
 	type Listener = EitherListenStream<A::Listener, B::Listener>;
-	type ListenerUpgrade = EitherTransportFuture<A::ListenerUpgrade, B::ListenerUpgrade>;
+	type ListenerUpgrade = EitherListenUpgrade<A::ListenerUpgrade, B::ListenerUpgrade>;
 	type Dial =
 		EitherTransportFuture<<A::Dial as IntoFuture>::Future, <B::Dial as IntoFuture>::Future>;
 
@@ -312,19 +312,19 @@ pub enum EitherListenStream<A, B> {
 
 impl<AStream, BStream, AInner, BInner> Stream for EitherListenStream<AStream, BStream>
 where
-	AStream: Stream<Item = (AInner, Multiaddr), Error = IoError>,
-	BStream: Stream<Item = (BInner, Multiaddr), Error = IoError>,
+	AStream: Stream<Item = AInner, Error = IoError>,
+	BStream: Stream<Item = BInner, Error = IoError>,
 {
-	type Item = (EitherTransportFuture<AInner, BInner>, Multiaddr);
+	type Item = EitherListenUpgrade<AInner, BInner>;
 	type Error = IoError;
 
 	#[inline]
 	fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
 		match self {
 			&mut EitherListenStream::First(ref mut a) => a.poll()
-				.map(|i| i.map(|v| v.map(|(s, a)| (EitherTransportFuture::First(s), a)))),
+				.map(|i| i.map(|v| v.map(EitherListenUpgrade::First))),
 			&mut EitherListenStream::Second(ref mut a) => a.poll()
-				.map(|i| i.map(|v| v.map(|(s, a)| (EitherTransportFuture::Second(s), a)))),
+				.map(|i| i.map(|v| v.map(EitherListenUpgrade::Second))),
 		}
 	}
 }
@@ -352,6 +352,37 @@ where
 			}
 			&mut EitherIncomingStream::Second(ref mut a) => {
 				a.poll().map(|i| i.map(|v| v.map(EitherSocket::Second)))
+			}
+		}
+	}
+}
+
+/// > **Note**: This type is needed because of the lack of `-> impl Trait` in Rust. It can be
+/// >           removed eventually.
+#[derive(Debug, Copy, Clone)]
+pub enum EitherListenUpgrade<A, B> {
+	First(A),
+	Second(B),
+}
+
+impl<A, B, Ao, Bo> Future for EitherListenUpgrade<A, B>
+where
+	A: Future<Item = (Ao, Multiaddr), Error = IoError>,
+	B: Future<Item = (Bo, Multiaddr), Error = IoError>,
+{
+	type Item = (EitherSocket<Ao, Bo>, Multiaddr);
+	type Error = IoError;
+
+	#[inline]
+	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+		match self {
+			&mut EitherListenUpgrade::First(ref mut a) => {
+				let (item, addr) = try_ready!(a.poll());
+				Ok(Async::Ready((EitherSocket::First(item), addr)))
+			}
+			&mut EitherListenUpgrade::Second(ref mut b) => {
+				let (item, addr) = try_ready!(b.poll());
+				Ok(Async::Ready((EitherSocket::Second(item), addr)))
 			}
 		}
 	}
@@ -870,7 +901,7 @@ where
 		self,
 		addr: Multiaddr,
 	) -> Result<
-		(Box<Stream<Item = (Box<Future<Item = C::Output, Error = IoError> + 'a>, Multiaddr), Error = IoError> + 'a>, Multiaddr),
+		(Box<Stream<Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError> + 'a>, Error = IoError> + 'a>, Multiaddr),
 		(Self, Multiaddr),
 	>
 	where
@@ -896,24 +927,24 @@ where
 		// Instead the `stream` will produce `Ok(Err(...))`.
 		// `stream` can only produce an `Err` if `listening_stream` produces an `Err`.
 		let stream = listening_stream
-			.map(move |(connection, client_addr)| {
+			.map(move |connection| {
 				let upgrade = upgrade.clone();
-				let remote_addr = client_addr.clone();
 				let connection = connection
 					// Try to negotiate the protocol
-					.and_then(move |connection| {
+					.and_then(move |(connection, remote_addr)| {
 						let iter = upgrade.protocol_names()
 							.map::<_, fn(_) -> _>(|(n, t)| (n, <Bytes as PartialEq>::eq, t));
 						multistream_select::listener_select_proto(connection, iter)
 							.map_err(|err| IoError::new(IoErrorKind::Other, err))
 							.and_then(move |(upgrade_id, connection)| {
-								upgrade.upgrade(connection, upgrade_id, Endpoint::Listener,
-												&remote_addr)
+								let fut = upgrade.upgrade(connection, upgrade_id, Endpoint::Listener,
+												&remote_addr);
+								fut.map(move |c| (c, remote_addr))
 							})
 							.into_future()
 					});
 
-				(Box::new(connection) as Box<_>, client_addr)
+				Box::new(connection) as Box<_>
 			});
 
 		Ok((Box::new(stream), new_addr))
@@ -929,8 +960,8 @@ where
 	C: Clone,
 {
 	type RawConn = C::Output;
-	type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>>;
-	type ListenerUpgrade = Box<Future<Item = C::Output, Error = IoError>>;
+	type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
+	type ListenerUpgrade = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>;
 	type Dial = Box<Future<Item = C::Output, Error = IoError>>;
 
 	#[inline]

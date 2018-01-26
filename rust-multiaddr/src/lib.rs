@@ -57,6 +57,19 @@ impl Multiaddr {
         self.bytes.to_owned()
     }
 
+    /// Produces a `Multiaddr` from its bytes representation.
+    pub fn from_bytes(bytes: Vec<u8>) -> Result<Multiaddr> {
+        {
+            let mut ptr = &bytes[..];
+            while !ptr.is_empty() {
+                let (_, new_ptr) = AddrComponent::from_bytes(ptr)?;
+                ptr = new_ptr;
+            }
+        }
+
+        Ok(Multiaddr { bytes })
+    }
+
     /// Extracts a slice containing the entire underlying vector.
     pub fn as_slice(&self) -> &[u8] {
         &self.bytes

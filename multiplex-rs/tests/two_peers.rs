@@ -53,7 +53,7 @@ fn client_to_server_outbound() {
         let future = listener
             .into_future()
             .map_err(|(err, _)| err)
-            .and_then(|(client, _)| client.unwrap().0)
+            .and_then(|(client, _)| client.unwrap().map(|v| v.0))
             .and_then(|client| client.outbound())
             .map(|client| Framed::<_, bytes::BytesMut>::new(client))
             .and_then(|client| {
@@ -102,7 +102,7 @@ fn client_to_server_inbound() {
         let future = listener
             .into_future()
             .map_err(|(err, _)| err)
-            .and_then(|(client, _)| client.unwrap().0)
+            .and_then(|(client, _)| client.unwrap().map(|v| v.0))
             .and_then(|client| client.inbound())
             .map(|client| Framed::<_, bytes::BytesMut>::new(client))
             .and_then(|client| {

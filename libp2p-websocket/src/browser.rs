@@ -48,8 +48,8 @@ impl BrowserWsConfig {
 
 impl Transport for BrowserWsConfig {
 	type RawConn = BrowserWsConn;
-	type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>>; // TODO: use `!`
-	type ListenerUpgrade = Box<Future<Item = Self::RawConn, Error = IoError>>; // TODO: use `!`
+	type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>; // TODO: use `!`
+	type ListenerUpgrade = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>; // TODO: use `!`
 	type Dial = FutureThen<
 		oneshot::Receiver<Result<BrowserWsConn, IoError>>,
 		Result<BrowserWsConn, IoError>,

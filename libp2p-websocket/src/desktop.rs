@@ -58,9 +58,9 @@ where
 	type RawConn = Box<AsyncStream>;
 	type Listener = stream::Map<
 		T::Listener,
-		fn((<T as Transport>::ListenerUpgrade, Multiaddr)) -> (Self::ListenerUpgrade, Multiaddr),
+		fn(<T as Transport>::ListenerUpgrade) -> Self::ListenerUpgrade,
 	>;
-	type ListenerUpgrade = Box<Future<Item = Self::RawConn, Error = IoError>>;
+	type ListenerUpgrade = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
 	type Dial = Box<Future<Item = Self::RawConn, Error = IoError>>;
 
 	fn listen_on(
@@ -89,12 +89,12 @@ where
 			}
 		};
 
-		let listen = inner_listen.map::<_, fn(_) -> _>(|(stream, mut client_addr)| {
-			// Need to suffix `/ws` to each client address.
-			client_addr.append(AddrComponent::WS);
-
+		let listen = inner_listen.map::<_, fn(_) -> _>(|stream| {
 			// Upgrade the listener to websockets like the websockets library requires us to do.
-			let upgraded = stream.and_then(|stream| {
+			let upgraded = stream.and_then(|(stream, mut client_addr)| {
+				// Need to suffix `/ws` to each client address.
+				client_addr.append(AddrComponent::WS);
+
 				stream
 					.into_ws()
 					.map_err(|e| IoError::new(IoErrorKind::Other, e.3))
@@ -130,12 +130,10 @@ where
 					.map(|s| Box::new(Ok(s).into_future()) as Box<Future<Item = _, Error = _>>)
 					.into_future()
 					.flatten()
+					.map(move |v| (v, client_addr))
 			});
 
-			(
-				Box::new(upgraded) as Box<Future<Item = _, Error = _>>,
-				client_addr,
-			)
+			Box::new(upgraded) as Box<Future<Item = _, Error = _>>
 		});
 
 		Ok((listen, new_addr))
@@ -216,7 +214,7 @@ mod tests {
 		let listener = listener
 			.into_future()
 			.map_err(|(e, _)| e)
-			.and_then(|(c, _)| c.unwrap().0);
+			.and_then(|(c, _)| c.unwrap().map(|v| v.0));
 		let dialer = ws_config.clone().dial(addr).unwrap();
 
 		let future = listener
@@ -240,7 +238,7 @@ mod tests {
 		let listener = listener
 			.into_future()
 			.map_err(|(e, _)| e)
-			.and_then(|(c, _)| c.unwrap().0);
+			.and_then(|(c, _)| c.unwrap().map(|v| v.0));
 		let dialer = ws_config.clone().dial(addr).unwrap();
 
 		let future = listener

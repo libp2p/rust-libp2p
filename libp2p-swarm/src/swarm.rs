@@ -76,7 +76,7 @@ pub struct SwarmController<T, C>
 {
     transport: T,
     upgraded: UpgradedNode<T, C>,
-    new_listeners: mpsc::UnboundedSender<Box<Stream<Item = (Box<Future<Item = C::Output, Error = IoError>>, Multiaddr), Error = IoError>>>,
+    new_listeners: mpsc::UnboundedSender<Box<Stream<Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>, Error = IoError>>>,
     new_dialers: mpsc::UnboundedSender<(Box<Future<Item = C::Output, Error = IoError>>, Multiaddr)>,
     new_toprocess: mpsc::UnboundedSender<Box<Future<Item = (), Error = IoError>>>,
 }
@@ -158,10 +158,10 @@ pub struct SwarmFuture<T, C, H, F>
 {
     upgraded: UpgradedNode<T, C>,
     handler: H,
-    new_listeners: mpsc::UnboundedReceiver<Box<Stream<Item = (Box<Future<Item = C::Output, Error = IoError>>, Multiaddr), Error = IoError>>>,
+    new_listeners: mpsc::UnboundedReceiver<Box<Stream<Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>, Error = IoError>>>,
     next_incoming: Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>,
-    listeners: Vec<Box<Stream<Item = (Box<Future<Item = C::Output, Error = IoError>>, Multiaddr), Error = IoError>>>,
-    listeners_upgrade: Vec<(Box<Future<Item = C::Output, Error = IoError>>, Multiaddr)>,
+    listeners: Vec<Box<Stream<Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>, Error = IoError>>>,
+    listeners_upgrade: Vec<Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>>,
     dialers: Vec<(Box<Future<Item = C::Output, Error = IoError>>, Multiaddr)>,
     new_dialers: mpsc::UnboundedReceiver<(Box<Future<Item = C::Output, Error = IoError>>, Multiaddr)>,
     to_process: Vec<future::Either<F, Box<Future<Item = (), Error = IoError>>>>,
@@ -225,9 +225,9 @@ impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
         for n in (0 .. self.listeners.len()).rev() {
             let mut listener = self.listeners.swap_remove(n);
             match listener.poll() {
-                Ok(Async::Ready(Some((upgrade, client_addr)))) => {
+                Ok(Async::Ready(Some(upgrade))) => {
                     self.listeners.push(listener);
-                    self.listeners_upgrade.push((upgrade, client_addr));
+                    self.listeners_upgrade.push(upgrade);
                 },
                 Ok(Async::NotReady) => {
                     self.listeners.push(listener);
@@ -238,13 +238,13 @@ impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
         }
 
         for n in (0 .. self.listeners_upgrade.len()).rev() {
-            let (mut upgrade, addr) = self.listeners_upgrade.swap_remove(n);
+            let mut upgrade = self.listeners_upgrade.swap_remove(n);
             match upgrade.poll() {
-                Ok(Async::Ready(output)) => {
-                    self.to_process.push(future::Either::A(handler(output, addr).into_future()));
+                Ok(Async::Ready((output, client_addr))) => {
+                    self.to_process.push(future::Either::A(handler(output, client_addr).into_future()));
                 },
                 Ok(Async::NotReady) => {
-                    self.listeners_upgrade.push((upgrade, addr));
+                    self.listeners_upgrade.push(upgrade);
                 },
                 Err(err) => return Err(err),
             }
