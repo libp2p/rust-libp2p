@@ -41,7 +41,7 @@ jobs:
     docker:
       - image: rust
       - image: ipfs/go-ipfs
-      - image: parity/libp2p-js-echo-server
+      - image: parity/libp2p-js-echo-server:gitlab-ci
     steps:
       - checkout
       - restore_cache:
