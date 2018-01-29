@@ -41,12 +41,7 @@ jobs:
     docker:
       - image: rust
       - image: ipfs/go-ipfs
-      - image: node
-        command: ["bash", "-c", "git clone https://github.com/libp2p/js-libp2p &&
-                                 cd js-libp2p &&
-                                 git checkout 4c81f39ebe75946feeadf6920101b61e329fb179 &&
-                                 npm install &&
-                                 node ./examples/echo/src/listener.js"]
+      - image: parity/libp2p-js-echo-server
     steps:
       - checkout
       - restore_cache:
