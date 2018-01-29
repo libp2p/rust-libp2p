@@ -116,7 +116,7 @@ where
 	type RawConn = T::RawConn;
 	type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
 	type ListenerUpgrade = Box<Future<Item = (T::RawConn, Multiaddr), Error = IoError>>;
-	type Dial = Box<Future<Item = T::RawConn, Error = IoError>>;
+	type Dial = Box<Future<Item = (T::RawConn, Multiaddr), Error = IoError>>;
 
 	#[inline]
 	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -151,7 +151,7 @@ where
 					.and_then(move |(dial, connec)| {
 						dial.map(move |dial| (dial, connec))
 					})
-					.map(move |(identify, connec)| {
+					.map(move |((identify, _), connec)| {
 						let client_addr: Multiaddr = if let IdentifyOutput::RemoteInfo { info, .. } = identify {
 							println!("received {:?}", info);
 							//peerstore
@@ -196,7 +196,7 @@ where
 					.filter_map(|res| res.ok())
 					.into_future()
 					.map_err(|(err, _)| err)
-					.and_then(|(val, _)| val.ok_or(IoErrorKind::InvalidData.into()));		// TODO: wrong error
+					.and_then(|(val, _)| val.ok_or(IoErrorKind::InvalidData.into())); 		// TODO: wrong error
 
 				Ok(Box::new(future) as Box<_>)
 			},
@@ -218,7 +218,7 @@ where
 
 				let future = dial
 					.and_then(|identify| {
-						if let IdentifyOutput::RemoteInfo { info, .. } = identify {
+						if let (IdentifyOutput::RemoteInfo { info, .. }, _) = identify {
 							//peerstore
 							//	.peer_or_create(info.public_key)		// TODO: is this the public key?
 						} else {
@@ -285,7 +285,7 @@ where
 				dial.map(move |dial| (dial, connec))
 			})
 			.map(move |(identify, connec)| {
-				let client_addr: Multiaddr = if let IdentifyOutput::RemoteInfo { info, .. } = identify {
+				let client_addr: Multiaddr = if let (IdentifyOutput::RemoteInfo { info, .. }, _) = identify {
 					println!("received {:?}", info);
 					//peerstore
 					//	.peer_or_create(info.public_key)		// TODO: is this the public key?

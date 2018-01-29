@@ -61,7 +61,7 @@ where
 		fn(<T as Transport>::ListenerUpgrade) -> Self::ListenerUpgrade,
 	>;
 	type ListenerUpgrade = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
-	type Dial = Box<Future<Item = Self::RawConn, Error = IoError>>;
+	type Dial = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
 
 	fn listen_on(
 		self,
@@ -159,7 +159,7 @@ where
 			}
 		};
 
-		let dial = inner_dial.into_future().and_then(move |connec| {
+		let dial = inner_dial.into_future().and_then(move |(connec, client_addr)| {
 			// We pass a dummy address to `ClientBuilder` because it is never used anywhere
 			// in the negotiation anyway, and we use `async_connect_on` to pass a stream.
 			ClientBuilder::new(if is_wss { "wss://127.0.0.1" } else { "ws://127.0.0.1" })
@@ -185,6 +185,7 @@ where
 					let read_write = RwStreamSink::new(framed_data);
 					Box::new(read_write) as Box<AsyncStream>
 				})
+				.map(|c| (c, client_addr))
 		});
 
 		Ok(Box::new(dial) as Box<_>)
@@ -215,7 +216,7 @@ mod tests {
 			.into_future()
 			.map_err(|(e, _)| e)
 			.and_then(|(c, _)| c.unwrap().map(|v| v.0));
-		let dialer = ws_config.clone().dial(addr).unwrap();
+		let dialer = ws_config.clone().dial(addr).unwrap().map(|v| v.0);
 
 		let future = listener
 			.select(dialer)
@@ -239,7 +240,7 @@ mod tests {
 			.into_future()
 			.map_err(|(e, _)| e)
 			.and_then(|(c, _)| c.unwrap().map(|v| v.0));
-		let dialer = ws_config.clone().dial(addr).unwrap();
+		let dialer = ws_config.clone().dial(addr).unwrap().map(|v| v.0);
 
 		let future = listener
 			.select(dialer)

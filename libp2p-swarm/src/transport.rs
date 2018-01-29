@@ -68,7 +68,7 @@ pub trait Transport {
 	type ListenerUpgrade: Future<Item = (Self::RawConn, Multiaddr), Error = IoError>;
 
 	/// A future which indicates that we are currently dialing to a peer.
-	type Dial: IntoFuture<Item = Self::RawConn, Error = IoError>;
+	type Dial: IntoFuture<Item = (Self::RawConn, Multiaddr), Error = IoError>;
 
 	/// Listen on the given multiaddr. Returns a stream of incoming connections, plus a modified
 	/// version of the `Multiaddr`. This new `Multiaddr` is the one that that should be advertised
@@ -164,7 +164,7 @@ impl Transport for DeniedTransport {
 	type RawConn = Cursor<Vec<u8>>;
 	type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
 	type ListenerUpgrade = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
-	type Dial = Box<Future<Item = Self::RawConn, Error = IoError>>;
+	type Dial = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
 
 	#[inline]
 	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -198,8 +198,7 @@ where
 	type RawConn = EitherSocket<A::RawConn, B::RawConn>;
 	type Listener = EitherListenStream<A::Listener, B::Listener>;
 	type ListenerUpgrade = EitherListenUpgrade<A::ListenerUpgrade, B::ListenerUpgrade>;
-	type Dial =
-		EitherTransportFuture<<A::Dial as IntoFuture>::Future, <B::Dial as IntoFuture>::Future>;
+	type Dial = EitherListenUpgrade<<A::Dial as IntoFuture>::Future, <B::Dial as IntoFuture>::Future>;
 
 	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
 		let (first, addr) = match self.0.listen_on(addr) {
@@ -215,12 +214,12 @@ where
 
 	fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
 		let (first, addr) = match self.0.dial(addr) {
-			Ok(connec) => return Ok(EitherTransportFuture::First(connec.into_future())),
+			Ok(connec) => return Ok(EitherListenUpgrade::First(connec.into_future())),
 			Err(err) => err,
 		};
 
 		match self.1.dial(addr) {
-			Ok(connec) => Ok(EitherTransportFuture::Second(connec.into_future())),
+			Ok(connec) => Ok(EitherListenUpgrade::Second(connec.into_future())),
 			Err((second, addr)) => Err((OrTransport(first, second), addr)),
 		}
 	}
@@ -831,7 +830,7 @@ where
 	pub fn dial(
 		self,
 		addr: Multiaddr,
-	) -> Result<Box<Future<Item = C::Output, Error = IoError> + 'a>, (Self, Multiaddr)> {
+	) -> Result<Box<Future<Item = (C::Output, Multiaddr), Error = IoError> + 'a>, (Self, Multiaddr)> {
 		let upgrade = self.upgrade;
 
 		let dialed_fut = match self.transports.dial(addr.clone()) {
@@ -848,15 +847,16 @@ where
 
 		let future = dialed_fut
             // Try to negotiate the protocol.
-            .and_then(move |connection| {
+            .and_then(move |(connection, client_addr)| {
                 let iter = upgrade.protocol_names()
                     .map(|(name, id)| (name, <Bytes as PartialEq>::eq, id));
                 let negotiated = multistream_select::dialer_select_proto(connection, iter)
                     .map_err(|err| IoError::new(IoErrorKind::Other, err));
-                negotiated.map(|(upgrade_id, conn)| (upgrade_id, conn, upgrade))
+                negotiated.map(|(upgrade_id, conn)| (upgrade_id, conn, upgrade, client_addr))
             })
-            .and_then(move |(upgrade_id, connection, upgrade)| {
-                upgrade.upgrade(connection, upgrade_id, Endpoint::Dialer, &addr)
+            .and_then(move |(upgrade_id, connection, upgrade, client_addr)| {
+                let f = upgrade.upgrade(connection, upgrade_id, Endpoint::Dialer, &client_addr);
+				f.map(|v| (v, client_addr))
             });
 
 		Ok(Box::new(future))
@@ -962,7 +962,7 @@ where
 	type RawConn = C::Output;
 	type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
 	type ListenerUpgrade = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>;
-	type Dial = Box<Future<Item = C::Output, Error = IoError>>;
+	type Dial = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>;
 
 	#[inline]
 	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {

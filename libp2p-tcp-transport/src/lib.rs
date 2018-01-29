@@ -58,7 +58,7 @@ extern crate futures;
 use std::io::Error as IoError;
 use std::net::SocketAddr;
 use tokio_core::reactor::Handle;
-use tokio_core::net::{TcpStream, TcpListener, TcpStreamNew};
+use tokio_core::net::{TcpStream, TcpListener};
 use futures::future::{self, Future, FutureResult, IntoFuture};
 use futures::stream::Stream;
 use multiaddr::{Multiaddr, AddrComponent, ToMultiaddr};
@@ -87,7 +87,7 @@ impl Transport for TcpConfig {
     type RawConn = TcpStream;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
     type ListenerUpgrade = FutureResult<(Self::RawConn, Multiaddr), IoError>;
-    type Dial = TcpStreamNew;
+    type Dial = Box<Future<Item = (TcpStream, Multiaddr), Error = IoError>>;
 
     /// Listen on the given multi-addr.
     /// Returns the address back if it isn't supported.
@@ -126,7 +126,9 @@ impl Transport for TcpConfig {
     /// or gives back the multiaddress.
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
         if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
-            Ok(TcpStream::connect(&socket_addr, &self.event_loop))
+            let fut = TcpStream::connect(&socket_addr, &self.event_loop)
+                .map(|t| (t, addr));
+            Ok(Box::new(fut) as Box<_>)
         } else {
             Err((self, addr))
         }
@@ -244,7 +246,7 @@ mod tests {
         let socket = tcp.dial(addr.clone()).unwrap();
         // Define what to do with the socket once it's obtained
         let action = socket.then(|sock| match sock {
-            Ok(mut s) => {
+            Ok((mut s, _)) => {
                 let written = s.write(&[0x1, 0x2, 0x3]).unwrap();
                 Ok(written)
             }

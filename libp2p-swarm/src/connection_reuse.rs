@@ -107,7 +107,7 @@ where
 	type RawConn = <C::Output as StreamMuxer>::Substream;
 	type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
 	type ListenerUpgrade = FutureResult<(Self::RawConn, Multiaddr), IoError>;
-	type Dial = Box<Future<Item = Self::RawConn, Error = IoError>>;
+	type Dial = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
 
 	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
 		let (listener, new_addr) = match self.inner.listen_on(addr.clone()) {
@@ -141,7 +141,7 @@ where
 		let ingoing = dial.clone()
 			.map(|muxer| stream::repeat(muxer))
 			.flatten_stream()
-			.map(move |muxer| ((&*muxer).clone(), addr.clone()));
+			.map(move |muxer| (&*muxer).clone());
 
 		let mut lock = self.shared.lock();
 		lock.incoming.push(Box::new(ingoing) as Box<_>);
@@ -150,7 +150,10 @@ where
 
 		let future = dial
 			.map_err(|err| err.lock().take().expect("error can only be extracted once"))
-			.and_then(|dial| (&*dial).clone().outbound());
+			.and_then(|dial| {
+				let (dial, client_addr) = (&*dial).clone();
+				dial.outbound().map(|s| (s, client_addr))
+			});
 		Ok(Box::new(future) as Box<_>)
 	}
 }

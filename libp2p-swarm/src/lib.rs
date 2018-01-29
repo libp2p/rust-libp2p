@@ -149,7 +149,7 @@
 //!     // TODO: right now the only available protocol is ping, but we want to replace it with
 //!     //       something that is more simple to use
 //!     .dial("127.0.0.1:12345".parse::<libp2p_swarm::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())
-//!     .and_then(|(mut pinger, service)| {
+//!     .and_then(|((mut pinger, service), _)| {
 //!         pinger.ping().map_err(|_| panic!()).select(service).map_err(|_| panic!())
 //!     });
 //! 
