@@ -32,27 +32,23 @@
 //! When called on a `ConnectionReuse`, the `listen_on` method will listen on the given
 //! multiaddress (by using the underlying `Transport`), then will apply a `flat_map` on the
 //! incoming connections so that we actually listen to the incoming substreams of each connection.
-//! TODO: design issue ; we need a way to handle the substreams that are opened by remotes on
-//!       connections opened by us
 //!
 //! When called on a `ConnectionReuse`, the `dial` method will try to use a connection that has
 //! already been opened earlier, and open an outgoing substream on it. If none is available, it
 //! will dial the given multiaddress. Dialed node can also spontaneously open new substreams with
 //! us. In order to handle these new substreams you should use the `next_incoming` method of the
 //! `MuxedTransport` trait.
-//! TODO: this raises several questions ^
-//!
-//! TODO: this whole code is a dummy and should be rewritten after the design has been properly
-//!       figured out.
 
+use fnv::FnvHashMap;
 use futures::future::{self, IntoFuture, FutureResult};
-use futures::{stream, Async, Future, Poll, Stream, task};
+use futures::{Async, Future, Poll, Stream};
 use futures::stream::Fuse as StreamFuse;
+use futures::sync::mpsc;
 use multiaddr::Multiaddr;
 use muxing::StreamMuxer;
 use parking_lot::Mutex;
-use smallvec::SmallVec;
 use std::io::Error as IoError;
+use std::mem;
 use std::sync::Arc;
 use transport::{ConnectionUpgrade, MuxedTransport, Transport, UpgradedNode};
 
@@ -66,31 +62,49 @@ pub struct ConnectionReuse<T, C>
 where
 	T: Transport,
 	C: ConnectionUpgrade<T::RawConn>,
+	C::Output: StreamMuxer,
 {
 	// Underlying transport and connection upgrade for when we need to dial or listen.
 	inner: UpgradedNode<T, C>,
+
+	// Struct shared between most of the types that are part of the `ConnectionReuse`
+	// infrastructure.
 	shared: Arc<Mutex<Shared<C::Output>>>,
 }
 
-struct Shared<O> {
-	// List of futures to dialed connections.
-	incoming: Vec<Box<Stream<Item = (O, Multiaddr), Error = future::SharedError<Mutex<Option<IoError>>>>>>,
-	// Tasks to signal when an element is added to `incoming`. Only used when `incoming` is empty.
-	to_signal: Vec<task::Task>,
+struct Shared<M> where M: StreamMuxer {
+	// List of active muxers.
+	active_connections: FnvHashMap<Multiaddr, M>,
+
+	// List of pending inbound substreams from dialed nodes.
+	// Only add to this list elements received through `add_to_next_rx`.
+	next_incoming: Vec<(M, M::InboundSubstream, Multiaddr)>,
+
+	// New elements are not directly added to `next_incoming`. Instead they are sent to this
+	// channel. This is done so that we can wake up tasks whenever a next inbound stream arrives.
+	add_to_next_rx: mpsc::UnboundedReceiver<(M, M::InboundSubstream, Multiaddr)>,
+
+	// Other part of `add_to_next_rx`.
+	add_to_next_tx: mpsc::UnboundedSender<(M, M::InboundSubstream, Multiaddr)>,
 }
 
 impl<T, C> From<UpgradedNode<T, C>> for ConnectionReuse<T, C>
 where
 	T: Transport,
 	C: ConnectionUpgrade<T::RawConn>,
+	C::Output: StreamMuxer,
 {
 	#[inline]
 	fn from(node: UpgradedNode<T, C>) -> ConnectionReuse<T, C> {
+		let (tx, rx) = mpsc::unbounded();
+
 		ConnectionReuse {
 			inner: node,
 			shared: Arc::new(Mutex::new(Shared {
-				incoming: Vec::new(),
-				to_signal: Vec::new(),
+				active_connections: Default::default(),
+				next_incoming: Vec::new(),
+				add_to_next_rx: rx,
+				add_to_next_tx: tx,
 			})),
 		}
 	}
@@ -118,6 +132,7 @@ where
 		};
 
 		let listener = ConnectionReuseListener {
+			shared: self.shared.clone(),
 			listener: listener.fuse(),
 			current_upgrades: Vec::new(),
 			connections: Vec::new(),
@@ -127,34 +142,36 @@ where
 	}
 
 	fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-		let dial = match self.inner.dial(addr.clone()) {
+		// If we already have an active connection, use it!
+		if let Some(connec) = self.shared.lock().active_connections.get(&addr).map(|c| c.clone()) {
+			let future = connec.outbound().map(|s| (s, addr));
+			return Ok(Box::new(future) as Box<_>);
+		}
+
+		// TODO: handle if we're already in the middle in dialing that same node?
+		// TODO: try dialing again if the existing connection has dropped
+
+		let dial = match self.inner.dial(addr) {
 			Ok(l) => l,
 			Err((inner, addr)) => {
 				return Err((ConnectionReuse { inner: inner, shared: self.shared }, addr));
 			}
 		};
 
+		let shared = self.shared.clone();
 		let dial = dial
-			.map_err::<fn(IoError) -> Mutex<Option<IoError>>, _>(|err| Mutex::new(Some(err)))
-			.shared();
-
-		let ingoing = dial.clone()
-			.map(|muxer| stream::repeat(muxer))
-			.flatten_stream()
-			.map(move |muxer| (&*muxer).clone());
-
-		let mut lock = self.shared.lock();
-		lock.incoming.push(Box::new(ingoing) as Box<_>);
-		for task in lock.to_signal.drain(..) { task.notify(); }
-		drop(lock);
-
-		let future = dial
-			.map_err(|err| err.lock().take().expect("error can only be extracted once"))
-			.and_then(|dial| {
-				let (dial, client_addr) = (&*dial).clone();
-				dial.outbound().map(|s| (s, client_addr))
+			.into_future()
+			.and_then(move |(connec, addr)| {
+				// Always replace the active connection because we are the most recent.
+				let mut lock = shared.lock();
+				lock.active_connections.insert(addr.clone(), connec.clone());
+				// TODO: doesn't need locking ; the sender could be extracted
+				let _ = lock.add_to_next_tx
+					.unbounded_send((connec.clone(), connec.clone().inbound(), addr.clone()));
+				connec.outbound().map(|s| (s, addr))
 			});
-		Ok(Box::new(future) as Box<_>)
+
+		Ok(Box::new(dial) as Box<_>)
 	}
 }
 
@@ -166,15 +183,12 @@ where
 	C::Output: StreamMuxer + Clone,
 	C::NamesIter: Clone, // TODO: not elegant
 {
-	type Incoming = Box<Future<Item = (<C::Output as StreamMuxer>::Substream, Multiaddr), Error = IoError>>;
+	type Incoming = ConnectionReuseIncoming<C::Output>;
+	type IncomingUpgrade = future::FutureResult<(<C::Output as StreamMuxer>::Substream, Multiaddr), IoError>;
 
 	#[inline]
 	fn next_incoming(self) -> Self::Incoming {
-		let future = ConnectionReuseIncoming { shared: self.shared.clone() }
-			.and_then(|(out, addr)| {
-				out.inbound().map(|o| (o, addr))
-			});
-		Box::new(future) as Box<_>
+		ConnectionReuseIncoming { shared: self.shared.clone() }
 	}
 }
 
@@ -189,6 +203,7 @@ where
 	listener: StreamFuse<S>,
 	current_upgrades: Vec<F>,
 	connections: Vec<(M, <M as StreamMuxer>::InboundSubstream, Multiaddr)>,
+	shared: Arc<Mutex<Shared<M>>>,
 }
 
 impl<S, F, M> Stream for ConnectionReuseListener<S, F, M>
@@ -200,76 +215,66 @@ where S: Stream<Item = F, Error = IoError>,
 	type Error = IoError;
 
 	fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+		// Check for any incoming connection on the socket.
 		match self.listener.poll() {
 			Ok(Async::Ready(Some(upgrade))) => {
 				self.current_upgrades.push(upgrade);
 			}
-			Ok(Async::NotReady) => (),
+			Ok(Async::NotReady) => {},
 			Ok(Async::Ready(None)) => {
-				if self.connections.is_empty() {
+				if self.connections.is_empty() && self.current_upgrades.is_empty() {
 					return Ok(Async::Ready(None));
 				}
 			}
 			Err(err) => {
-				if self.connections.is_empty() {
+				if self.connections.is_empty() && self.current_upgrades.is_empty() {
 					return Err(err);
 				}
 			}
 		};
-		
-		// Most of the time, this array will contain 0 or 1 elements, but sometimes it may contain
-		// more and we don't want to panic if that happens. With 8 elements, we can be pretty
-		// confident that this is never going to spill into a `Vec`.
-		let mut upgrades_to_drop: SmallVec<[_; 8]> = SmallVec::new();
-		let mut early_ret = None;
 
-		for (index, current_upgrade) in
-			self.current_upgrades.iter_mut().enumerate()
-		{
+		// Check whether any upgrade (to a muxer) on an incoming connection is ready.
+		// We extract everything at the start, then insert back the elements that we still want at
+		// the next iteration.
+        for n in (0 .. self.current_upgrades.len()).rev() {
+            let mut current_upgrade = self.current_upgrades.swap_remove(n);
 			match current_upgrade.poll() {
 				Ok(Async::Ready((muxer, client_addr))) => {
 					let next_incoming = muxer.clone().inbound();
-					self.connections.push((muxer, next_incoming, client_addr.clone()));
-					upgrades_to_drop.push(index);
+					self.connections.push((muxer.clone(), next_incoming, client_addr.clone()));
+					// We overwrite any current active connection to that multiaddr because we
+					// are the freshest possible connection.
+					self.shared.lock().active_connections.insert(client_addr, muxer);
 				},
-				Ok(Async::NotReady) => {},
+				Ok(Async::NotReady) => {
+					self.current_upgrades.push(current_upgrade);
+				},
 				Err(err) => {
-					upgrades_to_drop.push(index);
-					early_ret = Some(Async::Ready(Some(Err(err).into_future())));
+					// Insert the rest of the pending upgrades, but not the current one.
+					return Ok(Async::Ready(Some(future::err(err))));
 				},
 			}
 		}
 
-		for &index in upgrades_to_drop.iter().rev() {
-			self.current_upgrades.swap_remove(index);
-		}
-
-		if let Some(early_ret) = early_ret {
-			return Ok(early_ret);
-		}
-
-		// We reuse `upgrades_to_drop`.
-		upgrades_to_drop.clear();
-		let mut connections_to_drop = upgrades_to_drop;
-
-		for (index, &mut (ref mut muxer, ref mut next_incoming, ref client_addr)) in
-			self.connections.iter_mut().enumerate()
-		{
+		// Check whether any incoming substream is ready.
+		// We extract everything at the start, then insert back the elements that we still want at
+		// the next iteration.
+        for n in (0 .. self.connections.len()).rev() {
+            let (muxer, mut next_incoming, client_addr) = self.connections.swap_remove(n);
 			match next_incoming.poll() {
 				Ok(Async::Ready(incoming)) => {
 					let mut new_next = muxer.clone().inbound();
-					*next_incoming = new_next;
-					return Ok(Async::Ready(Some(Ok((incoming, client_addr.clone())).into_future())));
+					self.connections.push((muxer, new_next, client_addr.clone()));
+					return Ok(Async::Ready(Some(Ok((incoming, client_addr)).into_future())));
 				}
-				Ok(Async::NotReady) => {}
-				Err(_) => {
-					connections_to_drop.push(index);
+				Ok(Async::NotReady) => {
+					self.connections.push((muxer, next_incoming, client_addr));
+				}
+				Err(err) => {
+					// Insert the rest of the pending connections, but not the current one.
+					return Ok(Async::Ready(Some(future::err(err))));
 				}
 			}
-		}
-
-		for &index in connections_to_drop.iter().rev() {
-			self.connections.swap_remove(index);
 		}
 
 		Ok(Async::NotReady)
@@ -278,47 +283,51 @@ where S: Stream<Item = F, Error = IoError>,
 
 /// Implementation of `Future<Item = (impl AsyncRead + AsyncWrite, Multiaddr)` for the
 /// `ConnectionReuse` struct.
-pub struct ConnectionReuseIncoming<O> {
-	shared: Arc<Mutex<Shared<O>>>,
+pub struct ConnectionReuseIncoming<M>
+	where M: StreamMuxer
+{
+	shared: Arc<Mutex<Shared<M>>>,
 }
 
-impl<O> Future for ConnectionReuseIncoming<O>
-	where O: Clone
+impl<M> Future for ConnectionReuseIncoming<M>
+	where M: Clone + StreamMuxer,
 {
-	type Item = (O, Multiaddr);
+	type Item = future::FutureResult<(M::Substream, Multiaddr), IoError>;
 	type Error = IoError;
 
 	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
 		let mut lock = self.shared.lock();
 
-		let mut to_remove = SmallVec::<[_; 8]>::new();
-		let mut ret_value = None;
-
-		for (offset, future) in lock.incoming.iter_mut().enumerate() {
-			match future.poll() {
-				Ok(Async::Ready(Some((value, addr)))) => {
-					ret_value = Some((value.clone(), addr));
-					break;
+		loop {
+			match lock.add_to_next_rx.poll() {
+				Ok(Async::Ready(Some(elem))) => {
+					lock.next_incoming.push(elem);
 				},
-				Ok(Async::Ready(None)) => {
-					to_remove.push(offset);
-				},
-				Ok(Async::NotReady) => {},
-				Err(_) => {
-					to_remove.push(offset);
+				Ok(Async::NotReady) => break,
+				Ok(Async::Ready(None)) | Err(_) => {
+					// The sender and receiver are both in the same struct, therefore the link can
+					// never break.
+					unreachable!()
 				},
 			}
 		}
 
-		for offset in to_remove.into_iter().rev() {
-			lock.incoming.swap_remove(offset);
+		let mut next_incoming = mem::replace(&mut lock.next_incoming, Vec::new());
+		while let Some((muxer, mut future, addr)) = next_incoming.pop() {
+			match future.poll() {
+				Ok(Async::Ready(value)) => {
+					let next = muxer.clone().inbound();
+					lock.next_incoming.push((muxer, next, addr.clone()));
+					lock.next_incoming.extend(next_incoming);
+					return Ok(Async::Ready(future::ok((value, addr))));
+				},
+				Ok(Async::NotReady) => {
+					lock.next_incoming.push((muxer, future, addr));
+				},
+				Err(_) => {},
+			}
 		}
 
-		if let Some(ret_value) = ret_value {
-			Ok(Async::Ready(ret_value))
-		} else {
-			lock.to_signal.push(task::current());
-			Ok(Async::NotReady)
-		}
+		Ok(Async::NotReady)
 	}
 }

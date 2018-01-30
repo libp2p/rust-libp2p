@@ -5,6 +5,7 @@ authors = ["Parity Technologies <admin@parity.io>"]
 
 [dependencies]
 bytes = "0.4"
+fnv = "1.0"
 multiaddr = "0.2.0"
 multistream-select = { path = "../multistream-select" }
 futures = { version = "0.1", features = ["use_std"] }
@@ -15,4 +16,5 @@ tokio-io = "0.1"
 [dev-dependencies]
 libp2p-ping = { path = "../libp2p-ping" }
 libp2p-tcp-transport = { path = "../libp2p-tcp-transport" }
+multiplex = { path = "../multiplex-rs" }
 tokio-core = "0.1"
