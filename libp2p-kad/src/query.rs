@@ -28,7 +28,7 @@ use libp2p_ping::Ping;
 use libp2p_swarm::{ConnectionUpgrade, UpgradedNode};
 use libp2p_swarm::{Endpoint, MuxedTransport, OrUpgrade, SwarmController, UpgradeExt};
 use libp2p_swarm::transport::EitherSocket;
-use multiaddr::Multiaddr;
+use multiaddr::{AddrComponent, Multiaddr};
 use parking_lot::Mutex;
 use protocol;
 use rand;
@@ -209,7 +209,7 @@ where
 		// Nodes that need to be attempted.
 		pending_nodes: Vec<PeerId>,
 		// Multiaddresses that we tried to contact but failed.
-		failed_to_contact: FnvHashSet<Multiaddr>,
+		failed_to_contact: FnvHashSet<PeerId>,
 	}
 
 	let initial_state = State {
@@ -229,34 +229,26 @@ where
 			.pending_nodes
 			.iter()
 			.filter(|peer| !state.result.iter().any(|p| &p == peer))
-			.filter_map(|node| {
-				query_interface
-                    .peer_store().clone()
-                    .peer(node)
-                    .into_iter()
-                    .flat_map(|peer| peer.addrs())       // TODO: choose from open_connections if any
-                    .filter(|ma| !state.failed_to_contact.contains(ma))
-                    .filter(|ma| !state.current_attempts_addrs.iter().any(|f| &f.1 == ma))
-                    .filter(|ma| { let s = format!("{:?}", ma); state.result.is_empty() || (!s.contains("127.0.0.1") && !s.contains("::1")) })  // TODO: hack
-                    .next()
-                    .map(|ma| (node.clone(), ma))
-			})
+			.filter(|peer| !state.failed_to_contact.iter().any(|p| &p == peer))
 			.take(parallelism.saturating_sub(state.current_attempts_fut.len()))
+			.map(|peer| peer.clone())
 			.collect::<Vec<_>>();
 		// TODO: loop in case there are less than `parallelism` nodes, so that we can try
 		//       multiple multiaddrs simultaneously
 
-		for (peer, multiaddr) in to_contact {
+		for peer in to_contact {
 			let message = protocol::KadMsg::FindNodeReq {
 				key: searched_key.clone().into_bytes(),
 				cluster_level: 10, // TODO: correct value
 			};
 
+			let multiaddr: Multiaddr = AddrComponent::IPFS(peer.clone().into_bytes()).into();
+
 			println!("contacting {:?}", multiaddr);
 			let resp_rx = query_interface.send(multiaddr.clone(), message);
 			state
 				.current_attempts_addrs
-				.push((peer.clone(), multiaddr.clone()));
+				.push((peer.clone(), multiaddr));
 			let current_attempt = resp_rx
                 .map_err(|_| ())        // TODO: better error?
                 .then(|res| Ok(res));
@@ -301,12 +293,7 @@ where
 							"timeout when contacting {:?} a.k.a. {:?}",
 							remote_addr, remote_id
 						);
-						if let Some(mut peer) =
-							query_interface.peer_store().clone().peer(&remote_id)
-						{
-							peer.set_addr_ttl(remote_addr.clone(), Duration::new(0, 0));
-						}
-						state.failed_to_contact.insert(remote_addr);
+						state.failed_to_contact.insert(remote_id);
 						return Ok(future::Loop::Continue(state));
 					}
 				};
@@ -330,7 +317,7 @@ where
 					{
 						let valid_multiaddrs = peer.multiaddrs
 							.drain(..)
-							.filter(|addr| !state.failed_to_contact.iter().any(|e| e == addr));
+							;//.filter(|addr| !state.failed_to_contact.iter().any(|e| e == addr));
 
 						query_interface2.kbuckets_update(peer.node_id.clone());
 						query_interface2

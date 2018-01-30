@@ -417,14 +417,6 @@ where
 				}
 			};
 
-			// TODO: do correctly
-			let upgrade =
-				IdentifyProtocolConfig
-				.map_upgrade(EitherSocket::Second)
-				.map_upgrade(EitherSocket::First);
-			swarm.dial_to_handler(client_addr, upgrade); // TODO: how to handle errs?
-
-			// TODO: send identify requests for unknown hosts?
 			kademlia_handler(kad_bistream, rx, shared)
 		}
 		EitherSocket::First(EitherSocket::Second(identify)) => {
@@ -437,6 +429,8 @@ where
 					.clone()
 					.peer_or_create(&id)
 					.add_addr(client_addr, Duration::from_secs(3600)); // TODO: configurable
+			} else {
+				println!("requested");
 			}
 
 			Box::new(Ok(()).into_future()) as Box<Future<Item = (), Error = IoError>>

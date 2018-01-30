@@ -21,6 +21,7 @@
 extern crate bytes;
 extern crate example;
 extern crate futures;
+extern crate libp2p_identify as identify;
 extern crate libp2p_kad as kad;
 extern crate libp2p_peerstore as peerstore;
 extern crate libp2p_secio as secio;
@@ -34,6 +35,7 @@ use futures::future::Future;
 use kad::kbucket::KBucketsPeerId;
 use peerstore::PeerId;
 use std::env;
+use std::sync::Arc;
 use std::time::Duration;
 use swarm::{Transport, UpgradeExt};
 use tcp::TcpConfig;
@@ -52,9 +54,13 @@ fn main() {
     // We start by building the tokio engine that will run all the sockets.
     let mut core = Core::new().unwrap();
 
+    let peer_store = Arc::new(peerstore::memory_peerstore::MemoryPeerstore::empty());
+    example::ipfs_bootstrap(&*peer_store);
+
+
     // Now let's build the transport stack.
     // We start by creating a `TcpConfig` that indicates that we want TCP/IP.
-    let transport = TcpConfig::new(core.handle())
+    let transport = identify::IdentifyTransport::new(TcpConfig::new(core.handle())
 
         // On top of TCP/IP, we will use either the plaintext protocol or the secio protocol,
         // depending on which one the remote supports.
@@ -78,14 +84,11 @@ fn main() {
         // `Transport` because the output of the upgrade is not a stream but a controller for
         // muxing. We have to explicitly call `into_connection_reuse()` in order to turn this into
         // a `Transport`.
-        .into_connection_reuse();
+        .into_connection_reuse(), peer_store.clone());
 
     // We now have a `transport` variable that can be used either to dial nodes or listen to
     // incoming connections, and that will automatically apply secio and multiplex on top
     // of any opened stream.
-
-    let peer_store = peerstore::memory_peerstore::MemoryPeerstore::empty();
-    example::ipfs_bootstrap(&peer_store);
 
     let my_peer_id = PeerId::from_public_key(include_bytes!("test-public-key.der"));
     println!("local peer id is: {:?}", my_peer_id);
@@ -95,7 +98,7 @@ fn main() {
     let kad_config = kad::KademliaConfig {
         parallelism: 3,
         record_store: (),
-        peer_store: &peer_store,
+        peer_store: &*peer_store,
         transport: transport.clone(),
         local_peer_id: my_peer_id.clone(),
         timeout: Duration::from_secs(2),
