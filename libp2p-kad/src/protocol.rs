@@ -90,7 +90,7 @@ impl<'a> From<&'a mut protobuf_structs::dht::Message_Peer> for Peer {
 		let node_id = PeerId::from_bytes(peer.get_id().to_vec()).unwrap(); // TODO: don't unwrap
 		let addrs = peer.take_addrs()
 			.into_iter()
-			.map(|a| Multiaddr::from_bytes(a))
+			.map(|a| Multiaddr::from_bytes(a).unwrap())		// TODO: don't unwrap
 			.collect();
 		let connection_ty = peer.get_connection().into();
 

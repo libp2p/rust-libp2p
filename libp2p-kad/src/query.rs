@@ -22,7 +22,7 @@ use fnv::{FnvHashMap, FnvHashSet};
 use futures::{future, stream, Future, IntoFuture};
 use futures::sync::{mpsc, oneshot};
 use kbucket::{KBucketsPeerId, KBucketsTable};
-use libp2p_identify::IdentifyProtocol;
+use libp2p_identify::IdentifyProtocolConfig;
 use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};
 use libp2p_ping::Ping;
 use libp2p_swarm::{ConnectionUpgrade, UpgradedNode};

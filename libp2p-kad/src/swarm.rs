@@ -23,7 +23,7 @@ use fnv::FnvHashMap;
 use futures::{self, future, stream, Future, IntoFuture, Sink, Stream};
 use futures::sync::{mpsc, oneshot};
 use kbucket::{KBucketsPeerId, KBucketsTable, UpdateOutcome};
-use libp2p_identify::{IdentifyInfo, IdentifyProtocol};
+use libp2p_identify::{IdentifyInfo, IdentifyOutput, IdentifyProtocolConfig};
 use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};
 use libp2p_ping::{Ping, Pinger};
 use libp2p_swarm::{self, Endpoint, MuxedTransport, OrUpgrade, SwarmController, UpgradeExt};
@@ -97,16 +97,7 @@ where
 			_,
 			Option<Arc<Mutex<Option<mpsc::UnboundedReceiver<(KadMsg, oneshot::Sender<KadMsg>)>>>>>,
 		>(protocol::KademliaProtocolConfig, None)
-			.or_upgrade(
-			IdentifyProtocol {
-				// TODO: everything here
-				public_key: self.local_peer_id.clone().into_bytes(),
-				protocol_version: "ipfs/1.0.0".to_owned(),
-				agent_version: "rust-libp2p/0.1.0".to_owned(),
-				listen_addrs: Vec::new(),
-				protocols: Vec::new(),
-			},
-		)
+			.or_upgrade(IdentifyProtocolConfig)
 			.or_upgrade(Ping);
 
 		let (swarm_controller, swarm_future) = {
@@ -192,7 +183,7 @@ type SwarmType<T> = SwarmController<
 					>,
 				>,
 			>,
-			IdentifyProtocol,
+			IdentifyProtocolConfig,
 		>,
 		Ping,
 	>,
@@ -315,7 +306,7 @@ where
 
 impl<R, P, T> KademliaSwarmController<R, P, T>
     where T: MuxedTransport + Clone + 'static,      // TODO: 'static :-/
-          SwarmController<T, OrUpgrade<OrUpgrade<protocol::KademliaProtocolConfig, IdentifyProtocol>, Ping>>: Clone,
+          SwarmController<T, OrUpgrade<OrUpgrade<protocol::KademliaProtocolConfig, IdentifyProtocolConfig>, Ping>>: Clone,
           P: Peerstore + Clone,
           R: Clone,
 {
@@ -384,7 +375,7 @@ impl<R, P, T> KademliaSwarmController<R, P, T>
     }
 }
 
-type UpgradeResult = EitherSocket<
+type UpgradeResult<R> = EitherSocket<
 	EitherSocket<
 		(
 			Box<
@@ -398,14 +389,14 @@ type UpgradeResult = EitherSocket<
 			>,
 			Option<Arc<Mutex<Option<mpsc::UnboundedReceiver<(KadMsg, oneshot::Sender<KadMsg>)>>>>>,
 		),
-		Option<IdentifyInfo>,
+		IdentifyOutput<R>,
 	>,
 	(Pinger, Box<Future<Item = (), Error = IoError> + 'static>),
 >;
 
 // Handles an incoming connection on the swarm.
 fn connection_handler<'a, T, R, P>(
-	upgrade: UpgradeResult,
+	upgrade: UpgradeResult<T::RawConn>,
 	client_addr: Multiaddr,
 	shared: Arc<Inner<R, P>>,
 	swarm: SwarmType<T>,
@@ -428,14 +419,7 @@ where
 
 			// TODO: do correctly
 			let upgrade =
-				IdentifyProtocol {
-					// TODO: meh
-					public_key: Vec::new(),
-					protocol_version: "ipfs/1.0.0".to_owned(),
-					agent_version: "rust-libp2p/0.1.0".to_owned(),
-					listen_addrs: Vec::new(),
-					protocols: Vec::new(),
-				}
+				IdentifyProtocolConfig
 				.map_upgrade(EitherSocket::Second)
 				.map_upgrade(EitherSocket::First);
 			swarm.dial_to_handler(client_addr, upgrade); // TODO: how to handle errs?
@@ -445,9 +429,9 @@ where
 		}
 		EitherSocket::First(EitherSocket::Second(identify)) => {
 			println!("identify protocol opened");
-			if let Some(identify) = identify {
-				println!("identify {:?}", identify);
-				let id = PeerId::from_bytes(identify.public_key).unwrap(); // TODO: get a PeerId directly
+			if let IdentifyOutput::RemoteInfo { info, .. } = identify {
+				println!("identify {:?}", info);
+				let id = PeerId::from_public_key(&info.public_key); // TODO: get a PeerId directly?
 				shared
 					.peer_store
 					.clone()

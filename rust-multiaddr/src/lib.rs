@@ -81,13 +81,6 @@ impl Multiaddr {
         &self.bytes
     }
 
-    /// Builds a `Multiaddr` from its raw bytes representation.
-    #[inline]
-    pub fn from_bytes(bytes: Vec<u8>) -> Multiaddr {
-        // FIXME: OMG WE NEED SAFETY HERE
-        Multiaddr { bytes: bytes }
-    }
-
     /// Return a list of protocols
     ///
     /// # Examples

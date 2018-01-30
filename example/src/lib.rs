@@ -52,14 +52,14 @@ where
 			.expect("failed to parse hard-coded multiaddr");
 
 		let ipfs_component = multiaddr.pop().expect("hard-coded multiaddr is empty");
-		let public_key = match ipfs_component {
+		let peer = match ipfs_component {
 			multiaddr::AddrComponent::IPFS(key) => PeerId::from_bytes(key).expect("invalid peer id"),
 			_ => panic!("hard-coded multiaddr didn't end with /ipfs/"),
 		};
 
 		peer_store
 			.clone()
-			.peer_or_create(&PeerId::from_bytes(public_key).unwrap())
+			.peer_or_create(&peer)
 			.add_addr(multiaddr, ttl.clone());
 	}
 }
