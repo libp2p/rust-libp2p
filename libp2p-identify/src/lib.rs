@@ -95,15 +95,26 @@ mod structs_proto;
 pub struct IdentifyTransport<T, P> {
 	transport: T,
 	peerstore: P,
+	addr_ttl: Duration,
 }
 
 impl<T, P> IdentifyTransport<T, P> {
 	/// Creates an `IdentifyTransport` that wraps around the given transport and peerstore.
 	#[inline]
 	pub fn new(transport: T, peerstore: P) -> IdentifyTransport<T, P> {
+		IdentifyTransport::with_ttl(transport, peerstore, Duration::from_secs(3600))
+	}
+
+	/// Same as `new`, but allows specifying a time-to-live for the addresses gathered from
+	/// remotes that connect to us.
+	///
+	/// The default value is one hour.
+	#[inline]
+	pub fn with_ttl(transport: T, peerstore: P, ttl: Duration) -> IdentifyTransport<T, P> {
 		IdentifyTransport {
 			transport: transport,
 			peerstore: peerstore,
+			addr_ttl: ttl,
 		}
 	}
 }
@@ -127,7 +138,7 @@ where
 		let (listener, new_addr) = match self.transport.clone().listen_on(addr.clone()) {
 			Ok((l, a)) => (l, a),
 			Err((inner, addr)) => {
-				let id = IdentifyTransport { transport: inner, peerstore: self.peerstore };
+				let id = IdentifyTransport { transport: inner, peerstore: self.peerstore, addr_ttl: self.addr_ttl };
 				return Err((id, addr));
 			}
 		};
@@ -135,6 +146,7 @@ where
 		let identify_upgrade = self.transport
 			.with_upgrade(IdentifyProtocolConfig);
 		let peerstore = self.peerstore;
+		let addr_ttl = self.addr_ttl;
 
 		let listener = listener
 			.map(move |connec| {
@@ -155,7 +167,8 @@ where
 					})
 					.and_then(move |((identify, original_addr), connec)| {
 						let real_addr = if let IdentifyOutput::RemoteInfo { info, .. } = identify {
-							process_identify_info(&info, &*peerstore.clone(), original_addr)?
+							process_identify_info(&info, &*peerstore.clone(), original_addr,
+												  addr_ttl)?
 						} else {
 							unreachable!("the identify protocol guarantees that we receive remote \
 											information when we dial a node")
@@ -210,17 +223,18 @@ where
 				let dial = match identify_upgrade.dial(addr.clone()) {
 					Ok(d) => d,
 					Err((_, addr)) => {
-						let id = IdentifyTransport { transport, peerstore: self.peerstore };
+						let id = IdentifyTransport { transport, peerstore: self.peerstore, addr_ttl: self.addr_ttl };
 						return Err((id, addr));
 					}
 				};
 
 				let peerstore = self.peerstore;
+				let addr_ttl = self.addr_ttl;
 
 				let future = dial
 					.and_then(move |identify| {
 						let real_addr = if let (IdentifyOutput::RemoteInfo { info, .. }, old_addr) = identify {
-							process_identify_info(&info, &*peerstore, old_addr)?
+							process_identify_info(&info, &*peerstore, old_addr, addr_ttl)?
 						} else {
 							unreachable!("the identify protocol guarantees that we receive remote \
 											information when we dial a node")
@@ -273,6 +287,7 @@ where
 	fn next_incoming(self) -> Self::Incoming {
 		let identify_upgrade = self.transport.clone().with_upgrade(IdentifyProtocolConfig);
 		let peerstore = self.peerstore;
+		let addr_ttl = self.addr_ttl;
 
 		let future = self.transport
 			.next_incoming()
@@ -290,7 +305,7 @@ where
 			})
 			.and_then(move |(identify, connec)| {
 				let real_addr = if let (IdentifyOutput::RemoteInfo { info, .. }, old_addr) = identify {
-					process_identify_info(&info, &*peerstore, old_addr)?
+					process_identify_info(&info, &*peerstore, old_addr, addr_ttl)?
 				} else {
 					unreachable!("the identify protocol guarantees that we receive remote \
 									information when we dial a node")
@@ -468,14 +483,14 @@ fn bytes_to_multiaddr(bytes: Vec<u8>) -> Result<Multiaddr, IoError> {
 //
 // > **Note**: This function is highly-specific, but this precise behaviour is needed in multiple
 // >		   places.
-fn process_identify_info<P>(info: &IdentifyInfo, peerstore: P, client_addr: Multiaddr)
-							-> Result<Multiaddr, IoError>
+fn process_identify_info<P>(info: &IdentifyInfo, peerstore: P, client_addr: Multiaddr,
+							ttl: Duration) -> Result<Multiaddr, IoError>
 	where P: Peerstore
 {
 	let peer_id = PeerId::from_public_key(&info.public_key);
 	peerstore
 		.peer_or_create(&peer_id)
-		.add_addr(client_addr, Duration::from_secs(3600));		// TODO: configurable
+		.add_addr(client_addr, ttl);
 	Ok(AddrComponent::IPFS(peer_id.into_bytes()).into())
 }
 
