@@ -91,6 +91,8 @@ where
 				let identify_upgrade = identify_upgrade.clone();
 				let fut = connec
 					.and_then(move |(connec, client_addr)| {
+						// Dial the address that connected to us and try upgrade with the
+						// identify protocol.
 						identify_upgrade
 							.clone()
 							.dial(client_addr.clone())
@@ -103,16 +105,20 @@ where
 						dial.map(move |dial| (dial, connec))
 					})
 					.and_then(move |((identify, original_addr), connec)| {
-						let real_addr = if let IdentifyOutput::RemoteInfo { info, .. } = identify {
-							process_identify_info(&info, &*peerstore.clone(), original_addr,
-												  addr_ttl)?
-						} else {
-							unreachable!("the identify protocol guarantees that we receive remote \
-											information when we dial a node")
+						// Compute the "real" address of the node (in the form `/ipfs/...`) and add
+						// it to the peerstore.
+						let real_addr = match identify {
+							IdentifyOutput::RemoteInfo { info, .. } => {
+								process_identify_info(&info, &*peerstore.clone(), original_addr,
+													  addr_ttl)?
+							},
+							_ => unreachable!("the identify protocol guarantees that we receive \
+											   remote information when we dial a node"),
 						};
 
 						Ok((connec, real_addr))
 					});
+
 				Box::new(fut) as Box<Future<Item = _, Error = _>>
 			});
 
@@ -157,7 +163,8 @@ where
 				let identify_upgrade = transport.clone()
 					.with_upgrade(IdentifyProtocolConfig);
 
-				let dial = match identify_upgrade.dial(addr.clone()) {
+				// We dial a first time the node and upgrade it to identify.
+				let dial = match identify_upgrade.dial(addr) {
 					Ok(d) => d,
 					Err((_, addr)) => {
 						let id = IdentifyTransport { transport, peerstore: self.peerstore, addr_ttl: self.addr_ttl };
@@ -170,14 +177,20 @@ where
 
 				let future = dial
 					.and_then(move |identify| {
-						let real_addr = if let (IdentifyOutput::RemoteInfo { info, .. }, old_addr) = identify {
-							process_identify_info(&info, &*peerstore, old_addr, addr_ttl)?
-						} else {
-							unreachable!("the identify protocol guarantees that we receive remote \
-											information when we dial a node")
+						// On success, store the information in the peerstore and compute the
+						// "real" address of the node (of the form `/ipfs/...`).
+						let (real_addr, old_addr);
+						match identify {
+							(IdentifyOutput::RemoteInfo { info, .. }, a) => {
+								old_addr = a.clone();
+								real_addr = process_identify_info(&info, &*peerstore, a, addr_ttl)?;
+							},
+							_ => unreachable!("the identify protocol guarantees that we receive \
+											   remote information when we dial a node")
 						};
 
-						Ok(transport.dial(addr)
+						// Then dial the same node again.
+						Ok(transport.dial(old_addr)
 							.unwrap_or_else(|_| {
 								panic!("the same multiaddr was determined to be valid earlier")
 							})
@@ -189,26 +202,6 @@ where
 				Ok(Box::new(future) as Box<_>)
 			}
 		}
-
-	}
-}
-
-// If the multiaddress is in the form `/ipfs/...`, turn it into a `PeerId`.
-// Otherwise, return it as-is.
-fn multiaddr_to_peerid(addr: Multiaddr) -> Result<PeerId, Multiaddr> {
-	let components = addr.iter().collect::<Vec<_>>();
-	if components.len() < 1 {
-		return Err(addr);
-	}
-
-	match components.last() {
-		Some(&AddrComponent::IPFS(ref peer_id)) => {	// TODO: `peer_id` is in fact a CID here
-			match PeerId::from_bytes(peer_id.clone()) {
-				Ok(peer_id) => Ok(peer_id),
-				Err(_) => Err(addr)
-			}
-		},
-		_ => Err(addr),
 	}
 }
 
@@ -229,6 +222,8 @@ where
 		let future = self.transport
 			.next_incoming()
 			.and_then(move |(connec, client_addr)| {
+				// On an incoming connection, dial back the node and upgrade to the identify
+				// protocol.
 				identify_upgrade
 					.clone()
 					.dial(client_addr.clone())
@@ -241,11 +236,14 @@ where
 				dial.map(move |dial| (dial, connec))
 			})
 			.and_then(move |(identify, connec)| {
-				let real_addr = if let (IdentifyOutput::RemoteInfo { info, .. }, old_addr) = identify {
-					process_identify_info(&info, &*peerstore, old_addr, addr_ttl)?
-				} else {
-					unreachable!("the identify protocol guarantees that we receive remote \
-									information when we dial a node")
+				// Add the info to the peerstore and compute the "real" address of the node (in
+				// the form `/ipfs/...`).
+				let real_addr = match identify {
+					(IdentifyOutput::RemoteInfo { info, .. }, old_addr) => {
+						process_identify_info(&info, &*peerstore, old_addr, addr_ttl)?
+					},
+					_ => unreachable!("the identify protocol guarantees that we receive remote \
+						   			   information when we dial a node")
 				};
 
 				Ok((connec, real_addr))
@@ -255,11 +253,30 @@ where
 	}
 }
 
+// If the multiaddress is in the form `/ipfs/...`, turn it into a `PeerId`.
+// Otherwise, return it as-is.
+fn multiaddr_to_peerid(addr: Multiaddr) -> Result<PeerId, Multiaddr> {
+	let components = addr.iter().collect::<Vec<_>>();
+	if components.len() < 1 {
+		return Err(addr);
+	}
+
+	match components.last() {
+		Some(&AddrComponent::IPFS(ref peer_id)) => {	// TODO: `peer_id` is sometimes in fact a CID here
+			match PeerId::from_bytes(peer_id.clone()) {
+				Ok(peer_id) => Ok(peer_id),
+				Err(_) => Err(addr)
+			}
+		},
+		_ => Err(addr),
+	}
+}
+
 // When passed the information sent by a remote, inserts the remote into the given peerstore and
 // returns a multiaddr of the format `/ipfs/...` corresponding to this node.
 //
 // > **Note**: This function is highly-specific, but this precise behaviour is needed in multiple
-// >		   places.
+// >		   different places in the code.
 fn process_identify_info<P>(info: &IdentifyInfo, peerstore: P, client_addr: Multiaddr,
 							ttl: Duration) -> Result<Multiaddr, IoError>
 	where P: Peerstore

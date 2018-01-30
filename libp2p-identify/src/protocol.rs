@@ -57,7 +57,7 @@ pub enum IdentifyOutput<T> {
 
 /// Object used to send back information to the client.
 pub struct IdentifySender<T> {
-	future: Framed<T, VarintCodec<Vec<u8>>>,
+	inner: Framed<T, VarintCodec<Vec<u8>>>,
 }
 
 impl<'a, T> IdentifySender<T> where T: AsyncWrite + 'a {
@@ -82,7 +82,7 @@ impl<'a, T> IdentifySender<T> where T: AsyncWrite + 'a {
 		let bytes = message.write_to_bytes()
 			.expect("writing protobuf failed ; should never happen");
 
-		let future = self.future
+		let future = self.inner
 			.send(bytes)
 			.map(|_| ());
 		Box::new(future) as Box<_>
@@ -99,9 +99,9 @@ pub struct IdentifyInfo {
 	/// Name and version of the client. Can be thought as similar to the `User-Agent` header
 	/// of HTTP.
 	pub agent_version: String,
-	/// Addresses that the remote is listening on.
+	/// Addresses that the node is listening on.
 	pub listen_addrs: Vec<Multiaddr>,
-	/// Protocols supported by the remote.
+	/// Protocols supported by the node, eg. `/ipfs/ping/1.0.0`.
 	pub protocols: Vec<String>,
 }
 
@@ -138,7 +138,7 @@ impl<C> ConnectionUpgrade<C> for IdentifyProtocolConfig
 
 			Endpoint::Listener => {
 				let sender = IdentifySender {
-					future: socket,
+					inner: socket,
 				};
 
 				let future = future::ok(IdentifyOutput::Sender {

@@ -41,8 +41,8 @@
 //! obtain its ID, then add it to the peerstore, and finally dial the same multiaddr again and
 //! return the connection.
 //!
-//! Listening doesn't support multiaddresses of the form `/ipfs/...`. Any address passed to
-//! `listen_on` will be passed directly to the underlying transport.
+//! Listening doesn't support multiaddresses of the form `/ipfs/...` (because that wouldn't make
+//! sense). Any address passed to `listen_on` will be passed directly to the underlying transport.
 //!
 //! Whenever a remote connects to us, either through listening or through `next_incoming`, the
 //! `IdentifyTransport` dials back the remote, upgrades the connection to the *identify* protocol
