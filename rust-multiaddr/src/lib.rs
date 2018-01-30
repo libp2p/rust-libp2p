@@ -52,6 +52,12 @@ impl fmt::Display for Multiaddr {
 }
 
 impl Multiaddr {
+    /// Returns the raw bytes representation of the multiaddr.
+    #[inline]
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.bytes
+    }
+
     /// Return a copy to disallow changing the bytes directly
     pub fn to_bytes(&self) -> Vec<u8> {
         self.bytes.to_owned()

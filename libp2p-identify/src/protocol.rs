@@ -73,7 +73,7 @@ where
 	) -> Box<Future<Item = (), Error = IoError> + 'a> {
 		let listen_addrs = info.listen_addrs
 			.into_iter()
-			.map(|addr| addr.to_string().into_bytes())
+			.map(|addr| addr.into_bytes())
 			.collect();
 
 		let mut message = structs_proto::Identify::new();
@@ -81,7 +81,7 @@ where
 		message.set_protocolVersion(info.protocol_version);
 		message.set_publicKey(info.public_key);
 		message.set_listenAddrs(listen_addrs);
-		message.set_observedAddr(observed_addr.to_string().into_bytes());
+		message.set_observedAddr(observed_addr.to_bytes());
 		message.set_protocols(RepeatedField::from_vec(info.protocols));
 
 		let bytes = message
@@ -194,4 +194,88 @@ fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> 
 // Turn a `Vec<u8>` into a `Multiaddr`. If something bad happens, turn it into an `IoError`.
 fn bytes_to_multiaddr(bytes: Vec<u8>) -> Result<Multiaddr, IoError> {
 	Multiaddr::from_bytes(bytes).map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
+}
+
+#[cfg(test)]
+mod tests {
+	extern crate libp2p_tcp_transport;
+	extern crate tokio_core;
+
+	use self::libp2p_tcp_transport::TcpConfig;
+	use self::tokio_core::reactor::Core;
+	use {IdentifyProtocolConfig, IdentifyOutput, IdentifyInfo};
+	use futures::{Future, Stream};
+	use libp2p_swarm::Transport;
+	use std::sync::mpsc;
+	use std::thread;
+
+	#[test]
+	fn correct_transfer() {
+		// We open a server and a client, send info from the server to the client, and check that
+		// they were successfully received.
+
+		let (tx, rx) = mpsc::channel();
+
+		let bg_thread = thread::spawn(move || {
+			let mut core = Core::new().unwrap();
+			let transport = TcpConfig::new(core.handle())
+				.with_upgrade(IdentifyProtocolConfig);
+
+			let (listener, addr) = transport
+				.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+			tx.send(addr).unwrap();
+
+			let future = listener
+				.into_future()
+				.map_err(|(err, _)| err)
+				.and_then(|(client, _)| client.unwrap().map(|v| v.0))
+				.and_then(|identify| {
+					match identify {
+						IdentifyOutput::Sender { sender, .. } => {
+							sender.send(IdentifyInfo {
+								public_key: vec![1, 2, 3, 4, 5, 7],
+								protocol_version: "proto_version".to_owned(),
+								agent_version: "agent_version".to_owned(),
+								listen_addrs: vec![
+									"/ip4/80.81.82.83/tcp/500".parse().unwrap(),
+									"/ip6/::1/udp/1000".parse().unwrap()
+								],
+								protocols: vec!["proto1".to_string(), "proto2".to_string()],
+							}, &"/ip4/100.101.102.103/tcp/5000".parse().unwrap())
+						},
+						_ => panic!()
+					}
+				});
+
+			let _ = core.run(future).unwrap();
+		});
+
+		let mut core = Core::new().unwrap();
+		let transport = TcpConfig::new(core.handle())
+			.with_upgrade(IdentifyProtocolConfig);
+
+		let future = transport
+			.dial(rx.recv().unwrap())
+			.unwrap_or_else(|_| panic!())
+			.and_then(|(identify, _)| {
+				match identify {
+					IdentifyOutput::RemoteInfo { info, observed_addr } => {
+						assert_eq!(observed_addr, "/ip4/100.101.102.103/tcp/5000".parse().unwrap());
+						assert_eq!(info.public_key, &[1, 2, 3, 4, 5, 7]);
+						assert_eq!(info.protocol_version, "proto_version");
+						assert_eq!(info.agent_version, "agent_version");
+						assert_eq!(info.listen_addrs, &[
+							"/ip4/80.81.82.83/tcp/500".parse().unwrap(),
+							"/ip6/::1/udp/1000".parse().unwrap()
+						]);
+						assert_eq!(info.protocols, &["proto1".to_string(), "proto2".to_string()]);
+						Ok(())
+					},
+					_ => panic!()
+				}
+			});
+
+		let _ = core.run(future).unwrap();
+		bg_thread.join().unwrap();
+	}
 }
