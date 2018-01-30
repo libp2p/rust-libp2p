@@ -83,7 +83,8 @@ fn client_to_server_outbound() {
         let future = listener
             .into_future()
             .map_err(|(err, _)| err)
-            .and_then(|(client, _)| client.unwrap().0)
+            .and_then(|(client, _)| client.unwrap())
+            .map(|client| client.0)
             .map(|client| Framed::<_, BytesMut>::new(client))
             .and_then(|client| {
                 client.into_future()
@@ -104,7 +105,7 @@ fn client_to_server_outbound() {
         .with_upgrade(multiplex::MultiplexConfig);
 
     let future = transport.dial(rx.recv().unwrap()).unwrap()
-        .and_then(|client| client.outbound())
+        .and_then(|client| client.0.outbound())
         .map(|server| Framed::<_, BytesMut>::new(server))
         .and_then(|server| server.send("hello world".into()))
         .map(|_| ());
@@ -133,7 +134,7 @@ fn connection_reused_for_dialing() {
         let future = listener
             .into_future()
             .map_err(|(err, _)| err)
-            .and_then(|(client, rest)| client.unwrap().0.map(move |c| (c, rest)))
+            .and_then(|(client, rest)| client.unwrap().map(move |c| (c.0, rest)))
             .map(|(client, rest)| (Framed::<_, BytesMut>::new(client), rest))
             .and_then(|(client, rest)| {
                 client.into_future()
@@ -148,7 +149,8 @@ fn connection_reused_for_dialing() {
             .flatten_stream()
             .into_future()
             .map_err(|(err, _)| err)
-            .and_then(|(client, _)| client.unwrap().0)
+            .and_then(|(client, _)| client.unwrap())
+            .map(|client| client.0)
             .map(|client| Framed::<_, BytesMut>::new(client))
             .and_then(|client| {
                 client.into_future()
@@ -171,13 +173,13 @@ fn connection_reused_for_dialing() {
     let listen_addr = rx.recv().unwrap();
 
     let future = transport.clone().dial(listen_addr.clone()).unwrap_or_else(|_| panic!())
-        .map(|server| Framed::<_, BytesMut>::new(server))
+        .map(|server| Framed::<_, BytesMut>::new(server.0))
         .and_then(|server| {
             server.send("hello world".into())
         })
         .and_then(|first_connec| {
             transport.clone().dial(listen_addr.clone()).unwrap_or_else(|_| panic!())
-                .map(|server| Framed::<_, BytesMut>::new(server))
+                .map(|server| Framed::<_, BytesMut>::new(server.0))
                 .map(|server| (first_connec, server))
         })
         .and_then(|(_first, second)| {
@@ -209,7 +211,8 @@ fn use_opened_listen_to_dial() {
         let future = listener
             .into_future()
             .map_err(|(err, _)| err)
-            .and_then(|(client, _)| client.unwrap().0)
+            .and_then(|(client, _)| client.unwrap())
+            .map(|client| client.0)
             .and_then(|c| {
                 let c2 = c.clone();
                 c.clone().inbound().map(move |i| (c2, i))
@@ -251,14 +254,14 @@ fn use_opened_listen_to_dial() {
     let listen_addr = rx.recv().unwrap();
 
     let future = transport.clone().dial(listen_addr.clone()).unwrap_or_else(|_| panic!())
-        .map(|server| Framed::<_, BytesMut>::new(server))
+        .map(|server| Framed::<_, BytesMut>::new(server.0))
         .and_then(|server| {
             server.send("hello world".into())
         })
         .and_then(|first_connec| {
             transport.clone().next_incoming()
-                .and_then(|(server,_ )| server)
-                .map(|server| Framed::<_, BytesMut>::new(server))
+                .and_then(|server| server)
+                .map(|server| Framed::<_, BytesMut>::new(server.0))
                 .map(|server| (first_connec, server))
         })
         .and_then(|(_first, second)| {

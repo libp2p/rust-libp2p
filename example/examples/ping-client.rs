@@ -83,7 +83,7 @@ fn main() {
     let (tx, rx) = oneshot::channel();
     swarm_controller
         .dial_custom_handler(target_addr.parse().expect("invalid multiaddr"), ping::Ping,
-            |(mut pinger, future)| {
+            |(mut pinger, future), _| {
                 let ping = pinger.ping().map_err(|_| unreachable!()).inspect(|_| {
                     println!("Received pong from the remote");
                     let _ = tx.send(());

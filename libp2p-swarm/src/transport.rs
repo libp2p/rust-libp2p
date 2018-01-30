@@ -60,15 +60,15 @@ pub trait Transport {
 	/// An item should be produced whenever a connection is received at the lowest level of the
 	/// transport stack. The item is a `Future` that is signalled once some pre-processing has
 	/// taken place, and that connection has been upgraded to the wanted protocols.
-	type Listener: Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>;
+	type Listener: Stream<Item = Self::ListenerUpgrade, Error = IoError>;
 
 	/// After a connection has been received, we may need to do some asynchronous pre-processing
 	/// on it (eg. an intermediary protocol negotiation). While this pre-processing takes place, we
 	/// want to be able to continue polling on the listener.
-	type ListenerUpgrade: Future<Item = Self::RawConn, Error = IoError>;
+	type ListenerUpgrade: Future<Item = (Self::RawConn, Multiaddr), Error = IoError>;
 
 	/// A future which indicates that we are currently dialing to a peer.
-	type Dial: IntoFuture<Item = Self::RawConn, Error = IoError>;
+	type Dial: IntoFuture<Item = (Self::RawConn, Multiaddr), Error = IoError>;
 
 	/// Listen on the given multiaddr. Returns a stream of incoming connections, plus a modified
 	/// version of the `Multiaddr`. This new `Multiaddr` is the one that that should be advertised
@@ -136,9 +136,9 @@ pub trait Transport {
 /// the dialed node can dial you back.
 pub trait MuxedTransport: Transport {
 	/// Future resolving to a future that will resolve to an incoming connection.
-	type Incoming: Future<Item = (Self::IncomingUpgrade, Multiaddr), Error = IoError>;
+	type Incoming: Future<Item = Self::IncomingUpgrade, Error = IoError>;
 	/// Future resolving to an incoming connection.
-	type IncomingUpgrade: Future<Item = Self::RawConn, Error = IoError>;
+	type IncomingUpgrade: Future<Item = (Self::RawConn, Multiaddr), Error = IoError>;
 
 	/// Returns the next incoming substream opened by a node that we dialed ourselves.
 	/// 
@@ -164,9 +164,9 @@ pub struct DeniedTransport;
 impl Transport for DeniedTransport {
 	// TODO: could use `!` for associated types once stable
 	type RawConn = Cursor<Vec<u8>>;
-	type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>>;
-	type ListenerUpgrade = Box<Future<Item = Self::RawConn, Error = IoError>>;
-	type Dial = Box<Future<Item = Self::RawConn, Error = IoError>>;
+	type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
+	type ListenerUpgrade = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
+	type Dial = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
 
 	#[inline]
 	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -180,8 +180,8 @@ impl Transport for DeniedTransport {
 }
 
 impl MuxedTransport for DeniedTransport {
-	type Incoming = future::Empty<(Self::IncomingUpgrade, Multiaddr), IoError>;
-	type IncomingUpgrade = future::Empty<Self::RawConn, IoError>;
+	type Incoming = future::Empty<Self::IncomingUpgrade, IoError>;
+	type IncomingUpgrade = future::Empty<(Self::RawConn, Multiaddr), IoError>;
 
 	#[inline]
 	fn next_incoming(self) -> Self::Incoming {
@@ -200,9 +200,8 @@ where
 {
 	type RawConn = EitherSocket<A::RawConn, B::RawConn>;
 	type Listener = EitherListenStream<A::Listener, B::Listener>;
-	type ListenerUpgrade = EitherTransportFuture<A::ListenerUpgrade, B::ListenerUpgrade>;
-	type Dial =
-		EitherTransportFuture<<A::Dial as IntoFuture>::Future, <B::Dial as IntoFuture>::Future>;
+	type ListenerUpgrade = EitherListenUpgrade<A::ListenerUpgrade, B::ListenerUpgrade>;
+	type Dial = EitherListenUpgrade<<A::Dial as IntoFuture>::Future, <B::Dial as IntoFuture>::Future>;
 
 	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
 		let (first, addr) = match self.0.listen_on(addr) {
@@ -218,12 +217,12 @@ where
 
 	fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
 		let (first, addr) = match self.0.dial(addr) {
-			Ok(connec) => return Ok(EitherTransportFuture::First(connec.into_future())),
+			Ok(connec) => return Ok(EitherListenUpgrade::First(connec.into_future())),
 			Err(err) => err,
 		};
 
 		match self.1.dial(addr) {
-			Ok(connec) => Ok(EitherTransportFuture::Second(connec.into_future())),
+			Ok(connec) => Ok(EitherListenUpgrade::Second(connec.into_future())),
 			Err((second, addr)) => Err((OrTransport(first, second), addr)),
 		}
 	}
@@ -273,18 +272,18 @@ where
 	A::RawConn: 'static,		// TODO: meh :-/
 	B::RawConn: 'static,		// TODO: meh :-/
 {
-	type Incoming = Box<Future<Item = (Self::IncomingUpgrade, Multiaddr), Error = IoError>>;
-	type IncomingUpgrade = Box<Future<Item = EitherSocket<A::RawConn, B::RawConn>, Error = IoError>>;
+	type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError>>;
+	type IncomingUpgrade = Box<Future<Item = (EitherSocket<A::RawConn, B::RawConn>, Multiaddr), Error = IoError>>;
 
 	#[inline]
 	fn next_incoming(self) -> Self::Incoming {
-		let first = self.0.next_incoming().map(|(out, addr)| {
-			let fut = out.map(EitherSocket::First);
-			(Box::new(fut) as Box<Future<Item = _, Error = _>>, addr)
+		let first = self.0.next_incoming().map(|out| {
+			let fut = out.map(move |(v, addr)| (EitherSocket::First(v), addr));
+			Box::new(fut) as Box<Future<Item = _, Error = _>>
 		});
-		let second = self.1.next_incoming().map(|(out, addr)| {
-			let fut = out.map(EitherSocket::Second);
-			(Box::new(fut) as Box<Future<Item = _, Error = _>>, addr)
+		let second = self.1.next_incoming().map(|out| {
+			let fut = out.map(move |(v, addr)| (EitherSocket::Second(v), addr));
+			Box::new(fut) as Box<Future<Item = _, Error = _>>
 		});
 		let future = first.select(second)
 			.map(|(i, _)| i)
@@ -326,19 +325,19 @@ pub enum EitherListenStream<A, B> {
 
 impl<AStream, BStream, AInner, BInner> Stream for EitherListenStream<AStream, BStream>
 where
-	AStream: Stream<Item = (AInner, Multiaddr), Error = IoError>,
-	BStream: Stream<Item = (BInner, Multiaddr), Error = IoError>,
+	AStream: Stream<Item = AInner, Error = IoError>,
+	BStream: Stream<Item = BInner, Error = IoError>,
 {
-	type Item = (EitherTransportFuture<AInner, BInner>, Multiaddr);
+	type Item = EitherListenUpgrade<AInner, BInner>;
 	type Error = IoError;
 
 	#[inline]
 	fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
 		match self {
 			&mut EitherListenStream::First(ref mut a) => a.poll()
-				.map(|i| i.map(|v| v.map(|(s, a)| (EitherTransportFuture::First(s), a)))),
+				.map(|i| i.map(|v| v.map(EitherListenUpgrade::First))),
 			&mut EitherListenStream::Second(ref mut a) => a.poll()
-				.map(|i| i.map(|v| v.map(|(s, a)| (EitherTransportFuture::Second(s), a)))),
+				.map(|i| i.map(|v| v.map(EitherListenUpgrade::Second))),
 		}
 	}
 }
@@ -366,6 +365,37 @@ where
 			}
 			&mut EitherIncomingStream::Second(ref mut a) => {
 				a.poll().map(|i| i.map(|v| v.map(EitherSocket::Second)))
+			}
+		}
+	}
+}
+
+/// > **Note**: This type is needed because of the lack of `-> impl Trait` in Rust. It can be
+/// >           removed eventually.
+#[derive(Debug, Copy, Clone)]
+pub enum EitherListenUpgrade<A, B> {
+	First(A),
+	Second(B),
+}
+
+impl<A, B, Ao, Bo> Future for EitherListenUpgrade<A, B>
+where
+	A: Future<Item = (Ao, Multiaddr), Error = IoError>,
+	B: Future<Item = (Bo, Multiaddr), Error = IoError>,
+{
+	type Item = (EitherSocket<Ao, Bo>, Multiaddr);
+	type Error = IoError;
+
+	#[inline]
+	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+		match self {
+			&mut EitherListenUpgrade::First(ref mut a) => {
+				let (item, addr) = try_ready!(a.poll());
+				Ok(Async::Ready((EitherSocket::First(item), addr)))
+			}
+			&mut EitherListenUpgrade::Second(ref mut b) => {
+				let (item, addr) = try_ready!(b.poll());
+				Ok(Async::Ready((EitherSocket::Second(item), addr)))
 			}
 		}
 	}
@@ -788,8 +818,8 @@ pub struct DummyMuxing<T> {
 impl<T> MuxedTransport for DummyMuxing<T>
 	where T: Transport
 {
-	type Incoming = future::Empty<(Self::IncomingUpgrade, Multiaddr), IoError>;
-	type IncomingUpgrade = future::Empty<T::RawConn, IoError>;
+	type Incoming = future::Empty<Self::IncomingUpgrade, IoError>;
+	type IncomingUpgrade = future::Empty<(T::RawConn, Multiaddr), IoError>;
 
 	fn next_incoming(self) -> Self::Incoming
 		where Self: Sized
@@ -860,7 +890,7 @@ where
 	pub fn dial(
 		self,
 		addr: Multiaddr,
-	) -> Result<Box<Future<Item = C::Output, Error = IoError> + 'a>, (Self, Multiaddr)> {
+	) -> Result<Box<Future<Item = (C::Output, Multiaddr), Error = IoError> + 'a>, (Self, Multiaddr)> {
 		let upgrade = self.upgrade;
 
 		let dialed_fut = match self.transports.dial(addr.clone()) {
@@ -877,15 +907,16 @@ where
 
 		let future = dialed_fut
             // Try to negotiate the protocol.
-            .and_then(move |connection| {
+            .and_then(move |(connection, client_addr)| {
                 let iter = upgrade.protocol_names()
                     .map(|(name, id)| (name, <Bytes as PartialEq>::eq, id));
                 let negotiated = multistream_select::dialer_select_proto(connection, iter)
                     .map_err(|err| IoError::new(IoErrorKind::Other, err));
-                negotiated.map(|(upgrade_id, conn)| (upgrade_id, conn, upgrade))
+                negotiated.map(|(upgrade_id, conn)| (upgrade_id, conn, upgrade, client_addr))
             })
-            .and_then(move |(upgrade_id, connection, upgrade)| {
-                upgrade.upgrade(connection, upgrade_id, Endpoint::Dialer, &addr)
+            .and_then(move |(upgrade_id, connection, upgrade, client_addr)| {
+                let f = upgrade.upgrade(connection, upgrade_id, Endpoint::Dialer, &client_addr);
+				f.map(|v| (v, client_addr))
             });
 
 		Ok(Box::new(future))
@@ -896,7 +927,7 @@ where
 	/// 
 	/// This function returns the next incoming substream. You are strongly encouraged to call it
 	/// if you have a muxed transport.
-	pub fn next_incoming(self) -> Box<Future<Item = (Box<Future<Item = C::Output, Error = IoError> + 'a>, Multiaddr), Error = IoError> + 'a>
+	pub fn next_incoming(self) -> Box<Future<Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError> + 'a>, Error = IoError> + 'a>
 		where T: MuxedTransport,
 			  C::NamesIter: Clone, // TODO: not elegant
 			  C: Clone,
@@ -904,23 +935,23 @@ where
 		let upgrade = self.upgrade;
 
 		let future = self.transports.next_incoming()
-			.map(|(future, addr)| {
+			.map(|future| {
 				// Try to negotiate the protocol.
-				let addr2 = addr.clone();
 				let future = future
-					.and_then(move |connection| {
+					.and_then(move |(connection, addr)| {
 						let iter = upgrade.protocol_names()
 							.map::<_, fn(_) -> _>(|(name, id)| (name, <Bytes as PartialEq>::eq, id));
 						let negotiated = multistream_select::listener_select_proto(connection, iter)
 							.map_err(|err| IoError::new(IoErrorKind::Other, err));
-						negotiated.map(|(upgrade_id, conn)| (upgrade_id, conn, upgrade))
+						negotiated.map(move |(upgrade_id, conn)| (upgrade_id, conn, upgrade, addr))
 					})
-					.and_then(move |(upgrade_id, connection, upgrade)| {
+					.and_then(move |(upgrade_id, connection, upgrade, addr)| {
 						println!("negotiated incoming");
-						upgrade.upgrade(connection, upgrade_id, Endpoint::Dialer, &addr2)
+						let upg = upgrade.upgrade(connection, upgrade_id, Endpoint::Dialer, &addr);
+						upg.map(|u| (u, addr))
 					});
 
-				(Box::new(future) as Box<Future<Item = _, Error = _>>, addr)
+				Box::new(future) as Box<Future<Item = _, Error = _>>
 			});
 
 		Box::new(future) as Box<_>
@@ -936,7 +967,7 @@ where
 		self,
 		addr: Multiaddr,
 	) -> Result<
-		(Box<Stream<Item = (Box<Future<Item = C::Output, Error = IoError> + 'a>, Multiaddr), Error = IoError> + 'a>, Multiaddr),
+		(Box<Stream<Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError> + 'a>, Error = IoError> + 'a>, Multiaddr),
 		(Self, Multiaddr),
 	>
 	where
@@ -962,24 +993,24 @@ where
 		// Instead the `stream` will produce `Ok(Err(...))`.
 		// `stream` can only produce an `Err` if `listening_stream` produces an `Err`.
 		let stream = listening_stream
-			.map(move |(connection, client_addr)| {
+			.map(move |connection| {
 				let upgrade = upgrade.clone();
-				let remote_addr = client_addr.clone();
 				let connection = connection
 					// Try to negotiate the protocol
-					.and_then(move |connection| {
+					.and_then(move |(connection, remote_addr)| {
 						let iter = upgrade.protocol_names()
 							.map::<_, fn(_) -> _>(|(n, t)| (n, <Bytes as PartialEq>::eq, t));
 						multistream_select::listener_select_proto(connection, iter)
 							.map_err(|err| IoError::new(IoErrorKind::Other, err))
 							.and_then(move |(upgrade_id, connection)| {
-								upgrade.upgrade(connection, upgrade_id, Endpoint::Listener,
-												&remote_addr)
+								let fut = upgrade.upgrade(connection, upgrade_id, Endpoint::Listener,
+												&remote_addr);
+								fut.map(move |c| (c, remote_addr))
 							})
 							.into_future()
 					});
 
-				(Box::new(connection) as Box<_>, client_addr)
+				Box::new(connection) as Box<_>
 			});
 
 		Ok((Box::new(stream), new_addr))
@@ -995,9 +1026,9 @@ where
 	C: Clone,
 {
 	type RawConn = C::Output;
-	type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>>;
-	type ListenerUpgrade = Box<Future<Item = C::Output, Error = IoError>>;
-	type Dial = Box<Future<Item = C::Output, Error = IoError>>;
+	type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
+	type ListenerUpgrade = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>;
+	type Dial = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>;
 
 	#[inline]
 	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -1018,8 +1049,8 @@ where
 	C::NamesIter: Clone, // TODO: not elegant
 	C: Clone,
 {
-	type Incoming = Box<Future<Item = (Self::IncomingUpgrade, Multiaddr), Error = IoError>>;
-	type IncomingUpgrade = Box<Future<Item = C::Output, Error = IoError>>;
+	type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError>>;
+	type IncomingUpgrade = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>;
 
 	#[inline]
 	fn next_incoming(self) -> Self::Incoming {

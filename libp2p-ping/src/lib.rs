@@ -68,7 +68,7 @@
 //! let ping_finished_future = libp2p_tcp_transport::TcpConfig::new(core.handle())
 //!     .with_upgrade(Ping)
 //!     .dial("127.0.0.1:12345".parse::<libp2p_swarm::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())
-//!     .and_then(|(mut pinger, service)| {
+//!     .and_then(|((mut pinger, service), _)| {
 //!         pinger.ping().map_err(|_| panic!()).select(service).map_err(|_| panic!())
 //!     });
 //! 

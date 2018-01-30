@@ -119,9 +119,9 @@ where
 	C::NamesIter: Clone, // TODO: not elegant
 {
 	type RawConn = <C::Output as StreamMuxer>::Substream;
-	type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>>;
-	type ListenerUpgrade = FutureResult<Self::RawConn, IoError>;
-	type Dial = Box<Future<Item = Self::RawConn, Error = IoError>>;
+	type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
+	type ListenerUpgrade = FutureResult<(Self::RawConn, Multiaddr), IoError>;
+	type Dial = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
 
 	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
 		let (listener, new_addr) = match self.inner.listen_on(addr.clone()) {
@@ -142,32 +142,33 @@ where
 	}
 
 	fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-		let dial = match self.inner.dial(addr.clone()) {
+		// If we already have an active connection, use it!
+		if let Some(connec) = self.shared.lock().active_connections.get(&addr).map(|c| c.clone()) {
+			let future = connec.outbound().map(|s| (s, addr));
+			return Ok(Box::new(future) as Box<_>);
+		}
+
+		// TODO: handle if we're already in the middle in dialing that same node?
+		// TODO: try dialing again if the existing connection has dropped
+
+		let dial = match self.inner.dial(addr) {
 			Ok(l) => l,
 			Err((inner, addr)) => {
 				return Err((ConnectionReuse { inner: inner, shared: self.shared }, addr));
 			}
 		};
 
-		// If we already have an active connection, use it!
-		if let Some(connec) = self.shared.lock().active_connections.get(&addr).map(|c| c.clone()) {
-			let future = connec.outbound();
-			return Ok(Box::new(future) as Box<_>);
-		}
-
-		// TODO: handle if we're already in the middle in dialing that same node?
-
 		let shared = self.shared.clone();
 		let dial = dial
 			.into_future()
-			.and_then(move |connec| {
+			.and_then(move |(connec, addr)| {
 				// Always replace the active connection because we are the most recent.
 				let mut lock = shared.lock();
 				lock.active_connections.insert(addr.clone(), connec.clone());
 				// TODO: doesn't need locking ; the sender could be extracted
 				let _ = lock.add_to_next_tx
-					.unbounded_send((connec.clone(), connec.clone().inbound(), addr));
-				connec.outbound()
+					.unbounded_send((connec.clone(), connec.clone().inbound(), addr.clone()));
+				connec.outbound().map(|s| (s, addr))
 			});
 
 		Ok(Box::new(dial) as Box<_>)
@@ -183,7 +184,7 @@ where
 	C::NamesIter: Clone, // TODO: not elegant
 {
 	type Incoming = ConnectionReuseIncoming<C::Output>;
-	type IncomingUpgrade = future::FutureResult<<C::Output as StreamMuxer>::Substream, IoError>;
+	type IncomingUpgrade = future::FutureResult<(<C::Output as StreamMuxer>::Substream, Multiaddr), IoError>;
 
 	#[inline]
 	fn next_incoming(self) -> Self::Incoming {
@@ -195,29 +196,29 @@ where
 /// `ConnectionReuse` struct.
 pub struct ConnectionReuseListener<S, F, M>
 where
-	S: Stream<Item = (F, Multiaddr), Error = IoError>,
-	F: Future<Item = M, Error = IoError>,
+	S: Stream<Item = F, Error = IoError>,
+	F: Future<Item = (M, Multiaddr), Error = IoError>,
 	M: StreamMuxer,
 {
 	listener: StreamFuse<S>,
-	current_upgrades: Vec<(F, Multiaddr)>,
+	current_upgrades: Vec<F>,
 	connections: Vec<(M, <M as StreamMuxer>::InboundSubstream, Multiaddr)>,
 	shared: Arc<Mutex<Shared<M>>>,
 }
 
 impl<S, F, M> Stream for ConnectionReuseListener<S, F, M>
-where S: Stream<Item = (F, Multiaddr), Error = IoError>,
-	  F: Future<Item = M, Error = IoError>,
+where S: Stream<Item = F, Error = IoError>,
+	  F: Future<Item = (M, Multiaddr), Error = IoError>,
 	  M: StreamMuxer + Clone + 'static // TODO: 'static :(
 {
-	type Item = (FutureResult<M::Substream, IoError>, Multiaddr);
+	type Item = FutureResult<(M::Substream, Multiaddr), IoError>;
 	type Error = IoError;
 
 	fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
 		// Check for any incoming connection on the socket.
 		match self.listener.poll() {
-			Ok(Async::Ready(Some((upgrade, client_addr)))) => {
-				self.current_upgrades.push((upgrade, client_addr));
+			Ok(Async::Ready(Some(upgrade))) => {
+				self.current_upgrades.push(upgrade);
 			}
 			Ok(Async::NotReady) => {},
 			Ok(Async::Ready(None)) => {
@@ -236,9 +237,9 @@ where S: Stream<Item = (F, Multiaddr), Error = IoError>,
 		// We extract everything at the start, then insert back the elements that we still want at
 		// the next iteration.
         for n in (0 .. self.current_upgrades.len()).rev() {
-            let (mut current_upgrade, client_addr) = self.current_upgrades.swap_remove(n);
+            let mut current_upgrade = self.current_upgrades.swap_remove(n);
 			match current_upgrade.poll() {
-				Ok(Async::Ready(muxer)) => {
+				Ok(Async::Ready((muxer, client_addr))) => {
 					let next_incoming = muxer.clone().inbound();
 					self.connections.push((muxer.clone(), next_incoming, client_addr.clone()));
 					// We overwrite any current active connection to that multiaddr because we
@@ -246,11 +247,11 @@ where S: Stream<Item = (F, Multiaddr), Error = IoError>,
 					self.shared.lock().active_connections.insert(client_addr, muxer);
 				},
 				Ok(Async::NotReady) => {
-					self.current_upgrades.push((current_upgrade, client_addr));
+					self.current_upgrades.push(current_upgrade);
 				},
 				Err(err) => {
 					// Insert the rest of the pending upgrades, but not the current one.
-					return Ok(Async::Ready(Some((future::err(err), client_addr))));
+					return Ok(Async::Ready(Some(future::err(err))));
 				},
 			}	
 		}
@@ -264,14 +265,14 @@ where S: Stream<Item = (F, Multiaddr), Error = IoError>,
 				Ok(Async::Ready(incoming)) => {
 					let mut new_next = muxer.clone().inbound();
 					self.connections.push((muxer, new_next, client_addr.clone()));
-					return Ok(Async::Ready(Some((Ok(incoming).into_future(), client_addr))));
+					return Ok(Async::Ready(Some(Ok((incoming, client_addr)).into_future())));
 				}
 				Ok(Async::NotReady) => {
 					self.connections.push((muxer, next_incoming, client_addr));
 				}
 				Err(err) => {
 					// Insert the rest of the pending connections, but not the current one.
-					return Ok(Async::Ready(Some((future::err(err), client_addr))));
+					return Ok(Async::Ready(Some(future::err(err))));
 				}
 			}
 		}
@@ -291,7 +292,7 @@ pub struct ConnectionReuseIncoming<M>
 impl<M> Future for ConnectionReuseIncoming<M>
 	where M: Clone + StreamMuxer,
 {
-	type Item = (future::FutureResult<M::Substream, IoError>, Multiaddr);
+	type Item = future::FutureResult<(M::Substream, Multiaddr), IoError>;
 	type Error = IoError;
 
 	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -318,7 +319,7 @@ impl<M> Future for ConnectionReuseIncoming<M>
 					let next = muxer.clone().inbound();
 					lock.next_incoming.push((muxer, next, addr.clone()));
 					lock.next_incoming.extend(next_incoming);
-					return Ok(Async::Ready((future::ok(value), addr)));
+					return Ok(Async::Ready(future::ok((value, addr))));
 				},
 				Ok(Async::NotReady) => {
 					lock.next_incoming.push((muxer, future, addr));
