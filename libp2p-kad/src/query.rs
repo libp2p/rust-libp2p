@@ -203,12 +203,12 @@ where
 		// For each open connection, a future with the response of the remote.
 		current_attempts_fut:
 			Vec<Box<Future<Item = Result<protocol::KadMsg, ()>, Error = ()> + 'a>>, // TODO: the Error can be !
-		// For each open connection, the multiaddress that we are connected to.
+		// For each open connection, the peer ID that we are connected to.
 		// Must always have the same length as `current_attempts_fut`.
-		current_attempts_addrs: Vec<(PeerId, Multiaddr)>,
+		current_attempts_addrs: Vec<PeerId>,
 		// Nodes that need to be attempted.
 		pending_nodes: Vec<PeerId>,
-		// Multiaddresses that we tried to contact but failed.
+		// Peers that we tried to contact but failed.
 		failed_to_contact: FnvHashSet<PeerId>,
 	}
 
@@ -229,6 +229,7 @@ where
 			.pending_nodes
 			.iter()
 			.filter(|peer| !state.result.iter().any(|p| &p == peer))
+			.filter(|peer| !state.current_attempts_addrs.iter().any(|p| &p == peer))
 			.filter(|peer| !state.failed_to_contact.iter().any(|p| &p == peer))
 			.take(parallelism.saturating_sub(state.current_attempts_fut.len()))
 			.map(|peer| peer.clone())
@@ -248,7 +249,7 @@ where
 			let resp_rx = query_interface.send(multiaddr.clone(), message);
 			state
 				.current_attempts_addrs
-				.push((peer.clone(), multiaddr));
+				.push(peer.clone());
 			let current_attempt = resp_rx
                 .map_err(|_| ())        // TODO: better error?
                 .then(|res| Ok(res));
@@ -273,25 +274,25 @@ where
 
 		let future = future::select_all(current_attempts_fut.into_iter()).and_then(
 			move |(message, trigger_idx, other_current_attempts)| {
-				let (remote_id, remote_addr) = state.current_attempts_addrs.remove(trigger_idx);
+				let remote_id = state.current_attempts_addrs.remove(trigger_idx);
 				state.current_attempts_fut.extend(other_current_attempts);
 
 				let closer_peers = match message {
 					Ok(protocol::KadMsg::FindNodeRes { closer_peers, .. }) => {
 						// Received a message.
-						println!("success msg from {:?} a.k.a. {:?}", remote_addr, remote_id);
+						println!("success msg from {:?}", remote_id);
 						println!("num closer peers: {:?}", closer_peers.len());
 						closer_peers
 					}
 					Ok(_other_msg) => {
 						// TODO: add to failed to contact
-						println!("wrong msg from {:?} {:?}", remote_id, remote_addr);
+						println!("wrong msg from {:?}", remote_id);
 						return Ok(future::Loop::Continue(state));
 					}
 					Err(_) => {
 						println!(
-							"timeout when contacting {:?} a.k.a. {:?}",
-							remote_addr, remote_id
+							"timeout when contacting {:?}",
+							remote_id
 						);
 						state.failed_to_contact.insert(remote_id);
 						return Ok(future::Loop::Continue(state));
