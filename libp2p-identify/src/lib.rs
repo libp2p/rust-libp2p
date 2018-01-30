@@ -73,7 +73,7 @@ extern crate tokio_io;
 extern crate varint;
 
 use bytes::{Bytes, BytesMut};
-use futures::{future, Future, Stream, Sink, stream};
+use futures::{future, IntoFuture, Future, Stream, Sink, stream};
 use libp2p_peerstore::{PeerId, Peerstore, PeerAccess};
 use libp2p_swarm::{ConnectionUpgrade, Endpoint, Transport, MuxedTransport};
 use multiaddr::{AddrComponent, Multiaddr};
@@ -83,6 +83,7 @@ use protobuf::repeated::RepeatedField;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use std::ops::Deref;
+use std::time::Duration;
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_io::codec::Framed;
 use varint::VarintCodec;
@@ -137,6 +138,7 @@ where
 
 		let listener = listener
 			.map(move |connec| {
+				let peerstore = peerstore.clone();
 				let identify_upgrade = identify_upgrade.clone();
 				let fut = connec
 					.and_then(move |(connec, client_addr)| {
@@ -151,18 +153,15 @@ where
 					.and_then(move |(dial, connec)| {
 						dial.map(move |dial| (dial, connec))
 					})
-					.map(move |((identify, _), connec)| {
-						let client_addr: Multiaddr = if let IdentifyOutput::RemoteInfo { info, .. } = identify {
-							println!("received {:?}", info);
-							//peerstore
-							//	.peer_or_create(info.public_key)		// TODO: is this the public key?
-							AddrComponent::IPFS(info.public_key).into()
+					.and_then(move |((identify, original_addr), connec)| {
+						let real_addr = if let IdentifyOutput::RemoteInfo { info, .. } = identify {
+							process_identify_info(&info, &*peerstore.clone(), original_addr)?
 						} else {
 							unreachable!("the identify protocol guarantees that we receive remote \
 											information when we dial a node")
 						};
 
-						(connec, client_addr)
+						Ok((connec, real_addr))
 					});
 				Box::new(fut) as Box<Future<Item = _, Error = _>>
 			});
@@ -216,21 +215,25 @@ where
 					}
 				};
 
+				let peerstore = self.peerstore;
+
 				let future = dial
-					.and_then(|identify| {
-						if let (IdentifyOutput::RemoteInfo { info, .. }, _) = identify {
-							//peerstore
-							//	.peer_or_create(info.public_key)		// TODO: is this the public key?
+					.and_then(move |identify| {
+						let real_addr = if let (IdentifyOutput::RemoteInfo { info, .. }, old_addr) = identify {
+							process_identify_info(&info, &*peerstore, old_addr)?
 						} else {
 							unreachable!("the identify protocol guarantees that we receive remote \
 											information when we dial a node")
-						}
+						};
 
-						transport.dial(addr)
+						Ok(transport.dial(addr)
 							.unwrap_or_else(|_| {
 								panic!("the same multiaddr was determined to be valid earlier")
 							})
-					});
+							.into_future()
+							.map(move |(dial, _wrong_addr)| (dial, real_addr)))
+					})
+					.flatten();
 				
 				Ok(Box::new(future) as Box<_>)
 			}
@@ -269,6 +272,7 @@ where
 	#[inline]
 	fn next_incoming(self) -> Self::Incoming {
 		let identify_upgrade = self.transport.clone().with_upgrade(IdentifyProtocolConfig);
+		let peerstore = self.peerstore;
 
 		let future = self.transport
 			.next_incoming()
@@ -284,18 +288,15 @@ where
 			.and_then(move |(dial, connec)| {
 				dial.map(move |dial| (dial, connec))
 			})
-			.map(move |(identify, connec)| {
-				let client_addr: Multiaddr = if let (IdentifyOutput::RemoteInfo { info, .. }, _) = identify {
-					println!("received {:?}", info);
-					//peerstore
-					//	.peer_or_create(info.public_key)		// TODO: is this the public key?
-					AddrComponent::IPFS(info.public_key).into()
+			.and_then(move |(identify, connec)| {
+				let real_addr = if let (IdentifyOutput::RemoteInfo { info, .. }, old_addr) = identify {
+					process_identify_info(&info, &*peerstore, old_addr)?
 				} else {
 					unreachable!("the identify protocol guarantees that we receive remote \
 									information when we dial a node")
 				};
 
-				(connec, client_addr)
+				Ok((connec, real_addr))
 			});
 
 		Box::new(future) as Box<_>
@@ -362,7 +363,7 @@ impl<'a, T> IdentifySender<T> where T: AsyncWrite + 'a {
 /// Information sent from the listener to the dialer.
 #[derive(Debug, Clone)]
 pub struct IdentifyInfo {
-	/// Public key of the node.
+	/// Public key of the node in the DER format.
 	pub public_key: Vec<u8>,
 	/// Version of the "global" protocol, eg. `ipfs/1.0.0` or `polkadot/1.0.0`.
 	pub protocol_version: String,
@@ -460,6 +461,22 @@ fn bytes_to_multiaddr(bytes: Vec<u8>) -> Result<Multiaddr, IoError> {
 		.map_err(|err| {
 			IoError::new(IoErrorKind::InvalidData, err)
 		})
+}
+
+// When passed the information sent by a remote, inserts the remote into the given peerstore and
+// returns a multiaddr of the format `/ipfs/...` corresponding to this node.
+//
+// > **Note**: This function is highly-specific, but this precise behaviour is needed in multiple
+// >		   places.
+fn process_identify_info<P>(info: &IdentifyInfo, peerstore: P, client_addr: Multiaddr)
+							-> Result<Multiaddr, IoError>
+	where P: Peerstore
+{
+	let peer_id = PeerId::from_public_key(&info.public_key);
+	peerstore
+		.peer_or_create(&peer_id)
+		.add_addr(client_addr, Duration::from_secs(3600));		// TODO: configurable
+	Ok(AddrComponent::IPFS(peer_id.into_bytes()).into())
 }
 
 #[cfg(test)]
