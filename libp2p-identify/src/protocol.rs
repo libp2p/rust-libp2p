@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::{Bytes, BytesMut};
-use futures::{future, Future, Stream, Sink};
+use futures::{future, Future, Sink, Stream};
 use libp2p_swarm::{ConnectionUpgrade, Endpoint};
 use multiaddr::Multiaddr;
 use protobuf::Message as ProtobufMessage;
@@ -60,16 +60,21 @@ pub struct IdentifySender<T> {
 	inner: Framed<T, VarintCodec<Vec<u8>>>,
 }
 
-impl<'a, T> IdentifySender<T> where T: AsyncWrite + 'a {
+impl<'a, T> IdentifySender<T>
+where
+	T: AsyncWrite + 'a,
+{
 	/// Sends back information to the client. Returns a future that is signalled whenever the
 	/// info have been sent.
-	pub fn send(self, info: IdentifyInfo, observed_addr: &Multiaddr)
-				-> Box<Future<Item = (), Error = IoError> + 'a>
-	{
+	pub fn send(
+		self,
+		info: IdentifyInfo,
+		observed_addr: &Multiaddr,
+	) -> Box<Future<Item = (), Error = IoError> + 'a> {
 		let listen_addrs = info.listen_addrs
-							   .into_iter()
-							   .map(|addr| addr.to_string().into_bytes())
-							   .collect();
+			.into_iter()
+			.map(|addr| addr.to_string().into_bytes())
+			.collect();
 
 		let mut message = structs_proto::Identify::new();
 		message.set_agentVersion(info.agent_version);
@@ -79,12 +84,11 @@ impl<'a, T> IdentifySender<T> where T: AsyncWrite + 'a {
 		message.set_observedAddr(observed_addr.to_string().into_bytes());
 		message.set_protocols(RepeatedField::from_vec(info.protocols));
 
-		let bytes = message.write_to_bytes()
+		let bytes = message
+			.write_to_bytes()
 			.expect("writing protobuf failed ; should never happen");
 
-		let future = self.inner
-			.send(bytes)
-			.map(|_| ());
+		let future = self.inner.send(bytes).map(|_| ());
 		Box::new(future) as Box<_>
 	}
 }
@@ -106,7 +110,8 @@ pub struct IdentifyInfo {
 }
 
 impl<C> ConnectionUpgrade<C> for IdentifyProtocolConfig
-    where C: AsyncRead + AsyncWrite + 'static
+where
+	C: AsyncRead + AsyncWrite + 'static,
 {
 	type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
 	type UpgradeIdentifier = ();
@@ -123,23 +128,27 @@ impl<C> ConnectionUpgrade<C> for IdentifyProtocolConfig
 
 		match ty {
 			Endpoint::Dialer => {
-				let future = socket.into_future()
-				      .map(|(msg, _)| msg)
-					  .map_err(|(err, _)| err)
-					  .and_then(|msg| if let Some(msg) = msg {
-					let (info, observed_addr) = parse_proto_msg(msg)?;
-					Ok(IdentifyOutput::RemoteInfo { info, observed_addr })
-				} else {
-					Err(IoErrorKind::InvalidData.into())
-				});
+				let future = socket
+					.into_future()
+					.map(|(msg, _)| msg)
+					.map_err(|(err, _)| err)
+					.and_then(|msg| {
+						if let Some(msg) = msg {
+							let (info, observed_addr) = parse_proto_msg(msg)?;
+							Ok(IdentifyOutput::RemoteInfo {
+								info,
+								observed_addr,
+							})
+						} else {
+							Err(IoErrorKind::InvalidData.into())
+						}
+					});
 
 				Box::new(future) as Box<_>
 			}
 
 			Endpoint::Listener => {
-				let sender = IdentifySender {
-					inner: socket,
-				};
+				let sender = IdentifySender { inner: socket };
 
 				let future = future::ok(IdentifyOutput::Sender {
 					sender,
@@ -178,16 +187,11 @@ fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> 
 			Ok((info, observed_addr))
 		}
 
-		Err(err) => {
-			Err(IoError::new(IoErrorKind::InvalidData, err))
-		}
+		Err(err) => Err(IoError::new(IoErrorKind::InvalidData, err)),
 	}
 }
 
 // Turn a `Vec<u8>` into a `Multiaddr`. If something bad happens, turn it into an `IoError`.
 fn bytes_to_multiaddr(bytes: Vec<u8>) -> Result<Multiaddr, IoError> {
-	Multiaddr::from_bytes(bytes)
-		.map_err(|err| {
-			IoError::new(IoErrorKind::InvalidData, err)
-		})
+	Multiaddr::from_bytes(bytes).map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
 }

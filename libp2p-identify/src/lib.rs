@@ -65,15 +65,15 @@
 
 extern crate bytes;
 extern crate futures;
-extern crate multiaddr;
 extern crate libp2p_peerstore;
 extern crate libp2p_swarm;
+extern crate multiaddr;
 extern crate protobuf;
 extern crate tokio_io;
 extern crate varint;
 
-pub use self::protocol::{IdentifyProtocolConfig, IdentifyInfo, IdentifySender, IdentifyOutput};
-pub use self::transport::{IdentifyTransport};
+pub use self::protocol::{IdentifyInfo, IdentifyOutput, IdentifyProtocolConfig, IdentifySender};
+pub use self::transport::IdentifyTransport;
 
 mod protocol;
 mod structs_proto;
