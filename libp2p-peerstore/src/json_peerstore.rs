@@ -128,16 +128,6 @@ impl<'a> PeerAccess for JsonPeerstoreAccess<'a> {
 	fn clear_addrs(&mut self) {
 		self.0.set_addrs(iter::empty());
 	}
-
-	#[inline]
-	fn get_pub_key(&self) -> Option<&[u8]> {
-		self.0.public_key()
-	}
-
-	#[inline]
-	fn set_pub_key(&mut self, key: Vec<u8>) {
-		self.0.set_public_key(key);
-	}
 }
 
 #[cfg(test)]
