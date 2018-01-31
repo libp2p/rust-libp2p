@@ -5,6 +5,7 @@ workflows:
   build:
     jobs:
       - test
+      - test-emscripten
       - integration_test
 
 jobs:
@@ -33,9 +34,25 @@ jobs:
           name: Run tests, inside a docker image
           command: docker run --rm -v "/cache/cargo/registry:/usr/local/cargo/registry" -v "/cache/target:/app/target" -it rust-libp2p cargo test
       - save_cache:
-          key: docker-cache
+          key: test-cache
           paths:
             - "/cache"
+
+  test-emscripten:
+    docker:
+      - image: tomaka/rustc-emscripten
+    steps:
+      - checkout
+      - restore_cache:
+          key: test-emscripten-cache
+      - run:
+          name: Build for emscripten
+          command: cargo build --target asmjs-unknown-emscripten --package libp2p-websocket   # TODO: build all?
+      - save_cache:
+          key: test-emscripten-cache
+          paths:
+            - "~/.cargo"
+            - "./target"
 
   integration_test:
     docker:
