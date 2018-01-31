@@ -18,10 +18,25 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! Contains a `ConnectionUpgrade` that makes it possible to send requests and receive responses
+//! from nodes after the upgrade.
+//!
+//! # Usage
+//!
+//! - Implement the `KadServerInterface` trait on something clonable (usually an `Arc`).
+//! - Create a `KademliaServerConfig` object from that interface. This struct implements
+//!   `ConnectionUpgrade`.
+//! - Update a connection through that `KademliaServerConfig`. The output yields you a
+//!   `KademliaServerController` and a future that must be driven to completion. The controller
+//!   allows you to perform queries and receive responses.
+//!
+//! The `KademliaServerController` is usually extracted and stored in some sort of hash map in an
+//! `Arc` in order to be available whenever we need to request something from a node.
+
 use bytes::Bytes;
 use error::KadError;
 use fnv::FnvHashMap;
-use futures::{self, future, stream, Future, IntoFuture, Sink, Stream};
+use futures::{self, future, stream, Future, Sink, Stream};
 use futures::sync::{mpsc, oneshot};
 use kbucket::{KBucketsPeerId, KBucketsTable, UpdateOutcome};
 use libp2p_identify::{IdentifyInfo, IdentifyOutput, IdentifyProtocolConfig};
@@ -33,7 +48,6 @@ use libp2p_swarm::transport::EitherSocket;
 use multiaddr::Multiaddr;
 use parking_lot::Mutex;
 use protocol::{self, KademliaProtocolConfig, KadMsg};
-use query::{self, QueryInterface};
 use smallvec::SmallVec;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
@@ -45,7 +59,7 @@ use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_timer;
 use with_some::WithSome;
 
-/// Interface that the query uses to communicate with the rest of the system.
+/// Interface that this server system uses to communicate with the rest of the system.
 pub trait KadServerInterface: Clone {
 	/// The `Peerstore` object where the query will load and store information about nodes.
 	type Peerstore: Peerstore + Clone;
@@ -124,333 +138,10 @@ where
 }
 
 /// Allows sending Kademlia requests and receiving responses.
+#[derive(Debug, Clone)]
 pub struct KademliaServerController {
 	inner: mpsc::UnboundedSender<(KadMsg, oneshot::Sender<KadMsg>)>,
 }
-
-/*impl<'a, R, P, T> KademliaServerConfig<R, P, T>
-where
-	T: MuxedTransport + Clone + 'static, // TODO: 'static :-/
-	P: Peerstore + Clone + 'a,
-	R: Clone + 'a,
-{
-	/// Starts the Kademlia DHT system.
-	///
-	/// This function returns a tuple that consists in a *controller*, and a future that will drive
-	/// the Kademlia process forward. The controller can be used to give instructions to the
-	/// Kademlia system.
-	pub fn build(
-		self,
-	) -> (
-		KademliaSwarmController<R, P, T>,
-		Box<Future<Item = (), Error = IoError> + 'a>,
-	) {
-		let buckets = KBucketsTable::new(self.local_peer_id.clone(), self.timeout);
-		for peer_id in self.peer_store.clone().peers() {
-			let _ = buckets.update(peer_id, ());
-		}
-
-		let shared = Arc::new(Inner {
-			kbuckets: buckets,
-			timer: tokio_timer::wheel().build(),
-			record_store: self.record_store,
-			peer_store: self.peer_store,
-			connections: Default::default(),
-		});
-
-		let server_upgrades = WithSome::<
-			_,
-			Option<Arc<Mutex<Option<mpsc::UnboundedReceiver<(KadMsg, oneshot::Sender<KadMsg>)>>>>>,
-		>(protocol::KademliaProtocolConfig, None)
-			.or_upgrade(IdentifyProtocolConfig)
-			.or_upgrade(Ping);
-
-		let (swarm_controller, swarm_future) = {
-			let shared = shared.clone();
-			libp2p_swarm::swarm(
-				self.transport,
-				server_upgrades,
-				move |upgrade, client_addr, swarm| {
-					let shared = shared.clone();
-					connection_handler(upgrade, client_addr, shared, swarm)
-				},
-			)
-		};
-
-		let controller = KademliaSwarmController {
-			swarm: swarm_controller,
-			parallelism: self.parallelism,
-			cycles_duration: self.cycles_duration,
-			timeout: self.timeout,
-			shared: shared.clone(),
-		};
-
-		let initialization_process = {
-			let controller2 = controller.clone();
-			controller
-				.find_node(self.local_peer_id.clone())
-				.and_then(move |_| {
-					let controller2 = controller2.clone();
-					let iter = shared
-						.clone()
-						.kbuckets
-						.buckets()
-						.enumerate()
-						.skip_while(|&(_, ref b)| b.num_entries() == 0)
-						.map(|(n, _)| n)
-						.collect::<Vec<_>>()
-						.into_iter()
-						.map(move |bucket_num| query::refresh(controller2.clone(), bucket_num));
-					future::join_all(iter)
-				})
-		};
-
-		let swarm_future = swarm_future
-			.select(initialization_process.map(move |_| ()))
-			.map_err(|(e, _)| e)
-			.and_then(|(_, n)| n);
-		(controller, Box::new(swarm_future) as Box<_>)
-	}
-}
-*/
-
-#[derive(Debug)]
-struct Inner<R, P> {
-	// The remotes are identified by their public keys.
-	kbuckets: KBucketsTable<PeerId, ()>,
-
-	// Timer used for building the timeouts.
-	timer: tokio_timer::Timer,
-
-	// Same fields as `KademliaServerConfig`.
-	record_store: R,
-	peer_store: P,
-
-	// List of open connections with remotes.
-	// TODO: is it correct to use FnvHashMap? needs benchmarks
-	connections:
-		Mutex<FnvHashMap<Multiaddr, mpsc::UnboundedSender<(KadMsg, oneshot::Sender<KadMsg>)>>>,
-}
-
-/*impl<R, P, T> QueryInterface for KademliaSwarmController<R, P, T>
-where
-	P: Peerstore + Clone,
-	R: Clone,
-	T: MuxedTransport + Clone + 'static,
-{
-	type Peerstore = P;
-	type RecordStore = R;
-	type Outcome = tokio_timer::Timeout<
-		future::MapErr<oneshot::Receiver<KadMsg>, fn(futures::Canceled) -> ()>,
-	>;
-
-	#[inline]
-	fn local_id(&self) -> &PeerId {
-		self.shared.kbuckets.my_id()
-	}
-
-	#[inline]
-	fn kbuckets_update(&self, peer: PeerId) {
-		// TODO: is this the right place for this check?
-		if &peer == self.shared.kbuckets.my_id() {
-			return;
-		}
-
-		match self.shared.kbuckets.update(peer, ()) {
-			UpdateOutcome::NeedPing(node_to_ping) => {
-				// TODO: return this info somehow
-				println!("need to ping {:?}", node_to_ping);
-			}
-			_ => (),
-		}
-	}
-
-	#[inline]
-	fn kbuckets_find_closest(&self, addr: &PeerId) -> Vec<PeerId> {
-		self.shared.kbuckets.find_closest(addr).collect()
-	}
-
-	#[inline]
-	fn peer_store(&self) -> Self::Peerstore {
-		self.shared.peer_store.clone()
-	}
-
-	#[inline]
-	fn record_store(&self) -> Self::RecordStore {
-		self.shared.record_store.clone()
-	}
-
-	#[inline]
-	fn parallelism(&self) -> usize {
-		self.parallelism as usize
-	}
-
-	#[inline]
-	fn cycle_duration(&self) -> Duration {
-		self.cycles_duration
-	}
-
-	#[inline]
-	fn send(&self, addr: Multiaddr, message: KadMsg) -> Self::Outcome {
-		let mut lock = self.shared.connections.lock();
-		let sender = lock.entry(addr.clone()).or_insert_with(move || {
-			let (tx, rx) = mpsc::unbounded();
-			let upgrade = WithSome(
-				protocol::KademliaProtocolConfig,
-				Some(Arc::new(Mutex::new(Some(rx)))),
-			).map_upgrade(EitherSocket::First)
-				.map_upgrade(EitherSocket::First);
-			self.swarm.dial_to_handler(addr, upgrade); // TODO: how to handle errs?
-			tx
-		});
-
-		// TODO: empty outcome if the message doesn't expect an answer
-
-		let (resp_tx, resp_rx) = oneshot::channel();
-		let _ = sender.unbounded_send((message, resp_tx));
-		self.shared
-			.timer
-			.timeout(resp_rx.map_err(|_| ()), self.timeout)
-	}
-}
-
-impl<R, P, T> KademliaSwarmController<R, P, T>
-    where T: MuxedTransport + Clone + 'static,      // TODO: 'static :-/
-          SwarmController<T, OrUpgrade<OrUpgrade<protocol::KademliaProtocolConfig, IdentifyProtocolConfig>, Ping>>: Clone,
-          P: Peerstore + Clone,
-          R: Clone,
-{
-    /// Adds a new address to listen on. The processing of this address will be handled by the
-    /// future that was returned when starting Kademlia.
-    #[inline]
-    pub fn listen_on(&self, addr: Multiaddr) -> Result<Multiaddr, Multiaddr> {
-        self.swarm.listen_on(addr)
-    }
-
-    /// Stores a value in the DHT.
-    pub fn store<'a, K, V>(&self, key: K, value: V) -> Box<Future<Item = (), Error = IoError> + 'a>
-        where K: Into<PeerId>,
-              V: Into<Vec<u8>>,
-              P: 'a,
-              R: 'a,
-    {
-        let key = key.into();
-        let me = self.clone();
-
-        let future = self.find_node(key.clone())
-            .and_then(move |closest_nodes| {
-                let closest_nodes = closest_nodes
-                    .into_iter()
-                    .flat_map(|node| {
-                        // TODO: this means that we send a message to all the multiaddrs of a peer
-                        me.shared.peer_store.clone()
-                            .peer(&node)
-                            .into_iter()
-                            .flat_map(|n| n.addrs())
-                    })
-                    .map(|addr| {
-                        let message = KadMsg::PutValue {
-                            key: key.as_bytes().to_vec(),       // TODO: meh
-                            record: ::protobuf_structs::record::Record::new(),      // FIXME:
-                        };
-
-                        me.send(addr, message)
-                            // Ignore errors if sending failed.
-                            .then(|r| Ok(r))
-                    })
-                    .collect::<Vec<_>>();
-
-                future::loop_fn(closest_nodes, |closest_nodes| {
-                    if closest_nodes.is_empty() {
-                        return future::Either::A(future::ok(future::Loop::Break(())));
-                    }
-
-                    let fut = future::select_all(closest_nodes)
-                        .map_err(|(err, _, _)| err)
-                        .map(|(_, _, rest)| future::Loop::Continue(rest));
-                    future::Either::B(fut)
-                })
-            });
-
-        Box::new(future) as Box<_>
-    }
-
-    /// Finds the nodes that are the closest to a given key.
-    pub fn find_node<'a, K>(&self, searched_key: K) -> Box<Future<Item = Vec<PeerId>, Error = IoError> + 'a>
-        where K: Into<PeerId>,
-              P: 'a,
-              R: 'a,
-    {
-        query::find_node(self.clone(), searched_key.into())
-    }
-}
-
-type UpgradeResult<R> = EitherSocket<
-	EitherSocket<
-		(
-			Box<
-				protocol::KadStreamSink<
-					SinkError = KadError,
-					Error = KadError,
-					Item = KadMsg,
-					SinkItem = KadMsg,
-				>
-					+ 'static,
-			>,
-			Option<Arc<Mutex<Option<mpsc::UnboundedReceiver<(KadMsg, oneshot::Sender<KadMsg>)>>>>>,
-		),
-		IdentifyOutput<R>,
-	>,
-	(Pinger, Box<Future<Item = (), Error = IoError> + 'static>),
->;
-
-// Handles an incoming connection on the swarm.
-fn connection_handler<'a, T, R, P>(
-	upgrade: UpgradeResult<T::RawConn>,
-	client_addr: Multiaddr,
-	shared: Arc<Inner<R, P>>,
-	swarm: SwarmType<T>,
-) -> Box<Future<Item = (), Error = IoError> + 'a>
-where
-	T: MuxedTransport + Clone,
-	P: Peerstore + Clone + 'a,
-	R: Clone + 'a,
-{
-	match upgrade {
-		EitherSocket::First(EitherSocket::First((kad_bistream, rx))) => {
-			let rx = match rx {
-				Some(rx) => rx.lock().take().unwrap(),
-				None => {
-					let (tx, rx) = mpsc::unbounded();
-					shared.connections.lock().insert(client_addr.clone(), tx);
-					rx
-				}
-			};
-
-			kademlia_handler(kad_bistream, rx, shared)
-		}
-		EitherSocket::First(EitherSocket::Second(identify)) => {
-			println!("identify protocol opened");
-			if let IdentifyOutput::RemoteInfo { info, .. } = identify {
-				println!("identify {:?}", info);
-				let id = PeerId::from_public_key(&info.public_key); // TODO: get a PeerId directly?
-				shared
-					.peer_store
-					.clone()
-					.peer_or_create(&id)
-					.add_addr(client_addr, Duration::from_secs(3600)); // TODO: configurable
-			} else {
-				println!("requested");
-			}
-
-			Box::new(Ok(()).into_future()) as Box<Future<Item = (), Error = IoError>>
-		}
-		EitherSocket::Second((ping_ctrl, ping_future)) => {
-			println!("ping opened");
-			Box::new(ping_future) as Box<Future<Item = (), Error = IoError>>
-		}
-	}
-}*/
 
 // Handles a newly-opened Kademlia stream with a remote peer.
 //
