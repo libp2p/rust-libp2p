@@ -28,7 +28,7 @@
 use bytes::Bytes;
 use error::KadError;
 use futures::{IntoFuture, Sink, Stream};
-use futures::future::FutureResult;
+use futures::future;
 use libp2p_peerstore::PeerId;
 use libp2p_swarm::{ConnectionUpgrade, Endpoint, Multiaddr};
 use protobuf::{self, Message};
@@ -126,7 +126,7 @@ where
 	type Output = Box<
 		KadStreamSink<Item = KadMsg, Error = KadError, SinkItem = KadMsg, SinkError = KadError>,
 	>;
-	type Future = FutureResult<Self::Output, IoError>;
+	type Future = future::FutureResult<Self::Output, IoError>;
 	type NamesIter = iter::Once<(Bytes, ())>;
 	type UpgradeIdentifier = ();
 
@@ -137,7 +137,7 @@ where
 
 	#[inline]
 	fn upgrade(self, incoming: C, _: (), _: Endpoint, _: &Multiaddr) -> Self::Future {
-		Ok(kademlia_protocol(incoming)).into_future()
+		future::ok(kademlia_protocol(incoming))
 	}
 }
 
