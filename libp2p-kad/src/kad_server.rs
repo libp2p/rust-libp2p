@@ -47,7 +47,7 @@ use libp2p_swarm::{ConnectionUpgrade, UpgradedNode};
 use libp2p_swarm::transport::EitherSocket;
 use multiaddr::Multiaddr;
 use parking_lot::Mutex;
-use protocol::{self, KademliaProtocolConfig, KadMsg};
+use protocol::{self, KademliaProtocolConfig, KadMsg, Peer};
 use smallvec::SmallVec;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
@@ -62,12 +62,9 @@ use with_some::WithSome;
 /// Interface that this server system uses to communicate with the rest of the system.
 pub trait KadServerInterface: Clone {
 	/// The `Peerstore` object where the query will load and store information about nodes.
-	type Peerstore: Peerstore + Clone;
+	type Peerstore: Peerstore;
 	/// The record store to use for `FIND_VALUE` queries.
-	type RecordStore: Clone;
-	/// Future that yields the Kademlia message that a remote will answer as part of a sent
-	/// message.
-	type Outcome: Future<Item = protocol::KadMsg, Error = ()>;
+	type RecordStore;
 
 	/// Returns the peer ID of the local node.
 	fn local_id(&self) -> &PeerId;
@@ -141,6 +138,45 @@ where
 #[derive(Debug, Clone)]
 pub struct KademliaServerController {
 	inner: mpsc::UnboundedSender<(KadMsg, oneshot::Sender<KadMsg>)>,
+}
+
+impl KademliaServerController {
+	/// Sends a `FIND_NODE` query to the node and sends back the response.
+	pub fn find_node(&self, searched_key: &PeerId)
+					 -> Box<Future<Item = Vec<Peer>, Error = IoError>>
+	{
+		let message = protocol::KadMsg::FindNodeReq {
+			key: searched_key.clone().into_bytes(),
+			cluster_level: 10, // TODO: correct value
+		};
+
+		let (tx, rx) = oneshot::channel();
+
+		match self.inner.unbounded_send((message, tx)) {
+			Ok(()) => (),
+			Err(_) => {
+				let fut = future::err(IoError::new(IoErrorKind::ConnectionAborted,
+								         		   "connection to remote has aborted"));
+				return Box::new(fut) as Box<_>
+			}
+		};
+
+		let future = rx
+			.map_err(|_| {
+				IoError::new(IoErrorKind::ConnectionAborted, "connection to remote has aborted")
+			})
+			.and_then(|msg| {
+				match msg {
+					KadMsg::FindNodeRes { closer_peers, .. } => Ok(closer_peers),
+					_ => {
+						Err(IoError::new(IoErrorKind::InvalidData,
+										"invalid message received by the remote"))
+					}
+				}
+			});
+
+		Box::new(future) as Box<_>
+	}
 }
 
 // Handles a newly-opened Kademlia stream with a remote peer.
