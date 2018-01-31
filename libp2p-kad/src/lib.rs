@@ -41,6 +41,7 @@ extern crate varint;
 pub use self::swarm::{KademliaConfig, KademliaSwarmController};
 
 mod error;
+mod kad_server;
 pub mod kbucket; // TODO: not pub
 mod protobuf_structs;
 mod protocol;
