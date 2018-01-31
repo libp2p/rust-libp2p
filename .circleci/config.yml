@@ -5,6 +5,7 @@ workflows:
   build:
     jobs:
       - test
+      - test-emscripten
       - integration_test
 
 jobs:
