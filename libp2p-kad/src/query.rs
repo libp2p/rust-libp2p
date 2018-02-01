@@ -105,6 +105,7 @@ where
 		None => return Box::new(future::ok(())),
 	};
 
+	// TODO: remove
 	println!(
 		"refreshing bucket {:?} with peer {:?}",
 		bucket_num,

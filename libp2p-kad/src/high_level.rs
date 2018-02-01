@@ -36,6 +36,7 @@ use libp2p_swarm::transport::EitherSocket;
 use multiaddr::Multiaddr;
 use parking_lot::Mutex;
 use protocol::{self, KademliaProtocolConfig, KadMsg, Peer};
+use query;
 use smallvec::SmallVec;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
@@ -62,7 +63,7 @@ pub struct KademliaConfig<P, R> {
 	pub local_peer_id: PeerId,
 	/// The Kademlia system uses cycles. This is the duration of one cycle.
 	pub cycles_duration: Duration,
-	/// When pinging a node, duration after which we consider that it doesn't respond.
+	/// When contacting a node, duration after which we consider that it doesn't respond.
 	pub timeout: Duration,
 }
 
@@ -72,7 +73,33 @@ pub struct KademliaControllerPrototype<P, R> {
     inner: Arc<Inner<P, R>>,
 }
 
-impl<P, R> KademliaControllerPrototype<P, R> {
+impl<P, Pc, R> KademliaControllerPrototype<P, R>
+    where P: Deref<Target = Pc>,
+          for<'r> &'r Pc: Peerstore,
+{
+    /// Creates a new controller from that configuration.
+    pub fn new(config: KademliaConfig<P, R>) -> KademliaControllerPrototype<P, R> {
+		let buckets = KBucketsTable::new(config.local_peer_id.clone(), config.timeout);
+		for peer_id in config.peer_store.deref().peers() {
+			let _ = buckets.update(peer_id, ());
+		}
+
+		let inner = Arc::new(Inner {
+			kbuckets: buckets,
+			timer: tokio_timer::wheel().build(),
+			record_store: config.record_store,
+			peer_store: config.peer_store,
+			connections: Default::default(),
+            timeout: config.timeout,
+            cycles_duration: config.cycles_duration,
+            parallelism: config.parallelism,
+		});
+
+        KademliaControllerPrototype {
+            inner: inner,
+        }
+    }
+
     pub fn start<T, C>(self, swarm: SwarmController<T, C>) -> KademliaController<P, R>
         where T: MuxedTransport,
               C: ConnectionUpgrade<T::RawConn>,
@@ -100,29 +127,17 @@ impl<P, R> Clone for KademliaController<P, R> {
     }
 }
 
-impl<P, R> KademliaController<P, R>
-    where P: Peerstore + Clone,
+impl<P, Pc, R> KademliaController<P, R>
+    where P: Deref<Target = Pc>,
+          for<'r> &'r Pc: Peerstore,
           R: Clone,
 {
-    /// Creates a new controller from that configuration.
-    pub fn new(config: KademliaConfig<P, R>) -> KademliaController<P, R> {
-		let buckets = KBucketsTable::new(config.local_peer_id.clone(), config.timeout);
-		for peer_id in config.peer_store.clone().peers() {
-			let _ = buckets.update(peer_id, ());
-		}
-
-		let inner = Arc::new(Inner {
-			kbuckets: buckets,
-			timer: tokio_timer::wheel().build(),
-			record_store: config.record_store,
-			peer_store: config.peer_store,
-			connections: Default::default(),
-            timeout: config.timeout,
-		});
-
-        KademliaController {
-            inner: inner,
-        }
+    #[inline]
+    pub fn find_node<'a>(&self, searched_key: PeerId)
+                         -> Box<Future<Item = Vec<PeerId>, Error = IoError> + 'a>
+        where P: 'a, R: 'a
+    {
+        query::find_node(self.inner.clone(), searched_key)
     }
 }
 
@@ -144,11 +159,12 @@ impl<P, R> KademliaUpgrade<P, R> {
     }
 }
 
-impl<C, P, R> ConnectionUpgrade<C> for KademliaUpgrade<P, R>
+impl<C, P, Pc, R> ConnectionUpgrade<C> for KademliaUpgrade<P, R>
 where
 	C: AsyncRead + AsyncWrite + 'static, // TODO: 'static :-/
-    P: Peerstore + Clone + 'static,     // TODO: 'static :-/
-    R: 'static          // TODO: 'static :-/
+    P: Deref<Target = Pc> + Clone + 'static,        // TODO: 'static :-/
+    for<'r> &'r Pc: Peerstore,
+    R: 'static,         // TODO: 'static :-/
 {
 	type Output = Box<Future<Item = (), Error = IoError>>;
 	type Future = Box<Future<Item = Self::Output, Error = IoError>>;
@@ -185,8 +201,14 @@ struct Inner<P, R> {
 	// Timer used for building the timeouts.
 	timer: tokio_timer::Timer,
 
-    // The timeout of the responses.
+    // Same as in the config.
     timeout: Duration,
+
+    // Same as in the config.
+    parallelism: u32,
+
+    // Same as in the config.
+    cycles_duration: Duration,
 
 	// Same fields as `KademliaConfig`.
 	record_store: R,
@@ -197,10 +219,11 @@ struct Inner<P, R> {
 	connections: Mutex<FnvHashMap<Multiaddr, KademliaServerController>>,
 }
 
-impl<P, R> KadServerInterface for Arc<Inner<P, R>>
-    where P: Peerstore + Clone,     // TODO: wrong
+impl<P, Pc, R> KadServerInterface for Arc<Inner<P, R>>
+    where P: Deref<Target = Pc>,
+          for<'r> &'r Pc: Peerstore,
 {
-	type Peerstore = P;
+	type Peerstore = &'static ::libp2p_peerstore::memory_peerstore::MemoryPeerstore;       // TODO: wrong
 	type RecordStore = R;
 
     #[inline]
@@ -237,13 +260,97 @@ impl<P, R> KadServerInterface for Arc<Inner<P, R>>
     }
 }
 
+impl<R, P, Pc> query::QueryInterface for Arc<Inner<P, R>>
+where
+	P: Deref<Target = Pc>,
+    for<'r> &'r Pc: Peerstore,
+	R: Clone,
+{
+	type Peerstore = &'static ::libp2p_peerstore::memory_peerstore::MemoryPeerstore;       // TODO: wrong
+	type RecordStore = R;
+	type Outcome = tokio_timer::Timeout<
+		future::MapErr<oneshot::Receiver<KadMsg>, fn(futures::Canceled) -> ()>,
+	>;
+
+	#[inline]
+	fn local_id(&self) -> &PeerId {
+		self.kbuckets.my_id()
+	}
+
+	#[inline]
+	fn kbuckets_update(&self, peer: PeerId) {
+		// TODO: is this the right place for this check?
+		if &peer == self.kbuckets.my_id() {
+			return;
+		}
+
+		match self.kbuckets.update(peer, ()) {
+			UpdateOutcome::NeedPing(node_to_ping) => {
+				// TODO: return this info somehow
+				println!("need to ping {:?}", node_to_ping);
+			}
+			_ => (),
+		}
+	}
+
+	#[inline]
+	fn kbuckets_find_closest(&self, addr: &PeerId) -> Vec<PeerId> {
+		self.kbuckets.find_closest(addr).collect()
+	}
+
+	#[inline]
+	fn peer_store(&self) -> Self::Peerstore {
+		unimplemented!()
+	}
+
+	#[inline]
+	fn record_store(&self) -> Self::RecordStore {
+		self.record_store.clone()
+	}
+
+	#[inline]
+	fn parallelism(&self) -> usize {
+		self.parallelism as usize
+	}
+
+	#[inline]
+	fn cycle_duration(&self) -> Duration {
+		self.cycles_duration
+	}
+
+	#[inline]
+	fn send(&self, addr: Multiaddr, message: KadMsg) -> Self::Outcome {
+		/*let mut lock = self.shared.connections.lock();
+		let sender = lock.entry(addr.clone()).or_insert_with(move || {
+			let (tx, rx) = mpsc::unbounded();
+			let upgrade = WithSome(
+				protocol::KademliaProtocolConfig,
+				Some(Arc::new(Mutex::new(Some(rx)))),
+			).map_upgrade(EitherSocket::First)
+				.map_upgrade(EitherSocket::First);
+			self.swarm.dial_to_handler(addr, upgrade); // TODO: how to handle errs?
+			tx
+		});
+        
+
+		// TODO: empty outcome if the message doesn't expect an answer
+
+		let (resp_tx, resp_rx) = oneshot::channel();
+		let _ = sender.unbounded_send((message, resp_tx));
+		self.shared
+			.timer
+			.timeout(resp_rx.map_err(|_| ()), self.timeout)*/
+        unimplemented!()
+	}
+}
+
 // Sends a message to a specific multiaddress, and returns a response with a timeout.
 #[inline]
 fn send<P, R, F, Fu>(inner: &Inner<P, R>, addr: Multiaddr, closure: F)
                      -> tokio_timer::Timeout<Fu::Future>
     where F: FnOnce(&KademliaServerController) -> Fu,
-        Fu: IntoFuture,
-        Fu::Error: From<tokio_timer::TimeoutError<Fu::Future>>
+          Fu: IntoFuture,
+          Fu::Error: From<tokio_timer::TimeoutError<Fu::Future>>
 {
     let mut lock = inner.connections.lock();
 

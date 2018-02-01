@@ -38,7 +38,8 @@ extern crate tokio_io;
 extern crate tokio_timer;
 extern crate varint;
 
-pub use self::swarm::{KademliaConfig, KademliaSwarmController};
+pub use self::high_level::{KademliaConfig, KademliaController, KademliaControllerPrototype};
+pub use self::high_level::KademliaUpgrade;
 
 mod error;
 mod high_level;

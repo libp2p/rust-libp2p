@@ -98,17 +98,26 @@ fn main() {
     let kad_config = kad::KademliaConfig {
         parallelism: 3,
         record_store: (),
-        peer_store: &*peer_store,
-        transport: transport.clone(),
+        peer_store: peer_store,
         local_peer_id: my_peer_id.clone(),
         timeout: Duration::from_secs(2),
         cycles_duration: Duration::from_secs(1),
     };
 
-    let (kad_controller, kad_future) = kad_config.build();
+    let kad_ctl_proto = kad::KademliaControllerPrototype::new(kad_config);
+
+    let proto = kad::KademliaUpgrade::new(&kad_ctl_proto);
+
+    // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming and
+    // outgoing connections for us.
+    let (swarm_controller, swarm_future) = swarm::swarm(transport, proto, |upgrade, client_addr, _| {
+        upgrade
+    });
+
+    let kad_controller = kad_ctl_proto.start(swarm_controller.clone());
 
     for listen_addr in listen_addrs {
-        let addr = kad_controller.listen_on(listen_addr.parse().expect("wrong multiaddr"))
+        let addr = swarm_controller.listen_on(listen_addr.parse().expect("wrong multiaddr"))
             .expect("unsupported multiaddr");
         println!("Now listening on {:?}", addr);
     }
@@ -126,6 +135,6 @@ fn main() {
     // `swarm_future` is a future that contains all the behaviour that we want, but nothing has
     // actually started yet. Because we created the `TcpConfig` with tokio, we need to run the
     // future through the tokio core.
-    //core.run(finish_enum.select(kad_future).map(|(n, _)| n).map_err(|(err, _)| err)).unwrap();
-    core.run(finish_enum.select(kad_future).map_err(|(err, _)| err).and_then(|(n, o)| o.map(move |_| n))).unwrap();
+    core.run(finish_enum.select(swarm_future).map(|(n, _)| n).map_err(|(err, _)| err)).unwrap();
+    //core.run(finish_enum.select(swarm_future).map_err(|(err, _)| err).and_then(|(n, o)| o.map(move |_| n))).unwrap();
 }
