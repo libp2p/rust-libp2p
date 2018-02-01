@@ -208,6 +208,8 @@ where
         let inner = self.inner;
         let client_addr = addr.clone();
 
+        println!("addr in upgrade {:?}", addr);
+
         let future = self.upgrade
             .upgrade(incoming, id, endpoint, addr)
             .map(move |(controller, future)| {
@@ -216,6 +218,7 @@ where
                         match entry.insert(Connection::Active(controller)) {
                             Connection::Active(_) => {},
                             Connection::Pending(closures) => {
+                                println!("calling closures");
                                 let new_ctl = match entry.get_mut() {
                                     &mut Connection::Active(ref mut ctl) => ctl,
                                     _ => unreachable!("we just inserted an Active enum variant")
@@ -228,6 +231,7 @@ where
                         };
                     },
                     Entry::Vacant(entry) => {
+                        println!("vacant");
                         entry.insert(Connection::Active(controller));
                     },
                 };
@@ -407,6 +411,11 @@ where
                 }
             },
             Entry::Vacant(entry) => {
+                let proto = KademliaUpgrade {
+                    inner: self.inner.clone(),
+                    upgrade: KademliaServerConfig::new(self.inner.clone()),
+                };
+                self.swarm_controller.dial_to_handler(addr, proto).unwrap();      // TODO: don't unwrap
                 match entry.insert(Connection::Pending(Vec::with_capacity(1))) {
                     &mut Connection::Pending(ref mut list) => list,
                     _ => unreachable!("we just inserted a Pending variant")
@@ -418,6 +427,7 @@ where
         let mut tx = Some(tx);
         let mut and_then = Some(and_then);
         pending_list.push(Box::new(move |ctrl: &mut KademliaServerController| {
+            println!("pending reached");
             let and_then = and_then.take().expect("pending closures are only ever called once");
             let tx = tx.take().expect("pending closures are only ever called once");
             let ret = and_then(ctrl);

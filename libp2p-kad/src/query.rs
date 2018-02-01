@@ -39,8 +39,6 @@ use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::mem;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_timer::Timer;
 
 /// Interface that the query uses to communicate with the rest of the system.
 pub trait QueryInterface: Clone {

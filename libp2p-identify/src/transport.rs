@@ -131,7 +131,7 @@ where
 
 	#[inline]
 	fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-		match multiaddr_to_peerid(addr) {
+		match multiaddr_to_peerid(addr.clone()) {
 			Ok(peer_id) => {
 				// If the multiaddress is a peer ID, try each known multiaddress (taken from the
 				// peerstore) one by one.
