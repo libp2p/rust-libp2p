@@ -70,10 +70,14 @@ pub trait QueryInterface: Clone {
 	/// Duration between two waves of queries.
 	fn cycle_duration(&self) -> Duration;
 
-	/// Gives access to a `KademliaServerController` that can be used to communicate with the node
-	/// whose address is `addr`.
-	fn send<F, R>(&self, addr: Multiaddr, handler: F) -> R
-        where F: FnOnce(&KademliaServerController) -> R;
+	/// Attempts to contact the given multiaddress, then calls `and_then` on success. Returns a
+	/// future that contains the output of `and_then`, or an error if we failed to contact the
+	/// remote.
+	// TODO: use HKTB once Rust supports that, to avoid boxing the future
+	fn send<F, FRet>(&self, addr: Multiaddr, and_then: F)
+					 -> Box<Future<Item = FRet, Error = IoError>>
+        where F: FnOnce(&KademliaServerController) -> FRet + 'static,
+			  FRet: 'static;
 }
 
 /// Starts a query for a `FIND_NODE` request.
@@ -238,13 +242,15 @@ where
 			let multiaddr: Multiaddr = AddrComponent::IPFS(peer.clone().into_bytes()).into();
 
 			println!("contacting {:?}", multiaddr);
-			let resp_rx = query_interface.send(multiaddr.clone(), |ctl| {
-				ctl.find_node(&searched_key)
+			let searched_key2 = searched_key.clone();
+			let resp_rx = query_interface.send(multiaddr.clone(), move |ctl| {
+				ctl.find_node(&searched_key2)
 			});
 			state
 				.current_attempts_addrs
 				.push(peer.clone());
 			let current_attempt = resp_rx
+				.flatten()
                 .map_err(|_| ())        // TODO: better error?
                 .then(|res| Ok(res));
 			state

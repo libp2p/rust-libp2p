@@ -122,7 +122,8 @@ impl<T, C> SwarmController<T, C>
     {
         match self.transport.clone().with_upgrade(upgrade).dial(multiaddr.clone()) {
             Ok(dial) => {
-                let dial = Box::new(self.timer.timeout(dial.map(|(d, client_addr)| (d.into(), client_addr)), Duration::from_secs(2))) as Box<Future<Item = _, Error = _>>;
+                let dial = Box::new(dial.map(|(d, client_addr)| (d.into(), client_addr)))
+                    as Box<Future<Item = _, Error = _>>;
                 // Ignoring errors if the receiver has been closed, because in that situation
                 // nothing is going to be processed anyway.
                 let _ = self.new_dialers.unbounded_send(dial);

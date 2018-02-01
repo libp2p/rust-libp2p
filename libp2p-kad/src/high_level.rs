@@ -38,6 +38,7 @@ use parking_lot::Mutex;
 use protocol::{self, KademliaProtocolConfig, KadMsg, Peer};
 use query;
 use smallvec::SmallVec;
+use std::collections::hash_map::Entry;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use std::mem;
@@ -68,7 +69,7 @@ pub struct KademliaConfig<P, R> {
 }
 
 /// Object that allows one to make queries on the Kademlia system.
-#[derive(Debug)]
+//#[derive(Debug)]      // TODO:
 pub struct KademliaControllerPrototype<P, R> {
     inner: Arc<Inner<P, R>>,
 }
@@ -156,7 +157,7 @@ impl<P, Pc, R, T, C> KademliaController<P, R, T, C>
 }
 
 /// Connection upgrade to the Kademlia protocol.
-#[derive(Debug, Clone)]
+#[derive(Clone)]        // TODO: Debug
 pub struct KademliaUpgrade<P, R> {
     inner: Arc<Inner<P, R>>,
     upgrade: KademliaServerConfig<Arc<Inner<P, R>>>,
@@ -210,7 +211,27 @@ where
         let future = self.upgrade
             .upgrade(incoming, id, endpoint, addr)
             .map(move |(controller, future)| {
-                inner.connections.lock().insert(client_addr, controller);
+                match inner.connections.lock().entry(client_addr) {
+                    Entry::Occupied(mut entry) => {
+                        match entry.insert(Connection::Active(controller)) {
+                            Connection::Active(_) => {},
+                            Connection::Pending(closures) => {
+                                let new_ctl = match entry.get_mut() {
+                                    &mut Connection::Active(ref mut ctl) => ctl,
+                                    _ => unreachable!("we just inserted an Active enum variant")
+                                };
+
+                                for mut closure in closures {
+                                    closure(new_ctl);
+                                }
+                            },
+                        };
+                    },
+                    Entry::Vacant(entry) => {
+                        entry.insert(Connection::Active(controller));
+                    },
+                };
+
                 KademliaProcessingFuture { inner: future }
             });
 
@@ -234,7 +255,7 @@ impl Future for KademliaProcessingFuture {
 }
 
 // Inner struct shared throughout the Kademlia system.
-#[derive(Debug)]
+//#[derive(Debug)]      // TODO:
 struct Inner<P, R> {
 	// The remotes are identified by their public keys.
 	kbuckets: KBucketsTable<PeerId, ()>,
@@ -257,7 +278,14 @@ struct Inner<P, R> {
 
 	// List of open connections with remotes.
 	// TODO: is it correct to use FnvHashMap with a Multiaddr? needs benchmarks
-	connections: Mutex<FnvHashMap<Multiaddr, KademliaServerController>>,
+	connections: Mutex<FnvHashMap<Multiaddr, Connection>>,
+}
+
+//#[derive(Debug)]      // TODO:
+enum Connection {
+    Active(KademliaServerController),
+    // TODO: should be FnOnce once Rust allows that
+    Pending(Vec<Box<FnMut(&mut KademliaServerController)>>),
 }
 
 impl<P, Pc, R> KadServerInterface for Arc<Inner<P, R>>
@@ -361,16 +389,42 @@ where
 	}
 
 	#[inline]
-	fn send<F, FRet>(&self, addr: Multiaddr, handler: F) -> FRet
-        where F: FnOnce(&KademliaServerController) -> FRet
+	fn send<F, FRet>(&self, addr: Multiaddr, and_then: F)
+                     -> Box<Future<Item = FRet, Error = IoError>>
+        where F: FnOnce(&KademliaServerController) -> FRet + 'static,
+              FRet: 'static,
     {
         let mut lock = self.inner.connections.lock();
-        let controller = lock.entry(addr.clone()).or_insert_with(move || {
-            let upgrade = KademliaUpgrade::from_controller(self);
-            self.swarm_controller.dial_to_handler(addr, upgrade);
-            unimplemented!()
-        });
 
-        handler(controller)
+        let pending_list = match lock.entry(addr.clone()) {
+            Entry::Occupied(entry) => {
+                match entry.into_mut() {
+                    &mut Connection::Pending(ref mut list) => list,
+                    &mut Connection::Active(ref mut ctrl) => {
+                        let output = future::ok(and_then(ctrl));
+                        return Box::new(output) as Box<_>;
+                    },
+                }
+            },
+            Entry::Vacant(entry) => {
+                match entry.insert(Connection::Pending(Vec::with_capacity(1))) {
+                    &mut Connection::Pending(ref mut list) => list,
+                    _ => unreachable!("we just inserted a Pending variant")
+                }
+            },
+        };
+
+        let (tx, rx) = oneshot::channel();
+        let mut tx = Some(tx);
+        let mut and_then = Some(and_then);
+        pending_list.push(Box::new(move |ctrl: &mut KademliaServerController| {
+            let and_then = and_then.take().expect("pending closures are only ever called once");
+            let tx = tx.take().expect("pending closures are only ever called once");
+            let ret = and_then(ctrl);
+            let _ = tx.send(ret);       // TODO: better error handling
+        }) as Box<_>);
+
+        let future = rx.map_err(|_| IoErrorKind::ConnectionAborted.into());
+        Box::new(future) as Box<_>
 	}
 }
