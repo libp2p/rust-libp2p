@@ -61,11 +61,6 @@ use with_some::WithSome;
 
 /// Interface that this server system uses to communicate with the rest of the system.
 pub trait KadServerInterface: Clone {
-	/// The `Peerstore` object where the query will load and store information about nodes.
-	type Peerstore: Peerstore;
-	/// The record store to use for `FIND_VALUE` queries.
-	type RecordStore;
-
 	/// Returns the peer ID of the local node.
 	fn local_id(&self) -> &PeerId;
 
@@ -74,12 +69,6 @@ pub trait KadServerInterface: Clone {
 
 	/// Finds the nodes closest to a peer ID.
 	fn kbuckets_find_closest(&self, addr: &PeerId) -> Vec<PeerId>;
-
-	/// Grants access to the peerstore to use for this query.
-	fn peer_store(&self) -> Self::Peerstore;
-
-	/// Grants access to the recordstore to use for this query.
-	fn record_store(&self) -> Self::RecordStore;
 }
 
 /// Configuration for a Kademlia server.

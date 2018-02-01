@@ -218,7 +218,6 @@ where
                         match entry.insert(Connection::Active(controller)) {
                             Connection::Active(_) => {},
                             Connection::Pending(closures) => {
-                                println!("calling closures");
                                 let new_ctl = match entry.get_mut() {
                                     &mut Connection::Active(ref mut ctl) => ctl,
                                     _ => unreachable!("we just inserted an Active enum variant")
@@ -296,9 +295,6 @@ impl<P, Pc, R> KadServerInterface for Arc<Inner<P, R>>
     where P: Deref<Target = Pc>,
           for<'r> &'r Pc: Peerstore,
 {
-	type Peerstore = &'static ::libp2p_peerstore::memory_peerstore::MemoryPeerstore;       // TODO: wrong
-	type RecordStore = R;
-
     #[inline]
 	fn local_id(&self) -> &PeerId {
         self.kbuckets.my_id()
@@ -320,16 +316,9 @@ impl<P, Pc, R> KadServerInterface for Arc<Inner<P, R>>
 		}
     }
 
+    #[inline]
 	fn kbuckets_find_closest(&self, addr: &PeerId) -> Vec<PeerId> {
 		self.kbuckets.find_closest(addr).collect()
-    }
-
-	fn peer_store(&self) -> Self::Peerstore {
-        unimplemented!()        // TODO:
-    }
-
-	fn record_store(&self) -> Self::RecordStore {
-        unimplemented!()        // TODO:
     }
 }
 
@@ -343,9 +332,6 @@ where
     C::NamesIter: Clone,
     C::Output: From<KademliaProcessingFuture>,
 {
-	type Peerstore = &'static ::libp2p_peerstore::memory_peerstore::MemoryPeerstore;       // TODO: wrong
-	type RecordStore = R;
-
 	#[inline]
 	fn local_id(&self) -> &PeerId {
 		self.inner.kbuckets.my_id()
@@ -372,15 +358,12 @@ where
 		self.inner.kbuckets.find_closest(addr).collect()
 	}
 
-	#[inline]
-	fn peer_store(&self) -> Self::Peerstore {
-		unimplemented!()
-	}
-
-	#[inline]
-	fn record_store(&self) -> Self::RecordStore {
-		self.inner.record_store.clone()
-	}
+    #[inline]
+    fn peer_add_addrs<I>(&self, peer: &PeerId, multiaddrs: I, ttl: Duration)
+		where I: Iterator<Item = Multiaddr>
+    {
+        self.inner.peer_store.peer_or_create(peer).add_addrs(multiaddrs, ttl);
+    }
 
 	#[inline]
 	fn parallelism(&self) -> usize {
@@ -427,7 +410,6 @@ where
         let mut tx = Some(tx);
         let mut and_then = Some(and_then);
         pending_list.push(Box::new(move |ctrl: &mut KademliaServerController| {
-            println!("pending reached");
             let and_then = and_then.take().expect("pending closures are only ever called once");
             let tx = tx.take().expect("pending closures are only ever called once");
             let ret = and_then(ctrl);

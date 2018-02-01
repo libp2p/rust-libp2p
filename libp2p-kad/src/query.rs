@@ -42,11 +42,6 @@ use std::time::{Duration, Instant};
 
 /// Interface that the query uses to communicate with the rest of the system.
 pub trait QueryInterface: Clone {
-	/// The `Peerstore` object where the query will load and store information about nodes.
-	type Peerstore: Peerstore + Clone;
-	/// The record store to use for `FIND_VALUE` queries.
-	type RecordStore: Clone;
-
 	/// Returns the peer ID of the local node.
 	fn local_id(&self) -> &PeerId;
 
@@ -56,11 +51,9 @@ pub trait QueryInterface: Clone {
 	/// Finds the nodes closest to a peer ID.
 	fn kbuckets_find_closest(&self, addr: &PeerId) -> Vec<PeerId>;
 
-	/// Grants access to the peerstore to use for this query.
-	fn peer_store(&self) -> Self::Peerstore;
-
-	/// Grants access to the recordstore to use for this query.
-	fn record_store(&self) -> Self::RecordStore;
+	/// Adds new known multiaddrs for the given peer.
+	fn peer_add_addrs<I>(&self, peer: &PeerId, multiaddrs: I, ttl: Duration)
+		where I: Iterator<Item = Multiaddr>;
 
 	/// Returns the level of parallelism wanted for this query.
 	fn parallelism(&self) -> usize;
@@ -314,11 +307,7 @@ where
 							;//.filter(|addr| !state.failed_to_contact.iter().any(|e| e == addr));
 
 						query_interface2.kbuckets_update(peer.node_id.clone());
-						query_interface2
-							.peer_store()
-							.clone()
-							.peer_or_create(&peer.node_id)
-							.add_addrs(valid_multiaddrs, Duration::from_secs(3600)); // TODO: which TTL?
+						query_interface2.peer_add_addrs(&peer.node_id, valid_multiaddrs, Duration::from_secs(3600));		// TODO: which TTL?
 					}
 
 					if peer.node_id.distance_with(&searched_key)
