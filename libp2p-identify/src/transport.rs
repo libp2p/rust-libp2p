@@ -153,7 +153,8 @@ where
 					.filter_map(|res| res.ok())
 					.into_future()
 					.map_err(|(err, _)| err)
-					.and_then(|(val, _)| val.ok_or(IoErrorKind::InvalidData.into())); // TODO: wrong error
+					.and_then(|(val, _)| val.ok_or(IoErrorKind::InvalidData.into())) // TODO: wrong error
+					.map(move |(socket, _inner_client_addr)| (socket, addr));
 
 				Ok(Box::new(future) as Box<_>)
 			}
