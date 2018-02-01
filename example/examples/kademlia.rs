@@ -110,7 +110,7 @@ fn main() {
 
     // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming and
     // outgoing connections for us.
-    let (swarm_controller, swarm_future) = swarm::swarm(transport, proto, |upgrade, client_addr, _| {
+    let (swarm_controller, swarm_future) = swarm::swarm(transport, proto, |upgrade, _, _| {
         upgrade
     });
 

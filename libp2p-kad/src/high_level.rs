@@ -100,44 +100,58 @@ impl<P, Pc, R> KademliaControllerPrototype<P, R>
         }
     }
 
-    pub fn start<T, C>(self, swarm: SwarmController<T, C>) -> KademliaController<P, R>
-        where T: MuxedTransport,
-              C: ConnectionUpgrade<T::RawConn>,
+    pub fn start<T, C>(self, swarm: SwarmController<T, C>) -> KademliaController<P, R, T, C>
+        where T: MuxedTransport + 'static,  // TODO: 'static :-/
+              C: ConnectionUpgrade<T::RawConn> + 'static,       // TODO: 'static :-/
     {
         // TODO: initialization
 
         KademliaController {
             inner: self.inner.clone(),
+            swarm_controller: swarm,
         }
     }
 }
 
 /// Object that allows one to make queries on the Kademlia system.
-#[derive(Debug)]
-pub struct KademliaController<P, R> {
+//#[derive(Debug)]      // TODO:
+pub struct KademliaController<P, R, T, C>
+    where T: MuxedTransport + 'static,          // TODO: 'static :-/
+          C: ConnectionUpgrade<T::RawConn> + 'static,           // TODO: 'static :-/
+{
     inner: Arc<Inner<P, R>>,
+    swarm_controller: SwarmController<T, C>,
 }
 
-impl<P, R> Clone for KademliaController<P, R> {
+impl<P, R, T, C> Clone for KademliaController<P, R, T, C>
+    where T: Clone + MuxedTransport + 'static,          // TODO: 'static :-/
+          C: Clone + ConnectionUpgrade<T::RawConn> + 'static,           // TODO: 'static :-/
+{
     #[inline]
     fn clone(&self) -> Self {
         KademliaController {
-            inner: self.inner.clone()
+            inner: self.inner.clone(),
+            swarm_controller: self.swarm_controller.clone(),
         }
     }
 }
 
-impl<P, Pc, R> KademliaController<P, R>
+impl<P, Pc, R, T, C> KademliaController<P, R, T, C>
     where P: Deref<Target = Pc>,
           for<'r> &'r Pc: Peerstore,
           R: Clone,
+          T: Clone + MuxedTransport + 'static,          // TODO: 'static :-/
+          C: Clone + ConnectionUpgrade<T::RawConn> + 'static,           // TODO: 'static :-/
 {
     #[inline]
-    pub fn find_node<'a>(&self, searched_key: PeerId)
-                         -> Box<Future<Item = Vec<PeerId>, Error = IoError> + 'a>
-        where P: 'a, R: 'a
+    pub fn find_node(&self, searched_key: PeerId)
+                     -> Box<Future<Item = Vec<PeerId>, Error = IoError>>
+        where P: Clone + 'static,
+              R: 'static,
+              C::NamesIter: Clone,
+              C::Output: From<KademliaProcessingFuture>,
     {
-        query::find_node(self.inner.clone(), searched_key)
+        query::find_node(self.clone(), searched_key)
     }
 }
 
@@ -157,6 +171,18 @@ impl<P, R> KademliaUpgrade<P, R> {
             upgrade: KademliaServerConfig::new(proto.inner.clone()),
         }
     }
+
+    /// Builds a connection upgrade from the controller.
+    #[inline]
+    pub fn from_controller<T, C>(ctl: &KademliaController<P, R, T, C>) -> Self
+        where T: MuxedTransport,
+              C: ConnectionUpgrade<T::RawConn>,
+    {
+        KademliaUpgrade {
+            inner: ctl.inner.clone(),
+            upgrade: KademliaServerConfig::new(ctl.inner.clone()),
+        }
+    }
 }
 
 impl<C, P, Pc, R> ConnectionUpgrade<C> for KademliaUpgrade<P, R>
@@ -166,7 +192,7 @@ where
     for<'r> &'r Pc: Peerstore,
     R: 'static,         // TODO: 'static :-/
 {
-	type Output = Box<Future<Item = (), Error = IoError>>;
+	type Output = KademliaProcessingFuture;
 	type Future = Box<Future<Item = Self::Output, Error = IoError>>;
 	type NamesIter = iter::Once<(Bytes, ())>;
 	type UpgradeIdentifier = ();
@@ -185,11 +211,26 @@ where
             .upgrade(incoming, id, endpoint, addr)
             .map(move |(controller, future)| {
                 inner.connections.lock().insert(client_addr, controller);
-                future
+                KademliaProcessingFuture { inner: future }
             });
 
         Box::new(future) as Box<_>
 	}
+}
+
+/// Future that must be processed for the Kademlia system to work.
+pub struct KademliaProcessingFuture {
+    inner: Box<Future<Item = (), Error = IoError>>,
+}
+
+impl Future for KademliaProcessingFuture {
+    type Item = ();
+    type Error = IoError;
+
+    #[inline]
+    fn poll(&mut self) -> futures::Poll<Self::Item, Self::Error> {
+        self.inner.poll()
+    }
 }
 
 // Inner struct shared throughout the Kademlia system.
@@ -260,31 +301,32 @@ impl<P, Pc, R> KadServerInterface for Arc<Inner<P, R>>
     }
 }
 
-impl<R, P, Pc> query::QueryInterface for Arc<Inner<P, R>>
+impl<R, P, Pc, T, C> query::QueryInterface for KademliaController<P, R, T, C>
 where
-	P: Deref<Target = Pc>,
+	P: Clone + Deref<Target = Pc> + 'static,            // TODO: 'static :-/
     for<'r> &'r Pc: Peerstore,
-	R: Clone,
+	R: Clone + 'static,         // TODO: 'static :-/
+    T: Clone + MuxedTransport + 'static,          // TODO: 'static :-/
+    C: Clone + ConnectionUpgrade<T::RawConn> + 'static,           // TODO: 'static :-/
+    C::NamesIter: Clone,
+    C::Output: From<KademliaProcessingFuture>,
 {
 	type Peerstore = &'static ::libp2p_peerstore::memory_peerstore::MemoryPeerstore;       // TODO: wrong
 	type RecordStore = R;
-	type Outcome = tokio_timer::Timeout<
-		future::MapErr<oneshot::Receiver<KadMsg>, fn(futures::Canceled) -> ()>,
-	>;
 
 	#[inline]
 	fn local_id(&self) -> &PeerId {
-		self.kbuckets.my_id()
+		self.inner.kbuckets.my_id()
 	}
 
 	#[inline]
 	fn kbuckets_update(&self, peer: PeerId) {
 		// TODO: is this the right place for this check?
-		if &peer == self.kbuckets.my_id() {
+		if &peer == self.inner.kbuckets.my_id() {
 			return;
 		}
 
-		match self.kbuckets.update(peer, ()) {
+		match self.inner.kbuckets.update(peer, ()) {
 			UpdateOutcome::NeedPing(node_to_ping) => {
 				// TODO: return this info somehow
 				println!("need to ping {:?}", node_to_ping);
@@ -295,7 +337,7 @@ where
 
 	#[inline]
 	fn kbuckets_find_closest(&self, addr: &PeerId) -> Vec<PeerId> {
-		self.kbuckets.find_closest(addr).collect()
+		self.inner.kbuckets.find_closest(addr).collect()
 	}
 
 	#[inline]
@@ -305,61 +347,30 @@ where
 
 	#[inline]
 	fn record_store(&self) -> Self::RecordStore {
-		self.record_store.clone()
+		self.inner.record_store.clone()
 	}
 
 	#[inline]
 	fn parallelism(&self) -> usize {
-		self.parallelism as usize
+		self.inner.parallelism as usize
 	}
 
 	#[inline]
 	fn cycle_duration(&self) -> Duration {
-		self.cycles_duration
+		self.inner.cycles_duration
 	}
 
 	#[inline]
-	fn send(&self, addr: Multiaddr, message: KadMsg) -> Self::Outcome {
-		/*let mut lock = self.shared.connections.lock();
-		let sender = lock.entry(addr.clone()).or_insert_with(move || {
-			let (tx, rx) = mpsc::unbounded();
-			let upgrade = WithSome(
-				protocol::KademliaProtocolConfig,
-				Some(Arc::new(Mutex::new(Some(rx)))),
-			).map_upgrade(EitherSocket::First)
-				.map_upgrade(EitherSocket::First);
-			self.swarm.dial_to_handler(addr, upgrade); // TODO: how to handle errs?
-			tx
-		});
-        
+	fn send<F, FRet>(&self, addr: Multiaddr, handler: F) -> FRet
+        where F: FnOnce(&KademliaServerController) -> FRet
+    {
+        let mut lock = self.inner.connections.lock();
+        let controller = lock.entry(addr.clone()).or_insert_with(move || {
+            let upgrade = KademliaUpgrade::from_controller(self);
+            self.swarm_controller.dial_to_handler(addr, upgrade);
+            unimplemented!()
+        });
 
-		// TODO: empty outcome if the message doesn't expect an answer
-
-		let (resp_tx, resp_rx) = oneshot::channel();
-		let _ = sender.unbounded_send((message, resp_tx));
-		self.shared
-			.timer
-			.timeout(resp_rx.map_err(|_| ()), self.timeout)*/
-        unimplemented!()
+        handler(controller)
 	}
-}
-
-// Sends a message to a specific multiaddress, and returns a response with a timeout.
-#[inline]
-fn send<P, R, F, Fu>(inner: &Inner<P, R>, addr: Multiaddr, closure: F)
-                     -> tokio_timer::Timeout<Fu::Future>
-    where F: FnOnce(&KademliaServerController) -> Fu,
-          Fu: IntoFuture,
-          Fu::Error: From<tokio_timer::TimeoutError<Fu::Future>>
-{
-    let mut lock = inner.connections.lock();
-
-    let controller = lock.entry(addr.clone()).or_insert_with(move || {
-        // TODO:
-        //inner.swarm.dial_to_handler(addr, upgrade); // TODO: how to handle errs?
-        unimplemented!()
-    });
-
-    let future = closure(controller);
-    inner.timer.timeout(future.into_future(), inner.timeout)
 }

@@ -78,6 +78,7 @@ pub fn swarm<T, C, H, F>(transport: T, upgrade: C, handler: H)
 }
 
 /// Allows control of what the swarm is doing.
+// TODO: Debug impl
 pub struct SwarmController<T, C>
     where T: MuxedTransport + 'static,      // TODO: 'static :-/
           C: ConnectionUpgrade<T::RawConn> + 'static,      // TODO: 'static :-/

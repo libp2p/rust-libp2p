@@ -21,6 +21,7 @@
 use fnv::{FnvHashMap, FnvHashSet};
 use futures::{future, stream, Future, IntoFuture};
 use futures::sync::{mpsc, oneshot};
+use kad_server::KademliaServerController;
 use kbucket::{KBucketsPeerId, KBucketsTable};
 use libp2p_identify::IdentifyProtocolConfig;
 use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};
@@ -47,9 +48,6 @@ pub trait QueryInterface: Clone {
 	type Peerstore: Peerstore + Clone;
 	/// The record store to use for `FIND_VALUE` queries.
 	type RecordStore: Clone;
-	/// Future that yields the Kademlia message that a remote will answer as part of a sent
-	/// message.
-	type Outcome: Future<Item = protocol::KadMsg, Error = ()>;
 
 	/// Returns the peer ID of the local node.
 	fn local_id(&self) -> &PeerId;
@@ -72,12 +70,10 @@ pub trait QueryInterface: Clone {
 	/// Duration between two waves of queries.
 	fn cycle_duration(&self) -> Duration;
 
-	/// Sends a message to a given multiaddress (opening a connection if necessary), and produces
-	/// a `Future` that will yield the response. If the message doesn't expect a response, then
-	/// the `Future` should not be processed and should yield an error.
-	///
-	/// The `Future` should have an appropriate timeout inside of it.
-	fn send(&self, Multiaddr, protocol::KadMsg) -> Self::Outcome;
+	/// Gives access to a `KademliaServerController` that can be used to communicate with the node
+	/// whose address is `addr`.
+	fn send<F, R>(&self, addr: Multiaddr, handler: F) -> R
+        where F: FnOnce(&KademliaServerController) -> R;
 }
 
 /// Starts a query for a `FIND_NODE` request.
@@ -203,7 +199,7 @@ where
 		result: Vec<PeerId>,
 		// For each open connection, a future with the response of the remote.
 		current_attempts_fut:
-			Vec<Box<Future<Item = Result<protocol::KadMsg, ()>, Error = ()> + 'a>>, // TODO: the Error can be !
+			Vec<Box<Future<Item = Result<Vec<protocol::Peer>, ()>, Error = ()> + 'a>>, // TODO: the Error can be !
 		// For each open connection, the peer ID that we are connected to.
 		// Must always have the same length as `current_attempts_fut`.
 		current_attempts_addrs: Vec<PeerId>,
@@ -239,15 +235,12 @@ where
 		//       multiple multiaddrs simultaneously
 
 		for peer in to_contact {
-			let message = protocol::KadMsg::FindNodeReq {
-				key: searched_key.clone().into_bytes(),
-				cluster_level: 10, // TODO: correct value
-			};
-
 			let multiaddr: Multiaddr = AddrComponent::IPFS(peer.clone().into_bytes()).into();
 
 			println!("contacting {:?}", multiaddr);
-			let resp_rx = query_interface.send(multiaddr.clone(), message);
+			let resp_rx = query_interface.send(multiaddr.clone(), |ctl| {
+				ctl.find_node(&searched_key)
+			});
 			state
 				.current_attempts_addrs
 				.push(peer.clone());
@@ -279,20 +272,15 @@ where
 				state.current_attempts_fut.extend(other_current_attempts);
 
 				let closer_peers = match message {
-					Ok(protocol::KadMsg::FindNodeRes { closer_peers, .. }) => {
+					Ok(closer_peers) => {
 						// Received a message.
 						println!("success msg from {:?}", remote_id);
 						println!("num closer peers: {:?}", closer_peers.len());
 						closer_peers
 					}
-					Ok(_other_msg) => {
-						// TODO: add to failed to contact
-						println!("wrong msg from {:?}", remote_id);
-						return Ok(future::Loop::Continue(state));
-					}
 					Err(_) => {
 						println!(
-							"timeout when contacting {:?}",
+							"error when contacting {:?}",
 							remote_id
 						);
 						state.failed_to_contact.insert(remote_id);
