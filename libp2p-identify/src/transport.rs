@@ -131,7 +131,7 @@ where
 
 	#[inline]
 	fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-		match multiaddr_to_peerid(addr) {
+		match multiaddr_to_peerid(addr.clone()) {
 			Ok(peer_id) => {
 				// If the multiaddress is a peer ID, try each known multiaddress (taken from the
 				// peerstore) one by one.
@@ -153,7 +153,8 @@ where
 					.filter_map(|res| res.ok())
 					.into_future()
 					.map_err(|(err, _)| err)
-					.and_then(|(val, _)| val.ok_or(IoErrorKind::InvalidData.into())); // TODO: wrong error
+					.and_then(|(val, _)| val.ok_or(IoErrorKind::InvalidData.into())) // TODO: wrong error
+					.map(move |(socket, _inner_client_addr)| (socket, addr));
 
 				Ok(Box::new(future) as Box<_>)
 			}
