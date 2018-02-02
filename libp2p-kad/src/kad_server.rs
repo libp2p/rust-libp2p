@@ -136,7 +136,6 @@ impl KademliaServerController {
 	{
 		let message = protocol::KadMsg::FindNodeReq {
 			key: searched_key.clone().into_bytes(),
-			cluster_level: 10, // TODO: correct value
 		};
 
 		let (tx, rx) = oneshot::channel();
@@ -265,7 +264,6 @@ where
 								}
 								KadMsg::FindNodeReq { key, .. } => {
 									let message = KadMsg::FindNodeRes {
-										cluster_level: 10,		// TODO:
 										closer_peers: vec![protocol::Peer {
 											node_id: interface.local_id().clone(),
 											multiaddrs: vec![],

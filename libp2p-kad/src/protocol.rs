@@ -192,12 +192,10 @@ pub enum KadMsg {
 	GetValueReq {
 		/// Identifier of the record.
 		key: Vec<u8>,
-		cluster_level: u32,
 	},
 	GetValueRes {
 		/// Identifier of the returned record.
 		key: Vec<u8>,
-		cluster_level: u32,
 		record: Option<protobuf_structs::record::Record>, // TODO: no
 		closer_peers: Vec<Peer>,
 	},
@@ -206,27 +204,22 @@ pub enum KadMsg {
 	FindNodeReq {
 		/// Identifier of the node.
 		key: Vec<u8>,
-		cluster_level: u32,
 	},
 	/// Response to a `FindNodeReq`.
 	FindNodeRes {
-		cluster_level: u32,
 		/// Results of the request.
 		closer_peers: Vec<Peer>,
 	},
 	GetProvidersReq {
 		key: Vec<u8>,
-		cluster_level: u32,
 	},
 	GetProvidersRes {
 		key: Vec<u8>,
-		cluster_level: u32,
 		closer_peers: Vec<Peer>,
 		provider_peers: Vec<Peer>,
 	},
 	AddProvider {
 		key: Vec<u8>,
-		cluster_level: u32,
 	},
 }
 
@@ -245,57 +238,54 @@ fn msg_to_proto(kad_msg: KadMsg) -> protobuf_structs::dht::Message {
 			msg.set_record(record);
 			msg
 		}
-		KadMsg::GetValueReq { key, cluster_level } => {
+		KadMsg::GetValueReq { key } => {
 			let mut msg = protobuf_structs::dht::Message::new();
 			msg.set_field_type(protobuf_structs::dht::Message_MessageType::GET_VALUE);
 			msg.set_key(key);
-			msg.set_clusterLevelRaw(cluster_level as i32);
+			msg.set_clusterLevelRaw(10);
 			msg
 		}
 		KadMsg::GetValueRes {
 			key,
-			cluster_level,
 			record,
 			closer_peers,
 		} => unimplemented!(),
-		KadMsg::FindNodeReq { key, cluster_level } => {
+		KadMsg::FindNodeReq { key } => {
 			let mut msg = protobuf_structs::dht::Message::new();
 			msg.set_field_type(protobuf_structs::dht::Message_MessageType::FIND_NODE);
 			msg.set_key(key);
-			msg.set_clusterLevelRaw(cluster_level as i32);
+			msg.set_clusterLevelRaw(10);
 			msg
 		}
 		KadMsg::FindNodeRes {
-			cluster_level,
 			closer_peers,
 		} => {
 			assert!(!closer_peers.is_empty()); // TODO:
 			let mut msg = protobuf_structs::dht::Message::new();
 			msg.set_field_type(protobuf_structs::dht::Message_MessageType::FIND_NODE);
-			msg.set_clusterLevelRaw(cluster_level as i32);
+			msg.set_clusterLevelRaw(9);
 			for peer in closer_peers {
 				msg.mut_closerPeers().push(peer.into());
 			}
 			msg
 		}
-		KadMsg::GetProvidersReq { key, cluster_level } => {
+		KadMsg::GetProvidersReq { key } => {
 			let mut msg = protobuf_structs::dht::Message::new();
 			msg.set_field_type(protobuf_structs::dht::Message_MessageType::GET_PROVIDERS);
 			msg.set_key(key);
-			msg.set_clusterLevelRaw(cluster_level as i32);
+			msg.set_clusterLevelRaw(10);
 			msg
 		}
 		KadMsg::GetProvidersRes {
 			key,
-			cluster_level,
 			closer_peers,
 			provider_peers,
 		} => unimplemented!(),
-		KadMsg::AddProvider { key, cluster_level } => {
+		KadMsg::AddProvider { key } => {
 			let mut msg = protobuf_structs::dht::Message::new();
 			msg.set_field_type(protobuf_structs::dht::Message_MessageType::ADD_PROVIDER);
 			msg.set_key(key);
-			msg.set_clusterLevelRaw(cluster_level as i32);
+			msg.set_clusterLevelRaw(10);
 			msg
 		}
 	}
@@ -317,14 +307,12 @@ fn proto_to_msg(mut message: protobuf_structs::dht::Message) -> KadMsg {
 			let key = message.take_key();
 			KadMsg::GetValueReq {
 				key: key,
-				cluster_level: message.get_clusterLevelRaw() as u32,
 			}
 		}
 		protobuf_structs::dht::Message_MessageType::FIND_NODE => {
 			if message.get_closerPeers().is_empty() {
 				KadMsg::FindNodeReq {
 					key: message.take_key(),
-					cluster_level: message.get_clusterLevelRaw() as u32,
 				}
 			} else {
 				KadMsg::FindNodeRes {
@@ -333,7 +321,6 @@ fn proto_to_msg(mut message: protobuf_structs::dht::Message) -> KadMsg {
 						.iter_mut()
 						.map(|peer| peer.into())
 						.collect(),
-					cluster_level: message.get_clusterLevelRaw() as u32,
 				}
 			}
 		}
