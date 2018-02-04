@@ -465,6 +465,7 @@ impl<D> Encoder for VarintCodec<D>
 
     fn encode(&mut self, item: D, dst: &mut BytesMut) -> Result<(), io::Error> {
         let encoded_len = encode(item.as_ref().len());
+        dst.reserve(encoded_len.len() + item.as_ref().len());
         dst.put(encoded_len);
         dst.put(item);
         Ok(())
