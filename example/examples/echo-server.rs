@@ -34,7 +34,8 @@ use std::env;
 use swarm::{Transport, UpgradeExt, SimpleProtocol};
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
-use tokio_io::codec::length_delimited;
+use tokio_io::AsyncRead;
+use tokio_io::codec::BytesCodec;
 use websocket::WsConfig;
 
 fn main() {
@@ -87,7 +88,7 @@ fn main() {
         // successfully negotiated. The parameter is the raw socket (implements the AsyncRead
         // and AsyncWrite traits), and the closure must return an implementation of
         // `IntoFuture` that can yield any type of object.
-        Ok(length_delimited::Framed::<_, bytes::BytesMut>::new(socket))
+        Ok(AsyncRead::framed(socket, BytesCodec::new()))
     });
 
     // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming and
@@ -108,7 +109,7 @@ fn main() {
                         // One message has been received. We send it back to the client.
                         println!("Received a message from {}: {:?}\n => Sending back \
                                 identical message to remote", client_addr, msg);
-                        Box::new(rest.send(msg).map(|m| Loop::Continue(m)))
+                        Box::new(rest.send(msg.freeze()).map(|m| Loop::Continue(m)))
                             as Box<Future<Item = _, Error = _>>
                     } else {
                         // End of stream. Connection closed. Breaking the loop.
