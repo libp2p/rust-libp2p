@@ -330,22 +330,6 @@ where
 	}
 
 	#[inline]
-	fn kbuckets_update(&self, peer: PeerId) {
-		// TODO: is this the right place for this check?
-		if &peer == self.inner.kbuckets.my_id() {
-			return;
-		}
-
-		match self.inner.kbuckets.update(peer, ()) {
-			UpdateOutcome::NeedPing(node_to_ping) => {
-				// TODO: return this info somehow
-				println!("need to ping {:?}", node_to_ping);
-			}
-			_ => (),
-		}
-	}
-
-	#[inline]
 	fn kbuckets_find_closest(&self, addr: &PeerId) -> Vec<PeerId> {
 		self.inner.kbuckets.find_closest(addr).collect()
 	}

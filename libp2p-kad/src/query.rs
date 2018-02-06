@@ -39,9 +39,6 @@ pub trait QueryInterface: Clone {
 	/// Returns the peer ID of the local node.
 	fn local_id(&self) -> &PeerId;
 
-	/// Updates an entry in the K-Buckets.
-	fn kbuckets_update(&self, peer: PeerId);
-
 	/// Finds the nodes closest to a peer ID.
 	fn kbuckets_find_closest(&self, addr: &PeerId) -> Vec<PeerId>;
 
@@ -192,7 +189,7 @@ where
 		result: Vec<PeerId>,
 		// For each open connection, a future with the response of the remote.
 		current_attempts_fut:
-			Vec<Box<Future<Item = Result<Vec<protocol::Peer>, ()>, Error = ()> + 'a>>, // TODO: the Error can be !
+			Vec<Box<Future<Item = Vec<protocol::Peer>, Error = IoError> + 'a>>,
 		// For each open connection, the peer ID that we are connected to.
 		// Must always have the same length as `current_attempts_fut`.
 		current_attempts_addrs: Vec<PeerId>,
@@ -250,9 +247,7 @@ where
 				.current_attempts_addrs
 				.push(peer.clone());
 			let current_attempt = resp_rx
-				.flatten()
-                .map_err(|_| ())        // TODO: better error?
-                .then(|res| Ok(res));
+				.flatten();
 			state
 				.current_attempts_fut
 				.push(Box::new(current_attempt) as Box<_>);
@@ -273,8 +268,17 @@ where
 		}
 
 		// This is the future that continues or breaks the `loop_fn`.
-		let future = future::select_all(current_attempts_fut.into_iter()).and_then(
-			move |(message, trigger_idx, other_current_attempts)| {
+		let future = future::select_all(current_attempts_fut.into_iter()).then(
+			move |result| {
+				let (message, trigger_idx, other_current_attempts) = match result {
+					Err((err, trigger_idx, other_current_attempts)) => {
+						(Err(err), trigger_idx, other_current_attempts)
+					},
+					Ok((message, trigger_idx, other_current_attempts)) => {
+						(Ok(message), trigger_idx, other_current_attempts)
+					}
+				};
+
 				let remote_id = state.current_attempts_addrs.remove(trigger_idx);
 				debug_assert!(state.current_attempts_fut.is_empty());
 				state.current_attempts_fut = other_current_attempts;
@@ -310,14 +314,10 @@ where
 				let mut nearest_node_updated = false;
 
 				for mut peer in closer_peers {
-					// Update the k-buckets and peerstore with the information sent by
+					// Update the peerstore with the information sent by
 					// the remote.
 					{
-						let valid_multiaddrs = peer.multiaddrs
-							.drain(..)
-							;//.filter(|addr| !state.failed_to_contact.iter().any(|e| e == addr));
-
-						query_interface2.kbuckets_update(peer.node_id.clone());
+						let valid_multiaddrs = peer.multiaddrs.drain(..);
 						query_interface2.peer_add_addrs(&peer.node_id, valid_multiaddrs, Duration::from_secs(3600));		// TODO: which TTL?
 					}
 
@@ -356,8 +356,6 @@ where
 	});
 
 	let stream = stream
-		.map(|state| state.result)
-		.map_err(|v| -> IoError { unreachable!() }); // TODO:
-
+		.map(|state| state.result);
 	Box::new(stream) as Box<_>
 }
