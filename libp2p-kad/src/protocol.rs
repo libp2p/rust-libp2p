@@ -157,7 +157,7 @@ where
 		})
 		.and_then(|bytes| {
 			if let Ok(response) = protobuf::parse_from_bytes(&bytes) {
-				Ok(proto_to_msg(response))
+				proto_to_msg(response)
 			} else {
 				Err(KadError::Failure)
 			}
@@ -210,17 +210,6 @@ pub enum KadMsg {
 		/// Results of the request.
 		closer_peers: Vec<Peer>,
 	},
-	GetProvidersReq {
-		key: Vec<u8>,
-	},
-	GetProvidersRes {
-		key: Vec<u8>,
-		closer_peers: Vec<Peer>,
-		provider_peers: Vec<Peer>,
-	},
-	AddProvider {
-		key: Vec<u8>,
-	},
 }
 
 // Turns a type-safe kadmelia message into the corresponding row protobuf message.
@@ -269,61 +258,53 @@ fn msg_to_proto(kad_msg: KadMsg) -> protobuf_structs::dht::Message {
 			}
 			msg
 		}
-		KadMsg::GetProvidersReq { key } => {
-			let mut msg = protobuf_structs::dht::Message::new();
-			msg.set_field_type(protobuf_structs::dht::Message_MessageType::GET_PROVIDERS);
-			msg.set_key(key);
-			msg.set_clusterLevelRaw(10);
-			msg
-		}
-		KadMsg::GetProvidersRes {
-			key,
-			closer_peers,
-			provider_peers,
-		} => unimplemented!(),
-		KadMsg::AddProvider { key } => {
-			let mut msg = protobuf_structs::dht::Message::new();
-			msg.set_field_type(protobuf_structs::dht::Message_MessageType::ADD_PROVIDER);
-			msg.set_key(key);
-			msg.set_clusterLevelRaw(10);
-			msg
-		}
 	}
 }
 
 /// Turns a raw Kademlia message into a type-safe message.
-fn proto_to_msg(mut message: protobuf_structs::dht::Message) -> KadMsg {
+fn proto_to_msg(mut message: protobuf_structs::dht::Message) -> Result<KadMsg, KadError> {
 	match message.get_field_type() {
-		protobuf_structs::dht::Message_MessageType::PING => KadMsg::Ping,
+		protobuf_structs::dht::Message_MessageType::PING => {
+			Ok(KadMsg::Ping)
+		},
+
 		protobuf_structs::dht::Message_MessageType::PUT_VALUE => {
 			let key = message.take_key();
 			let record = message.take_record();
-			KadMsg::PutValue {
+			Ok(KadMsg::PutValue {
 				key: key,
 				record: record,
-			}
+			})
 		}
+
 		protobuf_structs::dht::Message_MessageType::GET_VALUE => {
 			let key = message.take_key();
-			KadMsg::GetValueReq {
+			Ok(KadMsg::GetValueReq {
 				key: key,
-			}
+			})
 		}
+
 		protobuf_structs::dht::Message_MessageType::FIND_NODE => {
 			if message.get_closerPeers().is_empty() {
-				KadMsg::FindNodeReq {
+				Ok(KadMsg::FindNodeReq {
 					key: message.take_key(),
-				}
+				})
 			} else {
-				KadMsg::FindNodeRes {
+				Ok(KadMsg::FindNodeRes {
 					closer_peers: message
 						.mut_closerPeers()
 						.iter_mut()
 						.map(|peer| peer.into())
 						.collect(),
-				}
+				})
 			}
 		}
+
+		protobuf_structs::dht::Message_MessageType::GET_PROVIDERS |
+		protobuf_structs::dht::Message_MessageType::ADD_PROVIDER => {
+			Err(KadError::Failure)
+		},
+
 		_ => unimplemented!(),
 	}
 }

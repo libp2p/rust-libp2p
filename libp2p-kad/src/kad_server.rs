@@ -245,9 +245,8 @@ where
 									// TODO: annoying to implement
 									unimplemented!()
 								}
-								message @ KadMsg::GetProvidersRes { .. }
-								| message @ KadMsg::FindNodeRes { .. }
-								| message @ KadMsg::GetValueRes { .. } => {
+								message @ KadMsg::FindNodeRes { .. } |
+								message @ KadMsg::GetValueRes { .. } => {
 									if !send_back_queue.is_empty() {
 										let send_back = send_back_queue.remove(0);
 										send_back.send(message);
