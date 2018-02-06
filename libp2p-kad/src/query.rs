@@ -71,7 +71,7 @@ pub fn find_node<'a, I>(
 where
 	I: QueryInterface + 'a,
 {
-	query(query_interface, searched_key)
+	query(query_interface, searched_key, 20)		// TODO: constant
 }
 
 /// Refreshes a specific bucket by performing an iterative `FIND_NODE` on a random ID of this
@@ -89,13 +89,6 @@ where
 		Ok(p) => p,
 		Err(()) => return Box::new(future::ok(())),
 	};
-
-	// TODO: remove
-	println!(
-		"refreshing bucket {:?} with peer {:?}",
-		bucket_num,
-		&peer_id.as_bytes()[..20]
-	);
 
 	let future = find_node(query_interface, peer_id).map(|_| ());
 	Box::new(future) as Box<_>
@@ -141,58 +134,30 @@ where
 	Ok(peer_id)
 }
 
-// Here is the algorithm for node finding, used by this code:
-//
-// - We start by picking the N closest known nodes from the k-buckets and put them in a
-//   list of pending nodes, ordered by distance with the searched key. N is generally 20.
-//
-// - We also keep a list of multiaddresses that we have tried but failed to connect to.
-//
-// - And finally we have a list of successfully-contacted nodes for the final result.
-//
-// - Start iterating:
-//
-//   - Pick the first alpha nodes of this pending list, and choose from the peerstore
-//     a multiaddress to contact for each of them. If we already have a active connection
-//     to one of the multiaddresses, use it. Otherwise just use the first known one that
-//     isn't in the list of failed addresses. If no multiaddress is available, remove this
-//     node from the pending list.
-//
-//   - Send a `FIND_NODE` query to the chosen multiaddresses, opening a connection if
-//     necessary.
-//
-//   - Whenever one of the queries is answered, if the multiaddress has error or timed out, remove
-//     it from the peerstore and add it to the list of failed attempts.
-//     If it has been successfully contacted, put the node in the list of the successfully
-//     contacted nodes. We write the peer ids and multiaddresses reported by the remote into the
-//     list of pending nodes, but also into the k-buckets and into the peerstore.
-//
-//   - At a specific interval named the "cycle duration", we spawn a new wave of `alpha` queries
-//     even if the previous ones haven't finished.
-//     TODO: ^ not implemented
-//
-//   - If the list of sucessfully contacted nodes contains more than N elements, or if
-//     the closest node in this list hasn't been updated during the latest iteration, stop
-//     iterating and return the result.
-//     TODO: ^ wrong
-//
+// Generic query-performing function.
 fn query<'a, I>(
 	query_interface: I,
 	searched_key: PeerId,
+	num_results: usize,
 ) -> Box<Future<Item = Vec<PeerId>, Error = IoError> + 'a>
 where
 	I: QueryInterface + 'a,
 {
 	// State of the current iterative process.
 	struct State<'a> {
+		// If true, we are still in the first step of the algorithm where we try to find the
+		// closest node. If false, then we are contacting the k closest nodes in order to fill the
+		// list with enough results.
+		looking_for_closer: bool,
 		// Final output of the iteration.
 		result: Vec<PeerId>,
 		// For each open connection, a future with the response of the remote.
+		// Note that don't use a `SmallVec` here because `select_all` produces a `Vec`.
 		current_attempts_fut:
 			Vec<Box<Future<Item = Vec<protocol::Peer>, Error = IoError> + 'a>>,
 		// For each open connection, the peer ID that we are connected to.
 		// Must always have the same length as `current_attempts_fut`.
-		current_attempts_addrs: Vec<PeerId>,
+		current_attempts_addrs: SmallVec<[PeerId; 32]>,
 		// Nodes that need to be attempted.
 		pending_nodes: Vec<PeerId>,
 		// Peers that we tried to contact but failed.
@@ -200,9 +165,10 @@ where
 	}
 
 	let initial_state = State {
-		result: Vec::new(),
+		looking_for_closer: true,
+		result: Vec::with_capacity(num_results),
 		current_attempts_fut: Vec::new(),
-		current_attempts_addrs: Vec::new(),
+		current_attempts_addrs: SmallVec::new(),
 		pending_nodes: query_interface.kbuckets_find_closest(&searched_key),
 		failed_to_contact: Default::default(),
 	};
@@ -217,7 +183,11 @@ where
 		// Find out which nodes to contact at this iteration.
 		let to_contact = {
 			let mut to_contact = SmallVec::<[_; 16]>::new();
-			let wanted_len = parallelism.saturating_sub(state.current_attempts_fut.len());
+			let wanted_len = if state.looking_for_closer {
+				parallelism.saturating_sub(state.current_attempts_fut.len())
+			} else {
+				num_results.saturating_sub(state.current_attempts_fut.len())
+			};
 			while to_contact.len() < wanted_len && !state.pending_nodes.is_empty() {
 				let peer = state.pending_nodes.remove(0);
 				if state.result.iter().any(|p| p == &peer) {
@@ -238,7 +208,6 @@ where
 		for peer in to_contact {
 			let multiaddr: Multiaddr = AddrComponent::IPFS(peer.clone().into_bytes()).into();
 
-			println!("contacting {:?}", multiaddr);
 			let searched_key2 = searched_key.clone();
 			let resp_rx = query_interface.send(multiaddr.clone(), move |ctl| {
 				ctl.find_node(&searched_key2)
@@ -286,15 +255,9 @@ where
 				let closer_peers = match message {
 					Ok(closer_peers) => {
 						// Received a message.
-						println!("success msg from {:?}", remote_id);
-						println!("num closer peers: {:?}", closer_peers.len());
 						closer_peers
 					}
 					Err(_) => {
-						println!(
-							"error when contacting {:?}",
-							remote_id
-						);
 						state.failed_to_contact.insert(remote_id);
 						return Ok(future::Loop::Continue(state));
 					}
@@ -305,13 +268,14 @@ where
 					e.distance_with(&searched_key) >= remote_id.distance_with(&searched_key)
 				}) {
 					if state.result[insert_pos] != remote_id {
+						state.result.pop();
 						state.result.insert(insert_pos, remote_id);
 					}
-				} else {
+				} else if state.result.len() < num_results {
 					state.result.push(remote_id);
 				}
 
-				let mut nearest_node_updated = false;
+				let mut local_nearest_node_updated = false;
 
 				for mut peer in closer_peers {
 					// Update the peerstore with the information sent by
@@ -324,7 +288,7 @@ where
 					if peer.node_id.distance_with(&searched_key)
 						<= state.result[0].distance_with(&searched_key)
 					{
-						nearest_node_updated = true;
+						local_nearest_node_updated = true;
 					}
 
 					if state.result.iter().any(|ma| ma == &peer.node_id) {
@@ -344,14 +308,24 @@ where
 					}
 				}
 
-				if nearest_node_updated && state.result.len() < 20 {
-					// TODO: right value
-					Ok(future::Loop::Continue(state))
-				} else {
+				if state.result.len() >= num_results ||
+					(!state.looking_for_closer && state.current_attempts_fut.is_empty())
+				{
+					// Check that our `Vec::with_capacity` is correct.
+					debug_assert_eq!(state.result.capacity(), num_results);
+
 					Ok(future::Loop::Break(state))
+
+				} else {
+					if !local_nearest_node_updated {
+						state.looking_for_closer = false;
+					}
+
+					Ok(future::Loop::Continue(state))
 				}
 			},
 		);
+
 		future::Either::B(future)
 	});
 

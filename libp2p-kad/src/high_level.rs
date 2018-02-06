@@ -200,8 +200,6 @@ where
         let inner = self.inner;
         let client_addr = addr.clone();
 
-        println!("addr in upgrade {:?}", addr);
-
         let future = self.upgrade
             .upgrade(incoming, id, endpoint, addr)
             .map(move |(controller, future)| {
@@ -393,6 +391,7 @@ where
         }) as Box<_>);
 
         let future = rx.map_err(|_| IoErrorKind::ConnectionAborted.into());
+        let future = self.inner.timer.timeout(future, self.inner.timeout);
         Box::new(future) as Box<_>
 	}
 }
