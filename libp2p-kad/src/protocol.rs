@@ -312,7 +312,8 @@ mod tests {
 
 	use self::libp2p_tcp_transport::TcpConfig;
 	use self::tokio_core::reactor::Core;
-	use protocol::{KadMsg, KademliaProtocolConfig};
+	use libp2p_peerstore::PeerId;
+	use protocol::{KadMsg, KademliaProtocolConfig, Peer, ConnectionType};
 	use futures::{Future, Stream, Sink};
 	use libp2p_swarm::Transport;
 	use std::sync::mpsc;
@@ -324,6 +325,17 @@ mod tests {
 		// successfully received.
 
 		test_one(KadMsg::Ping);
+		test_one(KadMsg::PutValue { key: vec![1, 2, 3, 4], record: () });
+		test_one(KadMsg::GetValueReq { key: vec![10, 11, 12] });
+		test_one(KadMsg::FindNodeReq { key: vec![9, 12, 0, 245, 245, 201, 28, 95] });
+		test_one(KadMsg::FindNodeRes {
+			closer_peers: vec![Peer {
+				node_id: PeerId::from_public_key(&[93, 80, 12, 250]),
+				multiaddrs: vec!["/ip4/100.101.102.103/tcp/20105".parse().unwrap()],
+				connection_ty: ConnectionType::Connected,
+			}]
+		});
+		// TODO: all messages
 
 		fn test_one(msg_server: KadMsg) {
 			let msg_client = msg_server.clone();
