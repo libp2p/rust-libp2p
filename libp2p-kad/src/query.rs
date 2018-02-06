@@ -28,6 +28,7 @@ use libp2p_peerstore::PeerId;
 use multiaddr::{AddrComponent, Multiaddr};
 use protocol;
 use rand;
+use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::io::Error as IoError;
 use std::mem;
@@ -216,18 +217,27 @@ where
 		let query_interface = query_interface.clone();
 		let query_interface2 = query_interface.clone();
 
-		let to_contact = state
-			.pending_nodes
-			.iter()
-			.filter(|peer| !state.result.iter().any(|p| &p == peer))
-			.filter(|peer| !state.current_attempts_addrs.iter().any(|p| &p == peer))
-			.filter(|peer| !state.failed_to_contact.iter().any(|p| &p == peer))
-			.take(parallelism.saturating_sub(state.current_attempts_fut.len()))
-			.map(|peer| peer.clone())
-			.collect::<Vec<_>>();
-		// TODO: loop in case there are less than `parallelism` nodes, so that we can try
-		//       multiple multiaddrs simultaneously
+		// Find out which nodes to contact at this iteration.
+		let to_contact = {
+			let mut to_contact = SmallVec::<[_; 16]>::new();
+			let wanted_len = parallelism.saturating_sub(state.current_attempts_fut.len());
+			while to_contact.len() < wanted_len && !state.pending_nodes.is_empty() {
+				let peer = state.pending_nodes.remove(0);
+				if state.result.iter().any(|p| p == &peer) {
+					continue;
+				}
+				if state.current_attempts_addrs.iter().any(|p| p == &peer) {
+					continue;
+				}
+				if state.failed_to_contact.iter().any(|p| p == &peer) {
+					continue;
+				}
+				to_contact.push(peer);
+			}
+			to_contact
+		};
 
+		// For each node in `to_contact`, add an entry in `state.current_attempts_*`.
 		for peer in to_contact {
 			let multiaddr: Multiaddr = AddrComponent::IPFS(peer.clone().into_bytes()).into();
 
@@ -247,13 +257,13 @@ where
 				.current_attempts_fut
 				.push(Box::new(current_attempt) as Box<_>);
 		}
-
 		debug_assert_eq!(
 			state.current_attempts_addrs.len(),
 			state.current_attempts_fut.len()
 		);
 
-		//
+		// Extract `current_attempts_fut` so that we can pass it to `select_all`. We will push the
+		// values back when inside the loop.
 		let current_attempts_fut = mem::replace(&mut state.current_attempts_fut, Vec::new());
 		if current_attempts_fut.is_empty() {
 			// If `current_attempts_fut` is empty, then `select_all` would panic. It attempts
@@ -262,10 +272,12 @@ where
 			return future::Either::A(future);
 		}
 
+		// This is the future that continues or breaks the `loop_fn`.
 		let future = future::select_all(current_attempts_fut.into_iter()).and_then(
 			move |(message, trigger_idx, other_current_attempts)| {
 				let remote_id = state.current_attempts_addrs.remove(trigger_idx);
-				state.current_attempts_fut.extend(other_current_attempts);
+				debug_assert!(state.current_attempts_fut.is_empty());
+				state.current_attempts_fut = other_current_attempts;
 
 				let closer_peers = match message {
 					Ok(closer_peers) => {
@@ -284,7 +296,7 @@ where
 					}
 				};
 
-				// Update the result with the node that sent the result.
+				// Update `result` with the node that sent the result.
 				if let Some(insert_pos) = state.result.iter().position(|e| {
 					e.distance_with(&searched_key) >= remote_id.distance_with(&searched_key)
 				}) {
