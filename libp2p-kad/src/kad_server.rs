@@ -41,7 +41,7 @@ use futures::sync::{mpsc, oneshot};
 use libp2p_peerstore::PeerId;
 use libp2p_swarm::Endpoint;
 use libp2p_swarm::ConnectionUpgrade;
-use multiaddr::Multiaddr;
+use multiaddr::{AddrComponent, Multiaddr};
 use protocol::{self, KademliaProtocolConfig, KadMsg, Peer};
 use smallvec::SmallVec;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -54,7 +54,7 @@ pub trait KadServerInterface: Clone {
 	fn local_id(&self) -> &PeerId;
 
 	/// Updates an entry in the K-Buckets. Called whenever that peer sends us a message.
-	fn kbuckets_update(&self, peer: PeerId);
+	fn kbuckets_update(&self, peer: &PeerId);
 
 	/// Finds the nodes closest to a peer ID.
 	fn kbuckets_find_closest(&self, addr: &PeerId) -> Vec<PeerId>;
@@ -99,12 +99,35 @@ where
 
 	#[inline]
 	fn upgrade(self, incoming: C, id: (), endpoint: Endpoint, addr: &Multiaddr) -> Self::Future {
+		let peer_id = {
+			let mut iter = addr.iter();
+			let protocol = iter.next();
+			let after_proto = iter.next();
+			match (protocol, after_proto) {
+				(Some(AddrComponent::IPFS(key)), None) => {
+					match PeerId::from_bytes(key) {
+						Ok(id) => id,
+						Err(_) => {
+							let err = IoError::new(IoErrorKind::InvalidData,
+												   "invalid peer ID sent by remote identification");
+							return Box::new(future::err(err));
+						}
+					}
+				},
+				_ => {
+					let err = IoError::new(IoErrorKind::InvalidData,
+										   "couldn't identify connected node");
+					return Box::new(future::err(err));
+				},
+			}
+		};
+
 		let interface = self.interface;
 		let future = self.raw_proto
 			.upgrade(incoming, id, endpoint, addr)
             .map(move |connec| {
 				let (tx, rx) = mpsc::unbounded();
-                let future = kademlia_handler(connec, rx, interface);
+                let future = kademlia_handler(connec, peer_id, rx, interface);
 				let controller = KademliaServerController { inner: tx };
 				(controller, future)
             });
@@ -165,13 +188,15 @@ impl KademliaServerController {
 // Handles a newly-opened Kademlia stream with a remote peer.
 //
 // Takes a `Stream` and `Sink` of Kademlia messages representing the connection to the client,
-// plus a `Receiver` that will receive messages to transmit to that connection, plus the interface.
+// plus the ID of the peer that we are handling, plus a `Receiver` that will receive messages to
+// transmit to that connection, plus the interface.
 //
 // Returns a `Future` that must be resolved in order for progress to work. It will never yield any
 // item (unless both `rx` and `kad_bistream` are closed) but will propagate any I/O of protocol
 // error that could happen. If the `Receiver` closes, no error is generated.
 fn kademlia_handler<'a, S, I>(
 	kad_bistream: S,
+	peer_id: PeerId,
 	rx: mpsc::UnboundedReceiver<(KadMsg, oneshot::Sender<KadMsg>)>,
 	interface: I,
 ) -> Box<Future<Item = (), Error = IoError> + 'a>
@@ -194,12 +219,14 @@ where
 	let future = future::loop_fn(
 		(kad_sink, messages, SmallVec::<[_; 8]>::new()),
 		move |(kad_sink, messages, mut send_back_queue)| {
+			let interface = interface.clone();
+			let peer_id = peer_id.clone();
+
 			// The `send_back_queue` is a queue of `UnboundedSender`s in the correct order of
 			// expected answers.
 			// Whenever we send a message to the remote and this message expects a response, we
 			// push the sender to the end of `send_back_queue`. Whenever a remote sends us a
 			// response, we pop the first element of `send_back_queue`.
-			let interface = interface.clone();
 			messages
 				.into_future()
 				.map_err(|(err, _)| err)
@@ -207,7 +234,7 @@ where
 					if let Some((_, None)) = message {
 						// If we received a message from the remote (as opposed to a message from
 						// `rx`) then we update the k-buckets.
-						//interface.kbuckets_update();
+						interface.kbuckets_update(&peer_id);
 					}
 
 					match message {

@@ -293,13 +293,13 @@ impl<P, Pc, R> KadServerInterface for Arc<Inner<P, R>>
     }
 
     #[inline]
-	fn kbuckets_update(&self, peer: PeerId) {
+	fn kbuckets_update(&self, peer: &PeerId) {
 		// TODO: is this the right place for this check?
-		if &peer == self.kbuckets.my_id() {
+		if peer == self.kbuckets.my_id() {
 			return;
 		}
 
-		match self.kbuckets.update(peer, ()) {
+		match self.kbuckets.update(peer.clone(), ()) {
 			UpdateOutcome::NeedPing(node_to_ping) => {
 				// TODO: return this info somehow
 				println!("need to ping {:?}", node_to_ping);

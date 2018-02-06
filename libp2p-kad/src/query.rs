@@ -185,8 +185,6 @@ fn query<'a, I>(
 where
 	I: QueryInterface + 'a,
 {
-	let parallelism = query_interface.parallelism();
-
 	// State of the current iterative process.
 	struct State<'a> {
 		// Final output of the iteration.
@@ -210,6 +208,8 @@ where
 		pending_nodes: query_interface.kbuckets_find_closest(&searched_key),
 		failed_to_contact: Default::default(),
 	};
+
+	let parallelism = query_interface.parallelism();
 
 	let stream = future::loop_fn(initial_state, move |mut state| {
 		let searched_key = searched_key.clone();
