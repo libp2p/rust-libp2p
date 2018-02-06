@@ -18,6 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+// TODO: we allow dead_code because this library contains a lot of unused code that will be useful
+//       later for record store
+#![allow(dead_code)]
+
 // # Crate organization
 //
 // The crate contains three levels of abstractions over the Kademlia protocol.

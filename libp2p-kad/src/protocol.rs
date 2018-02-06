@@ -26,7 +26,7 @@
 //! used to send messages.
 
 use bytes::Bytes;
-use futures::{IntoFuture, Sink, Stream};
+use futures::{Sink, Stream};
 use futures::future;
 use libp2p_peerstore::PeerId;
 use libp2p_swarm::{ConnectionUpgrade, Endpoint, Multiaddr};
@@ -216,11 +216,11 @@ fn msg_to_proto(kad_msg: KadMsg) -> protobuf_structs::dht::Message {
 			msg.set_field_type(protobuf_structs::dht::Message_MessageType::PING);
 			msg
 		}
-		KadMsg::PutValue { key, record } => {
+		KadMsg::PutValue { key, .. } => {
 			let mut msg = protobuf_structs::dht::Message::new();
 			msg.set_field_type(protobuf_structs::dht::Message_MessageType::PUT_VALUE);
 			msg.set_key(key);
-			//msg.set_record(record);
+			//msg.set_record(record);		// TODO:
 			msg
 		}
 		KadMsg::GetValueReq { key } => {
@@ -230,11 +230,7 @@ fn msg_to_proto(kad_msg: KadMsg) -> protobuf_structs::dht::Message {
 			msg.set_clusterLevelRaw(10);
 			msg
 		}
-		KadMsg::GetValueRes {
-			key,
-			record,
-			closer_peers,
-		} => unimplemented!(),
+		KadMsg::GetValueRes { .. } => unimplemented!(),
 		KadMsg::FindNodeReq { key } => {
 			let mut msg = protobuf_structs::dht::Message::new();
 			msg.set_field_type(protobuf_structs::dht::Message_MessageType::FIND_NODE);
@@ -266,7 +262,7 @@ fn proto_to_msg(mut message: protobuf_structs::dht::Message) -> Result<KadMsg, I
 
 		protobuf_structs::dht::Message_MessageType::PUT_VALUE => {
 			let key = message.take_key();
-			let record = message.take_record();
+			let _record = message.take_record();
 			Ok(KadMsg::PutValue {
 				key: key,
 				record: (),

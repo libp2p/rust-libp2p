@@ -36,28 +36,17 @@
 //! `Arc` in order to be available whenever we need to request something from a node.
 
 use bytes::Bytes;
-use fnv::FnvHashMap;
-use futures::{self, future, stream, Future, Sink, Stream};
+use futures::{future, Future, Sink, Stream};
 use futures::sync::{mpsc, oneshot};
-use kbucket::{KBucketsPeerId, KBucketsTable, UpdateOutcome};
-use libp2p_identify::{IdentifyInfo, IdentifyOutput, IdentifyProtocolConfig};
-use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};
-use libp2p_ping::{Ping, Pinger};
-use libp2p_swarm::{self, Endpoint, MuxedTransport, OrUpgrade, SwarmController, UpgradeExt};
-use libp2p_swarm::{ConnectionUpgrade, UpgradedNode};
-use libp2p_swarm::transport::EitherSocket;
+use libp2p_peerstore::PeerId;
+use libp2p_swarm::Endpoint;
+use libp2p_swarm::ConnectionUpgrade;
 use multiaddr::Multiaddr;
-use parking_lot::Mutex;
 use protocol::{self, KademliaProtocolConfig, KadMsg, Peer};
 use smallvec::SmallVec;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
-use std::mem;
-use std::ops::Deref;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_timer;
 
 /// Interface that this server system uses to communicate with the rest of the system.
 pub trait KadServerInterface: Clone {
@@ -248,7 +237,7 @@ where
 						Some((message, None)) => {
 							// Message received by the remote.
 							match message {
-								message @ KadMsg::Ping => {
+								KadMsg::Ping => {
 									// TODO: annoying to implement
 									unimplemented!()
 								}
@@ -300,7 +289,7 @@ where
 }
 
 // Builds a `KadMsg` that handles a `FIND_NODE` request received from the remote.
-fn handle_find_node_req<I>(interface: &I, requested_key: &[u8]) -> KadMsg
+fn handle_find_node_req<I>(interface: &I, _requested_key: &[u8]) -> KadMsg
 	where I: ?Sized + KadServerInterface
 {
 	KadMsg::FindNodeRes {
@@ -313,14 +302,14 @@ fn handle_find_node_req<I>(interface: &I, requested_key: &[u8]) -> KadMsg
 }
 
 // Builds a `KadMsg` that handles a `FIND_VALUE` request received from the remote.
-fn handle_get_value_req<I>(interface: &I, requested_key: &[u8]) -> KadMsg
+fn handle_get_value_req<I>(_interface: &I, _requested_key: &[u8]) -> KadMsg
 	where I: ?Sized + KadServerInterface
 {
 	unimplemented!()
 }
 
 // Handles a `STORE` request received from the remote.
-fn handle_put_value_req<I>(interface: &I)
+fn handle_put_value_req<I>(_interface: &I)
 	where I: ?Sized + KadServerInterface
 {
 	unimplemented!()

@@ -22,28 +22,22 @@
 
 use bytes::Bytes;
 use fnv::FnvHashMap;
-use futures::{self, future, stream, Future, IntoFuture, Sink, Stream};
-use futures::sync::{mpsc, oneshot};
+use futures::{self, future, Future};
+use futures::sync::oneshot;
 use kad_server::{KademliaServerController, KademliaServerConfig, KadServerInterface};
-use kbucket::{KBucketsPeerId, KBucketsTable, UpdateOutcome};
-use libp2p_identify::{IdentifyInfo, IdentifyOutput, IdentifyProtocolConfig};
+use kbucket::{KBucketsTable, UpdateOutcome};
 use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};
-use libp2p_ping::{Ping, Pinger};
-use libp2p_swarm::{self, Endpoint, MuxedTransport, OrUpgrade, SwarmController, UpgradeExt};
-use libp2p_swarm::{ConnectionUpgrade, UpgradedNode};
-use libp2p_swarm::transport::EitherSocket;
+use libp2p_swarm::{Endpoint, MuxedTransport, SwarmController};
+use libp2p_swarm::ConnectionUpgrade;
 use multiaddr::Multiaddr;
 use parking_lot::Mutex;
-use protocol::{self, KademliaProtocolConfig, KadMsg, Peer};
 use query;
-use smallvec::SmallVec;
 use std::collections::hash_map::Entry;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
-use std::mem;
 use std::ops::Deref;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_timer;
 
@@ -81,7 +75,7 @@ impl<P, Pc, R> KademliaControllerPrototype<P, R>
 		let buckets = KBucketsTable::new(config.local_peer_id.clone(), config.timeout);
 		for peer_id in config.peer_store.deref().peers() {
 			let _ = buckets.update(peer_id, ());
-		}
+        }
 
 		let inner = Arc::new(Inner {
 			kbuckets: buckets,

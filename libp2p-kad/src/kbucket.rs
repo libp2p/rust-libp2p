@@ -204,8 +204,8 @@ where
 			}
 		}
 		out.sort_by(|a, b| {
-			b.distance_with(&self.my_id)
-				.cmp(&a.distance_with(&self.my_id))
+			b.distance_with(id)
+				.cmp(&a.distance_with(id))
 		});
 		out.into_iter()
 	}

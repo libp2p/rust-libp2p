@@ -20,27 +20,18 @@
 
 //! This module handles performing iterative queries about the network.
 
-use fnv::{FnvHashMap, FnvHashSet};
-use futures::{future, stream, Future, IntoFuture};
-use futures::sync::{mpsc, oneshot};
+use fnv::FnvHashSet;
+use futures::{future, Future};
 use kad_server::KademliaServerController;
-use kbucket::{KBucketsPeerId, KBucketsTable};
-use libp2p_identify::IdentifyProtocolConfig;
-use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};
-use libp2p_ping::Ping;
-use libp2p_swarm::{ConnectionUpgrade, UpgradedNode};
-use libp2p_swarm::{Endpoint, MuxedTransport, OrUpgrade, SwarmController, UpgradeExt};
-use libp2p_swarm::transport::EitherSocket;
+use kbucket::KBucketsPeerId;
+use libp2p_peerstore::PeerId;
 use multiaddr::{AddrComponent, Multiaddr};
-use parking_lot::Mutex;
 use protocol;
 use rand;
-use smallvec::SmallVec;
 use std::cmp::Ordering;
-use std::io::{Error as IoError, ErrorKind as IoErrorKind};
+use std::io::Error as IoError;
 use std::mem;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// Interface that the query uses to communicate with the rest of the system.
 pub trait QueryInterface: Clone {
