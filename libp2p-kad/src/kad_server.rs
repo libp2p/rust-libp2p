@@ -293,65 +293,65 @@ where
 							});
 							Box::new(future) as Box<_>
 						}
-						Some((message, None)) => {
-							// Message received by the remote.
-							match message {
-								KadMsg::Ping => {
-									// Note: The way the protocol was designed, there is no way to
-									//		 differentiate between a ping and a pong.
-									if expected_pongs == 0 {
-										let message = KadMsg::Ping;
-										let future = kad_sink.send(message).map(move |kad_sink| {
-											future::Loop::Continue((kad_sink, rest, send_back_queue, expected_pongs))
-										});
-										Box::new(future) as Box<_>
-									} else {
-										expected_pongs -= 1;
-										let future = future::ok({
-											future::Loop::Continue((kad_sink, rest, send_back_queue, expected_pongs))
-										});
-										Box::new(future) as Box<_>
-									}
-								}
-								message @ KadMsg::FindNodeRes { .. } |
-								message @ KadMsg::GetValueRes { .. } => {
-									if !send_back_queue.is_empty() {
-										let send_back = send_back_queue.remove(0);
-										let _ = send_back.send(message);
-										let future = future::ok(future::Loop::Continue((
-											kad_sink,
-											rest,
-											send_back_queue,
-											expected_pongs,
-										)));
-										return Box::new(future) as Box<_>;
-									} else {
-										let future = future::err(IoErrorKind::InvalidData.into());
-										return Box::new(future) as Box<_>;
-									}
-								}
-								KadMsg::FindNodeReq { key, .. } => {
-									let message = handle_find_node_req(&interface, &key);
-									let future = kad_sink.send(message).map(move |kad_sink| {
-										future::Loop::Continue((kad_sink, rest, send_back_queue, expected_pongs))
-									});
-									Box::new(future) as Box<_>
-								}
-								KadMsg::GetValueReq { key, .. } => {
-									let message = handle_get_value_req(&interface, &key);
-									let future = kad_sink.send(message).map(move |kad_sink| {
-										future::Loop::Continue((kad_sink, rest, send_back_queue, expected_pongs))
-									});
-									Box::new(future) as Box<_>
-								}
-								KadMsg::PutValue { .. } => {
-									handle_put_value_req(&interface);
-									let future = future::ok({
-										future::Loop::Continue((kad_sink, rest, send_back_queue, expected_pongs))
-									});
-									Box::new(future) as Box<_>
-								},
+						Some((KadMsg::Ping, None)) => {
+							// Note: The way the protocol was designed, there is no way to
+							//		 differentiate between a ping and a pong.
+							if expected_pongs == 0 {
+								let message = KadMsg::Ping;
+								let future = kad_sink.send(message).map(move |kad_sink| {
+									future::Loop::Continue((kad_sink, rest, send_back_queue, expected_pongs))
+								});
+								Box::new(future) as Box<_>
+							} else {
+								expected_pongs -= 1;
+								let future = future::ok({
+									future::Loop::Continue((kad_sink, rest, send_back_queue, expected_pongs))
+								});
+								Box::new(future) as Box<_>
 							}
+						}
+						Some((message @ KadMsg::FindNodeRes { .. }, None)) |
+						Some((message @ KadMsg::GetValueRes { .. }, None)) => {
+							// `FindNodeRes` or `GetValueRes` received on the socket.
+							// Send it back through `send_back_queue`.
+							if !send_back_queue.is_empty() {
+								let send_back = send_back_queue.remove(0);
+								let _ = send_back.send(message);
+								let future = future::ok(future::Loop::Continue((
+									kad_sink,
+									rest,
+									send_back_queue,
+									expected_pongs,
+								)));
+								return Box::new(future) as Box<_>;
+							} else {
+								let future = future::err(IoErrorKind::InvalidData.into());
+								return Box::new(future) as Box<_>;
+							}
+						}
+						Some((KadMsg::FindNodeReq { key, .. }, None)) => {
+							// `FindNodeReq` received on the socket.
+							let message = handle_find_node_req(&interface, &key);
+							let future = kad_sink.send(message).map(move |kad_sink| {
+								future::Loop::Continue((kad_sink, rest, send_back_queue, expected_pongs))
+							});
+							Box::new(future) as Box<_>
+						}
+						Some((KadMsg::GetValueReq { key, .. }, None)) => {
+							// `GetValueReq` received on the socket.
+							let message = handle_get_value_req(&interface, &key);
+							let future = kad_sink.send(message).map(move |kad_sink| {
+								future::Loop::Continue((kad_sink, rest, send_back_queue, expected_pongs))
+							});
+							Box::new(future) as Box<_>
+						}
+						Some((KadMsg::PutValue { .. }, None)) => {
+							// `PutValue` received on the socket.
+							handle_put_value_req(&interface);
+							let future = future::ok({
+								future::Loop::Continue((kad_sink, rest, send_back_queue, expected_pongs))
+							});
+							Box::new(future) as Box<_>
 						}
 					}
 				})
