@@ -46,7 +46,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_timer;
-use with_some::WithSome;
 
 /// Prototype for a future Kademlia protocol running on a socket.
 #[derive(Debug, Clone)]

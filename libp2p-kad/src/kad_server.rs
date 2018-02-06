@@ -58,7 +58,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_timer;
-use with_some::WithSome;
 
 /// Interface that this server system uses to communicate with the rest of the system.
 pub trait KadServerInterface: Clone {

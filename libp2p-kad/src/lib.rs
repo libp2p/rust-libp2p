@@ -66,4 +66,3 @@ pub mod kbucket; // TODO: not pub
 mod protobuf_structs;
 mod protocol;
 mod query;
-mod with_some;
