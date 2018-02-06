@@ -53,7 +53,6 @@ extern crate parking_lot;
 extern crate protobuf;
 extern crate rand;
 extern crate smallvec;
-extern crate tokio_core;
 extern crate tokio_io;
 extern crate tokio_timer;
 extern crate varint;

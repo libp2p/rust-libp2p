@@ -19,10 +19,11 @@ parking_lot = "0.5.1"
 protobuf = "1.4.2"
 rand = "0.4.2"
 smallvec = "0.5"
-tokio-core = "0.1"
 tokio-io = "0.1"
 tokio-timer = "0.1.2"
 varint = { path = "../varint-rs" }
 
 [dev-dependencies]
+libp2p-tcp-transport = { path = "../libp2p-tcp-transport" }
 rand = "0.4.2"
+tokio-core = "0.1"

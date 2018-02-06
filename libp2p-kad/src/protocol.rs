@@ -76,7 +76,7 @@ impl Into<protobuf_structs::dht::Message_ConnectionType> for ConnectionType {
 }
 
 /// Information about a peer, as known by the sender.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Peer {
 	pub node_id: PeerId,
 	/// The multiaddresses that are known for that peer.
@@ -174,7 +174,7 @@ where
 
 /// Message that we can send to a peer or received from a peer.
 // TODO: document the rest
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum KadMsg {
 	/// Ping request or response.
 	Ping,
@@ -183,7 +183,7 @@ pub enum KadMsg {
 		/// Identifier of the record.
 		key: Vec<u8>,
 		/// The record itself.
-		record: protobuf_structs::record::Record, // TODO: no
+		record: (), //record: protobuf_structs::record::Record, // TODO: no
 	},
 	GetValueReq {
 		/// Identifier of the record.
@@ -192,7 +192,7 @@ pub enum KadMsg {
 	GetValueRes {
 		/// Identifier of the returned record.
 		key: Vec<u8>,
-		record: Option<protobuf_structs::record::Record>, // TODO: no
+		record: (), //record: Option<protobuf_structs::record::Record>, // TODO: no
 		closer_peers: Vec<Peer>,
 	},
 	/// Request for the list of nodes whose IDs are the closest to `key`. The number of nodes
@@ -220,7 +220,7 @@ fn msg_to_proto(kad_msg: KadMsg) -> protobuf_structs::dht::Message {
 			let mut msg = protobuf_structs::dht::Message::new();
 			msg.set_field_type(protobuf_structs::dht::Message_MessageType::PUT_VALUE);
 			msg.set_key(key);
-			msg.set_record(record);
+			//msg.set_record(record);
 			msg
 		}
 		KadMsg::GetValueReq { key } => {
@@ -269,7 +269,7 @@ fn proto_to_msg(mut message: protobuf_structs::dht::Message) -> Result<KadMsg, I
 			let record = message.take_record();
 			Ok(KadMsg::PutValue {
 				key: key,
-				record: record,
+				record: (),
 			})
 		}
 
@@ -302,5 +302,73 @@ fn proto_to_msg(mut message: protobuf_structs::dht::Message) -> Result<KadMsg, I
 			// them we suppose that it's a mistake in the protocol usage.
 			Err(IoError::new(IoErrorKind::InvalidData, "received an unsupported kad message type"))
 		},
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	extern crate libp2p_tcp_transport;
+	extern crate tokio_core;
+
+	use self::libp2p_tcp_transport::TcpConfig;
+	use self::tokio_core::reactor::Core;
+	use protocol::{KadMsg, KademliaProtocolConfig};
+	use futures::{Future, Stream, Sink};
+	use libp2p_swarm::Transport;
+	use std::sync::mpsc;
+	use std::thread;
+
+	#[test]
+	fn correct_transfer() {
+		// We open a server and a client, send a message between the two, and check that they were
+		// successfully received.
+
+		test_one(KadMsg::Ping);
+
+		fn test_one(msg_server: KadMsg) {
+			let msg_client = msg_server.clone();
+			let (tx, rx) = mpsc::channel();
+
+			let bg_thread = thread::spawn(move || {
+				let mut core = Core::new().unwrap();
+				let transport = TcpConfig::new(core.handle())
+					.with_upgrade(KademliaProtocolConfig);
+
+				let (listener, addr) = transport
+					.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+				tx.send(addr).unwrap();
+
+				let future = listener
+					.into_future()
+					.map_err(|(err, _)| err)
+					.and_then(|(client, _)| client.unwrap().map(|v| v.0))
+					.and_then(|proto| {
+						proto.into_future()
+							.map_err(|(err, _)| err)
+							.map(|(v, _)| v)
+					})
+					.map(|recv_msg| {
+						assert_eq!(recv_msg.unwrap(), msg_server);
+						()
+					});
+
+				let _ = core.run(future).unwrap();
+			});
+
+			let mut core = Core::new().unwrap();
+			let transport = TcpConfig::new(core.handle())
+				.with_upgrade(KademliaProtocolConfig);
+
+			let future = transport
+				.dial(rx.recv().unwrap())
+				.unwrap_or_else(|_| panic!())
+				.and_then(|proto| {
+					proto.0.send(msg_client)
+				})
+				.map(|_| ());
+
+			let _ = core.run(future).unwrap();
+			bg_thread.join().unwrap();
+		}
 	}
 }
