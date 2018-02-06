@@ -33,6 +33,7 @@ use multiaddr::Multiaddr;
 use parking_lot::Mutex;
 use query;
 use std::collections::hash_map::Entry;
+use std::fmt;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use std::ops::Deref;
@@ -94,15 +95,23 @@ impl<P, Pc, R> KademliaControllerPrototype<P, R>
     }
 
     pub fn start<T, C>(self, swarm: SwarmController<T, C>) -> KademliaController<P, R, T, C>
-        where T: MuxedTransport + 'static,  // TODO: 'static :-/
-              C: ConnectionUpgrade<T::RawConn> + 'static,       // TODO: 'static :-/
+        where P: Clone + Deref<Target = Pc> + 'static,          // TODO: 'static :-/
+              for<'r> &'r Pc: Peerstore,
+              R: Clone + 'static,           // TODO: 'static :-/
+              T: Clone + MuxedTransport + 'static,  // TODO: 'static :-/
+              C: Clone + ConnectionUpgrade<T::RawConn> + 'static,       // TODO: 'static :-/
+              C::NamesIter: Clone,
+              C::Output: From<KademliaProcessingFuture>,
     {
         // TODO: initialization
 
-        KademliaController {
+        let controller = KademliaController {
             inner: self.inner.clone(),
             swarm_controller: swarm,
-        }
+        };
+
+        query::refresh(controller.clone(), 0);
+        controller
     }
 }
 
@@ -136,6 +145,13 @@ impl<P, Pc, R, T, C> KademliaController<P, R, T, C>
           T: Clone + MuxedTransport + 'static,          // TODO: 'static :-/
           C: Clone + ConnectionUpgrade<T::RawConn> + 'static,           // TODO: 'static :-/
 {
+    /// Performs an iterative find node query on the network.
+    ///
+    /// Will query the network for the peers that are the closest to `searched_key` and return
+    /// the results.
+    ///
+    /// The algorithm used is a standard Kademlia algorithm. The details are not documented, so
+    /// that the implementation is free to modify them.
     #[inline]
     pub fn find_node(&self, searched_key: PeerId)
                      -> Box<Future<Item = Vec<PeerId>, Error = IoError>>
@@ -149,7 +165,7 @@ impl<P, Pc, R, T, C> KademliaController<P, R, T, C>
 }
 
 /// Connection upgrade to the Kademlia protocol.
-#[derive(Clone)]        // TODO: Debug
+#[derive(Clone)]
 pub struct KademliaUpgrade<P, R> {
     inner: Arc<Inner<P, R>>,
     upgrade: KademliaServerConfig<Arc<Inner<P, R>>>,
@@ -220,7 +236,6 @@ where
                         };
                     },
                     Entry::Vacant(entry) => {
-                        println!("vacant");
                         entry.insert(Connection::Active(controller));
                     },
                 };
@@ -248,7 +263,7 @@ impl Future for KademliaProcessingFuture {
 }
 
 // Inner struct shared throughout the Kademlia system.
-//#[derive(Debug)]      // TODO:
+#[derive(Debug)]
 struct Inner<P, R> {
 	// The remotes are identified by their public keys.
 	kbuckets: KBucketsTable<PeerId, ()>,
@@ -274,11 +289,26 @@ struct Inner<P, R> {
 	connections: Mutex<FnvHashMap<Multiaddr, Connection>>,
 }
 
-//#[derive(Debug)]      // TODO:
+// Current state of a connection to a specific multiaddr.
+//
+// There is `Inactive` entry, as an inactive connection corresponds to no entry in the
+// `connections` hash map.
 enum Connection {
+    // The connection has already been opened and is ready to be controlled through the given
+    // controller.
     Active(KademliaServerController),
+
+    // The connection is in the process of being opened. Any closure added to this `Vec` will be
+    // executed on the controller once it is available.
+    // Once the connection is open, it will be replaced with `Active`.
     // TODO: should be FnOnce once Rust allows that
     Pending(Vec<Box<FnMut(&mut KademliaServerController)>>),
+}
+
+impl fmt::Debug for Connection {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Connection")
+    }
 }
 
 impl<P, Pc, R> KadServerInterface for Arc<Inner<P, R>>
