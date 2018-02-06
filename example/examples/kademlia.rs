@@ -106,7 +106,7 @@ fn main() {
 
     let kad_ctl_proto = kad::KademliaControllerPrototype::new(kad_config);
 
-    let proto = kad::KademliaUpgrade::new(&kad_ctl_proto);
+    let proto = kad::KademliaUpgrade::from_prototype(&kad_ctl_proto);
 
     // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming and
     // outgoing connections for us.

@@ -62,7 +62,7 @@ pub struct KademliaConfig<P, R> {
 }
 
 /// Object that allows one to make queries on the Kademlia system.
-//#[derive(Debug)]      // TODO:
+#[derive(Debug)]
 pub struct KademliaControllerPrototype<P, R> {
     inner: Arc<Inner<P, R>>,
 }
@@ -174,7 +174,7 @@ pub struct KademliaUpgrade<P, R> {
 impl<P, R> KademliaUpgrade<P, R> {
     /// Builds a connection upgrade from the controller.
     #[inline]
-    pub fn new(proto: &KademliaControllerPrototype<P, R>) -> Self {
+    pub fn from_prototype(proto: &KademliaControllerPrototype<P, R>) -> Self {
         KademliaUpgrade {
             inner: proto.inner.clone(),
             upgrade: KademliaServerConfig::new(proto.inner.clone()),
@@ -280,11 +280,17 @@ struct Inner<P, R> {
     // Same as in the config.
     cycles_duration: Duration,
 
-	// Same fields as `KademliaConfig`.
+    // Same as in the config.
 	record_store: R,
+
+    // Same as in the config.
 	peer_store: P,
 
 	// List of open connections with remotes.
+    //
+    // Note that this is a good idea only if each node has only one unique multiaddr. This should
+    // be the case if the user uses the identify transport that automatically maps peer IDs to
+    // multiaddresses.
 	// TODO: is it correct to use FnvHashMap with a Multiaddr? needs benchmarks
 	connections: Mutex<FnvHashMap<Multiaddr, Connection>>,
 }
