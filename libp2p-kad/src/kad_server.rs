@@ -183,6 +183,22 @@ impl KademliaServerController {
 
 		Box::new(future) as Box<_>
 	}
+
+	/// Sends a `PING` query to the node. Because of the way the protocol is designed, there is
+	/// no way to differentiate between a ping and a pong. Therefore this function doesn't return a
+	/// future, and the only way to be notified of the result is through the `kbuckets_update`
+	/// method in the `KadServerInterface` trait.
+	pub fn ping(&self) -> Result<(), IoError> {
+		// Dummy channel.
+		let (tx, _rx) = oneshot::channel();
+		match self.inner.unbounded_send((protocol::KadMsg::Ping, tx)) {
+			Ok(()) => Ok(()),
+			Err(_) => {
+				Err(IoError::new(IoErrorKind::ConnectionAborted,
+				   		         "connection to remote has aborted"))
+			}
+		}
+	}
 }
 
 // Handles a newly-opened Kademlia stream with a remote peer.
@@ -217,8 +233,8 @@ where
 
 	// Loop forever.
 	let future = future::loop_fn(
-		(kad_sink, messages, SmallVec::<[_; 8]>::new()),
-		move |(kad_sink, messages, mut send_back_queue)| {
+		(kad_sink, messages, SmallVec::<[_; 8]>::new(), 0),
+		move |(kad_sink, messages, mut send_back_queue, mut expected_pongs)| {
 			let interface = interface.clone();
 			let peer_id = peer_id.clone();
 
@@ -227,6 +243,14 @@ where
 			// Whenever we send a message to the remote and this message expects a response, we
 			// push the sender to the end of `send_back_queue`. Whenever a remote sends us a
 			// response, we pop the first element of `send_back_queue`.
+
+			// The value of `expected_pongs` is the number of PING requests that we sent and that
+			// haven't been answered by the remote yet. Because of the way the protocol is designed,
+			// there is no way to differentiate between a ping and a pong. Therefore whenever we
+			// send a ping request we suppose that the next ping we receive is an answer, even
+			// though that may not be the case in reality.
+			// Because of this behaviour, pings do not pop from the `send_back_queue`.
+
 			messages
 				.into_future()
 				.map_err(|(err, _)| err)
@@ -248,16 +272,24 @@ where
 							// types of messages, this one doesn't expect any answer and therefore
 							// we ignore the sender.
 							let future = kad_sink.send(message).map(move |kad_sink| {
-								future::Loop::Continue((kad_sink, rest, send_back_queue))
+								future::Loop::Continue((kad_sink, rest, send_back_queue, expected_pongs))
+							});
+							Box::new(future) as Box<_>
+						}
+						Some((message @ KadMsg::Ping { .. }, Some(_))) => {
+							// A `Ping` message has been received on `rx`.
+							expected_pongs += 1;
+							let future = kad_sink.send(message).map(move |kad_sink| {
+								future::Loop::Continue((kad_sink, rest, send_back_queue, expected_pongs))
 							});
 							Box::new(future) as Box<_>
 						}
 						Some((message, Some(send_back))) => {
-							// Any message other than `PutValue` has been received on `rx`. Send it
-							// to the remote.
+							// Any message other than `PutValue` or `Ping` has been received on
+							// `rx`. Send it to the remote.
 							let future = kad_sink.send(message).map(move |kad_sink| {
 								send_back_queue.push(send_back);
-								future::Loop::Continue((kad_sink, rest, send_back_queue))
+								future::Loop::Continue((kad_sink, rest, send_back_queue, expected_pongs))
 							});
 							Box::new(future) as Box<_>
 						}
@@ -265,8 +297,21 @@ where
 							// Message received by the remote.
 							match message {
 								KadMsg::Ping => {
-									// TODO: annoying to implement
-									unimplemented!()
+									// Note: The way the protocol was designed, there is no way to
+									//		 differentiate between a ping and a pong.
+									if expected_pongs == 0 {
+										let message = KadMsg::Ping;
+										let future = kad_sink.send(message).map(move |kad_sink| {
+											future::Loop::Continue((kad_sink, rest, send_back_queue, expected_pongs))
+										});
+										Box::new(future) as Box<_>
+									} else {
+										expected_pongs -= 1;
+										let future = future::ok({
+											future::Loop::Continue((kad_sink, rest, send_back_queue, expected_pongs))
+										});
+										Box::new(future) as Box<_>
+									}
 								}
 								message @ KadMsg::FindNodeRes { .. } |
 								message @ KadMsg::GetValueRes { .. } => {
@@ -277,6 +322,7 @@ where
 											kad_sink,
 											rest,
 											send_back_queue,
+											expected_pongs,
 										)));
 										return Box::new(future) as Box<_>;
 									} else {
@@ -287,21 +333,21 @@ where
 								KadMsg::FindNodeReq { key, .. } => {
 									let message = handle_find_node_req(&interface, &key);
 									let future = kad_sink.send(message).map(move |kad_sink| {
-										future::Loop::Continue((kad_sink, rest, send_back_queue))
+										future::Loop::Continue((kad_sink, rest, send_back_queue, expected_pongs))
 									});
 									Box::new(future) as Box<_>
 								}
 								KadMsg::GetValueReq { key, .. } => {
 									let message = handle_get_value_req(&interface, &key);
 									let future = kad_sink.send(message).map(move |kad_sink| {
-										future::Loop::Continue((kad_sink, rest, send_back_queue))
+										future::Loop::Continue((kad_sink, rest, send_back_queue, expected_pongs))
 									});
 									Box::new(future) as Box<_>
 								}
 								KadMsg::PutValue { .. } => {
 									handle_put_value_req(&interface);
 									let future = future::ok({
-										future::Loop::Continue((kad_sink, rest, send_back_queue))
+										future::Loop::Continue((kad_sink, rest, send_back_queue, expected_pongs))
 									});
 									Box::new(future) as Box<_>
 								},
