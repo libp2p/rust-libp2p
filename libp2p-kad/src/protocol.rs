@@ -26,14 +26,13 @@
 //! used to send messages.
 
 use bytes::Bytes;
-use error::KadError;
 use futures::{IntoFuture, Sink, Stream};
 use futures::future;
 use libp2p_peerstore::PeerId;
 use libp2p_swarm::{ConnectionUpgrade, Endpoint, Multiaddr};
 use protobuf::{self, Message};
 use protobuf_structs;
-use std::io::Error as IoError;
+use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use tokio_io::{AsyncRead, AsyncWrite};
 use varint::VarintCodec;
@@ -124,7 +123,7 @@ where
 	C: AsyncRead + AsyncWrite + 'static, // TODO: 'static :-/
 {
 	type Output = Box<
-		KadStreamSink<Item = KadMsg, Error = KadError, SinkItem = KadMsg, SinkError = KadError>,
+		KadStreamSink<Item = KadMsg, Error = IoError, SinkItem = KadMsg, SinkError = IoError>,
 	>;
 	type Future = future::FutureResult<Self::Output, IoError>;
 	type NamesIter = iter::Once<(Bytes, ())>;
@@ -144,23 +143,20 @@ where
 // Upgrades a socket to use the Kademlia protocol.
 fn kademlia_protocol<'a, S>(
 	socket: S,
-) -> Box<KadStreamSink<Item = KadMsg, Error = KadError, SinkItem = KadMsg, SinkError = KadError> + 'a>
+) -> Box<KadStreamSink<Item = KadMsg, Error = IoError, SinkItem = KadMsg, SinkError = IoError> + 'a>
 where
 	S: AsyncRead + AsyncWrite + 'a,
 {
 	let wrapped = socket
 		.framed(VarintCodec::default())
-		.from_err::<KadError>()
-		.with(|request| -> Result<_, KadError> {
+		.from_err::<IoError>()
+		.with(|request| -> Result<_, IoError> {
 			let proto_struct = msg_to_proto(request);
 			Ok(proto_struct.write_to_bytes().unwrap()) // TODO: error?
 		})
 		.and_then(|bytes| {
-			if let Ok(response) = protobuf::parse_from_bytes(&bytes) {
-				proto_to_msg(response)
-			} else {
-				Err(KadError::Failure)
-			}
+			let response = protobuf::parse_from_bytes(&bytes)?;
+			proto_to_msg(response)
 		});
 
 	Box::new(wrapped)
@@ -168,11 +164,11 @@ where
 
 /// Custom trait that derives `Sink` and `Stream`, so that we can box it.
 pub trait KadStreamSink
-	: Stream<Item = KadMsg, Error = KadError> + Sink<SinkItem = KadMsg, SinkError = KadError> {
+	: Stream<Item = KadMsg, Error = IoError> + Sink<SinkItem = KadMsg, SinkError = IoError> {
 }
 impl<T> KadStreamSink for T
 where
-	T: Stream<Item = KadMsg, Error = KadError> + Sink<SinkItem = KadMsg, SinkError = KadError>,
+	T: Stream<Item = KadMsg, Error = IoError> + Sink<SinkItem = KadMsg, SinkError = IoError>,
 {
 }
 
@@ -249,7 +245,7 @@ fn msg_to_proto(kad_msg: KadMsg) -> protobuf_structs::dht::Message {
 		KadMsg::FindNodeRes {
 			closer_peers,
 		} => {
-			assert!(!closer_peers.is_empty()); // TODO:
+			assert!(!closer_peers.is_empty()); // TODO: if empty, the remote will think it's a request
 			let mut msg = protobuf_structs::dht::Message::new();
 			msg.set_field_type(protobuf_structs::dht::Message_MessageType::FIND_NODE);
 			msg.set_clusterLevelRaw(9);
@@ -262,7 +258,7 @@ fn msg_to_proto(kad_msg: KadMsg) -> protobuf_structs::dht::Message {
 }
 
 /// Turns a raw Kademlia message into a type-safe message.
-fn proto_to_msg(mut message: protobuf_structs::dht::Message) -> Result<KadMsg, KadError> {
+fn proto_to_msg(mut message: protobuf_structs::dht::Message) -> Result<KadMsg, IoError> {
 	match message.get_field_type() {
 		protobuf_structs::dht::Message_MessageType::PING => {
 			Ok(KadMsg::Ping)
@@ -302,9 +298,9 @@ fn proto_to_msg(mut message: protobuf_structs::dht::Message) -> Result<KadMsg, K
 
 		protobuf_structs::dht::Message_MessageType::GET_PROVIDERS |
 		protobuf_structs::dht::Message_MessageType::ADD_PROVIDER => {
-			Err(KadError::Failure)
+			// These messages don't seem to be used in the protocol in practice, so if we receive
+			// them we suppose that it's a mistake in the protocol usage.
+			Err(IoError::new(IoErrorKind::InvalidData, "received an unsupported kad message type"))
 		},
-
-		_ => unimplemented!(),
 	}
 }

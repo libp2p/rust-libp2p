@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! This module handles performing iterative queries about the network.
+
 use fnv::{FnvHashMap, FnvHashSet};
 use futures::{future, stream, Future, IntoFuture};
 use futures::sync::{mpsc, oneshot};
@@ -71,7 +73,7 @@ pub trait QueryInterface: Clone {
 			  FRet: 'static;
 }
 
-/// Starts a query for a `FIND_NODE` request.
+/// Starts a query for an iterative `FIND_NODE` request.
 #[inline]
 pub fn find_node<'a, I>(
 	query_interface: I,
@@ -83,7 +85,10 @@ where
 	query(query_interface, searched_key)
 }
 
-/// Refreshes a specific bucket by performing a `FIND_NODE` on a random ID of this bucket.
+/// Refreshes a specific bucket by performing an iterative `FIND_NODE` on a random ID of this
+/// bucket.
+///
+/// Returns a dummy no-op future if `bucket_num` is out of range.
 pub fn refresh<'a, I>(
 	query_interface: I,
 	bucket_num: usize,
@@ -92,8 +97,8 @@ where
 	I: QueryInterface + 'a,
 {
 	let peer_id = match gen_random_id(&query_interface, bucket_num) {
-		Some(p) => p,
-		None => return Box::new(future::ok(())),
+		Ok(p) => p,
+		Err(()) => return Box::new(future::ok(())),
 	};
 
 	// TODO: remove
@@ -107,7 +112,10 @@ where
 	Box::new(future) as Box<_>
 }
 
-fn gen_random_id<I>(query_interface: &I, bucket_num: usize) -> Option<PeerId>
+// Generates a random `PeerId` that belongs to the given bucket.
+//
+// Returns an error if `bucket_num` is out of range.
+fn gen_random_id<I>(query_interface: &I, bucket_num: usize) -> Result<PeerId, ()>
 where
 	I: ?Sized + QueryInterface,
 {
@@ -120,7 +128,7 @@ where
 	// TODO: this 2 is magic here ; it is the length of the hash of the multihash
 	let bits_diff = bucket_num + 1;
 	if bits_diff > 8 * (my_id_len - 2) {
-		return None;
+		return Err(());
 	}
 
 	let mut random_id = [0; 64];
@@ -141,7 +149,7 @@ where
 
 	let peer_id = PeerId::from_bytes(random_id[..my_id_len].to_owned())
 		.expect("randomly-generated peer ID should always be valid");
-	Some(peer_id)
+	Ok(peer_id)
 }
 
 // Here is the algorithm for node finding, used by this code:

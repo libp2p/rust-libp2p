@@ -21,7 +21,6 @@
 //! High-level structs/traits of the crate.
 
 use bytes::Bytes;
-use error::KadError;
 use fnv::FnvHashMap;
 use futures::{self, future, stream, Future, IntoFuture, Sink, Stream};
 use futures::sync::{mpsc, oneshot};
