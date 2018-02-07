@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::fmt;
 use std::io::Error as IoError;
 use std::time::Duration;
 use futures::{IntoFuture, Future, Stream, Async, Poll, future};
@@ -78,7 +79,6 @@ pub fn swarm<T, C, H, F>(transport: T, upgrade: C, handler: H)
 }
 
 /// Allows control of what the swarm is doing.
-// TODO: Debug impl
 pub struct SwarmController<T, C>
     where T: MuxedTransport + 'static,      // TODO: 'static :-/
           C: ConnectionUpgrade<T::RawConn> + 'static,      // TODO: 'static :-/
@@ -89,6 +89,17 @@ pub struct SwarmController<T, C>
     new_listeners: mpsc::UnboundedSender<Box<Stream<Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>, Error = IoError>>>,
     new_dialers: mpsc::UnboundedSender<Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>>,
     new_toprocess: mpsc::UnboundedSender<Box<Future<Item = (), Error = IoError>>>,
+}
+
+impl<T, C> fmt::Debug for SwarmController<T, C>
+    where T: fmt::Debug + MuxedTransport + 'static,      // TODO: 'static :-/
+          C: fmt::Debug + ConnectionUpgrade<T::RawConn> + 'static,      // TODO: 'static :-/
+{
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_tuple("SwarmController")
+            .field(&self.upgraded)
+            .finish()
+    }
 }
 
 impl<T, C> Clone for SwarmController<T, C>

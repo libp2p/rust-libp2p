@@ -116,7 +116,7 @@ impl<P, Pc, R> KademliaControllerPrototype<P, R>
 }
 
 /// Object that allows one to make queries on the Kademlia system.
-//#[derive(Debug)]      // TODO:
+#[derive(Debug)]
 pub struct KademliaController<P, R, T, C>
     where T: MuxedTransport + 'static,          // TODO: 'static :-/
           C: ConnectionUpgrade<T::RawConn> + 'static,           // TODO: 'static :-/
@@ -313,7 +313,10 @@ enum Connection {
 
 impl fmt::Debug for Connection {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Connection")
+        match *self {
+            Connection::Active(_) => write!(f, "Connection::Active"),
+            Connection::Pending(_) => write!(f, "Connection::Pending"),
+        }
     }
 }
 
