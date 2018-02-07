@@ -12,7 +12,6 @@ futures = { version = "0.1", features = ["use_std"] }
 parking_lot = "0.5.3"
 smallvec = "0.5"
 tokio-io = "0.1"
-tokio-timer = "0.1"
 
 [dev-dependencies]
 libp2p-ping = { path = "../libp2p-ping" }

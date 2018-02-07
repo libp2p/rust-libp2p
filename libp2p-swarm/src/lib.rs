@@ -210,7 +210,6 @@ extern crate multistream_select;
 extern crate parking_lot;
 extern crate smallvec;
 extern crate tokio_io;
-extern crate tokio_timer;
 
 /// Multi-address re-export.
 pub extern crate multiaddr;

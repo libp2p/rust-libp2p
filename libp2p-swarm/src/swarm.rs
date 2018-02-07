@@ -23,7 +23,6 @@ use std::io::Error as IoError;
 use std::time::Duration;
 use futures::{IntoFuture, Future, Stream, Async, Poll, future};
 use futures::sync::mpsc;
-use tokio_timer::{self, Timer, Timeout};
 use {ConnectionUpgrade, Multiaddr, MuxedTransport, UpgradedNode};
 
 /// Creates a swarm.
@@ -46,14 +45,11 @@ pub fn swarm<T, C, H, F>(transport: T, upgrade: C, handler: H)
     let (new_listeners_tx, new_listeners_rx) = mpsc::unbounded();
     let (new_toprocess_tx, new_toprocess_rx) = mpsc::unbounded();
 
-    let timer = tokio_timer::wheel().build();
-
     let upgraded = transport.clone().with_upgrade(upgrade);
 
     let controller = SwarmController {
         transport: transport,
         upgraded: upgraded.clone(),
-        timer: timer,
         new_listeners: new_listeners_tx,
         new_dialers: new_dialers_tx,
         new_toprocess: new_toprocess_tx,
@@ -85,7 +81,6 @@ pub struct SwarmController<T, C>
 {
     transport: T,
     upgraded: UpgradedNode<T, C>,
-    timer: Timer,
     new_listeners: mpsc::UnboundedSender<Box<Stream<Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>, Error = IoError>>>,
     new_dialers: mpsc::UnboundedSender<Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>>,
     new_toprocess: mpsc::UnboundedSender<Box<Future<Item = (), Error = IoError>>>,
@@ -110,7 +105,6 @@ impl<T, C> Clone for SwarmController<T, C>
         SwarmController {
             transport: self.transport.clone(),
             upgraded: self.upgraded.clone(),
-            timer: self.timer.clone(),
             new_listeners: self.new_listeners.clone(),
             new_dialers: self.new_dialers.clone(),
             new_toprocess: self.new_toprocess.clone(),
