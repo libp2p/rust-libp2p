@@ -23,6 +23,7 @@ extern crate futures;
 extern crate libp2p_secio as secio;
 extern crate libp2p_swarm as swarm;
 extern crate libp2p_tcp_transport as tcp;
+extern crate libp2p_websocket as websocket;
 extern crate multiplex;
 extern crate tokio_core;
 extern crate tokio_io;
@@ -33,7 +34,6 @@ use std::env;
 use swarm::{UpgradeExt, SimpleProtocol, Transport, DeniedConnectionUpgrade};
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
-use tokio_io::codec::length_delimited;
 use tokio_io::AsyncRead;
 use tokio_io::codec::BytesCodec;
 use websocket::WsConfig;
@@ -48,6 +48,11 @@ fn main() {
     // Now let's build the transport stack.
     // We start by creating a `TcpConfig` that indicates that we want TCP/IP.
     let transport = TcpConfig::new(core.handle())
+
+        // In addition to TCP/IP, we also want to support the Websockets protocol on top of TCP/IP.
+        // The parameter passed to `WsConfig::new()` must be an implementation of `Transport` to be
+        // used for the underlying multiaddress.
+        .or_transport(WsConfig::new(TcpConfig::new(core.handle())))
 
         // On top of TCP/IP, we will use either the plaintext protocol or the secio protocol,
         // depending on which one the remote supports.
@@ -92,11 +97,7 @@ fn main() {
     });
 
     // We now use the controller to dial to the address.
-<<<<<<< HEAD
-    FIX THIS DESIGN ISSUE BEFORE MERGING THIS PR PLEASE
-=======
     let (finished_tx, finished_rx) = oneshot::channel();
->>>>>>> identify-merge-connec-reuse
     swarm_controller
         .dial_custom_handler(target_addr.parse().expect("invalid multiaddr"), proto, |echo, _| {
             // `echo` is what the closure used when initializing `proto` returns.
@@ -113,7 +114,10 @@ fn main() {
                     finished_tx.send(()).unwrap();
                     Ok(())
                 })
-        });
+        })
+        // If the multiaddr protocol exists but is not supported, then we get an error containing
+        // the original multiaddress.
+        .expect("unsupported multiaddr");
 
     // The address we actually listen on can be different from the address that was passed to
     // the `listen_on` function. For example if you pass `/ip4/0.0.0.0/tcp/0`, then the port `0`

@@ -359,7 +359,7 @@ mod tests {
 		};
 
 		let table = KBucketsTable::new(my_id, Duration::from_secs(5));
-		table.update(other_id.clone(), ());
+		let _ = table.update(other_id.clone(), ());
 
 		let res = table.find_closest(&other_id).collect::<Vec<_>>();
 		assert_eq!(res.len(), 1);
@@ -377,7 +377,7 @@ mod tests {
 		};
 
 		let table = KBucketsTable::new(my_id.clone(), Duration::from_secs(5));
-		table.update(my_id, ());
+		let _ = table.update(my_id, ());
 	}
 
 	#[test]
@@ -404,7 +404,7 @@ mod tests {
 
 		thread::sleep(Duration::from_secs(2));
 		for &(ref id, _) in &other_ids {
-			table.update(id.clone(), ());
+			let _ = table.update(id.clone(), ());
 		}
 
 		let after_update = table.buckets().map(|b| b.last_update()).collect::<Vec<_>>();
