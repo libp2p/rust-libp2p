@@ -85,7 +85,7 @@ pub use self::high_level::KademliaUpgrade;
 
 mod high_level;
 mod kad_server;
-pub mod kbucket; // TODO: not pub
+mod kbucket;
 mod protobuf_structs;
 mod protocol;
 mod query;

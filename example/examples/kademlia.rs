@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
 // DEALINGS IN THE SOFTWARE.
 
+extern crate bigint;
 extern crate bytes;
 extern crate example;
 extern crate futures;
@@ -31,8 +32,8 @@ extern crate multiplex;
 extern crate tokio_core;
 extern crate tokio_io;
 
+use bigint::U512;
 use futures::future::Future;
-use kad::kbucket::KBucketsPeerId;
 use peerstore::PeerId;
 use std::env;
 use std::sync::Arc;
@@ -91,7 +92,7 @@ fn main() {
     // of any opened stream.
 
     let my_peer_id = PeerId::from_public_key(include_bytes!("test-public-key.der"));
-    println!("local peer id is: {:?}", my_peer_id);
+    println!("Local peer id is: {:?}", my_peer_id);
 
     // Let's put this `transport` into a Kademlia *swarm*. The swarm will handle all the incoming
     // and outgoing connections for us.
@@ -125,9 +126,12 @@ fn main() {
     let finish_enum = kad_controller
         .find_node(my_peer_id.clone())
         .and_then(|out| {
+            let local_hash = U512::from(my_peer_id.hash());
+            println!("Results of peer discovery for {:?}:", my_peer_id);
             for n in out {
-                let dist = n.distance_with(&my_peer_id);
-                println!("final result => {:?} (distance bits = {:?} (lower is better))", n, 512 - dist.leading_zeros());
+                let other_hash = U512::from(n.hash());
+                let dist = 512 - (local_hash ^ other_hash).leading_zeros();
+                println!("* {:?} (distance bits = {:?} (lower is better))", n, dist);
             }
             Ok(())
         });
