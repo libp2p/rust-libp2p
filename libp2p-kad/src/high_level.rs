@@ -19,6 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! High-level structs/traits of the crate.
+//!
+//! Lies on top of the `kad_server` module.
 
 use bytes::Bytes;
 use fnv::FnvHashMap;
@@ -94,6 +96,7 @@ impl<P, Pc, R> KademliaControllerPrototype<P, R>
         }
     }
 
+    /// Turns the prototype into an actual controller by feeding it a swarm.
     pub fn start<T, C>(self, swarm: SwarmController<T, C>) -> KademliaController<P, R, T, C>
         where P: Clone + Deref<Target = Pc> + 'static,          // TODO: 'static :-/
               for<'r> &'r Pc: Peerstore,
@@ -297,7 +300,7 @@ struct Inner<P, R> {
 
 // Current state of a connection to a specific multiaddr.
 //
-// There is `Inactive` entry, as an inactive connection corresponds to no entry in the
+// There is no `Inactive` entry, as an inactive connection corresponds to no entry in the
 // `connections` hash map.
 enum Connection {
     // The connection has already been opened and is ready to be controlled through the given
@@ -401,17 +404,26 @@ where
                 match entry.into_mut() {
                     &mut Connection::Pending(ref mut list) => list,
                     &mut Connection::Active(ref mut ctrl) => {
+                        // If we have an active connection, entirely short-circuit the function.
                         let output = future::ok(and_then(ctrl));
                         return Box::new(output) as Box<_>;
                     },
                 }
             },
             Entry::Vacant(entry) => {
+                // Need to open a connection.
                 let proto = KademliaUpgrade {
                     inner: self.inner.clone(),
                     upgrade: KademliaServerConfig::new(self.inner.clone()),
                 };
-                self.swarm_controller.dial_to_handler(addr, proto).unwrap();      // TODO: don't unwrap
+                match self.swarm_controller.dial_to_handler(addr, proto) {
+                    Ok(()) => (),
+                    Err(addr) => {
+                        let fut = future::err(IoError::new(IoErrorKind::InvalidData,
+                                                           "unsupported multiaddress"));
+                        return Box::new(fut) as Box<_>;
+                    }
+                }
                 match entry.insert(Connection::Pending(Vec::with_capacity(1))) {
                     &mut Connection::Pending(ref mut list) => list,
                     _ => unreachable!("we just inserted a Pending variant")
@@ -426,7 +438,7 @@ where
             let and_then = and_then.take().expect("pending closures are only ever called once");
             let tx = tx.take().expect("pending closures are only ever called once");
             let ret = and_then(ctrl);
-            let _ = tx.send(ret);       // TODO: better error handling
+            let _ = tx.send(ret);
         }) as Box<_>);
 
         let future = rx.map_err(|_| IoErrorKind::ConnectionAborted.into());

@@ -18,8 +18,27 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-// TODO: we allow dead_code because this library contains a lot of unused code that will be useful
-//       later for record store
+//! Kademlia protocol. Allows peer discovery, records store and records fetch.
+//!
+//! # Usage
+//!
+//! Usage is done in the following steps:
+//!
+//! - Build a `KademliaConfig` that contains the way you want the Kademlia protocol to behave.
+//!
+//! - Build a `KademliaControllerPrototype` from that configuration object.
+//!
+//! - Build a `KademliaUpgrade` from that prototype. Then create a swarm (from the *swarm* crate)
+//!   and pass the `KademliaUpgrade` you built as part of the list of protocols.
+//!
+//! - Then turn the controller prototype into an actual `KademliaController` by passing to it the
+//!   swarm controller you got.
+//!
+//! - You can now perform operations using that controller.
+//!
+
+// TODO: we allow dead_code for now because this library contains a lot of unused code that will
+//       be useful later for record store
 #![allow(dead_code)]
 
 // # Crate organization
