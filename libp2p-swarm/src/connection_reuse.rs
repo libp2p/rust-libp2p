@@ -253,7 +253,7 @@ where S: Stream<Item = F, Error = IoError>,
 					// Insert the rest of the pending upgrades, but not the current one.
 					return Ok(Async::Ready(Some(future::err(err))));
 				},
-			}	
+			}
 		}
 
 		// Check whether any incoming substream is ready.

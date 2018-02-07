@@ -20,7 +20,6 @@
 
 use std::fmt;
 use std::io::Error as IoError;
-use std::time::Duration;
 use futures::{IntoFuture, Future, Stream, Async, Poll, future};
 use futures::sync::mpsc;
 use {ConnectionUpgrade, Multiaddr, MuxedTransport, UpgradedNode};
@@ -38,7 +37,7 @@ pub fn swarm<T, C, H, F>(transport: T, upgrade: C, handler: H)
     where T: MuxedTransport + Clone + 'static,      // TODO: 'static :-/
           C: ConnectionUpgrade<T::RawConn> + Clone + 'static,      // TODO: 'static :-/
           C::NamesIter: Clone,      // TODO: not elegant
-          H: FnMut(C::Output, Multiaddr, SwarmController<T, C>) -> F,
+          H: FnMut(C::Output, Multiaddr) -> F,
           F: IntoFuture<Item = (), Error = IoError>,
 {
     let (new_dialers_tx, new_dialers_rx) = mpsc::unbounded();
@@ -47,28 +46,25 @@ pub fn swarm<T, C, H, F>(transport: T, upgrade: C, handler: H)
 
     let upgraded = transport.clone().with_upgrade(upgrade);
 
-    let controller = SwarmController {
-        transport: transport,
-        upgraded: upgraded.clone(),
-        new_listeners: new_listeners_tx,
-        new_dialers: new_dialers_tx,
-        new_toprocess: new_toprocess_tx,
-    };
-
-    let next_incoming = upgraded.clone().next_incoming();
-
     let future = SwarmFuture {
-        controller: controller.clone(),
-        upgraded: upgraded,
+        upgraded: upgraded.clone(),
         handler: handler,
         new_listeners: new_listeners_rx,
-        next_incoming: next_incoming,
+        next_incoming: upgraded.clone().next_incoming(),
         listeners: Vec::new(),
         listeners_upgrade: Vec::new(),
         dialers: Vec::new(),
         new_dialers: new_dialers_rx,
         to_process: Vec::new(),
         new_toprocess: new_toprocess_rx,
+    };
+
+    let controller = SwarmController {
+        transport: transport,
+        upgraded: upgraded,
+        new_listeners: new_listeners_tx,
+        new_dialers: new_dialers_tx,
+        new_toprocess: new_toprocess_tx,
     };
 
     (controller, future)
@@ -127,8 +123,7 @@ impl<T, C> SwarmController<T, C>
     {
         match self.transport.clone().with_upgrade(upgrade).dial(multiaddr.clone()) {
             Ok(dial) => {
-                let dial = Box::new(dial.map(|(d, client_addr)| (d.into(), client_addr)))
-                    as Box<Future<Item = _, Error = _>>;
+                let dial = Box::new(dial.map(|(d, client_addr)| (d.into(), client_addr))) as Box<Future<Item = _, Error = _>>;
                 // Ignoring errors if the receiver has been closed, because in that situation
                 // nothing is going to be processed anyway.
                 let _ = self.new_dialers.unbounded_send(dial);
@@ -188,7 +183,6 @@ pub struct SwarmFuture<T, C, H, F>
     where T: MuxedTransport + 'static,      // TODO: 'static :-/
           C: ConnectionUpgrade<T::RawConn> + 'static,      // TODO: 'static :-/
 {
-    controller: SwarmController<T, C>,
     upgraded: UpgradedNode<T, C>,
     handler: H,
     new_listeners: mpsc::UnboundedReceiver<Box<Stream<Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>, Error = IoError>>>,
@@ -205,7 +199,7 @@ impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
     where T: MuxedTransport + Clone + 'static,      // TODO: 'static :-/,
           C: ConnectionUpgrade<T::RawConn> + Clone + 'static,      // TODO: 'static :-/
           C::NamesIter: Clone,      // TODO: not elegant
-          H: FnMut(C::Output, Multiaddr, SwarmController<T, C>) -> If,
+          H: FnMut(C::Output, Multiaddr) -> If,
           If: IntoFuture<Future = F, Item = (), Error = IoError>,
           F: Future<Item = (), Error = IoError>,
 {
@@ -222,21 +216,15 @@ impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
             },
             Ok(Async::NotReady) => {},
             // TODO: may not be the best idea because we're killing the whole server
-            Err(err) => {
-                println!("err from new incoming: {:?}", err);
-            },//return Err(err),
+            Err(err) => return Err(err),
         };
 
         match self.new_listeners.poll() {
             Ok(Async::Ready(Some(new_listener))) => {
                 self.listeners.push(new_listener);
             },
-            Ok(Async::Ready(None)) => {
+            Ok(Async::Ready(None)) | Err(_) => {
                 // New listener sender has been closed.
-            },
-            Err(err) => {
-                // TODO:
-                println!("err from new listener: {:?}", err);
             },
             Ok(Async::NotReady) => {},
         };
@@ -280,15 +268,12 @@ impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
             let mut upgrade = self.listeners_upgrade.swap_remove(n);
             match upgrade.poll() {
                 Ok(Async::Ready((output, client_addr))) => {
-                    self.to_process.push(future::Either::A(handler(output, client_addr, self.controller.clone()).into_future()));
+                    self.to_process.push(future::Either::A(handler(output, client_addr).into_future()));
                 },
                 Ok(Async::NotReady) => {
                     self.listeners_upgrade.push(upgrade);
                 },
-                Err(err) => {
-                    // TODO:
-                    println!("error form listener upgrade: {:?}", err);
-                },//return Err(err),
+                Err(err) => return Err(err),
             }
         }
 
@@ -296,15 +281,12 @@ impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
             let mut dialer = self.dialers.swap_remove(n);
             match dialer.poll() {
                 Ok(Async::Ready((output, addr))) => {
-                    self.to_process.push(future::Either::A(handler(output, addr, self.controller.clone()).into_future()));
+                    self.to_process.push(future::Either::A(handler(output, addr).into_future()));
                 },
                 Ok(Async::NotReady) => {
                     self.dialers.push(dialer);
                 },
-                Err(err) => {
-                    // TODO:
-                    println!("error from dialer upgrade: {:?}", err);
-                },//return Err(err),
+                Err(err) => return Err(err),
             }
         }
 

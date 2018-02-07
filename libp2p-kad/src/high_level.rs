@@ -418,7 +418,7 @@ where
                 };
                 match self.swarm_controller.dial_to_handler(addr, proto) {
                     Ok(()) => (),
-                    Err(addr) => {
+                    Err(_addr) => {
                         let fut = future::err(IoError::new(IoErrorKind::InvalidData,
                                                            "unsupported multiaddress"));
                         return Box::new(fut) as Box<_>;

@@ -602,55 +602,12 @@ impl<C> ConnectionUpgrade<C> for DeniedConnectionUpgrade
 	}
 }
 
-/// Maps a connection upgrade output to something else.
-#[derive(Debug, Copy, Clone)]
-pub struct ConnectionUpgradeMap<U, F> {
-	inner: U,
-	map: F,
-}
-
-impl<C, U, F, O> ConnectionUpgrade<C> for ConnectionUpgradeMap<U, F>
-	where C: AsyncRead + AsyncWrite,
-		  U: ConnectionUpgrade<C>,
-		  F: FnOnce(U::Output) -> O,
-{
-	type NamesIter = U::NamesIter;
-	type UpgradeIdentifier = U::UpgradeIdentifier;
-	type Output = O;
-	type Future = future::Map<U::Future, F>;
-
-	#[inline]
-	fn protocol_names(&self) -> Self::NamesIter {
-		self.inner.protocol_names()
-	}
-
-	#[inline]
-	fn upgrade(self, connec: C, ident: Self::UpgradeIdentifier, endpoint: Endpoint,
-			   addr: &Multiaddr) -> Self::Future
-	{
-		self.inner
-			.upgrade(connec, ident, endpoint, addr)
-			.map(self.map)
-	}
-}
-
 /// Extension trait for `ConnectionUpgrade`. Automatically implemented on everything.
 pub trait UpgradeExt {
 	/// Builds a struct that will choose an upgrade between `self` and `other`, depending on what
 	/// the remote supports.
     fn or_upgrade<T>(self, other: T) -> OrUpgrade<Self, T>
 		where Self: Sized;
-
-	/// Maps the output of this connection upgrade to something else.
-	#[inline]
-	fn map_upgrade<F>(self, map: F) -> ConnectionUpgradeMap<Self, F>
-		where Self: Sized
-	{
-		ConnectionUpgradeMap {
-			inner: self,
-			map: map,
-		}
-	}
 }
 
 impl<T> UpgradeExt for T {
