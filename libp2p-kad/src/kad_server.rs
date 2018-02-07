@@ -39,10 +39,10 @@ use bytes::Bytes;
 use futures::{future, Future, Sink, Stream};
 use futures::sync::{mpsc, oneshot};
 use libp2p_peerstore::PeerId;
-use libp2p_swarm::Endpoint;
 use libp2p_swarm::ConnectionUpgrade;
+use libp2p_swarm::Endpoint;
 use multiaddr::{AddrComponent, Multiaddr};
-use protocol::{self, KademliaProtocolConfig, KadMsg, Peer};
+use protocol::{self, KadMsg, KademliaProtocolConfig, Peer};
 use smallvec::SmallVec;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
@@ -85,16 +85,19 @@ impl<I> KademliaServerConfig<I> {
 impl<C, I> ConnectionUpgrade<C> for KademliaServerConfig<I>
 where
 	C: AsyncRead + AsyncWrite + 'static, // TODO: 'static :-/
-	I: KadServerInterface + 'static, // TODO: 'static :-/
+	I: KadServerInterface + 'static,     // TODO: 'static :-/
 {
-	type Output = (KademliaServerController, Box<Future<Item = (), Error = IoError>>);
+	type Output = (
+		KademliaServerController,
+		Box<Future<Item = (), Error = IoError>>,
+	);
 	type Future = Box<Future<Item = Self::Output, Error = IoError>>;
 	type NamesIter = iter::Once<(Bytes, ())>;
 	type UpgradeIdentifier = ();
 
 	#[inline]
 	fn protocol_names(&self) -> Self::NamesIter {
-        ConnectionUpgrade::<C>::protocol_names(&self.raw_proto)
+		ConnectionUpgrade::<C>::protocol_names(&self.raw_proto)
 	}
 
 	#[inline]
@@ -104,33 +107,33 @@ where
 			let protocol = iter.next();
 			let after_proto = iter.next();
 			match (protocol, after_proto) {
-				(Some(AddrComponent::IPFS(key)), None) => {
-					match PeerId::from_bytes(key) {
-						Ok(id) => id,
-						Err(_) => {
-							let err = IoError::new(IoErrorKind::InvalidData,
-												   "invalid peer ID sent by remote identification");
-							return Box::new(future::err(err));
-						}
+				(Some(AddrComponent::IPFS(key)), None) => match PeerId::from_bytes(key) {
+					Ok(id) => id,
+					Err(_) => {
+						let err = IoError::new(
+							IoErrorKind::InvalidData,
+							"invalid peer ID sent by remote identification",
+						);
+						return Box::new(future::err(err));
 					}
 				},
 				_ => {
-					let err = IoError::new(IoErrorKind::InvalidData,
-										   "couldn't identify connected node");
+					let err =
+						IoError::new(IoErrorKind::InvalidData, "couldn't identify connected node");
 					return Box::new(future::err(err));
-				},
+				}
 			}
 		};
 
 		let interface = self.interface;
 		let future = self.raw_proto
 			.upgrade(incoming, id, endpoint, addr)
-            .map(move |connec| {
+			.map(move |connec| {
 				let (tx, rx) = mpsc::unbounded();
-                let future = kademlia_handler(connec, peer_id, rx, interface);
+				let future = kademlia_handler(connec, peer_id, rx, interface);
 				let controller = KademliaServerController { inner: tx };
 				(controller, future)
-            });
+			});
 
 		Box::new(future) as Box<_>
 	}
@@ -149,9 +152,10 @@ pub struct KademliaServerController {
 impl KademliaServerController {
 	/// Sends a `FIND_NODE` query to the node and provides a future that will contain the response.
 	// TODO: future item could be `impl Iterator` instead
-	pub fn find_node(&self, searched_key: &PeerId)
-					 -> Box<Future<Item = Vec<Peer>, Error = IoError>>
-	{
+	pub fn find_node(
+		&self,
+		searched_key: &PeerId,
+	) -> Box<Future<Item = Vec<Peer>, Error = IoError>> {
 		let message = protocol::KadMsg::FindNodeReq {
 			key: searched_key.clone().into_bytes(),
 		};
@@ -161,25 +165,26 @@ impl KademliaServerController {
 		match self.inner.unbounded_send((message, tx)) {
 			Ok(()) => (),
 			Err(_) => {
-				let fut = future::err(IoError::new(IoErrorKind::ConnectionAborted,
-								         		   "connection to remote has aborted"));
-				return Box::new(fut) as Box<_>
+				let fut = future::err(IoError::new(
+					IoErrorKind::ConnectionAborted,
+					"connection to remote has aborted",
+				));
+				return Box::new(fut) as Box<_>;
 			}
 		};
 
-		let future = rx
-			.map_err(|_| {
-				IoError::new(IoErrorKind::ConnectionAborted, "connection to remote has aborted")
-			})
-			.and_then(|msg| {
-				match msg {
-					KadMsg::FindNodeRes { closer_peers, .. } => Ok(closer_peers),
-					_ => {
-						Err(IoError::new(IoErrorKind::InvalidData,
-									 	 "invalid response type received from the remote"))
-					}
-				}
-			});
+		let future = rx.map_err(|_| {
+			IoError::new(
+				IoErrorKind::ConnectionAborted,
+				"connection to remote has aborted",
+			)
+		}).and_then(|msg| match msg {
+			KadMsg::FindNodeRes { closer_peers, .. } => Ok(closer_peers),
+			_ => Err(IoError::new(
+				IoErrorKind::InvalidData,
+				"invalid response type received from the remote",
+			)),
+		});
 
 		Box::new(future) as Box<_>
 	}
@@ -193,10 +198,10 @@ impl KademliaServerController {
 		let (tx, _rx) = oneshot::channel();
 		match self.inner.unbounded_send((protocol::KadMsg::Ping, tx)) {
 			Ok(()) => Ok(()),
-			Err(_) => {
-				Err(IoError::new(IoErrorKind::ConnectionAborted,
-				   		         "connection to remote has aborted"))
-			}
+			Err(_) => Err(IoError::new(
+				IoErrorKind::ConnectionAborted,
+				"connection to remote has aborted",
+			)),
 		}
 	}
 }
@@ -272,7 +277,12 @@ where
 							// types of messages, this one doesn't expect any answer and therefore
 							// we ignore the sender.
 							let future = kad_sink.send(message).map(move |kad_sink| {
-								future::Loop::Continue((kad_sink, rest, send_back_queue, expected_pongs))
+								future::Loop::Continue((
+									kad_sink,
+									rest,
+									send_back_queue,
+									expected_pongs,
+								))
 							});
 							Box::new(future) as Box<_>
 						}
@@ -280,7 +290,12 @@ where
 							// A `Ping` message has been received on `rx`.
 							expected_pongs += 1;
 							let future = kad_sink.send(message).map(move |kad_sink| {
-								future::Loop::Continue((kad_sink, rest, send_back_queue, expected_pongs))
+								future::Loop::Continue((
+									kad_sink,
+									rest,
+									send_back_queue,
+									expected_pongs,
+								))
 							});
 							Box::new(future) as Box<_>
 						}
@@ -289,7 +304,12 @@ where
 							// `rx`. Send it to the remote.
 							let future = kad_sink.send(message).map(move |kad_sink| {
 								send_back_queue.push(send_back);
-								future::Loop::Continue((kad_sink, rest, send_back_queue, expected_pongs))
+								future::Loop::Continue((
+									kad_sink,
+									rest,
+									send_back_queue,
+									expected_pongs,
+								))
 							});
 							Box::new(future) as Box<_>
 						}
@@ -299,19 +319,29 @@ where
 							if expected_pongs == 0 {
 								let message = KadMsg::Ping;
 								let future = kad_sink.send(message).map(move |kad_sink| {
-									future::Loop::Continue((kad_sink, rest, send_back_queue, expected_pongs))
+									future::Loop::Continue((
+										kad_sink,
+										rest,
+										send_back_queue,
+										expected_pongs,
+									))
 								});
 								Box::new(future) as Box<_>
 							} else {
 								expected_pongs -= 1;
 								let future = future::ok({
-									future::Loop::Continue((kad_sink, rest, send_back_queue, expected_pongs))
+									future::Loop::Continue((
+										kad_sink,
+										rest,
+										send_back_queue,
+										expected_pongs,
+									))
 								});
 								Box::new(future) as Box<_>
 							}
 						}
-						Some((message @ KadMsg::FindNodeRes { .. }, None)) |
-						Some((message @ KadMsg::GetValueRes { .. }, None)) => {
+						Some((message @ KadMsg::FindNodeRes { .. }, None))
+						| Some((message @ KadMsg::GetValueRes { .. }, None)) => {
 							// `FindNodeRes` or `GetValueRes` received on the socket.
 							// Send it back through `send_back_queue`.
 							if !send_back_queue.is_empty() {
@@ -333,7 +363,12 @@ where
 							// `FindNodeReq` received on the socket.
 							let message = handle_find_node_req(&interface, &key);
 							let future = kad_sink.send(message).map(move |kad_sink| {
-								future::Loop::Continue((kad_sink, rest, send_back_queue, expected_pongs))
+								future::Loop::Continue((
+									kad_sink,
+									rest,
+									send_back_queue,
+									expected_pongs,
+								))
 							});
 							Box::new(future) as Box<_>
 						}
@@ -341,7 +376,12 @@ where
 							// `GetValueReq` received on the socket.
 							let message = handle_get_value_req(&interface, &key);
 							let future = kad_sink.send(message).map(move |kad_sink| {
-								future::Loop::Continue((kad_sink, rest, send_back_queue, expected_pongs))
+								future::Loop::Continue((
+									kad_sink,
+									rest,
+									send_back_queue,
+									expected_pongs,
+								))
 							});
 							Box::new(future) as Box<_>
 						}
@@ -349,7 +389,12 @@ where
 							// `PutValue` received on the socket.
 							handle_put_value_req(&interface);
 							let future = future::ok({
-								future::Loop::Continue((kad_sink, rest, send_back_queue, expected_pongs))
+								future::Loop::Continue((
+									kad_sink,
+									rest,
+									send_back_queue,
+									expected_pongs,
+								))
 							});
 							Box::new(future) as Box<_>
 						}
@@ -363,27 +408,32 @@ where
 
 // Builds a `KadMsg` that handles a `FIND_NODE` request received from the remote.
 fn handle_find_node_req<I>(interface: &I, _requested_key: &[u8]) -> KadMsg
-	where I: ?Sized + KadServerInterface
+where
+	I: ?Sized + KadServerInterface,
 {
 	KadMsg::FindNodeRes {
-		closer_peers: vec![protocol::Peer {
-			node_id: interface.local_id().clone(),
-			multiaddrs: vec![],
-			connection_ty: protocol::ConnectionType::Connected,
-		}],		// TODO:
+		closer_peers: vec![
+			protocol::Peer {
+				node_id: interface.local_id().clone(),
+				multiaddrs: vec![],
+				connection_ty: protocol::ConnectionType::Connected,
+			},
+		], // TODO:
 	}
 }
 
 // Builds a `KadMsg` that handles a `FIND_VALUE` request received from the remote.
 fn handle_get_value_req<I>(_interface: &I, _requested_key: &[u8]) -> KadMsg
-	where I: ?Sized + KadServerInterface
+where
+	I: ?Sized + KadServerInterface,
 {
 	unimplemented!()
 }
 
 // Handles a `STORE` request received from the remote.
 fn handle_put_value_req<I>(_interface: &I)
-	where I: ?Sized + KadServerInterface
+where
+	I: ?Sized + KadServerInterface,
 {
 	unimplemented!()
 }

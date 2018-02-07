@@ -44,7 +44,8 @@ pub trait QueryInterface: Clone {
 
 	/// Adds new known multiaddrs for the given peer.
 	fn peer_add_addrs<I>(&self, peer: &PeerId, multiaddrs: I, ttl: Duration)
-		where I: Iterator<Item = Multiaddr>;
+	where
+		I: Iterator<Item = Multiaddr>;
 
 	/// Returns the level of parallelism wanted for this query.
 	fn parallelism(&self) -> usize;
@@ -56,10 +57,14 @@ pub trait QueryInterface: Clone {
 	/// future that contains the output of `and_then`, or an error if we failed to contact the
 	/// remote.
 	// TODO: use HKTB once Rust supports that, to avoid boxing the future
-	fn send<F, FRet>(&self, addr: Multiaddr, and_then: F)
-					 -> Box<Future<Item = FRet, Error = IoError>>
-        where F: FnOnce(&KademliaServerController) -> FRet + 'static,
-			  FRet: 'static;
+	fn send<F, FRet>(
+		&self,
+		addr: Multiaddr,
+		and_then: F,
+	) -> Box<Future<Item = FRet, Error = IoError>>
+	where
+		F: FnOnce(&KademliaServerController) -> FRet + 'static,
+		FRet: 'static;
 }
 
 /// Starts a query for an iterative `FIND_NODE` request.
@@ -71,7 +76,7 @@ pub fn find_node<'a, I>(
 where
 	I: QueryInterface + 'a,
 {
-	query(query_interface, searched_key, 20)		// TODO: constant
+	query(query_interface, searched_key, 20) // TODO: constant
 }
 
 /// Refreshes a specific bucket by performing an iterative `FIND_NODE` on a random ID of this
@@ -153,8 +158,7 @@ where
 		result: Vec<PeerId>,
 		// For each open connection, a future with the response of the remote.
 		// Note that don't use a `SmallVec` here because `select_all` produces a `Vec`.
-		current_attempts_fut:
-			Vec<Box<Future<Item = Vec<protocol::Peer>, Error = IoError> + 'a>>,
+		current_attempts_fut: Vec<Box<Future<Item = Vec<protocol::Peer>, Error = IoError> + 'a>>,
 		// For each open connection, the peer ID that we are connected to.
 		// Must always have the same length as `current_attempts_fut`.
 		current_attempts_addrs: SmallVec<[PeerId; 32]>,
@@ -209,14 +213,10 @@ where
 			let multiaddr: Multiaddr = AddrComponent::IPFS(peer.clone().into_bytes()).into();
 
 			let searched_key2 = searched_key.clone();
-			let resp_rx = query_interface.send(multiaddr.clone(), move |ctl| {
-				ctl.find_node(&searched_key2)
-			});
-			state
-				.current_attempts_addrs
-				.push(peer.clone());
-			let current_attempt = resp_rx
-				.flatten();
+			let resp_rx =
+				query_interface.send(multiaddr.clone(), move |ctl| ctl.find_node(&searched_key2));
+			state.current_attempts_addrs.push(peer.clone());
+			let current_attempt = resp_rx.flatten();
 			state
 				.current_attempts_fut
 				.push(Box::new(current_attempt) as Box<_>);
@@ -237,99 +237,99 @@ where
 		}
 
 		// This is the future that continues or breaks the `loop_fn`.
-		let future = future::select_all(current_attempts_fut.into_iter()).then(
-			move |result| {
-				let (message, trigger_idx, other_current_attempts) = match result {
-					Err((err, trigger_idx, other_current_attempts)) => {
-						(Err(err), trigger_idx, other_current_attempts)
-					},
-					Ok((message, trigger_idx, other_current_attempts)) => {
-						(Ok(message), trigger_idx, other_current_attempts)
-					}
-				};
-
-				let remote_id = state.current_attempts_addrs.remove(trigger_idx);
-				debug_assert!(state.current_attempts_fut.is_empty());
-				state.current_attempts_fut = other_current_attempts;
-
-				let closer_peers = match message {
-					Ok(closer_peers) => {
-						// Received a message.
-						closer_peers
-					}
-					Err(_) => {
-						state.failed_to_contact.insert(remote_id);
-						return Ok(future::Loop::Continue(state));
-					}
-				};
-
-				// Update `result` with the node that sent the result.
-				if let Some(insert_pos) = state.result.iter().position(|e| {
-					e.distance_with(&searched_key) >= remote_id.distance_with(&searched_key)
-				}) {
-					if state.result[insert_pos] != remote_id {
-						state.result.pop();
-						state.result.insert(insert_pos, remote_id);
-					}
-				} else if state.result.len() < num_results {
-					state.result.push(remote_id);
+		let future = future::select_all(current_attempts_fut.into_iter()).then(move |result| {
+			let (message, trigger_idx, other_current_attempts) = match result {
+				Err((err, trigger_idx, other_current_attempts)) => {
+					(Err(err), trigger_idx, other_current_attempts)
 				}
-
-				let mut local_nearest_node_updated = false;
-
-				for mut peer in closer_peers {
-					// Update the peerstore with the information sent by
-					// the remote.
-					{
-						let valid_multiaddrs = peer.multiaddrs.drain(..);
-						query_interface2.peer_add_addrs(&peer.node_id, valid_multiaddrs, Duration::from_secs(3600));		// TODO: which TTL?
-					}
-
-					if peer.node_id.distance_with(&searched_key)
-						<= state.result[0].distance_with(&searched_key)
-					{
-						local_nearest_node_updated = true;
-					}
-
-					if state.result.iter().any(|ma| ma == &peer.node_id) {
-						continue;
-					}
-
-					// Insert the node into `pending_nodes` at the right position, or do not
-					// insert it if it is already in there.
-					if let Some(insert_pos) = state.pending_nodes.iter().position(|e| {
-						e.distance_with(&searched_key) >= peer.node_id.distance_with(&searched_key)
-					}) {
-						if state.pending_nodes[insert_pos] != peer.node_id {
-							state.pending_nodes.insert(insert_pos, peer.node_id.clone());
-						}
-					} else {
-						state.pending_nodes.push(peer.node_id.clone());
-					}
+				Ok((message, trigger_idx, other_current_attempts)) => {
+					(Ok(message), trigger_idx, other_current_attempts)
 				}
+			};
 
-				if state.result.len() >= num_results ||
-					(!state.looking_for_closer && state.current_attempts_fut.is_empty())
+			let remote_id = state.current_attempts_addrs.remove(trigger_idx);
+			debug_assert!(state.current_attempts_fut.is_empty());
+			state.current_attempts_fut = other_current_attempts;
+
+			let closer_peers = match message {
+				Ok(closer_peers) => {
+					// Received a message.
+					closer_peers
+				}
+				Err(_) => {
+					state.failed_to_contact.insert(remote_id);
+					return Ok(future::Loop::Continue(state));
+				}
+			};
+
+			// Update `result` with the node that sent the result.
+			if let Some(insert_pos) = state.result.iter().position(|e| {
+				e.distance_with(&searched_key) >= remote_id.distance_with(&searched_key)
+			}) {
+				if state.result[insert_pos] != remote_id {
+					state.result.pop();
+					state.result.insert(insert_pos, remote_id);
+				}
+			} else if state.result.len() < num_results {
+				state.result.push(remote_id);
+			}
+
+			let mut local_nearest_node_updated = false;
+
+			for mut peer in closer_peers {
+				// Update the peerstore with the information sent by
+				// the remote.
 				{
-					// Check that our `Vec::with_capacity` is correct.
-					debug_assert_eq!(state.result.capacity(), num_results);
-
-					Ok(future::Loop::Break(state))
-
-				} else {
-					if !local_nearest_node_updated {
-						state.looking_for_closer = false;
-					}
-
-					Ok(future::Loop::Continue(state))
+					let valid_multiaddrs = peer.multiaddrs.drain(..);
+					query_interface2.peer_add_addrs(
+						&peer.node_id,
+						valid_multiaddrs,
+						Duration::from_secs(3600),
+					); // TODO: which TTL?
 				}
-			},
-		);
+
+				if peer.node_id.distance_with(&searched_key)
+					<= state.result[0].distance_with(&searched_key)
+				{
+					local_nearest_node_updated = true;
+				}
+
+				if state.result.iter().any(|ma| ma == &peer.node_id) {
+					continue;
+				}
+
+				// Insert the node into `pending_nodes` at the right position, or do not
+				// insert it if it is already in there.
+				if let Some(insert_pos) = state.pending_nodes.iter().position(|e| {
+					e.distance_with(&searched_key) >= peer.node_id.distance_with(&searched_key)
+				}) {
+					if state.pending_nodes[insert_pos] != peer.node_id {
+						state.pending_nodes.insert(insert_pos, peer.node_id.clone());
+					}
+				} else {
+					state.pending_nodes.push(peer.node_id.clone());
+				}
+			}
+
+			if state.result.len() >= num_results
+				|| (!state.looking_for_closer && state.current_attempts_fut.is_empty())
+			{
+				// Check that our `Vec::with_capacity` is correct.
+				debug_assert_eq!(state.result.capacity(), num_results);
+
+				Ok(future::Loop::Break(state))
+			} else {
+				if !local_nearest_node_updated {
+					state.looking_for_closer = false;
+				}
+
+				Ok(future::Loop::Continue(state))
+			}
+		});
 
 		future::Either::B(future)
 	});
 
-	let stream = stream
-		.map(|state| state.result);
+	let stream = stream.map(|state| state.result);
 	Box::new(stream) as Box<_>
 }

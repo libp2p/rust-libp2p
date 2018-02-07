@@ -203,10 +203,7 @@ where
 				out.push(node.id.clone());
 			}
 		}
-		out.sort_by(|a, b| {
-			b.distance_with(id)
-				.cmp(&a.distance_with(id))
-		});
+		out.sort_by(|a, b| b.distance_with(id).cmp(&a.distance_with(id)));
 		out.into_iter()
 	}
 
