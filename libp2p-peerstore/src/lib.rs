@@ -42,13 +42,13 @@
 //! 
 //! # fn main() {
 //! use libp2p_peerstore::memory_peerstore::MemoryPeerstore;
-//! use libp2p_peerstore::{Peerstore, PeerAccess};
+//! use libp2p_peerstore::{PeerId, Peerstore, PeerAccess};
 //! use multiaddr::Multiaddr;
 //! use std::time::Duration;
 //! 
 //! // In this example we use a `MemoryPeerstore`, but you can easily swap it for another backend.
 //! let mut peerstore = MemoryPeerstore::empty();
-//! let peer_id = vec![1, 2, 3, 4];
+//! let peer_id = PeerId::from_public_key(&[1, 2, 3, 4]);
 //! 
 //! // Let's write some information about a peer.
 //! {
@@ -73,10 +73,14 @@ extern crate base58;
 extern crate datastore;
 extern crate futures;
 extern crate multiaddr;
+extern crate multihash;
 extern crate owning_ref;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
+
+use std::fmt;
+use base58::ToBase58;
 
 pub use self::peerstore::{Peerstore, PeerAccess};
 
@@ -88,5 +92,68 @@ pub mod memory_peerstore;
 mod peerstore;
 mod peer_info;
 
-pub type PeerId = Vec<u8>;
 pub type TTL = std::time::Duration;
+
+/// Identifier of a peer of the network.
+///
+/// The data is a multihash of the public key of the peer.
+// TODO: maybe keep things in decoded version?
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct PeerId {
+    multihash: Vec<u8>,
+}
+
+impl fmt::Debug for PeerId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "PeerId({})", self.multihash.to_base58())
+    }
+}
+
+impl PeerId {
+    /// Builds a `PeerId` from a public key.
+    #[inline]
+    pub fn from_public_key(public_key: &[u8]) -> PeerId {
+        let data = multihash::encode(multihash::Hash::SHA2256, public_key)
+            .expect("sha2-256 is always supported");
+        PeerId { multihash: data }
+    }
+
+    /// Checks whether `data` is a valid `PeerId`. If so, returns the `PeerId`. If not, returns
+    /// back the data as an error.
+    #[inline]
+    pub fn from_bytes(data: Vec<u8>) -> Result<PeerId, Vec<u8>> {
+        match multihash::decode(&data) {
+            Ok(_) => Ok(PeerId { multihash: data }),
+            Err(_) => Err(data),
+        }
+    }
+
+    /// Returns a raw bytes representation of this `PeerId`.
+    #[inline]
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.multihash
+    }
+
+    /// Returns a raw bytes representation of this `PeerId`.
+    #[inline]
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.multihash
+    }
+
+    /// Returns the raw bytes of the hash of this `PeerId`.
+    #[inline]
+    pub fn hash(&self) -> &[u8] {
+        let multihash::Multihash { digest, .. } = multihash::decode(&self.multihash)
+            .expect("our inner value should always be valid");
+        digest
+    }
+
+    /// Checks whether the public key passed as parameter matches the public key of this `PeerId`.
+    pub fn is_public_key(&self, public_key: &[u8]) -> bool {
+        let multihash::Multihash { alg, .. } = multihash::decode(&self.multihash)
+            .expect("our inner value should always be valid");
+        let compare = multihash::encode(alg, public_key)
+            .expect("unsupported multihash algorithm");     // TODO: what to do here?
+        compare == self.multihash
+    }
+}
