@@ -210,6 +210,11 @@ where
 			}
 		}
 	}
+
+	#[inline]
+	fn nat_traversal(&self, a: &Multiaddr, b: &Multiaddr) -> Option<Multiaddr> {
+		self.transport.nat_traversal(a, b)
+	}
 }
 
 impl<T, Pr, P> MuxedTransport for IdentifyTransport<T, Pr>
@@ -347,6 +352,10 @@ mod tests {
 					"/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap()
 				);
 				Ok(self.inner.dial(addr).unwrap_or_else(|_| panic!()))
+			}
+			#[inline]
+			fn nat_traversal(&self, a: &Multiaddr, b: &Multiaddr) -> Option<Multiaddr> {
+				self.inner.nat_traversal(a, b)
 			}
 		}
 
