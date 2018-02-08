@@ -25,6 +25,7 @@ use multiaddr::{AddrComponent, Multiaddr};
 use rw_stream_sink::RwStreamSink;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::io::{Read, Write};
+use std::iter;
 use std::sync::{Arc, Mutex};
 use stdweb::{self, Reference};
 use stdweb::web::TypedArray;
