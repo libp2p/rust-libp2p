@@ -45,19 +45,6 @@ macro_rules! peerstore_tests {
         }
 
         #[test]
-        fn set_pub_key_then_retreive() {
-            $($stmt;)*
-            let peer_store = $create_peerstore;
-            let peer_id = PeerId::from_public_key(&[1, 2, 3]);
-
-            peer_store.peer_or_create(&peer_id).set_pub_key(vec![9, 8, 7]);
-
-            assert_eq!(peer_store.peer(&peer_id).unwrap().get_pub_key().unwrap(), &[9, 8, 7]);
-
-            assert_eq!(peer_store.peers().collect::<Vec<_>>(), &[peer_id.clone()]);
-        }
-
-        #[test]
         fn set_then_get_addr() {
             $($stmt;)*
             let peer_store = $create_peerstore;
