@@ -21,8 +21,8 @@
 //! The objective of the `peerstore` crate is to provide a key-value storage. Keys are peer IDs,
 //! and the `PeerInfo` struct in this module is the value.
 //!
-//! Note that the `PeerInfo` struct implements `PartialOrd` so that it can be stored in a
-//! `Datastore`. This operation currently simply compares the public keys of the `PeerInfo`s.
+//! Note that the `PeerInfo` struct implements `PartialOrd` in a dummy way so that it can be stored
+//! in a `Datastore`.
 //! If the `PeerInfo` struct ever gets exposed to the public API of the crate, we may want to give
 //! more thoughts about this.
 
@@ -39,14 +39,13 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 pub struct PeerInfo {
 	// Adresses, and the time at which they will be considered expired.
 	addrs: Vec<(Multiaddr, SystemTime)>,
-	public_key: Option<Vec<u8>>,
 }
 
 impl PeerInfo {
 	/// Builds a new empty `PeerInfo`.
 	#[inline]
 	pub fn new() -> PeerInfo {
-		PeerInfo { addrs: vec![], public_key: None }
+		PeerInfo { addrs: vec![] }
 	}
 
 	/// Returns the list of the non-expired addresses stored in this `PeerInfo`.
@@ -93,18 +92,6 @@ impl PeerInfo {
 
 		self.addrs.push((addr, expires));
 	}
-
-	/// Sets the public key stored in this `PeerInfo`.
-	#[inline]
-	pub fn set_public_key(&mut self, key: Vec<u8>) {
-		self.public_key = Some(key);
-	}
-
-	/// Returns the public key stored in this `PeerInfo`, if any.
-	#[inline]
-	pub fn public_key(&self) -> Option<&[u8]> {
-		self.public_key.as_ref().map(|k| &**k)
-	}
 }
 
 /// Behaviour of the `add_addr` function.
@@ -140,7 +127,6 @@ impl Serialize for PeerInfo {
 			})
 			     .collect::<Vec<_>>(),
 		)?;
-		s.serialize_field("public_key", &self.public_key)?;
 		s.end()
 	}
 }
@@ -154,7 +140,6 @@ impl<'de> Deserialize<'de> for PeerInfo {
 			#[derive(Deserialize)]
 			struct Interm {
 				addrs: Vec<(String, u64)>,
-				public_key: Option<Vec<u8>>,
 			}
 			Interm::deserialize(deserializer)?
 		};
@@ -174,22 +159,18 @@ impl<'de> Deserialize<'de> for PeerInfo {
 
 		Ok(PeerInfo {
 			addrs: addrs,
-			public_key: interm.public_key,
 		})
 	}
 }
 
+// The reason why we need to implement the PartialOrd trait is that the datastore library (a
+// key-value storage) which we use allows performing queries where the results can be ordered.
+//
+// Since the struct that implements PartialOrd is internal and since we never use this ordering
+// feature, I think it's ok to have this code.
 impl PartialOrd for PeerInfo {
 	#[inline]
-	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-		// See module-level comment.
-		match (&self.public_key, &other.public_key) {
-			(&Some(ref my_pub), &Some(ref other_pub)) => {
-				Some(my_pub.cmp(other_pub))
-			}
-			_ => {
-				None
-			}
-		}
+	fn partial_cmp(&self, _other: &Self) -> Option<Ordering> {
+		None
 	}
 }
