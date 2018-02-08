@@ -191,6 +191,24 @@ where
 
 		Ok(Box::new(dial) as Box<_>)
 	}
+
+    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+		let mut server = server.clone();
+		let last_proto = match server.pop() {
+			Some(v @ AddrComponent::WS) | Some(v @ AddrComponent::WSS) => v,
+			_ => return None,
+		};
+
+		let mut observed = observed.clone();
+		match observed.pop() {
+			Some(AddrComponent::WS) => false,
+			Some(AddrComponent::WSS) => true,
+			_ => return None,
+		};
+
+		self.transport.nat_traversal(&server, &observed)
+			.map(move |mut result| { result.append(last_proto); result })
+	}
 }
 
 #[cfg(test)]
@@ -200,6 +218,7 @@ mod tests {
 	use self::tokio_core::reactor::Core;
 	use WsConfig;
 	use futures::{Future, Stream};
+	use multiaddr::Multiaddr;
 	use swarm::Transport;
 
 	#[test]
@@ -248,5 +267,39 @@ mod tests {
 			.map_err(|(e, _)| e)
 			.and_then(|(_, n)| n);
 		core.run(future).unwrap();
+	}
+
+	#[test]
+	fn nat_traversal() {
+		let core = Core::new().unwrap();
+		let ws_config = WsConfig::new(tcp::TcpConfig::new(core.handle()));
+
+		{
+			let server = "/ip4/127.0.0.1/tcp/10000/ws".parse::<Multiaddr>().unwrap();
+			let observed = "/ip4/80.81.82.83/tcp/25000/ws".parse::<Multiaddr>().unwrap();
+			assert_eq!(ws_config.nat_traversal(&server, &observed).unwrap(),
+					"/ip4/80.81.82.83/tcp/10000/ws".parse::<Multiaddr>().unwrap());
+		}
+
+		{
+			let server = "/ip4/127.0.0.1/tcp/10000/wss".parse::<Multiaddr>().unwrap();
+			let observed = "/ip4/80.81.82.83/tcp/25000/wss".parse::<Multiaddr>().unwrap();
+			assert_eq!(ws_config.nat_traversal(&server, &observed).unwrap(),
+					"/ip4/80.81.82.83/tcp/10000/wss".parse::<Multiaddr>().unwrap());
+		}
+
+		{
+			let server = "/ip4/127.0.0.1/tcp/10000/ws".parse::<Multiaddr>().unwrap();
+			let observed = "/ip4/80.81.82.83/tcp/25000/wss".parse::<Multiaddr>().unwrap();
+			assert_eq!(ws_config.nat_traversal(&server, &observed).unwrap(),
+					"/ip4/80.81.82.83/tcp/10000/ws".parse::<Multiaddr>().unwrap());
+		}
+
+		{
+			let server = "/ip4/127.0.0.1/tcp/10000/wss".parse::<Multiaddr>().unwrap();
+			let observed = "/ip4/80.81.82.83/tcp/25000/ws".parse::<Multiaddr>().unwrap();
+			assert_eq!(ws_config.nat_traversal(&server, &observed).unwrap(),
+					"/ip4/80.81.82.83/tcp/10000/wss".parse::<Multiaddr>().unwrap());
+		}
 	}
 }
