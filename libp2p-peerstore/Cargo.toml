@@ -9,6 +9,7 @@ datastore = { path = "../datastore" }
 futures = "0.1.0"
 owning_ref = "0.3.3"
 multiaddr = "0.2"
+multihash = "0.7.0"
 serde = "1.0"
 serde_derive = "1.0"
 

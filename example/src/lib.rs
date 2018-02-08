@@ -22,7 +22,7 @@ extern crate libp2p_peerstore;
 extern crate libp2p_swarm;
 extern crate multiaddr;
 
-use libp2p_peerstore::{PeerAccess, Peerstore};
+use libp2p_peerstore::{PeerId, PeerAccess, Peerstore};
 use multiaddr::Multiaddr;
 use std::time::Duration;
 
@@ -58,7 +58,7 @@ where
 
 		peer_store
 			.clone()
-			.peer_or_create(&public_key)
+			.peer_or_create(&PeerId::from_bytes(public_key).unwrap())
 			.add_addr(multiaddr, ttl.clone());
 	}
 }

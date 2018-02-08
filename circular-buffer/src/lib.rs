@@ -459,6 +459,11 @@ impl<B: Array> CircularBuffer<B> {
         )
     }
 
+    /// Removes the first `by` elements of the start of the buffer.
+    /// 
+    /// # Panic
+    /// 
+    /// Panics if `by` is superior to the number of elements in the buffer.
     // This is not unsafe because it can only leak data, not cause uninit to be read.
     pub fn advance(&mut self, by: usize) {
         assert!(by <= self.len);
