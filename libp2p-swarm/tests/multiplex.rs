@@ -61,6 +61,9 @@ impl<T: Transport> Transport for OnlyOnce<T> {
         assert!(!self.1.swap(true, atomic::Ordering::SeqCst));
         Ok(self.0.dial(addr).unwrap_or_else(|_| panic!()))
     }
+    fn nat_traversal(&self, a: &Multiaddr, b: &Multiaddr) -> Option<Multiaddr> {
+        self.0.nat_traversal(a, b)
+    }
 }
 
 #[test]
