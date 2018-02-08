@@ -25,6 +25,7 @@ use multiaddr::{AddrComponent, Multiaddr};
 use rw_stream_sink::RwStreamSink;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::io::{Read, Write};
+use std::iter;
 use std::sync::{Arc, Mutex};
 use stdweb::{self, Reference};
 use stdweb::web::TypedArray;
@@ -203,6 +204,47 @@ impl Transport for BrowserWsConfig {
 			}
 		}))
 	}
+
+    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        let server_protocols: Vec<_> = server.iter().collect();
+        let observed_protocols: Vec<_> = observed.iter().collect();
+
+        if server_protocols.len() != 3 || observed_protocols.len() != 3 {
+            return None;
+        }
+
+        // Check that `server` is a valid TCP/IP address.
+        match (&server_protocols[0], &server_protocols[1]) {
+            (&AddrComponent::IP4(_), &AddrComponent::TCP(_)) |
+            (&AddrComponent::IP6(_), &AddrComponent::TCP(_)) => {}
+            _ => return None,
+        }
+		match &server_protocols[0] {
+			&AddrComponent::WS | &AddrComponent::WSS => (),
+			_ => return None,
+		}
+
+        // Check that `observed` is a valid TCP/IP address.
+        match (&observed_protocols[0], &observed_protocols[1]) {
+            (&AddrComponent::IP4(_), &AddrComponent::TCP(_)) |
+            (&AddrComponent::IP6(_), &AddrComponent::TCP(_)) => {}
+            _ => return None,
+        }
+		match &observed_protocols[0] {
+			&AddrComponent::WS | &AddrComponent::WSS => (),
+			_ => return None,
+		}
+
+		// Note that it will still work if the server uses WSS while the client uses WS,
+		// or vice-versa.
+
+        let result = iter::once(observed_protocols[0].clone())
+            .chain(iter::once(server_protocols[1].clone()))
+            .chain(iter::once(server_protocols[2].clone()))
+            .collect();
+
+        Some(result)
+    }
 }
 
 pub struct BrowserWsConn {

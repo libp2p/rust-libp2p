@@ -173,6 +173,11 @@ where
 
 		Ok(Box::new(dial) as Box<_>)
 	}
+
+	#[inline]
+	fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+		self.inner.transport().nat_traversal(server, observed)
+	}
 }
 
 impl<T, C> MuxedTransport for ConnectionReuse<T, C>
