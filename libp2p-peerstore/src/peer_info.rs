@@ -163,6 +163,11 @@ impl<'de> Deserialize<'de> for PeerInfo {
 	}
 }
 
+// The reason why we need to implement the PartialOrd trait is that the datastore library (a
+// key-value storage) which we use allows performing queries where the results can be ordered.
+//
+// Since the struct that implements PartialOrd is internal and since we never use this ordering
+// feature, I think it's ok to have this code.
 impl PartialOrd for PeerInfo {
 	#[inline]
 	fn partial_cmp(&self, _other: &Self) -> Option<Ordering> {
