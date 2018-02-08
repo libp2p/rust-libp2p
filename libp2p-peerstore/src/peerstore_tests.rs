@@ -32,14 +32,14 @@ macro_rules! peerstore_tests {
         extern crate multihash;
         use std::thread;
         use std::time::Duration;
-        use {Peerstore, PeerAccess};
+        use {Peerstore, PeerAccess, PeerId};
         use multiaddr::Multiaddr;
 
         #[test]
         fn initially_empty() {
             $($stmt;)*
             let peer_store = $create_peerstore;
-            let peer_id = multihash::encode(multihash::Hash::SHA2512, &[1, 2, 3]).unwrap();
+            let peer_id = PeerId::from_public_key(&[1, 2, 3]);
             assert_eq!(peer_store.peers().count(), 0);
             assert!(peer_store.peer(&peer_id).is_none());
         }
@@ -48,7 +48,7 @@ macro_rules! peerstore_tests {
         fn set_then_get_addr() {
             $($stmt;)*
             let peer_store = $create_peerstore;
-            let peer_id = multihash::encode(multihash::Hash::SHA2512, &[1, 2, 3]).unwrap();
+            let peer_id = PeerId::from_public_key(&[1, 2, 3]);
             let addr = "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap();
 
             peer_store.peer_or_create(&peer_id).add_addr(addr.clone(), Duration::from_millis(5000));
@@ -62,7 +62,7 @@ macro_rules! peerstore_tests {
             // Add an already-expired address to a peer.
             $($stmt;)*
             let peer_store = $create_peerstore;
-            let peer_id = multihash::encode(multihash::Hash::SHA2512, &[1, 2, 3]).unwrap();
+            let peer_id = PeerId::from_public_key(&[1, 2, 3]);
             let addr = "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap();
 
             peer_store.peer_or_create(&peer_id).add_addr(addr.clone(), Duration::from_millis(0));
@@ -76,7 +76,7 @@ macro_rules! peerstore_tests {
         fn clear_addrs() {
             $($stmt;)*
             let peer_store = $create_peerstore;
-            let peer_id = multihash::encode(multihash::Hash::SHA2512, &[1, 2, 3]).unwrap();
+            let peer_id = PeerId::from_public_key(&[1, 2, 3]);
             let addr = "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap();
 
             peer_store.peer_or_create(&peer_id).add_addr(addr.clone(), Duration::from_millis(5000));
@@ -90,7 +90,7 @@ macro_rules! peerstore_tests {
         fn no_update_ttl() {
             $($stmt;)*
             let peer_store = $create_peerstore;
-            let peer_id = multihash::encode(multihash::Hash::SHA2512, &[1, 2, 3]).unwrap();
+            let peer_id = PeerId::from_public_key(&[1, 2, 3]);
 
             let addr1 = "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap();
             let addr2 = "/ip4/0.0.0.1/tcp/0".parse::<Multiaddr>().unwrap();
@@ -109,7 +109,7 @@ macro_rules! peerstore_tests {
         fn force_update_ttl() {
             $($stmt;)*
             let peer_store = $create_peerstore;
-            let peer_id = multihash::encode(multihash::Hash::SHA2512, &[1, 2, 3]).unwrap();
+            let peer_id = PeerId::from_public_key(&[1, 2, 3]);
 
             let addr1 = "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap();
             let addr2 = "/ip4/0.0.0.1/tcp/0".parse::<Multiaddr>().unwrap();

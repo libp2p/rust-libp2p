@@ -67,13 +67,13 @@ impl<'a> Peerstore for &'a JsonPeerstore {
 
 	#[inline]
 	fn peer(self, peer_id: &PeerId) -> Option<Self::PeerAccess> {
-		let hash = peer_id.to_base58();
+		let hash = peer_id.as_bytes().to_base58();
 		self.store.lock(hash.into()).map(JsonPeerstoreAccess)
 	}
 
 	#[inline]
 	fn peer_or_create(self, peer_id: &PeerId) -> Self::PeerAccess {
-		let hash = peer_id.to_base58();
+		let hash = peer_id.as_bytes().to_base58();
 		JsonPeerstoreAccess(self.store.lock_or_create(hash.into()))
 	}
 
@@ -90,7 +90,7 @@ impl<'a> Peerstore for &'a JsonPeerstore {
 		let list = query.filter_map(|(key, _)| {
 			// We filter out invalid elements. This can happen if the JSON storage file was
 			// corrupted or manually modified by the user.
-			key.from_base58().ok()
+			PeerId::from_bytes(key.from_base58().ok()?).ok()
 		})
 		                .collect()
 		                .wait(); // Wait can never block for the JSON datastore.
