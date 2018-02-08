@@ -96,7 +96,8 @@ where
 	}
 
 	/// Turns the prototype into an actual controller by feeding it a swarm.
-	pub fn start<T, C>(self, swarm: SwarmController<T, C>) -> KademliaController<P, R, T, C>
+	pub fn start<T, C>(self, swarm: SwarmController<T, C>)
+					   -> (KademliaController<P, R, T, C>, Box<Future<Item = (), Error = IoError>>)
 	where
 		P: Clone + Deref<Target = Pc> + 'static, // TODO: 'static :-/
 		for<'r> &'r Pc: Peerstore,
@@ -113,8 +114,27 @@ where
 			swarm_controller: swarm,
 		};
 
-		query::refresh(controller.clone(), 0);
-		controller
+		let init_future = {
+			let futures: Vec<_> = (0 .. 256).map(|n| {
+				query::refresh(controller.clone(), n)
+			}).collect();
+
+			future::loop_fn(futures, |futures| {
+				if futures.is_empty() {
+					let fut = future::ok(future::Loop::Break(()));
+					return future::Either::A(fut);
+				}
+
+				let fut = future::select_all(futures)
+					.map_err(|(err, _, _)| err)
+					.map(|(_, _, rest)| {
+						future::Loop::Continue(rest)
+					});
+				future::Either::B(fut)
+			})
+		};
+
+		(controller, Box::new(init_future))
 	}
 }
 

@@ -115,7 +115,7 @@ fn main() {
         upgrade
     });
 
-    let kad_controller = kad_ctl_proto.start(swarm_controller.clone());
+    let (kad_controller, _kad_init) = kad_ctl_proto.start(swarm_controller.clone());
 
     for listen_addr in listen_addrs {
         let addr = swarm_controller.listen_on(listen_addr.parse().expect("wrong multiaddr"))
@@ -140,5 +140,4 @@ fn main() {
     // actually started yet. Because we created the `TcpConfig` with tokio, we need to run the
     // future through the tokio core.
     core.run(finish_enum.select(swarm_future).map(|(n, _)| n).map_err(|(err, _)| err)).unwrap();
-    //core.run(finish_enum.select(swarm_future).map_err(|(err, _)| err).and_then(|(n, o)| o.map(move |_| n))).unwrap();
 }
