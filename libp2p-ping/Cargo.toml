@@ -6,6 +6,7 @@ authors = ["pierre <pierre.krieger1708@gmail.com>"]
 [dependencies]
 bytes = "0.4"
 libp2p-swarm = { path = "../libp2p-swarm" }
+log = "0.4.1"
 multiaddr = "0.2.0"
 multistream-select = { path = "../multistream-select" }
 futures = "0.1"
