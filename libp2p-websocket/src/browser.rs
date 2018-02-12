@@ -210,11 +210,17 @@ impl Transport for BrowserWsConfig {
 		let server_proto0 = if let Some(p) = server_protocols.next() { p } else { return None; };
 		let server_proto1 = if let Some(p) = server_protocols.next() { p } else { return None; };
 		let server_proto2 = if let Some(p) = server_protocols.next() { p } else { return None; };
+		if server_protocols.next().is_some() {
+			return None;
+		}
 
 		let mut observed_protocols = observed.iter();
 		let obs_proto0 = if let Some(p) = observed_protocols.next() { p } else { return None; };
 		let obs_proto1 = if let Some(p) = observed_protocols.next() { p } else { return None; };
 		let obs_proto2 = if let Some(p) = observed_protocols.next() { p } else { return None; };
+		if observed_protocols.next().is_some() {
+			return None;
+		}
 
         // Check that `server` is a valid TCP/IP address.
         match (&server_proto0, &server_proto1, &server_proto2) {
