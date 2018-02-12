@@ -93,6 +93,9 @@ where
 			let identify_upgrade = identify_upgrade.clone();
 			let fut = connec
 				.and_then(move |(connec, client_addr)| {
+					debug!(target: "libp2p-identify", "Received a connection from {} ; dialing \
+													   it back to receive identity", client_addr);
+
 					// Dial the address that connected to us and try upgrade with the
 					// identify protocol.
 					identify_upgrade
@@ -107,6 +110,7 @@ where
 				.and_then(move |((identify, original_addr), connec)| {
 					// Compute the "real" address of the node (in the form `/ipfs/...`) and add
 					// it to the peerstore.
+					debug!(target: "libp2p-identify", "Received identify from {}", original_addr);
 					let real_addr = match identify {
 						IdentifyOutput::RemoteInfo { info, .. } => process_identify_info(
 							&info,
@@ -120,6 +124,7 @@ where
 						),
 					};
 
+					debug!(target: "libp2p-identify", "Node identified as {}", real_addr);
 					Ok((connec, real_addr))
 				});
 
@@ -131,8 +136,12 @@ where
 
 	#[inline]
 	fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+		debug!(target: "libp2p-identify", "Dialing addr {} through identify", addr);
+
 		match multiaddr_to_peerid(addr.clone()) {
 			Ok(peer_id) => {
+				trace!(target: "libp2p-identify", "Addr {} identified as {:?}", addr, peer_id);
+
 				// If the multiaddress is a peer ID, try each known multiaddress (taken from the
 				// peerstore) one by one.
 				let addrs = self.peerstore
@@ -142,6 +151,8 @@ where
 					.flat_map(|peer| peer.addrs())
 					.collect::<Vec<_>>()
 					.into_iter();
+				
+				trace!(target: "libp2p-identify", "Known multiaddrs for this peer: {:?}", addrs);
 
 				let transport = self.transport;
 				let future = stream::iter_ok(addrs)
@@ -154,12 +165,18 @@ where
 					.into_future()
 					.map_err(|(err, _)| err)
 					.and_then(|(val, _)| val.ok_or(IoErrorKind::InvalidData.into())) // TODO: wrong error
-					.map(move |(socket, _inner_client_addr)| (socket, addr));
+					.map(move |(socket, _inner_client_addr)| {
+						debug!(target: "libp2p-identify", "Node {} successfully dialed through {}",
+							   addr, _inner_client_addr);
+						(socket, addr)
+					});
 
 				Ok(Box::new(future) as Box<_>)
 			}
 
 			Err(addr) => {
+				trace!(target: "libp2p-identify", "Address is not a peer ID ; dialing directly");
+
 				// If the multiaddress is something else, propagate it to the underlying transport
 				// and identify the node.
 				let transport = self.transport;
@@ -197,6 +214,8 @@ where
 					};
 
 					// Then dial the same node again.
+					trace!(target: "libp2p-identify", "Node {} identified as {} , dialing again",
+						   old_addr, real_addr);
 					Ok(transport
 						.dial(old_addr)
 						.unwrap_or_else(|_| {
@@ -234,6 +253,9 @@ where
 		let future = self.transport
 			.next_incoming()
 			.and_then(move |(connec, client_addr)| {
+				debug!(target: "libp2p-identify", "Received a connection from {} ; dialing \
+												   it back to receive identity", client_addr);
+
 				// On an incoming connection, dial back the node and upgrade to the identify
 				// protocol.
 				identify_upgrade
@@ -250,6 +272,7 @@ where
 				// the form `/ipfs/...`).
 				let real_addr = match identify {
 					(IdentifyOutput::RemoteInfo { info, .. }, old_addr) => {
+						debug!(target: "libp2p-identify", "Received identify from {}", old_addr);
 						process_identify_info(&info, &*peerstore, old_addr, addr_ttl)?
 					}
 					_ => unreachable!(
@@ -258,6 +281,7 @@ where
 					),
 				};
 
+				debug!(target: "libp2p-identify", "Node identified as {}", real_addr);
 				Ok((connec, real_addr))
 			});
 
