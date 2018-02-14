@@ -52,6 +52,7 @@ use tokio_io::{AsyncRead, AsyncWrite};
 use varint::VarintCodec;
 
 /// Implementation of the `ConnectionUpgrade` for the floodsub protocol.
+#[derive(Clone)]        // TODO: Debug
 pub struct FloodSubUpgrade {
     inner: Arc<Inner>,
 }
@@ -197,6 +198,7 @@ impl<C> ConnectionUpgrade<C> for FloodSubUpgrade
                         None => {
                             // Both the connection stream and `rx` are empty, so we break the loop.
                             trace!(target: "libp2p-floodsub", "Pubsub future clean finish");
+                            inner.remote_connections.write().remove(&remote_addr);      // TODO: what if multiple connections?
 							let future = future::ok(future::Loop::Break(()));
 							Box::new(future) as Box<Future<Item = _, Error = _>>
                         },
@@ -211,6 +213,7 @@ impl<C> ConnectionUpgrade<C> for FloodSubUpgrade
 }
 
 /// Allows one to control the behaviour of the floodsub system.
+#[derive(Clone)]
 pub struct FloodSubController<T, C>
     where T: MuxedTransport + 'static,      // TODO: 'static :-/
           C: ConnectionUpgrade<T::RawConn> + 'static,      // TODO: 'static :-/
