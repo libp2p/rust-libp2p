@@ -90,6 +90,18 @@ pub trait Transport {
 	where
 		Self: Sized;
 
+	/// Takes a multiaddress we're listening on (`server`), and tries to convert it to an
+	/// externally-visible multiaddress. In order to do so, we pass an `observed` address which
+	/// a remote node observes for one of our dialers.
+	///
+	/// For example, if `server` is `/ip4/0.0.0.0/tcp/3000` and `observed` is
+	/// `/ip4/80.81.82.83/tcp/29601`, then we should return `/ip4/80.81.82.83/tcp/3000`. Each
+	/// implementation of `Transport` is only responsible for handling the protocols it supports.
+	///
+	/// Returns `None` if nothing can be determined. This happens if this trait implementation
+	/// doesn't recognize the protocols, or if `server` and `observed` are related.
+	fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
+
 	/// Builds a new struct that implements `Transport` that contains both `self` and `other`.
 	///
 	/// The returned object will redirect its calls to `self`, except that if `listen_on` or `dial`
@@ -175,6 +187,11 @@ impl Transport for DeniedTransport {
 	fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
 		Err((DeniedTransport, addr))
 	}
+
+	#[inline]
+	fn nat_traversal(&self, _: &Multiaddr, _: &Multiaddr) -> Option<Multiaddr> {
+		None
+	}
 }
 
 impl MuxedTransport for DeniedTransport {
@@ -223,6 +240,16 @@ where
 			Ok(connec) => Ok(EitherTransportFuture::Second(connec.into_future())),
 			Err((second, addr)) => Err((OrTransport(first, second), addr)),
 		}
+	}
+
+	#[inline]
+	fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+		let first = self.0.nat_traversal(server, observed);
+		if let Some(first) = first {
+			return Some(first);
+		}
+
+		self.1.nat_traversal(server, observed)
 	}
 }
 
@@ -767,6 +794,11 @@ impl<T> Transport for DummyMuxing<T>
 			(DummyMuxing { inner }, addr)
 		})
 	}
+
+	#[inline]
+	fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+		self.inner.nat_traversal(server, observed)
+	}
 }
 
 /// Implements the `Transport` trait. Dials or listens, then upgrades any dialed or received
@@ -789,6 +821,12 @@ where
 	#[inline]
 	pub fn into_connection_reuse(self) -> ConnectionReuse<T, C> {
 		From::from(self)
+	}
+
+	/// Returns a reference to the inner `Transport`.
+	#[inline]
+	pub fn transport(&self) -> &T {
+		&self.transports
 	}
 
 	/// Tries to dial on the `Multiaddr` using the transport that was passed to `new`, then upgrade
@@ -941,6 +979,11 @@ where
 	#[inline]
 	fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
 		self.dial(addr)
+	}
+
+	#[inline]
+	fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+		self.transports.nat_traversal(server, observed)
 	}
 }
 
