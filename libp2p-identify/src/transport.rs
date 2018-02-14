@@ -70,7 +70,7 @@ where
 	#[inline]
 	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
 		// Note that `listen_on` expects a "regular" multiaddr (eg. `/ip/.../tcp/...`),
-		// and not `/ipfs/<foo>`.
+		// and not `/p2p/<foo>`.
 
 		let (listener, new_addr) = match self.transport.clone().listen_on(addr.clone()) {
 			Ok((l, a)) => (l, a),
@@ -105,7 +105,7 @@ where
 				})
 				.and_then(move |(dial, connec)| dial.map(move |dial| (dial, connec)))
 				.and_then(move |((identify, original_addr), connec)| {
-					// Compute the "real" address of the node (in the form `/ipfs/...`) and add
+					// Compute the "real" address of the node (in the form `/p2p/...`) and add
 					// it to the peerstore.
 					let real_addr = match identify {
 						IdentifyOutput::RemoteInfo { info, .. } => process_identify_info(
@@ -183,7 +183,7 @@ where
 
 				let future = dial.and_then(move |identify| {
 					// On success, store the information in the peerstore and compute the
-					// "real" address of the node (of the form `/ipfs/...`).
+					// "real" address of the node (of the form `/p2p/...`).
 					let (real_addr, old_addr);
 					match identify {
 						(IdentifyOutput::RemoteInfo { info, .. }, a) => {
@@ -247,7 +247,7 @@ where
 			.and_then(move |(dial, connec)| dial.map(move |dial| (dial, connec)))
 			.and_then(move |(identify, connec)| {
 				// Add the info to the peerstore and compute the "real" address of the node (in
-				// the form `/ipfs/...`).
+				// the form `/p2p/...`).
 				let real_addr = match identify {
 					(IdentifyOutput::RemoteInfo { info, .. }, old_addr) => {
 						process_identify_info(&info, &*peerstore, old_addr, addr_ttl)?
@@ -265,7 +265,7 @@ where
 	}
 }
 
-// If the multiaddress is in the form `/ipfs/...`, turn it into a `PeerId`.
+// If the multiaddress is in the form `/p2p/...`, turn it into a `PeerId`.
 // Otherwise, return it as-is.
 fn multiaddr_to_peerid(addr: Multiaddr) -> Result<PeerId, Multiaddr> {
 	let components = addr.iter().collect::<Vec<_>>();
@@ -274,6 +274,7 @@ fn multiaddr_to_peerid(addr: Multiaddr) -> Result<PeerId, Multiaddr> {
 	}
 
 	match components.last() {
+		Some(&AddrComponent::P2P(ref peer_id)) |
 		Some(&AddrComponent::IPFS(ref peer_id)) => {
 			// TODO: `peer_id` is sometimes in fact a CID here
 			match PeerId::from_bytes(peer_id.clone()) {
@@ -286,7 +287,7 @@ fn multiaddr_to_peerid(addr: Multiaddr) -> Result<PeerId, Multiaddr> {
 }
 
 // When passed the information sent by a remote, inserts the remote into the given peerstore and
-// returns a multiaddr of the format `/ipfs/...` corresponding to this node.
+// returns a multiaddr of the format `/p2p/...` corresponding to this node.
 //
 // > **Note**: This function is highly-specific, but this precise behaviour is needed in multiple
 // >		   different places in the code.
@@ -303,7 +304,7 @@ where
 	peerstore
 		.peer_or_create(&peer_id)
 		.add_addr(client_addr, ttl);
-	Ok(AddrComponent::IPFS(peer_id.into_bytes()).into())
+	Ok(AddrComponent::P2P(peer_id.into_bytes()).into())
 }
 
 #[cfg(test)]
@@ -326,7 +327,7 @@ mod tests {
 
 	#[test]
 	fn dial_peer_id() {
-		// When we dial an `/ipfs/...` address, the `IdentifyTransport` should look into the
+		// When we dial an `/p2p/...` address, the `IdentifyTransport` should look into the
 		// peerstore and dial one of the known multiaddresses of the node instead.
 
 		#[derive(Debug, Clone)]
@@ -374,7 +375,7 @@ mod tests {
 		let transport = IdentifyTransport::new(underlying, Arc::new(peerstore));
 
 		let future = transport
-			.dial(iter::once(AddrComponent::IPFS(peer_id.into_bytes())).collect())
+			.dial(iter::once(AddrComponent::P2P(peer_id.into_bytes())).collect())
 			.unwrap_or_else(|_| panic!())
 			.then::<_, Result<(), ()>>(|_| Ok(()));
 
