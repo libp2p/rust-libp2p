@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+extern crate bs58;
 extern crate bytes;
 extern crate byteorder;
 extern crate futures;
@@ -101,6 +102,22 @@ impl<C> ConnectionUpgrade<C> for FloodSubUpgrade
 	fn upgrade(self, socket: C, _: Self::UpgradeIdentifier, _: Endpoint, remote_addr: &Multiaddr)
 			   -> Self::Future
 	{
+        debug!(target: "libp2p-floodsub", "Upgrading connection to {} as floodsub", remote_addr);
+
+        let init_msg = {
+            let subscribed_topics = self.inner.subscribed_topics.read();
+            let mut proto = rpc_proto::RPC::new();
+
+            for topic in subscribed_topics.iter() {
+                let mut subscription = rpc_proto::RPC_SubOpts::new();
+                subscription.set_subscribe(true);
+                subscription.set_topicid(topic.clone().into_string());
+                proto.mut_subscriptions().push(subscription);
+            }
+
+            proto.write_to_bytes().expect("protobuf message is always valid")
+        };
+
         let socket = socket.framed(VarintCodec::default());
 
         let (floodsub_sink, floodsub_stream) = socket
@@ -109,6 +126,7 @@ impl<C> ConnectionUpgrade<C> for FloodSubUpgrade
     		.split();
 
         let (input_tx, input_rx) = mpsc::unbounded();
+        input_tx.unbounded_send(init_msg.into()).expect("newly-created channel is always open");
         self.inner.remote_connections.write().insert(remote_addr.clone(), RemoteInfo {
             sender: input_tx,
             subscribed_topics: RwLock::new(HashSet::new()),
@@ -131,6 +149,7 @@ impl<C> ConnectionUpgrade<C> for FloodSubUpgrade
                 .and_then(move |(input, rest)| {
                     match input {
                         Some((bytes, false)) => {
+                            trace!(target: "libp2p-floodsub", "Received packet from remote");
                             let mut input = match protobuf::parse_from_bytes::<rpc_proto::RPC>(&bytes) {
                                 Ok(msg) => msg,
                                 Err(err) => {
@@ -141,9 +160,7 @@ impl<C> ConnectionUpgrade<C> for FloodSubUpgrade
                                 },
                             };
 
-                            // TODO: handle `received` to avoid duplicate messages
-
-                            if !input.get_publish().is_empty() {
+                            if !input.get_subscriptions().is_empty() {
                                 let mut remote_connec = inner.remote_connections.write();
                                 let mut remote = remote_connec.get(&remote_addr).unwrap();       // TODO: what if multiple entries?
                                 let mut topics = remote.subscribed_topics.write();
@@ -151,35 +168,66 @@ impl<C> ConnectionUpgrade<C> for FloodSubUpgrade
                                     let topic = TopicHash::from_raw(subscription.take_topicid());
                                     let subscribe = subscription.get_subscribe();
                                     if subscribe {
+                                        trace!(target: "libp2p-floodsub",
+                                               "Remote subscribed to {:?}", topic);
                                         topics.insert(topic);
                                     } else {
+                                        trace!(target: "libp2p-floodsub",
+                                               "Remote unsubscribed from {:?}", topic);
                                         topics.remove(&topic);
                                     }
                                 }
                             }
 
                             for publish in input.mut_publish().iter_mut() {
+                                let from: Multiaddr = AddrComponent::TCP(5).into(); // TODO: AddrComponent::IPFS(publish.take_from()).into(),
+                                if !inner.received.lock().insert((from.clone(), publish.take_seqno())) {
+                                    continue;
+                                }
+
                                 let topics = publish
                                     .take_topicIDs()
                                     .into_iter()
                                     .map(|h| TopicHash::from_raw(h))
                                     .collect::<Vec<_>>();
 
-                                let subscribed_topics = inner.subscribed_topics.read();
-                                let dispatch_locally = topics
-                                    .iter()
-                                    .any(|t| subscribed_topics.contains(t));
+                                trace!(target: "libp2p-floodsub",
+                                       "Processing message for topics {:?} ; payload = {} bytes",
+                                       topics, publish.get_data().len());
 
-                                //let seqno = publish.take_seqno();
+                                {
+                                    let remote_connections = inner.remote_connections.read();
+                                    for (addr, info) in remote_connections.iter() {
+                                        let st = info.subscribed_topics.read();
+                                        if !topics.iter().any(|t| st.contains(t)) {
+                                            continue;
+                                        }
+                                        trace!(target: "libp2p-floodsub",
+                                               "Broadcasting received message to {}", addr);
+                                        let _ = info.sender.unbounded_send(bytes.clone());
+                                    }
+                                }
+
+                                let dispatch_locally = {
+                                    let subscribed_topics = inner.subscribed_topics.read();
+                                    topics.iter().any(|t| subscribed_topics.contains(t))
+                                };
+
                                 let out_msg = Message {
-                                    source: AddrComponent::IPFS(publish.take_from()).into(),
+                                    source: from,
                                     data: publish.take_data(),
                                     topics: topics,
                                 };
 
                                 if dispatch_locally {
                                     // Ignore if channel is closed.
+                                    trace!(target: "libp2p-floodsub",
+                                       "Dispatching message locally");
                                     let _ = inner.output_tx.unbounded_send(out_msg);
+                                } else {
+                                    trace!(target: "libp2p-floodsub",
+                                       "Message not dispatched locally as we are not subscribed \
+                                        to any of the topics");
                                 }
                             }
 
@@ -324,8 +372,14 @@ impl<T, C> FloodSubController<T, C>
         self.broadcast(proto, |_| true);
     }
 
-    /// Publishes a message on the network for the specified topic.
-    pub fn publish<'a, I>(&self, topics: I, data: Vec<u8>)
+    /// Publishes a message on the network for the specified topic
+    #[inline]
+    pub fn publish(&self, topic: &TopicHash, data: Vec<u8>) {
+        self.publish_multi(iter::once(topic), data)
+    }
+
+    /// Publishes a message on the network for the specified topics.
+    pub fn publish_multi<'a, I>(&self, topics: I, data: Vec<u8>)
         where I: IntoIterator<Item = &'a TopicHash>,
               I::IntoIter: Clone,
     {
@@ -337,16 +391,19 @@ impl<T, C> FloodSubController<T, C>
         let mut msg = rpc_proto::Message::new();
         msg.set_data(data);
         //msg.set_from();
-
-        let mut seqno_bytes = Vec::new();
-        seqno_bytes.write_u64::<BigEndian>(self.inner.seq_no.fetch_add(1, Ordering::Relaxed) as u64)
-            .expect("writing to a Vec never fails");
-        msg.set_seqno(seqno_bytes);
-
+        msg.set_seqno({
+            let mut seqno_bytes = Vec::new();
+            let seqn = self.inner.seq_no.fetch_add(1, Ordering::Relaxed);
+            seqno_bytes.write_u64::<BigEndian>(seqn as u64)
+                .expect("writing to a Vec never fails");
+            seqno_bytes
+        });
         msg.set_topicIDs(topics.clone().map(|t| t.clone().into_string()).collect());
 
         let mut proto = rpc_proto::RPC::new();
         proto.mut_publish().push(msg);
+
+        // TODO: add to self.received so that we don't get our own message back
 
         self.broadcast(proto, |r_top| topics.clone().any(|t| r_top.contains(t)));
     }

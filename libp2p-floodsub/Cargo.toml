@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["pierre <pierre.krieger1708@gmail.com>"]
 
 [dependencies]
+bs58 = "0.2.0"
 byteorder = "1.2.1"
 bytes = "0.4"
 futures = "0.1"

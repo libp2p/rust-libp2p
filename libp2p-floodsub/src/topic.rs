@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use bs58;
+use protobuf::Message;
 use rpc_proto;
 
 /// Represents the hash of a topic.
@@ -51,9 +53,11 @@ pub struct TopicBuilder {
 }
 
 impl TopicBuilder {
-    pub fn new(name: String) -> TopicBuilder {
+    pub fn new<S>(name: S) -> TopicBuilder
+        where S: Into<String>
+    {
         let mut builder = rpc_proto::TopicDescriptor::new();
-        builder.set_name(name);
+        builder.set_name(name.into());
         
         TopicBuilder {
             builder: builder,
@@ -61,6 +65,8 @@ impl TopicBuilder {
     }
 
     pub fn build(self) -> TopicHash {
-        unimplemented!()
+        let bytes = self.builder.write_to_bytes().expect("protobuf message is always valid");
+        let hash = bs58::encode(&bytes).into_string();
+        TopicHash { hash }
     }
 }

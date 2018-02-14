@@ -5,6 +5,7 @@ authors = ["pierre <pierre.krieger1708@gmail.com>"]
 
 [dependencies]
 bytes = "0.4"
+env_logger = "0.5.3"
 futures = "0.1"
 multiaddr = { path = "../rust-multiaddr" }
 multiplex = { path = "../multiplex-rs" }

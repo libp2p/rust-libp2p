@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 extern crate bytes;
+extern crate env_logger;
 extern crate futures;
 extern crate libp2p_floodsub as floodsub;
 extern crate libp2p_secio as secio;
@@ -30,17 +31,17 @@ extern crate tokio_core;
 extern crate tokio_io;
 extern crate tokio_stdin;
 
-use futures::future::{Future, IntoFuture, loop_fn, Loop};
-use futures::{Stream, Sink};
-use std::env;
-use swarm::{Transport, UpgradeExt, SimpleProtocol};
+use futures::future::Future;
+use futures::Stream;
+use std::{env, mem};
+use swarm::{Multiaddr, Transport, UpgradeExt};
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
-use tokio_io::AsyncRead;
-use tokio_io::codec::BytesCodec;
 use websocket::WsConfig;
 
 fn main() {
+    env_logger::init();
+
     // Determine which address to listen to.
     let listen_addr = env::args().nth(1).unwrap_or("/ip4/0.0.0.0/tcp/10050".to_owned());
 
@@ -100,19 +101,45 @@ fn main() {
         .expect("unsupported multiaddr");
     println!("Now listening on {:?}", address);
 
+    let topic = floodsub::TopicBuilder::new("chat").build();
+
     let floodsub_ctl = floodsub::FloodSubController::new(&floodsub_upgrade, swarm_controller.clone());
+    floodsub_ctl.subscribe(topic.clone());
 
     let floodsub_rx = floodsub_rx
         .for_each(|msg| {
-            println!("Received {:?}", msg);
-            Ok(())
-        });
-    
-    let stdin = tokio_stdin::spawn_stdin_stream_unbounded()
-        .for_each(|msg| {
+            if let Ok(msg) = String::from_utf8(msg.data) {
+                println!("< {}", msg);
+            }
             Ok(())
         });
 
-    let final_fut = swarm_future.select(floodsub_rx).map(|_| ()).map_err(|_| ());
+    let stdin = {
+        let mut buffer = Vec::new();
+        tokio_stdin::spawn_stdin_stream_unbounded()
+            .for_each(move |msg| {
+                if msg != b'\r' && msg != b'\n' {
+                    buffer.push(msg);
+                    return Ok(());
+                } else if buffer.is_empty() {
+                    return Ok(());
+                }
+
+                let msg = String::from_utf8(mem::replace(&mut buffer, Vec::new())).unwrap();
+                if msg.starts_with("dial ") {
+                    let target: Multiaddr = msg[5..].parse().unwrap();
+                    println!("*Dialing {}*", target);
+                    swarm_controller.dial_to_handler(target, floodsub_upgrade.clone()).unwrap();
+                } else {
+                    floodsub_ctl.publish(&topic, msg.into_bytes());
+                }
+
+                Ok(())
+            })
+    };
+
+    let final_fut = swarm_future
+        .select(floodsub_rx).map(|_| ()).map_err(|e| e.0)
+        .select(stdin.map_err(|_| unreachable!())).map(|_| ()).map_err(|e| e.0);
     core.run(final_fut).unwrap();
 }
