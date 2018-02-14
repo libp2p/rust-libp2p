@@ -83,6 +83,8 @@ extern crate bytes;
 extern crate crypto;
 extern crate futures;
 extern crate libp2p_swarm;
+#[macro_use]
+extern crate log;
 extern crate protobuf;
 extern crate rand;
 extern crate ring;
@@ -198,7 +200,11 @@ impl<S> libp2p_swarm::ConnectionUpgrade<S> for SecioConfig
 	}
 
 	#[inline]
-	fn upgrade(self, incoming: S, _: (), _: libp2p_swarm::Endpoint, _: &Multiaddr) -> Self::Future {
+	fn upgrade(self, incoming: S, _: (), _: libp2p_swarm::Endpoint, remote_addr: &Multiaddr)
+			   -> Self::Future
+	{
+		info!(target: "libp2p-secio", "starting secio upgrade with {:?}", remote_addr);
+
 		let fut = SecioMiddleware::handshake(
 			incoming,
 			self.key,
@@ -213,6 +219,7 @@ impl<S> libp2p_swarm::ConnectionUpgrade<S> for SecioConfig
 
 #[inline]
 fn map_err(err: SecioError) -> IoError {
+	debug!(target: "libp2p-secio", "error during secio handshake {:?}", err);
 	IoError::new(IoErrorKind::InvalidData, err)
 }
 
