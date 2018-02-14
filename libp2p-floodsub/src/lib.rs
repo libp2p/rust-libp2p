@@ -22,6 +22,7 @@ extern crate bs58;
 extern crate bytes;
 extern crate byteorder;
 extern crate futures;
+extern crate libp2p_peerstore;
 extern crate libp2p_swarm;
 #[macro_use]
 extern crate log;
@@ -45,6 +46,7 @@ use bytes::{Bytes, BytesMut};
 use byteorder::{BigEndian, WriteBytesExt};
 use futures::{future, Future, Sink, Stream, Poll};
 use futures::sync::mpsc;
+use libp2p_peerstore::PeerId;
 use libp2p_swarm::{ConnectionUpgrade, Endpoint, SwarmController, MuxedTransport};
 use multiaddr::{Multiaddr, AddrComponent};
 use parking_lot::{Mutex, RwLock};
@@ -61,10 +63,11 @@ pub struct FloodSubUpgrade {
 impl FloodSubUpgrade {
     /// Builds a new `FloodSubUpgrade`. Also returns a `FloodSubReceiver` that will stream incoming
     /// messages for the floodsub system.
-    pub fn new() -> (FloodSubUpgrade, FloodSubReceiver) {
+    pub fn new(my_id: PeerId) -> (FloodSubUpgrade, FloodSubReceiver) {
         let (output_tx, output_rx) = mpsc::unbounded();
 
         let inner = Arc::new(Inner {
+            peer_id: my_id.into_bytes(),
             output_tx: output_tx,
             remote_connections: RwLock::new(HashMap::new()),
             subscribed_topics: RwLock::new(HashSet::new()),
@@ -180,10 +183,14 @@ impl<C> ConnectionUpgrade<C> for FloodSubUpgrade
                             }
 
                             for publish in input.mut_publish().iter_mut() {
-                                let from: Multiaddr = AddrComponent::TCP(5).into(); // TODO: AddrComponent::IPFS(publish.take_from()).into(),
+                                let from = publish.take_from();
                                 if !inner.received.lock().insert((from.clone(), publish.take_seqno())) {
+                                    trace!(target: "libp2p-floodsub",
+                                           "Skipping message because we had already received \
+                                            it ; payload = {} bytes", publish.get_data().len());
                                     continue;
                                 }
+                                let from: Multiaddr = AddrComponent::IPFS(from).into();
 
                                 let topics = publish
                                     .take_topicIDs()
@@ -202,6 +209,7 @@ impl<C> ConnectionUpgrade<C> for FloodSubUpgrade
                                         if !topics.iter().any(|t| st.contains(t)) {
                                             continue;
                                         }
+                                        // TODO: don't send back to the sender
                                         trace!(target: "libp2p-floodsub",
                                                "Broadcasting received message to {}", addr);
                                         let _ = info.sender.unbounded_send(bytes.clone());
@@ -271,6 +279,9 @@ pub struct FloodSubController<T, C>
 }
 
 struct Inner {
+    // Our local peer ID multihash, to pass as the source.
+    peer_id: Vec<u8>,
+
     // Channel where to send the messages that should be dispatched to the user.
     output_tx: mpsc::UnboundedSender<Message>,
 
@@ -284,9 +295,9 @@ struct Inner {
     // Sequence number for the messages we send.
     seq_no: AtomicUsize,
 
-    // We keep track of the messages we received (in the format `(remote, seq_no)`) so that we
+    // We keep track of the messages we received (in the format `(remote ID, seq_no)`) so that we
     // don't dispatch the same message twice if we receive it twice on the network.
-    received: Mutex<HashSet<(Multiaddr, Vec<u8>)>>,
+    received: Mutex<HashSet<(Vec<u8>, Vec<u8>)>>,
 }
 
 struct RemoteInfo {
@@ -388,22 +399,25 @@ impl<T, C> FloodSubController<T, C>
         debug!(target: "libp2p-floodsub", "Queueing publish message ; topics = {:?} ; data_len = {:?}",
                topics.clone().map(|t| t.clone().into_string()).collect::<Vec<_>>(), data.len());
 
-        let mut msg = rpc_proto::Message::new();
-        msg.set_data(data);
-        //msg.set_from();
-        msg.set_seqno({
+        let seq_no_bytes = {
             let mut seqno_bytes = Vec::new();
             let seqn = self.inner.seq_no.fetch_add(1, Ordering::Relaxed);
             seqno_bytes.write_u64::<BigEndian>(seqn as u64)
                 .expect("writing to a Vec never fails");
             seqno_bytes
-        });
+        };
+
+        let mut msg = rpc_proto::Message::new();
+        msg.set_data(data);
+        msg.set_from(self.inner.peer_id.clone());
+        msg.set_seqno(seq_no_bytes.clone());
         msg.set_topicIDs(topics.clone().map(|t| t.clone().into_string()).collect());
 
         let mut proto = rpc_proto::RPC::new();
         proto.mut_publish().push(msg);
 
         // TODO: add to self.received so that we don't get our own message back
+        self.inner.received.lock().insert((self.inner.peer_id.clone(), seq_no_bytes));
 
         self.broadcast(proto, |r_top| topics.clone().any(|t| r_top.contains(t)));
     }

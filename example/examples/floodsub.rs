@@ -22,17 +22,20 @@ extern crate bytes;
 extern crate env_logger;
 extern crate futures;
 extern crate libp2p_floodsub as floodsub;
+extern crate libp2p_peerstore as peerstore;
 extern crate libp2p_secio as secio;
 extern crate libp2p_swarm as swarm;
 extern crate libp2p_tcp_transport as tcp;
 extern crate libp2p_websocket as websocket;
 extern crate multiplex;
+extern crate rand;
 extern crate tokio_core;
 extern crate tokio_io;
 extern crate tokio_stdin;
 
 use futures::future::Future;
 use futures::Stream;
+use peerstore::PeerId;
 use std::{env, mem};
 use swarm::{Multiaddr, Transport, UpgradeExt};
 use tcp::TcpConfig;
@@ -86,7 +89,12 @@ fn main() {
 
     // We now prepare the protocol that we are going to negotiate with nodes that open a connection
     // or substream to our server.
-    let (floodsub_upgrade, floodsub_rx) = floodsub::FloodSubUpgrade::new();
+    let my_id = {
+        let key = (0 .. 2048).map(|_| rand::random::<u8>()).collect::<Vec<_>>();
+        PeerId::from_public_key(&key)
+    };
+
+    let (floodsub_upgrade, floodsub_rx) = floodsub::FloodSubUpgrade::new(my_id);
 
     // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming and
     // outgoing connections for us.

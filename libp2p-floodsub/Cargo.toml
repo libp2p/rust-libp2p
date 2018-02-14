@@ -8,6 +8,7 @@ bs58 = "0.2.0"
 byteorder = "1.2.1"
 bytes = "0.4"
 futures = "0.1"
+libp2p-peerstore = { path = "../libp2p-peerstore" }
 libp2p-swarm = { path = "../libp2p-swarm" }
 log = "0.4.1"
 multiaddr = { path = "../rust-multiaddr" }
