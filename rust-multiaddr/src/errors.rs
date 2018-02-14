@@ -1,4 +1,4 @@
-use std::{net, fmt, error, io, num};
+use std::{net, fmt, error, io, num, string};
 use cid;
 use byteorder;
 
@@ -66,6 +66,12 @@ impl From<byteorder::Error> for Error {
 
 impl From<num::ParseIntError> for Error {
     fn from(err: num::ParseIntError) -> Error {
+        Error::ParsingError(err.into())
+    }
+}
+
+impl From<string::FromUtf8Error> for Error {
+    fn from(err: string::FromUtf8Error) -> Error {
         Error::ParsingError(err.into())
     }
 }
