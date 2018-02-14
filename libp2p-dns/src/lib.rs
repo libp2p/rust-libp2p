@@ -21,6 +21,21 @@
 // TODO: use this once stable ; for now we just copy-paste the content of the README.md
 //#![doc(include = "../README.md")]
 
+//! # libp2p-dns
+//!
+//! This crate provides the type `DnsConfig` that allows one to resolve the `/dns4/` and `/dns6/`
+//! components of multiaddresses.
+//!
+//! ## Usage
+//!
+//! In order to use this crate, create a `DnsConfig` with one of its constructors and pass it an
+//! implementation of the `Transport` trait.
+//!
+//! Whenever we want to dial an address through the `DnsConfig` and that address contains a
+//! `/dns4/` or `/dns6/` component, a DNS resolve will be performed and the component will be
+//! replaced with respectively an `/ip4/` or an `/ip6/` component.
+//!
+
 #[macro_use]
 extern crate log;
 extern crate libp2p_swarm as swarm;
@@ -48,11 +63,17 @@ impl<T> DnsConfig<T> {
     /// Creates a new configuration object for DNS.
     #[inline]
     pub fn new(inner: T) -> DnsConfig<T> {
+        DnsConfig::with_resolve_threads(inner, 1)
+    }
+
+    /// Same as `new`, but allows specifying a number of threads for the resolving.
+    #[inline]
+    pub fn with_resolve_threads(inner: T, num_threads: usize) -> DnsConfig<T> {
         trace!(target: "libp2p-dns", "Created a CpuPoolResolver");
 
         DnsConfig {
             inner,
-            resolver: CpuPoolResolver::new(8),      // TODO: arbitrary
+            resolver: CpuPoolResolver::new(num_threads),
         }
     }
 }

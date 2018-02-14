@@ -1,27 +1,13 @@
-# TCP transport
+# libp2p-dns
 
-Implementation of the libp2p `Transport` trait for TCP/IP.
-
-Uses [the *tokio* library](https://tokio.rs).
+This crate provides the type `DnsConfig` that allows one to resolve the `/dns4/` and `/dns6/`
+components of multiaddresses.
 
 ## Usage
 
-Create [a tokio `Core`](https://docs.rs/tokio-core/0.1/tokio_core/reactor/struct.Core.html),
-then grab a handle by calling the `handle()` method on it, then create a `TcpConfig` and pass
-the handle.
+In order to use this crate, create a `DnsConfig` with one of its constructors and pass it an
+implementation of the `Transport` trait.
 
-Example:
-
-```rust
-extern crate libp2p_tcp_transport;
-extern crate tokio_core;
-
-use libp2p_tcp_transport::TcpConfig;
-use tokio_core::reactor::Core;
-
-let mut core = Core::new().unwrap();
-let tcp = TcpConfig::new(core.handle());
-```
-
-The `TcpConfig` structs implements the `Transport` trait of the `swarm` library. See the
-documentation of `swarm` and of libp2p in general to learn how to use the `Transport` trait.
+Whenever we want to dial an address through the `DnsConfig` and that address contains a
+`/dns4/` or `/dns6/` component, a DNS resolve will be performed and the component will be
+replaced with respectively an `/ip4/` or an `/ip6/` component.
