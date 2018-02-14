@@ -168,7 +168,7 @@ impl<C> ConnectionUpgrade<C> for Ping
 		let future = loop_fn((sink, stream.select(rx)), move |(sink, stream)| {
 			let expected_pongs = expected_pongs.clone();
 			let remote_addr = if log_enabled!(target: "libp2p-ping", Level::Debug) {
-				Some(remote_addr.clone())
+				remote_addr.clone()
 			} else {
 				None
 			};
