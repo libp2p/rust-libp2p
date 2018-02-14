@@ -79,6 +79,7 @@ impl<S> Stream for DecoderMiddleware<S>
 		let hmac_num_bytes = self.hmac_key.digest_algorithm().output_len;
 
 		if frame.len() < hmac_num_bytes {
+			debug!(target: "libp2p-secio", "frame too short when decoding secio frame");
 			return Err(SecioError::FrameTooShort);
 		}
 
@@ -86,6 +87,7 @@ impl<S> Stream for DecoderMiddleware<S>
 		debug_assert_eq!(expected_hash.len(), hmac_num_bytes);
 
 		if let Err(_) = hmac::verify(&self.hmac_key, crypted_data, expected_hash) {
+			debug!(target: "libp2p-secio", "hmac mismatch when decoding secio frame");
 			return Err(SecioError::HmacNotMatching);
 		}
 
