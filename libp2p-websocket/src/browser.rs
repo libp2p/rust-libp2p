@@ -205,51 +205,51 @@ impl Transport for BrowserWsConfig {
 		}))
 	}
 
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+	fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
 		let mut server_protocols = server.iter();
-		let server_proto0 = if let Some(p) = server_protocols.next() { p } else { return None; };
-		let server_proto1 = if let Some(p) = server_protocols.next() { p } else { return None; };
-		let server_proto2 = if let Some(p) = server_protocols.next() { p } else { return None; };
+		let server_proto0 = server_protocols.next()?;
+		let server_proto1 = server_protocols.next()?;
+		let server_proto2 = server_protocols.next()?;
 		if server_protocols.next().is_some() {
 			return None;
 		}
 
 		let mut observed_protocols = observed.iter();
-		let obs_proto0 = if let Some(p) = observed_protocols.next() { p } else { return None; };
-		let obs_proto1 = if let Some(p) = observed_protocols.next() { p } else { return None; };
-		let obs_proto2 = if let Some(p) = observed_protocols.next() { p } else { return None; };
+		let obs_proto0 = observed_protocols.next()?;
+		let obs_proto1 = observed_protocols.next()?;
+		let obs_proto2 = observed_protocols.next()?;
 		if observed_protocols.next().is_some() {
 			return None;
 		}
 
-        // Check that `server` is a valid TCP/IP address.
-        match (&server_proto0, &server_proto1, &server_proto2) {
-            (&AddrComponent::IP4(_), &AddrComponent::TCP(_), &AddrComponent::WS) |
-            (&AddrComponent::IP6(_), &AddrComponent::TCP(_), &AddrComponent::WS) |
-            (&AddrComponent::IP4(_), &AddrComponent::TCP(_), &AddrComponent::WSS) |
-            (&AddrComponent::IP6(_), &AddrComponent::TCP(_), &AddrComponent::WSS) => {}
-            _ => return None,
-        }
-
-        // Check that `observed` is a valid TCP/IP address.
-        match (&obs_proto0, &obs_proto1, &obs_proto2) {
-            (&AddrComponent::IP4(_), &AddrComponent::TCP(_), &AddrComponent::WS) |
-            (&AddrComponent::IP6(_), &AddrComponent::TCP(_), &AddrComponent::WS) |
+		// Check that `server` is a valid TCP/IP address.
+		match (&server_proto0, &server_proto1, &server_proto2) {
+			(&AddrComponent::IP4(_), &AddrComponent::TCP(_), &AddrComponent::WS) |
+			(&AddrComponent::IP6(_), &AddrComponent::TCP(_), &AddrComponent::WS) |
 			(&AddrComponent::IP4(_), &AddrComponent::TCP(_), &AddrComponent::WSS) |
-            (&AddrComponent::IP6(_), &AddrComponent::TCP(_), &AddrComponent::WSS) => {}
-            _ => return None,
-        }
+			(&AddrComponent::IP6(_), &AddrComponent::TCP(_), &AddrComponent::WSS) => {}
+			_ => return None,
+		}
+
+		// Check that `observed` is a valid TCP/IP address.
+		match (&obs_proto0, &obs_proto1, &obs_proto2) {
+			(&AddrComponent::IP4(_), &AddrComponent::TCP(_), &AddrComponent::WS) |
+			(&AddrComponent::IP6(_), &AddrComponent::TCP(_), &AddrComponent::WS) |
+			(&AddrComponent::IP4(_), &AddrComponent::TCP(_), &AddrComponent::WSS) |
+			(&AddrComponent::IP6(_), &AddrComponent::TCP(_), &AddrComponent::WSS) => {}
+			_ => return None,
+		}
 
 		// Note that it will still work if the server uses WSS while the client uses WS,
 		// or vice-versa.
 
-        let result = iter::once(obs_proto0)
-            .chain(iter::once(server_proto1))
-            .chain(iter::once(server_proto2))
-            .collect();
+		let result = iter::once(obs_proto0)
+			.chain(iter::once(server_proto1))
+			.chain(iter::once(server_proto2))
+			.collect();
 
-        Some(result)
-    }
+		Some(result)
+	}
 }
 
 pub struct BrowserWsConn {
