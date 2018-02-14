@@ -200,5 +200,55 @@ fn resolve_dns(name: &str, resolver: CpuPoolResolver, ty: ResolveTy)
 
 #[cfg(test)]
 mod tests {
+    extern crate libp2p_tcp_transport;
+    use self::libp2p_tcp_transport::TcpConfig;
+    use multiaddr::{Multiaddr, AddrComponent};
+    use swarm::Transport;
+    use std::io::Error as IoError;
+    use futures::{future, Future};
     use DnsConfig;
+
+    #[test]
+    fn basic_resolve() {
+        #[derive(Clone)]
+        struct CustomTransport;
+        impl Transport for CustomTransport {
+            type RawConn = <TcpConfig as Transport>::RawConn;
+            type Listener = <TcpConfig as Transport>::Listener;
+            type ListenerUpgrade = <TcpConfig as Transport>::ListenerUpgrade;
+            type Dial = Box<Future<Item = Self::RawConn, Error = IoError>>;
+
+            #[inline]
+            fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+                unreachable!()
+            }
+
+            fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+                let contains_dns = addr
+                    .iter()
+                    .any(|cmp| {
+                        match cmp {
+                            AddrComponent::DNS4(_) => true,
+                            AddrComponent::DNS6(_) => true,
+                            _ => false
+                        }
+                    });
+
+                assert!(!contains_dns);
+                Ok(Box::new(future::empty()) as Box<_>)
+            }
+
+            #[inline]
+            fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+                panic!()
+            }
+        }
+
+        let transport = DnsConfig::new(CustomTransport);
+
+        let _ = transport.clone().dial("/dns4/example.com/tcp/20000".parse().unwrap())
+            .unwrap_or_else(|_| panic!());
+        let _ = transport.dial("/dns6/example.com/tcp/20000".parse().unwrap())
+            .unwrap_or_else(|_| panic!());
+    }
 }
