@@ -482,7 +482,6 @@ impl<T, C> FloodSubController<T, C>
 }
 
 /// Implementation of `Stream` that provides messages for the subscribed topics you subscribed to.
-// TODO: implement Debug
 pub struct FloodSubReceiver {
     inner: mpsc::UnboundedReceiver<Message>,
 }
@@ -494,6 +493,13 @@ impl Stream for FloodSubReceiver {
     #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         self.inner.poll().map_err(|_| unreachable!("UnboundedReceiver cannot err"))
+    }
+}
+
+impl fmt::Debug for FloodSubReceiver {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_struct("FloodSubReceiver")
+            .finish()
     }
 }
 
@@ -513,7 +519,6 @@ pub struct Message {
 }
 
 /// Implementation of `Future` that must be driven to completion in order for floodsub to work.
-// TODO: implement Debug
 pub struct FloodSubFuture {
     inner: Box<Future<Item = (), Error = IoError>>,
 }
@@ -525,5 +530,12 @@ impl Future for FloodSubFuture {
     #[inline]
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         self.inner.poll()
+    }
+}
+
+impl fmt::Debug for FloodSubFuture {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_struct("FloodSubFuture")
+            .finish()
     }
 }
