@@ -29,6 +29,7 @@ extern crate log;
 extern crate multiaddr;
 extern crate parking_lot;
 extern crate protobuf;
+extern crate smallvec;
 extern crate tokio_io;
 extern crate varint;
 
@@ -38,6 +39,7 @@ mod topic;
 pub use self::topic::{TopicBuilder, TopicHash};
 
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use std::sync::Arc;
@@ -51,11 +53,12 @@ use libp2p_swarm::{ConnectionUpgrade, Endpoint, SwarmController, MuxedTransport}
 use multiaddr::{Multiaddr, AddrComponent};
 use parking_lot::{Mutex, RwLock};
 use protobuf::Message as ProtobufMessage;
+use smallvec::SmallVec;
 use tokio_io::{AsyncRead, AsyncWrite};
 use varint::VarintCodec;
 
 /// Implementation of the `ConnectionUpgrade` for the floodsub protocol.
-#[derive(Clone)]        // TODO: Debug
+#[derive(Debug, Clone)]
 pub struct FloodSubUpgrade {
     inner: Arc<Inner>,
 }
@@ -307,6 +310,18 @@ struct RemoteInfo {
     subscribed_topics: RwLock<HashSet<TopicHash>>,
 }
 
+impl fmt::Debug for Inner {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_struct("Inner")
+            .field("peer_id", &self.peer_id)
+            .field("num_remote_connections", &self.remote_connections.read().len())
+            .field("num_subscribed_topics", &self.subscribed_topics.read().len())
+            .field("seq_no", &self.seq_no)
+            .field("received", &self.received)
+            .finish()
+    }
+}
+
 impl<T, C> FloodSubController<T, C>
     where T: MuxedTransport + 'static,      // TODO: 'static :-/
           C: ConnectionUpgrade<T::RawConn> + 'static,      // TODO: 'static :-/
@@ -428,16 +443,38 @@ impl<T, C> FloodSubController<T, C>
         where F: FnMut(&HashSet<TopicHash>) -> bool
     {
         let bytes = message.write_to_bytes().expect("protobuf message is always valid");
-        let remote_connections = self.inner.remote_connections.read();
 
+        let remote_connections = self.inner.remote_connections.upgradable_read();
+
+        // Number of remotes we dispatched to, for logging purposes.
         let mut num_dispatched = 0;
-        for remote in remote_connections.values() {
+        // Will store the addresses of remotes which we failed to send a message to and which
+        // must be removed from the active connections.
+        let mut failed_to_send: SmallVec<[_; 6]> = SmallVec::new();
+        for (remote_addr, remote) in remote_connections.iter() {
             if !filter(&remote.subscribed_topics.read()) {
                 continue;
             }
 
             num_dispatched += 1;
-            remote.sender.unbounded_send(bytes.clone().into());
+            match remote.sender.unbounded_send(bytes.clone().into()) {
+                Ok(_) => (),
+                Err(_) => {
+                    trace!(target: "libp2p-floodsub", "Failed to dispatch message to {} because \
+                                                       channel was closed", remote_addr);
+                    failed_to_send.push(remote_addr.clone());
+                }
+            }
+        }
+
+        // Remove the remotes which we failed to send a message to.
+        if !failed_to_send.is_empty() {
+            // If we fail to upgrade the read lock to a write lock, just ignore `failed_to_send`.
+            if let Ok(mut remote_connections) = remote_connections.try_upgrade() {
+                for failed_to_send in failed_to_send {
+                    remote_connections.remove(&failed_to_send);
+                }
+            }
         }
 
         debug!(target: "libp2p-floodsub", "Message queued for {} remotes", num_dispatched);

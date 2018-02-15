@@ -64,6 +64,7 @@ impl TopicBuilder {
         }
     }
 
+    /// Turns the builder into an actual `TopicHash`.
     pub fn build(self) -> TopicHash {
         let bytes = self.builder.write_to_bytes().expect("protobuf message is always valid");
         let hash = bs58::encode(&bytes).into_string();
