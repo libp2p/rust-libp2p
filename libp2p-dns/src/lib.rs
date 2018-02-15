@@ -86,14 +86,13 @@ impl<T> DnsConfig<T> {
 }
 
 impl<T> fmt::Debug for DnsConfig<T>
-	where T: fmt::Debug
+where
+	T: fmt::Debug,
 {
 	#[inline]
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        fmt.debug_tuple("DnsConfig")
-            .field(&self.inner)
-            .finish()
-    }
+	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+		fmt.debug_tuple("DnsConfig").field(&self.inner).finish()
+	}
 }
 
 impl<T> Transport for DnsConfig<T>
@@ -254,12 +253,12 @@ mod tests {
 				assert_eq!(addr.len(), 2);
 				match addr[1] {
 					AddrComponent::TCP(_) => (),
-					_ => panic!()
+					_ => panic!(),
 				};
 				match addr[0] {
 					AddrComponent::DNS4(_) => (),
 					AddrComponent::DNS6(_) => (),
-					_ => panic!()
+					_ => panic!(),
 				};
 				Ok(Box::new(future::empty()) as Box<_>)
 			}
