@@ -111,7 +111,9 @@ impl<C> ConnectionUpgrade<C> for FloodSubUpgrade
 	{
         debug!(target: "libp2p-floodsub", "Upgrading connection to {} as floodsub", remote_addr);
 
-        let init_msg = {
+        // Whenever a new node connects, we send to it a message containing the topics we are
+        // already subscribed to.
+        let init_msg: Vec<u8> = {
             let subscribed_topics = self.inner.subscribed_topics.read();
             let mut proto = rpc_proto::RPC::new();
 
@@ -125,13 +127,14 @@ impl<C> ConnectionUpgrade<C> for FloodSubUpgrade
             proto.write_to_bytes().expect("protobuf message is always valid")
         };
 
-        let socket = socket.framed(VarintCodec::default());
-
+        // Split the socket into writing and reading parts.
         let (floodsub_sink, floodsub_stream) = socket
+            .framed(VarintCodec::default())
     		.sink_map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
     		.map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
     		.split();
 
+        // Build the channel that will be used to communicate outgoing message to this remote.
         let (input_tx, input_rx) = mpsc::unbounded();
         input_tx.unbounded_send(init_msg.into()).expect("newly-created channel is always open");
         self.inner.remote_connections.write().insert(remote_addr.clone(), RemoteInfo {
@@ -139,13 +142,14 @@ impl<C> ConnectionUpgrade<C> for FloodSubUpgrade
             subscribed_topics: RwLock::new(FnvHashSet::default()),
         });
 
+        // Combine the socket read and the outgoing messages input, so that we can wake up when
+        // either happens.
 	    let messages = input_rx.map(|m| (m, true))
 		    .map_err(|_| unreachable!())
 		    .select(floodsub_stream.map(|m| (m, false)));
 
         let inner = self.inner.clone();
         let remote_addr = remote_addr.clone();
-
         let future = future::loop_fn((floodsub_sink, messages), move |(floodsub_sink, messages)| {
             let inner = inner.clone();
             let remote_addr = remote_addr.clone();
@@ -156,7 +160,9 @@ impl<C> ConnectionUpgrade<C> for FloodSubUpgrade
                 .and_then(move |(input, rest)| {
                     match input {
                         Some((bytes, false)) => {
+                            // Received a packet from the remote.
                             trace!(target: "libp2p-floodsub", "Received packet from remote");
+                            // Parsing attempt.
                             let mut input = match protobuf::parse_from_bytes::<rpc_proto::RPC>(&bytes) {
                                 Ok(msg) => msg,
                                 Err(err) => {
@@ -167,6 +173,7 @@ impl<C> ConnectionUpgrade<C> for FloodSubUpgrade
                                 },
                             };
 
+                            // Update the topics the remote is subscribed to.
                             if !input.get_subscriptions().is_empty() {
                                 let mut remote_connec = inner.remote_connections.write();
                                 let mut remote = remote_connec.get(&remote_addr).unwrap();       // TODO: what if multiple entries?
@@ -186,8 +193,12 @@ impl<C> ConnectionUpgrade<C> for FloodSubUpgrade
                                 }
                             }
 
+                            // Handle the messages coming from the remote.
                             for publish in input.mut_publish().iter_mut() {
                                 let from = publish.take_from();
+                                // We maintain a list of the messages that have already been
+                                // processed so that we don't process the same message twice.
+                                // Each message is identified by the `(from, seqno)` tuple.
                                 if !inner.received.lock().insert((from.clone(), publish.take_seqno())) {
                                     trace!(target: "libp2p-floodsub",
                                            "Skipping message because we had already received \
@@ -206,6 +217,7 @@ impl<C> ConnectionUpgrade<C> for FloodSubUpgrade
                                        "Processing message for topics {:?} ; payload = {} bytes",
                                        topics, publish.get_data().len());
 
+                                // Broadcast the message to all the other remotes.
                                 {
                                     let remote_connections = inner.remote_connections.read();
                                     for (addr, info) in remote_connections.iter() {
@@ -213,29 +225,27 @@ impl<C> ConnectionUpgrade<C> for FloodSubUpgrade
                                         if !topics.iter().any(|t| st.contains(t)) {
                                             continue;
                                         }
-                                        // TODO: don't send back to the sender
+                                        // TODO: don't send back to the remote that just sent it
                                         trace!(target: "libp2p-floodsub",
                                                "Broadcasting received message to {}", addr);
                                         let _ = info.sender.unbounded_send(bytes.clone());
                                     }
                                 }
 
+                                // Send the message locally if relevant.
                                 let dispatch_locally = {
                                     let subscribed_topics = inner.subscribed_topics.read();
                                     topics.iter().any(|t| subscribed_topics.contains(t))
                                 };
-
-                                let out_msg = Message {
-                                    source: from,
-                                    data: publish.take_data(),
-                                    topics: topics,
-                                };
-
                                 if dispatch_locally {
                                     // Ignore if channel is closed.
                                     trace!(target: "libp2p-floodsub",
                                        "Dispatching message locally");
-                                    let _ = inner.output_tx.unbounded_send(out_msg);
+                                    let _ = inner.output_tx.unbounded_send(Message {
+                                        source: from,
+                                        data: publish.take_data(),
+                                        topics: topics,
+                                    });
                                 } else {
                                     trace!(target: "libp2p-floodsub",
                                        "Message not dispatched locally as we are not subscribed \
@@ -246,15 +256,17 @@ impl<C> ConnectionUpgrade<C> for FloodSubUpgrade
                             let fut = future::ok(future::Loop::Continue((floodsub_sink, rest)));
                             Box::new(fut) as Box<_>
                         },
+
                         Some((bytes, true)) => {
                             // Sending message to remote.
                             trace!(target: "libp2p-floodsub", "Effectively sending message \
-                                                             to remote");
+                                                               to remote");
                             let future = floodsub_sink
                                 .send(bytes)
                                 .map(|floodsub_sink| future::Loop::Continue((floodsub_sink, rest)));
                             Box::new(future) as Box<_>
                         },
+
                         None => {
                             // Both the connection stream and `rx` are empty, so we break the loop.
                             trace!(target: "libp2p-floodsub", "Pubsub future clean finish");
