@@ -192,7 +192,7 @@ where
 		Ok(Box::new(dial) as Box<_>)
 	}
 
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+	fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
 		let mut server = server.clone();
 		let last_proto = match server.pop() {
 			Some(v @ AddrComponent::WS) | Some(v @ AddrComponent::WSS) => v,
