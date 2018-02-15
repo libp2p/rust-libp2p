@@ -47,12 +47,19 @@ extern crate tokio_io;
 use futures::future::{self, Future, IntoFuture};
 use log::Level;
 use multiaddr::{AddrComponent, Multiaddr};
+use std::fmt;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::net::IpAddr;
 use swarm::Transport;
 use tokio_dns::{CpuPoolResolver, Resolver};
 
 /// Represents the configuration for a DNS transport capability of libp2p.
+///
+/// This struct implements the `Transport` trait and holds an underlying transport. Any call to
+/// `dial` with a multiaddr that contains `/dns4/` or `/dns6/` will be first be resolved, then
+/// passed to the underlying transport.
+///
+/// Listening is unaffected.
 #[derive(Clone)] // TODO: Debug
 pub struct DnsConfig<T> {
 	inner: T,
@@ -76,6 +83,17 @@ impl<T> DnsConfig<T> {
 			resolver: CpuPoolResolver::new(num_threads),
 		}
 	}
+}
+
+impl<T> fmt::Debug for DnsConfig<T>
+	where T: fmt::Debug
+{
+	#[inline]
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_tuple("DnsConfig")
+            .field(&self.inner)
+            .finish()
+    }
 }
 
 impl<T> Transport for DnsConfig<T>
@@ -164,12 +182,14 @@ where
 	}
 }
 
+// How to resolve ; to an IPv4 address or an IPv6 address?
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum ResolveTy {
 	Dns4,
 	Dns6,
 }
 
+// Resolve a DNS name and returns a future with the result.
 fn resolve_dns(
 	name: &str,
 	resolver: CpuPoolResolver,
@@ -224,24 +244,28 @@ mod tests {
 			#[inline]
 			fn listen_on(
 				self,
-				addr: Multiaddr,
+				_addr: Multiaddr,
 			) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
 				unreachable!()
 			}
 
 			fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-				let contains_dns = addr.iter().any(|cmp| match cmp {
-					AddrComponent::DNS4(_) => true,
-					AddrComponent::DNS6(_) => true,
-					_ => false,
-				});
-
-				assert!(!contains_dns);
+				let addr = addr.iter().collect::<Vec<_>>();
+				assert_eq!(addr.len(), 2);
+				match addr[1] {
+					AddrComponent::TCP(_) => (),
+					_ => panic!()
+				};
+				match addr[0] {
+					AddrComponent::DNS4(_) => (),
+					AddrComponent::DNS6(_) => (),
+					_ => panic!()
+				};
 				Ok(Box::new(future::empty()) as Box<_>)
 			}
 
 			#[inline]
-			fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+			fn nat_traversal(&self, _: &Multiaddr, _: &Multiaddr) -> Option<Multiaddr> {
 				panic!()
 			}
 		}
