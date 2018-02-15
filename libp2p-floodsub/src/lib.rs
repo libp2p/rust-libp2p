@@ -21,6 +21,7 @@
 extern crate bs58;
 extern crate bytes;
 extern crate byteorder;
+extern crate fnv;
 extern crate futures;
 extern crate libp2p_peerstore;
 extern crate libp2p_swarm;
@@ -38,7 +39,6 @@ mod topic;
 
 pub use self::topic::{TopicBuilder, TopicHash};
 
-use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
@@ -46,6 +46,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use bytes::{Bytes, BytesMut};
 use byteorder::{BigEndian, WriteBytesExt};
+use fnv::{FnvHashMap, FnvHashSet};
 use futures::{future, Future, Sink, Stream, Poll};
 use futures::sync::mpsc;
 use libp2p_peerstore::PeerId;
@@ -72,10 +73,10 @@ impl FloodSubUpgrade {
         let inner = Arc::new(Inner {
             peer_id: my_id.into_bytes(),
             output_tx: output_tx,
-            remote_connections: RwLock::new(HashMap::new()),
-            subscribed_topics: RwLock::new(HashSet::new()),
+            remote_connections: RwLock::new(FnvHashMap::default()),
+            subscribed_topics: RwLock::new(FnvHashSet::default()),
             seq_no: AtomicUsize::new(0),
-            received: Mutex::new(HashSet::new()),
+            received: Mutex::new(FnvHashSet::default()),
         });
 
         let upgrade = FloodSubUpgrade {
@@ -135,7 +136,7 @@ impl<C> ConnectionUpgrade<C> for FloodSubUpgrade
         input_tx.unbounded_send(init_msg.into()).expect("newly-created channel is always open");
         self.inner.remote_connections.write().insert(remote_addr.clone(), RemoteInfo {
             sender: input_tx,
-            subscribed_topics: RwLock::new(HashSet::new()),
+            subscribed_topics: RwLock::new(FnvHashSet::default()),
         });
 
 	    let messages = input_rx.map(|m| (m, true))
@@ -289,25 +290,26 @@ struct Inner {
     output_tx: mpsc::UnboundedSender<Message>,
 
     // Active connections with a remote.
-    remote_connections: RwLock<HashMap<Multiaddr, RemoteInfo>>,
+    remote_connections: RwLock<FnvHashMap<Multiaddr, RemoteInfo>>,
 
     // List of topics we're subscribed to. Necessary in order to filter out messages that we
     // erroneously receive.
-    subscribed_topics: RwLock<HashSet<TopicHash>>,
+    subscribed_topics: RwLock<FnvHashSet<TopicHash>>,
 
     // Sequence number for the messages we send.
     seq_no: AtomicUsize,
 
     // We keep track of the messages we received (in the format `(remote ID, seq_no)`) so that we
     // don't dispatch the same message twice if we receive it twice on the network.
-    received: Mutex<HashSet<(Vec<u8>, Vec<u8>)>>,
+    // TODO: the `HashSet` will keep growing indefinitely :-/
+    received: Mutex<FnvHashSet<(Vec<u8>, Vec<u8>)>>,
 }
 
 struct RemoteInfo {
     // Sender to send data over the socket to that host.
     sender: mpsc::UnboundedSender<BytesMut>,
     // Topics the remote is registered to.
-    subscribed_topics: RwLock<HashSet<TopicHash>>,
+    subscribed_topics: RwLock<FnvHashSet<TopicHash>>,
 }
 
 impl fmt::Debug for Inner {
@@ -327,7 +329,10 @@ impl<T, C> FloodSubController<T, C>
           C: ConnectionUpgrade<T::RawConn> + 'static,      // TODO: 'static :-/
 {
     /// Builds a new controller for floodsub.
-    pub fn new(upgrade: &FloodSubUpgrade, swarm: SwarmController<T, C>) -> FloodSubController<T, C> {
+    #[inline]
+    pub fn new(upgrade: &FloodSubUpgrade, swarm: SwarmController<T, C>)
+               -> FloodSubController<T, C>
+    {
         FloodSubController {
             inner: upgrade.inner.clone(),
             swarm: swarm,
@@ -340,6 +345,7 @@ impl<T, C> FloodSubController<T, C>
     /// It is not guaranteed that we receive every single message published on the network.
     #[inline]
     pub fn subscribe(&self, topic: TopicHash) {
+        // This function exists for convenience.
         self.subscribe_multi(iter::once(topic));
     }
 
@@ -349,6 +355,7 @@ impl<T, C> FloodSubController<T, C>
         where I: IntoIterator<Item = TopicHash>,
               I::IntoIter: Clone,
     {
+        // This function exists for convenience.
         self.sub_unsub_multi(topics.into_iter().map::<_, fn(_) -> _>(|t| (t, true)))
     }
 
@@ -358,6 +365,7 @@ impl<T, C> FloodSubController<T, C>
     /// anymore, then the message will be filtered out locally.
     #[inline]
     pub fn unsubscribe(&self, topic: &TopicHash) {
+        // This function exists for convenience.
         self.unsubscribe_multi(iter::once(topic));
     }
 
@@ -367,25 +375,25 @@ impl<T, C> FloodSubController<T, C>
         where I: IntoIterator<Item = &'a TopicHash>,
               I::IntoIter: Clone,
     {
+        // This function exists for convenience.
         self.sub_unsub_multi(topics.into_iter().map::<_, fn(_) -> _>(|t| (t.clone(), false)));
     }
 
-    // Inner implementation. The iterator also produces a boolean that is true if we subscribe and
+    // Inner implementation. The iterator should produce a boolean that is true if we subscribe and
     // false if we unsubscribe.
     fn sub_unsub_multi<I>(&self, topics: I)
         where I: IntoIterator<Item = (TopicHash, bool)>,
               I::IntoIter: Clone,
     {
-        let topics = topics.into_iter();
-
-        let mut subscribed_topics = self.inner.subscribed_topics.write();
-
         let mut proto = rpc_proto::RPC::new();
+
+        let topics = topics.into_iter();
 
         debug!(target: "libp2p-floodsub", "Queuing sub/unsub message ; sub = {:?} ; unsub = {:?}",
                topics.clone().filter(|t| t.1).map(|t| t.0.into_string()).collect::<Vec<_>>(),
                topics.clone().filter(|t| !t.1).map(|t| t.0.into_string()).collect::<Vec<_>>());
 
+        let mut subscribed_topics = self.inner.subscribed_topics.write();
         for (topic, subscribe) in topics.clone() {
             let mut subscription = rpc_proto::RPC_SubOpts::new();
             subscription.set_subscribe(subscribe);
@@ -401,6 +409,7 @@ impl<T, C> FloodSubController<T, C>
     /// Publishes a message on the network for the specified topic
     #[inline]
     pub fn publish(&self, topic: &TopicHash, data: Vec<u8>) {
+        // This function exists for convenience.
         self.publish_multi(iter::once(topic), data)
     }
 
@@ -414,6 +423,7 @@ impl<T, C> FloodSubController<T, C>
         debug!(target: "libp2p-floodsub", "Queueing publish message ; topics = {:?} ; data_len = {:?}",
                topics.clone().map(|t| t.clone().into_string()).collect::<Vec<_>>(), data.len());
 
+        // Build the `Vec<u8>` containing our sequence number for this message.
         let seq_no_bytes = {
             let mut seqno_bytes = Vec::new();
             let seqn = self.inner.seq_no.fetch_add(1, Ordering::Relaxed);
@@ -431,7 +441,7 @@ impl<T, C> FloodSubController<T, C>
         let mut proto = rpc_proto::RPC::new();
         proto.mut_publish().push(msg);
 
-        // TODO: add to self.received so that we don't get our own message back
+        // Insert into `received` so that we ignore the message if a remote sends it back to us.
         self.inner.received.lock().insert((self.inner.peer_id.clone(), seq_no_bytes));
 
         self.broadcast(proto, |r_top| topics.clone().any(|t| r_top.contains(t)));
@@ -440,7 +450,7 @@ impl<T, C> FloodSubController<T, C>
     // Internal function that dispatches an `RPC` protobuf struct to all the connected remotes
     // for which `filter` returns true.
     fn broadcast<F>(&self, message: rpc_proto::RPC, mut filter: F)
-        where F: FnMut(&HashSet<TopicHash>) -> bool
+        where F: FnMut(&FnvHashSet<TopicHash>) -> bool
     {
         let bytes = message.write_to_bytes().expect("protobuf message is always valid");
 
