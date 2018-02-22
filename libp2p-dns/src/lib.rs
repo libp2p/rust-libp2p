@@ -60,7 +60,7 @@ use tokio_dns::{CpuPoolResolver, Resolver};
 /// passed to the underlying transport.
 ///
 /// Listening is unaffected.
-#[derive(Clone)] // TODO: Debug
+#[derive(Clone)]
 pub struct DnsConfig<T> {
 	inner: T,
 	resolver: CpuPoolResolver,
@@ -202,7 +202,7 @@ fn resolve_dns(
 
 	let future = resolver.resolve(name).and_then(move |addrs| {
 		trace!(target: "libp2p-dns", "DNS component resolution: {} => {:?}",
-                   debug_name.expect("trace log level was enabled"), addrs);
+				   debug_name.expect("trace log level was enabled"), addrs);
 		addrs
 			.into_iter()
 			.filter_map(move |addr| match (addr, ty) {
