@@ -1,0 +1,15 @@
+[package]
+name = "libp2p-dns"
+version = "0.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+
+[dependencies]
+libp2p-swarm = { path = "../libp2p-swarm" }
+log = "0.4.1"
+futures = "0.1"
+multiaddr = "0.2.0"
+tokio-dns-unofficial = "0.1"
+tokio-io = "0.1"
+
+[dev-dependencies]
+libp2p-tcp-transport = { path = "../libp2p-tcp-transport" }
