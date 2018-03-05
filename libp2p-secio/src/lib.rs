@@ -95,7 +95,7 @@ extern crate minimal_lens;
 
 pub use self::error::SecioError;
 
-pub use minimal_lens::HasRef;
+pub use minimal_lens::Has;
 
 use bytes::{Bytes, BytesMut};
 use futures::{Future, Poll, StartSend, Sink, Stream};
@@ -121,10 +121,7 @@ mod structs_proto;
 /// Implementation of the `ConnectionUpgrade` trait of `libp2p_swarm`. Automatically applies
 /// secio on any connection.
 #[derive(Clone)]
-pub struct SecioConfig {
-	/// Private and public keys of the local node.
-	pub key: SecioKeyPair,
-}
+pub struct SecioConfig;
 
 /// Private and public keys of the local node.
 ///
@@ -189,7 +186,7 @@ pub enum SecioPublicKey<'a> {
 	Rsa(&'a [u8]),
 }
 
-impl<S> libp2p_swarm::ConnectionUpgrade<S> for SecioConfig
+impl<S, Conf: Has<SecioKeyPair>> libp2p_swarm::ConnectionUpgrade<S, Conf> for SecioConfig
 	where S: AsyncRead + AsyncWrite + 'static
 {
 	type Output = RwStreamSink<

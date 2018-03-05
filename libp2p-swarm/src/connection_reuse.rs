@@ -65,7 +65,7 @@ use transport::{ConnectionUpgrade, MuxedTransport, Transport, UpgradedNode};
 pub struct ConnectionReuse<T, C, Conf>
 where
 	T: Transport<Conf>,
-	C: ConnectionUpgrade<T::RawConn>,
+	C: ConnectionUpgrade<T::RawConn, Conf>,
 {
 	// Underlying transport and connection upgrade for when we need to dial or listen.
 	inner: UpgradedNode<T, C, Conf>,
@@ -82,7 +82,7 @@ struct Shared<O> {
 impl<T, C, Conf> From<UpgradedNode<T, C, Conf>> for ConnectionReuse<T, C, Conf>
 where
 	T: Transport<Conf>,
-	C: ConnectionUpgrade<T::RawConn>,
+	C: ConnectionUpgrade<T::RawConn, Conf>,
 {
 	#[inline]
 	fn from(node: UpgradedNode<T, C, Conf>) -> Self {
@@ -100,7 +100,7 @@ where
 impl<T: 'static, C: 'static, Conf: 'static> Transport<Conf> for ConnectionReuse<T, C, Conf>
 where
 	T: Transport<Conf>,
-	C: ConnectionUpgrade<T::RawConn>,
+	C: ConnectionUpgrade<T::RawConn, Conf>,
 	C: Clone,
 	C::Output: StreamMuxer + Clone,
 	C::NamesIter: Clone, // TODO: not elegant
@@ -168,7 +168,7 @@ where
 impl<T: 'static, C: 'static, Conf: 'static> MuxedTransport<Conf> for ConnectionReuse<T, C, Conf>
 where
 	T: Transport<Conf>,
-	C: ConnectionUpgrade<T::RawConn>,
+	C: ConnectionUpgrade<T::RawConn, Conf>,
 	C: Clone,
 	C::Output: StreamMuxer + Clone,
 	C::NamesIter: Clone, // TODO: not elegant
@@ -176,7 +176,7 @@ where
 	type Incoming = Box<Future<Item = (<C::Output as StreamMuxer>::Substream, Multiaddr), Error = IoError>>;
 
 	#[inline]
-	fn next_incoming(self) -> Self::Incoming {
+	fn next_incoming(self, _: Conf) -> Self::Incoming {
 		let future = ConnectionReuseIncoming { shared: self.shared.clone() }
 			.and_then(|(out, addr)| {
 				out.inbound().map(|o| (o, addr))
