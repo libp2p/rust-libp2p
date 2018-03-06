@@ -27,18 +27,18 @@ use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::ops::Deref;
 use std::time::Duration;
 
-/// Implementation of `Transport`. See the crate root description.
+/// Implementation of `Transport`. See [the crate root description](index.html).
 #[derive(Debug, Clone)]
-pub struct IdentifyTransport<T, P> {
-	transport: T,
-	peerstore: P,
+pub struct IdentifyTransport<Trans, PStoreRef> {
+	transport: Trans,
+	peerstore: PStoreRef,
 	addr_ttl: Duration,
 }
 
-impl<T, P> IdentifyTransport<T, P> {
+impl<Trans, PStoreRef> IdentifyTransport<Trans, PStoreRef> {
 	/// Creates an `IdentifyTransport` that wraps around the given transport and peerstore.
 	#[inline]
-	pub fn new(transport: T, peerstore: P) -> IdentifyTransport<T, P> {
+	pub fn new(transport: Trans, peerstore: PStoreRef) -> Self {
 		IdentifyTransport::with_ttl(transport, peerstore, Duration::from_secs(3600))
 	}
 
@@ -47,7 +47,7 @@ impl<T, P> IdentifyTransport<T, P> {
 	///
 	/// The default value is one hour.
 	#[inline]
-	pub fn with_ttl(transport: T, peerstore: P, ttl: Duration) -> IdentifyTransport<T, P> {
+	pub fn with_ttl(transport: Trans, peerstore: PStoreRef, ttl: Duration) -> Self {
 		IdentifyTransport {
 			transport: transport,
 			peerstore: peerstore,
@@ -56,16 +56,16 @@ impl<T, P> IdentifyTransport<T, P> {
 	}
 }
 
-impl<T, Pr, P> Transport for IdentifyTransport<T, Pr>
+impl<Trans, PStore, PStoreRef> Transport for IdentifyTransport<Trans, PStoreRef>
 where
-	T: Transport + Clone + 'static,          // TODO: 'static :(
-	Pr: Deref<Target = P> + Clone + 'static, // TODO: 'static :(
-	for<'r> &'r P: Peerstore,
+	Trans: Transport + Clone + 'static,          // TODO: 'static :(
+	PStoreRef: Deref<Target = PStore> + Clone + 'static, // TODO: 'static :(
+	for<'r> &'r PStore: Peerstore,
 {
-	type RawConn = T::RawConn;
+	type RawConn = Trans::RawConn;
 	type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
-	type ListenerUpgrade = Box<Future<Item = (T::RawConn, Multiaddr), Error = IoError>>;
-	type Dial = Box<Future<Item = (T::RawConn, Multiaddr), Error = IoError>>;
+	type ListenerUpgrade = Box<Future<Item = (Trans::RawConn, Multiaddr), Error = IoError>>;
+	type Dial = Box<Future<Item = (Trans::RawConn, Multiaddr), Error = IoError>>;
 
 	#[inline]
 	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -217,13 +217,13 @@ where
 	}
 }
 
-impl<T, Pr, P> MuxedTransport for IdentifyTransport<T, Pr>
+impl<Trans, PStore, PStoreRef> MuxedTransport for IdentifyTransport<Trans, PStoreRef>
 where
-	T: MuxedTransport + Clone + 'static,
-	Pr: Deref<Target = P> + Clone + 'static,
-	for<'r> &'r P: Peerstore,
+	Trans: MuxedTransport + Clone + 'static,
+	PStoreRef: Deref<Target = PStore> + Clone + 'static,
+	for<'r> &'r PStore: Peerstore,
 {
-	type Incoming = Box<Future<Item = (T::RawConn, Multiaddr), Error = IoError>>;
+	type Incoming = Box<Future<Item = (Trans::RawConn, Multiaddr), Error = IoError>>;
 
 	#[inline]
 	fn next_incoming(self) -> Self::Incoming {

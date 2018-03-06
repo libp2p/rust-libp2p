@@ -166,6 +166,13 @@ where
 fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> {
 	match protobuf_parse_from_bytes::<structs_proto::Identify>(&msg) {
 		Ok(mut msg) => {
+			// Turn a `Vec<u8>` into a `Multiaddr`. If something bad happens, turn it into
+			// an `IoError`.
+			fn bytes_to_multiaddr(bytes: Vec<u8>) -> Result<Multiaddr, IoError> {
+				Multiaddr::from_bytes(bytes)
+					.map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
+			}
+
 			let listen_addrs = {
 				let mut addrs = Vec::new();
 				for addr in msg.take_listenAddrs().into_iter() {
@@ -189,11 +196,6 @@ fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> 
 
 		Err(err) => Err(IoError::new(IoErrorKind::InvalidData, err)),
 	}
-}
-
-// Turn a `Vec<u8>` into a `Multiaddr`. If something bad happens, turn it into an `IoError`.
-fn bytes_to_multiaddr(bytes: Vec<u8>) -> Result<Multiaddr, IoError> {
-	Multiaddr::from_bytes(bytes).map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
 }
 
 #[cfg(test)]
