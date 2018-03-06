@@ -383,8 +383,9 @@ where
 	}
 }
 
-/// > **Note**: This type is needed because of the lack of `-> impl Trait` in Rust. It can be
-/// >           removed eventually.
+// TODO: This type is needed because of the lack of `impl Trait` in stable Rust.
+//		 If Rust had impl Trait we could use the Either enum from the futures crate and add some
+//		 modifiers to it. This custom enum is a combination of Either and these modifiers.
 #[derive(Debug, Copy, Clone)]
 pub enum EitherListenUpgrade<A, B> {
 	First(A),
@@ -417,9 +418,9 @@ where
 /// Implements `Future` and redirects calls to either `First` or `Second`.
 ///
 /// Additionally, the output will be wrapped inside a `EitherSocket`.
-///
-/// > **Note**: This type is needed because of the lack of `-> impl Trait` in Rust. It can be
-/// >           removed eventually.
+// TODO: This type is needed because of the lack of `impl Trait` in stable Rust.
+//		 If Rust had impl Trait we could use the Either enum from the futures crate and add some
+//		 modifiers to it. This custom enum is a combination of Either and these modifiers.
 #[derive(Debug, Copy, Clone)]
 pub enum EitherTransportFuture<A, B> {
 	First(A),
@@ -680,8 +681,9 @@ pub enum EitherUpgradeIdentifier<A, B> {
 ///
 /// Additionally, the output will be wrapped inside a `EitherSocket`.
 ///
-/// > **Note**: This type is needed because of the lack of `-> impl Trait` in Rust. It can be
-/// >           removed eventually.
+// TODO: This type is needed because of the lack of `impl Trait` in stable Rust.
+//		 If Rust had impl Trait we could use the Either enum from the futures crate and add some
+//		 modifiers to it. This custom enum is a combination of Either and these modifiers.
 #[derive(Debug, Copy, Clone)]
 pub enum EitherConnUpgrFuture<A, B> {
 	First(A),
