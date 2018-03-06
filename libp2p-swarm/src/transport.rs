@@ -889,8 +889,8 @@ where
 	/// If the underlying transport is a `MuxedTransport`, then after calling `dial` we may receive
 	/// substreams opened by the dialed nodes.
 	/// 
-	/// This function returns the next incoming substream. You are strongly encouraged to call it
-	/// if you have a muxed transport.
+	/// This function returns the next incoming substream. Muxed transports may block processing
+	/// incoming connections if this function is not called.
 	pub fn next_incoming(self) -> Box<Future<Item = (Box<Future<Item = C::Output, Error = IoError> + 'a>, Multiaddr), Error = IoError> + 'a>
 		where T: MuxedTransport,
 			  C::NamesIter: Clone, // TODO: not elegant

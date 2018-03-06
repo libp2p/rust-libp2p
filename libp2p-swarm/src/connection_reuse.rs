@@ -249,8 +249,8 @@ where S: Stream<Item = (F, Multiaddr), Error = IoError>,
 		};
 
 		// Check whether any upgrade (to a muxer) on an incoming connection is ready.
-        for n in (0 .. self.current_upgrades.len()).rev() {
-            let (mut current_upgrade, client_addr) = self.current_upgrades.swap_remove(n);
+		for n in (0 .. self.current_upgrades.len()).rev() {
+			let (mut current_upgrade, client_addr) = self.current_upgrades.swap_remove(n);
 			match current_upgrade.poll() {
 				Ok(Async::Ready(muxer)) => {
 					// A new connection has been successfully upgraded to a muxer.
@@ -271,8 +271,8 @@ where S: Stream<Item = (F, Multiaddr), Error = IoError>,
 		}
 
 		// Check whether any incoming substream is ready.
-        for n in (0 .. self.connections.len()).rev() {
-            let (muxer, mut next_incoming, client_addr) = self.connections.swap_remove(n);
+		for n in (0 .. self.connections.len()).rev() {
+			let (muxer, mut next_incoming, client_addr) = self.connections.swap_remove(n);
 			match next_incoming.poll() {
 				Ok(Async::Ready(incoming)) => {
 					// A new substream is ready.
@@ -322,16 +322,15 @@ impl<M> Future for ConnectionReuseIncoming<M>
 				},
 				Ok(Async::NotReady) => break,
 				Ok(Async::Ready(None)) | Err(_) => {
-					// The sender and receiver are both in the same struct, therefore the link can
-					// never break.
-					unreachable!()
+					unreachable!("the sender and receiver are both in the same struct, therefore \
+								  the link can never break")
 				},
 			}
 		}
 
 		// Check whether any incoming substream is ready.
-        for n in (0 .. lock.next_incoming.len()).rev() {
-            let (muxer, mut future, addr) = lock.next_incoming.swap_remove(n);
+		for n in (0 .. lock.next_incoming.len()).rev() {
+			let (muxer, mut future, addr) = lock.next_incoming.swap_remove(n);
 			match future.poll() {
 				Ok(Async::Ready(value)) => {
 					// A substream is ready ; push back the muxer for the next time this function
