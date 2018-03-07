@@ -6,7 +6,7 @@ authors = ["pierre <pierre.krieger1708@gmail.com>"]
 [dependencies]
 bytes = "0.4"
 futures = "0.1"
-multiaddr = { path = "../rust-multiaddr" }
+multiaddr = "0.2"
 multiplex = { path = "../multiplex-rs" }
 libp2p-peerstore = { path = "../libp2p-peerstore" }
 libp2p-ping = { path = "../libp2p-ping" }
