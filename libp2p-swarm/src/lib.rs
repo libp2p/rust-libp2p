@@ -22,60 +22,60 @@
 //#![doc(include = "../README.md")]
 
 //! Transport, protocol upgrade and swarm systems of *libp2p*.
-//! 
+//!
 //! This crate contains all the core traits and mechanisms of the transport and swarm systems
 //! of *libp2p*.
-//! 
+//!
 //! # The `Transport` trait
-//! 
+//!
 //! The main trait that this crate provides is `Transport`, which provides the `dial` and
 //! `listen_on` methods and can be used to dial or listen on a multiaddress. The `swarm` crate
 //! itself does not provide any concrete (ie. non-dummy, non-adapter) implementation of this trait.
 //! It is implemented on structs that are provided by external crates, such as `TcpConfig` from
 //! `tcp-transport`, `UdpConfig`, or `WebsocketConfig` (note: as of the writing of this
 //! documentation, the last two structs don't exist yet).
-//! 
+//!
 //! Each implementation of `Transport` only supports *some* multiaddress protocols, for example
 //! the `TcpConfig` struct only supports multiaddresses that look like `/ip*/*.*.*.*/tcp/*`. It is
 //! possible to group two implementations of `Transport` with the `or_transport` method, in order
 //! to obtain a single object that supports the protocols of both objects at once. This can be done
 //! multiple times in a row in order to chain as many implementations as you want.
-//! 
+//!
 //! // TODO: right now only tcp-transport exists, we need to add an example for chaining
 //! //       multiple transports once that makes sense
-//! 
+//!
 //! ## The `MuxedTransport` trait
-//! 
+//!
 //! The `MuxedTransport` trait is an extension to the `Transport` trait, and is implemented on
 //! transports that can receive incoming connections on streams that have been opened with `dial()`.
-//! 
+//!
 //! The trait provides the `next_incoming()` method, which returns a future that will resolve to
 //! the next substream that arrives from a dialed node.
-//! 
+//!
 //! > **Note**: This trait is mainly implemented for transports that provide stream muxing
 //! >           capabilities, but it can also be implemented in a dummy way by returning an empty
 //! >           iterator.
-//! 
+//!
 //! # Connection upgrades
-//! 
+//!
 //! Once a socket has been opened with a remote through a `Transport`, it can be *upgraded*. This
 //! consists in negotiating a protocol with the remote (through `multistream-select`), and applying
 //! that protocol on the socket.
-//! 
+//!
 //! A potential connection upgrade is represented with the `ConnectionUpgrade` trait. The trait
 //! consists in a protocol name plus a method that turns the socket into an `Output` object whose
 //! nature and type is specific to each upgrade.
-//! 
+//!
 //! There exists three kinds of connection upgrades: middlewares, muxers, and actual protocols.
-//! 
+//!
 //! ## Middlewares
-//! 
+//!
 //! Examples of middleware connection upgrades include `PlainTextConfig` (dummy upgrade) or
 //! `SecioConfig` (encyption layer, provided by the `secio` crate).
-//! 
+//!
 //! The output of a middleware connection upgrade implements the `AsyncRead` and `AsyncWrite`
 //! traits, just like sockets do.
-//! 
+//!
 //! A middleware can be applied on a transport by using the `with_upgrade` method of the
 //! `Transport` trait. The return value of this method also implements the `Transport` trait, which
 //! means that you can call `dial()` and `listen_on()` on it in order to directly obtain an
@@ -83,66 +83,66 @@
 //! `next_incoming()` method will automatically apply the upgrade on both the dialer and the
 //! listener. An error is produced if the remote doesn't support the protocol corresponding to the
 //! connection upgrade.
-//! 
+//!
 //! ```
 //! extern crate libp2p_swarm;
 //! extern crate libp2p_tcp_transport;
 //! extern crate tokio_core;
-//! 
+//!
 //! use libp2p_swarm::Transport;
-//! 
+//!
 //! # fn main() {
 //! let tokio_core = tokio_core::reactor::Core::new().unwrap();
 //! let tcp_transport = libp2p_tcp_transport::TcpConfig::new(tokio_core.handle());
 //! let upgraded = tcp_transport.with_upgrade(libp2p_swarm::PlainTextConfig);
-//! 
+//!
 //! // upgraded.dial(...)   // automatically applies the plain text protocol on the socket
 //! # }
 //! ```
 //!
 //! ## Muxers
-//! 
+//!
 //! The concept of *muxing* consists in using a single stream as if it was multiple substreams.
-//! 
+//!
 //! If the output of the connection upgrade instead implements the `StreamMuxer` and `Clone`
 //! traits, then you can turn the `UpgradedNode` struct into a `ConnectionReuse` struct by calling
 //! `ConnectionReuse::from(upgraded_node)`.
-//! 
+//!
 //! The `ConnectionReuse` struct then implements the `Transport` and `MuxedTransport` traits, and
 //! can be used to dial or listen to multiaddresses, just like any other transport. The only
 //! difference is that dialing a node will try to open a new substream on an existing connection
 //! instead of opening a new one every time.
-//! 
+//!
 //! > **Note**: Right now the `ConnectionReuse` struct is not fully implemented.
-//! 
+//!
 //! TODO: add an example once the multiplex pull request is merged
-//! 
+//!
 //! ## Actual protocols
-//! 
+//!
 //! *Actual protocols* work the same way as middlewares, except that their `Output` doesn't
 //! implement the `AsyncRead` and `AsyncWrite` traits. This means that that the return value of
 //! `with_upgrade` does **not** implement the `Transport` trait and thus cannot be used as a
 //! transport.
-//! 
+//!
 //! However the `UpgradedNode` struct returned by `with_upgrade` still provides methods named
 //! `dial`, `listen_on`, and `next_incoming`, which will yield you a `Future` or a `Stream`,
 //! which you can use to obtain the `Output`. This `Output` can then be used in a protocol-specific
 //! way to use the protocol.
-//! 
+//!
 //! ```no_run
 //! extern crate futures;
 //! extern crate libp2p_ping;
 //! extern crate libp2p_swarm;
 //! extern crate libp2p_tcp_transport;
 //! extern crate tokio_core;
-//! 
+//!
 //! use futures::Future;
 //! use libp2p_ping::Ping;
 //! use libp2p_swarm::Transport;
-//! 
+//!
 //! # fn main() {
 //! let mut core = tokio_core::reactor::Core::new().unwrap();
-//! 
+//!
 //! let ping_finished_future = libp2p_tcp_transport::TcpConfig::new(core.handle())
 //!     // We have a `TcpConfig` struct that implements `Transport`, and apply a `Ping` upgrade on it.
 //!     .with_upgrade(Ping)
@@ -152,14 +152,14 @@
 //!     .and_then(|((mut pinger, service), _)| {
 //!         pinger.ping().map_err(|_| panic!()).select(service).map_err(|_| panic!())
 //!     });
-//! 
+//!
 //! // Runs until the ping arrives.
 //! core.run(ping_finished_future).unwrap();
 //! # }
 //! ```
-//! 
+//!
 //! ## Grouping protocols
-//! 
+//!
 //! You can use the `.or_upgrade()` method to group multiple upgrades together. The return value
 //! also implements the `ConnectionUpgrade` trait and will choose one of the protocols amongst the
 //! ones supported.
@@ -177,26 +177,26 @@
 //! extern crate libp2p_swarm;
 //! extern crate libp2p_tcp_transport;
 //! extern crate tokio_core;
-//! 
+//!
 //! use futures::Future;
 //! use libp2p_ping::Ping;
 //! use libp2p_swarm::Transport;
-//! 
+//!
 //! # fn main() {
 //! let mut core = tokio_core::reactor::Core::new().unwrap();
-//! 
+//!
 //! let transport = libp2p_tcp_transport::TcpConfig::new(core.handle())
 //!     .with_dummy_muxing();
-//! 
+//!
 //! let (swarm_controller, swarm_future) = libp2p_swarm::swarm(transport, Ping, |(mut pinger, service), client_addr| {
 //!     pinger.ping().map_err(|_| panic!())
 //!         .select(service).map_err(|_| panic!())
 //!         .map(|_| ())
 //! });
-//! 
+//!
 //! // The `swarm_controller` can then be used to do some operations.
 //! swarm_controller.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap());
-//! 
+//!
 //! // Runs until everything is finished.
 //! core.run(swarm_future).unwrap();
 //! # }
@@ -223,6 +223,6 @@ pub use self::connection_reuse::ConnectionReuse;
 pub use self::multiaddr::Multiaddr;
 pub use self::muxing::StreamMuxer;
 pub use self::swarm::{swarm, SwarmController, SwarmFuture};
-pub use self::transport::{ConnectionUpgrade, PlainTextConfig, Transport, UpgradedNode, OrUpgrade};
-pub use self::transport::{Endpoint, SimpleProtocol, MuxedTransport, UpgradeExt};
-pub use self::transport::{DeniedConnectionUpgrade};
+pub use self::transport::{ConnectionUpgrade, OrUpgrade, PlainTextConfig, Transport, UpgradedNode};
+pub use self::transport::{Endpoint, MuxedTransport, SimpleProtocol, UpgradeExt};
+pub use self::transport::DeniedConnectionUpgrade;

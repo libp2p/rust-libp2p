@@ -1,34 +1,34 @@
 // Copyright 2017 Parity Technologies (UK) Ltd.
-// 
-// Permission is hereby granted, free of charge, to any person obtaining a 
-// copy of this software and associated documentation files (the "Software"), 
-// to deal in the Software without restriction, including without limitation 
-// the rights to use, copy, modify, merge, publish, distribute, sublicense, 
-// and/or sell copies of the Software, and to permit persons to whom the 
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
 // Software is furnished to do so, subject to the following conditions:
 //
-// The above copyright notice and this permission notice shall be included in 
+// The above copyright notice and this permission notice shall be included in
 // all copies or substantial portions of the Software.
 //
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS 
-// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
 //! Alternative implementation for `tokio_io::codec::length_delimited::FramedRead` with an
 //! additional property: the `into_inner()` method is guarateed not to drop any data.
 //!
 //! Also has the length field length hardcoded.
-//! 
+//!
 //! We purposely only support a frame length of under 64kiB. Frames most consist in a short
 //! protocol name, which is highly unlikely to be more than 64kiB long.
 
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::marker::PhantomData;
-use futures::{Async, StartSend, Poll, Sink, Stream};
+use futures::{Async, Poll, Sink, StartSend, Stream};
 use smallvec::SmallVec;
 use tokio_io::AsyncRead;
 
@@ -56,16 +56,18 @@ enum State {
     // We are currently reading the length of the next frame of data.
     ReadingLength,
     // We are currently reading the frame of data itself.
-    ReadingData {
-        frame_len: u16
-    },
+    ReadingData { frame_len: u16 },
 }
 
 impl<I, S> LengthDelimitedFramedRead<I, S> {
     pub fn new(inner: S) -> LengthDelimitedFramedRead<I, S> {
         LengthDelimitedFramedRead {
             inner: inner,
-            internal_buffer: { let mut v = SmallVec::new(); v.push(0); v },
+            internal_buffer: {
+                let mut v = SmallVec::new();
+                v.push(0);
+                v
+            },
             internal_buffer_pos: 0,
             state: State::ReadingLength,
             marker: PhantomData,
@@ -92,8 +94,9 @@ impl<I, S> LengthDelimitedFramedRead<I, S> {
 }
 
 impl<I, S> Stream for LengthDelimitedFramedRead<I, S>
-    where S: AsyncRead,
-          I: for<'r> From<&'r [u8]>
+where
+    S: AsyncRead,
+    I: for<'r> From<&'r [u8]>,
 {
     type Item = I;
     type Error = IoError;
@@ -105,26 +108,27 @@ impl<I, S> Stream for LengthDelimitedFramedRead<I, S>
 
             match self.state {
                 State::ReadingLength => {
-                    match self.inner.read(&mut self.internal_buffer[self.internal_buffer_pos..]) {
+                    match self.inner
+                        .read(&mut self.internal_buffer[self.internal_buffer_pos..])
+                    {
                         Ok(0) => {
                             // EOF
                             if self.internal_buffer_pos == 0 {
                                 return Ok(Async::Ready(None));
                             } else {
-                                return Err(IoError::new(IoErrorKind::BrokenPipe,
-                                                        "unexpected eof"));
+                                return Err(IoError::new(IoErrorKind::BrokenPipe, "unexpected eof"));
                             }
-                        },
+                        }
                         Ok(n) => {
                             debug_assert_eq!(n, 1);
                             self.internal_buffer_pos += n;
-                        },
+                        }
                         Err(ref err) if err.kind() == IoErrorKind::WouldBlock => {
                             return Ok(Async::NotReady);
-                        },
+                        }
                         Err(err) => {
                             return Err(err);
-                        },
+                        }
                     };
 
                     debug_assert_eq!(self.internal_buffer.len(), self.internal_buffer_pos);
@@ -135,12 +139,13 @@ impl<I, S> Stream for LengthDelimitedFramedRead<I, S>
                         let frame_len = decode_length_prefix(&self.internal_buffer);
 
                         if frame_len >= 1 {
-                            self.state = State::ReadingData { frame_len: frame_len };
+                            self.state = State::ReadingData {
+                                frame_len: frame_len,
+                            };
                             self.internal_buffer.clear();
                             self.internal_buffer.reserve(frame_len as usize);
-                            self.internal_buffer.extend((0 .. frame_len).map(|_| 0));
+                            self.internal_buffer.extend((0..frame_len).map(|_| 0));
                             self.internal_buffer_pos = 0;
-
                         } else {
                             debug_assert_eq!(frame_len, 0);
                             self.state = State::ReadingLength;
@@ -149,29 +154,32 @@ impl<I, S> Stream for LengthDelimitedFramedRead<I, S>
                             self.internal_buffer_pos = 0;
                             return Ok(Async::Ready(Some(From::from(&[][..]))));
                         }
-
                     } else if self.internal_buffer_pos >= 2 {
                         // Length prefix is too long. See module doc for info about max frame len.
-                        return Err(IoError::new(IoErrorKind::InvalidData, "frame length too long"));
-
+                        return Err(IoError::new(
+                            IoErrorKind::InvalidData,
+                            "frame length too long",
+                        ));
                     } else {
                         // Prepare for next read.
                         self.internal_buffer.push(0);
                     }
-                },
+                }
 
                 State::ReadingData { frame_len } => {
-                    match self.inner.read(&mut self.internal_buffer[self.internal_buffer_pos..]) {
+                    match self.inner
+                        .read(&mut self.internal_buffer[self.internal_buffer_pos..])
+                    {
                         Ok(0) => {
                             return Err(IoError::new(IoErrorKind::BrokenPipe, "unexpected eof"));
-                        },
+                        }
                         Ok(n) => self.internal_buffer_pos += n,
                         Err(ref err) if err.kind() == IoErrorKind::WouldBlock => {
                             return Ok(Async::NotReady);
-                        },
+                        }
                         Err(err) => {
                             return Err(err);
-                        },
+                        }
                     };
 
                     if self.internal_buffer_pos >= frame_len as usize {
@@ -183,14 +191,15 @@ impl<I, S> Stream for LengthDelimitedFramedRead<I, S>
                         self.internal_buffer_pos = 0;
                         return Ok(Async::Ready(Some(out_data)));
                     }
-                },
+                }
             }
         }
     }
 }
 
 impl<I, S> Sink for LengthDelimitedFramedRead<I, S>
-    where S: Sink
+where
+    S: Sink,
 {
     type SinkItem = S::SinkItem;
     type SinkError = S::SinkError;
@@ -250,25 +259,34 @@ mod tests {
     fn two_bytes_long_packet() {
         let len = 5000u16;
         assert!(len < (1 << 15));
-        let frame = (0 .. len).map(|n| (n & 0xff) as u8).collect::<Vec<_>>();
+        let frame = (0..len).map(|n| (n & 0xff) as u8).collect::<Vec<_>>();
         let mut data = vec![(len & 0x7f) as u8 | 0x80, (len >> 7) as u8];
         data.extend(frame.clone().into_iter());
         let framed = LengthDelimitedFramedRead::<Vec<u8>, _>::new(Cursor::new(data));
 
-        let recved = framed.into_future().map(|(m, _)| m).map_err(|_| ()).wait().unwrap();
+        let recved = framed
+            .into_future()
+            .map(|(m, _)| m)
+            .map_err(|_| ())
+            .wait()
+            .unwrap();
         assert_eq!(recved.unwrap(), frame);
     }
 
     #[test]
     fn packet_len_too_long() {
         let mut data = vec![0x81, 0x81, 0x1];
-        data.extend((0 .. 16513).map(|_| 0));
+        data.extend((0..16513).map(|_| 0));
         let framed = LengthDelimitedFramedRead::<Vec<u8>, _>::new(Cursor::new(data));
 
-        let recved = framed.into_future().map(|(m, _)| m).map_err(|(err, _)| err).wait();
+        let recved = framed
+            .into_future()
+            .map(|(m, _)| m)
+            .map_err(|(err, _)| err)
+            .wait();
         match recved {
             Err(io_err) => assert_eq!(io_err.kind(), ErrorKind::InvalidData),
-            _ => panic!()
+            _ => panic!(),
         }
     }
 
@@ -278,7 +296,16 @@ mod tests {
         let framed = LengthDelimitedFramedRead::<Vec<u8>, _>::new(Cursor::new(data));
 
         let recved = framed.collect().wait().unwrap();
-        assert_eq!(recved, vec![vec![], vec![], vec![9, 8, 7, 6, 5, 4], vec![], vec![9, 8, 7]]);
+        assert_eq!(
+            recved,
+            vec![
+                vec![],
+                vec![],
+                vec![9, 8, 7, 6, 5, 4],
+                vec![],
+                vec![9, 8, 7],
+            ]
+        );
     }
 
     #[test]
@@ -289,7 +316,7 @@ mod tests {
         let recved = framed.collect().wait();
         match recved {
             Err(io_err) => assert_eq!(io_err.kind(), ErrorKind::BrokenPipe),
-            _ => panic!()
+            _ => panic!(),
         }
     }
 
@@ -301,7 +328,7 @@ mod tests {
         let recved = framed.collect().wait();
         match recved {
             Err(io_err) => assert_eq!(io_err.kind(), ErrorKind::BrokenPipe),
-            _ => panic!()
+            _ => panic!(),
         }
     }
 
@@ -313,7 +340,7 @@ mod tests {
         let recved = framed.collect().wait();
         match recved {
             Err(io_err) => assert_eq!(io_err.kind(), ErrorKind::BrokenPipe),
-            _ => panic!()
+            _ => panic!(),
         }
     }
 }
