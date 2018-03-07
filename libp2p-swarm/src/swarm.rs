@@ -189,7 +189,9 @@ impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
             },
             Ok(Async::NotReady) => {},
             // TODO: may not be the best idea because we're killing the whole server
-            Err(err) => return Err(err),
+            Err(_err) => {
+                self.next_incoming = self.upgraded.clone().next_incoming();
+            },
         };
 
         match self.new_listeners.poll() {
@@ -233,7 +235,7 @@ impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
                     self.listeners.push(listener);
                 },
                 Ok(Async::Ready(None)) => {},
-                Err(err) => return Err(err),
+                Err(_err) => {},        // Ignoring errors
             };
         }
 
@@ -246,7 +248,7 @@ impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
                 Ok(Async::NotReady) => {
                     self.listeners_upgrade.push(upgrade);
                 },
-                Err(err) => return Err(err),
+                Err(_err) => {},       // Ignoring errors
             }
         }
 
@@ -259,7 +261,7 @@ impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
                 Ok(Async::NotReady) => {
                     self.dialers.push(dialer);
                 },
-                Err(err) => return Err(err),
+                Err(_err) => {},       // Ignoring errors
             }
         }
 
@@ -268,7 +270,7 @@ impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
             match to_process.poll() {
                 Ok(Async::Ready(())) => {},
                 Ok(Async::NotReady) => self.to_process.push(to_process),
-                Err(err) => return Err(err),
+                Err(_err) => {},     // Ignoring errors
             }
         }
 
