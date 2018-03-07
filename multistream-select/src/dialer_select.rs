@@ -1,21 +1,21 @@
 // Copyright 2017 Parity Technologies (UK) Ltd.
-// 
-// Permission is hereby granted, free of charge, to any person obtaining a 
-// copy of this software and associated documentation files (the "Software"), 
-// to deal in the Software without restriction, including without limitation 
-// the rights to use, copy, modify, merge, publish, distribute, sublicense, 
-// and/or sell copies of the Software, and to permit persons to whom the 
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
 // Software is furnished to do so, subject to the following conditions:
 //
-// The above copyright notice and this permission notice shall be included in 
+// The above copyright notice and this permission notice shall be included in
 // all copies or substantial portions of the Software.
 //
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS 
-// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
 //! Contains the `dialer_select_proto` code, which allows selecting a protocol thanks to
@@ -24,7 +24,7 @@
 use ProtocolChoiceError;
 use bytes::Bytes;
 use futures::{Future, Sink, Stream};
-use futures::future::{result, loop_fn, Loop};
+use futures::future::{loop_fn, result, Loop};
 
 use protocol::Dialer;
 use protocol::DialerToListenerMessage;
@@ -45,20 +45,21 @@ use tokio_io::{AsyncRead, AsyncWrite};
 // TODO: remove the Box once -> impl Trait lands
 #[inline]
 pub fn dialer_select_proto<'a, R, I, M, P>(
-	inner: R,
-	protocols: I,
+    inner: R,
+    protocols: I,
 ) -> Box<Future<Item = (P, R), Error = ProtocolChoiceError> + 'a>
-	where R: AsyncRead + AsyncWrite + 'a,
-	      I: Iterator<Item = (Bytes, M, P)> + 'a,
-	      M: FnMut(&Bytes, &Bytes) -> bool + 'a,
-	      P: 'a
+where
+    R: AsyncRead + AsyncWrite + 'a,
+    I: Iterator<Item = (Bytes, M, P)> + 'a,
+    M: FnMut(&Bytes, &Bytes) -> bool + 'a,
+    P: 'a,
 {
-	// We choose between the "serial" and "parallel" strategies based on the number of protocols.
-	if protocols.size_hint().1.map(|n| n <= 3).unwrap_or(false) {
-		dialer_select_proto_serial(inner, protocols.map(|(n, _, id)| (n, id)))
-	} else {
-		dialer_select_proto_parallel(inner, protocols)
-	}
+    // We choose between the "serial" and "parallel" strategies based on the number of protocols.
+    if protocols.size_hint().1.map(|n| n <= 3).unwrap_or(false) {
+        dialer_select_proto_serial(inner, protocols.map(|(n, _, id)| (n, id)))
+    } else {
+        dialer_select_proto_parallel(inner, protocols)
+    }
 }
 
 /// Helps selecting a protocol amongst the ones supported.
@@ -67,22 +68,24 @@ pub fn dialer_select_proto<'a, R, I, M, P>(
 /// match functions, because it's not needed.
 // TODO: remove the Box once -> impl Trait lands
 pub fn dialer_select_proto_serial<'a, R, I, P>(
-	inner: R,
-	mut protocols: I,
+    inner: R,
+    mut protocols: I,
 ) -> Box<Future<Item = (P, R), Error = ProtocolChoiceError> + 'a>
-	where R: AsyncRead + AsyncWrite + 'a,
-	      I: Iterator<Item = (Bytes, P)> + 'a,
-	      P: 'a
+where
+    R: AsyncRead + AsyncWrite + 'a,
+    I: Iterator<Item = (Bytes, P)> + 'a,
+    P: 'a,
 {
-	let future = Dialer::new(inner)
-        .from_err()
-        .and_then(move |dialer| {
-            // Similar to a `loop` keyword.
-            loop_fn(dialer, move |dialer| {
-                result(protocols.next().ok_or(ProtocolChoiceError::NoProtocolFound))
+    let future = Dialer::new(inner).from_err().and_then(move |dialer| {
+        // Similar to a `loop` keyword.
+        loop_fn(dialer, move |dialer| {
+            result(protocols.next().ok_or(ProtocolChoiceError::NoProtocolFound))
                     // If the `protocols` iterator produced an element, send it to the dialer
                     .and_then(|(proto_name, proto_value)| {
-                        dialer.send(DialerToListenerMessage::ProtocolRequest { name: proto_name.clone() })
+                        let req = DialerToListenerMessage::ProtocolRequest {
+                            name: proto_name.clone()
+                        };
+                        dialer.send(req)
                             .map(|d| (d, proto_name, proto_value))
                             .from_err()
                     })
@@ -110,11 +113,11 @@ pub fn dialer_select_proto_serial<'a, R, I, P>(
                             _ => Err(ProtocolChoiceError::UnexpectedMessage),
                         }
                     })
-            })
-        });
+        })
+    });
 
-	// The "Rust doesn't have impl Trait yet" tax.
-	Box::new(future)
+    // The "Rust doesn't have impl Trait yet" tax.
+    Box::new(future)
 }
 
 /// Helps selecting a protocol amongst the ones supported.
@@ -123,60 +126,67 @@ pub fn dialer_select_proto_serial<'a, R, I, P>(
 /// chooses the most appropriate one.
 // TODO: remove the Box once -> impl Trait lands
 pub fn dialer_select_proto_parallel<'a, R, I, M, P>(
-	inner: R,
-	protocols: I,
+    inner: R,
+    protocols: I,
 ) -> Box<Future<Item = (P, R), Error = ProtocolChoiceError> + 'a>
-	where R: AsyncRead + AsyncWrite + 'a,
-	      I: Iterator<Item = (Bytes, M, P)> + 'a,
-	      M: FnMut(&Bytes, &Bytes) -> bool + 'a,
-	      P: 'a
+where
+    R: AsyncRead + AsyncWrite + 'a,
+    I: Iterator<Item = (Bytes, M, P)> + 'a,
+    M: FnMut(&Bytes, &Bytes) -> bool + 'a,
+    P: 'a,
 {
-	let future = Dialer::new(inner)
-		.from_err()
-		.and_then(
-			move |dialer| dialer.send(DialerToListenerMessage::ProtocolsListRequest).from_err(),
-		)
-		.and_then(move |dialer| dialer.into_future().map_err(|(e, _)| e.into()))
-		.and_then(move |(msg, dialer)| {
-			let list = match msg {
-				Some(ListenerToDialerMessage::ProtocolsListResponse { list }) => list,
-				_ => return Err(ProtocolChoiceError::UnexpectedMessage),
-			};
+    let future = Dialer::new(inner)
+        .from_err()
+        .and_then(move |dialer| {
+            dialer
+                .send(DialerToListenerMessage::ProtocolsListRequest)
+                .from_err()
+        })
+        .and_then(move |dialer| dialer.into_future().map_err(|(e, _)| e.into()))
+        .and_then(move |(msg, dialer)| {
+            let list = match msg {
+                Some(ListenerToDialerMessage::ProtocolsListResponse { list }) => list,
+                _ => return Err(ProtocolChoiceError::UnexpectedMessage),
+            };
 
-			let mut found = None;
-			for (local_name, mut match_fn, ident) in protocols {
-				for remote_name in &list {
-					if match_fn(remote_name, &local_name) {
-						found = Some((remote_name.clone(), ident));
-						break;
-					}
-				}
+            let mut found = None;
+            for (local_name, mut match_fn, ident) in protocols {
+                for remote_name in &list {
+                    if match_fn(remote_name, &local_name) {
+                        found = Some((remote_name.clone(), ident));
+                        break;
+                    }
+                }
 
-				if found.is_some() {
-					break;
-				}
-			}
+                if found.is_some() {
+                    break;
+                }
+            }
 
-			let (proto_name, proto_val) = found.ok_or(ProtocolChoiceError::NoProtocolFound)?;
-			Ok((proto_name, proto_val, dialer))
-		})
-		.and_then(|(proto_name, proto_val, dialer)| {
-			dialer.send(DialerToListenerMessage::ProtocolRequest { name: proto_name.clone() })
-			      .from_err()
-			      .map(|dialer| (proto_name, proto_val, dialer))
-		})
-		.and_then(|(proto_name, proto_val, dialer)| {
-			dialer.into_future()
-			      .map(|(msg, rest)| (proto_name, proto_val, msg, rest))
-			      .map_err(|(err, _)| err.into())
-		})
-		.and_then(|(proto_name, proto_val, msg, dialer)| match msg {
-			Some(ListenerToDialerMessage::ProtocolAck { ref name }) if name == &proto_name => {
-				Ok((proto_val, dialer.into_inner()))
-			}
-			_ => Err(ProtocolChoiceError::UnexpectedMessage),
-		});
+            let (proto_name, proto_val) = found.ok_or(ProtocolChoiceError::NoProtocolFound)?;
+            Ok((proto_name, proto_val, dialer))
+        })
+        .and_then(|(proto_name, proto_val, dialer)| {
+            dialer
+                .send(DialerToListenerMessage::ProtocolRequest {
+                    name: proto_name.clone(),
+                })
+                .from_err()
+                .map(|dialer| (proto_name, proto_val, dialer))
+        })
+        .and_then(|(proto_name, proto_val, dialer)| {
+            dialer
+                .into_future()
+                .map(|(msg, rest)| (proto_name, proto_val, msg, rest))
+                .map_err(|(err, _)| err.into())
+        })
+        .and_then(|(proto_name, proto_val, msg, dialer)| match msg {
+            Some(ListenerToDialerMessage::ProtocolAck { ref name }) if name == &proto_name => {
+                Ok((proto_val, dialer.into_inner()))
+            }
+            _ => Err(ProtocolChoiceError::UnexpectedMessage),
+        });
 
-	// The "Rust doesn't have impl Trait yet" tax.
-	Box::new(future)
+    // The "Rust doesn't have impl Trait yet" tax.
+    Box::new(future)
 }
