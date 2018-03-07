@@ -223,7 +223,8 @@ where
 	PStoreRef: Deref<Target = PStore> + Clone + 'static,
 	for<'r> &'r PStore: Peerstore,
 {
-	type Incoming = Box<Future<Item = (Trans::RawConn, Multiaddr), Error = IoError>>;
+	type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError>>;
+	type IncomingUpgrade = Box<Future<Item = (Trans::RawConn, Multiaddr), Error = IoError>>;
 
 	#[inline]
 	fn next_incoming(self) -> Self::Incoming {
@@ -233,32 +234,37 @@ where
 
 		let future = self.transport
 			.next_incoming()
-			.and_then(move |(connec, client_addr)| {
-				// On an incoming connection, dial back the node and upgrade to the identify
-				// protocol.
-				identify_upgrade
-					.clone()
-					.dial(client_addr.clone())
-					.map_err(|_| {
-						IoError::new(IoErrorKind::Other, "couldn't dial back incoming node")
+			.map(move |incoming| {
+				let future = incoming
+					.and_then(move |(connec, client_addr)| {
+						// On an incoming connection, dial back the node and upgrade to the identify
+						// protocol.
+						identify_upgrade
+							.clone()
+							.dial(client_addr.clone())
+							.map_err(|_| {
+								IoError::new(IoErrorKind::Other, "couldn't dial back incoming node")
+							})
+							.map(move |id| (id, connec))
 					})
-					.map(move |id| (id, connec))
-			})
-			.and_then(move |(dial, connec)| dial.map(move |dial| (dial, connec)))
-			.and_then(move |(identify, connec)| {
-				// Add the info to the peerstore and compute the "real" address of the node (in
-				// the form `/p2p/...`).
-				let real_addr = match identify {
-					(IdentifyOutput::RemoteInfo { info, .. }, old_addr) => {
-						process_identify_info(&info, &*peerstore, old_addr, addr_ttl)?
-					}
-					_ => unreachable!(
-						"the identify protocol guarantees that we receive remote \
-						 information when we dial a node"
-					),
-				};
+					.and_then(move |(dial, connec)| dial.map(move |dial| (dial, connec)))
+					.and_then(move |(identify, connec)| {
+						// Add the info to the peerstore and compute the "real" address of the node (in
+						// the form `/p2p/...`).
+						let real_addr = match identify {
+							(IdentifyOutput::RemoteInfo { info, .. }, old_addr) => {
+								process_identify_info(&info, &*peerstore, old_addr, addr_ttl)?
+							}
+							_ => unreachable!(
+								"the identify protocol guarantees that we receive remote \
+								information when we dial a node"
+							),
+						};
 
-				Ok((connec, real_addr))
+						Ok((connec, real_addr))
+					});
+
+				Box::new(future) as Box<Future<Item = _, Error = _>>
 			});
 
 		Box::new(future) as Box<_>

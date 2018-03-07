@@ -159,7 +159,7 @@ pub struct SwarmFuture<T, C, H, F>
     upgraded: UpgradedNode<T, C>,
     handler: H,
     new_listeners: mpsc::UnboundedReceiver<Box<Stream<Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>, Error = IoError>>>,
-    next_incoming: Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>,
+    next_incoming: Box<Future<Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>, Error = IoError>>,
     listeners: Vec<Box<Stream<Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>, Error = IoError>>>,
     listeners_upgrade: Vec<Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>>,
     dialers: Vec<Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>>,
@@ -183,13 +183,15 @@ impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
         let handler = &mut self.handler;
 
         match self.next_incoming.poll() {
-            Ok(Async::Ready((connec, client_addr))) => {
+            Ok(Async::Ready(connec)) => {
                 self.next_incoming = self.upgraded.clone().next_incoming();
-                self.to_process.push(future::Either::A(handler(connec, client_addr).into_future()));
+                self.listeners_upgrade.push(connec);
             },
             Ok(Async::NotReady) => {},
             // TODO: may not be the best idea because we're killing the whole server
-            Err(err) => return Err(err),
+            Err(_err) => {
+                self.next_incoming = self.upgraded.clone().next_incoming();
+            },
         };
 
         match self.new_listeners.poll() {
@@ -233,7 +235,7 @@ impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
                     self.listeners.push(listener);
                 },
                 Ok(Async::Ready(None)) => {},
-                Err(err) => return Err(err),
+                Err(_err) => {},        // Ignoring errors
             };
         }
 
@@ -246,7 +248,7 @@ impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
                 Ok(Async::NotReady) => {
                     self.listeners_upgrade.push(upgrade);
                 },
-                Err(err) => return Err(err),
+                Err(_err) => {},       // Ignoring errors
             }
         }
 
@@ -259,7 +261,7 @@ impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
                 Ok(Async::NotReady) => {
                     self.dialers.push(dialer);
                 },
-                Err(err) => return Err(err),
+                Err(_err) => {},       // Ignoring errors
             }
         }
 
@@ -268,7 +270,7 @@ impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
             match to_process.poll() {
                 Ok(Async::Ready(())) => {},
                 Ok(Async::NotReady) => self.to_process.push(to_process),
-                Err(err) => return Err(err),
+                Err(_err) => {},     // Ignoring errors
             }
         }
 
