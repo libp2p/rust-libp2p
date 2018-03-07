@@ -67,8 +67,7 @@ where
 	// Underlying transport and connection upgrade for when we need to dial or listen.
 	inner: UpgradedNode<T, C>,
 
-	// Struct shared between most of the types that are part of the `ConnectionReuse`
-	// infrastructure.
+	// Struct shared between most of the `ConnectionReuse` infrastructure.
 	shared: Arc<Mutex<Shared<C::Output>>>,
 }
 
@@ -81,10 +80,10 @@ struct Shared<M> where M: StreamMuxer {
 	next_incoming: Vec<(M, M::InboundSubstream, Multiaddr)>,
 
 	// New elements are not directly added to `next_incoming`. Instead they are sent to this
-	// channel. This is done so that we can wake up tasks whenever a next inbound stream arrives.
+	// channel. This is done so that we can wake up tasks whenever a new element is added.
 	add_to_next_rx: mpsc::UnboundedReceiver<(M, M::InboundSubstream, Multiaddr)>,
 
-	// Other part of `add_to_next_rx`.
+	// Other side of `add_to_next_rx`.
 	add_to_next_tx: mpsc::UnboundedSender<(M, M::InboundSubstream, Multiaddr)>,
 }
 
@@ -197,17 +196,19 @@ where
 	}
 }
 
-/// Implementation of `Stream<Item = (impl AsyncRead + AsyncWrite, Multiaddr)` for the
-/// `ConnectionReuse` struct.
+/// Implementation of `Stream` for the connections incoming from listening on a specific address.
 pub struct ConnectionReuseListener<S, F, M>
 where
 	S: Stream<Item = F, Error = IoError>,
 	F: Future<Item = (M, Multiaddr), Error = IoError>,
 	M: StreamMuxer,
 {
+	// The main listener. `S` is from the underlying transport.
 	listener: StreamFuse<S>,
 	current_upgrades: Vec<F>,
 	connections: Vec<(M, <M as StreamMuxer>::InboundSubstream, Multiaddr)>,
+
+	// Shared between the whole connection reuse mechanism.
 	shared: Arc<Mutex<Shared<M>>>,
 }
 
@@ -220,7 +221,9 @@ where S: Stream<Item = F, Error = IoError>,
 	type Error = IoError;
 
 	fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-		// Check for any incoming connection on the socket.
+		// Check for any incoming connection on the listening socket.
+		// Note that since `self.listener` is a `Fuse`, it's not a problem to continue polling even
+		// after it is finished or after it error'ed.
 		match self.listener.poll() {
 			Ok(Async::Ready(Some(upgrade))) => {
 				self.current_upgrades.push(upgrade);
@@ -262,12 +265,11 @@ where S: Stream<Item = F, Error = IoError>,
 		}
 
 		// Check whether any incoming substream is ready.
-		// We extract everything at the start, then insert back the elements that we still want at
-		// the next iteration.
-        for n in (0 .. self.connections.len()).rev() {
-            let (muxer, mut next_incoming, client_addr) = self.connections.swap_remove(n);
+		for n in (0 .. self.connections.len()).rev() {
+			let (muxer, mut next_incoming, client_addr) = self.connections.swap_remove(n);
 			match next_incoming.poll() {
 				Ok(Async::Ready(incoming)) => {
+					// A new substream is ready.
 					let mut new_next = muxer.clone().inbound();
 					self.connections.push((muxer, new_next, client_addr.clone()));
 					return Ok(Async::Ready(Some(Ok((incoming, client_addr)).into_future())));
@@ -282,15 +284,16 @@ where S: Stream<Item = F, Error = IoError>,
 			}
 		}
 
+		// Nothing is ready, return `NotReady`.
 		Ok(Async::NotReady)
 	}
 }
 
-/// Implementation of `Future<Item = (impl AsyncRead + AsyncWrite, Multiaddr)` for the
-/// `ConnectionReuse` struct.
+/// Implementation of `Future` that yields the next incoming substream from a dialed connection.
 pub struct ConnectionReuseIncoming<M>
 	where M: StreamMuxer
 {
+	// Shared between the whole connection reuse system.
 	shared: Arc<Mutex<Shared<M>>>,
 }
 
@@ -303,6 +306,9 @@ impl<M> Future for ConnectionReuseIncoming<M>
 	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
 		let mut lock = self.shared.lock();
 
+		// Try to get any new muxer from `add_to_next_rx`.
+		// We push the new muxers to a channel instead of adding them to `next_incoming`, so that
+		// tasks are notified when something is pushed.
 		loop {
 			match lock.add_to_next_rx.poll() {
 				Ok(Async::Ready(Some(elem))) => {
@@ -310,29 +316,33 @@ impl<M> Future for ConnectionReuseIncoming<M>
 				},
 				Ok(Async::NotReady) => break,
 				Ok(Async::Ready(None)) | Err(_) => {
-					// The sender and receiver are both in the same struct, therefore the link can
-					// never break.
-					unreachable!()
+					unreachable!("the sender and receiver are both in the same struct, therefore \
+								  the link can never break")
 				},
 			}
 		}
 
-		let mut next_incoming = mem::replace(&mut lock.next_incoming, Vec::new());
-		while let Some((muxer, mut future, addr)) = next_incoming.pop() {
+		// Check whether any incoming substream is ready.
+		for n in (0 .. lock.next_incoming.len()).rev() {
+			let (muxer, mut future, addr) = lock.next_incoming.swap_remove(n);
 			match future.poll() {
 				Ok(Async::Ready(value)) => {
+					// A substream is ready ; push back the muxer for the next time this function
+					// is called, then return.
 					let next = muxer.clone().inbound();
 					lock.next_incoming.push((muxer, next, addr.clone()));
-					lock.next_incoming.extend(next_incoming);
 					return Ok(Async::Ready(future::ok((value, addr))));
 				},
 				Ok(Async::NotReady) => {
 					lock.next_incoming.push((muxer, future, addr));
 				},
-				Err(_) => {},
+				Err(_) => {
+					// In case of error, we just not push back the element, which drops it.
+				},
 			}
 		}
 
+		// Nothing is ready.
 		Ok(Async::NotReady)
 	}
 }

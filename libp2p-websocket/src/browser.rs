@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{Async, Future, Poll, Stream, Then as FutureThen};
+use futures::{Async, Future, Poll, Stream};
 use futures::stream::Then as StreamThen;
 use futures::sync::{mpsc, oneshot};
 use multiaddr::{AddrComponent, Multiaddr};
@@ -51,12 +51,7 @@ impl Transport for BrowserWsConfig {
 	type RawConn = BrowserWsConn;
 	type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>; // TODO: use `!`
 	type ListenerUpgrade = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>; // TODO: use `!`
-	type Dial = FutureThen<
-		oneshot::Receiver<Result<BrowserWsConn, IoError>>,
-		Result<BrowserWsConn, IoError>,
-		fn(Result<Result<BrowserWsConn, IoError>, oneshot::Canceled>)
-			-> Result<BrowserWsConn, IoError>,
-	>;
+	type Dial = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
 
 	#[inline]
 	fn listen_on(self, a: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -191,9 +186,9 @@ impl Transport for BrowserWsConfig {
 			});
 		};
 
-		Ok(open_rx.then(|result| {
+		Ok(Box::new(open_rx.then(|result| {
 			match result {
-				Ok(Ok(r)) => Ok(r),
+				Ok(Ok(r)) => Ok((r, original_addr)),
 				Ok(Err(e)) => Err(e),
 				// `Err` would happen here if `open_tx` is destroyed. `open_tx` is captured by
 				// the `WebSocket`, and the `WebSocket` is captured by `open_cb`, which is itself
@@ -202,7 +197,53 @@ impl Transport for BrowserWsConfig {
 				// TODO: how do we break this cyclic dependency? difficult question
 				Err(_) => unreachable!("the sending side will only close when we drop the future"),
 			}
-		}))
+		})) as Box<_>)
+	}
+
+	fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+		let mut server_protocols = server.iter();
+		let server_proto0 = server_protocols.next()?;
+		let server_proto1 = server_protocols.next()?;
+		let server_proto2 = server_protocols.next()?;
+		if server_protocols.next().is_some() {
+			return None;
+		}
+
+		let mut observed_protocols = observed.iter();
+		let obs_proto0 = observed_protocols.next()?;
+		let obs_proto1 = observed_protocols.next()?;
+		let obs_proto2 = observed_protocols.next()?;
+		if observed_protocols.next().is_some() {
+			return None;
+		}
+
+		// Check that `server` is a valid TCP/IP address.
+		match (&server_proto0, &server_proto1, &server_proto2) {
+			(&AddrComponent::IP4(_), &AddrComponent::TCP(_), &AddrComponent::WS) |
+			(&AddrComponent::IP6(_), &AddrComponent::TCP(_), &AddrComponent::WS) |
+			(&AddrComponent::IP4(_), &AddrComponent::TCP(_), &AddrComponent::WSS) |
+			(&AddrComponent::IP6(_), &AddrComponent::TCP(_), &AddrComponent::WSS) => {}
+			_ => return None,
+		}
+
+		// Check that `observed` is a valid TCP/IP address.
+		match (&obs_proto0, &obs_proto1, &obs_proto2) {
+			(&AddrComponent::IP4(_), &AddrComponent::TCP(_), &AddrComponent::WS) |
+			(&AddrComponent::IP6(_), &AddrComponent::TCP(_), &AddrComponent::WS) |
+			(&AddrComponent::IP4(_), &AddrComponent::TCP(_), &AddrComponent::WSS) |
+			(&AddrComponent::IP6(_), &AddrComponent::TCP(_), &AddrComponent::WSS) => {}
+			_ => return None,
+		}
+
+		// Note that it will still work if the server uses WSS while the client uses WS,
+		// or vice-versa.
+
+		let result = iter::once(obs_proto0)
+			.chain(iter::once(server_proto1))
+			.chain(iter::once(server_proto2))
+			.collect();
+
+		Some(result)
 	}
 
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
