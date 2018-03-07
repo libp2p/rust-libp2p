@@ -79,7 +79,8 @@ macro_rules! peerstore_tests {
             let peer_id = PeerId::from_public_key(&[1, 2, 3]);
             let addr = "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap();
 
-            peer_store.peer_or_create(&peer_id).add_addr(addr.clone(), Duration::from_millis(5000));
+            peer_store.peer_or_create(&peer_id)
+                .add_addr(addr.clone(), Duration::from_millis(5000));
             peer_store.peer(&peer_id).unwrap().clear_addrs();
 
             let addrs = peer_store.peer(&peer_id).unwrap().addrs();
@@ -95,8 +96,10 @@ macro_rules! peerstore_tests {
             let addr1 = "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap();
             let addr2 = "/ip4/0.0.0.1/tcp/0".parse::<Multiaddr>().unwrap();
 
-            peer_store.peer_or_create(&peer_id).add_addr(addr1.clone(), Duration::from_millis(5000));
-            peer_store.peer_or_create(&peer_id).add_addr(addr2.clone(), Duration::from_millis(5000));
+            peer_store.peer_or_create(&peer_id)
+                .add_addr(addr1.clone(), Duration::from_millis(5000));
+            peer_store.peer_or_create(&peer_id)
+                .add_addr(addr2.clone(), Duration::from_millis(5000));
             assert_eq!(peer_store.peer(&peer_id).unwrap().addrs().count(), 2);
 
             // `add_addr` must not overwrite the TTL because it's already higher
@@ -114,11 +117,14 @@ macro_rules! peerstore_tests {
             let addr1 = "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap();
             let addr2 = "/ip4/0.0.0.1/tcp/0".parse::<Multiaddr>().unwrap();
 
-            peer_store.peer_or_create(&peer_id).add_addr(addr1.clone(), Duration::from_millis(5000));
-            peer_store.peer_or_create(&peer_id).add_addr(addr2.clone(), Duration::from_millis(5000));
+            peer_store.peer_or_create(&peer_id)
+                .add_addr(addr1.clone(), Duration::from_millis(5000));
+            peer_store.peer_or_create(&peer_id)
+                .add_addr(addr2.clone(), Duration::from_millis(5000));
             assert_eq!(peer_store.peer(&peer_id).unwrap().addrs().count(), 2);
 
-            peer_store.peer_or_create(&peer_id).set_addr_ttl(addr1.clone(), Duration::from_millis(0));
+            peer_store.peer_or_create(&peer_id)
+                .set_addr_ttl(addr1.clone(), Duration::from_millis(0));
             thread::sleep(Duration::from_millis(2));
             assert_eq!(peer_store.peer(&peer_id).unwrap().addrs().count(), 1);
         }

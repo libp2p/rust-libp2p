@@ -221,9 +221,8 @@ impl<B: Array> CircularBuffer<B> {
     /// when the slice goes out of scope), if you're using non-`Drop` types you can use
     /// `pop_slice_leaky`.
     pub fn pop_slice(&mut self) -> Option<OwnedSlice<B::Item>> {
-        self.pop_slice_leaky().map(
-            |x| unsafe { OwnedSlice::new(x) },
-        )
+        self.pop_slice_leaky()
+            .map(|x| unsafe { OwnedSlice::new(x) })
     }
 
     /// Pop a slice containing the maximum possible contiguous number of elements. Since this buffer
@@ -435,9 +434,9 @@ impl<B: Array> CircularBuffer<B> {
     /// Get a borrow to an element at an index unsafely (behaviour is undefined if the index is out
     /// of bounds).
     pub unsafe fn get_unchecked(&self, index: usize) -> &B::Item {
-        &*self.buffer.ptr().offset(
-            ((index + self.start) % B::size()) as isize,
-        )
+        &*self.buffer
+            .ptr()
+            .offset(((index + self.start) % B::size()) as isize)
     }
 
     /// Get a mutable borrow to an element at an index safely (if the index is out of bounds, return
@@ -453,16 +452,15 @@ impl<B: Array> CircularBuffer<B> {
     /// Get a mutable borrow to an element at an index unsafely (behaviour is undefined if the index
     /// is out of bounds).
     pub unsafe fn get_unchecked_mut(&mut self, index: usize) -> &mut B::Item {
-        &mut *self.buffer.ptr_mut().offset(
-            ((index + self.start) % B::size()) as
-                isize,
-        )
+        &mut *self.buffer
+            .ptr_mut()
+            .offset(((index + self.start) % B::size()) as isize)
     }
 
     /// Removes the first `by` elements of the start of the buffer.
-    /// 
+    ///
     /// # Panic
-    /// 
+    ///
     /// Panics if `by` is superior to the number of elements in the buffer.
     // This is not unsafe because it can only leak data, not cause uninit to be read.
     pub fn advance(&mut self, by: usize) {
@@ -482,8 +480,7 @@ impl<B: Array> std::ops::Index<usize> for CircularBuffer<B> {
         } else {
             panic!(
                 "index out of bounds: the len is {} but the index is {}",
-                self.len,
-                index
+                self.len, index
             );
         }
     }
@@ -499,8 +496,7 @@ impl<B: Array> std::ops::IndexMut<usize> for CircularBuffer<B> {
         } else {
             panic!(
                 "index out of bounds: the len is {} but the index is {}",
-                len,
-                index
+                len, index
             );
         }
     }
@@ -624,7 +620,9 @@ where
     /// ```rust
     /// use circular_buffer::CircularBuffer;
     ///
-    /// let result = CircularBuffer::<[usize; 5]>::from_slice_prefix(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 20]);
+    /// let result = CircularBuffer::<[usize; 5]>::from_slice_prefix(
+    ///     &[1, 2, 3, 4, 5, 6, 7, 8, 9, 20]
+    /// );
     /// assert_eq!(result, (CircularBuffer::from_array([1, 2, 3, 4, 5]), 5));
     /// ```
     pub fn from_slice_prefix(slice: &[B::Item]) -> (Self, usize) {

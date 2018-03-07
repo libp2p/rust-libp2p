@@ -22,17 +22,17 @@ extern crate libp2p_peerstore;
 extern crate libp2p_swarm;
 extern crate multiaddr;
 
-use libp2p_peerstore::{PeerId, PeerAccess, Peerstore};
+use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};
 use multiaddr::Multiaddr;
 use std::time::Duration;
 
 /// Stores initial addresses on the given peer store. Uses a very large timeout.
 pub fn ipfs_bootstrap<P>(peer_store: P)
 where
-	P: Peerstore + Clone,
+    P: Peerstore + Clone,
 {
-	const ADDRESSES: &[&str] = &[
-        "/ip4/127.0.0.1/tcp/4001/ipfs/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",		// TODO: remove
+    const ADDRESSES: &[&str] = &[
+        "/ip4/127.0.0.1/tcp/4001/ipfs/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ", // TODO: remove
         /*"/ip4/104.131.131.82/tcp/4001/ipfs/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
         "/ip4/104.236.179.241/tcp/4001/ipfs/QmSoLPppuBtQSGwKDZT2M73ULpjvfd3aZ6ha4oFGL1KrGM",
         "/ip4/162.243.248.213/tcp/4001/ipfs/QmSoLueR4xBeUbY9WZ9xGUUxunbKWcrNFTDAadQJmocnWm",
@@ -44,22 +44,24 @@ where
         //"/dns4/wss1.bootstrap.libp2p.io/tcp/443/wss/ipfs/Qmbut9Ywz9YEDrz8ySBSgWyJk41Uvm2QJPhwDJzJyGFsD6"
     ];
 
-	let ttl = Duration::from_secs(100 * 365 * 24 * 3600);
+    let ttl = Duration::from_secs(100 * 365 * 24 * 3600);
 
-	for address in ADDRESSES.iter() {
-		let mut multiaddr = address
-			.parse::<Multiaddr>()
-			.expect("failed to parse hard-coded multiaddr");
+    for address in ADDRESSES.iter() {
+        let mut multiaddr = address
+            .parse::<Multiaddr>()
+            .expect("failed to parse hard-coded multiaddr");
 
-		let ipfs_component = multiaddr.pop().expect("hard-coded multiaddr is empty");
-		let peer = match ipfs_component {
-			multiaddr::AddrComponent::IPFS(key) => PeerId::from_bytes(key).expect("invalid peer id"),
-			_ => panic!("hard-coded multiaddr didn't end with /ipfs/"),
-		};
+        let ipfs_component = multiaddr.pop().expect("hard-coded multiaddr is empty");
+        let peer = match ipfs_component {
+            multiaddr::AddrComponent::IPFS(key) => {
+                PeerId::from_bytes(key).expect("invalid peer id")
+            }
+            _ => panic!("hard-coded multiaddr didn't end with /ipfs/"),
+        };
 
-		peer_store
-			.clone()
-			.peer_or_create(&peer)
-			.add_addr(multiaddr, ttl.clone());
-	}
+        peer_store
+            .clone()
+            .peer_or_create(&peer)
+            .add_addr(multiaddr, ttl.clone());
+    }
 }

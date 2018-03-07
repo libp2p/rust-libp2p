@@ -1,21 +1,21 @@
 // Copyright 2017 Parity Technologies (UK) Ltd.
-// 
-// Permission is hereby granted, free of charge, to any person obtaining a 
-// copy of this software and associated documentation files (the "Software"), 
-// to deal in the Software without restriction, including without limitation 
-// the rights to use, copy, modify, merge, publish, distribute, sublicense, 
-// and/or sell copies of the Software, and to permit persons to whom the 
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
 // Software is furnished to do so, subject to the following conditions:
 //
-// The above copyright notice and this permission notice shall be included in 
+// The above copyright notice and this permission notice shall be included in
 // all copies or substantial portions of the Software.
 //
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS 
-// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
 extern crate bigint;
@@ -58,10 +58,10 @@ fn main() {
     let peer_store = Arc::new(peerstore::memory_peerstore::MemoryPeerstore::empty());
     example::ipfs_bootstrap(&*peer_store);
 
-
     // Now let's build the transport stack.
     // We start by creating a `TcpConfig` that indicates that we want TCP/IP.
-    let transport = identify::IdentifyTransport::new(TcpConfig::new(core.handle())
+    let transport = identify::IdentifyTransport::new(
+        TcpConfig::new(core.handle())
 
         // On top of TCP/IP, we will use either the plaintext protocol or the secio protocol,
         // depending on which one the remote supports.
@@ -85,7 +85,9 @@ fn main() {
         // `Transport` because the output of the upgrade is not a stream but a controller for
         // muxing. We have to explicitly call `into_connection_reuse()` in order to turn this into
         // a `Transport`.
-        .into_connection_reuse(), peer_store.clone());
+        .into_connection_reuse(),
+        peer_store.clone(),
+    );
 
     // We now have a `transport` variable that can be used either to dial nodes or listen to
     // incoming connections, and that will automatically apply secio and multiplex on top
@@ -111,14 +113,13 @@ fn main() {
 
     // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming and
     // outgoing connections for us.
-    let (swarm_controller, swarm_future) = swarm::swarm(transport, proto, |upgrade, _| {
-        upgrade
-    });
+    let (swarm_controller, swarm_future) = swarm::swarm(transport, proto, |upgrade, _| upgrade);
 
     let (kad_controller, _kad_init) = kad_ctl_proto.start(swarm_controller.clone());
 
     for listen_addr in listen_addrs {
-        let addr = swarm_controller.listen_on(listen_addr.parse().expect("wrong multiaddr"))
+        let addr = swarm_controller
+            .listen_on(listen_addr.parse().expect("wrong multiaddr"))
             .expect("unsupported multiaddr");
         println!("Now listening on {:?}", addr);
     }
@@ -139,5 +140,10 @@ fn main() {
     // `swarm_future` is a future that contains all the behaviour that we want, but nothing has
     // actually started yet. Because we created the `TcpConfig` with tokio, we need to run the
     // future through the tokio core.
-    core.run(finish_enum.select(swarm_future).map(|(n, _)| n).map_err(|(err, _)| err)).unwrap();
+    core.run(
+        finish_enum
+            .select(swarm_future)
+            .map(|(n, _)| n)
+            .map_err(|(err, _)| err),
+    ).unwrap();
 }

@@ -1,21 +1,21 @@
 // Copyright 2017 Parity Technologies (UK) Ltd.
-// 
-// Permission is hereby granted, free of charge, to any person obtaining a 
-// copy of this software and associated documentation files (the "Software"), 
-// to deal in the Software without restriction, including without limitation 
-// the rights to use, copy, modify, merge, publish, distribute, sublicense, 
-// and/or sell copies of the Software, and to permit persons to whom the 
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
 // Software is furnished to do so, subject to the following conditions:
 //
-// The above copyright notice and this permission notice shall be included in 
+// The above copyright notice and this permission notice shall be included in
 // all copies or substantial portions of the Software.
 //
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS 
-// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
 // TODO: use this once stable ; for now we just copy-paste the content of the README.md
@@ -24,9 +24,9 @@
 //! Implementation of the libp2p `Transport` trait for TCP/IP.
 //!
 //! Uses [the *tokio* library](https://tokio.rs).
-//! 
+//!
 //! # Usage
-//! 
+//!
 //! Create [a tokio `Core`](https://docs.rs/tokio-core/0.1/tokio_core/reactor/struct.Core.html),
 //! then grab a handle by calling the `handle()` method on it, then create a `TcpConfig` and pass
 //! the handle.
@@ -49,20 +49,20 @@
 //! The `TcpConfig` structs implements the `Transport` trait of the `swarm` library. See the
 //! documentation of `swarm` and of libp2p in general to learn how to use the `Transport` trait.
 
+extern crate futures;
 extern crate libp2p_swarm as swarm;
+extern crate multiaddr;
 extern crate tokio_core;
 extern crate tokio_io;
-extern crate multiaddr;
-extern crate futures;
 
 use std::io::Error as IoError;
 use std::iter;
 use std::net::SocketAddr;
 use tokio_core::reactor::Handle;
-use tokio_core::net::{TcpStream, TcpListener};
+use tokio_core::net::{TcpListener, TcpStream};
 use futures::future::{self, Future, FutureResult, IntoFuture};
 use futures::stream::Stream;
-use multiaddr::{Multiaddr, AddrComponent, ToMultiaddr};
+use multiaddr::{AddrComponent, Multiaddr, ToMultiaddr};
 use swarm::Transport;
 
 /// Represents the configuration for a TCP/IP transport capability for libp2p.
@@ -99,15 +99,18 @@ impl Transport for TcpConfig {
             // just return the original multiaddr.
             let new_addr = match listener {
                 Ok(ref l) => if let Ok(new_s_addr) = l.local_addr() {
-                    new_s_addr.to_multiaddr().expect("multiaddr generated from socket addr is \
-                                                      always valid")
+                    new_s_addr.to_multiaddr().expect(
+                        "multiaddr generated from socket addr is \
+                         always valid",
+                    )
                 } else {
                     addr
-                }
+                },
                 Err(_) => addr,
             };
 
-            let future = future::result(listener).map(|listener| {
+            let future = future::result(listener)
+                .map(|listener| {
                     // Pull out a stream of sockets for incoming connections
                     listener.incoming().map(|(sock, addr)| {
                         let addr = addr.to_multiaddr()
@@ -115,7 +118,7 @@ impl Transport for TcpConfig {
                         Ok((sock, addr)).into_future()
                     })
                 })
-                    .flatten_stream();
+                .flatten_stream();
             Ok((Box::new(future), new_addr))
         } else {
             Err((self, addr))
@@ -127,8 +130,7 @@ impl Transport for TcpConfig {
     /// or gives back the multiaddress.
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
         if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
-            let fut = TcpStream::connect(&socket_addr, &self.event_loop)
-                .map(|t| (t, addr));
+            let fut = TcpStream::connect(&socket_addr, &self.event_loop).map(|t| (t, addr));
             Ok(Box::new(fut) as Box<_>)
         } else {
             Err((self, addr))
@@ -145,15 +147,15 @@ impl Transport for TcpConfig {
 
         // Check that `server` is a valid TCP/IP address.
         match (&server_protocols[0], &server_protocols[1]) {
-            (&AddrComponent::IP4(_), &AddrComponent::TCP(_)) |
-            (&AddrComponent::IP6(_), &AddrComponent::TCP(_)) => {}
+            (&AddrComponent::IP4(_), &AddrComponent::TCP(_))
+            | (&AddrComponent::IP6(_), &AddrComponent::TCP(_)) => {}
             _ => return None,
         }
 
         // Check that `observed` is a valid TCP/IP address.
         match (&observed_protocols[0], &observed_protocols[1]) {
-            (&AddrComponent::IP4(_), &AddrComponent::TCP(_)) |
-            (&AddrComponent::IP6(_), &AddrComponent::TCP(_)) => {}
+            (&AddrComponent::IP4(_), &AddrComponent::TCP(_))
+            | (&AddrComponent::IP6(_), &AddrComponent::TCP(_)) => {}
             _ => return None,
         }
 
@@ -186,7 +188,7 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{TcpConfig, multiaddr_to_socketaddr};
+    use super::{multiaddr_to_socketaddr, TcpConfig};
     use std;
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use tokio_core::reactor::Core;
@@ -200,7 +202,10 @@ mod tests {
     fn multiaddr_to_tcp_conversion() {
         use std::net::Ipv6Addr;
 
-        assert!(multiaddr_to_socketaddr(&"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap()).is_err());
+        assert!(
+            multiaddr_to_socketaddr(&"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap())
+                .is_err()
+        );
 
         assert_eq!(
             multiaddr_to_socketaddr(&"/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap()),
@@ -210,7 +215,9 @@ mod tests {
             ))
         );
         assert_eq!(
-            multiaddr_to_socketaddr(&"/ip4/255.255.255.255/tcp/8080".parse::<Multiaddr>().unwrap()),
+            multiaddr_to_socketaddr(&"/ip4/255.255.255.255/tcp/8080"
+                .parse::<Multiaddr>()
+                .unwrap()),
             Ok(SocketAddr::new(
                 IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)),
                 8080,
@@ -225,7 +232,8 @@ mod tests {
         );
         assert_eq!(
             multiaddr_to_socketaddr(&"/ip6/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/tcp/8080"
-                                     .parse::<Multiaddr>().unwrap()),
+                .parse::<Multiaddr>()
+                .unwrap()),
             Ok(SocketAddr::new(
                 IpAddr::V6(Ipv6Addr::new(
                     65535,
@@ -316,7 +324,9 @@ mod tests {
         let core = Core::new().unwrap();
         let tcp = TcpConfig::new(core.handle());
 
-        let addr = "/ip4/127.0.0.1/tcp/12345/tcp/12345".parse::<Multiaddr>().unwrap();
+        let addr = "/ip4/127.0.0.1/tcp/12345/tcp/12345"
+            .parse::<Multiaddr>()
+            .unwrap();
         assert!(tcp.listen_on(addr).is_err());
     }
 
@@ -329,6 +339,9 @@ mod tests {
         let observed = "/ip4/80.81.82.83/tcp/25000".parse::<Multiaddr>().unwrap();
 
         let out = tcp.nat_traversal(&server, &observed);
-        assert_eq!(out.unwrap(), "/ip4/80.81.82.83/tcp/10000".parse::<Multiaddr>().unwrap());
+        assert_eq!(
+            out.unwrap(),
+            "/ip4/80.81.82.83/tcp/10000".parse::<Multiaddr>().unwrap()
+        );
     }
 }
