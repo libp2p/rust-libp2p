@@ -145,10 +145,13 @@ where
                     .map(|(msg, _)| msg)
                     .map_err(|(err, _)| err)
                     .and_then(|msg| {
-                        debug!(target: "libp2p-identify", "Received identify message from {:?}",
-                               observed_addr_log
-                                   .expect("Programmer error: expected `observed_addr_log' to be \
-                                            non-None since debug log level is enabled"));
+                        if log_enabled!(target: "libp2p-identify", Level::Debug) {
+                            debug!(target: "libp2p-identify", "Received identify message from {:?}",
+                                observed_addr_log
+                                    .expect("Programmer error: expected `observed_addr_log' to be \
+                                                non-None since debug log level is enabled"));
+                        }
+
                         if let Some(msg) = msg {
                             let (info, observed_addr) = match parse_proto_msg(msg) {
                                 Ok(v) => v,
