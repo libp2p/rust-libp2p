@@ -1,12 +1,12 @@
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
 use std::convert::From;
-use std::io::{Cursor, Write, Result as IoResult};
+use std::io::{Cursor, Result as IoResult, Write};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use cid::Cid;
 use integer_encoding::{VarInt, VarIntWriter};
 
-use {Result, Error};
+use {Error, Result};
 
 ///! # ProtocolId
 ///!
@@ -116,7 +116,6 @@ impl FromStr for ProtocolId {
         }
     }
 }
-
 
 impl ProtocolId {
     /// Convert a `u64` based code to a `ProtocolId`.
@@ -232,12 +231,8 @@ impl ProtocolId {
                 let addr = Ipv6Addr::from_str(a)?;
                 Ok(AddrComponent::IP6(addr))
             }
-            ProtocolId::DNS4 => {
-                Ok(AddrComponent::DNS4(a.to_owned()))
-            }
-            ProtocolId::DNS6 => {
-                Ok(AddrComponent::DNS6(a.to_owned()))
-            }
+            ProtocolId::DNS4 => Ok(AddrComponent::DNS4(a.to_owned())),
+            ProtocolId::DNS6 => Ok(AddrComponent::DNS6(a.to_owned())),
             ProtocolId::TCP => {
                 let parsed: u16 = a.parse()?;
                 Ok(AddrComponent::TCP(parsed))
@@ -262,12 +257,10 @@ impl ProtocolId {
                 let bytes = Cid::from(a)?.to_bytes();
                 Ok(AddrComponent::IPFS(bytes))
             }
-            ProtocolId::ONION => unimplemented!(),              // TODO:
+            ProtocolId::ONION => unimplemented!(), // TODO:
             ProtocolId::QUIC => Ok(AddrComponent::QUIC),
             ProtocolId::UTP => Ok(AddrComponent::UTP),
-            ProtocolId::UNIX => {
-                Ok(AddrComponent::UNIX(a.to_owned()))
-            }
+            ProtocolId::UNIX => Ok(AddrComponent::UNIX(a.to_owned())),
             ProtocolId::UDT => Ok(AddrComponent::UDT),
             ProtocolId::HTTP => Ok(AddrComponent::HTTP),
             ProtocolId::HTTPS => Ok(AddrComponent::HTTPS),
@@ -342,17 +335,15 @@ impl AddrComponent {
     /// Builds an `AddrComponent` from an array that starts with a bytes representation. On
     /// success, also returns the rest of the slice.
     pub fn from_bytes(input: &[u8]) -> Result<(AddrComponent, &[u8])> {
-        let (proto_num, proto_id_len) = u64::decode_var(input);   // TODO: will panic if ID too large
+        let (proto_num, proto_id_len) = u64::decode_var(input); // TODO: will panic if ID too large
 
         let protocol_id = ProtocolId::from(proto_num)?;
         let (data_offset, data_size) = match protocol_id.size() {
-            ProtocolArgSize::Fixed { bytes } => {
-                (0, bytes)
-            },
+            ProtocolArgSize::Fixed { bytes } => (0, bytes),
             ProtocolArgSize::Variable => {
-                let (data_size, varint_len) = u64::decode_var(&input[proto_id_len..]);      // TODO: will panic if ID too large
+                let (data_size, varint_len) = u64::decode_var(&input[proto_id_len..]); // TODO: will panic if ID too large
                 (varint_len, data_size as usize)
-            },
+            }
         };
 
         let (data, rest) = input[proto_id_len..][data_offset..].split_at(data_size);
@@ -360,7 +351,7 @@ impl AddrComponent {
         let addr_component = match protocol_id {
             ProtocolId::IP4 => {
                 AddrComponent::IP4(Ipv4Addr::new(data[0], data[1], data[2], data[3]))
-            },
+            }
             ProtocolId::IP6 => {
                 let mut rdr = Cursor::new(data);
                 let mut seg = vec![];
@@ -369,22 +360,20 @@ impl AddrComponent {
                     seg.push(rdr.read_u16::<BigEndian>()?);
                 }
 
-                let addr = Ipv6Addr::new(seg[0],
-                                         seg[1],
-                                         seg[2],
-                                         seg[3],
-                                         seg[4],
-                                         seg[5],
-                                         seg[6],
-                                         seg[7]);
+                let addr = Ipv6Addr::new(
+                    seg[0],
+                    seg[1],
+                    seg[2],
+                    seg[3],
+                    seg[4],
+                    seg[5],
+                    seg[6],
+                    seg[7],
+                );
                 AddrComponent::IP6(addr)
             }
-            ProtocolId::DNS4 => {
-                AddrComponent::DNS4(String::from_utf8(data.to_owned())?)
-            }
-            ProtocolId::DNS6 => {
-                AddrComponent::DNS6(String::from_utf8(data.to_owned())?)
-            }
+            ProtocolId::DNS4 => AddrComponent::DNS4(String::from_utf8(data.to_owned())?),
+            ProtocolId::DNS6 => AddrComponent::DNS6(String::from_utf8(data.to_owned())?),
             ProtocolId::TCP => {
                 let mut rdr = Cursor::new(data);
                 let num = rdr.read_u16::<BigEndian>()?;
@@ -405,9 +394,7 @@ impl AddrComponent {
                 let num = rdr.read_u16::<BigEndian>()?;
                 AddrComponent::SCTP(num)
             }
-            ProtocolId::UNIX => {
-                AddrComponent::UNIX(String::from_utf8(data.to_owned())?)
-            }
+            ProtocolId::UNIX => AddrComponent::UNIX(String::from_utf8(data.to_owned())?),
             ProtocolId::P2P => {
                 let bytes = Cid::from(data)?.to_bytes();
                 AddrComponent::P2P(bytes)
@@ -416,7 +403,7 @@ impl AddrComponent {
                 let bytes = Cid::from(data)?.to_bytes();
                 AddrComponent::IPFS(bytes)
             }
-            ProtocolId::ONION => unimplemented!(),      // TODO:
+            ProtocolId::ONION => unimplemented!(), // TODO:
             ProtocolId::QUIC => AddrComponent::QUIC,
             ProtocolId::UTP => AddrComponent::UTP,
             ProtocolId::UDT => AddrComponent::UDT,
@@ -441,13 +428,13 @@ impl AddrComponent {
             AddrComponent::IP4(addr) => {
                 out.write_all(&addr.octets())?;
             }
-            AddrComponent::IP6(addr) => {
-                for &segment in &addr.segments() {
-                    out.write_u16::<BigEndian>(segment)?;
-                }
-            }
-            AddrComponent::TCP(port) | AddrComponent::UDP(port) | AddrComponent::DCCP(port) |
-            AddrComponent::SCTP(port) => {
+            AddrComponent::IP6(addr) => for &segment in &addr.segments() {
+                out.write_u16::<BigEndian>(segment)?;
+            },
+            AddrComponent::TCP(port)
+            | AddrComponent::UDP(port)
+            | AddrComponent::DCCP(port)
+            | AddrComponent::SCTP(port) => {
                 out.write_u16::<BigEndian>(port)?;
             }
             AddrComponent::DNS4(s) | AddrComponent::DNS6(s) | AddrComponent::UNIX(s) => {
@@ -460,19 +447,19 @@ impl AddrComponent {
                 out.write_all(&bytes)?;
             }
             AddrComponent::ONION(_) => {
-                unimplemented!()  // TODO:
-            },
-            AddrComponent::QUIC |
-            AddrComponent::UTP |
-            AddrComponent::UDT |
-            AddrComponent::HTTP |
-            AddrComponent::HTTPS |
-            AddrComponent::WS |
-            AddrComponent::WSS |
-            AddrComponent::Libp2pWebsocketStar |
-            AddrComponent::Libp2pWebrtcStar |
-            AddrComponent::Libp2pWebrtcDirect |
-            AddrComponent::P2pCircuit => {}
+                unimplemented!() // TODO:
+            }
+            AddrComponent::QUIC
+            | AddrComponent::UTP
+            | AddrComponent::UDT
+            | AddrComponent::HTTP
+            | AddrComponent::HTTPS
+            | AddrComponent::WS
+            | AddrComponent::WSS
+            | AddrComponent::Libp2pWebsocketStar
+            | AddrComponent::Libp2pWebrtcStar
+            | AddrComponent::Libp2pWebrtcDirect
+            | AddrComponent::P2pCircuit => {}
         };
 
         Ok(())
@@ -497,15 +484,15 @@ impl ToString for AddrComponent {
                 // TODO: meh for cloning
                 let c = Cid::from(bytes.clone()).expect("cid is known to be valid");
                 format!("/p2p/{}", c)
-            },
+            }
             AddrComponent::IPFS(ref bytes) => {
                 // TODO: meh for cloning
                 let c = Cid::from(bytes.clone()).expect("cid is known to be valid");
                 format!("/ipfs/{}", c)
-            },
+            }
             AddrComponent::HTTP => format!("/http"),
             AddrComponent::HTTPS => format!("/https"),
-            AddrComponent::ONION(_) => unimplemented!(),//format!("/onion"),        // TODO:
+            AddrComponent::ONION(_) => unimplemented!(), //format!("/onion"),        // TODO:
             AddrComponent::QUIC => format!("/quic"),
             AddrComponent::WS => format!("/ws"),
             AddrComponent::WSS => format!("/wss"),
