@@ -21,6 +21,7 @@
 use bytes::{Bytes, BytesMut};
 use futures::{future, Future, Sink, Stream};
 use libp2p_swarm::{ConnectionUpgrade, Endpoint};
+use log::Level;
 use multiaddr::Multiaddr;
 use protobuf::Message as ProtobufMessage;
 use protobuf::core::parse_from_bytes as protobuf_parse_from_bytes;
@@ -71,6 +72,9 @@ where
 		info: IdentifyInfo,
 		observed_addr: &Multiaddr,
 	) -> Box<Future<Item = (), Error = IoError> + 'a> {
+		debug!(target: "libp2p-identify", "Sending identify info to client");
+		trace!(target: "libp2p-identify", "Sending: {:?}", info);
+
 		let listen_addrs = info.listen_addrs
 			.into_iter()
 			.map(|addr| addr.into_bytes())
@@ -124,7 +128,15 @@ where
 	}
 
 	fn upgrade(self, socket: C, _: (), ty: Endpoint, observed_addr: &Multiaddr) -> Self::Future {
+		trace!(target: "libp2p-identify", "Upgrading connection with {:?} as {:?}",
+			   observed_addr, ty);
+
 		let socket = socket.framed(VarintCodec::default());
+		let observed_addr_log = if log_enabled!(target: "libp2p-identify", Level::Debug) {
+			Some(observed_addr.clone())
+		} else {
+			None
+		};
 
 		match ty {
 			Endpoint::Dialer => {
@@ -133,13 +145,32 @@ where
 					.map(|(msg, _)| msg)
 					.map_err(|(err, _)| err)
 					.and_then(|msg| {
+						debug!(target: "libp2p-identify", "Received identify message from {:?}",
+							   observed_addr_log
+							   	.expect("Programmer error: expected `observed_addr_log' to be \
+								   		 non-None since debug log level is enabled"));
 						if let Some(msg) = msg {
-							let (info, observed_addr) = parse_proto_msg(msg)?;
+							let (info, observed_addr) = match parse_proto_msg(msg) {
+								Ok(v) => v,
+								Err(err) => {
+									debug!(target: "libp2p-identify",
+										   "Failed to parse protobuf message ; error = {:?}", err);
+									return Err(err.into());
+								}
+							};
+
+							trace!(target: "libp2p-identify", "Remote observes us as {:?}",
+								   observed_addr);
+							trace!(target: "libp2p-identify", "Information received: {:?}", info);
+
 							Ok(IdentifyOutput::RemoteInfo {
 								info,
 								observed_addr,
 							})
+
 						} else {
+							debug!(target: "libp2p-identify", "Identify protocol stream closed \
+															   before receiving info");
 							Err(IoErrorKind::InvalidData.into())
 						}
 					});
