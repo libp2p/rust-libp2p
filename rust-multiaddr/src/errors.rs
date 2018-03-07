@@ -1,4 +1,4 @@
-use std::{net, fmt, error, io, num, string};
+use std::{error, fmt, io, net, num, string};
 use cid;
 use byteorder;
 
@@ -35,7 +35,7 @@ impl error::Error for Error {
     fn cause(&self) -> Option<&error::Error> {
         match *self {
             Error::ParsingError(ref err) => Some(&**err),
-            _ => None
+            _ => None,
         }
     }
 }

@@ -36,63 +36,65 @@ use ring::hmac;
 ///
 /// Also implements `Stream` for convenience.
 pub struct EncoderMiddleware<S> {
-	cipher_state: Box<SynchronousStreamCipher>,
-	hmac_key: hmac::SigningKey,
-	raw_sink: S,
+    cipher_state: Box<SynchronousStreamCipher>,
+    hmac_key: hmac::SigningKey,
+    raw_sink: S,
 }
 
 impl<S> EncoderMiddleware<S> {
-	pub fn new(
-		raw_sink: S,
-		cipher: Box<SynchronousStreamCipher>,
-		hmac_key: hmac::SigningKey,
-	) -> EncoderMiddleware<S> {
-		EncoderMiddleware {
-			cipher_state: cipher,
-			hmac_key: hmac_key,
-			raw_sink: raw_sink,
-		}
-	}
+    pub fn new(
+        raw_sink: S,
+        cipher: Box<SynchronousStreamCipher>,
+        hmac_key: hmac::SigningKey,
+    ) -> EncoderMiddleware<S> {
+        EncoderMiddleware {
+            cipher_state: cipher,
+            hmac_key: hmac_key,
+            raw_sink: raw_sink,
+        }
+    }
 }
 
 impl<S> Sink for EncoderMiddleware<S>
-	where S: Sink<SinkItem = BytesMut>
+where
+    S: Sink<SinkItem = BytesMut>,
 {
-	type SinkItem = BytesMut;
-	type SinkError = S::SinkError;
+    type SinkItem = BytesMut;
+    type SinkError = S::SinkError;
 
-	fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
-		let capacity = item.len() + self.hmac_key.digest_algorithm().output_len;
+    fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
+        let capacity = item.len() + self.hmac_key.digest_algorithm().output_len;
 
-		// Apparently this is the fastest way of doing.
-		// See https://gist.github.com/kirushik/e0d93759b0cd102f814408595c20a9d0
-		let mut out_buffer = BytesMut::from(vec![0; capacity]);
+        // Apparently this is the fastest way of doing.
+        // See https://gist.github.com/kirushik/e0d93759b0cd102f814408595c20a9d0
+        let mut out_buffer = BytesMut::from(vec![0; capacity]);
 
-		{
-			let (out_data, out_sign) = out_buffer.split_at_mut(item.len());
-			self.cipher_state.process(&item, out_data);
+        {
+            let (out_data, out_sign) = out_buffer.split_at_mut(item.len());
+            self.cipher_state.process(&item, out_data);
 
-			let signature = hmac::sign(&self.hmac_key, out_data);
-			out_sign.copy_from_slice(signature.as_ref());
-		}
+            let signature = hmac::sign(&self.hmac_key, out_data);
+            out_sign.copy_from_slice(signature.as_ref());
+        }
 
-		self.raw_sink.start_send(out_buffer)
-	}
+        self.raw_sink.start_send(out_buffer)
+    }
 
-	#[inline]
-	fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
-		self.raw_sink.poll_complete()
-	}
+    #[inline]
+    fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
+        self.raw_sink.poll_complete()
+    }
 }
 
 impl<S> Stream for EncoderMiddleware<S>
-	where S: Stream
+where
+    S: Stream,
 {
-	type Item = S::Item;
-	type Error = S::Error;
+    type Item = S::Item;
+    type Error = S::Error;
 
-	#[inline]
-	fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-		self.raw_sink.poll()
-	}
+    #[inline]
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        self.raw_sink.poll()
+    }
 }
