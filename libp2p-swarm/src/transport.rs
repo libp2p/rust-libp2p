@@ -51,7 +51,7 @@ use tokio_io::{AsyncRead, AsyncWrite};
 /// >           words, listening or dialing consumes the transport object. This has been designed
 /// >           so that you would implement this trait on `&Foo` or `&mut Foo` instead of directly
 /// >           on `Foo`.
-pub trait Transport {
+pub trait Transport<Config> {
 	/// The raw connection to a peer.
 	type RawConn: AsyncRead + AsyncWrite;
 
@@ -79,14 +79,14 @@ pub trait Transport {
 	/// > **Note**: The reason why we need to change the `Multiaddr` on success is to handle
 	/// >             situations such as turning `/ip4/127.0.0.1/tcp/0` into
 	/// >             `/ip4/127.0.0.1/tcp/<actual port>`.
-	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)>
+	fn listen_on(self, addr: Multiaddr, config: Config) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)>
 	where
 		Self: Sized;
 
 	/// Dial to the given multi-addr.
 	///
 	/// Returns either a future which may resolve to a connection, or gives back the multiaddress.
-	fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)>
+	fn dial(self, addr: Multiaddr, config: Config) -> Result<Self::Dial, (Self, Multiaddr)>
 	where
 		Self: Sized;
 
@@ -120,7 +120,7 @@ pub trait Transport {
 	/// > **Note**: The concept of an *upgrade* for example includes middlewares such *secio*
 	/// >           (communication encryption), *multiplex*, but also a protocol handler.
 	#[inline]
-	fn with_upgrade<U>(self, upgrade: U) -> UpgradedNode<Self, U>
+	fn with_upgrade<U>(self, upgrade: U) -> UpgradedNode<Self, U, Config>
 	where
 		Self: Sized,
 		U: ConnectionUpgrade<Self::RawConn>,
@@ -128,6 +128,7 @@ pub trait Transport {
 		UpgradedNode {
 			transports: self,
 			upgrade: upgrade,
+			config: Default::default(),
 		}
 	}
 
@@ -146,7 +147,7 @@ pub trait Transport {
 
 /// Extension trait for `Transport`. Implemented on structs that provide a `Transport` on which
 /// the dialed node can dial you back.
-pub trait MuxedTransport: Transport {
+pub trait MuxedTransport<Conf>: Transport<Conf> {
 	/// Future resolving to an incoming connection.
 	type Incoming: Future<Item = (Self::RawConn, Multiaddr), Error = IoError>;
 
@@ -171,7 +172,7 @@ pub trait MuxedTransport: Transport {
 #[derive(Debug, Copy, Clone)]
 pub struct DeniedTransport;
 
-impl Transport for DeniedTransport {
+impl<Conf> Transport<Conf> for DeniedTransport {
 	// TODO: could use `!` for associated types once stable
 	type RawConn = Cursor<Vec<u8>>;
 	type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
@@ -179,12 +180,12 @@ impl Transport for DeniedTransport {
 	type Dial = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
 
 	#[inline]
-	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+	fn listen_on(self, addr: Multiaddr, _: Conf) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
 		Err((DeniedTransport, addr))
 	}
 
 	#[inline]
-	fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+	fn dial(self, addr: Multiaddr, _: Conf) -> Result<Self::Dial, (Self, Multiaddr)> {
 		Err((DeniedTransport, addr))
 	}
 
@@ -194,7 +195,7 @@ impl Transport for DeniedTransport {
 	}
 }
 
-impl MuxedTransport for DeniedTransport {
+impl<Conf> MuxedTransport<Conf> for DeniedTransport {
 	type Incoming = future::Empty<(Self::RawConn, Multiaddr), IoError>;
 
 	#[inline]
@@ -207,36 +208,37 @@ impl MuxedTransport for DeniedTransport {
 #[derive(Debug, Copy, Clone)]
 pub struct OrTransport<A, B>(A, B);
 
-impl<A, B> Transport for OrTransport<A, B>
+impl<A, B, Conf> Transport<Conf> for OrTransport<A, B>
 where
-	A: Transport,
-	B: Transport,
+	A: Transport<Conf>,
+	B: Transport<Conf>,
+	Conf: Clone,
 {
 	type RawConn = EitherSocket<A::RawConn, B::RawConn>;
 	type Listener = EitherListenStream<A::Listener, B::Listener>;
 	type ListenerUpgrade = EitherListenUpgrade<A::ListenerUpgrade, B::ListenerUpgrade>;
 	type Dial = EitherListenUpgrade<<A::Dial as IntoFuture>::Future, <B::Dial as IntoFuture>::Future>;
 
-	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-		let (first, addr) = match self.0.listen_on(addr) {
+	fn listen_on(self, addr: Multiaddr, conf: Conf) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+		let (first, addr) = match self.0.listen_on(addr, conf.clone()) {
 			Ok((connec, addr)) => return Ok((EitherListenStream::First(connec), addr)),
 			Err(err) => err,
 		};
 
-		match self.1.listen_on(addr) {
+		match self.1.listen_on(addr, conf) {
 			Ok((connec, addr)) => Ok((EitherListenStream::Second(connec), addr)),
 			Err((second, addr)) => Err((OrTransport(first, second), addr)),
 		}
 	}
 
-	fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-		let (first, addr) = match self.0.dial(addr) {
-			Ok(connec) => return Ok(EitherListenUpgrade::First(connec.into_future())),
+	fn dial(self, addr: Multiaddr, conf: Conf) -> Result<Self::Dial, (Self, Multiaddr)> {
+		let (first, addr) = match self.0.dial(addr, conf.clone()) {
+			Ok(connec) => return Ok(EitherTransportFuture::First(connec.into_future())),
 			Err(err) => err,
 		};
 
-		match self.1.dial(addr) {
-			Ok(connec) => Ok(EitherListenUpgrade::Second(connec.into_future())),
+		match self.1.dial(addr, conf) {
+			Ok(connec) => Ok(EitherTransportFuture::Second(connec.into_future())),
 			Err((second, addr)) => Err((OrTransport(first, second), addr)),
 		}
 	}
@@ -285,12 +287,13 @@ impl<F> Clone for SimpleProtocol<F> {
 	}
 }
 
-impl<A, B> MuxedTransport for OrTransport<A, B>
+impl<A, B, Conf> MuxedTransport<Conf> for OrTransport<A, B>
 where
-	A: MuxedTransport,
-	B: MuxedTransport,
-	A::Incoming: 'static,		// TODO: meh :-/
-	B::Incoming: 'static,		// TODO: meh :-/
+	A: MuxedTransport<Conf>,
+	B: MuxedTransport<Conf>,
+	A::Incoming: 'static, // TODO: meh :-/
+	B::Incoming: 'static, // TODO: meh :-/
+	Conf: Clone,
 {
 	type Incoming = Box<Future<Item = (EitherSocket<A::RawConn, B::RawConn>, Multiaddr), Error = IoError>>;
 
@@ -787,8 +790,8 @@ pub struct DummyMuxing<T> {
 	inner: T,
 }
 
-impl<T> MuxedTransport for DummyMuxing<T>
-	where T: Transport
+impl<T, Conf> MuxedTransport<Conf> for DummyMuxing<T>
+	where T: Transport<Conf>
 {
 	type Incoming = future::Empty<(T::RawConn, Multiaddr), IoError>;
 
@@ -799,8 +802,8 @@ impl<T> MuxedTransport for DummyMuxing<T>
 	}
 }
 
-impl<T> Transport for DummyMuxing<T>
-	where T: Transport
+impl<T, Conf> Transport<Conf> for DummyMuxing<T>
+	where T: Transport<Conf>
 {
 	type RawConn = T::RawConn;
 	type Listener = T::Listener;
@@ -808,21 +811,21 @@ impl<T> Transport for DummyMuxing<T>
 	type Dial = T::Dial;
 
 	#[inline]
-	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)>
+	fn listen_on(self, addr: Multiaddr, conf: Conf) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)>
 	where
 		Self: Sized
 	{
-		self.inner.listen_on(addr).map_err(|(inner, addr)| {
+		self.inner.listen_on(addr, conf).map_err(|(inner, addr)| {
 			(DummyMuxing { inner }, addr)
 		})
 	}
 
 	#[inline]
-	fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)>
+	fn dial(self, addr: Multiaddr, conf: Conf) -> Result<Self::Dial, (Self, Multiaddr)>
 	where
 		Self: Sized
 	{
-		self.inner.dial(addr).map_err(|(inner, addr)| {
+		self.inner.dial(addr, conf).map_err(|(inner, addr)| {
 			(DummyMuxing { inner }, addr)
 		})
 	}
@@ -837,21 +840,32 @@ impl<T> Transport for DummyMuxing<T>
 /// connection.
 ///
 /// See the `Transport::with_upgrade` method.
-#[derive(Debug, Clone)]
-pub struct UpgradedNode<T, C> {
+#[derive(Debug)]
+pub struct UpgradedNode<T, C, Conf> {
 	transports: T,
 	upgrade: C,
+	config: ::std::marker::PhantomData<Conf>,
 }
 
-impl<'a, T, C> UpgradedNode<T, C>
+impl<T: Clone, C: Clone, Conf> Clone for UpgradedNode<T, C, Conf> {
+	fn clone(&self) -> Self {
+		UpgradedNode {
+			transports: self.transports.clone(),
+			upgrade: self.upgrade.clone(),
+			config: self.config,
+		}
+	}
+}
+
+impl<'a, Trans: 'a, Upgrade: 'a, Conf: 'a> UpgradedNode<Trans, Upgrade, Conf>
 where
-	T: Transport + 'a,
-	C: ConnectionUpgrade<T::RawConn> + 'a,
+	Trans: Transport<Conf>,
+	Upgrade: ConnectionUpgrade<Trans::RawConn>,
 {
 	/// Turns this upgraded node into a `ConnectionReuse`. If the `Output` implements the
 	/// `StreamMuxer` trait, the returned object will implement `Transport` and `MuxedTransport`.
 	#[inline]
-	pub fn into_connection_reuse(self) -> ConnectionReuse<T, C> {
+	pub fn into_connection_reuse(self) -> ConnectionReuse<Trans, Upgrade, Conf> {
 		From::from(self)
 	}
 
@@ -870,15 +884,17 @@ where
 	pub fn dial(
 		self,
 		addr: Multiaddr,
+		conf: Conf,
 	) -> Result<Box<Future<Item = (C::Output, Multiaddr), Error = IoError> + 'a>, (Self, Multiaddr)> {
 		let upgrade = self.upgrade;
 
-		let dialed_fut = match self.transports.dial(addr.clone()) {
+		let dialed_fut = match self.transports.dial(addr.clone(), conf) {
 			Ok(f) => f.into_future(),
 			Err((trans, addr)) => {
 				let builder = UpgradedNode {
 					transports: trans,
 					upgrade: upgrade,
+					config: Default::default(),
 				};
 
 				return Err((builder, addr));
@@ -907,10 +923,10 @@ where
 	/// 
 	/// This function returns the next incoming substream. You are strongly encouraged to call it
 	/// if you have a muxed transport.
-	pub fn next_incoming(self) -> Box<Future<Item = (C::Output, Multiaddr), Error = IoError> + 'a>
-		where T: MuxedTransport,
-			  C::NamesIter: Clone, // TODO: not elegant
-			  C: Clone,
+	pub fn next_incoming(self) -> Box<Future<Item = (Upgrade::Output, Multiaddr), Error = IoError> + 'a>
+		where Trans: MuxedTransport<Conf>,
+			  Upgrade::NamesIter: Clone, // TODO: not elegant
+			  Upgrade: Clone,
 	{
 		let upgrade = self.upgrade;
 
@@ -940,22 +956,24 @@ where
 	pub fn listen_on(
 		self,
 		addr: Multiaddr,
+		conf: Conf,
 	) -> Result<
-		(Box<Stream<Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError> + 'a>, Error = IoError> + 'a>, Multiaddr),
+		(Box<Stream<Item = Box<Future<Item = (Upgrade::Output, Multiaddr), Error = IoError> + 'a>, Error = IoError> + 'a>, Multiaddr),
 		(Self, Multiaddr),
 	>
 	where
-		C::NamesIter: Clone, // TODO: not elegant
-		C: Clone,
+		Upgrade::NamesIter: Clone, // TODO: not elegant
+		Upgrade: Clone,
 	{
 		let upgrade = self.upgrade;
 
-		let (listening_stream, new_addr) = match self.transports.listen_on(addr) {
+		let (listening_stream, new_addr) = match self.transports.listen_on(addr, conf) {
 			Ok((l, new_addr)) => (l, new_addr),
 			Err((trans, addr)) => {
 				let builder = UpgradedNode {
 					transports: trans,
 					upgrade: upgrade,
+					config: Default::default(),
 				};
 
 				return Err((builder, addr));
@@ -991,27 +1009,27 @@ where
 	}
 }
 
-impl<T, C> Transport for UpgradedNode<T, C>
+impl<Trans: 'static, Upgrade: 'static, Conf: 'static> Transport<Conf> for UpgradedNode<Trans, Upgrade, Conf>
 where
-	T: Transport + 'static,
-	C: ConnectionUpgrade<T::RawConn> + 'static,
-	C::Output: AsyncRead + AsyncWrite,
-	C::NamesIter: Clone, // TODO: not elegant
-	C: Clone,
+	Trans: Transport<Conf>,
+	Upgrade: ConnectionUpgrade<Trans::RawConn>,
+	Upgrade::Output: AsyncRead + AsyncWrite,
+	Upgrade::NamesIter: Clone, // TODO: not elegant
+	Upgrade: Clone,
 {
-	type RawConn = C::Output;
-	type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
-	type ListenerUpgrade = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>;
-	type Dial = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>;
+	type RawConn = Upgrade::Output;
+	type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>>;
+	type ListenerUpgrade = Box<Future<Item = Upgrade::Output, Error = IoError>>;
+	type Dial = Box<Future<Item = Upgrade::Output, Error = IoError>>;
 
 	#[inline]
-	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-		self.listen_on(addr)
+	fn listen_on(self, addr: Multiaddr, conf: Conf) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+		self.listen_on(addr, conf)
 	}
 
 	#[inline]
-	fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-		self.dial(addr)
+	fn dial(self, addr: Multiaddr, conf: Conf) -> Result<Self::Dial, (Self, Multiaddr)> {
+		self.dial(addr, conf)
 	}
 
 	#[inline]
@@ -1020,15 +1038,15 @@ where
 	}
 }
 
-impl<T, C> MuxedTransport for UpgradedNode<T, C>
+impl<Trans: 'static, Upgrade: 'static, Conf: 'static> MuxedTransport<Conf> for UpgradedNode<Trans, Upgrade, Conf>
 where
-	T: MuxedTransport + 'static,
-	C: ConnectionUpgrade<T::RawConn> + 'static,
-	C::Output: AsyncRead + AsyncWrite,
-	C::NamesIter: Clone, // TODO: not elegant
-	C: Clone,
+	Trans: MuxedTransport<Conf>,
+	Upgrade: ConnectionUpgrade<Trans::RawConn>,
+	Upgrade::Output: AsyncRead + AsyncWrite,
+	Upgrade::NamesIter: Clone, // TODO: not elegant
+	Upgrade: Clone,
 {
-	type Incoming = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>;
+	type Incoming = Box<Future<Item = (Upgrade::Output, Multiaddr), Error = IoError>>;
 
 	#[inline]
 	fn next_incoming(self) -> Self::Incoming {

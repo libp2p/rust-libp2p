@@ -91,8 +91,11 @@ extern crate ring;
 extern crate rw_stream_sink;
 extern crate tokio_io;
 extern crate untrusted;
+extern crate minimal_lens;
 
 pub use self::error::SecioError;
+
+pub use minimal_lens::HasRef;
 
 use bytes::{Bytes, BytesMut};
 use futures::{Future, Poll, StartSend, Sink, Stream};
@@ -151,11 +154,15 @@ pub struct SecioKeyPair {
 }
 
 impl SecioKeyPair {
-	pub fn rsa_from_pkcs8<P>(private: &[u8], public: P)
-							 -> Result<SecioKeyPair, Box<Error + Send + Sync>>
-		where P: Into<Vec<u8>>
+	pub fn rsa_from_pkcs8<Priv, Pub>(
+		private: &Priv,
+		public: Pub,
+	) -> Result<SecioKeyPair, Box<Error + Send + Sync>>
+	where
+		Priv: AsRef<[u8]>,
+		Pub: Into<Arc<[u8]>>,
 	{
-		let private = RSAKeyPair::from_pkcs8(Input::from(&private[..]))
+		let private = RSAKeyPair::from_pkcs8(Input::from(&private.as_ref()[..]))
 			.map_err(|err| Box::new(err))?;
 
 		Ok(SecioKeyPair {
@@ -171,7 +178,7 @@ impl SecioKeyPair {
 #[derive(Clone)]
 enum SecioKeyPairInner {
 	Rsa {
-		public: Vec<u8>,
+		public: Arc<[u8]>,
 		private: Arc<RSAKeyPair>,
 	}
 }
@@ -231,12 +238,6 @@ fn map_err(err: SecioError) -> IoError {
 pub struct SecioMiddleware<S> {
 	inner: codec::FullCodec<S>,
 	remote_pubkey_der: Vec<u8>,
-}
-
-impl<S> SecurityProvider for SecioMiddleware {
-	fn public_key(&self) -> &[u8] {
-		&self.remote_pubkey_der
-	}
 }
 
 impl<S> SecioMiddleware<S>

@@ -62,13 +62,13 @@ use transport::{ConnectionUpgrade, MuxedTransport, Transport, UpgradedNode};
 ///
 /// Implements the `Transport` trait.
 #[derive(Clone)]
-pub struct ConnectionReuse<T, C>
+pub struct ConnectionReuse<T, C, Conf>
 where
-	T: Transport,
+	T: Transport<Conf>,
 	C: ConnectionUpgrade<T::RawConn>,
 {
 	// Underlying transport and connection upgrade for when we need to dial or listen.
-	inner: UpgradedNode<T, C>,
+	inner: UpgradedNode<T, C, Conf>,
 	shared: Arc<Mutex<Shared<C::Output>>>,
 }
 
@@ -79,13 +79,13 @@ struct Shared<O> {
 	to_signal: Vec<task::Task>,
 }
 
-impl<T, C> From<UpgradedNode<T, C>> for ConnectionReuse<T, C>
+impl<T, C, Conf> From<UpgradedNode<T, C, Conf>> for ConnectionReuse<T, C, Conf>
 where
-	T: Transport,
+	T: Transport<Conf>,
 	C: ConnectionUpgrade<T::RawConn>,
 {
 	#[inline]
-	fn from(node: UpgradedNode<T, C>) -> ConnectionReuse<T, C> {
+	fn from(node: UpgradedNode<T, C, Conf>) -> Self {
 		ConnectionReuse {
 			inner: node,
 			shared: Arc::new(Mutex::new(Shared {
@@ -96,10 +96,11 @@ where
 	}
 }
 
-impl<T, C> Transport for ConnectionReuse<T, C>
+// TODO: 'static :(
+impl<T: 'static, C: 'static, Conf: 'static> Transport<Conf> for ConnectionReuse<T, C, Conf>
 where
-	T: Transport + 'static,                     // TODO: 'static :(
-	C: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :(
+	T: Transport<Conf>,
+	C: ConnectionUpgrade<T::RawConn>,
 	C: Clone,
 	C::Output: StreamMuxer + Clone,
 	C::NamesIter: Clone, // TODO: not elegant
@@ -109,8 +110,8 @@ where
 	type ListenerUpgrade = FutureResult<(Self::RawConn, Multiaddr), IoError>;
 	type Dial = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
 
-	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-		let (listener, new_addr) = match self.inner.listen_on(addr.clone()) {
+	fn listen_on(self, addr: Multiaddr, conf: Conf) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+		let (listener, new_addr) = match self.inner.listen_on(addr.clone(), conf) {
 			Ok((l, a)) => (l, a),
 			Err((inner, addr)) => {
 				return Err((ConnectionReuse { inner: inner, shared: self.shared }, addr));
@@ -126,8 +127,8 @@ where
 		Ok((Box::new(listener) as Box<_>, new_addr))
 	}
 
-	fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-		let dial = match self.inner.dial(addr.clone()) {
+	fn dial(self, addr: Multiaddr, conf: Conf) -> Result<Self::Dial, (Self, Multiaddr)> {
+		let dial = match self.inner.dial(addr.clone(), conf) {
 			Ok(l) => l,
 			Err((inner, addr)) => {
 				return Err((ConnectionReuse { inner: inner, shared: self.shared }, addr));
@@ -163,10 +164,11 @@ where
 	}
 }
 
-impl<T, C> MuxedTransport for ConnectionReuse<T, C>
+// TODO: 'static :(
+impl<T: 'static, C: 'static, Conf: 'static> MuxedTransport<Conf> for ConnectionReuse<T, C, Conf>
 where
-	T: Transport + 'static,                     // TODO: 'static :(
-	C: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :(
+	T: Transport<Conf>,
+	C: ConnectionUpgrade<T::RawConn>,
 	C: Clone,
 	C::Output: StreamMuxer + Clone,
 	C::NamesIter: Clone, // TODO: not elegant
