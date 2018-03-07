@@ -20,6 +20,7 @@
 
 extern crate bigint;
 extern crate bytes;
+extern crate env_logger;
 extern crate example;
 extern crate futures;
 extern crate libp2p_identify as identify;
@@ -43,6 +44,8 @@ use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 
 fn main() {
+    env_logger::init();
+
     // Determine which addresses to listen to.
     let listen_addrs = {
         let mut args = env::args().skip(1).collect::<Vec<_>>();
