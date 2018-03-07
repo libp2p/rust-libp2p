@@ -8,6 +8,7 @@ bytes = "0.4"
 futures = "0.1"
 libp2p-peerstore = { path = "../libp2p-peerstore" }
 libp2p-swarm = { path = "../libp2p-swarm" }
+log = "0.4.1"
 multiaddr = "0.2.0"
 protobuf = "1.4.2"
 tokio-io = "0.1.0"

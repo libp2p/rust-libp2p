@@ -31,7 +31,7 @@ extern crate tokio_io;
 use futures::{Future, Sink, Stream};
 use futures::sync::oneshot;
 use std::env;
-use swarm::{UpgradeExt, SimpleProtocol, Transport, DeniedConnectionUpgrade};
+use swarm::{DeniedConnectionUpgrade, SimpleProtocol, Transport, UpgradeExt};
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 use tokio_io::AsyncRead;
@@ -40,7 +40,9 @@ use websocket::WsConfig;
 
 fn main() {
     // Determine which address to dial.
-    let target_addr = env::args().nth(1).unwrap_or("/ip4/127.0.0.1/tcp/10333".to_owned());
+    let target_addr = env::args()
+        .nth(1)
+        .unwrap_or("/ip4/127.0.0.1/tcp/10333".to_owned());
 
     // We start by building the tokio engine that will run all the sockets.
     let mut core = Core::new().unwrap();
@@ -82,10 +84,13 @@ fn main() {
     // connections for us. The second parameter we pass is the connection upgrade that is accepted
     // by the listening part. We don't want to accept anything, so we pass a dummy object that
     // represents a connection that is always denied.
-    let (swarm_controller, swarm_future) = swarm::swarm(transport, DeniedConnectionUpgrade,
+    let (swarm_controller, swarm_future) = swarm::swarm(
+        transport,
+        DeniedConnectionUpgrade,
         |_socket, _client_addr| -> Result<(), _> {
             unreachable!("All incoming connections should have been denied")
-        });
+        },
+    );
 
     // Building a struct that represents the protocol that we are going to use for dialing.
     let proto = SimpleProtocol::new("/echo/1.0.0", |socket| {

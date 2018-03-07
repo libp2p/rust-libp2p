@@ -381,7 +381,7 @@ mod tests {
         assert_eq!(
             substream
                 .name()
-                .and_then(|bytes| { String::from_utf8(bytes.to_vec()).ok() }),
+                .and_then(|bytes| String::from_utf8(bytes.to_vec()).ok()),
             Some(id.to_string())
         );
 
@@ -395,7 +395,7 @@ mod tests {
         assert_eq!(
             substream
                 .name()
-                .and_then(|bytes| { String::from_utf8(bytes.to_vec()).ok() }),
+                .and_then(|bytes| String::from_utf8(bytes.to_vec()).ok()),
             Some(id.to_string())
         );
 
@@ -445,7 +445,7 @@ mod tests {
             assert_eq!(
                 substream
                     .name()
-                    .and_then(|bytes| { String::from_utf8(bytes.to_vec()).ok() }),
+                    .and_then(|bytes| String::from_utf8(bytes.to_vec()).ok()),
                 Some(id.to_string())
             );
 

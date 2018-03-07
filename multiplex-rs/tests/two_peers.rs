@@ -27,10 +27,10 @@ extern crate tokio_core;
 extern crate tokio_io;
 
 use futures::future::Future;
-use futures::{Stream, Sink};
+use futures::{Sink, Stream};
 use std::sync::mpsc;
 use std::thread;
-use swarm::{Transport, StreamMuxer};
+use swarm::{StreamMuxer, Transport};
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 use tokio_io::codec::length_delimited::Framed;
@@ -43,11 +43,11 @@ fn client_to_server_outbound() {
 
     let bg_thread = thread::spawn(move || {
         let mut core = Core::new().unwrap();
-        let transport = TcpConfig::new(core.handle())
-            .with_upgrade(multiplex::MultiplexConfig);
+        let transport = TcpConfig::new(core.handle()).with_upgrade(multiplex::MultiplexConfig);
 
         let (listener, addr) = transport
-            .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+            .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
+            .unwrap();
         tx.send(addr).unwrap();
 
         let future = listener
@@ -57,7 +57,8 @@ fn client_to_server_outbound() {
             .and_then(|client| client.outbound())
             .map(|client| Framed::<_, bytes::BytesMut>::new(client))
             .and_then(|client| {
-                client.into_future()
+                client
+                    .into_future()
                     .map_err(|(err, _)| err)
                     .map(|(msg, _)| msg)
             })
@@ -71,10 +72,11 @@ fn client_to_server_outbound() {
     });
 
     let mut core = Core::new().unwrap();
-    let transport = TcpConfig::new(core.handle())
-        .with_upgrade(multiplex::MultiplexConfig);
+    let transport = TcpConfig::new(core.handle()).with_upgrade(multiplex::MultiplexConfig);
 
-    let future = transport.dial(rx.recv().unwrap()).unwrap()
+    let future = transport
+        .dial(rx.recv().unwrap())
+        .unwrap()
         .and_then(|client| client.0.inbound())
         .map(|server| Framed::<_, bytes::BytesMut>::new(server))
         .and_then(|server| server.send("hello world".into()))
@@ -92,11 +94,11 @@ fn client_to_server_inbound() {
 
     let bg_thread = thread::spawn(move || {
         let mut core = Core::new().unwrap();
-        let transport = TcpConfig::new(core.handle())
-            .with_upgrade(multiplex::MultiplexConfig);
+        let transport = TcpConfig::new(core.handle()).with_upgrade(multiplex::MultiplexConfig);
 
         let (listener, addr) = transport
-            .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+            .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
+            .unwrap();
         tx.send(addr).unwrap();
 
         let future = listener
@@ -106,7 +108,8 @@ fn client_to_server_inbound() {
             .and_then(|client| client.inbound())
             .map(|client| Framed::<_, bytes::BytesMut>::new(client))
             .and_then(|client| {
-                client.into_future()
+                client
+                    .into_future()
                     .map_err(|(err, _)| err)
                     .map(|(msg, _)| msg)
             })
@@ -120,10 +123,11 @@ fn client_to_server_inbound() {
     });
 
     let mut core = Core::new().unwrap();
-    let transport = TcpConfig::new(core.handle())
-        .with_upgrade(multiplex::MultiplexConfig);
+    let transport = TcpConfig::new(core.handle()).with_upgrade(multiplex::MultiplexConfig);
 
-    let future = transport.dial(rx.recv().unwrap()).unwrap()
+    let future = transport
+        .dial(rx.recv().unwrap())
+        .unwrap()
         .and_then(|(client, _)| client.outbound())
         .map(|server| Framed::<_, bytes::BytesMut>::new(server))
         .and_then(|server| server.send("hello world".into()))

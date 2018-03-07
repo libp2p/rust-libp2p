@@ -1,21 +1,21 @@
 // Copyright 2017 Parity Technologies (UK) Ltd.
-// 
-// Permission is hereby granted, free of charge, to any person obtaining a 
-// copy of this software and associated documentation files (the "Software"), 
-// to deal in the Software without restriction, including without limitation 
-// the rights to use, copy, modify, merge, publish, distribute, sublicense, 
-// and/or sell copies of the Software, and to permit persons to whom the 
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
 // Software is furnished to do so, subject to the following conditions:
 //
-// The above copyright notice and this permission notice shall be included in 
+// The above copyright notice and this permission notice shall be included in
 // all copies or substantial portions of the Software.
 //
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS 
-// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
 extern crate bytes;
@@ -28,10 +28,10 @@ extern crate multiplex;
 extern crate tokio_core;
 extern crate tokio_io;
 
-use futures::future::{Future, IntoFuture, loop_fn, Loop};
-use futures::{Stream, Sink};
+use futures::future::{loop_fn, Future, IntoFuture, Loop};
+use futures::{Sink, Stream};
 use std::env;
-use swarm::{Transport, UpgradeExt, SimpleProtocol};
+use swarm::{SimpleProtocol, Transport, UpgradeExt};
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 use tokio_io::AsyncRead;
@@ -40,7 +40,9 @@ use websocket::WsConfig;
 
 fn main() {
     // Determine which address to listen to.
-    let listen_addr = env::args().nth(1).unwrap_or("/ip4/0.0.0.0/tcp/10333".to_owned());
+    let listen_addr = env::args()
+        .nth(1)
+        .unwrap_or("/ip4/0.0.0.0/tcp/10333".to_owned());
 
     // We start by building the tokio engine that will run all the sockets.
     let mut core = Core::new().unwrap();
@@ -107,14 +109,16 @@ fn main() {
                 .and_then(move |(msg, rest)| {
                     if let Some(msg) = msg {
                         // One message has been received. We send it back to the client.
-                        println!("Received a message from {}: {:?}\n => Sending back \
-                                identical message to remote", client_addr, msg);
+                        println!(
+                            "Received a message from {}: {:?}\n => Sending back \
+                             identical message to remote",
+                            client_addr, msg
+                        );
                         Box::new(rest.send(msg.freeze()).map(|m| Loop::Continue(m)))
                             as Box<Future<Item = _, Error = _>>
                     } else {
                         // End of stream. Connection closed. Breaking the loop.
-                        println!("Received EOF from {}\n => Dropping connection",
-                                client_addr);
+                        println!("Received EOF from {}\n => Dropping connection", client_addr);
                         Box::new(Ok(Loop::Break(())).into_future())
                             as Box<Future<Item = _, Error = _>>
                     }
