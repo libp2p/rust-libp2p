@@ -54,7 +54,6 @@
 //! {
 //!     // `peer_or_create` mutably borrows the peerstore, so we have to do it in a local scope.
 //!     let mut peer = peerstore.peer_or_create(&peer_id);
-//!     peer.set_pub_key(vec![60, 90, 120, 150]);
 //!     peer.add_addr("/ip4/10.11.12.13/tcp/20000".parse::<Multiaddr>().unwrap(),
 //!                   Duration::from_millis(5000));
 //! }
@@ -62,7 +61,6 @@
 //! // Now let's load back the info.
 //! {
 //!     let mut peer = peerstore.peer(&peer_id).expect("peer doesn't exist in the peerstore");
-//!     assert_eq!(peer.get_pub_key().unwrap(), &[60, 90, 120, 150]);
 //!     assert_eq!(peer.addrs().collect::<Vec<_>>(),
 //!                &["/ip4/10.11.12.13/tcp/20000".parse::<Multiaddr>().unwrap()]);
 //! }

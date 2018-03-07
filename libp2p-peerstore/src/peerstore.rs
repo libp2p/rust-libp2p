@@ -95,10 +95,4 @@ pub trait PeerAccess {
 
 	/// Removes all previously stored addresses.
 	fn clear_addrs(&mut self);
-
-	/// Get the public key for the peer, if known.
-	fn get_pub_key(&self) -> Option<&[u8]>;
-
-	/// Set public key for the peer.
-	fn set_pub_key(&mut self, key: Vec<u8>);
 }
