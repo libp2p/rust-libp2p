@@ -160,10 +160,16 @@ pub trait MuxedTransport<Conf>: Transport<Conf> {
 
 	/// Returns a stream of incoming connections.
 	#[inline]
-	fn incoming(self, conf: Conf) -> Box<Stream<Item = Self::Incoming, Error = IoError>>
-		where Self: Sized + Clone
+	fn incoming(self, conf: Conf) -> stream::AndThen<
+		stream::Repeat<(Self, Conf), IoError>,
+		fn((Self, Conf)) -> Self::Incoming,
+		Self::Incoming
+	>
+	where
+		Self: Sized + Clone,
+		Conf: Clone
 	{
-		Box::new(stream::repeat(self).and_then(|me| me.next_incoming(conf.clone())))
+		stream::repeat((self, conf)).and_then(|(me, conf)| me.next_incoming(conf))
 	}
 }
 
@@ -860,6 +866,7 @@ impl<'a, Trans: 'a, Upgrade: 'a, Conf: 'a> UpgradedNode<Trans, Upgrade, Conf>
 where
 	Trans: Transport<Conf>,
 	Upgrade: ConnectionUpgrade<Trans::RawConn, Conf>,
+	Conf: Clone,
 {
 	/// Turns this upgraded node into a `ConnectionReuse`. If the `Output` implements the
 	/// `StreamMuxer` trait, the returned object will implement `Transport` and `MuxedTransport`.
@@ -887,7 +894,7 @@ where
 	) -> Result<Box<Future<Item = (C::Output, Multiaddr), Error = IoError> + 'a>, (Self, Multiaddr)> {
 		let upgrade = self.upgrade;
 
-		let dialed_fut = match self.transports.dial(addr.clone(), conf) {
+		let dialed_fut = match self.transports.dial(addr.clone(), conf.clone()) {
 			Ok(f) => f.into_future(),
 			Err((trans, addr)) => {
 				let builder = UpgradedNode {
@@ -929,7 +936,7 @@ where
 	{
 		let upgrade = self.upgrade;
 
-		let future = self.transports.next_incoming()
+		let future = self.transports.next_incoming(conf.clone())
             // Try to negotiate the protocol.
             .and_then(move |(connection, addr)| {
                 let iter = upgrade.protocol_names()
@@ -966,7 +973,7 @@ where
 	{
 		let upgrade = self.upgrade;
 
-		let (listening_stream, new_addr) = match self.transports.listen_on(addr, conf) {
+		let (listening_stream, new_addr) = match self.transports.listen_on(addr, conf.clone()) {
 			Ok((l, new_addr)) => (l, new_addr),
 			Err((trans, addr)) => {
 				let builder = UpgradedNode {
@@ -984,7 +991,8 @@ where
 		// Instead the `stream` will produce `Ok(Err(...))`.
 		// `stream` can only produce an `Err` if `listening_stream` produces an `Err`.
 		let stream = listening_stream
-			.map(move |connection| {
+			.zip(stream::repeat(conf))
+			.map(move |((connection, client_addr), conf)| {
 				let upgrade = upgrade.clone();
 				let connection = connection
 					// Try to negotiate the protocol
@@ -1010,6 +1018,7 @@ where
 
 impl<Trans: 'static, Upgrade: 'static, Conf: 'static> Transport<Conf> for UpgradedNode<Trans, Upgrade, Conf>
 where
+	Conf: Clone,
 	Trans: Transport<Conf>,
 	Upgrade: ConnectionUpgrade<Trans::RawConn, Conf>,
 	Upgrade::Output: AsyncRead + AsyncWrite,
@@ -1023,12 +1032,12 @@ where
 
 	#[inline]
 	fn listen_on(self, addr: Multiaddr, conf: Conf) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-		self.listen_on(addr, conf)
+		UpgradedNode::listen_on(self, addr, conf)
 	}
 
 	#[inline]
 	fn dial(self, addr: Multiaddr, conf: Conf) -> Result<Self::Dial, (Self, Multiaddr)> {
-		self.dial(addr, conf)
+		UpgradedNode::dial(self, addr, conf)
 	}
 
 	#[inline]
@@ -1039,6 +1048,7 @@ where
 
 impl<Trans: 'static, Upgrade: 'static, Conf: 'static> MuxedTransport<Conf> for UpgradedNode<Trans, Upgrade, Conf>
 where
+	Conf: Clone,
 	Trans: MuxedTransport<Conf>,
 	Upgrade: ConnectionUpgrade<Trans::RawConn, Conf>,
 	Upgrade::Output: AsyncRead + AsyncWrite,

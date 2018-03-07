@@ -52,7 +52,7 @@ where
         config: conf.clone(),
         handler: handler,
         new_listeners: new_listeners_rx,
-        next_incoming: upgraded.clone().next_incoming(conf),
+        next_incoming: upgraded.clone().next_incoming(conf.clone()),
         listeners: Vec::new(),
         listeners_upgrade: Vec::new(),
         dialers: Vec::new(),

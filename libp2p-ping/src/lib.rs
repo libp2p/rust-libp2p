@@ -113,7 +113,7 @@ use tokio_io::codec::{Encoder, Decoder};
 #[derive(Debug, Copy, Clone, Default)]
 pub struct Ping;
 
-impl<C> ConnectionUpgrade<C> for Ping
+impl<C, Conf> ConnectionUpgrade<C, Conf> for Ping
     where C: AsyncRead + AsyncWrite + 'static
 {
 	type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
@@ -128,8 +128,8 @@ impl<C> ConnectionUpgrade<C> for Ping
 	type Future = FutureResult<Self::Output, IoError>;
 
 	#[inline]
-	fn upgrade(self, socket: C, _: Self::UpgradeIdentifier, _: Endpoint, remote_addr: &Multiaddr)
-				-> Self::Future
+	fn upgrade(self, socket: C, _: Self::UpgradeIdentifier, _: Endpoint, remote_addr: &Multiaddr, _: &Multiaddr, _: Conf)
+			-> Self::Future
 	{
 		// # How does it work?
 		//
@@ -299,7 +299,8 @@ mod tests {
 		                     .map_err(|(e, _)| e.into())
 		                     .and_then(|(c, _)| {
 								 Ping.upgrade(c.unwrap().0, (), Endpoint::Listener,
-											  &"/ip4/127.0.0.1/tcp/10000".parse().unwrap())
+											  &"/ip4/127.0.0.1/tcp/10000".parse().unwrap(),
+								 ())
 							 })
 		                     .and_then(|(mut pinger, service)| {
 			pinger.ping().map_err(|_| panic!()).select(service).map_err(|_| panic!())
@@ -308,7 +309,7 @@ mod tests {
 		let client = TcpStream::connect(&listener_addr, &core.handle())
 			.map_err(|e| e.into())
 			.and_then(|c| {
-				Ping.upgrade(c, (), Endpoint::Dialer, &"/ip4/127.0.0.1/tcp/10000".parse().unwrap())
+				Ping.upgrade(c, (), Endpoint::Dialer, &"/ip4/127.0.0.1/tcp/10000".parse().unwrap(), ())
 			})
 			.and_then(|(mut pinger, service)| {
 				pinger.ping().map_err(|_| panic!()).select(service).map_err(|_| panic!())
@@ -330,14 +331,14 @@ mod tests {
 		                     .map_err(|(e, _)| e.into())
 		                     .and_then(|(c, _)| {
 								 Ping.upgrade(c.unwrap().0, (), Endpoint::Listener,
-								 			  &"/ip4/127.0.0.1/tcp/10000".parse().unwrap())
+								 			  &"/ip4/127.0.0.1/tcp/10000".parse().unwrap(), ())
 							 })
 		                     .and_then(|(_, service)| service.map_err(|_| panic!()));
 
 		let client = TcpStream::connect(&listener_addr, &core.handle())
 			.map_err(|e| e.into())
 			.and_then(|c| Ping.upgrade(c, (), Endpoint::Dialer,
-						  &"/ip4/127.0.0.1/tcp/1000".parse().unwrap()))
+						  &"/ip4/127.0.0.1/tcp/1000".parse().unwrap(), ()))
 			.and_then(|(mut pinger, service)| {
 				let pings = (0 .. 20).map(move |_| {
 					pinger.ping().map_err(|_| ())

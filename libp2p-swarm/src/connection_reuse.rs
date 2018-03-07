@@ -100,6 +100,7 @@ where
 impl<T: 'static, C: 'static, Conf: 'static> Transport<Conf> for ConnectionReuse<T, C, Conf>
 where
 	T: Transport<Conf>,
+	Conf: Clone,
 	C: ConnectionUpgrade<T::RawConn, Conf>,
 	C: Clone,
 	C::Output: StreamMuxer + Clone,
@@ -168,6 +169,7 @@ where
 impl<T: 'static, C: 'static, Conf: 'static> MuxedTransport<Conf> for ConnectionReuse<T, C, Conf>
 where
 	T: Transport<Conf>,
+	Conf: Clone,
 	C: ConnectionUpgrade<T::RawConn, Conf>,
 	C: Clone,
 	C::Output: StreamMuxer + Clone,
