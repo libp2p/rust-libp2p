@@ -94,8 +94,9 @@ where
 }
 
 impl<T, C> Clone for SwarmController<T, C>
-    where T: MuxedTransport + Clone + 'static,      // TODO: 'static :-/
-          C: ConnectionUpgrade<T::RawConn> + 'static + Clone,      // TODO: 'static :-/
+where
+    T: MuxedTransport + Clone + 'static, // TODO: 'static :-/
+    C: ConnectionUpgrade<T::RawConn> + 'static + Clone, // TODO: 'static :-/
 {
     fn clone(&self) -> SwarmController<T, C> {
         SwarmController {

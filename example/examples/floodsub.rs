@@ -1,21 +1,21 @@
 // Copyright 2018 Parity Technologies (UK) Ltd.
-// 
-// Permission is hereby granted, free of charge, to any person obtaining a 
-// copy of this software and associated documentation files (the "Software"), 
-// to deal in the Software without restriction, including without limitation 
-// the rights to use, copy, modify, merge, publish, distribute, sublicense, 
-// and/or sell copies of the Software, and to permit persons to whom the 
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
 // Software is furnished to do so, subject to the following conditions:
 //
-// The above copyright notice and this permission notice shall be included in 
+// The above copyright notice and this permission notice shall be included in
 // all copies or substantial portions of the Software.
 //
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS 
-// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
 extern crate bytes;
@@ -46,7 +46,9 @@ fn main() {
     env_logger::init();
 
     // Determine which address to listen to.
-    let listen_addr = env::args().nth(1).unwrap_or("/ip4/0.0.0.0/tcp/10050".to_owned());
+    let listen_addr = env::args()
+        .nth(1)
+        .unwrap_or("/ip4/0.0.0.0/tcp/10050".to_owned());
 
     // We start by building the tokio engine that will run all the sockets.
     let mut core = Core::new().unwrap();
@@ -90,7 +92,7 @@ fn main() {
     // We now prepare the protocol that we are going to negotiate with nodes that open a connection
     // or substream to our server.
     let my_id = {
-        let key = (0 .. 2048).map(|_| rand::random::<u8>()).collect::<Vec<_>>();
+        let key = (0..2048).map(|_| rand::random::<u8>()).collect::<Vec<_>>();
         PeerId::from_public_key(&key)
     };
 
@@ -98,11 +100,14 @@ fn main() {
 
     // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming and
     // outgoing connections for us.
-    let (swarm_controller, swarm_future) = swarm::swarm(transport, floodsub_upgrade.clone(),
+    let (swarm_controller, swarm_future) = swarm::swarm(
+        transport,
+        floodsub_upgrade.clone(),
         |socket, client_addr| {
             println!("Successfully negotiated protocol with {}", client_addr);
             socket
-        });
+        },
+    );
 
     let address = swarm_controller
         .listen_on(listen_addr.parse().expect("invalid multiaddr"))
@@ -111,43 +116,48 @@ fn main() {
 
     let topic = floodsub::TopicBuilder::new("chat").build();
 
-    let floodsub_ctl = floodsub::FloodSubController::new(&floodsub_upgrade, swarm_controller.clone());
+    let floodsub_ctl =
+        floodsub::FloodSubController::new(&floodsub_upgrade, swarm_controller.clone());
     floodsub_ctl.subscribe(topic.clone());
 
-    let floodsub_rx = floodsub_rx
-        .for_each(|msg| {
-            if let Ok(msg) = String::from_utf8(msg.data) {
-                println!("< {}", msg);
-            }
-            Ok(())
-        });
+    let floodsub_rx = floodsub_rx.for_each(|msg| {
+        if let Ok(msg) = String::from_utf8(msg.data) {
+            println!("< {}", msg);
+        }
+        Ok(())
+    });
 
     let stdin = {
         let mut buffer = Vec::new();
-        tokio_stdin::spawn_stdin_stream_unbounded()
-            .for_each(move |msg| {
-                if msg != b'\r' && msg != b'\n' {
-                    buffer.push(msg);
-                    return Ok(());
-                } else if buffer.is_empty() {
-                    return Ok(());
-                }
+        tokio_stdin::spawn_stdin_stream_unbounded().for_each(move |msg| {
+            if msg != b'\r' && msg != b'\n' {
+                buffer.push(msg);
+                return Ok(());
+            } else if buffer.is_empty() {
+                return Ok(());
+            }
 
-                let msg = String::from_utf8(mem::replace(&mut buffer, Vec::new())).unwrap();
-                if msg.starts_with("dial ") {
-                    let target: Multiaddr = msg[5..].parse().unwrap();
-                    println!("*Dialing {}*", target);
-                    swarm_controller.dial_to_handler(target, floodsub_upgrade.clone()).unwrap();
-                } else {
-                    floodsub_ctl.publish(&topic, msg.into_bytes());
-                }
+            let msg = String::from_utf8(mem::replace(&mut buffer, Vec::new())).unwrap();
+            if msg.starts_with("dial ") {
+                let target: Multiaddr = msg[5..].parse().unwrap();
+                println!("*Dialing {}*", target);
+                swarm_controller
+                    .dial_to_handler(target, floodsub_upgrade.clone())
+                    .unwrap();
+            } else {
+                floodsub_ctl.publish(&topic, msg.into_bytes());
+            }
 
-                Ok(())
-            })
+            Ok(())
+        })
     };
 
     let final_fut = swarm_future
-        .select(floodsub_rx).map(|_| ()).map_err(|e| e.0)
-        .select(stdin.map_err(|_| unreachable!())).map(|_| ()).map_err(|e| e.0);
+        .select(floodsub_rx)
+        .map(|_| ())
+        .map_err(|e| e.0)
+        .select(stdin.map_err(|_| unreachable!()))
+        .map(|_| ())
+        .map_err(|e| e.0);
     core.run(final_fut).unwrap();
 }

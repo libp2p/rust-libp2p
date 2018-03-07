@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 extern crate bs58;
-extern crate bytes;
 extern crate byteorder;
+extern crate bytes;
 extern crate fnv;
 extern crate futures;
 extern crate libp2p_peerstore;
@@ -47,11 +47,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use bytes::{Bytes, BytesMut};
 use byteorder::{BigEndian, WriteBytesExt};
 use fnv::{FnvHashMap, FnvHashSet};
-use futures::{future, Future, Sink, Stream, Poll};
+use futures::{future, Future, Poll, Sink, Stream};
 use futures::sync::mpsc;
 use libp2p_peerstore::PeerId;
-use libp2p_swarm::{ConnectionUpgrade, Endpoint, SwarmController, MuxedTransport};
-use multiaddr::{Multiaddr, AddrComponent};
+use libp2p_swarm::{ConnectionUpgrade, Endpoint, MuxedTransport, SwarmController};
+use multiaddr::{AddrComponent, Multiaddr};
 use parking_lot::{Mutex, RwLock};
 use protobuf::Message as ProtobufMessage;
 use smallvec::SmallVec;
@@ -79,36 +79,37 @@ impl FloodSubUpgrade {
             received: Mutex::new(FnvHashSet::default()),
         });
 
-        let upgrade = FloodSubUpgrade {
-            inner: inner,
-        };
+        let upgrade = FloodSubUpgrade { inner: inner };
 
-        let receiver = FloodSubReceiver {
-            inner: output_rx,
-        };
+        let receiver = FloodSubReceiver { inner: output_rx };
 
         (upgrade, receiver)
     }
 }
 
 impl<C> ConnectionUpgrade<C> for FloodSubUpgrade
-    where C: AsyncRead + AsyncWrite + 'static
+where
+    C: AsyncRead + AsyncWrite + 'static,
 {
-	type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
-	type UpgradeIdentifier = ();
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
+    type UpgradeIdentifier = ();
 
-	#[inline]
-	fn protocol_names(&self) -> Self::NamesIter {
-		iter::once(("/floodsub/1.0.0".into(), ()))
-	}
+    #[inline]
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once(("/floodsub/1.0.0".into(), ()))
+    }
 
-	type Output = FloodSubFuture;
-	type Future = future::FutureResult<Self::Output, IoError>;
+    type Output = FloodSubFuture;
+    type Future = future::FutureResult<Self::Output, IoError>;
 
-	#[inline]
-	fn upgrade(self, socket: C, _: Self::UpgradeIdentifier, _: Endpoint, remote_addr: &Multiaddr)
-			   -> Self::Future
-	{
+    #[inline]
+    fn upgrade(
+        self,
+        socket: C,
+        _: Self::UpgradeIdentifier,
+        _: Endpoint,
+        remote_addr: &Multiaddr,
+    ) -> Self::Future {
         debug!(target: "libp2p-floodsub", "Upgrading connection to {} as floodsub", remote_addr);
 
         // Whenever a new node connects, we send to it a message containing the topics we are
@@ -124,171 +125,190 @@ impl<C> ConnectionUpgrade<C> for FloodSubUpgrade
                 proto.mut_subscriptions().push(subscription);
             }
 
-            proto.write_to_bytes().expect("protobuf message is always valid")
+            proto
+                .write_to_bytes()
+                .expect("protobuf message is always valid")
         };
 
         // Split the socket into writing and reading parts.
         let (floodsub_sink, floodsub_stream) = socket
             .framed(VarintCodec::default())
-    		.sink_map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
-    		.map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
-    		.split();
+            .sink_map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
+            .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
+            .split();
 
         // Build the channel that will be used to communicate outgoing message to this remote.
         let (input_tx, input_rx) = mpsc::unbounded();
-        input_tx.unbounded_send(init_msg.into()).expect("newly-created channel is always open");
-        self.inner.remote_connections.write().insert(remote_addr.clone(), RemoteInfo {
-            sender: input_tx,
-            subscribed_topics: RwLock::new(FnvHashSet::default()),
-        });
+        input_tx
+            .unbounded_send(init_msg.into())
+            .expect("newly-created channel is always open");
+        self.inner.remote_connections.write().insert(
+            remote_addr.clone(),
+            RemoteInfo {
+                sender: input_tx,
+                subscribed_topics: RwLock::new(FnvHashSet::default()),
+            },
+        );
 
         // Combine the socket read and the outgoing messages input, so that we can wake up when
         // either happens.
-	    let messages = input_rx.map(|m| (m, true))
-		    .map_err(|_| unreachable!())
-		    .select(floodsub_stream.map(|m| (m, false)));
+        let messages = input_rx
+            .map(|m| (m, true))
+            .map_err(|_| unreachable!())
+            .select(floodsub_stream.map(|m| (m, false)));
 
         let inner = self.inner.clone();
         let remote_addr = remote_addr.clone();
-        let future = future::loop_fn((floodsub_sink, messages), move |(floodsub_sink, messages)| {
-            let inner = inner.clone();
-            let remote_addr = remote_addr.clone();
+        let future = future::loop_fn(
+            (floodsub_sink, messages),
+            move |(floodsub_sink, messages)| {
+                let inner = inner.clone();
+                let remote_addr = remote_addr.clone();
 
-            messages
-                .into_future()
-                .map_err(|(err, _)| err)
-                .and_then(move |(input, rest)| {
-                    match input {
-                        Some((bytes, false)) => {
-                            // Received a packet from the remote.
-                            trace!(target: "libp2p-floodsub", "Received packet from remote");
-                            // Parsing attempt.
-                            let mut input = match protobuf::parse_from_bytes::<rpc_proto::RPC>(&bytes) {
-                                Ok(msg) => msg,
-                                Err(err) => {
-                                    debug!(target: "libp2p-floodsub", "Failed to parse protobuf \
-                                                                     message ; err = {:?}", err);
-                                    let future = future::err(err.into());
-                                    return Box::new(future) as Box<_>;
-                                },
-                            };
+                messages
+                    .into_future()
+                    .map_err(|(err, _)| err)
+                    .and_then(move |(input, rest)| {
+                        match input {
+                            Some((bytes, false)) => {
+                                // Received a packet from the remote.
+                                trace!(target: "libp2p-floodsub", "Received packet from remote");
+                                // Parsing attempt.
+                                let mut input =
+                                    match protobuf::parse_from_bytes::<rpc_proto::RPC>(&bytes) {
+                                        Ok(msg) => msg,
+                                        Err(err) => {
+                                            debug!(target: "libp2p-floodsub", "Failed to parse \
+                                                        protobuf message ; err = {:?}", err);
+                                            let future = future::err(err.into());
+                                            return Box::new(future) as Box<_>;
+                                        }
+                                    };
 
-                            // Update the topics the remote is subscribed to.
-                            if !input.get_subscriptions().is_empty() {
-                                let mut remote_connec = inner.remote_connections.write();
-                                let mut remote = remote_connec.get(&remote_addr).unwrap();       // TODO: what if multiple entries?
-                                let mut topics = remote.subscribed_topics.write();
-                                for subscription in input.mut_subscriptions().iter_mut() {
-                                    let topic = TopicHash::from_raw(subscription.take_topicid());
-                                    let subscribe = subscription.get_subscribe();
-                                    if subscribe {
-                                        trace!(target: "libp2p-floodsub",
+                                // Update the topics the remote is subscribed to.
+                                if !input.get_subscriptions().is_empty() {
+                                    let mut remote_connec = inner.remote_connections.write();
+                                    // TODO: what if multiple entries?
+                                    let mut remote = remote_connec.get(&remote_addr).unwrap();
+                                    let mut topics = remote.subscribed_topics.write();
+                                    for subscription in input.mut_subscriptions().iter_mut() {
+                                        let topic =
+                                            TopicHash::from_raw(subscription.take_topicid());
+                                        let subscribe = subscription.get_subscribe();
+                                        if subscribe {
+                                            trace!(target: "libp2p-floodsub",
                                                "Remote subscribed to {:?}", topic);
-                                        topics.insert(topic);
-                                    } else {
-                                        trace!(target: "libp2p-floodsub",
+                                            topics.insert(topic);
+                                        } else {
+                                            trace!(target: "libp2p-floodsub",
                                                "Remote unsubscribed from {:?}", topic);
-                                        topics.remove(&topic);
+                                            topics.remove(&topic);
+                                        }
                                     }
                                 }
-                            }
 
-                            // Handle the messages coming from the remote.
-                            for publish in input.mut_publish().iter_mut() {
-                                let from = publish.take_from();
-                                // We maintain a list of the messages that have already been
-                                // processed so that we don't process the same message twice.
-                                // Each message is identified by the `(from, seqno)` tuple.
-                                if !inner.received.lock().insert((from.clone(), publish.take_seqno())) {
-                                    trace!(target: "libp2p-floodsub",
+                                // Handle the messages coming from the remote.
+                                for publish in input.mut_publish().iter_mut() {
+                                    let from = publish.take_from();
+                                    // We maintain a list of the messages that have already been
+                                    // processed so that we don't process the same message twice.
+                                    // Each message is identified by the `(from, seqno)` tuple.
+                                    if !inner
+                                        .received
+                                        .lock()
+                                        .insert((from.clone(), publish.take_seqno()))
+                                    {
+                                        trace!(target: "libp2p-floodsub",
                                            "Skipping message because we had already received \
                                             it ; payload = {} bytes", publish.get_data().len());
-                                    continue;
-                                }
-                                let from: Multiaddr = AddrComponent::IPFS(from).into();
+                                        continue;
+                                    }
+                                    let from: Multiaddr = AddrComponent::IPFS(from).into();
 
-                                let topics = publish
-                                    .take_topicIDs()
-                                    .into_iter()
-                                    .map(|h| TopicHash::from_raw(h))
-                                    .collect::<Vec<_>>();
+                                    let topics = publish
+                                        .take_topicIDs()
+                                        .into_iter()
+                                        .map(|h| TopicHash::from_raw(h))
+                                        .collect::<Vec<_>>();
 
-                                trace!(target: "libp2p-floodsub",
+                                    trace!(target: "libp2p-floodsub",
                                        "Processing message for topics {:?} ; payload = {} bytes",
                                        topics, publish.get_data().len());
 
-                                // Broadcast the message to all the other remotes.
-                                {
-                                    let remote_connections = inner.remote_connections.read();
-                                    for (addr, info) in remote_connections.iter() {
-                                        let st = info.subscribed_topics.read();
-                                        if !topics.iter().any(|t| st.contains(t)) {
-                                            continue;
-                                        }
-                                        // TODO: don't send back to the remote that just sent it
-                                        trace!(target: "libp2p-floodsub",
+                                    // Broadcast the message to all the other remotes.
+                                    {
+                                        let remote_connections = inner.remote_connections.read();
+                                        for (addr, info) in remote_connections.iter() {
+                                            let st = info.subscribed_topics.read();
+                                            if !topics.iter().any(|t| st.contains(t)) {
+                                                continue;
+                                            }
+                                            // TODO: don't send back to the remote that just sent it
+                                            trace!(target: "libp2p-floodsub",
                                                "Broadcasting received message to {}", addr);
-                                        let _ = info.sender.unbounded_send(bytes.clone());
+                                            let _ = info.sender.unbounded_send(bytes.clone());
+                                        }
+                                    }
+
+                                    // Send the message locally if relevant.
+                                    let dispatch_locally = {
+                                        let subscribed_topics = inner.subscribed_topics.read();
+                                        topics.iter().any(|t| subscribed_topics.contains(t))
+                                    };
+                                    if dispatch_locally {
+                                        // Ignore if channel is closed.
+                                        trace!(target: "libp2p-floodsub",
+                                       "Dispatching message locally");
+                                        let _ = inner.output_tx.unbounded_send(Message {
+                                            source: from,
+                                            data: publish.take_data(),
+                                            topics: topics,
+                                        });
+                                    } else {
+                                        trace!(target: "libp2p-floodsub",
+                                       "Message not dispatched locally as we are not subscribed \
+                                        to any of the topics");
                                     }
                                 }
 
-                                // Send the message locally if relevant.
-                                let dispatch_locally = {
-                                    let subscribed_topics = inner.subscribed_topics.read();
-                                    topics.iter().any(|t| subscribed_topics.contains(t))
-                                };
-                                if dispatch_locally {
-                                    // Ignore if channel is closed.
-                                    trace!(target: "libp2p-floodsub",
-                                       "Dispatching message locally");
-                                    let _ = inner.output_tx.unbounded_send(Message {
-                                        source: from,
-                                        data: publish.take_data(),
-                                        topics: topics,
-                                    });
-                                } else {
-                                    trace!(target: "libp2p-floodsub",
-                                       "Message not dispatched locally as we are not subscribed \
-                                        to any of the topics");
-                                }
+                                let fut = future::ok(future::Loop::Continue((floodsub_sink, rest)));
+                                Box::new(fut) as Box<_>
                             }
 
-                            let fut = future::ok(future::Loop::Continue((floodsub_sink, rest)));
-                            Box::new(fut) as Box<_>
-                        },
-
-                        Some((bytes, true)) => {
-                            // Sending message to remote.
-                            trace!(target: "libp2p-floodsub", "Effectively sending message \
+                            Some((bytes, true)) => {
+                                // Sending message to remote.
+                                trace!(target: "libp2p-floodsub", "Effectively sending message \
                                                                to remote");
-                            let future = floodsub_sink
-                                .send(bytes)
-                                .map(|floodsub_sink| future::Loop::Continue((floodsub_sink, rest)));
-                            Box::new(future) as Box<_>
-                        },
+                                let future = floodsub_sink.send(bytes).map(|floodsub_sink| {
+                                    future::Loop::Continue((floodsub_sink, rest))
+                                });
+                                Box::new(future) as Box<_>
+                            }
 
-                        None => {
-                            // Both the connection stream and `rx` are empty, so we break the loop.
-                            trace!(target: "libp2p-floodsub", "Pubsub future clean finish");
-                            inner.remote_connections.write().remove(&remote_addr);      // TODO: what if multiple connections?
-							let future = future::ok(future::Loop::Break(()));
-							Box::new(future) as Box<Future<Item = _, Error = _>>
-                        },
-                    }
-                })
-        });
+                            None => {
+                                // Both the connection stream and `rx` are empty, so we break the loop.
+                                trace!(target: "libp2p-floodsub", "Pubsub future clean finish");
+                                inner.remote_connections.write().remove(&remote_addr); // TODO: what if multiple connections?
+                                let future = future::ok(future::Loop::Break(()));
+                                Box::new(future) as Box<Future<Item = _, Error = _>>
+                            }
+                        }
+                    })
+            },
+        );
 
         future::ok(FloodSubFuture {
-            inner: Box::new(future) as Box<_>
+            inner: Box::new(future) as Box<_>,
         })
-	}
+    }
 }
 
 /// Allows one to control the behaviour of the floodsub system.
 #[derive(Clone)]
 pub struct FloodSubController<T, C>
-    where T: MuxedTransport + 'static,      // TODO: 'static :-/
-          C: ConnectionUpgrade<T::RawConn> + 'static,      // TODO: 'static :-/
+where
+    T: MuxedTransport + 'static,                // TODO: 'static :-/
+    C: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :-/
 {
     inner: Arc<Inner>,
     swarm: SwarmController<T, C>,
@@ -328,8 +348,14 @@ impl fmt::Debug for Inner {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt.debug_struct("Inner")
             .field("peer_id", &self.peer_id)
-            .field("num_remote_connections", &self.remote_connections.read().len())
-            .field("num_subscribed_topics", &self.subscribed_topics.read().len())
+            .field(
+                "num_remote_connections",
+                &self.remote_connections.read().len(),
+            )
+            .field(
+                "num_subscribed_topics",
+                &self.subscribed_topics.read().len(),
+            )
             .field("seq_no", &self.seq_no)
             .field("received", &self.received)
             .finish()
@@ -337,14 +363,16 @@ impl fmt::Debug for Inner {
 }
 
 impl<T, C> FloodSubController<T, C>
-    where T: MuxedTransport + 'static,      // TODO: 'static :-/
-          C: ConnectionUpgrade<T::RawConn> + 'static,      // TODO: 'static :-/
+where
+    T: MuxedTransport + 'static,                // TODO: 'static :-/
+    C: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :-/
 {
     /// Builds a new controller for floodsub.
     #[inline]
-    pub fn new(upgrade: &FloodSubUpgrade, swarm: SwarmController<T, C>)
-               -> FloodSubController<T, C>
-    {
+    pub fn new(
+        upgrade: &FloodSubUpgrade,
+        swarm: SwarmController<T, C>,
+    ) -> FloodSubController<T, C> {
         FloodSubController {
             inner: upgrade.inner.clone(),
             swarm: swarm,
@@ -364,8 +392,9 @@ impl<T, C> FloodSubController<T, C>
     /// Same as `subscribe`, but subscribes to multiple topics at once.
     #[inline]
     pub fn subscribe_multi<I>(&self, topics: I)
-        where I: IntoIterator<Item = TopicHash>,
-              I::IntoIter: Clone,
+    where
+        I: IntoIterator<Item = TopicHash>,
+        I::IntoIter: Clone,
     {
         // This function exists for convenience.
         self.sub_unsub_multi(topics.into_iter().map::<_, fn(_) -> _>(|t| (t, true)))
@@ -384,18 +413,24 @@ impl<T, C> FloodSubController<T, C>
     /// Same as `unsubscribe` but unsubscribes from multiple topics at once.
     #[inline]
     pub fn unsubscribe_multi<'a, I>(&self, topics: I)
-        where I: IntoIterator<Item = &'a TopicHash>,
-              I::IntoIter: Clone,
+    where
+        I: IntoIterator<Item = &'a TopicHash>,
+        I::IntoIter: Clone,
     {
         // This function exists for convenience.
-        self.sub_unsub_multi(topics.into_iter().map::<_, fn(_) -> _>(|t| (t.clone(), false)));
+        self.sub_unsub_multi(
+            topics
+                .into_iter()
+                .map::<_, fn(_) -> _>(|t| (t.clone(), false)),
+        );
     }
 
     // Inner implementation. The iterator should produce a boolean that is true if we subscribe and
     // false if we unsubscribe.
     fn sub_unsub_multi<I>(&self, topics: I)
-        where I: IntoIterator<Item = (TopicHash, bool)>,
-              I::IntoIter: Clone,
+    where
+        I: IntoIterator<Item = (TopicHash, bool)>,
+        I::IntoIter: Clone,
     {
         let mut proto = rpc_proto::RPC::new();
 
@@ -427,8 +462,9 @@ impl<T, C> FloodSubController<T, C>
 
     /// Publishes a message on the network for the specified topics.
     pub fn publish_multi<'a, I>(&self, topics: I, data: Vec<u8>)
-        where I: IntoIterator<Item = &'a TopicHash>,
-              I::IntoIter: Clone,
+    where
+        I: IntoIterator<Item = &'a TopicHash>,
+        I::IntoIter: Clone,
     {
         let topics = topics.into_iter();
 
@@ -439,7 +475,8 @@ impl<T, C> FloodSubController<T, C>
         let seq_no_bytes = {
             let mut seqno_bytes = Vec::new();
             let seqn = self.inner.seq_no.fetch_add(1, Ordering::Relaxed);
-            seqno_bytes.write_u64::<BigEndian>(seqn as u64)
+            seqno_bytes
+                .write_u64::<BigEndian>(seqn as u64)
                 .expect("writing to a Vec never fails");
             seqno_bytes
         };
@@ -454,7 +491,10 @@ impl<T, C> FloodSubController<T, C>
         proto.mut_publish().push(msg);
 
         // Insert into `received` so that we ignore the message if a remote sends it back to us.
-        self.inner.received.lock().insert((self.inner.peer_id.clone(), seq_no_bytes));
+        self.inner
+            .received
+            .lock()
+            .insert((self.inner.peer_id.clone(), seq_no_bytes));
 
         self.broadcast(proto, |r_top| topics.clone().any(|t| r_top.contains(t)));
     }
@@ -462,9 +502,12 @@ impl<T, C> FloodSubController<T, C>
     // Internal function that dispatches an `RPC` protobuf struct to all the connected remotes
     // for which `filter` returns true.
     fn broadcast<F>(&self, message: rpc_proto::RPC, mut filter: F)
-        where F: FnMut(&FnvHashSet<TopicHash>) -> bool
+    where
+        F: FnMut(&FnvHashSet<TopicHash>) -> bool,
     {
-        let bytes = message.write_to_bytes().expect("protobuf message is always valid");
+        let bytes = message
+            .write_to_bytes()
+            .expect("protobuf message is always valid");
 
         let remote_connections = self.inner.remote_connections.upgradable_read();
 
@@ -514,14 +557,15 @@ impl Stream for FloodSubReceiver {
 
     #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        self.inner.poll().map_err(|_| unreachable!("UnboundedReceiver cannot err"))
+        self.inner
+            .poll()
+            .map_err(|_| unreachable!("UnboundedReceiver cannot err"))
     }
 }
 
 impl fmt::Debug for FloodSubReceiver {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        fmt.debug_struct("FloodSubReceiver")
-            .finish()
+        fmt.debug_struct("FloodSubReceiver").finish()
     }
 }
 
@@ -557,7 +601,6 @@ impl Future for FloodSubFuture {
 
 impl fmt::Debug for FloodSubFuture {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        fmt.debug_struct("FloodSubFuture")
-            .finish()
+        fmt.debug_struct("FloodSubFuture").finish()
     }
 }

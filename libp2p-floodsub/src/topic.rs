@@ -35,9 +35,7 @@ impl TopicHash {
     /// Builds a new `TopicHash` from the given hash.
     #[inline]
     pub fn from_raw(hash: String) -> TopicHash {
-        TopicHash {
-            hash: hash,
-        }
+        TopicHash { hash: hash }
     }
 
     #[inline]
@@ -54,19 +52,20 @@ pub struct TopicBuilder {
 
 impl TopicBuilder {
     pub fn new<S>(name: S) -> TopicBuilder
-        where S: Into<String>
+    where
+        S: Into<String>,
     {
         let mut builder = rpc_proto::TopicDescriptor::new();
         builder.set_name(name.into());
-        
-        TopicBuilder {
-            builder: builder,
-        }
+
+        TopicBuilder { builder: builder }
     }
 
     /// Turns the builder into an actual `TopicHash`.
     pub fn build(self) -> TopicHash {
-        let bytes = self.builder.write_to_bytes().expect("protobuf message is always valid");
+        let bytes = self.builder
+            .write_to_bytes()
+            .expect("protobuf message is always valid");
         let hash = bs58::encode(&bytes).into_string();
         TopicHash { hash }
     }
