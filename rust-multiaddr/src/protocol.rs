@@ -339,6 +339,8 @@ impl AddrComponent {
         }
     }
 
+    /// Builds an `AddrComponent` from an array that starts with a bytes representation. On
+    /// success, also returns the rest of the slice.
     pub fn from_bytes(input: &[u8]) -> Result<(AddrComponent, &[u8])> {
         let (proto_num, proto_id_len) = u64::decode_var(input);   // TODO: will panic if ID too large
 

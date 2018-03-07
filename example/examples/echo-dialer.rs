@@ -99,7 +99,7 @@ fn main() {
     // We now use the controller to dial to the address.
     let (finished_tx, finished_rx) = oneshot::channel();
     swarm_controller
-        .dial_custom_handler(target_addr.parse().expect("invalid multiaddr"), proto, |echo| {
+        .dial_custom_handler(target_addr.parse().expect("invalid multiaddr"), proto, |echo, _| {
             // `echo` is what the closure used when initializing `proto` returns.
             // Consequently, please note that the `send` method is available only because the type
             // `length_delimited::Framed` has a `send` method.

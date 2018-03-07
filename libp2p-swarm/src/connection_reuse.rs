@@ -105,9 +105,9 @@ where
 	C::NamesIter: Clone, // TODO: not elegant
 {
 	type RawConn = <C::Output as StreamMuxer>::Substream;
-	type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>>;
-	type ListenerUpgrade = FutureResult<Self::RawConn, IoError>;
-	type Dial = Box<Future<Item = Self::RawConn, Error = IoError>>;
+	type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
+	type ListenerUpgrade = FutureResult<(Self::RawConn, Multiaddr), IoError>;
+	type Dial = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
 
 	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
 		let (listener, new_addr) = match self.inner.listen_on(addr.clone()) {
@@ -141,7 +141,7 @@ where
 		let ingoing = dial.clone()
 			.map(|muxer| stream::repeat(muxer))
 			.flatten_stream()
-			.map(move |muxer| ((&*muxer).clone(), addr.clone()));
+			.map(move |muxer| (&*muxer).clone());
 
 		let mut lock = self.shared.lock();
 		lock.incoming.push(Box::new(ingoing) as Box<_>);
@@ -150,7 +150,10 @@ where
 
 		let future = dial
 			.map_err(|err| err.lock().take().expect("error can only be extracted once"))
-			.and_then(|dial| (&*dial).clone().outbound());
+			.and_then(|dial| {
+				let (dial, client_addr) = (&*dial).clone();
+				dial.outbound().map(|s| (s, client_addr))
+			});
 		Ok(Box::new(future) as Box<_>)
 	}
 
@@ -184,27 +187,27 @@ where
 /// `ConnectionReuse` struct.
 pub struct ConnectionReuseListener<S, F, M>
 where
-	S: Stream<Item = (F, Multiaddr), Error = IoError>,
-	F: Future<Item = M, Error = IoError>,
+	S: Stream<Item = F, Error = IoError>,
+	F: Future<Item = (M, Multiaddr), Error = IoError>,
 	M: StreamMuxer,
 {
 	listener: StreamFuse<S>,
-	current_upgrades: Vec<(F, Multiaddr)>,
+	current_upgrades: Vec<F>,
 	connections: Vec<(M, <M as StreamMuxer>::InboundSubstream, Multiaddr)>,
 }
 
 impl<S, F, M> Stream for ConnectionReuseListener<S, F, M>
-where S: Stream<Item = (F, Multiaddr), Error = IoError>,
-	  F: Future<Item = M, Error = IoError>,
+where S: Stream<Item = F, Error = IoError>,
+	  F: Future<Item = (M, Multiaddr), Error = IoError>,
 	  M: StreamMuxer + Clone + 'static // TODO: 'static :(
 {
-	type Item = (FutureResult<M::Substream, IoError>, Multiaddr);
+	type Item = FutureResult<(M::Substream, Multiaddr), IoError>;
 	type Error = IoError;
 
 	fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
 		match self.listener.poll() {
-			Ok(Async::Ready(Some((upgrade, client_addr)))) => {
-				self.current_upgrades.push((upgrade, client_addr));
+			Ok(Async::Ready(Some(upgrade))) => {
+				self.current_upgrades.push(upgrade);
 			}
 			Ok(Async::NotReady) => (),
 			Ok(Async::Ready(None)) => {
@@ -225,11 +228,11 @@ where S: Stream<Item = (F, Multiaddr), Error = IoError>,
 		let mut upgrades_to_drop: SmallVec<[_; 8]> = SmallVec::new();
 		let mut early_ret = None;
 
-		for (index, &mut (ref mut current_upgrade, ref mut client_addr)) in
+		for (index, current_upgrade) in
 			self.current_upgrades.iter_mut().enumerate()
 		{
 			match current_upgrade.poll() {
-				Ok(Async::Ready(muxer)) => {
+				Ok(Async::Ready((muxer, client_addr))) => {
 					let next_incoming = muxer.clone().inbound();
 					self.connections.push((muxer, next_incoming, client_addr.clone()));
 					upgrades_to_drop.push(index);
@@ -237,7 +240,7 @@ where S: Stream<Item = (F, Multiaddr), Error = IoError>,
 				Ok(Async::NotReady) => {},
 				Err(err) => {
 					upgrades_to_drop.push(index);
-					early_ret = Some(Async::Ready(Some((Err(err).into_future(), client_addr.clone()))));
+					early_ret = Some(Async::Ready(Some(Err(err).into_future())));
 				},
 			}
 		}
@@ -261,7 +264,7 @@ where S: Stream<Item = (F, Multiaddr), Error = IoError>,
 				Ok(Async::Ready(incoming)) => {
 					let mut new_next = muxer.clone().inbound();
 					*next_incoming = new_next;
-					return Ok(Async::Ready(Some((Ok(incoming).into_future(), client_addr.clone()))));
+					return Ok(Async::Ready(Some(Ok((incoming, client_addr.clone())).into_future())));
 				}
 				Ok(Async::NotReady) => {}
 				Err(_) => {

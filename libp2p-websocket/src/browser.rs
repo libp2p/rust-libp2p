@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{Async, Future, Poll, Stream, Then as FutureThen};
+use futures::{Async, Future, Poll, Stream};
 use futures::stream::Then as StreamThen;
 use futures::sync::{mpsc, oneshot};
 use multiaddr::{AddrComponent, Multiaddr};
@@ -49,14 +49,9 @@ impl BrowserWsConfig {
 
 impl Transport for BrowserWsConfig {
 	type RawConn = BrowserWsConn;
-	type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>>; // TODO: use `!`
-	type ListenerUpgrade = Box<Future<Item = Self::RawConn, Error = IoError>>; // TODO: use `!`
-	type Dial = FutureThen<
-		oneshot::Receiver<Result<BrowserWsConn, IoError>>,
-		Result<BrowserWsConn, IoError>,
-		fn(Result<Result<BrowserWsConn, IoError>, oneshot::Canceled>)
-			-> Result<BrowserWsConn, IoError>,
-	>;
+	type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>; // TODO: use `!`
+	type ListenerUpgrade = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>; // TODO: use `!`
+	type Dial = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
 
 	#[inline]
 	fn listen_on(self, a: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -191,9 +186,9 @@ impl Transport for BrowserWsConfig {
 			});
 		};
 
-		Ok(open_rx.then(|result| {
+		Ok(Box::new(open_rx.then(|result| {
 			match result {
-				Ok(Ok(r)) => Ok(r),
+				Ok(Ok(r)) => Ok((r, original_addr)),
 				Ok(Err(e)) => Err(e),
 				// `Err` would happen here if `open_tx` is destroyed. `open_tx` is captured by
 				// the `WebSocket`, and the `WebSocket` is captured by `open_cb`, which is itself
@@ -202,7 +197,7 @@ impl Transport for BrowserWsConfig {
 				// TODO: how do we break this cyclic dependency? difficult question
 				Err(_) => unreachable!("the sending side will only close when we drop the future"),
 			}
-		}))
+		})) as Box<_>)
 	}
 
 	fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
