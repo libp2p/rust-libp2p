@@ -27,20 +27,20 @@ use futures::Future;
 use futures::future;
 use futures::sink::Sink;
 use futures::stream::Stream;
-use keys_proto::{PublicKey as PublicKeyProtobuf, KeyType as KeyTypeProtobuf};
+use keys_proto::{KeyType as KeyTypeProtobuf, PublicKey as PublicKeyProtobuf};
 use protobuf::Message as ProtobufMessage;
 use protobuf::core::parse_from_bytes as protobuf_parse_from_bytes;
 use ring::{agreement, digest, rand};
 use ring::agreement::EphemeralPrivateKey;
-use ring::hmac::{SigningKey, SigningContext, VerificationKey};
+use ring::hmac::{SigningContext, SigningKey, VerificationKey};
 use ring::rand::SecureRandom;
-use ring::signature::{RSAKeyPair, RSASigningState, RSA_PKCS1_SHA256, RSA_PKCS1_2048_8192_SHA256};
+use ring::signature::{RSAKeyPair, RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256};
 use ring::signature::verify as signature_verify;
 use std::cmp::{self, Ordering};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::mem;
 use std::sync::Arc;
-use structs_proto::{Propose, Exchange};
+use structs_proto::{Exchange, Propose};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_io::codec::length_delimited;
 use untrusted::Input as UntrustedInput;
@@ -54,84 +54,87 @@ use untrusted::Input as UntrustedInput;
 /// On success, returns an object that implements the `Sink` and `Stream` trait whose items are
 /// buffers of data, plus the public key of the remote.
 pub fn handshake<'a, S: 'a, Pub: AsRef<[u8]> + 'a>(
-	socket: S,
-	local_public_key: Pub,
-	local_private_key: Arc<RSAKeyPair>,
+    socket: S,
+    local_public_key: Pub,
+    local_private_key: Arc<RSAKeyPair>,
 ) -> Box<Future<Item = (FullCodec<S>, Vec<u8>), Error = SecioError> + 'a>
-	where S: AsyncRead + AsyncWrite
+where
+    S: AsyncRead + AsyncWrite,
 {
-	// TODO: could be rewritten as a coroutine once coroutines land in stable Rust
+    // TODO: could be rewritten as a coroutine once coroutines land in stable Rust
 
-	// This struct contains the whole context of a handshake, and is filled progressively
-	// throughout the various parts of the handshake.
-	struct HandshakeContext<Pub: AsRef<[u8]>> {
-		// Filled with this function's parameters.
-		local_public_key: Pub,
-		local_private_key: Arc<RSAKeyPair>,
+    // This struct contains the whole context of a handshake, and is filled progressively
+    // throughout the various parts of the handshake.
+    struct HandshakeContext<Pub: AsRef<[u8]>> {
+        // Filled with this function's parameters.
+        local_public_key: Pub,
+        local_private_key: Arc<RSAKeyPair>,
 
-		rng: rand::SystemRandom,
-		// Locally-generated random number. The array size can be changed without any repercussion.
-		local_nonce: [u8; 16],
+        rng: rand::SystemRandom,
+        // Locally-generated random number. The array size can be changed without any repercussion.
+        local_nonce: [u8; 16],
 
-		// Our local proposition's raw bytes.
-		local_public_key_in_protobuf_bytes: Vec<u8>,
-		local_proposition_bytes: Vec<u8>,
+        // Our local proposition's raw bytes.
+        local_public_key_in_protobuf_bytes: Vec<u8>,
+        local_proposition_bytes: Vec<u8>,
 
-		// The remote proposition's raw bytes.
-		remote_proposition_bytes: BytesMut,
-		remote_public_key_in_protobuf_bytes: Vec<u8>,
-		remote_public_key: Vec<u8>,
+        // The remote proposition's raw bytes.
+        remote_proposition_bytes: BytesMut,
+        remote_public_key_in_protobuf_bytes: Vec<u8>,
+        remote_public_key: Vec<u8>,
 
-		// The remote peer's version of `local_nonce`.
-		// If the NONCE size is actually part of the protocol, we can change this to a fixed-size
-		// array instead of a `Vec`.
-		remote_nonce: Vec<u8>,
+        // The remote peer's version of `local_nonce`.
+        // If the NONCE size is actually part of the protocol, we can change this to a fixed-size
+        // array instead of a `Vec`.
+        remote_nonce: Vec<u8>,
 
-		// Set to `ordering(
-		//             hash(concat(remote-pubkey, local-none)),
-		//             hash(concat(local-pubkey, remote-none))
-		//         )`.
-		// `Ordering::Equal` is an invalid value (as it would mean we're talking to ourselves).
-		//
-		// Since everything is symmetrical, this value is used to determine what should be ours
-		// and what should be the remote's.
-		hashes_ordering: Ordering,
+        // Set to `ordering(
+        //             hash(concat(remote-pubkey, local-none)),
+        //             hash(concat(local-pubkey, remote-none))
+        //         )`.
+        // `Ordering::Equal` is an invalid value (as it would mean we're talking to ourselves).
+        //
+        // Since everything is symmetrical, this value is used to determine what should be ours
+        // and what should be the remote's.
+        hashes_ordering: Ordering,
 
-		// Crypto algorithms chosen for the communication.
-		chosen_exchange: Option<&'static agreement::Algorithm>,
-		// We only support AES for now, so store just a key size.
-		chosen_cipher: Option<KeySize>,
-		chosen_hash: Option<&'static digest::Algorithm>,
+        // Crypto algorithms chosen for the communication.
+        chosen_exchange: Option<&'static agreement::Algorithm>,
+        // We only support AES for now, so store just a key size.
+        chosen_cipher: Option<KeySize>,
+        chosen_hash: Option<&'static digest::Algorithm>,
 
-		// Ephemeral key generated for the handshake and then thrown away.
-		local_tmp_priv_key: Option<EphemeralPrivateKey>,
-		local_tmp_pub_key: [u8; agreement::PUBLIC_KEY_MAX_LEN],
-	}
+        // Ephemeral key generated for the handshake and then thrown away.
+        local_tmp_priv_key: Option<EphemeralPrivateKey>,
+        local_tmp_pub_key: [u8; agreement::PUBLIC_KEY_MAX_LEN],
+    }
 
-	let context = HandshakeContext {
-		local_public_key: local_public_key,
-		local_private_key: local_private_key,
-		rng: rand::SystemRandom::new(),
-		local_nonce: Default::default(),
-		local_public_key_in_protobuf_bytes: Vec::new(),
-		local_proposition_bytes: Vec::new(),
-		remote_proposition_bytes: BytesMut::new(),
-		remote_public_key_in_protobuf_bytes: Vec::new(),
-		remote_public_key: Vec::new(),
-		remote_nonce: Vec::new(),
-		hashes_ordering: Ordering::Equal,
-		chosen_exchange: None,
-		chosen_cipher: None,
-		chosen_hash: None,
-		local_tmp_priv_key: None,
-		local_tmp_pub_key: [0; agreement::PUBLIC_KEY_MAX_LEN],
-	};
+    let context = HandshakeContext {
+        local_public_key: local_public_key,
+        local_private_key: local_private_key,
+        rng: rand::SystemRandom::new(),
+        local_nonce: Default::default(),
+        local_public_key_in_protobuf_bytes: Vec::new(),
+        local_proposition_bytes: Vec::new(),
+        remote_proposition_bytes: BytesMut::new(),
+        remote_public_key_in_protobuf_bytes: Vec::new(),
+        remote_public_key: Vec::new(),
+        remote_nonce: Vec::new(),
+        hashes_ordering: Ordering::Equal,
+        chosen_exchange: None,
+        chosen_cipher: None,
+        chosen_hash: None,
+        local_tmp_priv_key: None,
+        local_tmp_pub_key: [0; agreement::PUBLIC_KEY_MAX_LEN],
+    };
 
-	// The handshake messages all start with a 4-bytes message length prefix.
-	let socket =
-		length_delimited::Builder::new().big_endian().length_field_length(4).new_framed(socket);
+    // The handshake messages all start with a 4-bytes message length prefix.
+    let socket = length_delimited::Builder::new()
+        .big_endian()
+        .length_field_length(4)
+        .new_framed(socket);
 
-	let future = future::ok::<_, SecioError>(context)
+    let future = future::ok::<_, SecioError>(context)
 		// Generate our nonce.
 		.and_then(|mut context| {
 			context.rng.fill(&mut context.local_nonce)
@@ -487,344 +490,133 @@ pub fn handshake<'a, S: 'a, Pub: AsRef<[u8]> + 'a>(
 				})
 		});
 
-	Box::new(future)
+    Box::new(future)
 }
 
 // Custom algorithm translated from reference implementations. Needs to be the same algorithm
 // amongst all implementations.
 fn stretch_key(key: &SigningKey, result: &mut [u8]) {
-	const SEED: &'static [u8] = b"key expansion";
+    const SEED: &'static [u8] = b"key expansion";
 
-	let mut init_ctxt = SigningContext::with_key(key);
-	init_ctxt.update(SEED);
-	let mut a = init_ctxt.sign();
+    let mut init_ctxt = SigningContext::with_key(key);
+    init_ctxt.update(SEED);
+    let mut a = init_ctxt.sign();
 
-	let mut j = 0;
-	while j < result.len() {
-		let mut context = SigningContext::with_key(key);
-		context.update(a.as_ref());
-		context.update(SEED);
-		let b = context.sign();
+    let mut j = 0;
+    while j < result.len() {
+        let mut context = SigningContext::with_key(key);
+        context.update(a.as_ref());
+        context.update(SEED);
+        let b = context.sign();
 
-		let todo = cmp::min(b.as_ref().len(), result.len() - j);
+        let todo = cmp::min(b.as_ref().len(), result.len() - j);
 
-		result[j..j + todo].copy_from_slice(&b.as_ref()[..todo]);
+        result[j..j + todo].copy_from_slice(&b.as_ref()[..todo]);
 
-		j += todo;
+        j += todo;
 
-		let mut context = SigningContext::with_key(key);
-		context.update(a.as_ref());
-		a = context.sign();
-	}
+        let mut context = SigningContext::with_key(key);
+        context.update(a.as_ref());
+        a = context.sign();
+    }
 }
 
 #[cfg(test)]
 mod tests {
-	extern crate tokio_core;
-	use super::handshake;
-	use super::stretch_key;
-	use futures::Future;
-	use futures::Stream;
-	use ring::digest::SHA256;
-	use ring::hmac::SigningKey;
-	use ring::signature::RSAKeyPair;
-	use std::sync::Arc;
-	use self::tokio_core::net::TcpListener;
-	use self::tokio_core::net::TcpStream;
-	use self::tokio_core::reactor::Core;
-	use untrusted::Input;
+    extern crate tokio_core;
+    use super::handshake;
+    use super::stretch_key;
+    use futures::Future;
+    use futures::Stream;
+    use ring::digest::SHA256;
+    use ring::hmac::SigningKey;
+    use ring::signature::RSAKeyPair;
+    use std::sync::Arc;
+    use self::tokio_core::net::TcpListener;
+    use self::tokio_core::net::TcpStream;
+    use self::tokio_core::reactor::Core;
+    use untrusted::Input;
 
-	#[test]
-	fn handshake_with_self_succeeds() {
-		let mut core = Core::new().unwrap();
+    #[test]
+    fn handshake_with_self_succeeds() {
+        let mut core = Core::new().unwrap();
 
-		let private_key1 = {
-			let pkcs8 = include_bytes!("../tests/test-private-key.pk8");
-			Arc::new(RSAKeyPair::from_pkcs8(Input::from(&pkcs8[..])).unwrap())
-		};
-		let public_key1 = include_bytes!("../tests/test-public-key.der").to_vec();
+        let private_key1 = {
+            let pkcs8 = include_bytes!("../tests/test-private-key.pk8");
+            Arc::new(RSAKeyPair::from_pkcs8(Input::from(&pkcs8[..])).unwrap())
+        };
+        let public_key1 = include_bytes!("../tests/test-public-key.der").to_vec();
 
-		let private_key2 = {
-			let pkcs8 = include_bytes!("../tests/test-private-key-2.pk8");
-			Arc::new(RSAKeyPair::from_pkcs8(Input::from(&pkcs8[..])).unwrap())
-		};
-		let public_key2 = include_bytes!("../tests/test-public-key-2.der").to_vec();
+        let private_key2 = {
+            let pkcs8 = include_bytes!("../tests/test-private-key-2.pk8");
+            Arc::new(RSAKeyPair::from_pkcs8(Input::from(&pkcs8[..])).unwrap())
+        };
+        let public_key2 = include_bytes!("../tests/test-public-key-2.der").to_vec();
 
-		let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap(), &core.handle()).unwrap();
-		let listener_addr = listener.local_addr().unwrap();
+        let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap(), &core.handle()).unwrap();
+        let listener_addr = listener.local_addr().unwrap();
 
-		let server = listener.incoming()
-							 .into_future()
-							 .map_err(|(e, _)| e.into())
-							 .and_then(move |(connec, _)| {
-			handshake(connec.unwrap().0, public_key1, private_key1)
-		});
+        let server = listener
+            .incoming()
+            .into_future()
+            .map_err(|(e, _)| e.into())
+            .and_then(move |(connec, _)| handshake(connec.unwrap().0, public_key1, private_key1));
 
-		let client = TcpStream::connect(&listener_addr, &core.handle())
-			.map_err(|e| e.into())
-			.and_then(move |stream| handshake(stream, public_key2, private_key2));
+        let client = TcpStream::connect(&listener_addr, &core.handle())
+            .map_err(|e| e.into())
+            .and_then(move |stream| handshake(stream, public_key2, private_key2));
 
-		core.run(server.join(client)).unwrap();
-	}
+        core.run(server.join(client)).unwrap();
+    }
 
-	#[test]
-	fn stretch() {
-		let mut output = [0u8; 32];
+    #[test]
+    fn stretch() {
+        let mut output = [0u8; 32];
 
-		let key1 = SigningKey::new(&SHA256, &[]);
-		stretch_key(&key1, &mut output);
-		assert_eq!(
-			&output,
-			&[
-				103,
-				144,
-				60,
-				199,
-				85,
-				145,
-				239,
-				71,
-				79,
-				198,
-				85,
-				164,
-				32,
-				53,
-				143,
-				205,
-				50,
-				48,
-				153,
-				10,
-				37,
-				32,
-				85,
-				1,
-				226,
-				61,
-				193,
-				1,
-				154,
-				120,
-				207,
-				80,
-			]
-		);
+        let key1 = SigningKey::new(&SHA256, &[]);
+        stretch_key(&key1, &mut output);
+        assert_eq!(
+            &output,
+            &[
+                103, 144, 60, 199, 85, 145, 239, 71, 79, 198, 85, 164, 32, 53, 143, 205, 50, 48,
+                153, 10, 37, 32, 85, 1, 226, 61, 193, 1, 154, 120, 207, 80,
+            ]
+        );
 
-		let key2 = SigningKey::new(
-			&SHA256,
-			&[
-				157,
-				166,
-				80,
-				144,
-				77,
-				193,
-				198,
-				6,
-				23,
-				220,
-				87,
-				220,
-				191,
-				72,
-				168,
-				197,
-				54,
-				33,
-				219,
-				225,
-				84,
-				156,
-				165,
-				37,
-				149,
-				224,
-				244,
-				32,
-				170,
-				79,
-				125,
-				35,
-				171,
-				26,
-				178,
-				176,
-				92,
-				168,
-				22,
-				27,
-				205,
-				44,
-				229,
-				61,
-				152,
-				21,
-				222,
-				81,
-				241,
-				81,
-				116,
-				236,
-				74,
-				166,
-				89,
-				145,
-				5,
-				162,
-				108,
-				230,
-				55,
-				54,
-				9,
-				17,
-			],
-		);
-		stretch_key(&key2, &mut output);
-		assert_eq!(
-			&output,
-			&[
-				39,
-				151,
-				182,
-				63,
-				180,
-				175,
-				224,
-				139,
-				42,
-				131,
-				130,
-				116,
-				55,
-				146,
-				62,
-				31,
-				157,
-				95,
-				217,
-				15,
-				73,
-				81,
-				10,
-				83,
-				243,
-				141,
-				64,
-				227,
-				103,
-				144,
-				99,
-				121,
-			]
-		);
+        let key2 = SigningKey::new(
+            &SHA256,
+            &[
+                157, 166, 80, 144, 77, 193, 198, 6, 23, 220, 87, 220, 191, 72, 168, 197, 54, 33,
+                219, 225, 84, 156, 165, 37, 149, 224, 244, 32, 170, 79, 125, 35, 171, 26, 178, 176,
+                92, 168, 22, 27, 205, 44, 229, 61, 152, 21, 222, 81, 241, 81, 116, 236, 74, 166,
+                89, 145, 5, 162, 108, 230, 55, 54, 9, 17,
+            ],
+        );
+        stretch_key(&key2, &mut output);
+        assert_eq!(
+            &output,
+            &[
+                39, 151, 182, 63, 180, 175, 224, 139, 42, 131, 130, 116, 55, 146, 62, 31, 157, 95,
+                217, 15, 73, 81, 10, 83, 243, 141, 64, 227, 103, 144, 99, 121,
+            ]
+        );
 
-		let key3 = SigningKey::new(
-			&SHA256,
-			&[
-				98,
-				219,
-				94,
-				104,
-				97,
-				70,
-				139,
-				13,
-				185,
-				110,
-				56,
-				36,
-				66,
-				3,
-				80,
-				224,
-				32,
-				205,
-				102,
-				170,
-				59,
-				32,
-				140,
-				245,
-				86,
-				102,
-				231,
-				68,
-				85,
-				249,
-				227,
-				243,
-				57,
-				53,
-				171,
-				36,
-				62,
-				225,
-				178,
-				74,
-				89,
-				142,
-				151,
-				94,
-				183,
-				231,
-				208,
-				166,
-				244,
-				130,
-				130,
-				209,
-				248,
-				65,
-				19,
-				48,
-				127,
-				127,
-				55,
-				82,
-				117,
-				154,
-				124,
-				108,
-			],
-		);
-		stretch_key(&key3, &mut output);
-		assert_eq!(
-			&output,
-			&[
-				28,
-				39,
-				158,
-				206,
-				164,
-				16,
-				211,
-				194,
-				99,
-				43,
-				208,
-				36,
-				24,
-				141,
-				90,
-				93,
-				157,
-				236,
-				238,
-				111,
-				170,
-				0,
-				60,
-				11,
-				49,
-				174,
-				177,
-				121,
-				30,
-				12,
-				182,
-				25,
-			]
-		);
-	}
+        let key3 = SigningKey::new(
+            &SHA256,
+            &[
+                98, 219, 94, 104, 97, 70, 139, 13, 185, 110, 56, 36, 66, 3, 80, 224, 32, 205, 102,
+                170, 59, 32, 140, 245, 86, 102, 231, 68, 85, 249, 227, 243, 57, 53, 171, 36, 62,
+                225, 178, 74, 89, 142, 151, 94, 183, 231, 208, 166, 244, 130, 130, 209, 248, 65,
+                19, 48, 127, 127, 55, 82, 117, 154, 124, 108,
+            ],
+        );
+        stretch_key(&key3, &mut output);
+        assert_eq!(
+            &output,
+            &[
+                28, 39, 158, 206, 164, 16, 211, 194, 99, 43, 208, 36, 24, 141, 90, 93, 157, 236,
+                238, 111, 170, 0, 60, 11, 49, 174, 177, 121, 30, 12, 182, 25,
+            ]
+        );
+    }
 }

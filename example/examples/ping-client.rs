@@ -31,13 +31,15 @@ extern crate tokio_io;
 use futures::Future;
 use futures::sync::oneshot;
 use std::env;
-use swarm::{UpgradeExt, Transport, DeniedConnectionUpgrade};
+use swarm::{DeniedConnectionUpgrade, Transport, UpgradeExt};
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 
 fn main() {
     // Determine which address to dial.
-    let target_addr = env::args().nth(1).unwrap_or("/ip4/127.0.0.1/tcp/4001".to_owned());
+    let target_addr = env::args()
+        .nth(1)
+        .unwrap_or("/ip4/127.0.0.1/tcp/4001".to_owned());
 
     // We start by building the tokio engine that will run all the sockets.
     let mut core = Core::new().unwrap();
@@ -74,10 +76,13 @@ fn main() {
     // connections for us. The second parameter we pass is the connection upgrade that is accepted
     // by the listening part. We don't want to accept anything, so we pass a dummy object that
     // represents a connection that is always denied.
-    let (swarm_controller, swarm_future) = swarm::swarm(transport, DeniedConnectionUpgrade,
+    let (swarm_controller, swarm_future) = swarm::swarm(
+        transport,
+        DeniedConnectionUpgrade,
         |_socket, _client_addr| -> Result<(), _> {
             unreachable!("All incoming connections should have been denied")
-        });
+        },
+    );
 
     // We now use the controller to dial to the address.
     let (tx, rx) = oneshot::channel();
@@ -101,5 +106,9 @@ fn main() {
     // `swarm_future` is a future that contains all the behaviour that we want, but nothing has
     // actually started yet. Because we created the `TcpConfig` with tokio, we need to run the
     // future through the tokio core.
-    core.run(rx.select(swarm_future.map_err(|_| unreachable!())).map_err(|(e, _)| e).map(|_| ())).unwrap();
+    core.run(
+        rx.select(swarm_future.map_err(|_| unreachable!()))
+            .map_err(|(e, _)| e)
+            .map(|_| ()),
+    ).unwrap();
 }

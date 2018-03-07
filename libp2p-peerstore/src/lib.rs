@@ -35,21 +35,21 @@
 //! data rather than returning the error.
 //!
 //! # Example
-//! 
+//!
 //! ```
 //! extern crate multiaddr;
 //! extern crate libp2p_peerstore;
-//! 
+//!
 //! # fn main() {
 //! use libp2p_peerstore::memory_peerstore::MemoryPeerstore;
 //! use libp2p_peerstore::{PeerId, Peerstore, PeerAccess};
 //! use multiaddr::Multiaddr;
 //! use std::time::Duration;
-//! 
+//!
 //! // In this example we use a `MemoryPeerstore`, but you can easily swap it for another backend.
 //! let mut peerstore = MemoryPeerstore::empty();
 //! let peer_id = PeerId::from_public_key(&[1, 2, 3, 4]);
-//! 
+//!
 //! // Let's write some information about a peer.
 //! {
 //!     // `peer_or_create` mutably borrows the peerstore, so we have to do it in a local scope.
@@ -57,7 +57,7 @@
 //!     peer.add_addr("/ip4/10.11.12.13/tcp/20000".parse::<Multiaddr>().unwrap(),
 //!                   Duration::from_millis(5000));
 //! }
-//! 
+//!
 //! // Now let's load back the info.
 //! {
 //!     let mut peer = peerstore.peer(&peer_id).expect("peer doesn't exist in the peerstore");
@@ -80,7 +80,7 @@ extern crate serde_derive;
 use std::fmt;
 use base58::ToBase58;
 
-pub use self::peerstore::{Peerstore, PeerAccess};
+pub use self::peerstore::{PeerAccess, Peerstore};
 
 #[macro_use]
 mod peerstore_tests;
@@ -141,17 +141,16 @@ impl PeerId {
     /// Returns the raw bytes of the hash of this `PeerId`.
     #[inline]
     pub fn hash(&self) -> &[u8] {
-        let multihash::Multihash { digest, .. } = multihash::decode(&self.multihash)
-            .expect("our inner value should always be valid");
+        let multihash::Multihash { digest, .. } =
+            multihash::decode(&self.multihash).expect("our inner value should always be valid");
         digest
     }
 
     /// Checks whether the public key passed as parameter matches the public key of this `PeerId`.
     pub fn is_public_key(&self, public_key: &[u8]) -> bool {
-        let multihash::Multihash { alg, .. } = multihash::decode(&self.multihash)
-            .expect("our inner value should always be valid");
-        let compare = multihash::encode(alg, public_key)
-            .expect("unsupported multihash algorithm");     // TODO: what to do here?
+        let multihash::Multihash { alg, .. } =
+            multihash::decode(&self.multihash).expect("our inner value should always be valid");
+        let compare = multihash::encode(alg, public_key).expect("unsupported multihash algorithm"); // TODO: what to do here?
         compare == self.multihash
     }
 }

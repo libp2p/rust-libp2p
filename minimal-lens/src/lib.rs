@@ -10,34 +10,55 @@ pub trait HasRefMut<T> {
     fn extract_ref_mut(&mut self) -> &mut T;
 }
 
-impl<'a, T, Out> Has<&'a Out> for &'a T where T: HasRef<Out> {
+impl<'a, T, Out> Has<&'a Out> for &'a T
+where
+    T: HasRef<Out>,
+{
     fn extract(self) -> &'a Out {
         self.extract_ref()
     }
 }
 
-impl<'a, T, Out> Has<&'a mut Out> for &'a mut T where T: HasRefMut<Out> {
+impl<'a, T, Out> Has<&'a mut Out> for &'a mut T
+where
+    T: HasRefMut<Out>,
+{
     fn extract(self) -> &'a mut Out {
         self.extract_ref_mut()
     }
 }
 
 pub trait HasExt {
-    fn get_owned<T>(self) -> T where Self: Has<T>;
-    fn get<'a, T>(&'a self) -> &'a T where &'a Self: Has<&'a T>;
-    fn get_mut<'a, T>(&'a mut self) -> &'a mut T where &'a mut Self: Has<&'a mut T>;
+    fn get_owned<T>(self) -> T
+    where
+        Self: Has<T>;
+    fn get<'a, T>(&'a self) -> &'a T
+    where
+        &'a Self: Has<&'a T>;
+    fn get_mut<'a, T>(&'a mut self) -> &'a mut T
+    where
+        &'a mut Self: Has<&'a mut T>;
 }
 
 impl<Container> HasExt for Container {
-    fn get_owned<T>(self) -> T where Self: Has<T> {
+    fn get_owned<T>(self) -> T
+    where
+        Self: Has<T>,
+    {
         Has::extract(self)
     }
 
-    fn get<'a, T>(&'a self) -> &'a T where &'a Self: Has<&'a T> {
+    fn get<'a, T>(&'a self) -> &'a T
+    where
+        &'a Self: Has<&'a T>,
+    {
         Has::extract(self)
     }
 
-    fn get_mut<'a, T>(&'a mut self) -> &'a mut T where &'a mut Self: Has<&'a mut T> {
+    fn get_mut<'a, T>(&'a mut self) -> &'a mut T
+    where
+        &'a mut Self: Has<&'a mut T>,
+    {
         Has::extract(self)
     }
 }
@@ -89,7 +110,7 @@ macro_rules! impl_has {
 
 #[cfg(test)]
 mod tests {
-    use super::{Has, HasRef, HasRefMut, HasExt};
+    use super::{Has, HasExt, HasRef, HasRefMut};
 
     #[derive(PartialEq, Debug)]
     struct Foo;

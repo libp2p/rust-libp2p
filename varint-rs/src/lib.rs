@@ -23,20 +23,20 @@
 //! Encoding and decoding state machines for protobuf varints
 
 // TODO: Non-allocating `BigUint`?
+extern crate bytes;
+#[macro_use]
+extern crate error_chain;
+extern crate futures;
 extern crate num_bigint;
 extern crate num_traits;
 extern crate tokio_io;
-extern crate bytes;
-extern crate futures;
-#[macro_use]
-extern crate error_chain;
 
 use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
-use futures::{Poll, Async};
+use futures::{Async, Poll};
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_io::codec::{Encoder, Decoder};
+use tokio_io::codec::{Decoder, Encoder};
 use std::io;
 use std::io::prelude::*;
 use std::marker::PhantomData;
@@ -439,16 +439,14 @@ impl<T> Decoder for VarintCodec<T> {
                         self.inner = VarintCodecInner::WaitingForData(len);
                         return Ok(None);
                     }
-                },
-                VarintCodecInner::WaitingForLen(mut decoder) => {
-                    match decoder.decode(src)? {
-                        None => {
-                            self.inner = VarintCodecInner::WaitingForLen(decoder);
-                            return Ok(None);
-                        },
-                        Some(len) => {
-                            self.inner = VarintCodecInner::WaitingForData(len);
-                        },
+                }
+                VarintCodecInner::WaitingForLen(mut decoder) => match decoder.decode(src)? {
+                    None => {
+                        self.inner = VarintCodecInner::WaitingForLen(decoder);
+                        return Ok(None);
+                    }
+                    Some(len) => {
+                        self.inner = VarintCodecInner::WaitingForData(len);
                     }
                 },
                 VarintCodecInner::Poisoned => panic!("varint codec was poisoned"),
@@ -458,7 +456,8 @@ impl<T> Decoder for VarintCodec<T> {
 }
 
 impl<D> Encoder for VarintCodec<D>
-    where D: IntoBuf + AsRef<[u8]>,
+where
+    D: IntoBuf + AsRef<[u8]>,
 {
     type Item = D;
     type Error = io::Error;
@@ -507,7 +506,7 @@ pub fn encode<T: EncoderHelper + Bits>(input: T) -> Bytes {
 
 #[cfg(test)]
 mod tests {
-    use super::{decode, VarintDecoder, EncoderState};
+    use super::{decode, EncoderState, VarintDecoder};
     use tokio_io::codec::FramedRead;
     use num_bigint::BigUint;
     use futures::{Future, Stream};
