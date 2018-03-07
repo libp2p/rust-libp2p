@@ -62,221 +62,221 @@ use tokio_dns::{CpuPoolResolver, Resolver};
 /// Listening is unaffected.
 #[derive(Clone)]
 pub struct DnsConfig<T> {
-	inner: T,
-	resolver: CpuPoolResolver,
+    inner: T,
+    resolver: CpuPoolResolver,
 }
 
 impl<T> DnsConfig<T> {
-	/// Creates a new configuration object for DNS.
-	#[inline]
-	pub fn new(inner: T) -> DnsConfig<T> {
-		DnsConfig::with_resolve_threads(inner, 1)
-	}
+    /// Creates a new configuration object for DNS.
+    #[inline]
+    pub fn new(inner: T) -> DnsConfig<T> {
+        DnsConfig::with_resolve_threads(inner, 1)
+    }
 
-	/// Same as `new`, but allows specifying a number of threads for the resolving.
-	#[inline]
-	pub fn with_resolve_threads(inner: T, num_threads: usize) -> DnsConfig<T> {
-		trace!(target: "libp2p-dns", "Created a CpuPoolResolver");
+    /// Same as `new`, but allows specifying a number of threads for the resolving.
+    #[inline]
+    pub fn with_resolve_threads(inner: T, num_threads: usize) -> DnsConfig<T> {
+        trace!(target: "libp2p-dns", "Created a CpuPoolResolver");
 
-		DnsConfig {
-			inner,
-			resolver: CpuPoolResolver::new(num_threads),
-		}
-	}
+        DnsConfig {
+            inner,
+            resolver: CpuPoolResolver::new(num_threads),
+        }
+    }
 }
 
 impl<T> fmt::Debug for DnsConfig<T>
 where
-	T: fmt::Debug,
+    T: fmt::Debug,
 {
-	#[inline]
-	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-		fmt.debug_tuple("DnsConfig").field(&self.inner).finish()
-	}
+    #[inline]
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_tuple("DnsConfig").field(&self.inner).finish()
+    }
 }
 
 impl<T> Transport for DnsConfig<T>
 where
-	T: Transport + 'static, // TODO: 'static :-/
+    T: Transport + 'static, // TODO: 'static :-/
 {
-	type RawConn = T::RawConn;
-	type Listener = T::Listener;
-	type ListenerUpgrade = T::ListenerUpgrade;
-	type Dial = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
+    type RawConn = T::RawConn;
+    type Listener = T::Listener;
+    type ListenerUpgrade = T::ListenerUpgrade;
+    type Dial = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
 
-	#[inline]
-	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-		match self.inner.listen_on(addr) {
-			Ok(r) => Ok(r),
-			Err((inner, addr)) => Err((
-				DnsConfig {
-					inner,
-					resolver: self.resolver,
-				},
-				addr,
-			)),
-		}
-	}
+    #[inline]
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+        match self.inner.listen_on(addr) {
+            Ok(r) => Ok(r),
+            Err((inner, addr)) => Err((
+                DnsConfig {
+                    inner,
+                    resolver: self.resolver,
+                },
+                addr,
+            )),
+        }
+    }
 
-	fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-		let contains_dns = addr.iter().any(|cmp| match cmp {
-			AddrComponent::DNS4(_) => true,
-			AddrComponent::DNS6(_) => true,
-			_ => false,
-		});
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+        let contains_dns = addr.iter().any(|cmp| match cmp {
+            AddrComponent::DNS4(_) => true,
+            AddrComponent::DNS6(_) => true,
+            _ => false,
+        });
 
-		if !contains_dns {
-			trace!(target: "libp2p-dns", "Pass-through address without DNS: {}", addr);
-			return match self.inner.dial(addr) {
-				Ok(d) => Ok(Box::new(d.into_future()) as Box<_>),
-				Err((inner, addr)) => Err((
-					DnsConfig {
-						inner,
-						resolver: self.resolver,
-					},
-					addr,
-				)),
-			};
-		}
+        if !contains_dns {
+            trace!(target: "libp2p-dns", "Pass-through address without DNS: {}", addr);
+            return match self.inner.dial(addr) {
+                Ok(d) => Ok(Box::new(d.into_future()) as Box<_>),
+                Err((inner, addr)) => Err((
+                    DnsConfig {
+                        inner,
+                        resolver: self.resolver,
+                    },
+                    addr,
+                )),
+            };
+        }
 
-		let resolver = self.resolver;
+        let resolver = self.resolver;
 
-		trace!(target: "libp2p-dns", "Dialing address with DNS: {}", addr);
-		let resolve_iters = addr.iter()
-			.map(move |cmp| match cmp {
-				AddrComponent::DNS4(ref name) => {
-					future::Either::A(resolve_dns(name, resolver.clone(), ResolveTy::Dns4))
-				}
-				AddrComponent::DNS6(ref name) => {
-					future::Either::A(resolve_dns(name, resolver.clone(), ResolveTy::Dns6))
-				}
-				cmp => future::Either::B(future::ok(cmp)),
-			})
-			.collect::<Vec<_>>()
-			.into_iter();
+        trace!(target: "libp2p-dns", "Dialing address with DNS: {}", addr);
+        let resolve_iters = addr.iter()
+            .map(move |cmp| match cmp {
+                AddrComponent::DNS4(ref name) => {
+                    future::Either::A(resolve_dns(name, resolver.clone(), ResolveTy::Dns4))
+                }
+                AddrComponent::DNS6(ref name) => {
+                    future::Either::A(resolve_dns(name, resolver.clone(), ResolveTy::Dns6))
+                }
+                cmp => future::Either::B(future::ok(cmp)),
+            })
+            .collect::<Vec<_>>()
+            .into_iter();
 
-		let new_addr = future::join_all(resolve_iters).map(move |outcome| {
-			let outcome: Multiaddr = outcome.into_iter().collect();
-			debug!(target: "libp2p-dns", "DNS resolution outcome: {} => {}", addr, outcome);
-			outcome
-		});
+        let new_addr = future::join_all(resolve_iters).map(move |outcome| {
+            let outcome: Multiaddr = outcome.into_iter().collect();
+            debug!(target: "libp2p-dns", "DNS resolution outcome: {} => {}", addr, outcome);
+            outcome
+        });
 
-		let inner = self.inner;
-		let future = new_addr
-			.and_then(move |addr| {
-				inner
-					.dial(addr)
-					.map_err(|_| IoError::new(IoErrorKind::Other, "multiaddr not supported"))
-			})
-			.flatten();
+        let inner = self.inner;
+        let future = new_addr
+            .and_then(move |addr| {
+                inner
+                    .dial(addr)
+                    .map_err(|_| IoError::new(IoErrorKind::Other, "multiaddr not supported"))
+            })
+            .flatten();
 
-		Ok(Box::new(future) as Box<_>)
-	}
+        Ok(Box::new(future) as Box<_>)
+    }
 
-	#[inline]
-	fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-		// Since `listen_on` doesn't perform any resolution, we just pass through `nat_traversal`
-		// as well.
-		self.inner.nat_traversal(server, observed)
-	}
+    #[inline]
+    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        // Since `listen_on` doesn't perform any resolution, we just pass through `nat_traversal`
+        // as well.
+        self.inner.nat_traversal(server, observed)
+    }
 }
 
 // How to resolve ; to an IPv4 address or an IPv6 address?
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum ResolveTy {
-	Dns4,
-	Dns6,
+    Dns4,
+    Dns6,
 }
 
 // Resolve a DNS name and returns a future with the result.
 fn resolve_dns(
-	name: &str,
-	resolver: CpuPoolResolver,
-	ty: ResolveTy,
+    name: &str,
+    resolver: CpuPoolResolver,
+    ty: ResolveTy,
 ) -> Box<Future<Item = AddrComponent, Error = IoError>> {
-	let debug_name = if log_enabled!(target: "libp2p-dns", Level::Trace) {
-		Some(name.to_owned())
-	} else {
-		None
-	};
+    let debug_name = if log_enabled!(target: "libp2p-dns", Level::Trace) {
+        Some(name.to_owned())
+    } else {
+        None
+    };
 
-	let future = resolver.resolve(name).and_then(move |addrs| {
-		trace!(target: "libp2p-dns", "DNS component resolution: {} => {:?}",
-				   debug_name.expect("trace log level was enabled"), addrs);
-		addrs
-			.into_iter()
-			.filter_map(move |addr| match (addr, ty) {
-				(IpAddr::V4(addr), ResolveTy::Dns4) => Some(AddrComponent::IP4(addr)),
-				(IpAddr::V6(addr), ResolveTy::Dns6) => Some(AddrComponent::IP6(addr)),
-				_ => None,
-			})
-			.next()
-			.ok_or(IoError::new(
-				IoErrorKind::Other,
-				"couldn't find any relevant IP address",
-			))
-	});
+    let future = resolver.resolve(name).and_then(move |addrs| {
+        trace!(target: "libp2p-dns", "DNS component resolution: {} => {:?}",
+                   debug_name.expect("trace log level was enabled"), addrs);
+        addrs
+            .into_iter()
+            .filter_map(move |addr| match (addr, ty) {
+                (IpAddr::V4(addr), ResolveTy::Dns4) => Some(AddrComponent::IP4(addr)),
+                (IpAddr::V6(addr), ResolveTy::Dns6) => Some(AddrComponent::IP6(addr)),
+                _ => None,
+            })
+            .next()
+            .ok_or(IoError::new(
+                IoErrorKind::Other,
+                "couldn't find any relevant IP address",
+            ))
+    });
 
-	Box::new(future)
+    Box::new(future)
 }
 
 #[cfg(test)]
 mod tests {
-	extern crate libp2p_tcp_transport;
-	use self::libp2p_tcp_transport::TcpConfig;
-	use DnsConfig;
-	use futures::{future, Future};
-	use multiaddr::{AddrComponent, Multiaddr};
-	use std::io::Error as IoError;
-	use swarm::Transport;
+    extern crate libp2p_tcp_transport;
+    use self::libp2p_tcp_transport::TcpConfig;
+    use DnsConfig;
+    use futures::{future, Future};
+    use multiaddr::{AddrComponent, Multiaddr};
+    use std::io::Error as IoError;
+    use swarm::Transport;
 
-	#[test]
-	fn basic_resolve() {
-		#[derive(Clone)]
-		struct CustomTransport;
-		impl Transport for CustomTransport {
-			type RawConn = <TcpConfig as Transport>::RawConn;
-			type Listener = <TcpConfig as Transport>::Listener;
-			type ListenerUpgrade = <TcpConfig as Transport>::ListenerUpgrade;
-			type Dial = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
+    #[test]
+    fn basic_resolve() {
+        #[derive(Clone)]
+        struct CustomTransport;
+        impl Transport for CustomTransport {
+            type RawConn = <TcpConfig as Transport>::RawConn;
+            type Listener = <TcpConfig as Transport>::Listener;
+            type ListenerUpgrade = <TcpConfig as Transport>::ListenerUpgrade;
+            type Dial = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
 
-			#[inline]
-			fn listen_on(
-				self,
-				_addr: Multiaddr,
-			) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-				unreachable!()
-			}
+            #[inline]
+            fn listen_on(
+                self,
+                _addr: Multiaddr,
+            ) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+                unreachable!()
+            }
 
-			fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-				let addr = addr.iter().collect::<Vec<_>>();
-				assert_eq!(addr.len(), 2);
-				match addr[1] {
-					AddrComponent::TCP(_) => (),
-					_ => panic!(),
-				};
-				match addr[0] {
-					AddrComponent::DNS4(_) => (),
-					AddrComponent::DNS6(_) => (),
-					_ => panic!(),
-				};
-				Ok(Box::new(future::empty()) as Box<_>)
-			}
+            fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+                let addr = addr.iter().collect::<Vec<_>>();
+                assert_eq!(addr.len(), 2);
+                match addr[1] {
+                    AddrComponent::TCP(_) => (),
+                    _ => panic!(),
+                };
+                match addr[0] {
+                    AddrComponent::DNS4(_) => (),
+                    AddrComponent::DNS6(_) => (),
+                    _ => panic!(),
+                };
+                Ok(Box::new(future::empty()) as Box<_>)
+            }
 
-			#[inline]
-			fn nat_traversal(&self, _: &Multiaddr, _: &Multiaddr) -> Option<Multiaddr> {
-				panic!()
-			}
-		}
+            #[inline]
+            fn nat_traversal(&self, _: &Multiaddr, _: &Multiaddr) -> Option<Multiaddr> {
+                panic!()
+            }
+        }
 
-		let transport = DnsConfig::new(CustomTransport);
+        let transport = DnsConfig::new(CustomTransport);
 
-		let _ = transport
-			.clone()
-			.dial("/dns4/example.com/tcp/20000".parse().unwrap())
-			.unwrap_or_else(|_| panic!());
-		let _ = transport
-			.dial("/dns6/example.com/tcp/20000".parse().unwrap())
-			.unwrap_or_else(|_| panic!());
-	}
+        let _ = transport
+            .clone()
+            .dial("/dns4/example.com/tcp/20000".parse().unwrap())
+            .unwrap_or_else(|_| panic!());
+        let _ = transport
+            .dial("/dns6/example.com/tcp/20000".parse().unwrap())
+            .unwrap_or_else(|_| panic!());
+    }
 }

@@ -28,7 +28,7 @@
 
 use TTL;
 use multiaddr::Multiaddr;
-use serde::{Serialize, Deserialize, Serializer, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::Error as DeserializerError;
 use serde::ser::SerializeStruct;
 use std::cmp::Ordering;
@@ -37,130 +37,133 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 /// Information about a peer.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PeerInfo {
-	// Adresses, and the time at which they will be considered expired.
-	addrs: Vec<(Multiaddr, SystemTime)>,
+    // Adresses, and the time at which they will be considered expired.
+    addrs: Vec<(Multiaddr, SystemTime)>,
 }
 
 impl PeerInfo {
-	/// Builds a new empty `PeerInfo`.
-	#[inline]
-	pub fn new() -> PeerInfo {
-		PeerInfo { addrs: vec![] }
-	}
+    /// Builds a new empty `PeerInfo`.
+    #[inline]
+    pub fn new() -> PeerInfo {
+        PeerInfo { addrs: vec![] }
+    }
 
-	/// Returns the list of the non-expired addresses stored in this `PeerInfo`.
-	///
-	/// > **Note**: Keep in mind that this function is racy because addresses can expire between
-	/// >   		the moment when you get them and the moment when you process them.
-	// TODO: use -> impl Iterator eventually
-	#[inline]
-	pub fn addrs<'a>(&'a self) -> Box<Iterator<Item = &'a Multiaddr> + 'a> {
-		let now = SystemTime::now();
-		Box::new(self.addrs.iter().filter_map(move |&(ref addr, ref expires)| if *expires >= now {
-			Some(addr)
-		} else {
-			None
-		}))
-	}
+    /// Returns the list of the non-expired addresses stored in this `PeerInfo`.
+    ///
+    /// > **Note**: Keep in mind that this function is racy because addresses can expire between
+    /// >           the moment when you get them and the moment when you process them.
+    // TODO: use -> impl Iterator eventually
+    #[inline]
+    pub fn addrs<'a>(&'a self) -> Box<Iterator<Item = &'a Multiaddr> + 'a> {
+        let now = SystemTime::now();
+        Box::new(self.addrs.iter().filter_map(
+            move |&(ref addr, ref expires)| if *expires >= now { Some(addr) } else { None },
+        ))
+    }
 
-	/// Sets the list of addresses and their time-to-live.
-	///
-	/// This removes all previously-stored addresses and replaces them with new ones.
-	#[inline]
-	pub fn set_addrs<I>(&mut self, addrs: I)
-		where I: IntoIterator<Item = (Multiaddr, TTL)>
-	{
-		let now = SystemTime::now();
-		self.addrs = addrs.into_iter().map(move |(addr, ttl)| (addr, now + ttl)).collect();
-	}
+    /// Sets the list of addresses and their time-to-live.
+    ///
+    /// This removes all previously-stored addresses and replaces them with new ones.
+    #[inline]
+    pub fn set_addrs<I>(&mut self, addrs: I)
+    where
+        I: IntoIterator<Item = (Multiaddr, TTL)>,
+    {
+        let now = SystemTime::now();
+        self.addrs = addrs
+            .into_iter()
+            .map(move |(addr, ttl)| (addr, now + ttl))
+            .collect();
+    }
 
-	/// Adds a single address and its time-to-live.
-	///
-	/// If the peer info already knows about that address, then what happens depends on the
-	/// `behaviour` parameter.
-	pub fn add_addr(&mut self, addr: Multiaddr, ttl: TTL, behaviour: AddAddrBehaviour) {
-		let expires = SystemTime::now() + ttl;
+    /// Adds a single address and its time-to-live.
+    ///
+    /// If the peer info already knows about that address, then what happens depends on the
+    /// `behaviour` parameter.
+    pub fn add_addr(&mut self, addr: Multiaddr, ttl: TTL, behaviour: AddAddrBehaviour) {
+        let expires = SystemTime::now() + ttl;
 
-		if let Some(&mut (_, ref mut existing_expires)) =
-			self.addrs.iter_mut().find(|&&mut (ref a, _)| a == &addr)
-		{
-			if behaviour == AddAddrBehaviour::OverwriteTtl || *existing_expires < expires {
-				*existing_expires = expires;
-			}
-			return;
-		}
+        if let Some(&mut (_, ref mut existing_expires)) =
+            self.addrs.iter_mut().find(|&&mut (ref a, _)| a == &addr)
+        {
+            if behaviour == AddAddrBehaviour::OverwriteTtl || *existing_expires < expires {
+                *existing_expires = expires;
+            }
+            return;
+        }
 
-		self.addrs.push((addr, expires));
-	}
+        self.addrs.push((addr, expires));
+    }
 }
 
 /// Behaviour of the `add_addr` function.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum AddAddrBehaviour {
-	/// Always overwrite the existing TTL.
-	OverwriteTtl,
-	/// Don't overwrite if the TTL is larger.
-	IgnoreTtlIfInferior,
+    /// Always overwrite the existing TTL.
+    OverwriteTtl,
+    /// Don't overwrite if the TTL is larger.
+    IgnoreTtlIfInferior,
 }
 
 impl Serialize for PeerInfo {
-	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-		where S: Serializer
-	{
-		let mut s = serializer.serialize_struct("PeerInfo", 2)?;
-		s.serialize_field(
-			"addrs",
-			&self.addrs
-			     .iter()
-			     .map(|&(ref addr, ref expires)| {
-				let addr = addr.to_bytes();
-				let from_epoch = expires.duration_since(UNIX_EPOCH)
-					// This `unwrap_or` case happens if the user has their system time set to
-					// before EPOCH. Times-to-live will be be longer than expected, but it's a very
-					// improbable corner case and is not attackable in any way, so we don't really
-					// care.
-				    .unwrap_or(Duration::new(0, 0));
-				let secs = from_epoch.as_secs()
-				                     .saturating_mul(1_000)
-				                     .saturating_add(from_epoch.subsec_nanos() as u64 / 1_000_000);
-				(addr, secs)
-			})
-			     .collect::<Vec<_>>(),
-		)?;
-		s.end()
-	}
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut s = serializer.serialize_struct("PeerInfo", 2)?;
+        s.serialize_field(
+            "addrs",
+            &self.addrs
+                .iter()
+                .map(|&(ref addr, ref expires)| {
+                    let addr = addr.to_bytes();
+                    let from_epoch = expires.duration_since(UNIX_EPOCH)
+                    // This `unwrap_or` case happens if the user has their system time set to
+                    // before EPOCH. Times-to-live will be be longer than expected, but it's a very
+                    // improbable corner case and is not attackable in any way, so we don't really
+                    // care.
+                    .unwrap_or(Duration::new(0, 0));
+                    let secs = from_epoch
+                        .as_secs()
+                        .saturating_mul(1_000)
+                        .saturating_add(from_epoch.subsec_nanos() as u64 / 1_000_000);
+                    (addr, secs)
+                })
+                .collect::<Vec<_>>(),
+        )?;
+        s.end()
+    }
 }
 
 impl<'de> Deserialize<'de> for PeerInfo {
-	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-		where D: Deserializer<'de>
-	{
-		// We deserialize to an intermdiate struct first, then turn that struct into a `PeerInfo`.
-		let interm = {
-			#[derive(Deserialize)]
-			struct Interm {
-				addrs: Vec<(String, u64)>,
-			}
-			Interm::deserialize(deserializer)?
-		};
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // We deserialize to an intermdiate struct first, then turn that struct into a `PeerInfo`.
+        let interm = {
+            #[derive(Deserialize)]
+            struct Interm {
+                addrs: Vec<(String, u64)>,
+            }
+            Interm::deserialize(deserializer)?
+        };
 
-		let addrs = {
-			let mut out = Vec::with_capacity(interm.addrs.len());
-			for (addr, since_epoch) in interm.addrs {
-				let addr = match addr.parse::<Multiaddr>() {
-					Ok(a) => a,
-					Err(err) => return Err(DeserializerError::custom(err)),
-				};
-				let expires = UNIX_EPOCH + Duration::from_millis(since_epoch);
-				out.push((addr, expires));
-			}
-			out
-		};
+        let addrs = {
+            let mut out = Vec::with_capacity(interm.addrs.len());
+            for (addr, since_epoch) in interm.addrs {
+                let addr = match addr.parse::<Multiaddr>() {
+                    Ok(a) => a,
+                    Err(err) => return Err(DeserializerError::custom(err)),
+                };
+                let expires = UNIX_EPOCH + Duration::from_millis(since_epoch);
+                out.push((addr, expires));
+            }
+            out
+        };
 
-		Ok(PeerInfo {
-			addrs: addrs,
-		})
-	}
+        Ok(PeerInfo { addrs: addrs })
+    }
 }
 
 // The reason why we need to implement the PartialOrd trait is that the datastore library (a
@@ -169,8 +172,8 @@ impl<'de> Deserialize<'de> for PeerInfo {
 // Since the struct that implements PartialOrd is internal and since we never use this ordering
 // feature, I think it's ok to have this code.
 impl PartialOrd for PeerInfo {
-	#[inline]
-	fn partial_cmp(&self, _other: &Self) -> Option<Ordering> {
-		None
-	}
+    #[inline]
+    fn partial_cmp(&self, _other: &Self) -> Option<Ordering> {
+        None
+    }
 }
