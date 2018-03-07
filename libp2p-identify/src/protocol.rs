@@ -127,13 +127,13 @@ where
 		iter::once((Bytes::from("/ipfs/id/1.0.0"), ()))
 	}
 
-	fn upgrade(self, socket: C, _: (), ty: Endpoint, remote_addr: &Multiaddr) -> Self::Future {
+	fn upgrade(self, socket: C, _: (), ty: Endpoint, observed_addr: &Multiaddr) -> Self::Future {
 		trace!(target: "libp2p-identify", "Upgrading connection with {:?} as {:?}",
-			   remote_addr, ty);
+			   observed_addr, ty);
 
 		let socket = socket.framed(VarintCodec::default());
-		let remote_addr_log = if log_enabled!(target: "libp2p-identify", Level::Debug) {
-			Some(remote_addr.clone())
+		let observed_addr_log = if log_enabled!(target: "libp2p-identify", Level::Debug) {
+			Some(observed_addr.clone())
 		} else {
 			None
 		};
@@ -144,16 +144,15 @@ where
 					.into_future()
 					.map(|(msg, _)| msg)
 					.map_err(|(err, _)| err)
-					.and_then(move |msg| {
+					.and_then(|msg| {
 						debug!(target: "libp2p-identify", "Received identify message from {:?}",
-							   remote_addr_log.expect("debug log level is enabled"));
+							   observed_addr_log.expect("debug log level is enabled"));
 						if let Some(msg) = msg {
-							let (info, observed_addr) = match parse_proto_msg(&msg) {
+							let (info, observed_addr) = match parse_proto_msg(msg) {
 								Ok(v) => v,
 								Err(err) => {
 									debug!(target: "libp2p-identify",
-										   "Failed to parse protobuf message ; error = {:?} ; \
-										   	bytes = {:?}", err, msg);
+										   "Failed to parse protobuf message ; error = {:?}", err);
 									return Err(err.into());
 								}
 							};
@@ -166,6 +165,7 @@ where
 								info,
 								observed_addr,
 							})
+
 						} else {
 							debug!(target: "libp2p-identify", "Identify protocol stream closed \
 															   before receiving info");
@@ -181,7 +181,7 @@ where
 
 				let future = future::ok(IdentifyOutput::Sender {
 					sender,
-					observed_addr: remote_addr.clone(),
+					observed_addr: observed_addr.clone(),
 				});
 
 				Box::new(future) as Box<_>
@@ -192,9 +192,16 @@ where
 
 // Turns a protobuf message into an `IdentifyInfo` and an observed address. If something bad
 // happens, turn it into an `IoError`.
-fn parse_proto_msg(msg: &BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> {
-	match protobuf_parse_from_bytes::<structs_proto::Identify>(msg) {
+fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> {
+	match protobuf_parse_from_bytes::<structs_proto::Identify>(&msg) {
 		Ok(mut msg) => {
+			// Turn a `Vec<u8>` into a `Multiaddr`. If something bad happens, turn it into
+			// an `IoError`.
+			fn bytes_to_multiaddr(bytes: Vec<u8>) -> Result<Multiaddr, IoError> {
+				Multiaddr::from_bytes(bytes)
+					.map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
+			}
+
 			let listen_addrs = {
 				let mut addrs = Vec::new();
 				for addr in msg.take_listenAddrs().into_iter() {
@@ -218,11 +225,6 @@ fn parse_proto_msg(msg: &BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError>
 
 		Err(err) => Err(IoError::new(IoErrorKind::InvalidData, err)),
 	}
-}
-
-// Turn a `Vec<u8>` into a `Multiaddr`. If something bad happens, turn it into an `IoError`.
-fn bytes_to_multiaddr(bytes: Vec<u8>) -> Result<Multiaddr, IoError> {
-	Multiaddr::from_bytes(bytes).map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
 }
 
 #[cfg(test)]

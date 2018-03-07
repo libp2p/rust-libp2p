@@ -27,18 +27,18 @@ use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::ops::Deref;
 use std::time::Duration;
 
-/// Implementation of `Transport`. See the crate root description.
+/// Implementation of `Transport`. See [the crate root description](index.html).
 #[derive(Debug, Clone)]
-pub struct IdentifyTransport<T, P> {
-	transport: T,
-	peerstore: P,
+pub struct IdentifyTransport<Trans, PStoreRef> {
+	transport: Trans,
+	peerstore: PStoreRef,
 	addr_ttl: Duration,
 }
 
-impl<T, P> IdentifyTransport<T, P> {
+impl<Trans, PStoreRef> IdentifyTransport<Trans, PStoreRef> {
 	/// Creates an `IdentifyTransport` that wraps around the given transport and peerstore.
 	#[inline]
-	pub fn new(transport: T, peerstore: P) -> IdentifyTransport<T, P> {
+	pub fn new(transport: Trans, peerstore: PStoreRef) -> Self {
 		IdentifyTransport::with_ttl(transport, peerstore, Duration::from_secs(3600))
 	}
 
@@ -47,7 +47,7 @@ impl<T, P> IdentifyTransport<T, P> {
 	///
 	/// The default value is one hour.
 	#[inline]
-	pub fn with_ttl(transport: T, peerstore: P, ttl: Duration) -> IdentifyTransport<T, P> {
+	pub fn with_ttl(transport: Trans, peerstore: PStoreRef, ttl: Duration) -> Self {
 		IdentifyTransport {
 			transport: transport,
 			peerstore: peerstore,
@@ -56,21 +56,21 @@ impl<T, P> IdentifyTransport<T, P> {
 	}
 }
 
-impl<T, Pr, P> Transport for IdentifyTransport<T, Pr>
+impl<Trans, PStore, PStoreRef> Transport for IdentifyTransport<Trans, PStoreRef>
 where
-	T: Transport + Clone + 'static,          // TODO: 'static :(
-	Pr: Deref<Target = P> + Clone + 'static, // TODO: 'static :(
-	for<'r> &'r P: Peerstore,
+	Trans: Transport + Clone + 'static,          // TODO: 'static :(
+	PStoreRef: Deref<Target = PStore> + Clone + 'static, // TODO: 'static :(
+	for<'r> &'r PStore: Peerstore,
 {
-	type RawConn = T::RawConn;
+	type RawConn = Trans::RawConn;
 	type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
-	type ListenerUpgrade = Box<Future<Item = (T::RawConn, Multiaddr), Error = IoError>>;
-	type Dial = Box<Future<Item = (T::RawConn, Multiaddr), Error = IoError>>;
+	type ListenerUpgrade = Box<Future<Item = (Trans::RawConn, Multiaddr), Error = IoError>>;
+	type Dial = Box<Future<Item = (Trans::RawConn, Multiaddr), Error = IoError>>;
 
 	#[inline]
 	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
 		// Note that `listen_on` expects a "regular" multiaddr (eg. `/ip/.../tcp/...`),
-		// and not `/ipfs/<foo>`.
+		// and not `/p2p/<foo>`.
 
 		let (listener, new_addr) = match self.transport.clone().listen_on(addr.clone()) {
 			Ok((l, a)) => (l, a),
@@ -93,9 +93,6 @@ where
 			let identify_upgrade = identify_upgrade.clone();
 			let fut = connec
 				.and_then(move |(connec, client_addr)| {
-					debug!(target: "libp2p-identify", "Received a connection from {} ; dialing \
-													   it back to receive identity", client_addr);
-
 					// Dial the address that connected to us and try upgrade with the
 					// identify protocol.
 					identify_upgrade
@@ -108,9 +105,8 @@ where
 				})
 				.and_then(move |(dial, connec)| dial.map(move |dial| (dial, connec)))
 				.and_then(move |((identify, original_addr), connec)| {
-					// Compute the "real" address of the node (in the form `/ipfs/...`) and add
+					// Compute the "real" address of the node (in the form `/p2p/...`) and add
 					// it to the peerstore.
-					debug!(target: "libp2p-identify", "Received identify from {}", original_addr);
 					let real_addr = match identify {
 						IdentifyOutput::RemoteInfo { info, .. } => process_identify_info(
 							&info,
@@ -124,7 +120,6 @@ where
 						),
 					};
 
-					debug!(target: "libp2p-identify", "Node identified as {}", real_addr);
 					Ok((connec, real_addr))
 				});
 
@@ -136,12 +131,8 @@ where
 
 	#[inline]
 	fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-		debug!(target: "libp2p-identify", "Dialing addr {} through identify", addr);
-
 		match multiaddr_to_peerid(addr.clone()) {
 			Ok(peer_id) => {
-				trace!(target: "libp2p-identify", "Addr {} identified as {:?}", addr, peer_id);
-
 				// If the multiaddress is a peer ID, try each known multiaddress (taken from the
 				// peerstore) one by one.
 				let addrs = self.peerstore
@@ -151,8 +142,6 @@ where
 					.flat_map(|peer| peer.addrs())
 					.collect::<Vec<_>>()
 					.into_iter();
-				
-				trace!(target: "libp2p-identify", "Known multiaddrs for this peer: {:?}", addrs);
 
 				let transport = self.transport;
 				let future = stream::iter_ok(addrs)
@@ -165,18 +154,12 @@ where
 					.into_future()
 					.map_err(|(err, _)| err)
 					.and_then(|(val, _)| val.ok_or(IoErrorKind::InvalidData.into())) // TODO: wrong error
-					.map(move |(socket, _inner_client_addr)| {
-						debug!(target: "libp2p-identify", "Node {} successfully dialed through {}",
-							   addr, _inner_client_addr);
-						(socket, addr)
-					});
+					.map(move |(socket, _inner_client_addr)| (socket, addr));
 
 				Ok(Box::new(future) as Box<_>)
 			}
 
 			Err(addr) => {
-				trace!(target: "libp2p-identify", "Address is not a peer ID ; dialing directly");
-
 				// If the multiaddress is something else, propagate it to the underlying transport
 				// and identify the node.
 				let transport = self.transport;
@@ -200,7 +183,7 @@ where
 
 				let future = dial.and_then(move |identify| {
 					// On success, store the information in the peerstore and compute the
-					// "real" address of the node (of the form `/ipfs/...`).
+					// "real" address of the node (of the form `/p2p/...`).
 					let (real_addr, old_addr);
 					match identify {
 						(IdentifyOutput::RemoteInfo { info, .. }, a) => {
@@ -214,8 +197,6 @@ where
 					};
 
 					// Then dial the same node again.
-					trace!(target: "libp2p-identify", "Node {} identified as {} , dialing again",
-						   old_addr, real_addr);
 					Ok(transport
 						.dial(old_addr)
 						.unwrap_or_else(|_| {
@@ -236,13 +217,14 @@ where
 	}
 }
 
-impl<T, Pr, P> MuxedTransport for IdentifyTransport<T, Pr>
+impl<Trans, PStore, PStoreRef> MuxedTransport for IdentifyTransport<Trans, PStoreRef>
 where
-	T: MuxedTransport + Clone + 'static,
-	Pr: Deref<Target = P> + Clone + 'static,
-	for<'r> &'r P: Peerstore,
+	Trans: MuxedTransport + Clone + 'static,
+	PStoreRef: Deref<Target = PStore> + Clone + 'static,
+	for<'r> &'r PStore: Peerstore,
 {
-	type Incoming = Box<Future<Item = (T::RawConn, Multiaddr), Error = IoError>>;
+	type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError>>;
+	type IncomingUpgrade = Box<Future<Item = (Trans::RawConn, Multiaddr), Error = IoError>>;
 
 	#[inline]
 	fn next_incoming(self) -> Self::Incoming {
@@ -252,44 +234,44 @@ where
 
 		let future = self.transport
 			.next_incoming()
-			.and_then(move |(connec, client_addr)| {
-				debug!(target: "libp2p-identify", "Received a connection from {} ; dialing \
-												   it back to receive identity", client_addr);
-
-				// On an incoming connection, dial back the node and upgrade to the identify
-				// protocol.
-				identify_upgrade
-					.clone()
-					.dial(client_addr.clone())
-					.map_err(|_| {
-						IoError::new(IoErrorKind::Other, "couldn't dial back incoming node")
+			.map(move |incoming| {
+				let future = incoming
+					.and_then(move |(connec, client_addr)| {
+						// On an incoming connection, dial back the node and upgrade to the identify
+						// protocol.
+						identify_upgrade
+							.clone()
+							.dial(client_addr.clone())
+							.map_err(|_| {
+								IoError::new(IoErrorKind::Other, "couldn't dial back incoming node")
+							})
+							.map(move |id| (id, connec))
 					})
-					.map(move |id| (id, connec))
-			})
-			.and_then(move |(dial, connec)| dial.map(move |dial| (dial, connec)))
-			.and_then(move |(identify, connec)| {
-				// Add the info to the peerstore and compute the "real" address of the node (in
-				// the form `/ipfs/...`).
-				let real_addr = match identify {
-					(IdentifyOutput::RemoteInfo { info, .. }, old_addr) => {
-						debug!(target: "libp2p-identify", "Received identify from {}", old_addr);
-						process_identify_info(&info, &*peerstore, old_addr, addr_ttl)?
-					}
-					_ => unreachable!(
-						"the identify protocol guarantees that we receive remote \
-						 information when we dial a node"
-					),
-				};
+					.and_then(move |(dial, connec)| dial.map(move |dial| (dial, connec)))
+					.and_then(move |(identify, connec)| {
+						// Add the info to the peerstore and compute the "real" address of the node (in
+						// the form `/p2p/...`).
+						let real_addr = match identify {
+							(IdentifyOutput::RemoteInfo { info, .. }, old_addr) => {
+								process_identify_info(&info, &*peerstore, old_addr, addr_ttl)?
+							}
+							_ => unreachable!(
+								"the identify protocol guarantees that we receive remote \
+								information when we dial a node"
+							),
+						};
 
-				debug!(target: "libp2p-identify", "Node identified as {}", real_addr);
-				Ok((connec, real_addr))
+						Ok((connec, real_addr))
+					});
+
+				Box::new(future) as Box<Future<Item = _, Error = _>>
 			});
 
 		Box::new(future) as Box<_>
 	}
 }
 
-// If the multiaddress is in the form `/ipfs/...`, turn it into a `PeerId`.
+// If the multiaddress is in the form `/p2p/...`, turn it into a `PeerId`.
 // Otherwise, return it as-is.
 fn multiaddr_to_peerid(addr: Multiaddr) -> Result<PeerId, Multiaddr> {
 	let components = addr.iter().collect::<Vec<_>>();
@@ -298,6 +280,7 @@ fn multiaddr_to_peerid(addr: Multiaddr) -> Result<PeerId, Multiaddr> {
 	}
 
 	match components.last() {
+		Some(&AddrComponent::P2P(ref peer_id)) |
 		Some(&AddrComponent::IPFS(ref peer_id)) => {
 			// TODO: `peer_id` is sometimes in fact a CID here
 			match PeerId::from_bytes(peer_id.clone()) {
@@ -310,7 +293,7 @@ fn multiaddr_to_peerid(addr: Multiaddr) -> Result<PeerId, Multiaddr> {
 }
 
 // When passed the information sent by a remote, inserts the remote into the given peerstore and
-// returns a multiaddr of the format `/ipfs/...` corresponding to this node.
+// returns a multiaddr of the format `/p2p/...` corresponding to this node.
 //
 // > **Note**: This function is highly-specific, but this precise behaviour is needed in multiple
 // >		   different places in the code.
@@ -327,7 +310,7 @@ where
 	peerstore
 		.peer_or_create(&peer_id)
 		.add_addr(client_addr, ttl);
-	Ok(AddrComponent::IPFS(peer_id.into_bytes()).into())
+	Ok(AddrComponent::P2P(peer_id.into_bytes()).into())
 }
 
 #[cfg(test)]
@@ -350,7 +333,7 @@ mod tests {
 
 	#[test]
 	fn dial_peer_id() {
-		// When we dial an `/ipfs/...` address, the `IdentifyTransport` should look into the
+		// When we dial an `/p2p/...` address, the `IdentifyTransport` should look into the
 		// peerstore and dial one of the known multiaddresses of the node instead.
 
 		#[derive(Debug, Clone)]
@@ -398,7 +381,7 @@ mod tests {
 		let transport = IdentifyTransport::new(underlying, Arc::new(peerstore));
 
 		let future = transport
-			.dial(iter::once(AddrComponent::IPFS(peer_id.into_bytes())).collect())
+			.dial(iter::once(AddrComponent::P2P(peer_id.into_bytes())).collect())
 			.unwrap_or_else(|_| panic!())
 			.then::<_, Result<(), ()>>(|_| Ok(()));
 
