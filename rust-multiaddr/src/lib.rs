@@ -52,9 +52,28 @@ impl fmt::Display for Multiaddr {
 }
 
 impl Multiaddr {
+    /// Returns the raw bytes representation of the multiaddr.
+    #[inline]
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.bytes
+    }
+
     /// Return a copy to disallow changing the bytes directly
     pub fn to_bytes(&self) -> Vec<u8> {
         self.bytes.to_owned()
+    }
+
+    /// Produces a `Multiaddr` from its bytes representation.
+    pub fn from_bytes(bytes: Vec<u8>) -> Result<Multiaddr> {
+        {
+            let mut ptr = &bytes[..];
+            while !ptr.is_empty() {
+                let (_, new_ptr) = AddrComponent::from_bytes(ptr)?;
+                ptr = new_ptr;
+            }
+        }
+
+        Ok(Multiaddr { bytes })
     }
 
     /// Extracts a slice containing the entire underlying vector.

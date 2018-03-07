@@ -59,7 +59,7 @@ use std::io::Error as IoError;
 use std::iter;
 use std::net::SocketAddr;
 use tokio_core::reactor::Handle;
-use tokio_core::net::{TcpStream, TcpListener, TcpStreamNew};
+use tokio_core::net::{TcpStream, TcpListener};
 use futures::future::{self, Future, FutureResult, IntoFuture};
 use futures::stream::Stream;
 use multiaddr::{Multiaddr, AddrComponent, ToMultiaddr};
@@ -86,9 +86,9 @@ impl TcpConfig {
 
 impl Transport for TcpConfig {
     type RawConn = TcpStream;
-    type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>>;
-    type ListenerUpgrade = FutureResult<Self::RawConn, IoError>;
-    type Dial = TcpStreamNew;
+    type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
+    type ListenerUpgrade = FutureResult<(Self::RawConn, Multiaddr), IoError>;
+    type Dial = Box<Future<Item = (TcpStream, Multiaddr), Error = IoError>>;
 
     /// Listen on the given multi-addr.
     /// Returns the address back if it isn't supported.
@@ -112,7 +112,7 @@ impl Transport for TcpConfig {
                     listener.incoming().map(|(sock, addr)| {
                         let addr = addr.to_multiaddr()
                             .expect("generating a multiaddr from a socket addr never fails");
-                        (Ok(sock).into_future(), addr)
+                        Ok((sock, addr)).into_future()
                     })
                 })
                     .flatten_stream();
@@ -127,7 +127,9 @@ impl Transport for TcpConfig {
     /// or gives back the multiaddress.
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
         if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
-            Ok(TcpStream::connect(&socket_addr, &self.event_loop))
+            let fut = TcpStream::connect(&socket_addr, &self.event_loop)
+                .map(|t| (t, addr));
+            Ok(Box::new(fut) as Box<_>)
         } else {
             Err((self, addr))
         }
@@ -249,8 +251,8 @@ mod tests {
             let addr = "/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap();
             let tcp = TcpConfig::new(core.handle());
             let handle = core.handle();
-            let listener = tcp.listen_on(addr).unwrap().0.for_each(|(sock, _)| {
-                sock.and_then(|sock| {
+            let listener = tcp.listen_on(addr).unwrap().0.for_each(|sock| {
+                sock.and_then(|(sock, _)| {
                     // Define what to do with the socket that just connected to us
                     // Which in this case is read 3 bytes
                     let handle_conn = tokio_io::io::read_exact(sock, [0; 3])
@@ -274,7 +276,7 @@ mod tests {
         let socket = tcp.dial(addr.clone()).unwrap();
         // Define what to do with the socket once it's obtained
         let action = socket.then(|sock| match sock {
-            Ok(mut s) => {
+            Ok((mut s, _)) => {
                 let written = s.write(&[0x1, 0x2, 0x3]).unwrap();
                 Ok(written)
             }

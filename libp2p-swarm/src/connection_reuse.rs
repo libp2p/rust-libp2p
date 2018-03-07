@@ -117,9 +117,9 @@ where
 	C::NamesIter: Clone, // TODO: not elegant
 {
 	type RawConn = <C::Output as StreamMuxer>::Substream;
-	type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>>;
-	type ListenerUpgrade = FutureResult<Self::RawConn, IoError>;
-	type Dial = Box<Future<Item = Self::RawConn, Error = IoError>>;
+	type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
+	type ListenerUpgrade = FutureResult<(Self::RawConn, Multiaddr), IoError>;
+	type Dial = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
 
 	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
 		let (listener, new_addr) = match self.inner.listen_on(addr.clone()) {
@@ -201,8 +201,8 @@ where
 /// Implementation of `Stream` for the connections incoming from listening on a specific address.
 pub struct ConnectionReuseListener<S, F, M>
 where
-	S: Stream<Item = (F, Multiaddr), Error = IoError>,
-	F: Future<Item = M, Error = IoError>,
+	S: Stream<Item = F, Error = IoError>,
+	F: Future<Item = (M, Multiaddr), Error = IoError>,
 	M: StreamMuxer,
 {
 	// The main listener. `S` is from the underlying transport.
@@ -220,11 +220,11 @@ where
 }
 
 impl<S, F, M> Stream for ConnectionReuseListener<S, F, M>
-where S: Stream<Item = (F, Multiaddr), Error = IoError>,
-	  F: Future<Item = M, Error = IoError>,
+where S: Stream<Item = F, Error = IoError>,
+	  F: Future<Item = (M, Multiaddr), Error = IoError>,
 	  M: StreamMuxer + Clone + 'static // TODO: 'static :(
 {
-	type Item = (FutureResult<M::Substream, IoError>, Multiaddr);
+	type Item = FutureResult<(M::Substream, Multiaddr), IoError>;
 	type Error = IoError;
 
 	fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
@@ -232,8 +232,8 @@ where S: Stream<Item = (F, Multiaddr), Error = IoError>,
 		// Note that since `self.listener` is a `Fuse`, it's not a problem to continue polling even
 		// after it is finished or after it error'ed.
 		match self.listener.poll() {
-			Ok(Async::Ready(Some((upgrade, client_addr)))) => {
-				self.current_upgrades.push((upgrade, client_addr));
+			Ok(Async::Ready(Some(upgrade))) => {
+				self.current_upgrades.push(upgrade);
 			}
 			Ok(Async::NotReady) => {},
 			Ok(Async::Ready(None)) => {

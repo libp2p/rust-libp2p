@@ -32,6 +32,7 @@ use std::sync::{Mutex, MutexGuard};
 use std::vec::IntoIter as VecIntoIter;
 
 /// Implementation of the `Peerstore` trait that simply stores the peer information in memory.
+#[derive(Debug)]
 pub struct MemoryPeerstore {
 	store: Mutex<HashMap<PeerId, PeerInfo>>,
 }

@@ -102,7 +102,7 @@ where
 	type RawConn = T::RawConn;
 	type Listener = T::Listener;
 	type ListenerUpgrade = T::ListenerUpgrade;
-	type Dial = Box<Future<Item = Self::RawConn, Error = IoError>>;
+	type Dial = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
 
 	#[inline]
 	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -238,7 +238,7 @@ mod tests {
 			type RawConn = <TcpConfig as Transport>::RawConn;
 			type Listener = <TcpConfig as Transport>::Listener;
 			type ListenerUpgrade = <TcpConfig as Transport>::ListenerUpgrade;
-			type Dial = Box<Future<Item = Self::RawConn, Error = IoError>>;
+			type Dial = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
 
 			#[inline]
 			fn listen_on(
