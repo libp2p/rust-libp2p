@@ -82,7 +82,10 @@ where
             result(protocols.next().ok_or(ProtocolChoiceError::NoProtocolFound))
                     // If the `protocols` iterator produced an element, send it to the dialer
                     .and_then(|(proto_name, proto_value)| {
-                        dialer.send(DialerToListenerMessage::ProtocolRequest { name: proto_name.clone() })
+                        let req = DialerToListenerMessage::ProtocolRequest {
+                            name: proto_name.clone()
+                        };
+                        dialer.send(req)
                             .map(|d| (d, proto_name, proto_value))
                             .from_err()
                     })

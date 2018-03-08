@@ -159,7 +159,7 @@ pub trait MuxedTransport<Conf>: Transport<Conf> {
     /// Returns the next incoming substream opened by a node that we dialed ourselves.
     ///
     /// > **Note**: Doesn't produce incoming substreams coming from addresses we are listening on.
-    /// >			This only concerns nodes that we dialed with `dial()`.
+    /// >            This only concerns nodes that we dialed with `dial()`.
     fn next_incoming(self, conf: Conf) -> Self::Incoming
     where
         Self: Sized;
@@ -413,8 +413,8 @@ where
 }
 
 // TODO: This type is needed because of the lack of `impl Trait` in stable Rust.
-//		 If Rust had impl Trait we could use the Either enum from the futures crate and add some
-//		 modifiers to it. This custom enum is a combination of Either and these modifiers.
+//         If Rust had impl Trait we could use the Either enum from the futures crate and add some
+//         modifiers to it. This custom enum is a combination of Either and these modifiers.
 #[derive(Debug, Copy, Clone)]
 pub enum EitherListenUpgrade<A, B> {
     First(A),
@@ -448,8 +448,8 @@ where
 ///
 /// Additionally, the output will be wrapped inside a `EitherSocket`.
 // TODO: This type is needed because of the lack of `impl Trait` in stable Rust.
-//		 If Rust had impl Trait we could use the Either enum from the futures crate and add some
-//		 modifiers to it. This custom enum is a combination of Either and these modifiers.
+//         If Rust had impl Trait we could use the Either enum from the futures crate and add some
+//         modifiers to it. This custom enum is a combination of Either and these modifiers.
 #[derive(Debug, Copy, Clone)]
 pub enum EitherTransportFuture<A, B> {
     First(A),
@@ -731,8 +731,8 @@ pub enum EitherUpgradeIdentifier<A, B> {
 /// Additionally, the output will be wrapped inside a `EitherSocket`.
 ///
 // TODO: This type is needed because of the lack of `impl Trait` in stable Rust.
-//		 If Rust had impl Trait we could use the Either enum from the futures crate and add some
-//		 modifiers to it. This custom enum is a combination of Either and these modifiers.
+//         If Rust had impl Trait we could use the Either enum from the futures crate and add some
+//         modifiers to it. This custom enum is a combination of Either and these modifiers.
 #[derive(Debug, Copy, Clone)]
 pub enum EitherConnUpgrFuture<A, B> {
     First(A),
@@ -966,7 +966,13 @@ where
                 negotiated.map(|(upgrade_id, conn)| (upgrade_id, conn, upgrade, client_addr))
             })
             .and_then(move |(upgrade_id, connection, upgrade, client_addr)| {
-                let f = upgrade.upgrade(connection, upgrade_id, Endpoint::Dialer, &client_addr, conf);
+                let f = upgrade.upgrade(
+                    connection,
+                    upgrade_id,
+                    Endpoint::Dialer,
+                    &client_addr,
+                    conf,
+                );
                 f.map(|v| (v, client_addr))
             });
 
@@ -1000,7 +1006,7 @@ where
             })
             .and_then(|(upgrade_id, connection, upgrade, addr)| {
                 upgrade.upgrade(connection, upgrade_id, Endpoint::Dialer, &addr, conf)
-					.map(|u| (u, addr))
+                    .map(|u| (u, addr))
             });
 
         Box::new(future) as Box<_>
@@ -1056,19 +1062,24 @@ where
             move |((connection, client_addr), conf)| {
                 let upgrade = upgrade.clone();
                 let connection = connection
-					// Try to negotiate the protocol
-					.and_then(move |(connection, remote_addr)| {
-						let iter = upgrade.protocol_names()
-							.map::<_, fn(_) -> _>(|(n, t)| (n, <Bytes as PartialEq>::eq, t));
-						multistream_select::listener_select_proto(connection, iter)
-							.map_err(|err| IoError::new(IoErrorKind::Other, err))
-							.and_then(move |(upgrade_id, connection)| {
-								let fut = upgrade.upgrade(connection, upgrade_id, Endpoint::Listener,
-									&remote_addr, conf);
-								fut.map(move |c| (c, remote_addr))
-							})
-							.into_future()
-					});
+                    // Try to negotiate the protocol
+                    .and_then(move |(connection, remote_addr)| {
+                        let iter = upgrade.protocol_names()
+                            .map::<_, fn(_) -> _>(|(n, t)| (n, <Bytes as PartialEq>::eq, t));
+                        multistream_select::listener_select_proto(connection, iter)
+                            .map_err(|err| IoError::new(IoErrorKind::Other, err))
+                            .and_then(move |(upgrade_id, connection)| {
+                                let fut = upgrade.upgrade(
+                                    connection,
+                                    upgrade_id,
+                                    Endpoint::Listener,
+                                    &remote_addr,
+                                    conf,
+                                );
+                                fut.map(move |c| (c, remote_addr))
+                            })
+                            .into_future()
+                    });
 
                 Box::new(connection) as Box<_>
             },

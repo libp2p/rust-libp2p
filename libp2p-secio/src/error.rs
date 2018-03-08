@@ -96,9 +96,9 @@ impl error::Error for SecioError {
         match *self {
             SecioError::IoError(ref err) => Some(err),
             // TODO: The type doesn't implement `Error`
-			/*SecioError::CipherError(ref err) => {
-				Some(err)
-			},*/
+            /*SecioError::CipherError(ref err) => {
+                Some(err)
+            },*/
             _ => None,
         }
     }

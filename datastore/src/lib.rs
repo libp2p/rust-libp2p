@@ -25,7 +25,7 @@
 //! The keys are strings, and the values are of any type you want.
 //!
 //! > **Note**: This crate is meant to be a utility for the implementation of other crates ; it
-//! >			does not directly participate in the stack of libp2p.
+//! >            does not directly participate in the stack of libp2p.
 //!
 //! This crate provides the `Datastore` trait, whose template parameter is the type of the value.
 //! It is implemented on types that represent a key-value storage.
@@ -49,7 +49,7 @@
 //! datastore.put("foo".into(), vec![1, 2, 3]);
 //! datastore.put("bar".into(), vec![0, 255, 127]);
 //! assert_eq!(datastore.get("foo").unwrap(), &[1, 2, 3]);
-//! datastore.flush().unwrap();		// optional
+//! datastore.flush().unwrap();        // optional
 //! ```
 //!
 //! # Query
@@ -76,23 +76,23 @@
 //!
 //! let datastore = JsonFileDatastore::<Vec<u8>>::new("/tmp/test.json").unwrap();
 //! let query = datastore.query(Query {
-//! 	// Only return the keys that start with this prefix.
-//! 	prefix: "fo".into(),
-//! 	// List of filters for the keys and/or values.
-//! 	filters: vec![
-//! 		Filter {
-//! 			ty: FilterTy::ValueCompare(&vec![6, 7, 8].into()),
-//! 			operation: FilterOp::NotEqual,
-//! 		},
-//! 	],
-//! 	// Order in which to sort the results.
-//! 	orders: vec![Order::ByKeyDesc],
-//! 	// Number of entries to skip at the beginning of the results (after sorting).
-//! 	skip: 1,
-//! 	// Limit to the number of entries to return (use `u64::max_value()` for no limit).
-//! 	limit: 12,
-//! 	// If true, don't load the values. For optimization purposes.
-//! 	keys_only: false,
+//!     // Only return the keys that start with this prefix.
+//!     prefix: "fo".into(),
+//!     // List of filters for the keys and/or values.
+//!     filters: vec![
+//!         Filter {
+//!             ty: FilterTy::ValueCompare(&vec![6, 7, 8].into()),
+//!             operation: FilterOp::NotEqual,
+//!         },
+//!     ],
+//!     // Order in which to sort the results.
+//!     orders: vec![Order::ByKeyDesc],
+//!     // Number of entries to skip at the beginning of the results (after sorting).
+//!     skip: 1,
+//!     // Limit to the number of entries to return (use `u64::max_value()` for no limit).
+//!     limit: 12,
+//!     // If true, don't load the values. For optimization purposes.
+//!     keys_only: false,
 //! });
 //!
 //! let results = query.collect().wait().unwrap();
@@ -159,8 +159,8 @@ pub trait Datastore<T> {
     /// Returns true if the datastore contains the given key.
     ///
     /// > **Note**: Keep in mind that using this operation is probably racy. A secondary thread
-    /// > 			can delete a key right after you called `has()`. In other words, this function
-    /// >			returns whether an entry with that key existed in the short past.
+    /// >             can delete a key right after you called `has()`. In other words, this function
+    /// >            returns whether an entry with that key existed in the short past.
     #[inline]
     fn has(self, key: &str) -> bool
     where

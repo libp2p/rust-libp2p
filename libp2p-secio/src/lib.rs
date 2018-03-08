@@ -47,23 +47,23 @@
 //! let mut core = Core::new().unwrap();
 //!
 //! let transport = TcpConfig::new(core.handle())
-//! 	.with_upgrade({
-//! 		# let private_key = b"";
-//! 		//let private_key = include_bytes!("test-private-key.pk8");
-//! 		# let public_key = vec![];
-//! 		//let public_key = include_bytes!("test-public-key.der").to_vec();
-//! 		SecioConfig {
-//!				// See the documentation of `SecioKeyPair`.
-//! 			key: SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap(),
-//! 		}
-//! 	});
+//!     .with_upgrade({
+//!         # let private_key = b"";
+//!         //let private_key = include_bytes!("test-private-key.pk8");
+//!         # let public_key = vec![];
+//!         //let public_key = include_bytes!("test-public-key.der").to_vec();
+//!         SecioConfig {
+//!                // See the documentation of `SecioKeyPair`.
+//!             key: SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap(),
+//!         }
+//!     });
 //!
 //! let future = transport.dial("/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap())
-//!		.unwrap_or_else(|_| panic!("Unable to dial node"))
-//! 	.and_then(|(connection, _)| {
-//! 		// Sends "hello world" on the connection, will be encrypted.
-//! 		write_all(connection, "hello world")
-//! 	});
+//!        .unwrap_or_else(|_| panic!("Unable to dial node"))
+//!     .and_then(|(connection, _)| {
+//!         // Sends "hello world" on the connection, will be encrypted.
+//!         write_all(connection, "hello world")
+//!     });
 //!
 //! core.run(future).unwrap();
 //! # }
@@ -142,7 +142,7 @@ pub struct SecioConfig;
 ///
 /// ```ignore
 /// let key_pair = SecioKeyPair::rsa_from_pkcs8(include_bytes!("private.pk8"),
-///												include_bytes!("public.der"));
+///                                                include_bytes!("public.der"));
 /// ```
 ///
 #[derive(Clone)]

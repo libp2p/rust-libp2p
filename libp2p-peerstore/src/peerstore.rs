@@ -59,7 +59,7 @@ pub trait PeerAccess {
     /// Returns all known and non-expired addresses for a given peer.
     ///
     /// > **Note**: Keep in mind that this function is racy because addresses can expire between
-    /// >   		the moment when you get them and the moment when you process them.
+    /// >           the moment when you get them and the moment when you process them.
     fn addrs(&self) -> Self::AddrsIter;
 
     /// Adds an address to a peer.

@@ -139,7 +139,7 @@ impl<'a> PeerAccess for JsonPeerstoreAccess<'a> {
 mod tests {
     extern crate tempfile;
     peerstore_tests!(
-		{::json_peerstore::JsonPeerstore::new(temp_file.path()).unwrap()}
-		{let temp_file = self::tempfile::NamedTempFile::new().unwrap()}
-	);
+        {::json_peerstore::JsonPeerstore::new(temp_file.path()).unwrap()}
+        {let temp_file = self::tempfile::NamedTempFile::new().unwrap()}
+    );
 }

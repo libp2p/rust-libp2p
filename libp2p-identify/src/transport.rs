@@ -145,16 +145,16 @@ where
 
                 let transport = self.transport;
                 let future = stream::iter_ok(addrs)
-					// Try to dial each address through the transport.
-					.filter_map(move |addr| transport.clone().dial(addr).ok())
-					.and_then(move |dial| dial)
-					// Pick the first non-failing dial result.
-					.then(|res| Ok(res))
-					.filter_map(|res| res.ok())
-					.into_future()
-					.map_err(|(err, _)| err)
-					.and_then(|(val, _)| val.ok_or(IoErrorKind::InvalidData.into())) // TODO: wrong error
-					.map(move |(socket, _inner_client_addr)| (socket, addr));
+                    // Try to dial each address through the transport.
+                    .filter_map(move |addr| transport.clone().dial(addr).ok())
+                    .and_then(move |dial| dial)
+                    // Pick the first non-failing dial result.
+                    .then(|res| Ok(res))
+                    .filter_map(|res| res.ok())
+                    .into_future()
+                    .map_err(|(err, _)| err)
+                    .and_then(|(val, _)| val.ok_or(IoErrorKind::InvalidData.into())) // TODO: wrong error
+                    .map(move |(socket, _inner_client_addr)| (socket, addr));
 
                 Ok(Box::new(future) as Box<_>)
             }
@@ -289,7 +289,7 @@ fn multiaddr_to_peerid(addr: Multiaddr) -> Result<PeerId, Multiaddr> {
 // returns a multiaddr of the format `/p2p/...` corresponding to this node.
 //
 // > **Note**: This function is highly-specific, but this precise behaviour is needed in multiple
-// >		   different places in the code.
+// >           different places in the code.
 fn process_identify_info<P>(
     info: &IdentifyInfo,
     peerstore: P,

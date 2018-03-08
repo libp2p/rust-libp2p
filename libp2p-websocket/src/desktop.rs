@@ -52,8 +52,10 @@ impl<T> WsConfig<T> {
 
 impl<T> Transport for WsConfig<T>
 where
-    T: Transport + 'static, // TODO: this 'static is pretty arbitrary and is necessary because of the websocket library
-    T::RawConn: Send, // TODO: this Send is pretty arbitrary and is necessary because of the websocket library
+    // TODO: this 'static is pretty arbitrary and is necessary because of the websocket library
+    T: Transport + 'static,
+    // TODO: this Send is pretty arbitrary and is necessary because of the websocket library
+    T::RawConn: Send,
 {
     type RawConn = Box<AsyncStream>;
     type Listener =
@@ -104,22 +106,22 @@ where
                             .map(|(client, _http_headers)| {
                                 // Plug our own API on top of the `websockets` API.
                                 let framed_data = client
-									.map_err(|err| IoError::new(IoErrorKind::Other, err))
-									.sink_map_err(|err| IoError::new(IoErrorKind::Other, err))
-									.with(|data| Ok(OwnedMessage::Binary(data)))
-									.and_then(|recv| {
-										match recv {
-											OwnedMessage::Binary(data) => Ok(Some(data)),
-											OwnedMessage::Text(data) => Ok(Some(data.into_bytes())),
-											OwnedMessage::Close(_) => Ok(None),
-											// TODO: handle pings and pongs, which is freaking hard
-											//		 for now we close the socket when that happens
-											_ => Ok(None)
-										}
-									})
-									// TODO: is there a way to merge both lines into one?
-									.take_while(|v| Ok(v.is_some()))
-									.map(|v| v.expect("we only take while this is Some"));
+                                    .map_err(|err| IoError::new(IoErrorKind::Other, err))
+                                    .sink_map_err(|err| IoError::new(IoErrorKind::Other, err))
+                                    .with(|data| Ok(OwnedMessage::Binary(data)))
+                                    .and_then(|recv| {
+                                        match recv {
+                                            OwnedMessage::Binary(data) => Ok(Some(data)),
+                                            OwnedMessage::Text(data) => Ok(Some(data.into_bytes())),
+                                            OwnedMessage::Close(_) => Ok(None),
+                                            // TODO: handle pings and pongs, which is freaking hard
+                                            //         for now we close the socket when that happens
+                                            _ => Ok(None)
+                                        }
+                                    })
+                                    // TODO: is there a way to merge both lines into one?
+                                    .take_while(|v| Ok(v.is_some()))
+                                    .map(|v| v.expect("we only take while this is Some"));
 
                                 let read_write = RwStreamSink::new(framed_data);
                                 Box::new(read_write) as Box<AsyncStream>
@@ -181,7 +183,7 @@ where
                                     OwnedMessage::Text(data) => Ok(data.into_bytes()),
                                     // TODO: pings and pongs and close messages need to be
                                     //       answered ; and this is really hard ; for now we produce
-                                    //		 an error when that happens
+                                    //         an error when that happens
                                     _ => Err(IoError::new(IoErrorKind::Other, "unimplemented")),
                                 }
                             });

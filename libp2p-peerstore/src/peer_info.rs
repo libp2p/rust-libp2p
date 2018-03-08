@@ -51,7 +51,7 @@ impl PeerInfo {
     /// Returns the list of the non-expired addresses stored in this `PeerInfo`.
     ///
     /// > **Note**: Keep in mind that this function is racy because addresses can expire between
-    /// >   		the moment when you get them and the moment when you process them.
+    /// >           the moment when you get them and the moment when you process them.
     // TODO: use -> impl Iterator eventually
     #[inline]
     pub fn addrs<'a>(&'a self) -> Box<Iterator<Item = &'a Multiaddr> + 'a> {
@@ -118,11 +118,11 @@ impl Serialize for PeerInfo {
                 .map(|&(ref addr, ref expires)| {
                     let addr = addr.to_bytes();
                     let from_epoch = expires.duration_since(UNIX_EPOCH)
-					// This `unwrap_or` case happens if the user has their system time set to
-					// before EPOCH. Times-to-live will be be longer than expected, but it's a very
-					// improbable corner case and is not attackable in any way, so we don't really
-					// care.
-				    .unwrap_or(Duration::new(0, 0));
+                    // This `unwrap_or` case happens if the user has their system time set to
+                    // before EPOCH. Times-to-live will be be longer than expected, but it's a very
+                    // improbable corner case and is not attackable in any way, so we don't really
+                    // care.
+                    .unwrap_or(Duration::new(0, 0));
                     let secs = from_epoch
                         .as_secs()
                         .saturating_mul(1_000)

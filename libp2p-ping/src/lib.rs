@@ -189,7 +189,7 @@ where
                             Message::Ping(payload, finished) => {
                                 // Ping requested by the user through the `Pinger`.
                                 debug!(target: "libp2p-ping", "Sending ping to {:?} with payload {:?}",
-								   remote_addr.expect("debug log level is enabled"), payload);
+                                   remote_addr.expect("debug log level is enabled"), payload);
                                 expected_pongs.insert(payload.clone(), finished);
                                 Box::new(
                                     sink.send(payload)
@@ -204,16 +204,16 @@ where
                                     // Errors can happen if the user closed the receiving end of
                                     // the future, which is fine to ignore.
                                     debug!(target: "libp2p-ping", "Received pong from {:?} \
-															   (payload={:?}) ; ping fufilled",
-									   remote_addr.expect("debug log level is enabled"), payload);
+                                                               (payload={:?}) ; ping fufilled",
+                                       remote_addr.expect("debug log level is enabled"), payload);
                                     let _ = fut.send(());
                                     Box::new(Ok(Loop::Continue((sink, stream))).into_future())
                                         as Box<Future<Item = _, Error = _>>
                                 } else {
                                     // Payload was not ours. Sending it back.
                                     debug!(target: "libp2p-ping", "Received ping from {:?} \
-															   (payload={:?}) ; sending back",
-									   remote_addr.expect("debug log level is enabled"), payload);
+                                                               (payload={:?}) ; sending back",
+                                       remote_addr.expect("debug log level is enabled"), payload);
                                     Box::new(
                                         sink.send(payload)
                                             .map(|sink| Loop::Continue((sink, stream))),
@@ -243,7 +243,7 @@ impl Pinger {
     /// Sends a ping. Returns a future that is signaled when a pong is received.
     ///
     /// **Note**: Please be aware that there is no timeout on the ping. You should handle the
-    /// 		  timeout yourself when you call this function.
+    ///           timeout yourself when you call this function.
     pub fn ping(&mut self) -> Box<Future<Item = (), Error = Box<Error + Send + Sync>>> {
         let (tx, rx) = oneshot::channel();
         let payload: [u8; 32] = Rand::rand(&mut self.os_rng);

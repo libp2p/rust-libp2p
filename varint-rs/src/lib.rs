@@ -143,7 +143,10 @@ macro_rules! impl_decoderstate {
     ($t:ty, $make_fn:expr, $shift_fn:expr) => {
         impl DecoderHelper for $t {
             #[inline]
-            fn decode_one(decoder: &mut DecoderState<Self>, byte: u8) -> ::errors::Result<Option<$t>> {
+            fn decode_one(
+                decoder: &mut DecoderState<Self>,
+                byte: u8,
+            ) -> ::errors::Result<Option<$t>> {
                 let res = decoder.accumulator.take().and_then(|accumulator| {
                     let out = accumulator | match $shift_fn(
                         $make_fn(byte & 0x7F),

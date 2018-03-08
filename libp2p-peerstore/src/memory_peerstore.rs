@@ -80,7 +80,7 @@ impl<'a> Peerstore for &'a MemoryPeerstore {
 }
 
 // Note: Rust doesn't provide a `MutexGuard::map` method, otherwise we could directly store a
-// 		 `MutexGuard<'a, (&'a PeerId, &'a PeerInfo)>`.
+//          `MutexGuard<'a, (&'a PeerId, &'a PeerInfo)>`.
 pub struct MemoryPeerstoreAccess<'a>(
     OwningRefMut<MutexGuard<'a, HashMap<PeerId, PeerInfo>>, PeerInfo>,
 );

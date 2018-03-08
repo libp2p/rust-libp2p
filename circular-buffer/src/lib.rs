@@ -620,7 +620,9 @@ where
     /// ```rust
     /// use circular_buffer::CircularBuffer;
     ///
-    /// let result = CircularBuffer::<[usize; 5]>::from_slice_prefix(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 20]);
+    /// let result = CircularBuffer::<[usize; 5]>::from_slice_prefix(
+    ///     &[1, 2, 3, 4, 5, 6, 7, 8, 9, 20]
+    /// );
     /// assert_eq!(result, (CircularBuffer::from_array([1, 2, 3, 4, 5]), 5));
     /// ```
     pub fn from_slice_prefix(slice: &[B::Item]) -> (Self, usize) {
