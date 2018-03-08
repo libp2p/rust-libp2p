@@ -200,7 +200,9 @@ where
             >,
         >,
     >,
-    next_incoming: Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>,
+    next_incoming: Box<
+        Future<Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>, Error = IoError>,
+    >,
     listeners: Vec<
         Box<
             Stream<
@@ -242,7 +244,9 @@ where
             }
             Ok(Async::NotReady) => {}
             // TODO: may not be the best idea because we're killing the whole server
-            Err(err) => return Err(err),
+            Err(_err) => {
+                self.next_incoming = self.upgraded.clone().next_incoming();
+            }
         };
 
         match self.new_listeners.poll() {
@@ -324,7 +328,7 @@ where
             match to_process.poll() {
                 Ok(Async::Ready(())) => {}
                 Ok(Async::NotReady) => self.to_process.push(to_process),
-                Err(err) => return Err(err),
+                Err(_err) => {} // Ignoring errors
             }
         }
 

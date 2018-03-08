@@ -893,7 +893,7 @@ where
 /// connection.
 ///
 /// See the `Transport::with_upgrade` method.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UpgradedNode<T, C, Conf> {
     transports: T,
     upgrade: C,

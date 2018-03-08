@@ -203,6 +203,7 @@
 //! ```
 
 extern crate bytes;
+extern crate fnv;
 #[macro_use]
 extern crate futures;
 extern crate multistream_select;
