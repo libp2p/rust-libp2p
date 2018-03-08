@@ -91,9 +91,10 @@ impl<T, C, Conf> From<UpgradedNode<T, C, Conf>> for ConnectionReuse<T, C, Conf>
 where
     T: Transport<Conf>,
     C: ConnectionUpgrade<T::RawConn, Conf>,
+    C::Output: StreamMuxer,
 {
     #[inline]
-    fn from(node: UpgradedNode<T, C>) -> ConnectionReuse<T, C> {
+    fn from(node: UpgradedNode<T, C, Conf>) -> Self {
         let (tx, rx) = mpsc::unbounded();
 
         ConnectionReuse {
@@ -212,15 +213,15 @@ where
     C::Output: StreamMuxer + Clone,
     C::NamesIter: Clone, // TODO: not elegant
 {
-    type Incoming =
-        Box<Future<Item = (<C::Output as StreamMuxer>::Substream, Multiaddr), Error = IoError>>;
+    type Incoming = ConnectionReuseIncoming<C::Output>;
+    type IncomingUpgrade =
+        future::FutureResult<(<C::Output as StreamMuxer>::Substream, Multiaddr), IoError>;
 
     #[inline]
     fn next_incoming(self, _: Conf) -> Self::Incoming {
-        let future = ConnectionReuseIncoming {
+        ConnectionReuseIncoming {
             shared: self.shared.clone(),
-        }.and_then(|(out, addr)| out.inbound().map(|o| (o, addr)));
-        Box::new(future) as Box<_>
+        }
     }
 }
 
