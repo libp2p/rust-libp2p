@@ -85,6 +85,7 @@ extern crate futures;
 extern crate libp2p_swarm;
 #[macro_use]
 extern crate log;
+extern crate minimal_lens;
 extern crate protobuf;
 extern crate rand;
 extern crate ring;
@@ -94,11 +95,14 @@ extern crate untrusted;
 
 pub use self::error::SecioError;
 
+pub use minimal_lens::Has;
+
 use bytes::{Bytes, BytesMut};
 use futures::{Future, Poll, Sink, StartSend, Stream};
 use futures::stream::MapErr as StreamMapErr;
 use libp2p_swarm::Multiaddr;
 use ring::signature::RSAKeyPair;
+use libp2p_swarm::SecurityProvider;
 use rw_stream_sink::RwStreamSink;
 use std::error::Error;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -117,10 +121,7 @@ mod structs_proto;
 /// Implementation of the `ConnectionUpgrade` trait of `libp2p_swarm`. Automatically applies
 /// secio on any connection.
 #[derive(Clone)]
-pub struct SecioConfig {
-    /// Private and public keys of the local node.
-    pub key: SecioKeyPair,
-}
+pub struct SecioConfig;
 
 /// Private and public keys of the local node.
 ///
@@ -150,15 +151,16 @@ pub struct SecioKeyPair {
 }
 
 impl SecioKeyPair {
-    pub fn rsa_from_pkcs8<P>(
-        private: &[u8],
-        public: P,
+    pub fn rsa_from_pkcs8<Priv, Pub>(
+        private: &Priv,
+        public: Pub,
     ) -> Result<SecioKeyPair, Box<Error + Send + Sync>>
     where
-        P: Into<Vec<u8>>,
+        Priv: AsRef<[u8]>,
+        Pub: Into<Arc<[u8]>>,
     {
-        let private =
-            RSAKeyPair::from_pkcs8(Input::from(&private[..])).map_err(|err| Box::new(err))?;
+        let private = RSAKeyPair::from_pkcs8(Input::from(&private.as_ref()[..]))
+            .map_err(|err| Box::new(err))?;
 
         Ok(SecioKeyPair {
             inner: SecioKeyPairInner::Rsa {
@@ -173,7 +175,7 @@ impl SecioKeyPair {
 #[derive(Clone)]
 enum SecioKeyPairInner {
     Rsa {
-        public: Vec<u8>,
+        public: Arc<[u8]>,
         private: Arc<RSAKeyPair>,
     },
 }
@@ -184,7 +186,7 @@ pub enum SecioPublicKey<'a> {
     Rsa(&'a [u8]),
 }
 
-impl<S> libp2p_swarm::ConnectionUpgrade<S> for SecioConfig
+impl<S, Conf: Has<SecioKeyPair>> libp2p_swarm::ConnectionUpgrade<S, Conf> for SecioConfig
 where
     S: AsyncRead + AsyncWrite + 'static,
 {

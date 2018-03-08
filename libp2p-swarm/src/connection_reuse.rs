@@ -57,16 +57,14 @@ use transport::{ConnectionUpgrade, MuxedTransport, Transport, UpgradedNode};
 ///
 /// Implements the `Transport` trait.
 #[derive(Clone)]
-pub struct ConnectionReuse<T, C>
+pub struct ConnectionReuse<T, C, Conf>
 where
-    T: Transport,
-    C: ConnectionUpgrade<T::RawConn>,
+    T: Transport<Conf>,
+    C: ConnectionUpgrade<T::RawConn, Conf>,
     C::Output: StreamMuxer,
 {
     // Underlying transport and connection upgrade for when we need to dial or listen.
-    inner: UpgradedNode<T, C>,
-
-    // Struct shared between most of the `ConnectionReuse` infrastructure.
+    inner: UpgradedNode<T, C, Conf>,
     shared: Arc<Mutex<Shared<C::Output>>>,
 }
 
@@ -89,14 +87,14 @@ where
     add_to_next_tx: mpsc::UnboundedSender<(M, M::InboundSubstream, Multiaddr)>,
 }
 
-impl<T, C> From<UpgradedNode<T, C>> for ConnectionReuse<T, C>
+impl<T, C, Conf> From<UpgradedNode<T, C, Conf>> for ConnectionReuse<T, C, Conf>
 where
-    T: Transport,
-    C: ConnectionUpgrade<T::RawConn>,
+    T: Transport<Conf>,
+    C: ConnectionUpgrade<T::RawConn, Conf>,
     C::Output: StreamMuxer,
 {
     #[inline]
-    fn from(node: UpgradedNode<T, C>) -> ConnectionReuse<T, C> {
+    fn from(node: UpgradedNode<T, C, Conf>) -> Self {
         let (tx, rx) = mpsc::unbounded();
 
         ConnectionReuse {
@@ -111,10 +109,12 @@ where
     }
 }
 
-impl<T, C> Transport for ConnectionReuse<T, C>
+// TODO: 'static :(
+impl<T: 'static, C: 'static, Conf: 'static> Transport<Conf> for ConnectionReuse<T, C, Conf>
 where
-    T: Transport + 'static,                     // TODO: 'static :(
-    C: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :(
+    T: Transport<Conf>,
+    Conf: Clone,
+    C: ConnectionUpgrade<T::RawConn, Conf>,
     C: Clone,
     C::Output: StreamMuxer + Clone,
     C::NamesIter: Clone, // TODO: not elegant
@@ -124,8 +124,12 @@ where
     type ListenerUpgrade = FutureResult<(Self::RawConn, Multiaddr), IoError>;
     type Dial = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        let (listener, new_addr) = match self.inner.listen_on(addr.clone()) {
+    fn listen_on(
+        self,
+        addr: Multiaddr,
+        conf: Conf,
+    ) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+        let (listener, new_addr) = match self.inner.listen_on(addr.clone(), conf) {
             Ok((l, a)) => (l, a),
             Err((inner, addr)) => {
                 return Err((
@@ -148,7 +152,7 @@ where
         Ok((Box::new(listener) as Box<_>, new_addr))
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+    fn dial(self, addr: Multiaddr, conf: Conf) -> Result<Self::Dial, (Self, Multiaddr)> {
         // If we already have an active connection, use it!
         if let Some(connec) = self.shared
             .lock()
@@ -163,7 +167,7 @@ where
         // TODO: handle if we're already in the middle in dialing that same node?
         // TODO: try dialing again if the existing connection has dropped
 
-        let dial = match self.inner.dial(addr) {
+        let dial = match self.inner.dial(addr.clone(), conf) {
             Ok(l) => l,
             Err((inner, addr)) => {
                 return Err((
@@ -199,10 +203,12 @@ where
     }
 }
 
-impl<T, C> MuxedTransport for ConnectionReuse<T, C>
+// TODO: 'static :(
+impl<T: 'static, C: 'static, Conf: 'static> MuxedTransport<Conf> for ConnectionReuse<T, C, Conf>
 where
-    T: Transport + 'static,                     // TODO: 'static :(
-    C: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :(
+    T: Transport<Conf>,
+    Conf: Clone,
+    C: ConnectionUpgrade<T::RawConn, Conf>,
     C: Clone,
     C::Output: StreamMuxer + Clone,
     C::NamesIter: Clone, // TODO: not elegant
@@ -212,7 +218,7 @@ where
         future::FutureResult<(<C::Output as StreamMuxer>::Substream, Multiaddr), IoError>;
 
     #[inline]
-    fn next_incoming(self) -> Self::Incoming {
+    fn next_incoming(self, _: Conf) -> Self::Incoming {
         ConnectionReuseIncoming {
             shared: self.shared.clone(),
         }

@@ -113,7 +113,7 @@ use tokio_io::codec::{Decoder, Encoder};
 #[derive(Debug, Copy, Clone, Default)]
 pub struct Ping;
 
-impl<C> ConnectionUpgrade<C> for Ping
+impl<C, Conf> ConnectionUpgrade<C, Conf> for Ping
 where
     C: AsyncRead + AsyncWrite + 'static,
 {
@@ -135,6 +135,8 @@ where
         _: Self::UpgradeIdentifier,
         _: Endpoint,
         remote_addr: &Multiaddr,
+        _: &Multiaddr,
+        _: Conf,
     ) -> Self::Future {
         // # How does it work?
         //
@@ -324,6 +326,7 @@ mod tests {
                     (),
                     Endpoint::Listener,
                     &"/ip4/127.0.0.1/tcp/10000".parse().unwrap(),
+                    (),
                 )
             })
             .and_then(|(mut pinger, service)| {
@@ -342,6 +345,7 @@ mod tests {
                     (),
                     Endpoint::Dialer,
                     &"/ip4/127.0.0.1/tcp/10000".parse().unwrap(),
+                    (),
                 )
             })
             .and_then(|(mut pinger, service)| {
@@ -373,6 +377,7 @@ mod tests {
                     (),
                     Endpoint::Listener,
                     &"/ip4/127.0.0.1/tcp/10000".parse().unwrap(),
+                    (),
                 )
             })
             .and_then(|(_, service)| service.map_err(|_| panic!()));
@@ -385,6 +390,7 @@ mod tests {
                     (),
                     Endpoint::Dialer,
                     &"/ip4/127.0.0.1/tcp/1000".parse().unwrap(),
+                    (),
                 )
             })
             .and_then(|(mut pinger, service)| {

@@ -15,6 +15,7 @@ rust-crypto = "^0.2"
 rw-stream-sink = { path = "../rw-stream-sink" }
 tokio-io = "0.1.0"
 untrusted = "0.6.0"
+minimal-lens = { path = "../minimal-lens" }
 
 [dev-dependencies]
 libp2p-tcp-transport = { path = "../libp2p-tcp-transport" }

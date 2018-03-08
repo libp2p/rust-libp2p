@@ -1,0 +1,6 @@
+[package]
+name = "minimal-lens"
+version = "0.1.0"
+authors = ["Vurich <jackefransham@gmail.com>"]
+
+[dependencies]

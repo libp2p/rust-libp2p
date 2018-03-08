@@ -218,6 +218,7 @@ mod connection_reuse;
 pub mod swarm;
 pub mod muxing;
 pub mod transport;
+pub mod security;
 
 pub use self::connection_reuse::ConnectionReuse;
 pub use self::multiaddr::Multiaddr;
@@ -226,3 +227,4 @@ pub use self::swarm::{swarm, SwarmController, SwarmFuture};
 pub use self::transport::{ConnectionUpgrade, OrUpgrade, PlainTextConfig, Transport, UpgradedNode};
 pub use self::transport::{Endpoint, MuxedTransport, SimpleProtocol, UpgradeExt};
 pub use self::transport::DeniedConnectionUpgrade;
+pub use self::security::SecurityProvider;

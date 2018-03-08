@@ -84,7 +84,7 @@ impl TcpConfig {
     }
 }
 
-impl Transport for TcpConfig {
+impl<Conf> Transport<Conf> for TcpConfig {
     type RawConn = TcpStream;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
     type ListenerUpgrade = FutureResult<(Self::RawConn, Multiaddr), IoError>;
@@ -92,7 +92,11 @@ impl Transport for TcpConfig {
 
     /// Listen on the given multi-addr.
     /// Returns the address back if it isn't supported.
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+    fn listen_on(
+        self,
+        addr: Multiaddr,
+        _: Conf,
+    ) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
             let listener = TcpListener::bind(&socket_addr, &self.event_loop);
             // We need to build the `Multiaddr` to return from this function. If an error happened,
@@ -128,7 +132,7 @@ impl Transport for TcpConfig {
     /// Dial to the given multi-addr.
     /// Returns either a future which may resolve to a connection,
     /// or gives back the multiaddress.
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+    fn dial(self, addr: Multiaddr, _: Conf) -> Result<Self::Dial, (Self, Multiaddr)> {
         if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
             let fut = TcpStream::connect(&socket_addr, &self.event_loop).map(|t| (t, addr));
             Ok(Box::new(fut) as Box<_>)

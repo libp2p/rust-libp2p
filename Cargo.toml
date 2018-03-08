@@ -12,6 +12,7 @@ members = [
     "libp2p-tcp-transport",
     "libp2p-websocket",
     "multistream-select",
+    "minimal-lens",
     "datastore",
     "rw-stream-sink",
     "circular-buffer",

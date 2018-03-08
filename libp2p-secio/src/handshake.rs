@@ -53,9 +53,9 @@ use untrusted::Input as UntrustedInput;
 ///
 /// On success, returns an object that implements the `Sink` and `Stream` trait whose items are
 /// buffers of data, plus the public key of the remote.
-pub fn handshake<'a, S: 'a>(
+pub fn handshake<'a, S: 'a, Pub: AsRef<[u8]> + 'a>(
     socket: S,
-    local_public_key: Vec<u8>,
+    local_public_key: Pub,
     local_private_key: Arc<RSAKeyPair>,
 ) -> Box<Future<Item = (FullCodec<S>, Vec<u8>), Error = SecioError> + 'a>
 where
@@ -65,9 +65,9 @@ where
 
     // This struct contains the whole context of a handshake, and is filled progressively
     // throughout the various parts of the handshake.
-    struct HandshakeContext {
+    struct HandshakeContext<Pub: AsRef<[u8]>> {
         // Filled with this function's parameters.
-        local_public_key: Vec<u8>,
+        local_public_key: Pub,
         local_private_key: Arc<RSAKeyPair>,
 
         rng: rand::SystemRandom,
@@ -149,7 +149,7 @@ where
         .and_then(|mut context| {
             let mut public_key = PublicKeyProtobuf::new();
             public_key.set_Type(KeyTypeProtobuf::RSA);
-            public_key.set_Data(context.local_public_key.clone());
+            public_key.set_Data(context.local_public_key.as_ref().into());
             context.local_public_key_in_protobuf_bytes = public_key.write_to_bytes().unwrap();
 
             let mut proposition = Propose::new();

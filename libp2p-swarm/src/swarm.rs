@@ -31,17 +31,22 @@ use {ConnectionUpgrade, Multiaddr, MuxedTransport, UpgradedNode};
 /// Produces a `SwarmController` and an implementation of `Future`. The controller can be used to
 /// control, and the `Future` must be driven to completion in order for things to work.
 ///
-pub fn swarm<T, C, H, F>(
-    transport: T,
-    upgrade: C,
-    handler: H,
-) -> (SwarmController<T, C>, SwarmFuture<T, C, H, F::Future>)
+pub fn swarm<Trans, Upgrade, Handler, ProcessFuture, Conf>(
+    transport: Trans,
+    upgrade: Upgrade,
+    handler: Handler,
+    conf: Conf,
+) -> (
+    SwarmController<Trans, Upgrade, Conf>,
+    SwarmFuture<Trans, Upgrade, Handler, ProcessFuture::Future, Conf>,
+)
 where
-    T: MuxedTransport + Clone + 'static, // TODO: 'static :-/
-    C: ConnectionUpgrade<T::RawConn> + Clone + 'static, // TODO: 'static :-/
-    C::NamesIter: Clone,                 // TODO: not elegant
-    H: FnMut(C::Output, Multiaddr) -> F,
-    F: IntoFuture<Item = (), Error = IoError>,
+    Trans: MuxedTransport<Conf> + Clone + 'static, // TODO: 'static :-/
+    Upgrade: ConnectionUpgrade<Trans::RawConn, Conf> + Clone + 'static, // TODO: 'static :-/
+    Upgrade::NamesIter: Clone,                       // TODO: not elegant
+    Handler: FnMut(Upgrade::Output, Multiaddr) -> ProcessFuture,
+    ProcessFuture: IntoFuture<Item = (), Error = IoError>,
+    Conf: Clone,
 {
     let (new_dialers_tx, new_dialers_rx) = mpsc::unbounded();
     let (new_listeners_tx, new_listeners_rx) = mpsc::unbounded();
@@ -51,9 +56,10 @@ where
 
     let future = SwarmFuture {
         upgraded: upgraded.clone(),
+        config: conf.clone(),
         handler: handler,
         new_listeners: new_listeners_rx,
-        next_incoming: upgraded.clone().next_incoming(),
+        next_incoming: upgraded.clone().next_incoming(conf.clone()),
         listeners: Vec::new(),
         listeners_upgrade: Vec::new(),
         dialers: Vec::new(),
@@ -65,6 +71,7 @@ where
     let controller = SwarmController {
         transport: transport,
         upgraded: upgraded,
+        config: conf,
         new_listeners: new_listeners_tx,
         new_dialers: new_dialers_tx,
         new_toprocess: new_toprocess_tx,
@@ -74,13 +81,14 @@ where
 }
 
 /// Allows control of what the swarm is doing.
-pub struct SwarmController<T, C>
+pub struct SwarmController<T, C, Conf>
 where
-    T: MuxedTransport + 'static,                // TODO: 'static :-/
-    C: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :-/
+    T: MuxedTransport<Conf> + 'static, // TODO: 'static :-/
+    C: ConnectionUpgrade<T::RawConn, Conf> + 'static, // TODO: 'static :-/
 {
     transport: T,
-    upgraded: UpgradedNode<T, C>,
+    upgraded: UpgradedNode<T, C, Conf>,
+    config: Conf,
     new_listeners: mpsc::UnboundedSender<
         Box<
             Stream<
@@ -93,11 +101,12 @@ where
     new_toprocess: mpsc::UnboundedSender<Box<Future<Item = (), Error = IoError>>>,
 }
 
-impl<T, C> SwarmController<T, C>
+impl<T: 'static, C: 'static, Conf: 'static> SwarmController<T, C, Conf>
 where
-    T: MuxedTransport + Clone + 'static, // TODO: 'static :-/
-    C: ConnectionUpgrade<T::RawConn> + Clone + 'static, // TODO: 'static :-/
-    C::NamesIter: Clone,                 // TODO: not elegant
+    T: MuxedTransport<Conf> + Clone,
+    C: ConnectionUpgrade<T::RawConn, Conf> + Clone,
+    C::NamesIter: Clone, // TODO: not elegant
+    Conf: Clone,         // Should be a cheaply-cloneable type like &_
 {
     /// Asks the swarm to dial the node with the given multiaddress. The connection is then
     /// upgraded using the `upgrade`, and the output is sent to the handler that was passed when
@@ -105,13 +114,13 @@ where
     // TODO: consider returning a future so that errors can be processed?
     pub fn dial_to_handler<Du>(&self, multiaddr: Multiaddr, upgrade: Du) -> Result<(), Multiaddr>
     where
-        Du: ConnectionUpgrade<T::RawConn> + Clone + 'static, // TODO: 'static :-/
+        Du: ConnectionUpgrade<T::RawConn, Conf> + Clone + 'static, // TODO: 'static :-/
         Du::Output: Into<C::Output>,
     {
         match self.transport
             .clone()
             .with_upgrade(upgrade)
-            .dial(multiaddr.clone())
+            .dial(multiaddr.clone(), self.config.clone())
         {
             Ok(dial) => {
                 let dial = Box::new(dial.map(|(d, client_addr)| (d.into(), client_addr)))
@@ -138,11 +147,15 @@ where
         and_then: Df,
     ) -> Result<(), Multiaddr>
     where
-        Du: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :-/
+        Du: ConnectionUpgrade<T::RawConn, Conf> + 'static, // TODO: 'static :-/
         Df: FnOnce(Du::Output, Multiaddr) -> Dfu + 'static, // TODO: 'static :-/
         Dfu: IntoFuture<Item = (), Error = IoError> + 'static, // TODO: 'static :-/
     {
-        match self.transport.clone().with_upgrade(upgrade).dial(multiaddr) {
+        match self.transport
+            .clone()
+            .with_upgrade(upgrade)
+            .dial(multiaddr, self.config.clone())
+        {
             Ok(dial) => {
                 let dial = Box::new(dial.and_then(|(d, m)| and_then(d, m))) as Box<_>;
                 // Ignoring errors if the receiver has been closed, because in that situation
@@ -156,8 +169,8 @@ where
 
     /// Adds a multiaddr to listen on. All the incoming connections will use the `upgrade` that
     /// was passed to `swarm`.
-    pub fn listen_on(&self, multiaddr: Multiaddr) -> Result<Multiaddr, Multiaddr> {
-        match self.upgraded.clone().listen_on(multiaddr) {
+    pub fn listen_on(&self, multiaddr: Multiaddr, conf: Conf) -> Result<Multiaddr, Multiaddr> {
+        match self.upgraded.clone().listen_on(multiaddr, conf) {
             Ok((listener, new_addr)) => {
                 // Ignoring errors if the receiver has been closed, because in that situation
                 // nothing is going to be processed anyway.
@@ -169,49 +182,65 @@ where
     }
 }
 
+// TODO: 'static :-/
 /// Future that must be driven to completion in order for the swarm to work.
-pub struct SwarmFuture<T, C, H, F>
+pub struct SwarmFuture<
+    Trans: 'static,
+    Upgrade: 'static,
+    Handler,
+    ProcessFuture,
+    Conf: 'static
+>
 where
-    T: MuxedTransport + 'static,                // TODO: 'static :-/
-    C: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :-/
+    Trans: MuxedTransport<Conf>,
+    Upgrade: ConnectionUpgrade<Trans::RawConn, Conf>,
 {
-    upgraded: UpgradedNode<T, C>,
-    handler: H,
+    upgraded: UpgradedNode<Trans, Upgrade, Conf>,
+    handler: Handler,
+    config: Conf,
     new_listeners: mpsc::UnboundedReceiver<
         Box<
             Stream<
-                Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>,
+                Item = Box<Future<Item = (Upgrade::Output, Multiaddr), Error = IoError>>,
                 Error = IoError,
             >,
         >,
     >,
     next_incoming: Box<
-        Future<Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>, Error = IoError>,
+        Future<
+            Item = Box<
+                Future<
+                    Item = (Upgrade::Output, Multiaddr), Error = IoError
+                >
+            >,
+            Error = IoError
+        >
     >,
     listeners: Vec<
         Box<
             Stream<
-                Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>,
+                Item = Box<Future<Item = (Upgrade::Output, Multiaddr), Error = IoError>>,
                 Error = IoError,
             >,
         >,
     >,
-    listeners_upgrade: Vec<Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>>,
-    dialers: Vec<Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>>,
+    listeners_upgrade: Vec<Box<Future<Item = (Upgrade::Output, Multiaddr), Error = IoError>>>,
+    dialers: Vec<Box<Future<Item = (Upgrade::Output, Multiaddr), Error = IoError>>>,
     new_dialers:
-        mpsc::UnboundedReceiver<Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>>,
-    to_process: Vec<future::Either<F, Box<Future<Item = (), Error = IoError>>>>,
+        mpsc::UnboundedReceiver<Box<Future<Item = (Upgrade::Output, Multiaddr), Error = IoError>>>,
+    to_process: Vec<future::Either<ProcessFuture, Box<Future<Item = (), Error = IoError>>>>,
     new_toprocess: mpsc::UnboundedReceiver<Box<Future<Item = (), Error = IoError>>>,
 }
 
-impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
+impl<Trans, Upgrade, Handler, IntoFut, Conf> Future
+    for SwarmFuture<Trans, Upgrade, Handler, IntoFut::Future, Conf>
 where
-    T: MuxedTransport + Clone + 'static, // TODO: 'static :-/,
-    C: ConnectionUpgrade<T::RawConn> + Clone + 'static, // TODO: 'static :-/
-    C::NamesIter: Clone,                 // TODO: not elegant
-    H: FnMut(C::Output, Multiaddr) -> If,
-    If: IntoFuture<Future = F, Item = (), Error = IoError>,
-    F: Future<Item = (), Error = IoError>,
+    Trans: MuxedTransport<Conf> + Clone + 'static, // TODO: 'static :-/,
+    Upgrade: ConnectionUpgrade<Trans::RawConn, Conf> + Clone + 'static, // TODO: 'static :-/
+    Upgrade::NamesIter: Clone,                     // TODO: not elegant
+    Handler: FnMut(Upgrade::Output, Multiaddr) -> IntoFut,
+    IntoFut: IntoFuture<Item = (), Error = IoError>,
+    Conf: Clone,
 {
     type Item = ();
     type Error = IoError;
@@ -221,13 +250,13 @@ where
 
         match self.next_incoming.poll() {
             Ok(Async::Ready(connec)) => {
-                self.next_incoming = self.upgraded.clone().next_incoming();
+                self.next_incoming = self.upgraded.clone().next_incoming(self.config.clone());
                 self.listeners_upgrade.push(connec);
             }
             Ok(Async::NotReady) => {}
             // TODO: may not be the best idea because we're killing the whole server
             Err(_err) => {
-                self.next_incoming = self.upgraded.clone().next_incoming();
+                self.next_incoming = self.upgraded.clone().next_incoming(self.config.clone());
             }
         };
 
@@ -272,7 +301,7 @@ where
                     self.listeners.push(listener);
                 }
                 Ok(Async::Ready(None)) => {}
-                Err(_err) => {} // Ignoring errors
+                Err(err) => return Err(err),
             };
         }
 
@@ -287,7 +316,7 @@ where
                 Ok(Async::NotReady) => {
                     self.listeners_upgrade.push(upgrade);
                 }
-                Err(_err) => {} // Ignoring errors
+                Err(err) => return Err(err),
             }
         }
 
@@ -301,7 +330,7 @@ where
                 Ok(Async::NotReady) => {
                     self.dialers.push(dialer);
                 }
-                Err(_err) => {} // Ignoring errors
+                Err(err) => return Err(err),
             }
         }
 
