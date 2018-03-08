@@ -1,3 +1,5 @@
+syntax = "proto2";
+
 enum KeyType {
   RSA = 0;
   Ed25519 = 1;
