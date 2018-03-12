@@ -7,7 +7,7 @@ authors = ["pierre <pierre.krieger1708@gmail.com>"]
 bytes = "0.4"
 env_logger = "0.5.3"
 futures = "0.1"
-multiaddr = { path = "../rust-multiaddr" }
+multiaddr = "0.2"
 multiplex = { path = "../multiplex-rs" }
 libp2p-floodsub = { path = "../libp2p-floodsub" }
 libp2p-peerstore = { path = "../libp2p-peerstore" }
