@@ -8,7 +8,7 @@ bigint = "4.2"
 bytes = "0.4"
 env_logger = "0.5.3"
 futures = "0.1"
-multiaddr = { path = "../rust-multiaddr" }
+multiaddr = "0.2"
 multiplex = { path = "../multiplex-rs" }
 libp2p-identify = { path = "../libp2p-identify" }
 libp2p-kad = { path = "../libp2p-kad" }
