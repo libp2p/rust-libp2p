@@ -48,7 +48,6 @@ use multiaddr::Multiaddr;
 use muxing::StreamMuxer;
 use parking_lot::Mutex;
 use std::io::Error as IoError;
-use std::mem;
 use std::sync::Arc;
 use transport::{ConnectionUpgrade, MuxedTransport, Transport, UpgradedNode};
 
