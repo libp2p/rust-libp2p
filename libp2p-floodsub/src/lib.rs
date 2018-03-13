@@ -394,6 +394,8 @@ where
             seqno_bytes
         };
 
+        // TODO: should handle encryption/authentication of the message
+
         let mut msg = rpc_proto::Message::new();
         msg.set_data(data);
         msg.set_from(self.inner.peer_id.clone());
@@ -584,6 +586,8 @@ fn handle_packet_received(
         trace!(target: "libp2p-floodsub",
                "Processing message for topics {:?} ; payload = {} bytes",
                topics, publish.get_data().len());
+
+        // TODO: should check encryption/authentication of the message
 
         // Broadcast the message to all the other remotes.
         {
