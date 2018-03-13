@@ -44,6 +44,21 @@ impl TopicHash {
     }
 }
 
+/// Built topic.
+#[derive(Debug, Clone)]
+pub struct Topic {
+    descriptor: rpc_proto::TopicDescriptor,
+    hash: TopicHash,
+}
+
+impl Topic {
+    /// Returns the hash of the topic.
+    #[inline]
+    pub fn hash(&self) -> &TopicHash {
+        &self.hash
+    }
+}
+
 /// Builder for a `TopicHash`.
 #[derive(Debug, Clone)]
 pub struct TopicBuilder {
@@ -61,12 +76,15 @@ impl TopicBuilder {
         TopicBuilder { builder: builder }
     }
 
-    /// Turns the builder into an actual `TopicHash`.
-    pub fn build(self) -> TopicHash {
+    /// Turns the builder into an actual `Topic`.
+    pub fn build(self) -> Topic {
         let bytes = self.builder
             .write_to_bytes()
             .expect("protobuf message is always valid");
-        let hash = bs58::encode(&bytes).into_string();
-        TopicHash { hash }
+        let hash = TopicHash { hash: bs58::encode(&bytes).into_string() };
+        Topic {
+            descriptor: self.builder,
+            hash: hash,
+        }
     }
 }

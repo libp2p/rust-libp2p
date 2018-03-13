@@ -118,7 +118,7 @@ fn main() {
 
     let floodsub_ctl =
         floodsub::FloodSubController::new(&floodsub_upgrade, swarm_controller.clone());
-    floodsub_ctl.subscribe(topic.clone());
+    floodsub_ctl.subscribe(&topic);
 
     let floodsub_rx = floodsub_rx.for_each(|msg| {
         if let Ok(msg) = String::from_utf8(msg.data) {

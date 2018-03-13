@@ -37,7 +37,7 @@ extern crate varint;
 mod rpc_proto;
 mod topic;
 
-pub use self::topic::{TopicBuilder, TopicHash};
+pub use self::topic::{TopicBuilder, Topic, TopicHash};
 
 use std::fmt;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -74,7 +74,7 @@ impl FloodSubUpgrade {
             peer_id: my_id.into_bytes(),
             output_tx: output_tx,
             remote_connections: RwLock::new(FnvHashMap::default()),
-            subscribed_topics: RwLock::new(FnvHashSet::default()),
+            subscribed_topics: RwLock::new(Vec::new()),
             seq_no: AtomicUsize::new(0),
             received: Mutex::new(FnvHashSet::default()),
         });
@@ -121,7 +121,7 @@ where
             for topic in subscribed_topics.iter() {
                 let mut subscription = rpc_proto::RPC_SubOpts::new();
                 subscription.set_subscribe(true);
-                subscription.set_topicid(topic.clone().into_string());
+                subscription.set_topicid(topic.hash().clone().into_string());
                 proto.mut_subscriptions().push(subscription);
             }
 
@@ -235,7 +235,7 @@ struct Inner {
 
     // List of topics we're subscribed to. Necessary in order to filter out messages that we
     // erroneously receive.
-    subscribed_topics: RwLock<FnvHashSet<TopicHash>>,
+    subscribed_topics: RwLock<Vec<Topic>>,
 
     // Sequence number for the messages we send.
     seq_no: AtomicUsize,
@@ -293,16 +293,16 @@ where
     ///
     /// It is not guaranteed that we receive every single message published on the network.
     #[inline]
-    pub fn subscribe(&self, topic: TopicHash) {
+    pub fn subscribe(&self, topic: &Topic) {
         // This function exists for convenience.
         self.subscribe_multi(iter::once(topic));
     }
 
     /// Same as `subscribe`, but subscribes to multiple topics at once.
     #[inline]
-    pub fn subscribe_multi<I>(&self, topics: I)
+    pub fn subscribe_multi<'a, I>(&self, topics: I)
     where
-        I: IntoIterator<Item = TopicHash>,
+        I: IntoIterator<Item = &'a Topic>,
         I::IntoIter: Clone,
     {
         // This function exists for convenience.
@@ -314,7 +314,7 @@ where
     /// If a message was sent to us before we are able to notify that we don't want messages
     /// anymore, then the message will be filtered out locally.
     #[inline]
-    pub fn unsubscribe(&self, topic: &TopicHash) {
+    pub fn unsubscribe(&self, topic: &Topic) {
         // This function exists for convenience.
         self.unsubscribe_multi(iter::once(topic));
     }
@@ -323,22 +323,22 @@ where
     #[inline]
     pub fn unsubscribe_multi<'a, I>(&self, topics: I)
     where
-        I: IntoIterator<Item = &'a TopicHash>,
+        I: IntoIterator<Item = &'a Topic>,
         I::IntoIter: Clone,
     {
         // This function exists for convenience.
         self.sub_unsub_multi(
             topics
                 .into_iter()
-                .map::<_, fn(_) -> _>(|t| (t.clone(), false)),
+                .map::<_, fn(_) -> _>(|t| (t, false)),
         );
     }
 
     // Inner implementation. The iterator should produce a boolean that is true if we subscribe and
     // false if we unsubscribe.
-    fn sub_unsub_multi<I>(&self, topics: I)
+    fn sub_unsub_multi<'a, I>(&self, topics: I)
     where
-        I: IntoIterator<Item = (TopicHash, bool)>,
+        I: IntoIterator<Item = (&'a Topic, bool)>,
         I::IntoIter: Clone,
     {
         let mut proto = rpc_proto::RPC::new();
@@ -346,17 +346,21 @@ where
         let topics = topics.into_iter();
 
         debug!(target: "libp2p-floodsub", "Queuing sub/unsub message ; sub = {:?} ; unsub = {:?}",
-               topics.clone().filter(|t| t.1).map(|t| t.0.into_string()).collect::<Vec<_>>(),
-               topics.clone().filter(|t| !t.1).map(|t| t.0.into_string()).collect::<Vec<_>>());
+               topics.clone().filter(|t| t.1).map(|t| t.0.hash().clone().into_string()).collect::<Vec<_>>(),
+               topics.clone().filter(|t| !t.1).map(|t| t.0.hash().clone().into_string()).collect::<Vec<_>>());
 
         let mut subscribed_topics = self.inner.subscribed_topics.write();
-        for (topic, subscribe) in topics.clone() {
+        for (topic, subscribe) in topics {
             let mut subscription = rpc_proto::RPC_SubOpts::new();
             subscription.set_subscribe(subscribe);
-            subscription.set_topicid(topic.clone().into_string());
+            subscription.set_topicid(topic.hash().clone().into_string());
             proto.mut_subscriptions().push(subscription);
 
-            subscribed_topics.insert(topic);
+            if subscribe {
+                subscribed_topics.push(topic.clone());
+            } else {
+                subscribed_topics.retain(|t| t.hash() != topic.hash())
+            }
         }
 
         self.broadcast(proto, |_| true);
@@ -364,7 +368,7 @@ where
 
     /// Publishes a message on the network for the specified topic
     #[inline]
-    pub fn publish(&self, topic: &TopicHash, data: Vec<u8>) {
+    pub fn publish(&self, topic: &Topic, data: Vec<u8>) {
         // This function exists for convenience.
         self.publish_multi(iter::once(topic), data)
     }
@@ -372,13 +376,13 @@ where
     /// Publishes a message on the network for the specified topics.
     pub fn publish_multi<'a, I>(&self, topics: I, data: Vec<u8>)
     where
-        I: IntoIterator<Item = &'a TopicHash>,
+        I: IntoIterator<Item = &'a Topic>,
         I::IntoIter: Clone,
     {
         let topics = topics.into_iter();
 
         debug!(target: "libp2p-floodsub", "Queueing publish message ; topics = {:?} ; data_len = {:?}",
-               topics.clone().map(|t| t.clone().into_string()).collect::<Vec<_>>(), data.len());
+               topics.clone().map(|t| t.hash().clone().into_string()).collect::<Vec<_>>(), data.len());
 
         // Build the `Vec<u8>` containing our sequence number for this message.
         let seq_no_bytes = {
@@ -394,7 +398,7 @@ where
         msg.set_data(data);
         msg.set_from(self.inner.peer_id.clone());
         msg.set_seqno(seq_no_bytes.clone());
-        msg.set_topicIDs(topics.clone().map(|t| t.clone().into_string()).collect());
+        msg.set_topicIDs(topics.clone().map(|t| t.hash().clone().into_string()).collect());
 
         let mut proto = rpc_proto::RPC::new();
         proto.mut_publish().push(msg);
@@ -405,7 +409,7 @@ where
             .lock()
             .insert((self.inner.peer_id.clone(), seq_no_bytes));
 
-        self.broadcast(proto, |r_top| topics.clone().any(|t| r_top.contains(t)));
+        self.broadcast(proto, |r_top| topics.clone().any(|t| r_top.iter().any(|to| to == t.hash())));
     }
 
     // Internal function that dispatches an `RPC` protobuf struct to all the connected remotes
@@ -599,7 +603,7 @@ fn handle_packet_received(
         // Send the message locally if relevant.
         let dispatch_locally = {
             let subscribed_topics = inner.subscribed_topics.read();
-            topics.iter().any(|t| subscribed_topics.contains(t))
+            topics.iter().any(|t| subscribed_topics.iter().any(|topic| topic.hash() == t))
         };
         if dispatch_locally {
             // Ignore if channel is closed.
