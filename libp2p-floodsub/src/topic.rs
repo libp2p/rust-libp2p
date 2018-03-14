@@ -81,7 +81,9 @@ impl TopicBuilder {
         let bytes = self.builder
             .write_to_bytes()
             .expect("protobuf message is always valid");
-        let hash = TopicHash { hash: bs58::encode(&bytes).into_string() };
+        let hash = TopicHash {
+            hash: bs58::encode(&bytes).into_string(),
+        };
         Topic {
             descriptor: self.builder,
             hash: hash,

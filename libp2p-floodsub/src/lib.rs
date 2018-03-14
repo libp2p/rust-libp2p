@@ -37,7 +37,7 @@ extern crate varint;
 mod rpc_proto;
 mod topic;
 
-pub use self::topic::{TopicBuilder, Topic, TopicHash};
+pub use self::topic::{Topic, TopicBuilder, TopicHash};
 
 use std::fmt;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -327,11 +327,7 @@ where
         I::IntoIter: Clone,
     {
         // This function exists for convenience.
-        self.sub_unsub_multi(
-            topics
-                .into_iter()
-                .map::<_, fn(_) -> _>(|t| (t, false)),
-        );
+        self.sub_unsub_multi(topics.into_iter().map::<_, fn(_) -> _>(|t| (t, false)));
     }
 
     // Inner implementation. The iterator should produce a boolean that is true if we subscribe and
@@ -346,8 +342,12 @@ where
         let topics = topics.into_iter();
 
         debug!(target: "libp2p-floodsub", "Queuing sub/unsub message ; sub = {:?} ; unsub = {:?}",
-               topics.clone().filter(|t| t.1).map(|t| t.0.hash().clone().into_string()).collect::<Vec<_>>(),
-               topics.clone().filter(|t| !t.1).map(|t| t.0.hash().clone().into_string()).collect::<Vec<_>>());
+               topics.clone().filter(|t| t.1)
+                     .map(|t| t.0.hash().clone().into_string())
+                     .collect::<Vec<_>>(),
+               topics.clone().filter(|t| !t.1)
+                     .map(|t| t.0.hash().clone().into_string())
+                     .collect::<Vec<_>>());
 
         let mut subscribed_topics = self.inner.subscribed_topics.write();
         for (topic, subscribe) in topics {
@@ -381,8 +381,10 @@ where
     {
         let topics = topics.into_iter();
 
-        debug!(target: "libp2p-floodsub", "Queueing publish message ; topics = {:?} ; data_len = {:?}",
-               topics.clone().map(|t| t.hash().clone().into_string()).collect::<Vec<_>>(), data.len());
+        debug!(target: "libp2p-floodsub", "Queueing publish message ; \
+                                           topics = {:?} ; data_len = {:?}",
+               topics.clone().map(|t| t.hash().clone().into_string()).collect::<Vec<_>>(),
+               data.len());
 
         // Build the `Vec<u8>` containing our sequence number for this message.
         let seq_no_bytes = {
@@ -400,7 +402,12 @@ where
         msg.set_data(data);
         msg.set_from(self.inner.peer_id.clone());
         msg.set_seqno(seq_no_bytes.clone());
-        msg.set_topicIDs(topics.clone().map(|t| t.hash().clone().into_string()).collect());
+        msg.set_topicIDs(
+            topics
+                .clone()
+                .map(|t| t.hash().clone().into_string())
+                .collect(),
+        );
 
         let mut proto = rpc_proto::RPC::new();
         proto.mut_publish().push(msg);
@@ -411,7 +418,11 @@ where
             .lock()
             .insert((self.inner.peer_id.clone(), seq_no_bytes));
 
-        self.broadcast(proto, |r_top| topics.clone().any(|t| r_top.iter().any(|to| to == t.hash())));
+        self.broadcast(proto, |r_top| {
+            topics
+                .clone()
+                .any(|t| r_top.iter().any(|to| to == t.hash()))
+        });
     }
 
     // Internal function that dispatches an `RPC` protobuf struct to all the connected remotes
@@ -607,7 +618,9 @@ fn handle_packet_received(
         // Send the message locally if relevant.
         let dispatch_locally = {
             let subscribed_topics = inner.subscribed_topics.read();
-            topics.iter().any(|t| subscribed_topics.iter().any(|topic| topic.hash() == t))
+            topics
+                .iter()
+                .any(|t| subscribed_topics.iter().any(|topic| topic.hash() == t))
         };
         if dispatch_locally {
             // Ignore if channel is closed.
