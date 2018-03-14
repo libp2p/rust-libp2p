@@ -40,13 +40,14 @@ mod topic;
 pub use self::topic::{Topic, TopicBuilder, TopicHash};
 
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use bytes::{Bytes, BytesMut};
 use byteorder::{BigEndian, WriteBytesExt};
-use fnv::{FnvHashMap, FnvHashSet};
+use fnv::{FnvHasher, FnvHashMap, FnvHashSet};
 use futures::{future, Future, Poll, Sink, Stream};
 use futures::sync::mpsc;
 use libp2p_peerstore::PeerId;
@@ -250,7 +251,7 @@ struct Inner {
     // We keep track of the messages we received (in the format `(remote ID, seq_no)`) so that we
     // don't dispatch the same message twice if we receive it twice on the network.
     // TODO: the `HashSet` will keep growing indefinitely :-/
-    received: Mutex<FnvHashSet<(Vec<u8>, Vec<u8>)>>,
+    received: Mutex<FnvHashSet<u64>>,
 }
 
 struct RemoteInfo {
@@ -428,7 +429,7 @@ where
         self.inner
             .received
             .lock()
-            .insert((self.inner.peer_id.clone(), seq_no_bytes));
+            .insert(hash((self.inner.peer_id.clone(), seq_no_bytes)));
 
         self.broadcast(proto, |r_top| {
             topics
@@ -595,7 +596,7 @@ fn handle_packet_received(
         if !inner
             .received
             .lock()
-            .insert((from.clone(), publish.take_seqno()))
+            .insert(hash((from.clone(), publish.take_seqno())))
         {
             trace!(target: "libp2p-floodsub",
                    "Skipping message because we had already received it ; payload = {} bytes",
@@ -653,4 +654,12 @@ fn handle_packet_received(
     }
 
     Ok(())
+}
+
+// Shortcut function that hashes a value.
+#[inline]
+fn hash<V: Hash>(value: V) -> u64 {
+    let mut h = FnvHasher::default();
+    value.hash(&mut h);
+    h.finish()
 }
