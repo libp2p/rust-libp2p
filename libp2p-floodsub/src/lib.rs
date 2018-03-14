@@ -47,7 +47,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use bytes::{Bytes, BytesMut};
 use byteorder::{BigEndian, WriteBytesExt};
-use fnv::{FnvHasher, FnvHashMap, FnvHashSet};
+use fnv::{FnvHashMap, FnvHashSet, FnvHasher};
 use futures::{future, Future, Poll, Sink, Stream};
 use futures::sync::mpsc;
 use libp2p_peerstore::PeerId;
@@ -432,9 +432,7 @@ where
             .insert(hash((self.inner.peer_id.clone(), seq_no_bytes)));
 
         self.broadcast(proto, |r_top| {
-            topics
-                .iter()
-                .any(|t| r_top.iter().any(|to| to == t.hash()))
+            topics.iter().any(|t| r_top.iter().any(|to| to == t.hash()))
         });
     }
 
