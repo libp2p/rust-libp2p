@@ -138,7 +138,7 @@ fn main() {
             }
 
             let msg = String::from_utf8(mem::replace(&mut buffer, Vec::new())).unwrap();
-            if msg.starts_with("dial ") {
+            if msg.starts_with("/dial ") {
                 let target: Multiaddr = msg[5..].parse().unwrap();
                 println!("*Dialing {}*", target);
                 swarm_controller

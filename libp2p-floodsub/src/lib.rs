@@ -51,6 +51,7 @@ use futures::{future, Future, Poll, Sink, Stream};
 use futures::sync::mpsc;
 use libp2p_peerstore::PeerId;
 use libp2p_swarm::{ConnectionUpgrade, Endpoint, MuxedTransport, SwarmController};
+use log::Level;
 use multiaddr::{AddrComponent, Multiaddr};
 use parking_lot::{Mutex, RwLock};
 use protobuf::Message as ProtobufMessage;
@@ -127,7 +128,7 @@ where
 
             proto
                 .write_to_bytes()
-                .expect("protobuf message is always valid")
+                .expect("programmer error: the protobuf message should always be valid")
         };
 
         // Split the socket into writing and reading parts.
@@ -141,7 +142,7 @@ where
         let (input_tx, input_rx) = mpsc::unbounded();
         input_tx
             .unbounded_send(init_msg.into())
-            .expect("newly-created channel is always open");
+            .expect("newly-created channel should always be open");
         self.inner.remote_connections.write().insert(
             remote_addr.clone(),
             RemoteInfo {
@@ -153,9 +154,15 @@ where
         // Combine the socket read and the outgoing messages input, so that we can wake up when
         // either happens.
         let messages = input_rx
-            .map(|m| (m, true))
-            .map_err(|_| unreachable!())
-            .select(floodsub_stream.map(|m| (m, false)));
+            .map(|m| (m, MessageSource::FromChannel))
+            .map_err(|_| unreachable!("channel streams should never produce an error"))
+            .select(floodsub_stream.map(|m| (m, MessageSource::FromSocket)));
+
+        #[derive(Debug)]
+        enum MessageSource {
+            FromSocket,
+            FromChannel,
+        }
 
         let inner = self.inner.clone();
         let remote_addr = remote_addr.clone();
@@ -170,7 +177,7 @@ where
                     .map_err(|(err, _)| err)
                     .and_then(move |(input, rest)| {
                         match input {
-                            Some((bytes, false)) => {
+                            Some((bytes, MessageSource::FromSocket)) => {
                                 // Received a packet from the remote.
                                 let fut = match handle_packet_received(bytes, inner, &remote_addr) {
                                     Ok(()) => {
@@ -181,7 +188,7 @@ where
                                 Box::new(fut) as Box<_>
                             }
 
-                            Some((bytes, true)) => {
+                            Some((bytes, MessageSource::FromChannel)) => {
                                 // Received a packet from the channel.
                                 // Need to send a message to remote.
                                 trace!(target: "libp2p-floodsub", "Effectively sending message \
@@ -261,10 +268,7 @@ impl fmt::Debug for Inner {
                 "num_remote_connections",
                 &self.remote_connections.read().len(),
             )
-            .field(
-                "num_subscribed_topics",
-                &self.subscribed_topics.read().len(),
-            )
+            .field("subscribed_topics", &*self.subscribed_topics.read())
             .field("seq_no", &self.seq_no)
             .field("received", &self.received)
             .finish()
@@ -295,12 +299,14 @@ where
     #[inline]
     pub fn subscribe(&self, topic: &Topic) {
         // This function exists for convenience.
-        self.subscribe_multi(iter::once(topic));
+        self.subscribe_many(iter::once(topic));
     }
 
     /// Same as `subscribe`, but subscribes to multiple topics at once.
+    ///
+    /// Preferable to `subscribe` in terms of performances.
     #[inline]
-    pub fn subscribe_multi<'a, I>(&self, topics: I)
+    pub fn subscribe_many<'a, I>(&self, topics: I)
     where
         I: IntoIterator<Item = &'a Topic>,
         I::IntoIter: Clone,
@@ -316,12 +322,14 @@ where
     #[inline]
     pub fn unsubscribe(&self, topic: &Topic) {
         // This function exists for convenience.
-        self.unsubscribe_multi(iter::once(topic));
+        self.unsubscribe_many(iter::once(topic));
     }
 
     /// Same as `unsubscribe` but unsubscribes from multiple topics at once.
+    ///
+    /// Preferable to `unsubscribe` in terms of performances.
     #[inline]
-    pub fn unsubscribe_multi<'a, I>(&self, topics: I)
+    pub fn unsubscribe_many<'a, I>(&self, topics: I)
     where
         I: IntoIterator<Item = &'a Topic>,
         I::IntoIter: Clone,
@@ -341,13 +349,16 @@ where
 
         let topics = topics.into_iter();
 
-        debug!(target: "libp2p-floodsub", "Queuing sub/unsub message ; sub = {:?} ; unsub = {:?}",
-               topics.clone().filter(|t| t.1)
-                     .map(|t| t.0.hash().clone().into_string())
-                     .collect::<Vec<_>>(),
-               topics.clone().filter(|t| !t.1)
-                     .map(|t| t.0.hash().clone().into_string())
-                     .collect::<Vec<_>>());
+        if log_enabled!(target: "libp2p-floodsub", Level::Debug) {
+            debug!(target: "libp2p-floodsub", "Queuing sub/unsub message ; \
+                                               sub = {:?} ; unsub = {:?}",
+                topics.clone().filter(|t| t.1)
+                        .map(|t| t.0.hash().clone().into_string())
+                        .collect::<Vec<_>>(),
+                topics.clone().filter(|t| !t.1)
+                        .map(|t| t.0.hash().clone().into_string())
+                        .collect::<Vec<_>>());
+        }
 
         let mut subscribed_topics = self.inner.subscribed_topics.write();
         for (topic, subscribe) in topics {
@@ -370,20 +381,21 @@ where
     #[inline]
     pub fn publish(&self, topic: &Topic, data: Vec<u8>) {
         // This function exists for convenience.
-        self.publish_multi(iter::once(topic), data)
+        self.publish_many(iter::once(topic), data)
     }
 
     /// Publishes a message on the network for the specified topics.
-    pub fn publish_multi<'a, I>(&self, topics: I, data: Vec<u8>)
+    ///
+    /// Preferable to `publish` in terms of performances.
+    pub fn publish_many<'a, I>(&self, topics: I, data: Vec<u8>)
     where
         I: IntoIterator<Item = &'a Topic>,
-        I::IntoIter: Clone,
     {
-        let topics = topics.into_iter();
+        let topics = topics.into_iter().collect::<Vec<_>>();
 
         debug!(target: "libp2p-floodsub", "Queueing publish message ; \
                                            topics = {:?} ; data_len = {:?}",
-               topics.clone().map(|t| t.hash().clone().into_string()).collect::<Vec<_>>(),
+               topics.iter().map(|t| t.hash().clone().into_string()).collect::<Vec<_>>(),
                data.len());
 
         // Build the `Vec<u8>` containing our sequence number for this message.
@@ -404,7 +416,7 @@ where
         msg.set_seqno(seq_no_bytes.clone());
         msg.set_topicIDs(
             topics
-                .clone()
+                .iter()
                 .map(|t| t.hash().clone().into_string())
                 .collect(),
         );
@@ -420,7 +432,7 @@ where
 
         self.broadcast(proto, |r_top| {
             topics
-                .clone()
+                .iter()
                 .any(|t| r_top.iter().any(|to| to == t.hash()))
         });
     }
@@ -441,6 +453,8 @@ where
         let mut num_dispatched = 0;
         // Will store the addresses of remotes which we failed to send a message to and which
         // must be removed from the active connections.
+        // We use a smallvec of 6 elements because it is unlikely that we lost connection to more
+        // than 6 elements at once.
         let mut failed_to_send: SmallVec<[_; 6]> = SmallVec::new();
         for (remote_addr, remote) in remote_connections.iter() {
             if !filter(&remote.subscribed_topics.read()) {
@@ -540,7 +554,7 @@ fn handle_packet_received(
     inner: Arc<Inner>,
     remote_addr: &Multiaddr,
 ) -> Result<(), IoError> {
-    trace!(target: "libp2p-floodsub", "Received packet from remote");
+    trace!(target: "libp2p-floodsub", "Received packet from {}", remote_addr);
 
     // Parsing attempt.
     let mut input = match protobuf::parse_from_bytes::<rpc_proto::RPC>(&bytes) {
@@ -555,16 +569,18 @@ fn handle_packet_received(
     if !input.get_subscriptions().is_empty() {
         let remote_connec = inner.remote_connections.write();
         // TODO: what if multiple entries?
-        let remote = remote_connec.get(remote_addr).unwrap();
+        let remote = &remote_connec[remote_addr];
         let mut topics = remote.subscribed_topics.write();
         for subscription in input.mut_subscriptions().iter_mut() {
             let topic = TopicHash::from_raw(subscription.take_topicid());
             let subscribe = subscription.get_subscribe();
             if subscribe {
-                trace!(target: "libp2p-floodsub", "Remote subscribed to {:?}", topic);
+                trace!(target: "libp2p-floodsub", "Remote {} subscribed to {:?}",
+                       remote_addr, topic);
                 topics.insert(topic);
             } else {
-                trace!(target: "libp2p-floodsub", "Remote unsubscribed from {:?}", topic);
+                trace!(target: "libp2p-floodsub", "Remote {} unsubscribed from {:?}",
+                       remote_addr, topic);
                 topics.remove(&topic);
             }
         }
