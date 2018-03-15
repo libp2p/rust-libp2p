@@ -72,6 +72,8 @@ impl Transport for BrowserWsConfig {
             Err(_) => return Err((self, original_addr)),
         };
 
+        debug!(target: "libp2p-websocket", "Dialing {}", original_addr);
+
         // Create the JS `WebSocket` object.
         let websocket = {
             let val = js! {
