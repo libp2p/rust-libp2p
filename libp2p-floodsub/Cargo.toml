@@ -1,0 +1,20 @@
+[package]
+name = "libp2p-floodsub"
+version = "0.1.0"
+authors = ["pierre <pierre.krieger1708@gmail.com>"]
+
+[dependencies]
+bs58 = "0.2.0"
+byteorder = "1.2.1"
+bytes = "0.4"
+fnv = "1.0"
+futures = "0.1"
+libp2p-peerstore = { path = "../libp2p-peerstore" }
+libp2p-swarm = { path = "../libp2p-swarm" }
+log = "0.4.1"
+multiaddr = "0.2"
+parking_lot = "0.5.3"
+protobuf = "1.4.2"
+smallvec = "0.6.0"
+tokio-io = "0.1"
+varint = { path = "../varint-rs" }
