@@ -305,7 +305,9 @@ where
 
     /// Same as `subscribe`, but subscribes to multiple topics at once.
     ///
-    /// Preferable to `subscribe` in terms of performances.
+    /// Since this results in a single packet sent to the remotes, it is preferable to use this
+    /// method when subscribing to multiple topics at once rather than call `subscribe` multiple
+    /// times.
     #[inline]
     pub fn subscribe_many<'a, I>(&self, topics: I)
     where
@@ -328,7 +330,9 @@ where
 
     /// Same as `unsubscribe` but unsubscribes from multiple topics at once.
     ///
-    /// Preferable to `unsubscribe` in terms of performances.
+    /// Since this results in a single packet sent to the remotes, it is preferable to use this
+    /// method when ybsubscribing from multiple topics at once rather than call `unsubscribe`
+    /// multiple times.
     #[inline]
     pub fn unsubscribe_many<'a, I>(&self, topics: I)
     where
@@ -387,7 +391,9 @@ where
 
     /// Publishes a message on the network for the specified topics.
     ///
-    /// Preferable to `publish` in terms of performances.
+    /// Since this results in a single packet sent to the remotes, it is preferable to use this
+    /// method when publishing multiple messages at once rather than call `publish` multiple
+    /// times.
     pub fn publish_many<'a, I>(&self, topics: I, data: Vec<u8>)
     where
         I: IntoIterator<Item = &'a Topic>,
