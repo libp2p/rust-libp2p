@@ -107,8 +107,7 @@ where
             let protocol = iter.next();
             let after_proto = iter.next();
             match (protocol, after_proto) {
-                (Some(AddrComponent::P2P(key)), None) |
-                (Some(AddrComponent::IPFS(key)), None) => {
+                (Some(AddrComponent::P2P(key)), None) | (Some(AddrComponent::IPFS(key)), None) => {
                     match PeerId::from_bytes(key) {
                         Ok(id) => id,
                         Err(_) => {
@@ -119,7 +118,7 @@ where
                             return Box::new(future::err(err));
                         }
                     }
-                },
+                }
                 _ => {
                     let err =
                         IoError::new(IoErrorKind::InvalidData, "couldn't identify connected node");

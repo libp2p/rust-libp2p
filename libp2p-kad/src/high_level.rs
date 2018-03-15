@@ -258,9 +258,11 @@ where
                             Connection::Pending(closures) => {
                                 let new_ctl = match entry.get_mut() {
                                     &mut Connection::Active(ref mut ctl) => ctl,
-                                    _ => unreachable!("logic error: an Active enum variant was \
-                                                       inserted, but reading back didn't give \
-                                                       an Active"),
+                                    _ => unreachable!(
+                                        "logic error: an Active enum variant was \
+                                         inserted, but reading back didn't give \
+                                         an Active"
+                                    ),
                                 };
 
                                 for mut closure in closures {
