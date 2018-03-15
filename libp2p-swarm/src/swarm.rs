@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::fmt;
 use std::io::Error as IoError;
 use futures::{future, Async, Future, IntoFuture, Poll, Stream};
 use futures::sync::mpsc;
@@ -91,6 +92,18 @@ where
     >,
     new_dialers: mpsc::UnboundedSender<Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>>,
     new_toprocess: mpsc::UnboundedSender<Box<Future<Item = (), Error = IoError>>>,
+}
+
+impl<T, C> fmt::Debug for SwarmController<T, C>
+where
+    T: fmt::Debug + MuxedTransport + 'static, // TODO: 'static :-/
+    C: fmt::Debug + ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :-/
+{
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_tuple("SwarmController")
+            .field(&self.upgraded)
+            .finish()
+    }
 }
 
 impl<T, C> Clone for SwarmController<T, C>

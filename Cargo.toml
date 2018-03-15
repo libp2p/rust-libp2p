@@ -6,6 +6,7 @@ members = [
     "libp2p-dns",
     "libp2p-floodsub",
     "libp2p-identify",
+    "libp2p-kad",
     "libp2p-peerstore",
     "libp2p-ping",
     "libp2p-secio",

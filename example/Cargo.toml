@@ -4,11 +4,14 @@ version = "0.1.0"
 authors = ["pierre <pierre.krieger1708@gmail.com>"]
 
 [dependencies]
+bigint = "4.2"
 bytes = "0.4"
 env_logger = "0.5.3"
 futures = "0.1"
 multiaddr = "0.2"
 multiplex = { path = "../multiplex-rs" }
+libp2p-identify = { path = "../libp2p-identify" }
+libp2p-kad = { path = "../libp2p-kad" }
 libp2p-floodsub = { path = "../libp2p-floodsub" }
 libp2p-peerstore = { path = "../libp2p-peerstore" }
 libp2p-ping = { path = "../libp2p-ping" }
