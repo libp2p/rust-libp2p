@@ -20,6 +20,6 @@ matrix:
     - rust: stable
 
 script:
-  - cargo fmt -- --write-mode=checkstyle
+  - cargo fmt -- --write-mode=diff
   - cargo check --all
   - cargo test --all

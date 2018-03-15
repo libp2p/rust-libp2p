@@ -1,0 +1,30 @@
+[package]
+name = "libp2p-kad"
+version = "0.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+
+[dependencies]
+arrayvec = "0.4.7"
+base58 = "0.1.0"
+bigint = "4.2"
+bytes = "0.4"
+datastore = { path = "../datastore" }
+fnv = "1.0"
+futures = "0.1"
+libp2p-identify = { path = "../libp2p-identify" }
+libp2p-peerstore = { path = "../libp2p-peerstore" }
+libp2p-ping = { path = "../libp2p-ping" }
+libp2p-swarm = { path = "../libp2p-swarm" }
+multiaddr = "0.2"
+parking_lot = "0.5.1"
+protobuf = "1.4.2"
+rand = "0.4.2"
+smallvec = "0.5"
+tokio-io = "0.1"
+tokio-timer = "0.1.2"
+varint = { path = "../varint-rs" }
+
+[dev-dependencies]
+libp2p-tcp-transport = { path = "../libp2p-tcp-transport" }
+rand = "0.4.2"
+tokio-core = "0.1"
