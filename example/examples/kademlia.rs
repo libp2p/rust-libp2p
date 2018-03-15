@@ -18,10 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+extern crate bigint;
 extern crate bytes;
 extern crate env_logger;
+extern crate example;
 extern crate futures;
-extern crate libp2p_ping as ping;
+extern crate libp2p_identify as identify;
+extern crate libp2p_kad as kad;
+extern crate libp2p_peerstore as peerstore;
 extern crate libp2p_secio as secio;
 extern crate libp2p_swarm as swarm;
 extern crate libp2p_tcp_transport as tcp;
@@ -29,27 +33,38 @@ extern crate multiplex;
 extern crate tokio_core;
 extern crate tokio_io;
 
-use futures::Future;
-use futures::sync::oneshot;
+use bigint::U512;
+use futures::future::Future;
+use peerstore::PeerId;
 use std::env;
-use swarm::{DeniedConnectionUpgrade, Transport, UpgradeExt};
+use std::sync::Arc;
+use std::time::Duration;
+use swarm::{Transport, UpgradeExt};
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 
 fn main() {
     env_logger::init();
 
-    // Determine which address to dial.
-    let target_addr = env::args()
-        .nth(1)
-        .unwrap_or("/ip4/127.0.0.1/tcp/4001".to_owned());
+    // Determine which addresses to listen to.
+    let listen_addrs = {
+        let mut args = env::args().skip(1).collect::<Vec<_>>();
+        if args.is_empty() {
+            args.push("/ip4/0.0.0.0/tcp/0".to_owned());
+        }
+        args
+    };
 
     // We start by building the tokio engine that will run all the sockets.
     let mut core = Core::new().unwrap();
 
+    let peer_store = Arc::new(peerstore::memory_peerstore::MemoryPeerstore::empty());
+    example::ipfs_bootstrap(&*peer_store);
+
     // Now let's build the transport stack.
-    // We start by creating a `TcpConfig` that indicates that we want TCP/IP.
-    let transport = TcpConfig::new(core.handle())
+    // We create a `TcpConfig` that indicates that we want TCP/IP.
+    let transport = identify::IdentifyTransport::new(
+        TcpConfig::new(core.handle())
 
         // On top of TCP/IP, we will use either the plaintext protocol or the secio protocol,
         // depending on which one the remote supports.
@@ -73,45 +88,64 @@ fn main() {
         // `Transport` because the output of the upgrade is not a stream but a controller for
         // muxing. We have to explicitly call `into_connection_reuse()` in order to turn this into
         // a `Transport`.
-        .into_connection_reuse();
-
-    // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming
-    // connections for us. The second parameter we pass is the connection upgrade that is accepted
-    // by the listening part. We don't want to accept anything, so we pass a dummy object that
-    // represents a connection that is always denied.
-    let (swarm_controller, swarm_future) = swarm::swarm(
-        transport,
-        DeniedConnectionUpgrade,
-        |_socket, _client_addr| -> Result<(), _> {
-            unreachable!("All incoming connections should have been denied")
-        },
+        .into_connection_reuse(),
+        peer_store.clone(),
     );
 
-    // We now use the controller to dial to the address.
-    let (tx, rx) = oneshot::channel();
-    swarm_controller
-        .dial_custom_handler(target_addr.parse().expect("invalid multiaddr"), ping::Ping,
-            |(mut pinger, future), _| {
-                let ping = pinger.ping().map_err(|_| unreachable!()).inspect(|_| {
-                    println!("Received pong from the remote");
-                    let _ = tx.send(());
-                });
-                ping.select(future).map(|_| ()).map_err(|(e, _)| e)
-            })
-        // If the multiaddr protocol exists but is not supported, then we get an error containing
-        // the original multiaddress.
-        .expect("unsupported multiaddr");
+    // We now have a `transport` variable that can be used either to dial nodes or listen to
+    // incoming connections, and that will automatically apply secio and multiplex on top
+    // of any opened stream.
 
-    // The address we actually listen on can be different from the address that was passed to
-    // the `listen_on` function. For example if you pass `/ip4/0.0.0.0/tcp/0`, then the port `0`
-    // will be replaced with the actual port.
+    let my_peer_id = PeerId::from_public_key(include_bytes!("test-public-key.der"));
+    println!("Local peer id is: {:?}", my_peer_id);
+
+    // Let's put this `transport` into a Kademlia *swarm*. The swarm will handle all the incoming
+    // and outgoing connections for us.
+    let kad_config = kad::KademliaConfig {
+        parallelism: 3,
+        record_store: (),
+        peer_store: peer_store,
+        local_peer_id: my_peer_id.clone(),
+        timeout: Duration::from_secs(2),
+    };
+
+    let kad_ctl_proto = kad::KademliaControllerPrototype::new(kad_config);
+
+    let proto = kad::KademliaUpgrade::from_prototype(&kad_ctl_proto);
+
+    // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming and
+    // outgoing connections for us.
+    let (swarm_controller, swarm_future) = swarm::swarm(transport, proto, |upgrade, _| upgrade);
+
+    let (kad_controller, _kad_init) = kad_ctl_proto.start(swarm_controller.clone());
+
+    for listen_addr in listen_addrs {
+        let addr = swarm_controller
+            .listen_on(listen_addr.parse().expect("invalid multiaddr"))
+            .expect("unsupported multiaddr");
+        println!("Now listening on {:?}", addr);
+    }
+
+    let finish_enum = kad_controller
+        .find_node(my_peer_id.clone())
+        .and_then(|out| {
+            let local_hash = U512::from(my_peer_id.hash());
+            println!("Results of peer discovery for {:?}:", my_peer_id);
+            for n in out {
+                let other_hash = U512::from(n.hash());
+                let dist = 512 - (local_hash ^ other_hash).leading_zeros();
+                println!("* {:?} (distance bits = {:?} (lower is better))", n, dist);
+            }
+            Ok(())
+        });
 
     // `swarm_future` is a future that contains all the behaviour that we want, but nothing has
     // actually started yet. Because we created the `TcpConfig` with tokio, we need to run the
     // future through the tokio core.
     core.run(
-        rx.select(swarm_future.map_err(|_| unreachable!()))
-            .map_err(|(e, _)| e)
-            .map(|_| ()),
+        finish_enum
+            .select(swarm_future)
+            .map(|(n, _)| n)
+            .map_err(|(err, _)| err),
     ).unwrap();
 }

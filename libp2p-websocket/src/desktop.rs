@@ -89,11 +89,14 @@ where
             }
         };
 
+        debug!(target: "libp2p-websocket", "Listening on {}", new_addr);
+
         let listen = inner_listen.map::<_, fn(_) -> _>(|stream| {
             // Upgrade the listener to websockets like the websockets library requires us to do.
             let upgraded = stream.and_then(|(stream, mut client_addr)| {
                 // Need to suffix `/ws` to each client address.
                 client_addr.append(AddrComponent::WS);
+                debug!(target: "libp2p-websocket", "Incoming connection from {}", client_addr);
 
                 stream
                     .into_ws()
@@ -104,6 +107,9 @@ where
                             .accept()
                             .map_err(|err| IoError::new(IoErrorKind::Other, err))
                             .map(|(client, _http_headers)| {
+                                debug!(target: "libp2p-websocket", "Upgraded incoming connection \
+                                                                    to websockets");
+
                                 // Plug our own API on top of the `websockets` API.
                                 let framed_data = client
                                     .map_err(|err| IoError::new(IoErrorKind::Other, err))
@@ -147,6 +153,8 @@ where
             _ => return Err((self, original_addr)),
         };
 
+        debug!(target: "libp2p-websocket", "Dialing {} through inner transport", inner_addr);
+
         let inner_dial = match self.transport.dial(inner_addr) {
             Ok(d) => d,
             Err((transport, _)) => {
@@ -172,6 +180,9 @@ where
                     .async_connect_on(connec)
                     .map_err(|err| IoError::new(IoErrorKind::Other, err))
                     .map(|(client, _)| {
+                        debug!(target: "libp2p-websocket", "Upgraded outgoing connection to \
+                                                            websockets");
+
                         // Plug our own API on top of the API of the websockets library.
                         let framed_data = client
                             .map_err(|err| IoError::new(IoErrorKind::Other, err))

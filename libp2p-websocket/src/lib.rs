@@ -76,6 +76,8 @@
 
 extern crate futures;
 extern crate libp2p_swarm as swarm;
+#[macro_use]
+extern crate log;
 extern crate multiaddr;
 extern crate rw_stream_sink;
 extern crate tokio_io;

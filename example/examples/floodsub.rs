@@ -1,4 +1,4 @@
-// Copyright 2017 Parity Technologies (UK) Ltd.
+// Copyright 2018 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -21,22 +21,25 @@
 extern crate bytes;
 extern crate env_logger;
 extern crate futures;
+extern crate libp2p_floodsub as floodsub;
+extern crate libp2p_peerstore as peerstore;
 extern crate libp2p_secio as secio;
 extern crate libp2p_swarm as swarm;
 extern crate libp2p_tcp_transport as tcp;
 extern crate libp2p_websocket as websocket;
 extern crate multiplex;
+extern crate rand;
 extern crate tokio_core;
 extern crate tokio_io;
+extern crate tokio_stdin;
 
-use futures::future::{loop_fn, Future, IntoFuture, Loop};
-use futures::{Sink, Stream};
-use std::env;
-use swarm::{SimpleProtocol, Transport, UpgradeExt};
+use futures::future::Future;
+use futures::Stream;
+use peerstore::PeerId;
+use std::{env, mem};
+use swarm::{Multiaddr, Transport, UpgradeExt};
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
-use tokio_io::AsyncRead;
-use tokio_io::codec::BytesCodec;
 use websocket::WsConfig;
 
 fn main() {
@@ -45,7 +48,7 @@ fn main() {
     // Determine which address to listen to.
     let listen_addr = env::args()
         .nth(1)
-        .unwrap_or("/ip4/0.0.0.0/tcp/10333".to_owned());
+        .unwrap_or("/ip4/0.0.0.0/tcp/10050".to_owned());
 
     // We start by building the tokio engine that will run all the sockets.
     let mut core = Core::new().unwrap();
@@ -88,60 +91,73 @@ fn main() {
 
     // We now prepare the protocol that we are going to negotiate with nodes that open a connection
     // or substream to our server.
-    let proto = SimpleProtocol::new("/echo/1.0.0", |socket| {
-        // This closure is called whenever a stream using the "echo" protocol has been
-        // successfully negotiated. The parameter is the raw socket (implements the AsyncRead
-        // and AsyncWrite traits), and the closure must return an implementation of
-        // `IntoFuture` that can yield any type of object.
-        Ok(AsyncRead::framed(socket, BytesCodec::new()))
-    });
+    let my_id = {
+        let key = (0..2048).map(|_| rand::random::<u8>()).collect::<Vec<_>>();
+        PeerId::from_public_key(&key)
+    };
+
+    let (floodsub_upgrade, floodsub_rx) = floodsub::FloodSubUpgrade::new(my_id);
 
     // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming and
     // outgoing connections for us.
-    let (swarm_controller, swarm_future) = swarm::swarm(transport, proto, |socket, client_addr| {
-        println!("Successfully negotiated protocol with {}", client_addr);
-
-        // The type of `socket` is exactly what the closure of `SimpleProtocol` returns.
-
-        // We loop forever in order to handle all the messages sent by the client.
-        loop_fn(socket, move |socket| {
-            let client_addr = client_addr.clone();
+    let (swarm_controller, swarm_future) = swarm::swarm(
+        transport,
+        floodsub_upgrade.clone(),
+        |socket, client_addr| {
+            println!("Successfully negotiated protocol with {}", client_addr);
             socket
-                .into_future()
-                .map_err(|(e, _)| e)
-                .and_then(move |(msg, rest)| {
-                    if let Some(msg) = msg {
-                        // One message has been received. We send it back to the client.
-                        println!(
-                            "Received a message from {}: {:?}\n => Sending back \
-                             identical message to remote",
-                            client_addr, msg
-                        );
-                        Box::new(rest.send(msg.freeze()).map(|m| Loop::Continue(m)))
-                            as Box<Future<Item = _, Error = _>>
-                    } else {
-                        // End of stream. Connection closed. Breaking the loop.
-                        println!("Received EOF from {}\n => Dropping connection", client_addr);
-                        Box::new(Ok(Loop::Break(())).into_future())
-                            as Box<Future<Item = _, Error = _>>
-                    }
-                })
-        })
-    });
+        },
+    );
 
-    // We now use the controller to listen on the address.
     let address = swarm_controller
         .listen_on(listen_addr.parse().expect("invalid multiaddr"))
-        // If the multiaddr protocol exists but is not supported, then we get an error containing
-        // the original multiaddress.
         .expect("unsupported multiaddr");
-    // The address we actually listen on can be different from the address that was passed to
-    // the `listen_on` function. For example if you pass `/ip4/0.0.0.0/tcp/0`, then the port `0`
-    // will be replaced with the actual port.
     println!("Now listening on {:?}", address);
 
-    // `swarm_future` is a future that contains all the behaviour that we want, but nothing has
-    // actually started yet. Because we created the `TcpConfig` with tokio, we need to run the
-    // future through the tokio core.
-    core.run(swarm_future).unwrap();
+    let topic = floodsub::TopicBuilder::new("chat").build();
+
+    let floodsub_ctl =
+        floodsub::FloodSubController::new(&floodsub_upgrade, swarm_controller.clone());
+    floodsub_ctl.subscribe(&topic);
+
+    let floodsub_rx = floodsub_rx.for_each(|msg| {
+        if let Ok(msg) = String::from_utf8(msg.data) {
+            println!("< {}", msg);
+        }
+        Ok(())
+    });
+
+    let stdin = {
+        let mut buffer = Vec::new();
+        tokio_stdin::spawn_stdin_stream_unbounded().for_each(move |msg| {
+            if msg != b'\r' && msg != b'\n' {
+                buffer.push(msg);
+                return Ok(());
+            } else if buffer.is_empty() {
+                return Ok(());
+            }
+
+            let msg = String::from_utf8(mem::replace(&mut buffer, Vec::new())).unwrap();
+            if msg.starts_with("/dial ") {
+                let target: Multiaddr = msg[5..].parse().unwrap();
+                println!("*Dialing {}*", target);
+                swarm_controller
+                    .dial_to_handler(target, floodsub_upgrade.clone())
+                    .unwrap();
+            } else {
+                floodsub_ctl.publish(&topic, msg.into_bytes());
+            }
+
+            Ok(())
+        })
+    };
+
+    let final_fut = swarm_future
+        .select(floodsub_rx)
+        .map(|_| ())
+        .map_err(|e| e.0)
+        .select(stdin.map_err(|_| unreachable!()))
+        .map(|_| ())
+        .map_err(|e| e.0);
+    core.run(final_fut).unwrap();
 }
