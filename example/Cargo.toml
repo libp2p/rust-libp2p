@@ -6,7 +6,7 @@ authors = ["pierre <pierre.krieger1708@gmail.com>"]
 [dependencies]
 bigint = "4.2"
 bytes = "0.4"
-env_logger = "0.5.3"
+env_logger = "0.5.4"
 futures = "0.1"
 multiaddr = "0.2"
 multiplex = { path = "../multiplex-rs" }

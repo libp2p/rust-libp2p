@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 extern crate bytes;
+extern crate env_logger;
 extern crate futures;
 extern crate libp2p_ping as ping;
 extern crate libp2p_secio as secio;
@@ -36,6 +37,8 @@ use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 
 fn main() {
+    env_logger::init();
+
     // Determine which address to dial.
     let target_addr = env::args()
         .nth(1)
