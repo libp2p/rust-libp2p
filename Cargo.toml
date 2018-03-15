@@ -4,6 +4,7 @@ members = [
     "datastore",
     "example",
     "libp2p-dns",
+    "libp2p-floodsub",
     "libp2p-identify",
     "libp2p-peerstore",
     "libp2p-ping",
