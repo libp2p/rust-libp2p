@@ -50,9 +50,6 @@ pub trait QueryInterface: Clone {
     /// Returns the level of parallelism wanted for this query.
     fn parallelism(&self) -> usize;
 
-    /// Duration between two waves of queries.
-    fn cycle_duration(&self) -> Duration;
-
     /// Attempts to contact the given multiaddress, then calls `and_then` on success. Returns a
     /// future that contains the output of `and_then`, or an error if we failed to contact the
     /// remote.
@@ -106,9 +103,6 @@ fn gen_random_id<I>(query_interface: &I, bucket_num: usize) -> Result<PeerId, ()
 where
     I: ?Sized + QueryInterface,
 {
-    // TODO: there is a design issue here, due to the fact that peer IDs are multihashes and not
-    //       byte arrays
-
     let my_id = query_interface.local_id();
     let my_id_len = my_id.as_bytes().len();
 
@@ -179,6 +173,7 @@ where
 
     let parallelism = query_interface.parallelism();
 
+    // Start of the iterative process.
     let stream = future::loop_fn(initial_state, move |mut state| {
         let searched_key = searched_key.clone();
         let query_interface = query_interface.clone();
@@ -186,13 +181,16 @@ where
 
         // Find out which nodes to contact at this iteration.
         let to_contact = {
-            let mut to_contact = SmallVec::<[_; 16]>::new();
             let wanted_len = if state.looking_for_closer {
                 parallelism.saturating_sub(state.current_attempts_fut.len())
             } else {
                 num_results.saturating_sub(state.current_attempts_fut.len())
             };
+            let mut to_contact = SmallVec::<[_; 16]>::new();
             while to_contact.len() < wanted_len && !state.pending_nodes.is_empty() {
+                // Move the first element of `pending_nodes` to `to_contact`, but ignore nodes that
+                // are already part of the results or of a current attempt or if we failed to
+                // contact it before.
                 let peer = state.pending_nodes.remove(0);
                 if state.result.iter().any(|p| p == &peer) {
                     continue;
@@ -208,9 +206,10 @@ where
             to_contact
         };
 
-        // For each node in `to_contact`, add an entry in `state.current_attempts_*`.
+        // For each node in `to_contact`, start an RPC query and a corresponding entry in the two
+        // `state.current_attempts_*` fields.
         for peer in to_contact {
-            let multiaddr: Multiaddr = AddrComponent::IPFS(peer.clone().into_bytes()).into();
+            let multiaddr: Multiaddr = AddrComponent::P2P(peer.clone().into_bytes()).into();
 
             let searched_key2 = searched_key.clone();
             let resp_rx =
@@ -247,22 +246,21 @@ where
                 }
             };
 
+            // Putting back the extracted elements in `state`.
             let remote_id = state.current_attempts_addrs.remove(trigger_idx);
             debug_assert!(state.current_attempts_fut.is_empty());
             state.current_attempts_fut = other_current_attempts;
 
+            // `message` contains the reason why the current future was woken up.
             let closer_peers = match message {
-                Ok(closer_peers) => {
-                    // Received a message.
-                    closer_peers
-                }
+                Ok(msg) => msg,
                 Err(_) => {
                     state.failed_to_contact.insert(remote_id);
                     return Ok(future::Loop::Continue(state));
                 }
             };
 
-            // Update `result` with the node that sent the result.
+            // Update `state.result` with the fact that we received a valid message from a node.
             if let Some(insert_pos) = state.result.iter().position(|e| {
                 e.distance_with(&searched_key) >= remote_id.distance_with(&searched_key)
             }) {
@@ -274,8 +272,11 @@ where
                 state.result.push(remote_id);
             }
 
+            // The loop below will set this variable to `true` if we find a new element to put at
+            // the top of the result. This would mean that we have to continue looping.
             let mut local_nearest_node_updated = false;
 
+            // Update `state` with the actual content of the message.
             for mut peer in closer_peers {
                 // Update the peerstore with the information sent by
                 // the remote.

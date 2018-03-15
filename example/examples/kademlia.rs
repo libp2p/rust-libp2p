@@ -62,7 +62,7 @@ fn main() {
     example::ipfs_bootstrap(&*peer_store);
 
     // Now let's build the transport stack.
-    // We start by creating a `TcpConfig` that indicates that we want TCP/IP.
+    // We create a `TcpConfig` that indicates that we want TCP/IP.
     let transport = identify::IdentifyTransport::new(
         TcpConfig::new(core.handle())
 
@@ -107,7 +107,6 @@ fn main() {
         peer_store: peer_store,
         local_peer_id: my_peer_id.clone(),
         timeout: Duration::from_secs(2),
-        cycles_duration: Duration::from_secs(1),
     };
 
     let kad_ctl_proto = kad::KademliaControllerPrototype::new(kad_config);
@@ -122,7 +121,7 @@ fn main() {
 
     for listen_addr in listen_addrs {
         let addr = swarm_controller
-            .listen_on(listen_addr.parse().expect("wrong multiaddr"))
+            .listen_on(listen_addr.parse().expect("invalid multiaddr"))
             .expect("unsupported multiaddr");
         println!("Now listening on {:?}", addr);
     }

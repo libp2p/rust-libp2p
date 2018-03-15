@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 
 [dependencies]
+arrayvec = "0.4.7"
 base58 = "0.1.0"
 bigint = "4.2"
 bytes = "0.4"

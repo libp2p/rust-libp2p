@@ -51,15 +51,14 @@ pub struct KademliaConfig<P, R> {
     /// No more than this number of remotes will be used at a given time for any given operation.
     // TODO: ^ share this number between operations? or does each operation use `alpha` remotes?
     pub parallelism: u32,
-    /// Used to load and store data requests of peers. TODO: say that must implement the `Recordstore` trait.
+    /// Used to load and store data requests of peers.
+    // TODO: say that must implement the `Recordstore` trait.
     pub record_store: R,
     /// Used to load and store information about peers.
     pub peer_store: P,
     /// Id of the local peer.
     pub local_peer_id: PeerId,
-    /// The Kademlia system uses cycles. This is the duration of one cycle.
-    pub cycles_duration: Duration,
-    /// When contacting a node, duration after which we consider that it doesn't respond.
+    /// When contacting a node, duration after which we consider it unresponsive.
     pub timeout: Duration,
 }
 
@@ -88,8 +87,7 @@ where
             peer_store: config.peer_store,
             connections: Default::default(),
             timeout: config.timeout,
-            cycles_duration: config.cycles_duration,
-            parallelism: config.parallelism,
+            parallelism: config.parallelism as usize,
         });
 
         KademliaControllerPrototype { inner: inner }
@@ -254,11 +252,15 @@ where
                 match inner.connections.lock().entry(client_addr) {
                     Entry::Occupied(mut entry) => {
                         match entry.insert(Connection::Active(controller)) {
-                            Connection::Active(_) => {}
+                            // If there was already an active connection to this remote, it gets
+                            // replaced by the new more recent one.
+                            Connection::Active(_old_connection) => {}
                             Connection::Pending(closures) => {
                                 let new_ctl = match entry.get_mut() {
                                     &mut Connection::Active(ref mut ctl) => ctl,
-                                    _ => unreachable!("we just inserted an Active enum variant"),
+                                    _ => unreachable!("logic error: an Active enum variant was \
+                                                       inserted, but reading back didn't give \
+                                                       an Active"),
                                 };
 
                                 for mut closure in closures {
@@ -308,10 +310,7 @@ struct Inner<P, R> {
     timeout: Duration,
 
     // Same as in the config.
-    parallelism: u32,
-
-    // Same as in the config.
-    cycles_duration: Duration,
+    parallelism: usize,
 
     // Same as in the config.
     record_store: R,
@@ -321,9 +320,9 @@ struct Inner<P, R> {
 
     // List of open connections with remotes.
     //
-    // Note that this is a good idea only if each node has only one unique multiaddr. This should
-    // be the case if the user uses the identify transport that automatically maps peer IDs to
-    // multiaddresses.
+    // Since the keys are the nodes' multiaddress, it is expected that each node only has one
+    // multiaddress. This should be the case if the user uses the identify transport that
+    // automatically maps peer IDs to multiaddresses.
     // TODO: is it correct to use FnvHashMap with a Multiaddr? needs benchmarks
     connections: Mutex<FnvHashMap<Multiaddr, Connection>>,
 }
@@ -418,12 +417,7 @@ where
 
     #[inline]
     fn parallelism(&self) -> usize {
-        self.inner.parallelism as usize
-    }
-
-    #[inline]
-    fn cycle_duration(&self) -> Duration {
-        self.inner.cycles_duration
+        self.inner.parallelism
     }
 
     #[inline]
@@ -478,9 +472,9 @@ where
         pending_list.push(Box::new(move |ctrl: &mut KademliaServerController| {
             let and_then = and_then
                 .take()
-                .expect("pending closures are only ever called once");
+                .expect("Programmer error: 'pending' closure was called multiple times");
             let tx = tx.take()
-                .expect("pending closures are only ever called once");
+                .expect("Programmer error: 'pending' closure was called multiple times");
             let ret = and_then(ctrl);
             let _ = tx.send(ret);
         }) as Box<_>);

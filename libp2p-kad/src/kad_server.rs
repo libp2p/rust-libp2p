@@ -43,7 +43,7 @@ use libp2p_swarm::ConnectionUpgrade;
 use libp2p_swarm::Endpoint;
 use multiaddr::{AddrComponent, Multiaddr};
 use protocol::{self, KadMsg, KademliaProtocolConfig, Peer};
-use smallvec::SmallVec;
+use std::collections::VecDeque;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -107,14 +107,17 @@ where
             let protocol = iter.next();
             let after_proto = iter.next();
             match (protocol, after_proto) {
-                (Some(AddrComponent::IPFS(key)), None) => match PeerId::from_bytes(key) {
-                    Ok(id) => id,
-                    Err(_) => {
-                        let err = IoError::new(
-                            IoErrorKind::InvalidData,
-                            "invalid peer ID sent by remote identification",
-                        );
-                        return Box::new(future::err(err));
+                (Some(AddrComponent::P2P(key)), None) |
+                (Some(AddrComponent::IPFS(key)), None) => {
+                    match PeerId::from_bytes(key) {
+                        Ok(id) => id,
+                        Err(_) => {
+                            let err = IoError::new(
+                                IoErrorKind::InvalidData,
+                                "invalid peer ID sent by remote identification",
+                            );
+                            return Box::new(future::err(err));
+                        }
                     }
                 },
                 _ => {
@@ -238,7 +241,7 @@ where
 
     // Loop forever.
     let future = future::loop_fn(
-        (kad_sink, messages, SmallVec::<[_; 8]>::new(), 0),
+        (kad_sink, messages, VecDeque::new(), 0),
         move |(kad_sink, messages, mut send_back_queue, mut expected_pongs)| {
             let interface = interface.clone();
             let peer_id = peer_id.clone();
@@ -303,7 +306,7 @@ where
                             // Any message other than `PutValue` or `Ping` has been received on
                             // `rx`. Send it to the remote.
                             let future = kad_sink.send(message).map(move |kad_sink| {
-                                send_back_queue.push(send_back);
+                                send_back_queue.push_back(send_back);
                                 future::Loop::Continue((
                                     kad_sink,
                                     rest,
@@ -344,8 +347,7 @@ where
                         | Some((message @ KadMsg::GetValueRes { .. }, None)) => {
                             // `FindNodeRes` or `GetValueRes` received on the socket.
                             // Send it back through `send_back_queue`.
-                            if !send_back_queue.is_empty() {
-                                let send_back = send_back_queue.remove(0);
+                            if let Some(send_back) = send_back_queue.pop_front() {
                                 let _ = send_back.send(message);
                                 let future = future::ok(future::Loop::Continue((
                                     kad_sink,
@@ -418,7 +420,7 @@ where
                 multiaddrs: vec![],
                 connection_ty: protocol::ConnectionType::Connected,
             },
-        ], // TODO:
+        ], // TODO: fill the multiaddresses from the peer store
     }
 }
 

@@ -27,10 +27,10 @@
 //! a constant number of entries. Storing a key in the k-buckets table adds it to the bucket
 //! corresponding to its distance with the reference key.
 
+use arrayvec::ArrayVec;
 use bigint::U512;
 use libp2p_peerstore::PeerId;
 use parking_lot::{Mutex, MutexGuard};
-use smallvec::SmallVec;
 use std::mem;
 use std::slice::Iter as SliceIter;
 use std::time::{Duration, Instant};
@@ -71,8 +71,8 @@ where
 struct KBucket<Id, Val> {
     // Nodes are always ordered from oldest to newest.
     // Note that we will very often move elements to the end of this. No benchmarking has been
-    // performed, but it is very likely that a `SmallVec` is the most performant data structure.
-    nodes: SmallVec<[Node<Id, Val>; MAX_NODES_PER_BUCKET]>,
+    // performed, but it is very likely that a `ArrayVec` is the most performant data structure.
+    nodes: ArrayVec<[Node<Id, Val>; MAX_NODES_PER_BUCKET]>,
 
     // Node received when the bucket was full. Will be added to the list if the first node doesn't
     // respond in time to our ping. The second element is the time when the pending node was added.
@@ -116,7 +116,7 @@ pub trait KBucketsPeerId: Eq + Clone {
     /// Returns then number of bits that are necessary to store the distance between peer IDs.
     /// Used for pre-allocations.
     ///
-    /// > **Note**: Please do not return 0. That would be a bad idea.
+    /// > **Note**: Returning 0 would lead to a panic.
     fn num_bits() -> usize;
 
     /// Returns the number of leading zeroes of the distance between peer IDs.
@@ -156,7 +156,7 @@ where
             my_id: my_id,
             tables: (0..Id::num_bits())
                 .map(|_| KBucket {
-                    nodes: SmallVec::new(),
+                    nodes: ArrayVec::new(),
                     pending_node: None,
                     last_update: Instant::now(),
                 })

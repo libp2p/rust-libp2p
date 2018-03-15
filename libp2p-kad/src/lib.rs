@@ -61,6 +61,7 @@
 //   the whole network.
 //
 
+extern crate arrayvec;
 extern crate base58;
 extern crate bigint;
 extern crate bytes;
