@@ -6,6 +6,7 @@ authors = ["Parity Technologies <admin@parity.io>"]
 [dependencies]
 bytes = "0.4"
 fnv = "1.0"
+log = "0.4"
 multiaddr = "0.2.0"
 multistream-select = { path = "../multistream-select" }
 futures = { version = "0.1", features = ["use_std"] }
