@@ -139,7 +139,7 @@ fn main() {
 
             let msg = String::from_utf8(mem::replace(&mut buffer, Vec::new())).unwrap();
             if msg.starts_with("/dial ") {
-                let target: Multiaddr = msg[5..].parse().unwrap();
+                let target: Multiaddr = msg[6..].parse().unwrap();
                 println!("*Dialing {}*", target);
                 swarm_controller
                     .dial_to_handler(target, floodsub_upgrade.clone())
