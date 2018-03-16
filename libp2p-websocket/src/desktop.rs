@@ -21,6 +21,7 @@
 use futures::{stream, Future, IntoFuture, Sink, Stream};
 use multiaddr::{AddrComponent, Multiaddr};
 use rw_stream_sink::RwStreamSink;
+use std::borrow::Cow;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use swarm::Transport;
 use websocket::client::builder::ClientBuilder;
@@ -208,21 +209,19 @@ where
     }
 
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        let mut server = server.clone();
-        let last_proto = match server.pop() {
+        let last_proto = match server.iter().last() {
             Some(v @ AddrComponent::WS) | Some(v @ AddrComponent::WSS) => v,
             _ => return None,
         };
 
-        let mut observed = observed.clone();
-        match observed.pop() {
+        match observed.iter().last() {
             Some(AddrComponent::WS) => false,
             Some(AddrComponent::WSS) => true,
             _ => return None,
         };
 
         self.transport
-            .nat_traversal(&server, &observed)
+            .nat_traversal(server, observed)
             .map(move |mut result| {
                 result.append(last_proto);
                 result
