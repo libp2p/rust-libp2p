@@ -67,7 +67,7 @@
 //! # }
 //! ```
 
-extern crate base58;
+extern crate bs58;
 extern crate datastore;
 extern crate futures;
 extern crate multiaddr;
@@ -78,7 +78,6 @@ extern crate serde;
 extern crate serde_derive;
 
 use std::fmt;
-use base58::ToBase58;
 
 pub use self::peerstore::{PeerAccess, Peerstore};
 
@@ -103,7 +102,7 @@ pub struct PeerId {
 
 impl fmt::Debug for PeerId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "PeerId({})", self.multihash.to_base58())
+        write!(f, "PeerId({})", bs58::encode(&self.multihash).into_string())
     }
 }
 

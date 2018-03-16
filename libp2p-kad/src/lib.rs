@@ -62,7 +62,7 @@
 //
 
 extern crate arrayvec;
-extern crate base58;
+extern crate bs58;
 extern crate bigint;
 extern crate bytes;
 extern crate datastore;

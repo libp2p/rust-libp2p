@@ -22,7 +22,6 @@
 
 use super::TTL;
 use PeerId;
-use base58::{FromBase58, ToBase58};
 use datastore::{Datastore, JsonFileDatastore, JsonFileDatastoreEntry, Query};
 use futures::{Future, Stream};
 use multiaddr::Multiaddr;
@@ -32,6 +31,7 @@ use std::io::Error as IoError;
 use std::iter;
 use std::path::PathBuf;
 use std::vec::IntoIter as VecIntoIter;
+use bs58;
 
 /// Peerstore backend that uses a Json file.
 pub struct JsonPeerstore {
@@ -70,13 +70,13 @@ impl<'a> Peerstore for &'a JsonPeerstore {
 
     #[inline]
     fn peer(self, peer_id: &PeerId) -> Option<Self::PeerAccess> {
-        let hash = peer_id.as_bytes().to_base58();
+        let hash = bs58::encode(peer_id.as_bytes()).into_string();
         self.store.lock(hash.into()).map(JsonPeerstoreAccess)
     }
 
     #[inline]
     fn peer_or_create(self, peer_id: &PeerId) -> Self::PeerAccess {
-        let hash = peer_id.as_bytes().to_base58();
+        let hash = bs58::encode(peer_id.as_bytes()).into_string();
         JsonPeerstoreAccess(self.store.lock_or_create(hash.into()))
     }
 
@@ -94,7 +94,7 @@ impl<'a> Peerstore for &'a JsonPeerstore {
             .filter_map(|(key, _)| {
                 // We filter out invalid elements. This can happen if the JSON storage file was
                 // corrupted or manually modified by the user.
-                PeerId::from_bytes(key.from_base58().ok()?).ok()
+                PeerId::from_bytes(bs58::decode(key).into_vec().ok()?).ok()
             })
             .collect()
             .wait(); // Wait can never block for the JSON datastore.
