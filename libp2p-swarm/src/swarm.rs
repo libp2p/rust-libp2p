@@ -322,7 +322,10 @@ where
             let mut upgrade = self.listeners_upgrade.swap_remove(n);
             match upgrade.poll() {
                 Ok(Async::Ready((output, client_addr))) => {
-                    debug!("Successfully upgraded listened connection with {}", client_addr);
+                    debug!(
+                        "Successfully upgraded listened connection with {}",
+                        client_addr
+                    );
                     self.to_process.push(future::Either::A(
                         handler(output, client_addr).into_future(),
                     ));

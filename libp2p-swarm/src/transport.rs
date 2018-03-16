@@ -991,11 +991,11 @@ where
                         Ok((_, _, _, ref client_addr)) => {
                             debug!(target: "libp2p-swarm", "Successfully negotiated protocol \
                                 upgrade with {}", client_addr)
-                        },
+                        }
                         Err(ref err) => {
                             debug!(target: "libp2p-swarm", "Error while negotiated protocol \
                                 upgrade: {:?}", err)
-                        },
+                        }
                     };
                     negotiated
                 })
