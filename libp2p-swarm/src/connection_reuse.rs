@@ -48,7 +48,6 @@ use multiaddr::Multiaddr;
 use muxing::StreamMuxer;
 use parking_lot::Mutex;
 use std::io::Error as IoError;
-use std::mem;
 use std::sync::Arc;
 use transport::{ConnectionUpgrade, MuxedTransport, Transport, UpgradedNode};
 
@@ -157,9 +156,14 @@ where
             .get(&addr)
             .map(|c| c.clone())
         {
+            debug!(target: "libp2p-swarm", "ConnectionReuse: Reusing multiplexed connection to {} \
+                                            instead of dialing", addr);
             let future = connec.outbound().map(|s| (s, addr));
             return Ok(Box::new(future) as Box<_>);
         }
+
+        debug!(target: "libp2p-swarm", "ConnectionReuse: No existing connection to {} ; dialing",
+                                       addr);
 
         // TODO: handle if we're already in the middle in dialing that same node?
         // TODO: try dialing again if the existing connection has dropped
@@ -255,11 +259,14 @@ where
             }
             Ok(Async::NotReady) => {}
             Ok(Async::Ready(None)) => {
+                debug!(target: "libp2p-swarm", "ConnectionReuse: listener has been closed");
                 if self.connections.is_empty() && self.current_upgrades.is_empty() {
                     return Ok(Async::Ready(None));
                 }
             }
             Err(err) => {
+                debug!(target: "libp2p-swarm", "ConnectionReuse: error while polling \
+                                                listener: {:?}", err);
                 if self.connections.is_empty() && self.current_upgrades.is_empty() {
                     return Err(err);
                 }
@@ -288,6 +295,8 @@ where
                 }
                 Err(err) => {
                     // Insert the rest of the pending upgrades, but not the current one.
+                    debug!(target: "libp2p-swarm", "ConnectionReuse: error while upgrading \
+                                                    listener connection: {:?}", err);
                     return Ok(Async::Ready(Some(future::err(err))));
                 }
             }
@@ -310,6 +319,8 @@ where
                     self.connections.push((muxer, next_incoming, client_addr));
                 }
                 Err(err) => {
+                    debug!(target: "libp2p-swarm", "ConnectionReuse: error while upgrading the \
+                                                    multiplexed incoming connection: {:?}", err);
                     // Insert the rest of the pending connections, but not the current one.
                     return Ok(Async::Ready(Some(future::err(err))));
                 }
@@ -370,8 +381,11 @@ where
                 Ok(Async::NotReady) => {
                     lock.next_incoming.push((muxer, future, addr));
                 }
-                Err(_) => {
+                Err(err) => {
                     // In case of error, we just not push back the element, which drops it.
+                    debug!(target: "libp2p-swarm", "ConnectionReuse incoming: one of the \
+                                                    multiplexed substreams produced an error: {:?}",
+                                                    err);
                 }
             }
         }

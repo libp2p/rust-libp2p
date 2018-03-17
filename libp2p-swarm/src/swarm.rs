@@ -137,6 +137,8 @@ where
         Du: ConnectionUpgrade<T::RawConn> + Clone + 'static, // TODO: 'static :-/
         Du::Output: Into<C::Output>,
     {
+        trace!(target: "libp2p-swarm", "Swarm dialing {}", multiaddr);
+
         match self.transport
             .clone()
             .with_upgrade(upgrade)
@@ -171,6 +173,8 @@ where
         Df: FnOnce(Du::Output, Multiaddr) -> Dfu + 'static, // TODO: 'static :-/
         Dfu: IntoFuture<Item = (), Error = IoError> + 'static, // TODO: 'static :-/
     {
+        trace!(target: "libp2p-swarm", "Swarm dialing {} with custom handler", multiaddr);
+
         match self.transport.clone().with_upgrade(upgrade).dial(multiaddr) {
             Ok(dial) => {
                 let dial = Box::new(dial.and_then(|(d, m)| and_then(d, m))) as Box<_>;
@@ -188,6 +192,7 @@ where
     pub fn listen_on(&self, multiaddr: Multiaddr) -> Result<Multiaddr, Multiaddr> {
         match self.upgraded.clone().listen_on(multiaddr) {
             Ok((listener, new_addr)) => {
+                trace!(target: "libp2p-swarm", "Swarm listening on {}", new_addr);
                 // Ignoring errors if the receiver has been closed, because in that situation
                 // nothing is going to be processed anyway.
                 let _ = self.new_listeners.unbounded_send(listener);
@@ -250,12 +255,16 @@ where
 
         match self.next_incoming.poll() {
             Ok(Async::Ready(connec)) => {
+                trace!(target: "libp2p-swarm", "Swarm received new multiplexed \
+                                                incoming connection");
                 self.next_incoming = self.upgraded.clone().next_incoming();
                 self.listeners_upgrade.push(connec);
             }
             Ok(Async::NotReady) => {}
             // TODO: may not be the best idea because we're killing the whole server
-            Err(_err) => {
+            Err(err) => {
+                debug!(target: "libp2p-swarm", "Error in multiplexed incoming \
+                                                connection: {:?}", err);
                 self.next_incoming = self.upgraded.clone().next_incoming();
             }
         };
@@ -294,6 +303,8 @@ where
             let mut listener = self.listeners.swap_remove(n);
             match listener.poll() {
                 Ok(Async::Ready(Some(upgrade))) => {
+                    trace!(target: "libp2p-swarm", "Swarm received new connection on \
+                                                    listener socket");
                     self.listeners.push(listener);
                     self.listeners_upgrade.push(upgrade);
                 }
@@ -301,7 +312,9 @@ where
                     self.listeners.push(listener);
                 }
                 Ok(Async::Ready(None)) => {}
-                Err(_err) => {} // Ignoring errors
+                Err(err) => {
+                    warn!(target: "libp2p-swarm", "Error in listener: {:?}", err);
+                }
             };
         }
 
@@ -309,6 +322,10 @@ where
             let mut upgrade = self.listeners_upgrade.swap_remove(n);
             match upgrade.poll() {
                 Ok(Async::Ready((output, client_addr))) => {
+                    debug!(
+                        "Successfully upgraded listened connection with {}",
+                        client_addr
+                    );
                     self.to_process.push(future::Either::A(
                         handler(output, client_addr).into_future(),
                     ));
@@ -316,7 +333,9 @@ where
                 Ok(Async::NotReady) => {
                     self.listeners_upgrade.push(upgrade);
                 }
-                Err(_err) => {} // Ignoring errors
+                Err(err) => {
+                    debug!(target: "libp2p-swarm", "Error in listener upgrade: {:?}", err);
+                }
             }
         }
 
@@ -324,22 +343,30 @@ where
             let mut dialer = self.dialers.swap_remove(n);
             match dialer.poll() {
                 Ok(Async::Ready((output, addr))) => {
+                    trace!("Successfully upgraded dialed connection with {}", addr);
                     self.to_process
                         .push(future::Either::A(handler(output, addr).into_future()));
                 }
                 Ok(Async::NotReady) => {
                     self.dialers.push(dialer);
                 }
-                Err(_err) => {} // Ignoring errors
+                Err(err) => {
+                    debug!(target: "libp2p-swarm", "Error in dialer upgrade: {:?}", err);
+                }
             }
         }
 
         for n in (0..self.to_process.len()).rev() {
             let mut to_process = self.to_process.swap_remove(n);
             match to_process.poll() {
-                Ok(Async::Ready(())) => {}
+                Ok(Async::Ready(())) => {
+                    trace!(target: "libp2p-swarm", "Future returned by swarm handler driven to \
+                                                    completion");
+                }
                 Ok(Async::NotReady) => self.to_process.push(to_process),
-                Err(_err) => {} // Ignoring errors
+                Err(err) => {
+                    debug!(target: "libp2p-swarm", "Error in processing: {:?}", err);
+                }
             }
         }
 

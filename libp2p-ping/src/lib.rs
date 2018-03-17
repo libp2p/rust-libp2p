@@ -186,8 +186,13 @@ where
                         match message {
                             Message::Ping(payload, finished) => {
                                 // Ping requested by the user through the `Pinger`.
-                                debug!(target: "libp2p-ping", "Sending ping to {:?} with payload {:?}",
-                                   remote_addr.expect("debug log level is enabled"), payload);
+                                if log_enabled!(target: "libp2p-ping", Level::Debug) {
+                                    debug!(target: "libp2p-ping", "Sending ping to {:?} with \
+                                           payload {:?}",
+                                           remote_addr.expect("debug log level is enabled"),
+                                           payload);
+                                }
+
                                 expected_pongs.insert(payload.clone(), finished);
                                 Box::new(
                                     sink.send(payload)

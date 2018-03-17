@@ -201,8 +201,11 @@ fn resolve_dns(
     };
 
     let future = resolver.resolve(name).and_then(move |addrs| {
-        trace!(target: "libp2p-dns", "DNS component resolution: {} => {:?}",
-                   debug_name.expect("trace log level was enabled"), addrs);
+        if log_enabled!(target: "libp2p-dns", Level::Trace) {
+            trace!(target: "libp2p-dns", "DNS component resolution: {} => {:?}",
+                    debug_name.expect("trace log level was enabled"), addrs);
+        }
+
         addrs
             .into_iter()
             .filter_map(move |addr| match (addr, ty) {

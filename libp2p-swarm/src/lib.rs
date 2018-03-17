@@ -206,6 +206,8 @@ extern crate bytes;
 extern crate fnv;
 #[macro_use]
 extern crate futures;
+#[macro_use]
+extern crate log;
 extern crate multistream_select;
 extern crate parking_lot;
 extern crate smallvec;

@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 extern crate bytes;
+extern crate env_logger;
 extern crate futures;
 extern crate libp2p_secio as secio;
 extern crate libp2p_swarm as swarm;
@@ -39,6 +40,8 @@ use tokio_io::codec::BytesCodec;
 use websocket::WsConfig;
 
 fn main() {
+    env_logger::init();
+
     // Determine which address to dial.
     let target_addr = env::args()
         .nth(1)
