@@ -27,7 +27,7 @@ extern crate libp2p_secio as secio;
 extern crate libp2p_swarm as swarm;
 extern crate libp2p_tcp_transport as tcp;
 extern crate libp2p_websocket as websocket;
-extern crate multiplex;
+extern crate libp2p_multiplex as multiplex;
 extern crate rand;
 extern crate tokio_core;
 extern crate tokio_io;
