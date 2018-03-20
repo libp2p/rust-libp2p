@@ -6,8 +6,8 @@ authors = ["Parity Technologies <admin@parity.io>"]
 [dependencies]
 bytes = "0.4"
 futures = "0.1"
-libp2p-peerstore = { path = "../libp2p-peerstore" }
-libp2p-swarm = { path = "../libp2p-swarm" }
+libp2p-peerstore = { path = "../peerstore" }
+libp2p-swarm = { path = "../swarm" }
 log = "0.4.1"
 multiaddr = "0.2.0"
 protobuf = "1.4.2"
@@ -15,5 +15,5 @@ tokio-io = "0.1.0"
 varint = { path = "../varint-rs" }
 
 [dev-dependencies]
-libp2p-tcp-transport = { path = "../libp2p-tcp-transport" }
+libp2p-tcp-transport = { path = "../tcp-transport" }
 tokio-core = "0.1.0"

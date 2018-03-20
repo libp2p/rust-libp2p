@@ -12,11 +12,11 @@ futures = "0.1"
 parking_lot = "0.4.8"
 arrayvec = "0.4.6"
 rand = "0.3.17"
-libp2p-swarm = { path = "../libp2p-swarm" }
+libp2p-swarm = { path = "../swarm" }
 varint = { path = "../varint-rs" }
 error-chain = "0.11.0"
 futures-mutex = { git = "https://github.com/paritytech/futures-mutex" }
 
 [dev-dependencies]
-libp2p-tcp-transport = { path = "../libp2p-tcp-transport" }
+libp2p-tcp-transport = { path = "../tcp-transport" }
 tokio-core = "0.1"
