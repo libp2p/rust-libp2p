@@ -15,7 +15,7 @@ smallvec = "0.5"
 tokio-io = "0.1"
 
 [dev-dependencies]
-libp2p-ping = { path = "../libp2p-ping" }
-libp2p-tcp-transport = { path = "../libp2p-tcp-transport" }
+libp2p-ping = { path = "../ping" }
+libp2p-tcp-transport = { path = "../tcp-transport" }
 multiplex = { path = "../multiplex-rs" }
 tokio-core = "0.1"

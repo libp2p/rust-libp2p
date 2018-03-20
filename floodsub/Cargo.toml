@@ -9,8 +9,8 @@ byteorder = "1.2.1"
 bytes = "0.4"
 fnv = "1.0"
 futures = "0.1"
-libp2p-peerstore = { path = "../libp2p-peerstore" }
-libp2p-swarm = { path = "../libp2p-swarm" }
+libp2p-peerstore = { path = "../peerstore" }
+libp2p-swarm = { path = "../swarm" }
 log = "0.4.1"
 multiaddr = "0.2"
 parking_lot = "0.5.3"
