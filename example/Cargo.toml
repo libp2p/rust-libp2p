@@ -8,8 +8,13 @@ bigint = "4.2"
 bytes = "0.4"
 env_logger = "0.5.4"
 futures = "0.1"
+<<<<<<< HEAD
 multiaddr = "0.3"
 libp2p-multiplex = { path = "../multiplex" }
+=======
+multiaddr = "0.2"
+libp2p-mplex = { path = "../mplex" }
+>>>>>>> Rename multiplex to mplex
 libp2p-identify = { path = "../identify" }
 libp2p-kad = { path = "../kad" }
 libp2p-floodsub = { path = "../floodsub" }
