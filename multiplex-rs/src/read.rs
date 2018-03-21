@@ -81,7 +81,7 @@ fn block_on_wrong_stream<T: AsyncRead, Buf: Array<Item = u8>>(
     substream_id: u32,
     remaining_bytes: usize,
     lock: &mut ::shared::MultiplexShared<T, Buf>,
-) -> io::Result<()> {
+) -> io::Result<usize> {
     use std::{mem, slice};
 
     lock.read_state = Some(MultiplexReadState::ParsingMessageBody {
@@ -89,6 +89,7 @@ fn block_on_wrong_stream<T: AsyncRead, Buf: Array<Item = u8>>(
         remaining_bytes,
     });
 
+    let mut out_consumed = 0;
     if let Some((tasks, cache)) = lock.open_streams
         .entry(substream_id)
         .or_insert_with(|| SubstreamMetadata::new_open())
@@ -122,6 +123,8 @@ fn block_on_wrong_stream<T: AsyncRead, Buf: Array<Item = u8>>(
 
                     assert!(cache.extend_from_slice(&buf_prefix[..consumed]));
 
+                    out_consumed = consumed;
+
                     lock.read_state = Some(MultiplexReadState::ParsingMessageBody {
                         substream_id,
                         remaining_bytes: new_remaining,
@@ -144,7 +147,7 @@ fn block_on_wrong_stream<T: AsyncRead, Buf: Array<Item = u8>>(
         }
     }
 
-    Ok(())
+    Ok(out_consumed)
 }
 
 pub fn read_stream<
@@ -437,15 +440,15 @@ fn read_stream_internal<T: AsyncRead, Buf: Array<Item = u8>>(
                         }
                     } else {
                         // We cannot make progress here, another stream has to accept this packet
-                        block_on_wrong_stream(substream_id, remaining_bytes, lock)?;
-
-                        return on_block;
+                        if block_on_wrong_stream(substream_id, remaining_bytes, lock)? == 0 {
+                            return on_block;
+                        }
                     }
                 } else {
                     // We cannot make progress here, another stream has to accept this packet
-                    block_on_wrong_stream(substream_id, remaining_bytes, lock)?;
-
-                    return on_block;
+                    if block_on_wrong_stream(substream_id, remaining_bytes, lock)? == 0 {
+                        return on_block;
+                    }
                 }
             }
             Ignore {
