@@ -43,7 +43,8 @@ fn client_to_server_outbound() {
 
     let bg_thread = thread::spawn(move || {
         let mut core = Core::new().unwrap();
-        let transport = TcpConfig::new(core.handle()).with_upgrade(multiplex::MultiplexConfig::new());
+        let transport =
+            TcpConfig::new(core.handle()).with_upgrade(multiplex::MultiplexConfig::new());
 
         let (listener, addr) = transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -94,7 +95,8 @@ fn client_to_server_inbound() {
 
     let bg_thread = thread::spawn(move || {
         let mut core = Core::new().unwrap();
-        let transport = TcpConfig::new(core.handle()).with_upgrade(multiplex::MultiplexConfig::new());
+        let transport =
+            TcpConfig::new(core.handle()).with_upgrade(multiplex::MultiplexConfig::new());
 
         let (listener, addr) = transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())

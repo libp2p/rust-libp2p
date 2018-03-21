@@ -211,8 +211,8 @@ fn use_opened_listen_to_dial() {
 
     let bg_thread = thread::spawn(move || {
         let mut core = Core::new().unwrap();
-        let transport =
-            OnlyOnce::from(TcpConfig::new(core.handle())).with_upgrade(multiplex::MultiplexConfig::new());
+        let transport = OnlyOnce::from(TcpConfig::new(core.handle()))
+            .with_upgrade(multiplex::MultiplexConfig::new());
 
         let (listener, addr) = transport
             .clone()
