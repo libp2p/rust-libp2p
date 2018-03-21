@@ -90,18 +90,15 @@ fn block_on_wrong_stream<T: AsyncRead, Buf: Array<Item = u8>>(
     });
 
     if let Some((tasks, cache)) = lock.open_streams
-        .get_mut(&substream_id)
-        .and_then(SubstreamMetadata::open_meta_mut)
+        .entry(substream_id)
+        .or_insert_with(|| SubstreamMetadata::new_open())
+        .open_meta_mut()
         .map(|cur| {
             (
                 mem::replace(&mut cur.read, Default::default()),
                 &mut cur.read_cache,
             )
         }) {
-        for task in tasks {
-            task.notify();
-        }
-
         // We check `cache.capacity()` since that can totally statically remove this branch in the
         // `== 0` path.
         if cache.capacity() > 0 && cache.len() < cache.capacity() {
@@ -132,10 +129,18 @@ fn block_on_wrong_stream<T: AsyncRead, Buf: Array<Item = u8>>(
                 }
                 Err(err) => {
                     if err.kind() != io::ErrorKind::WouldBlock {
+                        for task in tasks {
+                            task.notify();
+                        }
+
                         return Err(err);
                     }
                 }
             }
+        }
+
+        for task in tasks {
+            task.notify();
         }
     }
 
@@ -154,12 +159,15 @@ pub fn read_stream<
     read_stream_internal(lock, stream_data.into())
 }
 
-pub fn read_stream_internal<T: AsyncRead, Buf: Array<Item = u8>>(
+fn read_stream_internal<T: AsyncRead, Buf: Array<Item = u8>>(
     lock: &mut ::shared::MultiplexShared<T, Buf>,
     mut stream_data: Option<(u32, &mut [u8])>,
 ) -> io::Result<usize> {
     use self::MultiplexReadState::*;
 
+    // This is only true if a stream exists and it has been closed in a "graceful" manner, so we
+    // can return `Ok(0)` like the `Read` trait requests. In any other case we want to return
+    // `WouldBlock`
     let stream_has_been_gracefully_closed = stream_data
         .as_ref()
         .and_then(|&(id, _)| lock.open_streams.get(&id))
@@ -172,13 +180,34 @@ pub fn read_stream_internal<T: AsyncRead, Buf: Array<Item = u8>>(
         Err(io::ErrorKind::WouldBlock.into())
     };
 
-    if let Some((ref id, ..)) = stream_data {
+    if let Some((ref mut id, ref mut buf)) = stream_data {
         if let Some(cur) = lock.open_streams
             .entry(*id)
             .or_insert_with(|| SubstreamMetadata::new_open())
             .open_meta_mut()
         {
             cur.read.push(task::current());
+
+            let cache = &mut cur.read_cache;
+
+            if !cache.is_empty() {
+                let mut consumed = 0;
+                loop {
+                    let cur_buf = &mut buf[consumed..];
+                    if cur_buf.is_empty() {
+                        break;
+                    }
+
+                    if let Some(out) = cache.pop_first_n_leaky(cur_buf.len()) {
+                        cur_buf[..out.len()].copy_from_slice(out);
+                        consumed += out.len();
+                    } else {
+                        break;
+                    };
+                }
+
+                on_block = Ok(consumed);
+            }
         }
     }
 
@@ -407,40 +436,8 @@ pub fn read_stream_internal<T: AsyncRead, Buf: Array<Item = u8>>(
                             }
                         }
                     } else {
-                        let consumed = if let Some(cache) = lock.open_streams
-                            .get_mut(&id)
-                            .and_then(SubstreamMetadata::open_meta_mut)
-                            .map(|cur| &mut cur.read_cache)
-                        {
-                            let mut consumed = 0;
-                            loop {
-                                let cur_buf = &mut buf[consumed..];
-                                if cur_buf.is_empty() {
-                                    break;
-                                }
-                                if let Some(out) = cache.pop_first_n_leaky(cur_buf.len()) {
-                                    cur_buf.copy_from_slice(out);
-                                    consumed += out.len();
-                                } else {
-                                    break;
-                                };
-                            }
-
-                            Some(consumed)
-                        } else {
-                            None
-                        };
-
                         // We cannot make progress here, another stream has to accept this packet
-                        if let Some(consumed) = consumed {
-                            on_block = Ok(on_block.unwrap_or(0) + consumed);
-                        }
-
-                        block_on_wrong_stream(
-                            substream_id,
-                            remaining_bytes,
-                            lock,
-                        )?;
+                        block_on_wrong_stream(substream_id, remaining_bytes, lock)?;
 
                         return on_block;
                     }

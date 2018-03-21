@@ -636,4 +636,70 @@ mod tests {
         assert_eq!(&out[1..0x14 - 1], b"/multistream/1.0.0");
         assert_eq!(out[0x14 - 1], 0x0a);
     }
+
+    #[test]
+    fn can_buffer() {
+        type Buffer = [u8; 1024];
+
+        let stream = io::Cursor::new(Vec::new());
+
+        let mplex = BufferedMultiplex::<_, Buffer>::dial(stream);
+
+        let mut outbound: Vec<Substream<_, Buffer>> = vec![];
+
+        for _ in 0..5 {
+            outbound.push(mplex.clone().outbound().wait().unwrap());
+        }
+
+        outbound.sort_by_key(|a| a.id());
+
+        for (i, substream) in outbound.iter_mut().enumerate() {
+            assert!(
+                tokio::write_all(substream, i.to_string().as_bytes())
+                    .wait()
+                    .is_ok()
+            );
+        }
+
+        let stream = io::Cursor::new(mplex.state.lock().wait().unwrap().stream.get_ref().clone());
+
+        let mplex = BufferedMultiplex::<_, Buffer>::listen(stream);
+
+        let mut inbound: Vec<Substream<_, Buffer>> = vec![];
+
+        for _ in 0..5 {
+            let inb: Substream<_, Buffer> = mplex.clone().inbound().wait().unwrap();
+            inbound.push(inb);
+        }
+
+        inbound.sort_by_key(|a| a.id());
+
+        // Skip the first substream and let it be cached.
+        for (mut substream, outbound) in inbound.iter_mut().zip(outbound.iter()).skip(1) {
+            let id = outbound.id();
+            assert_eq!(id, substream.id());
+            assert_eq!(
+                substream
+                    .name()
+                    .and_then(|bytes| String::from_utf8(bytes.to_vec()).ok()),
+                Some(id.to_string())
+            );
+
+            let mut buf = [0; 3];
+            assert_eq!(tokio::read(&mut substream, &mut buf).wait().unwrap().2, 1);
+        }
+
+        let (mut substream, outbound) = (&mut inbound[0], &outbound[0]);
+        let id = outbound.id();
+        assert_eq!(id, substream.id());
+        assert_eq!(
+            substream
+                .name()
+                .and_then(|bytes| String::from_utf8(bytes.to_vec()).ok()),
+            Some(id.to_string())
+        );
+
+        let mut buf = [0; 3];
+        assert_eq!(tokio::read(&mut substream, &mut buf).wait().unwrap().2, 1);
+    }
 }
