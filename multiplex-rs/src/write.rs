@@ -21,6 +21,7 @@
 use shared::{ByteBuf, MultiplexShared, SubstreamMetadata};
 use header::MultiplexHeader;
 
+use circular_buffer;
 use varint;
 use futures::task;
 use std::io;
@@ -69,8 +70,8 @@ pub enum MultiplexWriteStateInner {
     Body { size: usize },
 }
 
-pub fn write_stream<T: AsyncWrite>(
-    lock: &mut MultiplexShared<T>,
+pub fn write_stream<Buf: circular_buffer::Array, T: AsyncWrite>(
+    lock: &mut MultiplexShared<T, Buf>,
     write_request: WriteRequest,
     buf: &mut io::Cursor<ByteBuf>,
 ) -> io::Result<usize> {
@@ -103,15 +104,15 @@ pub fn write_stream<T: AsyncWrite>(
             if let Some(cur) = lock.open_streams
                 .entry(id)
                 .or_insert_with(|| SubstreamMetadata::new_open())
-                .write_tasks_mut()
+                .open_meta_mut()
             {
-                cur.push(task::current());
+                cur.write.push(task::current());
             }
 
             if let Some(tasks) = lock.open_streams
                 .get_mut(&request.header.substream_id)
-                .and_then(SubstreamMetadata::write_tasks_mut)
-                .map(|cur| mem::replace(cur, Default::default()))
+                .and_then(SubstreamMetadata::open_meta_mut)
+                .map(|cur| mem::replace(&mut cur.write, Default::default()))
             {
                 for task in tasks {
                     task.notify();
@@ -129,8 +130,8 @@ pub fn write_stream<T: AsyncWrite>(
 
             if let Some(tasks) = lock.open_streams
                 .get_mut(&request.header.substream_id)
-                .and_then(SubstreamMetadata::write_tasks_mut)
-                .map(|cur| mem::replace(cur, Default::default()))
+                .and_then(SubstreamMetadata::open_meta_mut)
+                .map(|cur| mem::replace(&mut cur.write, Default::default()))
             {
                 for task in tasks {
                     task.notify();
@@ -147,9 +148,9 @@ pub fn write_stream<T: AsyncWrite>(
             if let Some(cur) = lock.open_streams
                 .entry(id)
                 .or_insert_with(|| SubstreamMetadata::new_open())
-                .write_tasks_mut()
+                .open_meta_mut()
             {
-                cur.push(task::current());
+                cur.write.push(task::current());
             }
 
             for task in mem::replace(&mut lock.meta_write_tasks, Default::default()) {

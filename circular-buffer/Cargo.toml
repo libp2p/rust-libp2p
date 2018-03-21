@@ -4,4 +4,4 @@ version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 
 [dependencies]
-smallvec = "0.5.0"
+smallvec = { git = "https://github.com/Vurich/rust-smallvec.git", branch = "array-zero" }

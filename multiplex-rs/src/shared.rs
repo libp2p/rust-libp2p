@@ -21,6 +21,7 @@
 use read::MultiplexReadState;
 use write::MultiplexWriteState;
 
+use circular_buffer::{Array, CircularBuffer};
 use std::collections::HashMap;
 use bytes::Bytes;
 use arrayvec::ArrayVec;
@@ -30,17 +31,24 @@ const BUF_SIZE: usize = 1024;
 
 pub type ByteBuf = ArrayVec<[u8; BUF_SIZE]>;
 
-pub enum SubstreamMetadata {
+pub enum SubstreamMetadata<Buf: Array> {
     Closed,
-    Open { read: Vec<Task>, write: Vec<Task> },
+    Open(OpenSubstreamMetadata<Buf>),
 }
 
-impl SubstreamMetadata {
+pub struct OpenSubstreamMetadata<Buf: Array> {
+    pub read_cache: CircularBuffer<Buf>,
+    pub read: Vec<Task>,
+    pub write: Vec<Task>,
+}
+
+impl<Buf: Array> SubstreamMetadata<Buf> {
     pub fn new_open() -> Self {
-        SubstreamMetadata::Open {
+        SubstreamMetadata::Open(OpenSubstreamMetadata {
+            read_cache: Default::default(),
             read: Default::default(),
             write: Default::default(),
-        }
+        })
     }
 
     pub fn open(&self) -> bool {
@@ -50,24 +58,17 @@ impl SubstreamMetadata {
         }
     }
 
-    pub fn read_tasks_mut(&mut self) -> Option<&mut Vec<Task>> {
+    pub fn open_meta_mut(&mut self) -> Option<&mut OpenSubstreamMetadata<Buf>> {
         match *self {
             SubstreamMetadata::Closed => None,
-            SubstreamMetadata::Open { ref mut read, .. } => Some(read),
-        }
-    }
-
-    pub fn write_tasks_mut(&mut self) -> Option<&mut Vec<Task>> {
-        match *self {
-            SubstreamMetadata::Closed => None,
-            SubstreamMetadata::Open { ref mut write, .. } => Some(write),
+            SubstreamMetadata::Open(ref mut meta) => Some(meta),
         }
     }
 }
 
 // TODO: Split reading and writing into different structs and have information shared between the
 //       two in a `RwLock`, since `open_streams` and `to_open` are mostly read-only.
-pub struct MultiplexShared<T> {
+pub struct MultiplexShared<T, Buf: Array> {
     // We use `Option` in order to take ownership of heap allocations within `DecoderState` and
     // `BytesMut`. If this is ever observably `None` then something has panicked or the underlying
     // stream returned an error.
@@ -75,7 +76,7 @@ pub struct MultiplexShared<T> {
     pub write_state: Option<MultiplexWriteState>,
     pub stream: T,
     // true if the stream is open, false otherwise
-    pub open_streams: HashMap<u32, SubstreamMetadata>,
+    pub open_streams: HashMap<u32, SubstreamMetadata<Buf>>,
     pub meta_write_tasks: Vec<Task>,
     // TODO: Should we use a version of this with a fixed size that doesn't allocate and return
     //       `WouldBlock` if it's full? Even if we ignore or size-cap names you can still open 2^32
@@ -83,7 +84,7 @@ pub struct MultiplexShared<T> {
     pub to_open: HashMap<u32, Option<Bytes>>,
 }
 
-impl<T> MultiplexShared<T> {
+impl<T, Buf: Array> MultiplexShared<T, Buf> {
     pub fn new(stream: T) -> Self {
         MultiplexShared {
             read_state: Default::default(),
@@ -98,10 +99,7 @@ impl<T> MultiplexShared<T> {
     pub fn open_stream(&mut self, id: u32) -> bool {
         self.open_streams
             .entry(id)
-            .or_insert(SubstreamMetadata::Open {
-                read: Default::default(),
-                write: Default::default(),
-            })
+            .or_insert(SubstreamMetadata::new_open())
             .open()
     }
 
