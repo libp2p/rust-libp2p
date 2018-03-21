@@ -53,20 +53,6 @@ impl MultiplexHeader {
         }
     }
 
-    pub fn close(id: u32, end: Endpoint) -> Self {
-        MultiplexHeader {
-            substream_id: id,
-            packet_type: PacketType::Close(end),
-        }
-    }
-
-    pub fn reset(id: u32, end: Endpoint) -> Self {
-        MultiplexHeader {
-            substream_id: id,
-            packet_type: PacketType::Reset(end),
-        }
-    }
-
     pub fn message(id: u32, end: Endpoint) -> Self {
         MultiplexHeader {
             substream_id: id,

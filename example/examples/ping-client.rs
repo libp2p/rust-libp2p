@@ -68,8 +68,8 @@ fn main() {
         })
 
         // On top of plaintext or secio, we will use the multiplex protocol.
-        .with_upgrade(multiplex::MultiplexConfig)
-        // The object returned by the call to `with_upgrade(MultiplexConfig)` can't be used as a
+        .with_upgrade(multiplex::MultiplexConfig::new())
+        // The object returned by the call to `with_upgrade(MultiplexConfig::new())` can't be used as a
         // `Transport` because the output of the upgrade is not a stream but a controller for
         // muxing. We have to explicitly call `into_connection_reuse()` in order to turn this into
         // a `Transport`.

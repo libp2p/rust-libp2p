@@ -32,7 +32,7 @@ extern crate smallvec;
 use std::ops::Drop;
 use std::mem::ManuallyDrop;
 
-use smallvec::Array;
+pub use smallvec::Array;
 
 use owned_slice::OwnedSlice;
 
@@ -248,12 +248,59 @@ impl<B: Array> CircularBuffer<B> {
     /// assert_eq!(buffer.len(), 0);
     /// ```
     pub fn pop_slice_leaky(&mut self) -> Option<&mut [B::Item]> {
+        let len = self.len;
+        self.pop_first_n_leaky(len)
+    }
+
+    /// Pop a slice containing up to `n` contiguous elements. Since this buffer is circular it will
+    /// take a maximum of two calls to this function to drain the buffer entirely.
+    ///
+    /// ```rust
+    /// use circular_buffer::CircularBuffer;
+    ///
+    /// let mut buffer = CircularBuffer::from_array([1, 2, 3, 4]);
+    ///
+    /// assert_eq!(buffer.pop(), Some(1));
+    /// assert!(buffer.push(1).is_none());
+    ///
+    /// assert_eq!(buffer.pop_first_n(2).as_ref().map(<_>::as_ref), Some(&[2, 3][..]));
+    /// assert_eq!(buffer.pop_first_n(2).as_ref().map(<_>::as_ref), Some(&[4][..]));
+    /// assert_eq!(buffer.pop_first_n(2).as_ref().map(<_>::as_ref), Some(&[1][..]));
+    /// assert!(buffer.pop_first_n(2).is_none());
+    ///
+    /// assert_eq!(buffer.len(), 0);
+    /// ```
+    pub fn pop_first_n(&mut self, n: usize) -> Option<OwnedSlice<B::Item>> {
+        self.pop_first_n_leaky(n)
+            .map(|x| unsafe { OwnedSlice::new(x) })
+    }
+
+    /// Pop a slice containing up to `n` contiguous elements. Since this buffer is circular it will
+    /// take a maximum of two calls to this function to drain the buffer entirely. This returns a
+    /// slice and so any `Drop` types returned from this function will be leaked.
+    ///
+    /// ```rust
+    /// use circular_buffer::CircularBuffer;
+    ///
+    /// let mut buffer = CircularBuffer::from_array([1, 2, 3, 4]);
+    ///
+    /// assert_eq!(buffer.pop(), Some(1));
+    /// assert!(buffer.push(1).is_none());
+    ///
+    /// assert_eq!(buffer.pop_first_n_leaky(2), Some(&mut [2, 3][..]));
+    /// assert_eq!(buffer.pop_first_n_leaky(2), Some(&mut [4][..]));
+    /// assert_eq!(buffer.pop_first_n_leaky(2), Some(&mut [1][..]));
+    /// assert!(buffer.pop_first_n_leaky(2).is_none());
+    ///
+    /// assert_eq!(buffer.len(), 0);
+    /// ```
+    pub fn pop_first_n_leaky(&mut self, n: usize) -> Option<&mut [B::Item]> {
         use std::slice;
 
         if self.is_empty() {
             None
         } else {
-            let (start, out_length) = (self.start, self.len.min(B::size() - self.start));
+            let (start, out_length) = (self.start, self.len.min(B::size() - self.start).min(n));
 
             self.advance(out_length);
 
@@ -359,6 +406,9 @@ impl<B: Array> CircularBuffer<B> {
     ///
     /// assert_eq!(buffer.capacity(), 4);
     /// ```
+    // We inline-always so that this can get const-folded properly. This is really important for
+    // stuff like `if buf.capacity() > 0 { ... }`.
+    #[inline(always)]
     pub fn capacity(&self) -> usize {
         B::size()
     }
