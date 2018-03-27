@@ -1,0 +1,21 @@
+[package]
+name = "core-derive"
+version = "0.1.0"
+authors = ["tomaka <pierre.krieger1708@gmail.com>"]
+
+[lib]
+name = "core_derive"
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "0.2"
+quote = "0.5"
+syn = "0.13"
+
+[dev-dependencies]
+bytes = "0.4"
+futures = "0.1"
+libp2p-core = { path = "../core" }
+libp2p-identify = { path = "../identify" }
+libp2p-ping = { path = "../ping" }
+tokio-io = "0.1"

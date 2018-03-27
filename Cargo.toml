@@ -1,6 +1,8 @@
 [workspace]
 members = [
     "circular-buffer",
+    "core",
+    "core-derive",
     "datastore",
     "dns",
     "floodsub",
@@ -15,7 +17,6 @@ members = [
     "relay",
     "rw-stream-sink",
     "secio",
-    "core",
     "tcp-transport",
     "varint-rs",
     "websocket",
