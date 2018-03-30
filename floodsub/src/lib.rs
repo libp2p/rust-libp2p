@@ -51,7 +51,7 @@ use fnv::{FnvHashMap, FnvHashSet, FnvHasher};
 use futures::{future, Future, Poll, Sink, Stream};
 use futures::sync::mpsc;
 use libp2p_peerstore::PeerId;
-use libp2p_swarm::{ConnectionUpgrade, Endpoint, MuxedTransport, SwarmController};
+use libp2p_swarm::{ConnectionUpgrade, Endpoint};
 use log::Level;
 use multiaddr::{AddrComponent, Multiaddr};
 use parking_lot::{Mutex, RwLock};
@@ -222,13 +222,8 @@ where
 
 /// Allows one to control the behaviour of the floodsub system.
 #[derive(Clone)]
-pub struct FloodSubController<T, C>
-where
-    T: MuxedTransport + 'static,                // TODO: 'static :-/
-    C: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :-/
-{
+pub struct FloodSubController {
     inner: Arc<Inner>,
-    swarm: SwarmController<T, C>,
 }
 
 struct Inner {
@@ -276,20 +271,12 @@ impl fmt::Debug for Inner {
     }
 }
 
-impl<T, C> FloodSubController<T, C>
-where
-    T: MuxedTransport + 'static,                // TODO: 'static :-/
-    C: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :-/
-{
+impl FloodSubController {
     /// Builds a new controller for floodsub.
     #[inline]
-    pub fn new(
-        upgrade: &FloodSubUpgrade,
-        swarm: SwarmController<T, C>,
-    ) -> FloodSubController<T, C> {
+    pub fn new(upgrade: &FloodSubUpgrade) -> Self {
         FloodSubController {
             inner: upgrade.inner.clone(),
-            swarm: swarm,
         }
     }
 

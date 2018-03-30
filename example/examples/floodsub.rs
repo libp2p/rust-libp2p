@@ -116,8 +116,7 @@ fn main() {
 
     let topic = floodsub::TopicBuilder::new("chat").build();
 
-    let floodsub_ctl =
-        floodsub::FloodSubController::new(&floodsub_upgrade, swarm_controller.clone());
+    let floodsub_ctl = floodsub::FloodSubController::new(&floodsub_upgrade);
     floodsub_ctl.subscribe(&topic);
 
     let floodsub_rx = floodsub_rx.for_each(|msg| {
