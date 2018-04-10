@@ -6,7 +6,7 @@ authors = ["Parity Technologies <admin@parity.io>"]
 [dependencies]
 libp2p-swarm = { path = "../swarm" }
 futures = "0.1"
-multiaddr = "0.2.0"
+multiaddr = "0.3.0"
 log = "0.4.1"
 rw-stream-sink = { path = "../rw-stream-sink" }
 tokio-io = "0.1"
