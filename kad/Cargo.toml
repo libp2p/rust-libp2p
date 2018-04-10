@@ -15,7 +15,7 @@ libp2p-identify = { path = "../identify" }
 libp2p-peerstore = { path = "../peerstore" }
 libp2p-ping = { path = "../ping" }
 libp2p-swarm = { path = "../swarm" }
-multiaddr = "0.2"
+multiaddr = "0.3"
 parking_lot = "0.5.1"
 protobuf = "1.4.2"
 rand = "0.4.2"
