@@ -27,12 +27,13 @@ use fnv::FnvHashMap;
 use futures::{self, future, Future};
 use futures::sync::oneshot;
 use kad_server::{KadServerInterface, KademliaServerConfig, KademliaServerController};
-use kbucket::{KBucketsTable, UpdateOutcome};
+use kbucket::{KBucketsPeerId, KBucketsTable, UpdateOutcome};
 use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};
 use libp2p_swarm::{Endpoint, MuxedTransport, SwarmController};
 use libp2p_swarm::ConnectionUpgrade;
 use multiaddr::Multiaddr;
 use parking_lot::Mutex;
+use protocol::ConnectionType;
 use query;
 use std::collections::hash_map::Entry;
 use std::fmt;
@@ -364,6 +365,15 @@ where
         self.kbuckets.my_id()
     }
 
+    fn peer_info(&self, peer_id: &PeerId) -> (Vec<Multiaddr>, ConnectionType) {
+        let addrs = self.peer_store
+            .peer(peer_id)
+            .into_iter()
+            .flat_map(|p| p.addrs())
+            .collect::<Vec<_>>();
+        (addrs, ConnectionType::Connected) // ConnectionType meh :-/
+    }
+
     #[inline]
     fn kbuckets_update(&self, peer: &PeerId) {
         // TODO: is this the right place for this check?
@@ -382,7 +392,19 @@ where
 
     #[inline]
     fn kbuckets_find_closest(&self, addr: &PeerId) -> Vec<PeerId> {
-        self.kbuckets.find_closest(addr).collect()
+        let mut intermediate: Vec<_> = self.kbuckets.find_closest(addr).collect();
+        let my_id = self.kbuckets.my_id().clone();
+        if let Some(pos) = intermediate
+            .iter()
+            .position(|e| e.distance_with(&addr) >= my_id.distance_with(&addr))
+        {
+            if intermediate[pos] != my_id {
+                intermediate.insert(pos, my_id);
+            }
+        } else {
+            intermediate.push(my_id);
+        }
+        intermediate
     }
 }
 

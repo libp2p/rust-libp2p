@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{stream, Future, IntoFuture, Stream};
+use futures::{future, stream, Future, IntoFuture, Stream};
 use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};
 use libp2p_swarm::{MuxedTransport, Transport};
 use multiaddr::{AddrComponent, Multiaddr};
@@ -91,37 +91,62 @@ where
         let listener = listener.map(move |connec| {
             let peerstore = peerstore.clone();
             let identify_upgrade = identify_upgrade.clone();
-            let fut = connec
-                .and_then(move |(connec, client_addr)| {
-                    // Dial the address that connected to us and try upgrade with the
-                    // identify protocol.
-                    identify_upgrade
-                        .clone()
-                        .dial(client_addr.clone())
-                        .map_err(|_| {
-                            IoError::new(IoErrorKind::Other, "couldn't dial back incoming node")
-                        })
-                        .map(move |id| (id, connec))
-                })
-                .and_then(move |(dial, connec)| dial.map(move |dial| (dial, connec)))
-                .and_then(move |((identify, original_addr), connec)| {
-                    // Compute the "real" address of the node (in the form `/p2p/...`) and add
-                    // it to the peerstore.
-                    let real_addr = match identify {
-                        IdentifyOutput::RemoteInfo { info, .. } => process_identify_info(
-                            &info,
-                            &*peerstore.clone(),
-                            original_addr,
-                            addr_ttl,
-                        )?,
-                        _ => unreachable!(
-                            "the identify protocol guarantees that we receive \
-                             remote information when we dial a node"
-                        ),
+            let fut = connec.and_then(move |(connec, client_addr)| {
+                for peer_id in peerstore.peers() {
+                    let peer = match peerstore.peer(&peer_id) {
+                        Some(p) => p,
+                        None => continue,
                     };
 
-                    Ok((connec, real_addr))
-                });
+                    if peer.addrs().any(|addr| addr == client_addr) {
+                        debug!(target: "libp2p-identify", "Incoming substream from {} \
+                                                               identified as {:?}", client_addr,
+                                                               peer_id);
+                        let ret = (connec, AddrComponent::P2P(peer_id.into_bytes()).into());
+                        return future::Either::A(future::ok(ret));
+                    }
+                }
+
+                debug!(target: "libp2p-identify", "Incoming connection from {}, dialing back \
+                                                       in order to identify", client_addr);
+                // Dial the address that connected to us and try upgrade with the
+                // identify protocol.
+                let future = identify_upgrade
+                    .clone()
+                    .dial(client_addr.clone())
+                    .map_err(move |_| {
+                        IoError::new(IoErrorKind::Other, "couldn't dial back incoming node")
+                    })
+                    .map(move |id| (id, connec))
+                    .into_future()
+                    .and_then(move |(dial, connec)| dial.map(move |dial| (dial, connec)))
+                    .and_then(move |((identify, original_addr), connec)| {
+                        // Compute the "real" address of the node (in the form `/p2p/...`) and
+                        // add it to the peerstore.
+                        let real_addr = match identify {
+                            IdentifyOutput::RemoteInfo { info, .. } => process_identify_info(
+                                &info,
+                                &*peerstore.clone(),
+                                original_addr.clone(),
+                                addr_ttl,
+                            )?,
+                            _ => unreachable!(
+                                "the identify protocol guarantees that we receive \
+                                 remote information when we dial a node"
+                            ),
+                        };
+
+                        debug!(target: "libp2p-identify", "Identified {} as {}", original_addr,
+                                                              real_addr);
+                        Ok((connec, real_addr))
+                    })
+                    .map_err(move |err| {
+                        warn!(target: "libp2p-identify", "Failed to identify incoming {}",
+                                                             client_addr);
+                        err
+                    });
+                future::Either::B(future)
+            });
 
             Box::new(fut) as Box<Future<Item = _, Error = _>>
         });
@@ -143,17 +168,45 @@ where
                     .collect::<Vec<_>>()
                     .into_iter();
 
+                trace!(target: "libp2p-identify", "Try dialing peer ID {:?} ; {} multiaddrs \
+                                                   loaded from peerstore", peer_id, addrs.len());
+
                 let transport = self.transport;
                 let future = stream::iter_ok(addrs)
                     // Try to dial each address through the transport.
-                    .filter_map(move |addr| transport.clone().dial(addr).ok())
+                    .filter_map(move |addr| {
+                        match transport.clone().dial(addr) {
+                            Ok(dial) => Some(dial),
+                            Err((_, addr)) => {
+                                warn!(target: "libp2p-identify", "Address {} not supported by \
+                                                                  underlying transport", addr);
+                                None
+                            },
+                        }
+                    })
                     .and_then(move |dial| dial)
-                    // Pick the first non-failing dial result.
+                    // Pick the first non-failing dial result by filtering out the ones which fail.
                     .then(|res| Ok(res))
                     .filter_map(|res| res.ok())
                     .into_future()
                     .map_err(|(err, _)| err)
-                    .and_then(|(val, _)| val.ok_or(IoErrorKind::InvalidData.into())) // TODO: wrong error
+                    .and_then(move |(val, _)| {
+                        match val {
+                            Some((connec, inner_addr)) => {
+                                debug!(target: "libp2p-identify", "Successfully dialed peer {:?} \
+                                                                   through {}", peer_id,
+                                                                   inner_addr);
+                                Ok((connec, inner_addr))
+                            },
+                            None => {
+                                debug!(target: "libp2p-identify", "All multiaddresses failed when \
+                                                                   dialing peer {:?}", peer_id);
+                                // TODO: wrong error
+                                Err(IoErrorKind::InvalidData.into())
+                            },
+                        }
+                    })
+                    // Replace the multiaddress with the one of the form `/p2p/...` or `/ipfs/...`.
                     .map(move |(socket, _inner_client_addr)| (socket, addr));
 
                 Ok(Box::new(future) as Box<_>)
@@ -164,6 +217,8 @@ where
                 // and identify the node.
                 let transport = self.transport;
                 let identify_upgrade = transport.clone().with_upgrade(IdentifyProtocolConfig);
+
+                trace!(target: "libp2p-identify", "Pass through when dialing {}", addr);
 
                 // We dial a first time the node and upgrade it to identify.
                 let dial = match identify_upgrade.dial(addr) {
@@ -233,34 +288,51 @@ where
         let addr_ttl = self.addr_ttl;
 
         let future = self.transport.next_incoming().map(move |incoming| {
-            let future = incoming
-                .and_then(move |(connec, client_addr)| {
-                    // On an incoming connection, dial back the node and upgrade to the identify
-                    // protocol.
-                    identify_upgrade
-                        .clone()
-                        .dial(client_addr.clone())
-                        .map_err(|_| {
-                            IoError::new(IoErrorKind::Other, "couldn't dial back incoming node")
-                        })
-                        .map(move |id| (id, connec))
-                })
-                .and_then(move |(dial, connec)| dial.map(move |dial| (dial, connec)))
-                .and_then(move |(identify, connec)| {
-                    // Add the info to the peerstore and compute the "real" address of the node (in
-                    // the form `/p2p/...`).
-                    let real_addr = match identify {
-                        (IdentifyOutput::RemoteInfo { info, .. }, old_addr) => {
-                            process_identify_info(&info, &*peerstore, old_addr, addr_ttl)?
-                        }
-                        _ => unreachable!(
-                            "the identify protocol guarantees that we receive remote \
-                             information when we dial a node"
-                        ),
+            let peerstore = peerstore.clone();
+            let future = incoming.and_then(move |(connec, client_addr)| {
+                for peer_id in peerstore.peers() {
+                    let peer = match peerstore.peer(&peer_id) {
+                        Some(p) => p,
+                        None => continue,
                     };
 
-                    Ok((connec, real_addr))
-                });
+                    if peer.addrs().any(|addr| addr == client_addr) {
+                        debug!(target: "libp2p-identify", "Incoming substream from {} \
+                                                               identified as {:?}", client_addr,
+                                                               peer_id);
+                        let ret = (connec, AddrComponent::P2P(peer_id.into_bytes()).into());
+                        return future::Either::A(future::ok(ret));
+                    }
+                }
+
+                // On an incoming connection, dial back the node and upgrade to the identify
+                // protocol.
+                let future = identify_upgrade
+                    .clone()
+                    .dial(client_addr.clone())
+                    .map_err(|_| {
+                        IoError::new(IoErrorKind::Other, "couldn't dial back incoming node")
+                    })
+                    .into_future()
+                    .and_then(move |dial| dial)
+                    .map(move |dial| (dial, connec))
+                    .and_then(move |(identify, connec)| {
+                        // Add the info to the peerstore and compute the "real" address of the
+                        // node (in the form `/p2p/...`).
+                        let real_addr = match identify {
+                            (IdentifyOutput::RemoteInfo { info, .. }, old_addr) => {
+                                process_identify_info(&info, &*peerstore, old_addr, addr_ttl)?
+                            }
+                            _ => unreachable!(
+                                "the identify protocol guarantees that we receive remote \
+                                 information when we dial a node"
+                            ),
+                        };
+
+                        Ok((connec, real_addr))
+                    });
+                future::Either::B(future)
+            });
 
             Box::new(future) as Box<Future<Item = _, Error = _>>
         });

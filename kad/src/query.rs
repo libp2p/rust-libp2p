@@ -142,6 +142,9 @@ fn query<'a, I>(
 where
     I: QueryInterface + 'a,
 {
+    debug!(target: "libp2p-kad", "Start query for {:?} ; num results = {}", searched_key,
+                                 num_results);
+
     // State of the current iterative process.
     struct State<'a> {
         // If true, we are still in the first step of the algorithm where we try to find the
@@ -206,6 +209,10 @@ where
             to_contact
         };
 
+        debug!(target: "libp2p-kad", "New query round ; {} queries in progress ; contacting \
+                                      {} new peers", state.current_attempts_fut.len(),
+                                      to_contact.len());
+
         // For each node in `to_contact`, start an RPC query and a corresponding entry in the two
         // `state.current_attempts_*` fields.
         for peer in to_contact {
@@ -229,7 +236,7 @@ where
         // values back when inside the loop.
         let current_attempts_fut = mem::replace(&mut state.current_attempts_fut, Vec::new());
         if current_attempts_fut.is_empty() {
-            // If `current_attempts_fut` is empty, then `select_all` would panic. It attempts
+            // If `current_attempts_fut` is empty, then `select_all` would panic. It happens
             // when we have no additional node to query.
             let future = future::ok(future::Loop::Break(state));
             return future::Either::A(future);
@@ -254,18 +261,23 @@ where
             // `message` contains the reason why the current future was woken up.
             let closer_peers = match message {
                 Ok(msg) => msg,
-                Err(_) => {
+                Err(err) => {
+                    trace!(target: "libp2p-kad", "RPC query failed for {:?}: {:?}", remote_id, err);
                     state.failed_to_contact.insert(remote_id);
                     return Ok(future::Loop::Continue(state));
                 }
             };
 
-            // Update `state.result` with the fact that we received a valid message from a node.
+            // Inserting the node we received a response from into `state.result`.
+            // The code is non-trivial because `state.result` is ordered by distance and is limited
+            // by `num_results` elements.
             if let Some(insert_pos) = state.result.iter().position(|e| {
                 e.distance_with(&searched_key) >= remote_id.distance_with(&searched_key)
             }) {
                 if state.result[insert_pos] != remote_id {
-                    state.result.pop();
+                    if state.result.len() >= num_results {
+                        state.result.pop();
+                    }
                     state.result.insert(insert_pos, remote_id);
                 }
             } else if state.result.len() < num_results {
@@ -282,6 +294,8 @@ where
                 // the remote.
                 {
                     let valid_multiaddrs = peer.multiaddrs.drain(..);
+                    trace!(target: "libp2p-kad", "Adding multiaddresses to {:?}: {:?}",
+                                                 peer.node_id, valid_multiaddrs);
                     query_interface2.peer_add_addrs(
                         &peer.node_id,
                         valid_multiaddrs,
@@ -317,10 +331,10 @@ where
             {
                 // Check that our `Vec::with_capacity` is correct.
                 debug_assert_eq!(state.result.capacity(), num_results);
-
                 Ok(future::Loop::Break(state))
             } else {
                 if !local_nearest_node_updated {
+                    trace!(target: "libp2p-kad", "Loop didn't update closer node ; jumping to step 2");
                     state.looking_for_closer = false;
                 }
 
@@ -331,6 +345,10 @@ where
         future::Either::B(future)
     });
 
-    let stream = stream.map(|state| state.result);
+    let stream = stream.map(|state| {
+        debug!(target: "libp2p-kad", "Query finished with {} results", state.result.len());
+        state.result
+    });
+
     Box::new(stream) as Box<_>
 }

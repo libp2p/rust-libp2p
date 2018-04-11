@@ -255,13 +255,12 @@ where
 
         match self.next_incoming.poll() {
             Ok(Async::Ready(connec)) => {
-                trace!(target: "libp2p-swarm", "Swarm received new multiplexed \
+                debug!(target: "libp2p-swarm", "Swarm received new multiplexed \
                                                 incoming connection");
                 self.next_incoming = self.upgraded.clone().next_incoming();
                 self.listeners_upgrade.push(connec);
             }
             Ok(Async::NotReady) => {}
-            // TODO: may not be the best idea because we're killing the whole server
             Err(err) => {
                 debug!(target: "libp2p-swarm", "Error in multiplexed incoming \
                                                 connection: {:?}", err);
@@ -323,7 +322,7 @@ where
             match upgrade.poll() {
                 Ok(Async::Ready((output, client_addr))) => {
                     debug!(
-                        "Successfully upgraded listened connection with {}",
+                        "Successfully upgraded incoming connection with {}",
                         client_addr
                     );
                     self.to_process.push(future::Either::A(
