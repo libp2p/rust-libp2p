@@ -156,14 +156,12 @@ where
             .get(&addr)
             .map(|c| c.clone())
         {
-            debug!(target: "libp2p-swarm", "ConnectionReuse: Reusing multiplexed connection to {} \
-                                            instead of dialing", addr);
+            debug!(target: "libp2p-swarm", "Using existing multiplexed connection to {}", addr);
             let future = connec.outbound().map(|s| (s, addr));
             return Ok(Box::new(future) as Box<_>);
         }
 
-        debug!(target: "libp2p-swarm", "ConnectionReuse: No existing connection to {} ; dialing",
-                                       addr);
+        debug!(target: "libp2p-swarm", "No existing connection to {} ; dialing", addr);
 
         // TODO: handle if we're already in the middle in dialing that same node?
         // TODO: try dialing again if the existing connection has dropped
@@ -171,6 +169,8 @@ where
         let dial = match self.inner.dial(addr) {
             Ok(l) => l,
             Err((inner, addr)) => {
+                warn!(target: "libp2p-swarm", "Failed to dial {} because the underlying \
+                                               transport doesn't support this address", addr);
                 return Err((
                     ConnectionReuse {
                         inner: inner,
@@ -259,14 +259,13 @@ where
             }
             Ok(Async::NotReady) => {}
             Ok(Async::Ready(None)) => {
-                debug!(target: "libp2p-swarm", "ConnectionReuse: listener has been closed");
+                debug!(target: "libp2p-swarm", "listener has been closed");
                 if self.connections.is_empty() && self.current_upgrades.is_empty() {
                     return Ok(Async::Ready(None));
                 }
             }
             Err(err) => {
-                debug!(target: "libp2p-swarm", "ConnectionReuse: error while polling \
-                                                listener: {:?}", err);
+                debug!(target: "libp2p-swarm", "error while polling listener: {:?}", err);
                 if self.connections.is_empty() && self.current_upgrades.is_empty() {
                     return Err(err);
                 }
@@ -295,8 +294,8 @@ where
                 }
                 Err(err) => {
                     // Insert the rest of the pending upgrades, but not the current one.
-                    debug!(target: "libp2p-swarm", "ConnectionReuse: error while upgrading \
-                                                    listener connection: {:?}", err);
+                    debug!(target: "libp2p-swarm", "error while upgrading listener connection: \
+                                                    {:?}", err);
                     return Ok(Async::Ready(Some(future::err(err))));
                 }
             }
@@ -319,7 +318,7 @@ where
                     self.connections.push((muxer, next_incoming, client_addr));
                 }
                 Err(err) => {
-                    debug!(target: "libp2p-swarm", "ConnectionReuse: error while upgrading the \
+                    debug!(target: "libp2p-swarm", "error while upgrading the \
                                                     multiplexed incoming connection: {:?}", err);
                     // Insert the rest of the pending connections, but not the current one.
                     return Ok(Async::Ready(Some(future::err(err))));
@@ -374,6 +373,7 @@ where
                 Ok(Async::Ready(value)) => {
                     // A substream is ready ; push back the muxer for the next time this function
                     // is called, then return.
+                    debug!(target: "libp2p-swarm", "New incoming substream");
                     let next = muxer.clone().inbound();
                     lock.next_incoming.push((muxer, next, addr.clone()));
                     return Ok(Async::Ready(future::ok((value, addr))));

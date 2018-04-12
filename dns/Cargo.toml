@@ -7,7 +7,7 @@ authors = ["Parity Technologies <admin@parity.io>"]
 libp2p-swarm = { path = "../swarm" }
 log = "0.4.1"
 futures = "0.1"
-multiaddr = "0.2.0"
+multiaddr = "0.3.0"
 tokio-dns-unofficial = "0.1"
 tokio-io = "0.1"
 

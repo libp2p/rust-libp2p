@@ -150,14 +150,21 @@ where
         let is_wss = match inner_addr.pop() {
             Some(AddrComponent::WS) => false,
             Some(AddrComponent::WSS) => true,
-            _ => return Err((self, original_addr)),
+            _ => {
+                trace!(target: "libp2p-websocket", "Ignoring dial attempt for {} because it is \
+                                                    not a websocket multiaddr", original_addr);
+                return Err((self, original_addr));
+            }
         };
 
         debug!(target: "libp2p-websocket", "Dialing {} through inner transport", inner_addr);
 
         let inner_dial = match self.transport.dial(inner_addr) {
             Ok(d) => d,
-            Err((transport, _)) => {
+            Err((transport, old_addr)) => {
+                warn!(target: "libp2p-websocket", "Failed to dial {} because {} is not supported \
+                                                   by the underlying transport", original_addr,
+                                                   old_addr);
                 return Err((
                     WsConfig {
                         transport: transport,
@@ -201,7 +208,15 @@ where
                         let read_write = RwStreamSink::new(framed_data);
                         Box::new(read_write) as Box<AsyncStream>
                     })
-                    .map(|c| (c, client_addr))
+                    .map(move |c| {
+                        let mut actual_addr = client_addr;
+                        if is_wss {
+                            actual_addr.append(AddrComponent::WSS);
+                        } else {
+                            actual_addr.append(AddrComponent::WS);
+                        };
+                        (c, actual_addr)
+                    })
             });
 
         Ok(Box::new(dial) as Box<_>)
