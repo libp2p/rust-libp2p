@@ -42,6 +42,7 @@
 use fnv::FnvHashMap;
 use futures::future::{self, FutureResult, IntoFuture};
 use futures::{Async, Future, Poll, Stream};
+use futures::stream::FuturesUnordered;
 use futures::stream::Fuse as StreamFuse;
 use futures::sync::mpsc;
 use multiaddr::Multiaddr;
@@ -141,7 +142,7 @@ where
         let listener = ConnectionReuseListener {
             shared: self.shared.clone(),
             listener: listener.fuse(),
-            current_upgrades: Vec::new(),
+            current_upgrades: FuturesUnordered::new(),
             connections: Vec::new(),
         };
 
@@ -233,7 +234,7 @@ where
 {
     // The main listener. `S` is from the underlying transport.
     listener: StreamFuse<S>,
-    current_upgrades: Vec<F>,
+    current_upgrades: FuturesUnordered<F>,
     connections: Vec<(M, <M as StreamMuxer>::InboundSubstream, Multiaddr)>,
 
     // Shared between the whole connection reuse mechanism.
@@ -272,33 +273,27 @@ where
             }
         };
 
-        // Check whether any upgrade (to a muxer) on an incoming connection is ready.
         // We extract everything at the start, then insert back the elements that we still want at
         // the next iteration.
-        for n in (0..self.current_upgrades.len()).rev() {
-            let mut current_upgrade = self.current_upgrades.swap_remove(n);
-            match current_upgrade.poll() {
-                Ok(Async::Ready((muxer, client_addr))) => {
-                    let next_incoming = muxer.clone().inbound();
-                    self.connections
-                        .push((muxer.clone(), next_incoming, client_addr.clone()));
-                    // We overwrite any current active connection to that multiaddr because we
-                    // are the freshest possible connection.
-                    self.shared
-                        .lock()
-                        .active_connections
-                        .insert(client_addr, muxer);
-                }
-                Ok(Async::NotReady) => {
-                    self.current_upgrades.push(current_upgrade);
-                }
-                Err(err) => {
-                    // Insert the rest of the pending upgrades, but not the current one.
-                    debug!(target: "libp2p-swarm", "error while upgrading listener connection: \
-                                                    {:?}", err);
-                    return Ok(Async::Ready(Some(future::err(err))));
-                }
+        match self.current_upgrades.poll() {
+            Ok(Async::Ready(Some((muxer, client_addr)))) => {
+                let next_incoming = muxer.clone().inbound();
+                self.connections
+                    .push((muxer.clone(), next_incoming, client_addr.clone()));
+                // We overwrite any current active connection to that multiaddr because we
+                // are the freshest possible connection.
+                self.shared
+                    .lock()
+                    .active_connections
+                    .insert(client_addr, muxer);
             }
+            Err(err) => {
+                // Insert the rest of the pending upgrades, but not the current one.
+                debug!(target: "libp2p-swarm", "error while upgrading listener connection: \
+                                                {:?}", err);
+                return Ok(Async::Ready(Some(future::err(err))));
+            }
+            _ => {}
         }
 
         // Check whether any incoming substream is ready.

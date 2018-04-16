@@ -21,6 +21,7 @@
 use std::fmt;
 use std::io::Error as IoError;
 use futures::{future, Async, Future, IntoFuture, Poll, Stream};
+use futures::stream::{FuturesUnordered, StreamFuture};
 use futures::sync::mpsc;
 use {ConnectionUpgrade, Multiaddr, MuxedTransport, UpgradedNode};
 
@@ -55,11 +56,11 @@ where
         handler: handler,
         new_listeners: new_listeners_rx,
         next_incoming: upgraded.clone().next_incoming(),
-        listeners: Vec::new(),
-        listeners_upgrade: Vec::new(),
-        dialers: Vec::new(),
+        listeners: FuturesUnordered::new(),
+        listeners_upgrade: FuturesUnordered::new(),
+        dialers: FuturesUnordered::new(),
         new_dialers: new_dialers_rx,
-        to_process: Vec::new(),
+        to_process: FuturesUnordered::new(),
         new_toprocess: new_toprocess_rx,
     };
 
@@ -222,19 +223,22 @@ where
     next_incoming: Box<
         Future<Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>, Error = IoError>,
     >,
-    listeners: Vec<
-        Box<
-            Stream<
-                Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>,
-                Error = IoError,
+    listeners: FuturesUnordered<
+        StreamFuture<
+            Box<
+                Stream<
+                    Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>,
+                    Error = IoError,
+                >,
             >,
         >,
     >,
-    listeners_upgrade: Vec<Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>>,
-    dialers: Vec<Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>>,
+    listeners_upgrade:
+        FuturesUnordered<Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>>,
+    dialers: FuturesUnordered<Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>>,
     new_dialers:
         mpsc::UnboundedReceiver<Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>>,
-    to_process: Vec<future::Either<F, Box<Future<Item = (), Error = IoError>>>>,
+    to_process: FuturesUnordered<future::Either<F, Box<Future<Item = (), Error = IoError>>>>,
     new_toprocess: mpsc::UnboundedReceiver<Box<Future<Item = (), Error = IoError>>>,
 }
 
@@ -270,7 +274,7 @@ where
 
         match self.new_listeners.poll() {
             Ok(Async::Ready(Some(new_listener))) => {
-                self.listeners.push(new_listener);
+                self.listeners.push(new_listener.into_future());
             }
             Ok(Async::Ready(None)) | Err(_) => {
                 // New listener sender has been closed.
@@ -298,75 +302,54 @@ where
             Ok(Async::NotReady) => {}
         };
 
-        for n in (0..self.listeners.len()).rev() {
-            let mut listener = self.listeners.swap_remove(n);
-            match listener.poll() {
-                Ok(Async::Ready(Some(upgrade))) => {
-                    trace!(target: "libp2p-swarm", "Swarm received new connection on \
-                                                    listener socket");
-                    self.listeners.push(listener);
-                    self.listeners_upgrade.push(upgrade);
-                }
-                Ok(Async::NotReady) => {
-                    self.listeners.push(listener);
-                }
-                Ok(Async::Ready(None)) => {}
-                Err(err) => {
-                    warn!(target: "libp2p-swarm", "Error in listener: {:?}", err);
-                }
-            };
+        match self.listeners.poll() {
+            Ok(Async::Ready(Some((Some(upgrade), remaining)))) => {
+                trace!(target: "libp2p-swarm", "Swarm received new connection on listener socket");
+                self.listeners_upgrade.push(upgrade);
+                self.listeners.push(remaining.into_future());
+            }
+            Err((err, _)) => {
+                warn!(target: "libp2p-swarm", "Error in listener: {:?}", err);
+            }
+            _ => {}
         }
 
-        for n in (0..self.listeners_upgrade.len()).rev() {
-            let mut upgrade = self.listeners_upgrade.swap_remove(n);
-            match upgrade.poll() {
-                Ok(Async::Ready((output, client_addr))) => {
-                    debug!(
-                        "Successfully upgraded incoming connection with {}",
-                        client_addr
-                    );
-                    self.to_process.push(future::Either::A(
-                        handler(output, client_addr).into_future(),
-                    ));
-                }
-                Ok(Async::NotReady) => {
-                    self.listeners_upgrade.push(upgrade);
-                }
-                Err(err) => {
-                    debug!(target: "libp2p-swarm", "Error in listener upgrade: {:?}", err);
-                }
+        match self.listeners_upgrade.poll() {
+            Ok(Async::Ready(Some((output, client_addr)))) => {
+                debug!(
+                    "Successfully upgraded incoming connection with {}",
+                    client_addr
+                );
+                self.to_process.push(future::Either::A(
+                    handler(output, client_addr).into_future(),
+                ));
             }
+            Err(err) => {
+                warn!(target: "libp2p-swarm", "Error in listener upgrade: {:?}", err);
+            }
+            _ => {}
         }
 
-        for n in (0..self.dialers.len()).rev() {
-            let mut dialer = self.dialers.swap_remove(n);
-            match dialer.poll() {
-                Ok(Async::Ready((output, addr))) => {
-                    trace!("Successfully upgraded dialed connection with {}", addr);
-                    self.to_process
-                        .push(future::Either::A(handler(output, addr).into_future()));
-                }
-                Ok(Async::NotReady) => {
-                    self.dialers.push(dialer);
-                }
-                Err(err) => {
-                    debug!(target: "libp2p-swarm", "Error in dialer upgrade: {:?}", err);
-                }
+        match self.dialers.poll() {
+            Ok(Async::Ready(Some((output, addr)))) => {
+                trace!("Successfully upgraded dialed connection with {}", addr);
+                self.to_process
+                    .push(future::Either::A(handler(output, addr).into_future()));
             }
+            Err(err) => {
+                warn!(target: "libp2p-swarm", "Error in dialer upgrade: {:?}", err);
+            }
+            _ => {}
         }
 
-        for n in (0..self.to_process.len()).rev() {
-            let mut to_process = self.to_process.swap_remove(n);
-            match to_process.poll() {
-                Ok(Async::Ready(())) => {
-                    trace!(target: "libp2p-swarm", "Future returned by swarm handler driven to \
-                                                    completion");
-                }
-                Ok(Async::NotReady) => self.to_process.push(to_process),
-                Err(err) => {
-                    debug!(target: "libp2p-swarm", "Error in processing: {:?}", err);
-                }
+        match self.to_process.poll() {
+            Ok(Async::Ready(Some(()))) => {
+                trace!(target: "libp2p-swarm", "Future returned by swarm handler driven to completion");
             }
+            Err(err) => {
+                warn!(target: "libp2p-swarm", "Error in processing: {:?}", err);
+            }
+            _ => {}
         }
 
         // TODO: we never return `Ok(Ready)` because there's no way to know whether
