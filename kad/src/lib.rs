@@ -72,6 +72,8 @@ extern crate libp2p_identify;
 extern crate libp2p_peerstore;
 extern crate libp2p_ping;
 extern crate libp2p_swarm;
+#[macro_use]
+extern crate log;
 extern crate multiaddr;
 extern crate parking_lot;
 extern crate protobuf;
@@ -82,7 +84,7 @@ extern crate tokio_timer;
 extern crate varint;
 
 pub use self::high_level::{KademliaConfig, KademliaController, KademliaControllerPrototype};
-pub use self::high_level::KademliaUpgrade;
+pub use self::high_level::{KademliaProcessingFuture, KademliaUpgrade};
 
 mod high_level;
 mod kad_server;

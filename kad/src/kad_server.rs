@@ -53,6 +53,10 @@ pub trait KadServerInterface: Clone {
     /// Returns the peer ID of the local node.
     fn local_id(&self) -> &PeerId;
 
+    /// Returns known information about the peer. Not atomic/thread-safe in the sense that
+    /// information can change immediately after being returned and before they are processed.
+    fn peer_info(&self, _: &PeerId) -> (Vec<Multiaddr>, protocol::ConnectionType);
+
     /// Updates an entry in the K-Buckets. Called whenever that peer sends us a message.
     fn kbuckets_update(&self, peer: &PeerId);
 
@@ -408,19 +412,34 @@ where
 }
 
 // Builds a `KadMsg` that handles a `FIND_NODE` request received from the remote.
-fn handle_find_node_req<I>(interface: &I, _requested_key: &[u8]) -> KadMsg
+fn handle_find_node_req<I>(interface: &I, requested_key: &[u8]) -> KadMsg
 where
     I: ?Sized + KadServerInterface,
 {
-    KadMsg::FindNodeRes {
-        closer_peers: vec![
+    let peer_id = match PeerId::from_bytes(requested_key.to_vec()) {
+        // TODO: suboptimal
+        Ok(id) => id,
+        Err(_) => {
+            return KadMsg::FindNodeRes {
+                closer_peers: vec![],
+            }
+        }
+    };
+
+    let closer_peers = interface
+        .kbuckets_find_closest(&peer_id)
+        .into_iter()
+        .map(|peer| {
+            let (multiaddrs, connection_ty) = interface.peer_info(&peer);
             protocol::Peer {
-                node_id: interface.local_id().clone(),
-                multiaddrs: vec![],
-                connection_ty: protocol::ConnectionType::Connected,
-            },
-        ], // TODO: fill the multiaddresses from the peer store
-    }
+                node_id: peer,
+                multiaddrs: multiaddrs,
+                connection_ty: connection_ty,
+            }
+        })
+        .collect();
+
+    KadMsg::FindNodeRes { closer_peers }
 }
 
 // Builds a `KadMsg` that handles a `FIND_VALUE` request received from the remote.

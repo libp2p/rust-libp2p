@@ -927,6 +927,7 @@ where
             .and_then(move |(connection, client_addr)| {
                 let iter = upgrade.protocol_names()
                     .map(|(name, id)| (name, <Bytes as PartialEq>::eq, id));
+                debug!(target: "libp2p-swarm", "Starting protocol negotiation (dialer)");
                 let negotiated = multistream_select::dialer_select_proto(connection, iter)
                     .map_err(|err| IoError::new(IoErrorKind::Other, err));
                 negotiated.map(|(upgrade_id, conn)| (upgrade_id, conn, upgrade, client_addr))
@@ -949,6 +950,14 @@ where
                 debug!(target: "libp2p-swarm", "Trying to apply negotiated protocol with {}",
                        client_addr);
                 f.map(|v| (v, client_addr))
+            })
+            .then(|val| {
+                match val {
+                    Ok(_) => debug!(target: "libp2p-swarm", "Successfully applied negotiated \
+                                                             protocol"),
+                    Err(_) => debug!(target: "libp2p-swarm", "Failed to apply negotiated protocol"),
+                }
+                val
             });
 
         Ok(Box::new(future))
@@ -982,6 +991,7 @@ where
                     let iter = upgrade
                         .protocol_names()
                         .map::<_, fn(_) -> _>(|(name, id)| (name, <Bytes as PartialEq>::eq, id));
+                    debug!(target: "libp2p-swarm", "Starting protocol negotiation (incoming)");
                     let negotiated = multistream_select::listener_select_proto(connection, iter)
                         .map_err(|err| IoError::new(IoErrorKind::Other, err));
                     negotiated.map(move |(upgrade_id, conn)| (upgrade_id, conn, upgrade, addr))
@@ -1000,10 +1010,19 @@ where
                     negotiated
                 })
                 .and_then(move |(upgrade_id, connection, upgrade, addr)| {
-                    let upg = upgrade.upgrade(connection, upgrade_id, Endpoint::Dialer, &addr);
+                    let upg = upgrade.upgrade(connection, upgrade_id, Endpoint::Listener, &addr);
                     debug!(target: "libp2p-swarm", "Trying to apply negotiated protocol with {}",
                            addr);
                     upg.map(|u| (u, addr))
+                })
+                .then(|val| {
+                    match val {
+                        Ok(_) => debug!(target: "libp2p-swarm", "Successfully applied negotiated \
+                                                                 protocol"),
+                        Err(_) => debug!(target: "libp2p-swarm", "Failed to apply negotiated \
+                                                                  protocol"),
+                    }
+                    val
                 });
 
             Box::new(future) as Box<Future<Item = _, Error = _>>
@@ -1064,6 +1083,7 @@ where
                         let iter = upgrade.protocol_names()
                             .map::<_, fn(_) -> _>(|(n, t)| (n, <Bytes as PartialEq>::eq, t));
                         let remote_addr2 = remote_addr.clone();
+                        debug!(target: "libp2p-swarm", "Starting protocol negotiation (listener)");
                         multistream_select::listener_select_proto(connection, iter)
                             .map_err(|err| IoError::new(IoErrorKind::Other, err))
                             .then(move |negotiated| {

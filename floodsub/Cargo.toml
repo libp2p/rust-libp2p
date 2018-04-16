@@ -12,7 +12,7 @@ futures = "0.1"
 libp2p-peerstore = { path = "../peerstore" }
 libp2p-swarm = { path = "../swarm" }
 log = "0.4.1"
-multiaddr = "0.2"
+multiaddr = "0.3"
 parking_lot = "0.5.3"
 protobuf = "1.4.2"
 smallvec = "0.6.0"
