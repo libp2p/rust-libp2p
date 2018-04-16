@@ -303,32 +303,54 @@ where
             Ok(Async::NotReady) => {}
         };
 
-        if let Ok(Async::Ready(Some((Some(upgrade), remaining)))) = self.listeners.poll() {
-            trace!(target: "libp2p-swarm", "Swarm received new connection on \
-                                                    listener socket");
-            self.listeners_upgrade.push(upgrade);
-            self.listeners.push(remaining.into_future());
+        match self.listeners.poll() {
+            Ok(Async::Ready(Some((Some(upgrade), remaining)))) => {
+                trace!(target: "libp2p-swarm", "Swarm received new connection on listener socket");
+                self.listeners_upgrade.push(upgrade);
+                self.listeners.push(remaining.into_future());
+            }
+            Err((err, _)) => {
+                warn!(target: "libp2p-swarm", "Error in listener: {:?}", err);
+            }
+            _ => {}
         }
 
-        if let Ok(Async::Ready(Some((output, client_addr)))) = self.listeners_upgrade.poll() {
-            debug!(
-                "Successfully upgraded listened connection with {}",
-                client_addr
-            );
-            self.to_process.push(future::Either::A(
-                handler(output, client_addr).into_future(),
-            ));
+        match self.listeners_upgrade.poll() {
+            Ok(Async::Ready(Some((output, client_addr)))) => {
+                trace!(
+                    "Successfully upgraded listened connection with {}",
+                    client_addr
+                );
+                self.to_process.push(future::Either::A(
+                    handler(output, client_addr).into_future(),
+                ));
+            }
+            Err(err) => {
+                warn!(target: "libp2p-swarm", "Error in listener upgrade: {:?}", err);
+            }
+            _ => {}
         }
 
-        if let Ok(Async::Ready(Some((output, addr)))) = self.dialers.poll() {
-            trace!("Successfully upgraded dialed connection with {}", addr);
-            self.to_process
-                .push(future::Either::A(handler(output, addr).into_future()));
+        match self.dialers.poll() {
+            Ok(Async::Ready(Some((output, addr)))) => {
+                trace!("Successfully upgraded dialed connection with {}", addr);
+                self.to_process
+                    .push(future::Either::A(handler(output, addr).into_future()));
+            }
+            Err(err) => {
+                warn!(target: "libp2p-swarm", "Error in dialer upgrade: {:?}", err);
+            }
+            _ => {}
         }
 
-        if let Ok(Async::Ready(Some(()))) = self.to_process.poll() {
-            trace!(target: "libp2p-swarm", "Future returned by swarm handler driven to \
-                                                    completion");
+        match self.to_process.poll() {
+            Ok(Async::Ready(Some(()))) => {
+                trace!(target: "libp2p-swarm", "Future returned by swarm handler driven to completion");
+            }
+            Err(err) => {
+                warn!(target: "libp2p-swarm", "Error in processing: {:?}", err);
+            }
+            _ => {}
         }
 
         // TODO: we never return `Ok(Ready)` because there's no way to know whether
