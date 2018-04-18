@@ -116,7 +116,7 @@ impl Serialize for PeerInfo {
             &self.addrs
                 .iter()
                 .map(|&(ref addr, ref expires)| {
-                    let addr = addr.to_bytes();
+                    let addr = addr.to_string();
                     let from_epoch = expires.duration_since(UNIX_EPOCH)
                     // This `unwrap_or` case happens if the user has their system time set to
                     // before EPOCH. Times-to-live will be be longer than expected, but it's a very
@@ -175,5 +175,26 @@ impl PartialOrd for PeerInfo {
     #[inline]
     fn partial_cmp(&self, _other: &Self) -> Option<Ordering> {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    extern crate serde_json;
+    use super::*;
+
+    #[test]
+    fn ser_and_deser() {
+        let peer_info = PeerInfo {
+            addrs: vec![
+                (
+                    "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap(),
+                    UNIX_EPOCH,
+                ),
+            ],
+        };
+        let serialized = serde_json::to_string(&peer_info).unwrap();
+        let deserialized: PeerInfo = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(peer_info, deserialized);
     }
 }
