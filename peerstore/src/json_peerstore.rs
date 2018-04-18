@@ -142,4 +142,27 @@ mod tests {
         {::json_peerstore::JsonPeerstore::new(temp_file.path()).unwrap()}
         {let temp_file = self::tempfile::NamedTempFile::new().unwrap()}
     );
+
+    #[test]
+    fn reload() {
+        let temp_file = self::tempfile::NamedTempFile::new().unwrap();
+        let peer_store = ::json_peerstore::JsonPeerstore::new(temp_file.path()).unwrap();
+
+        let peer_id = PeerId::from_public_key(&[1, 2, 3]);
+        let addr = "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap();
+
+        peer_store
+            .peer_or_create(&peer_id)
+            .add_addr(addr.clone(), Duration::from_millis(5000));
+        peer_store.flush().unwrap();
+        drop(peer_store);
+
+        let peer_store = ::json_peerstore::JsonPeerstore::new(temp_file.path()).unwrap();
+        let addrs = peer_store
+            .peer(&peer_id)
+            .unwrap()
+            .addrs()
+            .collect::<Vec<_>>();
+        assert_eq!(addrs, &[addr]);
+    }
 }
