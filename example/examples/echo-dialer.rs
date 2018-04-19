@@ -32,7 +32,8 @@ extern crate tokio_io;
 use futures::{Future, Sink, Stream};
 use futures::sync::oneshot;
 use std::env;
-use swarm::{DeniedConnectionUpgrade, SimpleProtocol, Transport, UpgradeExt};
+use swarm::Transport;
+use swarm::upgrade::{self, DeniedConnectionUpgrade, SimpleProtocol, UpgradeExt};
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 use tokio_io::AsyncRead;
@@ -62,7 +63,7 @@ fn main() {
         // On top of TCP/IP, we will use either the plaintext protocol or the secio protocol,
         // depending on which one the remote supports.
         .with_upgrade({
-            let plain_text = swarm::PlainTextConfig;
+            let plain_text = upgrade::PlainTextConfig;
 
             let secio = {
                 let private_key = include_bytes!("test-private-key.pk8");

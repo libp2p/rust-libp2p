@@ -94,7 +94,7 @@
 //! # fn main() {
 //! let tokio_core = tokio_core::reactor::Core::new().unwrap();
 //! let tcp_transport = libp2p_tcp_transport::TcpConfig::new(tokio_core.handle());
-//! let upgraded = tcp_transport.with_upgrade(libp2p_swarm::PlainTextConfig);
+//! let upgraded = tcp_transport.with_upgrade(libp2p_swarm::upgrade::PlainTextConfig);
 //!
 //! // upgraded.dial(...)   // automatically applies the plain text protocol on the socket
 //! # }
@@ -217,14 +217,16 @@ extern crate tokio_io;
 pub extern crate multiaddr;
 
 mod connection_reuse;
-pub mod swarm;
+mod either;
+
 pub mod muxing;
+pub mod swarm;
 pub mod transport;
+pub mod upgrade;
 
 pub use self::connection_reuse::ConnectionReuse;
 pub use self::multiaddr::{AddrComponent, Multiaddr};
 pub use self::muxing::StreamMuxer;
 pub use self::swarm::{swarm, SwarmController, SwarmFuture};
-pub use self::transport::{ConnectionUpgrade, OrUpgrade, PlainTextConfig, Transport, UpgradedNode};
-pub use self::transport::{Endpoint, MuxedTransport, SimpleProtocol, UpgradeExt};
-pub use self::transport::DeniedConnectionUpgrade;
+pub use self::transport::{MuxedTransport, Transport};
+pub use self::upgrade::{ConnectionUpgrade, Endpoint};
