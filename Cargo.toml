@@ -1,26 +1,24 @@
 [workspace]
 members = [
-    "multistream-select",
+    "circular-buffer",
     "datastore",
-    "example",
     "dns",
+    "example",
     "floodsub",
     "identify",
     "kad",
+    "mplex",
+    "multistream-select",
     "peerstore",
     "ping",
+    "ratelimit",
+    "relay",
+    "rw-stream-sink",
     "secio",
     "core",
     "tcp-transport",
-    "websocket",
-    "multistream-select",
-    "datastore",
-    "rw-stream-sink",
-    "circular-buffer",
     "varint-rs",
-    "mplex",
-    "example",
-    "ratelimit"
+    "websocket"
 ]
 
 [patch.crates-io]

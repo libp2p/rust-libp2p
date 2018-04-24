@@ -102,7 +102,7 @@ pub struct PeerId {
 
 impl fmt::Debug for PeerId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "PeerId({})", bs58::encode(&self.multihash).into_string())
+        write!(f, "PeerId({})", self.to_string())
     }
 }
 
@@ -113,6 +113,15 @@ impl PeerId {
         let data = multihash::encode(multihash::Hash::SHA2256, public_key)
             .expect("sha2-256 is always supported");
         PeerId { multihash: data }
+    }
+
+    /// Parses a base-58 encoded string as a `PeerId`.
+    #[inline]
+    pub fn from_str(public_key: &str) -> Option<PeerId> {
+        bs58::decode(public_key)
+            .into_vec()
+            .ok()
+            .and_then(|vec| PeerId::from_bytes(vec).ok())
     }
 
     /// Checks whether `data` is a valid `PeerId`. If so, returns the `PeerId`. If not, returns
@@ -135,6 +144,12 @@ impl PeerId {
     #[inline]
     pub fn as_bytes(&self) -> &[u8] {
         &self.multihash
+    }
+
+    /// Returns a base-58 encoded string of this `PeerId`.
+    #[inline]
+    pub fn to_string(&self) -> String {
+        bs58::encode(&self.multihash).into_string()
     }
 
     /// Returns the raw bytes of the hash of this `PeerId`.
