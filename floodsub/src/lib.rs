@@ -79,6 +79,7 @@ impl FloodSubUpgrade {
             subscribed_topics: RwLock::new(Vec::new()),
             seq_no: AtomicUsize::new(0),
             received: Mutex::new(FnvHashSet::default()),
+            topic_validators: RwLock::new(FnvHashMap::default()),
         });
 
         let upgrade = FloodSubUpgrade { inner: inner };
@@ -247,6 +248,12 @@ struct Inner {
     // don't dispatch the same message twice if we receive it twice on the network.
     // TODO: the `HashSet` will keep growing indefinitely :-/
     received: Mutex<FnvHashSet<u64>>,
+
+    topic_validators: RwLock<FnvHashMap<TopicHash, Box<TopicValidator>>>,
+}
+
+pub trait TopicValidator {
+    fn validate(&self, message: &Message) -> bool;
 }
 
 struct RemoteInfo {
@@ -476,6 +483,19 @@ impl FloodSubController {
 
         debug!(target: "libp2p-floodsub", "Message queued for {} remotes", num_dispatched);
     }
+
+    /// Register topic validator.
+    pub fn register_validator(&self, topic: &Topic, validator: Box<TopicValidator>) {
+        self.inner
+            .topic_validators
+            .write()
+            .insert(topic.hash().clone(), validator);
+    }
+
+    /// Unregister topic validator.
+    pub fn unregister_validator(&self, topic: &Topic) {
+        self.inner.topic_validators.write().remove(topic.hash());
+    }
 }
 
 /// Implementation of `Stream` that provides messages for the subscribed topics you subscribed to.
@@ -608,6 +628,24 @@ fn handle_packet_received(
 
         // TODO: should check encryption/authentication of the message
 
+        // Validate topic message
+        let msg = Message {
+            source: from,
+            data: publish.take_data(),
+            topics: topics.clone(),
+        };
+        let validators = inner.topic_validators.read();
+        if topics
+            .iter()
+            .map(|t| validators.get(t).map(|v| v.validate(&msg)))
+            .any(|r| r == Some(false))
+        {
+            trace!(target: "libp2p-floodsub",
+                   "Skipping message because failing validation ; payload = {} bytes",
+                   publish.get_data().len());
+            continue;
+        }
+
         // Broadcast the message to all the other remotes.
         {
             let remote_connections = inner.remote_connections.read();
@@ -633,11 +671,7 @@ fn handle_packet_received(
         if dispatch_locally {
             // Ignore if channel is closed.
             trace!(target: "libp2p-floodsub", "Dispatching message locally");
-            let _ = inner.output_tx.unbounded_send(Message {
-                source: from,
-                data: publish.take_data(),
-                topics: topics,
-            });
+            let _ = inner.output_tx.unbounded_send(msg);
         } else {
             trace!(target: "libp2p-floodsub",
                    "Message not dispatched locally as we are not subscribed to any of the topics");
