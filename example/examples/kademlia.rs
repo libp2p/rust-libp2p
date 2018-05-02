@@ -39,7 +39,8 @@ use peerstore::PeerId;
 use std::env;
 use std::sync::Arc;
 use std::time::Duration;
-use swarm::{Transport, UpgradeExt};
+use swarm::Transport;
+use swarm::upgrade::{self, UpgradeExt};
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 
@@ -69,7 +70,7 @@ fn main() {
         // On top of TCP/IP, we will use either the plaintext protocol or the secio protocol,
         // depending on which one the remote supports.
         .with_upgrade({
-            let plain_text = swarm::PlainTextConfig;
+            let plain_text = upgrade::PlainTextConfig;
 
             let secio = {
                 let private_key = include_bytes!("test-private-key.pk8");
