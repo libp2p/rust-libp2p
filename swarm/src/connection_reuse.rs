@@ -50,7 +50,8 @@ use muxing::StreamMuxer;
 use parking_lot::Mutex;
 use std::io::Error as IoError;
 use std::sync::Arc;
-use transport::{ConnectionUpgrade, MuxedTransport, Transport, UpgradedNode};
+use transport::{MuxedTransport, Transport, UpgradedNode};
+use upgrade::ConnectionUpgrade;
 
 /// Allows reusing the same muxed connection multiple times.
 ///

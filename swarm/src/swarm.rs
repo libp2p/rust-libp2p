@@ -23,7 +23,8 @@ use std::io::Error as IoError;
 use futures::{future, Async, Future, IntoFuture, Poll, Stream};
 use futures::stream::{FuturesUnordered, StreamFuture};
 use futures::sync::mpsc;
-use {ConnectionUpgrade, Multiaddr, MuxedTransport, UpgradedNode};
+use transport::UpgradedNode;
+use {ConnectionUpgrade, Multiaddr, MuxedTransport};
 
 /// Creates a swarm.
 ///

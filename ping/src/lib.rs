@@ -92,8 +92,7 @@ use bytes::{BufMut, Bytes, BytesMut};
 use futures::{Future, Sink, Stream};
 use futures::future::{loop_fn, FutureResult, IntoFuture, Loop};
 use futures::sync::{mpsc, oneshot};
-use libp2p_swarm::Multiaddr;
-use libp2p_swarm::transport::{ConnectionUpgrade, Endpoint};
+use libp2p_swarm::{ConnectionUpgrade, Endpoint, Multiaddr};
 use log::Level;
 use parking_lot::Mutex;
 use rand::Rand;
@@ -310,7 +309,7 @@ mod tests {
     use futures::future::join_all;
     use futures::Future;
     use futures::Stream;
-    use libp2p_swarm::transport::{ConnectionUpgrade, Endpoint};
+    use libp2p_swarm::{ConnectionUpgrade, Endpoint};
 
     #[test]
     fn ping_pong() {

@@ -37,7 +37,8 @@ use futures::future::Future;
 use futures::Stream;
 use peerstore::PeerId;
 use std::{env, mem};
-use swarm::{Multiaddr, Transport, UpgradeExt};
+use swarm::{Multiaddr, Transport};
+use swarm::upgrade::{self, UpgradeExt};
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 use websocket::WsConfig;
@@ -64,7 +65,7 @@ fn main() {
         // On top of TCP/IP, we will use either the plaintext protocol or the secio protocol,
         // depending on which one the remote supports.
         .with_upgrade({
-            let plain_text = swarm::PlainTextConfig;
+            let plain_text = upgrade::PlainTextConfig;
 
             let secio = {
                 let private_key = include_bytes!("test-private-key.pk8");
