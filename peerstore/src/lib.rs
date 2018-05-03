@@ -86,8 +86,8 @@ mod peerstore_tests;
 
 pub mod json_peerstore;
 pub mod memory_peerstore;
-mod peerstore;
 mod peer_info;
+mod peerstore;
 
 pub type TTL = std::time::Duration;
 
@@ -140,16 +140,23 @@ impl PeerId {
     /// Returns the raw bytes of the hash of this `PeerId`.
     #[inline]
     pub fn hash(&self) -> &[u8] {
-        let multihash::Multihash { digest, .. } =
-            multihash::decode(&self.multihash).expect("our inner value should always be valid");
-        digest
+        multihash::decode(&self.multihash)
+            .expect("our inner value should always be valid")
+            .digest
     }
 
     /// Checks whether the public key passed as parameter matches the public key of this `PeerId`.
-    pub fn is_public_key(&self, public_key: &[u8]) -> bool {
-        let multihash::Multihash { alg, .. } =
-            multihash::decode(&self.multihash).expect("our inner value should always be valid");
-        let compare = multihash::encode(alg, public_key).expect("unsupported multihash algorithm"); // TODO: what to do here?
-        compare == self.multihash
+    ///
+    /// Returns `None` if this `PeerId`s hash algorithm is not supported when encoding the
+    /// given public key, otherwise `Some` boolean as the result of an equality check.
+    pub fn is_public_key(&self, public_key: &[u8]) -> Option<bool> {
+        let alg = multihash::decode(&self.multihash)
+            .expect("our inner value should always be valid")
+            .alg;
+        match multihash::encode(alg, public_key) {
+            Ok(compare) => Some(compare == self.multihash),
+            Err(multihash::Error::UnsupportedType) => None,
+            Err(_) => Some(false),
+        }
     }
 }
