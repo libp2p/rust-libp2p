@@ -20,9 +20,9 @@
 
 extern crate bytes;
 extern crate futures;
+extern crate libp2p_mplex as multiplex;
 extern crate libp2p_swarm as swarm;
 extern crate libp2p_tcp_transport as tcp;
-extern crate multiplex;
 extern crate tokio_core;
 extern crate tokio_io;
 

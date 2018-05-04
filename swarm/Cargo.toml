@@ -17,5 +17,5 @@ tokio-io = "0.1"
 [dev-dependencies]
 libp2p-ping = { path = "../ping" }
 libp2p-tcp-transport = { path = "../tcp-transport" }
-multiplex = { path = "../multiplex-rs" }
+libp2p-mplex = { path = "../mplex" }
 tokio-core = "0.1"

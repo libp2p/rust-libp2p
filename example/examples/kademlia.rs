@@ -25,11 +25,11 @@ extern crate example;
 extern crate futures;
 extern crate libp2p_identify as identify;
 extern crate libp2p_kad as kad;
+extern crate libp2p_mplex as multiplex;
 extern crate libp2p_peerstore as peerstore;
 extern crate libp2p_secio as secio;
 extern crate libp2p_swarm as swarm;
 extern crate libp2p_tcp_transport as tcp;
-extern crate multiplex;
 extern crate tokio_core;
 extern crate tokio_io;
 

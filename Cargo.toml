@@ -18,7 +18,7 @@ members = [
     "rw-stream-sink",
     "circular-buffer",
     "varint-rs",
-    "multiplex-rs",
+    "mplex",
     "example",
     "ratelimit"
 ]

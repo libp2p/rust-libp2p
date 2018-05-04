@@ -9,7 +9,7 @@ bytes = "0.4"
 env_logger = "0.5.4"
 futures = "0.1"
 multiaddr = "0.3"
-multiplex = { path = "../multiplex-rs" }
+libp2p-mplex = { path = "../mplex" }
 libp2p-identify = { path = "../identify" }
 libp2p-kad = { path = "../kad" }
 libp2p-floodsub = { path = "../floodsub" }
