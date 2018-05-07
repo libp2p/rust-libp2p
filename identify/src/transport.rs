@@ -62,10 +62,10 @@ where
     PStoreRef: Deref<Target = PStore> + Clone + 'static, // TODO: 'static :(
     for<'r> &'r PStore: Peerstore,
 {
-    type RawConn = Trans::RawConn;
+    type Output = Trans::Output;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
-    type ListenerUpgrade = Box<Future<Item = (Trans::RawConn, Multiaddr), Error = IoError>>;
-    type Dial = Box<Future<Item = (Trans::RawConn, Multiaddr), Error = IoError>>;
+    type ListenerUpgrade = Box<Future<Item = (Trans::Output, Multiaddr), Error = IoError>>;
+    type Dial = Box<Future<Item = (Trans::Output, Multiaddr), Error = IoError>>;
 
     #[inline]
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -279,7 +279,7 @@ where
     for<'r> &'r PStore: Peerstore,
 {
     type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError>>;
-    type IncomingUpgrade = Box<Future<Item = (Trans::RawConn, Multiaddr), Error = IoError>>;
+    type IncomingUpgrade = Box<Future<Item = (Trans::Output, Multiaddr), Error = IoError>>;
 
     #[inline]
     fn next_incoming(self) -> Self::Incoming {
@@ -410,9 +410,9 @@ mod tests {
             inner: TcpConfig,
         }
         impl Transport for UnderlyingTrans {
-            type RawConn = <TcpConfig as Transport>::RawConn;
+            type Output = <TcpConfig as Transport>::Output;
             type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
-            type ListenerUpgrade = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
+            type ListenerUpgrade = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>;
             type Dial = <TcpConfig as Transport>::Dial;
             #[inline]
             fn listen_on(

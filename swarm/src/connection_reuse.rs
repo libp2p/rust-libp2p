@@ -62,7 +62,7 @@ use upgrade::ConnectionUpgrade;
 pub struct ConnectionReuse<T, C>
 where
     T: Transport,
-    C: ConnectionUpgrade<T::RawConn>,
+    C: ConnectionUpgrade<T::Output>,
     C::Output: StreamMuxer,
 {
     // Underlying transport and connection upgrade for when we need to dial or listen.
@@ -94,7 +94,7 @@ where
 impl<T, C> From<UpgradedNode<T, C>> for ConnectionReuse<T, C>
 where
     T: Transport,
-    C: ConnectionUpgrade<T::RawConn>,
+    C: ConnectionUpgrade<T::Output>,
     C::Output: StreamMuxer,
 {
     #[inline]
@@ -116,15 +116,15 @@ where
 impl<T, C> Transport for ConnectionReuse<T, C>
 where
     T: Transport + 'static,                     // TODO: 'static :(
-    C: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :(
+    C: ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :(
     C: Clone,
     C::Output: StreamMuxer + Clone,
     C::NamesIter: Clone, // TODO: not elegant
 {
-    type RawConn = <C::Output as StreamMuxer>::Substream;
+    type Output = <C::Output as StreamMuxer>::Substream;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
-    type ListenerUpgrade = FutureResult<(Self::RawConn, Multiaddr), IoError>;
-    type Dial = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
+    type ListenerUpgrade = FutureResult<(Self::Output, Multiaddr), IoError>;
+    type Dial = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         let (listener, new_addr) = match self.inner.listen_on(addr.clone()) {
@@ -209,7 +209,7 @@ where
 impl<T, C> MuxedTransport for ConnectionReuse<T, C>
 where
     T: Transport + 'static,                     // TODO: 'static :(
-    C: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :(
+    C: ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :(
     C: Clone,
     C::Output: StreamMuxer + Clone,
     C::NamesIter: Clone, // TODO: not elegant

@@ -30,7 +30,7 @@ pub trait MuxedTransport: Transport {
     /// Future resolving to a future that will resolve to an incoming connection.
     type Incoming: Future<Item = Self::IncomingUpgrade, Error = IoError>;
     /// Future resolving to an incoming connection.
-    type IncomingUpgrade: Future<Item = (Self::RawConn, Multiaddr), Error = IoError>;
+    type IncomingUpgrade: Future<Item = (Self::Output, Multiaddr), Error = IoError>;
 
     /// Returns the next incoming substream opened by a node that we dialed ourselves.
     ///

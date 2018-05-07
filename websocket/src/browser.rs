@@ -52,10 +52,10 @@ impl BrowserWsConfig {
 }
 
 impl Transport for BrowserWsConfig {
-    type RawConn = BrowserWsConn;
+    type Output = BrowserWsConn;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>; // TODO: use `!`
-    type ListenerUpgrade = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>; // TODO: use `!`
-    type Dial = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
+    type ListenerUpgrade = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>; // TODO: use `!`
+    type Dial = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>;
 
     #[inline]
     fn listen_on(self, a: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {

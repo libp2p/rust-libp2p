@@ -107,7 +107,7 @@ where
         for<'r> &'r Pc: Peerstore,
         R: Clone + 'static,                                 // TODO: 'static :-/
         T: Clone + MuxedTransport + 'static,                // TODO: 'static :-/
-        C: Clone + ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :-/
+        C: Clone + ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :-/
         C::NamesIter: Clone,
         C::Output: From<KademliaProcessingFuture>,
     {
@@ -145,7 +145,7 @@ where
 pub struct KademliaController<P, R, T, C>
 where
     T: MuxedTransport + 'static,                // TODO: 'static :-/
-    C: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :-/
+    C: ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :-/
 {
     inner: Arc<Inner<P, R>>,
     swarm_controller: SwarmController<T, C>,
@@ -154,7 +154,7 @@ where
 impl<P, R, T, C> Clone for KademliaController<P, R, T, C>
 where
     T: Clone + MuxedTransport + 'static, // TODO: 'static :-/
-    C: Clone + ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :-/
+    C: Clone + ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :-/
 {
     #[inline]
     fn clone(&self) -> Self {
@@ -171,7 +171,7 @@ where
     for<'r> &'r Pc: Peerstore,
     R: Clone,
     T: Clone + MuxedTransport + 'static, // TODO: 'static :-/
-    C: Clone + ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :-/
+    C: Clone + ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :-/
 {
     /// Performs an iterative find node query on the network.
     ///
@@ -217,7 +217,7 @@ impl<P, R> KademliaUpgrade<P, R> {
     pub fn from_controller<T, C>(ctl: &KademliaController<P, R, T, C>) -> Self
     where
         T: MuxedTransport,
-        C: ConnectionUpgrade<T::RawConn>,
+        C: ConnectionUpgrade<T::Output>,
     {
         KademliaUpgrade {
             inner: ctl.inner.clone(),
@@ -414,7 +414,7 @@ where
     for<'r> &'r Pc: Peerstore,
     R: Clone + 'static,                                 // TODO: 'static :-/
     T: Clone + MuxedTransport + 'static,                // TODO: 'static :-/
-    C: Clone + ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :-/
+    C: Clone + ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :-/
     C::NamesIter: Clone,
     C::Output: From<KademliaProcessingFuture>,
 {

@@ -51,7 +51,7 @@ impl<T, C> UpgradedNode<T, C> {
 impl<'a, T, C> UpgradedNode<T, C>
 where
     T: Transport + 'a,
-    C: ConnectionUpgrade<T::RawConn> + 'a,
+    C: ConnectionUpgrade<T::Output> + 'a,
 {
     /// Turns this upgraded node into a `ConnectionReuse`. If the `Output` implements the
     /// `StreamMuxer` trait, the returned object will implement `Transport` and `MuxedTransport`.
@@ -293,12 +293,12 @@ where
 impl<T, C> Transport for UpgradedNode<T, C>
 where
     T: Transport + 'static,
-    C: ConnectionUpgrade<T::RawConn> + 'static,
+    C: ConnectionUpgrade<T::Output> + 'static,
     C::Output: AsyncRead + AsyncWrite,
     C::NamesIter: Clone, // TODO: not elegant
     C: Clone,
 {
-    type RawConn = C::Output;
+    type Output = C::Output;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
     type ListenerUpgrade = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>;
     type Dial = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>;
@@ -322,7 +322,7 @@ where
 impl<T, C> MuxedTransport for UpgradedNode<T, C>
 where
     T: MuxedTransport + 'static,
-    C: ConnectionUpgrade<T::RawConn> + 'static,
+    C: ConnectionUpgrade<T::Output> + 'static,
     C::Output: AsyncRead + AsyncWrite,
     C::NamesIter: Clone, // TODO: not elegant
     C: Clone,

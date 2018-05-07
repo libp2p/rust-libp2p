@@ -59,7 +59,7 @@ pub use self::upgrade::UpgradedNode;
 /// >           on `Foo`.
 pub trait Transport {
     /// The raw connection to a peer.
-    type RawConn: AsyncRead + AsyncWrite;
+    type Output: AsyncRead + AsyncWrite;
 
     /// The listener produces incoming connections.
     ///
@@ -71,10 +71,10 @@ pub trait Transport {
     /// After a connection has been received, we may need to do some asynchronous pre-processing
     /// on it (eg. an intermediary protocol negotiation). While this pre-processing takes place, we
     /// want to be able to continue polling on the listener.
-    type ListenerUpgrade: Future<Item = (Self::RawConn, Multiaddr), Error = IoError>;
+    type ListenerUpgrade: Future<Item = (Self::Output, Multiaddr), Error = IoError>;
 
     /// A future which indicates that we are currently dialing to a peer.
-    type Dial: IntoFuture<Item = (Self::RawConn, Multiaddr), Error = IoError>;
+    type Dial: IntoFuture<Item = (Self::Output, Multiaddr), Error = IoError>;
 
     /// Listen on the given multiaddr. Returns a stream of incoming connections, plus a modified
     /// version of the `Multiaddr`. This new `Multiaddr` is the one that that should be advertised
@@ -129,7 +129,7 @@ pub trait Transport {
     fn with_upgrade<U>(self, upgrade: U) -> UpgradedNode<Self, U>
     where
         Self: Sized,
-        U: ConnectionUpgrade<Self::RawConn>,
+        U: ConnectionUpgrade<Self::Output>,
     {
         UpgradedNode::new(self, upgrade)
     }

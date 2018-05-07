@@ -87,9 +87,9 @@ impl TcpConfig {
 }
 
 impl Transport for TcpConfig {
-    type RawConn = TcpStream;
+    type Output = TcpStream;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
-    type ListenerUpgrade = FutureResult<(Self::RawConn, Multiaddr), IoError>;
+    type ListenerUpgrade = FutureResult<(Self::Output, Multiaddr), IoError>;
     type Dial = Box<Future<Item = (TcpStream, Multiaddr), Error = IoError>>;
 
     /// Listen on the given multi-addr.

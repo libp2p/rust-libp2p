@@ -41,7 +41,7 @@ pub fn swarm<T, C, H, F>(
 ) -> (SwarmController<T, C>, SwarmFuture<T, C, H, F::Future>)
 where
     T: MuxedTransport + Clone + 'static, // TODO: 'static :-/
-    C: ConnectionUpgrade<T::RawConn> + Clone + 'static, // TODO: 'static :-/
+    C: ConnectionUpgrade<T::Output> + Clone + 'static, // TODO: 'static :-/
     C::NamesIter: Clone,                 // TODO: not elegant
     H: FnMut(C::Output, Multiaddr) -> F,
     F: IntoFuture<Item = (), Error = IoError>,
@@ -80,7 +80,7 @@ where
 pub struct SwarmController<T, C>
 where
     T: MuxedTransport + 'static,                // TODO: 'static :-/
-    C: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :-/
+    C: ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :-/
 {
     transport: T,
     upgraded: UpgradedNode<T, C>,
@@ -99,7 +99,7 @@ where
 impl<T, C> fmt::Debug for SwarmController<T, C>
 where
     T: fmt::Debug + MuxedTransport + 'static, // TODO: 'static :-/
-    C: fmt::Debug + ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :-/
+    C: fmt::Debug + ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :-/
 {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt.debug_tuple("SwarmController")
@@ -111,7 +111,7 @@ where
 impl<T, C> Clone for SwarmController<T, C>
 where
     T: MuxedTransport + Clone + 'static, // TODO: 'static :-/
-    C: ConnectionUpgrade<T::RawConn> + 'static + Clone, // TODO: 'static :-/
+    C: ConnectionUpgrade<T::Output> + 'static + Clone, // TODO: 'static :-/
 {
     fn clone(&self) -> SwarmController<T, C> {
         SwarmController {
@@ -127,7 +127,7 @@ where
 impl<T, C> SwarmController<T, C>
 where
     T: MuxedTransport + Clone + 'static, // TODO: 'static :-/
-    C: ConnectionUpgrade<T::RawConn> + Clone + 'static, // TODO: 'static :-/
+    C: ConnectionUpgrade<T::Output> + Clone + 'static, // TODO: 'static :-/
     C::NamesIter: Clone,                 // TODO: not elegant
 {
     /// Asks the swarm to dial the node with the given multiaddress. The connection is then
@@ -136,7 +136,7 @@ where
     // TODO: consider returning a future so that errors can be processed?
     pub fn dial_to_handler<Du>(&self, multiaddr: Multiaddr, upgrade: Du) -> Result<(), Multiaddr>
     where
-        Du: ConnectionUpgrade<T::RawConn> + Clone + 'static, // TODO: 'static :-/
+        Du: ConnectionUpgrade<T::Output> + Clone + 'static, // TODO: 'static :-/
         Du::Output: Into<C::Output>,
     {
         trace!(target: "libp2p-swarm", "Swarm dialing {}", multiaddr);
@@ -171,7 +171,7 @@ where
         and_then: Df,
     ) -> Result<(), Multiaddr>
     where
-        Du: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :-/
+        Du: ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :-/
         Df: FnOnce(Du::Output, Multiaddr) -> Dfu + 'static, // TODO: 'static :-/
         Dfu: IntoFuture<Item = (), Error = IoError> + 'static, // TODO: 'static :-/
     {
@@ -209,7 +209,7 @@ where
 pub struct SwarmFuture<T, C, H, F>
 where
     T: MuxedTransport + 'static,                // TODO: 'static :-/
-    C: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :-/
+    C: ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :-/
 {
     upgraded: UpgradedNode<T, C>,
     handler: H,
@@ -246,7 +246,7 @@ where
 impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
 where
     T: MuxedTransport + Clone + 'static, // TODO: 'static :-/,
-    C: ConnectionUpgrade<T::RawConn> + Clone + 'static, // TODO: 'static :-/
+    C: ConnectionUpgrade<T::Output> + Clone + 'static, // TODO: 'static :-/
     C::NamesIter: Clone,                 // TODO: not elegant
     H: FnMut(C::Output, Multiaddr) -> If,
     If: IntoFuture<Future = F, Item = (), Error = IoError>,

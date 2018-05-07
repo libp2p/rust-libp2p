@@ -141,7 +141,7 @@ impl<T> Future for ListenerUpgrade<T>
 where
     T: Transport + 'static,
 {
-    type Item = (Connection<T::RawConn>, Multiaddr);
+    type Item = (Connection<T::Output>, Multiaddr);
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -159,7 +159,7 @@ where
     T: Transport + 'static,
 {
     type Future = Box<Future<Item = Self::Item, Error = Self::Error>>;
-    type Item = (Connection<T::RawConn>, Multiaddr);
+    type Item = (Connection<T::Output>, Multiaddr);
     type Error = io::Error;
 
     fn into_future(self) -> Self::Future {
@@ -177,7 +177,7 @@ impl<T> Transport for RateLimited<T>
 where
     T: Transport + 'static,
 {
-    type RawConn = Connection<T::RawConn>;
+    type Output = Connection<T::Output>;
     type Listener = Listener<T>;
     type ListenerUpgrade = ListenerUpgrade<T>;
     type Dial = Dial<T>;

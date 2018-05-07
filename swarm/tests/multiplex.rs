@@ -53,7 +53,7 @@ impl<T: Clone> Clone for OnlyOnce<T> {
     }
 }
 impl<T: Transport> Transport for OnlyOnce<T> {
-    type RawConn = T::RawConn;
+    type Output = T::Output;
     type Listener = T::Listener;
     type ListenerUpgrade = T::ListenerUpgrade;
     type Dial = T::Dial;
