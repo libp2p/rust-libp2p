@@ -296,7 +296,6 @@ where
     T: Transport + 'static,
     T::Output: AsyncRead + AsyncWrite,
     C: ConnectionUpgrade<T::Output> + 'static,
-    C::Output: AsyncRead + AsyncWrite,
     C::NamesIter: Clone, // TODO: not elegant
     C: Clone,
 {
@@ -326,7 +325,6 @@ where
     T: MuxedTransport + 'static,
     T::Output: AsyncRead + AsyncWrite,
     C: ConnectionUpgrade<T::Output> + 'static,
-    C::Output: AsyncRead + AsyncWrite,
     C::NamesIter: Clone, // TODO: not elegant
     C: Clone,
 {
