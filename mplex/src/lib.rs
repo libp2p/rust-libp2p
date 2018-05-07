@@ -170,7 +170,7 @@ pub struct InboundFuture<T, Buf: Array> {
 }
 
 impl<T: AsyncRead, Buf: Array<Item = u8>> Future for InboundFuture<T, Buf> {
-    type Item = Substream<T, Buf>;
+    type Item = Option<Substream<T, Buf>>;
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -178,6 +178,10 @@ impl<T: AsyncRead, Buf: Array<Item = u8>> Future for InboundFuture<T, Buf> {
             Async::Ready(lock) => lock,
             Async::NotReady => return Ok(Async::NotReady),
         };
+
+        if lock.is_closed() {
+            return Ok(Async::Ready(None));
+        }
 
         // Attempt to make progress, but don't block if we can't
         match read_stream(&mut lock, None) {
@@ -198,12 +202,12 @@ impl<T: AsyncRead, Buf: Array<Item = u8>> Future for InboundFuture<T, Buf> {
 
         lock.open_stream(id);
 
-        Ok(Async::Ready(Substream::new(
+        Ok(Async::Ready(Some(Substream::new(
             id,
             self.end,
             name,
             Arc::clone(&self.state),
-        )))
+        ))))
     }
 }
 
@@ -228,7 +232,7 @@ fn nonce_to_id(id: usize, end: Endpoint) -> u32 {
 }
 
 impl<T: AsyncWrite, Buf: Array> Future for OutboundFuture<T, Buf> {
-    type Item = Substream<T, Buf>;
+    type Item = Option<Substream<T, Buf>>;
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -236,6 +240,10 @@ impl<T: AsyncWrite, Buf: Array> Future for OutboundFuture<T, Buf> {
             Async::Ready(lock) => lock,
             Async::NotReady => return Ok(Async::NotReady),
         };
+
+        if lock.is_closed() {
+            return Ok(Async::Ready(None));
+        }
 
         loop {
             let (mut id_str, id) = self.current_id.take().unwrap_or_else(|| {
@@ -258,12 +266,12 @@ impl<T: AsyncWrite, Buf: Array> Future for OutboundFuture<T, Buf> {
                     debug_assert!(id_str.position() <= id_str.get_ref().len() as u64);
                     if id_str.position() == id_str.get_ref().len() as u64 {
                         if lock.open_stream(id) {
-                            return Ok(Async::Ready(Substream::new(
+                            return Ok(Async::Ready(Some(Substream::new(
                                 id,
                                 self.meta.end,
                                 Bytes::from(&id_str.get_ref()[..]),
                                 Arc::clone(&self.state),
-                            )));
+                            ))));
                         }
                     } else {
                         self.current_id = Some((id_str, id));
@@ -391,7 +399,12 @@ mod tests {
 
         let mplex = Multiplex::dial(stream);
 
-        let mut substream = mplex.clone().outbound().wait().unwrap();
+        let mut substream = mplex
+            .clone()
+            .outbound()
+            .wait()
+            .unwrap()
+            .expect("outbound substream");
 
         assert!(tokio::write_all(&mut substream, message).wait().is_ok());
 
@@ -408,7 +421,7 @@ mod tests {
 
         let mplex = Multiplex::listen(stream);
 
-        let mut substream = mplex.inbound().wait().unwrap();
+        let mut substream = mplex.inbound().wait().unwrap().expect("inbound substream");
 
         assert_eq!(id, substream.id());
         assert_eq!(
@@ -433,7 +446,14 @@ mod tests {
         let mut outbound: Vec<Substream<_>> = vec![];
 
         for _ in 0..5 {
-            outbound.push(mplex.clone().outbound().wait().unwrap());
+            outbound.push(
+                mplex
+                    .clone()
+                    .outbound()
+                    .wait()
+                    .unwrap()
+                    .expect("outbound substream"),
+            );
         }
 
         outbound.sort_by_key(|a| a.id());
@@ -453,7 +473,14 @@ mod tests {
         let mut inbound: Vec<Substream<_>> = vec![];
 
         for _ in 0..5 {
-            inbound.push(mplex.clone().inbound().wait().unwrap());
+            inbound.push(
+                mplex
+                    .clone()
+                    .inbound()
+                    .wait()
+                    .unwrap()
+                    .expect("inbound substream"),
+            );
         }
 
         inbound.sort_by_key(|a| a.id());
@@ -513,7 +540,7 @@ mod tests {
 
         let mplex = Multiplex::listen(io::Cursor::new(input));
 
-        let mut substream = mplex.inbound().wait().unwrap();
+        let mut substream = mplex.inbound().wait().unwrap().expect("inbound substream");
 
         assert_eq!(substream.id(), 0);
         assert_eq!(substream.name(), None);
@@ -565,7 +592,7 @@ mod tests {
 
         let mplex = Multiplex::listen(io::Cursor::new(input));
 
-        let mut substream = mplex.inbound().wait().unwrap();
+        let mut substream = mplex.inbound().wait().unwrap().expect("inbound substream");
 
         assert_eq!(substream.id(), 0);
         assert_eq!(substream.name(), None);
@@ -613,7 +640,7 @@ mod tests {
 
         let mplex = Multiplex::listen(io::Cursor::new(data));
 
-        let mut substream = mplex.inbound().wait().unwrap();
+        let mut substream = mplex.inbound().wait().unwrap().expect("inbound substream");
 
         assert_eq!(substream.id(), 1);
 
@@ -648,7 +675,14 @@ mod tests {
         let mut outbound: Vec<Substream<_, Buffer>> = vec![];
 
         for _ in 0..5 {
-            outbound.push(mplex.clone().outbound().wait().unwrap());
+            outbound.push(
+                mplex
+                    .clone()
+                    .outbound()
+                    .wait()
+                    .unwrap()
+                    .expect("outbound substream"),
+            );
         }
 
         outbound.sort_by_key(|a| a.id());
@@ -668,7 +702,12 @@ mod tests {
         let mut inbound: Vec<Substream<_, Buffer>> = vec![];
 
         for _ in 0..5 {
-            let inb: Substream<_, Buffer> = mplex.clone().inbound().wait().unwrap();
+            let inb: Substream<_, Buffer> = mplex
+                .clone()
+                .inbound()
+                .wait()
+                .unwrap()
+                .expect("inbound substream");
             inbound.push(inb);
         }
 

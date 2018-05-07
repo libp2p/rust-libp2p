@@ -102,56 +102,79 @@ where
     B: StreamMuxer,
 {
     type Substream = EitherSocket<A::Substream, B::Substream>;
-    type InboundSubstream = EitherTransportFuture<A::InboundSubstream, B::InboundSubstream>;
-    type OutboundSubstream = EitherTransportFuture<A::OutboundSubstream, B::OutboundSubstream>;
+    type InboundSubstream = EitherInbound<A, B>;
+    type OutboundSubstream = EitherOutbound<A, B>;
 
     #[inline]
     fn inbound(self) -> Self::InboundSubstream {
         match self {
-            EitherSocket::First(a) => EitherTransportFuture::First(a.inbound()),
-            EitherSocket::Second(b) => EitherTransportFuture::Second(b.inbound()),
+            EitherSocket::First(a) => EitherInbound::A(a.inbound()),
+            EitherSocket::Second(b) => EitherInbound::B(b.inbound()),
         }
     }
 
     #[inline]
     fn outbound(self) -> Self::OutboundSubstream {
         match self {
-            EitherSocket::First(a) => EitherTransportFuture::First(a.outbound()),
-            EitherSocket::Second(b) => EitherTransportFuture::Second(b.outbound()),
+            EitherSocket::First(a) => EitherOutbound::A(a.outbound()),
+            EitherSocket::Second(b) => EitherOutbound::B(b.outbound()),
         }
     }
 }
 
-/// Implements `Future` and redirects calls to either `First` or `Second`.
-///
-/// Additionally, the output will be wrapped inside a `EitherSocket`.
-// TODO: This type is needed because of the lack of `impl Trait` in stable Rust.
-//         If Rust had impl Trait we could use the Either enum from the futures crate and add some
-//         modifiers to it. This custom enum is a combination of Either and these modifiers.
 #[derive(Debug, Copy, Clone)]
-pub enum EitherTransportFuture<A, B> {
-    First(A),
-    Second(B),
+pub enum EitherInbound<A: StreamMuxer, B: StreamMuxer> {
+    A(A::InboundSubstream),
+    B(B::InboundSubstream),
 }
 
-impl<A, B> Future for EitherTransportFuture<A, B>
+impl<A, B> Future for EitherInbound<A, B>
 where
-    A: Future<Error = IoError>,
-    B: Future<Error = IoError>,
+    A: StreamMuxer,
+    B: StreamMuxer,
 {
-    type Item = EitherSocket<A::Item, B::Item>;
+    type Item = Option<EitherSocket<A::Substream, B::Substream>>;
     type Error = IoError;
 
     #[inline]
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match self {
-            &mut EitherTransportFuture::First(ref mut a) => {
+        match *self {
+            EitherInbound::A(ref mut a) => {
                 let item = try_ready!(a.poll());
-                Ok(Async::Ready(EitherSocket::First(item)))
+                Ok(Async::Ready(item.map(EitherSocket::First)))
             }
-            &mut EitherTransportFuture::Second(ref mut b) => {
+            EitherInbound::B(ref mut b) => {
                 let item = try_ready!(b.poll());
-                Ok(Async::Ready(EitherSocket::Second(item)))
+                Ok(Async::Ready(item.map(EitherSocket::Second)))
+            }
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum EitherOutbound<A: StreamMuxer, B: StreamMuxer> {
+    A(A::OutboundSubstream),
+    B(B::OutboundSubstream),
+}
+
+impl<A, B> Future for EitherOutbound<A, B>
+where
+    A: StreamMuxer,
+    B: StreamMuxer,
+{
+    type Item = Option<EitherSocket<A::Substream, B::Substream>>;
+    type Error = IoError;
+
+    #[inline]
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        match *self {
+            EitherOutbound::A(ref mut a) => {
+                let item = try_ready!(a.poll());
+                Ok(Async::Ready(item.map(EitherSocket::First)))
+            }
+            EitherOutbound::B(ref mut b) => {
+                let item = try_ready!(b.poll());
+                Ok(Async::Ready(item.map(EitherSocket::Second)))
             }
         }
     }

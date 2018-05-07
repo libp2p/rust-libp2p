@@ -29,10 +29,18 @@ use tokio_io::{AsyncRead, AsyncWrite};
 pub trait StreamMuxer {
     /// Type of the object that represents the raw substream where data can be read and written.
     type Substream: AsyncRead + AsyncWrite;
+
     /// Future that will be resolved when a new incoming substream is open.
-    type InboundSubstream: Future<Item = Self::Substream, Error = IoError>;
+    ///
+    /// A `None` item signals that the underlying resource has been exhausted and
+    /// no more substreams can be created.
+    type InboundSubstream: Future<Item = Option<Self::Substream>, Error = IoError>;
+
     /// Future that will be resolved when the outgoing substream is open.
-    type OutboundSubstream: Future<Item = Self::Substream, Error = IoError>;
+    ///
+    /// A `None` item signals that the underlying resource has been exhausted and
+    /// no more substreams can be created.
+    type OutboundSubstream: Future<Item = Option<Self::Substream>, Error = IoError>;
 
     /// Produces a future that will be resolved when a new incoming substream arrives.
     fn inbound(self) -> Self::InboundSubstream;
