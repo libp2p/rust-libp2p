@@ -50,6 +50,7 @@ use muxing::StreamMuxer;
 use parking_lot::Mutex;
 use std::io::Error as IoError;
 use std::sync::Arc;
+use tokio_io::{AsyncRead, AsyncWrite};
 use transport::{MuxedTransport, Transport, UpgradedNode};
 use upgrade::ConnectionUpgrade;
 
@@ -62,6 +63,7 @@ use upgrade::ConnectionUpgrade;
 pub struct ConnectionReuse<T, C>
 where
     T: Transport,
+    T::Output: AsyncRead + AsyncWrite,
     C: ConnectionUpgrade<T::Output>,
     C::Output: StreamMuxer,
 {
@@ -94,6 +96,7 @@ where
 impl<T, C> From<UpgradedNode<T, C>> for ConnectionReuse<T, C>
 where
     T: Transport,
+    T::Output: AsyncRead + AsyncWrite,
     C: ConnectionUpgrade<T::Output>,
     C::Output: StreamMuxer,
 {
@@ -116,6 +119,7 @@ where
 impl<T, C> Transport for ConnectionReuse<T, C>
 where
     T: Transport + 'static,                     // TODO: 'static :(
+    T::Output: AsyncRead + AsyncWrite,
     C: ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :(
     C: Clone,
     C::Output: StreamMuxer + Clone,
@@ -209,6 +213,7 @@ where
 impl<T, C> MuxedTransport for ConnectionReuse<T, C>
 where
     T: Transport + 'static,                     // TODO: 'static :(
+    T::Output: AsyncRead + AsyncWrite,
     C: ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :(
     C: Clone,
     C::Output: StreamMuxer + Clone,

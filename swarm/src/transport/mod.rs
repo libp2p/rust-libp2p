@@ -59,7 +59,7 @@ pub use self::upgrade::UpgradedNode;
 /// >           on `Foo`.
 pub trait Transport {
     /// The raw connection to a peer.
-    type Output: AsyncRead + AsyncWrite;
+    type Output;
 
     /// The listener produces incoming connections.
     ///
@@ -129,6 +129,7 @@ pub trait Transport {
     fn with_upgrade<U>(self, upgrade: U) -> UpgradedNode<Self, U>
     where
         Self: Sized,
+        Self::Output: AsyncRead + AsyncWrite,
         U: ConnectionUpgrade<Self::Output>,
     {
         UpgradedNode::new(self, upgrade)

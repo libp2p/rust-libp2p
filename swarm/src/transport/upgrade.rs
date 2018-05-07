@@ -51,6 +51,7 @@ impl<T, C> UpgradedNode<T, C> {
 impl<'a, T, C> UpgradedNode<T, C>
 where
     T: Transport + 'a,
+    T::Output: AsyncRead + AsyncWrite,
     C: ConnectionUpgrade<T::Output> + 'a,
 {
     /// Turns this upgraded node into a `ConnectionReuse`. If the `Output` implements the
@@ -293,6 +294,7 @@ where
 impl<T, C> Transport for UpgradedNode<T, C>
 where
     T: Transport + 'static,
+    T::Output: AsyncRead + AsyncWrite,
     C: ConnectionUpgrade<T::Output> + 'static,
     C::Output: AsyncRead + AsyncWrite,
     C::NamesIter: Clone, // TODO: not elegant
@@ -322,6 +324,7 @@ where
 impl<T, C> MuxedTransport for UpgradedNode<T, C>
 where
     T: MuxedTransport + 'static,
+    T::Output: AsyncRead + AsyncWrite,
     C: ConnectionUpgrade<T::Output> + 'static,
     C::Output: AsyncRead + AsyncWrite,
     C::NamesIter: Clone, // TODO: not elegant

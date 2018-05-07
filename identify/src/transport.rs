@@ -26,6 +26,7 @@ use protocol::{IdentifyInfo, IdentifyOutput, IdentifyProtocolConfig};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::ops::Deref;
 use std::time::Duration;
+use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Implementation of `Transport`. See [the crate root description](index.html).
 #[derive(Debug, Clone)]
@@ -59,6 +60,7 @@ impl<Trans, PStoreRef> IdentifyTransport<Trans, PStoreRef> {
 impl<Trans, PStore, PStoreRef> Transport for IdentifyTransport<Trans, PStoreRef>
 where
     Trans: Transport + Clone + 'static, // TODO: 'static :(
+    Trans::Output: AsyncRead + AsyncWrite,
     PStoreRef: Deref<Target = PStore> + Clone + 'static, // TODO: 'static :(
     for<'r> &'r PStore: Peerstore,
 {
@@ -275,6 +277,7 @@ where
 impl<Trans, PStore, PStoreRef> MuxedTransport for IdentifyTransport<Trans, PStoreRef>
 where
     Trans: MuxedTransport + Clone + 'static,
+    Trans::Output: AsyncRead + AsyncWrite,
     PStoreRef: Deref<Target = PStore> + Clone + 'static,
     for<'r> &'r PStore: Peerstore,
 {

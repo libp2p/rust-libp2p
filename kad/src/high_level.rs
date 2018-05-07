@@ -107,6 +107,7 @@ where
         for<'r> &'r Pc: Peerstore,
         R: Clone + 'static,                                 // TODO: 'static :-/
         T: Clone + MuxedTransport + 'static,                // TODO: 'static :-/
+        T::Output: AsyncRead + AsyncWrite,
         C: Clone + ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :-/
         C::NamesIter: Clone,
         C::Output: From<KademliaProcessingFuture>,
@@ -145,6 +146,7 @@ where
 pub struct KademliaController<P, R, T, C>
 where
     T: MuxedTransport + 'static,                // TODO: 'static :-/
+    T::Output: AsyncRead + AsyncWrite,
     C: ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :-/
 {
     inner: Arc<Inner<P, R>>,
@@ -154,6 +156,7 @@ where
 impl<P, R, T, C> Clone for KademliaController<P, R, T, C>
 where
     T: Clone + MuxedTransport + 'static, // TODO: 'static :-/
+    T::Output: AsyncRead + AsyncWrite,
     C: Clone + ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :-/
 {
     #[inline]
@@ -171,11 +174,12 @@ where
     for<'r> &'r Pc: Peerstore,
     R: Clone,
     T: Clone + MuxedTransport + 'static, // TODO: 'static :-/
+    T::Output: AsyncRead + AsyncWrite,
     C: Clone + ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :-/
 {
     /// Performs an iterative find node query on the network.
     ///
-    /// Will query the network for the peers that are the closest to `searched_key` and return
+    /// Will query the network for the peers that4 are the closest to `searched_key` and return
     /// the results.
     ///
     /// The algorithm used is a standard Kademlia algorithm. The details are not documented, so
@@ -217,6 +221,7 @@ impl<P, R> KademliaUpgrade<P, R> {
     pub fn from_controller<T, C>(ctl: &KademliaController<P, R, T, C>) -> Self
     where
         T: MuxedTransport,
+        T::Output: AsyncRead + AsyncWrite,
         C: ConnectionUpgrade<T::Output>,
     {
         KademliaUpgrade {
@@ -414,6 +419,7 @@ where
     for<'r> &'r Pc: Peerstore,
     R: Clone + 'static,                                 // TODO: 'static :-/
     T: Clone + MuxedTransport + 'static,                // TODO: 'static :-/
+    T::Output: AsyncRead + AsyncWrite,
     C: Clone + ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :-/
     C::NamesIter: Clone,
     C::Output: From<KademliaProcessingFuture>,

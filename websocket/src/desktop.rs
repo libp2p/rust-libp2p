@@ -23,6 +23,7 @@ use multiaddr::{AddrComponent, Multiaddr};
 use rw_stream_sink::RwStreamSink;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use swarm::Transport;
+use tokio_io::{AsyncRead, AsyncWrite};
 use websocket::client::builder::ClientBuilder;
 use websocket::message::OwnedMessage;
 use websocket::server::upgrade::async::IntoWs;
@@ -59,7 +60,7 @@ where
     // TODO: this 'static is pretty arbitrary and is necessary because of the websocket library
     T: Transport + 'static,
     // TODO: this Send is pretty arbitrary and is necessary because of the websocket library
-    T::Output: Send,
+    T::Output: AsyncRead + AsyncWrite + Send,
 {
     type Output = Box<AsyncStream>;
     type Listener =
