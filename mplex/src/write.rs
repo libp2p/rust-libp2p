@@ -207,7 +207,7 @@ pub fn write_stream<Buf: circular_buffer::Array, T: AsyncWrite>(
                             Err(Some(Body { size }))
                         }
                         Err(other) => {
-                            error!(target: "libp2p-mplex",
+                            debug!(target: "libp2p-mplex",
                                    "substream {}: failed to write body: {}",
                                    id,
                                    other);

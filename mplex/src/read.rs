@@ -242,7 +242,7 @@ fn read_stream_internal<T: AsyncRead, Buf: Array<Item = u8>>(
                             substream_id,
                             packet_type,
                         } = MultiplexHeader::parse(header).map_err(|err| {
-                            error!(target: "libp2p-mplex", "failed to parse header: {}", err);
+                            debug!(target: "libp2p-mplex", "failed to parse header: {}", err);
                             io::Error::new(
                                 io::ErrorKind::Other,
                                 format!("Error parsing header: {:?}", err),
@@ -281,10 +281,10 @@ fn read_stream_internal<T: AsyncRead, Buf: Array<Item = u8>>(
                     }
                     Err(error) => {
                         return if let varint::Error(varint::ErrorKind::Io(inner), ..) = error {
-                            error!(target: "libp2p-mplex", "failed to read header: {}", inner);
+                            debug!(target: "libp2p-mplex", "failed to read header: {}", inner);
                             Err(inner)
                         } else {
-                            error!(target: "libp2p-mplex", "failed to read header: {}", error);
+                            debug!(target: "libp2p-mplex", "failed to read header: {}", error);
                             Err(io::Error::new(io::ErrorKind::Other, error.description()))
                         };
                     }
@@ -297,7 +297,7 @@ fn read_stream_internal<T: AsyncRead, Buf: Array<Item = u8>>(
                 use self::NextMultiplexState::*;
 
                 let body_len = varint_state.read(&mut lock.stream).map_err(|e| {
-                    error!(target: "libp2p-mplex",
+                    debug!(target: "libp2p-mplex",
                            "substream {}: failed to read body length: {}",
                            next.substream_id(),
                            e);
@@ -395,7 +395,7 @@ fn read_stream_internal<T: AsyncRead, Buf: Array<Item = u8>>(
                             return on_block;
                         }
                         Err(other) => {
-                            error!(target: "libp2p-mplex",
+                            debug!(target: "libp2p-mplex",
                                    "substream {}: failed to read new stream: {}",
                                    substream_id,
                                    other);
@@ -459,7 +459,7 @@ fn read_stream_internal<T: AsyncRead, Buf: Array<Item = u8>>(
                                 return on_block;
                             }
                             Err(other) => {
-                                error!(target: "libp2p-mplex",
+                                debug!(target: "libp2p-mplex",
                                        "substream {}: failed to read message body: {}",
                                        substream_id,
                                        other);
@@ -507,7 +507,7 @@ fn read_stream_internal<T: AsyncRead, Buf: Array<Item = u8>>(
                                 return on_block;
                             }
                             Err(other) => {
-                                error!(target: "libp2p-mplex",
+                                debug!(target: "libp2p-mplex",
                                        "substream {}: failed to read ignore bytes: {}",
                                        substream_id,
                                        other);
