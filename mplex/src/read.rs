@@ -36,10 +36,9 @@ pub enum NextMultiplexState {
 impl NextMultiplexState {
     pub fn substream_id(&self) -> u32 {
         match *self {
-            | NextMultiplexState::NewStream(id)
+            NextMultiplexState::NewStream(id)
             | NextMultiplexState::ParsingMessageBody(id)
-            | NextMultiplexState::Ignore(id)
-            => id
+            | NextMultiplexState::Ignore(id) => id,
         }
     }
 }
@@ -501,7 +500,10 @@ fn read_stream_internal<T: AsyncRead, Buf: Array<Item = u8>>(
                                 });
                             }
                             Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => {
-                                lock.read_state = Some(Ignore { substream_id, remaining_bytes });
+                                lock.read_state = Some(Ignore {
+                                    substream_id,
+                                    remaining_bytes,
+                                });
                                 return on_block;
                             }
                             Err(other) => {
@@ -509,7 +511,10 @@ fn read_stream_internal<T: AsyncRead, Buf: Array<Item = u8>>(
                                        "substream {}: failed to read ignore bytes: {}",
                                        substream_id,
                                        other);
-                                lock.read_state = Some(Ignore { substream_id, remaining_bytes });
+                                lock.read_state = Some(Ignore {
+                                    substream_id,
+                                    remaining_bytes,
+                                });
                                 return Err(other);
                             }
                         }
