@@ -298,7 +298,7 @@ fn read_stream_internal<T: AsyncRead, Buf: Array<Item = u8>>(
 
                 let body_len = varint_state.read(&mut lock.stream).map_err(|e| {
                     error!(target: "libp2p-mplex",
-                           "substream {}: failed to read body len: {}",
+                           "substream {}: failed to read body length: {}",
                            next.substream_id(),
                            e);
                     io::Error::new(io::ErrorKind::Other, "Error reading varint")
