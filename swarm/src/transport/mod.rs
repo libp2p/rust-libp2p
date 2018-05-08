@@ -38,6 +38,7 @@ use upgrade::ConnectionUpgrade;
 pub mod choice;
 pub mod denied;
 pub mod dummy;
+pub mod map;
 pub mod muxed;
 pub mod upgrade;
 
@@ -107,6 +108,14 @@ pub trait Transport {
     /// Returns `None` if nothing can be determined. This happens if this trait implementation
     /// doesn't recognize the protocols, or if `server` and `observed` are related.
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
+
+    /// Applies a function on the output of the `Transport`.
+    #[inline]
+    fn map<F>(self, map: F) -> map::Map<Self, F>
+        where Self: Sized,
+    {
+        map::Map::new(self, map)
+    }
 
     /// Builds a new struct that implements `Transport` that contains both `self` and `other`.
     ///

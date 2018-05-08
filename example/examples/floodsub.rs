@@ -38,7 +38,7 @@ use futures::Stream;
 use peerstore::PeerId;
 use std::{env, mem};
 use swarm::{Multiaddr, Transport};
-use swarm::upgrade::{self, UpgradeExt};
+use swarm::upgrade;
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 use websocket::WsConfig;
@@ -75,7 +75,7 @@ fn main() {
                 }
             };
 
-            plain_text.or_upgrade(secio)
+            upgrade::or(plain_text, secio)
         })
 
         // On top of plaintext or secio, we will use the multiplex protocol.

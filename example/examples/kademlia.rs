@@ -40,7 +40,7 @@ use std::env;
 use std::sync::Arc;
 use std::time::Duration;
 use swarm::Transport;
-use swarm::upgrade::{self, UpgradeExt};
+use swarm::upgrade;
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 
@@ -80,7 +80,7 @@ fn main() {
                 }
             };
 
-            plain_text.or_upgrade(secio)
+            upgrade::or(plain_text, secio)
         })
 
         // On top of plaintext or secio, we will use the multiplex protocol.

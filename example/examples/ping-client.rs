@@ -33,7 +33,7 @@ use futures::Future;
 use futures::sync::oneshot;
 use std::env;
 use swarm::Transport;
-use swarm::upgrade::{self, DeniedConnectionUpgrade, UpgradeExt};
+use swarm::upgrade::{self, DeniedConnectionUpgrade};
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 
@@ -65,7 +65,7 @@ fn main() {
                 }
             };
 
-            plain_text.or_upgrade(secio)
+            upgrade::or(plain_text, secio)
         })
 
         // On top of plaintext or secio, we will use the multiplex protocol.

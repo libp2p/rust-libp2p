@@ -33,7 +33,7 @@ use futures::future::{loop_fn, Future, IntoFuture, Loop};
 use futures::{Sink, Stream};
 use std::env;
 use swarm::Transport;
-use swarm::upgrade::{self, SimpleProtocol, UpgradeExt};
+use swarm::upgrade::{self, SimpleProtocol};
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 use tokio_io::AsyncRead;
@@ -72,7 +72,7 @@ fn main() {
                 }
             };
 
-            plain_text.or_upgrade(secio)
+            upgrade::or(plain_text, secio)
         })
 
         // On top of plaintext or secio, we will use the multiplex protocol.

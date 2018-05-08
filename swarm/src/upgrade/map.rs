@@ -18,16 +18,46 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-pub mod denied;
-pub mod traits;
-pub mod choice;
-pub mod map;
-pub mod plaintext;
-pub mod simple;
+use futures::{future, prelude::*};
+use multiaddr::Multiaddr;
+use tokio_io::{AsyncRead, AsyncWrite};
+use upgrade::{ConnectionUpgrade, Endpoint};
 
-pub use self::choice::{or, OrUpgrade};
-pub use self::denied::DeniedConnectionUpgrade;
-pub use self::map::map;
-pub use self::plaintext::PlainTextConfig;
-pub use self::simple::SimpleProtocol;
-pub use self::traits::{ConnectionUpgrade, Endpoint};
+/// Applies a closure on the output of a connection upgrade.
+#[inline]
+pub fn map<U, F>(upgrade: U, map: F) -> Map<U, F> {
+    Map { upgrade, map }
+}
+
+/// Application of a closure on the output of a connection upgrade.
+#[derive(Debug, Copy, Clone)]
+pub struct Map<U, F> {
+    upgrade: U,
+    map: F,
+}
+
+impl<C, U, F, O> ConnectionUpgrade<C> for Map<U, F>
+where U: ConnectionUpgrade<C>,
+      C: AsyncRead + AsyncWrite,
+      F: FnOnce(U::Output) -> O,
+{
+    type NamesIter = U::NamesIter;
+    type UpgradeIdentifier = U::UpgradeIdentifier;
+
+    fn protocol_names(&self) -> Self::NamesIter {
+        self.upgrade.protocol_names()
+    }
+
+    type Output = O;
+    type Future = future::Map<U::Future, F>;
+
+    fn upgrade(
+        self,
+        socket: C,
+        id: Self::UpgradeIdentifier,
+        ty: Endpoint,
+        remote_addr: &Multiaddr,
+    ) -> Self::Future {
+        self.upgrade.upgrade(socket, id, ty, remote_addr).map(self.map)
+    }
+}
