@@ -29,7 +29,7 @@ jobs:
           key: test-cache
       - run:
           name: Prepare docker container for building
-          command: docker build --no-cache -t rust-libp2p -f .circleci/images/rust-libp2p/Dockerfile .
+          command: docker build --pull --no-cache -t rust-libp2p -f .circleci/images/rust-libp2p/Dockerfile .
       - run:
           name: Run tests, inside a docker image
           command: docker run --rm -v "/cache/cargo/registry:/usr/local/cargo/registry" -v "/cache/target:/app/target" -it rust-libp2p cargo test
