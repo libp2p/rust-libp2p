@@ -97,6 +97,7 @@ impl<T, Buf: Array> MultiplexShared<T, Buf> {
     }
 
     pub fn open_stream(&mut self, id: u32) -> bool {
+        trace!(target: "libp2p-mplex", "open stream {}", id);
         self.open_streams
             .entry(id)
             .or_insert(SubstreamMetadata::new_open())
@@ -104,6 +105,7 @@ impl<T, Buf: Array> MultiplexShared<T, Buf> {
     }
 
     pub fn close_stream(&mut self, id: u32) {
+        trace!(target: "libp2p-mplex", "close stream {}", id);
         self.open_streams.insert(id, SubstreamMetadata::Closed);
     }
 }
