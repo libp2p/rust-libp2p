@@ -4,19 +4,20 @@ version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 
 [dependencies]
-bytes = "0.4.5"
-num-traits = "0.1.40"
-num-bigint = { version = "0.1.40", default-features = false }
-tokio-io = "0.1"
-futures = "0.1"
-parking_lot = "0.4.8"
 arrayvec = "0.4.6"
-rand = "0.3.17"
+bytes = "0.4.5"
 circular-buffer = { path = "../circular-buffer" }
-libp2p-swarm = { path = "../swarm" }
-varint = { path = "../varint-rs" }
 error-chain = "0.11.0"
+futures = "0.1"
 futures-mutex = { git = "https://github.com/paritytech/futures-mutex" }
+libp2p-swarm = { path = "../swarm" }
+log = "0.4"
+num-bigint = { version = "0.1.40", default-features = false }
+num-traits = "0.1.40"
+parking_lot = "0.4.8"
+rand = "0.3.17"
+tokio-io = "0.1"
+varint = { path = "../varint-rs" }
 
 [dev-dependencies]
 libp2p-tcp-transport = { path = "../tcp-transport" }
