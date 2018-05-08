@@ -34,6 +34,10 @@ use websocket::stream::async::Stream as AsyncStream;
 /// This implementation of `Transport` accepts any address that ends with `/ws` or `/wss`, and will
 /// try to pass the underlying multiaddress to the underlying `Transport`.
 ///
+/// Note that the underlying multiaddr is `/dns4/...` or `/dns6/...`, then this library will
+/// pass the domain name in the headers of the request. This is important is the listener is behind
+/// an HTTP proxy.
+///
 /// > **Note**: `/wss` is only supported for dialing and not listening.
 #[derive(Debug, Clone)]
 pub struct WsConfig<T> {
@@ -159,6 +163,8 @@ where
 
         debug!(target: "libp2p-websocket", "Dialing {} through inner transport", inner_addr);
 
+        let ws_addr = client_addr_to_ws(&inner_addr, is_wss);
+
         let inner_dial = match self.transport.dial(inner_addr) {
             Ok(d) => d,
             Err((transport, old_addr)) => {
@@ -177,13 +183,8 @@ where
         let dial = inner_dial
             .into_future()
             .and_then(move |(connec, client_addr)| {
-                // We pass a dummy address to `ClientBuilder` because it is never used anywhere
-                // in the negotiation anyway, and we use `async_connect_on` to pass a stream.
-                ClientBuilder::new(if is_wss {
-                    "wss://127.0.0.1"
-                } else {
-                    "ws://127.0.0.1"
-                }).expect("hard-coded ws address is always valid")
+                ClientBuilder::new(&ws_addr)
+                    .expect("generated ws address is always valid")
                     .async_connect_on(connec)
                     .map_err(|err| IoError::new(IoErrorKind::Other, err))
                     .map(|(client, _)| {
@@ -242,6 +243,38 @@ where
                 result.append(last_proto);
                 result
             })
+    }
+}
+
+fn client_addr_to_ws(client_addr: &Multiaddr, is_wss: bool) -> String {
+    let inner = {
+        let protocols: Vec<_> = client_addr.iter().collect();
+
+        if protocols.len() != 2 {
+            "127.0.0.1".to_owned()
+        } else {
+            match (&protocols[0], &protocols[1]) {
+                (&AddrComponent::IP4(ref ip), &AddrComponent::TCP(port)) => {
+                    format!("{}:{}", ip, port)
+                }
+                (&AddrComponent::IP6(ref ip), &AddrComponent::TCP(port)) => {
+                    format!("[{}]:{}", ip, port)
+                }
+                (&AddrComponent::DNS4(ref ns), &AddrComponent::TCP(port)) => {
+                    format!("{}:{}", ns, port)
+                }
+                (&AddrComponent::DNS6(ref ns), &AddrComponent::TCP(port)) => {
+                    format!("{}:{}", ns, port)
+                }
+                _ => "127.0.0.1".to_owned(),
+            }
+        }
+    };
+
+    if is_wss {
+        format!("wss://{}", inner)
+    } else {
+        format!("ws://{}", inner)
     }
 }
 
