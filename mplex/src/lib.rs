@@ -26,6 +26,8 @@ extern crate error_chain;
 extern crate futures;
 extern crate futures_mutex;
 extern crate libp2p_swarm as swarm;
+#[macro_use]
+extern crate log;
 extern crate num_bigint;
 extern crate num_traits;
 extern crate parking_lot;
