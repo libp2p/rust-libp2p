@@ -33,12 +33,12 @@ extern crate tokio_core;
 extern crate tokio_io;
 extern crate tokio_stdin;
 
-use futures::future::Future;
 use futures::Stream;
+use futures::future::Future;
 use peerstore::PeerId;
 use std::{env, mem};
-use swarm::{Multiaddr, Transport};
 use swarm::upgrade;
+use swarm::{Multiaddr, Transport};
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 use websocket::WsConfig;
@@ -141,7 +141,10 @@ fn main() {
                 let target: Multiaddr = msg[6..].parse().unwrap();
                 println!("*Dialing {}*", target);
                 swarm_controller
-                    .dial_to_handler(target, transport.clone().with_upgrade(floodsub_upgrade.clone()))
+                    .dial_to_handler(
+                        target,
+                        transport.clone().with_upgrade(floodsub_upgrade.clone()),
+                    )
                     .unwrap();
             } else {
                 floodsub_ctl.publish(&topic, msg.into_bytes());

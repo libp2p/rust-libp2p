@@ -19,12 +19,12 @@
 // DEALINGS IN THE SOFTWARE.
 
 pub mod apply;
-pub mod denied;
-pub mod traits;
 pub mod choice;
+pub mod denied;
 pub mod map;
 pub mod plaintext;
 pub mod simple;
+pub mod traits;
 
 pub use self::apply::apply;
 pub use self::choice::{or, OrUpgrade};

@@ -89,9 +89,9 @@ extern crate rand;
 extern crate tokio_io;
 
 use bytes::{BufMut, Bytes, BytesMut};
-use futures::{Future, Sink, Stream};
 use futures::future::{loop_fn, FutureResult, IntoFuture, Loop};
 use futures::sync::{mpsc, oneshot};
+use futures::{Future, Sink, Stream};
 use libp2p_swarm::{ConnectionUpgrade, Endpoint, Multiaddr};
 use log::Level;
 use parking_lot::Mutex;
@@ -102,8 +102,8 @@ use std::error::Error;
 use std::io::Error as IoError;
 use std::iter;
 use std::sync::Arc;
-use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_io::codec::{Decoder, Encoder};
+use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Represents a prototype for an upgrade to handle the ping protocol.
 ///
@@ -306,9 +306,9 @@ mod tests {
     use self::tokio_core::net::TcpStream;
     use self::tokio_core::reactor::Core;
     use super::Ping;
-    use futures::future::join_all;
     use futures::Future;
     use futures::Stream;
+    use futures::future::join_all;
     use libp2p_swarm::{ConnectionUpgrade, Endpoint};
 
     #[test]

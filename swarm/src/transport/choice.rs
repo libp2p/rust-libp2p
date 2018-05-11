@@ -88,8 +88,8 @@ where
     B::Incoming: 'static,        // TODO: meh :-/
     A::IncomingUpgrade: 'static, // TODO: meh :-/
     B::IncomingUpgrade: 'static, // TODO: meh :-/
-    A::Output: 'static,         // TODO: meh :-/
-    B::Output: 'static,         // TODO: meh :-/
+    A::Output: 'static,          // TODO: meh :-/
+    B::Output: 'static,          // TODO: meh :-/
 {
     type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError>>;
     type IncomingUpgrade =

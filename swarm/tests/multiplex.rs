@@ -31,10 +31,10 @@ use futures::future::Future;
 use futures::{Sink, Stream};
 use libp2p_swarm::{Multiaddr, MuxedTransport, StreamMuxer, Transport};
 use libp2p_tcp_transport::TcpConfig;
-use tokio_core::reactor::Core;
-use tokio_io::codec::length_delimited::Framed;
 use std::sync::{atomic, mpsc};
 use std::thread;
+use tokio_core::reactor::Core;
+use tokio_io::codec::length_delimited::Framed;
 
 // Ensures that a transport is only ever used once for dialing.
 #[derive(Debug)]

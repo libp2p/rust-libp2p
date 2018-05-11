@@ -394,8 +394,8 @@ mod tests {
     use self::tokio_core::reactor::Core;
     use IdentifyTransport;
     use futures::{Future, Stream};
-    use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};
     use libp2p_peerstore::memory_peerstore::MemoryPeerstore;
+    use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};
     use libp2p_swarm::Transport;
     use multiaddr::{AddrComponent, Multiaddr};
     use std::io::Error as IoError;

@@ -27,10 +27,7 @@ use upgrade::Endpoint;
 /// See the `Transport::and_then` method.
 #[inline]
 pub fn and_then<T, C>(transport: T, upgrade: C) -> AndThen<T, C> {
-    AndThen {
-        transport,
-        upgrade,
-    }
+    AndThen { transport, upgrade }
 }
 
 /// See the `Transport::and_then` method.
@@ -74,8 +71,7 @@ where
         let stream = listening_stream.map(move |connection| {
             let upgrade = upgrade.clone();
             let future = connection.and_then(move |(stream, client_addr)| {
-                upgrade(stream, Endpoint::Listener, client_addr.clone())
-                    .map(|o| (o, client_addr))
+                upgrade(stream, Endpoint::Listener, client_addr.clone()).map(|o| (o, client_addr))
             });
 
             Box::new(future) as Box<_>
@@ -131,12 +127,11 @@ where
 
         let future = self.transport.next_incoming().map(|future| {
             // Try to negotiate the protocol.
-            let future = future
-                .and_then(move |(connection, client_addr)| {
-                    let upgrade = upgrade.clone();
-                    upgrade(connection, Endpoint::Listener, client_addr.clone())
-                        .map(|o| (o, client_addr))
-                });
+            let future = future.and_then(move |(connection, client_addr)| {
+                let upgrade = upgrade.clone();
+                upgrade(connection, Endpoint::Listener, client_addr.clone())
+                    .map(|o| (o, client_addr))
+            });
 
             Box::new(future) as Box<Future<Item = _, Error = _>>
         });

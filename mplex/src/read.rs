@@ -18,14 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use {bytes, varint};
+use circular_buffer::Array;
 use futures::Async;
 use futures::task;
 use header::{MultiplexHeader, PacketType};
+use shared::SubstreamMetadata;
 use std::io;
 use tokio_io::AsyncRead;
-use shared::SubstreamMetadata;
-use circular_buffer::Array;
+use {bytes, varint};
 
 pub enum NextMultiplexState {
     NewStream(u32),

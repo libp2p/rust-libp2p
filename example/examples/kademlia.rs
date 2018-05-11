@@ -116,9 +116,13 @@ fn main() {
 
     // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming and
     // outgoing connections for us.
-    let (swarm_controller, swarm_future) = swarm::swarm(transport.clone().with_upgrade(proto.clone()), |upgrade, _| upgrade);
+    let (swarm_controller, swarm_future) = swarm::swarm(
+        transport.clone().with_upgrade(proto.clone()),
+        |upgrade, _| upgrade,
+    );
 
-    let (kad_controller, _kad_init) = kad_ctl_proto.start(swarm_controller.clone(), transport.with_upgrade(proto));
+    let (kad_controller, _kad_init) =
+        kad_ctl_proto.start(swarm_controller.clone(), transport.with_upgrade(proto));
 
     for listen_addr in listen_addrs {
         let addr = swarm_controller

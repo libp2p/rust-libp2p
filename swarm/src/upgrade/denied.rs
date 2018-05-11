@@ -19,11 +19,11 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::Bytes;
-use upgrade::{ConnectionUpgrade, Endpoint};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{io, iter};
 use tokio_io::{AsyncRead, AsyncWrite};
+use upgrade::{ConnectionUpgrade, Endpoint};
 
 /// Implementation of `ConnectionUpgrade` that always fails to negotiate.
 #[derive(Debug, Copy, Clone)]

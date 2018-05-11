@@ -18,12 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::fmt;
-use std::io::Error as IoError;
-use futures::{future, Async, Future, IntoFuture, Poll, Stream};
 use futures::stream::{FuturesUnordered, StreamFuture};
 use futures::sync::mpsc;
-use {Multiaddr, Transport, MuxedTransport};
+use futures::{future, Async, Future, IntoFuture, Poll, Stream};
+use std::fmt;
+use std::io::Error as IoError;
+use {Multiaddr, MuxedTransport, Transport};
 
 /// Creates a swarm.
 ///
@@ -72,7 +72,7 @@ where
 /// Allows control of what the swarm is doing.
 pub struct SwarmController<T>
 where
-    T: MuxedTransport + 'static,                // TODO: 'static :-/
+    T: MuxedTransport + 'static, // TODO: 'static :-/
 {
     transport: T,
     new_listeners: mpsc::UnboundedSender<T::Listener>,
@@ -120,12 +120,12 @@ where
     {
         trace!(target: "libp2p-swarm", "Swarm dialing {}", multiaddr);
 
-        match transport
-            .dial(multiaddr.clone())
-        {
+        match transport.dial(multiaddr.clone()) {
             Ok(dial) => {
-                let dial = Box::new(dial.into_future().map(|(d, client_addr)| (d.into(), client_addr)))
-                    as Box<Future<Item = _, Error = _>>;
+                let dial = Box::new(
+                    dial.into_future()
+                        .map(|(d, client_addr)| (d.into(), client_addr)),
+                ) as Box<Future<Item = _, Error = _>>;
                 // Ignoring errors if the receiver has been closed, because in that situation
                 // nothing is going to be processed anyway.
                 let _ = self.new_dialers.unbounded_send(dial);
@@ -148,8 +148,8 @@ where
         and_then: Df,
     ) -> Result<(), Multiaddr>
     where
-        Du: Transport + 'static, // TODO: 'static :-/
-        Df: FnOnce(Du::Output, Multiaddr) -> Dfu + 'static, // TODO: 'static :-/
+        Du: Transport + 'static,                               // TODO: 'static :-/
+        Df: FnOnce(Du::Output, Multiaddr) -> Dfu + 'static,    // TODO: 'static :-/
         Dfu: IntoFuture<Item = (), Error = IoError> + 'static, // TODO: 'static :-/
     {
         trace!(target: "libp2p-swarm", "Swarm dialing {} with custom handler", multiaddr);
@@ -185,7 +185,7 @@ where
 /// Future that must be driven to completion in order for the swarm to work.
 pub struct SwarmFuture<T, H, F>
 where
-    T: MuxedTransport + 'static,                // TODO: 'static :-/
+    T: MuxedTransport + 'static, // TODO: 'static :-/
 {
     transport: T,
     handler: H,
@@ -240,8 +240,9 @@ where
 
         match self.new_listeners.poll() {
             Ok(Async::Ready(Some(new_listener))) => {
-                let new_listener = Box::new(new_listener
-                    .map(|f| Box::new(f) as Box<Future<Item = _, Error = _>>)) as Box<Stream<Item = _, Error = _>>;
+                let new_listener = Box::new(
+                    new_listener.map(|f| Box::new(f) as Box<Future<Item = _, Error = _>>),
+                ) as Box<Stream<Item = _, Error = _>>;
                 self.listeners.push(new_listener.into_future());
             }
             Ok(Async::Ready(None)) | Err(_) => {

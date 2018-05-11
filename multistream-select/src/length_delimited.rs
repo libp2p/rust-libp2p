@@ -26,10 +26,10 @@
 //! We purposely only support a frame length of under 64kiB. Frames most consist in a short
 //! protocol name, which is highly unlikely to be more than 64kiB long.
 
-use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use std::marker::PhantomData;
 use futures::{Async, Poll, Sink, StartSend, Stream};
 use smallvec::SmallVec;
+use std::io::{Error as IoError, ErrorKind as IoErrorKind};
+use std::marker::PhantomData;
 use tokio_io::AsyncRead;
 
 /// Wraps around a `AsyncRead` and implements `Stream`.
@@ -232,10 +232,10 @@ fn decode_length_prefix(buf: &[u8]) -> u16 {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
-    use std::io::ErrorKind;
     use futures::{Future, Stream};
     use length_delimited::LengthDelimitedFramedRead;
+    use std::io::Cursor;
+    use std::io::ErrorKind;
 
     #[test]
     fn basic_read() {

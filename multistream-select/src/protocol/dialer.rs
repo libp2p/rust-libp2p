@@ -28,9 +28,9 @@ use protocol::ListenerToDialerMessage;
 use protocol::MULTISTREAM_PROTOCOL_WITH_LF;
 use protocol::MultistreamSelectError;
 use std::io::{BufRead, Cursor, Read};
-use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_io::codec::length_delimited::Builder as LengthDelimitedBuilder;
 use tokio_io::codec::length_delimited::FramedWrite as LengthDelimitedFramedWrite;
+use tokio_io::{AsyncRead, AsyncWrite};
 use varint;
 
 /// Wraps around a `AsyncRead+AsyncWrite`. Assumes that we're on the dialer's side. Produces and
@@ -191,12 +191,12 @@ where
 #[cfg(test)]
 mod tests {
     extern crate tokio_core;
-    use bytes::Bytes;
-    use futures::{Sink, Stream};
-    use futures::Future;
-    use protocol::{Dialer, DialerToListenerMessage, MultistreamSelectError};
     use self::tokio_core::net::{TcpListener, TcpStream};
     use self::tokio_core::reactor::Core;
+    use bytes::Bytes;
+    use futures::Future;
+    use futures::{Sink, Stream};
+    use protocol::{Dialer, DialerToListenerMessage, MultistreamSelectError};
 
     #[test]
     fn wrong_proto_name() {

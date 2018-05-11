@@ -29,8 +29,8 @@ use protobuf::repeated::RepeatedField;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use structs_proto;
-use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_io::codec::Framed;
+use tokio_io::{AsyncRead, AsyncWrite};
 use varint::VarintCodec;
 
 /// Configuration for an upgrade to the identity protocol.
@@ -238,11 +238,11 @@ mod tests {
 
     use self::libp2p_tcp_transport::TcpConfig;
     use self::tokio_core::reactor::Core;
-    use {IdentifyInfo, IdentifyOutput, IdentifyProtocolConfig};
     use futures::{Future, Stream};
     use libp2p_swarm::Transport;
     use std::sync::mpsc;
     use std::thread;
+    use {IdentifyInfo, IdentifyOutput, IdentifyProtocolConfig};
 
     #[test]
     fn correct_transfer() {

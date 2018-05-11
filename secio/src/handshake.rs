@@ -30,19 +30,19 @@ use futures::stream::Stream;
 use keys_proto::{KeyType as KeyTypeProtobuf, PublicKey as PublicKeyProtobuf};
 use protobuf::Message as ProtobufMessage;
 use protobuf::core::parse_from_bytes as protobuf_parse_from_bytes;
-use ring::{agreement, digest, rand};
 use ring::agreement::EphemeralPrivateKey;
 use ring::hmac::{SigningContext, SigningKey, VerificationKey};
 use ring::rand::SecureRandom;
-use ring::signature::{RSAKeyPair, RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256};
 use ring::signature::verify as signature_verify;
+use ring::signature::{RSAKeyPair, RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256};
+use ring::{agreement, digest, rand};
 use std::cmp::{self, Ordering};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::mem;
 use std::sync::Arc;
 use structs_proto::{Exchange, Propose};
-use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_io::codec::length_delimited;
+use tokio_io::{AsyncRead, AsyncWrite};
 use untrusted::Input as UntrustedInput;
 
 /// Performs a handshake on the given socket.
@@ -526,6 +526,9 @@ fn stretch_key(key: &SigningKey, result: &mut [u8]) {
 #[cfg(test)]
 mod tests {
     extern crate tokio_core;
+    use self::tokio_core::net::TcpListener;
+    use self::tokio_core::net::TcpStream;
+    use self::tokio_core::reactor::Core;
     use super::handshake;
     use super::stretch_key;
     use futures::Future;
@@ -534,9 +537,6 @@ mod tests {
     use ring::hmac::SigningKey;
     use ring::signature::RSAKeyPair;
     use std::sync::Arc;
-    use self::tokio_core::net::TcpListener;
-    use self::tokio_core::net::TcpStream;
-    use self::tokio_core::reactor::Core;
     use untrusted::Input;
 
     #[test]

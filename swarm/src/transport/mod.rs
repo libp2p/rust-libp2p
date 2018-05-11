@@ -113,7 +113,8 @@ pub trait Transport {
     /// Applies a function on the output of the `Transport`.
     #[inline]
     fn map<F>(self, map: F) -> map::Map<Self, F>
-        where Self: Sized,
+    where
+        Self: Sized,
     {
         map::Map::new(self, map)
     }

@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{Async, Future, Poll, Stream};
 use futures::stream::{iter_ok, Skip as StreamSkip, Take as StreamTake};
+use futures::{Async, Future, Poll, Stream};
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::io::Error as IoError;

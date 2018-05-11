@@ -21,11 +21,11 @@
 use read::MultiplexReadState;
 use write::MultiplexWriteState;
 
-use circular_buffer::{Array, CircularBuffer};
-use std::collections::HashMap;
-use bytes::Bytes;
 use arrayvec::ArrayVec;
+use bytes::Bytes;
+use circular_buffer::{Array, CircularBuffer};
 use futures::task::Task;
+use std::collections::HashMap;
 
 const BUF_SIZE: usize = 1024;
 

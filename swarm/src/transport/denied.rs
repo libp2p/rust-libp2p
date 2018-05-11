@@ -22,8 +22,8 @@ use futures::future;
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::io::{self, Cursor};
-use transport::Transport;
 use transport::MuxedTransport;
+use transport::Transport;
 
 /// Dummy implementation of `Transport` that just denies every single attempt.
 #[derive(Debug, Copy, Clone)]

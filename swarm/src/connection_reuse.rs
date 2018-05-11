@@ -41,10 +41,10 @@
 
 use fnv::FnvHashMap;
 use futures::future::{self, FutureResult, IntoFuture};
-use futures::{Async, Future, Poll, Stream};
-use futures::stream::FuturesUnordered;
 use futures::stream::Fuse as StreamFuse;
+use futures::stream::FuturesUnordered;
 use futures::sync::mpsc;
+use futures::{Async, Future, Poll, Stream};
 use multiaddr::Multiaddr;
 use muxing::StreamMuxer;
 use parking_lot::Mutex;
@@ -118,7 +118,7 @@ where
 
 impl<T, C> Transport for ConnectionReuse<T, C>
 where
-    T: Transport + 'static,                     // TODO: 'static :(
+    T: Transport + 'static, // TODO: 'static :(
     T::Output: AsyncRead + AsyncWrite,
     C: ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :(
     C: Clone,
@@ -212,7 +212,7 @@ where
 
 impl<T, C> MuxedTransport for ConnectionReuse<T, C>
 where
-    T: Transport + 'static,                     // TODO: 'static :(
+    T: Transport + 'static, // TODO: 'static :(
     T::Output: AsyncRead + AsyncWrite,
     C: ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :(
     C: Clone,

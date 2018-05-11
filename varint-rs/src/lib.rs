@@ -35,12 +35,12 @@ use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
 use futures::{Async, Poll};
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
-use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_io::codec::{Decoder, Encoder};
 use std::io;
 use std::io::prelude::*;
 use std::marker::PhantomData;
 use std::mem;
+use tokio_io::codec::{Decoder, Encoder};
+use tokio_io::{AsyncRead, AsyncWrite};
 
 mod errors {
     error_chain! {
@@ -106,7 +106,7 @@ macro_rules! impl_bits {
                 (std::mem::size_of::<$t>() * 8) - self.leading_zeros() as usize
             }
         }
-    }
+    };
 }
 
 impl_bits!(usize);
@@ -139,7 +139,9 @@ macro_rules! impl_decoderstate {
             |a: $t, b| -> Option<$t> { a.checked_shl(b as u32) }
         );
     };
-    ($t:ty, $make_fn:expr) => { impl_decoderstate!($t, $make_fn, $make_fn); };
+    ($t:ty, $make_fn:expr) => {
+        impl_decoderstate!($t, $make_fn, $make_fn);
+    };
     ($t:ty, $make_fn:expr, $shift_fn:expr) => {
         impl DecoderHelper for $t {
             #[inline]
@@ -148,13 +150,14 @@ macro_rules! impl_decoderstate {
                 byte: u8,
             ) -> ::errors::Result<Option<$t>> {
                 let res = decoder.accumulator.take().and_then(|accumulator| {
-                    let out = accumulator | match $shift_fn(
-                        $make_fn(byte & 0x7F),
-                        decoder.shift * USABLE_BITS_PER_BYTE,
-                    ) {
-                        Some(a) => a,
-                        None => return Some(Err(ErrorKind::ParseError.into())),
-                    };
+                    let out = accumulator
+                        | match $shift_fn(
+                            $make_fn(byte & 0x7F),
+                            decoder.shift * USABLE_BITS_PER_BYTE,
+                        ) {
+                            Some(a) => a,
+                            None => return Some(Err(ErrorKind::ParseError.into())),
+                        };
                     decoder.shift += 1;
 
                     if byte & 0x80 == 0 {
@@ -174,7 +177,7 @@ macro_rules! impl_decoderstate {
 
             fn read<R: AsyncRead>(
                 decoder: &mut DecoderState<Self>,
-                mut input: R
+                mut input: R,
             ) -> Poll<Option<Self>, Error> {
                 if decoder.accumulator == AccumulatorState::Finished {
                     return Err(Error::with_chain(
@@ -202,17 +205,19 @@ macro_rules! impl_decoderstate {
                         Err(inner) => if decoder.accumulator == AccumulatorState::NotStarted {
                             break Ok(Async::Ready(None));
                         } else {
-                            break Err(Error::with_chain(inner, ErrorKind::ParseError))
+                            break Err(Error::with_chain(inner, ErrorKind::ParseError));
                         },
                     }
                 }
             }
         }
-    }
+    };
 }
 
 macro_rules! impl_encoderstate {
-    ($t:ty) => { impl_encoderstate!($t, <$t>::from); };
+    ($t:ty) => {
+        impl_encoderstate!($t, <$t>::from);
+    };
     ($t:ty, $make_fn:expr) => {
         impl EncoderHelper for $t {
             /// Write as much as possible of the inner integer to the output `AsyncWrite`
@@ -227,11 +232,11 @@ macro_rules! impl_encoderstate {
                         return None;
                     }
 
-                    let masked = (&encoder.source >> (encoder.cur_chunk * USABLE_BITS_PER_BYTE)) &
-                        $make_fn((1 << USABLE_BITS_PER_BYTE) - 1usize);
-                    let masked = masked.to_u8().expect(
-                        "Masked with 0b0111_1111, is less than u8::MAX, QED",
-                    );
+                    let masked = (&encoder.source >> (encoder.cur_chunk * USABLE_BITS_PER_BYTE))
+                        & $make_fn((1 << USABLE_BITS_PER_BYTE) - 1usize);
+                    let masked = masked
+                        .to_u8()
+                        .expect("Masked with 0b0111_1111, is less than u8::MAX, QED");
 
                     if encoder.cur_chunk == last_chunk {
                         Some(masked)
@@ -258,9 +263,9 @@ macro_rules! impl_encoderstate {
                                     Ok(Async::Ready(WriteState::Pending(written)))
                                 };
                             }
-                            Err(inner) => break Err(
-                                Error::with_chain(inner, ErrorKind::WriteError)
-                            ),
+                            Err(inner) => {
+                                break Err(Error::with_chain(inner, ErrorKind::WriteError))
+                            }
                         }
                     } else {
                         break Ok(Async::Ready(WriteState::Done(written)));
@@ -268,7 +273,7 @@ macro_rules! impl_encoderstate {
                 }
             }
         }
-    }
+    };
 }
 
 impl_encoderstate!(usize);
@@ -315,8 +320,8 @@ enum AccumulatorState<T> {
 
 impl<T: Default> AccumulatorState<T> {
     fn take(&mut self) -> Option<T> {
-        use std::mem;
         use AccumulatorState::*;
+        use std::mem;
 
         match mem::replace(self, AccumulatorState::Finished) {
             InProgress(inner) => Some(inner),
@@ -511,15 +516,15 @@ pub fn encode<T: EncoderHelper + Bits>(input: T) -> Bytes {
 #[cfg(test)]
 mod tests {
     use super::{decode, EncoderState, VarintDecoder};
-    use tokio_io::codec::FramedRead;
-    use num_bigint::BigUint;
     use futures::{Future, Stream};
+    use num_bigint::BigUint;
+    use tokio_io::codec::FramedRead;
 
     #[test]
     fn large_number_fails() {
-        use std::io::Cursor;
-        use futures::Async;
         use super::WriteState;
+        use futures::Async;
+        use std::io::Cursor;
 
         let mut out = vec![0u8; 10];
 
@@ -586,9 +591,9 @@ mod tests {
 
     #[test]
     fn can_encode_basic_biguint_async() {
-        use std::io::Cursor;
-        use futures::Async;
         use super::WriteState;
+        use futures::Async;
+        use std::io::Cursor;
 
         let mut out = vec![0u8; 2];
 
@@ -608,9 +613,9 @@ mod tests {
 
     #[test]
     fn can_encode_basic_usize_async() {
-        use std::io::Cursor;
-        use futures::Async;
         use super::WriteState;
+        use futures::Async;
+        use std::io::Cursor;
 
         let mut out = vec![0u8; 2];
 

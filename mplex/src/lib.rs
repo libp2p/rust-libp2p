@@ -35,25 +35,25 @@ extern crate rand;
 extern crate tokio_io;
 extern crate varint;
 
-mod read;
-mod write;
-mod shared;
 mod header;
+mod read;
+mod shared;
+mod write;
 
 use bytes::Bytes;
 use circular_buffer::Array;
-use futures::{Async, Future, Poll};
 use futures::future::{self, FutureResult};
-use header::MultiplexHeader;
-use swarm::muxing::StreamMuxer;
-use swarm::{ConnectionUpgrade, Endpoint, Multiaddr};
+use futures::{Async, Future, Poll};
 use futures_mutex::Mutex;
+use header::MultiplexHeader;
 use read::{read_stream, MultiplexReadState};
 use shared::{buf_from_slice, ByteBuf, MultiplexShared};
-use std::iter;
 use std::io::{self, Read, Write};
+use std::iter;
 use std::sync::Arc;
 use std::sync::atomic::{self, AtomicUsize};
+use swarm::muxing::StreamMuxer;
+use swarm::{ConnectionUpgrade, Endpoint, Multiaddr};
 use tokio_io::{AsyncRead, AsyncWrite};
 use write::write_stream;
 

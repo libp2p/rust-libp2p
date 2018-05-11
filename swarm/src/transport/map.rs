@@ -39,8 +39,9 @@ impl<T, F> Map<T, F> {
 }
 
 impl<T, F, D> Transport for Map<T, F>
-where T: Transport + 'static,                       // TODO: 'static :-/
-      F: Fn(T::Output) -> D + Clone + 'static,      // TODO: 'static :-/
+where
+    T: Transport + 'static,                  // TODO: 'static :-/
+    F: Fn(T::Output) -> D + Clone + 'static, // TODO: 'static :-/
 {
     type Output = D;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
@@ -54,14 +55,14 @@ where T: Transport + 'static,                       // TODO: 'static :-/
             Ok((stream, listen_addr)) => {
                 let stream = stream.map(move |future| {
                     let map = map.clone();
-                    let future = future.into_future().map(move |(output, addr)| (map(output), addr));
+                    let future = future
+                        .into_future()
+                        .map(move |(output, addr)| (map(output), addr));
                     Box::new(future) as Box<_>
                 });
                 Ok((Box::new(stream), listen_addr))
-            },
-            Err((transport, addr)) => {
-                Err((Map { transport, map }, addr))
-            },
+            }
+            Err((transport, addr)) => Err((Map { transport, map }, addr)),
         }
     }
 
@@ -70,12 +71,12 @@ where T: Transport + 'static,                       // TODO: 'static :-/
 
         match self.transport.dial(addr) {
             Ok(future) => {
-                let future = future.into_future().map(move |(output, addr)| (map(output), addr));
+                let future = future
+                    .into_future()
+                    .map(move |(output, addr)| (map(output), addr));
                 Ok(Box::new(future))
-            },
-            Err((transport, addr)) => {
-                Err((Map { transport, map }, addr))
             }
+            Err((transport, addr)) => Err((Map { transport, map }, addr)),
         }
     }
 
@@ -86,19 +87,19 @@ where T: Transport + 'static,                       // TODO: 'static :-/
 }
 
 impl<T, F, D> MuxedTransport for Map<T, F>
-where T: MuxedTransport + 'static,                       // TODO: 'static :-/
-      F: Fn(T::Output) -> D + Clone + 'static,      // TODO: 'static :-/
+where
+    T: MuxedTransport + 'static,             // TODO: 'static :-/
+    F: Fn(T::Output) -> D + Clone + 'static, // TODO: 'static :-/
 {
     type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError>>;
     type IncomingUpgrade = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>;
 
     fn next_incoming(self) -> Self::Incoming {
         let map = self.map;
-        let future = self.transport.next_incoming()
-            .map(move |upgrade| {
-                let future = upgrade.map(move |(output, addr)| (map(output), addr));
-                Box::new(future) as Box<_>
-            });
+        let future = self.transport.next_incoming().map(move |upgrade| {
+            let future = upgrade.map(move |(output, addr)| (map(output), addr));
+            Box::new(future) as Box<_>
+        });
         Box::new(future)
     }
 }

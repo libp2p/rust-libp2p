@@ -29,8 +29,8 @@
 
 extern crate smallvec;
 
-use std::ops::Drop;
 use std::mem::ManuallyDrop;
+use std::ops::Drop;
 
 pub use smallvec::Array;
 
@@ -41,8 +41,8 @@ use owned_slice::OwnedSlice;
 /// elements of these slices would be leaked after the slice goes out of scope. `OwnedSlice` simply
 /// manually drops all its elements when it goes out of scope.
 pub mod owned_slice {
-    use std::ops::{Deref, DerefMut, Drop};
     use std::mem::ManuallyDrop;
+    use std::ops::{Deref, DerefMut, Drop};
 
     /// A slice that owns its elements, but not their storage. This is useful for things like
     /// `Vec::retain` and `CircularBuffer::pop_slice`, since these functions can return a slice but

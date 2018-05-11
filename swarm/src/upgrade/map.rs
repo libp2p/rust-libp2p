@@ -37,9 +37,10 @@ pub struct Map<U, F> {
 }
 
 impl<C, U, F, O> ConnectionUpgrade<C> for Map<U, F>
-where U: ConnectionUpgrade<C>,
-      C: AsyncRead + AsyncWrite,
-      F: FnOnce(U::Output) -> O,
+where
+    U: ConnectionUpgrade<C>,
+    C: AsyncRead + AsyncWrite,
+    F: FnOnce(U::Output) -> O,
 {
     type NamesIter = U::NamesIter;
     type UpgradeIdentifier = U::UpgradeIdentifier;
@@ -58,6 +59,8 @@ where U: ConnectionUpgrade<C>,
         ty: Endpoint,
         remote_addr: &Multiaddr,
     ) -> Self::Future {
-        self.upgrade.upgrade(socket, id, ty, remote_addr).map(self.map)
+        self.upgrade
+            .upgrade(socket, id, ty, remote_addr)
+            .map(self.map)
     }
 }

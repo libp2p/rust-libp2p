@@ -24,12 +24,12 @@
 
 use bytes::Bytes;
 use fnv::FnvHashMap;
-use futures::{self, future, Future};
 use futures::sync::oneshot;
+use futures::{self, future, Future};
 use kad_server::{KadServerInterface, KademliaServerConfig, KademliaServerController};
 use kbucket::{KBucketsPeerId, KBucketsTable, UpdateOutcome};
 use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};
-use libp2p_swarm::{Transport, Endpoint, MuxedTransport, SwarmController, ConnectionUpgrade};
+use libp2p_swarm::{ConnectionUpgrade, Endpoint, MuxedTransport, SwarmController, Transport};
 use multiaddr::Multiaddr;
 use parking_lot::Mutex;
 use protocol::ConnectionType;
@@ -105,10 +105,10 @@ where
     where
         P: Clone + Deref<Target = Pc> + 'static, // TODO: 'static :-/
         for<'r> &'r Pc: Peerstore,
-        R: Clone + 'static,                                 // TODO: 'static :-/
-        T: Clone + MuxedTransport + 'static,                // TODO: 'static :-/
+        R: Clone + 'static,                  // TODO: 'static :-/
+        T: Clone + MuxedTransport + 'static, // TODO: 'static :-/
         T::Output: From<KademliaProcessingFuture>,
-        K: Transport<Output = KademliaProcessingFuture> + Clone + 'static,         // TODO: 'static :-/
+        K: Transport<Output = KademliaProcessingFuture> + Clone + 'static, // TODO: 'static :-/
     {
         // TODO: initialization
 
@@ -144,7 +144,7 @@ where
 #[derive(Debug)]
 pub struct KademliaController<P, R, T, K>
 where
-    T: MuxedTransport + 'static,                // TODO: 'static :-/
+    T: MuxedTransport + 'static, // TODO: 'static :-/
 {
     inner: Arc<Inner<P, R>>,
     swarm_controller: SwarmController<T>,
@@ -411,8 +411,8 @@ impl<R, P, Pc, T, K> query::QueryInterface for KademliaController<P, R, T, K>
 where
     P: Clone + Deref<Target = Pc> + 'static, // TODO: 'static :-/
     for<'r> &'r Pc: Peerstore,
-    R: Clone + 'static,                                 // TODO: 'static :-/
-    T: Clone + MuxedTransport + 'static,                // TODO: 'static :-/
+    R: Clone + 'static,                  // TODO: 'static :-/
+    T: Clone + MuxedTransport + 'static, // TODO: 'static :-/
     T::Output: From<KademliaProcessingFuture>,
     K: Transport<Output = KademliaProcessingFuture> + Clone + 'static,
 {
@@ -467,7 +467,9 @@ where
             }
             Entry::Vacant(entry) => {
                 // Need to open a connection.
-                match self.swarm_controller.dial_to_handler(addr, self.kademlia_transport.clone()) {
+                match self.swarm_controller
+                    .dial_to_handler(addr, self.kademlia_transport.clone())
+                {
                     Ok(()) => (),
                     Err(_addr) => {
                         let fut = future::err(IoError::new(

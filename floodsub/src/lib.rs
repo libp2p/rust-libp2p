@@ -39,17 +39,11 @@ mod topic;
 
 pub use self::topic::{Topic, TopicBuilder, TopicHash};
 
-use std::fmt;
-use std::hash::{Hash, Hasher};
-use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use std::iter;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use bytes::{Bytes, BytesMut};
 use byteorder::{BigEndian, WriteBytesExt};
+use bytes::{Bytes, BytesMut};
 use fnv::{FnvHashMap, FnvHashSet, FnvHasher};
-use futures::{future, Future, Poll, Sink, Stream};
 use futures::sync::mpsc;
+use futures::{future, Future, Poll, Sink, Stream};
 use libp2p_peerstore::PeerId;
 use libp2p_swarm::{ConnectionUpgrade, Endpoint};
 use log::Level;
@@ -57,6 +51,12 @@ use multiaddr::{AddrComponent, Multiaddr};
 use parking_lot::{Mutex, RwLock};
 use protobuf::Message as ProtobufMessage;
 use smallvec::SmallVec;
+use std::fmt;
+use std::hash::{Hash, Hasher};
+use std::io::{Error as IoError, ErrorKind as IoErrorKind};
+use std::iter;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio_io::{AsyncRead, AsyncWrite};
 use varint::VarintCodec;
 

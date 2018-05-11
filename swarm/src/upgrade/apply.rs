@@ -30,48 +30,41 @@ use upgrade::{ConnectionUpgrade, Endpoint};
 ///
 /// Returns a `Future` that returns the outcome of the connection upgrade.
 #[inline]
-pub fn apply<'a, C, U>(connection: C, upgrade: U, endpoint: Endpoint, remote_addr: Multiaddr)
-    -> Box<Future<Item = (U::Output, Multiaddr), Error = IoError> + 'a>
-where U: ConnectionUpgrade<C> + 'a,
-      U::NamesIter: Clone,  // TODO: not elegant
-      C: AsyncRead + AsyncWrite + 'a,
+pub fn apply<'a, C, U>(
+    connection: C,
+    upgrade: U,
+    endpoint: Endpoint,
+    remote_addr: Multiaddr,
+) -> Box<Future<Item = (U::Output, Multiaddr), Error = IoError> + 'a>
+where
+    U: ConnectionUpgrade<C> + 'a,
+    U::NamesIter: Clone, // TODO: not elegant
+    C: AsyncRead + AsyncWrite + 'a,
 {
-    let iter = upgrade.protocol_names()
+    let iter = upgrade
+        .protocol_names()
         .map::<_, fn(_) -> _>(|(n, t)| (n, <Bytes as PartialEq>::eq, t));
     let remote_addr2 = remote_addr.clone();
     debug!(target: "libp2p-swarm", "Starting protocol negotiation");
 
     let negotiation = match endpoint {
-        Endpoint::Listener => {
-            multistream_select::listener_select_proto(connection, iter)
-        },
-        Endpoint::Dialer => {
-            multistream_select::dialer_select_proto(connection, iter)
-        },
+        Endpoint::Listener => multistream_select::listener_select_proto(connection, iter),
+        Endpoint::Dialer => multistream_select::dialer_select_proto(connection, iter),
     };
 
     let future = negotiation
         .map_err(|err| IoError::new(IoErrorKind::Other, err))
         .then(move |negotiated| {
             match negotiated {
-                Ok(_) => {
-                    debug!(target: "libp2p-swarm", "Successfully negotiated \
-                            protocol upgrade with {}", remote_addr2)
-                },
-                Err(ref err) => {
-                    debug!(target: "libp2p-swarm", "Error while negotiated \
-                            protocol upgrade: {:?}", err)
-                },
+                Ok(_) => debug!(target: "libp2p-swarm", "Successfully negotiated \
+                            protocol upgrade with {}", remote_addr2),
+                Err(ref err) => debug!(target: "libp2p-swarm", "Error while negotiated \
+                            protocol upgrade: {:?}", err),
             };
             negotiated
         })
         .and_then(move |(upgrade_id, connection)| {
-            let fut = upgrade.upgrade(
-                connection,
-                upgrade_id,
-                endpoint,
-                &remote_addr,
-            );
+            let fut = upgrade.upgrade(connection, upgrade_id, endpoint, &remote_addr);
             fut.map(move |c| (c, remote_addr))
         })
         .into_future()
@@ -83,6 +76,6 @@ where U: ConnectionUpgrade<C> + 'a,
             }
             val
         });
-    
+
     Box::new(future)
 }

@@ -97,8 +97,8 @@ extern crate untrusted;
 pub use self::error::SecioError;
 
 use bytes::{Bytes, BytesMut};
-use futures::{Future, Poll, Sink, StartSend, Stream};
 use futures::stream::MapErr as StreamMapErr;
+use futures::{Future, Poll, Sink, StartSend, Stream};
 use libp2p_swarm::Multiaddr;
 use ring::signature::RSAKeyPair;
 use rw_stream_sink::RwStreamSink;
@@ -112,8 +112,8 @@ use untrusted::Input;
 mod algo_support;
 mod codec;
 mod error;
-mod keys_proto;
 mod handshake;
+mod keys_proto;
 mod structs_proto;
 
 /// Implementation of the `ConnectionUpgrade` trait of `libp2p_swarm`. Automatically applies
@@ -190,7 +190,10 @@ impl<S> libp2p_swarm::ConnectionUpgrade<S> for SecioConfig
 where
     S: AsyncRead + AsyncWrite + 'static,
 {
-    type Output = (RwStreamSink<StreamMapErr<SecioMiddleware<S>, fn(SecioError) -> IoError>>, SecioPublicKey);
+    type Output = (
+        RwStreamSink<StreamMapErr<SecioMiddleware<S>, fn(SecioError) -> IoError>>,
+        SecioPublicKey,
+    );
     type Future = Box<Future<Item = Self::Output, Error = IoError>>;
     type NamesIter = iter::Once<(Bytes, ())>;
     type UpgradeIdentifier = ();
@@ -250,11 +253,10 @@ where
     {
         let SecioKeyPairInner::Rsa { private, public } = key_pair.inner;
 
-        let fut =
-            handshake::handshake(socket, public, private).map(|(inner, pubkey)| {
-                let inner = SecioMiddleware { inner };
-                (inner, SecioPublicKey::Rsa(pubkey))
-            });
+        let fut = handshake::handshake(socket, public, private).map(|(inner, pubkey)| {
+            let inner = SecioMiddleware { inner };
+            (inner, SecioPublicKey::Rsa(pubkey))
+        });
         Box::new(fut)
     }
 }

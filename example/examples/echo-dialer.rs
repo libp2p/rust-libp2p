@@ -29,8 +29,8 @@ extern crate libp2p_websocket as websocket;
 extern crate tokio_core;
 extern crate tokio_io;
 
-use futures::{Future, Sink, Stream};
 use futures::sync::oneshot;
+use futures::{Future, Sink, Stream};
 use std::env;
 use swarm::Transport;
 use swarm::upgrade::{self, DeniedConnectionUpgrade, SimpleProtocol};

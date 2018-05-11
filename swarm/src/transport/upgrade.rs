@@ -25,7 +25,7 @@ use muxing::StreamMuxer;
 use std::io::Error as IoError;
 use tokio_io::{AsyncRead, AsyncWrite};
 use transport::{MuxedTransport, Transport};
-use upgrade::{ConnectionUpgrade, Endpoint, apply};
+use upgrade::{apply, ConnectionUpgrade, Endpoint};
 
 /// Implements the `Transport` trait. Dials or listens, then upgrades any dialed or received
 /// connection.
@@ -78,7 +78,8 @@ where
         self,
         addr: Multiaddr,
     ) -> Result<Box<Future<Item = (C::Output, Multiaddr), Error = IoError> + 'a>, (Self, Multiaddr)>
-        where C::NamesIter: Clone, // TODO: not elegant
+    where
+        C::NamesIter: Clone, // TODO: not elegant
     {
         let upgrade = self.upgrade;
 
@@ -112,9 +113,9 @@ where
         self,
     ) -> Box<
         Future<
-            Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError> + 'a>,
-            Error = IoError,
-        >
+                Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError> + 'a>,
+                Error = IoError,
+            >
             + 'a,
     >
     where
@@ -126,10 +127,9 @@ where
 
         let future = self.transports.next_incoming().map(|future| {
             // Try to negotiate the protocol.
-            let future = future
-                .and_then(move |(connection, client_addr)| {
-                    apply(connection, upgrade, Endpoint::Listener, client_addr)
-                });
+            let future = future.and_then(move |(connection, client_addr)| {
+                apply(connection, upgrade, Endpoint::Listener, client_addr)
+            });
 
             Box::new(future) as Box<Future<Item = _, Error = _>>
         });
@@ -150,9 +150,9 @@ where
         (
             Box<
                 Stream<
-                    Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError> + 'a>,
-                    Error = IoError,
-                >
+                        Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError> + 'a>,
+                        Error = IoError,
+                    >
                     + 'a,
             >,
             Multiaddr,

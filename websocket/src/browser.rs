@@ -18,17 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{Async, Future, Poll, Stream};
 use futures::stream::Then as StreamThen;
 use futures::sync::{mpsc, oneshot};
+use futures::{Async, Future, Poll, Stream};
 use multiaddr::{AddrComponent, Multiaddr};
 use rw_stream_sink::RwStreamSink;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::io::{Read, Write};
 use std::iter;
 use std::sync::{Arc, Mutex};
-use stdweb::{self, Reference};
 use stdweb::web::TypedArray;
+use stdweb::{self, Reference};
 use swarm::Transport;
 use tokio_io::{AsyncRead, AsyncWrite};
 

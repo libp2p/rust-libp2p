@@ -27,8 +27,8 @@ use futures::stream::{iter_ok, Stream};
 use query::{naive_apply_query, Query};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
-use serde_json::{from_reader, from_value, to_value, to_writer, Map};
 use serde_json::value::Value;
+use serde_json::{from_reader, from_value, to_value, to_writer, Map};
 use std::borrow::Cow;
 use std::fs;
 use std::io::Cursor;
@@ -264,11 +264,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use {Filter, FilterOp, FilterTy, Order, Query};
     use Datastore;
     use JsonFileDatastore;
     use futures::{Future, Stream};
     use tempfile::NamedTempFile;
+    use {Filter, FilterOp, FilterTy, Order, Query};
 
     #[test]
     fn open_and_flush() {
