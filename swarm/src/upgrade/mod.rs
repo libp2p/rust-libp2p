@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+pub mod apply;
 pub mod denied;
 pub mod traits;
 pub mod choice;
@@ -25,6 +26,7 @@ pub mod map;
 pub mod plaintext;
 pub mod simple;
 
+pub use self::apply::apply;
 pub use self::choice::{or, OrUpgrade};
 pub use self::denied::DeniedConnectionUpgrade;
 pub use self::map::map;

@@ -144,6 +144,7 @@ where
     where
         Du: ConnectionUpgrade<T::Output> + Clone + 'static, // TODO: 'static :-/
         Du::Output: Into<C::Output>,
+        Du::NamesIter: Clone, // TODO: not elegant
     {
         trace!(target: "libp2p-swarm", "Swarm dialing {}", multiaddr);
 
@@ -178,6 +179,7 @@ where
     ) -> Result<(), Multiaddr>
     where
         Du: ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :-/
+        Du::NamesIter: Clone, // TODO: not elegant
         Df: FnOnce(Du::Output, Multiaddr) -> Dfu + 'static, // TODO: 'static :-/
         Dfu: IntoFuture<Item = (), Error = IoError> + 'static, // TODO: 'static :-/
     {
