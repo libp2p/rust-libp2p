@@ -65,7 +65,7 @@ fn main() {
                 }
             };
 
-            upgrade::or(plain_text, secio)
+            upgrade::or(plain_text, upgrade::map(secio, |(socket, _)| socket))
         })
 
         // On top of plaintext or secio, we will use the multiplex protocol.
