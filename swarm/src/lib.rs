@@ -188,7 +188,7 @@
 //! let transport = libp2p_tcp_transport::TcpConfig::new(core.handle())
 //!     .with_dummy_muxing();
 //!
-//! let (swarm_controller, swarm_future) = libp2p_swarm::swarm(transport, Ping, |(mut pinger, service), client_addr| {
+//! let (swarm_controller, swarm_future) = libp2p_swarm::swarm(transport.with_upgrade(Ping), |(mut pinger, service), client_addr| {
 //!     pinger.ping().map_err(|_| panic!())
 //!         .select(service).map_err(|_| panic!())
 //!         .map(|_| ())

@@ -29,8 +29,7 @@ use futures::sync::oneshot;
 use kad_server::{KadServerInterface, KademliaServerConfig, KademliaServerController};
 use kbucket::{KBucketsPeerId, KBucketsTable, UpdateOutcome};
 use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};
-use libp2p_swarm::{Endpoint, MuxedTransport, SwarmController};
-use libp2p_swarm::ConnectionUpgrade;
+use libp2p_swarm::{Transport, Endpoint, MuxedTransport, SwarmController, ConnectionUpgrade};
 use multiaddr::Multiaddr;
 use parking_lot::Mutex;
 use protocol::ConnectionType;
@@ -95,11 +94,12 @@ where
     }
 
     /// Turns the prototype into an actual controller by feeding it a swarm.
-    pub fn start<T, C>(
+    pub fn start<T, K>(
         self,
-        swarm: SwarmController<T, C>,
+        swarm: SwarmController<T>,
+        kademlia_transport: K,
     ) -> (
-        KademliaController<P, R, T, C>,
+        KademliaController<P, R, T, K>,
         Box<Future<Item = (), Error = IoError>>,
     )
     where
@@ -107,16 +107,15 @@ where
         for<'r> &'r Pc: Peerstore,
         R: Clone + 'static,                                 // TODO: 'static :-/
         T: Clone + MuxedTransport + 'static,                // TODO: 'static :-/
-        T::Output: AsyncRead + AsyncWrite,
-        C: Clone + ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :-/
-        C::NamesIter: Clone,
-        C::Output: From<KademliaProcessingFuture>,
+        T::Output: From<KademliaProcessingFuture>,
+        K: Transport<Output = KademliaProcessingFuture> + Clone + 'static,         // TODO: 'static :-/
     {
         // TODO: initialization
 
         let controller = KademliaController {
             inner: self.inner.clone(),
             swarm_controller: swarm,
+            kademlia_transport,
         };
 
         let init_future = {
@@ -143,39 +142,36 @@ where
 
 /// Object that allows one to make queries on the Kademlia system.
 #[derive(Debug)]
-pub struct KademliaController<P, R, T, C>
+pub struct KademliaController<P, R, T, K>
 where
     T: MuxedTransport + 'static,                // TODO: 'static :-/
-    T::Output: AsyncRead + AsyncWrite,
-    C: ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :-/
 {
     inner: Arc<Inner<P, R>>,
-    swarm_controller: SwarmController<T, C>,
+    swarm_controller: SwarmController<T>,
+    kademlia_transport: K,
 }
 
-impl<P, R, T, C> Clone for KademliaController<P, R, T, C>
+impl<P, R, T, K> Clone for KademliaController<P, R, T, K>
 where
     T: Clone + MuxedTransport + 'static, // TODO: 'static :-/
-    T::Output: AsyncRead + AsyncWrite,
-    C: Clone + ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :-/
+    K: Clone,
 {
     #[inline]
     fn clone(&self) -> Self {
         KademliaController {
             inner: self.inner.clone(),
             swarm_controller: self.swarm_controller.clone(),
+            kademlia_transport: self.kademlia_transport.clone(),
         }
     }
 }
 
-impl<P, Pc, R, T, C> KademliaController<P, R, T, C>
+impl<P, Pc, R, T, K> KademliaController<P, R, T, K>
 where
     P: Deref<Target = Pc>,
     for<'r> &'r Pc: Peerstore,
     R: Clone,
     T: Clone + MuxedTransport + 'static, // TODO: 'static :-/
-    T::Output: AsyncRead + AsyncWrite,
-    C: Clone + ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :-/
 {
     /// Performs an iterative find node query on the network.
     ///
@@ -192,8 +188,8 @@ where
     where
         P: Clone + 'static,
         R: 'static,
-        C::NamesIter: Clone,
-        C::Output: From<KademliaProcessingFuture>,
+        T::Output: From<KademliaProcessingFuture>,
+        K: Transport<Output = KademliaProcessingFuture> + Clone + 'static,
     {
         query::find_node(self.clone(), searched_key)
     }
@@ -218,11 +214,9 @@ impl<P, R> KademliaUpgrade<P, R> {
 
     /// Builds a connection upgrade from the controller.
     #[inline]
-    pub fn from_controller<T, C>(ctl: &KademliaController<P, R, T, C>) -> Self
+    pub fn from_controller<T, K>(ctl: &KademliaController<P, R, T, K>) -> Self
     where
         T: MuxedTransport,
-        T::Output: AsyncRead + AsyncWrite,
-        C: ConnectionUpgrade<T::Output>,
     {
         KademliaUpgrade {
             inner: ctl.inner.clone(),
@@ -413,16 +407,14 @@ where
     }
 }
 
-impl<R, P, Pc, T, C> query::QueryInterface for KademliaController<P, R, T, C>
+impl<R, P, Pc, T, K> query::QueryInterface for KademliaController<P, R, T, K>
 where
     P: Clone + Deref<Target = Pc> + 'static, // TODO: 'static :-/
     for<'r> &'r Pc: Peerstore,
     R: Clone + 'static,                                 // TODO: 'static :-/
     T: Clone + MuxedTransport + 'static,                // TODO: 'static :-/
-    T::Output: AsyncRead + AsyncWrite,
-    C: Clone + ConnectionUpgrade<T::Output> + 'static, // TODO: 'static :-/
-    C::NamesIter: Clone,
-    C::Output: From<KademliaProcessingFuture>,
+    T::Output: From<KademliaProcessingFuture>,
+    K: Transport<Output = KademliaProcessingFuture> + Clone + 'static,
 {
     #[inline]
     fn local_id(&self) -> &PeerId {
@@ -475,11 +467,7 @@ where
             }
             Entry::Vacant(entry) => {
                 // Need to open a connection.
-                let proto = KademliaUpgrade {
-                    inner: self.inner.clone(),
-                    upgrade: KademliaServerConfig::new(self.inner.clone()),
-                };
-                match self.swarm_controller.dial_to_handler(addr, proto) {
+                match self.swarm_controller.dial_to_handler(addr, self.kademlia_transport.clone()) {
                     Ok(()) => (),
                     Err(_addr) => {
                         let fut = future::err(IoError::new(

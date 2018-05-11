@@ -81,8 +81,7 @@ fn main() {
     // by the listening part. We don't want to accept anything, so we pass a dummy object that
     // represents a connection that is always denied.
     let (swarm_controller, swarm_future) = swarm::swarm(
-        transport,
-        DeniedConnectionUpgrade,
+        transport.clone().with_upgrade(DeniedConnectionUpgrade),
         |_socket, _client_addr| -> Result<(), _> {
             unreachable!("All incoming connections should have been denied")
         },
@@ -91,7 +90,8 @@ fn main() {
     // We now use the controller to dial to the address.
     let (tx, rx) = oneshot::channel();
     swarm_controller
-        .dial_custom_handler(target_addr.parse().expect("invalid multiaddr"), ping::Ping,
+        .dial_custom_handler(target_addr.parse().expect("invalid multiaddr"),
+            transport.with_upgrade(ping::Ping),
             |(mut pinger, future), _| {
                 let ping = pinger.ping().map_err(|_| unreachable!()).inspect(|_| {
                     println!("Received pong from the remote");

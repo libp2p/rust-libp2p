@@ -102,8 +102,7 @@ fn main() {
     // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming and
     // outgoing connections for us.
     let (swarm_controller, swarm_future) = swarm::swarm(
-        transport,
-        floodsub_upgrade.clone(),
+        transport.clone().with_upgrade(floodsub_upgrade.clone()),
         |socket, client_addr| {
             println!("Successfully negotiated protocol with {}", client_addr);
             socket
@@ -142,7 +141,7 @@ fn main() {
                 let target: Multiaddr = msg[6..].parse().unwrap();
                 println!("*Dialing {}*", target);
                 swarm_controller
-                    .dial_to_handler(target, floodsub_upgrade.clone())
+                    .dial_to_handler(target, transport.clone().with_upgrade(floodsub_upgrade.clone()))
                     .unwrap();
             } else {
                 floodsub_ctl.publish(&topic, msg.into_bytes());
