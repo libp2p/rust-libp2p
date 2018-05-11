@@ -33,8 +33,9 @@ use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::io::Error as IoError;
 use tokio_io::{AsyncRead, AsyncWrite};
-use upgrade::ConnectionUpgrade;
+use upgrade::{ConnectionUpgrade, Endpoint};
 
+pub mod and_then;
 pub mod choice;
 pub mod denied;
 pub mod dummy;
@@ -142,6 +143,21 @@ pub trait Transport {
         U: ConnectionUpgrade<Self::Output>,
     {
         UpgradedNode::new(self, upgrade)
+    }
+
+    /// Wraps this transport inside an upgrade. Whenever a connection that uses this transport
+    /// is established, it is wrapped inside the upgrade.
+    ///
+    /// > **Note**: The concept of an *upgrade* for example includes middlewares such *secio*
+    /// >           (communication encryption), *multiplex*, but also a protocol handler.
+    #[inline]
+    fn and_then<C, F>(self, upgrade: C) -> and_then::AndThen<Self, C>
+    where
+        Self: Sized,
+        C: FnOnce(Self::Output, Endpoint, Multiaddr) -> F + Clone + 'static,
+        F: Future<Error = IoError> + 'static,
+    {
+        and_then::and_then(self, upgrade)
     }
 
     /// Builds a dummy implementation of `MuxedTransport` that uses this transport.
