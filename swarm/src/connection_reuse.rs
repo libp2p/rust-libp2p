@@ -40,7 +40,7 @@
 //! `MuxedTransport` trait.
 
 use fnv::FnvHashMap;
-use futures::future::{self, FutureResult, IntoFuture};
+use futures::future::{self, Either, FutureResult, IntoFuture};
 use futures::{Async, Future, Poll, Stream};
 use futures::stream::FuturesUnordered;
 use futures::stream::Fuse as StreamFuse;
@@ -48,7 +48,7 @@ use futures::sync::mpsc;
 use multiaddr::Multiaddr;
 use muxing::StreamMuxer;
 use parking_lot::Mutex;
-use std::io::Error as IoError;
+use std::io::{self, Error as IoError};
 use std::sync::Arc;
 use transport::{MuxedTransport, Transport, UpgradedNode};
 use upgrade::ConnectionUpgrade;
@@ -152,52 +152,59 @@ where
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
         // If we already have an active connection, use it!
-        if let Some(connec) = self.shared
+        let substream = if let Some(muxer) = self.shared
             .lock()
             .active_connections
             .get(&addr)
-            .map(|c| c.clone())
+            .map(|muxer| muxer.clone())
         {
-            debug!(target: "libp2p-swarm", "Using existing multiplexed connection to {}", addr);
-            let future = connec.outbound().map(|s| (s, addr));
-            return Ok(Box::new(future) as Box<_>);
-        }
-
-        debug!(target: "libp2p-swarm", "No existing connection to {} ; dialing", addr);
-
-        // TODO: handle if we're already in the middle in dialing that same node?
-        // TODO: try dialing again if the existing connection has dropped
-
-        let dial = match self.inner.dial(addr) {
-            Ok(l) => l,
-            Err((inner, addr)) => {
-                warn!(target: "libp2p-swarm", "Failed to dial {} because the underlying \
-                                               transport doesn't support this address", addr);
-                return Err((
-                    ConnectionReuse {
-                        inner: inner,
-                        shared: self.shared,
-                    },
-                    addr,
-                ));
-            }
+            let a = addr.clone();
+            Either::A(muxer.outbound().map(move |s| s.map(move |s| (s, a))))
+        } else {
+            Either::B(future::ok(None))
         };
 
         let shared = self.shared.clone();
-        let dial = dial.into_future().and_then(move |(connec, addr)| {
-            // Always replace the active connection because we are the most recent.
-            let mut lock = shared.lock();
-            lock.active_connections.insert(addr.clone(), connec.clone());
-            // TODO: doesn't need locking ; the sender could be extracted
-            let _ = lock.add_to_next_tx.unbounded_send((
-                connec.clone(),
-                connec.clone().inbound(),
-                addr.clone(),
-            ));
-            connec.outbound().map(|s| (s, addr))
+        let inner = self.inner;
+        let future = substream.and_then(move |outbound| {
+            if let Some(o) = outbound {
+                debug!(target: "libp2p-swarm", "Using existing multiplexed connection to {}", addr);
+                return Either::A(future::ok(o));
+            }
+            // The previous stream muxer did not yield a new substream => start new dial
+            debug!(target: "libp2p-swarm", "No existing connection to {}; dialing", addr);
+            match inner.dial(addr.clone()) {
+                Ok(dial) => {
+                    let future = dial.into_future().and_then(move |(muxer, addr)| {
+                        muxer.clone().outbound().and_then(move |substream| {
+                            if let Some(s) = substream {
+                                // Replace the active connection because we are the most recent.
+                                let mut lock = shared.lock();
+                                lock.active_connections.insert(addr.clone(), muxer.clone());
+                                // TODO: doesn't need locking ; the sender could be extracted
+                                let _ = lock.add_to_next_tx.unbounded_send((
+                                    muxer.clone(),
+                                    muxer.inbound(),
+                                    addr.clone(),
+                                ));
+                                Ok((s, addr))
+                            } else {
+                                error!(target: "libp2p-swarm", "failed to dial to {}", addr);
+                                shared.lock().active_connections.remove(&addr);
+                                Err(io::Error::new(io::ErrorKind::Other, "dial failed"))
+                            }
+                        })
+                    });
+                    Either::B(Either::A(future))
+                }
+                Err(_) => {
+                    let e = io::Error::new(io::ErrorKind::Other, "transport rejected dial");
+                    Either::B(Either::B(future::err(e)))
+                }
+            }
         });
 
-        Ok(Box::new(dial) as Box<_>)
+        Ok(Box::new(future) as Box<_>)
     }
 
     #[inline]
@@ -281,12 +288,6 @@ where
                 let next_incoming = muxer.clone().inbound();
                 self.connections
                     .push((muxer.clone(), next_incoming, client_addr.clone()));
-                // We overwrite any current active connection to that multiaddr because we
-                // are the freshest possible connection.
-                self.shared
-                    .lock()
-                    .active_connections
-                    .insert(client_addr, muxer);
             }
             Err(err) => {
                 // Insert the rest of the pending upgrades, but not the current one.
@@ -301,7 +302,18 @@ where
         for n in (0..self.connections.len()).rev() {
             let (muxer, mut next_incoming, client_addr) = self.connections.swap_remove(n);
             match next_incoming.poll() {
-                Ok(Async::Ready(incoming)) => {
+                Ok(Async::Ready(None)) => {
+                    // stream muxer gave us a `None` => connection should be considered closed
+                    debug!(target: "libp2p-swarm", "no more inbound substreams on {}", client_addr);
+                    self.shared.lock().active_connections.remove(&client_addr);
+                }
+                Ok(Async::Ready(Some(incoming))) => {
+                    // We overwrite any current active connection to that multiaddr because we
+                    // are the freshest possible connection.
+                    self.shared
+                        .lock()
+                        .active_connections
+                        .insert(client_addr.clone(), muxer.clone());
                     // A new substream is ready.
                     let mut new_next = muxer.clone().inbound();
                     self.connections
@@ -366,7 +378,11 @@ where
         for n in (0..lock.next_incoming.len()).rev() {
             let (muxer, mut future, addr) = lock.next_incoming.swap_remove(n);
             match future.poll() {
-                Ok(Async::Ready(value)) => {
+                Ok(Async::Ready(None)) => {
+                    debug!(target: "libp2p-swarm", "no inbound substream for {}", addr);
+                    lock.active_connections.remove(&addr);
+                }
+                Ok(Async::Ready(Some(value))) => {
                     // A substream is ready ; push back the muxer for the next time this function
                     // is called, then return.
                     debug!(target: "libp2p-swarm", "New incoming substream");
