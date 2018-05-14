@@ -33,11 +33,13 @@ use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::io::Error as IoError;
 use tokio_io::{AsyncRead, AsyncWrite};
-use upgrade::ConnectionUpgrade;
+use upgrade::{ConnectionUpgrade, Endpoint};
 
+pub mod and_then;
 pub mod choice;
 pub mod denied;
 pub mod dummy;
+pub mod map;
 pub mod muxed;
 pub mod upgrade;
 
@@ -59,7 +61,7 @@ pub use self::upgrade::UpgradedNode;
 /// >           on `Foo`.
 pub trait Transport {
     /// The raw connection to a peer.
-    type RawConn: AsyncRead + AsyncWrite;
+    type Output;
 
     /// The listener produces incoming connections.
     ///
@@ -71,10 +73,10 @@ pub trait Transport {
     /// After a connection has been received, we may need to do some asynchronous pre-processing
     /// on it (eg. an intermediary protocol negotiation). While this pre-processing takes place, we
     /// want to be able to continue polling on the listener.
-    type ListenerUpgrade: Future<Item = (Self::RawConn, Multiaddr), Error = IoError>;
+    type ListenerUpgrade: Future<Item = (Self::Output, Multiaddr), Error = IoError>;
 
     /// A future which indicates that we are currently dialing to a peer.
-    type Dial: IntoFuture<Item = (Self::RawConn, Multiaddr), Error = IoError>;
+    type Dial: IntoFuture<Item = (Self::Output, Multiaddr), Error = IoError>;
 
     /// Listen on the given multiaddr. Returns a stream of incoming connections, plus a modified
     /// version of the `Multiaddr`. This new `Multiaddr` is the one that that should be advertised
@@ -108,6 +110,16 @@ pub trait Transport {
     /// doesn't recognize the protocols, or if `server` and `observed` are related.
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
 
+    /// Applies a function on the output of the `Transport`.
+    #[inline]
+    fn map<F, O>(self, map: F) -> map::Map<Self, F>
+    where
+        Self: Sized,
+        F: FnOnce(Self::Output, Endpoint, Multiaddr) -> O + Clone + 'static,        // TODO: 'static :-/
+    {
+        map::Map::new(self, map)
+    }
+
     /// Builds a new struct that implements `Transport` that contains both `self` and `other`.
     ///
     /// The returned object will redirect its calls to `self`, except that if `listen_on` or `dial`
@@ -129,9 +141,25 @@ pub trait Transport {
     fn with_upgrade<U>(self, upgrade: U) -> UpgradedNode<Self, U>
     where
         Self: Sized,
-        U: ConnectionUpgrade<Self::RawConn>,
+        Self::Output: AsyncRead + AsyncWrite,
+        U: ConnectionUpgrade<Self::Output>,
     {
         UpgradedNode::new(self, upgrade)
+    }
+
+    /// Wraps this transport inside an upgrade. Whenever a connection that uses this transport
+    /// is established, it is wrapped inside the upgrade.
+    ///
+    /// > **Note**: The concept of an *upgrade* for example includes middlewares such *secio*
+    /// >           (communication encryption), *multiplex*, but also a protocol handler.
+    #[inline]
+    fn and_then<C, F>(self, upgrade: C) -> and_then::AndThen<Self, C>
+    where
+        Self: Sized,
+        C: FnOnce(Self::Output, Endpoint, Multiaddr) -> F + Clone + 'static,
+        F: Future<Error = IoError> + 'static,
+    {
+        and_then::and_then(self, upgrade)
     }
 
     /// Builds a dummy implementation of `MuxedTransport` that uses this transport.

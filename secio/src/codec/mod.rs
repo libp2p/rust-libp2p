@@ -26,8 +26,8 @@ use self::encode::EncoderMiddleware;
 
 use crypto::symmetriccipher::SynchronousStreamCipher;
 use ring::hmac;
-use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_io::codec::length_delimited;
+use tokio_io::{AsyncRead, AsyncWrite};
 
 mod decode;
 mod encode;
@@ -59,6 +59,9 @@ where
 #[cfg(test)]
 mod tests {
     extern crate tokio_core;
+    use self::tokio_core::net::TcpListener;
+    use self::tokio_core::net::TcpStream;
+    use self::tokio_core::reactor::Core;
     use super::DecoderMiddleware;
     use super::EncoderMiddleware;
     use super::full_codec;
@@ -66,16 +69,13 @@ mod tests {
     use crypto::aessafe::AesSafe256Encryptor;
     use crypto::blockmodes::CtrMode;
     use error::SecioError;
-    use futures::{Future, Sink, Stream};
     use futures::sync::mpsc::channel;
+    use futures::{Future, Sink, Stream};
     use rand;
     use ring::digest::SHA256;
     use ring::hmac::SigningKey;
     use ring::hmac::VerificationKey;
     use std::io::Error as IoError;
-    use self::tokio_core::net::TcpListener;
-    use self::tokio_core::net::TcpStream;
-    use self::tokio_core::reactor::Core;
     use tokio_io::codec::length_delimited::Framed;
 
     #[test]

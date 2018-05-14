@@ -23,6 +23,7 @@ use multiaddr::{AddrComponent, Multiaddr};
 use rw_stream_sink::RwStreamSink;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use swarm::Transport;
+use tokio_io::{AsyncRead, AsyncWrite};
 use websocket::client::builder::ClientBuilder;
 use websocket::message::OwnedMessage;
 use websocket::server::upgrade::async::IntoWs;
@@ -59,13 +60,13 @@ where
     // TODO: this 'static is pretty arbitrary and is necessary because of the websocket library
     T: Transport + 'static,
     // TODO: this Send is pretty arbitrary and is necessary because of the websocket library
-    T::RawConn: Send,
+    T::Output: AsyncRead + AsyncWrite + Send,
 {
-    type RawConn = Box<AsyncStream>;
+    type Output = Box<AsyncStream>;
     type Listener =
         stream::Map<T::Listener, fn(<T as Transport>::ListenerUpgrade) -> Self::ListenerUpgrade>;
-    type ListenerUpgrade = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
-    type Dial = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
+    type ListenerUpgrade = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>;
+    type Dial = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>;
 
     fn listen_on(
         self,

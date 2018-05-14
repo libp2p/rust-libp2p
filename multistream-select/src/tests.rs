@@ -24,16 +24,16 @@
 
 extern crate tokio_core;
 
-use {dialer_select_proto, listener_select_proto};
-use ProtocolChoiceError;
-use bytes::Bytes;
-use dialer_select::{dialer_select_proto_parallel, dialer_select_proto_serial};
-use futures::{Sink, Stream};
-use futures::Future;
-use protocol::{Dialer, DialerToListenerMessage, Listener, ListenerToDialerMessage};
 use self::tokio_core::net::TcpListener;
 use self::tokio_core::net::TcpStream;
 use self::tokio_core::reactor::Core;
+use ProtocolChoiceError;
+use bytes::Bytes;
+use dialer_select::{dialer_select_proto_parallel, dialer_select_proto_serial};
+use futures::Future;
+use futures::{Sink, Stream};
+use protocol::{Dialer, DialerToListenerMessage, Listener, ListenerToDialerMessage};
+use {dialer_select_proto, listener_select_proto};
 
 #[test]
 fn negotiate_with_self_succeeds() {

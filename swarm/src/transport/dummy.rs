@@ -40,7 +40,7 @@ where
     T: Transport,
 {
     type Incoming = future::Empty<Self::IncomingUpgrade, IoError>;
-    type IncomingUpgrade = future::Empty<(T::RawConn, Multiaddr), IoError>;
+    type IncomingUpgrade = future::Empty<(T::Output, Multiaddr), IoError>;
 
     fn next_incoming(self) -> Self::Incoming
     where
@@ -54,7 +54,7 @@ impl<T> Transport for DummyMuxing<T>
 where
     T: Transport,
 {
-    type RawConn = T::RawConn;
+    type Output = T::Output;
     type Listener = T::Listener;
     type ListenerUpgrade = T::ListenerUpgrade;
     type Dial = T::Dial;

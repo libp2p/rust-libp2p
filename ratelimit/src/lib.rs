@@ -140,8 +140,9 @@ pub struct ListenerUpgrade<T: Transport>(RateLimited<T::ListenerUpgrade>);
 impl<T> Future for ListenerUpgrade<T>
 where
     T: Transport + 'static,
+    T::Output: AsyncRead + AsyncWrite,
 {
-    type Item = (Connection<T::RawConn>, Multiaddr);
+    type Item = (Connection<T::Output>, Multiaddr);
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -157,9 +158,10 @@ pub struct Dial<T: Transport>(RateLimited<T::Dial>);
 impl<T> IntoFuture for Dial<T>
 where
     T: Transport + 'static,
+    T::Output: AsyncRead + AsyncWrite,
 {
     type Future = Box<Future<Item = Self::Item, Error = Self::Error>>;
-    type Item = (Connection<T::RawConn>, Multiaddr);
+    type Item = (Connection<T::Output>, Multiaddr);
     type Error = io::Error;
 
     fn into_future(self) -> Self::Future {
@@ -176,8 +178,9 @@ where
 impl<T> Transport for RateLimited<T>
 where
     T: Transport + 'static,
+    T::Output: AsyncRead + AsyncWrite,
 {
-    type RawConn = Connection<T::RawConn>;
+    type Output = Connection<T::Output>;
     type Listener = Listener<T>;
     type ListenerUpgrade = ListenerUpgrade<T>;
     type Dial = Dial<T>;

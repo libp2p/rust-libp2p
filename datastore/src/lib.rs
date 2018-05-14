@@ -113,8 +113,8 @@ use std::borrow::Cow;
 use std::io::Error as IoError;
 use std::ops::DerefMut;
 
-mod query;
 mod json_file;
+mod query;
 
 pub use self::json_file::{JsonFileDatastore, JsonFileDatastoreEntry};
 pub use self::query::{Filter, FilterOp, FilterTy, Order, Query};

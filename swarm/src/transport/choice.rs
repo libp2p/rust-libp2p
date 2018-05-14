@@ -39,7 +39,7 @@ where
     A: Transport,
     B: Transport,
 {
-    type RawConn = EitherSocket<A::RawConn, B::RawConn>;
+    type Output = EitherSocket<A::Output, B::Output>;
     type Listener = EitherListenStream<A::Listener, B::Listener>;
     type ListenerUpgrade = EitherListenUpgrade<A::ListenerUpgrade, B::ListenerUpgrade>;
     type Dial =
@@ -88,12 +88,12 @@ where
     B::Incoming: 'static,        // TODO: meh :-/
     A::IncomingUpgrade: 'static, // TODO: meh :-/
     B::IncomingUpgrade: 'static, // TODO: meh :-/
-    A::RawConn: 'static,         // TODO: meh :-/
-    B::RawConn: 'static,         // TODO: meh :-/
+    A::Output: 'static,          // TODO: meh :-/
+    B::Output: 'static,          // TODO: meh :-/
 {
     type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError>>;
     type IncomingUpgrade =
-        Box<Future<Item = (EitherSocket<A::RawConn, B::RawConn>, Multiaddr), Error = IoError>>;
+        Box<Future<Item = (EitherSocket<A::Output, B::Output>, Multiaddr), Error = IoError>>;
 
     #[inline]
     fn next_incoming(self) -> Self::Incoming {

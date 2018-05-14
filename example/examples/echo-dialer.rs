@@ -29,11 +29,11 @@ extern crate libp2p_websocket as websocket;
 extern crate tokio_core;
 extern crate tokio_io;
 
-use futures::{Future, Sink, Stream};
 use futures::sync::oneshot;
+use futures::{Future, Sink, Stream};
 use std::env;
 use swarm::Transport;
-use swarm::upgrade::{self, DeniedConnectionUpgrade, SimpleProtocol, UpgradeExt};
+use swarm::upgrade::{self, DeniedConnectionUpgrade, SimpleProtocol};
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 use tokio_io::AsyncRead;
@@ -73,7 +73,7 @@ fn main() {
                 }
             };
 
-            plain_text.or_upgrade(secio)
+            upgrade::or(plain_text, upgrade::map(secio, |(socket, _)| socket))
         })
 
         // On top of plaintext or secio, we will use the multiplex protocol.
@@ -89,8 +89,7 @@ fn main() {
     // by the listening part. We don't want to accept anything, so we pass a dummy object that
     // represents a connection that is always denied.
     let (swarm_controller, swarm_future) = swarm::swarm(
-        transport,
-        DeniedConnectionUpgrade,
+        transport.clone().with_upgrade(DeniedConnectionUpgrade),
         |_socket, _client_addr| -> Result<(), _> {
             unreachable!("All incoming connections should have been denied")
         },
@@ -108,7 +107,7 @@ fn main() {
     // We now use the controller to dial to the address.
     let (finished_tx, finished_rx) = oneshot::channel();
     swarm_controller
-        .dial_custom_handler(target_addr.parse().expect("invalid multiaddr"), proto, |echo, _| {
+        .dial_custom_handler(target_addr.parse().expect("invalid multiaddr"), transport.with_upgrade(proto), |echo, _| {
             // `echo` is what the closure used when initializing `proto` returns.
             // Consequently, please note that the `send` method is available only because the type
             // `length_delimited::Framed` has a `send` method.

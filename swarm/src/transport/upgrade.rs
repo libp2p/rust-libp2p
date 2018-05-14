@@ -18,16 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use bytes::Bytes;
 use connection_reuse::ConnectionReuse;
 use futures::prelude::*;
 use multiaddr::Multiaddr;
-use multistream_select;
 use muxing::StreamMuxer;
-use std::io::{Error as IoError, ErrorKind as IoErrorKind};
+use std::io::Error as IoError;
 use tokio_io::{AsyncRead, AsyncWrite};
 use transport::{MuxedTransport, Transport};
-use upgrade::{ConnectionUpgrade, Endpoint};
+use upgrade::{apply, ConnectionUpgrade, Endpoint};
 
 /// Implements the `Transport` trait. Dials or listens, then upgrades any dialed or received
 /// connection.
@@ -51,7 +49,8 @@ impl<T, C> UpgradedNode<T, C> {
 impl<'a, T, C> UpgradedNode<T, C>
 where
     T: Transport + 'a,
-    C: ConnectionUpgrade<T::RawConn> + 'a,
+    T::Output: AsyncRead + AsyncWrite,
+    C: ConnectionUpgrade<T::Output> + 'a,
 {
     /// Turns this upgraded node into a `ConnectionReuse`. If the `Output` implements the
     /// `StreamMuxer` trait, the returned object will implement `Transport` and `MuxedTransport`.
@@ -79,6 +78,8 @@ where
         self,
         addr: Multiaddr,
     ) -> Result<Box<Future<Item = (C::Output, Multiaddr), Error = IoError> + 'a>, (Self, Multiaddr)>
+    where
+        C::NamesIter: Clone, // TODO: not elegant
     {
         let upgrade = self.upgrade;
 
@@ -97,39 +98,7 @@ where
         let future = dialed_fut
             // Try to negotiate the protocol.
             .and_then(move |(connection, client_addr)| {
-                let iter = upgrade.protocol_names()
-                    .map(|(name, id)| (name, <Bytes as PartialEq>::eq, id));
-                debug!(target: "libp2p-swarm", "Starting protocol negotiation (dialer)");
-                let negotiated = multistream_select::dialer_select_proto(connection, iter)
-                    .map_err(|err| IoError::new(IoErrorKind::Other, err));
-                negotiated.map(|(upgrade_id, conn)| (upgrade_id, conn, upgrade, client_addr))
-            })
-            .then(|negotiated| {
-                match negotiated {
-                    Ok((_, _, _, ref client_addr)) => {
-                        debug!(target: "libp2p-swarm", "Successfully negotiated protocol \
-                               upgrade with {}", client_addr)
-                    },
-                    Err(ref err) => {
-                        debug!(target: "libp2p-swarm", "Error while negotiated protocol \
-                               upgrade: {:?}", err)
-                    },
-                };
-                negotiated
-            })
-            .and_then(move |(upgrade_id, connection, upgrade, client_addr)| {
-                let f = upgrade.upgrade(connection, upgrade_id, Endpoint::Dialer, &client_addr);
-                debug!(target: "libp2p-swarm", "Trying to apply negotiated protocol with {}",
-                       client_addr);
-                f.map(|v| (v, client_addr))
-            })
-            .then(|val| {
-                match val {
-                    Ok(_) => debug!(target: "libp2p-swarm", "Successfully applied negotiated \
-                                                             protocol"),
-                    Err(_) => debug!(target: "libp2p-swarm", "Failed to apply negotiated protocol"),
-                }
-                val
+                apply(connection, upgrade, Endpoint::Dialer, client_addr)
             });
 
         Ok(Box::new(future))
@@ -144,9 +113,9 @@ where
         self,
     ) -> Box<
         Future<
-            Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError> + 'a>,
-            Error = IoError,
-        >
+                Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError> + 'a>,
+                Error = IoError,
+            >
             + 'a,
     >
     where
@@ -158,44 +127,9 @@ where
 
         let future = self.transports.next_incoming().map(|future| {
             // Try to negotiate the protocol.
-            let future = future
-                .and_then(move |(connection, addr)| {
-                    let iter = upgrade
-                        .protocol_names()
-                        .map::<_, fn(_) -> _>(|(name, id)| (name, <Bytes as PartialEq>::eq, id));
-                    debug!(target: "libp2p-swarm", "Starting protocol negotiation (incoming)");
-                    let negotiated = multistream_select::listener_select_proto(connection, iter)
-                        .map_err(|err| IoError::new(IoErrorKind::Other, err));
-                    negotiated.map(move |(upgrade_id, conn)| (upgrade_id, conn, upgrade, addr))
-                })
-                .then(|negotiated| {
-                    match negotiated {
-                        Ok((_, _, _, ref client_addr)) => {
-                            debug!(target: "libp2p-swarm", "Successfully negotiated protocol \
-                                upgrade with {}", client_addr)
-                        }
-                        Err(ref err) => {
-                            debug!(target: "libp2p-swarm", "Error while negotiated protocol \
-                                upgrade: {:?}", err)
-                        }
-                    };
-                    negotiated
-                })
-                .and_then(move |(upgrade_id, connection, upgrade, addr)| {
-                    let upg = upgrade.upgrade(connection, upgrade_id, Endpoint::Listener, &addr);
-                    debug!(target: "libp2p-swarm", "Trying to apply negotiated protocol with {}",
-                           addr);
-                    upg.map(|u| (u, addr))
-                })
-                .then(|val| {
-                    match val {
-                        Ok(_) => debug!(target: "libp2p-swarm", "Successfully applied negotiated \
-                                                                 protocol"),
-                        Err(_) => debug!(target: "libp2p-swarm", "Failed to apply negotiated \
-                                                                  protocol"),
-                    }
-                    val
-                });
+            let future = future.and_then(move |(connection, client_addr)| {
+                apply(connection, upgrade, Endpoint::Listener, client_addr)
+            });
 
             Box::new(future) as Box<Future<Item = _, Error = _>>
         });
@@ -216,9 +150,9 @@ where
         (
             Box<
                 Stream<
-                    Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError> + 'a>,
-                    Error = IoError,
-                >
+                        Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError> + 'a>,
+                        Error = IoError,
+                    >
                     + 'a,
             >,
             Multiaddr,
@@ -250,38 +184,10 @@ where
         let stream = listening_stream.map(move |connection| {
             let upgrade = upgrade.clone();
             let connection = connection
-                    // Try to negotiate the protocol
-                    .and_then(move |(connection, remote_addr)| {
-                        let iter = upgrade.protocol_names()
-                            .map::<_, fn(_) -> _>(|(n, t)| (n, <Bytes as PartialEq>::eq, t));
-                        let remote_addr2 = remote_addr.clone();
-                        debug!(target: "libp2p-swarm", "Starting protocol negotiation (listener)");
-                        multistream_select::listener_select_proto(connection, iter)
-                            .map_err(|err| IoError::new(IoErrorKind::Other, err))
-                            .then(move |negotiated| {
-                                match negotiated {
-                                    Ok(_) => {
-                                        debug!(target: "libp2p-swarm", "Successfully negotiated \
-                                               protocol upgrade with {}", remote_addr2)
-                                    },
-                                    Err(ref err) => {
-                                        debug!(target: "libp2p-swarm", "Error while negotiated \
-                                               protocol upgrade: {:?}", err)
-                                    },
-                                };
-                                negotiated
-                            })
-                            .and_then(move |(upgrade_id, connection)| {
-                                let fut = upgrade.upgrade(
-                                    connection,
-                                    upgrade_id,
-                                    Endpoint::Listener,
-                                    &remote_addr,
-                                );
-                                fut.map(move |c| (c, remote_addr))
-                            })
-                            .into_future()
-                    });
+                // Try to negotiate the protocol.
+                .and_then(move |(connection, client_addr)| {
+                    apply(connection, upgrade, Endpoint::Listener, client_addr)
+                });
 
             Box::new(connection) as Box<_>
         });
@@ -293,12 +199,12 @@ where
 impl<T, C> Transport for UpgradedNode<T, C>
 where
     T: Transport + 'static,
-    C: ConnectionUpgrade<T::RawConn> + 'static,
-    C::Output: AsyncRead + AsyncWrite,
+    T::Output: AsyncRead + AsyncWrite,
+    C: ConnectionUpgrade<T::Output> + 'static,
     C::NamesIter: Clone, // TODO: not elegant
     C: Clone,
 {
-    type RawConn = C::Output;
+    type Output = C::Output;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
     type ListenerUpgrade = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>;
     type Dial = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>;
@@ -322,8 +228,8 @@ where
 impl<T, C> MuxedTransport for UpgradedNode<T, C>
 where
     T: MuxedTransport + 'static,
-    C: ConnectionUpgrade<T::RawConn> + 'static,
-    C::Output: AsyncRead + AsyncWrite,
+    T::Output: AsyncRead + AsyncWrite,
+    C: ConnectionUpgrade<T::Output> + 'static,
     C::NamesIter: Clone, // TODO: not elegant
     C: Clone,
 {

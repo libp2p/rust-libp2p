@@ -23,8 +23,8 @@
 
 use ProtocolChoiceError;
 use bytes::Bytes;
-use futures::{Future, Sink, Stream};
 use futures::future::{loop_fn, result, Loop};
+use futures::{Future, Sink, Stream};
 
 use protocol::Dialer;
 use protocol::DialerToListenerMessage;

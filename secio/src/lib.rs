@@ -39,7 +39,7 @@
 //! # fn main() {
 //! use futures::Future;
 //! use libp2p_secio::{SecioConfig, SecioKeyPair};
-//! use libp2p_swarm::{Multiaddr, Transport};
+//! use libp2p_swarm::{Multiaddr, Transport, upgrade};
 //! use libp2p_tcp_transport::TcpConfig;
 //! use tokio_core::reactor::Core;
 //! use tokio_io::io::write_all;
@@ -52,10 +52,12 @@
 //!         //let private_key = include_bytes!("test-private-key.pk8");
 //!         # let public_key = vec![];
 //!         //let public_key = include_bytes!("test-public-key.der").to_vec();
-//!         SecioConfig {
-//!                // See the documentation of `SecioKeyPair`.
+//!         let upgrade = SecioConfig {
+//!             // See the documentation of `SecioKeyPair`.
 //!             key: SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap(),
-//!         }
+//!         };
+//!
+//!         upgrade::map(upgrade, |(socket, _remote_key)| socket)
 //!     });
 //!
 //! let future = transport.dial("/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap())
@@ -95,8 +97,8 @@ extern crate untrusted;
 pub use self::error::SecioError;
 
 use bytes::{Bytes, BytesMut};
-use futures::{Future, Poll, Sink, StartSend, Stream};
 use futures::stream::MapErr as StreamMapErr;
+use futures::{Future, Poll, Sink, StartSend, Stream};
 use libp2p_swarm::Multiaddr;
 use ring::signature::RSAKeyPair;
 use rw_stream_sink::RwStreamSink;
@@ -110,8 +112,8 @@ use untrusted::Input;
 mod algo_support;
 mod codec;
 mod error;
-mod keys_proto;
 mod handshake;
+mod keys_proto;
 mod structs_proto;
 
 /// Implementation of the `ConnectionUpgrade` trait of `libp2p_swarm`. Automatically applies
@@ -179,16 +181,19 @@ enum SecioKeyPairInner {
 }
 
 #[derive(Debug, Clone)]
-pub enum SecioPublicKey<'a> {
+pub enum SecioPublicKey {
     /// DER format.
-    Rsa(&'a [u8]),
+    Rsa(Vec<u8>),
 }
 
 impl<S> libp2p_swarm::ConnectionUpgrade<S> for SecioConfig
 where
     S: AsyncRead + AsyncWrite + 'static,
 {
-    type Output = RwStreamSink<StreamMapErr<SecioMiddleware<S>, fn(SecioError) -> IoError>>;
+    type Output = (
+        RwStreamSink<StreamMapErr<SecioMiddleware<S>, fn(SecioError) -> IoError>>,
+        SecioPublicKey,
+    );
     type Future = Box<Future<Item = Self::Output, Error = IoError>>;
     type NamesIter = iter::Once<(Bytes, ())>;
     type UpgradeIdentifier = ();
@@ -209,9 +214,9 @@ where
         info!(target: "libp2p-secio", "starting secio upgrade with {:?}", remote_addr);
 
         let fut = SecioMiddleware::handshake(incoming, self.key);
-        let wrapped = fut.map(|stream_sink| {
+        let wrapped = fut.map(|(stream_sink, pubkey)| {
             let mapped = stream_sink.map_err(map_err as fn(_) -> _);
-            RwStreamSink::new(mapped)
+            (RwStreamSink::new(mapped), pubkey)
         }).map_err(map_err);
         Box::new(wrapped)
     }
@@ -229,7 +234,6 @@ fn map_err(err: SecioError) -> IoError {
 /// individually, so you are encouraged to group data in few frames if possible.
 pub struct SecioMiddleware<S> {
     inner: codec::FullCodec<S>,
-    remote_pubkey_der: Vec<u8>,
 }
 
 impl<S> SecioMiddleware<S>
@@ -243,24 +247,17 @@ where
     pub fn handshake<'a>(
         socket: S,
         key_pair: SecioKeyPair,
-    ) -> Box<Future<Item = SecioMiddleware<S>, Error = SecioError> + 'a>
+    ) -> Box<Future<Item = (SecioMiddleware<S>, SecioPublicKey), Error = SecioError> + 'a>
     where
         S: 'a,
     {
         let SecioKeyPairInner::Rsa { private, public } = key_pair.inner;
 
-        let fut =
-            handshake::handshake(socket, public, private).map(|(inner, pubkey)| SecioMiddleware {
-                inner: inner,
-                remote_pubkey_der: pubkey,
-            });
+        let fut = handshake::handshake(socket, public, private).map(|(inner, pubkey)| {
+            let inner = SecioMiddleware { inner };
+            (inner, SecioPublicKey::Rsa(pubkey))
+        });
         Box::new(fut)
-    }
-
-    /// Returns the public key of the remote in the `DER` format.
-    #[inline]
-    pub fn remote_public_key_der(&self) -> SecioPublicKey {
-        SecioPublicKey::Rsa(&self.remote_pubkey_der)
     }
 }
 

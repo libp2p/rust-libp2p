@@ -23,7 +23,6 @@ use futures::future::Future;
 use multiaddr::Multiaddr;
 use std::io::Error as IoError;
 use tokio_io::{AsyncRead, AsyncWrite};
-use upgrade::choice::OrUpgrade;
 
 /// Type of connection for the upgrade.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -73,20 +72,4 @@ pub trait ConnectionUpgrade<C: AsyncRead + AsyncWrite> {
         ty: Endpoint,
         remote_addr: &Multiaddr,
     ) -> Self::Future;
-}
-
-/// Extension trait for `ConnectionUpgrade`. Automatically implemented on everything.
-pub trait UpgradeExt {
-    /// Builds a struct that will choose an upgrade between `self` and `other`, depending on what
-    /// the remote supports.
-    fn or_upgrade<T>(self, other: T) -> OrUpgrade<Self, T>
-    where
-        Self: Sized;
-}
-
-impl<T> UpgradeExt for T {
-    #[inline]
-    fn or_upgrade<U>(self, other: U) -> OrUpgrade<Self, U> {
-        OrUpgrade::new(self, other)
-    }
 }

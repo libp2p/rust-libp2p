@@ -28,9 +28,9 @@
 
 use TTL;
 use multiaddr::Multiaddr;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::Error as DeserializerError;
 use serde::ser::SerializeStruct;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::Ordering;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 

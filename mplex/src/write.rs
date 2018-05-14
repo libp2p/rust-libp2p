@@ -18,14 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use shared::{ByteBuf, MultiplexShared, SubstreamMetadata};
 use header::MultiplexHeader;
+use shared::{ByteBuf, MultiplexShared, SubstreamMetadata};
 
 use circular_buffer;
-use varint;
 use futures::task;
 use std::io;
 use tokio_io::AsyncWrite;
+use varint;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum RequestType {

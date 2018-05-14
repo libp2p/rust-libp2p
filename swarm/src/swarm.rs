@@ -18,13 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::fmt;
-use std::io::Error as IoError;
-use futures::{future, Async, Future, IntoFuture, Poll, Stream};
 use futures::stream::{FuturesUnordered, StreamFuture};
 use futures::sync::mpsc;
-use transport::UpgradedNode;
-use {ConnectionUpgrade, Multiaddr, MuxedTransport};
+use futures::{future, Async, Future, IntoFuture, Poll, Stream};
+use std::fmt;
+use std::io::Error as IoError;
+use {Multiaddr, MuxedTransport, Transport};
 
 /// Creates a swarm.
 ///
@@ -34,29 +33,24 @@ use {ConnectionUpgrade, Multiaddr, MuxedTransport};
 /// Produces a `SwarmController` and an implementation of `Future`. The controller can be used to
 /// control, and the `Future` must be driven to completion in order for things to work.
 ///
-pub fn swarm<T, C, H, F>(
+pub fn swarm<T, H, F>(
     transport: T,
-    upgrade: C,
     handler: H,
-) -> (SwarmController<T, C>, SwarmFuture<T, C, H, F::Future>)
+) -> (SwarmController<T>, SwarmFuture<T, H, F::Future>)
 where
     T: MuxedTransport + Clone + 'static, // TODO: 'static :-/
-    C: ConnectionUpgrade<T::RawConn> + Clone + 'static, // TODO: 'static :-/
-    C::NamesIter: Clone,                 // TODO: not elegant
-    H: FnMut(C::Output, Multiaddr) -> F,
+    H: FnMut(T::Output, Multiaddr) -> F,
     F: IntoFuture<Item = (), Error = IoError>,
 {
     let (new_dialers_tx, new_dialers_rx) = mpsc::unbounded();
     let (new_listeners_tx, new_listeners_rx) = mpsc::unbounded();
     let (new_toprocess_tx, new_toprocess_rx) = mpsc::unbounded();
 
-    let upgraded = transport.clone().with_upgrade(upgrade);
-
     let future = SwarmFuture {
-        upgraded: upgraded.clone(),
+        transport: transport.clone(),
         handler: handler,
         new_listeners: new_listeners_rx,
-        next_incoming: upgraded.clone().next_incoming(),
+        next_incoming: transport.clone().next_incoming(),
         listeners: FuturesUnordered::new(),
         listeners_upgrade: FuturesUnordered::new(),
         dialers: FuturesUnordered::new(),
@@ -67,7 +61,6 @@ where
 
     let controller = SwarmController {
         transport: transport,
-        upgraded: upgraded,
         new_listeners: new_listeners_tx,
         new_dialers: new_dialers_tx,
         new_toprocess: new_toprocess_tx,
@@ -77,46 +70,34 @@ where
 }
 
 /// Allows control of what the swarm is doing.
-pub struct SwarmController<T, C>
+pub struct SwarmController<T>
 where
-    T: MuxedTransport + 'static,                // TODO: 'static :-/
-    C: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :-/
+    T: MuxedTransport + 'static, // TODO: 'static :-/
 {
     transport: T,
-    upgraded: UpgradedNode<T, C>,
-    new_listeners: mpsc::UnboundedSender<
-        Box<
-            Stream<
-                Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>,
-                Error = IoError,
-            >,
-        >,
-    >,
-    new_dialers: mpsc::UnboundedSender<Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>>,
+    new_listeners: mpsc::UnboundedSender<T::Listener>,
+    new_dialers: mpsc::UnboundedSender<Box<Future<Item = (T::Output, Multiaddr), Error = IoError>>>,
     new_toprocess: mpsc::UnboundedSender<Box<Future<Item = (), Error = IoError>>>,
 }
 
-impl<T, C> fmt::Debug for SwarmController<T, C>
+impl<T> fmt::Debug for SwarmController<T>
 where
     T: fmt::Debug + MuxedTransport + 'static, // TODO: 'static :-/
-    C: fmt::Debug + ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :-/
 {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt.debug_tuple("SwarmController")
-            .field(&self.upgraded)
+            .field(&self.transport)
             .finish()
     }
 }
 
-impl<T, C> Clone for SwarmController<T, C>
+impl<T> Clone for SwarmController<T>
 where
     T: MuxedTransport + Clone + 'static, // TODO: 'static :-/
-    C: ConnectionUpgrade<T::RawConn> + 'static + Clone, // TODO: 'static :-/
 {
-    fn clone(&self) -> SwarmController<T, C> {
+    fn clone(&self) -> SwarmController<T> {
         SwarmController {
             transport: self.transport.clone(),
-            upgraded: self.upgraded.clone(),
             new_listeners: self.new_listeners.clone(),
             new_dialers: self.new_dialers.clone(),
             new_toprocess: self.new_toprocess.clone(),
@@ -124,31 +105,27 @@ where
     }
 }
 
-impl<T, C> SwarmController<T, C>
+impl<T> SwarmController<T>
 where
     T: MuxedTransport + Clone + 'static, // TODO: 'static :-/
-    C: ConnectionUpgrade<T::RawConn> + Clone + 'static, // TODO: 'static :-/
-    C::NamesIter: Clone,                 // TODO: not elegant
 {
     /// Asks the swarm to dial the node with the given multiaddress. The connection is then
     /// upgraded using the `upgrade`, and the output is sent to the handler that was passed when
     /// calling `swarm`.
     // TODO: consider returning a future so that errors can be processed?
-    pub fn dial_to_handler<Du>(&self, multiaddr: Multiaddr, upgrade: Du) -> Result<(), Multiaddr>
+    pub fn dial_to_handler<Du>(&self, multiaddr: Multiaddr, transport: Du) -> Result<(), Multiaddr>
     where
-        Du: ConnectionUpgrade<T::RawConn> + Clone + 'static, // TODO: 'static :-/
-        Du::Output: Into<C::Output>,
+        Du: Transport + 'static, // TODO: 'static :-/
+        Du::Output: Into<T::Output>,
     {
         trace!(target: "libp2p-swarm", "Swarm dialing {}", multiaddr);
 
-        match self.transport
-            .clone()
-            .with_upgrade(upgrade)
-            .dial(multiaddr.clone())
-        {
+        match transport.dial(multiaddr.clone()) {
             Ok(dial) => {
-                let dial = Box::new(dial.map(|(d, client_addr)| (d.into(), client_addr)))
-                    as Box<Future<Item = _, Error = _>>;
+                let dial = Box::new(
+                    dial.into_future()
+                        .map(|(d, client_addr)| (d.into(), client_addr)),
+                ) as Box<Future<Item = _, Error = _>>;
                 // Ignoring errors if the receiver has been closed, because in that situation
                 // nothing is going to be processed anyway.
                 let _ = self.new_dialers.unbounded_send(dial);
@@ -167,19 +144,19 @@ where
     pub fn dial_custom_handler<Du, Df, Dfu>(
         &self,
         multiaddr: Multiaddr,
-        upgrade: Du,
+        transport: Du,
         and_then: Df,
     ) -> Result<(), Multiaddr>
     where
-        Du: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :-/
-        Df: FnOnce(Du::Output, Multiaddr) -> Dfu + 'static, // TODO: 'static :-/
+        Du: Transport + 'static,                               // TODO: 'static :-/
+        Df: FnOnce(Du::Output, Multiaddr) -> Dfu + 'static,    // TODO: 'static :-/
         Dfu: IntoFuture<Item = (), Error = IoError> + 'static, // TODO: 'static :-/
     {
         trace!(target: "libp2p-swarm", "Swarm dialing {} with custom handler", multiaddr);
 
-        match self.transport.clone().with_upgrade(upgrade).dial(multiaddr) {
+        match transport.dial(multiaddr) {
             Ok(dial) => {
-                let dial = Box::new(dial.and_then(|(d, m)| and_then(d, m))) as Box<_>;
+                let dial = Box::new(dial.into_future().and_then(|(d, m)| and_then(d, m))) as Box<_>;
                 // Ignoring errors if the receiver has been closed, because in that situation
                 // nothing is going to be processed anyway.
                 let _ = self.new_toprocess.unbounded_send(dial);
@@ -192,7 +169,7 @@ where
     /// Adds a multiaddr to listen on. All the incoming connections will use the `upgrade` that
     /// was passed to `swarm`.
     pub fn listen_on(&self, multiaddr: Multiaddr) -> Result<Multiaddr, Multiaddr> {
-        match self.upgraded.clone().listen_on(multiaddr) {
+        match self.transport.clone().listen_on(multiaddr) {
             Ok((listener, new_addr)) => {
                 trace!(target: "libp2p-swarm", "Swarm listening on {}", new_addr);
                 // Ignoring errors if the receiver has been closed, because in that situation
@@ -206,49 +183,37 @@ where
 }
 
 /// Future that must be driven to completion in order for the swarm to work.
-pub struct SwarmFuture<T, C, H, F>
+pub struct SwarmFuture<T, H, F>
 where
-    T: MuxedTransport + 'static,                // TODO: 'static :-/
-    C: ConnectionUpgrade<T::RawConn> + 'static, // TODO: 'static :-/
+    T: MuxedTransport + 'static, // TODO: 'static :-/
 {
-    upgraded: UpgradedNode<T, C>,
+    transport: T,
     handler: H,
-    new_listeners: mpsc::UnboundedReceiver<
-        Box<
-            Stream<
-                Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>,
-                Error = IoError,
-            >,
-        >,
-    >,
-    next_incoming: Box<
-        Future<Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>, Error = IoError>,
-    >,
+    new_listeners: mpsc::UnboundedReceiver<T::Listener>,
+    next_incoming: T::Incoming,
     listeners: FuturesUnordered<
         StreamFuture<
             Box<
                 Stream<
-                    Item = Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>,
+                    Item = Box<Future<Item = (T::Output, Multiaddr), Error = IoError>>,
                     Error = IoError,
                 >,
             >,
         >,
     >,
     listeners_upgrade:
-        FuturesUnordered<Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>>,
-    dialers: FuturesUnordered<Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>>,
+        FuturesUnordered<Box<Future<Item = (T::Output, Multiaddr), Error = IoError>>>,
+    dialers: FuturesUnordered<Box<Future<Item = (T::Output, Multiaddr), Error = IoError>>>,
     new_dialers:
-        mpsc::UnboundedReceiver<Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>>,
+        mpsc::UnboundedReceiver<Box<Future<Item = (T::Output, Multiaddr), Error = IoError>>>,
     to_process: FuturesUnordered<future::Either<F, Box<Future<Item = (), Error = IoError>>>>,
     new_toprocess: mpsc::UnboundedReceiver<Box<Future<Item = (), Error = IoError>>>,
 }
 
-impl<T, C, H, If, F> Future for SwarmFuture<T, C, H, F>
+impl<T, H, If, F> Future for SwarmFuture<T, H, F>
 where
     T: MuxedTransport + Clone + 'static, // TODO: 'static :-/,
-    C: ConnectionUpgrade<T::RawConn> + Clone + 'static, // TODO: 'static :-/
-    C::NamesIter: Clone,                 // TODO: not elegant
-    H: FnMut(C::Output, Multiaddr) -> If,
+    H: FnMut(T::Output, Multiaddr) -> If,
     If: IntoFuture<Future = F, Item = (), Error = IoError>,
     F: Future<Item = (), Error = IoError>,
 {
@@ -262,19 +227,22 @@ where
             Ok(Async::Ready(connec)) => {
                 debug!(target: "libp2p-swarm", "Swarm received new multiplexed \
                                                 incoming connection");
-                self.next_incoming = self.upgraded.clone().next_incoming();
-                self.listeners_upgrade.push(connec);
+                self.next_incoming = self.transport.clone().next_incoming();
+                self.listeners_upgrade.push(Box::new(connec) as Box<_>);
             }
             Ok(Async::NotReady) => {}
             Err(err) => {
                 debug!(target: "libp2p-swarm", "Error in multiplexed incoming \
                                                 connection: {:?}", err);
-                self.next_incoming = self.upgraded.clone().next_incoming();
+                self.next_incoming = self.transport.clone().next_incoming();
             }
         };
 
         match self.new_listeners.poll() {
             Ok(Async::Ready(Some(new_listener))) => {
+                let new_listener = Box::new(
+                    new_listener.map(|f| Box::new(f) as Box<Future<Item = _, Error = _>>),
+                ) as Box<Stream<Item = _, Error = _>>;
                 self.listeners.push(new_listener.into_future());
             }
             Ok(Async::Ready(None)) | Err(_) => {

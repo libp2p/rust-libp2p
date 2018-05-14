@@ -33,7 +33,7 @@ use futures::future::{loop_fn, Future, IntoFuture, Loop};
 use futures::{Sink, Stream};
 use std::env;
 use swarm::Transport;
-use swarm::upgrade::{self, SimpleProtocol, UpgradeExt};
+use swarm::upgrade::{self, SimpleProtocol};
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 use tokio_io::AsyncRead;
@@ -72,7 +72,7 @@ fn main() {
                 }
             };
 
-            plain_text.or_upgrade(secio)
+            upgrade::or(plain_text, upgrade::map(secio, |(socket, _)| socket))
         })
 
         // On top of plaintext or secio, we will use the multiplex protocol.
@@ -99,36 +99,39 @@ fn main() {
 
     // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming and
     // outgoing connections for us.
-    let (swarm_controller, swarm_future) = swarm::swarm(transport, proto, |socket, client_addr| {
-        println!("Successfully negotiated protocol with {}", client_addr);
+    let (swarm_controller, swarm_future) = swarm::swarm(
+        transport.clone().with_upgrade(proto),
+        |socket, client_addr| {
+            println!("Successfully negotiated protocol with {}", client_addr);
 
-        // The type of `socket` is exactly what the closure of `SimpleProtocol` returns.
+            // The type of `socket` is exactly what the closure of `SimpleProtocol` returns.
 
-        // We loop forever in order to handle all the messages sent by the client.
-        loop_fn(socket, move |socket| {
-            let client_addr = client_addr.clone();
-            socket
-                .into_future()
-                .map_err(|(e, _)| e)
-                .and_then(move |(msg, rest)| {
-                    if let Some(msg) = msg {
-                        // One message has been received. We send it back to the client.
-                        println!(
-                            "Received a message from {}: {:?}\n => Sending back \
-                             identical message to remote",
-                            client_addr, msg
-                        );
-                        Box::new(rest.send(msg.freeze()).map(|m| Loop::Continue(m)))
-                            as Box<Future<Item = _, Error = _>>
-                    } else {
-                        // End of stream. Connection closed. Breaking the loop.
-                        println!("Received EOF from {}\n => Dropping connection", client_addr);
-                        Box::new(Ok(Loop::Break(())).into_future())
-                            as Box<Future<Item = _, Error = _>>
-                    }
-                })
-        })
-    });
+            // We loop forever in order to handle all the messages sent by the client.
+            loop_fn(socket, move |socket| {
+                let client_addr = client_addr.clone();
+                socket
+                    .into_future()
+                    .map_err(|(e, _)| e)
+                    .and_then(move |(msg, rest)| {
+                        if let Some(msg) = msg {
+                            // One message has been received. We send it back to the client.
+                            println!(
+                                "Received a message from {}: {:?}\n => Sending back \
+                                 identical message to remote",
+                                client_addr, msg
+                            );
+                            Box::new(rest.send(msg.freeze()).map(|m| Loop::Continue(m)))
+                                as Box<Future<Item = _, Error = _>>
+                        } else {
+                            // End of stream. Connection closed. Breaking the loop.
+                            println!("Received EOF from {}\n => Dropping connection", client_addr);
+                            Box::new(Ok(Loop::Break(())).into_future())
+                                as Box<Future<Item = _, Error = _>>
+                        }
+                    })
+            })
+        },
+    );
 
     // We now use the controller to listen on the address.
     let address = swarm_controller

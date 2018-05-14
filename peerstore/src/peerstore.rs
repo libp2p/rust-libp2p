@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use {PeerId, TTL};
 use multiaddr::Multiaddr;
+use {PeerId, TTL};
 
 /// Implemented on objects that store peers.
 ///

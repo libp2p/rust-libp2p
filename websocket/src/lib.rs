@@ -88,10 +88,10 @@ extern crate stdweb;
 #[cfg(not(target_os = "emscripten"))]
 extern crate websocket;
 
-#[cfg(not(target_os = "emscripten"))]
-mod desktop;
 #[cfg(target_os = "emscripten")]
 mod browser;
+#[cfg(not(target_os = "emscripten"))]
+mod desktop;
 
 #[cfg(target_os = "emscripten")]
 pub use self::browser::{BrowserWsConfig, BrowserWsConn};

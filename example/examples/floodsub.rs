@@ -33,12 +33,12 @@ extern crate tokio_core;
 extern crate tokio_io;
 extern crate tokio_stdin;
 
-use futures::future::Future;
 use futures::Stream;
+use futures::future::Future;
 use peerstore::PeerId;
 use std::{env, mem};
+use swarm::upgrade;
 use swarm::{Multiaddr, Transport};
-use swarm::upgrade::{self, UpgradeExt};
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 use websocket::WsConfig;
@@ -75,7 +75,7 @@ fn main() {
                 }
             };
 
-            plain_text.or_upgrade(secio)
+            upgrade::or(plain_text, upgrade::map(secio, |(socket, _)| socket))
         })
 
         // On top of plaintext or secio, we will use the multiplex protocol.
@@ -102,8 +102,7 @@ fn main() {
     // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming and
     // outgoing connections for us.
     let (swarm_controller, swarm_future) = swarm::swarm(
-        transport,
-        floodsub_upgrade.clone(),
+        transport.clone().with_upgrade(floodsub_upgrade.clone()),
         |socket, client_addr| {
             println!("Successfully negotiated protocol with {}", client_addr);
             socket
@@ -142,7 +141,10 @@ fn main() {
                 let target: Multiaddr = msg[6..].parse().unwrap();
                 println!("*Dialing {}*", target);
                 swarm_controller
-                    .dial_to_handler(target, floodsub_upgrade.clone())
+                    .dial_to_handler(
+                        target,
+                        transport.clone().with_upgrade(floodsub_upgrade.clone()),
+                    )
                     .unwrap();
             } else {
                 floodsub_ctl.publish(&topic, msg.into_bytes());

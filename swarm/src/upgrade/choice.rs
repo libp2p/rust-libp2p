@@ -26,15 +26,18 @@ use std::io::Error as IoError;
 use tokio_io::{AsyncRead, AsyncWrite};
 use upgrade::{ConnectionUpgrade, Endpoint};
 
-/// See `transport::Transport::or_upgrade()`.
+/// Builds a new `ConnectionUpgrade` that chooses between `A` and `B`.
+///
+/// If both `A` and `B` are supported by the remote, then `A` will be chosen.
+// TODO: write a test for this ^
+#[inline]
+pub fn or<A, B>(me: A, other: B) -> OrUpgrade<A, B> {
+    OrUpgrade(me, other)
+}
+
+/// See `upgrade::or`.
 #[derive(Debug, Copy, Clone)]
 pub struct OrUpgrade<A, B>(A, B);
-
-impl<A, B> OrUpgrade<A, B> {
-    pub fn new(a: A, b: B) -> OrUpgrade<A, B> {
-        OrUpgrade(a, b)
-    }
-}
 
 impl<C, A, B> ConnectionUpgrade<C> for OrUpgrade<A, B>
 where

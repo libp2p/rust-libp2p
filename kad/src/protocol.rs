@@ -26,8 +26,8 @@
 //! used to send messages.
 
 use bytes::Bytes;
-use futures::{Sink, Stream};
 use futures::future;
+use futures::{Sink, Stream};
 use libp2p_peerstore::PeerId;
 use libp2p_swarm::{ConnectionUpgrade, Endpoint, Multiaddr};
 use protobuf::{self, Message};
@@ -162,9 +162,9 @@ where
 }
 
 /// Custom trait that derives `Sink` and `Stream`, so that we can box it.
-pub trait KadStreamSink
-    : Stream<Item = KadMsg, Error = IoError> + Sink<SinkItem = KadMsg, SinkError = IoError>
-    {
+pub trait KadStreamSink:
+    Stream<Item = KadMsg, Error = IoError> + Sink<SinkItem = KadMsg, SinkError = IoError>
+{
 }
 impl<T> KadStreamSink for T
 where

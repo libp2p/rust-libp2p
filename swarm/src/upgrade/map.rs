@@ -18,33 +18,49 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use bytes::Bytes;
-use futures::prelude::*;
+use futures::{future, prelude::*};
 use multiaddr::Multiaddr;
-use std::{io, iter};
 use tokio_io::{AsyncRead, AsyncWrite};
 use upgrade::{ConnectionUpgrade, Endpoint};
 
-/// Implementation of `ConnectionUpgrade` that always fails to negotiate.
+/// Applies a closure on the output of a connection upgrade.
+#[inline]
+pub fn map<U, F>(upgrade: U, map: F) -> Map<U, F> {
+    Map { upgrade, map }
+}
+
+/// Application of a closure on the output of a connection upgrade.
 #[derive(Debug, Copy, Clone)]
-pub struct DeniedConnectionUpgrade;
+pub struct Map<U, F> {
+    upgrade: U,
+    map: F,
+}
 
-impl<C> ConnectionUpgrade<C> for DeniedConnectionUpgrade
+impl<C, U, F, O> ConnectionUpgrade<C> for Map<U, F>
 where
+    U: ConnectionUpgrade<C>,
     C: AsyncRead + AsyncWrite,
+    F: FnOnce(U::Output) -> O,
 {
-    type NamesIter = iter::Empty<(Bytes, ())>;
-    type UpgradeIdentifier = (); // TODO: could use `!`
-    type Output = (); // TODO: could use `!`
-    type Future = Box<Future<Item = (), Error = io::Error>>; // TODO: could use `!`
+    type NamesIter = U::NamesIter;
+    type UpgradeIdentifier = U::UpgradeIdentifier;
 
-    #[inline]
     fn protocol_names(&self) -> Self::NamesIter {
-        iter::empty()
+        self.upgrade.protocol_names()
     }
 
-    #[inline]
-    fn upgrade(self, _: C, _: Self::UpgradeIdentifier, _: Endpoint, _: &Multiaddr) -> Self::Future {
-        unreachable!("the denied connection upgrade always fails to negotiate")
+    type Output = O;
+    type Future = future::Map<U::Future, F>;
+
+    fn upgrade(
+        self,
+        socket: C,
+        id: Self::UpgradeIdentifier,
+        ty: Endpoint,
+        remote_addr: &Multiaddr,
+    ) -> Self::Future {
+        self.upgrade
+            .upgrade(socket, id, ty, remote_addr)
+            .map(self.map)
     }
 }

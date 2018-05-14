@@ -99,10 +99,10 @@ impl<T> Transport for DnsConfig<T>
 where
     T: Transport + 'static, // TODO: 'static :-/
 {
-    type RawConn = T::RawConn;
+    type Output = T::Output;
     type Listener = T::Listener;
     type ListenerUpgrade = T::ListenerUpgrade;
-    type Dial = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
+    type Dial = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>;
 
     #[inline]
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -238,10 +238,10 @@ mod tests {
         #[derive(Clone)]
         struct CustomTransport;
         impl Transport for CustomTransport {
-            type RawConn = <TcpConfig as Transport>::RawConn;
+            type Output = <TcpConfig as Transport>::Output;
             type Listener = <TcpConfig as Transport>::Listener;
             type ListenerUpgrade = <TcpConfig as Transport>::ListenerUpgrade;
-            type Dial = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
+            type Dial = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>;
 
             #[inline]
             fn listen_on(

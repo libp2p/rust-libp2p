@@ -57,15 +57,15 @@ extern crate multiaddr;
 extern crate tokio_core;
 extern crate tokio_io;
 
-use std::io::Error as IoError;
-use std::iter;
-use std::net::SocketAddr;
-use tokio_core::reactor::Handle;
-use tokio_core::net::{TcpListener, TcpStream};
 use futures::future::{self, Future, FutureResult, IntoFuture};
 use futures::stream::Stream;
 use multiaddr::{AddrComponent, Multiaddr, ToMultiaddr};
+use std::io::Error as IoError;
+use std::iter;
+use std::net::SocketAddr;
 use swarm::Transport;
+use tokio_core::net::{TcpListener, TcpStream};
+use tokio_core::reactor::Handle;
 
 /// Represents the configuration for a TCP/IP transport capability for libp2p.
 ///
@@ -87,9 +87,9 @@ impl TcpConfig {
 }
 
 impl Transport for TcpConfig {
-    type RawConn = TcpStream;
+    type Output = TcpStream;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
-    type ListenerUpgrade = FutureResult<(Self::RawConn, Multiaddr), IoError>;
+    type ListenerUpgrade = FutureResult<(Self::Output, Multiaddr), IoError>;
     type Dial = Box<Future<Item = (TcpStream, Multiaddr), Error = IoError>>;
 
     /// Listen on the given multi-addr.
@@ -195,14 +195,14 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
 #[cfg(test)]
 mod tests {
     use super::{multiaddr_to_socketaddr, TcpConfig};
-    use std;
-    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-    use tokio_core::reactor::Core;
-    use tokio_io;
     use futures::Future;
     use futures::stream::Stream;
     use multiaddr::Multiaddr;
+    use std;
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use swarm::Transport;
+    use tokio_core::reactor::Core;
+    use tokio_io;
 
     #[test]
     fn multiaddr_to_tcp_conversion() {

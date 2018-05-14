@@ -34,12 +34,12 @@ extern crate bytes;
 extern crate futures;
 extern crate tokio_io;
 
+use bytes::{Buf, IntoBuf};
+use futures::{Async, AsyncSink, Poll, Sink, Stream};
 use std::cmp;
 use std::io::Error as IoError;
 use std::io::ErrorKind as IoErrorKind;
 use std::io::{Read, Write};
-use bytes::{Buf, IntoBuf};
-use futures::{Async, AsyncSink, Poll, Sink, Stream};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Wraps around a `Stream + Sink` whose items are buffers. Implements `AsyncRead` and `AsyncWrite`.
@@ -164,11 +164,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use bytes::Bytes;
-    use futures::{Future, Poll, Sink, StartSend, Stream};
-    use futures::sync::mpsc::channel;
-    use std::io::Read;
     use RwStreamSink;
+    use bytes::Bytes;
+    use futures::sync::mpsc::channel;
+    use futures::{Future, Poll, Sink, StartSend, Stream};
+    use std::io::Read;
 
     // This struct merges a stream and a sink and is quite useful for tests.
     struct Wrapper<St, Si>(St, Si);

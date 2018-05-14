@@ -26,6 +26,7 @@ use protocol::{IdentifyInfo, IdentifyOutput, IdentifyProtocolConfig};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::ops::Deref;
 use std::time::Duration;
+use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Implementation of `Transport`. See [the crate root description](index.html).
 #[derive(Debug, Clone)]
@@ -59,13 +60,14 @@ impl<Trans, PStoreRef> IdentifyTransport<Trans, PStoreRef> {
 impl<Trans, PStore, PStoreRef> Transport for IdentifyTransport<Trans, PStoreRef>
 where
     Trans: Transport + Clone + 'static, // TODO: 'static :(
+    Trans::Output: AsyncRead + AsyncWrite,
     PStoreRef: Deref<Target = PStore> + Clone + 'static, // TODO: 'static :(
     for<'r> &'r PStore: Peerstore,
 {
-    type RawConn = Trans::RawConn;
+    type Output = Trans::Output;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
-    type ListenerUpgrade = Box<Future<Item = (Trans::RawConn, Multiaddr), Error = IoError>>;
-    type Dial = Box<Future<Item = (Trans::RawConn, Multiaddr), Error = IoError>>;
+    type ListenerUpgrade = Box<Future<Item = (Trans::Output, Multiaddr), Error = IoError>>;
+    type Dial = Box<Future<Item = (Trans::Output, Multiaddr), Error = IoError>>;
 
     #[inline]
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -275,11 +277,12 @@ where
 impl<Trans, PStore, PStoreRef> MuxedTransport for IdentifyTransport<Trans, PStoreRef>
 where
     Trans: MuxedTransport + Clone + 'static,
+    Trans::Output: AsyncRead + AsyncWrite,
     PStoreRef: Deref<Target = PStore> + Clone + 'static,
     for<'r> &'r PStore: Peerstore,
 {
     type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError>>;
-    type IncomingUpgrade = Box<Future<Item = (Trans::RawConn, Multiaddr), Error = IoError>>;
+    type IncomingUpgrade = Box<Future<Item = (Trans::Output, Multiaddr), Error = IoError>>;
 
     #[inline]
     fn next_incoming(self) -> Self::Incoming {
@@ -391,8 +394,8 @@ mod tests {
     use self::tokio_core::reactor::Core;
     use IdentifyTransport;
     use futures::{Future, Stream};
-    use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};
     use libp2p_peerstore::memory_peerstore::MemoryPeerstore;
+    use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};
     use libp2p_swarm::Transport;
     use multiaddr::{AddrComponent, Multiaddr};
     use std::io::Error as IoError;
@@ -410,9 +413,9 @@ mod tests {
             inner: TcpConfig,
         }
         impl Transport for UnderlyingTrans {
-            type RawConn = <TcpConfig as Transport>::RawConn;
+            type Output = <TcpConfig as Transport>::Output;
             type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
-            type ListenerUpgrade = Box<Future<Item = (Self::RawConn, Multiaddr), Error = IoError>>;
+            type ListenerUpgrade = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>;
             type Dial = <TcpConfig as Transport>::Dial;
             #[inline]
             fn listen_on(

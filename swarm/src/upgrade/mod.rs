@@ -18,14 +18,18 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-pub mod denied;
-pub mod traits;
+pub mod apply;
 pub mod choice;
+pub mod denied;
+pub mod map;
 pub mod plaintext;
 pub mod simple;
+pub mod traits;
 
-pub use self::choice::OrUpgrade;
+pub use self::apply::apply;
+pub use self::choice::{or, OrUpgrade};
 pub use self::denied::DeniedConnectionUpgrade;
+pub use self::map::map;
 pub use self::plaintext::PlainTextConfig;
 pub use self::simple::SimpleProtocol;
-pub use self::traits::{ConnectionUpgrade, Endpoint, UpgradeExt};
+pub use self::traits::{ConnectionUpgrade, Endpoint};

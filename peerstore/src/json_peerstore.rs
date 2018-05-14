@@ -22,6 +22,7 @@
 
 use super::TTL;
 use PeerId;
+use bs58;
 use datastore::{Datastore, JsonFileDatastore, JsonFileDatastoreEntry, Query};
 use futures::{Future, Stream};
 use multiaddr::Multiaddr;
@@ -31,7 +32,6 @@ use std::io::Error as IoError;
 use std::iter;
 use std::path::PathBuf;
 use std::vec::IntoIter as VecIntoIter;
-use bs58;
 
 /// Peerstore backend that uses a Json file.
 pub struct JsonPeerstore {

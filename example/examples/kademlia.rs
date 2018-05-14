@@ -40,7 +40,7 @@ use std::env;
 use std::sync::Arc;
 use std::time::Duration;
 use swarm::Transport;
-use swarm::upgrade::{self, UpgradeExt};
+use swarm::upgrade;
 use tcp::TcpConfig;
 use tokio_core::reactor::Core;
 
@@ -80,7 +80,7 @@ fn main() {
                 }
             };
 
-            plain_text.or_upgrade(secio)
+            upgrade::or(plain_text, upgrade::map(secio, |(socket, _)| socket))
         })
 
         // On top of plaintext or secio, we will use the multiplex protocol.
@@ -116,9 +116,13 @@ fn main() {
 
     // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming and
     // outgoing connections for us.
-    let (swarm_controller, swarm_future) = swarm::swarm(transport, proto, |upgrade, _| upgrade);
+    let (swarm_controller, swarm_future) = swarm::swarm(
+        transport.clone().with_upgrade(proto.clone()),
+        |upgrade, _| upgrade,
+    );
 
-    let (kad_controller, _kad_init) = kad_ctl_proto.start(swarm_controller.clone());
+    let (kad_controller, _kad_init) =
+        kad_ctl_proto.start(swarm_controller.clone(), transport.with_upgrade(proto));
 
     for listen_addr in listen_addrs {
         let addr = swarm_controller

@@ -36,8 +36,8 @@
 //! `Arc` in order to be available whenever we need to request something from a node.
 
 use bytes::Bytes;
-use futures::{future, Future, Sink, Stream};
 use futures::sync::{mpsc, oneshot};
+use futures::{future, Future, Sink, Stream};
 use libp2p_peerstore::PeerId;
 use libp2p_swarm::ConnectionUpgrade;
 use libp2p_swarm::Endpoint;
