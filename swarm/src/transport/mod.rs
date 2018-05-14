@@ -112,9 +112,10 @@ pub trait Transport {
 
     /// Applies a function on the output of the `Transport`.
     #[inline]
-    fn map<F>(self, map: F) -> map::Map<Self, F>
+    fn map<F, O>(self, map: F) -> map::Map<Self, F>
     where
         Self: Sized,
+        F: FnOnce(Self::Output, Endpoint, Multiaddr) -> O + Clone + 'static,        // TODO: 'static :-/
     {
         map::Map::new(self, map)
     }

@@ -22,6 +22,7 @@ use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::io::Error as IoError;
 use transport::{MuxedTransport, Transport};
+use Endpoint;
 
 /// See `Transport::map`.
 #[derive(Debug, Copy, Clone)]
@@ -41,7 +42,7 @@ impl<T, F> Map<T, F> {
 impl<T, F, D> Transport for Map<T, F>
 where
     T: Transport + 'static,                  // TODO: 'static :-/
-    F: Fn(T::Output) -> D + Clone + 'static, // TODO: 'static :-/
+    F: FnOnce(T::Output, Endpoint, Multiaddr) -> D + Clone + 'static, // TODO: 'static :-/
 {
     type Output = D;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
@@ -57,7 +58,7 @@ where
                     let map = map.clone();
                     let future = future
                         .into_future()
-                        .map(move |(output, addr)| (map(output), addr));
+                        .map(move |(output, addr)| (map(output, Endpoint::Listener, addr.clone()), addr));
                     Box::new(future) as Box<_>
                 });
                 Ok((Box::new(stream), listen_addr))
@@ -73,7 +74,7 @@ where
             Ok(future) => {
                 let future = future
                     .into_future()
-                    .map(move |(output, addr)| (map(output), addr));
+                    .map(move |(output, addr)| (map(output, Endpoint::Dialer, addr.clone()), addr));
                 Ok(Box::new(future))
             }
             Err((transport, addr)) => Err((Map { transport, map }, addr)),
@@ -89,7 +90,7 @@ where
 impl<T, F, D> MuxedTransport for Map<T, F>
 where
     T: MuxedTransport + 'static,             // TODO: 'static :-/
-    F: Fn(T::Output) -> D + Clone + 'static, // TODO: 'static :-/
+    F: FnOnce(T::Output, Endpoint, Multiaddr) -> D + Clone + 'static, // TODO: 'static :-/
 {
     type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError>>;
     type IncomingUpgrade = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>;
@@ -97,7 +98,9 @@ where
     fn next_incoming(self) -> Self::Incoming {
         let map = self.map;
         let future = self.transport.next_incoming().map(move |upgrade| {
-            let future = upgrade.map(move |(output, addr)| (map(output), addr));
+            let future = upgrade.map(move |(output, addr)| {
+                (map(output, Endpoint::Listener, addr.clone()), addr)
+            });
             Box::new(future) as Box<_>
         });
         Box::new(future)
