@@ -10,7 +10,7 @@ libp2p-peerstore = { path = "../peerstore" }
 libp2p-swarm = { path = "../swarm" }
 log = "0.4.1"
 multiaddr = "0.3.0"
-protobuf = "1.4.2"
+protobuf = "=1.4.2"
 tokio-io = "0.1.0"
 varint = { path = "../varint-rs" }
 

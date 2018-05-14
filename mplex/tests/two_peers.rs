@@ -56,7 +56,7 @@ fn client_to_server_outbound() {
             .map_err(|(err, _)| err)
             .and_then(|(client, _)| client.unwrap().map(|v| v.0))
             .and_then(|client| client.outbound())
-            .map(|client| Framed::<_, bytes::BytesMut>::new(client))
+            .map(|client| Framed::<_, bytes::BytesMut>::new(client.unwrap()))
             .and_then(|client| {
                 client
                     .into_future()
@@ -79,7 +79,7 @@ fn client_to_server_outbound() {
         .dial(rx.recv().unwrap())
         .unwrap()
         .and_then(|client| client.0.inbound())
-        .map(|server| Framed::<_, bytes::BytesMut>::new(server))
+        .map(|server| Framed::<_, bytes::BytesMut>::new(server.unwrap()))
         .and_then(|server| server.send("hello world".into()))
         .map(|_| ());
 
@@ -108,7 +108,7 @@ fn client_to_server_inbound() {
             .map_err(|(err, _)| err)
             .and_then(|(client, _)| client.unwrap().map(|v| v.0))
             .and_then(|client| client.inbound())
-            .map(|client| Framed::<_, bytes::BytesMut>::new(client))
+            .map(|client| Framed::<_, bytes::BytesMut>::new(client.unwrap()))
             .and_then(|client| {
                 client
                     .into_future()
@@ -131,7 +131,7 @@ fn client_to_server_inbound() {
         .dial(rx.recv().unwrap())
         .unwrap()
         .and_then(|(client, _)| client.outbound())
-        .map(|server| Framed::<_, bytes::BytesMut>::new(server))
+        .map(|server| Framed::<_, bytes::BytesMut>::new(server.unwrap()))
         .and_then(|server| server.send("hello world".into()))
         .map(|_| ());
 

@@ -115,7 +115,7 @@ fn client_to_server_outbound() {
         .dial(rx.recv().unwrap())
         .unwrap()
         .and_then(|client| client.0.outbound())
-        .map(|server| Framed::<_, BytesMut>::new(server))
+        .map(|server| Framed::<_, BytesMut>::new(server.unwrap()))
         .and_then(|server| server.send("hello world".into()))
         .map(|_| ());
 
@@ -229,7 +229,7 @@ fn use_opened_listen_to_dial() {
                 let c2 = c.clone();
                 c.clone().inbound().map(move |i| (c2, i))
             })
-            .map(|(muxer, client)| (muxer, Framed::<_, BytesMut>::new(client)))
+            .map(|(muxer, client)| (muxer, Framed::<_, BytesMut>::new(client.unwrap())))
             .and_then(|(muxer, client)| {
                 client
                     .into_future()
@@ -241,7 +241,7 @@ fn use_opened_listen_to_dial() {
                 assert_eq!(msg, "hello world");
                 muxer.outbound()
             })
-            .map(|client| Framed::<_, BytesMut>::new(client))
+            .map(|client| Framed::<_, BytesMut>::new(client.unwrap()))
             .and_then(|client| client.into_future().map_err(|(err, _)| err))
             .and_then(|(msg, _)| {
                 let msg = msg.unwrap();

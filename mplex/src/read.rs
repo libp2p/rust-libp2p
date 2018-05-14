@@ -235,6 +235,7 @@ fn read_stream_internal<T: AsyncRead, Buf: Array<Item = u8>>(
                         let header = if let Some(header) = header {
                             header
                         } else {
+                            lock.close();
                             return Ok(on_block.unwrap_or(0));
                         };
 
@@ -310,6 +311,7 @@ fn read_stream_internal<T: AsyncRead, Buf: Array<Item = u8>>(
                         let length = if let Some(length) = length {
                             length
                         } else {
+                            lock.close();
                             return Ok(on_block.unwrap_or(0));
                         };
 
@@ -377,6 +379,10 @@ fn read_stream_internal<T: AsyncRead, Buf: Array<Item = u8>>(
 
                     match consumed {
                         Ok(consumed) => {
+                            if consumed == 0 {
+                                lock.close()
+                            }
+
                             let new_remaining = remaining_bytes - consumed;
 
                             lock.read_state = Some(NewStream {
@@ -446,6 +452,10 @@ fn read_stream_internal<T: AsyncRead, Buf: Array<Item = u8>>(
 
                         match read_result {
                             Ok(consumed) => {
+                                if consumed == 0 {
+                                    lock.close()
+                                }
+
                                 let new_remaining = remaining_bytes - consumed;
 
                                 lock.read_state = Some(ParsingMessageBody {
@@ -493,6 +503,9 @@ fn read_stream_internal<T: AsyncRead, Buf: Array<Item = u8>>(
                         let new_len = ignore_buf.len().min(remaining_bytes);
                         match lock.stream.read(&mut ignore_buf[..new_len]) {
                             Ok(consumed) => {
+                                if consumed == 0 {
+                                    lock.close()
+                                }
                                 remaining_bytes -= consumed;
                                 lock.read_state = Some(Ignore {
                                     substream_id,

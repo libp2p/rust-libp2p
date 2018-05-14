@@ -75,7 +75,7 @@ pub struct MultiplexShared<T, Buf: Array> {
     pub read_state: Option<MultiplexReadState>,
     pub write_state: Option<MultiplexWriteState>,
     pub stream: T,
-    // true if the stream is open, false otherwise
+    eof: bool, // true, if `stream` has been exhausted
     pub open_streams: HashMap<u32, SubstreamMetadata<Buf>>,
     pub meta_write_tasks: Vec<Task>,
     // TODO: Should we use a version of this with a fixed size that doesn't allocate and return
@@ -93,6 +93,7 @@ impl<T, Buf: Array> MultiplexShared<T, Buf> {
             meta_write_tasks: Default::default(),
             to_open: Default::default(),
             stream: stream,
+            eof: false,
         }
     }
 
@@ -107,6 +108,14 @@ impl<T, Buf: Array> MultiplexShared<T, Buf> {
     pub fn close_stream(&mut self, id: u32) {
         trace!(target: "libp2p-mplex", "close stream {}", id);
         self.open_streams.insert(id, SubstreamMetadata::Closed);
+    }
+
+    pub fn close(&mut self) {
+        self.eof = true
+    }
+
+    pub fn is_closed(&self) -> bool {
+        self.eof
     }
 }
 
