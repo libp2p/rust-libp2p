@@ -35,7 +35,11 @@ use tokio_io::{AsyncRead, AsyncWrite};
 /// Represents the configuration for a websocket transport capability for libp2p.
 ///
 /// This implementation of `Transport` accepts any address that looks like
-/// `/ip4/.../tcp/.../ws` or `/ip6/.../tcp/.../ws`, and connect to the corresponding IP and port.
+/// `/ip4/.../tcp/.../ws`, `/ip6/.../tcp/.../ws`, `/dns4/.../ws` or `/dns6/.../ws`, and connect to
+/// the corresponding IP and port.
+///
+/// If the underlying multiaddress uses `/dns4` or `/dns6`, then the domain name will be passed in
+/// the headers of the request. This is important is the listener is behind an HTTP proxy.
 #[derive(Debug, Clone)]
 pub struct BrowserWsConfig;
 
@@ -338,6 +342,18 @@ fn multiaddr_to_target(addr: &Multiaddr) -> Result<String, ()> {
         }
         (&AddrComponent::IP6(ref ip), &AddrComponent::TCP(port), &AddrComponent::WSS) => {
             Ok(format!("wss://[{}]:{}/", ip, port))
+        }
+        (&AddrComponent::DNS4(ref ns), &AddrComponent::TCP(port), &AddrComponent::WS) => {
+            Ok(format!("ws://{}:{}/", ns, port))
+        }
+        (&AddrComponent::DNS6(ref ns), &AddrComponent::TCP(port), &AddrComponent::WS) => {
+            Ok(format!("ws://{}:{}/", ns, port))
+        }
+        (&AddrComponent::DNS4(ref ns), &AddrComponent::TCP(port), &AddrComponent::WSS) => {
+            Ok(format!("wss://{}:{}/", ns, port))
+        }
+        (&AddrComponent::DNS6(ref ns), &AddrComponent::TCP(port), &AddrComponent::WSS) => {
+            Ok(format!("wss://{}:{}/", ns, port))
         }
         _ => Err(()),
     }

@@ -8,7 +8,7 @@ bytes = "0.4"
 futures = "0.1"
 libp2p-swarm = { path = "../swarm" }
 log = "0.4.1"
-protobuf = "1.4.2"
+protobuf = "=1.4.2"
 rand = "0.3.17"
 ring = { version = "0.12.1", features = ["rsa_signing"] }
 rust-crypto = "^0.2"
