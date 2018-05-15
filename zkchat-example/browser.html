@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Chat browser demo</title>
+</head>
+<body>
+    <p>Logs: <br /><textarea id="stdout" rows="20" cols="150"></textarea></p>
+    <p>Stdin: <form id="stdin_form"><input type="text" id="stdin" placeholder="Stdin" /></form></p>
+
+    <script type="text/javascript">
+        var stdout = document.getElementById('stdout');
+        stdout.value = '';
+
+        var Module = {
+            TOTAL_MEMORY: 256 * 1024 * 1024,
+            print: function(text) {
+                stdout.value += text + "\n";
+                stdout.scrollTop = stdout.scrollHeight; // focus on bottom
+            },
+        };
+    </script>
+    <script type="text/javascript" async src="../target/asmjs-unknown-emscripten/release/zkchat.js"></script>
+</body>
+</html>
