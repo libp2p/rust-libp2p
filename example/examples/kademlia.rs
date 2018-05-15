@@ -64,8 +64,7 @@ fn main() {
 
     // Now let's build the transport stack.
     // We create a `TcpConfig` that indicates that we want TCP/IP.
-    let transport = identify::IdentifyTransport::new(
-        TcpConfig::new(core.handle())
+    let transport = TcpConfig::new(core.handle())
 
         // On top of TCP/IP, we will use either the plaintext protocol or the secio protocol,
         // depending on which one the remote supports.
@@ -89,9 +88,12 @@ fn main() {
         // `Transport` because the output of the upgrade is not a stream but a controller for
         // muxing. We have to explicitly call `into_connection_reuse()` in order to turn this into
         // a `Transport`.
-        .into_connection_reuse(),
-        peer_store.clone(),
-    );
+        .into_connection_reuse();
+        
+    let transport = identify::IdentifyTransport::new(transport, peer_store.clone())
+        .map(|id_out, _, _| {
+            id_out.socket
+        });
 
     // We now have a `transport` variable that can be used either to dial nodes or listen to
     // incoming connections, and that will automatically apply secio and multiplex on top
