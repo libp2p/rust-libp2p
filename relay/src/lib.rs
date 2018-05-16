@@ -25,10 +25,8 @@ extern crate libp2p_core as core;
 #[macro_use]
 extern crate log;
 extern crate multiaddr;
-extern crate parking_lot;
 extern crate protobuf;
 extern crate rand;
-extern crate tokio;
 extern crate tokio_io;
 extern crate varint;
 

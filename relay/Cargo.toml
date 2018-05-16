@@ -10,9 +10,7 @@ libp2p-peerstore = { path = "../peerstore" }
 libp2p-core = { path = "../core" }
 log = "0.4"
 multiaddr = "0.3.0"
-parking_lot = "0.5"
 protobuf = "=1.5.1"
 rand = "0.4"
-tokio = "0.1"
 tokio-io = "0.1"
 varint = { path = "../varint-rs" }
