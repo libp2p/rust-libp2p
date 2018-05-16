@@ -15,17 +15,17 @@ Architecture of the crates of this repository:
   backends. Used by `peerstore`.
 - `example`: Example usages of this library.
 - `libp2p-identify`: Protocol implementation that allows a node A to query another node B what
-  information B knows about A. Implements the `ConnectionUpgrade` trait of `libp2p-swarm`.
+  information B knows about A. Implements the `ConnectionUpgrade` trait of `libp2p-core`.
 - `libp2p-peerstore`: Generic storage for information about remote peers (their multiaddresses and
   their public key), with multiple possible backends. Each multiaddress also has a time-to-live.
-  Used by `libp2p-swarm`.
+  Used by `libp2p-core`.
 - `libp2p-ping`: Implementation of the `ping` protocol (the exact protocol is specific to libp2p).
-  Implements the `ConnectionUpgrade` trait of `libp2p-swarm`.
+  Implements the `ConnectionUpgrade` trait of `libp2p-core`.
 - `libp2p-secio`: Implementation of the `secio` protocol. Encrypts communications. Implements the
-  `ConnectionUpgrade` trait of `libp2p-swarm`.
-- `libp2p-swarm`: Core library that contains all the traits of *libp2p* and plugs things together.
-- `libp2p-tcp-transport`: Implementation of the `Transport` trait of `libp2p-swarm` for TCP/IP.
-- `libp2p-websocket`: Implementation of the `Transport` trait of `libp2p-swarm` for Websockets.
+  `ConnectionUpgrade` trait of `libp2p-core`.
+- `libp2p-core`: Core library that contains all the traits of *libp2p* and plugs things together.
+- `libp2p-tcp-transport`: Implementation of the `Transport` trait of `libp2p-core` for TCP/IP.
+- `libp2p-websocket`: Implementation of the `Transport` trait of `libp2p-core` for Websockets.
 - `multistream-select`: Implementation of the `multistream-select` protocol, which is used to
   negotiate a protocol over a newly-established connection with a peer, or after a connection
   upgrade.

@@ -30,12 +30,12 @@ This underlying transport must be put inside a `WsConfig` object through the
 `WsConfig::new()` function.
 
 ```rust
-extern crate libp2p_swarm;
+extern crate libp2p_core;
 extern crate libp2p_tcp_transport;
 extern crate libp2p_websocket;
 extern crate tokio_core;
 
-use libp2p_swarm::{Multiaddr, Transport};
+use libp2p_core::{Multiaddr, Transport};
 use libp2p_tcp_transport::TcpConfig;
 use libp2p_websocket::WsConfig;
 use tokio_core::reactor::Core;

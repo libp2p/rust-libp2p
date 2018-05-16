@@ -20,7 +20,7 @@
 
 use futures::{future, stream, Future, IntoFuture, Stream};
 use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};
-use libp2p_swarm::{MuxedTransport, Transport};
+use libp2p_core::{MuxedTransport, Transport};
 use multiaddr::{AddrComponent, Multiaddr};
 use protocol::{IdentifyInfo, IdentifyOutput, IdentifyProtocolConfig};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -420,7 +420,7 @@ mod tests {
     use futures::{Future, Stream};
     use libp2p_peerstore::memory_peerstore::MemoryPeerstore;
     use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};
-    use libp2p_swarm::Transport;
+    use libp2p_core::Transport;
     use multiaddr::{AddrComponent, Multiaddr};
     use std::io::Error as IoError;
     use std::iter;

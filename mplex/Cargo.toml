@@ -10,7 +10,7 @@ circular-buffer = { path = "../circular-buffer" }
 error-chain = "0.11.0"
 futures = "0.1"
 futures-mutex = { git = "https://github.com/paritytech/futures-mutex" }
-libp2p-swarm = { path = "../swarm" }
+libp2p-core = { path = "../core" }
 log = "0.4"
 num-bigint = { version = "0.1.40", default-features = false }
 num-traits = "0.1.40"

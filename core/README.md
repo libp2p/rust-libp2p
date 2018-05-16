@@ -1,4 +1,4 @@
-# libp2p-swarm
+# libp2p-core
 
 Transport, protocol upgrade and swarm systems of *libp2p*.
 
@@ -64,15 +64,15 @@ listener. An error is produced if the remote doesn't support the protocol corres
 connection upgrade.
 
 ```rust
-extern crate libp2p_swarm;
+extern crate libp2p_core;
 extern crate libp2p_tcp_transport;
 extern crate tokio_core;
 
-use libp2p_swarm::Transport;
+use libp2p_core::Transport;
 
 let tokio_core = tokio_core::reactor::Core::new().unwrap();
 let tcp_transport = libp2p_tcp_transport::TcpConfig::new(tokio_core.handle());
-let upgraded = tcp_transport.with_upgrade(libp2p_swarm::PlainTextConfig);
+let upgraded = tcp_transport.with_upgrade(libp2p_core::PlainTextConfig);
 
 // upgraded.dial(...)   // automatically applies the plain text protocol on the socket
 ```
@@ -109,13 +109,13 @@ way to use the protocol.
 ```rust
 extern crate futures;
 extern crate libp2p_ping;
-extern crate libp2p_swarm;
+extern crate libp2p_core;
 extern crate libp2p_tcp_transport;
 extern crate tokio_core;
 
 use futures::Future;
 use libp2p_ping::Ping;
-use libp2p_swarm::Transport;
+use libp2p_core::Transport;
 
 let mut core = tokio_core::reactor::Core::new().unwrap();
 
@@ -124,7 +124,7 @@ let ping_finished_future = libp2p_tcp_transport::TcpConfig::new(core.handle())
     .with_upgrade(Ping)
     // TODO: right now the only available protocol is ping, but we want to replace it with
     //       something that is more simple to use
-    .dial("127.0.0.1:12345".parse::<libp2p_swarm::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())
+    .dial("127.0.0.1:12345".parse::<libp2p_core::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())
     .and_then(|((mut pinger, service), _)| {
         pinger.ping().map_err(|_| panic!()).select(service).map_err(|_| panic!())
     });
@@ -149,20 +149,20 @@ actual protocol, as explained above) into a `Future` producing `()`.
 ```rust
 extern crate futures;
 extern crate libp2p_ping;
-extern crate libp2p_swarm;
+extern crate libp2p_core;
 extern crate libp2p_tcp_transport;
 extern crate tokio_core;
 
 use futures::Future;
 use libp2p_ping::Ping;
-use libp2p_swarm::Transport;
+use libp2p_core::Transport;
 
 let mut core = tokio_core::reactor::Core::new().unwrap();
 
 let transport = libp2p_tcp_transport::TcpConfig::new(core.handle())
     .with_dummy_muxing();
 
-let (swarm_controller, swarm_future) = libp2p_swarm::swarm(transport, Ping, |(mut pinger, service), client_addr| {
+let (swarm_controller, swarm_future) = libp2p_core::swarm(transport, Ping, |(mut pinger, service), client_addr| {
     pinger.ping().map_err(|_| panic!())
         .select(service).map_err(|_| panic!())
         .map(|_| ())

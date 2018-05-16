@@ -23,7 +23,7 @@ extern crate env_logger;
 extern crate futures;
 extern crate libp2p_mplex as multiplex;
 extern crate libp2p_secio as secio;
-extern crate libp2p_swarm as swarm;
+extern crate libp2p_core as swarm;
 extern crate libp2p_tcp_transport as tcp;
 extern crate libp2p_websocket as websocket;
 extern crate tokio_core;

@@ -25,7 +25,7 @@ extern crate circular_buffer;
 extern crate error_chain;
 extern crate futures;
 extern crate futures_mutex;
-extern crate libp2p_swarm as swarm;
+extern crate libp2p_core as swarm;
 #[macro_use]
 extern crate log;
 extern crate num_bigint;

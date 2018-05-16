@@ -12,13 +12,13 @@ through it.
 extern crate futures;
 extern crate tokio_core;
 extern crate tokio_io;
-extern crate libp2p_swarm;
+extern crate libp2p_core;
 extern crate libp2p_secio;
 extern crate libp2p_tcp_transport;
 
 use futures::Future;
 use libp2p_secio::{SecioConfig, SecioKeyPair};
-use libp2p_swarm::{Multiaddr, Transport};
+use libp2p_core::{Multiaddr, Transport};
 use libp2p_tcp_transport::TcpConfig;
 use tokio_core::reactor::Core;
 use tokio_io::io::write_all;

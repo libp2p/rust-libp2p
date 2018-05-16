@@ -172,11 +172,11 @@ where
         let inner = self.inner;
         let future = substream.and_then(move |outbound| {
             if let Some(o) = outbound {
-                debug!(target: "libp2p-swarm", "Using existing multiplexed connection to {}", addr);
+                debug!(target: "libp2p-core", "Using existing multiplexed connection to {}", addr);
                 return Either::A(future::ok(o));
             }
             // The previous stream muxer did not yield a new substream => start new dial
-            debug!(target: "libp2p-swarm", "No existing connection to {}; dialing", addr);
+            debug!(target: "libp2p-core", "No existing connection to {}; dialing", addr);
             match inner.dial(addr.clone()) {
                 Ok(dial) => {
                     let future = dial.into_future().and_then(move |(muxer, addr)| {
@@ -193,7 +193,7 @@ where
                                 ));
                                 Ok((s, addr))
                             } else {
-                                error!(target: "libp2p-swarm", "failed to dial to {}", addr);
+                                error!(target: "libp2p-core", "failed to dial to {}", addr);
                                 shared.lock().active_connections.remove(&addr);
                                 Err(io::Error::new(io::ErrorKind::Other, "dial failed"))
                             }
@@ -273,13 +273,13 @@ where
             }
             Ok(Async::NotReady) => {}
             Ok(Async::Ready(None)) => {
-                debug!(target: "libp2p-swarm", "listener has been closed");
+                debug!(target: "libp2p-core", "listener has been closed");
                 if self.connections.is_empty() && self.current_upgrades.is_empty() {
                     return Ok(Async::Ready(None));
                 }
             }
             Err(err) => {
-                debug!(target: "libp2p-swarm", "error while polling listener: {:?}", err);
+                debug!(target: "libp2p-core", "error while polling listener: {:?}", err);
                 if self.connections.is_empty() && self.current_upgrades.is_empty() {
                     return Err(err);
                 }
@@ -296,7 +296,7 @@ where
             }
             Err(err) => {
                 // Insert the rest of the pending upgrades, but not the current one.
-                debug!(target: "libp2p-swarm", "error while upgrading listener connection: \
+                debug!(target: "libp2p-core", "error while upgrading listener connection: \
                                                 {:?}", err);
                 return Ok(Async::Ready(Some(future::err(err))));
             }
@@ -309,7 +309,7 @@ where
             match next_incoming.poll() {
                 Ok(Async::Ready(None)) => {
                     // stream muxer gave us a `None` => connection should be considered closed
-                    debug!(target: "libp2p-swarm", "no more inbound substreams on {}", client_addr);
+                    debug!(target: "libp2p-core", "no more inbound substreams on {}", client_addr);
                     self.shared.lock().active_connections.remove(&client_addr);
                 }
                 Ok(Async::Ready(Some(incoming))) => {
@@ -331,7 +331,7 @@ where
                     self.connections.push((muxer, next_incoming, client_addr));
                 }
                 Err(err) => {
-                    debug!(target: "libp2p-swarm", "error while upgrading the \
+                    debug!(target: "libp2p-core", "error while upgrading the \
                                                     multiplexed incoming connection: {:?}", err);
                     // Insert the rest of the pending connections, but not the current one.
                     return Ok(Async::Ready(Some(future::err(err))));
@@ -384,13 +384,13 @@ where
             let (muxer, mut future, addr) = lock.next_incoming.swap_remove(n);
             match future.poll() {
                 Ok(Async::Ready(None)) => {
-                    debug!(target: "libp2p-swarm", "no inbound substream for {}", addr);
+                    debug!(target: "libp2p-core", "no inbound substream for {}", addr);
                     lock.active_connections.remove(&addr);
                 }
                 Ok(Async::Ready(Some(value))) => {
                     // A substream is ready ; push back the muxer for the next time this function
                     // is called, then return.
-                    debug!(target: "libp2p-swarm", "New incoming substream");
+                    debug!(target: "libp2p-core", "New incoming substream");
                     let next = muxer.clone().inbound();
                     lock.next_incoming.push((muxer, next, addr.clone()));
                     return Ok(Async::Ready(future::ok((value, addr))));
@@ -400,7 +400,7 @@ where
                 }
                 Err(err) => {
                     // In case of error, we just not push back the element, which drops it.
-                    debug!(target: "libp2p-swarm", "ConnectionReuse incoming: one of the \
+                    debug!(target: "libp2p-core", "ConnectionReuse incoming: one of the \
                                                     multiplexed substreams produced an error: {:?}",
                                                     err);
                 }

@@ -6,7 +6,7 @@ authors = ["Parity Technologies <admin@parity.io>"]
 [dependencies]
 bytes = "0.4"
 futures = "0.1"
-libp2p-swarm = { path = "../swarm" }
+libp2p-core = { path = "../core" }
 log = "0.4.1"
 protobuf = "=1.4.2"
 rand = "0.3.17"

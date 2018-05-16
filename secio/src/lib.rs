@@ -32,14 +32,14 @@
 //! extern crate futures;
 //! extern crate tokio_core;
 //! extern crate tokio_io;
-//! extern crate libp2p_swarm;
+//! extern crate libp2p_core;
 //! extern crate libp2p_secio;
 //! extern crate libp2p_tcp_transport;
 //!
 //! # fn main() {
 //! use futures::Future;
 //! use libp2p_secio::{SecioConfig, SecioKeyPair};
-//! use libp2p_swarm::{Multiaddr, Transport, upgrade};
+//! use libp2p_core::{Multiaddr, Transport, upgrade};
 //! use libp2p_tcp_transport::TcpConfig;
 //! use tokio_core::reactor::Core;
 //! use tokio_io::io::write_all;
@@ -84,7 +84,7 @@
 extern crate bytes;
 extern crate crypto;
 extern crate futures;
-extern crate libp2p_swarm;
+extern crate libp2p_core;
 #[macro_use]
 extern crate log;
 extern crate protobuf;
@@ -99,7 +99,7 @@ pub use self::error::SecioError;
 use bytes::{Bytes, BytesMut};
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
-use libp2p_swarm::Multiaddr;
+use libp2p_core::Multiaddr;
 use ring::signature::RSAKeyPair;
 use rw_stream_sink::RwStreamSink;
 use std::error::Error;
@@ -116,7 +116,7 @@ mod handshake;
 mod keys_proto;
 mod structs_proto;
 
-/// Implementation of the `ConnectionUpgrade` trait of `libp2p_swarm`. Automatically applies
+/// Implementation of the `ConnectionUpgrade` trait of `libp2p_core`. Automatically applies
 /// secio on any connection.
 #[derive(Clone)]
 pub struct SecioConfig {
@@ -186,7 +186,7 @@ pub enum SecioPublicKey {
     Rsa(Vec<u8>),
 }
 
-impl<S> libp2p_swarm::ConnectionUpgrade<S> for SecioConfig
+impl<S> libp2p_core::ConnectionUpgrade<S> for SecioConfig
 where
     S: AsyncRead + AsyncWrite + 'static,
 {
@@ -208,7 +208,7 @@ where
         self,
         incoming: S,
         _: (),
-        _: libp2p_swarm::Endpoint,
+        _: libp2p_core::Endpoint,
         remote_addr: &Multiaddr,
     ) -> Self::Future {
         info!(target: "libp2p-secio", "starting secio upgrade with {:?}", remote_addr);

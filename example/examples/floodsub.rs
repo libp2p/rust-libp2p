@@ -25,7 +25,7 @@ extern crate libp2p_floodsub as floodsub;
 extern crate libp2p_mplex as multiplex;
 extern crate libp2p_peerstore as peerstore;
 extern crate libp2p_secio as secio;
-extern crate libp2p_swarm as swarm;
+extern crate libp2p_core as swarm;
 extern crate libp2p_tcp_transport as tcp;
 extern crate libp2p_websocket as websocket;
 extern crate rand;
