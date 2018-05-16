@@ -30,7 +30,7 @@ pub extern crate libp2p_kad as kad;
 pub extern crate libp2p_floodsub as floodsub;
 pub extern crate libp2p_mplex as mplex;
 pub extern crate libp2p_ping as ping;
-pub extern crate libp2p_secio as secio;
+//pub extern crate libp2p_secio as secio;
 pub extern crate libp2p_tcp_transport as tcp;
 pub extern crate libp2p_websocket as websocket;
 
