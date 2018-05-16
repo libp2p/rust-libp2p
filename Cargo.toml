@@ -20,7 +20,8 @@ members = [
     "varint-rs",
     "mplex",
     "example",
-    "ratelimit"
+    "ratelimit",
+    "libp2p",
 ]
 
 [patch.crates-io]
