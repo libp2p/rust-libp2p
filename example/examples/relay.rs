@@ -93,13 +93,13 @@ enum Options {
 
 #[derive(Debug, StructOpt)]
 struct DialerOpts {
-    #[structopt(short = "s", long = "self", parse(try_from_str = "parse_peer_id"))]
+    #[structopt(short = "s", long = "self", parse(try_from_str))]
     /// The PeerId of this node.
     me: PeerId,
-    #[structopt(short = "d", long = "destination", parse(try_from_str = "parse_peer_id"))]
+    #[structopt(short = "d", long = "destination", parse(try_from_str))]
     /// The PeerId to dial.
     dest: PeerId,
-    #[structopt(short = "r", long = "relay", parse(try_from_str = "parse_peer_id"))]
+    #[structopt(short = "r", long = "relay", parse(try_from_str))]
     /// The PeerId of the relay node to use when dialing the destination.
     relay: PeerId,
     #[structopt(short = "p", long = "peer", parse(try_from_str = "parse_peer_addr"))]
@@ -110,7 +110,7 @@ struct DialerOpts {
 
 #[derive(Debug, StructOpt)]
 struct ListenerOpts {
-    #[structopt(short = "s", long = "self", parse(try_from_str = "parse_peer_id"))]
+    #[structopt(short = "s", long = "self", parse(try_from_str))]
     /// The PeerId of this node.
     me: PeerId,
     #[structopt(short = "p", long = "peer", parse(try_from_str = "parse_peer_addr"))]
@@ -156,7 +156,7 @@ fn run_dialer(opts: DialerOpts) -> Result<(), Box<Error>> {
         }
     });
 
-    let address = format!("/p2p-circuit/p2p/{}", opts.dest.to_string()).parse()?;
+    let address = format!("/p2p-circuit/p2p/{}", opts.dest.to_base58()).parse()?;
 
     control.dial_custom_handler(address, upgraded, |out, _| {
         match out {
@@ -232,14 +232,10 @@ fn run_listener(opts: ListenerOpts) -> Result<(), Box<Error>> {
 
 // Custom parsers ///////////////////////////////////////////////////////////
 
-fn parse_peer_id(s: &str) -> Result<PeerId, Box<Error>> {
-    PeerId::from_str(s).ok_or("failed to parse as PeerId".into())
-}
-
 fn parse_peer_addr(s: &str) -> Result<(PeerId, Multiaddr), Box<Error>> {
     let mut iter = s.splitn(2, '=');
     let p = iter.next()
-        .and_then(PeerId::from_str)
+        .and_then(|s| PeerId::from_str(s).ok())
         .ok_or("missing or invalid PeerId")?;
     let m = iter.next()
         .and_then(|s| Multiaddr::from_str(s).ok())
