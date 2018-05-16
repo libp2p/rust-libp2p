@@ -85,16 +85,16 @@
 //! connection upgrade.
 //!
 //! ```
-//! extern crate libp2p_swarm;
+//! extern crate libp2p_core;
 //! extern crate libp2p_tcp_transport;
 //! extern crate tokio_core;
 //!
-//! use libp2p_swarm::Transport;
+//! use libp2p_core::Transport;
 //!
 //! # fn main() {
 //! let tokio_core = tokio_core::reactor::Core::new().unwrap();
 //! let tcp_transport = libp2p_tcp_transport::TcpConfig::new(tokio_core.handle());
-//! let upgraded = tcp_transport.with_upgrade(libp2p_swarm::upgrade::PlainTextConfig);
+//! let upgraded = tcp_transport.with_upgrade(libp2p_core::upgrade::PlainTextConfig);
 //!
 //! // upgraded.dial(...)   // automatically applies the plain text protocol on the socket
 //! # }
@@ -132,13 +132,13 @@
 //! ```no_run
 //! extern crate futures;
 //! extern crate libp2p_ping;
-//! extern crate libp2p_swarm;
+//! extern crate libp2p_core;
 //! extern crate libp2p_tcp_transport;
 //! extern crate tokio_core;
 //!
 //! use futures::Future;
 //! use libp2p_ping::Ping;
-//! use libp2p_swarm::Transport;
+//! use libp2p_core::Transport;
 //!
 //! # fn main() {
 //! let mut core = tokio_core::reactor::Core::new().unwrap();
@@ -148,7 +148,7 @@
 //!     .with_upgrade(Ping)
 //!     // TODO: right now the only available protocol is ping, but we want to replace it with
 //!     //       something that is more simple to use
-//!     .dial("127.0.0.1:12345".parse::<libp2p_swarm::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())
+//!     .dial("127.0.0.1:12345".parse::<libp2p_core::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())
 //!     .and_then(|((mut pinger, service), _)| {
 //!         pinger.ping().map_err(|_| panic!()).select(service).map_err(|_| panic!())
 //!     });
@@ -174,13 +174,13 @@
 //! ```no_run
 //! extern crate futures;
 //! extern crate libp2p_ping;
-//! extern crate libp2p_swarm;
+//! extern crate libp2p_core;
 //! extern crate libp2p_tcp_transport;
 //! extern crate tokio_core;
 //!
 //! use futures::Future;
 //! use libp2p_ping::Ping;
-//! use libp2p_swarm::Transport;
+//! use libp2p_core::Transport;
 //!
 //! # fn main() {
 //! let mut core = tokio_core::reactor::Core::new().unwrap();
@@ -188,7 +188,7 @@
 //! let transport = libp2p_tcp_transport::TcpConfig::new(core.handle())
 //!     .with_dummy_muxing();
 //!
-//! let (swarm_controller, swarm_future) = libp2p_swarm::swarm(transport.with_upgrade(Ping),
+//! let (swarm_controller, swarm_future) = libp2p_core::swarm(transport.with_upgrade(Ping),
 //!     |(mut pinger, service), client_addr| {
 //!         pinger.ping().map_err(|_| panic!())
 //!             .select(service).map_err(|_| panic!())

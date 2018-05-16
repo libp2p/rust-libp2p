@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 
 [dependencies]
-libp2p-swarm = { path = "../swarm" }
+libp2p-core = { path = "../core" }
 log = "0.4.1"
 futures = "0.1"
 multiaddr = "0.3.0"

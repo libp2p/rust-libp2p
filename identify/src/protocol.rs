@@ -20,7 +20,7 @@
 
 use bytes::{Bytes, BytesMut};
 use futures::{future, Future, Sink, Stream};
-use libp2p_swarm::{ConnectionUpgrade, Endpoint};
+use libp2p_core::{ConnectionUpgrade, Endpoint};
 use log::Level;
 use multiaddr::Multiaddr;
 use protobuf::Message as ProtobufMessage;
@@ -239,7 +239,7 @@ mod tests {
     use self::libp2p_tcp_transport::TcpConfig;
     use self::tokio_core::reactor::Core;
     use futures::{Future, Stream};
-    use libp2p_swarm::Transport;
+    use libp2p_core::Transport;
     use std::sync::mpsc;
     use std::thread;
     use {IdentifyInfo, IdentifyOutput, IdentifyProtocolConfig};

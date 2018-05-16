@@ -10,7 +10,7 @@ members = [
     "peerstore",
     "ping",
     "secio",
-    "swarm",
+    "core",
     "tcp-transport",
     "websocket",
     "multistream-select",

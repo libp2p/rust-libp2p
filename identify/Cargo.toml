@@ -7,7 +7,7 @@ authors = ["Parity Technologies <admin@parity.io>"]
 bytes = "0.4"
 futures = "0.1"
 libp2p-peerstore = { path = "../peerstore" }
-libp2p-swarm = { path = "../swarm" }
+libp2p-core = { path = "../core" }
 log = "0.4.1"
 multiaddr = "0.3.0"
 protobuf = "=1.4.2"

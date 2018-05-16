@@ -55,12 +55,12 @@
 //! `WsConfig::new()` function.
 //!
 //! ```
-//! extern crate libp2p_swarm;
+//! extern crate libp2p_core;
 //! extern crate libp2p_tcp_transport;
 //! extern crate libp2p_websocket;
 //! extern crate tokio_core;
 //!
-//! use libp2p_swarm::{Multiaddr, Transport};
+//! use libp2p_core::{Multiaddr, Transport};
 //! use libp2p_tcp_transport::TcpConfig;
 //! use libp2p_websocket::WsConfig;
 //! use tokio_core::reactor::Core;
@@ -75,7 +75,7 @@
 //!
 
 extern crate futures;
-extern crate libp2p_swarm as swarm;
+extern crate libp2p_core as swarm;
 #[macro_use]
 extern crate log;
 extern crate multiaddr;

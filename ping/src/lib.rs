@@ -54,20 +54,20 @@
 //! ```no_run
 //! extern crate futures;
 //! extern crate libp2p_ping;
-//! extern crate libp2p_swarm;
+//! extern crate libp2p_core;
 //! extern crate libp2p_tcp_transport;
 //! extern crate tokio_core;
 //!
 //! use futures::Future;
 //! use libp2p_ping::Ping;
-//! use libp2p_swarm::Transport;
+//! use libp2p_core::Transport;
 //!
 //! # fn main() {
 //! let mut core = tokio_core::reactor::Core::new().unwrap();
 //!
 //! let ping_finished_future = libp2p_tcp_transport::TcpConfig::new(core.handle())
 //!     .with_upgrade(Ping)
-//!     .dial("127.0.0.1:12345".parse::<libp2p_swarm::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())
+//!     .dial("127.0.0.1:12345".parse::<libp2p_core::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())
 //!     .and_then(|((mut pinger, service), _)| {
 //!         pinger.ping().map_err(|_| panic!()).select(service).map_err(|_| panic!())
 //!     });
@@ -80,7 +80,7 @@
 
 extern crate bytes;
 extern crate futures;
-extern crate libp2p_swarm;
+extern crate libp2p_core;
 #[macro_use]
 extern crate log;
 extern crate multistream_select;
@@ -92,7 +92,7 @@ use bytes::{BufMut, Bytes, BytesMut};
 use futures::future::{loop_fn, FutureResult, IntoFuture, Loop};
 use futures::sync::{mpsc, oneshot};
 use futures::{Future, Sink, Stream};
-use libp2p_swarm::{ConnectionUpgrade, Endpoint, Multiaddr};
+use libp2p_core::{ConnectionUpgrade, Endpoint, Multiaddr};
 use log::Level;
 use parking_lot::Mutex;
 use rand::Rand;
@@ -309,7 +309,7 @@ mod tests {
     use futures::Future;
     use futures::Stream;
     use futures::future::join_all;
-    use libp2p_swarm::{ConnectionUpgrade, Endpoint};
+    use libp2p_core::{ConnectionUpgrade, Endpoint};
 
     #[test]
     fn ping_pong() {

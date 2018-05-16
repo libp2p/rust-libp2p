@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 extern crate libp2p_peerstore;
-extern crate libp2p_swarm;
+extern crate libp2p_core;
 extern crate multiaddr;
 
 use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};

@@ -21,7 +21,7 @@
 extern crate bytes;
 extern crate futures;
 extern crate libp2p_mplex as multiplex;
-extern crate libp2p_swarm;
+extern crate libp2p_core;
 extern crate libp2p_tcp_transport;
 extern crate tokio_core;
 extern crate tokio_io;
@@ -29,7 +29,7 @@ extern crate tokio_io;
 use bytes::BytesMut;
 use futures::future::Future;
 use futures::{Sink, Stream};
-use libp2p_swarm::{Multiaddr, MuxedTransport, StreamMuxer, Transport};
+use libp2p_core::{Multiaddr, MuxedTransport, StreamMuxer, Transport};
 use libp2p_tcp_transport::TcpConfig;
 use std::sync::{atomic, mpsc};
 use std::thread;

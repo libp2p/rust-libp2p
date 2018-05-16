@@ -29,7 +29,7 @@ use futures::{self, future, Future};
 use kad_server::{KadServerInterface, KademliaServerConfig, KademliaServerController};
 use kbucket::{KBucketsPeerId, KBucketsTable, UpdateOutcome};
 use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};
-use libp2p_swarm::{ConnectionUpgrade, Endpoint, MuxedTransport, SwarmController, Transport};
+use libp2p_core::{ConnectionUpgrade, Endpoint, MuxedTransport, SwarmController, Transport};
 use multiaddr::Multiaddr;
 use parking_lot::Mutex;
 use protocol::ConnectionType;

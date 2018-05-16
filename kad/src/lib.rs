@@ -71,7 +71,7 @@ extern crate futures;
 extern crate libp2p_identify;
 extern crate libp2p_peerstore;
 extern crate libp2p_ping;
-extern crate libp2p_swarm;
+extern crate libp2p_core;
 #[macro_use]
 extern crate log;
 extern crate multiaddr;

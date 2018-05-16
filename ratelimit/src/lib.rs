@@ -21,7 +21,7 @@
 extern crate aio_limited;
 #[macro_use]
 extern crate futures;
-extern crate libp2p_swarm as swarm;
+extern crate libp2p_core as swarm;
 #[macro_use]
 extern crate log;
 extern crate tokio;

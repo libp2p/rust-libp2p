@@ -118,7 +118,7 @@ where
         Du: Transport + 'static, // TODO: 'static :-/
         Du::Output: Into<T::Output>,
     {
-        trace!(target: "libp2p-swarm", "Swarm dialing {}", multiaddr);
+        trace!(target: "libp2p-core", "Swarm dialing {}", multiaddr);
 
         match transport.dial(multiaddr.clone()) {
             Ok(dial) => {
@@ -152,7 +152,7 @@ where
         Df: FnOnce(Du::Output, Multiaddr) -> Dfu + 'static,    // TODO: 'static :-/
         Dfu: IntoFuture<Item = (), Error = IoError> + 'static, // TODO: 'static :-/
     {
-        trace!(target: "libp2p-swarm", "Swarm dialing {} with custom handler", multiaddr);
+        trace!(target: "libp2p-core", "Swarm dialing {} with custom handler", multiaddr);
 
         match transport.dial(multiaddr) {
             Ok(dial) => {
@@ -171,7 +171,7 @@ where
     pub fn listen_on(&self, multiaddr: Multiaddr) -> Result<Multiaddr, Multiaddr> {
         match self.transport.clone().listen_on(multiaddr) {
             Ok((listener, new_addr)) => {
-                trace!(target: "libp2p-swarm", "Swarm listening on {}", new_addr);
+                trace!(target: "libp2p-core", "Swarm listening on {}", new_addr);
                 // Ignoring errors if the receiver has been closed, because in that situation
                 // nothing is going to be processed anyway.
                 let _ = self.new_listeners.unbounded_send(listener);
@@ -225,14 +225,14 @@ where
 
         match self.next_incoming.poll() {
             Ok(Async::Ready(connec)) => {
-                debug!(target: "libp2p-swarm", "Swarm received new multiplexed \
+                debug!(target: "libp2p-core", "Swarm received new multiplexed \
                                                 incoming connection");
                 self.next_incoming = self.transport.clone().next_incoming();
                 self.listeners_upgrade.push(Box::new(connec) as Box<_>);
             }
             Ok(Async::NotReady) => {}
             Err(err) => {
-                debug!(target: "libp2p-swarm", "Error in multiplexed incoming \
+                debug!(target: "libp2p-core", "Error in multiplexed incoming \
                                                 connection: {:?}", err);
                 self.next_incoming = self.transport.clone().next_incoming();
             }
@@ -273,12 +273,12 @@ where
 
         match self.listeners.poll() {
             Ok(Async::Ready(Some((Some(upgrade), remaining)))) => {
-                trace!(target: "libp2p-swarm", "Swarm received new connection on listener socket");
+                trace!(target: "libp2p-core", "Swarm received new connection on listener socket");
                 self.listeners_upgrade.push(upgrade);
                 self.listeners.push(remaining.into_future());
             }
             Err((err, _)) => {
-                warn!(target: "libp2p-swarm", "Error in listener: {:?}", err);
+                warn!(target: "libp2p-core", "Error in listener: {:?}", err);
             }
             _ => {}
         }
@@ -294,7 +294,7 @@ where
                 ));
             }
             Err(err) => {
-                warn!(target: "libp2p-swarm", "Error in listener upgrade: {:?}", err);
+                warn!(target: "libp2p-core", "Error in listener upgrade: {:?}", err);
             }
             _ => {}
         }
@@ -306,17 +306,17 @@ where
                     .push(future::Either::A(handler(output, addr).into_future()));
             }
             Err(err) => {
-                warn!(target: "libp2p-swarm", "Error in dialer upgrade: {:?}", err);
+                warn!(target: "libp2p-core", "Error in dialer upgrade: {:?}", err);
             }
             _ => {}
         }
 
         match self.to_process.poll() {
             Ok(Async::Ready(Some(()))) => {
-                trace!(target: "libp2p-swarm", "Future returned by swarm handler driven to completion");
+                trace!(target: "libp2p-core", "Future returned by swarm handler driven to completion");
             }
             Err(err) => {
-                warn!(target: "libp2p-swarm", "Error in processing: {:?}", err);
+                warn!(target: "libp2p-core", "Error in processing: {:?}", err);
             }
             _ => {}
         }

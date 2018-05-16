@@ -24,7 +24,7 @@ extern crate bytes;
 extern crate fnv;
 extern crate futures;
 extern crate libp2p_peerstore;
-extern crate libp2p_swarm;
+extern crate libp2p_core;
 #[macro_use]
 extern crate log;
 extern crate multiaddr;
@@ -45,7 +45,7 @@ use fnv::{FnvHashMap, FnvHashSet, FnvHasher};
 use futures::sync::mpsc;
 use futures::{future, Future, Poll, Sink, Stream};
 use libp2p_peerstore::PeerId;
-use libp2p_swarm::{ConnectionUpgrade, Endpoint};
+use libp2p_core::{ConnectionUpgrade, Endpoint};
 use log::Level;
 use multiaddr::{AddrComponent, Multiaddr};
 use parking_lot::{Mutex, RwLock};
