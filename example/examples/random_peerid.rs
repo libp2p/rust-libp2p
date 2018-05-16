@@ -28,5 +28,5 @@ fn main() {
         let key = (0..2048).map(|_| rand::random::<u8>()).collect::<Vec<_>>();
         PeerId::from_public_key(&key)
     };
-    println!("{}", pid.to_string());
+    println!("{}", pid.to_base58());
 }
