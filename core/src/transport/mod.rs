@@ -76,7 +76,7 @@ pub trait Transport {
     type ListenerUpgrade: Future<Item = (Self::Output, Multiaddr), Error = IoError>;
 
     /// A future which indicates that we are currently dialing to a peer.
-    type Dial: IntoFuture<Item = (Self::Output, Multiaddr), Error = IoError>;
+    type Dial: Future<Item = (Self::Output, Multiaddr), Error = IoError>;
 
     /// Listen on the given multiaddr. Returns a stream of incoming connections, plus a modified
     /// version of the `Multiaddr`. This new `Multiaddr` is the one that that should be advertised
