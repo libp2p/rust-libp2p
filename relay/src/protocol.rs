@@ -33,9 +33,18 @@ use utility::{io_err, is_success, status, Io, Peer};
 pub struct RelayConfig<T, P> {
     my_id: PeerId,
     transport: T,
-    peers: P
+    peers: P,
+    // If `allow_relays` is false this node can only be used as a
+    // destination but will not allow relaying streams to other
+    // destinations.
+    allow_relays: bool
 }
 
+// The `RelayConfig` upgrade can serve as destination or relay. Each mode needs a different
+// output type. As destination we want the stream to continue to be usable, whereas as relay
+// we pipe data from source to destination and do not want to use the stream in any other way.
+// Therefore, in the latter case we simply return a future that can be driven to completion
+// but otherwise the stream is not programmatically accessible.
 pub enum Output<C> {
     Stream(C),
     Sealed(Box<Future<Item=(), Error=io::Error>>)
@@ -68,7 +77,7 @@ where
                 return A(A(future::err(io_err("no message received"))))
             };
             match msg.get_field_type() {
-                CircuitRelay_Type::HOP => { // act as relay
+                CircuitRelay_Type::HOP if self.allow_relays => { // act as relay
                     B(A(self.on_hop(msg, io).map(|fut| Output::Sealed(Box::new(fut)))))
                 }
                 CircuitRelay_Type::STOP => { // act as destination
@@ -93,7 +102,11 @@ where
     for<'a> &'a S: Peerstore,
 {
     pub fn new(my_id: PeerId, transport: T, peers: P) -> RelayConfig<T, P> {
-        RelayConfig { my_id, transport, peers }
+        RelayConfig { my_id, transport, peers, allow_relays: true }
+    }
+
+    pub fn allow_relays(&mut self, val: bool) {
+        self.allow_relays = val
     }
 
     // HOP message handling (relay mode).
