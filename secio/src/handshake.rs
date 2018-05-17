@@ -139,8 +139,7 @@ where
         .and_then(|mut context| {
             context.rng.fill(&mut context.local_nonce)
                 .map_err(|_| SecioError::NonceGenerationFailed)?;
-            trace!(target: "libp2p-secio", "starting handshake ; local pubkey = {:?} ; \
-                                            local nonce = {:?}",
+            trace!("starting handshake ; local pubkey = {:?} ; local nonce = {:?}",
                    context.local_public_key, context.local_nonce);
             Ok(context)
         })
@@ -161,7 +160,7 @@ where
             let proposition_bytes = proposition.write_to_bytes().unwrap();
             context.local_proposition_bytes = proposition_bytes.clone();
 
-            trace!(target: "libp2p-secio", "sending proposition to remote");
+            trace!("sending proposition to remote");
 
             socket.send(BytesMut::from(proposition_bytes.clone()))
                 .from_err()
@@ -177,8 +176,7 @@ where
                         Some(p) => context.remote_proposition_bytes = p,
                         None => {
                             let err = IoError::new(IoErrorKind::BrokenPipe, "unexpected eof");
-                            debug!(target: "libp2p-secio", "unexpected eof while waiting for \
-                                                            remote's proposition");
+                            debug!("unexpected eof while waiting for remote's proposition");
                             return Err(err.into())
                         },
                     };
@@ -188,8 +186,7 @@ where
                     ) {
                         Ok(prop) => prop,
                         Err(_) => {
-                            debug!(target: "libp2p-secio", "failed to parse remote's proposition \
-                                                            protobuf message");
+                            debug!("failed to parse remote's proposition protobuf message");
                             return Err(SecioError::HandshakeParsingFailure);
                         }
                     };
@@ -199,8 +196,7 @@ where
                         match protobuf_parse_from_bytes::<PublicKeyProtobuf>(bytes) {
                             Ok(p) => p,
                             Err(_) => {
-                                debug!(target: "libp2p-secio", "failed to parse remote's \
-                                                                proposition's pubkey protobuf");
+                                debug!("failed to parse remote's proposition's pubkey protobuf");
                                 return Err(SecioError::HandshakeParsingFailure);
                             },
                         }
@@ -212,15 +208,13 @@ where
                         KeyTypeProtobuf::RSA => (),
                         format => {
                             let err = IoError::new(IoErrorKind::Other, "unsupported protocol");
-                            debug!(target: "libp2p-secio", "unsupported remote pubkey format {:?}",
-                                   format);
+                            debug!("unsupported remote pubkey format {:?}", format);
                             return Err(err.into());
                         },
                     };
                     context.remote_public_key = pubkey.take_Data();
                     context.remote_nonce = prop.take_rand();
-                    trace!(target: "libp2p-secio", "received proposition from remote ; \
-                                                    pubkey = {:?} ; nonce = {:?}",
+                    trace!("received proposition from remote ; pubkey = {:?} ; nonce = {:?}",
                            context.remote_public_key, context.remote_nonce);
                     Ok((prop, socket, context))
                 })
@@ -253,7 +247,7 @@ where
                 Some(match algo_support::exchanges::select_best(context.hashes_ordering, list) {
                     Ok(a) => a,
                     Err(err) => {
-                        debug!(target: "libp2p-secio", "failed to select an exchange protocol");
+                        debug!("failed to select an exchange protocol");
                         return Err(err);
                     }
                 })
@@ -263,7 +257,7 @@ where
                 Some(match algo_support::ciphers::select_best(context.hashes_ordering, list) {
                     Ok(a) => a,
                     Err(err) => {
-                        debug!(target: "libp2p-secio", "failed to select a cipher protocol");
+                        debug!("failed to select a cipher protocol");
                         return Err(err);
                     }
                 })
@@ -273,7 +267,7 @@ where
                 Some(match algo_support::hashes::select_best(context.hashes_ordering, list) {
                     Ok(a) => a,
                     Err(err) => {
-                        debug!(target: "libp2p-secio", "failed to select a hash protocol");
+                        debug!("failed to select a hash protocol");
                         return Err(err);
                     }
                 })
@@ -287,7 +281,7 @@ where
             match EphemeralPrivateKey::generate(&agreement::ECDH_P256, &context.rng) {
                 Ok(tmp_priv_key) => Ok((socket, context, tmp_priv_key)),
                 Err(_) => {
-                    debug!(target: "libp2p-secio", "failed to generate ECDH key");
+                    debug!("failed to generate ECDH key");
                     Err(SecioError::EphemeralKeyGenerationFailed)
                 },
             }
@@ -311,7 +305,7 @@ where
                     let mut state = match RSASigningState::new(context.local_private_key.clone()) {
                         Ok(s) => s,
                         Err(_) => {
-                            debug!(target: "libp2p-secio", "failed to sign local exchange");
+                            debug!("failed to sign local exchange");
                             return Err(SecioError::SigningFailure);
                         },
                     };
@@ -321,7 +315,7 @@ where
                     {
                         Ok(_) => (),
                         Err(_) => {
-                            debug!(target: "libp2p-secio", "failed to sign local exchange");
+                            debug!("failed to sign local exchange");
                             return Err(SecioError::SigningFailure);
                         },
                     };
@@ -339,7 +333,7 @@ where
 
         // Send our local `Exchange`.
         .and_then(|(local_exch, socket, context)| {
-            trace!(target: "libp2p-secio", "sending exchange to remote");
+            trace!("sending exchange to remote");
             socket.send(local_exch)
                 .from_err()
                 .map(|s| (s, context))
@@ -354,8 +348,7 @@ where
                         Some(r) => r,
                         None => {
                             let err = IoError::new(IoErrorKind::BrokenPipe, "unexpected eof");
-                            debug!(target: "libp2p-secio", "unexpected eof while waiting for \
-                                                            remote's exchange");
+                            debug!("unexpected eof while waiting for remote's exchange");
                             return Err(err.into())
                         },
                     };
@@ -363,13 +356,12 @@ where
                     let remote_exch = match protobuf_parse_from_bytes::<Exchange>(&raw) {
                         Ok(e) => e,
                         Err(err) => {
-                            debug!(target: "libp2p-secio", "failed to parse remote's exchange \
-                                                            protobuf ; {:?}", err);
+                            debug!("failed to parse remote's exchange protobuf ; {:?}", err);
                             return Err(SecioError::HandshakeParsingFailure);
                         }
                     };
 
-                    trace!(target: "libp2p-secio", "received and decoded the remote's exchange");
+                    trace!("received and decoded the remote's exchange");
                     Ok((remote_exch, socket, context))
                 })
         })
@@ -392,12 +384,12 @@ where
             {
                 Ok(()) => (),
                 Err(_) => {
-                    debug!(target: "libp2p-secio", "failed to verify the remote's signature");
+                    debug!("failed to verify the remote's signature");
                     return Err(SecioError::SignatureVerificationFailed)
                 },
             }
 
-            trace!(target: "libp2p-secio", "successfully verified the remote's signature");
+            trace!("successfully verified the remote's signature");
             Ok((remote_exch, socket, context))
         })
 
@@ -455,7 +447,7 @@ where
             match codec {
                 Ok(c) => Ok((c, context)),
                 Err(err) => {
-                    debug!(target: "libp2p-secio", "failed to generate shared secret with remote");
+                    debug!("failed to generate shared secret with remote");
                     return Err(err);
                 },
             }
@@ -464,7 +456,7 @@ where
         // We send back their nonce to check if the connection works.
         .and_then(|(codec, mut context)| {
             let remote_nonce = mem::replace(&mut context.remote_nonce, Vec::new());
-            trace!(target: "libp2p-secio", "checking encryption by sending back remote's nonce");
+            trace!("checking encryption by sending back remote's nonce");
             codec.send(BytesMut::from(remote_nonce))
                 .map(|s| (s, context))
                 .from_err()
@@ -477,15 +469,15 @@ where
                 .and_then(move |(nonce, rest)| {
                     match nonce {
                         Some(ref n) if n == &context.local_nonce => {
-                            trace!(target: "libp2p-secio", "secio handshake success");
+                            trace!("secio handshake success");
                             Ok((rest, context.remote_public_key))
                         },
                         None => {
-                            debug!(target: "libp2p-secio", "unexpected eof during nonce check");
+                            debug!("unexpected eof during nonce check");
                             Err(IoError::new(IoErrorKind::BrokenPipe, "unexpected eof").into())
                         },
                         _ => {
-                            debug!(target: "libp2p-secio", "failed nonce verification with remote");
+                            debug!("failed nonce verification with remote");
                             Err(SecioError::NonceVerificationFailed)
                         }
                     }

@@ -142,8 +142,7 @@ fn query<'a, I>(
 where
     I: QueryInterface + 'a,
 {
-    debug!(target: "libp2p-kad", "Start query for {:?} ; num results = {}", searched_key,
-                                 num_results);
+    debug!("Start query for {:?} ; num results = {}", searched_key, num_results);
 
     // State of the current iterative process.
     struct State<'a> {
@@ -209,9 +208,9 @@ where
             to_contact
         };
 
-        debug!(target: "libp2p-kad", "New query round ; {} queries in progress ; contacting \
-                                      {} new peers", state.current_attempts_fut.len(),
-                                      to_contact.len());
+        debug!("New query round ; {} queries in progress ; contacting {} new peers",
+               state.current_attempts_fut.len(),
+               to_contact.len());
 
         // For each node in `to_contact`, start an RPC query and a corresponding entry in the two
         // `state.current_attempts_*` fields.
@@ -262,7 +261,7 @@ where
             let closer_peers = match message {
                 Ok(msg) => msg,
                 Err(err) => {
-                    trace!(target: "libp2p-kad", "RPC query failed for {:?}: {:?}", remote_id, err);
+                    trace!("RPC query failed for {:?}: {:?}", remote_id, err);
                     state.failed_to_contact.insert(remote_id);
                     return Ok(future::Loop::Continue(state));
                 }
@@ -294,8 +293,7 @@ where
                 // the remote.
                 {
                     let valid_multiaddrs = peer.multiaddrs.drain(..);
-                    trace!(target: "libp2p-kad", "Adding multiaddresses to {:?}: {:?}",
-                                                 peer.node_id, valid_multiaddrs);
+                    trace!("Adding multiaddresses to {:?}: {:?}", peer.node_id, valid_multiaddrs);
                     query_interface2.peer_add_addrs(
                         &peer.node_id,
                         valid_multiaddrs,
@@ -334,7 +332,7 @@ where
                 Ok(future::Loop::Break(state))
             } else {
                 if !local_nearest_node_updated {
-                    trace!(target: "libp2p-kad", "Loop didn't update closer node ; jumping to step 2");
+                    trace!("Loop didn't update closer node ; jumping to step 2");
                     state.looking_for_closer = false;
                 }
 
@@ -346,7 +344,7 @@ where
     });
 
     let stream = stream.map(|state| {
-        debug!(target: "libp2p-kad", "Query finished with {} results", state.result.len());
+        debug!("Query finished with {} results", state.result.len());
         state.result
     });
 

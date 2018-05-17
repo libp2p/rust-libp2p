@@ -211,7 +211,7 @@ where
         _: libp2p_core::Endpoint,
         remote_addr: &Multiaddr,
     ) -> Self::Future {
-        info!(target: "libp2p-secio", "starting secio upgrade with {:?}", remote_addr);
+        info!("starting secio upgrade with {:?}", remote_addr);
 
         let fut = SecioMiddleware::handshake(incoming, self.key);
         let wrapped = fut.map(|(stream_sink, pubkey)| {
@@ -224,7 +224,7 @@ where
 
 #[inline]
 fn map_err(err: SecioError) -> IoError {
-    debug!(target: "libp2p-secio", "error during secio handshake {:?}", err);
+    debug!("error during secio handshake {:?}", err);
     IoError::new(IoErrorKind::InvalidData, err)
 }
 

@@ -165,7 +165,7 @@ where
             .map(|msg| Message::Received(msg.freeze()));
         let (sink, stream) = sink_stream.split();
 
-        let remote_addr = if log_enabled!(target: "libp2p-ping", Level::Debug) {
+        let remote_addr = if log_enabled!(Level::Debug) {
             Some(remote_addr.clone())
         } else {
             None
@@ -185,9 +185,8 @@ where
                         match message {
                             Message::Ping(payload, finished) => {
                                 // Ping requested by the user through the `Pinger`.
-                                if log_enabled!(target: "libp2p-ping", Level::Debug) {
-                                    debug!(target: "libp2p-ping", "Sending ping to {:?} with \
-                                           payload {:?}",
+                                if log_enabled!(Level::Debug) {
+                                    debug!("Sending ping to {:?} with payload {:?}",
                                            remote_addr.expect("debug log level is enabled"),
                                            payload);
                                 }
@@ -205,16 +204,14 @@ where
                                     // Payload was ours. Signalling future.
                                     // Errors can happen if the user closed the receiving end of
                                     // the future, which is fine to ignore.
-                                    debug!(target: "libp2p-ping", "Received pong from {:?} \
-                                                               (payload={:?}) ; ping fufilled",
+                                    debug!("Received pong from {:?} (payload={:?}) ; ping fufilled",
                                        remote_addr.expect("debug log level is enabled"), payload);
                                     let _ = fut.send(());
                                     Box::new(Ok(Loop::Continue((sink, stream))).into_future())
                                         as Box<Future<Item = _, Error = _>>
                                 } else {
                                     // Payload was not ours. Sending it back.
-                                    debug!(target: "libp2p-ping", "Received ping from {:?} \
-                                                               (payload={:?}) ; sending back",
+                                    debug!("Received ping from {:?} (payload={:?}) ; sending back",
                                        remote_addr.expect("debug log level is enabled"), payload);
                                     Box::new(
                                         sink.send(payload)
@@ -249,7 +246,7 @@ impl Pinger {
     pub fn ping(&mut self) -> Box<Future<Item = (), Error = Box<Error + Send + Sync>>> {
         let (tx, rx) = oneshot::channel();
         let payload: [u8; 32] = Rand::rand(&mut self.os_rng);
-        debug!(target: "libp2p-ping", "Preparing for ping with payload {:?}", payload);
+        debug!("Preparing for ping with payload {:?}", payload);
         // Ignore errors if the ponger has been already destroyed. The returned future will never
         // be signalled.
         let fut = self.send
