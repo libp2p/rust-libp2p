@@ -35,7 +35,7 @@ pub extern crate libp2p_ping as ping;
 pub extern crate libp2p_tcp_transport as tcp;
 pub extern crate libp2p_websocket as websocket;
 
-pub use self::core::{Transport, ConnectionUpgrade};
+pub use self::core::{Transport, ConnectionUpgrade, swarm};
 pub use self::multiaddr::Multiaddr;
 pub use self::peerstore::PeerId;
 
