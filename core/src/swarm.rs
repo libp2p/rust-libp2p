@@ -123,8 +123,7 @@ where
         match transport.dial(multiaddr.clone()) {
             Ok(dial) => {
                 let dial = Box::new(
-                    dial.into_future()
-                        .map(|(d, client_addr)| (d.into(), client_addr)),
+                    dial.map(|(d, client_addr)| (d.into(), client_addr)),
                 ) as Box<Future<Item = _, Error = _>>;
                 // Ignoring errors if the receiver has been closed, because in that situation
                 // nothing is going to be processed anyway.
@@ -156,7 +155,7 @@ where
 
         match transport.dial(multiaddr) {
             Ok(dial) => {
-                let dial = Box::new(dial.into_future().and_then(|(d, m)| and_then(d, m))) as Box<_>;
+                let dial = Box::new(dial.and_then(|(d, m)| and_then(d, m))) as Box<_>;
                 // Ignoring errors if the receiver has been closed, because in that situation
                 // nothing is going to be processed anyway.
                 let _ = self.new_toprocess.unbounded_send(dial);

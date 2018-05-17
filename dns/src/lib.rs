@@ -128,7 +128,7 @@ where
         if !contains_dns {
             trace!(target: "libp2p-dns", "Pass-through address without DNS: {}", addr);
             return match self.inner.dial(addr) {
-                Ok(d) => Ok(Box::new(d.into_future()) as Box<_>),
+                Ok(d) => Ok(Box::new(d) as Box<_>),
                 Err((inner, addr)) => Err((
                     DnsConfig {
                         inner,

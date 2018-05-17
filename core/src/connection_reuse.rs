@@ -179,7 +179,7 @@ where
             debug!(target: "libp2p-core", "No existing connection to {}; dialing", addr);
             match inner.dial(addr.clone()) {
                 Ok(dial) => {
-                    let future = dial.into_future().and_then(move |(muxer, addr)| {
+                    let future = dial.and_then(move |(muxer, addr)| {
                         muxer.clone().outbound().and_then(move |substream| {
                             if let Some(s) = substream {
                                 // Replace the active connection because we are the most recent.
