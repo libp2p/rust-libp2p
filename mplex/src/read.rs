@@ -101,6 +101,7 @@ fn block_on_wrong_stream<T: AsyncRead, Buf: Array<Item = u8>>(
     });
 
     let mut out_consumed = 0;
+    let mut stream_eof = false;
     if let Some((tasks, cache)) = lock.open_streams
         .entry(substream_id)
         .or_insert_with(|| SubstreamMetadata::new_open())
@@ -130,6 +131,10 @@ fn block_on_wrong_stream<T: AsyncRead, Buf: Array<Item = u8>>(
 
             match lock.stream.read(buf_prefix) {
                 Ok(consumed) => {
+                    if consumed == 0 && !buf_prefix.is_empty() {
+                        stream_eof = true
+                    }
+
                     let new_remaining = remaining_bytes - consumed;
 
                     assert!(cache.extend_from_slice(&buf_prefix[..consumed]));
@@ -156,6 +161,10 @@ fn block_on_wrong_stream<T: AsyncRead, Buf: Array<Item = u8>>(
         for task in tasks {
             task.notify();
         }
+    }
+
+    if stream_eof {
+        lock.close()
     }
 
     Ok(out_consumed)
