@@ -84,7 +84,7 @@ where
         let upgrade = self.upgrade;
 
         let dialed_fut = match self.transports.dial(addr.clone()) {
-            Ok(f) => f.into_future(),
+            Ok(f) => f,
             Err((trans, addr)) => {
                 let builder = UpgradedNode {
                     transports: trans,
