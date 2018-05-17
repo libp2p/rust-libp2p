@@ -131,10 +131,8 @@ fn run_dialer(opts: DialerOpts) -> Result<(), Box<Error>> {
     }
 
     let transport = {
-        let tcp = TcpConfig::new(core.handle()).with_dummy_muxing();
-        //    .with_upgrade(multiplex::MultiplexConfig::new())
-        //    .into_connection_reuse();
-        RelayTransport::new(opts.me, tcp, store, iter::once(opts.relay))
+        let tcp = TcpConfig::new(core.handle());
+        RelayTransport::new(opts.me, tcp, store, iter::once(opts.relay)).with_dummy_muxing()
     };
 
     let (control, future) = core::swarm(transport.clone(), |_, _| {
@@ -145,33 +143,16 @@ fn run_dialer(opts: DialerOpts) -> Result<(), Box<Error>> {
         Ok(AsyncRead::framed(socket, BytesCodec::new()))
     });
 
-    let upgraded = transport.and_then(|out, endpoint, addr| {
-        match out {
-            relay::Output::Sealed(future) => {
-                Either::A(future.map(Either::A))
-            }
-            relay::Output::Stream(socket) => {
-                Either::B(upgrade::apply(socket, echo, endpoint, addr).map(Either::B))
-            }
-        }
-    });
-
     let address = format!("/p2p-circuit/p2p/{}", opts.dest.to_base58()).parse()?;
 
-    control.dial_custom_handler(address, upgraded, |out, _| {
-        match out {
-            Either::A(()) => Either::A(future::ok(())),
-            Either::B((socket, _)) => {
-                println!("sending \"hello world\"");
-                Either::B(socket
-                    .send("hello world".into())
-                    .and_then(|socket| socket.into_future().map_err(|(e, _)| e).map(|(m, _)| m))
-                    .and_then(|message| {
-                        println!("received message: {:?}", message);
-                        Ok(())
-                    }))
-            }
-        }
+    control.dial_custom_handler(address, transport.with_upgrade(echo), |socket, _| {
+        println!("sending \"hello world\"");
+        socket.send("hello world".into())
+            .and_then(|socket| socket.into_future().map_err(|(e, _)| e).map(|(m, _)| m))
+            .and_then(|message| {
+                println!("received message: {:?}", message);
+                Ok(())
+            })
     }).map_err(|_| "failed to dial")?;
 
     core.run(future).map_err(From::from)
@@ -185,17 +166,14 @@ fn run_listener(opts: ListenerOpts) -> Result<(), Box<Error>> {
         store.peer_or_create(&p).add_addr(a, Duration::from_secs(600))
     }
 
-    let trans = TcpConfig::new(core.handle()).with_dummy_muxing();
-    //    .with_upgrade(multiplex::MultiplexConfig::new())
-    //    .into_connection_reuse();
+    let transport = TcpConfig::new(core.handle()).with_dummy_muxing();
+    let relay = RelayConfig::new(opts.me, transport.clone(), store);
 
     let echo = SimpleProtocol::new("/echo/1.0.0", |socket| {
         Ok(AsyncRead::framed(socket, BytesCodec::new()))
     });
 
-    let relay = RelayConfig::new(opts.me, trans.clone(), store);
-
-    let upgraded = trans.with_upgrade(relay)
+    let upgraded = transport.with_upgrade(relay)
         .and_then(|out, endpoint, addr| {
             match out {
                 relay::Output::Sealed(future) => {

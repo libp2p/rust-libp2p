@@ -61,8 +61,7 @@ where
     T: AsyncRead + AsyncWrite + 'static,
 {
     pub(crate) fn send(self, msg: CircuitRelay) -> impl Future<Item=Self, Error=io::Error> {
-        trace!(target: "libp2p-relay",
-               "sending protocol message: type={:?}, code={:?}",
+        trace!("sending protocol message: type={:?}, code={:?}",
                msg.get_field_type(),
                msg.get_code());
         let pkg = match msg.write_to_bytes() {
@@ -80,8 +79,7 @@ where
                 if let Some(ref p) = pkg {
                     protobuf::parse_from_bytes(p)
                         .map(|msg: CircuitRelay| {
-                            trace!(target: "libp2p-relay",
-                                   "received protocol message: type={:?}, code={:?}",
+                            trace!("received protocol message: type={:?}, code={:?}",
                                    msg.get_field_type(),
                                    msg.get_code());
                             (Some(msg), Io { codec })

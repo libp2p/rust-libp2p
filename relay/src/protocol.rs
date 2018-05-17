@@ -84,7 +84,7 @@ where
                     B(B(self.on_stop(msg, io).map(Output::Stream)))
                 }
                 other => {
-                    debug!(target: "libp2p-relay", "invalid message type: {:?}", other);
+                    debug!("invalid message type: {:?}", other);
                     let resp = status(CircuitRelay_Status::MALFORMED_MESSAGE);
                     A(B(io.send(resp).and_then(|_| Err(io_err("invalid message type")))))
                 }

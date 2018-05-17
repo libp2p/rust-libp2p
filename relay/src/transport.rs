@@ -18,12 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use core::{Transport, MuxedTransport};
+use core::Transport;
 use futures::{stream, prelude::*};
 use message::{CircuitRelay, CircuitRelay_Peer, CircuitRelay_Type};
 use multiaddr::Multiaddr;
 use peerstore::{PeerAccess, PeerId, Peerstore};
-use protocol::{self, RelayConfig};
+use protocol;
 use rand::{self, Rng};
 use std::{io, iter::FromIterator, ops::Deref, sync::Arc};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -45,38 +45,32 @@ where
     S: 'static,
     for<'a> &'a S: Peerstore
 {
-    type Output = protocol::Output<T::Output>;
+    type Output = T::Output;
     type Listener = Box<Stream<Item=Self::ListenerUpgrade, Error=io::Error>>;
     type ListenerUpgrade = Box<Future<Item=(Self::Output, Multiaddr), Error=io::Error>>;
     type Dial = Box<Future<Item=(Self::Output, Multiaddr), Error=io::Error>>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        let rly = RelayConfig::new(self.my_id.clone(), self.transport.clone(), self.peers.clone());
-        let (listener, new_addr) = self.transport
-            .clone()
-            .with_upgrade(rly)
-            .listen_on(addr)
-            .map_err(|(_, a)| (self, a))?;
-        Ok((Box::new(listener), new_addr))
+        Err((self, addr))
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
         match RelayAddr::parse(&addr) {
             RelayAddr::Malformed => {
-                debug!(target: "libp2p-relay", "malformed address: {}", addr);
+                debug!("malformed address: {}", addr);
                 return Err((self, addr));
             }
             RelayAddr::Multihop => {
-                debug!(target: "libp2p-relay", "multihop address: {}", addr);
+                debug!("multihop address: {}", addr);
                 return Err((self, addr));
             }
             RelayAddr::Address { relay, dest } => {
                 if let Some(ref r) = relay {
                     let f = self.relay_via(r, &dest).map_err(|this| (this, addr))?;
-                    Ok(Box::new(f.map(|(out, addr)| (protocol::Output::Stream(out), addr))))
+                    Ok(Box::new(f))
                 } else {
                     let f = self.relay_to(&dest).map_err(|this| (this, addr))?;
-                    Ok(Box::new(f.map(|(out, addr)| (protocol::Output::Stream(out), addr))))
+                    Ok(Box::new(f))
                 }
             }
         }
@@ -84,23 +78,6 @@ where
 
     fn nat_traversal(&self, a: &Multiaddr, b: &Multiaddr) -> Option<Multiaddr> {
         self.transport.nat_traversal(a, b)
-    }
-}
-
-impl<T, P, S> MuxedTransport for RelayTransport<T, P>
-where
-    T: MuxedTransport + Clone + 'static,
-    T::Output: AsyncRead + AsyncWrite,
-    P: Deref<Target=S> + Clone + 'static,
-    S: 'static,
-    for<'a> &'a S: Peerstore
-{
-    type Incoming = Box<Future<Item=Self::IncomingUpgrade, Error=io::Error>>;
-    type IncomingUpgrade = Box<Future<Item=(Self::Output, Multiaddr), Error=io::Error>>;
-
-    fn next_incoming(self) -> Self::Incoming {
-        let rly = RelayConfig::new(self.my_id.clone(), self.transport.clone(), self.peers.clone());
-        Box::new(self.transport.with_upgrade(rly).next_incoming())
     }
 }
 
@@ -129,7 +106,7 @@ where
 
     // Relay to destination over any available relay node.
     fn relay_to(self, destination: &Peer) -> Result<impl Future<Item=(T::Output, Multiaddr), Error=io::Error>, Self> {
-        trace!(target: "libp2p-relay", "relay_to {:?}", destination.id);
+        trace!("relay_to {:?}", destination.id);
         let mut dials = Vec::new();
         for relay in &*self.relays {
             let relay_peer = Peer {
@@ -142,7 +119,7 @@ where
         }
 
         if dials.is_empty() {
-            info!(target: "libp2p-relay", "no relay available for {:?}", destination.id);
+            info!("no relay available for {:?}", destination.id);
             return Err(self);
         }
 
@@ -167,7 +144,7 @@ where
 
     // Relay to destination via the given peer.
     fn relay_via(self, relay: &Peer, destination: &Peer) -> Result<impl Future<Item=(T::Output, Multiaddr), Error=io::Error>, Self> {
-        trace!(target: "libp2p-relay", "relay_via {:?} to {:?}", relay.id, destination.id);
+        trace!("relay_via {:?} to {:?}", relay.id, destination.id);
         let mut addresses = Vec::new();
 
         if relay.addrs.is_empty() {
@@ -182,7 +159,7 @@ where
 
         // no relay address => bail out
         if addresses.is_empty() {
-            info!(target: "libp2p-relay", "no available address for relay: {:?}", relay.id);
+            info!("no available address for relay: {:?}", relay.id);
             return Err(self);
         }
 
@@ -198,11 +175,11 @@ where
             .map_err(|(err, _stream)| err)
             .and_then(move |(ok, _stream)| match ok {
                 Some((out, addr)) => {
-                    debug!(target: "libp2p-relay", "connected to {:?}", addr);
+                    debug!("connected to {:?}", addr);
                     Ok((out, addr))
                 }
                 None => {
-                    info!(target: "libp2p-relay", "failed to dial to {:?}", relay.id);
+                    info!("failed to dial to {:?}", relay.id);
                     Err(io_err(format!("failed to dial to relay {:?}", relay.id)))
                 }
             });
