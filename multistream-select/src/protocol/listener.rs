@@ -58,7 +58,7 @@ where
             .map_err(|(e, _)| e.into())
             .and_then(|(msg, rest)| {
                 if msg.as_ref().map(|b| &b[..]) != Some(MULTISTREAM_PROTOCOL_WITH_LF) {
-                    debug!(target: "multistream-select", "failed handshake; received: {:?}", msg);
+                    debug!("failed handshake; received: {:?}", msg);
                     return Err(MultistreamSelectError::FailedHandshake);
                 }
                 Ok(rest)
@@ -93,7 +93,7 @@ where
         match item {
             ListenerToDialerMessage::ProtocolAck { name } => {
                 if !name.starts_with(b"/") {
-                    debug!(target: "multistream-select", "invalid protocol name {:?}", name);
+                    debug!("invalid protocol name {:?}", name);
                     return Err(MultistreamSelectError::WrongProtocolName);
                 }
                 let mut protocol = BytesMut::from(name);

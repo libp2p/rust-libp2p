@@ -85,7 +85,7 @@ where
                         let req = DialerToListenerMessage::ProtocolRequest {
                             name: proto_name.clone()
                         };
-                        trace!(target: "multistream-select", "sending {:?}", req);
+                        trace!("sending {:?}", req);
                         dialer.send(req)
                             .map(|d| (d, proto_name, proto_value))
                             .from_err()
@@ -99,7 +99,7 @@ where
                     })
                     // Once read, analyze the response.
                     .and_then(|(message, rest, proto_name, proto_value)| {
-                        trace!(target: "multistream-select", "received {:?}", message);
+                        trace!("received {:?}", message);
                         let message = message.ok_or(ProtocolChoiceError::UnexpectedMessage)?;
 
                         match message {
@@ -140,14 +140,14 @@ where
     let future = Dialer::new(inner)
         .from_err()
         .and_then(move |dialer| {
-            trace!(target: "multistream-select", "requesting protocols list");
+            trace!("requesting protocols list");
             dialer
                 .send(DialerToListenerMessage::ProtocolsListRequest)
                 .from_err()
         })
         .and_then(move |dialer| dialer.into_future().map_err(|(e, _)| e.into()))
         .and_then(move |(msg, dialer)| {
-            trace!(target: "multistream-select", "protocols list response: {:?}", msg);
+            trace!("protocols list response: {:?}", msg);
             let list = match msg {
                 Some(ListenerToDialerMessage::ProtocolsListResponse { list }) => list,
                 _ => return Err(ProtocolChoiceError::UnexpectedMessage),
@@ -171,7 +171,7 @@ where
             Ok((proto_name, proto_val, dialer))
         })
         .and_then(|(proto_name, proto_val, dialer)| {
-            trace!(target: "multistream-select", "sending {:?}", proto_name);
+            trace!("sending {:?}", proto_name);
             dialer
                 .send(DialerToListenerMessage::ProtocolRequest {
                     name: proto_name.clone(),
@@ -186,7 +186,7 @@ where
                 .map_err(|(err, _)| err.into())
         })
         .and_then(|(proto_name, proto_val, msg, dialer)| {
-            trace!(target: "multistream-select", "received {:?}", msg);
+            trace!("received {:?}", msg);
             match msg {
                 Some(ListenerToDialerMessage::ProtocolAck { ref name }) if name == &proto_name => {
                     Ok((proto_val, dialer.into_inner()))

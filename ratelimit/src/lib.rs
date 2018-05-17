@@ -51,11 +51,11 @@ impl<T> RateLimited<T> {
         Ok(RateLimited {
             value,
             rlimiter: Limiter::new(e, max_read).map_err(|e| {
-                error!(target: "libp2p-ratelimit", "failed to create read limiter: {}", e);
+                error!("failed to create read limiter: {}", e);
                 io::Error::new(io::ErrorKind::Other, e)
             })?,
             wlimiter: Limiter::new(e, max_write).map_err(|e| {
-                error!(target: "libp2p-ratelimit", "failed to create write limiter: {}", e);
+                error!("failed to create write limiter: {}", e);
                 io::Error::new(io::ErrorKind::Other, e)
             })?,
         })
@@ -81,11 +81,11 @@ impl<C: AsyncRead + AsyncWrite> Connection<C> {
         let (r, w) = c.split();
         Ok(Connection {
             reader: Limited::new(r, rlimiter).map_err(|e| {
-                error!(target: "libp2p-ratelimit", "failed to create limited reader: {}", e);
+                error!("failed to create limited reader: {}", e);
                 io::Error::new(io::ErrorKind::Other, e)
             })?,
             writer: Limited::new(w, wlimiter).map_err(|e| {
-                error!(target: "libp2p-ratelimit", "failed to create limited writer: {}", e);
+                error!("failed to create limited writer: {}", e);
                 io::Error::new(io::ErrorKind::Other, e)
             })?,
         })

@@ -44,7 +44,7 @@ extern crate multiaddr;
 extern crate tokio_dns;
 extern crate tokio_io;
 
-use futures::future::{self, Future, IntoFuture};
+use futures::future::{self, Future};
 use log::Level;
 use multiaddr::{AddrComponent, Multiaddr};
 use std::fmt;
@@ -76,7 +76,7 @@ impl<T> DnsConfig<T> {
     /// Same as `new`, but allows specifying a number of threads for the resolving.
     #[inline]
     pub fn with_resolve_threads(inner: T, num_threads: usize) -> DnsConfig<T> {
-        trace!(target: "libp2p-dns", "Created a CpuPoolResolver");
+        trace!("Created a CpuPoolResolver");
 
         DnsConfig {
             inner,
@@ -126,7 +126,7 @@ where
         });
 
         if !contains_dns {
-            trace!(target: "libp2p-dns", "Pass-through address without DNS: {}", addr);
+            trace!("Pass-through address without DNS: {}", addr);
             return match self.inner.dial(addr) {
                 Ok(d) => Ok(Box::new(d) as Box<_>),
                 Err((inner, addr)) => Err((
@@ -141,7 +141,7 @@ where
 
         let resolver = self.resolver;
 
-        trace!(target: "libp2p-dns", "Dialing address with DNS: {}", addr);
+        trace!("Dialing address with DNS: {}", addr);
         let resolve_iters = addr.iter()
             .map(move |cmp| match cmp {
                 AddrComponent::DNS4(ref name) => {
@@ -157,7 +157,7 @@ where
 
         let new_addr = future::join_all(resolve_iters).map(move |outcome| {
             let outcome: Multiaddr = outcome.into_iter().collect();
-            debug!(target: "libp2p-dns", "DNS resolution outcome: {} => {}", addr, outcome);
+            debug!("DNS resolution outcome: {} => {}", addr, outcome);
             outcome
         });
 
@@ -194,15 +194,15 @@ fn resolve_dns(
     resolver: CpuPoolResolver,
     ty: ResolveTy,
 ) -> Box<Future<Item = AddrComponent, Error = IoError>> {
-    let debug_name = if log_enabled!(target: "libp2p-dns", Level::Trace) {
+    let debug_name = if log_enabled!(Level::Trace) {
         Some(name.to_owned())
     } else {
         None
     };
 
     let future = resolver.resolve(name).and_then(move |addrs| {
-        if log_enabled!(target: "libp2p-dns", Level::Trace) {
-            trace!(target: "libp2p-dns", "DNS component resolution: {} => {:?}",
+        if log_enabled!(Level::Trace) {
+            trace!("DNS component resolution: {} => {:?}",
                     debug_name.expect("trace log level was enabled"), addrs);
         }
 

@@ -112,7 +112,7 @@ where
         _: Endpoint,
         remote_addr: &Multiaddr,
     ) -> Self::Future {
-        debug!(target: "libp2p-floodsub", "Upgrading connection to {} as floodsub", remote_addr);
+        debug!("Upgrading connection to {} as floodsub", remote_addr);
 
         // Whenever a new node connects, we send to it a message containing the topics we are
         // already subscribed to.
@@ -192,8 +192,7 @@ where
                             Some((bytes, MessageSource::FromChannel)) => {
                                 // Received a packet from the channel.
                                 // Need to send a message to remote.
-                                trace!(target: "libp2p-floodsub", "Effectively sending message \
-                                                               to remote");
+                                trace!("Effectively sending message to remote");
                                 let future = floodsub_sink.send(bytes).map(|floodsub_sink| {
                                     future::Loop::Continue((floodsub_sink, rest))
                                 });
@@ -203,7 +202,7 @@ where
                             None => {
                                 // Both the connection stream and `rx` are empty, so we break
                                 // the loop.
-                                trace!(target: "libp2p-floodsub", "Pubsub future clean finish");
+                                trace!("Pubsub future clean finish");
                                 // TODO: what if multiple connections?
                                 inner.remote_connections.write().remove(&remote_addr);
                                 let future = future::ok(future::Loop::Break(()));
@@ -341,9 +340,8 @@ impl FloodSubController {
 
         let topics = topics.into_iter();
 
-        if log_enabled!(target: "libp2p-floodsub", Level::Debug) {
-            debug!(target: "libp2p-floodsub", "Queuing sub/unsub message ; \
-                                               sub = {:?} ; unsub = {:?}",
+        if log_enabled!(Level::Debug) {
+            debug!("Queuing sub/unsub message ; sub = {:?} ; unsub = {:?}",
                 topics.clone().filter(|t| t.1)
                         .map(|t| t.0.hash().clone().into_string())
                         .collect::<Vec<_>>(),
@@ -387,8 +385,7 @@ impl FloodSubController {
     {
         let topics = topics.into_iter().collect::<Vec<_>>();
 
-        debug!(target: "libp2p-floodsub", "Queueing publish message ; \
-                                           topics = {:?} ; data_len = {:?}",
+        debug!("Queueing publish message ; topics = {:?} ; data_len = {:?}",
                topics.iter().map(|t| t.hash().clone().into_string()).collect::<Vec<_>>(),
                data.len());
 
@@ -457,8 +454,8 @@ impl FloodSubController {
             match remote.sender.unbounded_send(bytes.clone().into()) {
                 Ok(_) => (),
                 Err(_) => {
-                    trace!(target: "libp2p-floodsub", "Failed to dispatch message to {} because \
-                                                       channel was closed", remote_addr);
+                    trace!("Failed to dispatch message to {} because channel was closed",
+                           remote_addr);
                     failed_to_send.push(remote_addr.clone());
                 }
             }
@@ -474,7 +471,7 @@ impl FloodSubController {
             }
         }
 
-        debug!(target: "libp2p-floodsub", "Message queued for {} remotes", num_dispatched);
+        debug!("Message queued for {} remotes", num_dispatched);
     }
 }
 
@@ -546,13 +543,13 @@ fn handle_packet_received(
     inner: Arc<Inner>,
     remote_addr: &Multiaddr,
 ) -> Result<(), IoError> {
-    trace!(target: "libp2p-floodsub", "Received packet from {}", remote_addr);
+    trace!("Received packet from {}", remote_addr);
 
     // Parsing attempt.
     let mut input = match protobuf::parse_from_bytes::<rpc_proto::RPC>(&bytes) {
         Ok(msg) => msg,
         Err(err) => {
-            debug!(target: "libp2p-floodsub", "Failed to parse protobuf message ; err = {:?}", err);
+            debug!("Failed to parse protobuf message ; err = {:?}", err);
             return Err(err.into());
         }
     };
@@ -567,12 +564,9 @@ fn handle_packet_received(
             let topic = TopicHash::from_raw(subscription.take_topicid());
             let subscribe = subscription.get_subscribe();
             if subscribe {
-                trace!(target: "libp2p-floodsub", "Remote {} subscribed to {:?}",
-                       remote_addr, topic);
-                topics.insert(topic);
+                trace!("Remote {} subscribed to {:?}", remote_addr, topic); topics.insert(topic);
             } else {
-                trace!(target: "libp2p-floodsub", "Remote {} unsubscribed from {:?}",
-                       remote_addr, topic);
+                trace!("Remote {} unsubscribed from {:?}", remote_addr, topic);
                 topics.remove(&topic);
             }
         }
@@ -589,8 +583,7 @@ fn handle_packet_received(
             .lock()
             .insert(hash((from.clone(), publish.take_seqno())))
         {
-            trace!(target: "libp2p-floodsub",
-                   "Skipping message because we had already received it ; payload = {} bytes",
+            trace!("Skipping message because we had already received it ; payload = {} bytes",
                    publish.get_data().len());
             continue;
         }
@@ -602,9 +595,9 @@ fn handle_packet_received(
             .map(|h| TopicHash::from_raw(h))
             .collect::<Vec<_>>();
 
-        trace!(target: "libp2p-floodsub",
-               "Processing message for topics {:?} ; payload = {} bytes",
-               topics, publish.get_data().len());
+        trace!("Processing message for topics {:?} ; payload = {} bytes",
+               topics,
+               publish.get_data().len());
 
         // TODO: should check encryption/authentication of the message
 
@@ -617,8 +610,7 @@ fn handle_packet_received(
                     continue;
                 }
                 // TODO: don't send back to the remote that just sent it
-                trace!(target: "libp2p-floodsub",
-                                               "Broadcasting received message to {}", addr);
+                trace!("Broadcasting received message to {}", addr);
                 let _ = info.sender.unbounded_send(bytes.clone());
             }
         }
@@ -632,15 +624,14 @@ fn handle_packet_received(
         };
         if dispatch_locally {
             // Ignore if channel is closed.
-            trace!(target: "libp2p-floodsub", "Dispatching message locally");
+            trace!("Dispatching message locally");
             let _ = inner.output_tx.unbounded_send(Message {
                 source: from,
                 data: publish.take_data(),
                 topics: topics,
             });
         } else {
-            trace!(target: "libp2p-floodsub",
-                   "Message not dispatched locally as we are not subscribed to any of the topics");
+            trace!("Message not dispatched locally as we are not subscribed to any of the topics");
         }
     }
 

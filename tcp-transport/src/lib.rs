@@ -111,7 +111,7 @@ impl Transport for TcpConfig {
                 Err(_) => addr,
             };
 
-            debug!(target: "libp2p-tcp-transport", "Now listening on {}", new_addr);
+            debug!("Now listening on {}", new_addr);
 
             let future = future::result(listener)
                 .map(|listener| {
@@ -119,7 +119,7 @@ impl Transport for TcpConfig {
                     listener.incoming().map(|(sock, addr)| {
                         let addr = addr.to_multiaddr()
                             .expect("generating a multiaddr from a socket addr never fails");
-                        debug!(target: "libp2p-tcp-transport", "Incoming connection from {}", addr);
+                        debug!("Incoming connection from {}", addr);
                         Ok((sock, addr)).into_future()
                     })
                 })
@@ -135,7 +135,7 @@ impl Transport for TcpConfig {
     /// or gives back the multiaddress.
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
         if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
-            debug!(target: "libp2p-tcp-transport", "Dialing {}", addr);
+            debug!("Dialing {}", addr);
             let fut = TcpStream::connect(&socket_addr, &self.event_loop).map(|t| (t, addr));
             Ok(Box::new(fut) as Box<_>)
         } else {

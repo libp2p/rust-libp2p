@@ -101,17 +101,14 @@ where
                     };
 
                     if peer.addrs().any(|addr| addr == client_addr) {
-                        debug!(target: "libp2p-identify", "Incoming substream from {} \
-                                                               identified as {:?}", client_addr,
-                                                               peer_id);
+                        debug!("Incoming substream from {} identified as {:?}", client_addr, peer_id);
                         let out = IdentifyTransportOutput { socket: connec, observed_addr: None };
                         let ret = (out, AddrComponent::P2P(peer_id.into_bytes()).into());
                         return future::Either::A(future::ok(ret));
                     }
                 }
 
-                debug!(target: "libp2p-identify", "Incoming connection from {}, dialing back \
-                                                       in order to identify", client_addr);
+                debug!("Incoming connection from {}, dialing back in order to identify", client_addr);
                 // Dial the address that connected to us and try upgrade with the
                 // identify protocol.
                 let future = identify_upgrade
@@ -143,14 +140,12 @@ where
                             ),
                         };
 
-                        debug!(target: "libp2p-identify", "Identified {} as {}", original_addr,
-                                                              real_addr);
+                        debug!("Identified {} as {}", original_addr, real_addr);
                         let out = IdentifyTransportOutput { socket: connec, observed_addr: Some(observed) };
                         Ok((out, real_addr))
                     })
                     .map_err(move |err| {
-                        warn!(target: "libp2p-identify", "Failed to identify incoming {}",
-                                                             client_addr);
+                        warn!("Failed to identify incoming {}", client_addr);
                         err
                     });
                 future::Either::B(future)
@@ -176,8 +171,7 @@ where
                     .collect::<Vec<_>>()
                     .into_iter();
 
-                trace!(target: "libp2p-identify", "Try dialing peer ID {:?} ; {} multiaddrs \
-                                                   loaded from peerstore", peer_id, addrs.len());
+                trace!("Try dialing peer ID {:?} ; {} multiaddrs loaded from peerstore", peer_id, addrs.len());
 
                 let transport = self.transport;
                 let future = stream::iter_ok(addrs)
@@ -186,8 +180,7 @@ where
                         match transport.clone().dial(addr) {
                             Ok(dial) => Some(dial),
                             Err((_, addr)) => {
-                                warn!(target: "libp2p-identify", "Address {} not supported by \
-                                                                  underlying transport", addr);
+                                warn!("Address {} not supported by underlying transport", addr);
                                 None
                             },
                         }
@@ -201,15 +194,12 @@ where
                     .and_then(move |(val, _)| {
                         match val {
                             Some((connec, inner_addr)) => {
-                                debug!(target: "libp2p-identify", "Successfully dialed peer {:?} \
-                                                                   through {}", peer_id,
-                                                                   inner_addr);
+                                debug!("Successfully dialed peer {:?} through {}", peer_id, inner_addr);
                                 let out = IdentifyTransportOutput { socket: connec, observed_addr: None };
                                 Ok((out, inner_addr))
                             },
                             None => {
-                                debug!(target: "libp2p-identify", "All multiaddresses failed when \
-                                                                   dialing peer {:?}", peer_id);
+                                debug!("All multiaddresses failed when dialing peer {:?}", peer_id);
                                 // TODO: wrong error
                                 Err(IoErrorKind::InvalidData.into())
                             },
@@ -227,7 +217,7 @@ where
                 let transport = self.transport;
                 let identify_upgrade = transport.clone().with_upgrade(IdentifyProtocolConfig);
 
-                trace!(target: "libp2p-identify", "Pass through when dialing {}", addr);
+                trace!("Pass through when dialing {}", addr);
 
                 // We dial a first time the node and upgrade it to identify.
                 let dial = match identify_upgrade.dial(addr) {
@@ -311,9 +301,7 @@ where
                     };
 
                     if peer.addrs().any(|addr| addr == client_addr) {
-                        debug!(target: "libp2p-identify", "Incoming substream from {} \
-                                                               identified as {:?}", client_addr,
-                                                               peer_id);
+                        debug!("Incoming substream from {} identified as {:?}", client_addr, peer_id);
                         let out = IdentifyTransportOutput { socket: connec, observed_addr: None };
                         let ret = (out, AddrComponent::P2P(peer_id.into_bytes()).into());
                         return future::Either::A(future::ok(ret));
