@@ -94,14 +94,14 @@ where
             }
         };
 
-        debug!(target: "libp2p-websocket", "Listening on {}", new_addr);
+        debug!("Listening on {}", new_addr);
 
         let listen = inner_listen.map::<_, fn(_) -> _>(|stream| {
             // Upgrade the listener to websockets like the websockets library requires us to do.
             let upgraded = stream.and_then(|(stream, mut client_addr)| {
                 // Need to suffix `/ws` to each client address.
                 client_addr.append(AddrComponent::WS);
-                debug!(target: "libp2p-websocket", "Incoming connection from {}", client_addr);
+                debug!("Incoming connection from {}", client_addr);
 
                 stream
                     .into_ws()
@@ -112,8 +112,7 @@ where
                             .accept()
                             .map_err(|err| IoError::new(IoErrorKind::Other, err))
                             .map(|(client, _http_headers)| {
-                                debug!(target: "libp2p-websocket", "Upgraded incoming connection \
-                                                                    to websockets");
+                                debug!("Upgraded incoming connection to websockets");
 
                                 // Plug our own API on top of the `websockets` API.
                                 let framed_data = client
@@ -156,22 +155,22 @@ where
             Some(AddrComponent::WS) => false,
             Some(AddrComponent::WSS) => true,
             _ => {
-                trace!(target: "libp2p-websocket", "Ignoring dial attempt for {} because it is \
-                                                    not a websocket multiaddr", original_addr);
+                trace!("Ignoring dial attempt for {} because it is not a websocket multiaddr",
+                       original_addr);
                 return Err((self, original_addr));
             }
         };
 
-        debug!(target: "libp2p-websocket", "Dialing {} through inner transport", inner_addr);
+        debug!("Dialing {} through inner transport", inner_addr);
 
         let ws_addr = client_addr_to_ws(&inner_addr, is_wss);
 
         let inner_dial = match self.transport.dial(inner_addr) {
             Ok(d) => d,
             Err((transport, old_addr)) => {
-                warn!(target: "libp2p-websocket", "Failed to dial {} because {} is not supported \
-                                                   by the underlying transport", original_addr,
-                                                   old_addr);
+                warn!("Failed to dial {} because {} is not supported by the underlying transport",
+                      original_addr,
+                      old_addr);
                 return Err((
                     WsConfig {
                         transport: transport,
@@ -189,8 +188,7 @@ where
                     .async_connect_on(connec)
                     .map_err(|err| IoError::new(IoErrorKind::Other, err))
                     .map(|(client, _)| {
-                        debug!(target: "libp2p-websocket", "Upgraded outgoing connection to \
-                                                            websockets");
+                        debug!("Upgraded outgoing connection to websockets");
 
                         // Plug our own API on top of the API of the websockets library.
                         let framed_data = client

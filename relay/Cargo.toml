@@ -1,5 +1,5 @@
 [package]
-name = "libp2p-identify"
+name = "libp2p-relay"
 version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 
@@ -8,12 +8,9 @@ bytes = "0.4"
 futures = "0.1"
 libp2p-peerstore = { path = "../peerstore" }
 libp2p-core = { path = "../core" }
-log = "0.4.1"
+log = "0.4"
 multiaddr = "0.3.0"
 protobuf = "=1.5.1"
-tokio-io = "0.1.0"
+rand = "0.4"
+tokio-io = "0.1"
 varint = { path = "../varint-rs" }
-
-[dev-dependencies]
-libp2p-tcp-transport = { path = "../tcp-transport" }
-tokio-core = "0.1.0"
