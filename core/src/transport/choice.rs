@@ -59,12 +59,12 @@ where
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
         let (first, addr) = match self.0.dial(addr) {
-            Ok(connec) => return Ok(EitherListenUpgrade::First(connec.into_future())),
+            Ok(connec) => return Ok(EitherListenUpgrade::First(connec)),
             Err(err) => err,
         };
 
         match self.1.dial(addr) {
-            Ok(connec) => Ok(EitherListenUpgrade::Second(connec.into_future())),
+            Ok(connec) => Ok(EitherListenUpgrade::Second(connec)),
             Err((second, addr)) => Err((OrTransport(first, second), addr)),
         }
     }

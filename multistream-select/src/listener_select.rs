@@ -68,7 +68,7 @@ where
                         let msg = ListenerToDialerMessage::ProtocolsListResponse {
                             list: protocols.map(|(p, _, _)| p).collect(),
                         };
-                        trace!(target: "multistream-select", "protocols list response: {:?}", msg);
+                        trace!("protocols list response: {:?}", msg);
                         let fut = listener
                             .send(msg)
                             .from_err()
@@ -86,10 +86,7 @@ where
                                 break;
                             }
                         }
-                        trace!(target: "multistream-select",
-                               "requested: {:?}, response: {:?}",
-                               name,
-                               send_back);
+                        trace!("requested: {:?}, response: {:?}", name, send_back);
                         let fut = listener
                             .send(send_back)
                             .from_err()
@@ -97,7 +94,7 @@ where
                         Box::new(fut) as Box<Future<Item = _, Error = ProtocolChoiceError>>
                     }
                     None => {
-                        debug!(target: "multistream-select", "no protocol request received");
+                        debug!("no protocol request received");
                         Box::new(err(ProtocolChoiceError::NoProtocolFound)) as Box<_>
                     }
                 })
