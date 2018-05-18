@@ -73,11 +73,13 @@ extern crate futures;
 extern crate multiaddr;
 extern crate multihash;
 extern crate owning_ref;
+#[macro_use]
+extern crate quick_error;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 
-use std::fmt;
+use std::{fmt, str::FromStr};
 
 pub use self::peerstore::{PeerAccess, Peerstore};
 
@@ -102,7 +104,7 @@ pub struct PeerId {
 
 impl fmt::Debug for PeerId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "PeerId({})", bs58::encode(&self.multihash).into_string())
+        write!(f, "PeerId({})", self.to_base58())
     }
 }
 
@@ -137,6 +139,12 @@ impl PeerId {
         &self.multihash
     }
 
+    /// Returns a base-58 encoded string of this `PeerId`.
+    #[inline]
+    pub fn to_base58(&self) -> String {
+        bs58::encode(&self.multihash).into_string()
+    }
+
     /// Returns the raw bytes of the hash of this `PeerId`.
     #[inline]
     pub fn hash(&self) -> &[u8] {
@@ -160,3 +168,28 @@ impl PeerId {
         }
     }
 }
+
+quick_error! {
+    #[derive(Debug)]
+    pub enum ParseError {
+        B58(e: bs58::decode::DecodeError) {
+            display("base-58 decode error: {}", e)
+            cause(e)
+            from()
+        }
+        MultiHash {
+            display("decoding multihash failed")
+        }
+    }
+}
+
+impl FromStr for PeerId {
+    type Err = ParseError;
+
+    #[inline]
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let bytes = bs58::decode(s).into_vec()?;
+        PeerId::from_bytes(bytes).map_err(|_| ParseError::MultiHash)
+    }
+}
+
