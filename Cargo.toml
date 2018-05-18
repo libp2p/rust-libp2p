@@ -7,6 +7,7 @@ members = [
     "floodsub",
     "identify",
     "kad",
+    "libp2p",
     "mplex",
     "multistream-select",
     "peerstore",
@@ -18,7 +19,7 @@ members = [
     "core",
     "tcp-transport",
     "varint-rs",
-    "websocket"
+    "websocket",
 ]
 
 [patch.crates-io]
