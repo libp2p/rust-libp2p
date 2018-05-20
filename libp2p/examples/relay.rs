@@ -49,26 +49,22 @@
 extern crate bytes;
 extern crate env_logger;
 extern crate futures;
-extern crate libp2p_mplex as multiplex;
-extern crate libp2p_peerstore as peerstore;
-extern crate libp2p_relay as relay;
-extern crate libp2p_core as core;
-extern crate libp2p_tcp_transport as tcp;
+extern crate libp2p;
 extern crate rand;
 #[macro_use]
 extern crate structopt;
 extern crate tokio_core;
 extern crate tokio_io;
 
-use core::Multiaddr;
-use core::transport::Transport;
-use core::upgrade::{self, SimpleProtocol};
+use libp2p::core::Multiaddr;
+use libp2p::core::transport::Transport;
+use libp2p::core::upgrade::{self, SimpleProtocol};
 use futures::{future::{self, Either, Loop, loop_fn}, prelude::*};
-use peerstore::{PeerAccess, PeerId, Peerstore, memory_peerstore::MemoryPeerstore};
-use relay::{RelayConfig, RelayTransport};
+use libp2p::peerstore::{PeerAccess, PeerId, Peerstore, memory_peerstore::MemoryPeerstore};
+use libp2p::relay::{RelayConfig, RelayTransport};
 use std::{error::Error, iter, str::FromStr, sync::Arc, time::Duration};
 use structopt::StructOpt;
-use tcp::TcpConfig;
+use libp2p::tcp::TcpConfig;
 use tokio_core::reactor::Core;
 use tokio_io::{AsyncRead, codec::BytesCodec};
 
@@ -135,7 +131,7 @@ fn run_dialer(opts: DialerOpts) -> Result<(), Box<Error>> {
         RelayTransport::new(opts.me, tcp, store, iter::once(opts.relay)).with_dummy_muxing()
     };
 
-    let (control, future) = core::swarm(transport.clone(), |_, _| {
+    let (control, future) = libp2p::core::swarm(transport.clone(), |_, _| {
         future::ok(())
     });
 
@@ -176,16 +172,16 @@ fn run_listener(opts: ListenerOpts) -> Result<(), Box<Error>> {
     let upgraded = transport.with_upgrade(relay)
         .and_then(|out, endpoint, addr| {
             match out {
-                relay::Output::Sealed(future) => {
+                libp2p::relay::Output::Sealed(future) => {
                     Either::A(future.map(Either::A))
                 }
-                relay::Output::Stream(socket) => {
+                libp2p::relay::Output::Stream(socket) => {
                     Either::B(upgrade::apply(socket, echo, endpoint, addr).map(Either::B))
                 }
             }
         });
 
-    let (control, future) = core::swarm(upgraded, |out, _| {
+    let (control, future) = libp2p::core::swarm(upgraded, |out, _| {
         match out {
             Either::A(()) => Either::A(future::ok(())),
             Either::B((socket, _)) => Either::B(loop_fn(socket, move |socket| {
