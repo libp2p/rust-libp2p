@@ -14,6 +14,8 @@ libp2p-kad = { path = "../kad" }
 libp2p-floodsub = { path = "../floodsub" }
 libp2p-peerstore = { path = "../peerstore" }
 libp2p-ping = { path = "../ping" }
+libp2p-ratelimit = { path = "../ratelimit" }
+libp2p-relay = { path = "../relay" }
 #libp2p-secio = { path = "../secio" }
 libp2p-core = { path = "../core" }
 libp2p-tcp-transport = { path = "../tcp-transport" }
