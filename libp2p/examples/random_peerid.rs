@@ -18,10 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-extern crate libp2p_peerstore;
+extern crate libp2p;
 extern crate rand;
 
-use libp2p_peerstore::PeerId;
+use libp2p::peerstore::PeerId;
 
 fn main() {
     let pid = {

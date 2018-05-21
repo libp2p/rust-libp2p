@@ -21,27 +21,21 @@
 extern crate bigint;
 extern crate bytes;
 extern crate env_logger;
-extern crate example;
 extern crate futures;
-extern crate libp2p_identify as identify;
-extern crate libp2p_kad as kad;
-extern crate libp2p_mplex as multiplex;
-extern crate libp2p_peerstore as peerstore;
-extern crate libp2p_secio as secio;
-extern crate libp2p_core as swarm;
-extern crate libp2p_tcp_transport as tcp;
+extern crate libp2p;
 extern crate tokio_core;
 extern crate tokio_io;
 
 use bigint::U512;
 use futures::future::Future;
-use peerstore::PeerId;
+use libp2p::peerstore::{PeerAccess, PeerId, Peerstore};
+use libp2p::Multiaddr;
 use std::env;
 use std::sync::Arc;
 use std::time::Duration;
-use swarm::Transport;
-use swarm::upgrade;
-use tcp::TcpConfig;
+use libp2p::core::Transport;
+use libp2p::core::upgrade;
+use libp2p::tcp::TcpConfig;
 use tokio_core::reactor::Core;
 
 fn main() {
@@ -59,8 +53,8 @@ fn main() {
     // We start by building the tokio engine that will run all the sockets.
     let mut core = Core::new().unwrap();
 
-    let peer_store = Arc::new(peerstore::memory_peerstore::MemoryPeerstore::empty());
-    example::ipfs_bootstrap(&*peer_store);
+    let peer_store = Arc::new(libp2p::peerstore::memory_peerstore::MemoryPeerstore::empty());
+    ipfs_bootstrap(&*peer_store);
 
     // Now let's build the transport stack.
     // We create a `TcpConfig` that indicates that we want TCP/IP.
@@ -74,8 +68,8 @@ fn main() {
             let secio = {
                 let private_key = include_bytes!("test-private-key.pk8");
                 let public_key = include_bytes!("test-public-key.der").to_vec();
-                secio::SecioConfig {
-                    key: secio::SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap(),
+                libp2p::secio::SecioConfig {
+                    key: libp2p::secio::SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap(),
                 }
             };
 
@@ -83,14 +77,14 @@ fn main() {
         })
 
         // On top of plaintext or secio, we will use the multiplex protocol.
-        .with_upgrade(multiplex::MultiplexConfig::new())
+        .with_upgrade(libp2p::mplex::MultiplexConfig::new())
         // The object returned by the call to `with_upgrade(MultiplexConfig::new())` can't be used as a
         // `Transport` because the output of the upgrade is not a stream but a controller for
         // muxing. We have to explicitly call `into_connection_reuse()` in order to turn this into
         // a `Transport`.
         .into_connection_reuse();
-        
-    let transport = identify::IdentifyTransport::new(transport, peer_store.clone())
+
+    let transport = libp2p::identify::IdentifyTransport::new(transport, peer_store.clone())
         .map(|id_out, _, _| {
             id_out.socket
         });
@@ -104,7 +98,7 @@ fn main() {
 
     // Let's put this `transport` into a Kademlia *swarm*. The swarm will handle all the incoming
     // and outgoing connections for us.
-    let kad_config = kad::KademliaConfig {
+    let kad_config = libp2p::kad::KademliaConfig {
         parallelism: 3,
         record_store: (),
         peer_store: peer_store,
@@ -112,13 +106,13 @@ fn main() {
         timeout: Duration::from_secs(2),
     };
 
-    let kad_ctl_proto = kad::KademliaControllerPrototype::new(kad_config);
+    let kad_ctl_proto = libp2p::kad::KademliaControllerPrototype::new(kad_config);
 
-    let proto = kad::KademliaUpgrade::from_prototype(&kad_ctl_proto);
+    let proto = libp2p::kad::KademliaUpgrade::from_prototype(&kad_ctl_proto);
 
     // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming and
     // outgoing connections for us.
-    let (swarm_controller, swarm_future) = swarm::swarm(
+    let (swarm_controller, swarm_future) = libp2p::core::swarm(
         transport.clone().with_upgrade(proto.clone()),
         |upgrade, _| upgrade,
     );
@@ -155,4 +149,36 @@ fn main() {
             .map(|(n, _)| n)
             .map_err(|(err, _)| err),
     ).unwrap();
+}
+
+/// Stores initial addresses on the given peer store. Uses a very large timeout.
+pub fn ipfs_bootstrap<P>(peer_store: P)
+where
+    P: Peerstore + Clone,
+{
+    const ADDRESSES: &[&str] = &[
+        "/ip4/127.0.0.1/tcp/4001/ipfs/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
+        // TODO: add some bootstrap nodes here
+    ];
+
+    let ttl = Duration::from_secs(100 * 365 * 24 * 3600);
+
+    for address in ADDRESSES.iter() {
+        let mut multiaddr = address
+            .parse::<Multiaddr>()
+            .expect("failed to parse hard-coded multiaddr");
+
+        let ipfs_component = multiaddr.pop().expect("hard-coded multiaddr is empty");
+        let peer = match ipfs_component {
+            libp2p::multiaddr::AddrComponent::IPFS(key) => {
+                PeerId::from_bytes(key).expect("invalid peer id")
+            }
+            _ => panic!("hard-coded multiaddr didn't end with /ipfs/"),
+        };
+
+        peer_store
+            .clone()
+            .peer_or_create(&peer)
+            .add_addr(multiaddr, ttl.clone());
+    }
 }

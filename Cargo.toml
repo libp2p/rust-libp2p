@@ -3,7 +3,6 @@ members = [
     "circular-buffer",
     "datastore",
     "dns",
-    "example",
     "floodsub",
     "identify",
     "kad",

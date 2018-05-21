@@ -64,9 +64,9 @@ jobs:
       - restore_cache:
           key: integration-test-cache
       - run:
-          command: cargo run -p example --example ping-client -- /ip4/127.0.0.1/tcp/4001
+          command: cargo run -p libp2p --example ping-client -- /ip4/127.0.0.1/tcp/4001
       - run:
-          command: cargo run -p example --example echo-dialer -- /ip4/127.0.0.1/tcp/10333
+          command: cargo run -p libp2p --example echo-dialer -- /ip4/127.0.0.1/tcp/10333
       - save_cache:
           key: integration-test-cache
           paths:

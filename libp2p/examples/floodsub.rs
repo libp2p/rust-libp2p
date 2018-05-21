@@ -21,13 +21,7 @@
 extern crate bytes;
 extern crate env_logger;
 extern crate futures;
-extern crate libp2p_floodsub as floodsub;
-extern crate libp2p_mplex as multiplex;
-extern crate libp2p_peerstore as peerstore;
-extern crate libp2p_secio as secio;
-extern crate libp2p_core as swarm;
-extern crate libp2p_tcp_transport as tcp;
-extern crate libp2p_websocket as websocket;
+extern crate libp2p;
 extern crate rand;
 extern crate tokio_core;
 extern crate tokio_io;
@@ -35,13 +29,13 @@ extern crate tokio_stdin;
 
 use futures::Stream;
 use futures::future::Future;
-use peerstore::PeerId;
 use std::{env, mem};
-use swarm::upgrade;
-use swarm::{Multiaddr, Transport};
-use tcp::TcpConfig;
+use libp2p::core::upgrade;
+use libp2p::core::{Multiaddr, Transport};
+use libp2p::peerstore::PeerId;
+use libp2p::tcp::TcpConfig;
 use tokio_core::reactor::Core;
-use websocket::WsConfig;
+use libp2p::websocket::WsConfig;
 
 fn main() {
     env_logger::init();
@@ -70,8 +64,8 @@ fn main() {
             let secio = {
                 let private_key = include_bytes!("test-private-key.pk8");
                 let public_key = include_bytes!("test-public-key.der").to_vec();
-                secio::SecioConfig {
-                    key: secio::SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap(),
+                libp2p::secio::SecioConfig {
+                    key: libp2p::secio::SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap(),
                 }
             };
 
@@ -79,7 +73,7 @@ fn main() {
         })
 
         // On top of plaintext or secio, we will use the multiplex protocol.
-        .with_upgrade(multiplex::MultiplexConfig::new())
+        .with_upgrade(libp2p::mplex::MultiplexConfig::new())
         // The object returned by the call to `with_upgrade(MultiplexConfig::new())` can't be used as a
         // `Transport` because the output of the upgrade is not a stream but a controller for
         // muxing. We have to explicitly call `into_connection_reuse()` in order to turn this into
@@ -97,11 +91,11 @@ fn main() {
         PeerId::from_public_key(&key)
     };
 
-    let (floodsub_upgrade, floodsub_rx) = floodsub::FloodSubUpgrade::new(my_id);
+    let (floodsub_upgrade, floodsub_rx) = libp2p::floodsub::FloodSubUpgrade::new(my_id);
 
     // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming and
     // outgoing connections for us.
-    let (swarm_controller, swarm_future) = swarm::swarm(
+    let (swarm_controller, swarm_future) = libp2p::core::swarm(
         transport.clone().with_upgrade(floodsub_upgrade.clone()),
         |socket, client_addr| {
             println!("Successfully negotiated protocol with {}", client_addr);
@@ -114,9 +108,9 @@ fn main() {
         .expect("unsupported multiaddr");
     println!("Now listening on {:?}", address);
 
-    let topic = floodsub::TopicBuilder::new("chat").build();
+    let topic = libp2p::floodsub::TopicBuilder::new("chat").build();
 
-    let floodsub_ctl = floodsub::FloodSubController::new(&floodsub_upgrade);
+    let floodsub_ctl = libp2p::floodsub::FloodSubController::new(&floodsub_upgrade);
     floodsub_ctl.subscribe(&topic);
 
     let floodsub_rx = floodsub_rx.for_each(|msg| {

@@ -16,8 +16,17 @@ libp2p-peerstore = { path = "../peerstore" }
 libp2p-ping = { path = "../ping" }
 libp2p-ratelimit = { path = "../ratelimit" }
 libp2p-relay = { path = "../relay" }
-#libp2p-secio = { path = "../secio" }
+libp2p-secio = { path = "../secio" }
 libp2p-core = { path = "../core" }
 libp2p-tcp-transport = { path = "../tcp-transport" }
 libp2p-websocket = { path = "../websocket" }
 tokio-core = "0.1"
+
+[dev-dependencies]
+bigint = "4.2"
+env_logger = "0.5.4"
+rand = "0.4"
+structopt =  "0.2"
+tokio-core = "0.1"
+tokio-io = "0.1"
+tokio-stdin = "0.1"

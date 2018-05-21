@@ -21,32 +21,28 @@
 extern crate bytes;
 extern crate env_logger;
 extern crate futures;
-extern crate libp2p_mplex as multiplex;
-extern crate libp2p_secio as secio;
-extern crate libp2p_core as swarm;
-extern crate libp2p_tcp_transport as tcp;
-extern crate libp2p_websocket as websocket;
+extern crate libp2p;
 extern crate tokio_core;
 extern crate tokio_io;
 
-use futures::sync::oneshot;
-use futures::{Future, Sink, Stream};
+use futures::future::{loop_fn, Future, IntoFuture, Loop};
+use futures::{Sink, Stream};
 use std::env;
-use swarm::Transport;
-use swarm::upgrade::{self, DeniedConnectionUpgrade, SimpleProtocol};
-use tcp::TcpConfig;
+use libp2p::core::Transport;
+use libp2p::core::upgrade::{self, SimpleProtocol};
+use libp2p::tcp::TcpConfig;
 use tokio_core::reactor::Core;
 use tokio_io::AsyncRead;
 use tokio_io::codec::BytesCodec;
-use websocket::WsConfig;
+use libp2p::websocket::WsConfig;
 
 fn main() {
     env_logger::init();
 
-    // Determine which address to dial.
-    let target_addr = env::args()
+    // Determine which address to listen to.
+    let listen_addr = env::args()
         .nth(1)
-        .unwrap_or("/ip4/127.0.0.1/tcp/10333".to_owned());
+        .unwrap_or("/ip4/0.0.0.0/tcp/10333".to_owned());
 
     // We start by building the tokio engine that will run all the sockets.
     let mut core = Core::new().unwrap();
@@ -54,7 +50,6 @@ fn main() {
     // Now let's build the transport stack.
     // We start by creating a `TcpConfig` that indicates that we want TCP/IP.
     let transport = TcpConfig::new(core.handle())
-
         // In addition to TCP/IP, we also want to support the Websockets protocol on top of TCP/IP.
         // The parameter passed to `WsConfig::new()` must be an implementation of `Transport` to be
         // used for the underlying multiaddress.
@@ -68,8 +63,8 @@ fn main() {
             let secio = {
                 let private_key = include_bytes!("test-private-key.pk8");
                 let public_key = include_bytes!("test-public-key.der").to_vec();
-                secio::SecioConfig {
-                    key: secio::SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap(),
+                libp2p::secio::SecioConfig {
+                    key: libp2p::secio::SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap(),
                 }
             };
 
@@ -77,25 +72,19 @@ fn main() {
         })
 
         // On top of plaintext or secio, we will use the multiplex protocol.
-        .with_upgrade(multiplex::MultiplexConfig::new())
+        .with_upgrade(libp2p::mplex::MultiplexConfig::new())
         // The object returned by the call to `with_upgrade(MultiplexConfig::new())` can't be used as a
         // `Transport` because the output of the upgrade is not a stream but a controller for
         // muxing. We have to explicitly call `into_connection_reuse()` in order to turn this into
         // a `Transport`.
         .into_connection_reuse();
 
-    // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming
-    // connections for us. The second parameter we pass is the connection upgrade that is accepted
-    // by the listening part. We don't want to accept anything, so we pass a dummy object that
-    // represents a connection that is always denied.
-    let (swarm_controller, swarm_future) = swarm::swarm(
-        transport.clone().with_upgrade(DeniedConnectionUpgrade),
-        |_socket, _client_addr| -> Result<(), _> {
-            unreachable!("All incoming connections should have been denied")
-        },
-    );
+    // We now have a `transport` variable that can be used either to dial nodes or listen to
+    // incoming connections, and that will automatically apply secio and multiplex on top
+    // of any opened stream.
 
-    // Building a struct that represents the protocol that we are going to use for dialing.
+    // We now prepare the protocol that we are going to negotiate with nodes that open a connection
+    // or substream to our server.
     let proto = SimpleProtocol::new("/echo/1.0.0", |socket| {
         // This closure is called whenever a stream using the "echo" protocol has been
         // successfully negotiated. The parameter is the raw socket (implements the AsyncRead
@@ -104,39 +93,55 @@ fn main() {
         Ok(AsyncRead::framed(socket, BytesCodec::new()))
     });
 
-    // We now use the controller to dial to the address.
-    let (finished_tx, finished_rx) = oneshot::channel();
-    swarm_controller
-        .dial_custom_handler(target_addr.parse().expect("invalid multiaddr"), transport.with_upgrade(proto), |echo, _| {
-            // `echo` is what the closure used when initializing `proto` returns.
-            // Consequently, please note that the `send` method is available only because the type
-            // `length_delimited::Framed` has a `send` method.
-            println!("Sending \"hello world\" to listener");
-            echo.send("hello world".into())
-                // Then listening for one message from the remote.
-                .and_then(|echo| {
-                    echo.into_future().map_err(|(e, _)| e).map(|(n,_ )| n)
-                })
-                .and_then(|message| {
-                    println!("Received message from listener: {:?}", message.unwrap());
-                    finished_tx.send(()).unwrap();
-                    Ok(())
-                })
-        })
+    // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming and
+    // outgoing connections for us.
+    let (swarm_controller, swarm_future) = libp2p::core::swarm(
+        transport.clone().with_upgrade(proto),
+        |socket, client_addr| {
+            println!("Successfully negotiated protocol with {}", client_addr);
+
+            // The type of `socket` is exactly what the closure of `SimpleProtocol` returns.
+
+            // We loop forever in order to handle all the messages sent by the client.
+            loop_fn(socket, move |socket| {
+                let client_addr = client_addr.clone();
+                socket
+                    .into_future()
+                    .map_err(|(e, _)| e)
+                    .and_then(move |(msg, rest)| {
+                        if let Some(msg) = msg {
+                            // One message has been received. We send it back to the client.
+                            println!(
+                                "Received a message from {}: {:?}\n => Sending back \
+                                 identical message to remote",
+                                client_addr, msg
+                            );
+                            Box::new(rest.send(msg.freeze()).map(|m| Loop::Continue(m)))
+                                as Box<Future<Item = _, Error = _>>
+                        } else {
+                            // End of stream. Connection closed. Breaking the loop.
+                            println!("Received EOF from {}\n => Dropping connection", client_addr);
+                            Box::new(Ok(Loop::Break(())).into_future())
+                                as Box<Future<Item = _, Error = _>>
+                        }
+                    })
+            })
+        },
+    );
+
+    // We now use the controller to listen on the address.
+    let address = swarm_controller
+        .listen_on(listen_addr.parse().expect("invalid multiaddr"))
         // If the multiaddr protocol exists but is not supported, then we get an error containing
         // the original multiaddress.
         .expect("unsupported multiaddr");
-
     // The address we actually listen on can be different from the address that was passed to
     // the `listen_on` function. For example if you pass `/ip4/0.0.0.0/tcp/0`, then the port `0`
     // will be replaced with the actual port.
+    println!("Now listening on {:?}", address);
 
     // `swarm_future` is a future that contains all the behaviour that we want, but nothing has
     // actually started yet. Because we created the `TcpConfig` with tokio, we need to run the
     // future through the tokio core.
-    let final_future = swarm_future
-        .select(finished_rx.map_err(|_| unreachable!()))
-        .map(|_| ())
-        .map_err(|(err, _)| err);
-    core.run(final_future).unwrap();
+    core.run(swarm_future).unwrap();
 }
