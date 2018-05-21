@@ -29,7 +29,7 @@ use futures::sink::Sink;
 use futures::stream::Stream;
 use keys_proto::{KeyType as KeyTypeProtobuf, PublicKey as PublicKeyProtobuf};
 use protobuf::Message as ProtobufMessage;
-use protobuf::core::parse_from_bytes as protobuf_parse_from_bytes;
+use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
 use ring::agreement::EphemeralPrivateKey;
 use ring::hmac::{SigningContext, SigningKey, VerificationKey};
 use ring::rand::SecureRandom;
