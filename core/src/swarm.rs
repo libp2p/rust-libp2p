@@ -268,16 +268,19 @@ where
             Ok(Async::NotReady) => {}
         };
 
-        match self.listeners.poll() {
-            Ok(Async::Ready(Some((Some(upgrade), remaining)))) => {
-                trace!("Swarm received new connection on listener socket");
-                self.listeners_upgrade.push(upgrade);
-                self.listeners.push(remaining.into_future());
+        loop {
+            match self.listeners.poll() {
+                Ok(Async::Ready(Some((Some(upgrade), remaining)))) => {
+                    trace!("Swarm received new connection on listener socket");
+                    self.listeners_upgrade.push(upgrade);
+                    self.listeners.push(remaining.into_future());
+                }
+                Err((err, _)) => {
+                    warn!("Error in listener: {:?}", err);
+                    break
+                }
+                _ => break
             }
-            Err((err, _)) => {
-                warn!("Error in listener: {:?}", err);
-            }
-            _ => {}
         }
 
         match self.listeners_upgrade.poll() {
