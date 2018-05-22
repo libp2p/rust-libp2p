@@ -113,7 +113,7 @@ where
     /// upgraded using the `upgrade`, and the output is sent to the handler that was passed when
     /// calling `swarm`.
     // TODO: consider returning a future so that errors can be processed?
-    pub fn dial_to_handler<Du>(&self, multiaddr: Multiaddr, transport: Du) -> Result<(), Multiaddr>
+    pub fn dial<Du>(&self, multiaddr: Multiaddr, transport: Du) -> Result<(), Multiaddr>
     where
         Du: Transport + 'static, // TODO: 'static :-/
         Du::Output: Into<T::Output>,
@@ -128,37 +128,6 @@ where
                 // Ignoring errors if the receiver has been closed, because in that situation
                 // nothing is going to be processed anyway.
                 let _ = self.new_dialers.unbounded_send(dial);
-                Ok(())
-            }
-            Err((_, multiaddr)) => Err(multiaddr),
-        }
-    }
-
-    /// Asks the swarm to dial the node with the given multiaddress. The connection is then
-    /// upgraded using the `upgrade`, and the output is then passed to `and_then`.
-    ///
-    /// Contrary to `dial_to_handler`, the output of the upgrade is not given to the handler that
-    /// was passed at initialization.
-    // TODO: consider returning a future so that errors can be processed?
-    pub fn dial_custom_handler<Du, Df, Dfu>(
-        &self,
-        multiaddr: Multiaddr,
-        transport: Du,
-        and_then: Df,
-    ) -> Result<(), Multiaddr>
-    where
-        Du: Transport + 'static,                               // TODO: 'static :-/
-        Df: FnOnce(Du::Output, Multiaddr) -> Dfu + 'static,    // TODO: 'static :-/
-        Dfu: IntoFuture<Item = (), Error = IoError> + 'static, // TODO: 'static :-/
-    {
-        trace!("Swarm dialing {} with custom handler", multiaddr);
-
-        match transport.dial(multiaddr) {
-            Ok(dial) => {
-                let dial = Box::new(dial.and_then(|(d, m)| and_then(d, m))) as Box<_>;
-                // Ignoring errors if the receiver has been closed, because in that situation
-                // nothing is going to be processed anyway.
-                let _ = self.new_toprocess.unbounded_send(dial);
                 Ok(())
             }
             Err((_, multiaddr)) => Err(multiaddr),
