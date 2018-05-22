@@ -121,7 +121,7 @@ fn main() {
 
     // We now use the controller to dial to the address.
     swarm_controller
-        .dial_to_handler(target_addr.parse().expect("invalid multiaddr"), transport.with_upgrade(proto))
+        .dial(target_addr.parse().expect("invalid multiaddr"), transport.with_upgrade(proto))
         // If the multiaddr protocol exists but is not supported, then we get an error containing
         // the original multiaddress.
         .expect("unsupported multiaddr");

@@ -147,7 +147,7 @@ fn run_dialer(opts: DialerOpts) -> Result<(), Box<Error>> {
 
     let address = format!("/p2p-circuit/p2p/{}", opts.dest.to_base58()).parse()?;
 
-    control.dial_to_handler(address, transport.with_upgrade(echo)).map_err(|_| "failed to dial")?;
+    control.dial(address, transport.with_upgrade(echo)).map_err(|_| "failed to dial")?;
 
     core.run(future).map_err(From::from)
 }
