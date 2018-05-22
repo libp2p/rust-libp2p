@@ -4,8 +4,8 @@ version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 
 [dependencies]
-num-bigint = { version = "0.1.40", default-features = false }
-num-traits = "0.1.40"
+num-bigint = { version = "0.1.41", default-features = false }
+num-traits = "0.2"
 bytes = "0.4.5"
 tokio-io = "0.1"
 futures = "0.1"
