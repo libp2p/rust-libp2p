@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::Bytes;
-use either::EitherSocket;
+use either::EitherOutput;
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::io::Error as IoError;
@@ -56,7 +56,7 @@ where
         }
     }
 
-    type Output = EitherSocket<A::Output, B::Output>;
+    type Output = EitherOutput<A::Output, B::Output>;
     type Future = EitherConnUpgrFuture<A::Future, B::Future>;
 
     #[inline]
@@ -87,7 +87,7 @@ pub enum EitherUpgradeIdentifier<A, B> {
 
 /// Implements `Future` and redirects calls to either `First` or `Second`.
 ///
-/// Additionally, the output will be wrapped inside a `EitherSocket`.
+/// Additionally, the output will be wrapped inside a `EitherOutput`.
 ///
 // TODO: This type is needed because of the lack of `impl Trait` in stable Rust.
 //         If Rust had impl Trait we could use the Either enum from the futures crate and add some
@@ -103,7 +103,7 @@ where
     A: Future<Error = IoError>,
     B: Future<Error = IoError>,
 {
-    type Item = EitherSocket<A::Item, B::Item>;
+    type Item = EitherOutput<A::Item, B::Item>;
     type Error = IoError;
 
     #[inline]
@@ -111,11 +111,11 @@ where
         match self {
             &mut EitherConnUpgrFuture::First(ref mut a) => {
                 let item = try_ready!(a.poll());
-                Ok(Async::Ready(EitherSocket::First(item)))
+                Ok(Async::Ready(EitherOutput::First(item)))
             }
             &mut EitherConnUpgrFuture::Second(ref mut b) => {
                 let item = try_ready!(b.poll());
-                Ok(Async::Ready(EitherSocket::Second(item)))
+                Ok(Async::Ready(EitherOutput::Second(item)))
             }
         }
     }

@@ -27,12 +27,12 @@ use tokio_io::{AsyncRead, AsyncWrite};
 /// Implements `AsyncRead` and `AsyncWrite` and dispatches all method calls to
 /// either `First` or `Second`.
 #[derive(Debug, Copy, Clone)]
-pub enum EitherSocket<A, B> {
+pub enum EitherOutput<A, B> {
     First(A),
     Second(B),
 }
 
-impl<A, B> AsyncRead for EitherSocket<A, B>
+impl<A, B> AsyncRead for EitherOutput<A, B>
 where
     A: AsyncRead,
     B: AsyncRead,
@@ -40,13 +40,13 @@ where
     #[inline]
     unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
         match self {
-            &EitherSocket::First(ref a) => a.prepare_uninitialized_buffer(buf),
-            &EitherSocket::Second(ref b) => b.prepare_uninitialized_buffer(buf),
+            &EitherOutput::First(ref a) => a.prepare_uninitialized_buffer(buf),
+            &EitherOutput::Second(ref b) => b.prepare_uninitialized_buffer(buf),
         }
     }
 }
 
-impl<A, B> Read for EitherSocket<A, B>
+impl<A, B> Read for EitherOutput<A, B>
 where
     A: Read,
     B: Read,
@@ -54,13 +54,13 @@ where
     #[inline]
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
         match self {
-            &mut EitherSocket::First(ref mut a) => a.read(buf),
-            &mut EitherSocket::Second(ref mut b) => b.read(buf),
+            &mut EitherOutput::First(ref mut a) => a.read(buf),
+            &mut EitherOutput::Second(ref mut b) => b.read(buf),
         }
     }
 }
 
-impl<A, B> AsyncWrite for EitherSocket<A, B>
+impl<A, B> AsyncWrite for EitherOutput<A, B>
 where
     A: AsyncWrite,
     B: AsyncWrite,
@@ -68,13 +68,13 @@ where
     #[inline]
     fn shutdown(&mut self) -> Poll<(), IoError> {
         match self {
-            &mut EitherSocket::First(ref mut a) => a.shutdown(),
-            &mut EitherSocket::Second(ref mut b) => b.shutdown(),
+            &mut EitherOutput::First(ref mut a) => a.shutdown(),
+            &mut EitherOutput::Second(ref mut b) => b.shutdown(),
         }
     }
 }
 
-impl<A, B> Write for EitherSocket<A, B>
+impl<A, B> Write for EitherOutput<A, B>
 where
     A: Write,
     B: Write,
@@ -82,42 +82,42 @@ where
     #[inline]
     fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
         match self {
-            &mut EitherSocket::First(ref mut a) => a.write(buf),
-            &mut EitherSocket::Second(ref mut b) => b.write(buf),
+            &mut EitherOutput::First(ref mut a) => a.write(buf),
+            &mut EitherOutput::Second(ref mut b) => b.write(buf),
         }
     }
 
     #[inline]
     fn flush(&mut self) -> Result<(), IoError> {
         match self {
-            &mut EitherSocket::First(ref mut a) => a.flush(),
-            &mut EitherSocket::Second(ref mut b) => b.flush(),
+            &mut EitherOutput::First(ref mut a) => a.flush(),
+            &mut EitherOutput::Second(ref mut b) => b.flush(),
         }
     }
 }
 
-impl<A, B> StreamMuxer for EitherSocket<A, B>
+impl<A, B> StreamMuxer for EitherOutput<A, B>
 where
     A: StreamMuxer,
     B: StreamMuxer,
 {
-    type Substream = EitherSocket<A::Substream, B::Substream>;
+    type Substream = EitherOutput<A::Substream, B::Substream>;
     type InboundSubstream = EitherInbound<A, B>;
     type OutboundSubstream = EitherOutbound<A, B>;
 
     #[inline]
     fn inbound(self) -> Self::InboundSubstream {
         match self {
-            EitherSocket::First(a) => EitherInbound::A(a.inbound()),
-            EitherSocket::Second(b) => EitherInbound::B(b.inbound()),
+            EitherOutput::First(a) => EitherInbound::A(a.inbound()),
+            EitherOutput::Second(b) => EitherInbound::B(b.inbound()),
         }
     }
 
     #[inline]
     fn outbound(self) -> Self::OutboundSubstream {
         match self {
-            EitherSocket::First(a) => EitherOutbound::A(a.outbound()),
-            EitherSocket::Second(b) => EitherOutbound::B(b.outbound()),
+            EitherOutput::First(a) => EitherOutbound::A(a.outbound()),
+            EitherOutput::Second(b) => EitherOutbound::B(b.outbound()),
         }
     }
 }
@@ -133,7 +133,7 @@ where
     A: StreamMuxer,
     B: StreamMuxer,
 {
-    type Item = Option<EitherSocket<A::Substream, B::Substream>>;
+    type Item = Option<EitherOutput<A::Substream, B::Substream>>;
     type Error = IoError;
 
     #[inline]
@@ -141,11 +141,11 @@ where
         match *self {
             EitherInbound::A(ref mut a) => {
                 let item = try_ready!(a.poll());
-                Ok(Async::Ready(item.map(EitherSocket::First)))
+                Ok(Async::Ready(item.map(EitherOutput::First)))
             }
             EitherInbound::B(ref mut b) => {
                 let item = try_ready!(b.poll());
-                Ok(Async::Ready(item.map(EitherSocket::Second)))
+                Ok(Async::Ready(item.map(EitherOutput::Second)))
             }
         }
     }
@@ -162,7 +162,7 @@ where
     A: StreamMuxer,
     B: StreamMuxer,
 {
-    type Item = Option<EitherSocket<A::Substream, B::Substream>>;
+    type Item = Option<EitherOutput<A::Substream, B::Substream>>;
     type Error = IoError;
 
     #[inline]
@@ -170,11 +170,11 @@ where
         match *self {
             EitherOutbound::A(ref mut a) => {
                 let item = try_ready!(a.poll());
-                Ok(Async::Ready(item.map(EitherSocket::First)))
+                Ok(Async::Ready(item.map(EitherOutput::First)))
             }
             EitherOutbound::B(ref mut b) => {
                 let item = try_ready!(b.poll());
-                Ok(Async::Ready(item.map(EitherSocket::Second)))
+                Ok(Async::Ready(item.map(EitherOutput::Second)))
             }
         }
     }
@@ -220,7 +220,7 @@ where
     A: Future<Item = (Ao, Multiaddr), Error = IoError>,
     B: Future<Item = (Bo, Multiaddr), Error = IoError>,
 {
-    type Item = (EitherSocket<Ao, Bo>, Multiaddr);
+    type Item = (EitherOutput<Ao, Bo>, Multiaddr);
     type Error = IoError;
 
     #[inline]
@@ -228,11 +228,11 @@ where
         match self {
             &mut EitherListenUpgrade::First(ref mut a) => {
                 let (item, addr) = try_ready!(a.poll());
-                Ok(Async::Ready((EitherSocket::First(item), addr)))
+                Ok(Async::Ready((EitherOutput::First(item), addr)))
             }
             &mut EitherListenUpgrade::Second(ref mut b) => {
                 let (item, addr) = try_ready!(b.poll());
-                Ok(Async::Ready((EitherSocket::Second(item), addr)))
+                Ok(Async::Ready((EitherOutput::Second(item), addr)))
             }
         }
     }
