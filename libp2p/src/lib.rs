@@ -34,7 +34,6 @@ pub extern crate libp2p_floodsub as floodsub;
 pub extern crate libp2p_mplex as mplex;
 pub extern crate libp2p_peerstore as peerstore;
 pub extern crate libp2p_ping as ping;
-#[cfg(not(target_os = "emscripten"))]
 pub extern crate libp2p_ratelimit as ratelimit;
 pub extern crate libp2p_relay as relay;
 #[cfg(not(target_os = "emscripten"))]
