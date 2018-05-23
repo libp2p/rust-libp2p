@@ -29,7 +29,7 @@ use futures::Future;
 use futures::sync::oneshot;
 use std::env;
 use libp2p::core::Transport;
-use libp2p::core::upgrade::{self, DeniedConnectionUpgrade};
+use libp2p::core::upgrade;
 use libp2p::tcp::TcpConfig;
 use tokio_core::reactor::Core;
 
@@ -76,25 +76,26 @@ fn main() {
     // connections for us. The second parameter we pass is the connection upgrade that is accepted
     // by the listening part. We don't want to accept anything, so we pass a dummy object that
     // represents a connection that is always denied.
+    let (tx, rx) = oneshot::channel();
+    let mut tx = Some(tx);
     let (swarm_controller, swarm_future) = libp2p::core::swarm(
-        transport.clone().with_upgrade(DeniedConnectionUpgrade),
-        |_socket, _client_addr| -> Result<(), _> {
-            unreachable!("All incoming connections should have been denied")
+        transport.clone().with_upgrade(libp2p::ping::Ping),
+        |(mut pinger, future), _client_addr| {
+            let tx = tx.take();
+            let ping = pinger.ping().map_err(|_| unreachable!()).inspect(move |_| {
+                println!("Received pong from the remote");
+                if let Some(tx) = tx {
+                    let _ = tx.send(());
+                }
+            });
+            ping.select(future).map(|_| ()).map_err(|(e, _)| e)
         },
     );
 
     // We now use the controller to dial to the address.
-    let (tx, rx) = oneshot::channel();
     swarm_controller
-        .dial_custom_handler(target_addr.parse().expect("invalid multiaddr"),
-            transport.with_upgrade(libp2p::ping::Ping),
-            |(mut pinger, future), _| {
-                let ping = pinger.ping().map_err(|_| unreachable!()).inspect(|_| {
-                    println!("Received pong from the remote");
-                    let _ = tx.send(());
-                });
-                ping.select(future).map(|_| ()).map_err(|(e, _)| e)
-            })
+        .dial(target_addr.parse().expect("invalid multiaddr"),
+            transport.with_upgrade(libp2p::ping::Ping))
         // If the multiaddr protocol exists but is not supported, then we get an error containing
         // the original multiaddress.
         .expect("unsupported multiaddr");

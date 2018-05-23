@@ -135,7 +135,7 @@ fn main() {
                 let target: Multiaddr = msg[6..].parse().unwrap();
                 println!("*Dialing {}*", target);
                 swarm_controller
-                    .dial_to_handler(
+                    .dial(
                         target,
                         transport.clone().with_upgrade(floodsub_upgrade.clone()),
                     )

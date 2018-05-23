@@ -131,17 +131,11 @@ fn run_dialer(opts: DialerOpts) -> Result<(), Box<Error>> {
         RelayTransport::new(opts.me, tcp, store, iter::once(opts.relay)).with_dummy_muxing()
     };
 
-    let (control, future) = libp2p::core::swarm(transport.clone(), |_, _| {
-        future::ok(())
-    });
-
     let echo = SimpleProtocol::new("/echo/1.0.0", |socket| {
         Ok(AsyncRead::framed(socket, BytesCodec::new()))
     });
 
-    let address = format!("/p2p-circuit/p2p/{}", opts.dest.to_base58()).parse()?;
-
-    control.dial_custom_handler(address, transport.with_upgrade(echo), |socket, _| {
+    let (control, future) = libp2p::core::swarm(transport.clone().with_upgrade(echo.clone()), |socket, _| {
         println!("sending \"hello world\"");
         socket.send("hello world".into())
             .and_then(|socket| socket.into_future().map_err(|(e, _)| e).map(|(m, _)| m))
@@ -149,7 +143,11 @@ fn run_dialer(opts: DialerOpts) -> Result<(), Box<Error>> {
                 println!("received message: {:?}", message);
                 Ok(())
             })
-    }).map_err(|_| "failed to dial")?;
+    });
+
+    let address = format!("/p2p-circuit/p2p/{}", opts.dest.to_base58()).parse()?;
+
+    control.dial(address, transport.with_upgrade(echo)).map_err(|_| "failed to dial")?;
 
     core.run(future).map_err(From::from)
 }

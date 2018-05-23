@@ -468,7 +468,7 @@ where
             Entry::Vacant(entry) => {
                 // Need to open a connection.
                 match self.swarm_controller
-                    .dial_to_handler(addr, self.kademlia_transport.clone())
+                    .dial(addr, self.kademlia_transport.clone())
                 {
                     Ok(()) => (),
                     Err(_addr) => {

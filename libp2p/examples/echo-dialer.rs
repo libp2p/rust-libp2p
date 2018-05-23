@@ -29,7 +29,7 @@ use futures::sync::oneshot;
 use futures::{Future, Sink, Stream};
 use std::env;
 use libp2p::core::Transport;
-use libp2p::core::upgrade::{self, DeniedConnectionUpgrade, SimpleProtocol};
+use libp2p::core::upgrade::{self, SimpleProtocol};
 use libp2p::tcp::TcpConfig;
 use tokio_core::reactor::Core;
 use tokio_io::AsyncRead;
@@ -80,17 +80,6 @@ fn main() {
         // a `Transport`.
         .into_connection_reuse();
 
-    // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming
-    // connections for us. The second parameter we pass is the connection upgrade that is accepted
-    // by the listening part. We don't want to accept anything, so we pass a dummy object that
-    // represents a connection that is always denied.
-    let (swarm_controller, swarm_future) = libp2p::core::swarm(
-        transport.clone().with_upgrade(DeniedConnectionUpgrade),
-        |_socket, _client_addr| -> Result<(), _> {
-            unreachable!("All incoming connections should have been denied")
-        },
-    );
-
     // Building a struct that represents the protocol that we are going to use for dialing.
     let proto = SimpleProtocol::new("/echo/1.0.0", |socket| {
         // This closure is called whenever a stream using the "echo" protocol has been
@@ -100,25 +89,39 @@ fn main() {
         Ok(AsyncRead::framed(socket, BytesCodec::new()))
     });
 
-    // We now use the controller to dial to the address.
     let (finished_tx, finished_rx) = oneshot::channel();
-    swarm_controller
-        .dial_custom_handler(target_addr.parse().expect("invalid multiaddr"), transport.with_upgrade(proto), |echo, _| {
+    let mut finished_tx = Some(finished_tx);
+
+    // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming
+    // connections for us. The second parameter we pass is the connection upgrade that is accepted
+    // by the listening part. We don't want to accept anything, so we pass a dummy object that
+    // represents a connection that is always denied.
+    let (swarm_controller, swarm_future) = libp2p::core::swarm(
+        transport.clone().with_upgrade(proto.clone()),
+        |echo, _client_addr| {
             // `echo` is what the closure used when initializing `proto` returns.
             // Consequently, please note that the `send` method is available only because the type
             // `length_delimited::Framed` has a `send` method.
             println!("Sending \"hello world\" to listener");
+            let finished_tx = finished_tx.take();
             echo.send("hello world".into())
                 // Then listening for one message from the remote.
                 .and_then(|echo| {
                     echo.into_future().map_err(|(e, _)| e).map(|(n,_ )| n)
                 })
-                .and_then(|message| {
+                .and_then(move |message| {
                     println!("Received message from listener: {:?}", message.unwrap());
-                    finished_tx.send(()).unwrap();
+                    if let Some(finished_tx) = finished_tx {
+                        finished_tx.send(()).unwrap();
+                    }
                     Ok(())
                 })
-        })
+        },
+    );
+
+    // We now use the controller to dial to the address.
+    swarm_controller
+        .dial(target_addr.parse().expect("invalid multiaddr"), transport.with_upgrade(proto))
         // If the multiaddr protocol exists but is not supported, then we get an error containing
         // the original multiaddress.
         .expect("unsupported multiaddr");
