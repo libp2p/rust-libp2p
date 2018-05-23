@@ -21,18 +21,18 @@
 extern crate aio_limited;
 #[macro_use]
 extern crate futures;
-extern crate libp2p_core as swarm;
+extern crate libp2p_core;
 #[macro_use]
 extern crate log;
-extern crate tokio;
+extern crate tokio_executor;
 extern crate tokio_io;
 
 use aio_limited::{Limited, Limiter};
+use futures::prelude::*;
+use libp2p_core::{Multiaddr, Transport};
 use std::io;
-use swarm::{Multiaddr, Transport};
-use tokio::executor::Executor;
-use tokio::prelude::*;
-use tokio_io::io::{ReadHalf, WriteHalf};
+use tokio_executor::Executor;
+use tokio_io::{AsyncRead, AsyncWrite, io::{ReadHalf, WriteHalf}};
 
 #[derive(Clone)]
 pub struct RateLimited<T> {
