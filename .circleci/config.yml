@@ -47,7 +47,7 @@ jobs:
           key: test-emscripten-cache
       - run:
           name: Build for emscripten
-          command: cargo build --target asmjs-unknown-emscripten --package libp2p-websocket   # TODO: build all?
+          command: cargo build --target asmjs-unknown-emscripten --package libp2p
       - save_cache:
           key: test-emscripten-cache
           paths:
