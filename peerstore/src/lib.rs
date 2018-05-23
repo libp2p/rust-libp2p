@@ -70,17 +70,14 @@
 extern crate bs58;
 extern crate datastore;
 extern crate futures;
+extern crate libp2p_core;
 extern crate multiaddr;
-extern crate multihash;
 extern crate owning_ref;
-#[macro_use]
-extern crate quick_error;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 
-use std::{fmt, str::FromStr};
-
+pub use self::libp2p_core::PeerId;
 pub use self::peerstore::{PeerAccess, Peerstore};
 
 #[macro_use]
@@ -92,104 +89,3 @@ mod peer_info;
 mod peerstore;
 
 pub type TTL = std::time::Duration;
-
-/// Identifier of a peer of the network.
-///
-/// The data is a multihash of the public key of the peer.
-// TODO: maybe keep things in decoded version?
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub struct PeerId {
-    multihash: Vec<u8>,
-}
-
-impl fmt::Debug for PeerId {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "PeerId({})", self.to_base58())
-    }
-}
-
-impl PeerId {
-    /// Builds a `PeerId` from a public key.
-    #[inline]
-    pub fn from_public_key(public_key: &[u8]) -> PeerId {
-        let data = multihash::encode(multihash::Hash::SHA2256, public_key)
-            .expect("sha2-256 is always supported");
-        PeerId { multihash: data }
-    }
-
-    /// Checks whether `data` is a valid `PeerId`. If so, returns the `PeerId`. If not, returns
-    /// back the data as an error.
-    #[inline]
-    pub fn from_bytes(data: Vec<u8>) -> Result<PeerId, Vec<u8>> {
-        match multihash::decode(&data) {
-            Ok(_) => Ok(PeerId { multihash: data }),
-            Err(_) => Err(data),
-        }
-    }
-
-    /// Returns a raw bytes representation of this `PeerId`.
-    #[inline]
-    pub fn into_bytes(self) -> Vec<u8> {
-        self.multihash
-    }
-
-    /// Returns a raw bytes representation of this `PeerId`.
-    #[inline]
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.multihash
-    }
-
-    /// Returns a base-58 encoded string of this `PeerId`.
-    #[inline]
-    pub fn to_base58(&self) -> String {
-        bs58::encode(&self.multihash).into_string()
-    }
-
-    /// Returns the raw bytes of the hash of this `PeerId`.
-    #[inline]
-    pub fn hash(&self) -> &[u8] {
-        multihash::decode(&self.multihash)
-            .expect("our inner value should always be valid")
-            .digest
-    }
-
-    /// Checks whether the public key passed as parameter matches the public key of this `PeerId`.
-    ///
-    /// Returns `None` if this `PeerId`s hash algorithm is not supported when encoding the
-    /// given public key, otherwise `Some` boolean as the result of an equality check.
-    pub fn is_public_key(&self, public_key: &[u8]) -> Option<bool> {
-        let alg = multihash::decode(&self.multihash)
-            .expect("our inner value should always be valid")
-            .alg;
-        match multihash::encode(alg, public_key) {
-            Ok(compare) => Some(compare == self.multihash),
-            Err(multihash::Error::UnsupportedType) => None,
-            Err(_) => Some(false),
-        }
-    }
-}
-
-quick_error! {
-    #[derive(Debug)]
-    pub enum ParseError {
-        B58(e: bs58::decode::DecodeError) {
-            display("base-58 decode error: {}", e)
-            cause(e)
-            from()
-        }
-        MultiHash {
-            display("decoding multihash failed")
-        }
-    }
-}
-
-impl FromStr for PeerId {
-    type Err = ParseError;
-
-    #[inline]
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let bytes = bs58::decode(s).into_vec()?;
-        PeerId::from_bytes(bytes).map_err(|_| ParseError::MultiHash)
-    }
-}
-
