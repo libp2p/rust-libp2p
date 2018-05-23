@@ -7,7 +7,7 @@ workflows:
       - test
       - test-emscripten
       - test-wasm
-      - integration_test
+      - integration-test
 
 jobs:
   test:
@@ -73,7 +73,7 @@ jobs:
             - "~/.cargo"
             - "./target"
 
-  integration_test:
+  integration-test:
     docker:
       - image: rust
       - image: ipfs/go-ipfs
