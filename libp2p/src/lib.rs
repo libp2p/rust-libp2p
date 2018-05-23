@@ -20,10 +20,12 @@
 
 pub extern crate bytes;
 pub extern crate futures;
+#[cfg(not(target_os = "emscripten"))]
 pub extern crate tokio_core;
 pub extern crate multiaddr;
 
 pub extern crate libp2p_core as core;
+#[cfg(not(target_os = "emscripten"))]
 pub extern crate libp2p_dns as dns;
 pub extern crate libp2p_identify as identify;
 pub extern crate libp2p_kad as kad;
@@ -31,9 +33,12 @@ pub extern crate libp2p_floodsub as floodsub;
 pub extern crate libp2p_mplex as mplex;
 pub extern crate libp2p_peerstore as peerstore;
 pub extern crate libp2p_ping as ping;
+#[cfg(not(target_os = "emscripten"))]
 pub extern crate libp2p_ratelimit as ratelimit;
 pub extern crate libp2p_relay as relay;
+#[cfg(not(target_os = "emscripten"))]
 pub extern crate libp2p_secio as secio;
+#[cfg(not(target_os = "emscripten"))]
 pub extern crate libp2p_tcp_transport as tcp;
 pub extern crate libp2p_websocket as websocket;
 
@@ -49,32 +54,62 @@ pub use self::peerstore::PeerId;
 #[derive(Debug, Clone)]
 pub struct CommonTransport {
     // The actual implementation of everything.
+    inner: CommonTransportInner
+}
+
+#[derive(Debug, Clone)]
+#[cfg(not(target_os = "emscripten"))]
+struct CommonTransportInner {
     inner: websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>,
+}
+#[derive(Debug, Clone)]
+#[cfg(target_os = "emscripten")]
+struct CommonTransportInner {
+    inner: websocket::BrowserWsConfig,
 }
 
 impl CommonTransport {
     /// Initializes the `CommonTransport`.
     #[inline]
+    #[cfg(not(target_os = "emscripten"))]
     pub fn new(tokio_handle: tokio_core::reactor::Handle) -> CommonTransport {
         let tcp = tcp::TcpConfig::new(tokio_handle);
         let with_dns = dns::DnsConfig::new(tcp);
         let with_ws = websocket::WsConfig::new(with_dns);
-        CommonTransport { inner: with_ws }
+
+        CommonTransport {
+            inner: CommonTransportInner { inner: with_ws }
+        }
+    }
+
+    /// Initializes the `CommonTransport`.
+    #[inline]
+    #[cfg(target_os = "emscripten")]
+    pub fn new() -> CommonTransport {
+        let inner = websocket::BrowserWsConfig::new();
+        CommonTransport {
+            inner: CommonTransportInner { inner: inner }
+        }
     }
 }
 
+#[cfg(not(target_os = "emscripten"))]
+pub type InnerImplementation = websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>;
+#[cfg(target_os = "emscripten")]
+pub type InnerImplementation = websocket::BrowserWsConfig;
+
 impl Transport for CommonTransport {
-    type Output = <websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>> as Transport>::Output;
-    type Listener = <websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>> as Transport>::Listener;
-    type ListenerUpgrade = <websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>> as Transport>::ListenerUpgrade;
-    type Dial = <websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>> as Transport>::Dial;
+    type Output = <InnerImplementation as Transport>::Output;
+    type Listener = <InnerImplementation as Transport>::Listener;
+    type ListenerUpgrade = <InnerImplementation as Transport>::ListenerUpgrade;
+    type Dial = <InnerImplementation as Transport>::Dial;
 
     #[inline]
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        match self.inner.listen_on(addr) {
+        match self.inner.inner.listen_on(addr) {
             Ok(res) => Ok(res),
             Err((inner, addr)) => {
-                let trans = CommonTransport { inner: inner };
+                let trans = CommonTransport { inner: CommonTransportInner { inner: inner } };
                 Err((trans, addr))
             }
         }
@@ -82,10 +117,10 @@ impl Transport for CommonTransport {
 
     #[inline]
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-        match self.inner.dial(addr) {
+        match self.inner.inner.dial(addr) {
             Ok(res) => Ok(res),
             Err((inner, addr)) => {
-                let trans = CommonTransport { inner: inner };
+                let trans = CommonTransport { inner: CommonTransportInner { inner: inner } };
                 Err((trans, addr))
             }
         }
@@ -93,6 +128,6 @@ impl Transport for CommonTransport {
 
     #[inline]
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.inner.nat_traversal(server, observed)
+        self.inner.inner.nat_traversal(server, observed)
     }
 }
