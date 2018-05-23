@@ -19,12 +19,11 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::Bytes;
-use futures::future::FromErr;
-use futures::prelude::*;
+use core::upgrade::{ConnectionUpgrade, Endpoint};
+use futures::{future::FromErr, prelude::*};
 use multiaddr::Multiaddr;
 use std::{iter, io::Error as IoError, sync::Arc};
 use tokio_io::{AsyncRead, AsyncWrite};
-use upgrade::{ConnectionUpgrade, Endpoint};
 
 /// Implementation of `ConnectionUpgrade`. Convenient to use with small protocols.
 #[derive(Debug)]

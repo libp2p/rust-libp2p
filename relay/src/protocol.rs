@@ -20,8 +20,7 @@
 
 use bytes::Bytes;
 use core::{ConnectionUpgrade, Endpoint, Transport};
-use core::upgrade::SimpleProtocol;
-use futures::{stream, future::{self, Either::{A, B}}, prelude::*};
+use futures::{stream, future::{self, Either::{A, B}, FutureResult}, prelude::*};
 use message::{CircuitRelay, CircuitRelay_Peer, CircuitRelay_Status, CircuitRelay_Type};
 use multiaddr::Multiaddr;
 use peerstore::{PeerAccess, PeerId, Peerstore};
@@ -137,8 +136,7 @@ where
 
         let stop = stop_message(&from, &dest);
 
-        let upgrade = SimpleProtocol::new("/libp2p/relay/circuit/0.1.0", Ok);
-        let transport = self.transport.with_upgrade(upgrade);
+        let transport = self.transport.with_upgrade(TrivialUpgrade);
         let dest_id = dest.id;
         let future = stream::iter_ok(dest.addrs.into_iter())
             .and_then(move |dest_addr| {
@@ -238,6 +236,28 @@ fn stop_message(from: &Peer, dest: &Peer) -> CircuitRelay {
     msg.set_dstPeer(d);
 
     msg
+}
+
+#[derive(Debug, Clone)]
+struct TrivialUpgrade;
+
+impl<C> ConnectionUpgrade<C> for TrivialUpgrade
+where
+    C: AsyncRead + AsyncWrite + 'static
+{
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
+    type UpgradeIdentifier = ();
+
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once((Bytes::from("/libp2p/relay/circuit/0.1.0"), ()))
+    }
+
+    type Output = C;
+    type Future = FutureResult<Self::Output, io::Error>;
+
+    fn upgrade(self, conn: C, _: (), _: Endpoint, _: &Multiaddr) -> Self::Future {
+        future::ok(conn)
+    }
 }
 
 #[derive(Debug, Clone)]
