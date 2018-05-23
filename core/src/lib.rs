@@ -203,14 +203,18 @@
 //! # }
 //! ```
 
+extern crate bs58;
 extern crate bytes;
 extern crate fnv;
 #[macro_use]
 extern crate futures;
 #[macro_use]
 extern crate log;
+extern crate multihash;
 extern crate multistream_select;
 extern crate parking_lot;
+#[macro_use]
+extern crate quick_error;
 extern crate smallvec;
 extern crate tokio_io;
 
@@ -219,6 +223,7 @@ pub extern crate multiaddr;
 
 mod connection_reuse;
 mod either;
+mod peer_id;
 
 pub mod muxing;
 pub mod swarm;
@@ -228,6 +233,7 @@ pub mod upgrade;
 pub use self::connection_reuse::ConnectionReuse;
 pub use self::multiaddr::{AddrComponent, Multiaddr};
 pub use self::muxing::StreamMuxer;
+pub use self::peer_id::PeerId;
 pub use self::swarm::{swarm, SwarmController, SwarmFuture};
 pub use self::transport::{MuxedTransport, Transport};
 pub use self::upgrade::{ConnectionUpgrade, Endpoint};
