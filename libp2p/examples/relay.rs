@@ -56,9 +56,10 @@ extern crate structopt;
 extern crate tokio_core;
 extern crate tokio_io;
 
+use libp2p::SimpleProtocol;
 use libp2p::core::Multiaddr;
 use libp2p::core::transport::Transport;
-use libp2p::core::upgrade::{self, SimpleProtocol};
+use libp2p::core::upgrade;
 use futures::{future::{self, Either, Loop, loop_fn}, prelude::*};
 use libp2p::peerstore::{PeerAccess, PeerId, Peerstore, memory_peerstore::MemoryPeerstore};
 use libp2p::relay::{RelayConfig, RelayTransport};

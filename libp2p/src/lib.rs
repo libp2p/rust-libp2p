@@ -23,6 +23,7 @@ pub extern crate futures;
 #[cfg(not(target_os = "emscripten"))]
 pub extern crate tokio_core;
 pub extern crate multiaddr;
+pub extern crate tokio_io;
 
 pub extern crate libp2p_core as core;
 #[cfg(not(target_os = "emscripten"))]
@@ -42,9 +43,12 @@ pub extern crate libp2p_secio as secio;
 pub extern crate libp2p_tcp_transport as tcp;
 pub extern crate libp2p_websocket as websocket;
 
+pub mod simple;
+
 pub use self::core::{Transport, ConnectionUpgrade, swarm};
 pub use self::multiaddr::Multiaddr;
 pub use self::peerstore::PeerId;
+pub use self::simple::SimpleProtocol;
 
 /// Implementation of `Transport` that supports the most common protocols.
 ///
