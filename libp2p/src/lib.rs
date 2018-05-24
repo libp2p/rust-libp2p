@@ -44,9 +44,8 @@ pub extern crate libp2p_websocket as websocket;
 
 pub mod simple;
 
-pub use self::core::{Transport, ConnectionUpgrade, swarm};
+pub use self::core::{Transport, ConnectionUpgrade, PeerId, swarm};
 pub use self::multiaddr::Multiaddr;
-pub use self::peerstore::PeerId;
 pub use self::simple::SimpleProtocol;
 
 /// Implementation of `Transport` that supports the most common protocols.
