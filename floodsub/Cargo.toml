@@ -9,7 +9,6 @@ byteorder = "1.2.1"
 bytes = "0.4"
 fnv = "1.0"
 futures = "0.1"
-libp2p-peerstore = { path = "../peerstore" }
 libp2p-core = { path = "../core" }
 log = "0.4.1"
 multiaddr = "0.3"

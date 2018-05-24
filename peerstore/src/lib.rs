@@ -77,6 +77,7 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 
+// TODO: remove
 pub use self::libp2p_core::PeerId;
 pub use self::peerstore::{PeerAccess, Peerstore};
 

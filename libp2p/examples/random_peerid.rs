@@ -21,7 +21,7 @@
 extern crate libp2p;
 extern crate rand;
 
-use libp2p::peerstore::PeerId;
+use libp2p::PeerId;
 
 fn main() {
     let pid = {
