@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::Bytes;
-use either::EitherOutput;
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::io::Error as IoError;
@@ -39,11 +38,11 @@ pub fn or<A, B>(me: A, other: B) -> OrUpgrade<A, B> {
 #[derive(Debug, Copy, Clone)]
 pub struct OrUpgrade<A, B>(A, B);
 
-impl<C, A, B> ConnectionUpgrade<C> for OrUpgrade<A, B>
+impl<C, A, B, O> ConnectionUpgrade<C> for OrUpgrade<A, B>
 where
     C: AsyncRead + AsyncWrite,
-    A: ConnectionUpgrade<C>,
-    B: ConnectionUpgrade<C>,
+    A: ConnectionUpgrade<C, Output = O>,
+    B: ConnectionUpgrade<C, Output = O>,
 {
     type NamesIter = NamesIterChain<A::NamesIter, B::NamesIter>;
     type UpgradeIdentifier = EitherUpgradeIdentifier<A::UpgradeIdentifier, B::UpgradeIdentifier>;
@@ -56,7 +55,7 @@ where
         }
     }
 
-    type Output = EitherOutput<A::Output, B::Output>;
+    type Output = O;
     type Future = EitherConnUpgrFuture<A::Future, B::Future>;
 
     #[inline]
@@ -98,12 +97,12 @@ pub enum EitherConnUpgrFuture<A, B> {
     Second(B),
 }
 
-impl<A, B> Future for EitherConnUpgrFuture<A, B>
+impl<A, B, O> Future for EitherConnUpgrFuture<A, B>
 where
-    A: Future<Error = IoError>,
-    B: Future<Error = IoError>,
+    A: Future<Error = IoError, Item = O>,
+    B: Future<Error = IoError, Item = O>,
 {
-    type Item = EitherOutput<A::Item, B::Item>;
+    type Item = O;
     type Error = IoError;
 
     #[inline]
@@ -111,11 +110,11 @@ where
         match self {
             &mut EitherConnUpgrFuture::First(ref mut a) => {
                 let item = try_ready!(a.poll());
-                Ok(Async::Ready(EitherOutput::First(item)))
+                Ok(Async::Ready(item))
             }
             &mut EitherConnUpgrFuture::Second(ref mut b) => {
                 let item = try_ready!(b.poll());
-                Ok(Async::Ready(EitherOutput::Second(item)))
+                Ok(Async::Ready(item))
             }
         }
     }

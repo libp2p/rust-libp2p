@@ -30,7 +30,7 @@ extern crate tokio_stdin;
 use futures::Stream;
 use futures::future::Future;
 use std::{env, mem};
-use libp2p::core::upgrade;
+use libp2p::core::{either::EitherOutput, upgrade};
 use libp2p::core::{Multiaddr, Transport};
 use libp2p::peerstore::PeerId;
 use libp2p::tcp::TcpConfig;
@@ -69,7 +69,10 @@ fn main() {
                 }
             };
 
-            upgrade::or(plain_text, upgrade::map(secio, |(socket, _)| socket))
+            upgrade::or(
+                upgrade::map(plain_text, |pt| EitherOutput::First(pt)),
+                upgrade::map(secio, |(socket, _)| EitherOutput::Second(socket))
+            )
         })
 
         // On top of plaintext or secio, we will use the multiplex protocol.
