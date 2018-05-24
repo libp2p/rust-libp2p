@@ -93,7 +93,11 @@ where
         KademliaControllerPrototype { inner: inner }
     }
 
-    /// Turns the prototype into an actual controller by feeding it a swarm.
+    /// Turns the prototype into an actual controller by feeding it a swarm controller.
+    ///
+    /// You must pass to this function the transport to use to dial and obtain 
+    /// `KademliaProcessingFuture`, plus a mapping function that will turn the
+    /// `KademliaProcessingFuture` into whatever the swarm expects.
     pub fn start<T, K, M>(
         self,
         swarm: SwarmController<T>,
