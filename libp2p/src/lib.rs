@@ -36,7 +36,7 @@ pub extern crate libp2p_peerstore as peerstore;
 pub extern crate libp2p_ping as ping;
 pub extern crate libp2p_ratelimit as ratelimit;
 pub extern crate libp2p_relay as relay;
-#[cfg(not(target_os = "emscripten"))]
+#[cfg(all(not(target_os = "emscripten"), feature = "libp2p-secio"))]
 pub extern crate libp2p_secio as secio;
 #[cfg(not(target_os = "emscripten"))]
 pub extern crate libp2p_tcp_transport as tcp;
