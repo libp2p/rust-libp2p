@@ -3,6 +3,9 @@ name = "libp2p"
 version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 
+[features]
+default = ["libp2p-secio"]
+
 [dependencies]
 bytes = "0.4"
 futures = "0.1"
@@ -21,7 +24,7 @@ tokio-io = "0.1"
 
 [target.'cfg(not(target_os = "emscripten"))'.dependencies]
 libp2p-dns = { path = "../dns" }
-libp2p-secio = { path = "../secio" }
+libp2p-secio = { path = "../secio", optional = true }
 libp2p-tcp-transport = { path = "../tcp-transport" }
 tokio-core = "0.1"
 
@@ -36,3 +39,29 @@ structopt =  "0.2"
 tokio-core = "0.1"
 tokio-io = "0.1"
 tokio-stdin = "0.1"
+
+[[example]]
+name = "echo-dialer"
+required-features = ["libp2p-secio"]
+
+[[example]]
+name = "echo-server"
+required-features = ["libp2p-secio"]
+
+[[example]]
+name = "floodsub"
+required-features = ["libp2p-secio"]
+
+[[example]]
+name = "kademlia"
+required-features = ["libp2p-secio"]
+
+[[example]]
+name = "ping-client"
+required-features = ["libp2p-secio"]
+
+[[example]]
+name = "random_peerid"
+
+[[example]]
+name = "relay"
