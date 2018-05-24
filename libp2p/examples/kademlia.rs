@@ -34,7 +34,7 @@ use std::env;
 use std::sync::Arc;
 use std::time::Duration;
 use libp2p::core::Transport;
-use libp2p::core::upgrade;
+use libp2p::core::{upgrade, either::EitherOutput};
 use libp2p::tcp::TcpConfig;
 use tokio_core::reactor::Core;
 
@@ -73,7 +73,10 @@ fn main() {
                 }
             };
 
-            upgrade::or(plain_text, upgrade::map(secio, |(socket, _)| socket))
+            upgrade::or(
+                upgrade::map(plain_text, |pt| EitherOutput::First(pt)),
+                upgrade::map(secio, |(socket, _)| EitherOutput::Second(socket))
+            )
         })
 
         // On top of plaintext or secio, we will use the multiplex protocol.

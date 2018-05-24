@@ -222,9 +222,9 @@ extern crate tokio_io;
 pub extern crate multiaddr;
 
 mod connection_reuse;
-mod either;
 mod peer_id;
 
+pub mod either;
 pub mod muxing;
 pub mod swarm;
 pub mod transport;
