@@ -6,7 +6,6 @@ authors = ["Parity Technologies <admin@parity.io>"]
 [dependencies]
 bytes = "0.4"
 futures = "0.1"
-libp2p-peerstore = { path = "../peerstore" }
 libp2p-core = { path = "../core" }
 log = "0.4.1"
 multiaddr = { path = "../multiaddr" }
@@ -15,5 +14,6 @@ tokio-io = "0.1.0"
 varint = { path = "../varint-rs" }
 
 [dev-dependencies]
+libp2p-peerstore = { path = "../peerstore" }
 libp2p-tcp-transport = { path = "../tcp-transport" }
 tokio-core = "0.1.0"

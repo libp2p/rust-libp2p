@@ -67,7 +67,6 @@
 
 extern crate bytes;
 extern crate futures;
-extern crate libp2p_peerstore;
 extern crate libp2p_core;
 #[macro_use]
 extern crate log;
@@ -77,7 +76,7 @@ extern crate tokio_io;
 extern crate varint;
 
 pub use self::protocol::{IdentifyInfo, IdentifyOutput, IdentifyProtocolConfig, IdentifySender};
-pub use self::transport::IdentifyTransport;
+pub use self::transport::{IdentifyTransport, IdentifyPeerInterface};
 
 mod protocol;
 mod structs_proto;

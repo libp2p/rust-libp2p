@@ -69,7 +69,6 @@ extern crate datastore;
 extern crate fnv;
 extern crate futures;
 extern crate libp2p_identify;
-extern crate libp2p_peerstore;
 extern crate libp2p_ping;
 extern crate libp2p_core;
 #[macro_use]
@@ -84,7 +83,7 @@ extern crate tokio_timer;
 extern crate varint;
 
 pub use self::high_level::{KademliaConfig, KademliaController, KademliaControllerPrototype};
-pub use self::high_level::{KademliaProcessingFuture, KademliaUpgrade};
+pub use self::high_level::{KademliaProcessingFuture, KademliaUpgrade, KademliaPeerInterface};
 
 mod high_level;
 mod kad_server;
