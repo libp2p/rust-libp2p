@@ -93,13 +93,18 @@ where
         KademliaControllerPrototype { inner: inner }
     }
 
-    /// Turns the prototype into an actual controller by feeding it a swarm.
-    pub fn start<T, K>(
+    /// Turns the prototype into an actual controller by feeding it a swarm controller.
+    ///
+    /// You must pass to this function the transport to use to dial and obtain 
+    /// `KademliaProcessingFuture`, plus a mapping function that will turn the
+    /// `KademliaProcessingFuture` into whatever the swarm expects.
+    pub fn start<T, K, M>(
         self,
         swarm: SwarmController<T>,
         kademlia_transport: K,
+        map: M,
     ) -> (
-        KademliaController<P, R, T, K>,
+        KademliaController<P, R, T, K, M>,
         Box<Future<Item = (), Error = IoError>>,
     )
     where
@@ -107,8 +112,8 @@ where
         for<'r> &'r Pc: Peerstore,
         R: Clone + 'static,                  // TODO: 'static :-/
         T: Clone + MuxedTransport + 'static, // TODO: 'static :-/
-        T::Output: From<KademliaProcessingFuture>,
         K: Transport<Output = KademliaProcessingFuture> + Clone + 'static, // TODO: 'static :-/
+        M: FnOnce(KademliaProcessingFuture) -> T::Output + Clone + 'static,
     {
         // TODO: initialization
 
@@ -116,6 +121,7 @@ where
             inner: self.inner.clone(),
             swarm_controller: swarm,
             kademlia_transport,
+            map,
         };
 
         let init_future = {
@@ -142,19 +148,21 @@ where
 
 /// Object that allows one to make queries on the Kademlia system.
 #[derive(Debug)]
-pub struct KademliaController<P, R, T, K>
+pub struct KademliaController<P, R, T, K, M>
 where
     T: MuxedTransport + 'static, // TODO: 'static :-/
 {
     inner: Arc<Inner<P, R>>,
     swarm_controller: SwarmController<T>,
     kademlia_transport: K,
+    map: M,
 }
 
-impl<P, R, T, K> Clone for KademliaController<P, R, T, K>
+impl<P, R, T, K, M> Clone for KademliaController<P, R, T, K, M>
 where
     T: Clone + MuxedTransport + 'static, // TODO: 'static :-/
     K: Clone,
+    M: Clone,
 {
     #[inline]
     fn clone(&self) -> Self {
@@ -162,11 +170,12 @@ where
             inner: self.inner.clone(),
             swarm_controller: self.swarm_controller.clone(),
             kademlia_transport: self.kademlia_transport.clone(),
+            map: self.map.clone(),
         }
     }
 }
 
-impl<P, Pc, R, T, K> KademliaController<P, R, T, K>
+impl<P, Pc, R, T, K, M> KademliaController<P, R, T, K, M>
 where
     P: Deref<Target = Pc>,
     for<'r> &'r Pc: Peerstore,
@@ -188,8 +197,8 @@ where
     where
         P: Clone + 'static,
         R: 'static,
-        T::Output: From<KademliaProcessingFuture>,
         K: Transport<Output = KademliaProcessingFuture> + Clone + 'static,
+        M: FnOnce(KademliaProcessingFuture) -> T::Output + Clone + 'static,     // TODO: 'static :-/
     {
         query::find_node(self.clone(), searched_key)
     }
@@ -214,7 +223,7 @@ impl<P, R> KademliaUpgrade<P, R> {
 
     /// Builds a connection upgrade from the controller.
     #[inline]
-    pub fn from_controller<T, K>(ctl: &KademliaController<P, R, T, K>) -> Self
+    pub fn from_controller<T, K, M>(ctl: &KademliaController<P, R, T, K, M>) -> Self
     where
         T: MuxedTransport,
     {
@@ -407,14 +416,14 @@ where
     }
 }
 
-impl<R, P, Pc, T, K> query::QueryInterface for KademliaController<P, R, T, K>
+impl<R, P, Pc, T, K, M> query::QueryInterface for KademliaController<P, R, T, K, M>
 where
     P: Clone + Deref<Target = Pc> + 'static, // TODO: 'static :-/
     for<'r> &'r Pc: Peerstore,
     R: Clone + 'static,                  // TODO: 'static :-/
     T: Clone + MuxedTransport + 'static, // TODO: 'static :-/
-    T::Output: From<KademliaProcessingFuture>,
-    K: Transport<Output = KademliaProcessingFuture> + Clone + 'static,
+    K: Transport<Output = KademliaProcessingFuture> + Clone + 'static,      // TODO: 'static
+    M: FnOnce(KademliaProcessingFuture) -> T::Output + Clone + 'static,     // TODO: 'static :-/
 {
     #[inline]
     fn local_id(&self) -> &PeerId {
@@ -467,8 +476,9 @@ where
             }
             Entry::Vacant(entry) => {
                 // Need to open a connection.
+                let map = self.map.clone();
                 match self.swarm_controller
-                    .dial(addr, self.kademlia_transport.clone())
+                    .dial(addr, self.kademlia_transport.clone().map(move |out, _, _| map(out)))
                 {
                     Ok(()) => (),
                     Err(_addr) => {

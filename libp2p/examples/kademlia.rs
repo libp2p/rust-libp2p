@@ -121,7 +121,7 @@ fn main() {
     );
 
     let (kad_controller, _kad_init) =
-        kad_ctl_proto.start(swarm_controller.clone(), transport.with_upgrade(proto));
+        kad_ctl_proto.start(swarm_controller.clone(), transport.with_upgrade(proto), |out| out);
 
     for listen_addr in listen_addrs {
         let addr = swarm_controller
