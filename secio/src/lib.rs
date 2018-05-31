@@ -206,14 +206,15 @@ impl SecioKeyPair {
         }
     }
 
-    /// Returns the public key as raw bytes.
-    ///
-    /// This is equivalent to calling `to_public_key()` and examining the content, except faster
-    /// since we don't have to create a `Vec`.
-    pub fn as_public_key_bytes(&self) -> &[u8] {
+    /// Builds a `PeerId` corresponding to the public key of this key pair.
+    pub fn to_peer_id(&self) -> PeerId {
         match self.inner {
-            SecioKeyPairInner::Rsa { ref public, .. } => &public,
-            SecioKeyPairInner::Ed25519 { ref key_pair } => key_pair.public_key_bytes(),
+            SecioKeyPairInner::Rsa { ref public, .. } => {
+                PeerId::from_public_key(&public)
+            },
+            SecioKeyPairInner::Ed25519 { ref key_pair } => {
+                PeerId::from_public_key(key_pair.public_key_bytes())
+            },
         }
     }
 
