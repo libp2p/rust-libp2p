@@ -264,7 +264,7 @@ where
         _: libp2p_core::Endpoint,
         remote_addr: &Multiaddr,
     ) -> Self::Future {
-        info!("starting secio upgrade with {:?}", remote_addr);
+        debug!("Starting secio upgrade with {:?}", remote_addr);
 
         let fut = SecioMiddleware::handshake(incoming, self.key);
         let wrapped = fut.map(|(stream_sink, pubkey)| {
