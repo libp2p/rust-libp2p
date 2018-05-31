@@ -194,6 +194,29 @@ impl SecioKeyPair {
             .expect("failed to parse generated Ed25519 key"))
     }
 
+    /// Returns the public key corresponding to this key pair.
+    pub fn to_public_key(&self) -> SecioPublicKey {
+        match self.inner {
+            SecioKeyPairInner::Rsa { ref public, .. } => {
+                SecioPublicKey::Rsa(public.clone())
+            },
+            SecioKeyPairInner::Ed25519 { ref key_pair } => {
+                SecioPublicKey::Ed25519(key_pair.public_key_bytes().to_vec())
+            },
+        }
+    }
+
+    /// Returns the public key as raw bytes.
+    ///
+    /// This is equivalent to calling `to_public_key()` and examining the content, except faster
+    /// since we don't have to create a `Vec`.
+    pub fn as_public_key_bytes(&self) -> &[u8] {
+        match self.inner {
+            SecioKeyPairInner::Rsa { ref public, .. } => &public,
+            SecioKeyPairInner::Ed25519 { ref key_pair } => key_pair.public_key_bytes(),
+        }
+    }
+
     // TODO: method to save generated key on disk?
 }
 
