@@ -99,7 +99,7 @@ pub use self::error::SecioError;
 use bytes::{Bytes, BytesMut};
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
-use libp2p_core::Multiaddr;
+use libp2p_core::{Multiaddr, PeerId};
 use ring::signature::{Ed25519KeyPair, RSAKeyPair};
 use ring::rand::SystemRandom;
 use rw_stream_sink::RwStreamSink;
@@ -219,6 +219,24 @@ pub enum SecioPublicKey {
     /// Format = ???
     // TODO: ^
     Ed25519(Vec<u8>),
+}
+
+impl SecioPublicKey {
+    /// Builds a `PeerId` corresponding to the public key of the node.
+    #[inline]
+    pub fn to_peer_id(&self) -> PeerId {
+        match self {
+            &SecioPublicKey::Rsa(ref data) => PeerId::from_public_key(data),
+            &SecioPublicKey::Ed25519(ref data) => PeerId::from_public_key(data),
+        }
+    }
+}
+
+impl From<SecioPublicKey> for PeerId {
+    #[inline]
+    fn from(key: SecioPublicKey) -> PeerId {
+        key.to_peer_id()
+    }
 }
 
 impl<S> libp2p_core::ConnectionUpgrade<S> for SecioConfig
