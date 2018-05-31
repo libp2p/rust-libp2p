@@ -194,6 +194,30 @@ impl SecioKeyPair {
             .expect("failed to parse generated Ed25519 key"))
     }
 
+    /// Returns the public key corresponding to this key pair.
+    pub fn to_public_key(&self) -> SecioPublicKey {
+        match self.inner {
+            SecioKeyPairInner::Rsa { ref public, .. } => {
+                SecioPublicKey::Rsa(public.clone())
+            },
+            SecioKeyPairInner::Ed25519 { ref key_pair } => {
+                SecioPublicKey::Ed25519(key_pair.public_key_bytes().to_vec())
+            },
+        }
+    }
+
+    /// Builds a `PeerId` corresponding to the public key of this key pair.
+    pub fn to_peer_id(&self) -> PeerId {
+        match self.inner {
+            SecioKeyPairInner::Rsa { ref public, .. } => {
+                PeerId::from_public_key(&public)
+            },
+            SecioKeyPairInner::Ed25519 { ref key_pair } => {
+                PeerId::from_public_key(key_pair.public_key_bytes())
+            },
+        }
+    }
+
     // TODO: method to save generated key on disk?
 }
 
