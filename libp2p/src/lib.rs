@@ -59,15 +59,14 @@ pub struct CommonTransport {
     inner: CommonTransportInner
 }
 
-#[derive(Debug, Clone)]
 #[cfg(not(target_os = "emscripten"))]
-struct CommonTransportInner {
-    inner: websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>,
-}
-#[derive(Debug, Clone)]
+pub type InnerImplementation = core::transport::OrTransport<dns::DnsConfig<tcp::TcpConfig>, websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>>;
 #[cfg(target_os = "emscripten")]
+pub type InnerImplementation = websocket::BrowserWsConfig;
+
+#[derive(Debug, Clone)]
 struct CommonTransportInner {
-    inner: websocket::BrowserWsConfig,
+    inner: InnerImplementation,
 }
 
 impl CommonTransport {
@@ -77,10 +76,11 @@ impl CommonTransport {
     pub fn new(tokio_handle: tokio_core::reactor::Handle) -> CommonTransport {
         let tcp = tcp::TcpConfig::new(tokio_handle);
         let with_dns = dns::DnsConfig::new(tcp);
-        let with_ws = websocket::WsConfig::new(with_dns);
+        let with_ws = websocket::WsConfig::new(with_dns.clone());
+        let inner = with_dns.or_transport(with_ws);
 
         CommonTransport {
-            inner: CommonTransportInner { inner: with_ws }
+            inner: CommonTransportInner { inner }
         }
     }
 
@@ -94,11 +94,6 @@ impl CommonTransport {
         }
     }
 }
-
-#[cfg(not(target_os = "emscripten"))]
-pub type InnerImplementation = websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>;
-#[cfg(target_os = "emscripten")]
-pub type InnerImplementation = websocket::BrowserWsConfig;
 
 impl Transport for CommonTransport {
     type Output = <InnerImplementation as Transport>::Output;
