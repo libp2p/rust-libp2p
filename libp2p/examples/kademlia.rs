@@ -66,8 +66,8 @@ fn main() {
             let plain_text = upgrade::PlainTextConfig;
 
             let secio = {
-                let private_key = include_bytes!("test-private-key.pk8");
-                let public_key = include_bytes!("test-public-key.der").to_vec();
+                let private_key = include_bytes!("test-rsa-private-key.pk8");
+                let public_key = include_bytes!("test-rsa-public-key.der").to_vec();
                 libp2p::secio::SecioConfig {
                     key: libp2p::secio::SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap(),
                 }
@@ -96,7 +96,7 @@ fn main() {
     // incoming connections, and that will automatically apply secio and multiplex on top
     // of any opened stream.
 
-    let my_peer_id = PeerId::from_public_key(include_bytes!("test-public-key.der"));
+    let my_peer_id = PeerId::from_public_key(include_bytes!("test-rsa-public-key.der"));
     println!("Local peer id is: {:?}", my_peer_id);
 
     // Let's put this `transport` into a Kademlia *swarm*. The swarm will handle all the incoming

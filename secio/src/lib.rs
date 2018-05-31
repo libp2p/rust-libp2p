@@ -49,9 +49,9 @@
 //! let transport = TcpConfig::new(core.handle())
 //!     .with_upgrade({
 //!         # let private_key = b"";
-//!         //let private_key = include_bytes!("test-private-key.pk8");
+//!         //let private_key = include_bytes!("test-rsa-private-key.pk8");
 //!         # let public_key = vec![];
-//!         //let public_key = include_bytes!("test-public-key.der").to_vec();
+//!         //let public_key = include_bytes!("test-rsa-public-key.der").to_vec();
 //!         let upgrade = SecioConfig {
 //!             // See the documentation of `SecioKeyPair`.
 //!             key: SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap(),
@@ -99,8 +99,9 @@ pub use self::error::SecioError;
 use bytes::{Bytes, BytesMut};
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
-use libp2p_core::Multiaddr;
-use ring::signature::RSAKeyPair;
+use libp2p_core::{Multiaddr, PeerId};
+use ring::signature::{Ed25519KeyPair, RSAKeyPair};
+use ring::rand::SystemRandom;
 use rw_stream_sink::RwStreamSink;
 use std::error::Error;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -152,6 +153,7 @@ pub struct SecioKeyPair {
 }
 
 impl SecioKeyPair {
+    /// Builds a `SecioKeyPair` from a PKCS8 private key and public key.
     pub fn rsa_from_pkcs8<P>(
         private: &[u8],
         public: P,
@@ -169,6 +171,30 @@ impl SecioKeyPair {
             },
         })
     }
+
+    /// Builds a `SecioKeyPair` from a PKCS8 ED25519 private key.
+    pub fn ed25519_from_pkcs8<K>(key: K) -> Result<SecioKeyPair, Box<Error + Send + Sync>>
+        where K: AsRef<[u8]>
+    {
+        let key_pair =
+            Ed25519KeyPair::from_pkcs8(Input::from(key.as_ref())).map_err(|err| Box::new(err))?;
+
+        Ok(SecioKeyPair {
+            inner: SecioKeyPairInner::Ed25519 {
+                key_pair: Arc::new(key_pair),
+            },
+        })
+    }
+
+    /// Generates a new Ed25519 key pair and uses it.
+    pub fn ed25519_generated() -> Result<SecioKeyPair, Box<Error + Send + Sync>> {
+        let rng = SystemRandom::new();
+        let gen = Ed25519KeyPair::generate_pkcs8(&rng).map_err(|err| Box::new(err))?;
+        Ok(SecioKeyPair::ed25519_from_pkcs8(&gen[..])
+            .expect("failed to parse generated Ed25519 key"))
+    }
+
+    // TODO: method to save generated key on disk?
 }
 
 // Inner content of `SecioKeyPair`.
@@ -176,14 +202,41 @@ impl SecioKeyPair {
 enum SecioKeyPairInner {
     Rsa {
         public: Vec<u8>,
+        // We use an `Arc` so that we can clone the enum.
         private: Arc<RSAKeyPair>,
+    },
+    Ed25519 {
+        // We use an `Arc` so that we can clone the enum.
+        key_pair: Arc<Ed25519KeyPair>,
     },
 }
 
+/// Public key used by the remote.
 #[derive(Debug, Clone)]
 pub enum SecioPublicKey {
     /// DER format.
     Rsa(Vec<u8>),
+    /// Format = ???
+    // TODO: ^
+    Ed25519(Vec<u8>),
+}
+
+impl SecioPublicKey {
+    /// Builds a `PeerId` corresponding to the public key of the node.
+    #[inline]
+    pub fn to_peer_id(&self) -> PeerId {
+        match self {
+            &SecioPublicKey::Rsa(ref data) => PeerId::from_public_key(data),
+            &SecioPublicKey::Ed25519(ref data) => PeerId::from_public_key(data),
+        }
+    }
+}
+
+impl From<SecioPublicKey> for PeerId {
+    #[inline]
+    fn from(key: SecioPublicKey) -> PeerId {
+        key.to_peer_id()
+    }
 }
 
 impl<S> libp2p_core::ConnectionUpgrade<S> for SecioConfig
@@ -251,12 +304,11 @@ where
     where
         S: 'a,
     {
-        let SecioKeyPairInner::Rsa { private, public } = key_pair.inner;
-
-        let fut = handshake::handshake(socket, public, private).map(|(inner, pubkey)| {
+        let fut = handshake::handshake(socket, key_pair).map(|(inner, pubkey)| {
             let inner = SecioMiddleware { inner };
-            (inner, SecioPublicKey::Rsa(pubkey))
+            (inner, pubkey)
         });
+
         Box::new(fut)
     }
 }
