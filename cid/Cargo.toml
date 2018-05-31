@@ -12,7 +12,7 @@ license = "MIT"
 readme = "README.md"
 
 [dependencies]
-multihash = "~0.7.0"
+multihash = { path = "../multihash" }
 multibase = "~0.6.0"
 integer-encoding = "~1.0.3"
 
