@@ -28,9 +28,9 @@ let mut core = Core::new().unwrap();
 let transport = TcpConfig::new(core.handle())
     .with_upgrade({
         # let private_key = b"";
-        //let private_key = include_bytes!("test-private-key.pk8");
+        //let private_key = include_bytes!("test-rsa-private-key.pk8");
         # let public_key = vec![];
-        //let public_key = include_bytes!("test-public-key.der").to_vec();
+        //let public_key = include_bytes!("test-rsa-public-key.der").to_vec();
         SecioConfig {
             // See the documentation of `SecioKeyPair`.
             key: SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap(),

@@ -34,30 +34,29 @@ use ring::agreement::EphemeralPrivateKey;
 use ring::hmac::{SigningContext, SigningKey, VerificationKey};
 use ring::rand::SecureRandom;
 use ring::signature::verify as signature_verify;
-use ring::signature::{RSAKeyPair, RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256};
+use ring::signature::{RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256, ED25519};
 use ring::{agreement, digest, rand};
 use std::cmp::{self, Ordering};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::mem;
-use std::sync::Arc;
 use structs_proto::{Exchange, Propose};
 use tokio_io::codec::length_delimited;
 use tokio_io::{AsyncRead, AsyncWrite};
 use untrusted::Input as UntrustedInput;
+use {SecioKeyPair, SecioKeyPairInner, SecioPublicKey};
 
 /// Performs a handshake on the given socket.
 ///
 /// This function expects that the remote is identified with `remote_public_key`, and the remote
-/// will expect that we are identified with `local_public_key`. Obviously `local_private_key` must
-/// be paired with `local_public_key`. Any mismatch somewhere will produce a `SecioError`.
+/// will expect that we are identified with `local_key`.Any mismatch somewhere will produce a
+/// `SecioError`.
 ///
 /// On success, returns an object that implements the `Sink` and `Stream` trait whose items are
 /// buffers of data, plus the public key of the remote.
 pub fn handshake<'a, S: 'a>(
     socket: S,
-    local_public_key: Vec<u8>,
-    local_private_key: Arc<RSAKeyPair>,
-) -> Box<Future<Item = (FullCodec<S>, Vec<u8>), Error = SecioError> + 'a>
+    local_key: SecioKeyPair,
+) -> Box<Future<Item = (FullCodec<S>, SecioPublicKey), Error = SecioError> + 'a>
 where
     S: AsyncRead + AsyncWrite,
 {
@@ -67,8 +66,7 @@ where
     // throughout the various parts of the handshake.
     struct HandshakeContext {
         // Filled with this function's parameters.
-        local_public_key: Vec<u8>,
-        local_private_key: Arc<RSAKeyPair>,
+        local_key: SecioKeyPairInner,
 
         rng: rand::SystemRandom,
         // Locally-generated random number. The array size can be changed without any repercussion.
@@ -81,7 +79,7 @@ where
         // The remote proposition's raw bytes.
         remote_proposition_bytes: BytesMut,
         remote_public_key_in_protobuf_bytes: Vec<u8>,
-        remote_public_key: Vec<u8>,
+        remote_public_key: Option<SecioPublicKey>,
 
         // The remote peer's version of `local_nonce`.
         // If the NONCE size is actually part of the protocol, we can change this to a fixed-size
@@ -110,15 +108,14 @@ where
     }
 
     let context = HandshakeContext {
-        local_public_key: local_public_key,
-        local_private_key: local_private_key,
+        local_key: local_key.inner,
         rng: rand::SystemRandom::new(),
         local_nonce: Default::default(),
         local_public_key_in_protobuf_bytes: Vec::new(),
         local_proposition_bytes: Vec::new(),
         remote_proposition_bytes: BytesMut::new(),
         remote_public_key_in_protobuf_bytes: Vec::new(),
-        remote_public_key: Vec::new(),
+        remote_public_key: None,
         remote_nonce: Vec::new(),
         hashes_ordering: Ordering::Equal,
         chosen_exchange: None,
@@ -139,16 +136,23 @@ where
         .and_then(|mut context| {
             context.rng.fill(&mut context.local_nonce)
                 .map_err(|_| SecioError::NonceGenerationFailed)?;
-            trace!("starting handshake ; local pubkey = {:?} ; local nonce = {:?}",
-                   context.local_public_key, context.local_nonce);
+            trace!("starting handshake ; local nonce = {:?}", context.local_nonce);
             Ok(context)
         })
 
         // Send our proposition with our nonce, public key and supported protocols.
         .and_then(|mut context| {
             let mut public_key = PublicKeyProtobuf::new();
-            public_key.set_Type(KeyTypeProtobuf::RSA);
-            public_key.set_Data(context.local_public_key.clone());
+            match context.local_key {
+                SecioKeyPairInner::Rsa { ref public, .. } => {
+                    public_key.set_Type(KeyTypeProtobuf::RSA);
+                    public_key.set_Data(public.clone());
+                },
+                SecioKeyPairInner::Ed25519 { ref key_pair } => {
+                    public_key.set_Type(KeyTypeProtobuf::Ed25519);
+                    public_key.set_Data(key_pair.public_key_bytes().to_owned());
+                },
+            }
             context.local_public_key_in_protobuf_bytes = public_key.write_to_bytes().unwrap();
 
             let mut proposition = Propose::new();
@@ -202,18 +206,21 @@ where
                         }
                     };
 
-                    // TODO: For now we suppose that the key is in the RSA format because that's
-                    //       the only thing the Go and JS implementations support.
-                    match pubkey.get_Type() {
-                        KeyTypeProtobuf::RSA => (),
+                    context.remote_nonce = prop.take_rand();
+                    context.remote_public_key = Some(match pubkey.get_Type() {
+                        KeyTypeProtobuf::RSA => {
+                            SecioPublicKey::Rsa(pubkey.take_Data())
+                        },
+                        KeyTypeProtobuf::Ed25519 => {
+                            SecioPublicKey::Ed25519(pubkey.take_Data())
+                        },
                         format => {
+                            // TODO: support secp255k1
                             let err = IoError::new(IoErrorKind::Other, "unsupported protocol");
                             debug!("unsupported remote pubkey format {:?}", format);
                             return Err(err.into());
                         },
-                    };
-                    context.remote_public_key = pubkey.take_Data();
-                    context.remote_nonce = prop.take_rand();
+                    });
                     trace!("received proposition from remote ; pubkey = {:?} ; nonce = {:?}",
                            context.remote_public_key, context.remote_nonce);
                     Ok((prop, socket, context))
@@ -302,25 +309,33 @@ where
                 let mut exchange = Exchange::new();
                 exchange.set_epubkey(local_tmp_pub_key.to_vec());
                 exchange.set_signature({
-                    let mut state = match RSASigningState::new(context.local_private_key.clone()) {
-                        Ok(s) => s,
-                        Err(_) => {
-                            debug!("failed to sign local exchange");
-                            return Err(SecioError::SigningFailure);
-                        },
-                    };
-                    let mut signature = vec![0; context.local_private_key.public_modulus_len()];
-                    match state.sign(&RSA_PKCS1_SHA256, &context.rng, &data_to_sign,
-                                     &mut signature)
-                    {
-                        Ok(_) => (),
-                        Err(_) => {
-                            debug!("failed to sign local exchange");
-                            return Err(SecioError::SigningFailure);
-                        },
-                    };
+                    match context.local_key {
+                        SecioKeyPairInner::Rsa { ref private, .. } => {
+                            let mut state = match RSASigningState::new(private.clone()) {
+                                Ok(s) => s,
+                                Err(_) => {
+                                    debug!("failed to sign local exchange");
+                                    return Err(SecioError::SigningFailure);
+                                },
+                            };
+                            let mut signature = vec![0; private.public_modulus_len()];
+                            match state.sign(&RSA_PKCS1_SHA256, &context.rng, &data_to_sign,
+                                             &mut signature)
+                            {
+                                Ok(_) => (),
+                                Err(_) => {
+                                    debug!("failed to sign local exchange");
+                                    return Err(SecioError::SigningFailure);
+                                },
+                            };
 
-                    signature
+                            signature
+                        },
+                        SecioKeyPairInner::Ed25519 { ref key_pair } => {
+                            let signature = key_pair.sign(&data_to_sign);
+                            signature.as_ref().to_owned()
+                        },
+                    }
                 });
                 exchange
             };
@@ -374,20 +389,39 @@ where
             data_to_verify.extend_from_slice(&context.local_proposition_bytes);
             data_to_verify.extend_from_slice(remote_exch.get_epubkey());
 
-            // TODO: The ring library doesn't like some stuff in our DER public key, therefore
-            //       we scrap the first 24 bytes of the key. A proper fix would be to write a DER
-            //       parser, but that's not trivial.
-            match signature_verify(&RSA_PKCS1_2048_8192_SHA256,
-                                UntrustedInput::from(&context.remote_public_key[24..]),
-                                UntrustedInput::from(&data_to_verify),
-                                UntrustedInput::from(remote_exch.get_signature()))
-            {
-                Ok(()) => (),
-                Err(_) => {
-                    debug!("failed to verify the remote's signature");
-                    return Err(SecioError::SignatureVerificationFailed)
+            match context.remote_public_key {
+                Some(SecioPublicKey::Rsa(ref remote_public_key)) => {
+                    // TODO: The ring library doesn't like some stuff in our DER public key,
+                    //       therefore we scrap the first 24 bytes of the key. A proper fix would
+                    //       be to write a DER parser, but that's not trivial.
+                    match signature_verify(&RSA_PKCS1_2048_8192_SHA256,
+                                           UntrustedInput::from(&remote_public_key[24..]),
+                                           UntrustedInput::from(&data_to_verify),
+                                           UntrustedInput::from(remote_exch.get_signature()))
+                    {
+                        Ok(()) => (),
+                        Err(_) => {
+                            debug!("failed to verify the remote's signature");
+                            return Err(SecioError::SignatureVerificationFailed)
+                        },
+                    }
                 },
-            }
+                Some(SecioPublicKey::Ed25519(ref remote_public_key)) => {
+                    match signature_verify(&ED25519,
+                                           UntrustedInput::from(remote_public_key),
+                                           UntrustedInput::from(&data_to_verify),
+                                           UntrustedInput::from(remote_exch.get_signature()))
+                    {
+                        Ok(()) => (),
+                        Err(_) => {
+                            debug!("failed to verify the remote's signature");
+                            return Err(SecioError::SignatureVerificationFailed)
+                        },
+                    }
+                },
+                None => unreachable!("we store a Some in the remote public key before reaching \
+                                      this point")
+            };
 
             trace!("successfully verified the remote's signature");
             Ok((remote_exch, socket, context))
@@ -470,7 +504,7 @@ where
                     match nonce {
                         Some(ref n) if n == &context.local_nonce => {
                             trace!("secio handshake success");
-                            Ok((rest, context.remote_public_key))
+                            Ok((rest, context.remote_public_key.expect("we stored a Some earlier")))
                         },
                         None => {
                             debug!("unexpected eof during nonce check");
@@ -527,25 +561,23 @@ mod tests {
     use futures::Stream;
     use ring::digest::SHA256;
     use ring::hmac::SigningKey;
-    use ring::signature::RSAKeyPair;
-    use std::sync::Arc;
-    use untrusted::Input;
+    use SecioKeyPair;
 
     #[test]
-    fn handshake_with_self_succeeds() {
+    fn handshake_with_self_succeeds_rsa() {
         let mut core = Core::new().unwrap();
 
-        let private_key1 = {
-            let pkcs8 = include_bytes!("../tests/test-private-key.pk8");
-            Arc::new(RSAKeyPair::from_pkcs8(Input::from(&pkcs8[..])).unwrap())
+        let key1 = {
+            let private = include_bytes!("../tests/test-rsa-private-key.pk8");
+            let public = include_bytes!("../tests/test-rsa-public-key.der").to_vec();
+            SecioKeyPair::rsa_from_pkcs8(private, public).unwrap()
         };
-        let public_key1 = include_bytes!("../tests/test-public-key.der").to_vec();
 
-        let private_key2 = {
-            let pkcs8 = include_bytes!("../tests/test-private-key-2.pk8");
-            Arc::new(RSAKeyPair::from_pkcs8(Input::from(&pkcs8[..])).unwrap())
+        let key2 = {
+            let private = include_bytes!("../tests/test-rsa-private-key-2.pk8");
+            let public = include_bytes!("../tests/test-rsa-public-key-2.der").to_vec();
+            SecioKeyPair::rsa_from_pkcs8(private, public).unwrap()
         };
-        let public_key2 = include_bytes!("../tests/test-public-key-2.der").to_vec();
 
         let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap(), &core.handle()).unwrap();
         let listener_addr = listener.local_addr().unwrap();
@@ -554,11 +586,34 @@ mod tests {
             .incoming()
             .into_future()
             .map_err(|(e, _)| e.into())
-            .and_then(move |(connec, _)| handshake(connec.unwrap().0, public_key1, private_key1));
+            .and_then(move |(connec, _)| handshake(connec.unwrap().0, key1));
 
         let client = TcpStream::connect(&listener_addr, &core.handle())
             .map_err(|e| e.into())
-            .and_then(move |stream| handshake(stream, public_key2, private_key2));
+            .and_then(move |stream| handshake(stream, key2));
+
+        core.run(server.join(client)).unwrap();
+    }
+
+    #[test]
+    fn handshake_with_self_succeeds_ed25519() {
+        let mut core = Core::new().unwrap();
+
+        let key1 = SecioKeyPair::ed25519_generated().unwrap();
+        let key2 = SecioKeyPair::ed25519_generated().unwrap();
+
+        let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap(), &core.handle()).unwrap();
+        let listener_addr = listener.local_addr().unwrap();
+
+        let server = listener
+            .incoming()
+            .into_future()
+            .map_err(|(e, _)| e.into())
+            .and_then(move |(connec, _)| handshake(connec.unwrap().0, key1));
+
+        let client = TcpStream::connect(&listener_addr, &core.handle())
+            .map_err(|e| e.into())
+            .and_then(move |stream| handshake(stream, key2));
 
         core.run(server.join(client)).unwrap();
     }
