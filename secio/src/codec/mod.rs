@@ -50,8 +50,9 @@ pub fn full_codec<S>(
 where
     S: AsyncRead + AsyncWrite,
 {
+    let hmac_num_bytes = encoding_hmac.digest_algorithm().output_len;
     let encoder = EncoderMiddleware::new(socket, cipher_encoding, encoding_hmac);
-    let codec = DecoderMiddleware::new(encoder, cipher_decoder, decoding_hmac);
+    let codec = DecoderMiddleware::new(encoder, cipher_decoder, decoding_hmac, hmac_num_bytes);
 
     codec
 }
@@ -102,6 +103,7 @@ mod tests {
                 vec![0; 16],
             )),
             VerificationKey::new(&SHA256, &hmac_key),
+            32,
         );
 
         let data = b"hello world";
