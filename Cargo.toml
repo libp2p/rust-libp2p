@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "cid",
     "circular-buffer",
     "datastore",
     "dns",
@@ -7,6 +8,8 @@ members = [
     "identify",
     "kad",
     "libp2p",
+    "multiaddr",
+    "multihash",
     "mplex",
     "multistream-select",
     "peerstore",
