@@ -14,7 +14,7 @@ ring = { version = "0.12.1", features = ["rsa_signing"] }
 rust-crypto = "^0.2"
 rw-stream-sink = { path = "../rw-stream-sink" }
 tokio-io = "0.1.0"
-untrusted = "0.6.0"
+untrusted = "0.5.1"
 
 [dev-dependencies]
 libp2p-tcp-transport = { path = "../tcp-transport" }

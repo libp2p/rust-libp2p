@@ -22,8 +22,6 @@ members = [
 ]
 
 [patch.crates-io]
-# TODO: Update ring and solve conflicts
-"ring" = { git = "https://github.com/briansmith/ring", rev = "3a14ef619559f7d4b69e2286d49c833409eef34a" }
 # Using a version of rust-multihash that compiles on emscripten
 # TODO: remove once merged upstream
 "multihash" = { git = "https://github.com/tomaka/rust-multihash", branch = "emscripten-hack" }

@@ -42,6 +42,8 @@ use ring::hmac;
 pub struct DecoderMiddleware<S> {
     cipher_state: Box<SynchronousStreamCipher>,
     hmac_key: hmac::VerificationKey,
+    // TODO: when a new version of ring is released, we can use `hmac_key.digest_algorithm().output_len` instead
+    hmac_num_bytes: usize,
     raw_stream: S,
 }
 
@@ -51,11 +53,13 @@ impl<S> DecoderMiddleware<S> {
         raw_stream: S,
         cipher: Box<SynchronousStreamCipher>,
         hmac_key: hmac::VerificationKey,
+        hmac_num_bytes: usize,      // TODO: remove this parameter
     ) -> DecoderMiddleware<S> {
         DecoderMiddleware {
             cipher_state: cipher,
-            hmac_key: hmac_key,
-            raw_stream: raw_stream,
+            hmac_key,
+            raw_stream,
+            hmac_num_bytes,
         }
     }
 }
@@ -77,7 +81,8 @@ where
             Err(err) => return Err(err.into()),
         };
 
-        let hmac_num_bytes = self.hmac_key.digest_algorithm().output_len;
+        // TODO: when a new version of ring is released, we can use `hmac_key.digest_algorithm().output_len` instead
+        let hmac_num_bytes = self.hmac_num_bytes;
 
         if frame.len() < hmac_num_bytes {
             debug!("frame too short when decoding secio frame");
