@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "cid",
     "circular-buffer",
     "datastore",
     "dns",
@@ -7,6 +8,8 @@ members = [
     "identify",
     "kad",
     "libp2p",
+    "multiaddr",
+    "multihash",
     "mplex",
     "multistream-select",
     "peerstore",
@@ -20,8 +23,3 @@ members = [
     "varint-rs",
     "websocket",
 ]
-
-[patch.crates-io]
-# Using a version of rust-multihash that compiles on emscripten
-# TODO: remove once merged upstream
-"multihash" = { git = "https://github.com/tomaka/rust-multihash", branch = "emscripten-hack" }

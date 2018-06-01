@@ -8,8 +8,8 @@ bs58 = "0.2.0"
 bytes = "0.4"
 fnv = "1.0"
 log = "0.4"
-multiaddr = "0.3.0"
-multihash = "0.7.0"
+multiaddr = { path = "../multiaddr" }
+multihash = { path = "../multihash" }
 multistream-select = { path = "../multistream-select" }
 futures = { version = "0.1", features = ["use_std"] }
 parking_lot = "0.5.3"

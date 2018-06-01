@@ -1,0 +1,22 @@
+[package]
+name = "cid"
+version = "0.2.3"
+description = "CID in rust"
+homepage = "https://github.com/ipld/rust-cid"
+authors = ["Friedel Ziegelmayer <dignifiedquire@gmail.com>"]
+
+keywords = ["ipld", "ipfs", "cid", "multihash"]
+
+license = "MIT"
+
+readme = "README.md"
+
+[dependencies]
+multihash = { path = "../multihash" }
+multibase = "~0.6.0"
+integer-encoding = "~1.0.3"
+
+[package.metadata.release]
+upload-doc = true
+pre-release-commit-message = "Release {{version}} 🎉🎉"
+no-dev-version = true

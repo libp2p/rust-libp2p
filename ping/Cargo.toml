@@ -7,7 +7,7 @@ authors = ["pierre <pierre.krieger1708@gmail.com>"]
 bytes = "0.4"
 libp2p-core = { path = "../core" }
 log = "0.4.1"
-multiaddr = "0.3.0"
+multiaddr = { path = "../multiaddr" }
 multistream-select = { path = "../multistream-select" }
 futures = "0.1"
 parking_lot = "0.5"

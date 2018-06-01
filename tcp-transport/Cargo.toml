@@ -7,6 +7,6 @@ authors = ["Parity Technologies <admin@parity.io>"]
 libp2p-core = { path = "../core" }
 log = "0.4.1"
 futures = "0.1"
-multiaddr = "0.3.0"
+multiaddr = { path = "../multiaddr" }
 tokio-core = "0.1"
 tokio-io = "0.1"

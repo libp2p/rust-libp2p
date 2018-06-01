@@ -9,7 +9,7 @@ default = ["libp2p-secio"]
 [dependencies]
 bytes = "0.4"
 futures = "0.1"
-multiaddr = "0.3"
+multiaddr = { path = "../multiaddr" }
 libp2p-mplex = { path = "../mplex" }
 libp2p-identify = { path = "../identify" }
 libp2p-kad = { path = "../kad" }

@@ -16,7 +16,7 @@ libp2p-peerstore = { path = "../peerstore" }
 libp2p-ping = { path = "../ping" }
 libp2p-core = { path = "../core" }
 log = "0.4"
-multiaddr = "0.3"
+multiaddr = { path = "../multiaddr" }
 parking_lot = "0.5.1"
 protobuf = "2"
 rand = "0.4.2"

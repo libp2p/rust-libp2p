@@ -1,0 +1,21 @@
+[package]
+name = "multihash"
+description = "Implementation of the multihash format"
+repository = "https://github.com/multiformats/rust-multihash"
+
+keywords = ["multihash", "ipfs"]
+
+version = "0.8.1-pre"
+
+authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
+
+license = "MIT"
+
+readme = "README.md"
+
+documentation = "https://docs.rs/multihash/"
+
+[dependencies]
+sha1 = "0.5"
+sha2 = { version = "0.7", default-features = false }
+tiny-keccak = "1.2"
