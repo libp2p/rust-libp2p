@@ -42,10 +42,12 @@ pub extern crate libp2p_secio as secio;
 pub extern crate libp2p_tcp_transport as tcp;
 pub extern crate libp2p_websocket as websocket;
 
+mod peerstore_ext;
 pub mod simple;
 
 pub use self::core::{Transport, ConnectionUpgrade, PeerId, swarm};
 pub use self::multiaddr::Multiaddr;
+pub use self::peerstore_ext::PeerstoreWrapper;
 pub use self::simple::SimpleProtocol;
 
 /// Implementation of `Transport` that supports the most common protocols.

@@ -12,7 +12,6 @@ datastore = { path = "../datastore" }
 fnv = "1.0"
 futures = "0.1"
 libp2p-identify = { path = "../identify" }
-libp2p-peerstore = { path = "../peerstore" }
 libp2p-ping = { path = "../ping" }
 libp2p-core = { path = "../core" }
 log = "0.4"

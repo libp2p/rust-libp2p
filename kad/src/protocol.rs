@@ -28,8 +28,7 @@
 use bytes::Bytes;
 use futures::future;
 use futures::{Sink, Stream};
-use libp2p_peerstore::PeerId;
-use libp2p_core::{ConnectionUpgrade, Endpoint, Multiaddr};
+use libp2p_core::{ConnectionUpgrade, Endpoint, Multiaddr, PeerId};
 use protobuf::{self, Message};
 use protobuf_structs;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -307,8 +306,7 @@ mod tests {
     use self::libp2p_tcp_transport::TcpConfig;
     use self::tokio_core::reactor::Core;
     use futures::{Future, Sink, Stream};
-    use libp2p_peerstore::PeerId;
-    use libp2p_core::Transport;
+    use libp2p_core::{Transport, PeerId};
     use protocol::{ConnectionType, KadMsg, KademliaProtocolConfig, Peer};
     use std::sync::mpsc;
     use std::thread;

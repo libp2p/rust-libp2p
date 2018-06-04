@@ -28,8 +28,8 @@ extern crate tokio_io;
 
 use bigint::U512;
 use futures::future::Future;
-use libp2p::peerstore::{PeerAccess, PeerId, Peerstore};
-use libp2p::Multiaddr;
+use libp2p::peerstore::{PeerAccess, Peerstore};
+use libp2p::{PeerId, Multiaddr};
 use std::env;
 use std::sync::Arc;
 use std::time::Duration;
@@ -53,8 +53,9 @@ fn main() {
     // We start by building the tokio engine that will run all the sockets.
     let mut core = Core::new().unwrap();
 
-    let peer_store = Arc::new(libp2p::peerstore::memory_peerstore::MemoryPeerstore::empty());
-    ipfs_bootstrap(&*peer_store);
+    let peer_interface = libp2p::peerstore::memory_peerstore::MemoryPeerstore::empty();
+    ipfs_bootstrap(&peer_interface);
+    let peer_interface = libp2p::PeerstoreWrapper(Arc::new(peer_interface));
 
     // Now let's build the transport stack.
     // We create a `TcpConfig` that indicates that we want TCP/IP.
@@ -87,7 +88,7 @@ fn main() {
         // a `Transport`.
         .into_connection_reuse();
 
-    let transport = libp2p::identify::IdentifyTransport::new(transport, peer_store.clone())
+    let transport = libp2p::identify::IdentifyTransport::new(transport, peer_interface.clone())
         .map(|id_out, _, _| {
             id_out.socket
         });
@@ -104,7 +105,7 @@ fn main() {
     let kad_config = libp2p::kad::KademliaConfig {
         parallelism: 3,
         record_store: (),
-        peer_store: peer_store,
+        peer_interface: peer_interface,
         local_peer_id: my_peer_id.clone(),
         timeout: Duration::from_secs(2),
     };
@@ -155,12 +156,12 @@ fn main() {
 }
 
 /// Stores initial addresses on the given peer store. Uses a very large timeout.
-pub fn ipfs_bootstrap<P>(peer_store: P)
+pub fn ipfs_bootstrap<P>(peer_interface: P)
 where
     P: Peerstore + Clone,
 {
     const ADDRESSES: &[&str] = &[
-        "/ip4/127.0.0.1/tcp/4001/ipfs/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
+        "/ip4/104.131.131.82/tcp/4001/ipfs/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
         // TODO: add some bootstrap nodes here
     ];
 
@@ -179,7 +180,7 @@ where
             _ => panic!("hard-coded multiaddr didn't end with /ipfs/"),
         };
 
-        peer_store
+        peer_interface
             .clone()
             .peer_or_create(&peer)
             .add_addr(multiaddr, ttl.clone());

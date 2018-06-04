@@ -28,8 +28,7 @@ use futures::sync::oneshot;
 use futures::{self, future, Future};
 use kad_server::{KadServerInterface, KademliaServerConfig, KademliaServerController};
 use kbucket::{KBucketsPeerId, KBucketsTable, UpdateOutcome};
-use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};
-use libp2p_core::{ConnectionUpgrade, Endpoint, MuxedTransport, SwarmController, Transport};
+use libp2p_core::{ConnectionUpgrade, Endpoint, MuxedTransport, SwarmController, Transport, PeerId};
 use multiaddr::Multiaddr;
 use parking_lot::Mutex;
 use protocol::ConnectionType;
@@ -38,11 +37,29 @@ use std::collections::hash_map::Entry;
 use std::fmt;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
-use std::ops::Deref;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_timer;
+
+/// Interface betwee, kademlia and the outside world.
+pub trait KademliaPeerInterface {
+    /// Iterator returned by `peer_addrs`.
+    type AddrsIter: Iterator<Item = Multiaddr>;
+    /// Iterator returned by `peers`.
+    type PeersIter: Iterator<Item = PeerId>;
+
+    /// Adds new known addresses to a peer.
+    // TODO: remove?
+    fn add_addrs<I>(&self, peer: &PeerId, multiaddrs: I)
+        where I: Iterator<Item = Multiaddr>;
+
+    /// Returns the known addresses of a peer.
+    fn peer_addrs(&self, peer: &PeerId) -> Self::AddrsIter;
+
+    /// Returns all the peers known by the peers storage.
+    fn peers(&self) -> Self::PeersIter;
+}
 
 /// Prototype for a future Kademlia protocol running on a socket.
 #[derive(Debug, Clone)]
@@ -55,7 +72,7 @@ pub struct KademliaConfig<P, R> {
     // TODO: say that must implement the `Recordstore` trait.
     pub record_store: R,
     /// Used to load and store information about peers.
-    pub peer_store: P,
+    pub peer_interface: P,
     /// Id of the local peer.
     pub local_peer_id: PeerId,
     /// When contacting a node, duration after which we consider it unresponsive.
@@ -68,15 +85,14 @@ pub struct KademliaControllerPrototype<P, R> {
     inner: Arc<Inner<P, R>>,
 }
 
-impl<P, Pc, R> KademliaControllerPrototype<P, R>
+impl<P, R> KademliaControllerPrototype<P, R>
 where
-    P: Deref<Target = Pc>,
-    for<'r> &'r Pc: Peerstore,
+    P: KademliaPeerInterface,
 {
     /// Creates a new controller from that configuration.
     pub fn new(config: KademliaConfig<P, R>) -> KademliaControllerPrototype<P, R> {
         let buckets = KBucketsTable::new(config.local_peer_id.clone(), config.timeout);
-        for peer_id in config.peer_store.deref().peers() {
+        for peer_id in config.peer_interface.peers() {
             let _ = buckets.update(peer_id, ());
         }
 
@@ -84,7 +100,7 @@ where
             kbuckets: buckets,
             timer: tokio_timer::wheel().build(),
             record_store: config.record_store,
-            peer_store: config.peer_store,
+            peer_interface: config.peer_interface,
             connections: Default::default(),
             timeout: config.timeout,
             parallelism: config.parallelism as usize,
@@ -108,8 +124,7 @@ where
         Box<Future<Item = (), Error = IoError>>,
     )
     where
-        P: Clone + Deref<Target = Pc> + 'static, // TODO: 'static :-/
-        for<'r> &'r Pc: Peerstore,
+        P: Clone + KademliaPeerInterface + 'static, // TODO: 'static :-/
         R: Clone + 'static,                  // TODO: 'static :-/
         T: Clone + MuxedTransport + 'static, // TODO: 'static :-/
         K: Transport<Output = KademliaProcessingFuture> + Clone + 'static, // TODO: 'static :-/
@@ -175,10 +190,9 @@ where
     }
 }
 
-impl<P, Pc, R, T, K, M> KademliaController<P, R, T, K, M>
+impl<P, R, T, K, M> KademliaController<P, R, T, K, M>
 where
-    P: Deref<Target = Pc>,
-    for<'r> &'r Pc: Peerstore,
+    P: KademliaPeerInterface,
     R: Clone,
     T: Clone + MuxedTransport + 'static, // TODO: 'static :-/
 {
@@ -234,11 +248,10 @@ impl<P, R> KademliaUpgrade<P, R> {
     }
 }
 
-impl<C, P, Pc, R> ConnectionUpgrade<C> for KademliaUpgrade<P, R>
+impl<C, P, R> ConnectionUpgrade<C> for KademliaUpgrade<P, R>
 where
     C: AsyncRead + AsyncWrite + 'static,     // TODO: 'static :-/
-    P: Deref<Target = Pc> + Clone + 'static, // TODO: 'static :-/
-    for<'r> &'r Pc: Peerstore,
+    P: KademliaPeerInterface + Clone + 'static, // TODO: 'static :-/
     R: 'static, // TODO: 'static :-/
 {
     type Output = KademliaProcessingFuture;
@@ -327,7 +340,7 @@ struct Inner<P, R> {
     record_store: R,
 
     // Same as in the config.
-    peer_store: P,
+    peer_interface: P,
 
     // List of open connections with remotes.
     //
@@ -363,10 +376,9 @@ impl fmt::Debug for Connection {
     }
 }
 
-impl<P, Pc, R> KadServerInterface for Arc<Inner<P, R>>
+impl<P, R> KadServerInterface for Arc<Inner<P, R>>
 where
-    P: Deref<Target = Pc>,
-    for<'r> &'r Pc: Peerstore,
+    P: KademliaPeerInterface,
 {
     #[inline]
     fn local_id(&self) -> &PeerId {
@@ -374,10 +386,8 @@ where
     }
 
     fn peer_info(&self, peer_id: &PeerId) -> (Vec<Multiaddr>, ConnectionType) {
-        let addrs = self.peer_store
-            .peer(peer_id)
-            .into_iter()
-            .flat_map(|p| p.addrs())
+        let addrs = self.peer_interface
+            .peer_addrs(peer_id)
             .collect::<Vec<_>>();
         (addrs, ConnectionType::Connected) // ConnectionType meh :-/
     }
@@ -416,10 +426,9 @@ where
     }
 }
 
-impl<R, P, Pc, T, K, M> query::QueryInterface for KademliaController<P, R, T, K, M>
+impl<R, P, T, K, M> query::QueryInterface for KademliaController<P, R, T, K, M>
 where
-    P: Clone + Deref<Target = Pc> + 'static, // TODO: 'static :-/
-    for<'r> &'r Pc: Peerstore,
+    P: Clone + KademliaPeerInterface + 'static, // TODO: 'static :-/
     R: Clone + 'static,                  // TODO: 'static :-/
     T: Clone + MuxedTransport + 'static, // TODO: 'static :-/
     K: Transport<Output = KademliaProcessingFuture> + Clone + 'static,      // TODO: 'static
@@ -436,14 +445,13 @@ where
     }
 
     #[inline]
-    fn peer_add_addrs<I>(&self, peer: &PeerId, multiaddrs: I, ttl: Duration)
+    fn peer_add_addrs<I>(&self, peer: &PeerId, multiaddrs: I)
     where
         I: Iterator<Item = Multiaddr>,
     {
         self.inner
-            .peer_store
-            .peer_or_create(peer)
-            .add_addrs(multiaddrs, ttl);
+            .peer_interface
+            .add_addrs(peer, multiaddrs);
     }
 
     #[inline]
