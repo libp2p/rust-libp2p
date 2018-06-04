@@ -23,7 +23,7 @@ use multihash;
 use std::{fmt, str::FromStr};
 
 /// The raw bytes of a public key.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PublicKeyBytes(pub Vec<u8>);
 
 impl PublicKeyBytes {
@@ -41,7 +41,7 @@ impl PublicKeyBytes {
 }
 
 /// The raw bytes of a public key.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct PublicKeyBytesSlice<'a>(pub &'a [u8]);
 
 impl<'a> PublicKeyBytesSlice<'a> {
@@ -55,6 +55,20 @@ impl<'a> PublicKeyBytesSlice<'a> {
     #[inline]
     pub fn to_peer_id(&self) -> PeerId {
         PeerId::from_public_key(*self)
+    }
+}
+
+impl<'a> PartialEq<PublicKeyBytes> for PublicKeyBytesSlice<'a> {
+    #[inline]
+    fn eq(&self, other: &PublicKeyBytes) -> bool {
+        self.0 == &other.0[..]
+    }
+}
+
+impl<'a> PartialEq<PublicKeyBytesSlice<'a>> for PublicKeyBytes {
+    #[inline]
+    fn eq(&self, other: &PublicKeyBytesSlice<'a>) -> bool {
+        self.0 == &other.0[..]
     }
 }
 

@@ -236,7 +236,7 @@ enum SecioKeyPairInner {
 }
 
 /// Public key used by the remote.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SecioPublicKey {
     /// DER format.
     Rsa(Vec<u8>),
