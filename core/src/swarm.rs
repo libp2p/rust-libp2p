@@ -245,7 +245,7 @@ where
                     self.listeners.push(remaining.into_future());
                 }
                 Err((err, _)) => {
-                    warn!("Error in listener: {:?}", err);
+                    debug!("Error in listener: {:?}", err);
                     break
                 }
                 _ => break
@@ -263,7 +263,7 @@ where
                 ));
             }
             Err(err) => {
-                warn!("Error in listener upgrade: {:?}", err);
+                debug!("Error in listener upgrade: {:?}", err);
             }
             _ => {}
         }
@@ -275,7 +275,7 @@ where
                     .push(future::Either::A(handler(output, addr).into_future()));
             }
             Err(err) => {
-                warn!("Error in dialer upgrade: {:?}", err);
+                debug!("Error in dialer upgrade: {:?}", err);
             }
             _ => {}
         }
@@ -285,7 +285,7 @@ where
                 trace!("Future returned by swarm handler driven to completion");
             }
             Err(err) => {
-                warn!("Error in processing: {:?}", err);
+                debug!("Error in processing: {:?}", err);
             }
             _ => {}
         }

@@ -145,7 +145,7 @@ where
                         Ok((out, real_addr))
                     })
                     .map_err(move |err| {
-                        warn!("Failed to identify incoming {}", client_addr);
+                        debug!("Failed to identify incoming {}", client_addr);
                         err
                     });
                 future::Either::B(future)
@@ -180,7 +180,7 @@ where
                         match transport.clone().dial(addr) {
                             Ok(dial) => Some(dial),
                             Err((_, addr)) => {
-                                warn!("Address {} not supported by underlying transport", addr);
+                                debug!("Address {} not supported by underlying transport", addr);
                                 None
                             },
                         }
