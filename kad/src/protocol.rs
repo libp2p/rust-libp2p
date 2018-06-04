@@ -308,7 +308,7 @@ mod tests {
     use self::tokio_core::reactor::Core;
     use futures::{Future, Sink, Stream};
     use libp2p_peerstore::PeerId;
-    use libp2p_core::Transport;
+    use libp2p_core::{Transport, PublicKeyBytesSlice};
     use protocol::{ConnectionType, KadMsg, KademliaProtocolConfig, Peer};
     use std::sync::mpsc;
     use std::thread;
@@ -332,7 +332,7 @@ mod tests {
         test_one(KadMsg::FindNodeRes {
             closer_peers: vec![
                 Peer {
-                    node_id: PeerId::from_public_key(&[93, 80, 12, 250]),
+                    node_id: PeerId::from_public_key(PublicKeyBytesSlice(&[93, 80, 12, 250])),
                     multiaddrs: vec!["/ip4/100.101.102.103/tcp/20105".parse().unwrap()],
                     connection_ty: ConnectionType::Connected,
                 },

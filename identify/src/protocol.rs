@@ -235,7 +235,7 @@ mod tests {
     use self::libp2p_tcp_transport::TcpConfig;
     use self::tokio_core::reactor::Core;
     use futures::{Future, Stream};
-    use libp2p_core::Transport;
+    use libp2p_core::{Transport, PublicKeyBytes};
     use std::sync::mpsc;
     use std::thread;
     use {IdentifyInfo, IdentifyOutput, IdentifyProtocolConfig};
@@ -263,7 +263,7 @@ mod tests {
                 .and_then(|identify| match identify {
                     IdentifyOutput::Sender { sender, .. } => sender.send(
                         IdentifyInfo {
-                            public_key: vec![1, 2, 3, 4, 5, 7],
+                            public_key: PublicKeyBytes(vec![1, 2, 3, 4, 5, 7]),
                             protocol_version: "proto_version".to_owned(),
                             agent_version: "agent_version".to_owned(),
                             listen_addrs: vec![
@@ -295,7 +295,7 @@ mod tests {
                         observed_addr,
                         "/ip4/100.101.102.103/tcp/5000".parse().unwrap()
                     );
-                    assert_eq!(info.public_key, &[1, 2, 3, 4, 5, 7]);
+                    assert_eq!(info.public_key.0, &[1, 2, 3, 4, 5, 7]);
                     assert_eq!(info.protocol_version, "proto_version");
                     assert_eq!(info.agent_version, "agent_version");
                     assert_eq!(

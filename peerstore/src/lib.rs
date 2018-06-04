@@ -38,17 +38,19 @@
 //!
 //! ```
 //! extern crate multiaddr;
+//! extern crate libp2p_core;
 //! extern crate libp2p_peerstore;
 //!
 //! # fn main() {
+//! use libp2p_core::{PeerId, PublicKeyBytesSlice};
 //! use libp2p_peerstore::memory_peerstore::MemoryPeerstore;
-//! use libp2p_peerstore::{PeerId, Peerstore, PeerAccess};
+//! use libp2p_peerstore::{Peerstore, PeerAccess};
 //! use multiaddr::Multiaddr;
 //! use std::time::Duration;
 //!
 //! // In this example we use a `MemoryPeerstore`, but you can easily swap it for another backend.
 //! let mut peerstore = MemoryPeerstore::empty();
-//! let peer_id = PeerId::from_public_key(&[1, 2, 3, 4]);
+//! let peer_id = PeerId::from_public_key(PublicKeyBytesSlice(&[1, 2, 3, 4]));
 //!
 //! // Let's write some information about a peer.
 //! {
