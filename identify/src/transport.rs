@@ -390,7 +390,7 @@ fn process_identify_info<P>(
 where
     P: Peerstore,
 {
-    let peer_id = PeerId::from_public_key(&info.public_key);
+    let peer_id: PeerId = info.public_key.to_peer_id();
     peerstore
         .peer_or_create(&peer_id)
         .add_addr(client_addr, ttl);

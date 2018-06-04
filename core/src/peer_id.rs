@@ -22,6 +22,42 @@ use bs58;
 use multihash;
 use std::{fmt, str::FromStr};
 
+/// The raw bytes of a public key.
+#[derive(Debug, Clone)]
+pub struct PublicKeyBytes(pub Vec<u8>);
+
+impl PublicKeyBytes {
+    /// Turns this into a `PublicKeyBytesSlice`.
+    #[inline]
+    pub fn as_slice(&self) -> PublicKeyBytesSlice {
+        PublicKeyBytesSlice(&self.0)
+    }
+
+    /// Turns this into a `PeerId`.
+    #[inline]
+    pub fn to_peer_id(&self) -> PeerId {
+        self.as_slice().into()
+    }
+}
+
+/// The raw bytes of a public key.
+#[derive(Debug, Copy, Clone)]
+pub struct PublicKeyBytesSlice<'a>(pub &'a [u8]);
+
+impl<'a> PublicKeyBytesSlice<'a> {
+    /// Turns this into a `PublicKeyBytes`.
+    #[inline]
+    pub fn to_owned(&self) -> PublicKeyBytes {
+        PublicKeyBytes(self.0.to_owned())
+    }
+
+    /// Turns this into a `PeerId`.
+    #[inline]
+    pub fn to_peer_id(&self) -> PeerId {
+        PeerId::from_public_key(*self)
+    }
+}
+
 /// Identifier of a peer of the network.
 ///
 /// The data is a multihash of the public key of the peer.
@@ -40,8 +76,8 @@ impl fmt::Debug for PeerId {
 impl PeerId {
     /// Builds a `PeerId` from a public key.
     #[inline]
-    pub fn from_public_key(public_key: &[u8]) -> PeerId {
-        let data = multihash::encode(multihash::Hash::SHA2256, public_key)
+    pub fn from_public_key(public_key: PublicKeyBytesSlice) -> PeerId {
+        let data = multihash::encode(multihash::Hash::SHA2256, public_key.0)
             .expect("sha2-256 is always supported");
         PeerId { multihash: data }
     }
@@ -95,6 +131,20 @@ impl PeerId {
             Err(multihash::Error::UnsupportedType) => None,
             Err(_) => Some(false),
         }
+    }
+}
+
+impl From<PublicKeyBytes> for PeerId {
+    #[inline]
+    fn from(pubkey: PublicKeyBytes) -> PeerId {
+        PublicKeyBytesSlice(&pubkey.0).into()
+    }
+}
+
+impl<'a> From<PublicKeyBytesSlice<'a>> for PeerId {
+    #[inline]
+    fn from(pubkey: PublicKeyBytesSlice<'a>) -> PeerId {
+        PeerId::from_public_key(pubkey)
     }
 }
 
