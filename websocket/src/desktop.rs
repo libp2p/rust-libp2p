@@ -168,7 +168,7 @@ where
         let inner_dial = match self.transport.dial(inner_addr) {
             Ok(d) => d,
             Err((transport, old_addr)) => {
-                warn!("Failed to dial {} because {} is not supported by the underlying transport",
+                debug!("Failed to dial {} because {} is not supported by the underlying transport",
                       original_addr,
                       old_addr);
                 return Err((
