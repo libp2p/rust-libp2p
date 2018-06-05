@@ -366,7 +366,7 @@ where
                         }
                         Some((KadMsg::FindNodeReq { key, .. }, None)) => {
                             // `FindNodeReq` received on the socket.
-                            let message = handle_find_node_req(&interface, &key);
+                            let message = handle_find_node_req(&interface, key);
                             let future = kad_sink.send(message).map(move |kad_sink| {
                                 future::Loop::Continue((
                                     kad_sink,
@@ -412,14 +412,14 @@ where
 }
 
 // Builds a `KadMsg` that handles a `FIND_NODE` request received from the remote.
-fn handle_find_node_req<I>(interface: &I, requested_key: &[u8]) -> KadMsg
+fn handle_find_node_req<I>(interface: &I, requested_key: Vec<u8>) -> KadMsg
 where
     I: ?Sized + KadServerInterface,
 {
-    let peer_id = match PeerId::from_bytes(requested_key.to_vec()) {
-        // TODO: suboptimal
+    let peer_id = match PeerId::from_bytes(requested_key) {
         Ok(id) => id,
-        Err(_) => {
+        Err(requested_key) => {
+            debug!("Ignoring FIND_NODE request with invalid request: {:?}", requested_key);
             return KadMsg::FindNodeRes {
                 closer_peers: vec![],
             }
