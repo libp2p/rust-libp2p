@@ -244,8 +244,8 @@ where
 
     // Loop forever.
     let future = future::loop_fn(
-        (kad_sink, messages, VecDeque::new(), 0),
-        move |(kad_sink, messages, mut send_back_queue, mut expected_pongs)| {
+        (kad_sink, messages, VecDeque::new(), 0u32),
+        move |(kad_sink, messages, mut send_back_queue, expected_pongs)| {
             let interface = interface.clone();
             let peer_id = peer_id.clone();
 
@@ -294,13 +294,13 @@ where
                         }
                         Some((message @ KadMsg::Ping { .. }, Some(_))) => {
                             // A `Ping` message has been received on `rx`.
-                            expected_pongs += 1;
                             let future = kad_sink.send(message).map(move |kad_sink| {
                                 future::Loop::Continue((
                                     kad_sink,
                                     rest,
                                     send_back_queue,
-                                    expected_pongs,
+                                    expected_pongs.checked_add(1)
+                                        .expect("overflow in number of simultaneous pings"),
                                 ))
                             });
                             Box::new(future) as Box<_>
@@ -322,9 +322,11 @@ where
                         Some((KadMsg::Ping, None)) => {
                             // Note: The way the protocol was designed, there is no way to
                             //		 differentiate between a ping and a pong.
-                            if expected_pongs == 0 {
-                                let message = KadMsg::Ping;
-                                let future = kad_sink.send(message).map(move |kad_sink| {
+                            if let Some(expected_pongs) = expected_pongs.checked_sub(1) {
+                                // Maybe we received a PONG, or maybe we received a PING, no way
+                                // to tell. If it was a PING and we expected a PONG, then the
+                                // remote will see its PING answered only when it PONGs us.
+                                let future = future::ok({
                                     future::Loop::Continue((
                                         kad_sink,
                                         rest,
@@ -334,8 +336,8 @@ where
                                 });
                                 Box::new(future) as Box<_>
                             } else {
-                                expected_pongs -= 1;
-                                let future = future::ok({
+                                let message = KadMsg::Ping;
+                                let future = kad_sink.send(message).map(move |kad_sink| {
                                     future::Loop::Continue((
                                         kad_sink,
                                         rest,
