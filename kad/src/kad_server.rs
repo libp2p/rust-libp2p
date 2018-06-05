@@ -219,10 +219,7 @@ fn kademlia_handler<'a, S>(
 where
     S: Stream<Item = KadMsg, Error = IoError> + Sink<SinkItem = KadMsg, SinkError = IoError> + 'a,
 {
-    let (kad_sink, kad_stream) = kad_bistream
-        .sink_map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
-        .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
-        .split();
+    let (kad_sink, kad_stream) = kad_bistream.split();
 
     // This is a stream of futures containing local responses.
     // Every time we receive a request from the remote, we create a `oneshot::channel()` and send
