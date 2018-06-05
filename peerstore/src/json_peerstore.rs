@@ -148,7 +148,7 @@ mod tests {
         let temp_file = self::tempfile::NamedTempFile::new().unwrap();
         let peer_store = ::json_peerstore::JsonPeerstore::new(temp_file.path()).unwrap();
 
-        let peer_id = PeerId::from_public_key(&[1, 2, 3]);
+        let peer_id = PeerId::from_public_key(PublicKeyBytesSlice(&[1, 2, 3]));
         let addr = "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap();
 
         peer_store

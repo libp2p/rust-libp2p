@@ -22,6 +22,56 @@ use bs58;
 use multihash;
 use std::{fmt, str::FromStr};
 
+/// The raw bytes of a public key.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PublicKeyBytes(pub Vec<u8>);
+
+impl PublicKeyBytes {
+    /// Turns this into a `PublicKeyBytesSlice`.
+    #[inline]
+    pub fn as_slice(&self) -> PublicKeyBytesSlice {
+        PublicKeyBytesSlice(&self.0)
+    }
+
+    /// Turns this into a `PeerId`.
+    #[inline]
+    pub fn to_peer_id(&self) -> PeerId {
+        self.as_slice().into()
+    }
+}
+
+/// The raw bytes of a public key.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct PublicKeyBytesSlice<'a>(pub &'a [u8]);
+
+impl<'a> PublicKeyBytesSlice<'a> {
+    /// Turns this into a `PublicKeyBytes`.
+    #[inline]
+    pub fn to_owned(&self) -> PublicKeyBytes {
+        PublicKeyBytes(self.0.to_owned())
+    }
+
+    /// Turns this into a `PeerId`.
+    #[inline]
+    pub fn to_peer_id(&self) -> PeerId {
+        PeerId::from_public_key(*self)
+    }
+}
+
+impl<'a> PartialEq<PublicKeyBytes> for PublicKeyBytesSlice<'a> {
+    #[inline]
+    fn eq(&self, other: &PublicKeyBytes) -> bool {
+        self.0 == &other.0[..]
+    }
+}
+
+impl<'a> PartialEq<PublicKeyBytesSlice<'a>> for PublicKeyBytes {
+    #[inline]
+    fn eq(&self, other: &PublicKeyBytesSlice<'a>) -> bool {
+        self.0 == &other.0[..]
+    }
+}
+
 /// Identifier of a peer of the network.
 ///
 /// The data is a multihash of the public key of the peer.
@@ -40,8 +90,8 @@ impl fmt::Debug for PeerId {
 impl PeerId {
     /// Builds a `PeerId` from a public key.
     #[inline]
-    pub fn from_public_key(public_key: &[u8]) -> PeerId {
-        let data = multihash::encode(multihash::Hash::SHA2256, public_key)
+    pub fn from_public_key(public_key: PublicKeyBytesSlice) -> PeerId {
+        let data = multihash::encode(multihash::Hash::SHA2256, public_key.0)
             .expect("sha2-256 is always supported");
         PeerId { multihash: data }
     }
@@ -57,12 +107,16 @@ impl PeerId {
     }
 
     /// Returns a raw bytes representation of this `PeerId`.
+    ///
+    /// Note that this is not the same as the public key of the peer.
     #[inline]
     pub fn into_bytes(self) -> Vec<u8> {
         self.multihash
     }
 
     /// Returns a raw bytes representation of this `PeerId`.
+    ///
+    /// Note that this is not the same as the public key of the peer.
     #[inline]
     pub fn as_bytes(&self) -> &[u8] {
         &self.multihash
@@ -86,15 +140,29 @@ impl PeerId {
     ///
     /// Returns `None` if this `PeerId`s hash algorithm is not supported when encoding the
     /// given public key, otherwise `Some` boolean as the result of an equality check.
-    pub fn is_public_key(&self, public_key: &[u8]) -> Option<bool> {
+    pub fn is_public_key(&self, public_key: PublicKeyBytesSlice) -> Option<bool> {
         let alg = multihash::decode(&self.multihash)
             .expect("our inner value should always be valid")
             .alg;
-        match multihash::encode(alg, public_key) {
+        match multihash::encode(alg, public_key.0) {
             Ok(compare) => Some(compare == self.multihash),
             Err(multihash::Error::UnsupportedType) => None,
             Err(_) => Some(false),
         }
+    }
+}
+
+impl From<PublicKeyBytes> for PeerId {
+    #[inline]
+    fn from(pubkey: PublicKeyBytes) -> PeerId {
+        PublicKeyBytesSlice(&pubkey.0).into()
+    }
+}
+
+impl<'a> From<PublicKeyBytesSlice<'a>> for PeerId {
+    #[inline]
+    fn from(pubkey: PublicKeyBytesSlice<'a>) -> PeerId {
+        PeerId::from_public_key(pubkey)
     }
 }
 

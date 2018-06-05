@@ -390,7 +390,7 @@ fn process_identify_info<P>(
 where
     P: Peerstore,
 {
-    let peer_id = PeerId::from_public_key(&info.public_key);
+    let peer_id: PeerId = info.public_key.to_peer_id();
     peerstore
         .peer_or_create(&peer_id)
         .add_addr(client_addr, ttl);
@@ -408,7 +408,7 @@ mod tests {
     use futures::{Future, Stream};
     use libp2p_peerstore::memory_peerstore::MemoryPeerstore;
     use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};
-    use libp2p_core::Transport;
+    use libp2p_core::{Transport, PublicKeyBytesSlice};
     use multiaddr::{AddrComponent, Multiaddr};
     use std::io::Error as IoError;
     use std::iter;
@@ -450,7 +450,7 @@ mod tests {
             }
         }
 
-        let peer_id = PeerId::from_public_key(&vec![1, 2, 3, 4]);
+        let peer_id = PeerId::from_public_key(PublicKeyBytesSlice(&[1, 2, 3, 4]));
 
         let peerstore = MemoryPeerstore::empty();
         peerstore.peer_or_create(&peer_id).add_addr(

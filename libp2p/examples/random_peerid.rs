@@ -21,12 +21,12 @@
 extern crate libp2p;
 extern crate rand;
 
-use libp2p::PeerId;
+use libp2p::{PeerId, core::PublicKeyBytesSlice};
 
 fn main() {
     let pid = {
         let key = (0..2048).map(|_| rand::random::<u8>()).collect::<Vec<_>>();
-        PeerId::from_public_key(&key)
+        PeerId::from_public_key(PublicKeyBytesSlice(&key))
     };
     println!("{}", pid.to_base58());
 }

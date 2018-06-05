@@ -99,7 +99,7 @@ pub use self::error::SecioError;
 use bytes::{Bytes, BytesMut};
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
-use libp2p_core::{Multiaddr, PeerId};
+use libp2p_core::{Multiaddr, PeerId, PublicKeyBytes, PublicKeyBytesSlice};
 use ring::signature::{Ed25519KeyPair, RSAKeyPair};
 use ring::rand::SystemRandom;
 use rw_stream_sink::RwStreamSink;
@@ -210,10 +210,10 @@ impl SecioKeyPair {
     pub fn to_peer_id(&self) -> PeerId {
         match self.inner {
             SecioKeyPairInner::Rsa { ref public, .. } => {
-                PeerId::from_public_key(&public)
+                PublicKeyBytesSlice(&public).into()
             },
             SecioKeyPairInner::Ed25519 { ref key_pair } => {
-                PeerId::from_public_key(key_pair.public_key_bytes())
+                PublicKeyBytesSlice(key_pair.public_key_bytes()).into()
             },
         }
     }
@@ -236,7 +236,7 @@ enum SecioKeyPairInner {
 }
 
 /// Public key used by the remote.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SecioPublicKey {
     /// DER format.
     Rsa(Vec<u8>),
@@ -246,13 +246,28 @@ pub enum SecioPublicKey {
 }
 
 impl SecioPublicKey {
+    /// Turns this public key into a raw representation.
+    #[inline]
+    pub fn as_raw(&self) -> PublicKeyBytesSlice {
+        match self {
+            SecioPublicKey::Rsa(ref data) => PublicKeyBytesSlice(data),
+            SecioPublicKey::Ed25519(ref data) => PublicKeyBytesSlice(data),
+        }
+    }
+
+    /// Turns this public key into a raw representation.
+    #[inline]
+    pub fn into_raw(self) -> PublicKeyBytes {
+        match self {
+            SecioPublicKey::Rsa(data) => PublicKeyBytes(data),
+            SecioPublicKey::Ed25519(data) => PublicKeyBytes(data),
+        }
+    }
+
     /// Builds a `PeerId` corresponding to the public key of the node.
     #[inline]
     pub fn to_peer_id(&self) -> PeerId {
-        match self {
-            &SecioPublicKey::Rsa(ref data) => PeerId::from_public_key(data),
-            &SecioPublicKey::Ed25519(ref data) => PeerId::from_public_key(data),
-        }
+        self.as_raw().into()
     }
 }
 
@@ -260,6 +275,13 @@ impl From<SecioPublicKey> for PeerId {
     #[inline]
     fn from(key: SecioPublicKey) -> PeerId {
         key.to_peer_id()
+    }
+}
+
+impl From<SecioPublicKey> for PublicKeyBytes {
+    #[inline]
+    fn from(key: SecioPublicKey) -> PublicKeyBytes {
+        key.into_raw()
     }
 }
 

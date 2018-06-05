@@ -233,7 +233,7 @@ pub mod upgrade;
 pub use self::connection_reuse::ConnectionReuse;
 pub use self::multiaddr::{AddrComponent, Multiaddr};
 pub use self::muxing::StreamMuxer;
-pub use self::peer_id::PeerId;
+pub use self::peer_id::{PeerId, PublicKeyBytes, PublicKeyBytesSlice};
 pub use self::swarm::{swarm, SwarmController, SwarmFuture};
 pub use self::transport::{MuxedTransport, Transport};
 pub use self::upgrade::{ConnectionUpgrade, Endpoint};
