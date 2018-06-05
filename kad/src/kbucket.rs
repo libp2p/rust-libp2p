@@ -209,15 +209,10 @@ where
 
     /// Marks the node as "most recent" in its bucket and modifies the value associated to it.
     /// This function should be called whenever we receive a communication from a node.
-    ///
-    /// # Panic
-    ///
-    /// Panics if `id` is equal to the local node ID.
-    ///
     pub fn update(&self, id: Id, value: Val) -> UpdateOutcome<Id, Val> {
         let table = match self.bucket_num(&id) {
             Some(n) => &self.tables[n],
-            None => panic!("tried to update our own node in the kbuckets table"),
+            None => return UpdateOutcome::FailSelfUpdate,
         };
 
         let mut table = table.lock();
@@ -272,10 +267,13 @@ pub enum UpdateOutcome<Id, Val> {
     Added,
     /// The node was already in the bucket and has been refreshed.
     Refreshed(Val),
-    /// The node wasn't added. Instead we need to ping the node passed as parameter.
+    /// The node wasn't added. Instead we need to ping the node passed as parameter, and call
+    /// `update` if it responds.
     NeedPing(Id),
     /// The node wasn't added at all because a node was already pending.
     Discarded,
+    /// Tried to update the local peer ID. This is an invalid operation.
+    FailSelfUpdate,
 }
 
 /// Iterator giving access to a bucket.
@@ -364,8 +362,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "tried to update our own node in the kbuckets table")]
-    fn update_local_id_panic() {
+    fn update_local_id_fails() {
         let my_id = {
             let mut bytes = vec![random(); 34];
             bytes[0] = 18;
@@ -374,7 +371,10 @@ mod tests {
         };
 
         let table = KBucketsTable::new(my_id.clone(), Duration::from_secs(5));
-        let _ = table.update(my_id, ());
+        match table.update(my_id, ()) {
+            UpdateOutcome::FailSelfUpdate => (),
+            _ => panic!()
+        }
     }
 
     #[test]
