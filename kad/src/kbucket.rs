@@ -89,11 +89,12 @@ impl<Id, Val> KBucket<Id, Val> {
     // If a node is pending and the timeout has expired, removes the first element of `nodes`
     // and pushes back the node in `pending_node`.
     fn flush(&mut self, timeout: Duration) {
-        if let Some((_, instant)) = self.pending_node {
+        if let Some((pending_node, instant)) = self.pending_node.take() {
             if instant.elapsed() >= timeout {
-                let (pending_node, _) = self.pending_node.take().unwrap();
                 let _ = self.nodes.remove(0);
                 self.nodes.push(pending_node);
+            } else {
+                self.pending_node = Some((pending_node, instant));
             }
         }
     }
