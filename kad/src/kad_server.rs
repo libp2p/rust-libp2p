@@ -158,7 +158,7 @@ impl KademliaServerController {
     pub fn find_node(
         &self,
         searched_key: &PeerId,
-    ) -> Box<Future<Item = Vec<Peer>, Error = IoError>> {
+    ) -> impl Future<Item = Vec<Peer>, Error = IoError> {
         let message = protocol::KadMsg::FindNodeReq {
             key: searched_key.clone().into_bytes(),
         };
@@ -172,7 +172,8 @@ impl KademliaServerController {
                     IoErrorKind::ConnectionAborted,
                     "connection to remote has aborted",
                 ));
-                return Box::new(fut) as Box<_>;
+
+                return future::Either::B(fut);
             }
         };
 
@@ -189,7 +190,7 @@ impl KademliaServerController {
             )),
         });
 
-        Box::new(future) as Box<_>
+        future::Either::A(future)
     }
 
     /// Sends a `PING` query to the node. Because of the way the protocol is designed, there is
