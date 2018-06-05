@@ -107,12 +107,16 @@ impl PeerId {
     }
 
     /// Returns a raw bytes representation of this `PeerId`.
+    ///
+    /// Note that this is not the same as the public key of the peer.
     #[inline]
     pub fn into_bytes(self) -> Vec<u8> {
         self.multihash
     }
 
     /// Returns a raw bytes representation of this `PeerId`.
+    ///
+    /// Note that this is not the same as the public key of the peer.
     #[inline]
     pub fn as_bytes(&self) -> &[u8] {
         &self.multihash
@@ -136,11 +140,11 @@ impl PeerId {
     ///
     /// Returns `None` if this `PeerId`s hash algorithm is not supported when encoding the
     /// given public key, otherwise `Some` boolean as the result of an equality check.
-    pub fn is_public_key(&self, public_key: &[u8]) -> Option<bool> {
+    pub fn is_public_key(&self, public_key: PublicKeyBytesSlice) -> Option<bool> {
         let alg = multihash::decode(&self.multihash)
             .expect("our inner value should always be valid")
             .alg;
-        match multihash::encode(alg, public_key) {
+        match multihash::encode(alg, public_key.0) {
             Ok(compare) => Some(compare == self.multihash),
             Err(multihash::Error::UnsupportedType) => None,
             Err(_) => Some(false),
