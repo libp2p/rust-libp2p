@@ -50,9 +50,6 @@ use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Interface that this server system uses to communicate with the rest of the system.
 pub trait KadServerInterface: Clone {
-    /// Returns the peer ID of the local node.
-    fn local_id(&self) -> &PeerId;
-
     /// Returns known information about the peer. Not atomic/thread-safe in the sense that
     /// information can change immediately after being returned and before they are processed.
     fn peer_info(&self, _: &PeerId) -> (Vec<Multiaddr>, protocol::ConnectionType);

@@ -368,11 +368,6 @@ where
     P: Deref<Target = Pc>,
     for<'r> &'r Pc: Peerstore,
 {
-    #[inline]
-    fn local_id(&self) -> &PeerId {
-        self.kbuckets.my_id()
-    }
-
     fn peer_info(&self, peer_id: &PeerId) -> (Vec<Multiaddr>, ConnectionType) {
         let addrs = self.peer_store
             .peer(peer_id)
@@ -384,11 +379,6 @@ where
 
     #[inline]
     fn kbuckets_update(&self, peer: &PeerId) {
-        // TODO: is this the right place for this check?
-        if peer == self.kbuckets.my_id() {
-            return;
-        }
-
         match self.kbuckets.update(peer.clone(), ()) {
             UpdateOutcome::NeedPing(node_to_ping) => {
                 // TODO: return this info somehow
