@@ -25,12 +25,12 @@
 use bytes::Bytes;
 use fnv::FnvHashMap;
 use futures::sync::oneshot;
-use futures::{self, future, Future};
-use kad_server::{KadServerInterface, KademliaServerConfig, KademliaServerController};
+use futures::{self, future, Future, Stream};
+use kad_server::{KademliaServerConfig, KademliaServerController, KademliaIncomingRequest};
 use kbucket::{KBucketsPeerId, KBucketsTable, UpdateOutcome};
 use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};
 use libp2p_core::{ConnectionUpgrade, Endpoint, MuxedTransport, SwarmController, Transport};
-use multiaddr::Multiaddr;
+use multiaddr::{AddrComponent, Multiaddr};
 use parking_lot::Mutex;
 use protocol::ConnectionType;
 use query;
@@ -208,7 +208,7 @@ where
 #[derive(Clone)]
 pub struct KademliaUpgrade<P, R> {
     inner: Arc<Inner<P, R>>,
-    upgrade: KademliaServerConfig<Arc<Inner<P, R>>>,
+    upgrade: KademliaServerConfig,
 }
 
 impl<P, R> KademliaUpgrade<P, R> {
@@ -217,7 +217,7 @@ impl<P, R> KademliaUpgrade<P, R> {
     pub fn from_prototype(proto: &KademliaControllerPrototype<P, R>) -> Self {
         KademliaUpgrade {
             inner: proto.inner.clone(),
-            upgrade: KademliaServerConfig::new(proto.inner.clone()),
+            upgrade: KademliaServerConfig::new(),
         }
     }
 
@@ -229,7 +229,7 @@ impl<P, R> KademliaUpgrade<P, R> {
     {
         KademliaUpgrade {
             inner: ctl.inner.clone(),
-            upgrade: KademliaServerConfig::new(ctl.inner.clone()),
+            upgrade: KademliaServerConfig::new(),
         }
     }
 }
@@ -256,8 +256,33 @@ where
         let inner = self.inner;
         let client_addr = addr.clone();
 
+        let peer_id = {
+            let mut iter = addr.iter();
+            let protocol = iter.next();
+            let after_proto = iter.next();
+            match (protocol, after_proto) {
+                (Some(AddrComponent::P2P(key)), None) | (Some(AddrComponent::IPFS(key)), None) => {
+                    match PeerId::from_bytes(key) {
+                        Ok(id) => id,
+                        Err(_) => {
+                            let err = IoError::new(
+                                IoErrorKind::InvalidData,
+                                "invalid peer ID sent by remote identification",
+                            );
+                            return Box::new(future::err(err));
+                        }
+                    }
+                }
+                _ => {
+                    let err =
+                        IoError::new(IoErrorKind::InvalidData, "couldn't identify connected node");
+                    return Box::new(future::err(err));
+                }
+            }
+        };
+
         let future = self.upgrade.upgrade(incoming, id, endpoint, addr).map(
-            move |(controller, future)| {
+            move |(controller, stream)| {
                 match inner.connections.lock().entry(client_addr) {
                     Entry::Occupied(mut entry) => {
                         match entry.insert(Connection::Active(controller)) {
@@ -285,7 +310,52 @@ where
                     }
                 };
 
-                KademliaProcessingFuture { inner: future }
+                let future = stream.for_each(move |query| {
+                    match inner.kbuckets.update(peer_id.clone(), ()) {
+                        UpdateOutcome::NeedPing(node_to_ping) => {
+                            // TODO: do something with this info
+                            println!("need to ping {:?}", node_to_ping);
+                        }
+                        _ => (),
+                    }
+
+                    match query {
+                        KademliaIncomingRequest::FindNode { searched, responder } => {
+                            let mut intermediate: Vec<_> = inner.kbuckets.find_closest(&searched).collect();
+                            let my_id = inner.kbuckets.my_id().clone();
+                            if let Some(pos) = intermediate
+                                .iter()
+                                .position(|e| e.distance_with(&searched) >= my_id.distance_with(&searched))
+                            {
+                                if intermediate[pos] != my_id {
+                                    intermediate.insert(pos, my_id);
+                                }
+                            } else {
+                                intermediate.push(my_id);
+                            }
+
+                            let closer_peers = intermediate
+                                .into_iter()
+                                .map(|peer| {
+                                    let addrs = inner.peer_store
+                                        .peer(&peer_id)
+                                        .into_iter()
+                                        .flat_map(|p| p.addrs())
+                                        .collect::<Vec<_>>();
+                                    (peer, addrs, ConnectionType::Connected) // ConnectionType meh :-/
+                                });
+
+                            responder.respond(closer_peers);
+                        },
+                        KademliaIncomingRequest::PingPong => {
+                            // We updated the k-bucket above.
+                        },
+                    }
+
+                    Ok(())
+                });
+
+                KademliaProcessingFuture { inner: Box::new(future) }
             },
         );
 
@@ -360,49 +430,6 @@ impl fmt::Debug for Connection {
             Connection::Active(_) => write!(f, "Connection::Active"),
             Connection::Pending(_) => write!(f, "Connection::Pending"),
         }
-    }
-}
-
-impl<P, Pc, R> KadServerInterface for Arc<Inner<P, R>>
-where
-    P: Deref<Target = Pc>,
-    for<'r> &'r Pc: Peerstore,
-{
-    fn peer_info(&self, peer_id: &PeerId) -> (Vec<Multiaddr>, ConnectionType) {
-        let addrs = self.peer_store
-            .peer(peer_id)
-            .into_iter()
-            .flat_map(|p| p.addrs())
-            .collect::<Vec<_>>();
-        (addrs, ConnectionType::Connected) // ConnectionType meh :-/
-    }
-
-    #[inline]
-    fn kbuckets_update(&self, peer: &PeerId) {
-        match self.kbuckets.update(peer.clone(), ()) {
-            UpdateOutcome::NeedPing(node_to_ping) => {
-                // TODO: return this info somehow
-                println!("need to ping {:?}", node_to_ping);
-            }
-            _ => (),
-        }
-    }
-
-    #[inline]
-    fn kbuckets_find_closest(&self, addr: &PeerId) -> Vec<PeerId> {
-        let mut intermediate: Vec<_> = self.kbuckets.find_closest(addr).collect();
-        let my_id = self.kbuckets.my_id().clone();
-        if let Some(pos) = intermediate
-            .iter()
-            .position(|e| e.distance_with(&addr) >= my_id.distance_with(&addr))
-        {
-            if intermediate[pos] != my_id {
-                intermediate.insert(pos, my_id);
-            }
-        } else {
-            intermediate.push(my_id);
-        }
-        intermediate
     }
 }
 
