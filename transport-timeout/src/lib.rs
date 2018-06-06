@@ -57,6 +57,26 @@ impl<InnerTrans> TransportTimeout<InnerTrans> {
             incoming_timeout: timeout,
         }
     }
+
+    /// Wraps around a `Transport` to add timeouts to the outgoing connections.
+    #[inline]
+    pub fn with_outgoing_timeout(trans: InnerTrans, timeout: Duration) -> Self {
+        TransportTimeout {
+            inner: trans,
+            outgoing_timeout: timeout,
+            incoming_timeout: Duration::from_secs(100 * 365 * 24 * 3600),   // 100 years
+        }
+    }
+
+    /// Wraps around a `Transport` to add timeouts to the ingoing connections.
+    #[inline]
+    pub fn with_ingoing_timeout(trans: InnerTrans, timeout: Duration) -> Self {
+        TransportTimeout {
+            inner: trans,
+            outgoing_timeout: Duration::from_secs(100 * 365 * 24 * 3600),   // 100 years
+            incoming_timeout: timeout,
+        }
+    }
 }
 
 impl<InnerTrans> Transport for TransportTimeout<InnerTrans>
