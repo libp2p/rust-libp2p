@@ -35,7 +35,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use libp2p::core::{Transport, PublicKeyBytesSlice};
 use libp2p::core::{upgrade, either::EitherOutput};
-use libp2p::kad::{ConnectionType, Peer};
+use libp2p::kad::{ConnectionType, Peer, QueryEvent};
 use libp2p::tcp::TcpConfig;
 use tokio_core::reactor::Core;
 
@@ -155,6 +155,15 @@ fn main() {
 
     let finish_enum = kad_controller
         .find_node(my_peer_id.clone())
+        .filter_map(|event| {
+            match event {
+                QueryEvent::NewKnownMultiaddrs(_, _) => None,   // TODO:
+                QueryEvent::Finished(out) => Some(out),
+            }
+        })
+        .into_future()
+        .map_err(|(err, _)| err)
+        .map(|(out, _)| out.unwrap())
         .and_then(|out| {
             let local_hash = U512::from(my_peer_id.hash());
             println!("Results of peer discovery for {:?}:", my_peer_id);

@@ -63,6 +63,39 @@ pub struct KademliaConfig<P, R> {
     pub timeout: Duration,
 }
 
+// Builds a `QueryParams` that fetches information from `$controller`.
+//
+// Because of lifetime issues and type naming issues, a macro is the most convenient solution.
+macro_rules! gen_query_params {
+    ($controller:expr) => {{
+        let controller = $controller;
+        query::QueryParams {
+            local_id: $controller.inner.kbuckets.my_id().clone(),
+            kbuckets_find_closest: {
+                let controller = controller.clone();
+                move |addr| controller.inner.kbuckets.find_closest(&addr).collect()
+            },
+            peer_add_addrs: {
+                let controller = controller.clone();
+                move |peer, multiaddrs| {
+                    controller.inner
+                        .peer_store
+                        .peer_or_create(&peer)
+                        .add_addrs(multiaddrs, Duration::from_secs(3600));      // TODO: which TTL?
+                }
+            },
+            parallelism: $controller.inner.parallelism,
+            find_node: {
+                let controller = controller.clone();
+                move |addr, searched| {
+                    // TODO: rewrite to be more direct
+                    Box::new(controller.send(addr, move |ctl| ctl.find_node(&searched)).flatten()) as Box<_>
+                }
+            },
+        }
+    }};
+}
+
 /// Object that allows one to make queries on the Kademlia system.
 #[derive(Debug)]
 pub struct KademliaControllerPrototype<P, R> {
@@ -127,7 +160,13 @@ where
 
         let init_future = {
             let futures: Vec<_> = (0..256)
-                .map(|n| query::refresh(controller.clone(), n))
+                .map({
+                    let controller = controller.clone();
+                    move |n| query::refresh(gen_query_params!(controller.clone()), n)
+                })
+                .map(|stream| {
+                    stream.for_each(|_| Ok(()))
+                })
                 .collect();
 
             future::loop_fn(futures, |futures| {
@@ -194,14 +233,15 @@ where
     pub fn find_node(
         &self,
         searched_key: PeerId,
-    ) -> Box<Future<Item = Vec<PeerId>, Error = IoError>>
+    ) -> Box<Stream<Item = query::QueryEvent<Vec<PeerId>>, Error = IoError>>
     where
         P: Clone + 'static,
         R: 'static,
         K: Transport<Output = KademliaPeerReqStream> + Clone + 'static,
         M: FnOnce(KademliaPeerReqStream) -> T::Output + Clone + 'static,     // TODO: 'static :-/
     {
-        query::find_node(self.clone(), searched_key)
+        let me = self.clone();
+        query::find_node(gen_query_params!(me.clone()), searched_key)
     }
 }
 
@@ -447,51 +487,6 @@ impl fmt::Debug for Connection {
             Connection::Active(_) => write!(f, "Connection::Active"),
             Connection::Pending(_) => write!(f, "Connection::Pending"),
         }
-    }
-}
-
-impl<R, P, Pc, T, K, M> query::QueryInterface for KademliaController<P, R, T, K, M>
-where
-    P: Clone + Deref<Target = Pc> + 'static, // TODO: 'static :-/
-    for<'r> &'r Pc: Peerstore,
-    R: Clone + 'static,                  // TODO: 'static :-/
-    T: Clone + MuxedTransport + 'static, // TODO: 'static :-/
-    K: Transport<Output = KademliaPeerReqStream> + Clone + 'static,      // TODO: 'static
-    M: FnOnce(KademliaPeerReqStream) -> T::Output + Clone + 'static,     // TODO: 'static :-/
-{
-    #[inline]
-    fn local_id(&self) -> &PeerId {
-        self.inner.kbuckets.my_id()
-    }
-
-    #[inline]
-    fn kbuckets_find_closest(&self, addr: &PeerId) -> Vec<PeerId> {
-        self.inner.kbuckets.find_closest(addr).collect()
-    }
-
-    #[inline]
-    fn peer_add_addrs<I>(&self, peer: &PeerId, multiaddrs: I)
-    where
-        I: Iterator<Item = Multiaddr>,
-    {
-        self.inner
-            .peer_store
-            .peer_or_create(peer)
-            .add_addrs(multiaddrs, Duration::from_secs(3600));      // TODO: which TTL?
-    }
-
-    #[inline]
-    fn parallelism(&self) -> usize {
-        self.inner.parallelism
-    }
-
-    #[inline]
-    fn find_node_rpc(&self, addr: Multiaddr, searched: &PeerId)
-        -> Box<Future<Item = Vec<Peer>, Error = IoError>>
-    {
-        // TODO: rewrite to be more direct
-        let searched = searched.clone();
-        Box::new(self.send(addr, move |ctl| ctl.find_node(&searched)).flatten()) as Box<_>
     }
 }
 

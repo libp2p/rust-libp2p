@@ -86,6 +86,7 @@ extern crate varint;
 pub use self::high_level::{KademliaConfig, KademliaController, KademliaControllerPrototype};
 pub use self::high_level::{KademliaPeerReqStream, KademliaUpgrade, KademliaPeerReq};
 pub use self::protocol::{ConnectionType, Peer};
+pub use self::query::QueryEvent;
 
 mod high_level;
 mod kad_server;
