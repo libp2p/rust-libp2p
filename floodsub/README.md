@@ -1,8 +1,8 @@
 # Floodsub
 
-> A flooding PubSub system.
+> A flooding PubSub system for p2p messaging.
 
-PubSub is a work in progress, with [`floodsub`](https://github.com/libp2p/go-floodsub/) as an initial protocol. Research on `gossipsub` (which is implemented in Go [here](https://github.com/libp2p/go-floodsub/pull/67)) is underway and work on it for Rust is planned to be started soon.
+PubSub is a work in progress, with [`floodsub`](https://github.com/libp2p/go-floodsub/) as an initial protocol. Research on `gossipsub` (which is implemented in Go [here](https://github.com/libp2p/go-floodsub/pull/67)) is underway and work on it for Rust is planned to be started soon. Floodsub broadcasts a message to all peers and subscribes to all peers for messages of a topic. In gossipsub, a peer maintains a list of other peers to dial and listen to (as a host) messages for a particular topic.
 
 For the specification, see [here](https://github.com/libp2p/specs/tree/master/pubsub).
 
