@@ -116,29 +116,32 @@ fn main() {
     // outgoing connections for us.
     let (swarm_controller, swarm_future) = libp2p::core::swarm(
         transport.clone().with_upgrade(proto.clone()),
-        move |kademlia_stream, _| {
+        {
             let peer_store = peer_store.clone();
-            kademlia_stream.for_each(move |req| {
+            move |kademlia_stream, _| {
                 let peer_store = peer_store.clone();
-                let result = req
-                    .requested_peers()
-                    .map(move |peer_id| {
-                        let addrs = peer_store
-                            .peer(peer_id)
-                            .into_iter()
-                            .flat_map(|p| p.addrs())
-                            .collect::<Vec<_>>();
-                        Peer {
-                            node_id: peer_id.clone(),
-                            multiaddrs: addrs,
-                            connection_ty: ConnectionType::Connected, // meh :-/
-                        }
-                    })
-                    .collect::<Vec<_>>();
-                req.respond(result);
-                Ok(())
-            })
-        },
+                kademlia_stream.for_each(move |req| {
+                    let peer_store = peer_store.clone();
+                    let result = req
+                        .requested_peers()
+                        .map(move |peer_id| {
+                            let addrs = peer_store
+                                .peer(peer_id)
+                                .into_iter()
+                                .flat_map(|p| p.addrs())
+                                .collect::<Vec<_>>();
+                            Peer {
+                                node_id: peer_id.clone(),
+                                multiaddrs: addrs,
+                                connection_ty: ConnectionType::Connected, // meh :-/
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    req.respond(result);
+                    Ok(())
+                })
+            }
+        }
     );
 
     let (kad_controller, _kad_init) =
@@ -153,9 +156,15 @@ fn main() {
 
     let finish_enum = kad_controller
         .find_node(my_peer_id.clone())
-        .filter_map(|event| {
+        .filter_map(move |event| {
             match event {
-                QueryEvent::NewKnownMultiaddrs(_) => None,   // TODO:
+                QueryEvent::NewKnownMultiaddrs(peers) => {
+                    for (peer, addrs) in peers {
+                        peer_store.peer_or_create(&peer)
+                            .add_addrs(addrs, Duration::from_secs(3600));
+                    }
+                    None
+                },
                 QueryEvent::Finished(out) => Some(out),
             }
         })

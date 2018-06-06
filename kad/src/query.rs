@@ -315,9 +315,9 @@ where
                 // Update the peerstore with the information sent by
                 // the remote.
                 {
-                    let valid_multiaddrs = peer.multiaddrs.drain(..);
-                    trace!("Adding multiaddresses to {:?}: {:?}", peer.node_id, valid_multiaddrs);
-                    new_known_multiaddrs.push((peer.node_id.clone(), valid_multiaddrs.collect()));
+                    let multiaddrs = mem::replace(&mut peer.multiaddrs, Vec::new());
+                    trace!("Reporting multiaddresses for {:?}: {:?}", peer.node_id, multiaddrs);
+                    new_known_multiaddrs.push((peer.node_id.clone(), multiaddrs));
                 }
 
                 if peer.node_id.distance_with(&searched_key)
