@@ -40,7 +40,7 @@ use libp2p_peerstore::PeerId;
 use libp2p_core::ConnectionUpgrade;
 use libp2p_core::Endpoint;
 use multiaddr::Multiaddr;
-use protocol::{self, KadMsg, KademliaProtocolConfig, Peer, ConnectionType};
+use protocol::{self, KadMsg, KademliaProtocolConfig, Peer};
 use std::collections::VecDeque;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
@@ -88,12 +88,7 @@ where
     fn upgrade(self, incoming: C, id: (), endpoint: Endpoint, addr: &Multiaddr) -> Self::Future {
         let future = self.raw_proto
             .upgrade(incoming, id, endpoint, addr)
-            .map(move |connec| {
-                let (tx, rx) = mpsc::unbounded();
-                let future = kademlia_handler(connec, rx);
-                let controller = KademliaServerController { inner: tx };
-                (controller, future)
-            });
+            .map(build_from_sink_stream);
 
         Box::new(future) as Box<_>
     }
@@ -190,18 +185,22 @@ pub struct KademliaFindNodeRespond {
 impl KademliaFindNodeRespond {
     /// Respond to the `FindNode` request.
     pub fn respond<I>(self, peers: I)
-        where I: Iterator<Item = (PeerId, Vec<Multiaddr>, ConnectionType)>
+        where I: Iterator<Item = protocol::Peer>
     {
         let _ = self.inner.send(KadMsg::FindNodeRes {
-            closer_peers: peers.map(|peer| {
-                protocol::Peer {
-                    node_id: peer.0,
-                    multiaddrs: peer.1,
-                    connection_ty: peer.2,
-                }
-            }).collect()
+            closer_peers: peers.collect()
         });
     }
+}
+
+// Builds a controller and stream from a stream/sink of raw messages.
+fn build_from_sink_stream<'a, S>(connec: S) -> (KademliaServerController, Box<Stream<Item = KademliaIncomingRequest, Error = IoError> + 'a>)
+where S: Sink<SinkItem = KadMsg, SinkError = IoError> + Stream<Item = KadMsg, Error = IoError> + 'a
+{
+    let (tx, rx) = mpsc::unbounded();
+    let future = kademlia_handler(connec, rx);
+    let controller = KademliaServerController { inner: tx };
+    (controller, future)
 }
 
 // Handles a newly-opened Kademlia stream with a remote peer.
@@ -410,4 +409,111 @@ where
     }).filter_map(|val| val);
 
     Box::new(stream) as Box<Stream<Item = _, Error = IoError>>
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Error as IoError;
+    use std::iter;
+    use futures::{Future, Poll, Sink, StartSend, Stream};
+    use futures::sync::mpsc;
+    use kad_server::{self, KademliaIncomingRequest, KademliaServerController};
+    use libp2p_core::PublicKeyBytes;
+    use protocol::{ConnectionType, Peer};
+    use rand;
+
+    // This struct merges a stream and a sink and is quite useful for tests.
+    struct Wrapper<St, Si>(St, Si);
+    impl<St, Si> Stream for Wrapper<St, Si>
+    where
+        St: Stream,
+    {
+        type Item = St::Item;
+        type Error = St::Error;
+        fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+            self.0.poll()
+        }
+    }
+    impl<St, Si> Sink for Wrapper<St, Si>
+    where
+        Si: Sink,
+    {
+        type SinkItem = Si::SinkItem;
+        type SinkError = Si::SinkError;
+        fn start_send(
+            &mut self,
+            item: Self::SinkItem,
+        ) -> StartSend<Self::SinkItem, Self::SinkError> {
+            self.1.start_send(item)
+        }
+        fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
+            self.1.poll_complete()
+        }
+    }
+
+    fn build_test() -> (KademliaServerController, impl Stream<Item = KademliaIncomingRequest, Error = IoError>, KademliaServerController, impl Stream<Item = KademliaIncomingRequest, Error = IoError>) {
+        let (a_to_b, b_from_a) = mpsc::unbounded();
+        let (b_to_a, a_from_b) = mpsc::unbounded();
+
+        let sink_stream_a = Wrapper(a_from_b, a_to_b)
+            .map_err(|_| panic!()).sink_map_err(|_| panic!());
+        let sink_stream_b = Wrapper(b_from_a, b_to_a)
+            .map_err(|_| panic!()).sink_map_err(|_| panic!());
+
+        let (controller_a, stream_events_a) = kad_server::build_from_sink_stream(sink_stream_a);
+        let (controller_b, stream_events_b) = kad_server::build_from_sink_stream(sink_stream_b);
+        (controller_a, stream_events_a, controller_b, stream_events_b)
+    }
+
+    #[test]
+    fn ping_response() {
+        let (controller_a, stream_events_a, _controller_b, stream_events_b) = build_test();
+
+        controller_a.ping().unwrap();
+
+        let streams = stream_events_a.map(|ev| (ev, "a"))
+            .select(stream_events_b.map(|ev| (ev, "b")));
+        match streams.into_future().map_err(|(err, _)| err).wait().unwrap() {
+            (Some((KademliaIncomingRequest::PingPong, "b")), _) => {},
+            _ => panic!()
+        }
+    }
+
+    #[test]
+    fn find_node_response() {
+        let (controller_a, stream_events_a, _controller_b, stream_events_b) = build_test();
+
+        let random_peer_id = {
+            let buf = (0 .. 1024).map(|_| -> u8 { rand::random() }).collect::<Vec<_>>();
+            PublicKeyBytes(buf).to_peer_id()
+        };
+
+        let find_node_fut = controller_a.find_node(&random_peer_id);
+
+        let example_response = Peer {
+            node_id: {
+                let buf = (0 .. 1024).map(|_| -> u8 { rand::random() }).collect::<Vec<_>>();
+                PublicKeyBytes(buf).to_peer_id()
+            },
+            multiaddrs: Vec::new(),
+            connection_ty: ConnectionType::Connected,
+        };
+
+        let streams = stream_events_a.map(|ev| (ev, "a"))
+            .select(stream_events_b.map(|ev| (ev, "b")));
+
+        let streams = match streams.into_future().map_err(|(err, _)| err).wait().unwrap() {
+            (Some((KademliaIncomingRequest::FindNode { searched, responder }, "b")), streams) => {
+                assert_eq!(searched, random_peer_id);
+                responder.respond(iter::once(example_response.clone()));
+                streams
+            },
+            _ => panic!()
+        };
+
+        let resp = streams.into_future().map_err(|(err, _)| err).map(|_| unreachable!())
+            .select(find_node_fut)
+            .map_err(|_| -> IoError { panic!() });
+        assert_eq!(resp.wait().unwrap().0, vec![example_response]);
+    }
 }

@@ -32,7 +32,7 @@ use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};
 use libp2p_core::{ConnectionUpgrade, Endpoint, MuxedTransport, SwarmController, Transport};
 use multiaddr::{AddrComponent, Multiaddr};
 use parking_lot::Mutex;
-use protocol::ConnectionType;
+use protocol::{ConnectionType, Peer};
 use query;
 use std::collections::hash_map::Entry;
 use std::fmt;
@@ -342,7 +342,11 @@ where
                                         .into_iter()
                                         .flat_map(|p| p.addrs())
                                         .collect::<Vec<_>>();
-                                    (peer, addrs, ConnectionType::Connected) // ConnectionType meh :-/
+                                    Peer {
+                                        node_id: peer,
+                                        multiaddrs: addrs,
+                                        connection_ty: ConnectionType::Connected, // ConnectionType meh :-/
+                                    }
                                 });
 
                             responder.respond(closer_peers);
