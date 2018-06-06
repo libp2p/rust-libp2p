@@ -189,3 +189,43 @@ impl FromStr for PeerId {
         PeerId::from_bytes(bytes).map_err(|_| ParseError::MultiHash)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use rand::random;
+    use {PeerId, PublicKeyBytes, PublicKeyBytesSlice};
+
+    #[test]
+    fn pubkey_as_slice_to_owned() {
+        let key = PublicKeyBytes((0 .. 2048).map(|_| -> u8 { random() }).collect());
+        assert_eq!(key.clone().as_slice().to_owned(), key);
+    }
+
+    #[test]
+    fn peer_id_is_public_key() {
+        let key = (0 .. 2048).map(|_| -> u8 { random() }).collect::<Vec<u8>>();
+        let peer_id = PeerId::from_public_key(PublicKeyBytesSlice(&key));
+        assert_eq!(peer_id.is_public_key(PublicKeyBytesSlice(&key)), Some(true));
+    }
+
+    #[test]
+    fn pubkey_to_peer_id() {
+        let key = PublicKeyBytes((0 .. 2048).map(|_| -> u8 { random() }).collect());
+        let peer_id = key.to_peer_id();
+        assert_eq!(peer_id.is_public_key(key.as_slice()), Some(true));
+    }
+
+    #[test]
+    fn peer_id_into_bytes_then_from_bytes() {
+        let peer_id = PublicKeyBytes((0 .. 2048).map(|_| -> u8 { random() }).collect()).to_peer_id();
+        let second = PeerId::from_bytes(peer_id.clone().into_bytes()).unwrap();
+        assert_eq!(peer_id, second);
+    }
+
+    #[test]
+    fn peer_id_to_base58_then_back() {
+        let peer_id = PublicKeyBytes((0 .. 2048).map(|_| -> u8 { random() }).collect()).to_peer_id();
+        let second: PeerId = peer_id.to_base58().parse().unwrap();
+        assert_eq!(peer_id, second);
+    }
+}

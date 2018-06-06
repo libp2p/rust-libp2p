@@ -218,6 +218,9 @@ extern crate quick_error;
 extern crate smallvec;
 extern crate tokio_io;
 
+#[cfg(test)]
+extern crate rand;
+
 /// Multi-address re-export.
 pub extern crate multiaddr;
 
