@@ -36,9 +36,7 @@
 use bytes::Bytes;
 use futures::sync::{mpsc, oneshot};
 use futures::{future, Future, Sink, stream, Stream};
-use libp2p_peerstore::PeerId;
-use libp2p_core::ConnectionUpgrade;
-use libp2p_core::Endpoint;
+use libp2p_core::{ConnectionUpgrade, Endpoint, PeerId};
 use multiaddr::Multiaddr;
 use protocol::{self, KadMsg, KademliaProtocolConfig, Peer};
 use std::collections::VecDeque;

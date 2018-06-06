@@ -23,7 +23,7 @@
 use fnv::FnvHashSet;
 use futures::{future, Future, stream, Stream};
 use kbucket::KBucketsPeerId;
-use libp2p_peerstore::PeerId;
+use libp2p_core::PeerId;
 use multiaddr::{AddrComponent, Multiaddr};
 use protocol;
 use rand;

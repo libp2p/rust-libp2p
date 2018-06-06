@@ -29,7 +29,7 @@
 
 use arrayvec::ArrayVec;
 use bigint::U512;
-use libp2p_peerstore::PeerId;
+use libp2p_core::PeerId;
 use parking_lot::{Mutex, MutexGuard};
 use std::mem;
 use std::slice::Iter as SliceIter;

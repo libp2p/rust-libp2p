@@ -27,8 +27,7 @@
 
 use bytes::{Bytes, BytesMut};
 use futures::{future, sink, Sink, stream, Stream};
-use libp2p_peerstore::PeerId;
-use libp2p_core::{ConnectionUpgrade, Endpoint, Multiaddr};
+use libp2p_core::{ConnectionUpgrade, Endpoint, Multiaddr, PeerId};
 use protobuf::{self, Message};
 use protobuf_structs;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
