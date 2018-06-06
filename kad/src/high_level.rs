@@ -472,6 +472,24 @@ where
         self.inner.parallelism
     }
 
+    fn find_node_rpc(&self, addr: Multiaddr, searched: &PeerId)
+        -> Box<Future<Item = Vec<Peer>, Error = IoError>>
+    {
+        // TODO: rewrite to be more direct
+        let searched = searched.clone();
+        Box::new(self.send(addr, move |ctl| ctl.find_node(&searched)).flatten()) as Box<_>
+    }
+}
+
+impl<R, P, Pc, T, K, M> KademliaController<P, R, T, K, M>
+where
+    P: Clone + Deref<Target = Pc> + 'static, // TODO: 'static :-/
+    for<'r> &'r Pc: Peerstore,
+    R: Clone + 'static,                  // TODO: 'static :-/
+    T: Clone + MuxedTransport + 'static, // TODO: 'static :-/
+    K: Transport<Output = KademliaProcessingFuture> + Clone + 'static,      // TODO: 'static
+    M: FnOnce(KademliaProcessingFuture) -> T::Output + Clone + 'static,     // TODO: 'static :-/
+{
     #[inline]
     fn send<F, FRet>(
         &self,

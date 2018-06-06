@@ -22,7 +22,6 @@
 
 use fnv::FnvHashSet;
 use futures::{future, Future};
-use kad_server::KademliaServerController;
 use kbucket::KBucketsPeerId;
 use libp2p_peerstore::PeerId;
 use multiaddr::{AddrComponent, Multiaddr};
@@ -49,18 +48,10 @@ pub trait QueryInterface: Clone {
     /// Returns the level of parallelism wanted for this query.
     fn parallelism(&self) -> usize;
 
-    /// Attempts to contact the given multiaddress, then calls `and_then` on success. Returns a
-    /// future that contains the output of `and_then`, or an error if we failed to contact the
-    /// remote.
-    // TODO: use HKTB once Rust supports that, to avoid boxing the future
-    fn send<F, FRet>(
-        &self,
-        addr: Multiaddr,
-        and_then: F,
-    ) -> Box<Future<Item = FRet, Error = IoError>>
-    where
-        F: FnOnce(&KademliaServerController) -> FRet + 'static,
-        FRet: 'static;
+    /// Sends a `FIND_NODE` RPC query to the node with the given multiaddress.
+    /// Attempts to contact the multiaddress if necessary.
+    fn find_node_rpc(&self, addr: Multiaddr, searched: &PeerId)
+        -> Box<Future<Item = Vec<protocol::Peer>, Error = IoError>>;
 }
 
 /// Starts a query for an iterative `FIND_NODE` request.
@@ -217,10 +208,8 @@ where
             let multiaddr: Multiaddr = AddrComponent::P2P(peer.clone().into_bytes()).into();
 
             let searched_key2 = searched_key.clone();
-            let resp_rx =
-                query_interface.send(multiaddr.clone(), move |ctl| ctl.find_node(&searched_key2));
+            let current_attempt = query_interface.find_node_rpc(multiaddr.clone(), &searched_key2);
             state.current_attempts_addrs.push(peer.clone());
-            let current_attempt = resp_rx.flatten();
             state
                 .current_attempts_fut
                 .push(Box::new(current_attempt) as Box<_>);
