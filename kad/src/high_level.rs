@@ -47,16 +47,11 @@ use tokio_timer;
 
 /// Prototype for a future Kademlia protocol running on a socket.
 #[derive(Debug, Clone)]
-pub struct KademliaConfig<P, R> {
+pub struct KademliaConfig {
     /// Degree of parallelism on the network. Often called `alpha` in technical papers.
     /// No more than this number of remotes will be used at a given time for any given operation.
     // TODO: ^ share this number between operations? or does each operation use `alpha` remotes?
     pub parallelism: u32,
-    /// Used to load and store data requests of peers.
-    // TODO: say that must implement the `Recordstore` trait.
-    pub record_store: R,
-    /// Used to load and store information about peers.
-    pub peer_store: P,
     /// Id of the local peer.
     pub local_peer_id: PeerId,
     /// When contacting a node, duration after which we consider it unresponsive.
@@ -89,27 +84,23 @@ macro_rules! gen_query_params {
 
 /// Object that allows one to make queries on the Kademlia system.
 #[derive(Debug)]
-pub struct KademliaControllerPrototype<P, R> {
-    inner: Arc<Inner<P, R>>,
+pub struct KademliaControllerPrototype {
+    inner: Arc<Inner>,
 }
 
-impl<P, Pc, R> KademliaControllerPrototype<P, R>
-where
-    P: Deref<Target = Pc>,
-    for<'r> &'r Pc: Peerstore,
-{
+impl KademliaControllerPrototype {
     /// Creates a new controller from that configuration.
-    pub fn new(config: KademliaConfig<P, R>) -> KademliaControllerPrototype<P, R> {
+    pub fn new<I>(config: KademliaConfig, initial_peers: I) -> KademliaControllerPrototype
+    where I: IntoIterator<Item = PeerId>
+    {
         let buckets = KBucketsTable::new(config.local_peer_id.clone(), config.timeout);
-        for peer_id in config.peer_store.deref().peers() {
+        for peer_id in initial_peers {
             let _ = buckets.update(peer_id, ());
         }
 
         let inner = Arc::new(Inner {
             kbuckets: buckets,
             timer: tokio_timer::wheel().build(),
-            record_store: config.record_store,
-            peer_store: config.peer_store,
             connections: Default::default(),
             timeout: config.timeout,
             parallelism: config.parallelism as usize,
@@ -129,13 +120,10 @@ where
         kademlia_transport: K,
         map: M,
     ) -> (
-        KademliaController<P, R, T, K, M>,
+        KademliaController<T, K, M>,
         Box<Future<Item = (), Error = IoError>>,
     )
     where
-        P: Clone + Deref<Target = Pc> + 'static, // TODO: 'static :-/
-        for<'r> &'r Pc: Peerstore,
-        R: Clone + 'static,                  // TODO: 'static :-/
         T: Clone + MuxedTransport + 'static, // TODO: 'static :-/
         K: Transport<Output = KademliaPeerReqStream> + Clone + 'static, // TODO: 'static :-/
         M: FnOnce(KademliaPeerReqStream) -> T::Output + Clone + 'static,
@@ -179,17 +167,17 @@ where
 
 /// Object that allows one to make queries on the Kademlia system.
 #[derive(Debug)]
-pub struct KademliaController<P, R, T, K, M>
+pub struct KademliaController<T, K, M>
 where
     T: MuxedTransport + 'static, // TODO: 'static :-/
 {
-    inner: Arc<Inner<P, R>>,
+    inner: Arc<Inner>,
     swarm_controller: SwarmController<T>,
     kademlia_transport: K,
     map: M,
 }
 
-impl<P, R, T, K, M> Clone for KademliaController<P, R, T, K, M>
+impl<T, K, M> Clone for KademliaController<T, K, M>
 where
     T: Clone + MuxedTransport + 'static, // TODO: 'static :-/
     K: Clone,
@@ -206,11 +194,8 @@ where
     }
 }
 
-impl<P, Pc, R, T, K, M> KademliaController<P, R, T, K, M>
+impl<T, K, M> KademliaController<T, K, M>
 where
-    P: Deref<Target = Pc>,
-    for<'r> &'r Pc: Peerstore,
-    R: Clone,
     T: Clone + MuxedTransport + 'static, // TODO: 'static :-/
 {
     /// Performs an iterative find node query on the network.
@@ -226,8 +211,6 @@ where
         searched_key: PeerId,
     ) -> Box<Stream<Item = query::QueryEvent<Vec<PeerId>>, Error = IoError>>
     where
-        P: Clone + 'static,
-        R: 'static,
         K: Transport<Output = KademliaPeerReqStream> + Clone + 'static,
         M: FnOnce(KademliaPeerReqStream) -> T::Output + Clone + 'static,     // TODO: 'static :-/
     {
@@ -238,15 +221,15 @@ where
 
 /// Connection upgrade to the Kademlia protocol.
 #[derive(Clone)]
-pub struct KademliaUpgrade<P, R> {
-    inner: Arc<Inner<P, R>>,
+pub struct KademliaUpgrade {
+    inner: Arc<Inner>,
     upgrade: KademliaServerConfig,
 }
 
-impl<P, R> KademliaUpgrade<P, R> {
+impl KademliaUpgrade {
     /// Builds a connection upgrade from the controller.
     #[inline]
-    pub fn from_prototype(proto: &KademliaControllerPrototype<P, R>) -> Self {
+    pub fn from_prototype(proto: &KademliaControllerPrototype) -> Self {
         KademliaUpgrade {
             inner: proto.inner.clone(),
             upgrade: KademliaServerConfig::new(),
@@ -255,7 +238,7 @@ impl<P, R> KademliaUpgrade<P, R> {
 
     /// Builds a connection upgrade from the controller.
     #[inline]
-    pub fn from_controller<T, K, M>(ctl: &KademliaController<P, R, T, K, M>) -> Self
+    pub fn from_controller<T, K, M>(ctl: &KademliaController<T, K, M>) -> Self
     where
         T: MuxedTransport,
     {
@@ -266,12 +249,9 @@ impl<P, R> KademliaUpgrade<P, R> {
     }
 }
 
-impl<C, P, Pc, R> ConnectionUpgrade<C> for KademliaUpgrade<P, R>
+impl<C> ConnectionUpgrade<C> for KademliaUpgrade
 where
     C: AsyncRead + AsyncWrite + 'static,     // TODO: 'static :-/
-    P: Deref<Target = Pc> + Clone + 'static, // TODO: 'static :-/
-    for<'r> &'r Pc: Peerstore,
-    R: 'static, // TODO: 'static :-/
 {
     type Output = KademliaPeerReqStream;
     type Future = Box<Future<Item = Self::Output, Error = IoError>>;
@@ -428,7 +408,7 @@ impl KademliaPeerReq {
 
 // Inner struct shared throughout the Kademlia system.
 #[derive(Debug)]
-struct Inner<P, R> {
+struct Inner {
     // The remotes are identified by their public keys.
     kbuckets: KBucketsTable<PeerId, ()>,
 
@@ -440,12 +420,6 @@ struct Inner<P, R> {
 
     // Same as in the config.
     parallelism: usize,
-
-    // Same as in the config.
-    record_store: R,
-
-    // Same as in the config.
-    peer_store: P,
 
     // List of open connections with remotes.
     //
@@ -481,11 +455,8 @@ impl fmt::Debug for Connection {
     }
 }
 
-impl<R, P, Pc, T, K, M> KademliaController<P, R, T, K, M>
+impl<T, K, M> KademliaController<T, K, M>
 where
-    P: Clone + Deref<Target = Pc> + 'static, // TODO: 'static :-/
-    for<'r> &'r Pc: Peerstore,
-    R: Clone + 'static,                  // TODO: 'static :-/
     T: Clone + MuxedTransport + 'static, // TODO: 'static :-/
     K: Transport<Output = KademliaPeerReqStream> + Clone + 'static,      // TODO: 'static
     M: FnOnce(KademliaPeerReqStream) -> T::Output + Clone + 'static,     // TODO: 'static :-/

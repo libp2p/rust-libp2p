@@ -104,13 +104,11 @@ fn main() {
     // and outgoing connections for us.
     let kad_config = libp2p::kad::KademliaConfig {
         parallelism: 3,
-        record_store: (),
-        peer_store: peer_store.clone(),
         local_peer_id: my_peer_id.clone(),
         timeout: Duration::from_secs(2),
     };
 
-    let kad_ctl_proto = libp2p::kad::KademliaControllerPrototype::new(kad_config);
+    let kad_ctl_proto = libp2p::kad::KademliaControllerPrototype::new(kad_config, peer_store.peers());
 
     let proto = libp2p::kad::KademliaUpgrade::from_prototype(&kad_ctl_proto);
 
