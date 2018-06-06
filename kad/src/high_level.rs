@@ -39,6 +39,7 @@ use std::fmt;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use std::ops::Deref;
+use std::slice::Iter as SliceIter;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -380,10 +381,9 @@ pub struct KademliaPeerReq {
 
 impl KademliaPeerReq {
     /// Returns a list of the IDs of the peers that were requested.
-    // TODO: iterator instead?
     #[inline]
-    pub fn requested_peers(&self) -> &[PeerId] {
-        &self.requested_peers
+    pub fn requested_peers(&self) -> SliceIter<PeerId> {
+        self.requested_peers.iter()
     }
 
     /// Responds to the request.

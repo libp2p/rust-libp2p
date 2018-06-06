@@ -124,7 +124,6 @@ fn main() {
                 let peer_store = peer_store.clone();
                 let result = req
                     .requested_peers()
-                    .iter()
                     .map(move |peer_id| {
                         let addrs = peer_store
                             .peer(peer_id)
