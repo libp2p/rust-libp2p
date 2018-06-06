@@ -457,14 +457,14 @@ where
     }
 
     #[inline]
-    fn peer_add_addrs<I>(&self, peer: &PeerId, multiaddrs: I, ttl: Duration)
+    fn peer_add_addrs<I>(&self, peer: &PeerId, multiaddrs: I)
     where
         I: Iterator<Item = Multiaddr>,
     {
         self.inner
             .peer_store
             .peer_or_create(peer)
-            .add_addrs(multiaddrs, ttl);
+            .add_addrs(multiaddrs, Duration::from_secs(3600));      // TODO: which TTL?
     }
 
     #[inline]

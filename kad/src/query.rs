@@ -32,7 +32,6 @@ use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::io::Error as IoError;
 use std::mem;
-use std::time::Duration;
 
 /// Interface that the query uses to communicate with the rest of the system.
 pub trait QueryInterface: Clone {
@@ -43,7 +42,7 @@ pub trait QueryInterface: Clone {
     fn kbuckets_find_closest(&self, addr: &PeerId) -> Vec<PeerId>;
 
     /// Adds new known multiaddrs for the given peer.
-    fn peer_add_addrs<I>(&self, peer: &PeerId, multiaddrs: I, ttl: Duration)
+    fn peer_add_addrs<I>(&self, peer: &PeerId, multiaddrs: I)
     where
         I: Iterator<Item = Multiaddr>;
 
@@ -296,9 +295,8 @@ where
                     trace!("Adding multiaddresses to {:?}: {:?}", peer.node_id, valid_multiaddrs);
                     query_interface2.peer_add_addrs(
                         &peer.node_id,
-                        valid_multiaddrs,
-                        Duration::from_secs(3600),
-                    ); // TODO: which TTL?
+                        valid_multiaddrs,  
+                    );
                 }
 
                 if peer.node_id.distance_with(&searched_key)
