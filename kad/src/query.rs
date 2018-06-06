@@ -77,7 +77,7 @@ pub fn refresh<'a, I>(
 where
     I: QueryInterface + 'a,
 {
-    let peer_id = match gen_random_id(&query_interface, bucket_num) {
+    let peer_id = match gen_random_id(query_interface.local_id(), bucket_num) {
         Ok(p) => p,
         Err(()) => return Box::new(future::ok(())),
     };
@@ -89,11 +89,7 @@ where
 // Generates a random `PeerId` that belongs to the given bucket.
 //
 // Returns an error if `bucket_num` is out of range.
-fn gen_random_id<I>(query_interface: &I, bucket_num: usize) -> Result<PeerId, ()>
-where
-    I: ?Sized + QueryInterface,
-{
-    let my_id = query_interface.local_id();
+fn gen_random_id(my_id: &PeerId, bucket_num: usize) -> Result<PeerId, ()> {
     let my_id_len = my_id.as_bytes().len();
 
     // TODO: this 2 is magic here ; it is the length of the hash of the multihash
