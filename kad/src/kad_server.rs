@@ -75,7 +75,7 @@ where
         KademliaServerController,
         Box<Stream<Item = KademliaIncomingRequest, Error = IoError>>,
     );
-    type Future = Box<Future<Item = Self::Output, Error = IoError>>;
+    type Future = future::Map<<KademliaProtocolConfig as ConnectionUpgrade<C>>::Future, fn(<KademliaProtocolConfig as ConnectionUpgrade<C>>::Output) -> Self::Output>;
     type NamesIter = iter::Once<(Bytes, ())>;
     type UpgradeIdentifier = ();
 
@@ -86,11 +86,9 @@ where
 
     #[inline]
     fn upgrade(self, incoming: C, id: (), endpoint: Endpoint, addr: &Multiaddr) -> Self::Future {
-        let future = self.raw_proto
+        self.raw_proto
             .upgrade(incoming, id, endpoint, addr)
-            .map(build_from_sink_stream);
-
-        Box::new(future) as Box<_>
+            .map(build_from_sink_stream)
     }
 }
 
