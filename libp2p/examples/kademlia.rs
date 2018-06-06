@@ -157,7 +157,7 @@ fn main() {
         .find_node(my_peer_id.clone())
         .filter_map(|event| {
             match event {
-                QueryEvent::NewKnownMultiaddrs(_, _) => None,   // TODO:
+                QueryEvent::NewKnownMultiaddrs(_) => None,   // TODO:
                 QueryEvent::Finished(out) => Some(out),
             }
         })

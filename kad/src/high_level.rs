@@ -28,7 +28,7 @@ use futures::sync::oneshot;
 use futures::{self, future, Future, Stream};
 use kad_server::{KademliaServerConfig, KademliaServerController, KademliaIncomingRequest, KademliaFindNodeRespond};
 use kbucket::{KBucketsPeerId, KBucketsTable, UpdateOutcome};
-use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};
+use libp2p_peerstore::{PeerId, Peerstore};
 use libp2p_core::{ConnectionUpgrade, Endpoint, MuxedTransport, SwarmController, Transport};
 use multiaddr::{AddrComponent, Multiaddr};
 use parking_lot::Mutex;
@@ -74,15 +74,6 @@ macro_rules! gen_query_params {
             kbuckets_find_closest: {
                 let controller = controller.clone();
                 move |addr| controller.inner.kbuckets.find_closest(&addr).collect()
-            },
-            peer_add_addrs: {
-                let controller = controller.clone();
-                move |peer, multiaddrs| {
-                    controller.inner
-                        .peer_store
-                        .peer_or_create(&peer)
-                        .add_addrs(multiaddrs, Duration::from_secs(3600));      // TODO: which TTL?
-                }
             },
             parallelism: $controller.inner.parallelism,
             find_node: {

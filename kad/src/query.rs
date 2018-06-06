@@ -34,13 +34,11 @@ use std::mem;
 
 /// Parameters of a query. Allows plugging the query-related code with the rest of the
 /// infrastructure.
-pub struct QueryParams<FBuckets, FAddPeers, FFindNode> {
+pub struct QueryParams<FBuckets, FFindNode> {
     /// Identifier of the local peer.
     pub local_id: PeerId,
     /// Called whenever we need to obtain the peers closest to a certain peer.
     pub kbuckets_find_closest: FBuckets,
-    /// Called whenever we want to add multiaddresses to the list of multiaddreses of a peer.
-    pub peer_add_addrs: FAddPeers,
     /// Level of parallelism for networking. If this is `N`, then we can dial `N` nodes at a time.
     pub parallelism: usize,
     /// Called whenever we want to send a `FIND_NODE` RPC query.
@@ -50,21 +48,20 @@ pub struct QueryParams<FBuckets, FAddPeers, FFindNode> {
 /// Event that happens during a query.
 #[derive(Debug, Clone)]
 pub enum QueryEvent<TOut> {
-    /// Learned about new mutiaddresses for the given peer.
-    NewKnownMultiaddrs(PeerId, Vec<Multiaddr>),
+    /// Learned about new mutiaddresses for the given peers.
+    NewKnownMultiaddrs(Vec<(PeerId, Vec<Multiaddr>)>),
     /// Finished the processing of the query. Contains the result.
     Finished(TOut),
 }
 
 /// Starts a query for an iterative `FIND_NODE` request.
 #[inline]
-pub fn find_node<'a, FBuckets, FAddPeers, FFindNode>(
-    query_params: QueryParams<FBuckets, FAddPeers, FFindNode>,
+pub fn find_node<'a, FBuckets, FFindNode>(
+    query_params: QueryParams<FBuckets, FFindNode>,
     searched_key: PeerId,
 ) -> Box<Stream<Item = QueryEvent<Vec<PeerId>>, Error = IoError> + 'a>
 where
     FBuckets: Fn(PeerId) -> Vec<PeerId> + 'a + Clone,
-    FAddPeers: Fn(PeerId, Vec<Multiaddr>) + 'a + Clone,
     FFindNode: Fn(Multiaddr, PeerId) -> Box<Future<Item = Vec<protocol::Peer>, Error = IoError>> + 'a + Clone,
 {
     query(query_params, searched_key, 20) // TODO: constant
@@ -74,13 +71,12 @@ where
 /// bucket.
 ///
 /// Returns a dummy no-op future if `bucket_num` is out of range.
-pub fn refresh<'a, FBuckets, FAddPeers, FFindNode>(
-    query_params: QueryParams<FBuckets, FAddPeers, FFindNode>,
+pub fn refresh<'a, FBuckets, FFindNode>(
+    query_params: QueryParams<FBuckets, FFindNode>,
     bucket_num: usize,
 ) -> Box<Stream<Item = QueryEvent<()>, Error = IoError> + 'a>
 where
     FBuckets: Fn(PeerId) -> Vec<PeerId> + 'a + Clone,
-    FAddPeers: Fn(PeerId, Vec<Multiaddr>) + 'a + Clone,
     FFindNode: Fn(Multiaddr, PeerId) -> Box<Future<Item = Vec<protocol::Peer>, Error = IoError>> + 'a + Clone,
 {
     let peer_id = match gen_random_id(&query_params.local_id, bucket_num) {
@@ -90,9 +86,7 @@ where
 
     let stream = find_node(query_params, peer_id).map(|event| {
         match event {
-            QueryEvent::NewKnownMultiaddrs(peer, addrs) => {
-                QueryEvent::NewKnownMultiaddrs(peer, addrs)
-            },
+            QueryEvent::NewKnownMultiaddrs(peers) => QueryEvent::NewKnownMultiaddrs(peers),
             QueryEvent::Finished(_) => QueryEvent::Finished(()),
         }
     });
@@ -134,26 +128,21 @@ fn gen_random_id(my_id: &PeerId, bucket_num: usize) -> Result<PeerId, ()> {
 }
 
 // Generic query-performing function.
-fn query<'a, FBuckets, FAddPeers, FFindNode>(
-    query_params: QueryParams<FBuckets, FAddPeers, FFindNode>,
+fn query<'a, FBuckets, FFindNode>(
+    query_params: QueryParams<FBuckets, FFindNode>,
     searched_key: PeerId,
     num_results: usize,
 ) -> Box<Stream<Item = QueryEvent<Vec<PeerId>>, Error = IoError> + 'a>
 where
     FBuckets: Fn(PeerId) -> Vec<PeerId> + 'a + Clone,
-    FAddPeers: Fn(PeerId, Vec<Multiaddr>) + 'a + Clone,
     FFindNode: Fn(Multiaddr, PeerId) -> Box<Future<Item = Vec<protocol::Peer>, Error = IoError>> + 'a + Clone,
 {
     debug!("Start query for {:?} ; num results = {}", searched_key, num_results);
 
     // State of the current iterative process.
     struct State<'a> {
-        // True if we are finished.
-        finished: bool,
-        // If true, we are still in the first step of the algorithm where we try to find the
-        // closest node. If false, then we are contacting the k closest nodes in order to fill the
-        // list with enough results.
-        looking_for_closer: bool,
+        // At which stage we are.
+        stage: Stage,
         // Final output of the iteration.
         result: Vec<PeerId>,
         // For each open connection, a future with the response of the remote.
@@ -168,9 +157,21 @@ where
         failed_to_contact: FnvHashSet<PeerId>,
     }
 
+    // General stage of the state.
+    #[derive(Copy, Clone, PartialEq, Eq)]
+    enum Stage {
+        // We are still in the first step of the algorithm where we try to find the closest node.
+        FirstStep,
+        // We are contacting the k closest nodes in order to fill the list with enough results.
+        SecondStep,
+        // The results are complete, and the next stream iteration will produce the outcome.
+        FinishingNextIter,
+        // We are finished and the stream shouldn't return anything anymore.
+        Finished,
+    }
+
     let initial_state = State {
-        finished: false,
-        looking_for_closer: true,
+        stage: Stage::FirstStep,
         result: Vec::with_capacity(num_results),
         current_attempts_fut: Vec::new(),
         current_attempts_addrs: SmallVec::new(),
@@ -185,17 +186,26 @@ where
 
     // Start of the iterative process.
     let stream = stream::unfold(initial_state, move |mut state| -> Option<_> {
-        if state.finished {
-            return None;
-        }
+        match state.stage {
+            Stage::FinishingNextIter => {
+                let result = mem::replace(&mut state.result, Vec::new());
+                debug!("Query finished with {} results", result.len());
+                state.stage = Stage::Finished;
+                let future = future::ok((Some(QueryEvent::Finished(result)), state));
+                return Some(future::Either::A(future));
+            },
+            Stage::Finished => {
+                return None;
+            },
+            _ => ()
+        };
 
         let searched_key = searched_key.clone();
         let find_node_rpc = query_params.find_node.clone();
-        let peer_add_addrs = query_params.peer_add_addrs.clone();
 
         // Find out which nodes to contact at this iteration.
         let to_contact = {
-            let wanted_len = if state.looking_for_closer {
+            let wanted_len = if state.stage == Stage::FirstStep {
                 parallelism.saturating_sub(state.current_attempts_fut.len())
             } else {
                 num_results.saturating_sub(state.current_attempts_fut.len())
@@ -247,11 +257,9 @@ where
         if current_attempts_fut.is_empty() {
             // If `current_attempts_fut` is empty, then `select_all` would panic. It happens
             // when we have no additional node to query.
-            let result = mem::replace(&mut state.result, Vec::new());
-            debug!("Query finished with {} results because no additional node available",
-                    result.len());
-            state.finished = true;
-            let future = future::ok((Some(QueryEvent::Finished(result)), state));
+            debug!("Finishing query early because no additional node available");
+            state.stage = Stage::FinishingNextIter;
+            let future = future::ok((None, state));
             return Some(future::Either::A(future));
         }
 
@@ -302,16 +310,14 @@ where
             let mut local_nearest_node_updated = false;
 
             // Update `state` with the actual content of the message.
+            let mut new_known_multiaddrs = Vec::with_capacity(closer_peers.len());
             for mut peer in closer_peers {
                 // Update the peerstore with the information sent by
                 // the remote.
                 {
                     let valid_multiaddrs = peer.multiaddrs.drain(..);
                     trace!("Adding multiaddresses to {:?}: {:?}", peer.node_id, valid_multiaddrs);
-                    peer_add_addrs(
-                        peer.node_id.clone(),   // TODO: suboptimal
-                        valid_multiaddrs.collect(),    // TODO: suboptimal
-                    );
+                    new_known_multiaddrs.push((peer.node_id.clone(), valid_multiaddrs.collect()));
                 }
 
                 if peer.node_id.distance_with(&searched_key)
@@ -338,23 +344,18 @@ where
             }
 
             if state.result.len() >= num_results
-                || (!state.looking_for_closer && state.current_attempts_fut.is_empty())
+                || (state.stage != Stage::FirstStep && state.current_attempts_fut.is_empty())
             {
-                // Check that our `Vec::with_capacity` is correct.
-                debug_assert_eq!(state.result.capacity(), num_results);
-                let result = mem::replace(&mut state.result, Vec::new());
-                debug!("Query finished with {} results", result.len());
-                state.finished = true;
-                future::ok((Some(QueryEvent::Finished(result)), state))
+                state.stage = Stage::FinishingNextIter;
 
             } else {
                 if !local_nearest_node_updated {
                     trace!("Loop didn't update closer node ; jumping to step 2");
-                    state.looking_for_closer = false;
+                    state.stage = Stage::SecondStep;
                 }
-
-                future::ok((None, state))
             }
+
+            future::ok((Some(QueryEvent::NewKnownMultiaddrs(new_known_multiaddrs)), state))
         });
 
         Some(future::Either::B(future))
