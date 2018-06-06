@@ -27,7 +27,7 @@ extern crate tokio_core;
 extern crate tokio_io;
 
 use bigint::U512;
-use futures::future::Future;
+use futures::{Future, Stream};
 use libp2p::peerstore::{PeerAccess, PeerId, Peerstore};
 use libp2p::Multiaddr;
 use std::env;
@@ -35,6 +35,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use libp2p::core::{Transport, PublicKeyBytesSlice};
 use libp2p::core::{upgrade, either::EitherOutput};
+use libp2p::kad::{ConnectionType, Peer};
 use libp2p::tcp::TcpConfig;
 use tokio_core::reactor::Core;
 
@@ -104,7 +105,7 @@ fn main() {
     let kad_config = libp2p::kad::KademliaConfig {
         parallelism: 3,
         record_store: (),
-        peer_store: peer_store,
+        peer_store: peer_store.clone(),
         local_peer_id: my_peer_id.clone(),
         timeout: Duration::from_secs(2),
     };
@@ -117,7 +118,30 @@ fn main() {
     // outgoing connections for us.
     let (swarm_controller, swarm_future) = libp2p::core::swarm(
         transport.clone().with_upgrade(proto.clone()),
-        |upgrade, _| upgrade,
+        move |kademlia_stream, _| {
+            let peer_store = peer_store.clone();
+            kademlia_stream.for_each(move |req| {
+                let peer_store = peer_store.clone();
+                let result = req
+                    .requested_peers()
+                    .iter()
+                    .map(move |peer_id| {
+                        let addrs = peer_store
+                            .peer(peer_id)
+                            .into_iter()
+                            .flat_map(|p| p.addrs())
+                            .collect::<Vec<_>>();
+                        Peer {
+                            node_id: peer_id.clone(),
+                            multiaddrs: addrs,
+                            connection_ty: ConnectionType::Connected, // meh :-/
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                req.respond(result);
+                Ok(())
+            })
+        },
     );
 
     let (kad_controller, _kad_init) =

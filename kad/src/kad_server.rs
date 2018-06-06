@@ -183,10 +183,10 @@ pub struct KademliaFindNodeRespond {
 impl KademliaFindNodeRespond {
     /// Respond to the `FindNode` request.
     pub fn respond<I>(self, peers: I)
-        where I: Iterator<Item = protocol::Peer>
+        where I: IntoIterator<Item = protocol::Peer>
     {
         let _ = self.inner.send(KadMsg::FindNodeRes {
-            closer_peers: peers.collect()
+            closer_peers: peers.into_iter().collect()
         });
     }
 }
