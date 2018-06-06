@@ -293,8 +293,7 @@ mod tests {
     use self::libp2p_tcp_transport::TcpConfig;
     use self::tokio_core::reactor::Core;
     use futures::{Future, Sink, Stream};
-    use libp2p_peerstore::PeerId;
-    use libp2p_core::{Transport, PublicKeyBytesSlice};
+    use libp2p_core::{Transport, PeerId, PublicKeyBytesSlice};
     use protocol::{ConnectionType, KadMsg, KademliaProtocolConfig, Peer};
     use std::sync::mpsc;
     use std::thread;
