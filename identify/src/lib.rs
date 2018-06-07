@@ -79,10 +79,10 @@ extern crate protobuf;
 extern crate tokio_io;
 extern crate varint;
 
+pub use self::peer_id_transport::PeerIdTransport;
 pub use self::protocol::{IdentifyInfo, IdentifyOutput, IdentifyProtocolConfig, IdentifySender};
-pub use self::transport::PeerIdTransport;
 
 mod identify_transport;
+mod peer_id_transport;
 mod protocol;
 mod structs_proto;
-mod transport;
