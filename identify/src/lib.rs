@@ -28,15 +28,15 @@
 //!
 //! Both low-level and high-level usages are available.
 //!
-//! ## High-level usage through the `IdentifyTransport` struct
+//! ## High-level usage through the `PeerIdTransport` struct
 //!
-//! This crate provides the `IdentifyTransport` struct, which wraps around a `Transport` and an
-//! implementation of `Peerstore`. `IdentifyTransport` is itself a transport that accepts
+//! This crate provides the `PeerIdTransport` struct, which wraps around a `Transport` and an
+//! implementation of `Peerstore`. `PeerIdTransport` is itself a transport that accepts
 //! multiaddresses of the form `/p2p/...` or `/ipfs/...`.
 //!
 //! > **Note**: All the documentation refers to `/p2p/...`, however `/ipfs/...` is also supported.
 //!
-//! If you dial a multiaddr of the form `/p2p/...`, then the `IdentifyTransport` will look into
+//! If you dial a multiaddr of the form `/p2p/...`, then the `PeerIdTransport` will look into
 //! the `Peerstore` for any known multiaddress for this peer and try to dial them using the
 //! underlying transport. If you dial any other multiaddr, then it will dial this multiaddr using
 //! the underlying transport, then negotiate the *identify* protocol with the remote in order to
@@ -47,7 +47,7 @@
 //! sense). Any address passed to `listen_on` will be passed directly to the underlying transport.
 //!
 //! Whenever a remote connects to us, either through listening or through `next_incoming`, the
-//! `IdentifyTransport` dials back the remote, upgrades the connection to the *identify* protocol
+//! `PeerIdTransport` dials back the remote, upgrades the connection to the *identify* protocol
 //! in order to obtain the ID of the remote, stores the information in the peerstore, and finally
 //! only returns the connection. From the exterior, the multiaddress of the remote is of the form
 //! `/p2p/...`. If the remote doesn't support the *identify* protocol, then the socket is closed.
@@ -80,7 +80,7 @@ extern crate tokio_io;
 extern crate varint;
 
 pub use self::protocol::{IdentifyInfo, IdentifyOutput, IdentifyProtocolConfig, IdentifySender};
-pub use self::transport::IdentifyTransport;
+pub use self::transport::PeerIdTransport;
 
 mod identify_transport;
 mod protocol;

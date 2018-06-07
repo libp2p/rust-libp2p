@@ -30,17 +30,17 @@ use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Implementation of `Transport`. See [the crate root description](index.html).
 #[derive(Debug, Clone)]
-pub struct IdentifyTransport<Trans, PStoreRef> {
+pub struct PeerIdTransport<Trans, PStoreRef> {
     transport: Trans,
     peerstore: PStoreRef,
     addr_ttl: Duration,
 }
 
-impl<Trans, PStoreRef> IdentifyTransport<Trans, PStoreRef> {
-    /// Creates an `IdentifyTransport` that wraps around the given transport and peerstore.
+impl<Trans, PStoreRef> PeerIdTransport<Trans, PStoreRef> {
+    /// Creates an `PeerIdTransport` that wraps around the given transport and peerstore.
     #[inline]
     pub fn new(transport: Trans, peerstore: PStoreRef) -> Self {
-        IdentifyTransport::with_ttl(transport, peerstore, Duration::from_secs(3600))
+        PeerIdTransport::with_ttl(transport, peerstore, Duration::from_secs(3600))
     }
 
     /// Same as `new`, but allows specifying a time-to-live for the addresses gathered from
@@ -49,7 +49,7 @@ impl<Trans, PStoreRef> IdentifyTransport<Trans, PStoreRef> {
     /// The default value is one hour.
     #[inline]
     pub fn with_ttl(transport: Trans, peerstore: PStoreRef, ttl: Duration) -> Self {
-        IdentifyTransport {
+        PeerIdTransport {
             transport: transport,
             peerstore: peerstore,
             addr_ttl: ttl,
@@ -57,14 +57,14 @@ impl<Trans, PStoreRef> IdentifyTransport<Trans, PStoreRef> {
     }
 }
 
-impl<Trans, PStore, PStoreRef> Transport for IdentifyTransport<Trans, PStoreRef>
+impl<Trans, PStore, PStoreRef> Transport for PeerIdTransport<Trans, PStoreRef>
 where
     Trans: Transport + Clone + 'static, // TODO: 'static :(
     Trans::Output: AsyncRead + AsyncWrite,
     PStoreRef: Deref<Target = PStore> + Clone + 'static, // TODO: 'static :(
     for<'r> &'r PStore: Peerstore,
 {
-    type Output = IdentifyTransportOutput<Trans::Output>;
+    type Output = PeerIdTransportOutput<Trans::Output>;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
     type ListenerUpgrade = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>;
     type Dial = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>;
@@ -77,7 +77,7 @@ where
         let (listener, new_addr) = match self.transport.clone().listen_on(addr.clone()) {
             Ok((l, a)) => (l, a),
             Err((inner, addr)) => {
-                let id = IdentifyTransport {
+                let id = PeerIdTransport {
                     transport: inner,
                     peerstore: self.peerstore,
                     addr_ttl: self.addr_ttl,
@@ -102,7 +102,7 @@ where
 
                     if peer.addrs().any(|addr| addr == client_addr) {
                         debug!("Incoming substream from {} identified as {:?}", client_addr, peer_id);
-                        let out = IdentifyTransportOutput { socket: connec, observed_addr: None };
+                        let out = PeerIdTransportOutput { socket: connec, observed_addr: None };
                         let ret = (out, AddrComponent::P2P(peer_id.into_bytes()).into());
                         return future::Either::A(future::ok(ret));
                     }
@@ -141,7 +141,7 @@ where
                         };
 
                         debug!("Identified {} as {}", original_addr, real_addr);
-                        let out = IdentifyTransportOutput { socket: connec, observed_addr: Some(observed) };
+                        let out = PeerIdTransportOutput { socket: connec, observed_addr: Some(observed) };
                         Ok((out, real_addr))
                     })
                     .map_err(move |err| {
@@ -195,7 +195,7 @@ where
                         match val {
                             Some((connec, inner_addr)) => {
                                 debug!("Successfully dialed peer {:?} through {}", peer_id, inner_addr);
-                                let out = IdentifyTransportOutput { socket: connec, observed_addr: None };
+                                let out = PeerIdTransportOutput { socket: connec, observed_addr: None };
                                 Ok((out, inner_addr))
                             },
                             None => {
@@ -223,7 +223,7 @@ where
                 let dial = match identify_upgrade.dial(addr) {
                     Ok(d) => d,
                     Err((_, addr)) => {
-                        let id = IdentifyTransport {
+                        let id = PeerIdTransport {
                             transport,
                             peerstore: self.peerstore,
                             addr_ttl: self.addr_ttl,
@@ -259,7 +259,7 @@ where
                         })
                         .into_future()
                         .map(move |(dial, _wrong_addr)| {
-                            let out = IdentifyTransportOutput { socket: dial, observed_addr: Some(observed) };
+                            let out = PeerIdTransportOutput { socket: dial, observed_addr: Some(observed) };
                             (out, real_addr)
                         }))
                 }).flatten();
@@ -275,7 +275,7 @@ where
     }
 }
 
-impl<Trans, PStore, PStoreRef> MuxedTransport for IdentifyTransport<Trans, PStoreRef>
+impl<Trans, PStore, PStoreRef> MuxedTransport for PeerIdTransport<Trans, PStoreRef>
 where
     Trans: MuxedTransport + Clone + 'static,
     Trans::Output: AsyncRead + AsyncWrite,
@@ -302,7 +302,7 @@ where
 
                     if peer.addrs().any(|addr| addr == client_addr) {
                         debug!("Incoming substream from {} identified as {:?}", client_addr, peer_id);
-                        let out = IdentifyTransportOutput { socket: connec, observed_addr: None };
+                        let out = PeerIdTransportOutput { socket: connec, observed_addr: None };
                         let ret = (out, AddrComponent::P2P(peer_id.into_bytes()).into());
                         return future::Either::A(future::ok(ret));
                     }
@@ -334,7 +334,7 @@ where
                             ),
                         };
 
-                        let out = IdentifyTransportOutput { socket: connec, observed_addr: Some(observed) };
+                        let out = PeerIdTransportOutput { socket: connec, observed_addr: Some(observed) };
                         Ok((out, real_addr))
                     });
                 future::Either::B(future)
@@ -349,7 +349,7 @@ where
 
 /// Output of the identify transport.
 #[derive(Debug, Clone)]
-pub struct IdentifyTransportOutput<S> {
+pub struct PeerIdTransportOutput<S> {
     /// The socket to communicate with the remote.
     pub socket: S,
     /// Address that the remote observes us as, if known.
@@ -404,7 +404,7 @@ mod tests {
 
     use self::libp2p_tcp_transport::TcpConfig;
     use self::tokio_core::reactor::Core;
-    use IdentifyTransport;
+    use PeerIdTransport;
     use futures::{Future, Stream};
     use libp2p_peerstore::memory_peerstore::MemoryPeerstore;
     use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};
@@ -417,7 +417,7 @@ mod tests {
 
     #[test]
     fn dial_peer_id() {
-        // When we dial an `/p2p/...` address, the `IdentifyTransport` should look into the
+        // When we dial an `/p2p/...` address, the `PeerIdTransport` should look into the
         // peerstore and dial one of the known multiaddresses of the node instead.
 
         #[derive(Debug, Clone)]
@@ -462,7 +462,7 @@ mod tests {
         let underlying = UnderlyingTrans {
             inner: TcpConfig::new(core.handle()),
         };
-        let transport = IdentifyTransport::new(underlying, Arc::new(peerstore));
+        let transport = PeerIdTransport::new(underlying, Arc::new(peerstore));
 
         let future = transport
             .dial(iter::once(AddrComponent::P2P(peer_id.into_bytes())).collect())
