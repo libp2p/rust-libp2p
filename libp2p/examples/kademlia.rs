@@ -87,7 +87,19 @@ fn main() {
         // a `Transport`.
         .into_connection_reuse();
 
-    let transport = libp2p::identify::PeerIdTransport::new(transport, peer_store.clone())
+    let addr_resolver = {
+        let peer_store = peer_store.clone();
+        move |peer_id| {
+            peer_store
+                .peer(&peer_id)
+                .into_iter()
+                .flat_map(|peer| peer.addrs())
+                .collect::<Vec<_>>()
+                .into_iter()
+        }
+    };
+
+    let transport = libp2p::identify::PeerIdTransport::new(transport, addr_resolver)
         .map(|id_out, _, _| {
             id_out.socket
         });
