@@ -67,7 +67,6 @@ extern crate bytes;
 extern crate fnv;
 extern crate futures;
 extern crate futures_mutex;
-extern crate libp2p_peerstore;
 extern crate libp2p_core;
 #[macro_use]
 extern crate log;

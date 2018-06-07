@@ -48,7 +48,7 @@ impl<Trans, AddrRes, AddrResOut> Transport for PeerIdTransport<Trans, AddrRes>
 where
     Trans: Transport + Clone + 'static, // TODO: 'static :(
     Trans::Output: AsyncRead + AsyncWrite,
-    AddrRes: Fn(&PeerId) -> AddrResOut + 'static,       // TODO: 'static :(
+    AddrRes: Fn(PeerId) -> AddrResOut + 'static,       // TODO: 'static :(
     AddrResOut: IntoIterator<Item = Multiaddr> + 'static,       // TODO: 'static :(
 {
     type Output = PeerIdTransportOutput<Trans::Output>;
@@ -100,10 +100,10 @@ where
                 // address resolved) one by one.
                 let addrs = {
                     let resolver = &self.addr_resolver;
-                    resolver(&peer_id).into_iter()
+                    resolver(peer_id.clone()).into_iter()
                 };
 
-                trace!("Try dialing peer ID {:?} ; loaded multiaddrs from addr resolver", peer_id);
+                trace!("Try dialing peer ID {:?} ; loading multiaddrs from addr resolver", peer_id);
 
                 let transport = self.transport;
                 let future = stream::iter_ok(addrs)
@@ -189,7 +189,7 @@ impl<Trans, AddrRes, AddrResOut> MuxedTransport for PeerIdTransport<Trans, AddrR
 where
     Trans: MuxedTransport + Clone + 'static,
     Trans::Output: AsyncRead + AsyncWrite,
-    AddrRes: Fn(&PeerId) -> AddrResOut + 'static,       // TODO: 'static :(
+    AddrRes: Fn(PeerId) -> AddrResOut + 'static,       // TODO: 'static :(
     AddrResOut: IntoIterator<Item = Multiaddr> + 'static,   // TODO: 'static :(
 {
     type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError>>;
@@ -259,14 +259,10 @@ mod tests {
     use self::tokio_core::reactor::Core;
     use PeerIdTransport;
     use futures::{Future, Stream};
-    use libp2p_peerstore::memory_peerstore::MemoryPeerstore;
-    use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};
-    use libp2p_core::{Transport, PublicKeyBytesSlice};
+    use libp2p_core::{Transport, PeerId, PublicKeyBytesSlice};
     use multiaddr::{AddrComponent, Multiaddr};
     use std::io::Error as IoError;
     use std::iter;
-    use std::sync::Arc;
-    use std::time::Duration;
 
     #[test]
     fn dial_peer_id() {
@@ -305,17 +301,17 @@ mod tests {
 
         let peer_id = PeerId::from_public_key(PublicKeyBytesSlice(&[1, 2, 3, 4]));
 
-        let peerstore = MemoryPeerstore::empty();
-        peerstore.peer_or_create(&peer_id).add_addr(
-            "/ip4/127.0.0.1/tcp/12345".parse().unwrap(),
-            Duration::from_secs(3600),
-        );
-
         let mut core = Core::new().unwrap();
         let underlying = UnderlyingTrans {
             inner: TcpConfig::new(core.handle()),
         };
-        let transport = PeerIdTransport::new(underlying, Arc::new(peerstore));
+        let transport = PeerIdTransport::new(underlying, {
+            let peer_id = peer_id.clone();
+            move |addr| {
+                assert_eq!(addr, peer_id);
+                vec!["/ip4/127.0.0.1/tcp/12345".parse().unwrap()]
+            }
+        });
 
         let future = transport
             .dial(iter::once(AddrComponent::P2P(peer_id.into_bytes())).collect())

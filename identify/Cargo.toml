@@ -8,7 +8,6 @@ bytes = "0.4"
 fnv = "1.0"
 futures = "0.1"
 futures-mutex = { git = "https://github.com/paritytech/futures-mutex" }
-libp2p-peerstore = { path = "../peerstore" }
 libp2p-core = { path = "../core" }
 log = "0.4.1"
 multiaddr = { path = "../multiaddr" }
