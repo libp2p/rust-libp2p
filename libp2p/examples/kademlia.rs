@@ -100,12 +100,16 @@ fn main() {
     };
 
     let transport = libp2p::identify::PeerIdTransport::new(transport, addr_resolver)
-        .map({
+        .and_then({
             let peer_store = peer_store.clone();
             move |id_out, _, _| {
-                let peer_id = id_out.info.public_key.to_peer_id();
-                peer_store.peer_or_create(&peer_id).add_addr(id_out.original_addr, Duration::from_secs(3600));
-                id_out.socket
+                let socket = id_out.socket;
+                let original_addr = id_out.original_addr;
+                id_out.info.map(move |info| {
+                    let peer_id = info.info.public_key.to_peer_id();
+                    peer_store.peer_or_create(&peer_id).add_addr(original_addr, Duration::from_secs(3600));
+                    socket
+                })
             }
         });
 
