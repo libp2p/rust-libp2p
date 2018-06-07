@@ -25,20 +25,19 @@
 use bytes::Bytes;
 use fnv::FnvHashMap;
 use futures::sync::oneshot;
-use futures::{self, future, Future};
-use kad_server::{KadServerInterface, KademliaServerConfig, KademliaServerController};
+use futures::{self, future, Future, Stream};
+use kad_server::{KademliaServerConfig, KademliaServerController, KademliaIncomingRequest, KademliaFindNodeRespond};
 use kbucket::{KBucketsPeerId, KBucketsTable, UpdateOutcome};
-use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};
-use libp2p_core::{ConnectionUpgrade, Endpoint, MuxedTransport, SwarmController, Transport};
-use multiaddr::Multiaddr;
+use libp2p_core::{ConnectionUpgrade, Endpoint, MuxedTransport, PeerId, SwarmController, Transport};
+use multiaddr::{AddrComponent, Multiaddr};
 use parking_lot::Mutex;
-use protocol::ConnectionType;
+use protocol::Peer;
 use query;
 use std::collections::hash_map::Entry;
 use std::fmt;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
-use std::ops::Deref;
+use std::slice::Iter as SliceIter;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -46,45 +45,60 @@ use tokio_timer;
 
 /// Prototype for a future Kademlia protocol running on a socket.
 #[derive(Debug, Clone)]
-pub struct KademliaConfig<P, R> {
+pub struct KademliaConfig {
     /// Degree of parallelism on the network. Often called `alpha` in technical papers.
     /// No more than this number of remotes will be used at a given time for any given operation.
     // TODO: ^ share this number between operations? or does each operation use `alpha` remotes?
     pub parallelism: u32,
-    /// Used to load and store data requests of peers.
-    // TODO: say that must implement the `Recordstore` trait.
-    pub record_store: R,
-    /// Used to load and store information about peers.
-    pub peer_store: P,
     /// Id of the local peer.
     pub local_peer_id: PeerId,
     /// When contacting a node, duration after which we consider it unresponsive.
     pub timeout: Duration,
 }
 
-/// Object that allows one to make queries on the Kademlia system.
-#[derive(Debug)]
-pub struct KademliaControllerPrototype<P, R> {
-    inner: Arc<Inner<P, R>>,
+// Builds a `QueryParams` that fetches information from `$controller`.
+//
+// Because of lifetime issues and type naming issues, a macro is the most convenient solution.
+macro_rules! gen_query_params {
+    ($controller:expr) => {{
+        let controller = $controller;
+        query::QueryParams {
+            local_id: $controller.inner.kbuckets.my_id().clone(),
+            kbuckets_find_closest: {
+                let controller = controller.clone();
+                move |addr| controller.inner.kbuckets.find_closest(&addr).collect()
+            },
+            parallelism: $controller.inner.parallelism,
+            find_node: {
+                let controller = controller.clone();
+                move |addr, searched| {
+                    // TODO: rewrite to be more direct
+                    Box::new(controller.send(addr, move |ctl| ctl.find_node(&searched)).flatten()) as Box<_>
+                }
+            },
+        }
+    }};
 }
 
-impl<P, Pc, R> KademliaControllerPrototype<P, R>
-where
-    P: Deref<Target = Pc>,
-    for<'r> &'r Pc: Peerstore,
-{
+/// Object that allows one to make queries on the Kademlia system.
+#[derive(Debug)]
+pub struct KademliaControllerPrototype {
+    inner: Arc<Inner>,
+}
+
+impl KademliaControllerPrototype {
     /// Creates a new controller from that configuration.
-    pub fn new(config: KademliaConfig<P, R>) -> KademliaControllerPrototype<P, R> {
+    pub fn new<I>(config: KademliaConfig, initial_peers: I) -> KademliaControllerPrototype
+    where I: IntoIterator<Item = PeerId>
+    {
         let buckets = KBucketsTable::new(config.local_peer_id.clone(), config.timeout);
-        for peer_id in config.peer_store.deref().peers() {
+        for peer_id in initial_peers {
             let _ = buckets.update(peer_id, ());
         }
 
         let inner = Arc::new(Inner {
             kbuckets: buckets,
             timer: tokio_timer::wheel().build(),
-            record_store: config.record_store,
-            peer_store: config.peer_store,
             connections: Default::default(),
             timeout: config.timeout,
             parallelism: config.parallelism as usize,
@@ -96,24 +110,21 @@ where
     /// Turns the prototype into an actual controller by feeding it a swarm controller.
     ///
     /// You must pass to this function the transport to use to dial and obtain 
-    /// `KademliaProcessingFuture`, plus a mapping function that will turn the
-    /// `KademliaProcessingFuture` into whatever the swarm expects.
+    /// `KademliaPeerReqStream`, plus a mapping function that will turn the
+    /// `KademliaPeerReqStream` into whatever the swarm expects.
     pub fn start<T, K, M>(
         self,
         swarm: SwarmController<T>,
         kademlia_transport: K,
         map: M,
     ) -> (
-        KademliaController<P, R, T, K, M>,
+        KademliaController<T, K, M>,
         Box<Future<Item = (), Error = IoError>>,
     )
     where
-        P: Clone + Deref<Target = Pc> + 'static, // TODO: 'static :-/
-        for<'r> &'r Pc: Peerstore,
-        R: Clone + 'static,                  // TODO: 'static :-/
         T: Clone + MuxedTransport + 'static, // TODO: 'static :-/
-        K: Transport<Output = KademliaProcessingFuture> + Clone + 'static, // TODO: 'static :-/
-        M: FnOnce(KademliaProcessingFuture) -> T::Output + Clone + 'static,
+        K: Transport<Output = KademliaPeerReqStream> + Clone + 'static, // TODO: 'static :-/
+        M: FnOnce(KademliaPeerReqStream) -> T::Output + Clone + 'static,
     {
         // TODO: initialization
 
@@ -126,7 +137,13 @@ where
 
         let init_future = {
             let futures: Vec<_> = (0..256)
-                .map(|n| query::refresh(controller.clone(), n))
+                .map({
+                    let controller = controller.clone();
+                    move |n| query::refresh(gen_query_params!(controller.clone()), n)
+                })
+                .map(|stream| {
+                    stream.for_each(|_| Ok(()))
+                })
                 .collect();
 
             future::loop_fn(futures, |futures| {
@@ -148,17 +165,17 @@ where
 
 /// Object that allows one to make queries on the Kademlia system.
 #[derive(Debug)]
-pub struct KademliaController<P, R, T, K, M>
+pub struct KademliaController<T, K, M>
 where
     T: MuxedTransport + 'static, // TODO: 'static :-/
 {
-    inner: Arc<Inner<P, R>>,
+    inner: Arc<Inner>,
     swarm_controller: SwarmController<T>,
     kademlia_transport: K,
     map: M,
 }
 
-impl<P, R, T, K, M> Clone for KademliaController<P, R, T, K, M>
+impl<T, K, M> Clone for KademliaController<T, K, M>
 where
     T: Clone + MuxedTransport + 'static, // TODO: 'static :-/
     K: Clone,
@@ -175,11 +192,8 @@ where
     }
 }
 
-impl<P, Pc, R, T, K, M> KademliaController<P, R, T, K, M>
+impl<T, K, M> KademliaController<T, K, M>
 where
-    P: Deref<Target = Pc>,
-    for<'r> &'r Pc: Peerstore,
-    R: Clone,
     T: Clone + MuxedTransport + 'static, // TODO: 'static :-/
 {
     /// Performs an iterative find node query on the network.
@@ -193,55 +207,51 @@ where
     pub fn find_node(
         &self,
         searched_key: PeerId,
-    ) -> Box<Future<Item = Vec<PeerId>, Error = IoError>>
+    ) -> Box<Stream<Item = query::QueryEvent<Vec<PeerId>>, Error = IoError>>
     where
-        P: Clone + 'static,
-        R: 'static,
-        K: Transport<Output = KademliaProcessingFuture> + Clone + 'static,
-        M: FnOnce(KademliaProcessingFuture) -> T::Output + Clone + 'static,     // TODO: 'static :-/
+        K: Transport<Output = KademliaPeerReqStream> + Clone + 'static,
+        M: FnOnce(KademliaPeerReqStream) -> T::Output + Clone + 'static,     // TODO: 'static :-/
     {
-        query::find_node(self.clone(), searched_key)
+        let me = self.clone();
+        query::find_node(gen_query_params!(me.clone()), searched_key)
     }
 }
 
 /// Connection upgrade to the Kademlia protocol.
 #[derive(Clone)]
-pub struct KademliaUpgrade<P, R> {
-    inner: Arc<Inner<P, R>>,
-    upgrade: KademliaServerConfig<Arc<Inner<P, R>>>,
+pub struct KademliaUpgrade {
+    inner: Arc<Inner>,
+    upgrade: KademliaServerConfig,
 }
 
-impl<P, R> KademliaUpgrade<P, R> {
+impl KademliaUpgrade {
     /// Builds a connection upgrade from the controller.
     #[inline]
-    pub fn from_prototype(proto: &KademliaControllerPrototype<P, R>) -> Self {
+    pub fn from_prototype(proto: &KademliaControllerPrototype) -> Self {
         KademliaUpgrade {
             inner: proto.inner.clone(),
-            upgrade: KademliaServerConfig::new(proto.inner.clone()),
+            upgrade: KademliaServerConfig::new(),
         }
     }
 
     /// Builds a connection upgrade from the controller.
     #[inline]
-    pub fn from_controller<T, K, M>(ctl: &KademliaController<P, R, T, K, M>) -> Self
+    pub fn from_controller<T, K, M>(ctl: &KademliaController<T, K, M>) -> Self
     where
         T: MuxedTransport,
     {
         KademliaUpgrade {
             inner: ctl.inner.clone(),
-            upgrade: KademliaServerConfig::new(ctl.inner.clone()),
+            upgrade: KademliaServerConfig::new(),
         }
     }
 }
 
-impl<C, P, Pc, R> ConnectionUpgrade<C> for KademliaUpgrade<P, R>
+impl<C> ConnectionUpgrade<C> for KademliaUpgrade
 where
     C: AsyncRead + AsyncWrite + 'static,     // TODO: 'static :-/
-    P: Deref<Target = Pc> + Clone + 'static, // TODO: 'static :-/
-    for<'r> &'r Pc: Peerstore,
-    R: 'static, // TODO: 'static :-/
 {
-    type Output = KademliaProcessingFuture;
+    type Output = KademliaPeerReqStream;
     type Future = Box<Future<Item = Self::Output, Error = IoError>>;
     type NamesIter = iter::Once<(Bytes, ())>;
     type UpgradeIdentifier = ();
@@ -256,8 +266,33 @@ where
         let inner = self.inner;
         let client_addr = addr.clone();
 
+        let peer_id = {
+            let mut iter = addr.iter();
+            let protocol = iter.next();
+            let after_proto = iter.next();
+            match (protocol, after_proto) {
+                (Some(AddrComponent::P2P(key)), None) | (Some(AddrComponent::IPFS(key)), None) => {
+                    match PeerId::from_bytes(key) {
+                        Ok(id) => id,
+                        Err(_) => {
+                            let err = IoError::new(
+                                IoErrorKind::InvalidData,
+                                "invalid peer ID sent by remote identification",
+                            );
+                            return Box::new(future::err(err));
+                        }
+                    }
+                }
+                _ => {
+                    let err =
+                        IoError::new(IoErrorKind::InvalidData, "couldn't identify connected node");
+                    return Box::new(future::err(err));
+                }
+            }
+        };
+
         let future = self.upgrade.upgrade(incoming, id, endpoint, addr).map(
-            move |(controller, future)| {
+            move |(controller, stream)| {
                 match inner.connections.lock().entry(client_addr) {
                     Entry::Occupied(mut entry) => {
                         match entry.insert(Connection::Active(controller)) {
@@ -285,7 +320,43 @@ where
                     }
                 };
 
-                KademliaProcessingFuture { inner: future }
+                let stream = stream.map(move |query| {
+                    match inner.kbuckets.update(peer_id.clone(), ()) {
+                        UpdateOutcome::NeedPing(node_to_ping) => {
+                            // TODO: do something with this info
+                            println!("need to ping {:?}", node_to_ping);
+                        }
+                        _ => (),
+                    }
+
+                    match query {
+                        KademliaIncomingRequest::FindNode { searched, responder } => {
+                            let mut intermediate: Vec<_> = inner.kbuckets.find_closest(&searched).collect();
+                            let my_id = inner.kbuckets.my_id().clone();
+                            if let Some(pos) = intermediate
+                                .iter()
+                                .position(|e| e.distance_with(&searched) >= my_id.distance_with(&searched))
+                            {
+                                if intermediate[pos] != my_id {
+                                    intermediate.insert(pos, my_id);
+                                }
+                            } else {
+                                intermediate.push(my_id);
+                            }
+
+                            Some(KademliaPeerReq {
+                                requested_peers: intermediate,
+                                inner: responder,
+                            })
+                        },
+                        KademliaIncomingRequest::PingPong => {
+                            // We updated the k-bucket above.
+                            None
+                        },
+                    }
+                }).filter_map(|val| val);
+
+                KademliaPeerReqStream { inner: Box::new(stream) }
             },
         );
 
@@ -293,24 +364,49 @@ where
     }
 }
 
-/// Future that must be processed for the Kademlia system to work.
-pub struct KademliaProcessingFuture {
-    inner: Box<Future<Item = (), Error = IoError>>,
+/// Stream that must be processed for the Kademlia system to work.
+///
+/// Produces requests for peer information. These requests should be answered for the stream to
+/// continue to progress.
+pub struct KademliaPeerReqStream {
+    inner: Box<Stream<Item = KademliaPeerReq, Error = IoError>>,
 }
 
-impl Future for KademliaProcessingFuture {
-    type Item = ();
+impl Stream for KademliaPeerReqStream {
+    type Item = KademliaPeerReq;
     type Error = IoError;
 
     #[inline]
-    fn poll(&mut self) -> futures::Poll<Self::Item, Self::Error> {
+    fn poll(&mut self) -> futures::Poll<Option<Self::Item>, Self::Error> {
         self.inner.poll()
+    }
+}
+
+/// Request for information about some peers.
+pub struct KademliaPeerReq {
+    inner: KademliaFindNodeRespond,
+    requested_peers: Vec<PeerId>,
+}
+
+impl KademliaPeerReq {
+    /// Returns a list of the IDs of the peers that were requested.
+    #[inline]
+    pub fn requested_peers(&self) -> SliceIter<PeerId> {
+        self.requested_peers.iter()
+    }
+
+    /// Responds to the request.
+    #[inline]
+    pub fn respond<I>(self, peers: I)
+        where I: IntoIterator<Item = Peer>
+    {
+        self.inner.respond(peers);
     }
 }
 
 // Inner struct shared throughout the Kademlia system.
 #[derive(Debug)]
-struct Inner<P, R> {
+struct Inner {
     // The remotes are identified by their public keys.
     kbuckets: KBucketsTable<PeerId, ()>,
 
@@ -322,12 +418,6 @@ struct Inner<P, R> {
 
     // Same as in the config.
     parallelism: usize,
-
-    // Same as in the config.
-    record_store: R,
-
-    // Same as in the config.
-    peer_store: P,
 
     // List of open connections with remotes.
     //
@@ -363,94 +453,12 @@ impl fmt::Debug for Connection {
     }
 }
 
-impl<P, Pc, R> KadServerInterface for Arc<Inner<P, R>>
+impl<T, K, M> KademliaController<T, K, M>
 where
-    P: Deref<Target = Pc>,
-    for<'r> &'r Pc: Peerstore,
-{
-    #[inline]
-    fn local_id(&self) -> &PeerId {
-        self.kbuckets.my_id()
-    }
-
-    fn peer_info(&self, peer_id: &PeerId) -> (Vec<Multiaddr>, ConnectionType) {
-        let addrs = self.peer_store
-            .peer(peer_id)
-            .into_iter()
-            .flat_map(|p| p.addrs())
-            .collect::<Vec<_>>();
-        (addrs, ConnectionType::Connected) // ConnectionType meh :-/
-    }
-
-    #[inline]
-    fn kbuckets_update(&self, peer: &PeerId) {
-        // TODO: is this the right place for this check?
-        if peer == self.kbuckets.my_id() {
-            return;
-        }
-
-        match self.kbuckets.update(peer.clone(), ()) {
-            UpdateOutcome::NeedPing(node_to_ping) => {
-                // TODO: return this info somehow
-                println!("need to ping {:?}", node_to_ping);
-            }
-            _ => (),
-        }
-    }
-
-    #[inline]
-    fn kbuckets_find_closest(&self, addr: &PeerId) -> Vec<PeerId> {
-        let mut intermediate: Vec<_> = self.kbuckets.find_closest(addr).collect();
-        let my_id = self.kbuckets.my_id().clone();
-        if let Some(pos) = intermediate
-            .iter()
-            .position(|e| e.distance_with(&addr) >= my_id.distance_with(&addr))
-        {
-            if intermediate[pos] != my_id {
-                intermediate.insert(pos, my_id);
-            }
-        } else {
-            intermediate.push(my_id);
-        }
-        intermediate
-    }
-}
-
-impl<R, P, Pc, T, K, M> query::QueryInterface for KademliaController<P, R, T, K, M>
-where
-    P: Clone + Deref<Target = Pc> + 'static, // TODO: 'static :-/
-    for<'r> &'r Pc: Peerstore,
-    R: Clone + 'static,                  // TODO: 'static :-/
     T: Clone + MuxedTransport + 'static, // TODO: 'static :-/
-    K: Transport<Output = KademliaProcessingFuture> + Clone + 'static,      // TODO: 'static
-    M: FnOnce(KademliaProcessingFuture) -> T::Output + Clone + 'static,     // TODO: 'static :-/
+    K: Transport<Output = KademliaPeerReqStream> + Clone + 'static,      // TODO: 'static
+    M: FnOnce(KademliaPeerReqStream) -> T::Output + Clone + 'static,     // TODO: 'static :-/
 {
-    #[inline]
-    fn local_id(&self) -> &PeerId {
-        self.inner.kbuckets.my_id()
-    }
-
-    #[inline]
-    fn kbuckets_find_closest(&self, addr: &PeerId) -> Vec<PeerId> {
-        self.inner.kbuckets.find_closest(addr).collect()
-    }
-
-    #[inline]
-    fn peer_add_addrs<I>(&self, peer: &PeerId, multiaddrs: I, ttl: Duration)
-    where
-        I: Iterator<Item = Multiaddr>,
-    {
-        self.inner
-            .peer_store
-            .peer_or_create(peer)
-            .add_addrs(multiaddrs, ttl);
-    }
-
-    #[inline]
-    fn parallelism(&self) -> usize {
-        self.inner.parallelism
-    }
-
     #[inline]
     fn send<F, FRet>(
         &self,

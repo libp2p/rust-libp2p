@@ -23,46 +23,27 @@
 //!
 //! # Usage
 //!
-//! - Implement the `KadServerInterface` trait on something clonable (usually an `Arc`).
-//!
-//! - Create a `KademliaServerConfig` object from that interface. This struct implements
-//!   `ConnectionUpgrade`.
+//! - Create a `KademliaServerConfig` object. This struct implements `ConnectionUpgrade`.
 //!
 //! - Update a connection through that `KademliaServerConfig`. The output yields you a
-//!   `KademliaServerController` and a future that must be driven to completion. The controller
-//!   allows you to perform queries and receive responses.
+//!   `KademliaServerController` and a stream that must be driven to completion. The controller
+//!   allows you to perform queries and receive responses. The stream produces incoming requests
+//!   from the remote.
 //!
 //! This `KademliaServerController` is usually extracted and stored in some sort of hash map in an
 //! `Arc` in order to be available whenever we need to request something from a node.
 
 use bytes::Bytes;
 use futures::sync::{mpsc, oneshot};
-use futures::{future, Future, Sink, Stream};
-use libp2p_peerstore::PeerId;
-use libp2p_core::ConnectionUpgrade;
-use libp2p_core::Endpoint;
-use multiaddr::{AddrComponent, Multiaddr};
+use futures::{future, Future, Sink, stream, Stream};
+use libp2p_core::{ConnectionUpgrade, Endpoint, PeerId};
+use multiaddr::Multiaddr;
 use protocol::{self, KadMsg, KademliaProtocolConfig, Peer};
 use std::collections::VecDeque;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
+use std::sync::{Arc, atomic};
 use tokio_io::{AsyncRead, AsyncWrite};
-
-/// Interface that this server system uses to communicate with the rest of the system.
-pub trait KadServerInterface: Clone {
-    /// Returns the peer ID of the local node.
-    fn local_id(&self) -> &PeerId;
-
-    /// Returns known information about the peer. Not atomic/thread-safe in the sense that
-    /// information can change immediately after being returned and before they are processed.
-    fn peer_info(&self, _: &PeerId) -> (Vec<Multiaddr>, protocol::ConnectionType);
-
-    /// Updates an entry in the K-Buckets. Called whenever that peer sends us a message.
-    fn kbuckets_update(&self, peer: &PeerId);
-
-    /// Finds the nodes closest to a peer ID.
-    fn kbuckets_find_closest(&self, addr: &PeerId) -> Vec<PeerId>;
-}
 
 /// Configuration for a Kademlia server.
 ///
@@ -70,32 +51,29 @@ pub trait KadServerInterface: Clone {
 /// and a `Future`. The controller lets you send queries to the remote and receive answers, while
 /// the `Future` must be driven to completion in order for things to work.
 #[derive(Debug, Clone)]
-pub struct KademliaServerConfig<I> {
+pub struct KademliaServerConfig {
     raw_proto: KademliaProtocolConfig,
-    interface: I,
 }
 
-impl<I> KademliaServerConfig<I> {
+impl KademliaServerConfig {
     /// Builds a configuration object for an upcoming Kademlia server.
     #[inline]
-    pub fn new(interface: I) -> Self {
+    pub fn new() -> Self {
         KademliaServerConfig {
             raw_proto: KademliaProtocolConfig,
-            interface: interface,
         }
     }
 }
 
-impl<C, I> ConnectionUpgrade<C> for KademliaServerConfig<I>
+impl<C> ConnectionUpgrade<C> for KademliaServerConfig
 where
     C: AsyncRead + AsyncWrite + 'static, // TODO: 'static :-/
-    I: KadServerInterface + 'static,     // TODO: 'static :-/
 {
     type Output = (
         KademliaServerController,
-        Box<Future<Item = (), Error = IoError>>,
+        Box<Stream<Item = KademliaIncomingRequest, Error = IoError>>,
     );
-    type Future = Box<Future<Item = Self::Output, Error = IoError>>;
+    type Future = future::Map<<KademliaProtocolConfig as ConnectionUpgrade<C>>::Future, fn(<KademliaProtocolConfig as ConnectionUpgrade<C>>::Output) -> Self::Output>;
     type NamesIter = iter::Once<(Bytes, ())>;
     type UpgradeIdentifier = ();
 
@@ -106,42 +84,9 @@ where
 
     #[inline]
     fn upgrade(self, incoming: C, id: (), endpoint: Endpoint, addr: &Multiaddr) -> Self::Future {
-        let peer_id = {
-            let mut iter = addr.iter();
-            let protocol = iter.next();
-            let after_proto = iter.next();
-            match (protocol, after_proto) {
-                (Some(AddrComponent::P2P(key)), None) | (Some(AddrComponent::IPFS(key)), None) => {
-                    match PeerId::from_bytes(key) {
-                        Ok(id) => id,
-                        Err(_) => {
-                            let err = IoError::new(
-                                IoErrorKind::InvalidData,
-                                "invalid peer ID sent by remote identification",
-                            );
-                            return Box::new(future::err(err));
-                        }
-                    }
-                }
-                _ => {
-                    let err =
-                        IoError::new(IoErrorKind::InvalidData, "couldn't identify connected node");
-                    return Box::new(future::err(err));
-                }
-            }
-        };
-
-        let interface = self.interface;
-        let future = self.raw_proto
+        self.raw_proto
             .upgrade(incoming, id, endpoint, addr)
-            .map(move |connec| {
-                let (tx, rx) = mpsc::unbounded();
-                let future = kademlia_handler(connec, peer_id, rx, interface);
-                let controller = KademliaServerController { inner: tx };
-                (controller, future)
-            });
-
-        Box::new(future) as Box<_>
+            .map(build_from_sink_stream)
     }
 }
 
@@ -161,7 +106,7 @@ impl KademliaServerController {
     pub fn find_node(
         &self,
         searched_key: &PeerId,
-    ) -> Box<Future<Item = Vec<Peer>, Error = IoError>> {
+    ) -> impl Future<Item = Vec<Peer>, Error = IoError> {
         let message = protocol::KadMsg::FindNodeReq {
             key: searched_key.clone().into_bytes(),
         };
@@ -175,7 +120,8 @@ impl KademliaServerController {
                     IoErrorKind::ConnectionAborted,
                     "connection to remote has aborted",
                 ));
-                return Box::new(fut) as Box<_>;
+
+                return future::Either::B(fut);
             }
         };
 
@@ -192,15 +138,14 @@ impl KademliaServerController {
             )),
         });
 
-        Box::new(future) as Box<_>
+        future::Either::A(future)
     }
 
     /// Sends a `PING` query to the node. Because of the way the protocol is designed, there is
     /// no way to differentiate between a ping and a pong. Therefore this function doesn't return a
-    /// future, and the only way to be notified of the result is through the `kbuckets_update`
-    /// method in the `KadServerInterface` trait.
+    /// future, and the only way to be notified of the result is through the stream.
     pub fn ping(&self) -> Result<(), IoError> {
-        // Dummy channel.
+        // Dummy channel, as the `tx` is going to be dropped anyway.
         let (tx, _rx) = oneshot::channel();
         match self.inner.unbounded_send((protocol::KadMsg::Ping, tx)) {
             Ok(()) => Ok(()),
@@ -212,248 +157,359 @@ impl KademliaServerController {
     }
 }
 
+/// Request received from the remote.
+pub enum KademliaIncomingRequest {
+    /// Find the nodes closest to `searched`.
+    FindNode {
+        /// The value being searched.
+        searched: PeerId,
+        /// Object to use to respond to the request.
+        responder: KademliaFindNodeRespond,
+    },
+
+    // TODO: PutValue and FindValue
+
+    /// Received either a ping or a pong.
+    PingPong,
+}
+
+/// Object used to respond to `FindNode` queries from remotes.
+pub struct KademliaFindNodeRespond {
+    inner: oneshot::Sender<KadMsg>,
+}
+
+impl KademliaFindNodeRespond {
+    /// Respond to the `FindNode` request.
+    pub fn respond<I>(self, peers: I)
+        where I: IntoIterator<Item = protocol::Peer>
+    {
+        let _ = self.inner.send(KadMsg::FindNodeRes {
+            closer_peers: peers.into_iter().collect()
+        });
+    }
+}
+
+// Builds a controller and stream from a stream/sink of raw messages.
+fn build_from_sink_stream<'a, S>(connec: S) -> (KademliaServerController, Box<Stream<Item = KademliaIncomingRequest, Error = IoError> + 'a>)
+where S: Sink<SinkItem = KadMsg, SinkError = IoError> + Stream<Item = KadMsg, Error = IoError> + 'a
+{
+    let (tx, rx) = mpsc::unbounded();
+    let future = kademlia_handler(connec, rx);
+    let controller = KademliaServerController { inner: tx };
+    (controller, future)
+}
+
 // Handles a newly-opened Kademlia stream with a remote peer.
 //
 // Takes a `Stream` and `Sink` of Kademlia messages representing the connection to the client,
-// plus the ID of the peer that we are handling, plus a `Receiver` that will receive messages to
-// transmit to that connection, plus the interface.
+// plus a `Receiver` that will receive messages to transmit to that connection.
 //
-// Returns a `Future` that must be resolved in order for progress to work. It will never yield any
-// item (unless both `rx` and `kad_bistream` are closed) but will propagate any I/O of protocol
-// error that could happen. If the `Receiver` closes, no error is generated.
-fn kademlia_handler<'a, S, I>(
+// Returns a `Stream` that must be resolved in order for progress to work. The `Stream` will
+// produce objects that represent the requests sent by the remote. These requests must be answered
+// immediately before the stream continues to produce items.
+fn kademlia_handler<'a, S>(
     kad_bistream: S,
-    peer_id: PeerId,
-    rx: mpsc::UnboundedReceiver<(KadMsg, oneshot::Sender<KadMsg>)>,
-    interface: I,
-) -> Box<Future<Item = (), Error = IoError> + 'a>
+    rq_rx: mpsc::UnboundedReceiver<(KadMsg, oneshot::Sender<KadMsg>)>,
+) -> Box<Stream<Item = KademliaIncomingRequest, Error = IoError> + 'a>
 where
     S: Stream<Item = KadMsg, Error = IoError> + Sink<SinkItem = KadMsg, SinkError = IoError> + 'a,
-    I: KadServerInterface + Clone + 'a,
 {
-    let (kad_sink, kad_stream) = kad_bistream
-        .sink_map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
-        .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
-        .split();
+    let (kad_sink, kad_stream) = kad_bistream.split();
 
-    // We combine `kad_stream` and `rx` into one so that the loop wakes up whenever either
-    // generates something.
-    let messages = rx.map(|(m, o)| (m, Some(o)))
-        .map_err(|_| unreachable!())
-        .select(kad_stream.map(|m| (m, None)));
+    // This is a stream of futures containing local responses.
+    // Every time we receive a request from the remote, we create a `oneshot::channel()` and send
+    // the receiving end to `responders_tx`.
+    // This way, if a future is available on `responders_rx`, we block until it produces the
+    // response.
+    let (responders_tx, responders_rx) = mpsc::unbounded();
 
-    // Loop forever.
-    let future = future::loop_fn(
-        (kad_sink, messages, VecDeque::new(), 0),
-        move |(kad_sink, messages, mut send_back_queue, mut expected_pongs)| {
-            let interface = interface.clone();
-            let peer_id = peer_id.clone();
+    // Will be set to true if either `kad_stream` or `rq_rx` is closed.
+    let finished = Arc::new(atomic::AtomicBool::new(false));
 
-            // The `send_back_queue` is a queue of `UnboundedSender`s in the correct order of
-            // expected answers.
-            // Whenever we send a message to the remote and this message expects a response, we
-            // push the sender to the end of `send_back_queue`. Whenever a remote sends us a
-            // response, we pop the first element of `send_back_queue`.
+    // We combine all the streams into one so that the loop wakes up whenever any generates
+    // something.
+    enum EventSource {
+        Remote(KadMsg),
+        LocalRequest(KadMsg, oneshot::Sender<KadMsg>),
+        LocalResponse(oneshot::Receiver<KadMsg>),
+        Finished,
+    }
 
-            // The value of `expected_pongs` is the number of PING requests that we sent and that
-            // haven't been answered by the remote yet. Because of the way the protocol is designed,
-            // there is no way to differentiate between a ping and a pong. Therefore whenever we
-            // send a ping request we suppose that the next ping we receive is an answer, even
-            // though that may not be the case in reality.
-            // Because of this behaviour, pings do not pop from the `send_back_queue`.
+    let events = {
+        let responders = responders_rx
+            .map(|m| EventSource::LocalResponse(m))
+            .map_err(|_| unreachable!());
+        let rq_rx = rq_rx
+            .map(|(m, o)| EventSource::LocalRequest(m, o))
+            .map_err(|_| unreachable!())
+            .chain({
+                let finished = finished.clone();
+                future::lazy(move || {
+                    finished.store(true, atomic::Ordering::SeqCst);
+                    Ok(EventSource::Finished)
+                }).into_stream()
+            });
+        let kad_stream = kad_stream
+            .map(|m| EventSource::Remote(m))
+            .chain({
+                let finished = finished.clone();
+                future::lazy(move || {
+                    finished.store(true, atomic::Ordering::SeqCst);
+                    Ok(EventSource::Finished)
+                }).into_stream()
+            });
+        responders.select(rq_rx).select(kad_stream)
+    };
 
-            messages
+    let stream = stream::unfold((events, kad_sink, responders_tx, VecDeque::new(), 0u32),
+        move |(events, kad_sink, responders_tx, mut send_back_queue, expected_pongs)| {
+            if finished.load(atomic::Ordering::SeqCst) {
+                return None;
+            }
+
+            Some(events
                 .into_future()
                 .map_err(|(err, _)| err)
-                .and_then(move |(message, rest)| {
-                    if let Some((_, None)) = message {
-                        // If we received a message from the remote (as opposed to a message from
-                        // `rx`) then we update the k-buckets.
-                        interface.kbuckets_update(&peer_id);
-                    }
-
+                .and_then(move |(message, events)| -> Box<Future<Item = _, Error = _>> {
                     match message {
-                        None => {
-                            // Both the connection stream and `rx` are empty, so we break the loop.
-                            let future = future::ok(future::Loop::Break(()));
-                            Box::new(future) as Box<Future<Item = _, Error = _>>
-                        }
-                        Some((message @ KadMsg::PutValue { .. }, Some(_))) => {
-                            // A `PutValue` message has been received on `rx`. Contrary to other
-                            // types of messages, this one doesn't expect any answer and therefore
-                            // we ignore the sender.
-                            let future = kad_sink.send(message).map(move |kad_sink| {
-                                future::Loop::Continue((
-                                    kad_sink,
-                                    rest,
-                                    send_back_queue,
-                                    expected_pongs,
-                                ))
-                            });
+                        Some(EventSource::Finished) | None => {
+                            // `finished` should have been set to true earlier, causing this
+                            // function to return `None`.
+                            unreachable!()
+                        },
+                        Some(EventSource::LocalResponse(message)) => {
+                            let future = message
+                                .map_err(|_| {
+                                    // The user destroyed the responder without responding.
+                                    warn!("Kad responder object destroyed without responding");
+                                    panic!()        // TODO: what to do here? we have to close the connection
+                                })
+                                .and_then(move |message| {
+                                    kad_sink
+                                        .send(message)
+                                        .map(move |kad_sink| {
+                                            let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs);
+                                            (None, state)
+                                        })
+                                });
+                            Box::new(future)
+                        },
+                        Some(EventSource::LocalRequest(message @ KadMsg::PutValue { .. }, _)) => {
+                            // A `PutValue` request. Contrary to other types of messages, this one
+                            // doesn't expect any answer and therefore we ignore the sender.
+                            let future = kad_sink
+                                .send(message)
+                                .map(move |kad_sink| {
+                                    let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs);
+                                    (None, state)
+                                });
                             Box::new(future) as Box<_>
                         }
-                        Some((message @ KadMsg::Ping { .. }, Some(_))) => {
-                            // A `Ping` message has been received on `rx`.
-                            expected_pongs += 1;
-                            let future = kad_sink.send(message).map(move |kad_sink| {
-                                future::Loop::Continue((
-                                    kad_sink,
-                                    rest,
-                                    send_back_queue,
-                                    expected_pongs,
-                                ))
-                            });
+                        Some(EventSource::LocalRequest(message @ KadMsg::Ping { .. }, _)) => {
+                            // A local `Ping` request.
+                            let expected_pongs = expected_pongs.checked_add(1)
+                                .expect("overflow in number of simultaneous pings");
+                            let future = kad_sink
+                                .send(message)
+                                .map(move |kad_sink| {
+                                    let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs);
+                                    (None, state)
+                                });
                             Box::new(future) as Box<_>
                         }
-                        Some((message, Some(send_back))) => {
-                            // Any message other than `PutValue` or `Ping` has been received on
-                            // `rx`. Send it to the remote.
-                            let future = kad_sink.send(message).map(move |kad_sink| {
-                                send_back_queue.push_back(send_back);
-                                future::Loop::Continue((
-                                    kad_sink,
-                                    rest,
-                                    send_back_queue,
-                                    expected_pongs,
-                                ))
-                            });
+                        Some(EventSource::LocalRequest(message, send_back)) => {
+                            // Any local request other than `PutValue` or `Ping`.
+                            send_back_queue.push_back(send_back);
+                            let future = kad_sink
+                                .send(message)
+                                .map(move |kad_sink| {
+                                    let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs);
+                                    (None, state)
+                                });
                             Box::new(future) as Box<_>
                         }
-                        Some((KadMsg::Ping, None)) => {
-                            // Note: The way the protocol was designed, there is no way to
-                            //		 differentiate between a ping and a pong.
-                            if expected_pongs == 0 {
-                                let message = KadMsg::Ping;
-                                let future = kad_sink.send(message).map(move |kad_sink| {
-                                    future::Loop::Continue((
-                                        kad_sink,
-                                        rest,
-                                        send_back_queue,
-                                        expected_pongs,
-                                    ))
+                        Some(EventSource::Remote(KadMsg::Ping)) => {
+                            // The way the protocol was designed, there is no way to differentiate
+                            // between a ping and a pong.
+                            if let Some(expected_pongs) = expected_pongs.checked_sub(1) {
+                                // Maybe we received a PONG, or maybe we received a PONG, no way
+                                // to tell. If it was a PING and we expected a PONG, then the
+                                // remote will see its PING answered only when it PONGs us.
+                                let future = future::ok({
+                                    let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs);
+                                    let rq = KademliaIncomingRequest::PingPong;
+                                    (Some(rq), state)
                                 });
                                 Box::new(future) as Box<_>
                             } else {
-                                expected_pongs -= 1;
-                                let future = future::ok({
-                                    future::Loop::Continue((
-                                        kad_sink,
-                                        rest,
-                                        send_back_queue,
-                                        expected_pongs,
-                                    ))
-                                });
+                                let future = kad_sink
+                                    .send(KadMsg::Ping)
+                                    .map(move |kad_sink| {
+                                        let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs);
+                                        let rq = KademliaIncomingRequest::PingPong;
+                                        (Some(rq), state)
+                                    });
                                 Box::new(future) as Box<_>
                             }
                         }
-                        Some((message @ KadMsg::FindNodeRes { .. }, None))
-                        | Some((message @ KadMsg::GetValueRes { .. }, None)) => {
+                        Some(EventSource::Remote(message @ KadMsg::FindNodeRes { .. }))
+                        | Some(EventSource::Remote(message @ KadMsg::GetValueRes { .. })) => {
                             // `FindNodeRes` or `GetValueRes` received on the socket.
                             // Send it back through `send_back_queue`.
                             if let Some(send_back) = send_back_queue.pop_front() {
                                 let _ = send_back.send(message);
-                                let future = future::ok(future::Loop::Continue((
-                                    kad_sink,
-                                    rest,
-                                    send_back_queue,
-                                    expected_pongs,
-                                )));
-                                return Box::new(future) as Box<_>;
+                                let future = future::ok({
+                                    let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs);
+                                    (None, state)
+                                });
+                                Box::new(future)
                             } else {
+                                debug!("Remote sent a Kad response but we didn't request anything");
                                 let future = future::err(IoErrorKind::InvalidData.into());
-                                return Box::new(future) as Box<_>;
+                                Box::new(future)
                             }
                         }
-                        Some((KadMsg::FindNodeReq { key, .. }, None)) => {
-                            // `FindNodeReq` received on the socket.
-                            let message = handle_find_node_req(&interface, &key);
-                            let future = kad_sink.send(message).map(move |kad_sink| {
-                                future::Loop::Continue((
-                                    kad_sink,
-                                    rest,
-                                    send_back_queue,
-                                    expected_pongs,
-                                ))
-                            });
-                            Box::new(future) as Box<_>
-                        }
-                        Some((KadMsg::GetValueReq { key, .. }, None)) => {
-                            // `GetValueReq` received on the socket.
-                            let message = handle_get_value_req(&interface, &key);
-                            let future = kad_sink.send(message).map(move |kad_sink| {
-                                future::Loop::Continue((
-                                    kad_sink,
-                                    rest,
-                                    send_back_queue,
-                                    expected_pongs,
-                                ))
-                            });
-                            Box::new(future) as Box<_>
-                        }
-                        Some((KadMsg::PutValue { .. }, None)) => {
-                            // `PutValue` received on the socket.
-                            handle_put_value_req(&interface);
+                        Some(EventSource::Remote(KadMsg::FindNodeReq { key, .. })) => {
+                            let peer_id = match PeerId::from_bytes(key) {
+                                Ok(id) => id,
+                                Err(key) => {
+                                    debug!("Ignoring FIND_NODE request with invalid key: {:?}", key);
+                                    let future = future::err(IoError::new(IoErrorKind::InvalidData, "invalid key in FIND_NODE"));
+                                    return Box::new(future);
+                                }
+                            };
+
+                            let (tx, rx) = oneshot::channel();
+                            let _ = responders_tx.unbounded_send(rx);
                             let future = future::ok({
-                                future::Loop::Continue((
-                                    kad_sink,
-                                    rest,
-                                    send_back_queue,
-                                    expected_pongs,
-                                ))
+                                let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs);
+                                let rq = KademliaIncomingRequest::FindNode {
+                                    searched: peer_id,
+                                    responder: KademliaFindNodeRespond {
+                                        inner: tx
+                                    }
+                                };
+                                (Some(rq), state)
                             });
-                            Box::new(future) as Box<_>
+
+                            Box::new(future)
+                        }
+                        Some(EventSource::Remote(KadMsg::GetValueReq { .. })) => {
+                            unimplemented!()        // FIXME:
+                        }
+                        Some(EventSource::Remote(KadMsg::PutValue { .. })) => {
+                            unimplemented!()        // FIXME:
                         }
                     }
-                })
-        },
-    );
+                }))
+    }).filter_map(|val| val);
 
-    Box::new(future) as Box<Future<Item = (), Error = IoError>>
+    Box::new(stream) as Box<Stream<Item = _, Error = IoError>>
 }
 
-// Builds a `KadMsg` that handles a `FIND_NODE` request received from the remote.
-fn handle_find_node_req<I>(interface: &I, requested_key: &[u8]) -> KadMsg
-where
-    I: ?Sized + KadServerInterface,
-{
-    let peer_id = match PeerId::from_bytes(requested_key.to_vec()) {
-        // TODO: suboptimal
-        Ok(id) => id,
-        Err(_) => {
-            return KadMsg::FindNodeRes {
-                closer_peers: vec![],
-            }
+#[cfg(test)]
+mod tests {
+    use std::io::Error as IoError;
+    use std::iter;
+    use futures::{Future, Poll, Sink, StartSend, Stream};
+    use futures::sync::mpsc;
+    use kad_server::{self, KademliaIncomingRequest, KademliaServerController};
+    use libp2p_core::PublicKeyBytes;
+    use protocol::{ConnectionType, Peer};
+    use rand;
+
+    // This struct merges a stream and a sink and is quite useful for tests.
+    struct Wrapper<St, Si>(St, Si);
+    impl<St, Si> Stream for Wrapper<St, Si>
+    where
+        St: Stream,
+    {
+        type Item = St::Item;
+        type Error = St::Error;
+        fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+            self.0.poll()
         }
-    };
+    }
+    impl<St, Si> Sink for Wrapper<St, Si>
+    where
+        Si: Sink,
+    {
+        type SinkItem = Si::SinkItem;
+        type SinkError = Si::SinkError;
+        fn start_send(
+            &mut self,
+            item: Self::SinkItem,
+        ) -> StartSend<Self::SinkItem, Self::SinkError> {
+            self.1.start_send(item)
+        }
+        fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
+            self.1.poll_complete()
+        }
+    }
 
-    let closer_peers = interface
-        .kbuckets_find_closest(&peer_id)
-        .into_iter()
-        .map(|peer| {
-            let (multiaddrs, connection_ty) = interface.peer_info(&peer);
-            protocol::Peer {
-                node_id: peer,
-                multiaddrs: multiaddrs,
-                connection_ty: connection_ty,
-            }
-        })
-        .collect();
+    fn build_test() -> (KademliaServerController, impl Stream<Item = KademliaIncomingRequest, Error = IoError>, KademliaServerController, impl Stream<Item = KademliaIncomingRequest, Error = IoError>) {
+        let (a_to_b, b_from_a) = mpsc::unbounded();
+        let (b_to_a, a_from_b) = mpsc::unbounded();
 
-    KadMsg::FindNodeRes { closer_peers }
-}
+        let sink_stream_a = Wrapper(a_from_b, a_to_b)
+            .map_err(|_| panic!()).sink_map_err(|_| panic!());
+        let sink_stream_b = Wrapper(b_from_a, b_to_a)
+            .map_err(|_| panic!()).sink_map_err(|_| panic!());
 
-// Builds a `KadMsg` that handles a `FIND_VALUE` request received from the remote.
-fn handle_get_value_req<I>(_interface: &I, _requested_key: &[u8]) -> KadMsg
-where
-    I: ?Sized + KadServerInterface,
-{
-    unimplemented!()
-}
+        let (controller_a, stream_events_a) = kad_server::build_from_sink_stream(sink_stream_a);
+        let (controller_b, stream_events_b) = kad_server::build_from_sink_stream(sink_stream_b);
+        (controller_a, stream_events_a, controller_b, stream_events_b)
+    }
 
-// Handles a `STORE` request received from the remote.
-fn handle_put_value_req<I>(_interface: &I)
-where
-    I: ?Sized + KadServerInterface,
-{
-    unimplemented!()
+    #[test]
+    fn ping_response() {
+        let (controller_a, stream_events_a, _controller_b, stream_events_b) = build_test();
+
+        controller_a.ping().unwrap();
+
+        let streams = stream_events_a.map(|ev| (ev, "a"))
+            .select(stream_events_b.map(|ev| (ev, "b")));
+        match streams.into_future().map_err(|(err, _)| err).wait().unwrap() {
+            (Some((KademliaIncomingRequest::PingPong, "b")), _) => {},
+            _ => panic!()
+        }
+    }
+
+    #[test]
+    fn find_node_response() {
+        let (controller_a, stream_events_a, _controller_b, stream_events_b) = build_test();
+
+        let random_peer_id = {
+            let buf = (0 .. 1024).map(|_| -> u8 { rand::random() }).collect::<Vec<_>>();
+            PublicKeyBytes(buf).to_peer_id()
+        };
+
+        let find_node_fut = controller_a.find_node(&random_peer_id);
+
+        let example_response = Peer {
+            node_id: {
+                let buf = (0 .. 1024).map(|_| -> u8 { rand::random() }).collect::<Vec<_>>();
+                PublicKeyBytes(buf).to_peer_id()
+            },
+            multiaddrs: Vec::new(),
+            connection_ty: ConnectionType::Connected,
+        };
+
+        let streams = stream_events_a.map(|ev| (ev, "a"))
+            .select(stream_events_b.map(|ev| (ev, "b")));
+
+        let streams = match streams.into_future().map_err(|(err, _)| err).wait().unwrap() {
+            (Some((KademliaIncomingRequest::FindNode { searched, responder }, "b")), streams) => {
+                assert_eq!(searched, random_peer_id);
+                responder.respond(iter::once(example_response.clone()));
+                streams
+            },
+            _ => panic!()
+        };
+
+        let resp = streams.into_future().map_err(|(err, _)| err).map(|_| unreachable!())
+            .select(find_node_fut)
+            .map_err(|_| -> IoError { panic!() });
+        assert_eq!(resp.wait().unwrap().0, vec![example_response]);
+    }
 }
