@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use fnv::FnvHashMap;
-use futures::{Future, IntoFuture, Stream};
+use futures::{future, Future, IntoFuture, Stream};
 use futures_mutex::Mutex as AsyncMutex;
 use libp2p_core::{Multiaddr, MuxedTransport, Transport};
 use parking_lot::Mutex;
@@ -101,7 +101,13 @@ where
                         };
 
                         debug!("Identified {} as pubkey {:?}", addr, info.public_key);
-                        let out = IdentifyTransportOutput { socket: connec, info, observed_addr };
+                        let out = IdentifyTransportOutput {
+                            socket: connec,
+                            info: Box::new(future::ok(IdentifyTransportOutcome {
+                                info,
+                                observed_addr,
+                            })),
+                        };
                         Ok((out, addr))
                     })
                     .map_err(move |err| {
@@ -159,7 +165,15 @@ where
                 })
                 .into_future()
                 .map(move |(dial, addr)| {
-                    (IdentifyTransportOutput { socket: dial, info, observed_addr }, addr)
+                    let out = IdentifyTransportOutput {
+                        socket: dial,
+                        info: Box::new(future::ok(IdentifyTransportOutcome {
+                            info,
+                            observed_addr,
+                        })),
+                    };
+
+                    (out, addr)
                 }))
         }).flatten();
 
@@ -208,7 +222,14 @@ where
                             ),
                         };
 
-                        let out = IdentifyTransportOutput { socket: connec, info, observed_addr };
+                        let out = IdentifyTransportOutput {
+                            socket: connec,
+                            info: Box::new(future::ok(IdentifyTransportOutcome {
+                                info,
+                                observed_addr,
+                            })),
+                        };
+
                         Ok((out, addr))
                     });
                 future
@@ -222,10 +243,16 @@ where
 }
 
 /// Output of the identify transport.
-#[derive(Debug, Clone)]
 pub struct IdentifyTransportOutput<S> {
     /// The socket to communicate with the remote.
     pub socket: S,
+    /// Outcome of the identification of the remote.
+    pub info: Box<Future<Item = IdentifyTransportOutcome, Error = IoError>>,
+}
+
+/// Outcome of the identification of the remote.
+#[derive(Debug, Clone)]
+pub struct IdentifyTransportOutcome {
     /// Identification of the remote.
     pub info: IdentifyInfo,
     /// Address the remote sees for us.

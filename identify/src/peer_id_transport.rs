@@ -74,17 +74,22 @@ where
         };
 
         let listener = listener.map(move |connec| {
-            let fut = connec.map(move |(connec, original_addr)| {
-                let peer_id = connec.info.public_key.to_peer_id();
-                let real_addr: Multiaddr = AddrComponent::P2P(peer_id.into_bytes()).into();
-                let out = PeerIdTransportOutput {
-                    socket: connec.socket,
-                    info: connec.info,
-                    observed_addr: connec.observed_addr,
-                    original_addr: original_addr,
-                };
-                (out, real_addr)
-            });
+            let fut = connec
+                .and_then(move |(connec, original_addr)| {
+                    let socket = connec.socket;
+                    connec.info.map(move |info| (socket, info, original_addr))
+                })
+                .map(move |(socket, info, original_addr)| {
+                    let peer_id = info.info.public_key.to_peer_id();
+                    let real_addr: Multiaddr = AddrComponent::P2P(peer_id.into_bytes()).into();
+                    let out = PeerIdTransportOutput {
+                        socket: socket,
+                        info: info.info,
+                        observed_addr: info.observed_addr,
+                        original_addr: original_addr,
+                    };
+                    (out, real_addr)
+                });
 
             Box::new(fut) as Box<Future<Item = _, Error = _>>
         });
@@ -123,25 +128,30 @@ where
                     .filter_map(|res| res.ok())
                     .into_future()
                     .map_err(|(err, _)| err)
-                    .and_then(move |(val, _)| {
-                        match val {
-                            Some((connec, original_addr)) => {
-                                debug!("Successfully dialed peer {:?} through {}", peer_id, original_addr);
-                                let peer_id = connec.info.public_key.to_peer_id();
-                                let real_addr: Multiaddr = AddrComponent::P2P(peer_id.into_bytes()).into();
-                                let out = PeerIdTransportOutput {
-                                    socket: connec.socket,
-                                    info: connec.info,
-                                    observed_addr: connec.observed_addr,
-                                    original_addr: original_addr,
-                                };
-                                Ok((out, real_addr))
-                            },
+                    .and_then(move |(connec, _)| {
+                        match connec {
+                            Some(connec) => Ok((connec, peer_id)),
                             None => {
                                 debug!("All multiaddresses failed when dialing peer {:?}", peer_id);
                                 Err(IoError::new(IoErrorKind::Other, "couldn't find any multiaddress for peer"))
                             },
                         }
+                    })
+                    .and_then(move |((connec, original_addr), peer_id)| {
+                        let socket = connec.socket;
+                        connec.info.map(|info| (socket, info, original_addr, peer_id))
+                    })
+                    .and_then(move |(socket, info, original_addr, peer_id)| {
+                        debug!("Successfully dialed peer {:?} through {}", peer_id, original_addr);
+                        let peer_id = info.info.public_key.to_peer_id();
+                        let real_addr: Multiaddr = AddrComponent::P2P(peer_id.into_bytes()).into();
+                        let out = PeerIdTransportOutput {
+                            socket: socket,
+                            info: info.info,
+                            observed_addr: info.observed_addr,
+                            original_addr: original_addr,
+                        };
+                        Ok((out, real_addr))
                     })
                     // Replace the multiaddress with the one of the form `/p2p/...` or `/ipfs/...`.
                     .map(move |(socket, _inner_client_addr)| (socket, addr));
@@ -162,17 +172,22 @@ where
                     }
                 };
 
-                let future = dial.map(move |(connec, original_addr)| {
-                    let peer_id = connec.info.public_key.to_peer_id();
-                    let real_addr: Multiaddr = AddrComponent::P2P(peer_id.into_bytes()).into();
-                    let out = PeerIdTransportOutput {
-                        socket: connec.socket,
-                        info: connec.info,
-                        observed_addr: connec.observed_addr,
-                        original_addr: original_addr,
-                    };
-                    (out, real_addr)
-                });
+                let future = dial
+                    .and_then(move |(connec, original_addr)| {
+                        let socket = connec.socket;
+                        connec.info.map(move |info| (socket, info, original_addr))
+                    })
+                    .map(move |(socket, info, original_addr)| {
+                        let peer_id = info.info.public_key.to_peer_id();
+                        let real_addr: Multiaddr = AddrComponent::P2P(peer_id.into_bytes()).into();
+                        let out = PeerIdTransportOutput {
+                            socket: socket,
+                            info: info.info,
+                            observed_addr: info.observed_addr,
+                            original_addr: original_addr,
+                        };
+                        (out, real_addr)
+                    });
 
                 Ok(Box::new(future) as Box<_>)
             }
@@ -198,17 +213,22 @@ where
     #[inline]
     fn next_incoming(self) -> Self::Incoming {
         let future = self.transport.next_incoming().map(move |incoming| {
-            let future = incoming.map(move |(connec, original_addr)| {
-                let peer_id = connec.info.public_key.to_peer_id();
-                let real_addr: Multiaddr = AddrComponent::P2P(peer_id.into_bytes()).into();
-                let out = PeerIdTransportOutput {
-                    socket: connec.socket,
-                    info: connec.info,
-                    observed_addr: connec.observed_addr,
-                    original_addr: original_addr,
-                };
-                (out, real_addr)
-            });
+            let future = incoming
+                .and_then(move |(connec, original_addr)| {
+                    let socket = connec.socket;
+                    connec.info.map(move |info| (socket, info, original_addr))
+                })
+                .map(move |(socket, info, original_addr)| {
+                    let peer_id = info.info.public_key.to_peer_id();
+                    let real_addr: Multiaddr = AddrComponent::P2P(peer_id.into_bytes()).into();
+                    let out = PeerIdTransportOutput {
+                        socket: socket,
+                        info: info.info,
+                        observed_addr: info.observed_addr,
+                        original_addr: original_addr,
+                    };
+                    (out, real_addr)
+                });
 
             Box::new(future) as Box<Future<Item = _, Error = _>>
         });
