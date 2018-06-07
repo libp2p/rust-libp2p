@@ -18,11 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{stream, Future, Stream};
-use identify_transport::IdentifyTransport;
+use futures::{future, stream, Future, Stream};
+use identify_transport::{IdentifyTransport, IdentifyTransportOutcome};
 use libp2p_core::{PeerId, MuxedTransport, Transport};
 use multiaddr::{AddrComponent, Multiaddr};
-use protocol::IdentifyInfo;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -84,8 +83,7 @@ where
                     let real_addr: Multiaddr = AddrComponent::P2P(peer_id.into_bytes()).into();
                     let out = PeerIdTransportOutput {
                         socket: socket,
-                        info: info.info,
-                        observed_addr: info.observed_addr,
+                        info: Box::new(future::ok(info)),
                         original_addr: original_addr,
                     };
                     (out, real_addr)
@@ -111,6 +109,7 @@ where
                 trace!("Try dialing peer ID {:?} ; loading multiaddrs from addr resolver", peer_id);
 
                 let transport = self.transport;
+                let real_addr: Multiaddr = AddrComponent::P2P(peer_id.clone().into_bytes()).into();
                 let future = stream::iter_ok(addrs)
                     // Try to dial each address through the transport.
                     .filter_map(move |addr| {
@@ -138,17 +137,10 @@ where
                         }
                     })
                     .and_then(move |((connec, original_addr), peer_id)| {
-                        let socket = connec.socket;
-                        connec.info.map(|info| (socket, info, original_addr, peer_id))
-                    })
-                    .and_then(move |(socket, info, original_addr, peer_id)| {
                         debug!("Successfully dialed peer {:?} through {}", peer_id, original_addr);
-                        let peer_id = info.info.public_key.to_peer_id();
-                        let real_addr: Multiaddr = AddrComponent::P2P(peer_id.into_bytes()).into();
                         let out = PeerIdTransportOutput {
-                            socket: socket,
-                            info: info.info,
-                            observed_addr: info.observed_addr,
+                            socket: connec.socket,
+                            info: connec.info,
                             original_addr: original_addr,
                         };
                         Ok((out, real_addr))
@@ -182,8 +174,7 @@ where
                         let real_addr: Multiaddr = AddrComponent::P2P(peer_id.into_bytes()).into();
                         let out = PeerIdTransportOutput {
                             socket: socket,
-                            info: info.info,
-                            observed_addr: info.observed_addr,
+                            info: Box::new(future::ok(info)),
                             original_addr: original_addr,
                         };
                         (out, real_addr)
@@ -223,8 +214,7 @@ where
                     let real_addr: Multiaddr = AddrComponent::P2P(peer_id.into_bytes()).into();
                     let out = PeerIdTransportOutput {
                         socket: socket,
-                        info: info.info,
-                        observed_addr: info.observed_addr,
+                        info: Box::new(future::ok(info)),
                         original_addr: original_addr,
                     };
                     (out, real_addr)
@@ -238,15 +228,17 @@ where
 }
 
 /// Output of the identify transport.
-#[derive(Debug, Clone)]
 pub struct PeerIdTransportOutput<S> {
     /// The socket to communicate with the remote.
     pub socket: S,
+
     /// Identification of the remote.
-    pub info: IdentifyInfo,
-    /// Address the remote sees for us.
-    pub observed_addr: Multiaddr,
+    /// This may not be known immediately, hence why we use a future.
+    pub info: Box<Future<Item = IdentifyTransportOutcome, Error = IoError>>,
+
     /// Original address of the remote.
+    /// This layer turns the address of the remote into the `/p2p/...` form, but stores the
+    /// original address in this field.
     pub original_addr: Multiaddr,
 }
 
