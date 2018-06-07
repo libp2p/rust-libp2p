@@ -125,18 +125,13 @@ where
 
     #[inline]
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-        let transport = self.transport;
-
         // TODO: use cache
         //if self.cache.lock().
 
-        let identify_upgrade = transport.clone().with_upgrade(IdentifyProtocolConfig);
-
-        // We dial a first time the node and upgrade it to identify.
-        trace!("Dialing {} for identification", addr);
-        let dial = match identify_upgrade.dial(addr) {
+        // We dial a first time the node.
+        let dial = match self.transport.clone().dial(addr) {
             Ok(d) => d,
-            Err((_, addr)) => {
+            Err((transport, addr)) => {
                 let id = IdentifyTransport {
                     transport,
                     cache: self.cache,
@@ -145,37 +140,41 @@ where
             }
         };
 
-        let future = dial.and_then(move |(identify, addr)| {
-            let (info, observed_addr) = match identify {
-                IdentifyOutput::RemoteInfo { info, observed_addr } => {
-                    (info, observed_addr)
-                }
-                _ => unreachable!(
-                    "the identify protocol guarantees that we receive \
-                        remote information when we dial a node"
-                ),
-            };
+        // Once successfully dialed, we dial again to identify.
+        let identify_upgrade = self.transport.with_upgrade(IdentifyProtocolConfig);
+        let future = dial.and_then(move |(socket, addr)| {
+            trace!("Successfully dialed {} ; dialing again for identification", addr);
 
-            // Then dial the same node again.
-            trace!("Identified {} as pubkey {:?} ; dialing again for real", addr, info.public_key);
-            Ok(transport
-                .dial(addr)
+            let info_future = identify_upgrade
+                .dial(addr.clone())
                 .unwrap_or_else(|(_, addr)| {
                     panic!("the multiaddr {} was determined to be valid earlier", addr)
                 })
                 .into_future()
-                .map(move |(dial, addr)| {
-                    let out = IdentifyTransportOutput {
-                        socket: dial,
-                        info: Box::new(future::ok(IdentifyTransportOutcome {
-                            info,
-                            observed_addr,
-                        })),
+                .map(move |(identify, _addr)| {
+                    let (info, observed_addr) = match identify {
+                        IdentifyOutput::RemoteInfo { info, observed_addr } => {
+                            (info, observed_addr)
+                        }
+                        _ => unreachable!(
+                            "the identify protocol guarantees that we receive \
+                                remote information when we dial a node"
+                        ),
                     };
+                    
+                    IdentifyTransportOutcome {
+                        info,
+                        observed_addr,
+                    }
+                });
 
-                    (out, addr)
-                }))
-        }).flatten();
+            let out = IdentifyTransportOutput {
+                socket: socket,
+                info: Box::new(info_future),
+            };
+            
+            Ok((out, addr))
+        });
 
         Ok(Box::new(future) as Box<_>)
     }
