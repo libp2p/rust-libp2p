@@ -19,12 +19,12 @@
 // DEALINGS IN THE SOFTWARE.
 
 use fnv::FnvHashMap;
-use futures::{future, Future, IntoFuture, Stream};
+use futures::{Future, IntoFuture, Stream};
 use futures_mutex::Mutex as AsyncMutex;
 use libp2p_core::{Multiaddr, MuxedTransport, Transport};
 use parking_lot::Mutex;
 use protocol::{IdentifyInfo, IdentifyOutput, IdentifyProtocolConfig};
-use std::io::{Error as IoError, ErrorKind as IoErrorKind};
+use std::io::Error as IoError;
 use std::sync::Arc;
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -80,16 +80,12 @@ where
 
                 // Dial the address that connected to us and try upgrade with the
                 // identify protocol.
-                let future = identify_upgrade
-                    .clone()
+                let info_future = identify_upgrade
                     .dial(client_addr.clone())
-                    .map_err(move |_| {
-                        IoError::new(IoErrorKind::Other, "couldn't dial back incoming node")
+                    .unwrap_or_else(|(_, addr)| {
+                        panic!("the multiaddr {} was determined to be valid earlier", addr)
                     })
-                    .map(move |id| (id, connec))
-                    .into_future()
-                    .and_then(move |(dial, connec)| dial.map(move |dial| (dial, connec)))
-                    .and_then(move |((identify, addr), connec)| {
+                    .map(move |(identify, addr)| {
                         let (info, observed_addr) = match identify {
                             IdentifyOutput::RemoteInfo { info, observed_addr } => {
                                 (info, observed_addr)
@@ -101,20 +97,25 @@ where
                         };
 
                         debug!("Identified {} as pubkey {:?}", addr, info.public_key);
-                        let out = IdentifyTransportOutput {
-                            socket: connec,
-                            info: Box::new(future::ok(IdentifyTransportOutcome {
-                                info,
-                                observed_addr,
-                            })),
-                        };
-                        Ok((out, addr))
+                        IdentifyTransportOutcome {
+                            info,
+                            observed_addr,
+                        }
                     })
-                    .map_err(move |err| {
-                        debug!("Failed to identify incoming {}", client_addr);
-                        err
+                    .map_err({
+                        let client_addr = client_addr.clone();
+                        move |err| {
+                            debug!("Failed to identify incoming {}", client_addr);
+                            err
+                        }
                     });
-                future
+
+                let out = IdentifyTransportOutput {
+                    socket: connec,
+                    info: Box::new(info_future),
+                };
+
+                Ok((out, client_addr))
             });
 
             Box::new(fut) as Box<Future<Item = _, Error = _>>
@@ -199,39 +200,44 @@ where
 
         let future = self.transport.next_incoming().map(move |incoming| {
             let future = incoming.and_then(move |(connec, client_addr)| {
-                // On an incoming connection, dial back the node and upgrade to the identify
-                // protocol.
-                let future = identify_upgrade
-                    .clone()
+                // Dial the address that connected to us and try upgrade with the
+                // identify protocol.
+                let info_future = identify_upgrade
                     .dial(client_addr.clone())
-                    .map_err(|_| {
-                        IoError::new(IoErrorKind::Other, "couldn't dial back incoming node")
+                    .unwrap_or_else(|(_, addr)| {
+                        panic!("the multiaddr {} was determined to be valid earlier", addr)
                     })
-                    .into_future()
-                    .and_then(move |dial| dial)
-                    .map(move |dial| (dial, connec))
-                    .and_then(move |((identify, addr), connec)| {
+                    .map(move |(identify, addr)| {
                         let (info, observed_addr) = match identify {
                             IdentifyOutput::RemoteInfo { info, observed_addr } => {
                                 (info, observed_addr)
-                            }
+                            },
                             _ => unreachable!(
-                                "the identify protocol guarantees that we receive remote \
-                                 information when we dial a node"
+                                "the identify protocol guarantees that we receive \
+                                 remote information when we dial a node"
                             ),
                         };
 
-                        let out = IdentifyTransportOutput {
-                            socket: connec,
-                            info: Box::new(future::ok(IdentifyTransportOutcome {
-                                info,
-                                observed_addr,
-                            })),
-                        };
-
-                        Ok((out, addr))
+                        debug!("Identified {} as pubkey {:?}", addr, info.public_key);
+                        IdentifyTransportOutcome {
+                            info,
+                            observed_addr,
+                        }
+                    })
+                    .map_err({
+                        let client_addr = client_addr.clone();
+                        move |err| {
+                            debug!("Failed to identify incoming {}", client_addr);
+                            err
+                        }
                     });
-                future
+
+                let out = IdentifyTransportOutput {
+                    socket: connec,
+                    info: Box::new(info_future),
+                };
+
+                Ok((out, client_addr))
             });
 
             Box::new(future) as Box<Future<Item = _, Error = _>>
