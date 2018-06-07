@@ -100,8 +100,13 @@ fn main() {
     };
 
     let transport = libp2p::identify::PeerIdTransport::new(transport, addr_resolver)
-        .map(|id_out, _, _| {
-            id_out.socket
+        .map({
+            let peer_store = peer_store.clone();
+            move |id_out, _, _| {
+                let peer_id = id_out.info.public_key.to_peer_id();
+                peer_store.peer_or_create(&peer_id).add_addr(id_out.original_addr, Duration::from_secs(3600));
+                id_out.socket
+            }
         });
 
     // We now have a `transport` variable that can be used either to dial nodes or listen to
