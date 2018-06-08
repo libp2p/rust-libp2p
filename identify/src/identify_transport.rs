@@ -19,22 +19,41 @@
 // DEALINGS IN THE SOFTWARE.
 
 use fnv::FnvHashMap;
-use futures::{future, Future, Stream};
-use futures_mutex::Mutex as AsyncMutex;
+use futures::{future, Future, Stream, sync::oneshot};
 use libp2p_core::{Multiaddr, MuxedTransport, Transport};
 use parking_lot::Mutex;
 use protocol::{IdentifyInfo, IdentifyOutput, IdentifyProtocolConfig};
+use std::collections::hash_map::Entry;
 use std::io::Error as IoError;
-use std::sync::Arc;
+use std::mem;
+use std::sync::{Arc, Weak};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Implementation of `Transport`. See [the crate root description](index.html).
-#[derive(Debug, Clone)]
 pub struct IdentifyTransport<Trans> {
     transport: Trans,
     // Each entry is protected by an asynchronous mutex, so that if we dial the same node twice
     // simultaneously, the second time will block until the first time has identified it.
-    cache: Arc<Mutex<FnvHashMap<Multiaddr, Arc<AsyncMutex<(IdentifyInfo, Multiaddr)>>>>>,
+    cache: Arc<Mutex<FnvHashMap<Multiaddr, Weak<Mutex<CacheEntry>>>>>,
+}
+
+impl<Trans> Clone for IdentifyTransport<Trans>
+    where Trans: Clone,
+{
+    fn clone(&self) -> Self {
+        IdentifyTransport {
+            transport: self.transport.clone(),
+            cache: self.cache.clone(),
+        }
+    }
+}
+
+enum CacheEntry {
+    // The information about this node is available.
+    Available(IdentifyTransportOutcome),
+    // An existing identification is in progress. The senders in this list are going to be
+    // notified of the outcome once available.
+    InProgress(Vec<oneshot::Sender<IdentifyTransportOutcome>>),
 }
 
 impl<Trans> IdentifyTransport<Trans> {
@@ -72,43 +91,47 @@ where
         };
 
         let identify_upgrade = self.transport.with_upgrade(IdentifyProtocolConfig);
+        let cache = self.cache.clone();
 
         let listener = listener.map(move |connec| {
             let identify_upgrade = identify_upgrade.clone();
+            let cache = cache.clone();
             let fut = connec.and_then(move |(connec, client_addr)| {
                 debug!("Incoming connection from {}, dialing back in order to identify", client_addr);
 
                 // Dial the address that connected to us and try upgrade with the
                 // identify protocol.
-                let info_future = identify_upgrade
-                    .dial(client_addr.clone())
-                    .unwrap_or_else(|(_, addr)| {
-                        panic!("the multiaddr {} was determined to be valid earlier", addr)
-                    })
-                    .map(move |(identify, addr)| {
-                        let (info, observed_addr) = match identify {
-                            IdentifyOutput::RemoteInfo { info, observed_addr } => {
-                                (info, observed_addr)
-                            },
-                            _ => unreachable!(
-                                "the identify protocol guarantees that we receive \
-                                 remote information when we dial a node"
-                            ),
-                        };
+                let info_future = cache_entry(&cache, client_addr.clone(), { let client_addr = client_addr.clone(); move || {
+                    identify_upgrade
+                        .dial(client_addr.clone())
+                        .unwrap_or_else(|(_, addr)| {
+                            panic!("the multiaddr {} was determined to be valid earlier", addr)
+                        })
+                        .map(move |(identify, client_addr)| {
+                            let (info, observed_addr) = match identify {
+                                IdentifyOutput::RemoteInfo { info, observed_addr } => {
+                                    (info, observed_addr)
+                                },
+                                _ => unreachable!(
+                                    "the identify protocol guarantees that we receive \
+                                    remote information when we dial a node"
+                                ),
+                            };
 
-                        debug!("Identified {} as pubkey {:?}", addr, info.public_key);
-                        IdentifyTransportOutcome {
-                            info,
-                            observed_addr,
-                        }
-                    })
-                    .map_err({
-                        let client_addr = client_addr.clone();
-                        move |err| {
-                            debug!("Failed to identify incoming {}", client_addr);
-                            err
-                        }
-                    });
+                            debug!("Identified {} as pubkey {:?}", client_addr, info.public_key);
+                            IdentifyTransportOutcome {
+                                info,
+                                observed_addr,
+                            }
+                        })
+                        .map_err({
+                            let client_addr = client_addr.clone();
+                            move |err| {
+                                debug!("Failed to identify incoming {}", client_addr);
+                                err
+                            }
+                        })
+                }});
 
                 let out = IdentifyTransportOutput {
                     socket: connec,
@@ -143,34 +166,32 @@ where
 
         // Once successfully dialed, we dial again to identify.
         let identify_upgrade = self.transport.with_upgrade(IdentifyProtocolConfig);
+        let cache = self.cache.clone();
         let future = dial.and_then(move |(socket, addr)| {
-            let info_future = future::lazy({
-                    let addr = addr.clone();
-                    move || {
-                        trace!("Dialing {} again for identification", addr);
-                        identify_upgrade
-                            .dial(addr)
-                            .unwrap_or_else(|(_, addr)| {
-                                panic!("the multiaddr {} was determined to be valid earlier", addr)
-                            })
-                    }
-                })
-                .map(move |(identify, _addr)| {
-                    let (info, observed_addr) = match identify {
-                        IdentifyOutput::RemoteInfo { info, observed_addr } => {
-                            (info, observed_addr)
+            let info_future = cache_entry(&cache, addr.clone(), { let addr = addr.clone(); move || {
+                trace!("Dialing {} again for identification", addr);
+                identify_upgrade
+                    .dial(addr)
+                    .unwrap_or_else(|(_, addr)| {
+                        panic!("the multiaddr {} was determined to be valid earlier", addr)
+                    })
+                    .map(move |(identify, _addr)| {
+                        let (info, observed_addr) = match identify {
+                            IdentifyOutput::RemoteInfo { info, observed_addr } => {
+                                (info, observed_addr)
+                            }
+                            _ => unreachable!(
+                                "the identify protocol guarantees that we receive \
+                                    remote information when we dial a node"
+                            ),
+                        };
+
+                        IdentifyTransportOutcome {
+                            info,
+                            observed_addr,
                         }
-                        _ => unreachable!(
-                            "the identify protocol guarantees that we receive \
-                                remote information when we dial a node"
-                        ),
-                    };
-                    
-                    IdentifyTransportOutcome {
-                        info,
-                        observed_addr,
-                    }
-                });
+                    })
+            }});
 
             let out = IdentifyTransportOutput {
                 socket: socket,
@@ -200,40 +221,44 @@ where
     #[inline]
     fn next_incoming(self) -> Self::Incoming {
         let identify_upgrade = self.transport.clone().with_upgrade(IdentifyProtocolConfig);
+        let cache = self.cache.clone();
 
         let future = self.transport.next_incoming().map(move |incoming| {
+            let cache = cache.clone();
             let future = incoming.and_then(move |(connec, client_addr)| {
                 // Dial the address that connected to us and try upgrade with the
                 // identify protocol.
-                let info_future = identify_upgrade
-                    .dial(client_addr.clone())
-                    .unwrap_or_else(|(_, addr)| {
-                        panic!("the multiaddr {} was determined to be valid earlier", addr)
-                    })
-                    .map(move |(identify, addr)| {
-                        let (info, observed_addr) = match identify {
-                            IdentifyOutput::RemoteInfo { info, observed_addr } => {
-                                (info, observed_addr)
-                            },
-                            _ => unreachable!(
-                                "the identify protocol guarantees that we receive \
-                                 remote information when we dial a node"
-                            ),
-                        };
+                let info_future = cache_entry(&cache, client_addr.clone(), { let client_addr = client_addr.clone(); move || {
+                    identify_upgrade
+                        .dial(client_addr.clone())
+                        .unwrap_or_else(|(_, client_addr)| {
+                            panic!("the multiaddr {} was determined to be valid earlier", client_addr)
+                        })
+                        .map(move |(identify, client_addr)| {
+                            let (info, observed_addr) = match identify {
+                                IdentifyOutput::RemoteInfo { info, observed_addr } => {
+                                    (info, observed_addr)
+                                },
+                                _ => unreachable!(
+                                    "the identify protocol guarantees that we receive \
+                                    remote information when we dial a node"
+                                ),
+                            };
 
-                        debug!("Identified {} as pubkey {:?}", addr, info.public_key);
-                        IdentifyTransportOutcome {
-                            info,
-                            observed_addr,
-                        }
-                    })
-                    .map_err({
-                        let client_addr = client_addr.clone();
-                        move |err| {
-                            debug!("Failed to identify incoming {}", client_addr);
-                            err
-                        }
-                    });
+                            debug!("Identified {} as pubkey {:?}", client_addr, info.public_key);
+                            IdentifyTransportOutcome {
+                                info,
+                                observed_addr,
+                            }
+                        })
+                        .map_err({
+                            let client_addr = client_addr.clone();
+                            move |err| {
+                                debug!("Failed to identify incoming {}", client_addr);
+                                err
+                            }
+                        })
+                }});
 
                 let out = IdentifyTransportOutput {
                     socket: connec,
@@ -265,6 +290,71 @@ pub struct IdentifyTransportOutcome {
     pub info: IdentifyInfo,
     /// Address the remote sees for us.
     pub observed_addr: Multiaddr,
+}
+
+fn cache_entry<F, Fut>(cache: &Mutex<FnvHashMap<Multiaddr, Weak<Mutex<CacheEntry>>>>, addr: Multiaddr, if_no_entry: F)
+    -> impl Future<Item = IdentifyTransportOutcome, Error = IoError>
+where F: FnOnce() -> Fut,
+      Fut: Future<Item = IdentifyTransportOutcome, Error = IoError> + 'static,
+{
+    trace!("Looking up cache entry for {}", addr);
+    let mut cache = cache.lock();
+    match cache.entry(addr) {
+        Entry::Occupied(entry) => {
+            if let Some(upgraded) = entry.get().upgrade() {
+                let mut upgraded = upgraded.lock();
+                future::Either::B(match *upgraded {
+                    CacheEntry::Available(ref outcome) => {
+                        trace!("Cache entry available ; returning clone");
+                        future::Either::A(future::ok(outcome.clone()))
+                    },
+                    CacheEntry::InProgress(ref mut list) => {
+                        trace!("Cache entry contains an in progress");
+                        let (tx, rx) = oneshot::channel();
+                        list.push(tx);
+                        future::Either::B(rx.map_err(|_| unreachable!()))
+                    }
+                })
+
+            } else {
+                trace!("Cache entry outdated");
+                let new = Arc::new(Mutex::new(CacheEntry::InProgress(Vec::new())));
+                *entry.into_mut() = Arc::downgrade(&new);
+                let future = if_no_entry()
+                    .map(move |outcome| {
+                        let mut new = new.lock();
+                        trace!("Storing outcome in cache and notifying waiters");
+                        match mem::replace(&mut *new, CacheEntry::Available(outcome.clone())) {
+                            CacheEntry::Available(_) => unreachable!(),
+                            CacheEntry::InProgress(notif) => {
+                                for notif in notif { let _ = notif.send(outcome.clone()); }
+                            }
+                        };
+                        outcome
+                    });
+                future::Either::A(Box::new(future) as Box<Future<Item = _, Error = _>>) // TODO: don't box
+            }
+        },
+
+        Entry::Vacant(entry) => {
+            trace!("No cache entry available");
+            let new = Arc::new(Mutex::new(CacheEntry::InProgress(Vec::new())));
+            entry.insert(Arc::downgrade(&new));
+            let future = if_no_entry()
+                .map(move |outcome| {
+                    let mut new = new.lock();
+                    trace!("Storing outcome in cache and notifying waiters");
+                    match mem::replace(&mut *new, CacheEntry::Available(outcome.clone())) {
+                        CacheEntry::Available(_) => unreachable!(),
+                        CacheEntry::InProgress(notif) => {
+                            for notif in notif { let _ = notif.send(outcome.clone()); }
+                        }
+                    };
+                    outcome
+                });
+            future::Either::A(Box::new(future) as Box<Future<Item = _, Error = _>>) // TODO: don't box
+        },
+    }
 }
 
 // TODO: test that we receive back what the remote sent us

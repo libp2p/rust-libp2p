@@ -26,7 +26,7 @@ use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Implementation of `Transport`. See [the crate root description](index.html).
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct PeerIdTransport<Trans, AddrRes> {
     transport: IdentifyTransport<Trans>,
     addr_resolver: AddrRes,
