@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use fnv::FnvHashMap;
-use futures::{Future, IntoFuture, Stream};
+use futures::{future, Future, Stream};
 use futures_mutex::Mutex as AsyncMutex;
 use libp2p_core::{Multiaddr, MuxedTransport, Transport};
 use parking_lot::Mutex;
@@ -144,14 +144,17 @@ where
         // Once successfully dialed, we dial again to identify.
         let identify_upgrade = self.transport.with_upgrade(IdentifyProtocolConfig);
         let future = dial.and_then(move |(socket, addr)| {
-            trace!("Successfully dialed {} ; dialing again for identification", addr);
-
-            let info_future = identify_upgrade
-                .dial(addr.clone())
-                .unwrap_or_else(|(_, addr)| {
-                    panic!("the multiaddr {} was determined to be valid earlier", addr)
+            let info_future = future::lazy({
+                    let addr = addr.clone();
+                    move || {
+                        trace!("Dialing {} again for identification", addr);
+                        identify_upgrade
+                            .dial(addr)
+                            .unwrap_or_else(|(_, addr)| {
+                                panic!("the multiaddr {} was determined to be valid earlier", addr)
+                            })
+                    }
                 })
-                .into_future()
                 .map(move |(identify, _addr)| {
                     let (info, observed_addr) = match identify {
                         IdentifyOutput::RemoteInfo { info, observed_addr } => {
@@ -173,7 +176,7 @@ where
                 socket: socket,
                 info: Box::new(info_future),
             };
-            
+
             Ok((out, addr))
         });
 

@@ -76,10 +76,12 @@ where
             let fut = connec
                 .and_then(move |(connec, original_addr)| {
                     let socket = connec.socket;
+                    debug!("Incoming connection from {} ; now waiting for identification", original_addr);
                     connec.info.map(move |info| (socket, info, original_addr))
                 })
                 .map(move |(socket, info, original_addr)| {
                     let peer_id = info.info.public_key.to_peer_id();
+                    debug!("Identified connection from {} as {:?}", original_addr, peer_id);
                     let real_addr: Multiaddr = AddrComponent::P2P(peer_id.into_bytes()).into();
                     let out = PeerIdTransportOutput {
                         socket: socket,
@@ -153,6 +155,7 @@ where
 
             Err(addr) => {
                 // If the multiaddress is something else, propagate it to the underlying transport.
+                trace!("Propagating {} to the underlying transport", addr);
                 let dial = match self.transport.dial(addr) {
                     Ok(d) => d,
                     Err((inner, addr)) => {
@@ -167,10 +170,12 @@ where
                 let future = dial
                     .and_then(move |(connec, original_addr)| {
                         let socket = connec.socket;
+                        debug!("Successfully dialed {} ; now waiting for identification", original_addr);
                         connec.info.map(move |info| (socket, info, original_addr))
                     })
                     .map(move |(socket, info, original_addr)| {
                         let peer_id = info.info.public_key.to_peer_id();
+                        debug!("Identified {} as {:?}", original_addr, peer_id);
                         let real_addr: Multiaddr = AddrComponent::P2P(peer_id.into_bytes()).into();
                         let out = PeerIdTransportOutput {
                             socket: socket,
@@ -207,10 +212,12 @@ where
             let future = incoming
                 .and_then(move |(connec, original_addr)| {
                     let socket = connec.socket;
+                    debug!("Incoming stream from {} ; now waiting for identification", original_addr);
                     connec.info.map(move |info| (socket, info, original_addr))
                 })
                 .map(move |(socket, info, original_addr)| {
                     let peer_id = info.info.public_key.to_peer_id();
+                    debug!("Identified substream from {} as {:?}", original_addr, peer_id);
                     let real_addr: Multiaddr = AddrComponent::P2P(peer_id.into_bytes()).into();
                     let out = PeerIdTransportOutput {
                         socket: socket,
