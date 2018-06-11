@@ -87,9 +87,10 @@ impl FloodSubUpgrade {
     }
 }
 
-impl<C> ConnectionUpgrade<C> for FloodSubUpgrade
+impl<C, Maf> ConnectionUpgrade<C, Maf> for FloodSubUpgrade
 where
     C: AsyncRead + AsyncWrite + 'static,
+    Maf: Future<Item = Multiaddr, Error = IoError> + 'static,
 {
     type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
     type UpgradeIdentifier = ();
@@ -100,7 +101,8 @@ where
     }
 
     type Output = FloodSubFuture;
-    type Future = future::FutureResult<Self::Output, IoError>;
+    type MultiaddrFuture = future::FutureResult<Multiaddr, IoError>;
+    type Future = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
     #[inline]
     fn upgrade(
@@ -108,112 +110,116 @@ where
         socket: C,
         _: Self::UpgradeIdentifier,
         _: Endpoint,
-        remote_addr: &Multiaddr,
+        remote_addr: Maf,
     ) -> Self::Future {
-        debug!("Upgrading connection to {} as floodsub", remote_addr);
+        debug!("Upgrading connection as floodsub");
 
-        // Whenever a new node connects, we send to it a message containing the topics we are
-        // already subscribed to.
-        let init_msg: Vec<u8> = {
-            let subscribed_topics = self.inner.subscribed_topics.read();
-            let mut proto = rpc_proto::RPC::new();
+        let future = remote_addr.and_then(move |remote_addr| {
+            // Whenever a new node connects, we send to it a message containing the topics we are
+            // already subscribed to.
+            let init_msg: Vec<u8> = {
+                let subscribed_topics = self.inner.subscribed_topics.read();
+                let mut proto = rpc_proto::RPC::new();
 
-            for topic in subscribed_topics.iter() {
-                let mut subscription = rpc_proto::RPC_SubOpts::new();
-                subscription.set_subscribe(true);
-                subscription.set_topicid(topic.hash().clone().into_string());
-                proto.mut_subscriptions().push(subscription);
+                for topic in subscribed_topics.iter() {
+                    let mut subscription = rpc_proto::RPC_SubOpts::new();
+                    subscription.set_subscribe(true);
+                    subscription.set_topicid(topic.hash().clone().into_string());
+                    proto.mut_subscriptions().push(subscription);
+                }
+
+                proto
+                    .write_to_bytes()
+                    .expect("programmer error: the protobuf message should always be valid")
+            };
+
+            // Split the socket into writing and reading parts.
+            let (floodsub_sink, floodsub_stream) = socket
+                .framed(VarintCodec::default())
+                .sink_map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
+                .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
+                .split();
+
+            // Build the channel that will be used to communicate outgoing message to this remote.
+            let (input_tx, input_rx) = mpsc::unbounded();
+            input_tx
+                .unbounded_send(init_msg.into())
+                .expect("newly-created channel should always be open");
+            self.inner.remote_connections.write().insert(
+                remote_addr.clone(),
+                RemoteInfo {
+                    sender: input_tx,
+                    subscribed_topics: RwLock::new(FnvHashSet::default()),
+                },
+            );
+
+            // Combine the socket read and the outgoing messages input, so that we can wake up when
+            // either happens.
+            let messages = input_rx
+                .map(|m| (m, MessageSource::FromChannel))
+                .map_err(|_| unreachable!("channel streams should never produce an error"))
+                .select(floodsub_stream.map(|m| (m, MessageSource::FromSocket)));
+
+            #[derive(Debug)]
+            enum MessageSource {
+                FromSocket,
+                FromChannel,
             }
 
-            proto
-                .write_to_bytes()
-                .expect("programmer error: the protobuf message should always be valid")
-        };
+            let inner = self.inner.clone();
+            let remote_addr_ret = future::ok(remote_addr.clone());
+            let future = future::loop_fn(
+                (floodsub_sink, messages),
+                move |(floodsub_sink, messages)| {
+                    let inner = inner.clone();
+                    let remote_addr = remote_addr.clone();
 
-        // Split the socket into writing and reading parts.
-        let (floodsub_sink, floodsub_stream) = socket
-            .framed(VarintCodec::default())
-            .sink_map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
-            .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
-            .split();
+                    messages
+                        .into_future()
+                        .map_err(|(err, _)| err)
+                        .and_then(move |(input, rest)| {
+                            match input {
+                                Some((bytes, MessageSource::FromSocket)) => {
+                                    // Received a packet from the remote.
+                                    let fut = match handle_packet_received(bytes, inner, &remote_addr) {
+                                        Ok(()) => {
+                                            future::ok(future::Loop::Continue((floodsub_sink, rest)))
+                                        }
+                                        Err(err) => future::err(err),
+                                    };
+                                    Box::new(fut) as Box<_>
+                                }
 
-        // Build the channel that will be used to communicate outgoing message to this remote.
-        let (input_tx, input_rx) = mpsc::unbounded();
-        input_tx
-            .unbounded_send(init_msg.into())
-            .expect("newly-created channel should always be open");
-        self.inner.remote_connections.write().insert(
-            remote_addr.clone(),
-            RemoteInfo {
-                sender: input_tx,
-                subscribed_topics: RwLock::new(FnvHashSet::default()),
-            },
-        );
+                                Some((bytes, MessageSource::FromChannel)) => {
+                                    // Received a packet from the channel.
+                                    // Need to send a message to remote.
+                                    trace!("Effectively sending message to remote");
+                                    let future = floodsub_sink.send(bytes).map(|floodsub_sink| {
+                                        future::Loop::Continue((floodsub_sink, rest))
+                                    });
+                                    Box::new(future) as Box<_>
+                                }
 
-        // Combine the socket read and the outgoing messages input, so that we can wake up when
-        // either happens.
-        let messages = input_rx
-            .map(|m| (m, MessageSource::FromChannel))
-            .map_err(|_| unreachable!("channel streams should never produce an error"))
-            .select(floodsub_stream.map(|m| (m, MessageSource::FromSocket)));
-
-        #[derive(Debug)]
-        enum MessageSource {
-            FromSocket,
-            FromChannel,
-        }
-
-        let inner = self.inner.clone();
-        let remote_addr = remote_addr.clone();
-        let future = future::loop_fn(
-            (floodsub_sink, messages),
-            move |(floodsub_sink, messages)| {
-                let inner = inner.clone();
-                let remote_addr = remote_addr.clone();
-
-                messages
-                    .into_future()
-                    .map_err(|(err, _)| err)
-                    .and_then(move |(input, rest)| {
-                        match input {
-                            Some((bytes, MessageSource::FromSocket)) => {
-                                // Received a packet from the remote.
-                                let fut = match handle_packet_received(bytes, inner, &remote_addr) {
-                                    Ok(()) => {
-                                        future::ok(future::Loop::Continue((floodsub_sink, rest)))
-                                    }
-                                    Err(err) => future::err(err),
-                                };
-                                Box::new(fut) as Box<_>
+                                None => {
+                                    // Both the connection stream and `rx` are empty, so we break
+                                    // the loop.
+                                    trace!("Pubsub future clean finish");
+                                    // TODO: what if multiple connections?
+                                    inner.remote_connections.write().remove(&remote_addr);
+                                    let future = future::ok(future::Loop::Break(()));
+                                    Box::new(future) as Box<Future<Item = _, Error = _>>
+                                }
                             }
+                        })
+                },
+            );
 
-                            Some((bytes, MessageSource::FromChannel)) => {
-                                // Received a packet from the channel.
-                                // Need to send a message to remote.
-                                trace!("Effectively sending message to remote");
-                                let future = floodsub_sink.send(bytes).map(|floodsub_sink| {
-                                    future::Loop::Continue((floodsub_sink, rest))
-                                });
-                                Box::new(future) as Box<_>
-                            }
+            future::ok((FloodSubFuture {
+                inner: Box::new(future) as Box<_>,
+            }, remote_addr_ret))
+        });
 
-                            None => {
-                                // Both the connection stream and `rx` are empty, so we break
-                                // the loop.
-                                trace!("Pubsub future clean finish");
-                                // TODO: what if multiple connections?
-                                inner.remote_connections.write().remove(&remote_addr);
-                                let future = future::ok(future::Loop::Break(()));
-                                Box::new(future) as Box<Future<Item = _, Error = _>>
-                            }
-                        }
-                    })
-            },
-        );
-
-        future::ok(FloodSubFuture {
-            inner: Box::new(future) as Box<_>,
-        })
+        Box::new(future) as Box<_>
     }
 }
 

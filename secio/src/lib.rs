@@ -99,7 +99,7 @@ pub use self::error::SecioError;
 use bytes::{Bytes, BytesMut};
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
-use libp2p_core::{Multiaddr, PeerId, PublicKeyBytes, PublicKeyBytesSlice};
+use libp2p_core::{PeerId, PublicKeyBytes, PublicKeyBytesSlice};
 use ring::signature::{Ed25519KeyPair, RSAKeyPair};
 use ring::rand::SystemRandom;
 use rw_stream_sink::RwStreamSink;
@@ -285,15 +285,17 @@ impl From<SecioPublicKey> for PublicKeyBytes {
     }
 }
 
-impl<S> libp2p_core::ConnectionUpgrade<S> for SecioConfig
+impl<S, Maf> libp2p_core::ConnectionUpgrade<S, Maf> for SecioConfig
 where
-    S: AsyncRead + AsyncWrite + 'static,
+    S: AsyncRead + AsyncWrite + 'static,        // TODO: 'static :(
+    Maf: 'static,       // TODO: 'static :(
 {
     type Output = (
         RwStreamSink<StreamMapErr<SecioMiddleware<S>, fn(SecioError) -> IoError>>,
         SecioPublicKey,
     );
-    type Future = Box<Future<Item = Self::Output, Error = IoError>>;
+    type MultiaddrFuture = Maf;
+    type Future = Box<Future<Item = (Self::Output, Maf), Error = IoError>>;
     type NamesIter = iter::Once<(Bytes, ())>;
     type UpgradeIdentifier = ();
 
@@ -308,16 +310,16 @@ where
         incoming: S,
         _: (),
         _: libp2p_core::Endpoint,
-        remote_addr: &Multiaddr,
+        remote_addr: Maf,
     ) -> Self::Future {
-        debug!("Starting secio upgrade with {:?}", remote_addr);
+        debug!("Starting secio upgrade");
 
         let fut = SecioMiddleware::handshake(incoming, self.key);
         let wrapped = fut.map(|(stream_sink, pubkey)| {
             let mapped = stream_sink.map_err(map_err as fn(_) -> _);
             (RwStreamSink::new(mapped), pubkey)
         }).map_err(map_err);
-        Box::new(wrapped)
+        Box::new(wrapped.map(move |out| (out, remote_addr)))
     }
 }
 

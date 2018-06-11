@@ -172,10 +172,11 @@ fn run_listener(opts: ListenerOpts) -> Result<(), Box<Error>> {
         .and_then(|out, endpoint, addr| {
             match out {
                 libp2p::relay::Output::Sealed(future) => {
-                    Either::A(future.map(Either::A))
+                    Either::A(future.map(|out| (Either::A(out), Either::A(addr))))
                 }
                 libp2p::relay::Output::Stream(socket) => {
-                    Either::B(upgrade::apply(socket, echo, endpoint, addr).map(Either::B))
+                    Either::B(upgrade::apply(socket, echo, endpoint, addr)
+                        .map(|(out, addr)| (Either::B(out), Either::B(addr))))
                 }
             }
         });
@@ -183,7 +184,7 @@ fn run_listener(opts: ListenerOpts) -> Result<(), Box<Error>> {
     let (control, future) = libp2p::core::swarm(upgraded, |out, _| {
         match out {
             Either::A(()) => Either::A(future::ok(())),
-            Either::B((socket, _)) => Either::B(loop_fn(socket, move |socket| {
+            Either::B(socket) => Either::B(loop_fn(socket, move |socket| {
                 socket.into_future()
                     .map_err(|(e, _)| e)
                     .and_then(move |(msg, socket)| {
