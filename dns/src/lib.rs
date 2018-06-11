@@ -193,14 +193,14 @@ fn resolve_dns(
     name: &str,
     resolver: CpuPoolResolver,
     ty: ResolveTy,
-) -> Box<Future<Item = AddrComponent, Error = IoError>> {
+) -> impl Future<Item = AddrComponent, Error = IoError> {
     let debug_name = if log_enabled!(Level::Trace) {
         Some(name.to_owned())
     } else {
         None
     };
 
-    let future = resolver.resolve(name).and_then(move |addrs| {
+    resolver.resolve(name).and_then(move |addrs| {
         if log_enabled!(Level::Trace) {
             trace!("DNS component resolution: {} => {:?}",
                     debug_name.expect("trace log level was enabled"), addrs);
@@ -218,9 +218,7 @@ fn resolve_dns(
                 IoErrorKind::Other,
                 "couldn't find any relevant IP address",
             ))
-    });
-
-    Box::new(future)
+    })
 }
 
 #[cfg(test)]
@@ -228,7 +226,7 @@ mod tests {
     extern crate libp2p_tcp_transport;
     use self::libp2p_tcp_transport::TcpConfig;
     use DnsConfig;
-    use futures::{future, Future};
+    use futures::future;
     use multiaddr::{AddrComponent, Multiaddr};
     use std::io::Error as IoError;
     use swarm::Transport;
@@ -241,7 +239,7 @@ mod tests {
             type Output = <TcpConfig as Transport>::Output;
             type Listener = <TcpConfig as Transport>::Listener;
             type ListenerUpgrade = <TcpConfig as Transport>::ListenerUpgrade;
-            type Dial = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>;
+            type Dial = future::Empty<(Self::Output, Multiaddr), IoError>;
 
             #[inline]
             fn listen_on(
@@ -263,7 +261,7 @@ mod tests {
                     AddrComponent::DNS6(_) => (),
                     _ => panic!(),
                 };
-                Ok(Box::new(future::empty()) as Box<_>)
+                Ok(future::empty())
             }
 
             #[inline]
