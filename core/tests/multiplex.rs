@@ -80,7 +80,7 @@ fn client_to_server_outbound() {
     let bg_thread = thread::spawn(move || {
         let mut core = Core::new().unwrap();
         let transport = TcpConfig::new(core.handle())
-            .with_upgrade(multiplex::MultiplexConfig::new())
+            .with_upgrade(multiplex::MplexConfig::new())
             .into_connection_reuse();
 
         let (listener, addr) = transport
@@ -110,7 +110,7 @@ fn client_to_server_outbound() {
     });
 
     let mut core = Core::new().unwrap();
-    let transport = TcpConfig::new(core.handle()).with_upgrade(multiplex::MultiplexConfig::new());
+    let transport = TcpConfig::new(core.handle()).with_upgrade(multiplex::MplexConfig::new());
 
     let future = transport
         .dial(rx.recv().unwrap())
@@ -134,7 +134,7 @@ fn connection_reused_for_dialing() {
     let bg_thread = thread::spawn(move || {
         let mut core = Core::new().unwrap();
         let transport = OnlyOnce::from(TcpConfig::new(core.handle()))
-            .with_upgrade(multiplex::MultiplexConfig::new())
+            .with_upgrade(multiplex::MplexConfig::new())
             .into_connection_reuse();
 
         let (listener, addr) = transport
@@ -176,7 +176,7 @@ fn connection_reused_for_dialing() {
 
     let mut core = Core::new().unwrap();
     let transport = OnlyOnce::from(TcpConfig::new(core.handle()))
-        .with_upgrade(multiplex::MultiplexConfig::new())
+        .with_upgrade(multiplex::MplexConfig::new())
         .into_connection_reuse();
 
     let listen_addr = rx.recv().unwrap();
@@ -213,7 +213,7 @@ fn use_opened_listen_to_dial() {
     let bg_thread = thread::spawn(move || {
         let mut core = Core::new().unwrap();
         let transport = OnlyOnce::from(TcpConfig::new(core.handle()))
-            .with_upgrade(multiplex::MultiplexConfig::new());
+            .with_upgrade(multiplex::MplexConfig::new());
 
         let (listener, addr) = transport
             .clone()
@@ -255,7 +255,7 @@ fn use_opened_listen_to_dial() {
 
     let mut core = Core::new().unwrap();
     let transport = OnlyOnce::from(TcpConfig::new(core.handle()))
-        .with_upgrade(multiplex::MultiplexConfig::new())
+        .with_upgrade(multiplex::MplexConfig::new())
         .into_connection_reuse();
 
     let listen_addr = rx.recv().unwrap();
