@@ -86,6 +86,8 @@ impl Peer {
     // Builds a `Peer` from its raw protobuf equivalent.
     // TODO: use TryFrom once stable
     fn from_peer(peer: &mut protobuf_structs::dht::Message_Peer) -> Result<Peer, IoError> {
+        // TODO: this is in fact a CID ; not sure if this should be handled in `from_bytes` or
+        //       as a special case here
         let node_id = PeerId::from_bytes(peer.get_id().to_vec())
             .map_err(|_| IoError::new(IoErrorKind::InvalidData, "invalid peer id"))?;
 
@@ -274,9 +276,15 @@ fn proto_to_msg(mut message: protobuf_structs::dht::Message) -> Result<KadMsg, I
             } else {
                 let mut closer_peers = Vec::with_capacity(message.get_closerPeers().len());
                 for peer in message.mut_closerPeers().iter_mut() {
-                    closer_peers.push(Peer::from_peer(peer)?);
+                    // TODO: for now we don't parse properly the peer, so it is possible that we
+                    //       get parsing errors even though the peer is valid ; we ignore these,
+                    //       but ultimately we should just error altogether
+                    if let Ok(peer) = Peer::from_peer(peer) {
+                        closer_peers.push(peer);
+                    }
                 }
-                debug_assert_eq!(closer_peers.len(), closer_peers.capacity());
+                // TODO: restore once the above TODO is fixed
+                //debug_assert_eq!(closer_peers.len(), closer_peers.capacity());
 
                 Ok(KadMsg::FindNodeRes {
                     closer_peers,
