@@ -27,7 +27,7 @@ extern crate tokio_core;
 extern crate tokio_io;
 
 use bigint::U512;
-use futures::future::Future;
+use futures::{Future, Stream};
 use libp2p::peerstore::{PeerAccess, PeerId, Peerstore};
 use libp2p::Multiaddr;
 use std::env;
@@ -35,6 +35,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use libp2p::core::{Transport, PublicKeyBytesSlice};
 use libp2p::core::{upgrade, either::EitherOutput};
+use libp2p::kad::{ConnectionType, Peer, QueryEvent};
 use libp2p::tcp::TcpConfig;
 use tokio_core::reactor::Core;
 
@@ -103,13 +104,11 @@ fn main() {
     // and outgoing connections for us.
     let kad_config = libp2p::kad::KademliaConfig {
         parallelism: 3,
-        record_store: (),
-        peer_store: peer_store,
         local_peer_id: my_peer_id.clone(),
         timeout: Duration::from_secs(2),
     };
 
-    let kad_ctl_proto = libp2p::kad::KademliaControllerPrototype::new(kad_config);
+    let kad_ctl_proto = libp2p::kad::KademliaControllerPrototype::new(kad_config, peer_store.peers());
 
     let proto = libp2p::kad::KademliaUpgrade::from_prototype(&kad_ctl_proto);
 
@@ -117,7 +116,32 @@ fn main() {
     // outgoing connections for us.
     let (swarm_controller, swarm_future) = libp2p::core::swarm(
         transport.clone().with_upgrade(proto.clone()),
-        |upgrade, _| upgrade,
+        {
+            let peer_store = peer_store.clone();
+            move |kademlia_stream, _| {
+                let peer_store = peer_store.clone();
+                kademlia_stream.for_each(move |req| {
+                    let peer_store = peer_store.clone();
+                    let result = req
+                        .requested_peers()
+                        .map(move |peer_id| {
+                            let addrs = peer_store
+                                .peer(peer_id)
+                                .into_iter()
+                                .flat_map(|p| p.addrs())
+                                .collect::<Vec<_>>();
+                            Peer {
+                                node_id: peer_id.clone(),
+                                multiaddrs: addrs,
+                                connection_ty: ConnectionType::Connected, // meh :-/
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    req.respond(result);
+                    Ok(())
+                })
+            }
+        }
     );
 
     let (kad_controller, _kad_init) =
@@ -132,6 +156,21 @@ fn main() {
 
     let finish_enum = kad_controller
         .find_node(my_peer_id.clone())
+        .filter_map(move |event| {
+            match event {
+                QueryEvent::NewKnownMultiaddrs(peers) => {
+                    for (peer, addrs) in peers {
+                        peer_store.peer_or_create(&peer)
+                            .add_addrs(addrs, Duration::from_secs(3600));
+                    }
+                    None
+                },
+                QueryEvent::Finished(out) => Some(out),
+            }
+        })
+        .into_future()
+        .map_err(|(err, _)| err)
+        .map(|(out, _)| out.unwrap())
         .and_then(|out| {
             let local_hash = U512::from(my_peer_id.hash());
             println!("Results of peer discovery for {:?}:", my_peer_id);

@@ -25,16 +25,14 @@
 //! The `Stream` component is used to poll the underlying transport, and the `Sink` component is
 //! used to send messages.
 
-use bytes::Bytes;
-use futures::future;
-use futures::{Sink, Stream};
-use libp2p_peerstore::PeerId;
-use libp2p_core::{ConnectionUpgrade, Endpoint, Multiaddr};
+use bytes::{Bytes, BytesMut};
+use futures::{future, sink, Sink, stream, Stream};
+use libp2p_core::{ConnectionUpgrade, Endpoint, Multiaddr, PeerId};
 use protobuf::{self, Message};
 use protobuf_structs;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio_io::{AsyncRead, AsyncWrite, codec::Framed};
 use varint::VarintCodec;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
@@ -122,8 +120,7 @@ impl<C> ConnectionUpgrade<C> for KademliaProtocolConfig
 where
     C: AsyncRead + AsyncWrite + 'static, // TODO: 'static :-/
 {
-    type Output =
-        Box<KadStreamSink<Item = KadMsg, Error = IoError, SinkItem = KadMsg, SinkError = IoError>>;
+    type Output = KadStreamSink<C>;
     type Future = future::FutureResult<Self::Output, IoError>;
     type NamesIter = iter::Once<(Bytes, ())>;
     type UpgradeIdentifier = ();
@@ -139,37 +136,26 @@ where
     }
 }
 
+type KadStreamSink<S> = stream::AndThen<sink::With<stream::FromErr<Framed<S, VarintCodec<Vec<u8>>>, IoError>, KadMsg, fn(KadMsg) -> Result<Vec<u8>, IoError>, Result<Vec<u8>, IoError>>, fn(BytesMut) -> Result<KadMsg, IoError>, Result<KadMsg, IoError>>;
+
 // Upgrades a socket to use the Kademlia protocol.
-fn kademlia_protocol<'a, S>(
+fn kademlia_protocol<S>(
     socket: S,
-) -> Box<KadStreamSink<Item = KadMsg, Error = IoError, SinkItem = KadMsg, SinkError = IoError> + 'a>
+) -> KadStreamSink<S>
 where
-    S: AsyncRead + AsyncWrite + 'a,
+    S: AsyncRead + AsyncWrite,
 {
-    let wrapped = socket
+    socket
         .framed(VarintCodec::default())
         .from_err::<IoError>()
-        .with(|request| -> Result<_, IoError> {
+        .with::<_, fn(_) -> _, _>(|request| -> Result<_, IoError> {
             let proto_struct = msg_to_proto(request);
             Ok(proto_struct.write_to_bytes().unwrap()) // TODO: error?
         })
-        .and_then(|bytes| {
+        .and_then::<fn(_) -> _, _>(|bytes| {
             let response = protobuf::parse_from_bytes(&bytes)?;
             proto_to_msg(response)
-        });
-
-    Box::new(wrapped)
-}
-
-/// Custom trait that derives `Sink` and `Stream`, so that we can box it.
-pub trait KadStreamSink:
-    Stream<Item = KadMsg, Error = IoError> + Sink<SinkItem = KadMsg, SinkError = IoError>
-{
-}
-impl<T> KadStreamSink for T
-where
-    T: Stream<Item = KadMsg, Error = IoError> + Sink<SinkItem = KadMsg, SinkError = IoError>,
-{
+        })
 }
 
 /// Message that we can send to a peer or received from a peer.
@@ -307,8 +293,7 @@ mod tests {
     use self::libp2p_tcp_transport::TcpConfig;
     use self::tokio_core::reactor::Core;
     use futures::{Future, Sink, Stream};
-    use libp2p_peerstore::PeerId;
-    use libp2p_core::{Transport, PublicKeyBytesSlice};
+    use libp2p_core::{Transport, PeerId, PublicKeyBytesSlice};
     use protocol::{ConnectionType, KadMsg, KademliaProtocolConfig, Peer};
     use std::sync::mpsc;
     use std::thread;
