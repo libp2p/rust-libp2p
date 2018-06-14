@@ -50,8 +50,6 @@ pub enum IdentifyOutput<T> {
     Sender {
         /// Object used to send identify info to the client.
         sender: IdentifySender<T>,
-        /// Observed multiaddress of the client.
-        observed_addr: Multiaddr,
     },
 }
 
@@ -120,7 +118,7 @@ where
     type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
     type UpgradeIdentifier = ();
     type Output = IdentifyOutput<C>;
-    type MultiaddrFuture = future::FutureResult<Multiaddr, IoError>;
+    type MultiaddrFuture = future::Either<future::FutureResult<Multiaddr, IoError>, Maf>;
     type Future = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
     #[inline]
@@ -128,7 +126,7 @@ where
         iter::once((Bytes::from("/ipfs/id/1.0.0"), ()))
     }
 
-    fn upgrade(self, socket: C, _: (), ty: Endpoint, observed_addr: Maf) -> Self::Future {
+    fn upgrade(self, socket: C, _: (), ty: Endpoint, remote_addr: Maf) -> Self::Future {
         trace!("Upgrading connection as {:?}", ty);
 
         let socket = socket.framed(VarintCodec::default());
@@ -159,7 +157,7 @@ where
                                 observed_addr: observed_addr.clone(),
                             };
 
-                            Ok((out, future::ok(observed_addr)))
+                            Ok((out, future::Either::A(future::ok(observed_addr))))
                         } else {
                             debug!("Identify protocol stream closed before receiving info");
                             Err(IoErrorKind::InvalidData.into())
@@ -172,13 +170,12 @@ where
             Endpoint::Listener => {
                 let sender = IdentifySender { inner: socket };
 
-                let future = observed_addr.map(move |addr| {
+                let future = future::ok({
                     let io = IdentifyOutput::Sender {
                         sender,
-                        observed_addr: addr.clone(),
                     };
 
-                    (io, future::ok(addr))
+                    (io, future::Either::B(remote_addr))
                 });
 
                 Box::new(future) as Box<_>
