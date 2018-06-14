@@ -125,7 +125,6 @@ impl KademliaControllerPrototype {
         T: Clone + MuxedTransport + 'static, // TODO: 'static :-/
         K: Transport<Output = KademliaPeerReqStream> + Clone + 'static, // TODO: 'static :-/
         M: FnOnce(KademliaPeerReqStream) -> T::Output + Clone + 'static,
-        T::MultiaddrFuture: From<K::MultiaddrFuture>,
     {
         // TODO: initialization
 
@@ -212,7 +211,6 @@ where
     where
         K: Transport<Output = KademliaPeerReqStream> + Clone + 'static,
         M: FnOnce(KademliaPeerReqStream) -> T::Output + Clone + 'static,     // TODO: 'static :-/
-        T::MultiaddrFuture: From<K::MultiaddrFuture>,
     {
         let me = self.clone();
         query::find_node(gen_query_params!(me.clone()), searched_key)
@@ -466,7 +464,6 @@ where
     T: Clone + MuxedTransport + 'static, // TODO: 'static :-/
     K: Transport<Output = KademliaPeerReqStream> + Clone + 'static,      // TODO: 'static
     M: FnOnce(KademliaPeerReqStream) -> T::Output + Clone + 'static,     // TODO: 'static :-/
-    T::MultiaddrFuture: From<K::MultiaddrFuture>,
 {
     #[inline]
     fn send<F, FRet>(

@@ -39,7 +39,7 @@ pub fn swarm<T, H, F>(
 ) -> (SwarmController<T>, SwarmFuture<T, H, F::Future>)
 where
     T: MuxedTransport + Clone + 'static, // TODO: 'static :-/
-    H: FnMut(T::Output, T::MultiaddrFuture) -> F,
+    H: FnMut(T::Output, Box<Future<Item = Multiaddr, Error = IoError>>) -> F,
     F: IntoFuture<Item = (), Error = IoError>,
 {
     let (new_dialers_tx, new_dialers_rx) = mpsc::unbounded();
@@ -76,7 +76,7 @@ where
 {
     transport: T,
     new_listeners: mpsc::UnboundedSender<T::Listener>,
-    new_dialers: mpsc::UnboundedSender<Box<Future<Item = (T::Output, T::MultiaddrFuture), Error = IoError>>>,
+    new_dialers: mpsc::UnboundedSender<Box<Future<Item = (T::Output, Box<Future<Item = Multiaddr, Error = IoError>>), Error = IoError>>>,
     new_toprocess: mpsc::UnboundedSender<Box<Future<Item = (), Error = IoError>>>,
 }
 
@@ -117,14 +117,13 @@ where
     where
         Du: Transport + 'static, // TODO: 'static :-/
         Du::Output: Into<T::Output>,
-        Du::MultiaddrFuture: Into<T::MultiaddrFuture>,
     {
         trace!("Swarm dialing {}", multiaddr);
 
         match transport.dial(multiaddr.clone()) {
             Ok(dial) => {
                 let dial = Box::new(
-                    dial.map(|(d, client_addr)| (d.into(), client_addr.into())),
+                    dial.map(|(d, client_addr)| (d.into(), Box::new(client_addr) as Box<Future<Item = _, Error = _>>)),
                 ) as Box<Future<Item = _, Error = _>>;
                 // Ignoring errors if the receiver has been closed, because in that situation
                 // nothing is going to be processed anyway.
@@ -164,17 +163,17 @@ where
         StreamFuture<
             Box<
                 Stream<
-                    Item = Box<Future<Item = (T::Output, T::MultiaddrFuture), Error = IoError>>,
+                    Item = Box<Future<Item = (T::Output, Box<Future<Item = Multiaddr, Error = IoError>>), Error = IoError>>,
                     Error = IoError,
                 >,
             >,
         >,
     >,
     listeners_upgrade:
-        FuturesUnordered<Box<Future<Item = (T::Output, T::MultiaddrFuture), Error = IoError>>>,
-    dialers: FuturesUnordered<Box<Future<Item = (T::Output, T::MultiaddrFuture), Error = IoError>>>,
+        FuturesUnordered<Box<Future<Item = (T::Output, Box<Future<Item = Multiaddr, Error = IoError>>), Error = IoError>>>,
+    dialers: FuturesUnordered<Box<Future<Item = (T::Output, Box<Future<Item = Multiaddr, Error = IoError>>), Error = IoError>>>,
     new_dialers:
-        mpsc::UnboundedReceiver<Box<Future<Item = (T::Output, T::MultiaddrFuture), Error = IoError>>>,
+        mpsc::UnboundedReceiver<Box<Future<Item = (T::Output, Box<Future<Item = Multiaddr, Error = IoError>>), Error = IoError>>>,
     to_process: FuturesUnordered<future::Either<F, Box<Future<Item = (), Error = IoError>>>>,
     new_toprocess: mpsc::UnboundedReceiver<Box<Future<Item = (), Error = IoError>>>,
 }
@@ -182,7 +181,7 @@ where
 impl<T, H, If, F> Future for SwarmFuture<T, H, F>
 where
     T: MuxedTransport + Clone + 'static, // TODO: 'static :-/,
-    H: FnMut(T::Output, T::MultiaddrFuture) -> If,
+    H: FnMut(T::Output, Box<Future<Item = Multiaddr, Error = IoError>>) -> If,
     If: IntoFuture<Future = F, Item = (), Error = IoError>,
     F: Future<Item = (), Error = IoError>,
 {
@@ -196,6 +195,9 @@ where
             Ok(Async::Ready(connec)) => {
                 debug!("Swarm received new multiplexed incoming connection");
                 self.next_incoming = self.transport.clone().next_incoming();
+                let connec = connec.map(|(out, maf)| {
+                    (out, Box::new(maf) as Box<Future<Item = Multiaddr, Error = IoError>>)
+                });
                 self.listeners_upgrade.push(Box::new(connec) as Box<_>);
             }
             Ok(Async::NotReady) => {}
@@ -208,7 +210,13 @@ where
         match self.new_listeners.poll() {
             Ok(Async::Ready(Some(new_listener))) => {
                 let new_listener = Box::new(
-                    new_listener.map(|f| Box::new(f) as Box<Future<Item = _, Error = _>>),
+                    new_listener.map(|f| {
+                        let f = f.map(|(out, maf)| {
+                            (out, Box::new(maf) as Box<Future<Item = Multiaddr, Error = IoError>>)
+                        });
+
+                        Box::new(f) as Box<Future<Item = _, Error = _>>
+                    }),
                 ) as Box<Stream<Item = _, Error = _>>;
                 self.listeners.push(new_listener.into_future());
             }
