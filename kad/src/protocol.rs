@@ -82,20 +82,26 @@ pub struct Peer {
     pub connection_ty: ConnectionType,
 }
 
-impl<'a> From<&'a mut protobuf_structs::dht::Message_Peer> for Peer {
-    fn from(peer: &'a mut protobuf_structs::dht::Message_Peer) -> Peer {
-        let node_id = PeerId::from_bytes(peer.get_id().to_vec()).unwrap(); // TODO: don't unwrap
-        let addrs = peer.take_addrs()
-			.into_iter()
-			.map(|a| Multiaddr::from_bytes(a).unwrap())		// TODO: don't unwrap
-			.collect();
+impl Peer {
+    // TODO: use TryFrom once stable
+    fn from_peer(peer: &mut protobuf_structs::dht::Message_Peer) -> Result<Peer, IoError> {
+        let node_id = PeerId::from_bytes(peer.get_id().to_vec())
+            .map_err(|_| IoError::new(IoErrorKind::InvalidData, "invalid peer id"))?;
+
+        let mut addrs = Vec::with_capacity(peer.get_addrs().len());
+        for addr in peer.take_addrs().into_iter() {
+            let as_ma = Multiaddr::from_bytes(addr)
+                .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))?;
+            addrs.push(as_ma);
+        }
+
         let connection_ty = peer.get_connection().into();
 
-        Peer {
+        Ok(Peer {
             node_id: node_id,
             multiaddrs: addrs,
             connection_ty: connection_ty,
-        }
+        })
     }
 }
 
@@ -262,13 +268,15 @@ fn proto_to_msg(mut message: protobuf_structs::dht::Message) -> Result<KadMsg, I
                 Ok(KadMsg::FindNodeReq {
                     key: message.take_key(),
                 })
+
             } else {
+                let mut closer_peers = Vec::with_capacity(message.get_closerPeers().len());
+                for peer in message.mut_closerPeers().iter_mut() {
+                    closer_peers.push(Peer::from_peer(peer)?);
+                }
+
                 Ok(KadMsg::FindNodeRes {
-                    closer_peers: message
-                        .mut_closerPeers()
-                        .iter_mut()
-                        .map(|peer| peer.into())
-                        .collect(),
+                    closer_peers,
                 })
             }
         }
