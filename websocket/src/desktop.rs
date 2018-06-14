@@ -118,7 +118,9 @@ where
                                 let framed_data = client
                                     .map_err(|err| IoError::new(IoErrorKind::Other, err))
                                     .sink_map_err(|err| IoError::new(IoErrorKind::Other, err))
-                                    .with(|data| Ok(OwnedMessage::Binary(data)))
+                                    .with(|data| -> Result<_, IoError> {
+                                        Ok(OwnedMessage::Binary(data))
+                                    })
                                     .and_then(|recv| {
                                         match recv {
                                             OwnedMessage::Binary(data) => Ok(Some(data)),
@@ -194,7 +196,9 @@ where
                         let framed_data = client
                             .map_err(|err| IoError::new(IoErrorKind::Other, err))
                             .sink_map_err(|err| IoError::new(IoErrorKind::Other, err))
-                            .with(|data| Ok(OwnedMessage::Binary(data)))
+                            .with(|data| -> Result<_, IoError> {
+                                Ok(OwnedMessage::Binary(data))
+                            })
                             .and_then(|recv| {
                                 match recv {
                                     OwnedMessage::Binary(data) => Ok(data),
