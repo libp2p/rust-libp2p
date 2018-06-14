@@ -274,17 +274,13 @@ fn proto_to_msg(mut message: protobuf_structs::dht::Message) -> Result<KadMsg, I
                 })
 
             } else {
-                let mut closer_peers = Vec::with_capacity(message.get_closerPeers().len());
-                for peer in message.mut_closerPeers().iter_mut() {
-                    // TODO: for now we don't parse properly the peer, so it is possible that we
-                    //       get parsing errors even though the peer is valid ; we ignore these,
-                    //       but ultimately we should just error altogether
-                    if let Ok(peer) = Peer::from_peer(peer) {
-                        closer_peers.push(peer);
-                    }
-                }
-                // TODO: restore once the above TODO is fixed
-                //debug_assert_eq!(closer_peers.len(), closer_peers.capacity());
+                // TODO: for now we don't parse the peer properly, so it is possible that we get
+                //       parsing errors for peers even when they are valid ; we ignore these
+                //       errors for now, but ultimately we should just error altogether
+                let closer_peers = message.mut_closerPeers()
+                    .iter_mut()
+                    .filter_map(|peer| Peer::from_peer(peer).ok())
+                    .collect::<Vec<_>>();
 
                 Ok(KadMsg::FindNodeRes {
                     closer_peers,
