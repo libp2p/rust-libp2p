@@ -83,6 +83,7 @@ pub struct Peer {
 }
 
 impl Peer {
+    // Builds a `Peer` from its raw protobuf equivalent.
     // TODO: use TryFrom once stable
     fn from_peer(peer: &mut protobuf_structs::dht::Message_Peer) -> Result<Peer, IoError> {
         let node_id = PeerId::from_bytes(peer.get_id().to_vec())
@@ -94,6 +95,7 @@ impl Peer {
                 .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))?;
             addrs.push(as_ma);
         }
+        debug_assert_eq!(addrs.len(), addrs.capacity());
 
         let connection_ty = peer.get_connection().into();
 
@@ -274,6 +276,7 @@ fn proto_to_msg(mut message: protobuf_structs::dht::Message) -> Result<KadMsg, I
                 for peer in message.mut_closerPeers().iter_mut() {
                     closer_peers.push(Peer::from_peer(peer)?);
                 }
+                debug_assert_eq!(closer_peers.len(), closer_peers.capacity());
 
                 Ok(KadMsg::FindNodeRes {
                     closer_peers,
