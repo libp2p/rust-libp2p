@@ -278,39 +278,42 @@ where
         // Check for any incoming connection on the listening socket.
         // Note that since `self.listener` is a `Fuse`, it's not a problem to continue polling even
         // after it is finished or after it error'ed.
-        match self.listener.poll() {
-            Ok(Async::Ready(Some(upgrade))) => {
-                self.current_upgrades.push(upgrade);
-            }
-            Ok(Async::NotReady) => {}
-            Ok(Async::Ready(None)) => {
-                debug!("listener has been closed");
-                if self.connections.is_empty() && self.current_upgrades.is_empty() {
-                    return Ok(Async::Ready(None));
+        loop {
+            match self.listener.poll() {
+                Ok(Async::Ready(Some(upgrade))) => {
+                    self.current_upgrades.push(upgrade);
+                }
+                Ok(Async::NotReady) => break,
+                Ok(Async::Ready(None)) => {
+                    debug!("listener has been closed");
+                    if self.connections.is_empty() && self.current_upgrades.is_empty() {
+                        return Ok(Async::Ready(None));
+                    }
+                    break
+                }
+                Err(err) => {
+                    debug!("error while polling listener: {:?}", err);
+                    if self.connections.is_empty() && self.current_upgrades.is_empty() {
+                        return Err(err);
+                    }
+                    break
                 }
             }
-            Err(err) => {
-                debug!("error while polling listener: {:?}", err);
-                if self.connections.is_empty() && self.current_upgrades.is_empty() {
-                    return Err(err);
-                }
-            }
-        };
+        }
 
-        // We extract everything at the start, then insert back the elements that we still want at
-        // the next iteration.
-        match self.current_upgrades.poll() {
-            Ok(Async::Ready(Some((muxer, client_addr)))) => {
-                let next_incoming = muxer.clone().inbound();
-                self.connections
-                    .push((muxer.clone(), next_incoming, client_addr.clone()));
+        loop {
+            match self.current_upgrades.poll() {
+                Ok(Async::Ready(Some((muxer, client_addr)))) => {
+                    let next_incoming = muxer.clone().inbound();
+                    self.connections
+                        .push((muxer.clone(), next_incoming, client_addr.clone()));
+                }
+                Err(err) => {
+                    debug!("error while upgrading listener connection: {:?}", err);
+                    return Ok(Async::Ready(Some(future::err(err))));
+                }
+                _ => break,
             }
-            Err(err) => {
-                // Insert the rest of the pending upgrades, but not the current one.
-                debug!("error while upgrading listener connection: {:?}", err);
-                return Ok(Async::Ready(Some(future::err(err))));
-            }
-            _ => {}
         }
 
         // Check whether any incoming substream is ready.
