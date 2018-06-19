@@ -81,6 +81,7 @@
 //! `SecioMiddleware` that implements `Sink` and `Stream` and can be used to send packets of data.
 //!
 
+extern crate asn1_der;
 extern crate bytes;
 extern crate crypto;
 extern crate futures;
@@ -91,11 +92,13 @@ extern crate protobuf;
 extern crate rand;
 extern crate ring;
 extern crate rw_stream_sink;
+extern crate secp256k1;
 extern crate tokio_io;
 extern crate untrusted;
 
 pub use self::error::SecioError;
 
+use asn1_der::{DerObject, traits::FromDerEncoded, traits::FromDerObject};
 use bytes::{Bytes, BytesMut};
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
@@ -194,6 +197,33 @@ impl SecioKeyPair {
             .expect("failed to parse generated Ed25519 key"))
     }
 
+    /// Builds a `SecioKeyPair` from a raw secp256k1 32 bytes private key.
+    pub fn secp256k1_raw_key<K>(key: K) -> Result<SecioKeyPair, Box<Error + Send + Sync>>
+        where K: AsRef<[u8]>
+    {
+        let secp = secp256k1::Secp256k1::with_caps(secp256k1::ContextFlag::None);
+        let private = secp256k1::key::SecretKey::from_slice(&secp, key.as_ref())?;
+
+        Ok(SecioKeyPair {
+            inner: SecioKeyPairInner::Secp256k1 {
+                private,
+            },
+        })
+    }
+
+    /// Builds a `SecioKeyPair` from a secp256k1 private key in DER format.
+    pub fn secp256k1_from_der<K>(key: K) -> Result<SecioKeyPair, Box<Error + Send + Sync>>
+        where K: AsRef<[u8]>
+    {
+        // See ECPrivateKey in https://tools.ietf.org/html/rfc5915
+        let obj: Vec<DerObject> = FromDerEncoded::with_der_encoded(key.as_ref())
+            .map_err(|err| err.to_string())?;
+        let priv_key_obj = obj.into_iter().nth(1).ok_or("Not enough elements in DER".to_string())?;
+        let private_key: Vec<u8> = FromDerObject::from_der_object(priv_key_obj)
+            .map_err(|err| err.to_string())?;
+        SecioKeyPair::secp256k1_raw_key(&private_key)
+    }
+
     /// Returns the public key corresponding to this key pair.
     pub fn to_public_key(&self) -> SecioPublicKey {
         match self.inner {
@@ -202,6 +232,12 @@ impl SecioKeyPair {
             },
             SecioKeyPairInner::Ed25519 { ref key_pair } => {
                 SecioPublicKey::Ed25519(key_pair.public_key_bytes().to_vec())
+            },
+            SecioKeyPairInner::Secp256k1 { ref private } => {
+                let secp = secp256k1::Secp256k1::with_caps(secp256k1::ContextFlag::SignOnly);
+                let pubkey = secp256k1::key::PublicKey::from_secret_key(&secp, private)
+                    .expect("wrong secp256k1 private key ; type safety violated");
+                SecioPublicKey::Secp256k1(pubkey.serialize().to_vec())
             },
         }
     }
@@ -214,6 +250,13 @@ impl SecioKeyPair {
             },
             SecioKeyPairInner::Ed25519 { ref key_pair } => {
                 PublicKeyBytesSlice(key_pair.public_key_bytes()).into()
+            },
+            SecioKeyPairInner::Secp256k1 { ref private } => {
+                let secp = secp256k1::Secp256k1::with_caps(secp256k1::ContextFlag::None);
+                let pubkey = secp256k1::key::PublicKey::from_secret_key(&secp, private)
+                    .expect("wrong secp256k1 private key ; type safety violated");
+                let pubkey_bytes = pubkey.serialize();
+                PublicKeyBytesSlice(&pubkey_bytes).into()
             },
         }
     }
@@ -233,6 +276,9 @@ enum SecioKeyPairInner {
         // We use an `Arc` so that we can clone the enum.
         key_pair: Arc<Ed25519KeyPair>,
     },
+    Secp256k1 {
+        private: secp256k1::key::SecretKey,
+    },
 }
 
 /// Public key used by the remote.
@@ -243,6 +289,9 @@ pub enum SecioPublicKey {
     /// Format = ???
     // TODO: ^
     Ed25519(Vec<u8>),
+    /// Format = ???
+    // TODO: ^
+    Secp256k1(Vec<u8>),
 }
 
 impl SecioPublicKey {
@@ -252,6 +301,7 @@ impl SecioPublicKey {
         match self {
             SecioPublicKey::Rsa(ref data) => PublicKeyBytesSlice(data),
             SecioPublicKey::Ed25519(ref data) => PublicKeyBytesSlice(data),
+            SecioPublicKey::Secp256k1(ref data) => PublicKeyBytesSlice(data),
         }
     }
 
@@ -261,6 +311,7 @@ impl SecioPublicKey {
         match self {
             SecioPublicKey::Rsa(data) => PublicKeyBytes(data),
             SecioPublicKey::Ed25519(data) => PublicKeyBytes(data),
+            SecioPublicKey::Secp256k1(data) => PublicKeyBytes(data),
         }
     }
 
