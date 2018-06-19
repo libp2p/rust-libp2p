@@ -20,7 +20,6 @@
 
 use bytes::Bytes;
 use futures::prelude::*;
-use multiaddr::Multiaddr;
 use multistream_select;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -30,21 +29,21 @@ use upgrade::{ConnectionUpgrade, Endpoint};
 ///
 /// Returns a `Future` that returns the outcome of the connection upgrade.
 #[inline]
-pub fn apply<'a, C, U>(
+pub fn apply<'a, C, U, Maf>(
     connection: C,
     upgrade: U,
     endpoint: Endpoint,
-    remote_addr: Multiaddr,
-) -> Box<Future<Item = (U::Output, Multiaddr), Error = IoError> + 'a>
+    remote_addr: Maf,
+) -> Box<Future<Item = (U::Output, U::MultiaddrFuture), Error = IoError> + 'a>
 where
-    U: ConnectionUpgrade<C> + 'a,
+    U: ConnectionUpgrade<C, Maf> + 'a,
     U::NamesIter: Clone, // TODO: not elegant
     C: AsyncRead + AsyncWrite + 'a,
+    Maf: 'a,
 {
     let iter = upgrade
         .protocol_names()
         .map::<_, fn(_) -> _>(|(n, t)| (n, <Bytes as PartialEq>::eq, t));
-    let remote_addr2 = remote_addr.clone();
     debug!("Starting protocol negotiation");
 
     let negotiation = match endpoint {
@@ -56,14 +55,13 @@ where
         .map_err(|err| IoError::new(IoErrorKind::Other, err))
         .then(move |negotiated| {
             match negotiated {
-                Ok(_) => debug!("Successfully negotiated protocol upgrade with {}", remote_addr2),
+                Ok(_) => debug!("Successfully negotiated protocol upgrade"),
                 Err(ref err) => debug!("Error while negotiated protocol upgrade: {:?}", err),
             };
             negotiated
         })
         .and_then(move |(upgrade_id, connection)| {
-            let fut = upgrade.upgrade(connection, upgrade_id, endpoint, &remote_addr);
-            fut.map(move |c| (c, remote_addr))
+            upgrade.upgrade(connection, upgrade_id, endpoint, remote_addr)
         })
         .into_future()
         .then(|val| {

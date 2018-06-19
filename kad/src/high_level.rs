@@ -247,118 +247,124 @@ impl KademliaUpgrade {
     }
 }
 
-impl<C> ConnectionUpgrade<C> for KademliaUpgrade
+impl<C, Maf> ConnectionUpgrade<C, Maf> for KademliaUpgrade
 where
     C: AsyncRead + AsyncWrite + 'static,     // TODO: 'static :-/
+    Maf: Future<Item = Multiaddr, Error = IoError> + 'static,       // TODO: 'static :(
 {
     type Output = KademliaPeerReqStream;
-    type Future = Box<Future<Item = Self::Output, Error = IoError>>;
+    type MultiaddrFuture = future::FutureResult<Multiaddr, IoError>;
+    type Future = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
     type NamesIter = iter::Once<(Bytes, ())>;
     type UpgradeIdentifier = ();
 
     #[inline]
     fn protocol_names(&self) -> Self::NamesIter {
-        ConnectionUpgrade::<C>::protocol_names(&self.upgrade)
+        ConnectionUpgrade::<C, Maf>::protocol_names(&self.upgrade)
     }
 
     #[inline]
-    fn upgrade(self, incoming: C, id: (), endpoint: Endpoint, addr: &Multiaddr) -> Self::Future {
-        let inner = self.inner;
-        let client_addr = addr.clone();
+    fn upgrade(self, incoming: C, id: (), endpoint: Endpoint, addr: Maf) -> Self::Future {
+        let future = addr.and_then(move |addr| {
+            let inner = self.inner;
+            let client_addr = addr.clone();
 
-        let peer_id = {
-            let mut iter = addr.iter();
-            let protocol = iter.next();
-            let after_proto = iter.next();
-            match (protocol, after_proto) {
-                (Some(AddrComponent::P2P(key)), None) | (Some(AddrComponent::IPFS(key)), None) => {
-                    match PeerId::from_bytes(key) {
-                        Ok(id) => id,
-                        Err(_) => {
-                            let err = IoError::new(
-                                IoErrorKind::InvalidData,
-                                "invalid peer ID sent by remote identification",
-                            );
-                            return Box::new(future::err(err));
+            let peer_id = {
+                let mut iter = addr.iter();
+                let protocol = iter.next();
+                let after_proto = iter.next();
+                match (protocol, after_proto) {
+                    (Some(AddrComponent::P2P(key)), None) | (Some(AddrComponent::IPFS(key)), None) => {
+                        match PeerId::from_bytes(key) {
+                            Ok(id) => id,
+                            Err(_) => {
+                                let err = IoError::new(
+                                    IoErrorKind::InvalidData,
+                                    "invalid peer ID sent by remote identification",
+                                );
+                                return Box::new(future::err(err)) as Box<Future<Item = _, Error = _>>;
+                            }
                         }
                     }
+                    _ => {
+                        let err =
+                            IoError::new(IoErrorKind::InvalidData, "couldn't identify connected node");
+                        return Box::new(future::err(err));
+                    }
                 }
-                _ => {
-                    let err =
-                        IoError::new(IoErrorKind::InvalidData, "couldn't identify connected node");
-                    return Box::new(future::err(err));
-                }
-            }
-        };
+            };
 
-        let future = self.upgrade.upgrade(incoming, id, endpoint, addr).map(
-            move |(controller, stream)| {
-                match inner.connections.lock().entry(client_addr) {
-                    Entry::Occupied(mut entry) => {
-                        match entry.insert(Connection::Active(controller)) {
-                            // If there was already an active connection to this remote, it gets
-                            // replaced by the new more recent one.
-                            Connection::Active(_old_connection) => {}
-                            Connection::Pending(closures) => {
-                                let new_ctl = match entry.get_mut() {
-                                    &mut Connection::Active(ref mut ctl) => ctl,
-                                    _ => unreachable!(
-                                        "logic error: an Active enum variant was \
-                                         inserted, but reading back didn't give \
-                                         an Active"
-                                    ),
-                                };
+            let future = self.upgrade.upgrade(incoming, id, endpoint, future::ok::<_, IoError>(addr)).map(
+                move |((controller, stream), _)| {
+                    match inner.connections.lock().entry(client_addr.clone()) {
+                        Entry::Occupied(mut entry) => {
+                            match entry.insert(Connection::Active(controller)) {
+                                // If there was already an active connection to this remote, it gets
+                                // replaced by the new more recent one.
+                                Connection::Active(_old_connection) => {}
+                                Connection::Pending(closures) => {
+                                    let new_ctl = match entry.get_mut() {
+                                        &mut Connection::Active(ref mut ctl) => ctl,
+                                        _ => unreachable!(
+                                            "logic error: an Active enum variant was \
+                                            inserted, but reading back didn't give \
+                                            an Active"
+                                        ),
+                                    };
 
-                                for mut closure in closures {
-                                    closure(new_ctl);
+                                    for mut closure in closures {
+                                        closure(new_ctl);
+                                    }
                                 }
-                            }
-                        };
-                    }
-                    Entry::Vacant(entry) => {
-                        entry.insert(Connection::Active(controller));
-                    }
-                };
-
-                let stream = stream.map(move |query| {
-                    match inner.kbuckets.update(peer_id.clone(), ()) {
-                        UpdateOutcome::NeedPing(node_to_ping) => {
-                            // TODO: do something with this info
-                            println!("need to ping {:?}", node_to_ping);
+                            };
                         }
-                        _ => (),
-                    }
+                        Entry::Vacant(entry) => {
+                            entry.insert(Connection::Active(controller));
+                        }
+                    };
 
-                    match query {
-                        KademliaIncomingRequest::FindNode { searched, responder } => {
-                            let mut intermediate: Vec<_> = inner.kbuckets.find_closest(&searched).collect();
-                            let my_id = inner.kbuckets.my_id().clone();
-                            if let Some(pos) = intermediate
-                                .iter()
-                                .position(|e| e.distance_with(&searched) >= my_id.distance_with(&searched))
-                            {
-                                if intermediate[pos] != my_id {
-                                    intermediate.insert(pos, my_id);
-                                }
-                            } else {
-                                intermediate.push(my_id);
+                    let stream = stream.map(move |query| {
+                        match inner.kbuckets.update(peer_id.clone(), ()) {
+                            UpdateOutcome::NeedPing(node_to_ping) => {
+                                // TODO: do something with this info
+                                println!("need to ping {:?}", node_to_ping);
                             }
+                            _ => (),
+                        }
 
-                            Some(KademliaPeerReq {
-                                requested_peers: intermediate,
-                                inner: responder,
-                            })
-                        },
-                        KademliaIncomingRequest::PingPong => {
-                            // We updated the k-bucket above.
-                            None
-                        },
-                    }
-                }).filter_map(|val| val);
+                        match query {
+                            KademliaIncomingRequest::FindNode { searched, responder } => {
+                                let mut intermediate: Vec<_> = inner.kbuckets.find_closest(&searched).collect();
+                                let my_id = inner.kbuckets.my_id().clone();
+                                if let Some(pos) = intermediate
+                                    .iter()
+                                    .position(|e| e.distance_with(&searched) >= my_id.distance_with(&searched))
+                                {
+                                    if intermediate[pos] != my_id {
+                                        intermediate.insert(pos, my_id);
+                                    }
+                                } else {
+                                    intermediate.push(my_id);
+                                }
 
-                KademliaPeerReqStream { inner: Box::new(stream) }
-            },
-        );
+                                Some(KademliaPeerReq {
+                                    requested_peers: intermediate,
+                                    inner: responder,
+                                })
+                            },
+                            KademliaIncomingRequest::PingPong => {
+                                // We updated the k-bucket above.
+                                None
+                            },
+                        }
+                    }).filter_map(|val| val);
+
+                    (KademliaPeerReqStream { inner: Box::new(stream) }, future::ok(client_addr))
+                },
+            );
+
+            Box::new(future) as Box<_>
+        });
 
         Box::new(future) as Box<_>
     }
@@ -486,7 +492,7 @@ where
                 // Need to open a connection.
                 let map = self.map.clone();
                 match self.swarm_controller
-                    .dial(addr, self.kademlia_transport.clone().map(move |out, _, _| map(out)))
+                    .dial(addr, self.kademlia_transport.clone().map(move |out, _| map(out)))
                 {
                     Ok(()) => (),
                     Err(_addr) => {

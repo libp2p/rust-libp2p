@@ -89,7 +89,7 @@ fn main() {
         .into_connection_reuse();
 
     let transport = libp2p::identify::IdentifyTransport::new(transport, peer_store.clone())
-        .map(|id_out, _, _| {
+        .map(|id_out, _| {
             id_out.socket
         });
 

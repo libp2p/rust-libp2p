@@ -46,9 +46,10 @@ where
     for<'a> &'a S: Peerstore
 {
     type Output = T::Output;
+    type MultiaddrFuture = T::MultiaddrFuture;
     type Listener = Box<Stream<Item=Self::ListenerUpgrade, Error=io::Error>>;
-    type ListenerUpgrade = Box<Future<Item=(Self::Output, Multiaddr), Error=io::Error>>;
-    type Dial = Box<Future<Item=(Self::Output, Multiaddr), Error=io::Error>>;
+    type ListenerUpgrade = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error>>;
+    type Dial = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error>>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         Err((self, addr))
@@ -105,7 +106,7 @@ where
     }
 
     // Relay to destination over any available relay node.
-    fn relay_to(self, destination: &Peer) -> Result<impl Future<Item=(T::Output, Multiaddr), Error=io::Error>, Self> {
+    fn relay_to(self, destination: &Peer) -> Result<impl Future<Item=(T::Output, T::MultiaddrFuture), Error=io::Error>, Self> {
         trace!("relay_to {:?}", destination.id);
         let mut dials = Vec::new();
         for relay in &*self.relays {
@@ -143,7 +144,7 @@ where
     }
 
     // Relay to destination via the given peer.
-    fn relay_via(self, relay: &Peer, destination: &Peer) -> Result<impl Future<Item=(T::Output, Multiaddr), Error=io::Error>, Self> {
+    fn relay_via(self, relay: &Peer, destination: &Peer) -> Result<impl Future<Item=(T::Output, T::MultiaddrFuture), Error=io::Error>, Self> {
         trace!("relay_via {:?} to {:?}", relay.id, destination.id);
         let mut addresses = Vec::new();
 
@@ -175,7 +176,7 @@ where
             .map_err(|(err, _stream)| err)
             .and_then(move |(ok, _stream)| match ok {
                 Some((out, addr)) => {
-                    debug!("connected to {:?}", addr);
+                    debug!("connected");
                     Ok((out, addr))
                 }
                 None => {
