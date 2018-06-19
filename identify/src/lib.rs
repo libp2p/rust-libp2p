@@ -28,31 +28,29 @@
 //!
 //! Both low-level and high-level usages are available.
 //!
-//! ## High-level usage through the `IdentifyTransport` struct
+//! ## High-level usage through the `PeerIdTransport` struct
 //!
-//! This crate provides the `IdentifyTransport` struct, which wraps around a `Transport` and an
-//! implementation of `Peerstore`. `IdentifyTransport` is itself a transport that accepts
-//! multiaddresses of the form `/p2p/...` or `/ipfs/...`.
+//! This crate provides the `PeerIdTransport` struct, which wraps around a `Transport` and an
+//! address resolver. `PeerIdTransport` is itself a transport that accepts multiaddresses of the
+//! form `/p2p/...` (or of the deprecated `/ipfs/...` form).
 //!
-//! > **Note**: All the documentation refers to `/p2p/...`, however `/ipfs/...` is also supported.
-//!
-//! If you dial a multiaddr of the form `/p2p/...`, then the `IdentifyTransport` will look into
-//! the `Peerstore` for any known multiaddress for this peer and try to dial them using the
+//! If you dial a multiaddr of the form `/p2p/...`, then the `PeerIdTransport` will query the
+//! address resolver for any known multiaddress for this peer and try to dial them using the
 //! underlying transport. If you dial any other multiaddr, then it will dial this multiaddr using
-//! the underlying transport, then negotiate the *identify* protocol with the remote in order to
-//! obtain its ID, then add it to the peerstore, and finally dial the same multiaddr again and
-//! return the connection.
+//! the underlying transport. In both situations, it will then negotiate the *identify* protocol
+//! with the remote in order to obtain its ID and information about it.
 //!
 //! Listening doesn't support multiaddresses of the form `/p2p/...` (because that wouldn't make
-//! sense). Any address passed to `listen_on` will be passed directly to the underlying transport.
+//! sense). Any address passed to `listen_on` will be passed directly to the underlying transport
+//! and incoming connections will be identified.
 //!
 //! Whenever a remote connects to us, either through listening or through `next_incoming`, the
-//! `IdentifyTransport` dials back the remote, upgrades the connection to the *identify* protocol
-//! in order to obtain the ID of the remote, stores the information in the peerstore, and finally
-//! only returns the connection. From the exterior, the multiaddress of the remote is of the form
-//! `/p2p/...`. If the remote doesn't support the *identify* protocol, then the socket is closed.
+//! `PeerIdTransport` dials back the remote, upgrades the connection to the *identify* protocol
+//! in order to obtain its information, and then only returns the incoming connection. From the
+//! exterior, the multiaddress of the remote is of the form `/p2p/...`. If the remote doesn't
+//! support the *identify* protocol, then the socket is closed.
 //!
-//! Because of the behaviour of `IdentifyProtocol`, it is recommended to build it on top of a
+//! Because of the behaviour of `PeerIdTransport`, it is recommended to build it on top of a
 //! `ConnectionReuse`.
 //!
 //! ## Low-level usage through the `IdentifyProtocolConfig` struct
@@ -66,19 +64,22 @@
 //! it.
 
 extern crate bytes;
+extern crate fnv;
 extern crate futures;
-extern crate libp2p_peerstore;
 extern crate libp2p_core;
 #[macro_use]
 extern crate log;
 extern crate multiaddr;
+extern crate parking_lot;
 extern crate protobuf;
 extern crate tokio_io;
 extern crate varint;
 
+pub use self::identify_transport::IdentifyTransportOutcome;
+pub use self::peer_id_transport::{PeerIdTransport, PeerIdTransportOutput};
 pub use self::protocol::{IdentifyInfo, IdentifyOutput, IdentifyProtocolConfig, IdentifySender};
-pub use self::transport::IdentifyTransport;
 
+mod identify_transport;
+mod peer_id_transport;
 mod protocol;
 mod structs_proto;
-mod transport;
