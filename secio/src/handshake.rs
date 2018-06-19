@@ -285,7 +285,7 @@ where
 
         // Generate an ephemeral key for the negotiation.
         .and_then(|(socket, context)| {
-            match EphemeralPrivateKey::generate(&agreement::ECDH_P256, &context.rng) {
+            match EphemeralPrivateKey::generate(context.chosen_exchange.as_ref().unwrap(), &context.rng) {
                 Ok(tmp_priv_key) => Ok((socket, context, tmp_priv_key)),
                 Err(_) => {
                     debug!("failed to generate ECDH key");
