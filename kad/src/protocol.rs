@@ -126,12 +126,13 @@ impl Into<protobuf_structs::dht::Message_Peer> for Peer {
 #[derive(Debug, Default, Copy, Clone)]
 pub struct KademliaProtocolConfig;
 
-impl<C> ConnectionUpgrade<C> for KademliaProtocolConfig
+impl<C, Maf> ConnectionUpgrade<C, Maf> for KademliaProtocolConfig
 where
     C: AsyncRead + AsyncWrite + 'static, // TODO: 'static :-/
 {
     type Output = KadStreamSink<C>;
-    type Future = future::FutureResult<Self::Output, IoError>;
+    type MultiaddrFuture = Maf;
+    type Future = future::FutureResult<(Self::Output, Self::MultiaddrFuture), IoError>;
     type NamesIter = iter::Once<(Bytes, ())>;
     type UpgradeIdentifier = ();
 
@@ -141,8 +142,8 @@ where
     }
 
     #[inline]
-    fn upgrade(self, incoming: C, _: (), _: Endpoint, _: &Multiaddr) -> Self::Future {
-        future::ok(kademlia_protocol(incoming))
+    fn upgrade(self, incoming: C, _: (), _: Endpoint, addr: Maf) -> Self::Future {
+        future::ok((kademlia_protocol(incoming), addr))
     }
 }
 

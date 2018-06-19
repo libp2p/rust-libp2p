@@ -97,6 +97,7 @@ impl CommonTransport {
 
 impl Transport for CommonTransport {
     type Output = <InnerImplementation as Transport>::Output;
+    type MultiaddrFuture = <InnerImplementation as Transport>::MultiaddrFuture;
     type Listener = <InnerImplementation as Transport>::Listener;
     type ListenerUpgrade = <InnerImplementation as Transport>::ListenerUpgrade;
     type Dial = <InnerImplementation as Transport>::Dial;

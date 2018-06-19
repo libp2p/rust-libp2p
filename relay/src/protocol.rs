@@ -22,7 +22,6 @@ use bytes::Bytes;
 use core::{ConnectionUpgrade, Endpoint, Transport};
 use futures::{stream, future::{self, Either::{A, B}, FutureResult}, prelude::*};
 use message::{CircuitRelay, CircuitRelay_Peer, CircuitRelay_Status, CircuitRelay_Type};
-use multiaddr::Multiaddr;
 use peerstore::{PeerAccess, PeerId, Peerstore};
 use std::{io, iter, ops::Deref};
 use tokio_io::{io as aio, AsyncRead, AsyncWrite};
@@ -49,13 +48,14 @@ pub enum Output<C> {
     Sealed(Box<Future<Item=(), Error=io::Error>>)
 }
 
-impl<C, T, P, S> ConnectionUpgrade<C> for RelayConfig<T, P>
+impl<C, T, P, S, Maf> ConnectionUpgrade<C, Maf> for RelayConfig<T, P>
 where
     C: AsyncRead + AsyncWrite + 'static,
     T: Transport + Clone + 'static,
     T::Output: AsyncRead + AsyncWrite,
     P: Deref<Target=S> + Clone + 'static,
     S: 'static,
+    Maf: 'static,
     for<'a> &'a S: Peerstore
 {
     type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
@@ -66,9 +66,10 @@ where
     }
 
     type Output = Output<C>;
-    type Future = Box<Future<Item=Self::Output, Error=io::Error>>;
+    type MultiaddrFuture = Maf;
+    type Future = Box<Future<Item=(Self::Output, Maf), Error=io::Error>>;
 
-    fn upgrade(self, conn: C, _: (), _: Endpoint, _: &Multiaddr) -> Self::Future {
+    fn upgrade(self, conn: C, _: (), _: Endpoint, remote_addr: Maf) -> Self::Future {
         let future = Io::new(conn).recv().and_then(move |(message, io)| {
             let msg = if let Some(m) = message {
                 m
@@ -89,7 +90,7 @@ where
                 }
             }
         });
-        Box::new(future)
+        Box::new(future.map(move |out| (out, remote_addr)))
     }
 }
 
@@ -241,7 +242,7 @@ fn stop_message(from: &Peer, dest: &Peer) -> CircuitRelay {
 #[derive(Debug, Clone)]
 struct TrivialUpgrade;
 
-impl<C> ConnectionUpgrade<C> for TrivialUpgrade
+impl<C, Maf> ConnectionUpgrade<C, Maf> for TrivialUpgrade
 where
     C: AsyncRead + AsyncWrite + 'static
 {
@@ -253,19 +254,21 @@ where
     }
 
     type Output = C;
-    type Future = FutureResult<Self::Output, io::Error>;
+    type MultiaddrFuture = Maf;
+    type Future = FutureResult<(Self::Output, Maf), io::Error>;
 
-    fn upgrade(self, conn: C, _: (), _: Endpoint, _: &Multiaddr) -> Self::Future {
-        future::ok(conn)
+    fn upgrade(self, conn: C, _: (), _: Endpoint, remote_addr: Maf) -> Self::Future {
+        future::ok((conn, remote_addr))
     }
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct Source(pub(crate) CircuitRelay);
 
-impl<C> ConnectionUpgrade<C> for Source
+impl<C, Maf> ConnectionUpgrade<C, Maf> for Source
 where
     C: AsyncRead + AsyncWrite + 'static,
+    Maf: 'static,
 {
     type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
     type UpgradeIdentifier = ();
@@ -275,9 +278,10 @@ where
     }
 
     type Output = C;
-    type Future = Box<Future<Item=Self::Output, Error=io::Error>>;
+    type MultiaddrFuture = Maf;
+    type Future = Box<Future<Item=(Self::Output, Maf), Error=io::Error>>;
 
-    fn upgrade(self, conn: C, _: (), _: Endpoint, _: &Multiaddr) -> Self::Future {
+    fn upgrade(self, conn: C, _: (), _: Endpoint, remote_addr: Maf) -> Self::Future {
         let future = Io::new(conn)
             .send(self.0)
             .and_then(Io::recv)
@@ -292,7 +296,7 @@ where
                     Err(io_err("no success response from relay"))
                 }
             });
-        Box::new(future)
+        Box::new(future.map(move |out| (out, remote_addr)))
     }
 }
 

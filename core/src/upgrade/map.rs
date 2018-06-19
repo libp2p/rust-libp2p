@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{future, prelude::*};
-use multiaddr::Multiaddr;
+use std::io::Error as IoError;
+use futures::prelude::*;
 use tokio_io::{AsyncRead, AsyncWrite};
 use upgrade::{ConnectionUpgrade, Endpoint};
 
@@ -36,11 +36,12 @@ pub struct Map<U, F> {
     map: F,
 }
 
-impl<C, U, F, O> ConnectionUpgrade<C> for Map<U, F>
+impl<C, U, F, O, Maf> ConnectionUpgrade<C, Maf> for Map<U, F>
 where
-    U: ConnectionUpgrade<C>,
+    U: ConnectionUpgrade<C, Maf>,
+    U::Future: 'static,     // TODO: 'static :(
     C: AsyncRead + AsyncWrite,
-    F: FnOnce(U::Output) -> O,
+    F: FnOnce(U::Output) -> O + 'static,     // TODO: 'static :(
 {
     type NamesIter = U::NamesIter;
     type UpgradeIdentifier = U::UpgradeIdentifier;
@@ -50,17 +51,20 @@ where
     }
 
     type Output = O;
-    type Future = future::Map<U::Future, F>;
+    type MultiaddrFuture = U::MultiaddrFuture;
+    type Future = Box<Future<Item = (O, Self::MultiaddrFuture), Error = IoError>>;
 
     fn upgrade(
         self,
         socket: C,
         id: Self::UpgradeIdentifier,
         ty: Endpoint,
-        remote_addr: &Multiaddr,
+        remote_addr: Maf,
     ) -> Self::Future {
-        self.upgrade
+        let map = self.map;
+        let fut = self.upgrade
             .upgrade(socket, id, ty, remote_addr)
-            .map(self.map)
+            .map(move |(out, maf)| (map(out), maf));
+        Box::new(fut) as Box<_>
     }
 }
