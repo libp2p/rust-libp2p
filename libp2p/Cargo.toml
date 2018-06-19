@@ -12,6 +12,7 @@ bytes = "0.4"
 futures = "0.1"
 multiaddr = { path = "../multiaddr" }
 libp2p-mplex = { path = "../mplex" }
+libp2p-mplex-yamux = { path = "../mplex-yamux" }
 libp2p-identify = { path = "../identify" }
 libp2p-kad = { path = "../kad" }
 libp2p-floodsub = { path = "../floodsub" }
