@@ -69,8 +69,9 @@ where
 
 impl<S> Read for RwStreamSink<S>
 where
-    S: Stream<Error = IoError>,
+    S: Stream,
     S::Item: IntoBuf,
+    S::Error: std::error::Error + Send + Sync + 'static
 {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
         let mut written = 0;
@@ -94,7 +95,7 @@ where
                     }
                     Err(err) => {
                         if written == 0 {
-                            return Err(err);
+                            return Err(IoError::new(IoErrorKind::Other, err));
                         } else {
                             return Ok(written);
                         }
@@ -123,42 +124,49 @@ where
 
 impl<S> AsyncRead for RwStreamSink<S>
 where
-    S: Stream<Error = IoError>,
+    S: Stream,
     S::Item: IntoBuf,
+    S::Error: std::error::Error + Send + Sync + 'static
 {
 }
 
 impl<S> Write for RwStreamSink<S>
 where
-    S: Stream + Sink<SinkError = IoError>,
+    S: Stream + Sink,
     S::SinkItem: for<'r> From<&'r [u8]>,
     S::Item: IntoBuf,
+    S::SinkError: std::error::Error + Send + Sync + 'static
 {
     #[inline]
     fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
         let len = buf.len();
-        match self.inner.start_send(buf.into())? {
-            AsyncSink::Ready => Ok(len),
-            AsyncSink::NotReady(_) => Err(IoError::new(IoErrorKind::WouldBlock, "not ready")),
+        match self.inner.start_send(buf.into()) {
+            Ok(AsyncSink::Ready) => Ok(len),
+            Ok(AsyncSink::NotReady(_)) => Err(IoError::new(IoErrorKind::WouldBlock, "not ready")),
+            Err(e) => Err(IoError::new(IoErrorKind::Other, e))
         }
     }
 
     #[inline]
     fn flush(&mut self) -> Result<(), IoError> {
-        self.inner.poll_complete()?;
-        Ok(())
+        match self.inner.poll_complete() {
+            Ok(Async::Ready(())) => Ok(()),
+            Ok(Async::NotReady) => Err(IoError::new(IoErrorKind::WouldBlock, "not ready")),
+            Err(e) => Err(IoError::new(IoErrorKind::Other, e))
+        }
     }
 }
 
 impl<S> AsyncWrite for RwStreamSink<S>
 where
-    S: Stream + Sink<SinkError = IoError>,
+    S: Stream + Sink,
     S::SinkItem: for<'r> From<&'r [u8]>,
     S::Item: IntoBuf,
+    S::SinkError: std::error::Error + Send + Sync + 'static
 {
     #[inline]
     fn shutdown(&mut self) -> Poll<(), IoError> {
-        self.inner.poll_complete()
+        self.inner.poll_complete().map_err(|e| IoError::new(IoErrorKind::Other, e))
     }
 }
 
@@ -168,7 +176,7 @@ mod tests {
     use bytes::Bytes;
     use futures::sync::mpsc::channel;
     use futures::{Future, Poll, Sink, StartSend, Stream};
-    use std::io::Read;
+    use std::io::{self, Read};
 
     // This struct merges a stream and a sink and is quite useful for tests.
     struct Wrapper<St, Si>(St, Si);
@@ -204,7 +212,9 @@ mod tests {
         let (tx1, _) = channel::<Vec<u8>>(10);
         let (tx2, rx2) = channel(10);
 
-        let mut wrapper = RwStreamSink::new(Wrapper(rx2.map_err(|_| panic!()), tx1));
+        let mut wrapper = RwStreamSink::new(Wrapper(rx2.map_err(|_| {
+            io::Error::new(io::ErrorKind::Other, "receive error")
+        }), tx1));
 
         tx2.send(Bytes::from("hel"))
             .and_then(|tx| tx.send(Bytes::from("lo wor")))
