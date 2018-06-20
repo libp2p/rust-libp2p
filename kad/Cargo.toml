@@ -28,3 +28,7 @@ varint = { path = "../varint-rs" }
 libp2p-tcp-transport = { path = "../tcp-transport" }
 rand = "0.4.2"
 tokio-core = "0.1"
+
+[build-dependencies]
+protobuf-codegen-pure = "2"
+

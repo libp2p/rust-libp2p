@@ -117,7 +117,9 @@ mod algo_support;
 mod codec;
 mod error;
 mod handshake;
+#[path = "protobuf_structs/keys.rs"]
 mod keys_proto;
+#[path = "protobuf_structs/structs.rs"]
 mod structs_proto;
 
 /// Implementation of the `ConnectionUpgrade` trait of `libp2p_core`. Automatically applies
