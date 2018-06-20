@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 
 [dependencies]
+asn1_der = "0.5"
 bytes = "0.4"
 futures = "0.1"
 libp2p-core = { path = "../core" }
@@ -13,6 +14,7 @@ rand = "0.3.17"
 ring = { version = "0.12.1", features = ["rsa_signing"] }
 rust-crypto = "^0.2"
 rw-stream-sink = { path = "../rw-stream-sink" }
+secp256k1 = "0.9"
 tokio-io = "0.1.0"
 untrusted = "0.5.1"
 

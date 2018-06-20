@@ -100,9 +100,10 @@ where
     T: Transport + 'static, // TODO: 'static :-/
 {
     type Output = T::Output;
+    type MultiaddrFuture = T::MultiaddrFuture;
     type Listener = T::Listener;
     type ListenerUpgrade = T::ListenerUpgrade;
-    type Dial = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>;
+    type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
     #[inline]
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -237,9 +238,10 @@ mod tests {
         struct CustomTransport;
         impl Transport for CustomTransport {
             type Output = <TcpConfig as Transport>::Output;
+            type MultiaddrFuture = <TcpConfig as Transport>::MultiaddrFuture;
             type Listener = <TcpConfig as Transport>::Listener;
             type ListenerUpgrade = <TcpConfig as Transport>::ListenerUpgrade;
-            type Dial = future::Empty<(Self::Output, Multiaddr), IoError>;
+            type Dial = future::Empty<(Self::Output, Self::MultiaddrFuture), IoError>;
 
             #[inline]
             fn listen_on(
