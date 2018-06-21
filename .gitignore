@@ -1,2 +1,7 @@
 target
 Cargo.lock
+floodsub/src/protobuf_structs
+identify/src/protobuf_structs
+kad/src/protobuf_structs
+relay/src/protobuf_structs
+secio/src/protobuf_structs
