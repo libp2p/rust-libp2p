@@ -17,3 +17,7 @@ protobuf = "2"
 smallvec = "0.6.0"
 tokio-io = "0.1"
 varint = { path = "../varint-rs" }
+
+[build-dependencies]
+protobuf-codegen-pure = "2"
+
