@@ -81,6 +81,7 @@
 //! `SecioMiddleware` that implements `Sink` and `Stream` and can be used to send packets of data.
 //!
 
+#[cfg(feature = "secp256k1")]
 extern crate asn1_der;
 extern crate bytes;
 extern crate crypto;
@@ -92,12 +93,14 @@ extern crate protobuf;
 extern crate rand;
 extern crate ring;
 extern crate rw_stream_sink;
+#[cfg(feature = "secp256k1")]
 extern crate secp256k1;
 extern crate tokio_io;
 extern crate untrusted;
 
 pub use self::error::SecioError;
 
+#[cfg(feature = "secp256k1")]
 use asn1_der::{DerObject, traits::FromDerEncoded, traits::FromDerObject};
 use bytes::{Bytes, BytesMut};
 use futures::stream::MapErr as StreamMapErr;
@@ -198,6 +201,7 @@ impl SecioKeyPair {
     }
 
     /// Builds a `SecioKeyPair` from a raw secp256k1 32 bytes private key.
+    #[cfg(feature = "secp256k1")]
     pub fn secp256k1_raw_key<K>(key: K) -> Result<SecioKeyPair, Box<Error + Send + Sync>>
         where K: AsRef<[u8]>
     {
@@ -212,6 +216,7 @@ impl SecioKeyPair {
     }
 
     /// Builds a `SecioKeyPair` from a secp256k1 private key in DER format.
+    #[cfg(feature = "secp256k1")]
     pub fn secp256k1_from_der<K>(key: K) -> Result<SecioKeyPair, Box<Error + Send + Sync>>
         where K: AsRef<[u8]>
     {
@@ -233,6 +238,7 @@ impl SecioKeyPair {
             SecioKeyPairInner::Ed25519 { ref key_pair } => {
                 SecioPublicKey::Ed25519(key_pair.public_key_bytes().to_vec())
             },
+            #[cfg(feature = "secp256k1")]
             SecioKeyPairInner::Secp256k1 { ref private } => {
                 let secp = secp256k1::Secp256k1::with_caps(secp256k1::ContextFlag::SignOnly);
                 let pubkey = secp256k1::key::PublicKey::from_secret_key(&secp, private)
@@ -251,6 +257,7 @@ impl SecioKeyPair {
             SecioKeyPairInner::Ed25519 { ref key_pair } => {
                 PublicKeyBytesSlice(key_pair.public_key_bytes()).into()
             },
+            #[cfg(feature = "secp256k1")]
             SecioKeyPairInner::Secp256k1 { ref private } => {
                 let secp = secp256k1::Secp256k1::with_caps(secp256k1::ContextFlag::None);
                 let pubkey = secp256k1::key::PublicKey::from_secret_key(&secp, private)
@@ -276,6 +283,7 @@ enum SecioKeyPairInner {
         // We use an `Arc` so that we can clone the enum.
         key_pair: Arc<Ed25519KeyPair>,
     },
+    #[cfg(feature = "secp256k1")]
     Secp256k1 {
         private: secp256k1::key::SecretKey,
     },

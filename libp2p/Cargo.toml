@@ -4,7 +4,8 @@ version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 
 [features]
-default = ["libp2p-secio"]
+default = ["libp2p-secio", "libp2p-secio-secp256k1"]
+libp2p-secio-secp256k1 = ["libp2p-secio/secp256k1"]
 
 [dependencies]
 bytes = "0.4"
@@ -24,7 +25,7 @@ tokio-io = "0.1"
 
 [target.'cfg(not(target_os = "emscripten"))'.dependencies]
 libp2p-dns = { path = "../dns" }
-libp2p-secio = { path = "../secio", optional = true }
+libp2p-secio = { path = "../secio", optional = true, default-features = false }
 libp2p-tcp-transport = { path = "../tcp-transport" }
 tokio-core = "0.1"
 
