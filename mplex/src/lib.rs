@@ -53,7 +53,7 @@ use std::iter;
 use std::sync::Arc;
 use std::sync::atomic::{self, AtomicUsize};
 use swarm::muxing::StreamMuxer;
-use swarm::{ConnectionUpgrade, Endpoint, Multiaddr};
+use swarm::{ConnectionUpgrade, Endpoint};
 use tokio_io::{AsyncRead, AsyncWrite};
 use write::write_stream;
 
@@ -366,18 +366,19 @@ impl<Buf: Array> BufferedMultiplexConfig<Buf> {
     }
 }
 
-impl<C, Buf: Array> ConnectionUpgrade<C> for BufferedMultiplexConfig<Buf>
+impl<C, Maf, Buf: Array> ConnectionUpgrade<C, Maf> for BufferedMultiplexConfig<Buf>
 where
     C: AsyncRead + AsyncWrite,
 {
     type Output = BufferedMultiplex<C, Buf>;
-    type Future = FutureResult<BufferedMultiplex<C, Buf>, io::Error>;
+    type MultiaddrFuture = Maf;
+    type Future = FutureResult<(BufferedMultiplex<C, Buf>, Maf), io::Error>;
     type UpgradeIdentifier = ();
     type NamesIter = iter::Once<(Bytes, ())>;
 
     #[inline]
-    fn upgrade(self, i: C, _: (), end: Endpoint, _: &Multiaddr) -> Self::Future {
-        future::ok(BufferedMultiplex::new(i, end))
+    fn upgrade(self, i: C, _: (), end: Endpoint, remote_addr: Maf) -> Self::Future {
+        future::ok((BufferedMultiplex::new(i, end), remote_addr))
     }
 
     #[inline]

@@ -100,8 +100,8 @@ fn main() {
     // outgoing connections for us.
     let (swarm_controller, swarm_future) = libp2p::core::swarm(
         transport.clone().with_upgrade(floodsub_upgrade.clone()),
-        |socket, client_addr| {
-            println!("Successfully negotiated protocol with {}", client_addr);
+        |socket, _| {
+            println!("Successfully negotiated protocol");
             socket
         },
     );

@@ -42,12 +42,13 @@ impl<T, F> Map<T, F> {
 impl<T, F, D> Transport for Map<T, F>
 where
     T: Transport + 'static,                  // TODO: 'static :-/
-    F: FnOnce(T::Output, Endpoint, Multiaddr) -> D + Clone + 'static, // TODO: 'static :-/
+    F: FnOnce(T::Output, Endpoint) -> D + Clone + 'static, // TODO: 'static :-/
 {
     type Output = D;
+    type MultiaddrFuture = T::MultiaddrFuture;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
-    type ListenerUpgrade = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>;
-    type Dial = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>;
+    type ListenerUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
+    type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         let map = self.map;
@@ -58,7 +59,7 @@ where
                     let map = map.clone();
                     let future = future
                         .into_future()
-                        .map(move |(output, addr)| (map(output, Endpoint::Listener, addr.clone()), addr));
+                        .map(move |(output, addr)| (map(output, Endpoint::Listener), addr));
                     Box::new(future) as Box<_>
                 });
                 Ok((Box::new(stream), listen_addr))
@@ -74,7 +75,7 @@ where
             Ok(future) => {
                 let future = future
                     .into_future()
-                    .map(move |(output, addr)| (map(output, Endpoint::Dialer, addr.clone()), addr));
+                    .map(move |(output, addr)| (map(output, Endpoint::Dialer), addr));
                 Ok(Box::new(future))
             }
             Err((transport, addr)) => Err((Map { transport, map }, addr)),
@@ -90,16 +91,16 @@ where
 impl<T, F, D> MuxedTransport for Map<T, F>
 where
     T: MuxedTransport + 'static,             // TODO: 'static :-/
-    F: FnOnce(T::Output, Endpoint, Multiaddr) -> D + Clone + 'static, // TODO: 'static :-/
+    F: FnOnce(T::Output, Endpoint) -> D + Clone + 'static, // TODO: 'static :-/
 {
     type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError>>;
-    type IncomingUpgrade = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>;
+    type IncomingUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
     fn next_incoming(self) -> Self::Incoming {
         let map = self.map;
         let future = self.transport.next_incoming().map(move |upgrade| {
             let future = upgrade.map(move |(output, addr)| {
-                (map(output, Endpoint::Listener, addr.clone()), addr)
+                (map(output, Endpoint::Listener), addr)
             });
             Box::new(future) as Box<_>
         });

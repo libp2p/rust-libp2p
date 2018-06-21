@@ -70,13 +70,17 @@ pub trait Transport {
     /// taken place, and that connection has been upgraded to the wanted protocols.
     type Listener: Stream<Item = Self::ListenerUpgrade, Error = IoError>;
 
+    /// Future that produces the multiaddress of the remote.
+    type MultiaddrFuture: Future<Item = Multiaddr, Error = IoError>;
+
     /// After a connection has been received, we may need to do some asynchronous pre-processing
     /// on it (eg. an intermediary protocol negotiation). While this pre-processing takes place, we
     /// want to be able to continue polling on the listener.
-    type ListenerUpgrade: Future<Item = (Self::Output, Multiaddr), Error = IoError>;
+    // TODO: we could move the `MultiaddrFuture` to the `Listener` trait
+    type ListenerUpgrade: Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>;
 
     /// A future which indicates that we are currently dialing to a peer.
-    type Dial: Future<Item = (Self::Output, Multiaddr), Error = IoError>;
+    type Dial: Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>;
 
     /// Listen on the given multiaddr. Returns a stream of incoming connections, plus a modified
     /// version of the `Multiaddr`. This new `Multiaddr` is the one that that should be advertised
@@ -115,7 +119,7 @@ pub trait Transport {
     fn map<F, O>(self, map: F) -> map::Map<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Output, Endpoint, Multiaddr) -> O + Clone + 'static,        // TODO: 'static :-/
+        F: FnOnce(Self::Output, Endpoint) -> O + Clone + 'static,        // TODO: 'static :-/
     {
         map::Map::new(self, map)
     }
@@ -142,7 +146,7 @@ pub trait Transport {
     where
         Self: Sized,
         Self::Output: AsyncRead + AsyncWrite,
-        U: ConnectionUpgrade<Self::Output>,
+        U: ConnectionUpgrade<Self::Output, Self::MultiaddrFuture>,
     {
         UpgradedNode::new(self, upgrade)
     }
@@ -153,11 +157,12 @@ pub trait Transport {
     /// > **Note**: The concept of an *upgrade* for example includes middlewares such *secio*
     /// >           (communication encryption), *multiplex*, but also a protocol handler.
     #[inline]
-    fn and_then<C, F>(self, upgrade: C) -> and_then::AndThen<Self, C>
+    fn and_then<C, F, O, Maf>(self, upgrade: C) -> and_then::AndThen<Self, C>
     where
         Self: Sized,
-        C: FnOnce(Self::Output, Endpoint, Multiaddr) -> F + Clone + 'static,
-        F: Future<Error = IoError> + 'static,
+        C: FnOnce(Self::Output, Endpoint, Self::MultiaddrFuture) -> F + Clone + 'static,
+        F: Future<Item = (O, Maf), Error = IoError> + 'static,
+        Maf: Future<Item = Multiaddr, Error = IoError> + 'static,
     {
         and_then::and_then(self, upgrade)
     }
