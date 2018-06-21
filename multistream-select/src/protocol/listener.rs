@@ -64,6 +64,7 @@ where
                 Ok(rest)
             })
             .and_then(|socket| {
+                trace!("sending back /multistream/<version> to finish the handshake");
                 socket
                     .send(BytesMut::from(MULTISTREAM_PROTOCOL_WITH_LF))
                     .from_err()
