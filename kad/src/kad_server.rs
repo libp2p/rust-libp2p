@@ -225,9 +225,6 @@ where
     // response.
     let (responders_tx, responders_rx) = mpsc::unbounded();
 
-    // Will be set to true if either `kad_stream` or `rq_rx` is closed.
-    let finished = Arc::new(atomic::AtomicBool::new(false));
-
     // We combine all the streams into one so that the loop wakes up whenever any generates
     // something.
     enum EventSource {
@@ -244,28 +241,16 @@ where
         let rq_rx = rq_rx
             .map(|(m, o)| EventSource::LocalRequest(m, o))
             .map_err(|_| unreachable!())
-            .chain({
-                let finished = finished.clone();
-                future::lazy(move || {
-                    finished.store(true, atomic::Ordering::SeqCst);
-                    Ok(EventSource::Finished)
-                }).into_stream()
-            });
+            .chain(future::ok(EventSource::Finished).into_stream());
         let kad_stream = kad_stream
             .map(|m| EventSource::Remote(m))
-            .chain({
-                let finished = finished.clone();
-                future::lazy(move || {
-                    finished.store(true, atomic::Ordering::SeqCst);
-                    Ok(EventSource::Finished)
-                }).into_stream()
-            });
+            .chain(future::ok(EventSource::Finished).into_stream());
         responders.select(rq_rx).select(kad_stream)
     };
 
-    let stream = stream::unfold((events, kad_sink, responders_tx, VecDeque::new(), 0u32),
-        move |(events, kad_sink, responders_tx, mut send_back_queue, expected_pongs)| {
-            if finished.load(atomic::Ordering::SeqCst) {
+    let stream = stream::unfold((events, kad_sink, responders_tx, VecDeque::new(), 0u32, false),
+        move |(events, kad_sink, responders_tx, mut send_back_queue, expected_pongs, finished)| {
+            if finished {
                 return None;
             }
 
@@ -275,9 +260,11 @@ where
                 .and_then(move |(message, events)| -> Box<Future<Item = _, Error = _>> {
                     match message {
                         Some(EventSource::Finished) | None => {
-                            // `finished` should have been set to true earlier, causing this
-                            // function to return `None`.
-                            unreachable!()
+                            let future = future::ok({
+                                let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, true);
+                                (None, state)
+                            });
+                            Box::new(future)
                         },
                         Some(EventSource::LocalResponse(message)) => {
                             let future = message
@@ -290,7 +277,7 @@ where
                                     kad_sink
                                         .send(message)
                                         .map(move |kad_sink| {
-                                            let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs);
+                                            let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, finished);
                                             (None, state)
                                         })
                                 });
@@ -302,7 +289,7 @@ where
                             let future = kad_sink
                                 .send(message)
                                 .map(move |kad_sink| {
-                                    let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs);
+                                    let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, finished);
                                     (None, state)
                                 });
                             Box::new(future) as Box<_>
@@ -314,7 +301,7 @@ where
                             let future = kad_sink
                                 .send(message)
                                 .map(move |kad_sink| {
-                                    let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs);
+                                    let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, finished);
                                     (None, state)
                                 });
                             Box::new(future) as Box<_>
@@ -325,7 +312,7 @@ where
                             let future = kad_sink
                                 .send(message)
                                 .map(move |kad_sink| {
-                                    let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs);
+                                    let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, finished);
                                     (None, state)
                                 });
                             Box::new(future) as Box<_>
@@ -338,7 +325,7 @@ where
                                 // to tell. If it was a PING and we expected a PONG, then the
                                 // remote will see its PING answered only when it PONGs us.
                                 let future = future::ok({
-                                    let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs);
+                                    let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, finished);
                                     let rq = KademliaIncomingRequest::PingPong;
                                     (Some(rq), state)
                                 });
@@ -347,7 +334,7 @@ where
                                 let future = kad_sink
                                     .send(KadMsg::Ping)
                                     .map(move |kad_sink| {
-                                        let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs);
+                                        let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, finished);
                                         let rq = KademliaIncomingRequest::PingPong;
                                         (Some(rq), state)
                                     });
@@ -361,7 +348,7 @@ where
                             if let Some(send_back) = send_back_queue.pop_front() {
                                 let _ = send_back.send(message);
                                 let future = future::ok({
-                                    let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs);
+                                    let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, finished);
                                     (None, state)
                                 });
                                 Box::new(future)
@@ -384,7 +371,7 @@ where
                             let (tx, rx) = oneshot::channel();
                             let _ = responders_tx.unbounded_send(rx);
                             let future = future::ok({
-                                let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs);
+                                let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, finished);
                                 let rq = KademliaIncomingRequest::FindNode {
                                     searched: peer_id,
                                     responder: KademliaFindNodeRespond {
