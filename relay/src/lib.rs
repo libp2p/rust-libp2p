@@ -30,7 +30,6 @@ extern crate rand;
 extern crate tokio_io;
 extern crate varint;
 
-#[path = "protobuf_structs/message.rs"]
 mod message;
 mod protocol;
 mod transport;

@@ -21,7 +21,3 @@ untrusted = "0.5.1"
 [dev-dependencies]
 libp2p-tcp-transport = { path = "../tcp-transport" }
 tokio-core = "0.1.6"
-
-[build-dependencies]
-protobuf-codegen-pure = "2"
-

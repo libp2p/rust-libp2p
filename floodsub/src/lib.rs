@@ -33,7 +33,6 @@ extern crate smallvec;
 extern crate tokio_io;
 extern crate varint;
 
-#[path = "protobuf_structs/rpc.rs"]
 mod rpc_proto;
 mod topic;
 

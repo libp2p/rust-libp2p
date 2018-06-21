@@ -80,6 +80,5 @@ pub use self::protocol::{IdentifyInfo, IdentifyOutput, IdentifyProtocolConfig, I
 pub use self::transport::IdentifyTransport;
 
 mod protocol;
-#[path = "protobuf_structs/structs.rs"]
 mod structs_proto;
 mod transport;
