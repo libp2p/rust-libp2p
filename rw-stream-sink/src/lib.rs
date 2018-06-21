@@ -145,8 +145,10 @@ where
 
     #[inline]
     fn flush(&mut self) -> Result<(), IoError> {
-        self.inner.poll_complete()?;
-        Ok(())
+        match self.inner.poll_complete()? {
+            Async::Ready(()) => Ok(()),
+            Async::NotReady => Err(IoError::new(IoErrorKind::WouldBlock, "not ready"))
+        }
     }
 }
 
