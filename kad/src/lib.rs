@@ -90,6 +90,10 @@ pub use self::query::QueryEvent;
 mod high_level;
 mod kad_server;
 mod kbucket;
-mod protobuf_structs;
 mod protocol;
 mod query;
+
+mod protobuf_structs {
+    pub mod dht;
+    pub mod record;
+}
