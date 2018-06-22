@@ -455,7 +455,7 @@ where
                     }
                 },
                 #[cfg(not(feature = "secp256k1"))]
-                Some(SecioPublicKey::Secp256k1(_)) => {
+                Some(PublicKey::Secp256k1(_)) => {
                     debug!("support for secp256k1 was disabled at compile-time");
                     return Err(SecioError::SignatureVerificationFailed);
                 },
