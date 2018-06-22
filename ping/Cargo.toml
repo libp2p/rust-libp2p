@@ -12,6 +12,7 @@ multistream-select = { path = "../multistream-select" }
 futures = "0.1"
 parking_lot = "0.5"
 rand = "0.3"
+tokio-codec = "0.1"
 tokio-io = "0.1"
 
 [dev-dependencies]

@@ -24,7 +24,7 @@ use multiaddr::{AddrComponent, Multiaddr, Protocol};
 use peerstore::PeerId;
 use protobuf::{self, Message};
 use std::{io, error::Error, iter::FromIterator};
-use tokio_io::codec::Framed;
+use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
 use varint::VarintCodec;
 
@@ -47,7 +47,7 @@ pub(crate) struct Io<T> {
 impl<T: AsyncRead + AsyncWrite> Io<T> {
     pub(crate) fn new(c: T) -> Io<T> {
         Io {
-            codec: c.framed(VarintCodec::default()),
+            codec: Framed::new(c, VarintCodec::default()),
         }
     }
 
