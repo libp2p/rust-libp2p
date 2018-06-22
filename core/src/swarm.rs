@@ -205,46 +205,55 @@ where
                 debug!("Error in multiplexed incoming connection: {:?}", err);
                 self.next_incoming = self.transport.clone().next_incoming();
             }
-        };
+        }
 
-        match self.new_listeners.poll() {
-            Ok(Async::Ready(Some(new_listener))) => {
-                let new_listener = Box::new(
-                    new_listener.map(|f| {
-                        let f = f.map(|(out, maf)| {
-                            (out, Box::new(maf) as Box<Future<Item = Multiaddr, Error = IoError>>)
-                        });
+        loop {
+            match self.new_listeners.poll() {
+                Ok(Async::Ready(Some(new_listener))) => {
+                    let new_listener = Box::new(
+                        new_listener.map(|f| {
+                            let f = f.map(|(out, maf)| {
+                                (out, Box::new(maf) as Box<Future<Item = Multiaddr, Error = IoError>>)
+                            });
 
-                        Box::new(f) as Box<Future<Item = _, Error = _>>
-                    }),
-                ) as Box<Stream<Item = _, Error = _>>;
-                self.listeners.push(new_listener.into_future());
+                            Box::new(f) as Box<Future<Item = _, Error = _>>
+                        }),
+                    ) as Box<Stream<Item = _, Error = _>>;
+                    self.listeners.push(new_listener.into_future());
+                }
+                Ok(Async::Ready(None)) | Err(_) => {
+                    // New listener sender has been closed.
+                    break;
+                }
+                Ok(Async::NotReady) => break,
             }
-            Ok(Async::Ready(None)) | Err(_) => {
-                // New listener sender has been closed.
-            }
-            Ok(Async::NotReady) => {}
-        };
+        }
 
-        match self.new_dialers.poll() {
-            Ok(Async::Ready(Some(new_dialer))) => {
-                self.dialers.push(new_dialer);
+        loop {
+            match self.new_dialers.poll() {
+                Ok(Async::Ready(Some(new_dialer))) => {
+                    self.dialers.push(new_dialer);
+                }
+                Ok(Async::Ready(None)) | Err(_) => {
+                    // New dialers sender has been closed.
+                    break
+                }
+                Ok(Async::NotReady) => break,
             }
-            Ok(Async::Ready(None)) | Err(_) => {
-                // New dialers sender has been closed.
-            }
-            Ok(Async::NotReady) => {}
-        };
+        }
 
-        match self.new_toprocess.poll() {
-            Ok(Async::Ready(Some(new_toprocess))) => {
-                self.to_process.push(future::Either::B(new_toprocess));
+        loop {
+            match self.new_toprocess.poll() {
+                Ok(Async::Ready(Some(new_toprocess))) => {
+                    self.to_process.push(future::Either::B(new_toprocess));
+                }
+                Ok(Async::Ready(None)) | Err(_) => {
+                    // New to-process sender has been closed.
+                    break
+                }
+                Ok(Async::NotReady) => break,
             }
-            Ok(Async::Ready(None)) | Err(_) => {
-                // New to-process sender has been closed.
-            }
-            Ok(Async::NotReady) => {}
-        };
+        }
 
         loop {
             match self.listeners.poll() {
@@ -261,39 +270,47 @@ where
             }
         }
 
-        match self.listeners_upgrade.poll() {
-            Ok(Async::Ready(Some((output, client_addr)))) => {
-                debug!("Successfully upgraded incoming connection");
-                self.to_process.push(future::Either::A(
-                    handler(output, client_addr).into_future(),
-                ));
+        loop {
+            match self.listeners_upgrade.poll() {
+                Ok(Async::Ready(Some((output, client_addr)))) => {
+                    debug!("Successfully upgraded incoming connection");
+                    self.to_process.push(future::Either::A(
+                        handler(output, client_addr).into_future(),
+                    ));
+                }
+                Err(err) => {
+                    debug!("Error in listener upgrade: {:?}", err);
+                    break;
+                }
+                _ => break
             }
-            Err(err) => {
-                debug!("Error in listener upgrade: {:?}", err);
-            }
-            _ => {}
         }
 
-        match self.dialers.poll() {
-            Ok(Async::Ready(Some((output, addr)))) => {
-                trace!("Successfully upgraded dialed connection");
-                self.to_process
-                    .push(future::Either::A(handler(output, addr).into_future()));
+        loop {
+            match self.dialers.poll() {
+                Ok(Async::Ready(Some((output, addr)))) => {
+                    trace!("Successfully upgraded dialed connection");
+                    self.to_process
+                        .push(future::Either::A(handler(output, addr).into_future()));
+                }
+                Err(err) => {
+                    debug!("Error in dialer upgrade: {:?}", err);
+                    break;
+                }
+                _ => break
             }
-            Err(err) => {
-                debug!("Error in dialer upgrade: {:?}", err);
-            }
-            _ => {}
         }
 
-        match self.to_process.poll() {
-            Ok(Async::Ready(Some(()))) => {
-                trace!("Future returned by swarm handler driven to completion");
+        loop {
+            match self.to_process.poll() {
+                Ok(Async::Ready(Some(()))) => {
+                    trace!("Future returned by swarm handler driven to completion");
+                }
+                Err(err) => {
+                    debug!("Error in processing: {:?}", err);
+                }
+                _ => break,
             }
-            Err(err) => {
-                debug!("Error in processing: {:?}", err);
-            }
-            _ => {}
         }
 
         // TODO: we never return `Ok(Ready)` because there's no way to know whether

@@ -27,6 +27,7 @@ extern crate log;
 extern crate multiaddr;
 extern crate protobuf;
 extern crate rand;
+extern crate tokio_codec;
 extern crate tokio_io;
 extern crate varint;
 

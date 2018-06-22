@@ -41,7 +41,6 @@ use protocol::{self, KadMsg, KademliaProtocolConfig, Peer};
 use std::collections::VecDeque;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
-use std::sync::{Arc, atomic};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Configuration for a Kademlia server.

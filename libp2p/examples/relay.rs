@@ -53,8 +53,8 @@ extern crate libp2p;
 extern crate rand;
 #[macro_use]
 extern crate structopt;
+extern crate tokio_codec;
 extern crate tokio_core;
-extern crate tokio_io;
 
 use libp2p::SimpleProtocol;
 use libp2p::core::Multiaddr;
@@ -67,7 +67,7 @@ use std::{error::Error, iter, str::FromStr, sync::Arc, time::Duration};
 use structopt::StructOpt;
 use libp2p::tcp::TcpConfig;
 use tokio_core::reactor::Core;
-use tokio_io::{AsyncRead, codec::BytesCodec};
+use tokio_codec::{BytesCodec, Framed};
 
 fn main() -> Result<(), Box<Error>> {
     env_logger::init();
@@ -133,7 +133,7 @@ fn run_dialer(opts: DialerOpts) -> Result<(), Box<Error>> {
     };
 
     let echo = SimpleProtocol::new("/echo/1.0.0", |socket| {
-        Ok(AsyncRead::framed(socket, BytesCodec::new()))
+        Ok(Framed::new(socket, BytesCodec::new()))
     });
 
     let (control, future) = libp2p::core::swarm(transport.clone().with_upgrade(echo.clone()), |socket, _| {
@@ -165,7 +165,7 @@ fn run_listener(opts: ListenerOpts) -> Result<(), Box<Error>> {
     let relay = RelayConfig::new(opts.me, transport.clone(), store);
 
     let echo = SimpleProtocol::new("/echo/1.0.0", |socket| {
-        Ok(AsyncRead::framed(socket, BytesCodec::new()))
+        Ok(Framed::new(socket, BytesCodec::new()))
     });
 
     let upgraded = transport.with_upgrade(relay)

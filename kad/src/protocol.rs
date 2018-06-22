@@ -32,7 +32,8 @@ use protobuf::{self, Message};
 use protobuf_structs;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
-use tokio_io::{AsyncRead, AsyncWrite, codec::Framed};
+use tokio_codec::Framed;
+use tokio_io::{AsyncRead, AsyncWrite};
 use varint::VarintCodec;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
@@ -156,8 +157,7 @@ fn kademlia_protocol<S>(
 where
     S: AsyncRead + AsyncWrite,
 {
-    socket
-        .framed(VarintCodec::default())
+    Framed::new(socket, VarintCodec::default())
         .from_err::<IoError>()
         .with::<_, fn(_) -> _, _>(|request| -> Result<_, IoError> {
             let proto_struct = msg_to_proto(request);

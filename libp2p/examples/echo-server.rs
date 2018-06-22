@@ -22,8 +22,8 @@ extern crate bytes;
 extern crate env_logger;
 extern crate futures;
 extern crate libp2p;
+extern crate tokio_codec;
 extern crate tokio_core;
-extern crate tokio_io;
 
 use futures::future::{loop_fn, Future, IntoFuture, Loop};
 use futures::{Sink, Stream};
@@ -33,8 +33,7 @@ use libp2p::core::Transport;
 use libp2p::core::{upgrade, either::EitherOutput};
 use libp2p::tcp::TcpConfig;
 use tokio_core::reactor::Core;
-use tokio_io::AsyncRead;
-use tokio_io::codec::BytesCodec;
+use tokio_codec::{BytesCodec, Framed};
 use libp2p::websocket::WsConfig;
 
 fn main() {
@@ -94,7 +93,7 @@ fn main() {
         // successfully negotiated. The parameter is the raw socket (implements the AsyncRead
         // and AsyncWrite traits), and the closure must return an implementation of
         // `IntoFuture` that can yield any type of object.
-        Ok(AsyncRead::framed(socket, BytesCodec::new()))
+        Ok(Framed::new(socket, BytesCodec::new()))
     });
 
     // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming and
