@@ -76,7 +76,7 @@ extern crate protobuf;
 extern crate tokio_io;
 extern crate varint;
 
-pub use self::protocol::{IdentifyInfo, IdentifyInfoPublicKey, IdentifyOutput};
+pub use self::protocol::{IdentifyInfo, IdentifyOutput};
 pub use self::protocol::{IdentifyProtocolConfig, IdentifySender};
 pub use self::transport::IdentifyTransport;
 

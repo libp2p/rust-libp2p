@@ -28,6 +28,7 @@ use futures::future;
 use futures::sink::Sink;
 use futures::stream::Stream;
 use keys_proto::{KeyType as KeyTypeProtobuf, PublicKey as PublicKeyProtobuf};
+use libp2p_core::PublicKey;
 use protobuf::Message as ProtobufMessage;
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
 use ring::agreement::EphemeralPrivateKey;
@@ -44,7 +45,7 @@ use structs_proto::{Exchange, Propose};
 use tokio_io::codec::length_delimited;
 use tokio_io::{AsyncRead, AsyncWrite};
 use untrusted::Input as UntrustedInput;
-use {SecioKeyPair, SecioKeyPairInner, SecioPublicKey};
+use {SecioKeyPair, SecioKeyPairInner};
 
 /// Performs a handshake on the given socket.
 ///
@@ -57,7 +58,7 @@ use {SecioKeyPair, SecioKeyPairInner, SecioPublicKey};
 pub fn handshake<'a, S: 'a>(
     socket: S,
     local_key: SecioKeyPair,
-) -> Box<Future<Item = (FullCodec<S>, SecioPublicKey), Error = SecioError> + 'a>
+) -> Box<Future<Item = (FullCodec<S>, PublicKey), Error = SecioError> + 'a>
 where
     S: AsyncRead + AsyncWrite,
 {
@@ -80,7 +81,7 @@ where
         // The remote proposition's raw bytes.
         remote_proposition_bytes: BytesMut,
         remote_public_key_in_protobuf_bytes: Vec<u8>,
-        remote_public_key: Option<SecioPublicKey>,
+        remote_public_key: Option<PublicKey>,
 
         // The remote peer's version of `local_nonce`.
         // If the NONCE size is actually part of the protocol, we can change this to a fixed-size
@@ -212,13 +213,13 @@ where
                     context.remote_nonce = prop.take_rand();
                     context.remote_public_key = Some(match pubkey.get_Type() {
                         KeyTypeProtobuf::RSA => {
-                            SecioPublicKey::Rsa(pubkey.take_Data())
+                            PublicKey::Rsa(pubkey.take_Data())
                         },
                         KeyTypeProtobuf::Ed25519 => {
-                            SecioPublicKey::Ed25519(pubkey.take_Data())
+                            PublicKey::Ed25519(pubkey.take_Data())
                         },
                         KeyTypeProtobuf::Secp256k1 => {
-                            SecioPublicKey::Secp256k1(pubkey.take_Data())
+                            PublicKey::Secp256k1(pubkey.take_Data())
                         },
                     });
                     trace!("received proposition from remote ; pubkey = {:?} ; nonce = {:?}",
@@ -400,7 +401,7 @@ where
             data_to_verify.extend_from_slice(remote_exch.get_epubkey());
 
             match context.remote_public_key {
-                Some(SecioPublicKey::Rsa(ref remote_public_key)) => {
+                Some(PublicKey::Rsa(ref remote_public_key)) => {
                     // TODO: The ring library doesn't like some stuff in our DER public key,
                     //       therefore we scrap the first 24 bytes of the key. A proper fix would
                     //       be to write a DER parser, but that's not trivial.
@@ -416,7 +417,7 @@ where
                         },
                     }
                 },
-                Some(SecioPublicKey::Ed25519(ref remote_public_key)) => {
+                Some(PublicKey::Ed25519(ref remote_public_key)) => {
                     match signature_verify(&ED25519,
                                            UntrustedInput::from(remote_public_key),
                                            UntrustedInput::from(&data_to_verify),
@@ -429,7 +430,7 @@ where
                         },
                     }
                 },
-                Some(SecioPublicKey::Secp256k1(ref remote_public_key)) => {
+                Some(PublicKey::Secp256k1(ref remote_public_key)) => {
                     let data_to_verify = digest::digest(&digest::SHA256, &data_to_verify);
                     let message = secp256k1::Message::from_slice(data_to_verify.as_ref())
                         .expect("digest output length doesn't match secp256k1 input length");

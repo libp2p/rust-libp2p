@@ -21,56 +21,7 @@
 use bs58;
 use multihash;
 use std::{fmt, str::FromStr};
-
-/// The raw bytes of a public key.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PublicKeyBytes(pub Vec<u8>);
-
-impl PublicKeyBytes {
-    /// Turns this into a `PublicKeyBytesSlice`.
-    #[inline]
-    pub fn as_slice(&self) -> PublicKeyBytesSlice {
-        PublicKeyBytesSlice(&self.0)
-    }
-
-    /// Turns this into a `PeerId`.
-    #[inline]
-    pub fn to_peer_id(&self) -> PeerId {
-        self.as_slice().into()
-    }
-}
-
-/// The raw bytes of a public key.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct PublicKeyBytesSlice<'a>(pub &'a [u8]);
-
-impl<'a> PublicKeyBytesSlice<'a> {
-    /// Turns this into a `PublicKeyBytes`.
-    #[inline]
-    pub fn to_owned(&self) -> PublicKeyBytes {
-        PublicKeyBytes(self.0.to_owned())
-    }
-
-    /// Turns this into a `PeerId`.
-    #[inline]
-    pub fn to_peer_id(&self) -> PeerId {
-        PeerId::from_public_key(*self)
-    }
-}
-
-impl<'a> PartialEq<PublicKeyBytes> for PublicKeyBytesSlice<'a> {
-    #[inline]
-    fn eq(&self, other: &PublicKeyBytes) -> bool {
-        self.0 == &other.0[..]
-    }
-}
-
-impl<'a> PartialEq<PublicKeyBytesSlice<'a>> for PublicKeyBytes {
-    #[inline]
-    fn eq(&self, other: &PublicKeyBytesSlice<'a>) -> bool {
-        self.0 == &other.0[..]
-    }
-}
+use {PublicKeyBytes, PublicKeyBytesSlice};
 
 /// Identifier of a peer of the network.
 ///
