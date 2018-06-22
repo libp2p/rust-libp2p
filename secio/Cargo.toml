@@ -14,9 +14,12 @@ rand = "0.3.17"
 ring = { version = "0.12.1", features = ["rsa_signing"] }
 rust-crypto = "^0.2"
 rw-stream-sink = { path = "../rw-stream-sink" }
-secp256k1 = "0.9"
+secp256k1 = { version = "0.9", optional = true }
 tokio-io = "0.1.0"
 untrusted = "0.5.1"
+
+[features]
+default = ["secp256k1"]
 
 [dev-dependencies]
 libp2p-tcp-transport = { path = "../tcp-transport" }
