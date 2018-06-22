@@ -20,6 +20,7 @@ parking_lot = "0.5.1"
 protobuf = "1"
 rand = "0.4.2"
 smallvec = "0.5"
+tokio-codec = "0.1"
 tokio-io = "0.1"
 tokio-timer = "0.1.2"
 varint = { path = "../varint-rs" }

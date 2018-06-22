@@ -28,7 +28,7 @@ use protobuf::RepeatedField;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use structs_proto;
-use tokio_io::codec::Framed;
+use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
 use varint::VarintCodec;
 
@@ -129,7 +129,7 @@ where
     fn upgrade(self, socket: C, _: (), ty: Endpoint, remote_addr: Maf) -> Self::Future {
         trace!("Upgrading connection as {:?}", ty);
 
-        let socket = socket.framed(VarintCodec::default());
+        let socket = Framed::new(socket, VarintCodec::default());
 
         match ty {
             Endpoint::Dialer => {

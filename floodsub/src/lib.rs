@@ -30,6 +30,7 @@ extern crate multiaddr;
 extern crate parking_lot;
 extern crate protobuf;
 extern crate smallvec;
+extern crate tokio_codec;
 extern crate tokio_io;
 extern crate varint;
 
@@ -55,6 +56,7 @@ use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
 use varint::VarintCodec;
 
@@ -134,8 +136,7 @@ where
             };
 
             // Split the socket into writing and reading parts.
-            let (floodsub_sink, floodsub_stream) = socket
-                .framed(VarintCodec::default())
+            let (floodsub_sink, floodsub_stream) = Framed::new(socket, VarintCodec::default())
                 .sink_map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
                 .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
                 .split();

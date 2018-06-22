@@ -21,6 +21,7 @@ libp2p-ratelimit = { path = "../ratelimit" }
 libp2p-relay = { path = "../relay" }
 libp2p-core = { path = "../core" }
 libp2p-websocket = { path = "../websocket" }
+tokio-codec = "0.1"
 tokio-io = "0.1"
 
 [target.'cfg(not(target_os = "emscripten"))'.dependencies]
