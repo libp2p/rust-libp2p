@@ -36,6 +36,7 @@ use ring::rand::SecureRandom;
 use ring::signature::verify as signature_verify;
 use ring::signature::{RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256, ED25519};
 use ring::{agreement, digest, rand};
+#[cfg(feature = "secp256k1")]
 use secp256k1;
 use std::cmp::{self, Ordering};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -152,6 +153,7 @@ where
                 SecioKeyPairInner::Ed25519 { .. } => {
                     public_key.set_Type(KeyTypeProtobuf::Ed25519);
                 },
+                #[cfg(feature = "secp256k1")]
                 SecioKeyPairInner::Secp256k1 { .. } => {
                     public_key.set_Type(KeyTypeProtobuf::Secp256k1);
                 },
@@ -335,6 +337,7 @@ where
                             let signature = key_pair.sign(&data_to_sign);
                             signature.as_ref().to_owned()
                         },
+                        #[cfg(feature = "secp256k1")]
                         SecioKeyPairInner::Secp256k1 { ref private } => {
                             let data_to_sign = digest::digest(&digest::SHA256, &data_to_sign);
                             let message = secp256k1::Message::from_slice(data_to_sign.as_ref())
@@ -429,6 +432,7 @@ where
                         },
                     }
                 },
+                #[cfg(feature = "secp256k1")]
                 Some(SecioPublicKey::Secp256k1(ref remote_public_key)) => {
                     let data_to_verify = digest::digest(&digest::SHA256, &data_to_verify);
                     let message = secp256k1::Message::from_slice(data_to_verify.as_ref())
@@ -448,6 +452,11 @@ where
                         debug!("remote's secp256k1 signature has wrong format");
                         return Err(SecioError::SignatureVerificationFailed)
                     }
+                },
+                #[cfg(not(feature = "secp256k1"))]
+                Some(SecioPublicKey::Secp256k1(_)) => {
+                    debug!("support for secp256k1 was disabled at compile-time");
+                    return Err(SecioError::SignatureVerificationFailed);
                 },
                 None => unreachable!("we store a Some in the remote public key before reaching \
                                       this point")
@@ -618,6 +627,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "secp256k1")]
     fn handshake_with_self_succeeds_secp256k1() {
         let key1 = {
             let key = include_bytes!("../tests/test-secp256k1-private-key.der");
