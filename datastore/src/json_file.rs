@@ -54,7 +54,8 @@ where
 {
     /// Opens or creates the datastore. If the path refers to an existing path, then this function
     /// will attempt to load an existing set of values from it (which can result in an error).
-    /// Otherwise if the path doesn't exist, a new empty datastore will be created.
+    /// Otherwise if the path doesn't exist, the parent directory will be created and a new empty
+    /// datastore will be returned.
     pub fn new<P>(path: P) -> Result<JsonFileDatastore<T>, IoError>
     where
         P: Into<PathBuf>,
@@ -62,6 +63,8 @@ where
         let path = path.into();
 
         if !path.exists() {
+            fs::create_dir_all(path.parent()
+                .expect("can only fail if root, which means that path.exists() would be true"))?;
             return Ok(JsonFileDatastore {
                 path: path,
                 content: CHashMap::new(),
