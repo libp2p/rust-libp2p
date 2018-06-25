@@ -27,7 +27,6 @@ use futures::Future;
 use futures::future;
 use futures::sink::Sink;
 use futures::stream::Stream;
-use keys_proto::{KeyType as KeyTypeProtobuf, PublicKey as PublicKeyProtobuf};
 use libp2p_core::PublicKey;
 use protobuf::Message as ProtobufMessage;
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
@@ -145,21 +144,7 @@ where
 
         // Send our proposition with our nonce, public key and supported protocols.
         .and_then(|mut context| {
-            let mut public_key = PublicKeyProtobuf::new();
-            public_key.set_Data(context.local_key.to_public_key().into_raw().0);
-            match context.local_key.inner {
-                SecioKeyPairInner::Rsa { .. } => {
-                    public_key.set_Type(KeyTypeProtobuf::RSA);
-                },
-                SecioKeyPairInner::Ed25519 { .. } => {
-                    public_key.set_Type(KeyTypeProtobuf::Ed25519);
-                },
-                #[cfg(feature = "secp256k1")]
-                SecioKeyPairInner::Secp256k1 { .. } => {
-                    public_key.set_Type(KeyTypeProtobuf::Secp256k1);
-                },
-            }
-            context.local_public_key_in_protobuf_bytes = public_key.write_to_bytes().unwrap();
+            context.local_public_key_in_protobuf_bytes = context.local_key.to_public_key().into_protobuf_encoding();
 
             let mut proposition = Propose::new();
             proposition.set_rand(context.local_nonce.clone().to_vec());
@@ -201,29 +186,16 @@ where
                         }
                     };
                     context.remote_public_key_in_protobuf_bytes = prop.take_pubkey();
-                    let mut pubkey = {
-                        let bytes = &context.remote_public_key_in_protobuf_bytes;
-                        match protobuf_parse_from_bytes::<PublicKeyProtobuf>(bytes) {
-                            Ok(p) => p,
-                            Err(_) => {
-                                debug!("failed to parse remote's proposition's pubkey protobuf");
-                                return Err(SecioError::HandshakeParsingFailure);
-                            },
-                        }
+                    let pubkey = match PublicKey::from_protobuf_encoding(&context.remote_public_key_in_protobuf_bytes) {
+                        Ok(p) => p,
+                        Err(_) => {
+                            debug!("failed to parse remote's proposition's pubkey protobuf");
+                            return Err(SecioError::HandshakeParsingFailure);
+                        },
                     };
 
                     context.remote_nonce = prop.take_rand();
-                    context.remote_public_key = Some(match pubkey.get_Type() {
-                        KeyTypeProtobuf::RSA => {
-                            PublicKey::Rsa(pubkey.take_Data())
-                        },
-                        KeyTypeProtobuf::Ed25519 => {
-                            PublicKey::Ed25519(pubkey.take_Data())
-                        },
-                        KeyTypeProtobuf::Secp256k1 => {
-                            PublicKey::Secp256k1(pubkey.take_Data())
-                        },
-                    });
+                    context.remote_public_key = Some(pubkey);
                     trace!("received proposition from remote ; pubkey = {:?} ; nonce = {:?}",
                            context.remote_public_key, context.remote_nonce);
                     Ok((prop, socket, context))

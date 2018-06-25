@@ -19,6 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use PeerId;
+use keys_proto;
+use protobuf::{self, Message};
+use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 
 /// Public key used by the remote.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,93 +37,72 @@ pub enum PublicKey {
 }
 
 impl PublicKey {
-    /// Turns this public key into a raw representation.
+    /// Encodes the public key as a protobuf message.
+    ///
+    /// Used at various locations in the wire protocol of libp2p.
     #[inline]
-    pub fn as_raw(&self) -> PublicKeyBytesSlice {
+    pub fn into_protobuf_encoding(self) -> Vec<u8> {
+        let mut public_key = keys_proto::PublicKey::new();
         match self {
-            PublicKey::Rsa(ref data) => PublicKeyBytesSlice(data),
-            PublicKey::Ed25519(ref data) => PublicKeyBytesSlice(data),
-            PublicKey::Secp256k1(ref data) => PublicKeyBytesSlice(data),
-        }
+            PublicKey::Rsa(data) => {
+                public_key.set_Type(keys_proto::KeyType::RSA);
+                public_key.set_Data(data);
+            },
+            PublicKey::Ed25519(data) => {
+                public_key.set_Type(keys_proto::KeyType::Ed25519);
+                public_key.set_Data(data);
+            },
+            PublicKey::Secp256k1(data) => {
+                public_key.set_Type(keys_proto::KeyType::Secp256k1);
+                public_key.set_Data(data);
+            },
+        };
+
+        public_key
+            .write_to_bytes()
+            .expect("protobuf writing should always be valid")
     }
 
-    /// Turns this public key into a raw representation.
+    /// Decodes the public key from a protobuf message.
+    ///
+    /// Used at various locations in the wire protocol of libp2p.
     #[inline]
-    pub fn into_raw(self) -> PublicKeyBytes {
-        match self {
-            PublicKey::Rsa(data) => PublicKeyBytes(data),
-            PublicKey::Ed25519(data) => PublicKeyBytes(data),
-            PublicKey::Secp256k1(data) => PublicKeyBytes(data),
-        }
+    pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<PublicKey, IoError> {
+        let mut pubkey = protobuf::parse_from_bytes::<keys_proto::PublicKey>(bytes)
+            .map_err(|err| {
+                debug!("failed to parse public key's protobuf encoding");
+                IoError::new(IoErrorKind::InvalidData, err)
+            })?;
+
+        Ok(match pubkey.get_Type() {
+            keys_proto::KeyType::RSA => {
+                PublicKey::Rsa(pubkey.take_Data())
+            },
+            keys_proto::KeyType::Ed25519 => {
+                PublicKey::Ed25519(pubkey.take_Data())
+            },
+            keys_proto::KeyType::Secp256k1 => {
+                PublicKey::Secp256k1(pubkey.take_Data())
+            },
+        })
     }
 
     /// Builds a `PeerId` corresponding to the public key of the node.
     #[inline]
-    pub fn to_peer_id(&self) -> PeerId {
-        self.as_raw().into()
+    pub fn into_peer_id(self) -> PeerId {
+        self.into()
     }
 }
 
-impl From<PublicKey> for PeerId {
-    #[inline]
-    fn from(key: PublicKey) -> PeerId {
-        key.to_peer_id()
-    }
-}
+#[cfg(test)]
+mod tests {
+    use rand::random;
+    use PublicKey;
 
-impl From<PublicKey> for PublicKeyBytes {
-    #[inline]
-    fn from(key: PublicKey) -> PublicKeyBytes {
-        key.into_raw()
-    }
-}
-
-/// The raw bytes of a public key.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PublicKeyBytes(pub Vec<u8>);
-
-impl PublicKeyBytes {
-    /// Turns this into a `PublicKeyBytesSlice`.
-    #[inline]
-    pub fn as_slice(&self) -> PublicKeyBytesSlice {
-        PublicKeyBytesSlice(&self.0)
-    }
-
-    /// Turns this into a `PeerId`.
-    #[inline]
-    pub fn to_peer_id(&self) -> PeerId {
-        self.as_slice().into()
-    }
-}
-
-/// The raw bytes of a public key.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct PublicKeyBytesSlice<'a>(pub &'a [u8]);
-
-impl<'a> PublicKeyBytesSlice<'a> {
-    /// Turns this into a `PublicKeyBytes`.
-    #[inline]
-    pub fn to_owned(&self) -> PublicKeyBytes {
-        PublicKeyBytes(self.0.to_owned())
-    }
-
-    /// Turns this into a `PeerId`.
-    #[inline]
-    pub fn to_peer_id(&self) -> PeerId {
-        PeerId::from_public_key(*self)
-    }
-}
-
-impl<'a> PartialEq<PublicKeyBytes> for PublicKeyBytesSlice<'a> {
-    #[inline]
-    fn eq(&self, other: &PublicKeyBytes) -> bool {
-        self.0 == &other.0[..]
-    }
-}
-
-impl<'a> PartialEq<PublicKeyBytesSlice<'a>> for PublicKeyBytes {
-    #[inline]
-    fn eq(&self, other: &PublicKeyBytesSlice<'a>) -> bool {
-        self.0 == &other.0[..]
+    #[test]
+    fn key_into_protobuf_then_back() {
+        let key = PublicKey::Rsa((0 .. 2048).map(|_| -> u8 { random() }).collect());
+        let second = PublicKey::from_protobuf_encoding(&key.clone().into_protobuf_encoding()).unwrap();
+        assert_eq!(key, second);
     }
 }

@@ -136,7 +136,7 @@ where
                             IdentifyOutput::RemoteInfo { info, observed_addr } => {
                                 observed = observed_addr;
                                 real_addr = process_identify_info(
-                                    &info,
+                                    info,
                                     &*peerstore.clone(),
                                     original_addr.clone(),
                                     addr_ttl,
@@ -249,7 +249,7 @@ where
                     match identify {
                         (IdentifyOutput::RemoteInfo { info, observed_addr }, a) => {
                             a.and_then(move |old_addr| {
-                                let real_addr = process_identify_info(&info, &*peerstore, old_addr.clone(), addr_ttl)?;
+                                let real_addr = process_identify_info(info, &*peerstore, old_addr.clone(), addr_ttl)?;
                                 Ok((real_addr, old_addr, observed_addr))
                             })
                         }
@@ -338,7 +338,7 @@ where
                         match identify {
                             (IdentifyOutput::RemoteInfo { info, observed_addr }, old_addr) => {
                                 old_addr.and_then(move |out| {
-                                    let real_addr = process_identify_info(&info, &*peerstore, out, addr_ttl)?;
+                                    let real_addr = process_identify_info(info, &*peerstore, out, addr_ttl)?;
                                     Ok((real_addr, observed_addr, connec))
                                 })
                             }
@@ -397,7 +397,7 @@ fn multiaddr_to_peerid(addr: Multiaddr) -> Result<PeerId, Multiaddr> {
 // > **Note**: This function is highly-specific, but this precise behaviour is needed in multiple
 // >           different places in the code.
 fn process_identify_info<P>(
-    info: &IdentifyInfo,
+    info: IdentifyInfo,
     peerstore: P,
     client_addr: Multiaddr,
     ttl: Duration,
@@ -405,7 +405,7 @@ fn process_identify_info<P>(
 where
     P: Peerstore,
 {
-    let peer_id: PeerId = info.public_key.to_peer_id();
+    let peer_id: PeerId = info.public_key.into_peer_id();
     peerstore
         .peer_or_create(&peer_id)
         .add_addr(client_addr, ttl);
@@ -422,8 +422,8 @@ mod tests {
     use IdentifyTransport;
     use futures::{Future, Stream};
     use libp2p_peerstore::memory_peerstore::MemoryPeerstore;
-    use libp2p_peerstore::{PeerAccess, PeerId, Peerstore};
-    use libp2p_core::{Transport, PublicKeyBytesSlice};
+    use libp2p_peerstore::{PeerAccess, Peerstore};
+    use libp2p_core::{PeerId, PublicKey, Transport};
     use multiaddr::{AddrComponent, Multiaddr};
     use std::io::Error as IoError;
     use std::iter;
@@ -466,7 +466,7 @@ mod tests {
             }
         }
 
-        let peer_id = PeerId::from_public_key(PublicKeyBytesSlice(&[1, 2, 3, 4]));
+        let peer_id = PeerId::from_public_key(PublicKey::Ed25519(vec![1, 2, 3, 4]));
 
         let peerstore = MemoryPeerstore::empty();
         peerstore.peer_or_create(&peer_id).add_addr(

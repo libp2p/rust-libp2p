@@ -105,7 +105,7 @@ use asn1_der::{DerObject, traits::FromDerEncoded, traits::FromDerObject};
 use bytes::{Bytes, BytesMut};
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
-use libp2p_core::{PeerId, PublicKey, PublicKeyBytesSlice};
+use libp2p_core::{PeerId, PublicKey};
 use ring::signature::{Ed25519KeyPair, RSAKeyPair};
 use ring::rand::SystemRandom;
 use rw_stream_sink::RwStreamSink;
@@ -120,7 +120,6 @@ mod algo_support;
 mod codec;
 mod error;
 mod handshake;
-mod keys_proto;
 mod structs_proto;
 
 /// Implementation of the `ConnectionUpgrade` trait of `libp2p_core`. Automatically applies
@@ -249,23 +248,9 @@ impl SecioKeyPair {
     }
 
     /// Builds a `PeerId` corresponding to the public key of this key pair.
+    #[inline]
     pub fn to_peer_id(&self) -> PeerId {
-        match self.inner {
-            SecioKeyPairInner::Rsa { ref public, .. } => {
-                PublicKeyBytesSlice(&public).into()
-            },
-            SecioKeyPairInner::Ed25519 { ref key_pair } => {
-                PublicKeyBytesSlice(key_pair.public_key_bytes()).into()
-            },
-            #[cfg(feature = "secp256k1")]
-            SecioKeyPairInner::Secp256k1 { ref private } => {
-                let secp = secp256k1::Secp256k1::with_caps(secp256k1::ContextFlag::None);
-                let pubkey = secp256k1::key::PublicKey::from_secret_key(&secp, private)
-                    .expect("wrong secp256k1 private key ; type safety violated");
-                let pubkey_bytes = pubkey.serialize();
-                PublicKeyBytesSlice(&pubkey_bytes).into()
-            },
-        }
+        self.to_public_key().into_peer_id()
     }
 
     // TODO: method to save generated key on disk?
