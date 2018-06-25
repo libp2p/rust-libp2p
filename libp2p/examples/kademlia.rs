@@ -33,7 +33,7 @@ use libp2p::Multiaddr;
 use std::env;
 use std::sync::Arc;
 use std::time::Duration;
-use libp2p::core::{Transport, PublicKeyBytesSlice};
+use libp2p::core::{Transport, PublicKey};
 use libp2p::core::{upgrade, either::EitherOutput};
 use libp2p::kad::{ConnectionType, Peer, QueryEvent};
 use libp2p::tcp::TcpConfig;
@@ -97,7 +97,7 @@ fn main() {
     // incoming connections, and that will automatically apply secio and multiplex on top
     // of any opened stream.
 
-    let my_peer_id = PeerId::from_public_key(PublicKeyBytesSlice(include_bytes!("test-rsa-public-key.der")));
+    let my_peer_id = PeerId::from_public_key(PublicKey::Rsa(include_bytes!("test-rsa-public-key.der").to_vec()));
     println!("Local peer id is: {:?}", my_peer_id);
 
     // Let's put this `transport` into a Kademlia *swarm*. The swarm will handle all the incoming

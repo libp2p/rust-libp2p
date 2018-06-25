@@ -81,7 +81,6 @@ pub use self::protocol::{IdentifyInfo, IdentifyOutput};
 pub use self::protocol::{IdentifyProtocolConfig, IdentifySender};
 pub use self::transport::IdentifyTransport;
 
-mod keys_proto;
 mod protocol;
 mod structs_proto;
 mod transport;
