@@ -83,6 +83,7 @@ impl<InnerTrans> Transport for TransportTimeout<InnerTrans>
 where InnerTrans: Transport,
 {
     type Output = InnerTrans::Output;
+    type MultiaddrFuture = InnerTrans::MultiaddrFuture;
     type Listener = TimeoutListener<InnerTrans::Listener>;
     type ListenerUpgrade = TokioTimerMapErr<Deadline<InnerTrans::ListenerUpgrade>>;
     type Dial = TokioTimerMapErr<Deadline<InnerTrans::Dial>>;

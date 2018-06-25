@@ -57,7 +57,7 @@ extern crate multiaddr;
 extern crate tokio_core;
 extern crate tokio_io;
 
-use futures::future::{self, Future, FutureResult, IntoFuture};
+use futures::future::{self, Future, FutureResult};
 use futures::stream::Stream;
 use multiaddr::{AddrComponent, Multiaddr, ToMultiaddr};
 use std::io::Error as IoError;
@@ -89,8 +89,9 @@ impl TcpConfig {
 impl Transport for TcpConfig {
     type Output = TcpStream;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
-    type ListenerUpgrade = FutureResult<(Self::Output, Multiaddr), IoError>;
-    type Dial = Box<Future<Item = (TcpStream, Multiaddr), Error = IoError>>;
+    type ListenerUpgrade = FutureResult<(Self::Output, Self::MultiaddrFuture), IoError>;
+    type MultiaddrFuture = FutureResult<Multiaddr, IoError>;
+    type Dial = Box<Future<Item = (TcpStream, Self::MultiaddrFuture), Error = IoError>>;
 
     /// Listen on the given multi-addr.
     /// Returns the address back if it isn't supported.
@@ -120,7 +121,7 @@ impl Transport for TcpConfig {
                         let addr = addr.to_multiaddr()
                             .expect("generating a multiaddr from a socket addr never fails");
                         debug!("Incoming connection from {}", addr);
-                        Ok((sock, addr)).into_future()
+                        future::ok((sock, future::ok(addr)))
                     })
                 })
                 .flatten_stream();
@@ -136,7 +137,7 @@ impl Transport for TcpConfig {
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
         if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
             debug!("Dialing {}", addr);
-            let fut = TcpStream::connect(&socket_addr, &self.event_loop).map(|t| (t, addr));
+            let fut = TcpStream::connect(&socket_addr, &self.event_loop).map(|t| (t, future::ok(addr)));
             Ok(Box::new(fut) as Box<_>)
         } else {
             Err((self, addr))

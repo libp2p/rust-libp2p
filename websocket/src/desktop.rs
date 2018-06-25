@@ -63,10 +63,11 @@ where
     T::Output: AsyncRead + AsyncWrite + Send,
 {
     type Output = Box<AsyncStream>;
+    type MultiaddrFuture = Box<Future<Item = Multiaddr, Error = IoError>>;
     type Listener =
         stream::Map<T::Listener, fn(<T as Transport>::ListenerUpgrade) -> Self::ListenerUpgrade>;
-    type ListenerUpgrade = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>;
-    type Dial = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>;
+    type ListenerUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
+    type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
     fn listen_on(
         self,
@@ -98,10 +99,13 @@ where
 
         let listen = inner_listen.map::<_, fn(_) -> _>(|stream| {
             // Upgrade the listener to websockets like the websockets library requires us to do.
-            let upgraded = stream.and_then(|(stream, mut client_addr)| {
+            let upgraded = stream.and_then(|(stream, client_addr)| {
                 // Need to suffix `/ws` to each client address.
-                client_addr.append(AddrComponent::WS);
-                debug!("Incoming connection from {}", client_addr);
+                let client_addr = client_addr.map(|mut addr| {
+                    addr.append(AddrComponent::WS);
+                    addr
+                });
+                debug!("Incoming connection");
 
                 stream
                     .into_ws()
@@ -140,7 +144,7 @@ where
                     .map(|s| Box::new(Ok(s).into_future()) as Box<Future<Item = _, Error = _>>)
                     .into_future()
                     .flatten()
-                    .map(move |v| (v, client_addr))
+                    .map(move |v| (v, Box::new(client_addr) as Box<Future<Item = _, Error = _>>))
             });
 
             Box::new(upgraded) as Box<Future<Item = _, Error = _>>
@@ -183,6 +187,15 @@ where
         let dial = inner_dial
             .into_future()
             .and_then(move |(connec, client_addr)| {
+                let client_addr = Box::new(client_addr.map(move |mut addr| {
+                    if is_wss {
+                        addr.append(AddrComponent::WSS);
+                    } else {
+                        addr.append(AddrComponent::WS);
+                    };
+                    addr
+                })) as Box<Future<Item = _, Error = _>>;
+
                 ClientBuilder::new(&ws_addr)
                     .expect("generated ws address is always valid")
                     .async_connect_on(connec)
@@ -209,13 +222,7 @@ where
                         Box::new(read_write) as Box<AsyncStream>
                     })
                     .map(move |c| {
-                        let mut actual_addr = client_addr;
-                        if is_wss {
-                            actual_addr.append(AddrComponent::WSS);
-                        } else {
-                            actual_addr.append(AddrComponent::WS);
-                        };
-                        (c, actual_addr)
+                        (c, client_addr)
                     })
             });
 

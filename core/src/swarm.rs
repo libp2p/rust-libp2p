@@ -39,7 +39,7 @@ pub fn swarm<T, H, F>(
 ) -> (SwarmController<T>, SwarmFuture<T, H, F::Future>)
 where
     T: MuxedTransport + Clone + 'static, // TODO: 'static :-/
-    H: FnMut(T::Output, Multiaddr) -> F,
+    H: FnMut(T::Output, Box<Future<Item = Multiaddr, Error = IoError>>) -> F,
     F: IntoFuture<Item = (), Error = IoError>,
 {
     let (new_dialers_tx, new_dialers_rx) = mpsc::unbounded();
@@ -76,7 +76,7 @@ where
 {
     transport: T,
     new_listeners: mpsc::UnboundedSender<T::Listener>,
-    new_dialers: mpsc::UnboundedSender<Box<Future<Item = (T::Output, Multiaddr), Error = IoError>>>,
+    new_dialers: mpsc::UnboundedSender<Box<Future<Item = (T::Output, Box<Future<Item = Multiaddr, Error = IoError>>), Error = IoError>>>,
     new_toprocess: mpsc::UnboundedSender<Box<Future<Item = (), Error = IoError>>>,
 }
 
@@ -123,7 +123,7 @@ where
         match transport.dial(multiaddr.clone()) {
             Ok(dial) => {
                 let dial = Box::new(
-                    dial.map(|(d, client_addr)| (d.into(), client_addr)),
+                    dial.map(|(d, client_addr)| (d.into(), Box::new(client_addr) as Box<Future<Item = _, Error = _>>)),
                 ) as Box<Future<Item = _, Error = _>>;
                 // Ignoring errors if the receiver has been closed, because in that situation
                 // nothing is going to be processed anyway.
@@ -163,17 +163,17 @@ where
         StreamFuture<
             Box<
                 Stream<
-                    Item = Box<Future<Item = (T::Output, Multiaddr), Error = IoError>>,
+                    Item = Box<Future<Item = (T::Output, Box<Future<Item = Multiaddr, Error = IoError>>), Error = IoError>>,
                     Error = IoError,
                 >,
             >,
         >,
     >,
     listeners_upgrade:
-        FuturesUnordered<Box<Future<Item = (T::Output, Multiaddr), Error = IoError>>>,
-    dialers: FuturesUnordered<Box<Future<Item = (T::Output, Multiaddr), Error = IoError>>>,
+        FuturesUnordered<Box<Future<Item = (T::Output, Box<Future<Item = Multiaddr, Error = IoError>>), Error = IoError>>>,
+    dialers: FuturesUnordered<Box<Future<Item = (T::Output, Box<Future<Item = Multiaddr, Error = IoError>>), Error = IoError>>>,
     new_dialers:
-        mpsc::UnboundedReceiver<Box<Future<Item = (T::Output, Multiaddr), Error = IoError>>>,
+        mpsc::UnboundedReceiver<Box<Future<Item = (T::Output, Box<Future<Item = Multiaddr, Error = IoError>>), Error = IoError>>>,
     to_process: FuturesUnordered<future::Either<F, Box<Future<Item = (), Error = IoError>>>>,
     new_toprocess: mpsc::UnboundedReceiver<Box<Future<Item = (), Error = IoError>>>,
 }
@@ -181,7 +181,7 @@ where
 impl<T, H, If, F> Future for SwarmFuture<T, H, F>
 where
     T: MuxedTransport + Clone + 'static, // TODO: 'static :-/,
-    H: FnMut(T::Output, Multiaddr) -> If,
+    H: FnMut(T::Output, Box<Future<Item = Multiaddr, Error = IoError>>) -> If,
     If: IntoFuture<Future = F, Item = (), Error = IoError>,
     F: Future<Item = (), Error = IoError>,
 {
@@ -195,6 +195,9 @@ where
             Ok(Async::Ready(connec)) => {
                 debug!("Swarm received new multiplexed incoming connection");
                 self.next_incoming = self.transport.clone().next_incoming();
+                let connec = connec.map(|(out, maf)| {
+                    (out, Box::new(maf) as Box<Future<Item = Multiaddr, Error = IoError>>)
+                });
                 self.listeners_upgrade.push(Box::new(connec) as Box<_>);
             }
             Ok(Async::NotReady) => {}
@@ -202,40 +205,55 @@ where
                 debug!("Error in multiplexed incoming connection: {:?}", err);
                 self.next_incoming = self.transport.clone().next_incoming();
             }
-        };
+        }
 
-        match self.new_listeners.poll() {
-            Ok(Async::Ready(Some(new_listener))) => {
-                let new_listener = Box::new(
-                    new_listener.map(|f| Box::new(f) as Box<Future<Item = _, Error = _>>),
-                ) as Box<Stream<Item = _, Error = _>>;
-                self.listeners.push(new_listener.into_future());
-            }
-            Ok(Async::Ready(None)) | Err(_) => {
-                // New listener sender has been closed.
-            }
-            Ok(Async::NotReady) => {}
-        };
+        loop {
+            match self.new_listeners.poll() {
+                Ok(Async::Ready(Some(new_listener))) => {
+                    let new_listener = Box::new(
+                        new_listener.map(|f| {
+                            let f = f.map(|(out, maf)| {
+                                (out, Box::new(maf) as Box<Future<Item = Multiaddr, Error = IoError>>)
+                            });
 
-        match self.new_dialers.poll() {
-            Ok(Async::Ready(Some(new_dialer))) => {
-                self.dialers.push(new_dialer);
+                            Box::new(f) as Box<Future<Item = _, Error = _>>
+                        }),
+                    ) as Box<Stream<Item = _, Error = _>>;
+                    self.listeners.push(new_listener.into_future());
+                }
+                Ok(Async::Ready(None)) | Err(_) => {
+                    // New listener sender has been closed.
+                    break;
+                }
+                Ok(Async::NotReady) => break,
             }
-            Ok(Async::Ready(None)) | Err(_) => {
-                // New dialers sender has been closed.
-            }
-            Ok(Async::NotReady) => {}
-        };
+        }
 
-        match self.new_toprocess.poll() {
-            Ok(Async::Ready(Some(new_toprocess))) => {
-                self.to_process.push(future::Either::B(new_toprocess));
+        loop {
+            match self.new_dialers.poll() {
+                Ok(Async::Ready(Some(new_dialer))) => {
+                    self.dialers.push(new_dialer);
+                }
+                Ok(Async::Ready(None)) | Err(_) => {
+                    // New dialers sender has been closed.
+                    break
+                }
+                Ok(Async::NotReady) => break,
             }
-            Ok(Async::Ready(None)) | Err(_) => {
-                // New to-process sender has been closed.
+        }
+
+        loop {
+            match self.new_toprocess.poll() {
+                Ok(Async::Ready(Some(new_toprocess))) => {
+                    self.to_process.push(future::Either::B(new_toprocess));
+                }
+                Ok(Async::Ready(None)) | Err(_) => {
+                    // New to-process sender has been closed.
+                    break
+                }
+                Ok(Async::NotReady) => break,
             }
-            Ok(Async::NotReady) => {}
-        };
+        }
 
         loop {
             match self.listeners.poll() {
@@ -252,42 +270,47 @@ where
             }
         }
 
-        match self.listeners_upgrade.poll() {
-            Ok(Async::Ready(Some((output, client_addr)))) => {
-                debug!(
-                    "Successfully upgraded incoming connection with {}",
-                    client_addr
-                );
-                self.to_process.push(future::Either::A(
-                    handler(output, client_addr).into_future(),
-                ));
+        loop {
+            match self.listeners_upgrade.poll() {
+                Ok(Async::Ready(Some((output, client_addr)))) => {
+                    debug!("Successfully upgraded incoming connection");
+                    self.to_process.push(future::Either::A(
+                        handler(output, client_addr).into_future(),
+                    ));
+                }
+                Err(err) => {
+                    debug!("Error in listener upgrade: {:?}", err);
+                    break;
+                }
+                _ => break
             }
-            Err(err) => {
-                debug!("Error in listener upgrade: {:?}", err);
-            }
-            _ => {}
         }
 
-        match self.dialers.poll() {
-            Ok(Async::Ready(Some((output, addr)))) => {
-                trace!("Successfully upgraded dialed connection with {}", addr);
-                self.to_process
-                    .push(future::Either::A(handler(output, addr).into_future()));
+        loop {
+            match self.dialers.poll() {
+                Ok(Async::Ready(Some((output, addr)))) => {
+                    trace!("Successfully upgraded dialed connection");
+                    self.to_process
+                        .push(future::Either::A(handler(output, addr).into_future()));
+                }
+                Err(err) => {
+                    debug!("Error in dialer upgrade: {:?}", err);
+                    break;
+                }
+                _ => break
             }
-            Err(err) => {
-                debug!("Error in dialer upgrade: {:?}", err);
-            }
-            _ => {}
         }
 
-        match self.to_process.poll() {
-            Ok(Async::Ready(Some(()))) => {
-                trace!("Future returned by swarm handler driven to completion");
+        loop {
+            match self.to_process.poll() {
+                Ok(Async::Ready(Some(()))) => {
+                    trace!("Future returned by swarm handler driven to completion");
+                }
+                Err(err) => {
+                    debug!("Error in processing: {:?}", err);
+                }
+                _ => break,
             }
-            Err(err) => {
-                debug!("Error in processing: {:?}", err);
-            }
-            _ => {}
         }
 
         // TODO: we never return `Ok(Ready)` because there's no way to know whether

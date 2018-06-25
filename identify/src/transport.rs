@@ -65,9 +65,10 @@ where
     for<'r> &'r PStore: Peerstore,
 {
     type Output = IdentifyTransportOutput<Trans::Output>;
+    type MultiaddrFuture = future::FutureResult<Multiaddr, IoError>;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
-    type ListenerUpgrade = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>;
-    type Dial = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>;
+    type ListenerUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
+    type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
     #[inline]
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -93,7 +94,11 @@ where
         let listener = listener.map(move |connec| {
             let peerstore = peerstore.clone();
             let identify_upgrade = identify_upgrade.clone();
-            let fut = connec.and_then(move |(connec, client_addr)| {
+            let fut = connec
+            .and_then(move |(connec, client_addr)| {
+                client_addr.map(move |a| (connec, a))
+            })
+            .and_then(move |(connec, client_addr)| {
                 for peer_id in peerstore.peers() {
                     let peer = match peerstore.peer(&peer_id) {
                         Some(p) => p,
@@ -103,7 +108,7 @@ where
                     if peer.addrs().any(|addr| addr == client_addr) {
                         debug!("Incoming substream from {} identified as {:?}", client_addr, peer_id);
                         let out = IdentifyTransportOutput { socket: connec, observed_addr: None };
-                        let ret = (out, AddrComponent::P2P(peer_id.into_bytes()).into());
+                        let ret = (out, future::ok(AddrComponent::P2P(peer_id.into_bytes()).into()));
                         return future::Either::A(future::ok(ret));
                     }
                 }
@@ -121,6 +126,9 @@ where
                     .into_future()
                     .and_then(move |(dial, connec)| dial.map(move |dial| (dial, connec)))
                     .and_then(move |((identify, original_addr), connec)| {
+                        original_addr.map(move |a| (identify, a, connec))
+                    })
+                    .and_then(move |(identify, original_addr, connec)| {
                         // Compute the "real" address of the node (in the form `/p2p/...`) and
                         // add it to the peerstore.
                         let (observed, real_addr);
@@ -142,7 +150,7 @@ where
 
                         debug!("Identified {} as {}", original_addr, real_addr);
                         let out = IdentifyTransportOutput { socket: connec, observed_addr: Some(observed) };
-                        Ok((out, real_addr))
+                        Ok((out, future::ok(real_addr)))
                     })
                     .map_err(move |err| {
                         debug!("Failed to identify incoming {}", client_addr);
@@ -194,7 +202,7 @@ where
                     .and_then(move |(val, _)| {
                         match val {
                             Some((connec, inner_addr)) => {
-                                debug!("Successfully dialed peer {:?} through {}", peer_id, inner_addr);
+                                debug!("Successfully dialed peer {:?}", peer_id);
                                 let out = IdentifyTransportOutput { socket: connec, observed_addr: None };
                                 Ok((out, inner_addr))
                             },
@@ -206,7 +214,7 @@ where
                         }
                     })
                     // Replace the multiaddress with the one of the form `/p2p/...` or `/ipfs/...`.
-                    .map(move |(socket, _inner_client_addr)| (socket, addr));
+                    .map(move |(socket, _inner_client_addr)| (socket, future::ok(addr)));
 
                 Ok(Box::new(future) as Box<_>)
             }
@@ -238,19 +246,20 @@ where
                 let future = dial.and_then(move |identify| {
                     // On success, store the information in the peerstore and compute the
                     // "real" address of the node (of the form `/p2p/...`).
-                    let (real_addr, old_addr, observed);
                     match identify {
                         (IdentifyOutput::RemoteInfo { info, observed_addr }, a) => {
-                            old_addr = a.clone();
-                            observed = observed_addr;
-                            real_addr = process_identify_info(&info, &*peerstore, a, addr_ttl)?;
+                            a.and_then(move |old_addr| {
+                                let real_addr = process_identify_info(&info, &*peerstore, old_addr.clone(), addr_ttl)?;
+                                Ok((real_addr, old_addr, observed_addr))
+                            })
                         }
                         _ => unreachable!(
                             "the identify protocol guarantees that we receive \
                              remote information when we dial a node"
                         ),
-                    };
-
+                    }
+                })
+                .and_then(move |(real_addr, old_addr, observed)| {
                     // Then dial the same node again.
                     Ok(transport
                         .dial(old_addr)
@@ -260,7 +269,7 @@ where
                         .into_future()
                         .map(move |(dial, _wrong_addr)| {
                             let out = IdentifyTransportOutput { socket: dial, observed_addr: Some(observed) };
-                            (out, real_addr)
+                            (out, future::ok(real_addr))
                         }))
                 }).flatten();
 
@@ -283,7 +292,7 @@ where
     for<'r> &'r PStore: Peerstore,
 {
     type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError>>;
-    type IncomingUpgrade = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>;
+    type IncomingUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
     #[inline]
     fn next_incoming(self) -> Self::Incoming {
@@ -293,7 +302,11 @@ where
 
         let future = self.transport.next_incoming().map(move |incoming| {
             let peerstore = peerstore.clone();
-            let future = incoming.and_then(move |(connec, client_addr)| {
+            let future = incoming
+            .and_then(move |(connec, client_addr)| {
+                client_addr.map(move |out| (connec, out))
+            })
+            .and_then(move |(connec, client_addr)| {
                 for peer_id in peerstore.peers() {
                     let peer = match peerstore.peer(&peer_id) {
                         Some(p) => p,
@@ -303,7 +316,7 @@ where
                     if peer.addrs().any(|addr| addr == client_addr) {
                         debug!("Incoming substream from {} identified as {:?}", client_addr, peer_id);
                         let out = IdentifyTransportOutput { socket: connec, observed_addr: None };
-                        let ret = (out, AddrComponent::P2P(peer_id.into_bytes()).into());
+                        let ret = (out, future::ok(AddrComponent::P2P(peer_id.into_bytes()).into()));
                         return future::Either::A(future::ok(ret));
                     }
                 }
@@ -322,20 +335,22 @@ where
                     .and_then(move |(identify, connec)| {
                         // Add the info to the peerstore and compute the "real" address of the
                         // node (in the form `/p2p/...`).
-                        let (real_addr, observed);
                         match identify {
                             (IdentifyOutput::RemoteInfo { info, observed_addr }, old_addr) => {
-                                observed = observed_addr;
-                                real_addr = process_identify_info(&info, &*peerstore, old_addr, addr_ttl)?;
+                                old_addr.and_then(move |out| {
+                                    let real_addr = process_identify_info(&info, &*peerstore, out, addr_ttl)?;
+                                    Ok((real_addr, observed_addr, connec))
+                                })
                             }
                             _ => unreachable!(
                                 "the identify protocol guarantees that we receive remote \
                                  information when we dial a node"
                             ),
-                        };
-
+                        }
+                    })
+                    .map(move |(real_addr, observed, connec)| {
                         let out = IdentifyTransportOutput { socket: connec, observed_addr: Some(observed) };
-                        Ok((out, real_addr))
+                        (out, future::ok(real_addr))
                     });
                 future::Either::B(future)
             });
@@ -426,8 +441,9 @@ mod tests {
         }
         impl Transport for UnderlyingTrans {
             type Output = <TcpConfig as Transport>::Output;
+            type MultiaddrFuture = <TcpConfig as Transport>::MultiaddrFuture;
             type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
-            type ListenerUpgrade = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>;
+            type ListenerUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
             type Dial = <TcpConfig as Transport>::Dial;
             #[inline]
             fn listen_on(

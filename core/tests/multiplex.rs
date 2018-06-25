@@ -54,6 +54,7 @@ impl<T: Clone> Clone for OnlyOnce<T> {
 }
 impl<T: Transport> Transport for OnlyOnce<T> {
     type Output = T::Output;
+    type MultiaddrFuture = T::MultiaddrFuture;
     type Listener = T::Listener;
     type ListenerUpgrade = T::ListenerUpgrade;
     type Dial = T::Dial;

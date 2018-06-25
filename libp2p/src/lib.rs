@@ -24,6 +24,7 @@ pub extern crate futures;
 pub extern crate tokio_core;
 pub extern crate multiaddr;
 pub extern crate tokio_io;
+pub extern crate tokio_codec;
 
 pub extern crate libp2p_core as core;
 #[cfg(not(target_os = "emscripten"))]
@@ -99,6 +100,7 @@ impl CommonTransport {
 
 impl Transport for CommonTransport {
     type Output = <InnerImplementation as Transport>::Output;
+    type MultiaddrFuture = <InnerImplementation as Transport>::MultiaddrFuture;
     type Listener = <InnerImplementation as Transport>::Listener;
     type ListenerUpgrade = <InnerImplementation as Transport>::ListenerUpgrade;
     type Dial = <InnerImplementation as Transport>::Dial;

@@ -32,7 +32,8 @@ use protobuf::{self, Message};
 use protobuf_structs;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
-use tokio_io::{AsyncRead, AsyncWrite, codec::Framed};
+use tokio_codec::Framed;
+use tokio_io::{AsyncRead, AsyncWrite};
 use varint::VarintCodec;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
@@ -82,20 +83,30 @@ pub struct Peer {
     pub connection_ty: ConnectionType,
 }
 
-impl<'a> From<&'a mut protobuf_structs::dht::Message_Peer> for Peer {
-    fn from(peer: &'a mut protobuf_structs::dht::Message_Peer) -> Peer {
-        let node_id = PeerId::from_bytes(peer.get_id().to_vec()).unwrap(); // TODO: don't unwrap
-        let addrs = peer.take_addrs()
-			.into_iter()
-			.map(|a| Multiaddr::from_bytes(a).unwrap())		// TODO: don't unwrap
-			.collect();
+impl Peer {
+    // Builds a `Peer` from its raw protobuf equivalent.
+    // TODO: use TryFrom once stable
+    fn from_peer(peer: &mut protobuf_structs::dht::Message_Peer) -> Result<Peer, IoError> {
+        // TODO: this is in fact a CID ; not sure if this should be handled in `from_bytes` or
+        //       as a special case here
+        let node_id = PeerId::from_bytes(peer.get_id().to_vec())
+            .map_err(|_| IoError::new(IoErrorKind::InvalidData, "invalid peer id"))?;
+
+        let mut addrs = Vec::with_capacity(peer.get_addrs().len());
+        for addr in peer.take_addrs().into_iter() {
+            let as_ma = Multiaddr::from_bytes(addr)
+                .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))?;
+            addrs.push(as_ma);
+        }
+        debug_assert_eq!(addrs.len(), addrs.capacity());
+
         let connection_ty = peer.get_connection().into();
 
-        Peer {
+        Ok(Peer {
             node_id: node_id,
             multiaddrs: addrs,
             connection_ty: connection_ty,
-        }
+        })
     }
 }
 
@@ -116,12 +127,13 @@ impl Into<protobuf_structs::dht::Message_Peer> for Peer {
 #[derive(Debug, Default, Copy, Clone)]
 pub struct KademliaProtocolConfig;
 
-impl<C> ConnectionUpgrade<C> for KademliaProtocolConfig
+impl<C, Maf> ConnectionUpgrade<C, Maf> for KademliaProtocolConfig
 where
     C: AsyncRead + AsyncWrite + 'static, // TODO: 'static :-/
 {
     type Output = KadStreamSink<C>;
-    type Future = future::FutureResult<Self::Output, IoError>;
+    type MultiaddrFuture = Maf;
+    type Future = future::FutureResult<(Self::Output, Self::MultiaddrFuture), IoError>;
     type NamesIter = iter::Once<(Bytes, ())>;
     type UpgradeIdentifier = ();
 
@@ -131,8 +143,8 @@ where
     }
 
     #[inline]
-    fn upgrade(self, incoming: C, _: (), _: Endpoint, _: &Multiaddr) -> Self::Future {
-        future::ok(kademlia_protocol(incoming))
+    fn upgrade(self, incoming: C, _: (), _: Endpoint, addr: Maf) -> Self::Future {
+        future::ok((kademlia_protocol(incoming), addr))
     }
 }
 
@@ -145,8 +157,7 @@ fn kademlia_protocol<S>(
 where
     S: AsyncRead + AsyncWrite,
 {
-    socket
-        .framed(VarintCodec::default())
+    Framed::new(socket, VarintCodec::default())
         .from_err::<IoError>()
         .with::<_, fn(_) -> _, _>(|request| -> Result<_, IoError> {
             let proto_struct = msg_to_proto(request);
@@ -262,13 +273,18 @@ fn proto_to_msg(mut message: protobuf_structs::dht::Message) -> Result<KadMsg, I
                 Ok(KadMsg::FindNodeReq {
                     key: message.take_key(),
                 })
+
             } else {
+                // TODO: for now we don't parse the peer properly, so it is possible that we get
+                //       parsing errors for peers even when they are valid ; we ignore these
+                //       errors for now, but ultimately we should just error altogether
+                let closer_peers = message.mut_closerPeers()
+                    .iter_mut()
+                    .filter_map(|peer| Peer::from_peer(peer).ok())
+                    .collect::<Vec<_>>();
+
                 Ok(KadMsg::FindNodeRes {
-                    closer_peers: message
-                        .mut_closerPeers()
-                        .iter_mut()
-                        .map(|peer| peer.into())
-                        .collect(),
+                    closer_peers,
                 })
             }
         }

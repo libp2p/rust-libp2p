@@ -22,8 +22,8 @@ extern crate bytes;
 extern crate env_logger;
 extern crate futures;
 extern crate libp2p;
+extern crate tokio_codec;
 extern crate tokio_core;
-extern crate tokio_io;
 
 use futures::future::{loop_fn, Future, IntoFuture, Loop};
 use futures::{Sink, Stream};
@@ -33,8 +33,7 @@ use libp2p::core::Transport;
 use libp2p::core::{upgrade, either::EitherOutput};
 use libp2p::tcp::TcpConfig;
 use tokio_core::reactor::Core;
-use tokio_io::AsyncRead;
-use tokio_io::codec::BytesCodec;
+use tokio_codec::{BytesCodec, Framed};
 use libp2p::websocket::WsConfig;
 
 fn main() {
@@ -94,21 +93,20 @@ fn main() {
         // successfully negotiated. The parameter is the raw socket (implements the AsyncRead
         // and AsyncWrite traits), and the closure must return an implementation of
         // `IntoFuture` that can yield any type of object.
-        Ok(AsyncRead::framed(socket, BytesCodec::new()))
+        Ok(Framed::new(socket, BytesCodec::new()))
     });
 
     // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming and
     // outgoing connections for us.
     let (swarm_controller, swarm_future) = libp2p::core::swarm(
         transport.clone().with_upgrade(proto),
-        |socket, client_addr| {
-            println!("Successfully negotiated protocol with {}", client_addr);
+        |socket, _client_addr| {
+            println!("Successfully negotiated protocol");
 
             // The type of `socket` is exactly what the closure of `SimpleProtocol` returns.
 
             // We loop forever in order to handle all the messages sent by the client.
             loop_fn(socket, move |socket| {
-                let client_addr = client_addr.clone();
                 socket
                     .into_future()
                     .map_err(|(e, _)| e)
@@ -116,15 +114,14 @@ fn main() {
                         if let Some(msg) = msg {
                             // One message has been received. We send it back to the client.
                             println!(
-                                "Received a message from {}: {:?}\n => Sending back \
-                                 identical message to remote",
-                                client_addr, msg
+                                "Received a message: {:?}\n => Sending back \
+                                 identical message to remote", msg
                             );
                             Box::new(rest.send(msg.freeze()).map(|m| Loop::Continue(m)))
                                 as Box<Future<Item = _, Error = _>>
                         } else {
                             // End of stream. Connection closed. Breaking the loop.
-                            println!("Received EOF from {}\n => Dropping connection", client_addr);
+                            println!("Received EOF\n => Dropping connection");
                             Box::new(Ok(Loop::Break(())).into_future())
                                 as Box<Future<Item = _, Error = _>>
                         }

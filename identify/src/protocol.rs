@@ -21,7 +21,6 @@
 use bytes::{Bytes, BytesMut};
 use futures::{future, Future, Sink, Stream};
 use libp2p_core::{ConnectionUpgrade, Endpoint, PublicKeyBytes};
-use log::Level;
 use multiaddr::Multiaddr;
 use protobuf::Message as ProtobufMessage;
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
@@ -29,7 +28,7 @@ use protobuf::RepeatedField;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use structs_proto;
-use tokio_io::codec::Framed;
+use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
 use varint::VarintCodec;
 
@@ -51,8 +50,6 @@ pub enum IdentifyOutput<T> {
     Sender {
         /// Object used to send identify info to the client.
         sender: IdentifySender<T>,
-        /// Observed multiaddress of the client.
-        observed_addr: Multiaddr,
     },
 }
 
@@ -113,29 +110,26 @@ pub struct IdentifyInfo {
     pub protocols: Vec<String>,
 }
 
-impl<C> ConnectionUpgrade<C> for IdentifyProtocolConfig
+impl<C, Maf> ConnectionUpgrade<C, Maf> for IdentifyProtocolConfig
 where
     C: AsyncRead + AsyncWrite + 'static,
+    Maf: Future<Item = Multiaddr, Error = IoError> + 'static,
 {
     type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
     type UpgradeIdentifier = ();
     type Output = IdentifyOutput<C>;
-    type Future = Box<Future<Item = Self::Output, Error = IoError>>;
+    type MultiaddrFuture = future::Either<future::FutureResult<Multiaddr, IoError>, Maf>;
+    type Future = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
     #[inline]
     fn protocol_names(&self) -> Self::NamesIter {
         iter::once((Bytes::from("/ipfs/id/1.0.0"), ()))
     }
 
-    fn upgrade(self, socket: C, _: (), ty: Endpoint, observed_addr: &Multiaddr) -> Self::Future {
-        trace!("Upgrading connection with {:?} as {:?}", observed_addr, ty);
+    fn upgrade(self, socket: C, _: (), ty: Endpoint, remote_addr: Maf) -> Self::Future {
+        trace!("Upgrading connection as {:?}", ty);
 
-        let socket = socket.framed(VarintCodec::default());
-        let observed_addr_log = if log_enabled!(Level::Debug) {
-            Some(observed_addr.clone())
-        } else {
-            None
-        };
+        let socket = Framed::new(socket, VarintCodec::default());
 
         match ty {
             Endpoint::Dialer => {
@@ -144,12 +138,7 @@ where
                     .map(|(msg, _)| msg)
                     .map_err(|(err, _)| err)
                     .and_then(|msg| {
-                        if log_enabled!(Level::Debug) {
-                            debug!("Received identify message from {:?}",
-                                observed_addr_log
-                                    .expect("Programmer error: expected `observed_addr_log' to be \
-                                                non-None since debug log level is enabled"));
-                        }
+                        debug!("Received identify message");
 
                         if let Some(msg) = msg {
                             let (info, observed_addr) = match parse_proto_msg(msg) {
@@ -163,10 +152,12 @@ where
                             trace!("Remote observes us as {:?}", observed_addr);
                             trace!("Information received: {:?}", info);
 
-                            Ok(IdentifyOutput::RemoteInfo {
+                            let out = IdentifyOutput::RemoteInfo {
                                 info,
-                                observed_addr,
-                            })
+                                observed_addr: observed_addr.clone(),
+                            };
+
+                            Ok((out, future::Either::A(future::ok(observed_addr))))
                         } else {
                             debug!("Identify protocol stream closed before receiving info");
                             Err(IoErrorKind::InvalidData.into())
@@ -179,9 +170,12 @@ where
             Endpoint::Listener => {
                 let sender = IdentifySender { inner: socket };
 
-                let future = future::ok(IdentifyOutput::Sender {
-                    sender,
-                    observed_addr: observed_addr.clone(),
+                let future = future::ok({
+                    let io = IdentifyOutput::Sender {
+                        sender,
+                    };
+
+                    (io, future::Either::B(remote_addr))
                 });
 
                 Box::new(future) as Box<_>

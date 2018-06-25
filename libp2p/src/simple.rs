@@ -20,8 +20,7 @@
 
 use bytes::Bytes;
 use core::upgrade::{ConnectionUpgrade, Endpoint};
-use futures::{future::FromErr, prelude::*};
-use multiaddr::Multiaddr;
+use futures::prelude::*;
 use std::{iter, io::Error as IoError, sync::Arc};
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -58,11 +57,13 @@ impl<F> Clone for SimpleProtocol<F> {
     }
 }
 
-impl<C, F, O> ConnectionUpgrade<C> for SimpleProtocol<F>
+impl<C, F, O, Maf> ConnectionUpgrade<C, Maf> for SimpleProtocol<F>
 where
     C: AsyncRead + AsyncWrite,
     F: Fn(C) -> O,
     O: IntoFuture<Error = IoError>,
+    O::Future: 'static,
+    Maf: 'static,
 {
     type NamesIter = iter::Once<(Bytes, ())>;
     type UpgradeIdentifier = ();
@@ -73,11 +74,13 @@ where
     }
 
     type Output = O::Item;
-    type Future = FromErr<O::Future, IoError>;
+    type MultiaddrFuture = Maf;
+    type Future = Box<Future<Item = (O::Item, Self::MultiaddrFuture), Error = IoError>>;
 
     #[inline]
-    fn upgrade(self, socket: C, _: (), _: Endpoint, _: &Multiaddr) -> Self::Future {
+    fn upgrade(self, socket: C, _: (), _: Endpoint, client_addr: Maf) -> Self::Future {
         let upgrade = &self.upgrade;
-        upgrade(socket).into_future().from_err()
+        let fut = upgrade(socket).into_future().from_err().map(move |out| (out, client_addr));
+        Box::new(fut) as Box<_>
     }
 }
