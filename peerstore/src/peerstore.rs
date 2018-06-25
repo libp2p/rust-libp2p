@@ -20,6 +20,7 @@
 
 use multiaddr::Multiaddr;
 use {PeerId, TTL};
+use std::time::Duration;
 
 /// Implemented on objects that store peers.
 ///
@@ -79,6 +80,22 @@ pub trait PeerAccess {
         }
     }
 
+    /// Removes an address from a peer.
+    #[inline]
+    fn rm_addr(&mut self, addr: Multiaddr) {
+        self.set_addr_ttl(addr, Duration::new(0, 0));
+    }
+
+    // Similar to calling `rm_addr` multiple times in a row.
+    fn rm_addrs<I>(&mut self, addrs: I)
+    where
+        I: IntoIterator<Item = Multiaddr>,
+    {
+        for addr in addrs.into_iter() {
+            self.rm_addr(addr);
+        }
+    }
+
     /// Sets the TTL of an address of a peer. Adds the address if it is currently unknown.
     ///
     /// Contrary to `add_addr`, this operation is never a no-op.
@@ -91,7 +108,7 @@ pub trait PeerAccess {
         I: IntoIterator<Item = Multiaddr>,
     {
         for addr in addrs.into_iter() {
-            self.add_addr(addr, ttl);
+            self.set_addr_ttl(addr, ttl);
         }
     }
 
