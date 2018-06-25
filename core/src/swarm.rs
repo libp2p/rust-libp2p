@@ -191,19 +191,22 @@ where
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let handler = &mut self.handler;
 
-        match self.next_incoming.poll() {
-            Ok(Async::Ready(connec)) => {
-                debug!("Swarm received new multiplexed incoming connection");
-                self.next_incoming = self.transport.clone().next_incoming();
-                let connec = connec.map(|(out, maf)| {
-                    (out, Box::new(maf) as Box<Future<Item = Multiaddr, Error = IoError>>)
-                });
-                self.listeners_upgrade.push(Box::new(connec) as Box<_>);
-            }
-            Ok(Async::NotReady) => {}
-            Err(err) => {
-                debug!("Error in multiplexed incoming connection: {:?}", err);
-                self.next_incoming = self.transport.clone().next_incoming();
+        loop {
+            match self.next_incoming.poll() {
+                Ok(Async::Ready(connec)) => {
+                    debug!("Swarm received new multiplexed incoming connection");
+                    self.next_incoming = self.transport.clone().next_incoming();
+                    let connec = connec.map(|(out, maf)| {
+                        (out, Box::new(maf) as Box<Future<Item = Multiaddr, Error = IoError>>)
+                    });
+                    self.listeners_upgrade.push(Box::new(connec) as Box<_>);
+                }
+                Ok(Async::NotReady) => break,
+                Err(err) => {
+                    debug!("Error in multiplexed incoming connection: {:?}", err);
+                    self.next_incoming = self.transport.clone().next_incoming();
+                    break;
+                }
             }
         }
 
