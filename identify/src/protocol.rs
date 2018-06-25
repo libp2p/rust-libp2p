@@ -20,7 +20,8 @@
 
 use bytes::{Bytes, BytesMut};
 use futures::{future, Future, Sink, Stream};
-use libp2p_core::{ConnectionUpgrade, Endpoint, PublicKeyBytes};
+use keys_proto::{KeyType as KeyTypeProtobuf, PublicKey as PublicKeyProtobuf};
+use libp2p_core::{ConnectionUpgrade, Endpoint, PublicKey};
 use multiaddr::Multiaddr;
 use protobuf::Message as ProtobufMessage;
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
@@ -40,6 +41,7 @@ pub struct IdentifyProtocolConfig;
 pub enum IdentifyOutput<T> {
     /// We obtained information from the remote. Happens when we are the dialer.
     RemoteInfo {
+        /// Information about the remote.
         info: IdentifyInfo,
         /// Address the remote sees for us.
         observed_addr: Multiaddr,
@@ -77,10 +79,27 @@ where
             .map(|addr| addr.into_bytes())
             .collect();
 
+        let mut public_key = PublicKeyProtobuf::new();
+        match info.public_key {
+            PublicKey::Rsa(data) => {
+                public_key.set_Type(KeyTypeProtobuf::RSA);
+                public_key.set_Data(data);
+            },
+            PublicKey::Ed25519(data) => {
+                public_key.set_Type(KeyTypeProtobuf::Ed25519);
+                public_key.set_Data(data);
+            },
+            PublicKey::Secp256k1(data) => {
+                public_key.set_Type(KeyTypeProtobuf::Secp256k1);
+                public_key.set_Data(data);
+            },
+        };
+
         let mut message = structs_proto::Identify::new();
         message.set_agentVersion(info.agent_version);
         message.set_protocolVersion(info.protocol_version);
-        message.set_publicKey(info.public_key.0);
+        message.set_publicKey(public_key.write_to_bytes()
+            .expect("protobuf writing should always be valid"));
         message.set_listenAddrs(listen_addrs);
         message.set_observedAddr(observed_addr.to_bytes());
         message.set_protocols(RepeatedField::from_vec(info.protocols));
@@ -98,7 +117,7 @@ where
 #[derive(Debug, Clone)]
 pub struct IdentifyInfo {
     /// Public key of the node.
-    pub public_key: PublicKeyBytes,
+    pub public_key: PublicKey,
     /// Version of the "global" protocol, eg. `ipfs/1.0.0` or `polkadot/1.0.0`.
     pub protocol_version: String,
     /// Name and version of the client. Can be thought as similar to the `User-Agent` header
@@ -206,8 +225,28 @@ fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> 
 
             let observed_addr = bytes_to_multiaddr(msg.take_observedAddr())?;
 
+            let pubkey = {
+                let mut pubkey = protobuf_parse_from_bytes::<PublicKeyProtobuf>(msg.get_publicKey())
+                    .map_err(|err| {
+                        debug!("failed to parse remote's infos' pubkey protobuf");
+                        IoError::new(IoErrorKind::InvalidData, err)
+                    })?;
+
+                match pubkey.get_Type() {
+                    KeyTypeProtobuf::RSA => {
+                        PublicKey::Rsa(pubkey.take_Data())
+                    },
+                    KeyTypeProtobuf::Ed25519 => {
+                        PublicKey::Ed25519(pubkey.take_Data())
+                    },
+                    KeyTypeProtobuf::Secp256k1 => {
+                        PublicKey::Secp256k1(pubkey.take_Data())
+                    },
+                }
+            };
+
             let info = IdentifyInfo {
-                public_key: PublicKeyBytes(msg.take_publicKey()),
+                public_key: pubkey,
                 protocol_version: msg.take_protocolVersion(),
                 agent_version: msg.take_agentVersion(),
                 listen_addrs: listen_addrs,
@@ -229,7 +268,7 @@ mod tests {
     use self::libp2p_tcp_transport::TcpConfig;
     use self::tokio_core::reactor::Core;
     use futures::{Future, Stream};
-    use libp2p_core::{Transport, PublicKeyBytes};
+    use libp2p_core::{PublicKey, PublicKeyBytesSlice, Transport};
     use std::sync::mpsc;
     use std::thread;
     use {IdentifyInfo, IdentifyOutput, IdentifyProtocolConfig};
@@ -257,7 +296,7 @@ mod tests {
                 .and_then(|identify| match identify {
                     IdentifyOutput::Sender { sender, .. } => sender.send(
                         IdentifyInfo {
-                            public_key: PublicKeyBytes(vec![1, 2, 3, 4, 5, 7]),
+                            public_key: PublicKey::Ed25519(vec![1, 2, 3, 4, 5, 7]),
                             protocol_version: "proto_version".to_owned(),
                             agent_version: "agent_version".to_owned(),
                             listen_addrs: vec![
@@ -289,7 +328,7 @@ mod tests {
                         observed_addr,
                         "/ip4/100.101.102.103/tcp/5000".parse().unwrap()
                     );
-                    assert_eq!(info.public_key.0, &[1, 2, 3, 4, 5, 7]);
+                    assert_eq!(info.public_key.as_raw(), PublicKeyBytesSlice(&[1, 2, 3, 4, 5, 7]));
                     assert_eq!(info.protocol_version, "proto_version");
                     assert_eq!(info.agent_version, "agent_version");
                     assert_eq!(
