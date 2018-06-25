@@ -84,7 +84,7 @@ extern crate tokio_timer;
 extern crate varint;
 
 pub use self::high_level::{KademliaConfig, KademliaController, KademliaControllerPrototype};
-pub use self::high_level::{KademliaPeerReqStream, KademliaUpgrade, KademliaPeerReq};
+pub use self::high_level::{KademliaReqStream, KademliaReq, KademliaUpgrade, KademliaPeerReq};
 pub use self::protocol::{ConnectionType, Peer};
 pub use self::query::QueryEvent;
 

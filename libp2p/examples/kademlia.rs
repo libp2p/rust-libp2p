@@ -35,7 +35,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use libp2p::core::{Transport, PublicKeyBytesSlice};
 use libp2p::core::{upgrade, either::EitherOutput};
-use libp2p::kad::{ConnectionType, Peer, QueryEvent};
+use libp2p::kad::{ConnectionType, KademliaReq, Peer, QueryEvent};
 use libp2p::tcp::TcpConfig;
 use tokio_core::reactor::Core;
 
@@ -121,24 +121,29 @@ fn main() {
             move |kademlia_stream, _| {
                 let peer_store = peer_store.clone();
                 kademlia_stream.for_each(move |req| {
-                    let peer_store = peer_store.clone();
-                    let result = req
-                        .requested_peers()
-                        .map(move |peer_id| {
-                            let addrs = peer_store
-                                .peer(peer_id)
-                                .into_iter()
-                                .flat_map(|p| p.addrs())
+                    match req {
+                        KademliaReq::NeedPing(_) => unimplemented!(),
+                        KademliaReq::PeerRequest(req) => {
+                            let peer_store = peer_store.clone();
+                            let result = req
+                                .requested_peers()
+                                .map(move |peer_id| {
+                                    let addrs = peer_store
+                                        .peer(peer_id)
+                                        .into_iter()
+                                        .flat_map(|p| p.addrs())
+                                        .collect::<Vec<_>>();
+                                    Peer {
+                                        node_id: peer_id.clone(),
+                                        multiaddrs: addrs,
+                                        connection_ty: ConnectionType::Connected, // meh :-/
+                                    }
+                                })
                                 .collect::<Vec<_>>();
-                            Peer {
-                                node_id: peer_id.clone(),
-                                multiaddrs: addrs,
-                                connection_ty: ConnectionType::Connected, // meh :-/
-                            }
-                        })
-                        .collect::<Vec<_>>();
-                    req.respond(result);
-                    Ok(())
+                            req.respond(result);
+                            Ok(())
+                        }
+                    }
                 })
             }
         }
