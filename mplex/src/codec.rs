@@ -26,6 +26,11 @@ use core::Endpoint;
 use tokio_io::codec::{Decoder, Encoder};
 use varint;
 
+// Arbitrary maximum size for a packet.
+// Since data is entirely buffered before being dispatched, we need a limit or remotes could just
+// send a 4 TB-long packet full of zeroes that we kill our process with an OOM error.
+const MAX_FRAME_SIZE: usize = 32 * 1024 * 1024;
+
 #[derive(Debug, Clone)]
 pub enum Elem {
     Open { substream_id: u32 },
@@ -77,7 +82,7 @@ impl Decoder for Codec {
                 CodecDecodeState::HasHeader(header) => {
                     match self.varint_decoder.decode(src)? {
                         Some(len) => {
-                            if len > 4096 {     // TODO: arbitrary
+                            if len as usize > MAX_FRAME_SIZE {
                                 return Err(IoErrorKind::InvalidData.into());
                             }
 
@@ -156,6 +161,10 @@ impl Encoder for Codec {
         let header_bytes = varint::encode(header);
         let data_len = data.as_ref().len();
         let data_len_bytes = varint::encode(data_len);
+
+        if data_len > MAX_FRAME_SIZE {
+            return Err(IoError::new(IoErrorKind::InvalidData, "data size exceed maximum"));
+        }
 
         dst.reserve(header_bytes.len() + data_len_bytes.len() + data_len);
         dst.put(header_bytes);
