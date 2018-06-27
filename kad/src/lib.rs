@@ -83,14 +83,12 @@ extern crate tokio_io;
 extern crate tokio_timer;
 extern crate varint;
 
-pub use self::high_level::{KademliaConfig, KademliaController, KademliaControllerPrototype};
-pub use self::high_level::{KademliaPeerReqStream, KademliaUpgrade, KademliaPeerReq};
+pub use self::high_level::{KademliaConfig, KademliaSystem, QueryEvent};
+pub use self::kad_server::{KademliaServerController, KademliaServerConfig, KademliaIncomingRequest, KademliaFindNodeRespond};
 pub use self::protocol::{ConnectionType, Peer};
-pub use self::query::QueryEvent;
 
 mod high_level;
 mod kad_server;
 mod kbucket;
 mod protobuf_structs;
 mod protocol;
-mod query;
