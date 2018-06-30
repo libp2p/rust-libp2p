@@ -42,6 +42,8 @@ pub struct KademliaConfig {
     pub parallelism: u32,
     /// Id of the local peer.
     pub local_peer_id: PeerId,
+    /// List of peers initially known.
+    pub known_initial_peers: Vec<PeerId>,
     /// Duration after which a node in the k-buckets needs to be pinged again.
     pub kbuckets_timeout: Duration,
     /// When contacting a node, duration after which we consider it unresponsive.
@@ -84,6 +86,10 @@ impl KademliaSystem {
     /// Same as `start`, but doesn't perform the initialization process.
     pub fn without_init(config: KademliaConfig) -> KademliaSystem {
         let kbuckets = KBucketsTable::new(config.local_peer_id.clone(), config.kbuckets_timeout);
+        for peer in config.known_initial_peers {
+            let _ = kbuckets.update(peer, ());
+        }
+
         let system = KademliaSystem {
             kbuckets: kbuckets,
             parallelism: config.parallelism,
@@ -117,6 +123,11 @@ impl KademliaSystem {
                 .map(|(_, _, rest)| future::Loop::Continue(rest));
             future::Either::B(fut)
         })
+    }
+
+    /// Finds the known nodes closest to `id`, ordered by distance.
+    pub fn known_closest_peers(&self, id: &PeerId) -> impl Iterator<Item = PeerId> {
+        self.kbuckets.find_closest_with_self(id)
     }
 
     /// Starts a query for an iterative `FIND_NODE` request.

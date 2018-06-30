@@ -208,6 +208,26 @@ where
         out.into_iter()
     }
 
+    /// Same as `find_closest`, but includes the local peer as well.
+    pub fn find_closest_with_self(&self, id: &Id) -> VecIntoIter<Id>
+    where
+        Id: Clone,
+    {
+        // TODO: optimize
+        let mut intermediate: Vec<_> = self.find_closest(&id).collect();
+        if let Some(pos) = intermediate
+            .iter()
+            .position(|e| e.distance_with(&id) >= self.my_id.distance_with(&id))
+        {
+            if intermediate[pos] != self.my_id {
+                intermediate.insert(pos, self.my_id.clone());
+            }
+        } else {
+            intermediate.push(self.my_id.clone());
+        }
+        intermediate.into_iter()
+    }
+
     /// Marks the node as "most recent" in its bucket and modifies the value associated to it.
     /// This function should be called whenever we receive a communication from a node.
     pub fn update(&self, id: Id, value: Val) -> UpdateOutcome<Id, Val> {

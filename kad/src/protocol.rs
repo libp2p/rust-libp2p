@@ -237,6 +237,7 @@ fn msg_to_proto(kad_msg: KadMsg) -> protobuf_structs::dht::Message {
         }
         KadMsg::FindNodeRes { closer_peers } => {
             // TODO: if empty, the remote will think it's a request
+            // TODO: not good, possibly exposed in the API
             assert!(!closer_peers.is_empty());
             let mut msg = protobuf_structs::dht::Message::new();
             msg.set_field_type(protobuf_structs::dht::Message_MessageType::FIND_NODE);

@@ -239,8 +239,7 @@ where
             .map_err(|_| unreachable!());
         let rq_rx = rq_rx
             .map(|(m, o)| EventSource::LocalRequest(m, o))
-            .map_err(|_| unreachable!())
-            .chain(future::ok(EventSource::Finished).into_stream());
+            .map_err(|_| unreachable!());
         let kad_stream = kad_stream
             .map(|m| EventSource::Remote(m))
             .chain(future::ok(EventSource::Finished).into_stream());
