@@ -35,7 +35,7 @@ use tokio_timer::Deadline;
 
 /// Prototype for a future Kademlia protocol running on a socket.
 #[derive(Debug, Clone)]
-pub struct KademliaConfig<F> {
+pub struct KademliaConfig {
     /// Degree of parallelism on the network. Often called `alpha` in technical papers.
     /// No more than this number of remotes will be used at a given time for any given operation.
     // TODO: ^ share this number between operations? or does each operation use `alpha` remotes?
@@ -46,23 +46,16 @@ pub struct KademliaConfig<F> {
     pub kbuckets_timeout: Duration,
     /// When contacting a node, duration after which we consider it unresponsive.
     pub request_timeout: Duration,
-    /// Function that, when called with a `&PeerId`, produces a `Future` that produces a
-    /// `KademliaServerController`. The controller must control the Kademlia socket for this
-    /// specific peer.
-    /// Should also implement `Clone`.
-    pub kad_access: F,
 }
 
 /// System that drives the whole Kademlia process.
-pub struct KademliaSystem<F> {
+pub struct KademliaSystem {
     // The actual DHT.
     kbuckets: KBucketsTable<PeerId, ()>,
     // Same as in the config.
     parallelism: u32,
     // Same as in the config.
     request_timeout: Duration,
-    // Access function for KademliaServerController.
-    access: F,
 }
 
 /// Event that happens during a query.
@@ -74,54 +67,65 @@ pub enum QueryEvent<TOut> {
     Finished(TOut),
 }
 
-impl<F, Fut> KademliaSystem<F>
-where F: FnMut(&PeerId) -> Fut + Clone,
-    Fut: IntoFuture<Item = KademliaServerController, Error = IoError>,
-{
+impl KademliaSystem {
     /// Starts a new Kademlia system.
     ///
     /// Also produces a `Future` that drives a Kademlia initialization process.
     /// This future should be driven to completion by the caller.
-    pub fn start<'a>(config: KademliaConfig<F>) -> (KademliaSystem<F>, Box<Future<Item = (), Error = IoError> + 'a>)
-    where F: 'a, Fut: 'a
+    pub fn start<'a, F, Fut>(config: KademliaConfig, access: F) -> (KademliaSystem, impl Future<Item = (), Error = IoError> + 'a)
+        where F: FnMut(&PeerId) -> Fut + Clone + 'a,
+            Fut: IntoFuture<Item = KademliaServerController, Error = IoError>  + 'a,
     {
+        let system = KademliaSystem::without_init(config);
+        let init_future = system.perform_initialization(access);
+        (system, init_future)
+    }
+
+    /// Same as `start`, but doesn't perform the initialization process.
+    pub fn without_init(config: KademliaConfig) -> KademliaSystem {
         let kbuckets = KBucketsTable::new(config.local_peer_id.clone(), config.kbuckets_timeout);
-
-        let init_future = {
-            let futures: Vec<_> = (0..256)      // TODO: 256 is arbitrary
-                .map(|n| refresh(&config.local_peer_id, n, config.kad_access.clone(), &kbuckets, config.parallelism as usize, config.request_timeout))
-                .map(|stream| stream.for_each(|_| Ok(())))
-                .collect();
-
-            future::loop_fn(futures, |futures| {
-                if futures.is_empty() {
-                    let fut = future::ok(future::Loop::Break(()));
-                    return future::Either::A(fut);
-                }
-
-                let fut = future::select_all(futures)
-                    .map_err(|(err, _, _)| err)
-                    .map(|(_, _, rest)| future::Loop::Continue(rest));
-                future::Either::B(fut)
-            })
-        };
-
         let system = KademliaSystem {
             kbuckets: kbuckets,
             parallelism: config.parallelism,
             request_timeout: config.request_timeout,
-            access: config.kad_access,
         };
 
-        (system, Box::new(init_future) as Box<_>)
+        system
+    }
+
+    /// Starts an initialization process.
+    pub fn perform_initialization<'a, F, Fut>(&self, access: F) -> impl Future<Item = (), Error = IoError> + 'a
+        where F: FnMut(&PeerId) -> Fut + Clone + 'a,
+            Fut: IntoFuture<Item = KademliaServerController, Error = IoError>  + 'a,
+    {
+        let futures: Vec<_> = (0..256)      // TODO: 256 is arbitrary
+            .map(|n| {
+                refresh(n, access.clone(), &self.kbuckets,
+                        self.parallelism as usize, self.request_timeout)
+            })
+            .map(|stream| stream.for_each(|_| Ok(())))
+            .collect();
+
+        future::loop_fn(futures, |futures| {
+            if futures.is_empty() {
+                let fut = future::ok(future::Loop::Break(()));
+                return future::Either::A(fut);
+            }
+
+            let fut = future::select_all(futures)
+                .map_err(|(err, _, _)| err)
+                .map(|(_, _, rest)| future::Loop::Continue(rest));
+            future::Either::B(fut)
+        })
     }
 
     /// Starts a query for an iterative `FIND_NODE` request.
-    pub fn find_node<'a>(&self, searched_key: PeerId)
+    pub fn find_node<'a, F, Fut>(&self, searched_key: PeerId, access: F)
         -> Box<Stream<Item = QueryEvent<Vec<PeerId>>, Error = IoError> + 'a>
-    where F: 'a, Fut: 'a
+    where F: FnMut(&PeerId) -> Fut + 'a,
+        Fut: IntoFuture<Item = KademliaServerController, Error = IoError>  + 'a,
     {
-        query(self.access.clone(), &self.kbuckets, searched_key, self.parallelism as usize,
+        query(access, &self.kbuckets, searched_key, self.parallelism as usize,
               20, self.request_timeout)  // TODO: arbitrary const
     }
 }
@@ -130,13 +134,13 @@ where F: FnMut(&PeerId) -> Fut + Clone,
 // bucket.
 //
 // Returns a dummy no-op future if `bucket_num` is out of range.
-fn refresh<'a, F, Fut>(local_id: &PeerId, bucket_num: usize, access: F, kbuckets: &KBucketsTable<PeerId, ()>,
+fn refresh<'a, F, Fut>(bucket_num: usize, access: F, kbuckets: &KBucketsTable<PeerId, ()>,
                         parallelism: usize, request_timeout: Duration)
     -> Box<Stream<Item = QueryEvent<()>, Error = IoError> + 'a>
 where F: FnMut(&PeerId) -> Fut + 'a,
     Fut: IntoFuture<Item = KademliaServerController, Error = IoError> + 'a,
 {
-    let peer_id = match gen_random_id(&local_id, bucket_num) {
+    let peer_id = match gen_random_id(kbuckets.my_id(), bucket_num) {
         Ok(p) => p,
         Err(()) => return Box::new(stream::once(Ok(QueryEvent::Finished(())))),
     };
