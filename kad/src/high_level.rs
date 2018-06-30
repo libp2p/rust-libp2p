@@ -125,6 +125,14 @@ impl KademliaSystem {
         })
     }
 
+    /// Updates the k-buckets with the specific peer.
+    ///
+    /// Should be called whenever we receive a message from a peer.
+    pub fn update_kbuckets(&self, peer: PeerId) {
+        // TODO: ping system
+        let _ = self.kbuckets.update(peer, ());
+    }
+
     /// Finds the known nodes closest to `id`, ordered by distance.
     pub fn known_closest_peers(&self, id: &PeerId) -> impl Iterator<Item = PeerId> {
         self.kbuckets.find_closest_with_self(id)
