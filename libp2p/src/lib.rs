@@ -41,6 +41,7 @@ pub extern crate libp2p_relay as relay;
 pub extern crate libp2p_secio as secio;
 #[cfg(not(target_os = "emscripten"))]
 pub extern crate libp2p_tcp_transport as tcp;
+pub extern crate libp2p_transport_timeout as transport_timeout;
 pub extern crate libp2p_websocket as websocket;
 
 pub mod simple;
@@ -48,6 +49,7 @@ pub mod simple;
 pub use self::core::{Transport, ConnectionUpgrade, PeerId, swarm};
 pub use self::multiaddr::Multiaddr;
 pub use self::simple::SimpleProtocol;
+pub use self::transport_timeout::TransportTimeout;
 
 /// Implementation of `Transport` that supports the most common protocols.
 ///

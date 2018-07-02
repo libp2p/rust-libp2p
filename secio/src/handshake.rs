@@ -27,7 +27,7 @@ use futures::Future;
 use futures::future;
 use futures::sink::Sink;
 use futures::stream::Stream;
-use keys_proto::{KeyType as KeyTypeProtobuf, PublicKey as PublicKeyProtobuf};
+use libp2p_core::PublicKey;
 use protobuf::Message as ProtobufMessage;
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
 use ring::agreement::EphemeralPrivateKey;
@@ -45,7 +45,7 @@ use structs_proto::{Exchange, Propose};
 use tokio_io::codec::length_delimited;
 use tokio_io::{AsyncRead, AsyncWrite};
 use untrusted::Input as UntrustedInput;
-use {SecioKeyPair, SecioKeyPairInner, SecioPublicKey};
+use {SecioKeyPair, SecioKeyPairInner};
 
 /// Performs a handshake on the given socket.
 ///
@@ -58,7 +58,7 @@ use {SecioKeyPair, SecioKeyPairInner, SecioPublicKey};
 pub fn handshake<'a, S: 'a>(
     socket: S,
     local_key: SecioKeyPair,
-) -> Box<Future<Item = (FullCodec<S>, SecioPublicKey), Error = SecioError> + 'a>
+) -> Box<Future<Item = (FullCodec<S>, PublicKey), Error = SecioError> + 'a>
 where
     S: AsyncRead + AsyncWrite,
 {
@@ -81,7 +81,7 @@ where
         // The remote proposition's raw bytes.
         remote_proposition_bytes: BytesMut,
         remote_public_key_in_protobuf_bytes: Vec<u8>,
-        remote_public_key: Option<SecioPublicKey>,
+        remote_public_key: Option<PublicKey>,
 
         // The remote peer's version of `local_nonce`.
         // If the NONCE size is actually part of the protocol, we can change this to a fixed-size
@@ -144,21 +144,7 @@ where
 
         // Send our proposition with our nonce, public key and supported protocols.
         .and_then(|mut context| {
-            let mut public_key = PublicKeyProtobuf::new();
-            public_key.set_Data(context.local_key.to_public_key().into_raw().0);
-            match context.local_key.inner {
-                SecioKeyPairInner::Rsa { .. } => {
-                    public_key.set_Type(KeyTypeProtobuf::RSA);
-                },
-                SecioKeyPairInner::Ed25519 { .. } => {
-                    public_key.set_Type(KeyTypeProtobuf::Ed25519);
-                },
-                #[cfg(feature = "secp256k1")]
-                SecioKeyPairInner::Secp256k1 { .. } => {
-                    public_key.set_Type(KeyTypeProtobuf::Secp256k1);
-                },
-            }
-            context.local_public_key_in_protobuf_bytes = public_key.write_to_bytes().unwrap();
+            context.local_public_key_in_protobuf_bytes = context.local_key.to_public_key().into_protobuf_encoding();
 
             let mut proposition = Propose::new();
             proposition.set_rand(context.local_nonce.clone().to_vec());
@@ -200,29 +186,16 @@ where
                         }
                     };
                     context.remote_public_key_in_protobuf_bytes = prop.take_pubkey();
-                    let mut pubkey = {
-                        let bytes = &context.remote_public_key_in_protobuf_bytes;
-                        match protobuf_parse_from_bytes::<PublicKeyProtobuf>(bytes) {
-                            Ok(p) => p,
-                            Err(_) => {
-                                debug!("failed to parse remote's proposition's pubkey protobuf");
-                                return Err(SecioError::HandshakeParsingFailure);
-                            },
-                        }
+                    let pubkey = match PublicKey::from_protobuf_encoding(&context.remote_public_key_in_protobuf_bytes) {
+                        Ok(p) => p,
+                        Err(_) => {
+                            debug!("failed to parse remote's proposition's pubkey protobuf");
+                            return Err(SecioError::HandshakeParsingFailure);
+                        },
                     };
 
                     context.remote_nonce = prop.take_rand();
-                    context.remote_public_key = Some(match pubkey.get_Type() {
-                        KeyTypeProtobuf::RSA => {
-                            SecioPublicKey::Rsa(pubkey.take_Data())
-                        },
-                        KeyTypeProtobuf::Ed25519 => {
-                            SecioPublicKey::Ed25519(pubkey.take_Data())
-                        },
-                        KeyTypeProtobuf::Secp256k1 => {
-                            SecioPublicKey::Secp256k1(pubkey.take_Data())
-                        },
-                    });
+                    context.remote_public_key = Some(pubkey);
                     trace!("received proposition from remote ; pubkey = {:?} ; nonce = {:?}",
                            context.remote_public_key, context.remote_nonce);
                     Ok((prop, socket, context))
@@ -403,7 +376,7 @@ where
             data_to_verify.extend_from_slice(remote_exch.get_epubkey());
 
             match context.remote_public_key {
-                Some(SecioPublicKey::Rsa(ref remote_public_key)) => {
+                Some(PublicKey::Rsa(ref remote_public_key)) => {
                     // TODO: The ring library doesn't like some stuff in our DER public key,
                     //       therefore we scrap the first 24 bytes of the key. A proper fix would
                     //       be to write a DER parser, but that's not trivial.
@@ -419,7 +392,7 @@ where
                         },
                     }
                 },
-                Some(SecioPublicKey::Ed25519(ref remote_public_key)) => {
+                Some(PublicKey::Ed25519(ref remote_public_key)) => {
                     match signature_verify(&ED25519,
                                            UntrustedInput::from(remote_public_key),
                                            UntrustedInput::from(&data_to_verify),
@@ -433,7 +406,7 @@ where
                     }
                 },
                 #[cfg(feature = "secp256k1")]
-                Some(SecioPublicKey::Secp256k1(ref remote_public_key)) => {
+                Some(PublicKey::Secp256k1(ref remote_public_key)) => {
                     let data_to_verify = digest::digest(&digest::SHA256, &data_to_verify);
                     let message = secp256k1::Message::from_slice(data_to_verify.as_ref())
                         .expect("digest output length doesn't match secp256k1 input length");
@@ -454,7 +427,7 @@ where
                     }
                 },
                 #[cfg(not(feature = "secp256k1"))]
-                Some(SecioPublicKey::Secp256k1(_)) => {
+                Some(PublicKey::Secp256k1(_)) => {
                     debug!("support for secp256k1 was disabled at compile-time");
                     return Err(SecioError::SignatureVerificationFailed);
                 },

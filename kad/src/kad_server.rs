@@ -402,7 +402,7 @@ mod tests {
     use futures::{Future, Poll, Sink, StartSend, Stream};
     use futures::sync::mpsc;
     use kad_server::{self, KademliaIncomingRequest, KademliaServerController};
-    use libp2p_core::PublicKeyBytes;
+    use libp2p_core::PublicKey;
     use protocol::{ConnectionType, Peer};
     use rand;
 
@@ -469,7 +469,7 @@ mod tests {
 
         let random_peer_id = {
             let buf = (0 .. 1024).map(|_| -> u8 { rand::random() }).collect::<Vec<_>>();
-            PublicKeyBytes(buf).to_peer_id()
+            PublicKey::Rsa(buf).into_peer_id()
         };
 
         let find_node_fut = controller_a.find_node(&random_peer_id);
@@ -477,7 +477,7 @@ mod tests {
         let example_response = Peer {
             node_id: {
                 let buf = (0 .. 1024).map(|_| -> u8 { rand::random() }).collect::<Vec<_>>();
-                PublicKeyBytes(buf).to_peer_id()
+                PublicKey::Rsa(buf).into_peer_id()
             },
             multiaddrs: Vec::new(),
             connection_ty: ConnectionType::Connected,

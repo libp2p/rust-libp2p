@@ -77,7 +77,8 @@ extern crate tokio_codec;
 extern crate tokio_io;
 extern crate varint;
 
-pub use self::protocol::{IdentifyInfo, IdentifyOutput, IdentifyProtocolConfig, IdentifySender};
+pub use self::protocol::{IdentifyInfo, IdentifyOutput};
+pub use self::protocol::{IdentifyProtocolConfig, IdentifySender};
 pub use self::transport::IdentifyTransport;
 
 mod protocol;

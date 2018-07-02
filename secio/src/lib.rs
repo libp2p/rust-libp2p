@@ -105,7 +105,7 @@ use asn1_der::{DerObject, traits::FromDerEncoded, traits::FromDerObject};
 use bytes::{Bytes, BytesMut};
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
-use libp2p_core::{PeerId, PublicKeyBytes, PublicKeyBytesSlice};
+use libp2p_core::{PeerId, PublicKey};
 use ring::signature::{Ed25519KeyPair, RSAKeyPair};
 use ring::rand::SystemRandom;
 use rw_stream_sink::RwStreamSink;
@@ -120,7 +120,6 @@ mod algo_support;
 mod codec;
 mod error;
 mod handshake;
-mod keys_proto;
 mod structs_proto;
 
 /// Implementation of the `ConnectionUpgrade` trait of `libp2p_core`. Automatically applies
@@ -230,42 +229,28 @@ impl SecioKeyPair {
     }
 
     /// Returns the public key corresponding to this key pair.
-    pub fn to_public_key(&self) -> SecioPublicKey {
+    pub fn to_public_key(&self) -> PublicKey {
         match self.inner {
             SecioKeyPairInner::Rsa { ref public, .. } => {
-                SecioPublicKey::Rsa(public.clone())
+                PublicKey::Rsa(public.clone())
             },
             SecioKeyPairInner::Ed25519 { ref key_pair } => {
-                SecioPublicKey::Ed25519(key_pair.public_key_bytes().to_vec())
+                PublicKey::Ed25519(key_pair.public_key_bytes().to_vec())
             },
             #[cfg(feature = "secp256k1")]
             SecioKeyPairInner::Secp256k1 { ref private } => {
                 let secp = secp256k1::Secp256k1::with_caps(secp256k1::ContextFlag::SignOnly);
                 let pubkey = secp256k1::key::PublicKey::from_secret_key(&secp, private)
                     .expect("wrong secp256k1 private key ; type safety violated");
-                SecioPublicKey::Secp256k1(pubkey.serialize().to_vec())
+                PublicKey::Secp256k1(pubkey.serialize().to_vec())
             },
         }
     }
 
     /// Builds a `PeerId` corresponding to the public key of this key pair.
+    #[inline]
     pub fn to_peer_id(&self) -> PeerId {
-        match self.inner {
-            SecioKeyPairInner::Rsa { ref public, .. } => {
-                PublicKeyBytesSlice(&public).into()
-            },
-            SecioKeyPairInner::Ed25519 { ref key_pair } => {
-                PublicKeyBytesSlice(key_pair.public_key_bytes()).into()
-            },
-            #[cfg(feature = "secp256k1")]
-            SecioKeyPairInner::Secp256k1 { ref private } => {
-                let secp = secp256k1::Secp256k1::with_caps(secp256k1::ContextFlag::None);
-                let pubkey = secp256k1::key::PublicKey::from_secret_key(&secp, private)
-                    .expect("wrong secp256k1 private key ; type safety violated");
-                let pubkey_bytes = pubkey.serialize();
-                PublicKeyBytesSlice(&pubkey_bytes).into()
-            },
-        }
+        self.to_public_key().into_peer_id()
     }
 
     // TODO: method to save generated key on disk?
@@ -289,61 +274,6 @@ enum SecioKeyPairInner {
     },
 }
 
-/// Public key used by the remote.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SecioPublicKey {
-    /// DER format.
-    Rsa(Vec<u8>),
-    /// Format = ???
-    // TODO: ^
-    Ed25519(Vec<u8>),
-    /// Format = ???
-    // TODO: ^
-    Secp256k1(Vec<u8>),
-}
-
-impl SecioPublicKey {
-    /// Turns this public key into a raw representation.
-    #[inline]
-    pub fn as_raw(&self) -> PublicKeyBytesSlice {
-        match self {
-            SecioPublicKey::Rsa(ref data) => PublicKeyBytesSlice(data),
-            SecioPublicKey::Ed25519(ref data) => PublicKeyBytesSlice(data),
-            SecioPublicKey::Secp256k1(ref data) => PublicKeyBytesSlice(data),
-        }
-    }
-
-    /// Turns this public key into a raw representation.
-    #[inline]
-    pub fn into_raw(self) -> PublicKeyBytes {
-        match self {
-            SecioPublicKey::Rsa(data) => PublicKeyBytes(data),
-            SecioPublicKey::Ed25519(data) => PublicKeyBytes(data),
-            SecioPublicKey::Secp256k1(data) => PublicKeyBytes(data),
-        }
-    }
-
-    /// Builds a `PeerId` corresponding to the public key of the node.
-    #[inline]
-    pub fn to_peer_id(&self) -> PeerId {
-        self.as_raw().into()
-    }
-}
-
-impl From<SecioPublicKey> for PeerId {
-    #[inline]
-    fn from(key: SecioPublicKey) -> PeerId {
-        key.to_peer_id()
-    }
-}
-
-impl From<SecioPublicKey> for PublicKeyBytes {
-    #[inline]
-    fn from(key: SecioPublicKey) -> PublicKeyBytes {
-        key.into_raw()
-    }
-}
-
 impl<S, Maf> libp2p_core::ConnectionUpgrade<S, Maf> for SecioConfig
 where
     S: AsyncRead + AsyncWrite + 'static,        // TODO: 'static :(
@@ -351,7 +281,7 @@ where
 {
     type Output = (
         RwStreamSink<StreamMapErr<SecioMiddleware<S>, fn(SecioError) -> IoError>>,
-        SecioPublicKey,
+        PublicKey,
     );
     type MultiaddrFuture = Maf;
     type Future = Box<Future<Item = (Self::Output, Maf), Error = IoError>>;
@@ -407,7 +337,7 @@ where
     pub fn handshake<'a>(
         socket: S,
         key_pair: SecioKeyPair,
-    ) -> Box<Future<Item = (SecioMiddleware<S>, SecioPublicKey), Error = SecioError> + 'a>
+    ) -> Box<Future<Item = (SecioMiddleware<S>, PublicKey), Error = SecioError> + 'a>
     where
         S: 'a,
     {

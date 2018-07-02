@@ -213,6 +213,7 @@ extern crate log;
 extern crate multihash;
 extern crate multistream_select;
 extern crate parking_lot;
+extern crate protobuf;
 #[macro_use]
 extern crate quick_error;
 extern crate smallvec;
@@ -225,7 +226,9 @@ extern crate rand;
 pub extern crate multiaddr;
 
 mod connection_reuse;
+mod keys_proto;
 mod peer_id;
+mod public_key;
 
 pub mod either;
 pub mod muxing;
@@ -236,7 +239,8 @@ pub mod upgrade;
 pub use self::connection_reuse::ConnectionReuse;
 pub use self::multiaddr::{AddrComponent, Multiaddr};
 pub use self::muxing::StreamMuxer;
-pub use self::peer_id::{PeerId, PublicKeyBytes, PublicKeyBytesSlice};
+pub use self::peer_id::PeerId;
+pub use self::public_key::PublicKey;
 pub use self::swarm::{swarm, SwarmController, SwarmFuture};
 pub use self::transport::{MuxedTransport, Transport};
 pub use self::upgrade::{ConnectionUpgrade, Endpoint};

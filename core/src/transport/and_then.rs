@@ -101,7 +101,7 @@ where
         let future = dialed_fut
             // Try to negotiate the protocol.
             .and_then(move |(connection, client_addr)| {
-                upgrade(connection, Endpoint::Listener, client_addr)
+                upgrade(connection, Endpoint::Dialer, client_addr)
             });
 
         Ok(Box::new(future))

@@ -20,6 +20,7 @@ libp2p-ping = { path = "../ping" }
 libp2p-ratelimit = { path = "../ratelimit" }
 libp2p-relay = { path = "../relay" }
 libp2p-core = { path = "../core" }
+libp2p-transport-timeout = { path = "../transport-timeout" }
 libp2p-websocket = { path = "../websocket" }
 tokio-codec = "0.1"
 tokio-io = "0.1"
