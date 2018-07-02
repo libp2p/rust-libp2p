@@ -38,7 +38,7 @@
 //!
 //! # fn main() {
 //! use futures::Future;
-//! use libp2p_secio::{SecioConfig, SecioKeyPair};
+//! use libp2p_secio::{SecioConfig, SecioKeyPair, SecioOutput};
 //! use libp2p_core::{Multiaddr, Transport, upgrade};
 //! use libp2p_tcp_transport::TcpConfig;
 //! use tokio_core::reactor::Core;
@@ -57,7 +57,7 @@
 //!             key: SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap(),
 //!         };
 //!
-//!         upgrade::map(upgrade, |out| out.stream)
+//!         upgrade::map(upgrade, |out: SecioOutput<_>| out.stream)
 //!     });
 //!
 //! let future = transport.dial("/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap())
