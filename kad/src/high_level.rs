@@ -20,7 +20,7 @@
 
 use fnv::FnvHashSet;
 use futures::{future, Future, IntoFuture, stream, Stream};
-use kad_server::KademliaServerController;
+use kad_server::KadConnecController;
 use kbucket::{KBucketsTable, KBucketsPeerId};
 use libp2p_core::PeerId;
 use multiaddr::Multiaddr;
@@ -35,7 +35,7 @@ use tokio_timer::Deadline;
 
 /// Prototype for a future Kademlia protocol running on a socket.
 #[derive(Debug, Clone)]
-pub struct KademliaConfig {
+pub struct KadSystemConfig {
     /// Degree of parallelism on the network. Often called `alpha` in technical papers.
     /// No more than this number of remotes will be used at a given time for any given operation.
     // TODO: ^ share this number between operations? or does each operation use `alpha` remotes?
@@ -51,7 +51,7 @@ pub struct KademliaConfig {
 }
 
 /// System that drives the whole Kademlia process.
-pub struct KademliaSystem {
+pub struct KadSystem {
     // The actual DHT.
     kbuckets: KBucketsTable<PeerId, ()>,
     // Same as in the config.
@@ -62,35 +62,35 @@ pub struct KademliaSystem {
 
 /// Event that happens during a query.
 #[derive(Debug, Clone)]
-pub enum QueryEvent<TOut> {
+pub enum KadQueryEvent<TOut> {
     /// Learned about new mutiaddresses for the given peers.
     NewKnownMultiaddrs(Vec<(PeerId, Vec<Multiaddr>)>),
     /// Finished the processing of the query. Contains the result.
     Finished(TOut),
 }
 
-impl KademliaSystem {
+impl KadSystem {
     /// Starts a new Kademlia system.
     ///
     /// Also produces a `Future` that drives a Kademlia initialization process.
     /// This future should be driven to completion by the caller.
-    pub fn start<'a, F, Fut>(config: KademliaConfig, access: F) -> (KademliaSystem, impl Future<Item = (), Error = IoError> + 'a)
+    pub fn start<'a, F, Fut>(config: KadSystemConfig, access: F) -> (KadSystem, impl Future<Item = (), Error = IoError> + 'a)
         where F: FnMut(&PeerId) -> Fut + Clone + 'a,
-            Fut: IntoFuture<Item = KademliaServerController, Error = IoError>  + 'a,
+            Fut: IntoFuture<Item = KadConnecController, Error = IoError>  + 'a,
     {
-        let system = KademliaSystem::without_init(config);
+        let system = KadSystem::without_init(config);
         let init_future = system.perform_initialization(access);
         (system, init_future)
     }
 
     /// Same as `start`, but doesn't perform the initialization process.
-    pub fn without_init(config: KademliaConfig) -> KademliaSystem {
+    pub fn without_init(config: KadSystemConfig) -> KadSystem {
         let kbuckets = KBucketsTable::new(config.local_peer_id.clone(), config.kbuckets_timeout);
         for peer in config.known_initial_peers {
             let _ = kbuckets.update(peer, ());
         }
 
-        let system = KademliaSystem {
+        let system = KadSystem {
             kbuckets: kbuckets,
             parallelism: config.parallelism,
             request_timeout: config.request_timeout,
@@ -102,7 +102,7 @@ impl KademliaSystem {
     /// Starts an initialization process.
     pub fn perform_initialization<'a, F, Fut>(&self, access: F) -> impl Future<Item = (), Error = IoError> + 'a
         where F: FnMut(&PeerId) -> Fut + Clone + 'a,
-            Fut: IntoFuture<Item = KademliaServerController, Error = IoError>  + 'a,
+            Fut: IntoFuture<Item = KadConnecController, Error = IoError>  + 'a,
     {
         let futures: Vec<_> = (0..256)      // TODO: 256 is arbitrary
             .map(|n| {
@@ -140,9 +140,9 @@ impl KademliaSystem {
 
     /// Starts a query for an iterative `FIND_NODE` request.
     pub fn find_node<'a, F, Fut>(&self, searched_key: PeerId, access: F)
-        -> Box<Stream<Item = QueryEvent<Vec<PeerId>>, Error = IoError> + 'a>
+        -> Box<Stream<Item = KadQueryEvent<Vec<PeerId>>, Error = IoError> + 'a>
     where F: FnMut(&PeerId) -> Fut + 'a,
-        Fut: IntoFuture<Item = KademliaServerController, Error = IoError>  + 'a,
+        Fut: IntoFuture<Item = KadConnecController, Error = IoError>  + 'a,
     {
         query(access, &self.kbuckets, searched_key, self.parallelism as usize,
               20, self.request_timeout)  // TODO: arbitrary const
@@ -155,20 +155,20 @@ impl KademliaSystem {
 // Returns a dummy no-op future if `bucket_num` is out of range.
 fn refresh<'a, F, Fut>(bucket_num: usize, access: F, kbuckets: &KBucketsTable<PeerId, ()>,
                         parallelism: usize, request_timeout: Duration)
-    -> Box<Stream<Item = QueryEvent<()>, Error = IoError> + 'a>
+    -> Box<Stream<Item = KadQueryEvent<()>, Error = IoError> + 'a>
 where F: FnMut(&PeerId) -> Fut + 'a,
-    Fut: IntoFuture<Item = KademliaServerController, Error = IoError> + 'a,
+    Fut: IntoFuture<Item = KadConnecController, Error = IoError> + 'a,
 {
     let peer_id = match gen_random_id(kbuckets.my_id(), bucket_num) {
         Ok(p) => p,
-        Err(()) => return Box::new(stream::once(Ok(QueryEvent::Finished(())))),
+        Err(()) => return Box::new(stream::once(Ok(KadQueryEvent::Finished(())))),
     };
 
     let stream = query(access, kbuckets, peer_id, parallelism, 20, request_timeout)        // TODO: 20 is arbitrary
         .map(|event| {
             match event {
-                QueryEvent::NewKnownMultiaddrs(peers) => QueryEvent::NewKnownMultiaddrs(peers),
-                QueryEvent::Finished(_) => QueryEvent::Finished(()),
+                KadQueryEvent::NewKnownMultiaddrs(peers) => KadQueryEvent::NewKnownMultiaddrs(peers),
+                KadQueryEvent::Finished(_) => KadQueryEvent::Finished(()),
             }
         });
 
@@ -216,9 +216,9 @@ fn query<'a, F, Fut>(
     parallelism: usize,
     num_results: usize,
     request_timeout: Duration,
-) -> Box<Stream<Item = QueryEvent<Vec<PeerId>>, Error = IoError> + 'a>
+) -> Box<Stream<Item = KadQueryEvent<Vec<PeerId>>, Error = IoError> + 'a>
 where F: FnMut(&PeerId) -> Fut + 'a,
-      Fut: IntoFuture<Item = KademliaServerController, Error = IoError> + 'a,
+      Fut: IntoFuture<Item = KadConnecController, Error = IoError> + 'a,
 {
     debug!("Start query for {:?} ; num results = {}", searched_key, num_results);
 
@@ -232,7 +232,7 @@ where F: FnMut(&PeerId) -> Fut + 'a,
         result: Vec<PeerId>,
         // For each open connection, a future with the response of the remote.
         // Note that don't use a `SmallVec` here because `select_all` produces a `Vec`.
-        current_attempts_fut: Vec<Box<Future<Item = Vec<protocol::Peer>, Error = IoError> + 'a>>,
+        current_attempts_fut: Vec<Box<Future<Item = Vec<protocol::KadPeer>, Error = IoError> + 'a>>,
         // For each open connection, the peer ID that we are connected to.
         // Must always have the same length as `current_attempts_fut`.
         current_attempts_addrs: SmallVec<[PeerId; 32]>,
@@ -272,7 +272,7 @@ where F: FnMut(&PeerId) -> Fut + 'a,
                 let result = mem::replace(&mut state.result, Vec::new());
                 debug!("Query finished with {} results", result.len());
                 state.stage = Stage::Finished;
-                let future = future::ok((Some(QueryEvent::Finished(result)), state));
+                let future = future::ok((Some(KadQueryEvent::Finished(result)), state));
                 return Some(future::Either::A(future));
             },
             Stage::Finished => {
@@ -445,7 +445,7 @@ where F: FnMut(&PeerId) -> Fut + 'a,
                 }
             }
 
-            future::ok((Some(QueryEvent::NewKnownMultiaddrs(new_known_multiaddrs)), state))
+            future::ok((Some(KadQueryEvent::NewKnownMultiaddrs(new_known_multiaddrs)), state))
         });
 
         Some(future::Either::B(future))
