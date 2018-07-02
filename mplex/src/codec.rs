@@ -39,6 +39,18 @@ pub enum Elem {
     Reset { substream_id: u32, endpoint: Endpoint },
 }
 
+impl Elem {
+    /// Returns the ID of the substream of the message.
+    pub fn substream_id(&self) -> u32 {
+        match *self {
+            Elem::Open { substream_id } => substream_id,
+            Elem::Data { substream_id, .. } => substream_id,
+            Elem::Close { substream_id, .. } => substream_id,
+            Elem::Reset { substream_id, .. } => substream_id,
+        }
+    }
+}
+
 pub struct Codec {
     varint_decoder: varint::VarintDecoder<u32>,
     decoder_state: CodecDecodeState,

@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 extern crate bytes;
+extern crate fnv;
 #[macro_use]
 extern crate futures;
 extern crate libp2p_core as core;
@@ -32,10 +33,12 @@ mod codec;
 
 use std::{cmp, iter};
 use std::io::{Read, Write, Error as IoError, ErrorKind as IoErrorKind};
+use std::mem;
 use std::sync::Arc;
 use bytes::Bytes;
 use core::{ConnectionUpgrade, Endpoint, StreamMuxer};
 use parking_lot::Mutex;
+use fnv::FnvHashSet;
 use futures::prelude::*;
 use futures::{future, stream::Fuse, task};
 use tokio_io::{AsyncRead, AsyncWrite, codec::Framed};
@@ -68,6 +71,7 @@ where
             inner: Arc::new(Mutex::new(MultiplexInner {
                 inner: i.framed(codec::Codec::new()).fuse(),
                 buffer: Vec::with_capacity(32),
+                opened_substreams: Default::default(),
                 next_outbound_stream_id: if endpoint == Endpoint::Dialer { 0 } else { 1 },
                 to_notify: Vec::new(),
             }))
@@ -102,6 +106,9 @@ struct MultiplexInner<C> {
     inner: Fuse<Framed<C, codec::Codec>>,
     // Buffer of elements pulled from the stream but not processed yet.
     buffer: Vec<codec::Elem>,
+    // List of Ids of opened substreams. Used to filter out messages that don't belong to any
+    // substream.
+    opened_substreams: FnvHashSet<u32>,
     // Id of the next outgoing substream. Should always increase by two.
     next_outbound_stream_id: u32,
     // List of tasks to notify when a new element is inserted in `buffer`.
@@ -137,15 +144,24 @@ where C: AsyncRead + AsyncWrite,
             if let Some(out) = filter(&elem) {
                 return Ok(Async::Ready(Some(out)));
             } else {
-                inner.buffer.push(elem);
-                for task in inner.to_notify.drain(..) {
-                    task.notify();
+                if inner.opened_substreams.contains(&elem.substream_id()) {
+                    inner.buffer.push(elem);
+                    for task in inner.to_notify.drain(..) {
+                        task.notify();
+                    }
                 }
             }
         } else {
             return Ok(Async::Ready(None));
         }
     }
+}
+
+// Closes a substream in `inner`.
+fn clean_out_substream<C>(inner: &mut MultiplexInner<C>, num: u32) {
+    let was_in = inner.opened_substreams.remove(&num);
+    debug_assert!(was_in, "Dropped substream which wasn't open ; programmer error");
+    inner.buffer.retain(|elem| elem.substream_id() != num);
 }
 
 // Small convenience function that tries to write `elem` to the stream.
@@ -177,13 +193,22 @@ where C: AsyncRead + AsyncWrite + 'static       // TODO: 'static :-/
 
     #[inline]
     fn outbound(self) -> Self::OutboundSubstream {
+        let mut inner = self.inner.lock();
+
         // Assign a substream ID now.
         let substream_id = {
-            let mut inner = self.inner.lock();
             let n = inner.next_outbound_stream_id;
             inner.next_outbound_stream_id += 2;
             n
         };
+
+        // We use an RAII guard, so that we close the substream in case of an error.
+        struct OpenedSubstreamGuard<C>(Arc<Mutex<MultiplexInner<C>>>, u32);
+        impl<C> Drop for OpenedSubstreamGuard<C> {
+            fn drop(&mut self) { clean_out_substream(&mut self.0.lock(), self.1); }
+        }
+        inner.opened_substreams.insert(substream_id);
+        let guard = OpenedSubstreamGuard(self.inner.clone(), substream_id);
 
         // We send `Open { substream_id }`, then flush, then only produce the substream.
         let future = {
@@ -201,6 +226,7 @@ where C: AsyncRead + AsyncWrite + 'static       // TODO: 'static :-/
             }).map({
                 let inner = self.inner.clone();
                 move |()| {
+                    mem::forget(guard);
                     Some(Substream {
                         inner: inner.clone(),
                         num: substream_id,
@@ -236,6 +262,7 @@ where C: AsyncRead + AsyncWrite
         }));
 
         if let Some(num) = num {
+            inner.opened_substreams.insert(num);
             Ok(Async::Ready(Some(Substream {
                 inner: self.inner.clone(),
                 current_data: Bytes::new(),
@@ -337,5 +364,13 @@ where C: AsyncRead + AsyncWrite
 
         let mut inner = self.inner.lock();
         poll_send(&mut inner, elem)
+    }
+}
+
+impl<C> Drop for Substream<C>
+where C: AsyncRead + AsyncWrite
+{
+    fn drop(&mut self) {
+        clean_out_substream(&mut self.inner.lock(), self.num);
     }
 }
