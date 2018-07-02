@@ -43,6 +43,9 @@ use futures::prelude::*;
 use futures::{future, stream::Fuse, task};
 use tokio_io::{AsyncRead, AsyncWrite, codec::Framed};
 
+// Maximum number of simultaneously-open substreams.
+const MAX_SUBSTREAMS: usize = 1024;
+
 /// Configuration for the multiplexer.
 #[derive(Debug, Clone, Default)]
 pub struct MplexConfig;
@@ -254,6 +257,12 @@ where C: AsyncRead + AsyncWrite
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let mut inner = self.inner.lock();
+
+        if inner.opened_substreams.len() >= MAX_SUBSTREAMS {
+            return Err(IoError::new(IoErrorKind::ConnectionRefused,
+                                    "exceeded maximum number of open substreams"));
+        }
+
         let num = try_ready!(next_match(&mut inner, |elem| {
             match elem {
                 codec::Elem::Open { substream_id } => Some(*substream_id),       // TODO: check even/uneven?
