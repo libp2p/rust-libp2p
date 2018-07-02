@@ -71,7 +71,7 @@ fn main() {
 
             upgrade::or(
                 upgrade::map(plain_text, |pt| EitherOutput::First(pt)),
-                upgrade::map(secio, |(socket, _)| EitherOutput::Second(socket))
+                upgrade::map(secio, |out: libp2p::secio::SecioOutput<_>| EitherOutput::Second(out.stream))
             )
         })
 
