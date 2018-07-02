@@ -164,11 +164,11 @@ where C: AsyncRead + AsyncWrite
 }
 
 impl<C> StreamMuxer for Multiplex<C>
-where C: AsyncRead + AsyncWrite
+where C: AsyncRead + AsyncWrite + 'static       // TODO: 'static :-/
 {
     type Substream = Substream<C>;
     type InboundSubstream = InboundSubstream<C>;
-    type OutboundSubstream = OutboundSubstream<C>;
+    type OutboundSubstream = Box<Future<Item = Option<Self::Substream>, Error = IoError> + 'static>;
 
     #[inline]
     fn inbound(self) -> Self::InboundSubstream {
@@ -185,7 +185,33 @@ where C: AsyncRead + AsyncWrite
             n
         };
 
-        OutboundSubstream { inner: self.inner, substream_id }
+        // We send `Open { substream_id }`, then flush, then only produce the substream.
+        let future = {
+            future::poll_fn({
+                let inner = self.inner.clone();
+                move || {
+                    let elem = codec::Elem::Open { substream_id };
+                    poll_send(&mut inner.lock(), elem)
+                }
+            }).and_then({
+                let inner = self.inner.clone();
+                move |()| {
+                    future::poll_fn(move || inner.lock().inner.poll_complete())
+                }
+            }).map({
+                let inner = self.inner.clone();
+                move |()| {
+                    Some(Substream {
+                        inner: inner.clone(),
+                        num: substream_id,
+                        current_data: Bytes::new(),
+                        endpoint: Endpoint::Dialer,
+                    })
+                }
+            })
+        };
+
+        Box::new(future) as Box<_>
     }
 }
 
@@ -219,34 +245,6 @@ where C: AsyncRead + AsyncWrite
         } else {
             Ok(Async::Ready(None))
         }
-    }
-}
-
-/// Future to the next available outgoing substream.
-///
-/// This produces the substream only after we're finished writing the opening message.
-pub struct OutboundSubstream<C> {
-    inner: Arc<Mutex<MultiplexInner<C>>>,
-    substream_id: u32,
-}
-
-impl<C> Future for OutboundSubstream<C>
-where C: AsyncRead + AsyncWrite
-{
-    type Item = Option<Substream<C>>;
-    type Error = IoError;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let elem = codec::Elem::Open { substream_id: self.substream_id };
-        let mut inner = self.inner.lock();
-        try_ready!(poll_send(&mut inner, elem));
-        let _ = inner.inner.poll_complete();        // TODO: block on this?
-        Ok(Async::Ready(Some(Substream {
-            inner: self.inner.clone(),
-            num: self.substream_id,
-            current_data: Bytes::new(),
-            endpoint: Endpoint::Dialer,
-        })))
     }
 }
 
