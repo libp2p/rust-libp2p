@@ -333,15 +333,27 @@ fn multiaddr_to_target(addr: &Multiaddr) -> Result<String, ()> {
 
     match (&protocols[0], &protocols[1], &protocols[2]) {
         (&AddrComponent::IP4(ref ip), &AddrComponent::TCP(port), &AddrComponent::WS) => {
+            if ip.is_unspecified() || port == 0 {
+                return Err(());
+            }
             Ok(format!("ws://{}:{}/", ip, port))
         }
         (&AddrComponent::IP6(ref ip), &AddrComponent::TCP(port), &AddrComponent::WS) => {
+            if ip.is_unspecified() || port == 0 {
+                return Err(());
+            }
             Ok(format!("ws://[{}]:{}/", ip, port))
         }
         (&AddrComponent::IP4(ref ip), &AddrComponent::TCP(port), &AddrComponent::WSS) => {
+            if ip.is_unspecified() || port == 0 {
+                return Err(());
+            }
             Ok(format!("wss://{}:{}/", ip, port))
         }
         (&AddrComponent::IP6(ref ip), &AddrComponent::TCP(port), &AddrComponent::WSS) => {
+            if ip.is_unspecified() || port == 0 {
+                return Err(());
+            }
             Ok(format!("wss://[{}]:{}/", ip, port))
         }
         (&AddrComponent::DNS4(ref ns), &AddrComponent::TCP(port), &AddrComponent::WS) => {
