@@ -100,7 +100,7 @@ impl<C> Clone for Multiplex<C> {
 struct MultiplexInner<C> {
     // Underlying stream.
     inner: Fuse<Framed<C, codec::Codec>>,
-    // Buffer of elmeents pulled from the stream but not processed yet.
+    // Buffer of elements pulled from the stream but not processed yet.
     buffer: Vec<codec::Elem>,
     // Id of the next outgoing substream. Should always increase by two.
     next_outbound_stream_id: u32,
