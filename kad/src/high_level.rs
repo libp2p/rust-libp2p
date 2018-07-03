@@ -133,6 +133,11 @@ impl KadSystem {
         let _ = self.kbuckets.update(peer, ());
     }
 
+    /// Returns the local peer ID, as passed in the configuration.
+    pub fn local_peer_id(&self) -> &PeerId {
+        self.kbuckets.my_id()
+    }
+
     /// Finds the known nodes closest to `id`, ordered by distance.
     pub fn known_closest_peers(&self, id: &PeerId) -> impl Iterator<Item = PeerId> {
         self.kbuckets.find_closest_with_self(id)
