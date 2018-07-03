@@ -102,6 +102,7 @@ where
 }
 
 /// Iterator that is toggleable.
+#[derive(Debug, Clone)]
 pub struct ToggleableIter<I> {
     inner: I,
     // It is expected that `enabled` doesn't change once the iterator has been created.
@@ -129,3 +130,6 @@ where I: Iterator
         }
     }
 }
+
+impl<I> ExactSizeIterator for ToggleableIter<I>
+where I: ExactSizeIterator {}
