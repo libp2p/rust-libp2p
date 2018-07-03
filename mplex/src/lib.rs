@@ -45,6 +45,8 @@ use tokio_io::{AsyncRead, AsyncWrite, codec::Framed};
 
 // Maximum number of simultaneously-open substreams.
 const MAX_SUBSTREAMS: usize = 1024;
+// Maximum number of elements in the internal buffer.
+const MAX_BUFFER_LEN: usize = 256;
 
 /// Configuration for the multiplexer.
 #[derive(Debug, Clone, Default)]
@@ -147,7 +149,9 @@ where C: AsyncRead + AsyncWrite,
             if let Some(out) = filter(&elem) {
                 return Ok(Async::Ready(Some(out)));
             } else {
-                if inner.opened_substreams.contains(&elem.substream_id()) {
+                if inner.buffer.len() < MAX_BUFFER_LEN &&
+                    inner.opened_substreams.contains(&elem.substream_id())
+                {
                     inner.buffer.push(elem);
                     for task in inner.to_notify.drain(..) {
                         task.notify();
