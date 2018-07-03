@@ -24,17 +24,15 @@
 //!
 //! Usage is done in the following steps:
 //!
-//! - Build a `KademliaConfig` that contains the way you want the Kademlia protocol to behave.
+//! - Build a `KadSystemConfig` and a `KadConnecConfig` object that contain the way you want the
+//!   Kademlia protocol to behave.
 //!
-//! - Build a `KademliaControllerPrototype` from that configuration object.
+//! - Create a swarm that upgrades incoming connections with the `KadConnecConfig`.
 //!
-//! - Build a `KademliaUpgrade` from that prototype. Then create a swarm (from the *swarm* crate)
-//!   and pass the `KademliaUpgrade` you built as part of the list of protocols.
+//! - Build a `KadSystem` from the `KadSystemConfig`. This requires passing a closure that provides
+//!   the Kademlia controller of a peer.
 //!
-//! - Then turn the controller prototype into an actual `KademliaController` by passing to it the
-//!   swarm controller you got.
-//!
-//! - You can now perform operations using that controller.
+//! - You can perform queries using the `KadSystem`.
 //!
 
 // TODO: we allow dead_code for now because this library contains a lot of unused code that will
@@ -54,11 +52,8 @@
 //   will automatically respond to Kad requests received by the remote. The controller lets you
 //   send your own requests to this remote and obtain strongly-typed responses.
 //
-// - The third level of abstraction is in `high_level`. This module also provides a
-//   `ConnectionUpgrade`, but all the upgraded connections share informations through a struct in
-//   an `Arc`. The user has a single clonable controller that operates on all the upgraded
-//   connections. This controller lets you perform peer discovery and record load operations over
-//   the whole network.
+// - The third level of abstraction is in `high_level`. This module only provides the
+//   `KademliaSystem`.
 //
 
 extern crate arrayvec;
