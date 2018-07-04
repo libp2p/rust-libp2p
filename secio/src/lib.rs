@@ -38,7 +38,7 @@
 //!
 //! # fn main() {
 //! use futures::Future;
-//! use libp2p_secio::{SecioConfig, SecioKeyPair};
+//! use libp2p_secio::{SecioConfig, SecioKeyPair, SecioOutput};
 //! use libp2p_core::{Multiaddr, Transport, upgrade};
 //! use libp2p_tcp_transport::TcpConfig;
 //! use tokio_core::reactor::Core;
@@ -57,7 +57,7 @@
 //!             key: SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap(),
 //!         };
 //!
-//!         upgrade::map(upgrade, |(socket, _remote_key)| socket)
+//!         upgrade::map(upgrade, |out: SecioOutput<_>| out.stream)
 //!     });
 //!
 //! let future = transport.dial("/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap())
@@ -274,15 +274,24 @@ enum SecioKeyPairInner {
     },
 }
 
+/// Output of the secio protocol.
+pub struct SecioOutput<S>
+where S: AsyncRead + AsyncWrite
+{
+    /// The encrypted stream.
+    pub stream: RwStreamSink<StreamMapErr<SecioMiddleware<S>, fn(SecioError) -> IoError>>,
+    /// The public key of the remote.
+    pub remote_key: PublicKey,
+    /// Ephemeral public key used during the negotiation.
+    pub ephemeral_public_key: Vec<u8>,
+}
+
 impl<S, Maf> libp2p_core::ConnectionUpgrade<S, Maf> for SecioConfig
 where
     S: AsyncRead + AsyncWrite + 'static,        // TODO: 'static :(
     Maf: 'static,       // TODO: 'static :(
 {
-    type Output = (
-        RwStreamSink<StreamMapErr<SecioMiddleware<S>, fn(SecioError) -> IoError>>,
-        PublicKey,
-    );
+    type Output = SecioOutput<S>;
     type MultiaddrFuture = Maf;
     type Future = Box<Future<Item = (Self::Output, Maf), Error = IoError>>;
     type NamesIter = iter::Once<(Bytes, ())>;
@@ -304,9 +313,13 @@ where
         debug!("Starting secio upgrade");
 
         let fut = SecioMiddleware::handshake(incoming, self.key);
-        let wrapped = fut.map(|(stream_sink, pubkey)| {
+        let wrapped = fut.map(|(stream_sink, pubkey, ephemeral)| {
             let mapped = stream_sink.map_err(map_err as fn(_) -> _);
-            (RwStreamSink::new(mapped), pubkey)
+            SecioOutput {
+                stream: RwStreamSink::new(mapped),
+                remote_key: pubkey,
+                ephemeral_public_key: ephemeral,
+            }
         }).map_err(map_err);
         Box::new(wrapped.map(move |out| (out, remote_addr)))
     }
@@ -333,17 +346,17 @@ where
     /// Attempts to perform a handshake on the given socket.
     ///
     /// On success, produces a `SecioMiddleware` that can then be used to encode/decode
-    /// communications.
+    /// communications, plus the public key of the remote, plus the ephemeral public key.
     pub fn handshake<'a>(
         socket: S,
         key_pair: SecioKeyPair,
-    ) -> Box<Future<Item = (SecioMiddleware<S>, PublicKey), Error = SecioError> + 'a>
+    ) -> Box<Future<Item = (SecioMiddleware<S>, PublicKey, Vec<u8>), Error = SecioError> + 'a>
     where
         S: 'a,
     {
-        let fut = handshake::handshake(socket, key_pair).map(|(inner, pubkey)| {
+        let fut = handshake::handshake(socket, key_pair).map(|(inner, pubkey, ephemeral)| {
             let inner = SecioMiddleware { inner };
-            (inner, pubkey)
+            (inner, pubkey, ephemeral)
         });
 
         Box::new(fut)
