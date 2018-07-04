@@ -23,6 +23,7 @@ pub mod choice;
 pub mod denied;
 pub mod map;
 pub mod plaintext;
+pub mod toggleable;
 pub mod traits;
 
 pub use self::apply::apply;
@@ -30,4 +31,5 @@ pub use self::choice::{or, OrUpgrade};
 pub use self::denied::DeniedConnectionUpgrade;
 pub use self::map::map;
 pub use self::plaintext::PlainTextConfig;
+pub use self::toggleable::toggleable;
 pub use self::traits::{ConnectionUpgrade, Endpoint};
