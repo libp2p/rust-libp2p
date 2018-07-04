@@ -11,6 +11,7 @@ members = [
     "multiaddr",
     "multihash",
     "mplex",
+    "mplex-yamux",
     "multistream-select",
     "peerstore",
     "ping",
