@@ -93,8 +93,6 @@ impl Transport for TcpConfig {
     type MultiaddrFuture = FutureResult<Multiaddr, IoError>;
     type Dial = Box<Future<Item = (TcpStream, Self::MultiaddrFuture), Error = IoError>>;
 
-    /// Listen on the given multi-addr.
-    /// Returns the address back if it isn't supported.
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
             let listener = TcpListener::bind(&socket_addr, &self.event_loop);
@@ -131,14 +129,18 @@ impl Transport for TcpConfig {
         }
     }
 
-    /// Dial to the given multi-addr.
-    /// Returns either a future which may resolve to a connection,
-    /// or gives back the multiaddress.
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
         if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
-            debug!("Dialing {}", addr);
-            let fut = TcpStream::connect(&socket_addr, &self.event_loop).map(|t| (t, future::ok(addr)));
-            Ok(Box::new(fut) as Box<_>)
+            // As an optimization, we check that the address is not of the form `0.0.0.0`.
+            // If so, we instantly refuse dialing instead of going through the kernel.
+            if socket_addr.port() != 0 && !socket_addr.ip().is_unspecified() {
+                debug!("Dialing {}", addr);
+                let fut = TcpStream::connect(&socket_addr, &self.event_loop).map(|t| (t, future::ok(addr)));
+                Ok(Box::new(fut) as Box<_>)
+            } else {
+                debug!("Instantly refusing dialing {}, as it is invalid", addr);
+                Err((self, addr))
+            }
         } else {
             Err((self, addr))
         }

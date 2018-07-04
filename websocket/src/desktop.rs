@@ -301,7 +301,7 @@ mod tests {
 
         let (listener, addr) = ws_config
             .clone()
-            .listen_on("/ip4/0.0.0.0/tcp/0/ws".parse().unwrap())
+            .listen_on("/ip4/127.0.0.1/tcp/0/ws".parse().unwrap())
             .unwrap();
         assert!(addr.to_string().ends_with("/ws"));
         assert!(!addr.to_string().ends_with("/0/ws"));
