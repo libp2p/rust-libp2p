@@ -50,7 +50,7 @@ extern crate bytes;
 extern crate env_logger;
 extern crate futures;
 extern crate libp2p;
-extern crate libp2p_mplex_yamux as mplex;
+extern crate libp2p_yamux;
 extern crate rand;
 #[macro_use]
 extern crate structopt;
@@ -130,7 +130,7 @@ fn run_dialer(opts: DialerOpts) -> Result<(), Box<Error>> {
 
     let transport = {
         let tcp = TcpConfig::new(core.handle())
-            .with_upgrade(mplex::YamuxConfig::default())
+            .with_upgrade(libp2p_yamux::Config::default())
             .into_connection_reuse();
         RelayTransport::new(opts.me, tcp, store, iter::once(opts.relay)).with_dummy_muxing()
     };
@@ -165,7 +165,7 @@ fn run_listener(opts: ListenerOpts) -> Result<(), Box<Error>> {
     }
 
     let transport = TcpConfig::new(core.handle())
-        .with_upgrade(mplex::YamuxConfig::default())
+        .with_upgrade(libp2p_yamux::Config::default())
         .into_connection_reuse();
 
     let relay = RelayConfig::new(opts.me, transport.clone(), store);

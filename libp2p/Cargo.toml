@@ -12,7 +12,6 @@ bytes = "0.4"
 futures = "0.1"
 multiaddr = { path = "../multiaddr" }
 libp2p-mplex = { path = "../mplex" }
-libp2p-mplex-yamux = { path = "../mplex-yamux" }
 libp2p-identify = { path = "../identify" }
 libp2p-kad = { path = "../kad" }
 libp2p-floodsub = { path = "../floodsub" }
@@ -23,6 +22,7 @@ libp2p-relay = { path = "../relay" }
 libp2p-core = { path = "../core" }
 libp2p-transport-timeout = { path = "../transport-timeout" }
 libp2p-websocket = { path = "../websocket" }
+libp2p-yamux = { path = "../yamux" }
 tokio-codec = "0.1"
 tokio-io = "0.1"
 

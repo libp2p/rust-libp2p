@@ -55,11 +55,11 @@ where
     C: AsyncRead + AsyncWrite + 'static
 {
     type Substream = yamux::StreamHandle<C>;
-    type InboundSubstream = Self;
+    type InboundSubstream = InboundFuture<C>;
     type OutboundSubstream = FutureResult<Option<Self::Substream>, io::Error>;
 
     fn inbound(self) -> Self::InboundSubstream {
-        self
+        InboundFuture(self.0)
     }
 
     fn outbound(self) -> Self::OutboundSubstream {
@@ -68,7 +68,10 @@ where
     }
 }
 
-impl<C> Future for Yamux<C>
+
+pub struct InboundFuture<C>(yamux::Connection<C>);
+
+impl<C> Future for InboundFuture<C>
 where
     C: AsyncRead + AsyncWrite + 'static
 {
@@ -90,21 +93,21 @@ where
 
 
 #[derive(Clone)]
-pub struct YamuxConfig(yamux::Config);
+pub struct Config(yamux::Config);
 
-impl YamuxConfig {
+impl Config {
     pub fn new(cfg: yamux::Config) -> Self {
-        YamuxConfig(cfg)
+        Config(cfg)
     }
 }
 
-impl Default for YamuxConfig {
+impl Default for Config {
     fn default() -> Self {
-        YamuxConfig(yamux::Config::default())
+        Config(yamux::Config::default())
     }
 }
 
-impl<C, M> core::ConnectionUpgrade<C, M> for YamuxConfig
+impl<C, M> core::ConnectionUpgrade<C, M> for Config
 where
     C: AsyncRead + AsyncWrite + 'static,
     M: 'static

@@ -11,7 +11,6 @@ members = [
     "multiaddr",
     "multihash",
     "mplex",
-    "mplex-yamux",
     "multistream-select",
     "peerstore",
     "ping",
@@ -24,4 +23,5 @@ members = [
     "transport-timeout",
     "varint-rs",
     "websocket",
+    "yamux"
 ]

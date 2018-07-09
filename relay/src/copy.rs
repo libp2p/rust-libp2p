@@ -1,5 +1,3 @@
-// Based on copy.rs from tokio-io in https://github.com/tokio-rs/tokio
-//
 // Copyright (c) 2018 Tokio Contributors
 //
 // Permission is hereby granted, free of charge, to any
@@ -25,6 +23,8 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 // IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
+
+// Based on copy.rs from tokio-io in https://github.com/tokio-rs/tokio
 
 use std::io;
 use futures::{Future, Poll};
@@ -83,6 +83,9 @@ impl<R, W> Future for Copy<R, W>
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<(u64, R, W), io::Error> {
+        debug_assert!(self.reader.is_some() && self.writer.is_some(),
+            "poll() has been called again after returning Ok");
+
         loop {
             // Still not finished flushing
             if !self.flush_done {
