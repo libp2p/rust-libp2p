@@ -6,7 +6,8 @@
 sudo docker run --rm -v `pwd`:/usr/code:z -w /usr/code rust /bin/bash -c " \
     apt-get update; \
     apt-get install -y protobuf-compiler; \
-    cargo install --version 1 protobuf; \
+    cargo install --version 2.0.2 protobuf-codegen; \
     protoc --rust_out . keys.proto"
 
+sudo chown $USER:$USER keys.rs
 mv -f keys.rs ./src/keys_proto.rs
