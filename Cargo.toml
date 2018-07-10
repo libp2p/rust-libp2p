@@ -23,4 +23,5 @@ members = [
     "transport-timeout",
     "varint-rs",
     "websocket",
+    "yamux"
 ]

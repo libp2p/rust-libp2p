@@ -50,6 +50,7 @@ extern crate bytes;
 extern crate env_logger;
 extern crate futures;
 extern crate libp2p;
+extern crate libp2p_yamux;
 extern crate rand;
 #[macro_use]
 extern crate structopt;
@@ -128,7 +129,9 @@ fn run_dialer(opts: DialerOpts) -> Result<(), Box<Error>> {
     }
 
     let transport = {
-        let tcp = TcpConfig::new(core.handle());
+        let tcp = TcpConfig::new(core.handle())
+            .with_upgrade(libp2p_yamux::Config::default())
+            .into_connection_reuse();
         RelayTransport::new(opts.me, tcp, store, iter::once(opts.relay)).with_dummy_muxing()
     };
 
@@ -161,7 +164,10 @@ fn run_listener(opts: ListenerOpts) -> Result<(), Box<Error>> {
         store.peer_or_create(&p).add_addr(a, Duration::from_secs(600))
     }
 
-    let transport = TcpConfig::new(core.handle()).with_dummy_muxing();
+    let transport = TcpConfig::new(core.handle())
+        .with_upgrade(libp2p_yamux::Config::default())
+        .into_connection_reuse();
+
     let relay = RelayConfig::new(opts.me, transport.clone(), store);
 
     let echo = SimpleProtocol::new("/echo/1.0.0", |socket| {
