@@ -63,9 +63,9 @@ mod tests {
     use self::tokio_core::net::TcpListener;
     use self::tokio_core::net::TcpStream;
     use self::tokio_core::reactor::Core;
+    use super::full_codec;
     use super::DecoderMiddleware;
     use super::EncoderMiddleware;
-    use super::full_codec;
     use bytes::BytesMut;
     use crypto::aessafe::AesSafe256Encryptor;
     use crypto::blockmodes::CtrMode;

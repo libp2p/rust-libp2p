@@ -27,12 +27,12 @@ extern crate tokio_core;
 use self::tokio_core::net::TcpListener;
 use self::tokio_core::net::TcpStream;
 use self::tokio_core::reactor::Core;
-use ProtocolChoiceError;
 use bytes::Bytes;
 use dialer_select::{dialer_select_proto_parallel, dialer_select_proto_serial};
 use futures::Future;
 use futures::{Sink, Stream};
 use protocol::{Dialer, DialerToListenerMessage, Listener, ListenerToDialerMessage};
+use ProtocolChoiceError;
 use {dialer_select_proto, listener_select_proto};
 
 #[test]

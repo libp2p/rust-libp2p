@@ -26,13 +26,13 @@
 //! If the `PeerInfo` struct ever gets exposed to the public API of the crate, we may want to give
 //! more thoughts about this.
 
-use TTL;
 use multiaddr::Multiaddr;
 use serde::de::Error as DeserializerError;
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::Ordering;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use TTL;
 
 /// Information about a peer.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -186,12 +186,10 @@ mod tests {
     #[test]
     fn ser_and_deser() {
         let peer_info = PeerInfo {
-            addrs: vec![
-                (
-                    "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap(),
-                    UNIX_EPOCH,
-                ),
-            ],
+            addrs: vec![(
+                "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap(),
+                UNIX_EPOCH,
+            )],
         };
         let serialized = serde_json::to_string(&peer_info).unwrap();
         let deserialized: PeerInfo = serde_json::from_str(&serialized).unwrap();

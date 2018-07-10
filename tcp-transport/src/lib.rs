@@ -135,7 +135,8 @@ impl Transport for TcpConfig {
             // If so, we instantly refuse dialing instead of going through the kernel.
             if socket_addr.port() != 0 && !socket_addr.ip().is_unspecified() {
                 debug!("Dialing {}", addr);
-                let fut = TcpStream::connect(&socket_addr, &self.event_loop).map(|t| (t, future::ok(addr)));
+                let fut = TcpStream::connect(&socket_addr, &self.event_loop)
+                    .map(|t| (t, future::ok(addr)));
                 Ok(Box::new(fut) as Box<_>)
             } else {
                 debug!("Instantly refusing dialing {}, as it is invalid", addr);
@@ -198,8 +199,8 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
 #[cfg(test)]
 mod tests {
     use super::{multiaddr_to_socketaddr, TcpConfig};
-    use futures::Future;
     use futures::stream::Stream;
+    use futures::Future;
     use multiaddr::Multiaddr;
     use std;
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -245,14 +246,7 @@ mod tests {
                 .unwrap()),
             Ok(SocketAddr::new(
                 IpAddr::V6(Ipv6Addr::new(
-                    65535,
-                    65535,
-                    65535,
-                    65535,
-                    65535,
-                    65535,
-                    65535,
-                    65535,
+                    65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535,
                 )),
                 8080,
             ))
