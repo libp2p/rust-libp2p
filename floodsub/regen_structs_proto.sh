@@ -2,19 +2,24 @@
 
 # This script regenerates the `src/rpc_proto.rs` file from `rpc.proto`.
 
+lsb_release=$(lsb_release -si);
+
 echo "Checking if docker is installed"
 if docker --version | grep -q "Docker version" ; then
     echo "Check that docker is installed: confirmed."
 else
-    if lsb_release -si | grep -q "Linux" ; then
-        if lsb_release -si | grep -q "Ubuntu" ; then
+    if [ "$lsb_release" ] = [ *Linux* ]; then
+        case $lsb_release in *Ubuntu*)
             apt-get update;
-            apt-get install -y docker;
-        elif [ lsb_release -si | grep -q "Manjaro" ]; then
-            sudo pacman -S --needed docker;
-        else
-            echo "installation for Docker is not configured for your OS, please install manually and make a pull request to install in this script for your OS at https://github.com/libp2p/rust-libp2p/floodsub";
-        fi
+            apt-get install -y docker;;
+        *Manjaro*) sudo pacman -S --needed docker;;
+        *)
+            echo "installation for Docker is not configured for \
+            your OS, please install manually and make a pull \
+            request to install in this script for your OS at \
+            https://github.com/libp2p/rust-libp2p/floodsub" >&2;
+            exit 1;;
+        esac;
     fi
 fi
 
@@ -26,13 +31,13 @@ else
     echo "Confirmed that docker is running"
 fi
 
-docker run --rm -v `pwd`:/usr/code:z -w /usr/code rust /bin/bash -c " \
+docker run --rm -v "$(pwd)":/usr/code:z -w /usr/code rust /bin/bash -c " \
     echo 'Checking if protobuf is installed' \
-    if lsb_release -si | grep -q 'Linux' ; then \
-        if lsb_release -si | grep -q 'Ubuntu' ; then \
+    if $lsb_release -si | grep -q 'Linux' ; then \
+        if $lsb_release -si | grep -q 'Ubuntu' ; then \
             apt-get update; \
             apt-get install -y protobuf-compiler; \
-        elif lsb_release -si | grep -q 'Manjaro' ; then \
+        elif $lsb_release -si | grep -q 'Manjaro' ; then \
             sudo pacman -S --needed protobuf; \
         else \
             echo 'installation for protobuf is not configured for your OS, please make a pull request for https://github.com/libp2p/rust-libp2p/floodsub' \
