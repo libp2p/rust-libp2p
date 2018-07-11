@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use multiaddr::Multiaddr;
-use {PeerId, TTL};
 use std::time::Duration;
+use {PeerId, TTL};
 
 /// Implemented on objects that store peers.
 ///

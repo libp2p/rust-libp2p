@@ -23,18 +23,18 @@ use bytes::BytesMut;
 use codec::{full_codec, FullCodec};
 use crypto::aes::{ctr, KeySize};
 use error::SecioError;
-use futures::Future;
 use futures::future;
 use futures::sink::Sink;
 use futures::stream::Stream;
+use futures::Future;
 use libp2p_core::PublicKey;
-use protobuf::Message as ProtobufMessage;
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
+use protobuf::Message as ProtobufMessage;
 use ring::agreement::EphemeralPrivateKey;
 use ring::hmac::{SigningContext, SigningKey, VerificationKey};
 use ring::rand::SecureRandom;
 use ring::signature::verify as signature_verify;
-use ring::signature::{RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256, ED25519};
+use ring::signature::{ED25519, RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256};
 use ring::{agreement, digest, rand};
 #[cfg(feature = "secp256k1")]
 use secp256k1;
@@ -589,7 +589,7 @@ mod tests {
             let public = include_bytes!("../tests/test-rsa-public-key-2.der").to_vec();
             SecioKeyPair::rsa_from_pkcs8(private, public).unwrap()
         };
-        
+
         handshake_with_self_succeeds(key1, key2);
     }
 

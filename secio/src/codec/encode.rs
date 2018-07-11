@@ -22,10 +22,10 @@
 
 use bytes::BytesMut;
 use crypto::symmetriccipher::SynchronousStreamCipher;
-use futures::Poll;
-use futures::StartSend;
 use futures::sink::Sink;
 use futures::stream::Stream;
+use futures::Poll;
+use futures::StartSend;
 use ring::hmac;
 
 /// Wraps around a `Sink`. Encodes the buffers passed to it and passes it to the underlying sink.
