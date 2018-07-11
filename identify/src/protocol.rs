@@ -30,7 +30,7 @@ use std::iter;
 use structs_proto;
 use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
-use varint::VarintCodec;
+use unsigned_varint::codec;
 
 /// Configuration for an upgrade to the identity protocol.
 #[derive(Debug, Clone)]
@@ -56,7 +56,7 @@ pub enum IdentifyOutput<T> {
 
 /// Object used to send back information to the client.
 pub struct IdentifySender<T> {
-    inner: Framed<T, VarintCodec<Vec<u8>>>,
+    inner: Framed<T, codec::UviBytes<Vec<u8>>>,
 }
 
 impl<'a, T> IdentifySender<T>
@@ -130,7 +130,7 @@ where
     fn upgrade(self, socket: C, _: (), ty: Endpoint, remote_addr: Maf) -> Self::Future {
         trace!("Upgrading connection as {:?}", ty);
 
-        let socket = Framed::new(socket, VarintCodec::default());
+        let socket = Framed::new(socket, codec::UviBytes::default());
 
         match ty {
             Endpoint::Dialer => {
