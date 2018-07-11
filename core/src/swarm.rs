@@ -114,6 +114,8 @@ where
     /// calling `swarm`.
     ///
     /// Returns a future that is signalled once the closure in the `swarm` has returned its future.
+    /// Therefore if the closure in the swarm has some side effect (eg. write something in a
+    /// variable), this side effect will be observable when this future succeeds.
     pub fn dial<Du>(&self, multiaddr: Multiaddr, transport: Du)
         -> Result<impl Future<Item = (), Error = IoError>, Multiaddr>
     where
