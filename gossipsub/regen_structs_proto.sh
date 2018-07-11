@@ -8,6 +8,6 @@ docker run --rm -v `pwd`:/usr/code:z -w /usr/code rust /bin/bash -c " \
     cargo install --version 2.0.2 protobuf-codegen; \
     protoc --rust_out . rpc.proto"
 
-sudo chown $USER:$USER *.rs
+sudo chown $USER:$USER *.rs;
 
-mv -f rpc.rs ./src/rpc_proto.rs
+mv -f rpc.rs ./src/rpc_proto.rs;
