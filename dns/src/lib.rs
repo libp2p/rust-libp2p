@@ -203,8 +203,11 @@ fn resolve_dns(
 
     resolver.resolve(name).and_then(move |addrs| {
         if log_enabled!(Level::Trace) {
-            trace!("DNS component resolution: {} => {:?}",
-                    debug_name.expect("trace log level was enabled"), addrs);
+            trace!(
+                "DNS component resolution: {} => {:?}",
+                debug_name.expect("trace log level was enabled"),
+                addrs
+            );
         }
 
         addrs
@@ -226,11 +229,11 @@ fn resolve_dns(
 mod tests {
     extern crate libp2p_tcp_transport;
     use self::libp2p_tcp_transport::TcpConfig;
-    use DnsConfig;
     use futures::future;
     use multiaddr::{AddrComponent, Multiaddr};
     use std::io::Error as IoError;
     use swarm::Transport;
+    use DnsConfig;
 
     #[test]
     fn basic_resolve() {
