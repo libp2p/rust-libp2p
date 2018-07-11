@@ -32,7 +32,7 @@ pub enum Protocol {
     IPFS = 421,
     HTTP = 480,
     HTTPS = 443,
-    ONION = 444,
+    // TODO: ONION = 444,
     QUIC = 460,
     WS = 477,
     WSS = 478,
@@ -72,7 +72,7 @@ impl ToString for Protocol {
             Protocol::IPFS => "ipfs",
             Protocol::HTTP => "http",
             Protocol::HTTPS => "https",
-            Protocol::ONION => "onion",
+            // TODO: Protocol::ONION => "onion",
             Protocol::QUIC => "quic",
             Protocol::WS => "ws",
             Protocol::WSS => "wss",
@@ -104,7 +104,7 @@ impl FromStr for Protocol {
             "ipfs" => Ok(Protocol::IPFS),
             "http" => Ok(Protocol::HTTP),
             "https" => Ok(Protocol::HTTPS),
-            "onion" => Ok(Protocol::ONION),
+            // TODO: "onion" => Ok(Protocol::ONION),
             "quic" => Ok(Protocol::QUIC),
             "ws" => Ok(Protocol::WS),
             "wss" => Ok(Protocol::WSS),
@@ -146,7 +146,7 @@ impl Protocol {
             421 => Ok(Protocol::IPFS),
             480 => Ok(Protocol::HTTP),
             443 => Ok(Protocol::HTTPS),
-            444 => Ok(Protocol::ONION),
+            // TODO: 444 => Ok(Protocol::ONION),
             460 => Ok(Protocol::QUIC),
             477 => Ok(Protocol::WS),
             478 => Ok(Protocol::WSS),
@@ -186,7 +186,7 @@ impl Protocol {
             Protocol::IPFS => ProtocolArgSize::Variable,
             Protocol::HTTP => ProtocolArgSize::Fixed { bytes: 0 },
             Protocol::HTTPS => ProtocolArgSize::Fixed { bytes: 0 },
-            Protocol::ONION => ProtocolArgSize::Fixed { bytes: 10 },
+            // TODO: Protocol::ONION => ProtocolArgSize::Fixed { bytes: 10 },
             Protocol::QUIC => ProtocolArgSize::Fixed { bytes: 0 },
             Protocol::WS => ProtocolArgSize::Fixed { bytes: 0 },
             Protocol::WSS => ProtocolArgSize::Fixed { bytes: 0 },
@@ -262,7 +262,7 @@ impl Protocol {
                 let bytes = Cid::from(a)?.to_bytes();
                 Ok(AddrComponent::IPFS(bytes))
             }
-            Protocol::ONION => unimplemented!(),              // TODO:
+            // TODO: Protocol::ONION => {}
             Protocol::QUIC => Ok(AddrComponent::QUIC),
             Protocol::UTP => Ok(AddrComponent::UTP),
             Protocol::UNIX => {
@@ -298,7 +298,7 @@ pub enum AddrComponent {
     IPFS(Vec<u8>),
     HTTP,
     HTTPS,
-    ONION(Vec<u8>),
+    // TODO: ONION(Vec<u8>),
     QUIC,
     WS,
     WSS,
@@ -328,7 +328,7 @@ impl AddrComponent {
             AddrComponent::IPFS(_) => Protocol::IPFS,
             AddrComponent::HTTP => Protocol::HTTP,
             AddrComponent::HTTPS => Protocol::HTTPS,
-            AddrComponent::ONION(_) => Protocol::ONION,
+            // TODO: AddrComponent::ONION(_) => Protocol::ONION,
             AddrComponent::QUIC => Protocol::QUIC,
             AddrComponent::WS => Protocol::WS,
             AddrComponent::WSS => Protocol::WSS,
@@ -416,7 +416,7 @@ impl AddrComponent {
                 let bytes = Cid::from(data)?.to_bytes();
                 AddrComponent::IPFS(bytes)
             }
-            Protocol::ONION => unimplemented!(),      // TODO:
+            // TODO: Protocol::ONION => {}
             Protocol::QUIC => AddrComponent::QUIC,
             Protocol::UTP => AddrComponent::UTP,
             Protocol::UDT => AddrComponent::UDT,
@@ -459,9 +459,7 @@ impl AddrComponent {
                 out.write_varint(bytes.len())?;
                 out.write_all(&bytes)?;
             }
-            AddrComponent::ONION(_) => {
-                unimplemented!()  // TODO:
-            },
+            // TODO: AddrComponent::ONION(_) => {}
             AddrComponent::QUIC |
             AddrComponent::UTP |
             AddrComponent::UDT |
@@ -505,7 +503,7 @@ impl ToString for AddrComponent {
             },
             AddrComponent::HTTP => format!("/http"),
             AddrComponent::HTTPS => format!("/https"),
-            AddrComponent::ONION(_) => unimplemented!(),//format!("/onion"),        // TODO:
+            // TODO: AddrComponent::ONION(_) => {}
             AddrComponent::QUIC => format!("/quic"),
             AddrComponent::WS => format!("/ws"),
             AddrComponent::WSS => format!("/wss"),
