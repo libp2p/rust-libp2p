@@ -20,7 +20,7 @@
 
 use futures::stream::Then as StreamThen;
 use futures::sync::{mpsc, oneshot};
-use futures::{Async, future, Future, Poll, Stream, future::FutureResult};
+use futures::{future, future::FutureResult, Async, Future, Poll, Stream};
 use multiaddr::{AddrComponent, Multiaddr};
 use rw_stream_sink::RwStreamSink;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -55,7 +55,8 @@ impl Transport for BrowserWsConfig {
     type Output = BrowserWsConn;
     type MultiaddrFuture = FutureResult<Multiaddr, IoError>;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>; // TODO: use `!`
-    type ListenerUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>; // TODO: use `!`
+    type ListenerUpgrade =
+        Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>; // TODO: use `!`
     type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
     #[inline]

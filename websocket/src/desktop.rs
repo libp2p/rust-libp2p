@@ -66,7 +66,8 @@ where
     type MultiaddrFuture = Box<Future<Item = Multiaddr, Error = IoError>>;
     type Listener =
         stream::Map<T::Listener, fn(<T as Transport>::ListenerUpgrade) -> Self::ListenerUpgrade>;
-    type ListenerUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
+    type ListenerUpgrade =
+        Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
     type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
     fn listen_on(
@@ -159,8 +160,10 @@ where
             Some(AddrComponent::WS) => false,
             Some(AddrComponent::WSS) => true,
             _ => {
-                trace!("Ignoring dial attempt for {} because it is not a websocket multiaddr",
-                       original_addr);
+                trace!(
+                    "Ignoring dial attempt for {} because it is not a websocket multiaddr",
+                    original_addr
+                );
                 return Err((self, original_addr));
             }
         };
@@ -172,9 +175,10 @@ where
         let inner_dial = match self.transport.dial(inner_addr) {
             Ok(d) => d,
             Err((transport, old_addr)) => {
-                debug!("Failed to dial {} because {} is not supported by the underlying transport",
-                      original_addr,
-                      old_addr);
+                debug!(
+                    "Failed to dial {} because {} is not supported by the underlying transport",
+                    original_addr, old_addr
+                );
                 return Err((
                     WsConfig {
                         transport: transport,
@@ -221,9 +225,7 @@ where
                         let read_write = RwStreamSink::new(framed_data);
                         Box::new(read_write) as Box<AsyncStream>
                     })
-                    .map(move |c| {
-                        (c, client_addr)
-                    })
+                    .map(move |c| (c, client_addr))
             });
 
         Ok(Box::new(dial) as Box<_>)
@@ -289,10 +291,10 @@ mod tests {
     extern crate libp2p_tcp_transport as tcp;
     extern crate tokio_core;
     use self::tokio_core::reactor::Core;
-    use WsConfig;
     use futures::{Future, Stream};
     use multiaddr::Multiaddr;
     use swarm::Transport;
+    use WsConfig;
 
     #[test]
     fn dialer_connects_to_listener_ipv4() {
