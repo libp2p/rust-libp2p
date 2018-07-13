@@ -383,10 +383,16 @@ where
                             Box::new(future)
                         }
                         Some(EventSource::Remote(KadMsg::GetValueReq { .. })) => {
-                            unimplemented!()        // FIXME:
+                            warn!("GET_VALUE requests are not implemented yet");
+                            let future = future::err(IoError::new(IoErrorKind::Other,
+                                "GET_VALUE requests are not implemented yet"));
+                            return Box::new(future);
                         }
                         Some(EventSource::Remote(KadMsg::PutValue { .. })) => {
-                            unimplemented!()        // FIXME:
+                            warn!("PUT_VALUE requests are not implemented yet");
+                            let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, finished);
+                            let future = future::ok((None, state));
+                            return Box::new(future);
                         }
                     }
                 }))
