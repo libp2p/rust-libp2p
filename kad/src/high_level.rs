@@ -494,7 +494,7 @@ where
                 match self.swarm_controller
                     .dial(addr, self.kademlia_transport.clone().map(move |out, _| map(out)))
                 {
-                    Ok(()) => (),
+                    Ok(_) => (),
                     Err(_addr) => {
                         let fut = future::err(IoError::new(
                             IoErrorKind::InvalidData,
