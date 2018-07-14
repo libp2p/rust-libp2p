@@ -21,7 +21,6 @@
 use bytes::Bytes;
 use futures::future::Future;
 use std::io::Error as IoError;
-use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Type of connection for the upgrade.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -39,8 +38,7 @@ pub enum Endpoint {
 /// > **Note**: The `upgrade` method of this trait uses `self` and not `&self` or `&mut self`.
 /// >           This has been designed so that you would implement this trait on `&Foo` or
 /// >           `&mut Foo` instead of directly on `Foo`.
-// TODO: remove AsyncRead + AsyncWrite bounds here
-pub trait ConnectionUpgrade<C: AsyncRead + AsyncWrite, TAddrFut> {
+pub trait ConnectionUpgrade<C, TAddrFut> {
     /// Iterator returned by `protocol_names`.
     type NamesIter: Iterator<Item = (Bytes, Self::UpgradeIdentifier)>;
     /// Type that serves as an identifier for the protocol. This type only exists to be returned

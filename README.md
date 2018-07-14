@@ -31,7 +31,7 @@ Architecture of the other crates of this repository:
 - `peerstore`: Generic storage for information about remote peers (their multiaddresses and their public key), with multiple possible backends. Each multiaddress also has a time-to-live. Used by `core`.
 - `ping`: Implementation of the `ping` protocol (the exact protocol is specific to libp2p). Implements the `ConnectionUpgrade` trait of `core`.
 - `ratelimit`: manages rate limiting with a connection. Also see [here](https://github.com/libp2p/specs/blob/master/8-implementations.md#811-swarm-dialer) for design.
-- `relay`: Implements the [`/libp2p/circuit/relay/0.1.0` protocol](https://github.com/libp2p/specs/blob/master/relay/). It allows a source `A` to connect to a destination `B` via an intermediate relay node `R` to which `B` is already connected to. Thisis used as a last resort to make `B` reachable from other nodes when it would normally not be, e.g. due to certain NAT setups.
+- `relay`: Implements the [`/libp2p/circuit/relay/0.1.0` protocol](https://github.com/libp2p/specs/blob/master/relay/). It allows a source `A` to connect to a destination `B` via an intermediate relay node `R` to which `B` is already connected to. This is used as a last resort to make `B` reachable from other nodes when it would normally not be, e.g. due to certain NAT setups.
 - `rw-stream-sink`: Utility library that makes it possible to wrap around a tokio `Stream + Sink` of bytes and implements `AsyncRead + AsyncWrite`.
 - `secio`: Implementation of the `secio` protocol. Encrypts communications. Implements the `ConnectionUpgrade` trait of `core`.
 - `tcp-transport`: Implementation of the `Transport` trait of `core` for TCP/IP.

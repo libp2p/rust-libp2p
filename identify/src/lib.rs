@@ -1,4 +1,4 @@
-// Copyright 2017 Parity Technologies (UK) Ltd.
+// Copyright 2018 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -66,21 +66,25 @@
 //! it.
 
 extern crate bytes;
+extern crate fnv;
 extern crate futures;
 extern crate libp2p_peerstore;
 extern crate libp2p_core;
 #[macro_use]
 extern crate log;
 extern crate multiaddr;
+extern crate parking_lot;
 extern crate protobuf;
 extern crate tokio_codec;
 extern crate tokio_io;
 extern crate varint;
 
+pub use self::identify_transport::IdentifyTransportOutcome;
+pub use self::peer_id_transport::{PeerIdTransport, PeerIdTransportOutput};
 pub use self::protocol::{IdentifyInfo, IdentifyOutput};
 pub use self::protocol::{IdentifyProtocolConfig, IdentifySender};
-pub use self::transport::IdentifyTransport;
 
+mod identify_transport;
+mod peer_id_transport;
 mod protocol;
 mod structs_proto;
-mod transport;

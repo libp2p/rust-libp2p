@@ -23,18 +23,18 @@ use bytes::BytesMut;
 use codec::{full_codec, FullCodec};
 use crypto::aes::{ctr, KeySize};
 use error::SecioError;
-use futures::Future;
 use futures::future;
 use futures::sink::Sink;
 use futures::stream::Stream;
+use futures::Future;
 use libp2p_core::PublicKey;
-use protobuf::Message as ProtobufMessage;
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
+use protobuf::Message as ProtobufMessage;
 use ring::agreement::EphemeralPrivateKey;
 use ring::hmac::{SigningContext, SigningKey, VerificationKey};
 use ring::rand::SecureRandom;
 use ring::signature::verify as signature_verify;
-use ring::signature::{RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256, ED25519};
+use ring::signature::{ED25519, RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256};
 use ring::{agreement, digest, rand};
 #[cfg(feature = "secp256k1")]
 use secp256k1;
@@ -54,11 +54,12 @@ use {SecioKeyPair, SecioKeyPairInner};
 /// `SecioError`.
 ///
 /// On success, returns an object that implements the `Sink` and `Stream` trait whose items are
-/// buffers of data, plus the public key of the remote.
+/// buffers of data, plus the public key of the remote, plus the ephemeral public key used during
+/// negotiation.
 pub fn handshake<'a, S: 'a>(
     socket: S,
     local_key: SecioKeyPair,
-) -> Box<Future<Item = (FullCodec<S>, PublicKey), Error = SecioError> + 'a>
+) -> Box<Future<Item = (FullCodec<S>, PublicKey, Vec<u8>), Error = SecioError> + 'a>
 where
     S: AsyncRead + AsyncWrite,
 {
@@ -106,7 +107,7 @@ where
 
         // Ephemeral key generated for the handshake and then thrown away.
         local_tmp_priv_key: Option<EphemeralPrivateKey>,
-        local_tmp_pub_key: [u8; agreement::PUBLIC_KEY_MAX_LEN],
+        local_tmp_pub_key: Vec<u8>,
     }
 
     let context = HandshakeContext {
@@ -124,7 +125,7 @@ where
         chosen_cipher: None,
         chosen_hash: None,
         local_tmp_priv_key: None,
-        local_tmp_pub_key: [0; agreement::PUBLIC_KEY_MAX_LEN],
+        local_tmp_pub_key: Vec::new(),
     };
 
     // The handshake messages all start with a 4-bytes message length prefix.
@@ -273,16 +274,16 @@ where
         // contains a signature of the two propositions encoded with our static public key.
         .and_then(|(socket, mut context, tmp_priv)| {
             let exchange = {
-                let local_tmp_pub_key = &mut context.local_tmp_pub_key[..tmp_priv.public_key_len()];
-                tmp_priv.compute_public_key(local_tmp_pub_key).unwrap();
+                let mut local_tmp_pub_key: Vec<u8> = (0 .. tmp_priv.public_key_len()).map(|_| 0).collect();
+                tmp_priv.compute_public_key(&mut local_tmp_pub_key).unwrap();
                 context.local_tmp_priv_key = Some(tmp_priv);
 
                 let mut data_to_sign = context.local_proposition_bytes.clone();
                 data_to_sign.extend_from_slice(&context.remote_proposition_bytes);
-                data_to_sign.extend_from_slice(local_tmp_pub_key);
+                data_to_sign.extend_from_slice(&local_tmp_pub_key);
 
                 let mut exchange = Exchange::new();
-                exchange.set_epubkey(local_tmp_pub_key.to_vec());
+                exchange.set_epubkey(local_tmp_pub_key.clone());
                 exchange.set_signature({
                     match context.local_key.inner {
                         SecioKeyPairInner::Rsa { ref private, .. } => {
@@ -516,7 +517,7 @@ where
                     match nonce {
                         Some(ref n) if n == &context.local_nonce => {
                             trace!("secio handshake success");
-                            Ok((rest, context.remote_public_key.expect("we stored a Some earlier")))
+                            Ok((rest, context.remote_public_key.expect("we stored a Some earlier"), context.local_tmp_pub_key))
                         },
                         None => {
                             debug!("unexpected eof during nonce check");
@@ -588,7 +589,7 @@ mod tests {
             let public = include_bytes!("../tests/test-rsa-public-key-2.der").to_vec();
             SecioKeyPair::rsa_from_pkcs8(private, public).unwrap()
         };
-        
+
         handshake_with_self_succeeds(key1, key2);
     }
 
