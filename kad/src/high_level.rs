@@ -35,7 +35,7 @@ use tokio_timer::Deadline;
 
 /// Prototype for a future Kademlia protocol running on a socket.
 #[derive(Debug, Clone)]
-pub struct KadSystemConfig {
+pub struct KadSystemConfig<I> {
     /// Degree of parallelism on the network. Often called `alpha` in technical papers.
     /// No more than this number of remotes will be used at a given time for any given operation.
     // TODO: ^ share this number between operations? or does each operation use `alpha` remotes?
@@ -43,7 +43,7 @@ pub struct KadSystemConfig {
     /// Id of the local peer.
     pub local_peer_id: PeerId,
     /// List of peers initially known.
-    pub known_initial_peers: Vec<PeerId>,
+    pub known_initial_peers: I,
     /// Duration after which a node in the k-buckets needs to be pinged again.
     pub kbuckets_timeout: Duration,
     /// When contacting a node, duration after which we consider it unresponsive.
@@ -74,7 +74,8 @@ impl KadSystem {
     ///
     /// Also produces a `Future` that drives a Kademlia initialization process.
     /// This future should be driven to completion by the caller.
-    pub fn start<'a, F, Fut>(config: KadSystemConfig, access: F) -> (KadSystem, impl Future<Item = (), Error = IoError> + 'a)
+    pub fn start<'a, F, Fut>(config: KadSystemConfig<impl Iterator<Item = PeerId>>, access: F)
+        -> (KadSystem, impl Future<Item = (), Error = IoError> + 'a)
         where F: FnMut(&PeerId) -> Fut + Clone + 'a,
             Fut: IntoFuture<Item = KadConnecController, Error = IoError>  + 'a,
     {
@@ -84,7 +85,7 @@ impl KadSystem {
     }
 
     /// Same as `start`, but doesn't perform the initialization process.
-    pub fn without_init(config: KadSystemConfig) -> KadSystem {
+    pub fn without_init(config: KadSystemConfig<impl Iterator<Item = PeerId>>) -> KadSystem {
         let kbuckets = KBucketsTable::new(config.local_peer_id.clone(), config.kbuckets_timeout);
         for peer in config.known_initial_peers {
             let _ = kbuckets.update(peer, ());

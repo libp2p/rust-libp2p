@@ -35,7 +35,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use libp2p::core::{Transport, PublicKey};
 use libp2p::core::{upgrade, either::EitherOutput};
-use libp2p::kad::{ConnectionType, Peer, QueryEvent};
+use libp2p::kad::{KadConnecConfig, KadConnectionType, KadPeer, KadQueryEvent, KadSystem};
+use libp2p::kad::{KadSystemConfig, KadIncomingRequest};
 use libp2p::tcp::TcpConfig;
 use tokio_core::reactor::Core;
 
@@ -121,52 +122,54 @@ fn main() {
     let my_peer_id = PeerId::from_public_key(PublicKey::Rsa(include_bytes!("test-rsa-public-key.der").to_vec()));
     println!("Local peer id is: {:?}", my_peer_id);
 
-    // Let's put this `transport` into a Kademlia *swarm*. The swarm will handle all the incoming
-    // and outgoing connections for us.
-    let kad_config = libp2p::kad::KademliaConfig {
+    let kad_system = Arc::new(KadSystem::without_init(KadSystemConfig {
         parallelism: 3,
         local_peer_id: my_peer_id.clone(),
-        timeout: Duration::from_secs(2),
-    };
-
-    let kad_ctl_proto = libp2p::kad::KademliaControllerPrototype::new(kad_config, peer_store.peers());
-
-    let proto = libp2p::kad::KademliaUpgrade::from_prototype(&kad_ctl_proto);
+        kbuckets_timeout: Duration::from_secs(10),
+        request_timeout: Duration::from_secs(10),
+        known_initial_peers: peer_store.peers(),
+    }));
 
     // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming and
     // outgoing connections for us.
     let (swarm_controller, swarm_future) = libp2p::core::swarm(
-        transport.clone().with_upgrade(proto.clone()),
+        transport.clone().with_upgrade(KadConnecConfig::new()),
         {
             let peer_store = peer_store.clone();
-            move |kademlia_stream, _| {
+            let kad_system = kad_system.clone();
+            move |(kad_ctrl, kad_stream), _| {
                 let peer_store = peer_store.clone();
-                kademlia_stream.for_each(move |req| {
+                let kad_system = kad_system.clone();
+                kad_stream.for_each(move |req| {
                     let peer_store = peer_store.clone();
-                    let result = req
-                        .requested_peers()
-                        .map(move |peer_id| {
-                            let addrs = peer_store
-                                .peer(peer_id)
-                                .into_iter()
-                                .flat_map(|p| p.addrs())
+                    //kad_system.update_kbuckets(node_id.clone());
+                    match req {
+                        KadIncomingRequest::FindNode { searched, responder } => {
+                            let result = kad_system
+                                .known_closest_peers(&searched)
+                                .map(move |peer_id| {
+                                    let addrs = peer_store
+                                        .peer(&peer_id)
+                                        .into_iter()
+                                        .flat_map(|p| p.addrs())
+                                        .collect::<Vec<_>>();
+                                    KadPeer {
+                                        node_id: peer_id.clone(),
+                                        multiaddrs: addrs,
+                                        connection_ty: KadConnectionType::Connected, // meh :-/
+                                    }
+                                })
                                 .collect::<Vec<_>>();
-                            Peer {
-                                node_id: peer_id.clone(),
-                                multiaddrs: addrs,
-                                connection_ty: ConnectionType::Connected, // meh :-/
-                            }
-                        })
-                        .collect::<Vec<_>>();
-                    req.respond(result);
+                            responder.respond(result);
+                        },
+                        KadIncomingRequest::PingPong => {
+                        }
+                    };
                     Ok(())
                 })
             }
         }
     );
-
-    let (kad_controller, _kad_init) =
-        kad_ctl_proto.start(swarm_controller.clone(), transport.with_upgrade(proto), |out| out);
 
     for listen_addr in listen_addrs {
         let addr = swarm_controller
@@ -175,18 +178,20 @@ fn main() {
         println!("Now listening on {:?}", addr);
     }
 
-    let finish_enum = kad_controller
-        .find_node(my_peer_id.clone())
+    let finish_enum = kad_system
+        .find_node(my_peer_id.clone(), |peer| {
+            futures::future::ok(unimplemented!())
+        })
         .filter_map(move |event| {
             match event {
-                QueryEvent::NewKnownMultiaddrs(peers) => {
+                KadQueryEvent::NewKnownMultiaddrs(peers) => {
                     for (peer, addrs) in peers {
                         peer_store.peer_or_create(&peer)
                             .add_addrs(addrs, Duration::from_secs(3600));
                     }
                     None
                 },
-                QueryEvent::Finished(out) => Some(out),
+                KadQueryEvent::Finished(out) => Some(out),
             }
         })
         .into_future()
