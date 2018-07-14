@@ -59,10 +59,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio_core;
-    use self::tokio_core::net::TcpListener;
-    use self::tokio_core::net::TcpStream;
-    use self::tokio_core::reactor::Core;
+    extern crate tokio_current_thread;
+    extern crate tokio_tcp;
+    use self::tokio_tcp::TcpListener;
+    use self::tokio_tcp::TcpStream;
     use super::full_codec;
     use super::DecoderMiddleware;
     use super::EncoderMiddleware;
@@ -111,8 +111,7 @@ mod tests {
         let data_sent = encoder.send(BytesMut::from(data.to_vec())).from_err();
         let data_received = decoder.into_future().map(|(n, _)| n).map_err(|(e, _)| e);
 
-        let mut core = Core::new().unwrap();
-        let (_, decoded) = core.run(data_sent.join(data_received))
+        let (_, decoded) = tokio_current_thread::block_on_all(data_sent.join(data_received))
             .map_err(|_| ())
             .unwrap();
         assert_eq!(decoded.unwrap(), data);
@@ -120,8 +119,6 @@ mod tests {
 
     #[test]
     fn full_codec_encode_then_decode() {
-        let mut core = Core::new().unwrap();
-
         let cipher_key: [u8; 32] = rand::random();
         let cipher_key_clone = cipher_key.clone();
         let hmac_key: [u8; 32] = rand::random();
@@ -129,12 +126,12 @@ mod tests {
         let data = b"hello world";
         let data_clone = data.clone();
 
-        let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap(), &core.handle()).unwrap();
+        let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap();
         let listener_addr = listener.local_addr().unwrap();
 
         let server = listener.incoming().into_future().map_err(|(e, _)| e).map(
             move |(connec, _)| {
-                let connec = Framed::new(connec.unwrap().0);
+                let connec = Framed::new(connec.unwrap());
 
                 full_codec(
                     connec,
@@ -152,7 +149,7 @@ mod tests {
             },
         );
 
-        let client = TcpStream::connect(&listener_addr, &core.handle())
+        let client = TcpStream::connect(&listener_addr)
             .map_err(|e| e.into())
             .map(move |stream| {
                 let stream = Framed::new(stream);
@@ -184,7 +181,7 @@ mod tests {
             .and_then(|server| server.into_future().map_err(|(e, _)| e.into()))
             .map(|recved| recved.0.unwrap().to_vec());
 
-        let received = core.run(fin).unwrap();
+        let received = tokio_current_thread::block_on_all(fin).unwrap();
         assert_eq!(received, data);
     }
 }

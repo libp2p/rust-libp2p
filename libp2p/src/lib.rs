@@ -21,7 +21,7 @@
 pub extern crate bytes;
 pub extern crate futures;
 #[cfg(not(target_os = "emscripten"))]
-pub extern crate tokio_core;
+pub extern crate tokio_current_thread;
 pub extern crate multiaddr;
 pub extern crate tokio_io;
 pub extern crate tokio_codec;
@@ -55,7 +55,6 @@ pub use self::transport_timeout::TransportTimeout;
 ///
 /// The list currently is TCP/IP, DNS, and WebSockets. However this list could change in the
 /// future to get new transports.
-// TODO: handle the emscripten situation, because we shouldn't depend on tokio-core with emscripten
 #[derive(Debug, Clone)]
 pub struct CommonTransport {
     // The actual implementation of everything.
@@ -76,8 +75,8 @@ impl CommonTransport {
     /// Initializes the `CommonTransport`.
     #[inline]
     #[cfg(not(target_os = "emscripten"))]
-    pub fn new(tokio_handle: tokio_core::reactor::Handle) -> CommonTransport {
-        let tcp = tcp::TcpConfig::new(tokio_handle);
+    pub fn new() -> CommonTransport {
+        let tcp = tcp::TcpConfig::new();
         let with_dns = dns::DnsConfig::new(tcp);
         let with_ws = websocket::WsConfig::new(with_dns.clone());
         let inner = with_dns.or_transport(with_ws);

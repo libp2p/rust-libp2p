@@ -22,11 +22,10 @@
 
 #![cfg(test)]
 
-extern crate tokio_core;
+extern crate tokio_current_thread;
+extern crate tokio_tcp;
 
-use self::tokio_core::net::TcpListener;
-use self::tokio_core::net::TcpStream;
-use self::tokio_core::reactor::Core;
+use self::tokio_tcp::{TcpListener, TcpStream};
 use bytes::Bytes;
 use dialer_select::{dialer_select_proto_parallel, dialer_select_proto_serial};
 use futures::Future;
@@ -37,16 +36,14 @@ use {dialer_select_proto, listener_select_proto};
 
 #[test]
 fn negotiate_with_self_succeeds() {
-    let mut core = Core::new().unwrap();
-
-    let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap(), &core.handle()).unwrap();
+    let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap();
     let listener_addr = listener.local_addr().unwrap();
 
     let server = listener
         .incoming()
         .into_future()
         .map_err(|(e, _)| e.into())
-        .and_then(move |(connec, _)| Listener::new(connec.unwrap().0))
+        .and_then(move |(connec, _)| Listener::new(connec.unwrap()))
         .and_then(|l| l.into_future().map_err(|(e, _)| e))
         .and_then(|(msg, rest)| {
             let proto = match msg {
@@ -56,7 +53,7 @@ fn negotiate_with_self_succeeds() {
             rest.send(ListenerToDialerMessage::ProtocolAck { name: proto })
         });
 
-    let client = TcpStream::connect(&listener_addr, &core.handle())
+    let client = TcpStream::connect(&listener_addr)
         .from_err()
         .and_then(move |stream| Dialer::new(stream))
         .and_then(move |dialer| {
@@ -73,20 +70,18 @@ fn negotiate_with_self_succeeds() {
             Ok(())
         });
 
-    core.run(server.join(client)).unwrap();
+    tokio_current_thread::block_on_all(server.join(client)).unwrap();
 }
 
 #[test]
 fn select_proto_basic() {
-    let mut core = Core::new().unwrap();
-
-    let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap(), &core.handle()).unwrap();
+    let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap();
     let listener_addr = listener.local_addr().unwrap();
 
     let server = listener
         .incoming()
         .into_future()
-        .map(|s| s.0.unwrap().0)
+        .map(|s| s.0.unwrap())
         .map_err(|(e, _)| e.into())
         .and_then(move |connec| {
             let protos = vec![
@@ -96,7 +91,7 @@ fn select_proto_basic() {
             listener_select_proto(connec, protos).map(|r| r.0)
         });
 
-    let client = TcpStream::connect(&listener_addr, &core.handle())
+    let client = TcpStream::connect(&listener_addr)
         .from_err()
         .and_then(move |connec| {
             let protos = vec![
@@ -106,22 +101,20 @@ fn select_proto_basic() {
             dialer_select_proto(connec, protos).map(|r| r.0)
         });
 
-    let (dialer_chosen, listener_chosen) = core.run(client.join(server)).unwrap();
+    let (dialer_chosen, listener_chosen) = tokio_current_thread::block_on_all(client.join(server)).unwrap();
     assert_eq!(dialer_chosen, 3);
     assert_eq!(listener_chosen, 1);
 }
 
 #[test]
 fn no_protocol_found() {
-    let mut core = Core::new().unwrap();
-
-    let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap(), &core.handle()).unwrap();
+    let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap();
     let listener_addr = listener.local_addr().unwrap();
 
     let server = listener
         .incoming()
         .into_future()
-        .map(|s| s.0.unwrap().0)
+        .map(|s| s.0.unwrap())
         .map_err(|(e, _)| e.into())
         .and_then(move |connec| {
             let protos = vec![
@@ -131,7 +124,7 @@ fn no_protocol_found() {
             listener_select_proto(connec, protos).map(|r| r.0)
         });
 
-    let client = TcpStream::connect(&listener_addr, &core.handle())
+    let client = TcpStream::connect(&listener_addr)
         .from_err()
         .and_then(move |connec| {
             let protos = vec![
@@ -141,7 +134,7 @@ fn no_protocol_found() {
             dialer_select_proto(connec, protos).map(|r| r.0)
         });
 
-    match core.run(client.join(server)) {
+    match tokio_current_thread::block_on_all(client.join(server)) {
         Err(ProtocolChoiceError::NoProtocolFound) => (),
         _ => panic!(),
     }
@@ -149,15 +142,13 @@ fn no_protocol_found() {
 
 #[test]
 fn select_proto_parallel() {
-    let mut core = Core::new().unwrap();
-
-    let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap(), &core.handle()).unwrap();
+    let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap();
     let listener_addr = listener.local_addr().unwrap();
 
     let server = listener
         .incoming()
         .into_future()
-        .map(|s| s.0.unwrap().0)
+        .map(|s| s.0.unwrap())
         .map_err(|(e, _)| e.into())
         .and_then(move |connec| {
             let protos = vec![
@@ -167,7 +158,7 @@ fn select_proto_parallel() {
             listener_select_proto(connec, protos).map(|r| r.0)
         });
 
-    let client = TcpStream::connect(&listener_addr, &core.handle())
+    let client = TcpStream::connect(&listener_addr)
         .from_err()
         .and_then(move |connec| {
             let protos = vec![
@@ -177,22 +168,20 @@ fn select_proto_parallel() {
             dialer_select_proto_parallel(connec, protos).map(|r| r.0)
         });
 
-    let (dialer_chosen, listener_chosen) = core.run(client.join(server)).unwrap();
+    let (dialer_chosen, listener_chosen) = tokio_current_thread::block_on_all(client.join(server)).unwrap();
     assert_eq!(dialer_chosen, 3);
     assert_eq!(listener_chosen, 1);
 }
 
 #[test]
 fn select_proto_serial() {
-    let mut core = Core::new().unwrap();
-
-    let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap(), &core.handle()).unwrap();
+    let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap();
     let listener_addr = listener.local_addr().unwrap();
 
     let server = listener
         .incoming()
         .into_future()
-        .map(|s| s.0.unwrap().0)
+        .map(|s| s.0.unwrap())
         .map_err(|(e, _)| e.into())
         .and_then(move |connec| {
             let protos = vec![
@@ -202,14 +191,14 @@ fn select_proto_serial() {
             listener_select_proto(connec, protos).map(|r| r.0)
         });
 
-    let client = TcpStream::connect(&listener_addr, &core.handle())
+    let client = TcpStream::connect(&listener_addr)
         .from_err()
         .and_then(move |connec| {
             let protos = vec![(Bytes::from("/proto3"), 2), (Bytes::from("/proto2"), 3)].into_iter();
             dialer_select_proto_serial(connec, protos).map(|r| r.0)
         });
 
-    let (dialer_chosen, listener_chosen) = core.run(client.join(server)).unwrap();
+    let (dialer_chosen, listener_chosen) = tokio_current_thread::block_on_all(client.join(server)).unwrap();
     assert_eq!(dialer_chosen, 3);
     assert_eq!(listener_chosen, 1);
 }

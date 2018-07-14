@@ -58,16 +58,13 @@
 //! extern crate libp2p_core;
 //! extern crate libp2p_tcp_transport;
 //! extern crate libp2p_websocket;
-//! extern crate tokio_core;
 //!
 //! use libp2p_core::{Multiaddr, Transport};
 //! use libp2p_tcp_transport::TcpConfig;
 //! use libp2p_websocket::WsConfig;
-//! use tokio_core::reactor::Core;
 //!
 //! # fn main() {
-//! let core = Core::new().unwrap();
-//! let ws_config = WsConfig::new(TcpConfig::new(core.handle()));
+//! let ws_config = WsConfig::new(TcpConfig::new());
 //! # return;
 //! let _ = ws_config.dial("/ip4/40.41.42.43/tcp/12345/ws".parse().unwrap());
 //! # }

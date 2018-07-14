@@ -564,10 +564,10 @@ fn stretch_key(key: &SigningKey, result: &mut [u8]) {
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio_core;
-    use self::tokio_core::net::TcpListener;
-    use self::tokio_core::net::TcpStream;
-    use self::tokio_core::reactor::Core;
+    extern crate tokio_current_thread;
+    extern crate tokio_tcp;
+    use self::tokio_tcp::TcpListener;
+    use self::tokio_tcp::TcpStream;
     use super::handshake;
     use super::stretch_key;
     use futures::Future;
@@ -617,22 +617,20 @@ mod tests {
     }
 
     fn handshake_with_self_succeeds(key1: SecioKeyPair, key2: SecioKeyPair) {
-        let mut core = Core::new().unwrap();
-
-        let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap(), &core.handle()).unwrap();
+        let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap();
         let listener_addr = listener.local_addr().unwrap();
 
         let server = listener
             .incoming()
             .into_future()
             .map_err(|(e, _)| e.into())
-            .and_then(move |(connec, _)| handshake(connec.unwrap().0, key1));
+            .and_then(move |(connec, _)| handshake(connec.unwrap(), key1));
 
-        let client = TcpStream::connect(&listener_addr, &core.handle())
+        let client = TcpStream::connect(&listener_addr)
             .map_err(|e| e.into())
             .and_then(move |stream| handshake(stream, key2));
 
-        core.run(server.join(client)).unwrap();
+        tokio_current_thread::block_on_all(server.join(client)).unwrap();
     }
 
     #[test]

@@ -30,7 +30,7 @@
 //!
 //! ```no_run
 //! extern crate futures;
-//! extern crate tokio_core;
+//! extern crate tokio_current_thread;
 //! extern crate tokio_io;
 //! extern crate libp2p_core;
 //! extern crate libp2p_secio;
@@ -41,12 +41,9 @@
 //! use libp2p_secio::{SecioConfig, SecioKeyPair, SecioOutput};
 //! use libp2p_core::{Multiaddr, Transport, upgrade};
 //! use libp2p_tcp_transport::TcpConfig;
-//! use tokio_core::reactor::Core;
 //! use tokio_io::io::write_all;
 //!
-//! let mut core = Core::new().unwrap();
-//!
-//! let transport = TcpConfig::new(core.handle())
+//! let transport = TcpConfig::new()
 //!     .with_upgrade({
 //!         # let private_key = b"";
 //!         //let private_key = include_bytes!("test-rsa-private-key.pk8");
@@ -67,7 +64,7 @@
 //!         write_all(connection, "hello world")
 //!     });
 //!
-//! core.run(future).unwrap();
+//! tokio_current_thread::block_on_all(future).unwrap();
 //! # }
 //! ```
 //!
