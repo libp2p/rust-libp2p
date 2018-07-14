@@ -149,9 +149,11 @@ where C: AsyncRead + AsyncWrite,
             if let Some(out) = filter(&elem) {
                 return Ok(Async::Ready(Some(out)));
             } else {
-                if inner.buffer.len() < MAX_BUFFER_LEN &&
-                    inner.opened_substreams.contains(&elem.substream_id())
-                {
+                if inner.buffer.len() >= MAX_BUFFER_LEN {
+                    return Err(IoError::new(IoErrorKind::InvalidData, "reached maximum buffer length"));
+                }
+                
+                if inner.opened_substreams.contains(&elem.substream_id()) {
                     inner.buffer.push(elem);
                     for task in inner.to_notify.drain(..) {
                         task.notify();
@@ -384,6 +386,7 @@ impl<C> Drop for Substream<C>
 where C: AsyncRead + AsyncWrite
 {
     fn drop(&mut self) {
+        let _ = self.shutdown();
         clean_out_substream(&mut self.inner.lock(), self.num);
     }
 }
