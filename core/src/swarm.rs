@@ -321,3 +321,23 @@ where
         Ok(Async::NotReady)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use futures::future;
+    use transport::DeniedTransport;
+    use swarm;
+
+    #[test]
+    fn transport_error_propagation_listen() {
+        let (swarm_ctrl, _swarm_future) = swarm(DeniedTransport, |_, _| future::empty());
+        assert!(swarm_ctrl.listen_on("/ip4/127.0.0.1/tcp/10000".parse().unwrap()).is_err());
+    }
+
+    #[test]
+    fn transport_error_propagation_dial() {
+        let (swarm_ctrl, _swarm_future) = swarm(DeniedTransport, |_, _| future::empty());
+        let addr = "/ip4/127.0.0.1/tcp/10000".parse().unwrap();
+        assert!(swarm_ctrl.dial(addr, DeniedTransport).is_err());
+    }
+}
