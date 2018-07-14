@@ -1,4 +1,4 @@
-sudo: false
+sudo: required
 language: rust
 branches:
   only:
