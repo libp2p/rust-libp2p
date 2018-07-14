@@ -33,7 +33,7 @@ use libp2p::Multiaddr;
 use std::env;
 use std::sync::Arc;
 use std::time::Duration;
-use libp2p::core::{Transport, PublicKeyBytesSlice};
+use libp2p::core::{Transport, PublicKey};
 use libp2p::core::{upgrade, either::EitherOutput};
 use libp2p::kad::{ConnectionType, Peer, QueryEvent};
 use libp2p::tcp::TcpConfig;
@@ -76,7 +76,7 @@ fn main() {
 
             upgrade::or(
                 upgrade::map(plain_text, |pt| EitherOutput::First(pt)),
-                upgrade::map(secio, |(socket, _)| EitherOutput::Second(socket))
+                upgrade::map(secio, |out: libp2p::secio::SecioOutput<_>| EitherOutput::Second(out.stream))
             )
         })
 
@@ -88,16 +88,37 @@ fn main() {
         // a `Transport`.
         .into_connection_reuse();
 
-    let transport = libp2p::identify::IdentifyTransport::new(transport, peer_store.clone())
-        .map(|id_out, _| {
-            id_out.socket
+    let addr_resolver = {
+        let peer_store = peer_store.clone();
+        move |peer_id| {
+            peer_store
+                .peer(&peer_id)
+                .into_iter()
+                .flat_map(|peer| peer.addrs())
+                .collect::<Vec<_>>()
+                .into_iter()
+        }
+    };
+
+    let transport = libp2p::identify::PeerIdTransport::new(transport, addr_resolver)
+        .and_then({
+            let peer_store = peer_store.clone();
+            move |id_out, _, remote_addr| {
+                let socket = id_out.socket;
+                let original_addr = id_out.original_addr;
+                id_out.info.map(move |info| {
+                    let peer_id = info.info.public_key.into_peer_id();
+                    peer_store.peer_or_create(&peer_id).add_addr(original_addr, Duration::from_secs(3600));
+                    (socket, remote_addr)
+                })
+            }
         });
 
     // We now have a `transport` variable that can be used either to dial nodes or listen to
     // incoming connections, and that will automatically apply secio and multiplex on top
     // of any opened stream.
 
-    let my_peer_id = PeerId::from_public_key(PublicKeyBytesSlice(include_bytes!("test-rsa-public-key.der")));
+    let my_peer_id = PeerId::from_public_key(PublicKey::Rsa(include_bytes!("test-rsa-public-key.der").to_vec()));
     println!("Local peer id is: {:?}", my_peer_id);
 
     // Let's put this `transport` into a Kademlia *swarm*. The swarm will handle all the incoming

@@ -21,7 +21,6 @@
 //! Implementation of the `Peerstore` trait that simple stores peers in memory.
 
 use super::TTL;
-use PeerId;
 use multiaddr::Multiaddr;
 use owning_ref::OwningRefMut;
 use peer_info::{AddAddrBehaviour, PeerInfo};
@@ -30,6 +29,7 @@ use std::collections::HashMap;
 use std::iter;
 use std::sync::{Mutex, MutexGuard};
 use std::vec::IntoIter as VecIntoIter;
+use PeerId;
 
 /// Implementation of the `Peerstore` trait that simply stores the peer information in memory.
 #[derive(Debug)]

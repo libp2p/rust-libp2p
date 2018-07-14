@@ -1,7 +1,7 @@
 [package]
 name = "libp2p-floodsub"
 version = "0.1.0"
-authors = ["pierre <pierre.krieger1708@gmail.com>"]
+authors = ["Parity Technologies <admin@parity.io>"]
 
 [dependencies]
 bs58 = "0.2.0"
@@ -13,7 +13,8 @@ libp2p-core = { path = "../core" }
 log = "0.4.1"
 multiaddr = { path = "../multiaddr" }
 parking_lot = "0.5.3"
-protobuf = "2"
+protobuf = "2.0.2"
 smallvec = "0.6.0"
+tokio-codec = "0.1"
 tokio-io = "0.1"
 varint = { path = "../varint-rs" }

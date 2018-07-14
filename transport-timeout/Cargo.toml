@@ -1,0 +1,10 @@
+[package]
+name = "libp2p-transport-timeout"
+version = "0.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+
+[dependencies]
+futures = "0.1"
+libp2p-core = { path = "../core" }
+log = "0.4.1"
+tokio-timer = "0.2.0"

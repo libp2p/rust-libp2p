@@ -1,7 +1,7 @@
 [package]
 name = "libp2p-ping"
 version = "0.1.0"
-authors = ["pierre <pierre.krieger1708@gmail.com>"]
+authors = ["Parity Technologies <admin@parity.io>"]
 
 [dependencies]
 bytes = "0.4"
@@ -12,6 +12,7 @@ multistream-select = { path = "../multistream-select" }
 futures = "0.1"
 parking_lot = "0.5"
 rand = "0.3"
+tokio-codec = "0.1"
 tokio-io = "0.1"
 
 [dev-dependencies]

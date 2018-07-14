@@ -31,7 +31,7 @@ use futures::Stream;
 use futures::future::Future;
 use std::{env, mem};
 use libp2p::core::{either::EitherOutput, upgrade};
-use libp2p::core::{Multiaddr, Transport, PublicKeyBytesSlice};
+use libp2p::core::{Multiaddr, Transport, PublicKey};
 use libp2p::peerstore::PeerId;
 use libp2p::tcp::TcpConfig;
 use tokio_core::reactor::Core;
@@ -71,7 +71,7 @@ fn main() {
 
             upgrade::or(
                 upgrade::map(plain_text, |pt| EitherOutput::First(pt)),
-                upgrade::map(secio, |(socket, _)| EitherOutput::Second(socket))
+                upgrade::map(secio, |out: libp2p::secio::SecioOutput<_>| EitherOutput::Second(out.stream))
             )
         })
 
@@ -91,7 +91,7 @@ fn main() {
     // or substream to our server.
     let my_id = {
         let key = (0..2048).map(|_| rand::random::<u8>()).collect::<Vec<_>>();
-        PeerId::from_public_key(PublicKeyBytesSlice(&key))
+        PeerId::from_public_key(PublicKey::Rsa(key))
     };
 
     let (floodsub_upgrade, floodsub_rx) = libp2p::floodsub::FloodSubUpgrade::new(my_id);

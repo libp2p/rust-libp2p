@@ -21,7 +21,6 @@
 //! Implementation of the `Peerstore` trait that uses a single JSON file as backend.
 
 use super::TTL;
-use PeerId;
 use bs58;
 use datastore::{Datastore, JsonFileDatastore, JsonFileDatastoreEntry, Query};
 use futures::{Future, Stream};
@@ -32,6 +31,7 @@ use std::io::Error as IoError;
 use std::iter;
 use std::path::PathBuf;
 use std::vec::IntoIter as VecIntoIter;
+use PeerId;
 
 /// Peerstore backend that uses a Json file.
 pub struct JsonPeerstore {
@@ -148,7 +148,7 @@ mod tests {
         let temp_file = self::tempfile::NamedTempFile::new().unwrap();
         let peer_store = ::json_peerstore::JsonPeerstore::new(temp_file.path()).unwrap();
 
-        let peer_id = PeerId::from_public_key(PublicKeyBytesSlice(&[1, 2, 3]));
+        let peer_id = PeerId::from_public_key(PublicKey::Ed25519(vec![1, 2, 3]));
         let addr = "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap();
 
         peer_store

@@ -86,6 +86,7 @@ extern crate log;
 extern crate multistream_select;
 extern crate parking_lot;
 extern crate rand;
+extern crate tokio_codec;
 extern crate tokio_io;
 
 use bytes::{BufMut, Bytes, BytesMut};
@@ -94,14 +95,14 @@ use futures::sync::{mpsc, oneshot};
 use futures::{Future, Sink, Stream};
 use libp2p_core::{ConnectionUpgrade, Endpoint};
 use parking_lot::Mutex;
-use rand::Rand;
 use rand::os::OsRng;
+use rand::Rand;
 use std::collections::HashMap;
 use std::error::Error;
 use std::io::Error as IoError;
 use std::iter;
 use std::sync::Arc;
-use tokio_io::codec::{Decoder, Encoder};
+use tokio_codec::{Decoder, Encoder, Framed};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Represents a prototype for an upgrade to handle the ping protocol.
@@ -160,9 +161,7 @@ where
         // TODO: can't figure out how to make it work without using an Arc/Mutex
         let expected_pongs = Arc::new(Mutex::new(HashMap::with_capacity(4)));
 
-        let sink_stream = socket
-            .framed(Codec)
-            .map(|msg| Message::Received(msg.freeze()));
+        let sink_stream = Framed::new(socket, Codec).map(|msg| Message::Received(msg.freeze()));
         let (sink, stream) = sink_stream.split();
 
         let future = loop_fn((sink, stream.select(rx)), move |(sink, stream)| {
@@ -290,9 +289,9 @@ mod tests {
     use self::tokio_core::net::TcpStream;
     use self::tokio_core::reactor::Core;
     use super::Ping;
+    use futures::future::{self, join_all};
     use futures::Future;
     use futures::Stream;
-    use futures::future::{self, join_all};
     use libp2p_core::{ConnectionUpgrade, Endpoint, Multiaddr};
     use std::io::Error as IoError;
 

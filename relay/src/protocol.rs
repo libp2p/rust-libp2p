@@ -19,12 +19,13 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::Bytes;
+use copy;
 use core::{ConnectionUpgrade, Endpoint, Transport};
 use futures::{stream, future::{self, Either::{A, B}, FutureResult}, prelude::*};
 use message::{CircuitRelay, CircuitRelay_Peer, CircuitRelay_Status, CircuitRelay_Type};
 use peerstore::{PeerAccess, PeerId, Peerstore};
 use std::{io, iter, ops::Deref};
-use tokio_io::{io as aio, AsyncRead, AsyncWrite};
+use tokio_io::{AsyncRead, AsyncWrite};
 use utility::{io_err, is_success, status, Io, Peer};
 
 #[derive(Debug, Clone)]
@@ -187,8 +188,8 @@ where
                 let future = {
                     let (src_r, src_w) = src.split();
                     let (dst_r, dst_w) = dst.split();
-                    let a = aio::copy(src_r, dst_w).map(|_| ());
-                    let b = aio::copy(dst_r, src_w).map(|_| ());
+                    let a = copy::flushing_copy(src_r, dst_w).map(|_| ());
+                    let b = copy::flushing_copy(dst_r, src_w).map(|_| ());
                     a.select(b).map(|_| ()).map_err(|(e, _)| e)
                 };
                 Ok(future)

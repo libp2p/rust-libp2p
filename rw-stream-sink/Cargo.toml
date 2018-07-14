@@ -1,7 +1,7 @@
 [package]
 name = "rw-stream-sink"
 version = "0.1.0"
-authors = ["pierre <pierre.krieger1708@gmail.com>"]
+authors = ["Parity Technologies <admin@parity.io>"]
 
 [dependencies]
 bytes = "0.4"

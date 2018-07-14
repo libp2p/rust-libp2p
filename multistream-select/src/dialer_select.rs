@@ -21,10 +21,10 @@
 //! Contains the `dialer_select_proto` code, which allows selecting a protocol thanks to
 //! `multistream-select` for the dialer.
 
-use ProtocolChoiceError;
 use bytes::Bytes;
 use futures::future::{loop_fn, result, Loop};
 use futures::{Future, Sink, Stream};
+use ProtocolChoiceError;
 
 use protocol::Dialer;
 use protocol::DialerToListenerMessage;

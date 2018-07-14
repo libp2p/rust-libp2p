@@ -25,8 +25,8 @@ use futures::{Async, AsyncSink, Future, Poll, Sink, StartSend, Stream};
 use length_delimited::LengthDelimitedFramedRead;
 use protocol::DialerToListenerMessage;
 use protocol::ListenerToDialerMessage;
-use protocol::MULTISTREAM_PROTOCOL_WITH_LF;
 use protocol::MultistreamSelectError;
+use protocol::MULTISTREAM_PROTOCOL_WITH_LF;
 use tokio_io::codec::length_delimited::Builder as LengthDelimitedBuilder;
 use tokio_io::codec::length_delimited::FramedWrite as LengthDelimitedFramedWrite;
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -64,6 +64,7 @@ where
                 Ok(rest)
             })
             .and_then(|socket| {
+                trace!("sending back /multistream/<version> to finish the handshake");
                 socket
                     .send(BytesMut::from(MULTISTREAM_PROTOCOL_WITH_LF))
                     .from_err()

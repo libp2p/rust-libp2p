@@ -20,6 +20,8 @@ members = [
     "secio",
     "core",
     "tcp-transport",
+    "transport-timeout",
     "varint-rs",
     "websocket",
+    "yamux"
 ]
