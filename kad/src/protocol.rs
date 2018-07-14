@@ -227,7 +227,7 @@ fn msg_to_proto(kad_msg: KadMsg) -> protobuf_structs::dht::Message {
             msg.set_clusterLevelRaw(10);
             msg
         }
-        KadMsg::GetValueRes { .. } => unimplemented!(),
+        KadMsg::GetValueRes { .. } => unimplemented!(),     // TODO:
         KadMsg::FindNodeReq { key } => {
             let mut msg = protobuf_structs::dht::Message::new();
             msg.set_field_type(protobuf_structs::dht::Message_MessageType::FIND_NODE);
