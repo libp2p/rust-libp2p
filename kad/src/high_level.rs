@@ -145,7 +145,7 @@ impl KadSystem {
 
     /// Starts a query for an iterative `FIND_NODE` request.
     pub fn find_node<'a, F, Fut>(&self, searched_key: PeerId, access: F)
-        -> Box<Stream<Item = KadQueryEvent<Vec<PeerId>>, Error = IoError> + 'a>
+        -> impl Stream<Item = KadQueryEvent<Vec<PeerId>>, Error = IoError> + 'a
     where F: FnMut(&PeerId) -> Fut + 'a,
         Fut: IntoFuture<Item = KadConnecController, Error = IoError>  + 'a,
     {
@@ -160,13 +160,16 @@ impl KadSystem {
 // Returns a dummy no-op future if `bucket_num` is out of range.
 fn refresh<'a, F, Fut>(bucket_num: usize, access: F, kbuckets: &KBucketsTable<PeerId, ()>,
                         parallelism: usize, request_timeout: Duration)
-    -> Box<Stream<Item = KadQueryEvent<()>, Error = IoError> + 'a>
+    -> impl Stream<Item = KadQueryEvent<()>, Error = IoError> + 'a
 where F: FnMut(&PeerId) -> Fut + 'a,
     Fut: IntoFuture<Item = KadConnecController, Error = IoError> + 'a,
 {
     let peer_id = match gen_random_id(kbuckets.my_id(), bucket_num) {
         Ok(p) => p,
-        Err(()) => return Box::new(stream::once(Ok(KadQueryEvent::Finished(())))),
+        Err(()) => {
+            let stream = stream::once(Ok(KadQueryEvent::Finished(())));
+            return Box::new(stream) as Box<Stream<Item = _, Error = _>>;
+        },
     };
 
     let stream = query(access, kbuckets, peer_id, parallelism, 20, request_timeout)        // TODO: 20 is arbitrary
@@ -176,8 +179,7 @@ where F: FnMut(&PeerId) -> Fut + 'a,
                 KadQueryEvent::Finished(_) => KadQueryEvent::Finished(()),
             }
         });
-
-    Box::new(stream) as Box<_>
+    Box::new(stream) as Box<Stream<Item = _, Error = _>>
 }
 
 // Generates a random `PeerId` that belongs to the given bucket.
@@ -221,7 +223,7 @@ fn query<'a, F, Fut>(
     parallelism: usize,
     num_results: usize,
     request_timeout: Duration,
-) -> Box<Stream<Item = KadQueryEvent<Vec<PeerId>>, Error = IoError> + 'a>
+) -> impl Stream<Item = KadQueryEvent<Vec<PeerId>>, Error = IoError> + 'a
 where F: FnMut(&PeerId) -> Fut + 'a,
       Fut: IntoFuture<Item = KadConnecController, Error = IoError> + 'a,
 {
