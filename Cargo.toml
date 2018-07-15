@@ -21,6 +21,7 @@ members = [
     "core",
     "tcp-transport",
     "transport-timeout",
+    "uds",
     "varint-rs",
     "websocket",
     "yamux"
