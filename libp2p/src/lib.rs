@@ -43,6 +43,7 @@ pub extern crate libp2p_secio as secio;
 pub extern crate libp2p_tcp_transport as tcp;
 pub extern crate libp2p_transport_timeout as transport_timeout;
 pub extern crate libp2p_websocket as websocket;
+pub extern crate libp2p_yamux as yamux;
 
 pub mod simple;
 
