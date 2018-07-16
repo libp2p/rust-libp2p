@@ -23,7 +23,7 @@ extern crate futures;
 extern crate libp2p_mplex as multiplex;
 extern crate libp2p_core as swarm;
 extern crate libp2p_tcp_transport as tcp;
-extern crate tokio_core;
+extern crate tokio_current_thread;
 extern crate tokio_io;
 
 use futures::future::Future;
@@ -32,7 +32,6 @@ use std::sync::mpsc;
 use std::thread;
 use swarm::{StreamMuxer, Transport};
 use tcp::TcpConfig;
-use tokio_core::reactor::Core;
 use tokio_io::codec::length_delimited::Framed;
 
 #[test]
@@ -42,9 +41,8 @@ fn client_to_server_outbound() {
     let (tx, rx) = mpsc::channel();
 
     let bg_thread = thread::spawn(move || {
-        let mut core = Core::new().unwrap();
         let transport =
-            TcpConfig::new(core.handle()).with_upgrade(multiplex::MultiplexConfig::new());
+            TcpConfig::new().with_upgrade(multiplex::MultiplexConfig::new());
 
         let (listener, addr) = transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -69,11 +67,10 @@ fn client_to_server_outbound() {
                 Ok(())
             });
 
-        core.run(future).unwrap();
+        tokio_current_thread::block_on_all(future).unwrap();
     });
 
-    let mut core = Core::new().unwrap();
-    let transport = TcpConfig::new(core.handle()).with_upgrade(multiplex::MultiplexConfig::new());
+    let transport = TcpConfig::new().with_upgrade(multiplex::MultiplexConfig::new());
 
     let future = transport
         .dial(rx.recv().unwrap())
@@ -83,7 +80,7 @@ fn client_to_server_outbound() {
         .and_then(|server| server.send("hello world".into()))
         .map(|_| ());
 
-    core.run(future).unwrap();
+    tokio_current_thread::block_on_all(future).unwrap();
     bg_thread.join().unwrap();
 }
 
@@ -94,9 +91,8 @@ fn client_to_server_inbound() {
     let (tx, rx) = mpsc::channel();
 
     let bg_thread = thread::spawn(move || {
-        let mut core = Core::new().unwrap();
         let transport =
-            TcpConfig::new(core.handle()).with_upgrade(multiplex::MultiplexConfig::new());
+            TcpConfig::new().with_upgrade(multiplex::MultiplexConfig::new());
 
         let (listener, addr) = transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -121,11 +117,10 @@ fn client_to_server_inbound() {
                 Ok(())
             });
 
-        core.run(future).unwrap();
+        tokio_current_thread::block_on_all(future).unwrap();
     });
 
-    let mut core = Core::new().unwrap();
-    let transport = TcpConfig::new(core.handle()).with_upgrade(multiplex::MultiplexConfig::new());
+    let transport = TcpConfig::new().with_upgrade(multiplex::MultiplexConfig::new());
 
     let future = transport
         .dial(rx.recv().unwrap())
@@ -135,6 +130,6 @@ fn client_to_server_inbound() {
         .and_then(|server| server.send("hello world".into()))
         .map(|_| ());
 
-    core.run(future).unwrap();
+    tokio_current_thread::block_on_all(future).unwrap();
     bg_thread.join().unwrap();
 }

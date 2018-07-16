@@ -190,9 +190,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio_core;
-    use self::tokio_core::net::{TcpListener, TcpStream};
-    use self::tokio_core::reactor::Core;
+    extern crate tokio_current_thread;
+    extern crate tokio_tcp;
+    use self::tokio_tcp::{TcpListener, TcpStream};
     use bytes::Bytes;
     use futures::Future;
     use futures::{Sink, Stream};
@@ -200,9 +200,7 @@ mod tests {
 
     #[test]
     fn wrong_proto_name() {
-        let mut core = Core::new().unwrap();
-
-        let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap(), &core.handle()).unwrap();
+        let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap();
         let listener_addr = listener.local_addr().unwrap();
 
         let server = listener
@@ -211,7 +209,7 @@ mod tests {
             .map(|_| ())
             .map_err(|(e, _)| e.into());
 
-        let client = TcpStream::connect(&listener_addr, &core.handle())
+        let client = TcpStream::connect(&listener_addr)
             .from_err()
             .and_then(move |stream| Dialer::new(stream))
             .and_then(move |dialer| {
@@ -219,7 +217,7 @@ mod tests {
                 dialer.send(DialerToListenerMessage::ProtocolRequest { name: p })
             });
 
-        match core.run(server.join(client)) {
+        match tokio_current_thread::block_on_all(server.join(client)) {
             Err(MultistreamSelectError::WrongProtocolName) => (),
             _ => panic!(),
         }

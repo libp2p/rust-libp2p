@@ -304,10 +304,9 @@ fn proto_to_msg(mut message: protobuf_structs::dht::Message) -> Result<KadMsg, I
 #[cfg(test)]
 mod tests {
     extern crate libp2p_tcp_transport;
-    extern crate tokio_core;
+    extern crate tokio_current_thread;
 
     use self::libp2p_tcp_transport::TcpConfig;
-    use self::tokio_core::reactor::Core;
     use futures::{Future, Sink, Stream};
     use libp2p_core::{Transport, PeerId, PublicKey};
     use protocol::{ConnectionType, KadMsg, KademliaProtocolConfig, Peer};
@@ -346,8 +345,7 @@ mod tests {
             let (tx, rx) = mpsc::channel();
 
             let bg_thread = thread::spawn(move || {
-                let mut core = Core::new().unwrap();
-                let transport = TcpConfig::new(core.handle()).with_upgrade(KademliaProtocolConfig);
+                let transport = TcpConfig::new().with_upgrade(KademliaProtocolConfig);
 
                 let (listener, addr) = transport
                     .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -364,11 +362,10 @@ mod tests {
                         ()
                     });
 
-                let _ = core.run(future).unwrap();
+                let _ = tokio_current_thread::block_on_all(future).unwrap();
             });
 
-            let mut core = Core::new().unwrap();
-            let transport = TcpConfig::new(core.handle()).with_upgrade(KademliaProtocolConfig);
+            let transport = TcpConfig::new().with_upgrade(KademliaProtocolConfig);
 
             let future = transport
                 .dial(rx.recv().unwrap())
@@ -376,7 +373,7 @@ mod tests {
                 .and_then(|proto| proto.0.send(msg_client))
                 .map(|_| ());
 
-            let _ = core.run(future).unwrap();
+            let _ = tokio_current_thread::block_on_all(future).unwrap();
             bg_thread.join().unwrap();
         }
     }
