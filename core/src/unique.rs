@@ -38,11 +38,14 @@ enum UniqueConnecInner<T> {
         /// Tasks that need to be awakened when the content of this object is set.
         tasks_waiting: Vec<task::Task>,
         /// Future that represents when `set_value` should have been called.
-        dial_fut: Box<Future<Item = (), Error = IoError>>,
+        // TODO: Send + Sync bound is meh
+        dial_fut: Box<Future<Item = (), Error = IoError> + Send + Sync>,
     },
     /// The value of this unique connec has been set.
     /// Can only transition to `Empty` when the future has expired.
     Full(T),
+    /// The `dial_fut` has errored.
+    Errored(IoError),
 }
 
 impl<T> UniqueConnec<T> {
@@ -94,7 +97,7 @@ impl<T> UniqueConnec<T> {
         where F: FnOnce() -> Fut,
               T: Clone,
               Fut: IntoFuture<Item = (), Error = IoError>,
-              Fut::Future: 'static, // TODO: 'static :-/
+              Fut::Future: Send + Sync + 'static, // TODO: 'static :-/
     {
         let mut inner = self.inner.lock();
         if let UniqueConnecInner::Empty = &mut *inner {
@@ -118,6 +121,7 @@ impl<T> UniqueConnec<T> {
         let mut inner = self.inner.lock();
         match mem::replace(&mut *inner, UniqueConnecInner::Full(value)) {
             UniqueConnecInner::Empty => {},
+            UniqueConnecInner::Errored(_) => {},
             UniqueConnecInner::Pending { tasks_waiting, .. } => {
                 for task in tasks_waiting {
                     task.notify();
@@ -173,33 +177,43 @@ impl<T> Future for UniqueConnecFuture<T>
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let mut inner = self.inner.lock();
-        match *inner {
+        match mem::replace(&mut *inner, UniqueConnecInner::Empty) {
             UniqueConnecInner::Empty => {
                 // This can happen if `set_until()` is called, and the future expires before the
                 // future returned by `get()` gets polled. This means that the connection has been
                 // closed.
                 Err(IoErrorKind::ConnectionAborted.into())
             },
-            UniqueConnecInner::Pending { ref mut tasks_waiting, ref mut dial_fut } => {
+            UniqueConnecInner::Pending { mut tasks_waiting, mut dial_fut } => {
                 match dial_fut.poll() {
                     Ok(Async::Ready(())) => {
                         // This happens if we successfully dialed a remote, but the callback
                         // doesn't call `set_value`. This can be a logic error by the user,
                         // but could also indicate that the user decided to filter out this
                         // connection for whatever reason.
+                        *inner = UniqueConnecInner::Errored(IoErrorKind::ConnectionAborted.into());
                         Err(IoErrorKind::ConnectionAborted.into())
                     },
                     Ok(Async::NotReady) => {
                         tasks_waiting.push(task::current());
+                        *inner = UniqueConnecInner::Pending { tasks_waiting, dial_fut };
                         Ok(Async::NotReady)
                     }
                     Err(err) => {
-                        Err(err)
+                        let tr = IoError::new(IoErrorKind::ConnectionAborted, err.to_string());
+                        *inner = UniqueConnecInner::Errored(err);
+                        Err(tr)
                     },
                 }
             },
-            UniqueConnecInner::Full(ref value) => {
-                Ok(Async::Ready(value.clone()))
+            UniqueConnecInner::Full(value) => {
+                *inner = UniqueConnecInner::Full(value.clone());
+                Ok(Async::Ready(value))
+            },
+            UniqueConnecInner::Errored(err) => {
+                let tr = IoError::new(IoErrorKind::ConnectionAborted, err.to_string());
+                *inner = UniqueConnecInner::Errored(err);
+                Err(tr)
             },
         }
     }
