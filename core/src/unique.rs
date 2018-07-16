@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{task, Async, Future, Poll, IntoFuture};
+use futures::{sync::oneshot, task, Async, Future, Poll, IntoFuture};
 use parking_lot::Mutex;
 use {Multiaddr, MuxedTransport, SwarmController, Transport};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -43,7 +43,12 @@ enum UniqueConnecInner<T> {
     },
     /// The value of this unique connec has been set.
     /// Can only transition to `Empty` when the future has expired.
-    Full(T),
+    Full {
+        /// Content of the object.
+        value: T,
+        /// Sender to trigger if the content gets cleared.
+        on_clear: oneshot::Sender<()>,
+    },
     /// The `dial_fut` has errored.
     Errored(IoError),
 }
@@ -60,8 +65,9 @@ impl<T> UniqueConnec<T> {
     /// Builds a new `UniqueConnec` that contains a value.
     #[inline]
     pub fn with_value(value: T) -> Self {
+        let (on_clear, _) = oneshot::channel();
         UniqueConnec {
-            inner: Arc::new(Mutex::new(UniqueConnecInner::Full(value))),
+            inner: Arc::new(Mutex::new(UniqueConnecInner::Full { value, on_clear })),
         }
     }
 
@@ -112,14 +118,17 @@ impl<T> UniqueConnec<T> {
     }
 
     /// Puts `value` inside the object. The second parameter is a future whose completion will
-    /// clear up the content. Returns a slightly modified version of that same future.
+    /// clear up the content. Returns an adjusted version of that same future.
+    ///
+    /// If `clear()` is called, the returned future will automatically complete with an error.
     ///
     /// Has no effect if the object already contains something.
-    pub fn set_until<F>(&self, value: T, until: F) -> impl Future<Item = F::Item, Error = F::Error>
-        where F: Future
+    pub fn set_until<F>(&self, value: T, until: F) -> impl Future<Item = (), Error = F::Error>
+        where F: Future<Item = ()>
     {
         let mut inner = self.inner.lock();
-        match mem::replace(&mut *inner, UniqueConnecInner::Full(value)) {
+        let (on_clear, on_clear_rx) = oneshot::channel();
+        match mem::replace(&mut *inner, UniqueConnecInner::Full { value, on_clear }) {
             UniqueConnecInner::Empty => {},
             UniqueConnecInner::Errored(_) => {},
             UniqueConnecInner::Pending { tasks_waiting, .. } => {
@@ -127,24 +136,46 @@ impl<T> UniqueConnec<T> {
                     task.notify();
                 }
             },
-            UniqueConnecInner::Full(old_value) => {
+            old @ UniqueConnecInner::Full { .. } => {
                 // Keep the old value.
-                *inner = UniqueConnecInner::Full(old_value);
+                *inner = old;
             },
         };
 
         let inner_clone = self.inner.clone();
         let mut called_once = false;
-        until.then(move |val| {
-            assert!(!called_once, "Future::poll() called again after returning Some");
-            called_once = true;
-            let mut inner = inner_clone.lock();
-            match mem::replace(&mut *inner, UniqueConnecInner::Empty) {
-                UniqueConnecInner::Full(_) => (),
-                _ => panic!("Wrong state in the UniqueConnec ; programmer error")
-            }
-            val
-        })
+        until
+            .select(on_clear_rx.then(|_| Ok(())))
+            .map(|((), _)| ())
+            .map_err(|(err, _)| err)
+            .then(move |val| {
+                assert!(!called_once, "Future::poll() called again after returning Some");
+                called_once = true;
+                let mut inner = inner_clone.lock();
+                match mem::replace(&mut *inner, UniqueConnecInner::Empty) {
+                    UniqueConnecInner::Full { .. } => (),
+                    _ => panic!("Wrong state in the UniqueConnec ; programmer error")
+                }
+                val
+            })
+    }
+
+    /// Clears the content of the object.
+    ///
+    /// Has no effect if the content is empty or pending.
+    /// If the node was full, calling `clear` will stop the future returned by `set_until`.
+    pub fn clear(&self) {
+        let mut inner = self.inner.lock();
+        match mem::replace(&mut *inner, UniqueConnecInner::Empty) {
+            UniqueConnecInner::Empty => {},
+            UniqueConnecInner::Errored(_) => {},
+            pending @ UniqueConnecInner::Pending { .. } => {
+                *inner = pending;
+            },
+            UniqueConnecInner::Full { on_clear, .. } => {
+                let _ = on_clear.send(());
+            },
+        };
     }
 }
 
@@ -206,8 +237,11 @@ impl<T> Future for UniqueConnecFuture<T>
                     },
                 }
             },
-            UniqueConnecInner::Full(value) => {
-                *inner = UniqueConnecInner::Full(value.clone());
+            UniqueConnecInner::Full { value, on_clear } => {
+                *inner = UniqueConnecInner::Full {
+                    value: value.clone(),
+                    on_clear
+                };
                 Ok(Async::Ready(value))
             },
             UniqueConnecInner::Errored(err) => {
