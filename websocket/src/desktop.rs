@@ -289,8 +289,7 @@ fn client_addr_to_ws(client_addr: &Multiaddr, is_wss: bool) -> String {
 #[cfg(test)]
 mod tests {
     extern crate libp2p_tcp_transport as tcp;
-    extern crate tokio_core;
-    use self::tokio_core::reactor::Core;
+    extern crate tokio_current_thread;
     use futures::{Future, Stream};
     use multiaddr::Multiaddr;
     use swarm::Transport;
@@ -298,8 +297,7 @@ mod tests {
 
     #[test]
     fn dialer_connects_to_listener_ipv4() {
-        let mut core = Core::new().unwrap();
-        let ws_config = WsConfig::new(tcp::TcpConfig::new(core.handle()));
+        let ws_config = WsConfig::new(tcp::TcpConfig::new());
 
         let (listener, addr) = ws_config
             .clone()
@@ -317,13 +315,12 @@ mod tests {
             .select(dialer)
             .map_err(|(e, _)| e)
             .and_then(|(_, n)| n);
-        core.run(future).unwrap();
+        tokio_current_thread::block_on_all(future).unwrap();
     }
 
     #[test]
     fn dialer_connects_to_listener_ipv6() {
-        let mut core = Core::new().unwrap();
-        let ws_config = WsConfig::new(tcp::TcpConfig::new(core.handle()));
+        let ws_config = WsConfig::new(tcp::TcpConfig::new());
 
         let (listener, addr) = ws_config
             .clone()
@@ -341,13 +338,12 @@ mod tests {
             .select(dialer)
             .map_err(|(e, _)| e)
             .and_then(|(_, n)| n);
-        core.run(future).unwrap();
+        tokio_current_thread::block_on_all(future).unwrap();
     }
 
     #[test]
     fn nat_traversal() {
-        let core = Core::new().unwrap();
-        let ws_config = WsConfig::new(tcp::TcpConfig::new(core.handle()));
+        let ws_config = WsConfig::new(tcp::TcpConfig::new());
 
         {
             let server = "/ip4/127.0.0.1/tcp/10000/ws".parse::<Multiaddr>().unwrap();

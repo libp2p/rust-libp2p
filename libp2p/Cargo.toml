@@ -30,7 +30,7 @@ tokio-io = "0.1"
 libp2p-dns = { path = "../dns" }
 libp2p-secio = { path = "../secio", optional = true, default-features = false }
 libp2p-tcp-transport = { path = "../tcp-transport" }
-tokio-core = "0.1"
+tokio-current-thread = "0.1"
 
 [target.'cfg(target_os = "emscripten")'.dependencies]
 stdweb = { version = "0.1.3", default-features = false }
@@ -40,7 +40,7 @@ bigint = "4.2"
 env_logger = "0.5.4"
 rand = "0.4"
 structopt =  "0.2"
-tokio-core = "0.1"
+tokio-current-thread = "0.1"
 tokio-io = "0.1"
 tokio-stdin = "0.1"
 
