@@ -71,6 +71,18 @@ impl<T> UniqueConnec<T> {
         }
     }
 
+    /// Instantly returns the value from the object if there is any.
+    pub fn poll(&self) -> Option<T>
+        where T: Clone,
+    {
+        let mut inner = self.inner.lock();
+        if let UniqueConnecInner::Full { ref value, .. } = &mut *inner {
+            Some(value.clone())
+        } else {
+            None
+        }
+    }
+
     /// Loads the value from the object.
     ///
     /// If the object is empty, dials the given multiaddress with the given transport.
