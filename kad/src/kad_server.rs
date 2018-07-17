@@ -23,21 +23,21 @@
 //!
 //! # Usage
 //!
-//! - Create a `KademliaServerConfig` object. This struct implements `ConnectionUpgrade`.
+//! - Create a `KadConnecConfig` object. This struct implements `ConnectionUpgrade`.
 //!
-//! - Update a connection through that `KademliaServerConfig`. The output yields you a
-//!   `KademliaServerController` and a stream that must be driven to completion. The controller
+//! - Update a connection through that `KadConnecConfig`. The output yields you a
+//!   `KadConnecController` and a stream that must be driven to completion. The controller
 //!   allows you to perform queries and receive responses. The stream produces incoming requests
 //!   from the remote.
 //!
-//! This `KademliaServerController` is usually extracted and stored in some sort of hash map in an
+//! This `KadConnecController` is usually extracted and stored in some sort of hash map in an
 //! `Arc` in order to be available whenever we need to request something from a node.
 
 use bytes::Bytes;
 use futures::sync::{mpsc, oneshot};
 use futures::{future, Future, Sink, stream, Stream};
 use libp2p_core::{ConnectionUpgrade, Endpoint, PeerId};
-use protocol::{self, KadMsg, KademliaProtocolConfig, Peer};
+use protocol::{self, KadMsg, KademliaProtocolConfig, KadPeer};
 use std::collections::VecDeque;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
@@ -45,31 +45,31 @@ use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Configuration for a Kademlia server.
 ///
-/// Implements `ConnectionUpgrade`. On a successful upgrade, produces a `KademliaServerController`
+/// Implements `ConnectionUpgrade`. On a successful upgrade, produces a `KadConnecController`
 /// and a `Future`. The controller lets you send queries to the remote and receive answers, while
 /// the `Future` must be driven to completion in order for things to work.
 #[derive(Debug, Clone)]
-pub struct KademliaServerConfig {
+pub struct KadConnecConfig {
     raw_proto: KademliaProtocolConfig,
 }
 
-impl KademliaServerConfig {
+impl KadConnecConfig {
     /// Builds a configuration object for an upcoming Kademlia server.
     #[inline]
     pub fn new() -> Self {
-        KademliaServerConfig {
+        KadConnecConfig {
             raw_proto: KademliaProtocolConfig,
         }
     }
 }
 
-impl<C, Maf> ConnectionUpgrade<C, Maf> for KademliaServerConfig
+impl<C, Maf> ConnectionUpgrade<C, Maf> for KadConnecConfig
 where
     C: AsyncRead + AsyncWrite + 'static, // TODO: 'static :-/
 {
     type Output = (
-        KademliaServerController,
-        Box<Stream<Item = KademliaIncomingRequest, Error = IoError>>,
+        KadConnecController,
+        Box<Stream<Item = KadIncomingRequest, Error = IoError>>,
     );
     type MultiaddrFuture = Maf;
     type Future = future::Map<<KademliaProtocolConfig as ConnectionUpgrade<C, Maf>>::Future, fn((<KademliaProtocolConfig as ConnectionUpgrade<C, Maf>>::Output, Maf)) -> (Self::Output, Maf)>;
@@ -93,7 +93,7 @@ where
 
 /// Allows sending Kademlia requests and receiving responses.
 #[derive(Debug, Clone)]
-pub struct KademliaServerController {
+pub struct KadConnecController {
     // In order to send a request, we use this sender to send a tuple. The first element of the
     // tuple is the message to send to the remote, and the second element is what is used to
     // receive the response. If the query doesn't expect a response (eg. `PUT_VALUE`), then the
@@ -101,13 +101,13 @@ pub struct KademliaServerController {
     inner: mpsc::UnboundedSender<(KadMsg, oneshot::Sender<KadMsg>)>,
 }
 
-impl KademliaServerController {
+impl KadConnecController {
     /// Sends a `FIND_NODE` query to the node and provides a future that will contain the response.
     // TODO: future item could be `impl Iterator` instead
     pub fn find_node(
         &self,
         searched_key: &PeerId,
-    ) -> impl Future<Item = Vec<Peer>, Error = IoError> {
+    ) -> impl Future<Item = Vec<KadPeer>, Error = IoError> {
         let message = protocol::KadMsg::FindNodeReq {
             key: searched_key.clone().into_bytes(),
         };
@@ -159,13 +159,13 @@ impl KademliaServerController {
 }
 
 /// Request received from the remote.
-pub enum KademliaIncomingRequest {
+pub enum KadIncomingRequest {
     /// Find the nodes closest to `searched`.
     FindNode {
         /// The value being searched.
         searched: PeerId,
         /// Object to use to respond to the request.
-        responder: KademliaFindNodeRespond,
+        responder: KadFindNodeRespond,
     },
 
     // TODO: PutValue and FindValue
@@ -175,14 +175,14 @@ pub enum KademliaIncomingRequest {
 }
 
 /// Object used to respond to `FindNode` queries from remotes.
-pub struct KademliaFindNodeRespond {
+pub struct KadFindNodeRespond {
     inner: oneshot::Sender<KadMsg>,
 }
 
-impl KademliaFindNodeRespond {
+impl KadFindNodeRespond {
     /// Respond to the `FindNode` request.
     pub fn respond<I>(self, peers: I)
-        where I: IntoIterator<Item = protocol::Peer>
+        where I: IntoIterator<Item = protocol::KadPeer>
     {
         let _ = self.inner.send(KadMsg::FindNodeRes {
             closer_peers: peers.into_iter().collect()
@@ -191,12 +191,12 @@ impl KademliaFindNodeRespond {
 }
 
 // Builds a controller and stream from a stream/sink of raw messages.
-fn build_from_sink_stream<'a, S>(connec: S) -> (KademliaServerController, Box<Stream<Item = KademliaIncomingRequest, Error = IoError> + 'a>)
+fn build_from_sink_stream<'a, S>(connec: S) -> (KadConnecController, Box<Stream<Item = KadIncomingRequest, Error = IoError> + 'a>)
 where S: Sink<SinkItem = KadMsg, SinkError = IoError> + Stream<Item = KadMsg, Error = IoError> + 'a
 {
     let (tx, rx) = mpsc::unbounded();
     let future = kademlia_handler(connec, rx);
-    let controller = KademliaServerController { inner: tx };
+    let controller = KadConnecController { inner: tx };
     (controller, future)
 }
 
@@ -211,7 +211,7 @@ where S: Sink<SinkItem = KadMsg, SinkError = IoError> + Stream<Item = KadMsg, Er
 fn kademlia_handler<'a, S>(
     kad_bistream: S,
     rq_rx: mpsc::UnboundedReceiver<(KadMsg, oneshot::Sender<KadMsg>)>,
-) -> Box<Stream<Item = KademliaIncomingRequest, Error = IoError> + 'a>
+) -> Box<Stream<Item = KadIncomingRequest, Error = IoError> + 'a>
 where
     S: Stream<Item = KadMsg, Error = IoError> + Sink<SinkItem = KadMsg, SinkError = IoError> + 'a,
 {
@@ -239,8 +239,7 @@ where
             .map_err(|_| unreachable!());
         let rq_rx = rq_rx
             .map(|(m, o)| EventSource::LocalRequest(m, o))
-            .map_err(|_| unreachable!())
-            .chain(future::ok(EventSource::Finished).into_stream());
+            .map_err(|_| unreachable!());
         let kad_stream = kad_stream
             .map(|m| EventSource::Remote(m))
             .chain(future::ok(EventSource::Finished).into_stream());
@@ -325,7 +324,7 @@ where
                                 // remote will see its PING answered only when it PONGs us.
                                 let future = future::ok({
                                     let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, finished);
-                                    let rq = KademliaIncomingRequest::PingPong;
+                                    let rq = KadIncomingRequest::PingPong;
                                     (Some(rq), state)
                                 });
                                 Box::new(future) as Box<_>
@@ -334,7 +333,7 @@ where
                                     .send(KadMsg::Ping)
                                     .map(move |kad_sink| {
                                         let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, finished);
-                                        let rq = KademliaIncomingRequest::PingPong;
+                                        let rq = KadIncomingRequest::PingPong;
                                         (Some(rq), state)
                                     });
                                 Box::new(future) as Box<_>
@@ -371,9 +370,9 @@ where
                             let _ = responders_tx.unbounded_send(rx);
                             let future = future::ok({
                                 let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, finished);
-                                let rq = KademliaIncomingRequest::FindNode {
+                                let rq = KadIncomingRequest::FindNode {
                                     searched: peer_id,
-                                    responder: KademliaFindNodeRespond {
+                                    responder: KadFindNodeRespond {
                                         inner: tx
                                     }
                                 };
@@ -407,9 +406,9 @@ mod tests {
     use std::iter;
     use futures::{Future, Poll, Sink, StartSend, Stream};
     use futures::sync::mpsc;
-    use kad_server::{self, KademliaIncomingRequest, KademliaServerController};
+    use kad_server::{self, KadIncomingRequest, KadConnecController};
     use libp2p_core::PublicKey;
-    use protocol::{ConnectionType, Peer};
+    use protocol::{KadConnectionType, KadPeer};
     use rand;
 
     // This struct merges a stream and a sink and is quite useful for tests.
@@ -441,7 +440,7 @@ mod tests {
         }
     }
 
-    fn build_test() -> (KademliaServerController, impl Stream<Item = KademliaIncomingRequest, Error = IoError>, KademliaServerController, impl Stream<Item = KademliaIncomingRequest, Error = IoError>) {
+    fn build_test() -> (KadConnecController, impl Stream<Item = KadIncomingRequest, Error = IoError>, KadConnecController, impl Stream<Item = KadIncomingRequest, Error = IoError>) {
         let (a_to_b, b_from_a) = mpsc::unbounded();
         let (b_to_a, a_from_b) = mpsc::unbounded();
 
@@ -464,7 +463,7 @@ mod tests {
         let streams = stream_events_a.map(|ev| (ev, "a"))
             .select(stream_events_b.map(|ev| (ev, "b")));
         match streams.into_future().map_err(|(err, _)| err).wait().unwrap() {
-            (Some((KademliaIncomingRequest::PingPong, "b")), _) => {},
+            (Some((KadIncomingRequest::PingPong, "b")), _) => {},
             _ => panic!()
         }
     }
@@ -480,20 +479,20 @@ mod tests {
 
         let find_node_fut = controller_a.find_node(&random_peer_id);
 
-        let example_response = Peer {
+        let example_response = KadPeer {
             node_id: {
                 let buf = (0 .. 1024).map(|_| -> u8 { rand::random() }).collect::<Vec<_>>();
                 PublicKey::Rsa(buf).into_peer_id()
             },
             multiaddrs: Vec::new(),
-            connection_ty: ConnectionType::Connected,
+            connection_ty: KadConnectionType::Connected,
         };
 
         let streams = stream_events_a.map(|ev| (ev, "a"))
             .select(stream_events_b.map(|ev| (ev, "b")));
 
         let streams = match streams.into_future().map_err(|(err, _)| err).wait().unwrap() {
-            (Some((KademliaIncomingRequest::FindNode { searched, responder }, "b")), streams) => {
+            (Some((KadIncomingRequest::FindNode { searched, responder }, "b")), streams) => {
                 assert_eq!(searched, random_peer_id);
                 responder.respond(iter::once(example_response.clone()));
                 streams
