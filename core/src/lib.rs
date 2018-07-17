@@ -238,5 +238,5 @@ pub use self::peer_id::PeerId;
 pub use self::public_key::PublicKey;
 pub use self::swarm::{swarm, SwarmController, SwarmFuture};
 pub use self::transport::{MuxedTransport, Transport};
-pub use self::unique::{UniqueConnec, UniqueConnecFuture};
+pub use self::unique::{UniqueConnec, UniqueConnecFuture, UniqueConnecState};
 pub use self::upgrade::{ConnectionUpgrade, Endpoint};

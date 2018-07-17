@@ -204,6 +204,19 @@ impl<T> UniqueConnec<T> {
             },
         };
     }
+
+    /// Returns the state of the object.
+    ///
+    /// Note that this can be racy, as the object can be used at the same time. In other words,
+    /// the returned value may no longer reflect the actual state.
+    pub fn state(&self) -> UniqueConnecState {
+        match *self.inner.lock() {
+            UniqueConnecInner::Empty => UniqueConnecState::Empty,
+            UniqueConnecInner::Errored(_) => UniqueConnecState::Errored,
+            UniqueConnecInner::Pending { .. } => UniqueConnecState::Pending,
+            UniqueConnecInner::Full { .. } => UniqueConnecState::Full,
+        }
+    }
 }
 
 impl<T> Clone for UniqueConnec<T> {
@@ -280,16 +293,31 @@ impl<T> Future for UniqueConnecFuture<T>
     }
 }
 
+/// State of a `UniqueConnec`.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum UniqueConnecState {
+    /// The object is empty.
+    Empty,
+    /// `get_*` has been called and we are waiting for `set_until` to be called.
+    Pending,
+    /// `set_until` has been called.
+    Full,
+    /// The future returned by the closure of `get_*` has errored or has finished before
+    /// `set_until` has been called.
+    Errored,
+}
+
 #[cfg(test)]
 mod tests {
     use futures::{future, Future};
     use transport::DeniedTransport;
-    use UniqueConnec;
+    use {UniqueConnec, UniqueConnecState};
     use swarm;
 
     #[test]
     fn invalid_multiaddr_produces_error() {
         let unique = UniqueConnec::empty();
+        assert_eq!(unique.state(), UniqueConnecState::Empty);
         let unique2 = unique.clone();
         let (swarm_ctrl, _swarm_fut) = swarm(DeniedTransport, |_, _| {
             unique2.set_until((), future::empty())
@@ -297,6 +325,7 @@ mod tests {
         let fut = unique.get_or_dial(&swarm_ctrl, &"/ip4/1.2.3.4".parse().unwrap(),
                                      DeniedTransport);
         assert!(fut.wait().is_err());
+        assert_eq!(unique.state(), UniqueConnecState::Errored);
     }
 
     // TODO: more tests
