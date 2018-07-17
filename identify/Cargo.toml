@@ -19,4 +19,4 @@ varint = { path = "../varint-rs" }
 
 [dev-dependencies]
 libp2p-tcp-transport = { path = "../tcp-transport" }
-tokio-core = "0.1.0"
+tokio-current-thread = "0.1"

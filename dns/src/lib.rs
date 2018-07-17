@@ -146,10 +146,10 @@ where
         let resolve_iters = addr.iter()
             .map(move |cmp| match cmp {
                 AddrComponent::DNS4(ref name) => {
-                    future::Either::A(resolve_dns(name, resolver.clone(), ResolveTy::Dns4))
+                    future::Either::A(resolve_dns(name, &resolver, ResolveTy::Dns4))
                 }
                 AddrComponent::DNS6(ref name) => {
-                    future::Either::A(resolve_dns(name, resolver.clone(), ResolveTy::Dns6))
+                    future::Either::A(resolve_dns(name, &resolver, ResolveTy::Dns6))
                 }
                 cmp => future::Either::B(future::ok(cmp)),
             })
@@ -192,7 +192,7 @@ enum ResolveTy {
 // Resolve a DNS name and returns a future with the result.
 fn resolve_dns(
     name: &str,
-    resolver: CpuPoolResolver,
+    resolver: &CpuPoolResolver,
     ty: ResolveTy,
 ) -> impl Future<Item = AddrComponent, Error = IoError> {
     let debug_name = if log_enabled!(Level::Trace) {
@@ -218,10 +218,9 @@ fn resolve_dns(
                 _ => None,
             })
             .next()
-            .ok_or(IoError::new(
-                IoErrorKind::Other,
-                "couldn't find any relevant IP address",
-            ))
+            .ok_or_else(|| {
+                IoError::new(IoErrorKind::Other, "couldn't find any relevant IP address")
+            })
     })
 }
 

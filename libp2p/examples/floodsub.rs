@@ -23,7 +23,7 @@ extern crate env_logger;
 extern crate futures;
 extern crate libp2p;
 extern crate rand;
-extern crate tokio_core;
+extern crate tokio_current_thread;
 extern crate tokio_io;
 extern crate tokio_stdin;
 
@@ -34,7 +34,6 @@ use libp2p::core::{either::EitherOutput, upgrade};
 use libp2p::core::{Multiaddr, Transport, PublicKey};
 use libp2p::peerstore::PeerId;
 use libp2p::tcp::TcpConfig;
-use tokio_core::reactor::Core;
 use libp2p::websocket::WsConfig;
 
 fn main() {
@@ -45,16 +44,12 @@ fn main() {
         .nth(1)
         .unwrap_or("/ip4/0.0.0.0/tcp/10050".to_owned());
 
-    // We start by building the tokio engine that will run all the sockets.
-    let mut core = Core::new().unwrap();
-
-    // Now let's build the transport stack.
     // We start by creating a `TcpConfig` that indicates that we want TCP/IP.
-    let transport = TcpConfig::new(core.handle())
+    let transport = TcpConfig::new()
         // In addition to TCP/IP, we also want to support the Websockets protocol on top of TCP/IP.
         // The parameter passed to `WsConfig::new()` must be an implementation of `Transport` to be
         // used for the underlying multiaddress.
-        .or_transport(WsConfig::new(TcpConfig::new(core.handle())))
+        .or_transport(WsConfig::new(TcpConfig::new()))
 
         // On top of TCP/IP, we will use either the plaintext protocol or the secio protocol,
         // depending on which one the remote supports.
@@ -158,5 +153,5 @@ fn main() {
         .select(stdin.map_err(|_| unreachable!()))
         .map(|_| ())
         .map_err(|e| e.0);
-    core.run(final_fut).unwrap();
+    tokio_current_thread::block_on_all(final_fut).unwrap();
 }

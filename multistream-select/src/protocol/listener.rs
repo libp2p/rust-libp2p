@@ -69,7 +69,7 @@ where
                     .send(BytesMut::from(MULTISTREAM_PROTOCOL_WITH_LF))
                     .from_err()
             })
-            .map(|inner| Listener { inner: inner });
+            .map(|inner| Listener { inner });
 
         Box::new(future)
     }
@@ -127,7 +127,7 @@ where
                 use std::iter;
 
                 let mut out_msg = varint::encode(list.len());
-                for elem in list.iter() {
+                for elem in &list {
                     out_msg.extend(iter::once(b'\r'));
                     out_msg.extend_from_slice(elem);
                     out_msg.extend(iter::once(b'\n'));
@@ -159,36 +159,34 @@ where
     type Error = MultistreamSelectError;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        loop {
-            let mut frame = match self.inner.poll() {
-                Ok(Async::Ready(Some(frame))) => frame,
-                Ok(Async::Ready(None)) => return Ok(Async::Ready(None)),
-                Ok(Async::NotReady) => return Ok(Async::NotReady),
-                Err(err) => return Err(err.into()),
-            };
+        let mut frame = match self.inner.poll() {
+            Ok(Async::Ready(Some(frame))) => frame,
+            Ok(Async::Ready(None)) => return Ok(Async::Ready(None)),
+            Ok(Async::NotReady) => return Ok(Async::NotReady),
+            Err(err) => return Err(err.into()),
+        };
 
-            if frame.get(0) == Some(&b'/') && frame.last() == Some(&b'\n') {
-                let frame_len = frame.len();
-                let protocol = frame.split_to(frame_len - 1);
-                return Ok(Async::Ready(Some(
-                    DialerToListenerMessage::ProtocolRequest { name: protocol },
-                )));
-            } else if frame == &b"ls\n"[..] {
-                return Ok(Async::Ready(Some(
-                    DialerToListenerMessage::ProtocolsListRequest,
-                )));
-            } else {
-                return Err(MultistreamSelectError::UnknownMessage);
-            }
+        if frame.get(0) == Some(&b'/') && frame.last() == Some(&b'\n') {
+            let frame_len = frame.len();
+            let protocol = frame.split_to(frame_len - 1);
+            Ok(Async::Ready(Some(
+                DialerToListenerMessage::ProtocolRequest { name: protocol },
+            )))
+        } else if frame == b"ls\n"[..] {
+            Ok(Async::Ready(Some(
+                DialerToListenerMessage::ProtocolsListRequest,
+            )))
+        } else {
+            Err(MultistreamSelectError::UnknownMessage)
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio_core;
-    use self::tokio_core::net::{TcpListener, TcpStream};
-    use self::tokio_core::reactor::Core;
+    extern crate tokio_current_thread;
+    extern crate tokio_tcp;
+    use self::tokio_tcp::{TcpListener, TcpStream};
     use bytes::Bytes;
     use futures::Future;
     use futures::{Sink, Stream};
@@ -196,26 +194,24 @@ mod tests {
 
     #[test]
     fn wrong_proto_name() {
-        let mut core = Core::new().unwrap();
-
-        let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap(), &core.handle()).unwrap();
+        let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap();
         let listener_addr = listener.local_addr().unwrap();
 
         let server = listener
             .incoming()
             .into_future()
             .map_err(|(e, _)| e.into())
-            .and_then(move |(connec, _)| Listener::new(connec.unwrap().0))
+            .and_then(move |(connec, _)| Listener::new(connec.unwrap()))
             .and_then(|listener| {
                 let proto_name = Bytes::from("invalid-proto");
                 listener.send(ListenerToDialerMessage::ProtocolAck { name: proto_name })
             });
 
-        let client = TcpStream::connect(&listener_addr, &core.handle())
+        let client = TcpStream::connect(&listener_addr)
             .from_err()
             .and_then(move |stream| Dialer::new(stream));
 
-        match core.run(server.join(client)) {
+        match tokio_current_thread::block_on_all(server.join(client)) {
             Err(MultistreamSelectError::WrongProtocolName) => (),
             _ => panic!(),
         }

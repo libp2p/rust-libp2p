@@ -62,7 +62,7 @@ enum State {
 impl<I, S> LengthDelimitedFramedRead<I, S> {
     pub fn new(inner: S) -> LengthDelimitedFramedRead<I, S> {
         LengthDelimitedFramedRead {
-            inner: inner,
+            inner,
             internal_buffer: {
                 let mut v = SmallVec::new();
                 v.push(0);
@@ -139,9 +139,7 @@ where
                         let frame_len = decode_length_prefix(&self.internal_buffer);
 
                         if frame_len >= 1 {
-                            self.state = State::ReadingData {
-                                frame_len: frame_len,
-                            };
+                            self.state = State::ReadingData { frame_len };
                             self.internal_buffer.clear();
                             self.internal_buffer.reserve(frame_len as usize);
                             self.internal_buffer.extend((0..frame_len).map(|_| 0));
@@ -223,8 +221,8 @@ fn decode_length_prefix(buf: &[u8]) -> u16 {
     for &byte in buf.iter().rev() {
         let byte = byte & 0x7f;
         sum <<= 7;
-        debug_assert!(sum.checked_add(byte as u16).is_some());
-        sum += byte as u16;
+        debug_assert!(sum.checked_add(u16::from(byte)).is_some());
+        sum += u16::from(byte);
     }
 
     sum

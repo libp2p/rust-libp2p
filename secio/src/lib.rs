@@ -30,7 +30,7 @@
 //!
 //! ```no_run
 //! extern crate futures;
-//! extern crate tokio_core;
+//! extern crate tokio_current_thread;
 //! extern crate tokio_io;
 //! extern crate libp2p_core;
 //! extern crate libp2p_secio;
@@ -41,12 +41,9 @@
 //! use libp2p_secio::{SecioConfig, SecioKeyPair, SecioOutput};
 //! use libp2p_core::{Multiaddr, Transport, upgrade};
 //! use libp2p_tcp_transport::TcpConfig;
-//! use tokio_core::reactor::Core;
 //! use tokio_io::io::write_all;
 //!
-//! let mut core = Core::new().unwrap();
-//!
-//! let transport = TcpConfig::new(core.handle())
+//! let transport = TcpConfig::new()
 //!     .with_upgrade({
 //!         # let private_key = b"";
 //!         //let private_key = include_bytes!("test-rsa-private-key.pk8");
@@ -67,7 +64,7 @@
 //!         write_all(connection, "hello world")
 //!     });
 //!
-//! core.run(future).unwrap();
+//! tokio_current_thread::block_on_all(future).unwrap();
 //! # }
 //! ```
 //!
@@ -166,8 +163,7 @@ impl SecioKeyPair {
     where
         P: Into<Vec<u8>>,
     {
-        let private =
-            RSAKeyPair::from_pkcs8(Input::from(&private[..])).map_err(|err| Box::new(err))?;
+        let private = RSAKeyPair::from_pkcs8(Input::from(&private[..])).map_err(Box::new)?;
 
         Ok(SecioKeyPair {
             inner: SecioKeyPairInner::Rsa {
@@ -182,8 +178,7 @@ impl SecioKeyPair {
     where
         K: AsRef<[u8]>,
     {
-        let key_pair =
-            Ed25519KeyPair::from_pkcs8(Input::from(key.as_ref())).map_err(|err| Box::new(err))?;
+        let key_pair = Ed25519KeyPair::from_pkcs8(Input::from(key.as_ref())).map_err(Box::new)?;
 
         Ok(SecioKeyPair {
             inner: SecioKeyPairInner::Ed25519 {
@@ -195,7 +190,7 @@ impl SecioKeyPair {
     /// Generates a new Ed25519 key pair and uses it.
     pub fn ed25519_generated() -> Result<SecioKeyPair, Box<Error + Send + Sync>> {
         let rng = SystemRandom::new();
-        let gen = Ed25519KeyPair::generate_pkcs8(&rng).map_err(|err| Box::new(err))?;
+        let gen = Ed25519KeyPair::generate_pkcs8(&rng).map_err(Box::new)?;
         Ok(SecioKeyPair::ed25519_from_pkcs8(&gen[..])
             .expect("failed to parse generated Ed25519 key"))
     }
@@ -225,7 +220,7 @@ impl SecioKeyPair {
             FromDerEncoded::with_der_encoded(key.as_ref()).map_err(|err| err.to_string())?;
         let priv_key_obj = obj.into_iter()
             .nth(1)
-            .ok_or("Not enough elements in DER".to_string())?;
+            .ok_or_else(|| "Not enough elements in DER".to_string())?;
         let private_key: Vec<u8> =
             FromDerObject::from_der_object(priv_key_obj).map_err(|err| err.to_string())?;
         SecioKeyPair::secp256k1_raw_key(&private_key)

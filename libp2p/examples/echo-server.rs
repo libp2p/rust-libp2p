@@ -23,7 +23,7 @@ extern crate env_logger;
 extern crate futures;
 extern crate libp2p;
 extern crate tokio_codec;
-extern crate tokio_core;
+extern crate tokio_current_thread;
 
 use futures::future::{loop_fn, Future, IntoFuture, Loop};
 use futures::{Sink, Stream};
@@ -32,7 +32,6 @@ use libp2p::SimpleProtocol;
 use libp2p::core::Transport;
 use libp2p::core::{upgrade, either::EitherOutput};
 use libp2p::tcp::TcpConfig;
-use tokio_core::reactor::Core;
 use tokio_codec::{BytesCodec, Framed};
 use libp2p::websocket::WsConfig;
 
@@ -44,16 +43,12 @@ fn main() {
         .nth(1)
         .unwrap_or("/ip4/0.0.0.0/tcp/10333".to_owned());
 
-    // We start by building the tokio engine that will run all the sockets.
-    let mut core = Core::new().unwrap();
-
-    // Now let's build the transport stack.
     // We start by creating a `TcpConfig` that indicates that we want TCP/IP.
-    let transport = TcpConfig::new(core.handle())
+    let transport = TcpConfig::new()
         // In addition to TCP/IP, we also want to support the Websockets protocol on top of TCP/IP.
         // The parameter passed to `WsConfig::new()` must be an implementation of `Transport` to be
         // used for the underlying multiaddress.
-        .or_transport(WsConfig::new(TcpConfig::new(core.handle())))
+        .or_transport(WsConfig::new(TcpConfig::new()))
 
         // On top of TCP/IP, we will use either the plaintext protocol or the secio protocol,
         // depending on which one the remote supports.
@@ -144,5 +139,5 @@ fn main() {
     // `swarm_future` is a future that contains all the behaviour that we want, but nothing has
     // actually started yet. Because we created the `TcpConfig` with tokio, we need to run the
     // future through the tokio core.
-    core.run(swarm_future).unwrap();
+    tokio_current_thread::block_on_all(swarm_future).unwrap();
 }
