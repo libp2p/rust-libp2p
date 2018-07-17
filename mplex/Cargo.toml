@@ -8,6 +8,7 @@ arrayvec = "0.4.6"
 bytes = "0.4.5"
 circular-buffer = { path = "../circular-buffer" }
 error-chain = "0.11.0"
+fnv = "1.0"
 futures = "0.1"
 futures-mutex = { git = "https://github.com/paritytech/futures-mutex" }
 libp2p-core = { path = "../core" }

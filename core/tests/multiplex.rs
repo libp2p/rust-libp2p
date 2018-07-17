@@ -78,7 +78,7 @@ fn client_to_server_outbound() {
 
     let bg_thread = thread::spawn(move || {
         let transport = TcpConfig::new()
-            .with_upgrade(multiplex::MultiplexConfig::new())
+            .with_upgrade(multiplex::MplexConfig::new())
             .into_connection_reuse();
 
         let (listener, addr) = transport
@@ -107,7 +107,7 @@ fn client_to_server_outbound() {
         tokio_current_thread::block_on_all(future).unwrap();
     });
 
-    let transport = TcpConfig::new().with_upgrade(multiplex::MultiplexConfig::new());
+    let transport = TcpConfig::new().with_upgrade(multiplex::MplexConfig::new());
 
     let future = transport
         .dial(rx.recv().unwrap())
@@ -130,7 +130,7 @@ fn connection_reused_for_dialing() {
 
     let bg_thread = thread::spawn(move || {
         let transport = OnlyOnce::from(TcpConfig::new())
-            .with_upgrade(multiplex::MultiplexConfig::new())
+            .with_upgrade(multiplex::MplexConfig::new())
             .into_connection_reuse();
 
         let (listener, addr) = transport
@@ -171,7 +171,7 @@ fn connection_reused_for_dialing() {
     });
 
     let transport = OnlyOnce::from(TcpConfig::new())
-        .with_upgrade(multiplex::MultiplexConfig::new())
+        .with_upgrade(multiplex::MplexConfig::new())
         .into_connection_reuse();
 
     let listen_addr = rx.recv().unwrap();
@@ -207,7 +207,7 @@ fn use_opened_listen_to_dial() {
 
     let bg_thread = thread::spawn(move || {
         let transport = OnlyOnce::from(TcpConfig::new())
-            .with_upgrade(multiplex::MultiplexConfig::new());
+            .with_upgrade(multiplex::MplexConfig::new());
 
         let (listener, addr) = transport
             .clone()
@@ -248,7 +248,7 @@ fn use_opened_listen_to_dial() {
     });
 
     let transport = OnlyOnce::from(TcpConfig::new())
-        .with_upgrade(multiplex::MultiplexConfig::new())
+        .with_upgrade(multiplex::MplexConfig::new())
         .into_connection_reuse();
 
     let listen_addr = rx.recv().unwrap();
