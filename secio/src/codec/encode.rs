@@ -49,8 +49,8 @@ impl<S> EncoderMiddleware<S> {
     ) -> EncoderMiddleware<S> {
         EncoderMiddleware {
             cipher_state: cipher,
-            hmac_key: hmac_key,
-            raw_sink: raw_sink,
+            hmac_key,
+            raw_sink,
         }
     }
 }
