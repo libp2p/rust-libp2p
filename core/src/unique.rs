@@ -23,7 +23,7 @@ use parking_lot::Mutex;
 use {Multiaddr, MuxedTransport, SwarmController, Transport};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::mem;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 /// Storage for a unique connection with a remote.
 pub struct UniqueConnec<T> {
@@ -119,7 +119,7 @@ impl<T> UniqueConnec<T> {
     {
         match &mut *self.inner.lock() {
             UniqueConnecInner::Empty => (),
-            _ => return UniqueConnecFuture { inner: self.inner.clone() },
+            _ => return UniqueConnecFuture { inner: Arc::downgrade(&self.inner) },
         };
 
         // The mutex is unlocked when we call `or`, in order to avoid potential deadlocks.
@@ -135,7 +135,7 @@ impl<T> UniqueConnec<T> {
             };
         }
 
-        UniqueConnecFuture { inner: self.inner.clone() }
+        UniqueConnecFuture { inner: Arc::downgrade(&self.inner) }
     }
 
     /// Puts `value` inside the object. The second parameter is a future whose completion will
@@ -237,7 +237,7 @@ impl<T> Default for UniqueConnec<T> {
 
 /// Future returned by `UniqueConnec::get()`.
 pub struct UniqueConnecFuture<T> {
-    inner: Arc<Mutex<UniqueConnecInner<T>>>,
+    inner: Weak<Mutex<UniqueConnecInner<T>>>,
 }
 
 impl<T> Future for UniqueConnecFuture<T>
@@ -247,7 +247,13 @@ impl<T> Future for UniqueConnecFuture<T>
     type Error = IoError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let mut inner = self.inner.lock();
+        let inner = match self.inner.upgrade() {
+            Some(inner) => inner,
+            // All the `UniqueConnec` have been destroyed.
+            None => return Err(IoErrorKind::ConnectionAborted.into()),
+        };
+
+        let mut inner = inner.lock();
         match mem::replace(&mut *inner, UniqueConnecInner::Empty) {
             UniqueConnecInner::Empty => {
                 // This can happen if `set_until()` is called, and the future expires before the
