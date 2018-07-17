@@ -459,5 +459,6 @@ where F: FnMut(&PeerId) -> Fut + 'a,
         Some(future::Either::B(future))
     }).filter_map(|val| val);
 
+    // Boxing the stream is not necessary, but we do it in order to improve compilation time.
     Box::new(stream) as Box<_>
 }

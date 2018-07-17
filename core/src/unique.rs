@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{sync::oneshot, task, Async, Future, Poll, IntoFuture};
+use futures::{future, sync::oneshot, task, Async, Future, Poll, IntoFuture};
 use parking_lot::Mutex;
 use {Multiaddr, MuxedTransport, SwarmController, Transport};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -37,7 +37,7 @@ enum UniqueConnecInner<T> {
     Pending {
         /// Tasks that need to be awakened when the content of this object is set.
         tasks_waiting: Vec<task::Task>,
-        /// Future that represents when `set_value` should have been called.
+        /// Future that represents when `set_until` should have been called.
         // TODO: Send + Sync bound is meh
         dial_fut: Box<Future<Item = (), Error = IoError> + Send + Sync>,
     },
@@ -75,8 +75,8 @@ impl<T> UniqueConnec<T> {
     pub fn poll(&self) -> Option<T>
         where T: Clone,
     {
-        let mut inner = self.inner.lock();
-        if let UniqueConnecInner::Full { ref value, .. } = &mut *inner {
+        let inner = self.inner.lock();
+        if let UniqueConnecInner::Full { ref value, .. } = &*inner {
             Some(value.clone())
         } else {
             None
@@ -87,7 +87,7 @@ impl<T> UniqueConnec<T> {
     ///
     /// If the object is empty, dials the given multiaddress with the given transport.
     ///
-    /// The closure of the `swarm` is expected to call `set_value()` on the `UniqueConnec`. Failure
+    /// The closure of the `swarm` is expected to call `set_until()` on the `UniqueConnec`. Failure
     /// to do so will make the `UniqueConnecFuture` produce an error.
     pub fn get_or_dial<S, Du>(&self, swarm: &SwarmController<S>, multiaddr: &Multiaddr,
                               transport: Du) -> UniqueConnecFuture<T>
@@ -107,9 +107,9 @@ impl<T> UniqueConnec<T> {
     /// Loads the value from the object.
     ///
     /// If the object is empty, calls the closure. The closure should return a future that
-    /// should be signaled after `set_value` has been called. If the future produces an error,
+    /// should be signaled after `set_until` has been called. If the future produces an error,
     /// then the object will empty itself again and the `UniqueConnecFuture` will return an error.
-    /// If the future is finished and `set_value` hasn't been called, then the `UniqueConnecFuture`
+    /// If the future is finished and `set_until` hasn't been called, then the `UniqueConnecFuture`
     /// will return an error.
     pub fn get<F, Fut>(&self, or: F) -> UniqueConnecFuture<T>
         where F: FnOnce() -> Fut,
@@ -117,7 +117,7 @@ impl<T> UniqueConnec<T> {
               Fut: IntoFuture<Item = (), Error = IoError>,
               Fut::Future: Send + Sync + 'static, // TODO: 'static :-/
     {
-        match &mut *self.inner.lock() {
+        match &*self.inner.lock() {
             UniqueConnecInner::Empty => (),
             _ => return UniqueConnecFuture { inner: Arc::downgrade(&self.inner) },
         };
@@ -160,6 +160,7 @@ impl<T> UniqueConnec<T> {
             old @ UniqueConnecInner::Full { .. } => {
                 // Keep the old value.
                 *inner = old;
+                return future::Either::B(until);
             },
         };
         drop(inner);
@@ -169,22 +170,16 @@ impl<T> UniqueConnec<T> {
             task.notify();
         }
 
-        let inner_clone = self.inner.clone();
-        let mut called_once = false;
-        until
+        let inner = self.inner.clone();
+        let fut = until
             .select(on_clear_rx.then(|_| Ok(())))
             .map(|((), _)| ())
             .map_err(|(err, _)| err)
             .then(move |val| {
-                assert!(!called_once, "Future::poll() called again after returning Some");
-                called_once = true;
-                let mut inner = inner_clone.lock();
-                match mem::replace(&mut *inner, UniqueConnecInner::Empty) {
-                    UniqueConnecInner::Full { .. } => (),
-                    _ => panic!("Wrong state in the UniqueConnec ; programmer error")
-                }
+                *inner.lock() = UniqueConnecInner::Empty;
                 val
-            })
+            });
+        future::Either::A(fut)
     }
 
     /// Clears the content of the object.
@@ -265,7 +260,7 @@ impl<T> Future for UniqueConnecFuture<T>
                 match dial_fut.poll() {
                     Ok(Async::Ready(())) => {
                         // This happens if we successfully dialed a remote, but the callback
-                        // doesn't call `set_value`. This can be a logic error by the user,
+                        // doesn't call `set_until`. This can be a logic error by the user,
                         // but could also indicate that the user decided to filter out this
                         // connection for whatever reason.
                         *inner = UniqueConnecInner::Errored(IoErrorKind::ConnectionAborted.into());
