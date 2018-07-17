@@ -236,3 +236,32 @@ where
         }
     }
 }
+
+
+#[derive(Debug, Copy, Clone)]
+pub enum EitherStreamMuxer<A, B> { A(A), B(B) }
+
+impl<A, B> StreamMuxer for EitherStreamMuxer<A, B>
+where
+    A: StreamMuxer,
+    B: StreamMuxer
+{
+    type Substream = EitherOutput<A::Substream, B::Substream>;
+    type InboundSubstream = EitherInbound<A, B>;
+    type OutboundSubstream = EitherOutbound<A, B>;
+
+    fn inbound(self) -> Self::InboundSubstream {
+        match self {
+            EitherStreamMuxer::A(a) => EitherInbound::A(a.inbound()),
+            EitherStreamMuxer::B(b) => EitherInbound::B(b.inbound())
+        }
+    }
+
+    fn outbound(self) -> Self::OutboundSubstream {
+        match self {
+            EitherStreamMuxer::A(a) => EitherOutbound::A(a.outbound()),
+            EitherStreamMuxer::B(b) => EitherOutbound::B(b.outbound())
+        }
+    }
+}
+
