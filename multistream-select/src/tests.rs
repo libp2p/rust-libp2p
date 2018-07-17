@@ -101,7 +101,8 @@ fn select_proto_basic() {
             dialer_select_proto(connec, protos).map(|r| r.0)
         });
 
-    let (dialer_chosen, listener_chosen) = tokio_current_thread::block_on_all(client.join(server)).unwrap();
+    let (dialer_chosen, listener_chosen) =
+        tokio_current_thread::block_on_all(client.join(server)).unwrap();
     assert_eq!(dialer_chosen, 3);
     assert_eq!(listener_chosen, 1);
 }
@@ -168,7 +169,8 @@ fn select_proto_parallel() {
             dialer_select_proto_parallel(connec, protos).map(|r| r.0)
         });
 
-    let (dialer_chosen, listener_chosen) = tokio_current_thread::block_on_all(client.join(server)).unwrap();
+    let (dialer_chosen, listener_chosen) =
+        tokio_current_thread::block_on_all(client.join(server)).unwrap();
     assert_eq!(dialer_chosen, 3);
     assert_eq!(listener_chosen, 1);
 }
@@ -198,7 +200,8 @@ fn select_proto_serial() {
             dialer_select_proto_serial(connec, protos).map(|r| r.0)
         });
 
-    let (dialer_chosen, listener_chosen) = tokio_current_thread::block_on_all(client.join(server)).unwrap();
+    let (dialer_chosen, listener_chosen) =
+        tokio_current_thread::block_on_all(client.join(server)).unwrap();
     assert_eq!(dialer_chosen, 3);
     assert_eq!(listener_chosen, 1);
 }

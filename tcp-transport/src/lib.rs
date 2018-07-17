@@ -66,9 +66,8 @@ use tokio_tcp::{TcpListener, TcpStream};
 ///
 /// The TCP sockets created by libp2p will need to be progressed by running the futures and streams
 /// obtained by libp2p through the tokio reactor.
-#[derive(Debug, Clone)]
-pub struct TcpConfig {
-}
+#[derive(Debug, Clone, Default)]
+pub struct TcpConfig {}
 
 impl TcpConfig {
     /// Creates a new configuration object for TCP/IP.
@@ -131,8 +130,7 @@ impl Transport for TcpConfig {
             // If so, we instantly refuse dialing instead of going through the kernel.
             if socket_addr.port() != 0 && !socket_addr.ip().is_unspecified() {
                 debug!("Dialing {}", addr);
-                let fut = TcpStream::connect(&socket_addr)
-                    .map(|t| (t, future::ok(addr)));
+                let fut = TcpStream::connect(&socket_addr).map(|t| (t, future::ok(addr)));
                 Ok(Box::new(fut) as Box<_>)
             } else {
                 debug!("Instantly refusing dialing {}, as it is invalid", addr);

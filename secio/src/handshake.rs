@@ -111,7 +111,7 @@ where
     }
 
     let context = HandshakeContext {
-        local_key: local_key,
+        local_key,
         rng: rand::SystemRandom::new(),
         local_nonce: Default::default(),
         local_public_key_in_protobuf_bytes: Vec::new(),
@@ -148,7 +148,7 @@ where
             context.local_public_key_in_protobuf_bytes = context.local_key.to_public_key().into_protobuf_encoding();
 
             let mut proposition = Propose::new();
-            proposition.set_rand(context.local_nonce.clone().to_vec());
+            proposition.set_rand(context.local_nonce.to_vec());
             proposition.set_pubkey(context.local_public_key_in_protobuf_bytes.clone());
             proposition.set_exchanges(algo_support::exchanges::PROPOSITION_STRING.into());
             proposition.set_ciphers(algo_support::ciphers::PROPOSITION_STRING.into());
@@ -446,7 +446,7 @@ where
             let local_priv_key = context.local_tmp_priv_key.take()
                 .expect("we filled this Option earlier, and extract it now");
             let codec = agreement::agree_ephemeral(local_priv_key,
-                                                   &context.chosen_exchange.clone().unwrap(),
+                                                   &context.chosen_exchange.unwrap(),
                                                    UntrustedInput::from(remote_exch.get_epubkey()),
                                                    SecioError::SecretGenerationFailed,
                                                    |key_material| {
@@ -474,7 +474,7 @@ where
                 let (encoding_cipher, encoding_hmac) = {
                     let (iv, rest) = local_infos.split_at(iv_size);
                     let (cipher_key, mac_key) = rest.split_at(cipher_key_size);
-                    let hmac = SigningKey::new(&context.chosen_hash.clone().unwrap(), mac_key);
+                    let hmac = SigningKey::new(&context.chosen_hash.unwrap(), mac_key);
                     let cipher = ctr(chosen_cipher, cipher_key, iv);
                     (cipher, hmac)
                 };
@@ -482,7 +482,7 @@ where
                 let (decoding_cipher, decoding_hmac) = {
                     let (iv, rest) = remote_infos.split_at(iv_size);
                     let (cipher_key, mac_key) = rest.split_at(cipher_key_size);
-                    let hmac = VerificationKey::new(&context.chosen_hash.clone().unwrap(), mac_key);
+                    let hmac = VerificationKey::new(&context.chosen_hash.unwrap(), mac_key);
                     let cipher = ctr(chosen_cipher, cipher_key, iv);
                     (cipher, hmac)
                 };
@@ -495,7 +495,7 @@ where
                 Ok(c) => Ok((c, context)),
                 Err(err) => {
                     debug!("failed to generate shared secret with remote");
-                    return Err(err);
+                    Err(err)
                 },
             }
         })
@@ -537,7 +537,7 @@ where
 // Custom algorithm translated from reference implementations. Needs to be the same algorithm
 // amongst all implementations.
 fn stretch_key(key: &SigningKey, result: &mut [u8]) {
-    const SEED: &'static [u8] = b"key expansion";
+    const SEED: &[u8] = b"key expansion";
 
     let mut init_ctxt = SigningContext::with_key(key);
     init_ctxt.update(SEED);
