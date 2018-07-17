@@ -26,7 +26,7 @@ mod dialer;
 mod error;
 mod listener;
 
-const MULTISTREAM_PROTOCOL_WITH_LF: &'static [u8] = b"/multistream/1.0.0\n";
+const MULTISTREAM_PROTOCOL_WITH_LF: &[u8] = b"/multistream/1.0.0\n";
 
 pub use self::dialer::Dialer;
 pub use self::error::MultistreamSelectError;

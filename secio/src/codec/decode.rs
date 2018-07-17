@@ -92,7 +92,7 @@ where
         let (crypted_data, expected_hash) = frame.split_at(frame.len() - hmac_num_bytes);
         debug_assert_eq!(expected_hash.len(), hmac_num_bytes);
 
-        if let Err(_) = hmac::verify(&self.hmac_key, crypted_data, expected_hash) {
+        if hmac::verify(&self.hmac_key, crypted_data, expected_hash).is_err() {
             debug!("hmac mismatch when decoding secio frame");
             return Err(SecioError::HmacNotMatching);
         }

@@ -69,7 +69,7 @@ where
                     .send(BytesMut::from(MULTISTREAM_PROTOCOL_WITH_LF))
                     .from_err()
             })
-            .map(|inner| Listener { inner: inner });
+            .map(|inner| Listener { inner });
 
         Box::new(future)
     }
@@ -127,7 +127,7 @@ where
                 use std::iter;
 
                 let mut out_msg = varint::encode(list.len());
-                for elem in list.iter() {
+                for elem in &list {
                     out_msg.extend(iter::once(b'\r'));
                     out_msg.extend_from_slice(elem);
                     out_msg.extend(iter::once(b'\n'));
@@ -159,27 +159,25 @@ where
     type Error = MultistreamSelectError;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        loop {
-            let mut frame = match self.inner.poll() {
-                Ok(Async::Ready(Some(frame))) => frame,
-                Ok(Async::Ready(None)) => return Ok(Async::Ready(None)),
-                Ok(Async::NotReady) => return Ok(Async::NotReady),
-                Err(err) => return Err(err.into()),
-            };
+        let mut frame = match self.inner.poll() {
+            Ok(Async::Ready(Some(frame))) => frame,
+            Ok(Async::Ready(None)) => return Ok(Async::Ready(None)),
+            Ok(Async::NotReady) => return Ok(Async::NotReady),
+            Err(err) => return Err(err.into()),
+        };
 
-            if frame.get(0) == Some(&b'/') && frame.last() == Some(&b'\n') {
-                let frame_len = frame.len();
-                let protocol = frame.split_to(frame_len - 1);
-                return Ok(Async::Ready(Some(
-                    DialerToListenerMessage::ProtocolRequest { name: protocol },
-                )));
-            } else if frame == &b"ls\n"[..] {
-                return Ok(Async::Ready(Some(
-                    DialerToListenerMessage::ProtocolsListRequest,
-                )));
-            } else {
-                return Err(MultistreamSelectError::UnknownMessage);
-            }
+        if frame.get(0) == Some(&b'/') && frame.last() == Some(&b'\n') {
+            let frame_len = frame.len();
+            let protocol = frame.split_to(frame_len - 1);
+            Ok(Async::Ready(Some(
+                DialerToListenerMessage::ProtocolRequest { name: protocol },
+            )))
+        } else if frame == b"ls\n"[..] {
+            Ok(Async::Ready(Some(
+                DialerToListenerMessage::ProtocolsListRequest,
+            )))
+        } else {
+            Err(MultistreamSelectError::UnknownMessage)
         }
     }
 }

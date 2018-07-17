@@ -52,9 +52,7 @@ where
 {
     let hmac_num_bytes = encoding_hmac.digest_algorithm().output_len;
     let encoder = EncoderMiddleware::new(socket, cipher_encoding, encoding_hmac);
-    let codec = DecoderMiddleware::new(encoder, cipher_decoder, decoding_hmac, hmac_num_bytes);
-
-    codec
+    DecoderMiddleware::new(encoder, cipher_decoder, decoding_hmac, hmac_num_bytes)
 }
 
 #[cfg(test)]
