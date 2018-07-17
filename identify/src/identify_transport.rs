@@ -24,6 +24,7 @@ use libp2p_core::{Multiaddr, MuxedTransport, Transport};
 use parking_lot::Mutex;
 use protocol::{IdentifyInfo, IdentifyOutput, IdentifyProtocolConfig};
 use std::collections::hash_map::Entry;
+use std::error::Error;
 use std::io::Error as IoError;
 use std::sync::Arc;
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -316,7 +317,7 @@ where F: FnOnce() -> Fut,
             entry.insert(future.clone());
             future::Either::B(future)
         },
-    }.map(|out| (*out).clone()).map_err(|err| panic!())     // FIXME:
+    }.map(|out| (*out).clone()).map_err(|err| IoError::new(err.kind(), err.description()))
 }
 
 // TODO: test that we receive back what the remote sent us
