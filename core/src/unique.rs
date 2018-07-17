@@ -117,9 +117,18 @@ impl<T> UniqueConnec<T> {
               Fut: IntoFuture<Item = (), Error = IoError>,
               Fut::Future: Send + Sync + 'static, // TODO: 'static :-/
     {
+        match &mut *self.inner.lock() {
+            UniqueConnecInner::Empty => (),
+            _ => return UniqueConnecFuture { inner: self.inner.clone() },
+        };
+
+        // The mutex is unlocked when we call `or`, in order to avoid potential deadlocks.
+        let dial_fut = or().into_future();
+
         let mut inner = self.inner.lock();
+        // Since we unlocked the mutex, it's possible that the object was filled in the meanwhile.
+        // Therefore we check again whether it's still `Empty`.
         if let UniqueConnecInner::Empty = &mut *inner {
-            let dial_fut = or().into_future();
             *inner = UniqueConnecInner::Pending {
                 tasks_waiting: Vec::new(),
                 dial_fut: Box::new(dial_fut),
@@ -138,21 +147,27 @@ impl<T> UniqueConnec<T> {
     pub fn set_until<F>(&self, value: T, until: F) -> impl Future<Item = (), Error = F::Error>
         where F: Future<Item = ()>
     {
+        let mut tasks_to_notify = Vec::new();
+
         let mut inner = self.inner.lock();
         let (on_clear, on_clear_rx) = oneshot::channel();
         match mem::replace(&mut *inner, UniqueConnecInner::Full { value, on_clear }) {
             UniqueConnecInner::Empty => {},
             UniqueConnecInner::Errored(_) => {},
             UniqueConnecInner::Pending { tasks_waiting, .. } => {
-                for task in tasks_waiting {
-                    task.notify();
-                }
+                tasks_to_notify = tasks_waiting;
             },
             old @ UniqueConnecInner::Full { .. } => {
                 // Keep the old value.
                 *inner = old;
             },
         };
+        drop(inner);
+
+        // The mutex is unlocked when we notify the pending tasks.
+        for task in tasks_to_notify {
+            task.notify();
+        }
 
         let inner_clone = self.inner.clone();
         let mut called_once = false;
