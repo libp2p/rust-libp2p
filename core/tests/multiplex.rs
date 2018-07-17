@@ -23,7 +23,7 @@ extern crate futures;
 extern crate libp2p_mplex as multiplex;
 extern crate libp2p_core;
 extern crate libp2p_tcp_transport;
-extern crate tokio_core;
+extern crate tokio_current_thread;
 extern crate tokio_io;
 
 use bytes::BytesMut;
@@ -33,7 +33,6 @@ use libp2p_core::{Multiaddr, MuxedTransport, StreamMuxer, Transport};
 use libp2p_tcp_transport::TcpConfig;
 use std::sync::{atomic, mpsc};
 use std::thread;
-use tokio_core::reactor::Core;
 use tokio_io::codec::length_delimited::Framed;
 
 // Ensures that a transport is only ever used once for dialing.
@@ -78,8 +77,7 @@ fn client_to_server_outbound() {
     let (tx, rx) = mpsc::channel();
 
     let bg_thread = thread::spawn(move || {
-        let mut core = Core::new().unwrap();
-        let transport = TcpConfig::new(core.handle())
+        let transport = TcpConfig::new()
             .with_upgrade(multiplex::MultiplexConfig::new())
             .into_connection_reuse();
 
@@ -106,11 +104,10 @@ fn client_to_server_outbound() {
                 Ok(())
             });
 
-        core.run(future).unwrap();
+        tokio_current_thread::block_on_all(future).unwrap();
     });
 
-    let mut core = Core::new().unwrap();
-    let transport = TcpConfig::new(core.handle()).with_upgrade(multiplex::MultiplexConfig::new());
+    let transport = TcpConfig::new().with_upgrade(multiplex::MultiplexConfig::new());
 
     let future = transport
         .dial(rx.recv().unwrap())
@@ -120,7 +117,7 @@ fn client_to_server_outbound() {
         .and_then(|server| server.send("hello world".into()))
         .map(|_| ());
 
-    core.run(future).unwrap();
+    tokio_current_thread::block_on_all(future).unwrap();
     bg_thread.join().unwrap();
 }
 
@@ -132,8 +129,7 @@ fn connection_reused_for_dialing() {
     let (tx, rx) = mpsc::channel();
 
     let bg_thread = thread::spawn(move || {
-        let mut core = Core::new().unwrap();
-        let transport = OnlyOnce::from(TcpConfig::new(core.handle()))
+        let transport = OnlyOnce::from(TcpConfig::new())
             .with_upgrade(multiplex::MultiplexConfig::new())
             .into_connection_reuse();
 
@@ -171,11 +167,10 @@ fn connection_reused_for_dialing() {
                 Ok(())
             });
 
-        core.run(future).unwrap();
+        tokio_current_thread::block_on_all(future).unwrap();
     });
 
-    let mut core = Core::new().unwrap();
-    let transport = OnlyOnce::from(TcpConfig::new(core.handle()))
+    let transport = OnlyOnce::from(TcpConfig::new())
         .with_upgrade(multiplex::MultiplexConfig::new())
         .into_connection_reuse();
 
@@ -198,7 +193,7 @@ fn connection_reused_for_dialing() {
         .and_then(|(_first, second)| second.send("second message".into()))
         .map(|_| ());
 
-    core.run(future).unwrap();
+    tokio_current_thread::block_on_all(future).unwrap();
     bg_thread.join().unwrap();
 }
 
@@ -211,8 +206,7 @@ fn use_opened_listen_to_dial() {
     let (tx, rx) = mpsc::channel();
 
     let bg_thread = thread::spawn(move || {
-        let mut core = Core::new().unwrap();
-        let transport = OnlyOnce::from(TcpConfig::new(core.handle()))
+        let transport = OnlyOnce::from(TcpConfig::new())
             .with_upgrade(multiplex::MultiplexConfig::new());
 
         let (listener, addr) = transport
@@ -250,11 +244,10 @@ fn use_opened_listen_to_dial() {
                 Ok(())
             });
 
-        core.run(future).unwrap();
+        tokio_current_thread::block_on_all(future).unwrap();
     });
 
-    let mut core = Core::new().unwrap();
-    let transport = OnlyOnce::from(TcpConfig::new(core.handle()))
+    let transport = OnlyOnce::from(TcpConfig::new())
         .with_upgrade(multiplex::MultiplexConfig::new())
         .into_connection_reuse();
 
@@ -277,6 +270,6 @@ fn use_opened_listen_to_dial() {
         .and_then(|(_first, second)| second.send("second message".into()))
         .map(|_| ());
 
-    core.run(future).unwrap();
+    tokio_current_thread::block_on_all(future).unwrap();
     bg_thread.join().unwrap();
 }

@@ -292,10 +292,9 @@ fn multiaddr_to_peerid(addr: Multiaddr) -> Result<PeerId, Multiaddr> {
 #[cfg(test)]
 mod tests {
     extern crate libp2p_tcp_transport;
-    extern crate tokio_core;
+    extern crate tokio_current_thread;
 
     use self::libp2p_tcp_transport::TcpConfig;
-    use self::tokio_core::reactor::Core;
     use PeerIdTransport;
     use futures::{Future, Stream};
     use libp2p_core::{Transport, PeerId, PublicKey};
@@ -341,9 +340,8 @@ mod tests {
 
         let peer_id = PeerId::from_public_key(PublicKey::Ed25519(vec![1, 2, 3, 4]));
 
-        let mut core = Core::new().unwrap();
         let underlying = UnderlyingTrans {
-            inner: TcpConfig::new(core.handle()),
+            inner: TcpConfig::new(),
         };
         let transport = PeerIdTransport::new(underlying, {
             let peer_id = peer_id.clone();
@@ -358,6 +356,6 @@ mod tests {
             .unwrap_or_else(|_| panic!())
             .then::<_, Result<(), ()>>(|_| Ok(()));
 
-        let _ = core.run(future).unwrap();
+        let _ = tokio_current_thread::block_on_all(future).unwrap();
     }
 }

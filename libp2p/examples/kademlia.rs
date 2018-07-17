@@ -23,7 +23,7 @@ extern crate bytes;
 extern crate env_logger;
 extern crate futures;
 extern crate libp2p;
-extern crate tokio_core;
+extern crate tokio_current_thread;
 extern crate tokio_io;
 
 use bigint::U512;
@@ -39,7 +39,6 @@ use libp2p::core::{upgrade, either::EitherOutput};
 use libp2p::kad::{KadConnecConfig, KadConnectionType, KadPeer, KadQueryEvent, KadSystem};
 use libp2p::kad::{KadSystemConfig, KadIncomingRequest};
 use libp2p::tcp::TcpConfig;
-use tokio_core::reactor::Core;
 
 fn main() {
     env_logger::init();
@@ -53,15 +52,11 @@ fn main() {
         args
     };
 
-    // We start by building the tokio engine that will run all the sockets.
-    let mut core = Core::new().unwrap();
-
     let peer_store = Arc::new(libp2p::peerstore::memory_peerstore::MemoryPeerstore::empty());
     ipfs_bootstrap(&*peer_store);
 
-    // Now let's build the transport stack.
     // We create a `TcpConfig` that indicates that we want TCP/IP.
-    let transport = TcpConfig::new(core.handle())
+    let transport = TcpConfig::new()
 
         // On top of TCP/IP, we will use either the plaintext protocol or the secio protocol,
         // depending on which one the remote supports.
@@ -229,7 +224,7 @@ fn main() {
     // `swarm_future` is a future that contains all the behaviour that we want, but nothing has
     // actually started yet. Because we created the `TcpConfig` with tokio, we need to run the
     // future through the tokio core.
-    core.run(
+    tokio_current_thread::block_on_all(
         finish_enum
             .select(swarm_future)
             .map(|(n, _)| n)

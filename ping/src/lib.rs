@@ -56,16 +56,14 @@
 //! extern crate libp2p_ping;
 //! extern crate libp2p_core;
 //! extern crate libp2p_tcp_transport;
-//! extern crate tokio_core;
+//! extern crate tokio_current_thread;
 //!
 //! use futures::Future;
 //! use libp2p_ping::Ping;
 //! use libp2p_core::Transport;
 //!
 //! # fn main() {
-//! let mut core = tokio_core::reactor::Core::new().unwrap();
-//!
-//! let ping_finished_future = libp2p_tcp_transport::TcpConfig::new(core.handle())
+//! let ping_finished_future = libp2p_tcp_transport::TcpConfig::new()
 //!     .with_upgrade(Ping)
 //!     .dial("127.0.0.1:12345".parse::<libp2p_core::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())
 //!     .and_then(|((mut pinger, service), _)| {
@@ -73,7 +71,7 @@
 //!     });
 //!
 //! // Runs until the ping arrives.
-//! core.run(ping_finished_future).unwrap();
+//! tokio_current_thread::block_on_all(ping_finished_future).unwrap();
 //! # }
 //! ```
 //!
@@ -283,11 +281,11 @@ impl Encoder for Codec {
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio_core;
+    extern crate tokio_current_thread;
+    extern crate tokio_tcp;
 
-    use self::tokio_core::net::TcpListener;
-    use self::tokio_core::net::TcpStream;
-    use self::tokio_core::reactor::Core;
+    use self::tokio_tcp::TcpListener;
+    use self::tokio_tcp::TcpStream;
     use super::Ping;
     use futures::future::{self, join_all};
     use futures::Future;
@@ -297,9 +295,7 @@ mod tests {
 
     #[test]
     fn ping_pong() {
-        let mut core = Core::new().unwrap();
-
-        let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap(), &core.handle()).unwrap();
+        let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap();
         let listener_addr = listener.local_addr().unwrap();
 
         let server = listener
@@ -308,7 +304,7 @@ mod tests {
             .map_err(|(e, _)| e.into())
             .and_then(|(c, _)| {
                 Ping.upgrade(
-                    c.unwrap().0,
+                    c.unwrap(),
                     (),
                     Endpoint::Listener,
                     future::ok::<Multiaddr, IoError>("/ip4/127.0.0.1/tcp/10000".parse().unwrap()),
@@ -322,7 +318,7 @@ mod tests {
                     .map_err(|_| panic!())
             });
 
-        let client = TcpStream::connect(&listener_addr, &core.handle())
+        let client = TcpStream::connect(&listener_addr)
             .map_err(|e| e.into())
             .and_then(|c| {
                 Ping.upgrade(
@@ -340,15 +336,13 @@ mod tests {
                     .map_err(|_| panic!())
             });
 
-        core.run(server.join(client)).unwrap();
+        tokio_current_thread::block_on_all(server.join(client)).unwrap();
     }
 
     #[test]
     fn multipings() {
         // Check that we can send multiple pings in a row and it will still work.
-        let mut core = Core::new().unwrap();
-
-        let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap(), &core.handle()).unwrap();
+        let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap();
         let listener_addr = listener.local_addr().unwrap();
 
         let server = listener
@@ -357,7 +351,7 @@ mod tests {
             .map_err(|(e, _)| e.into())
             .and_then(|(c, _)| {
                 Ping.upgrade(
-                    c.unwrap().0,
+                    c.unwrap(),
                     (),
                     Endpoint::Listener,
                     future::ok::<Multiaddr, IoError>("/ip4/127.0.0.1/tcp/10000".parse().unwrap()),
@@ -365,7 +359,7 @@ mod tests {
             })
             .and_then(|((_, service), _)| service.map_err(|_| panic!()));
 
-        let client = TcpStream::connect(&listener_addr, &core.handle())
+        let client = TcpStream::connect(&listener_addr)
             .map_err(|e| e.into())
             .and_then(|c| {
                 Ping.upgrade(
@@ -386,6 +380,6 @@ mod tests {
                     .map_err(|_| panic!())
             });
 
-        core.run(server.select(client)).unwrap_or_else(|_| panic!());
+        tokio_current_thread::block_on_all(server.select(client)).unwrap_or_else(|_| panic!());
     }
 }

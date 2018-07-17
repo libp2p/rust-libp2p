@@ -87,13 +87,11 @@
 //! ```
 //! extern crate libp2p_core;
 //! extern crate libp2p_tcp_transport;
-//! extern crate tokio_core;
 //!
 //! use libp2p_core::Transport;
 //!
 //! # fn main() {
-//! let tokio_core = tokio_core::reactor::Core::new().unwrap();
-//! let tcp_transport = libp2p_tcp_transport::TcpConfig::new(tokio_core.handle());
+//! let tcp_transport = libp2p_tcp_transport::TcpConfig::new();
 //! let upgraded = tcp_transport.with_upgrade(libp2p_core::upgrade::PlainTextConfig);
 //!
 //! // upgraded.dial(...)   // automatically applies the plain text protocol on the socket
@@ -134,16 +132,14 @@
 //! extern crate libp2p_ping;
 //! extern crate libp2p_core;
 //! extern crate libp2p_tcp_transport;
-//! extern crate tokio_core;
+//! extern crate tokio_current_thread;
 //!
 //! use futures::Future;
 //! use libp2p_ping::Ping;
 //! use libp2p_core::Transport;
 //!
 //! # fn main() {
-//! let mut core = tokio_core::reactor::Core::new().unwrap();
-//!
-//! let ping_finished_future = libp2p_tcp_transport::TcpConfig::new(core.handle())
+//! let ping_finished_future = libp2p_tcp_transport::TcpConfig::new()
 //!     // We have a `TcpConfig` struct that implements `Transport`, and apply a `Ping` upgrade on it.
 //!     .with_upgrade(Ping)
 //!     // TODO: right now the only available protocol is ping, but we want to replace it with
@@ -154,7 +150,7 @@
 //!     });
 //!
 //! // Runs until the ping arrives.
-//! core.run(ping_finished_future).unwrap();
+//! tokio_current_thread::block_on_all(ping_finished_future).unwrap();
 //! # }
 //! ```
 //!
@@ -176,16 +172,14 @@
 //! extern crate libp2p_ping;
 //! extern crate libp2p_core;
 //! extern crate libp2p_tcp_transport;
-//! extern crate tokio_core;
+//! extern crate tokio_current_thread;
 //!
 //! use futures::Future;
 //! use libp2p_ping::Ping;
 //! use libp2p_core::Transport;
 //!
 //! # fn main() {
-//! let mut core = tokio_core::reactor::Core::new().unwrap();
-//!
-//! let transport = libp2p_tcp_transport::TcpConfig::new(core.handle())
+//! let transport = libp2p_tcp_transport::TcpConfig::new()
 //!     .with_dummy_muxing();
 //!
 //! let (swarm_controller, swarm_future) = libp2p_core::swarm(transport.with_upgrade(Ping),
@@ -199,7 +193,7 @@
 //! swarm_controller.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap());
 //!
 //! // Runs until everything is finished.
-//! core.run(swarm_future).unwrap();
+//! tokio_current_thread::block_on_all(swarm_future).unwrap();
 //! # }
 //! ```
 
