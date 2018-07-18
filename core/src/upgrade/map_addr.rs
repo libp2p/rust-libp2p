@@ -26,7 +26,9 @@ use Multiaddr;
 
 /// Applies a closure on the output of a connection upgrade.
 #[inline]
-pub fn map_with_addr<U, F>(upgrade: U, map: F) -> MapAddr<U, F> {
+pub fn map_with_addr<U, F, I, O>(upgrade: U, map: F) -> MapAddr<U, F>
+    where F: FnOnce(I, &Multiaddr) -> O
+{
     MapAddr { upgrade, map }
 }
 
