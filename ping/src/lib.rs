@@ -93,8 +93,7 @@ use futures::sync::{mpsc, oneshot};
 use futures::{Future, Sink, Stream};
 use libp2p_core::{ConnectionUpgrade, Endpoint};
 use parking_lot::Mutex;
-use rand::os::OsRng;
-use rand::Rand;
+use rand::{prelude::*, rngs::EntropyRng, distributions::Standard};
 use std::collections::HashMap;
 use std::error::Error;
 use std::io::Error as IoError;
@@ -145,14 +144,9 @@ where
         // never produce anything.
         let rx = rx.then(|r| Ok(r.ok())).filter_map(|a| a);
 
-        let os_rng = match OsRng::new() {
-            Ok(r) => r,
-            Err(err) => return Err(err).into_future(),
-        };
-
         let pinger = Pinger {
             send: tx,
-            os_rng: os_rng,
+            rng: EntropyRng::default(),
         };
 
         // Hashmap that associates outgoing payloads to one-shot senders.
@@ -219,7 +213,7 @@ where
 /// Controller for the ping service. Makes it possible to send pings to the remote.
 pub struct Pinger {
     send: mpsc::Sender<Message>,
-    os_rng: OsRng,
+    rng: EntropyRng,
 }
 
 impl Pinger {
@@ -229,7 +223,8 @@ impl Pinger {
     ///           timeout yourself when you call this function.
     pub fn ping(&mut self) -> Box<Future<Item = (), Error = Box<Error + Send + Sync>>> {
         let (tx, rx) = oneshot::channel();
-        let payload: [u8; 32] = Rand::rand(&mut self.os_rng);
+
+        let payload: [u8; 32] = self.rng.sample(Standard);
         debug!("Preparing for ping with payload {:?}", payload);
         // Ignore errors if the ponger has been already destroyed. The returned future will never
         // be signalled.
@@ -239,6 +234,15 @@ impl Pinger {
             .from_err()
             .and_then(|_| rx.from_err());
         Box::new(fut) as Box<_>
+    }
+}
+
+impl Clone for Pinger {
+    fn clone(&self) -> Pinger {
+        Pinger {
+            send: self.send.clone(),
+            rng: EntropyRng::default(),
+        }
     }
 }
 
