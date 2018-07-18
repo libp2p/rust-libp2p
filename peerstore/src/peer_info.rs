@@ -28,17 +28,16 @@
 
 use multiaddr::Multiaddr;
 use serde::de::Error as DeserializerError;
-use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::Ordering;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::SystemTime;
 use TTL;
 
 /// Information about a peer.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PeerInfo {
     // Adresses, and the time at which they will be considered expired.
-    addrs: Vec<(Multiaddr, SystemTime)>,
+    addrs: Vec<(SerdeMultiaddr, SystemTime)>,
 }
 
 impl PeerInfo {
@@ -57,7 +56,7 @@ impl PeerInfo {
         let now = SystemTime::now();
         self.addrs.iter().filter_map(move |(addr, expires)| {
             if *expires >= now {
-                Some(addr)
+                Some(&addr.0)
             } else {
                 None
             }
@@ -75,7 +74,7 @@ impl PeerInfo {
         let now = SystemTime::now();
         self.addrs = addrs
             .into_iter()
-            .map(move |(addr, ttl)| (addr, now + ttl))
+            .map(move |(addr, ttl)| (SerdeMultiaddr(addr), now + ttl))
             .collect();
     }
 
@@ -87,7 +86,7 @@ impl PeerInfo {
         let expires = SystemTime::now() + ttl;
 
         if let Some(&mut (_, ref mut existing_expires)) =
-            self.addrs.iter_mut().find(|&&mut (ref a, _)| a == &addr)
+            self.addrs.iter_mut().find(|&&mut (ref a, _)| a.0 == addr)
         {
             if behaviour == AddAddrBehaviour::OverwriteTtl || *existing_expires < expires {
                 *existing_expires = expires;
@@ -95,7 +94,7 @@ impl PeerInfo {
             return;
         }
 
-        self.addrs.push((addr, expires));
+        self.addrs.push((SerdeMultiaddr(addr), expires));
     }
 }
 
@@ -108,64 +107,30 @@ pub enum AddAddrBehaviour {
     IgnoreTtlIfInferior,
 }
 
-impl Serialize for PeerInfo {
+/// Same as `Multiaddr`, but serializable.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SerdeMultiaddr(Multiaddr);
+
+impl Serialize for SerdeMultiaddr {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let mut s = serializer.serialize_struct("PeerInfo", 2)?;
-        s.serialize_field(
-            "addrs",
-            &self.addrs
-                .iter()
-                .map(|&(ref addr, ref expires)| {
-                    let addr = addr.to_string();
-                    let from_epoch = expires.duration_since(UNIX_EPOCH)
-                    // This `unwrap_or` case happens if the user has their system time set to
-                    // before EPOCH. Times-to-live will be be longer than expected, but it's a very
-                    // improbable corner case and is not attackable in any way, so we don't really
-                    // care.
-                    .unwrap_or(Duration::new(0, 0));
-                    let secs = from_epoch
-                        .as_secs()
-                        .saturating_mul(1_000)
-                        .saturating_add(from_epoch.subsec_nanos() as u64 / 1_000_000);
-                    (addr, secs)
-                })
-                .collect::<Vec<_>>(),
-        )?;
-        s.end()
+        self.0.to_string().serialize(serializer)
     }
 }
 
-impl<'de> Deserialize<'de> for PeerInfo {
+impl<'de> Deserialize<'de> for SerdeMultiaddr {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        // We deserialize to an intermdiate struct first, then turn that struct into a `PeerInfo`.
-        let interm = {
-            #[derive(Deserialize)]
-            struct Interm {
-                addrs: Vec<(String, u64)>,
-            }
-            Interm::deserialize(deserializer)?
+        let addr: String = Deserialize::deserialize(deserializer)?;
+        let addr = match addr.parse::<Multiaddr>() {
+            Ok(a) => a,
+            Err(err) => return Err(DeserializerError::custom(err)),
         };
-
-        let addrs = {
-            let mut out = Vec::with_capacity(interm.addrs.len());
-            for (addr, since_epoch) in interm.addrs {
-                let addr = match addr.parse::<Multiaddr>() {
-                    Ok(a) => a,
-                    Err(err) => return Err(DeserializerError::custom(err)),
-                };
-                let expires = UNIX_EPOCH + Duration::from_millis(since_epoch);
-                out.push((addr, expires));
-            }
-            out
-        };
-
-        Ok(PeerInfo { addrs: addrs })
+        Ok(SerdeMultiaddr(addr))
     }
 }
 
@@ -185,12 +150,13 @@ impl PartialOrd for PeerInfo {
 mod tests {
     extern crate serde_json;
     use super::*;
+    use std::time::UNIX_EPOCH;
 
     #[test]
     fn ser_and_deser() {
         let peer_info = PeerInfo {
             addrs: vec![(
-                "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap(),
+                SerdeMultiaddr("/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap()),
                 UNIX_EPOCH,
             )],
         };
