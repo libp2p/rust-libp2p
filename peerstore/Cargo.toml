@@ -11,8 +11,8 @@ futures = "0.1.0"
 owning_ref = "0.3.3"
 libp2p-core = { path = "../core" }
 multiaddr = { path = "../multiaddr" }
-serde = "1.0"
-serde_derive = "1.0"
+serde = "1.0.70"
+serde_derive = "1.0.70"
 
 [dev-dependencies]
 tempfile = "2.2"
