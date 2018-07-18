@@ -49,6 +49,14 @@ impl Elem {
             Elem::Reset { substream_id, .. } => substream_id,
         }
     }
+
+    pub fn is_open_msg(&self) -> bool {
+        if let Elem::Open { .. } = self {
+            true
+        } else {
+            false
+        }
+    }
 }
 
 pub struct Codec {

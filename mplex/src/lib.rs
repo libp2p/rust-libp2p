@@ -23,7 +23,6 @@ extern crate fnv;
 #[macro_use]
 extern crate futures;
 extern crate libp2p_core as core;
-extern crate log;
 extern crate parking_lot;
 extern crate tokio_codec;
 extern crate tokio_io;
@@ -154,7 +153,7 @@ where C: AsyncRead + AsyncWrite,
                     return Err(IoError::new(IoErrorKind::InvalidData, "reached maximum buffer length"));
                 }
 
-                if inner.opened_substreams.contains(&elem.substream_id()) {
+                if inner.opened_substreams.contains(&elem.substream_id()) || elem.is_open_msg() {
                     inner.buffer.push(elem);
                     for task in inner.to_notify.drain(..) {
                         task.notify();
