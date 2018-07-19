@@ -25,6 +25,7 @@ use multiaddr::Multiaddr;
 use owning_ref::OwningRefMut;
 use peer_info::{AddAddrBehaviour, PeerInfo};
 use peerstore::{PeerAccess, Peerstore};
+use rand;
 use std::collections::HashMap;
 use std::iter;
 use std::sync::{Mutex, MutexGuard};
@@ -71,6 +72,22 @@ impl<'a> Peerstore for &'a MemoryPeerstore {
         let r = OwningRefMut::new(lock)
             .map_mut(|n| n.entry(peer_id.clone()).or_insert_with(|| PeerInfo::new()));
         MemoryPeerstoreAccess(r)
+    }
+
+    fn random_peer(self) -> Option<(PeerId, Self::PeerAccess)> {
+        let lock = self.store.lock().unwrap();
+        let len = lock.len();
+        if len == 0 {
+            return None;
+        }
+
+        // TODO: should be optimized to not iterate on the keys
+        let num = rand::random::<usize>() % len;
+        let id = lock.keys().nth(num).expect("mem peerstore entry is always valid").clone();
+        let access = OwningRefMut::new(lock)
+            .try_map_mut(|n| n.get_mut(&id).ok_or(()))
+            .expect("mem peerstore entry is always valid");
+        Some((id, MemoryPeerstoreAccess(access)))
     }
 
     fn peers(self) -> Self::PeersIter {

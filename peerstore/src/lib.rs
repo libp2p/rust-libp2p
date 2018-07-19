@@ -75,6 +75,7 @@ extern crate futures;
 extern crate libp2p_core;
 extern crate multiaddr;
 extern crate owning_ref;
+extern crate rand;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;

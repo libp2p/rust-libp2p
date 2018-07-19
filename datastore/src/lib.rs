@@ -169,6 +169,9 @@ pub trait Datastore<T> {
         self.lock(key.into()).is_some()
     }
 
+    /// Returns the number of elements in the datastore.
+    fn len(self) -> usize;
+
     /// Removes the given key from the datastore. Returns the old value if the key existed.
     fn delete(self, key: &str) -> Option<T>;
 

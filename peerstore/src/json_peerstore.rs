@@ -27,6 +27,7 @@ use futures::{Future, Stream};
 use multiaddr::Multiaddr;
 use peer_info::{AddAddrBehaviour, PeerInfo};
 use peerstore::{PeerAccess, Peerstore};
+use rand;
 use std::io::Error as IoError;
 use std::iter;
 use std::path::PathBuf;
@@ -78,6 +79,45 @@ impl<'a> Peerstore for &'a JsonPeerstore {
     fn peer_or_create(self, peer_id: &PeerId) -> Self::PeerAccess {
         let hash = bs58::encode(peer_id.as_bytes()).into_string();
         JsonPeerstoreAccess(self.store.lock_or_create(hash.into()))
+    }
+
+    fn random_peer(self) -> Option<(PeerId, Self::PeerAccess)> {
+        // Since everything can be racy, we use a loop and continue until everything works.
+        loop {
+            let store_len = self.store.len();
+            if store_len == 0 {
+                return None;
+            }
+
+            let num = rand::random::<usize>() % store_len;
+
+            let query = self.store.query(Query {
+                prefix: "".into(),
+                filters: vec![],
+                orders: vec![],
+                skip: num as u64,
+                limit: 1,
+                keys_only: true,
+            });
+
+            // Wait can never block for the JSON datastore.
+            let elem = match query.into_future().wait().ok() {
+                Some((Some((e, _)), _)) => e,
+                _ => continue
+            };
+
+            let id = match PeerId::from_bytes(bs58::decode(&elem).into_vec().ok()?).ok() {
+                Some(id) => id,
+                None => continue
+            };
+
+            let access = match self.store.lock(elem.into()).map(JsonPeerstoreAccess) {
+                Some(acc) => acc,
+                None => continue
+            };
+
+            break Some((id, access))
+        }
     }
 
     fn peers(self) -> Self::PeersIter {

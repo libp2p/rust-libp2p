@@ -195,6 +195,11 @@ where
     }
 
     #[inline]
+    fn len(self) -> usize {
+        self.content.len()
+    }
+
+    #[inline]
     fn delete(self, key: &str) -> Option<T> {
         self.content.remove(&key.to_owned())
     }
