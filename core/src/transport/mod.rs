@@ -40,6 +40,7 @@ pub mod choice;
 pub mod denied;
 pub mod dummy;
 pub mod map;
+pub mod memory;
 pub mod muxed;
 pub mod upgrade;
 

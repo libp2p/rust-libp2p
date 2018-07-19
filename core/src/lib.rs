@@ -210,6 +210,7 @@ extern crate parking_lot;
 extern crate protobuf;
 #[macro_use]
 extern crate quick_error;
+extern crate rw_stream_sink;
 extern crate smallvec;
 extern crate tokio_io;
 
