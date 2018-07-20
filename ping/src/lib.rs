@@ -277,6 +277,7 @@ impl Encoder for Codec {
     fn encode(&mut self, mut data: Bytes, buf: &mut BytesMut) -> Result<(), IoError> {
         if data.len() != 0 {
             let split = 32 * (1 + ((data.len() - 1) / 32));
+            buf.reserve(split);
             buf.put(data.split_to(split));
         }
         Ok(())
