@@ -6,12 +6,12 @@ extern crate tokio_current_thread;
 
 use bytes::Bytes;
 use futures::{future::{self, Either, Loop}, prelude::*, sync::mpsc};
-use std::{error::Error, io, iter};
+use std::{io, iter};
 use libp2p_core::{transport::memory, swarm, ConnectionUpgrade, Endpoint, Transport};
 use tokio_codec::{BytesCodec, Framed};
 
 #[test]
-fn echo() -> Result<(), Box<Error>> {
+fn echo() {
 
     #[derive(Clone)]
     struct Echo(mpsc::UnboundedSender<()>);
@@ -73,8 +73,8 @@ fn echo() -> Result<(), Box<Error>> {
 
     let (control, future) = swarm(listener, |sock, _addr| Ok(sock));
 
-    control.listen_on("/memory".parse()?).map_err(|_| "listening failed")?;
-    control.dial("/memory".parse()?, dialer).map_err(|_| "dialing failed")?;
+    control.listen_on("/memory".parse().expect("/memory is a valid multiaddr")).unwrap();
+    control.dial("/memory".parse().expect("/memory is a valid multiaddr"), dialer).unwrap();
 
     let finish_rx = finish_rx.into_future()
         .map(|_| ())
@@ -84,7 +84,6 @@ fn echo() -> Result<(), Box<Error>> {
         .map(|_| ())
         .map_err(|(e, _)| e);
 
-    tokio_current_thread::block_on_all(future)?;
-    Ok(())
+    tokio_current_thread::block_on_all(future).unwrap();
 }
 
