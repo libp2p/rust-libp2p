@@ -82,13 +82,15 @@ extern crate serde_derive;
 
 // TODO: remove
 pub use self::libp2p_core::PeerId;
-pub use self::peerstore::{PeerAccess, Peerstore};
+pub use self::peerstore::{PeerAccess, PeerAccessWeights, Peerstore};
 
 #[macro_use]
 mod peerstore_tests;
 
 pub mod json_peerstore;
+pub mod json_peerstore_weights;
 pub mod memory_peerstore;
+pub mod memory_peerstore_weights;
 mod peer_info;
 mod peerstore;
 

@@ -120,3 +120,12 @@ pub trait PeerAccess {
     /// Removes all previously stored addresses.
     fn clear_addrs(&mut self);
 }
+
+/// Extra trait for `PeerAccess` that gives access to the weight.
+pub trait PeerAccessWeights: PeerAccess {
+    /// Returns the weight of the peer.
+    fn weight(&self) -> u32;
+
+    /// Sets the weight of the peer.
+    fn set_weight(&mut self, value: u32);
+}

@@ -35,16 +35,30 @@ use TTL;
 
 /// Information about a peer.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PeerInfo {
+pub struct PeerInfo<T = ()> {
     // Adresses, and the time at which they will be considered expired.
     addrs: Vec<(SerdeMultiaddr, SystemTime)>,
+    // Additional information.
+    extra: T,
 }
 
-impl PeerInfo {
+impl<T> PeerInfo<T> {
     /// Builds a new empty `PeerInfo`.
     #[inline]
-    pub fn new() -> PeerInfo {
-        PeerInfo { addrs: vec![] }
+    pub fn new(extra: T) -> PeerInfo<T> {
+        PeerInfo { addrs: vec![], extra }
+    }
+
+    /// Give access to the extra information stored in this peer info.
+    #[inline]
+    pub fn extra(&self) -> &T {
+        &self.extra
+    }
+
+    /// Give access to the extra information stored in this peer info.
+    #[inline]
+    pub fn extra_mut(&mut self) -> &mut T {
+        &mut self.extra
     }
 
     /// Returns the list of the non-expired addresses stored in this `PeerInfo`.
@@ -139,7 +153,9 @@ impl<'de> Deserialize<'de> for SerdeMultiaddr {
 //
 // Since the struct that implements PartialOrd is internal and since we never use this ordering
 // feature, I think it's ok to have this code.
-impl PartialOrd for PeerInfo {
+impl<T> PartialOrd for PeerInfo<T>
+    where T: PartialOrd
+{
     #[inline]
     fn partial_cmp(&self, _other: &Self) -> Option<Ordering> {
         None

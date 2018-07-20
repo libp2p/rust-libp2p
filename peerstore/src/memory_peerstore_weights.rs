@@ -21,42 +21,42 @@
 //! Implementation of the `Peerstore` trait that simple stores peers in memory.
 
 use super::TTL;
+use PeerId;
 use multiaddr::Multiaddr;
 use owning_ref::OwningRefMut;
 use peer_info::{AddAddrBehaviour, PeerInfo};
-use peerstore::{PeerAccess, Peerstore};
+use peerstore::{PeerAccess, PeerAccessWeights, Peerstore};
 use rand;
 use std::collections::HashMap;
 use std::iter;
 use std::sync::{Mutex, MutexGuard};
 use std::vec::IntoIter as VecIntoIter;
-use PeerId;
 
 /// Implementation of the `Peerstore` trait that simply stores the peer information in memory.
 #[derive(Debug)]
-pub struct MemoryPeerstore {
-    store: Mutex<HashMap<PeerId, PeerInfo>>,
+pub struct MemoryPeerstoreWeights {
+    store: Mutex<HashMap<PeerId, PeerInfo<u32>>>,
 }
 
-impl MemoryPeerstore {
-    /// Initializes a new `MemoryPeerstore`. The database is initially empty.
+impl MemoryPeerstoreWeights {
+    /// Initializes a new `MemoryPeerstoreWeights`. The database is initially empty.
     #[inline]
-    pub fn empty() -> MemoryPeerstore {
-        MemoryPeerstore {
+    pub fn empty() -> MemoryPeerstoreWeights {
+        MemoryPeerstoreWeights {
             store: Mutex::new(HashMap::new()),
         }
     }
 }
 
-impl Default for MemoryPeerstore {
+impl Default for MemoryPeerstoreWeights {
     #[inline]
-    fn default() -> MemoryPeerstore {
-        MemoryPeerstore::empty()
+    fn default() -> MemoryPeerstoreWeights {
+        MemoryPeerstoreWeights::empty()
     }
 }
 
-impl<'a> Peerstore for &'a MemoryPeerstore {
-    type PeerAccess = MemoryPeerstoreAccess<'a>;
+impl<'a> Peerstore for &'a MemoryPeerstoreWeights {
+    type PeerAccess = MemoryPeerstoreWeightsAccess<'a>;
     type PeersIter = VecIntoIter<PeerId>;
 
     fn peer(self, peer_id: &PeerId) -> Option<Self::PeerAccess> {
@@ -64,52 +64,55 @@ impl<'a> Peerstore for &'a MemoryPeerstore {
         OwningRefMut::new(lock)
             .try_map_mut(|n| n.get_mut(peer_id).ok_or(()))
             .ok()
-            .map(MemoryPeerstoreAccess)
+            .map(MemoryPeerstoreWeightsAccess)
     }
 
     fn peer_or_create(self, peer_id: &PeerId) -> Self::PeerAccess {
         let lock = self.store.lock().unwrap();
         let r = OwningRefMut::new(lock)
-            .map_mut(|n| n.entry(peer_id.clone()).or_insert_with(|| PeerInfo::new(())));
-        MemoryPeerstoreAccess(r)
+            .map_mut(|n| n.entry(peer_id.clone()).or_insert_with(|| PeerInfo::new(0)));
+        MemoryPeerstoreWeightsAccess(r)
     }
 
     fn random_peer(self) -> Option<(PeerId, Self::PeerAccess)> {
         let lock = self.store.lock().unwrap();
-        let len = lock.len();
-        if len == 0 {
+        let sum = lock.iter().fold(0u64, |a, v| a + *v.1.extra() as u64);
+        if sum == 0 {
             return None;
         }
 
         // TODO: should be optimized to not iterate on the keys
-        let num = rand::random::<usize>() % len;
-        let id = lock.keys().nth(num).expect("mem peerstore entry is always valid").clone();
+        let mut num = rand::random::<u64>() % sum;
+        let id = 'outer: loop {
+            for elem in lock.iter() {
+                let val = *elem.1.extra() as u64;
+                if num <= val {
+                    break 'outer elem.0.clone();
+                } else {
+                    num -= val;
+                }
+            }
+        };
+
         let access = OwningRefMut::new(lock)
             .try_map_mut(|n| n.get_mut(&id).ok_or(()))
             .expect("mem peerstore entry is always valid");
-        Some((id, MemoryPeerstoreAccess(access)))
+        Some((id, MemoryPeerstoreWeightsAccess(access)))
     }
 
     fn peers(self) -> Self::PeersIter {
         let lock = self.store.lock().unwrap();
-        lock.iter()
-            .filter_map(|(id, info)| {
-                if info.addrs().count() == 0 {
-                    return None // all addresses are expired
-                }
-                Some(id.clone())
-            })
-            .collect::<Vec<_>>().into_iter()
+        lock.keys().cloned().collect::<Vec<_>>().into_iter()
     }
 }
 
 // Note: Rust doesn't provide a `MutexGuard::map` method, otherwise we could directly store a
 //          `MutexGuard<'a, (&'a PeerId, &'a PeerInfo)>`.
-pub struct MemoryPeerstoreAccess<'a>(
-    OwningRefMut<MutexGuard<'a, HashMap<PeerId, PeerInfo>>, PeerInfo>,
+pub struct MemoryPeerstoreWeightsAccess<'a>(
+    OwningRefMut<MutexGuard<'a, HashMap<PeerId, PeerInfo<u32>>>, PeerInfo<u32>>,
 );
 
-impl<'a> PeerAccess for MemoryPeerstoreAccess<'a> {
+impl<'a> PeerAccess for MemoryPeerstoreWeightsAccess<'a> {
     type AddrsIter = VecIntoIter<Multiaddr>;
 
     #[inline]
@@ -134,7 +137,19 @@ impl<'a> PeerAccess for MemoryPeerstoreAccess<'a> {
     }
 }
 
+impl<'a> PeerAccessWeights for MemoryPeerstoreWeightsAccess<'a> {
+    #[inline]
+    fn weight(&self) -> u32 {
+        *self.0.extra()
+    }
+
+    #[inline]
+    fn set_weight(&mut self, value: u32) {
+        *self.0.extra_mut() = value;
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    peerstore_tests!({ ::memory_peerstore::MemoryPeerstore::empty() });
+    peerstore_tests!({ ::memory_peerstore::MemoryPeerstoreWeights::empty() });
 }
