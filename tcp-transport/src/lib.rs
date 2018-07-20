@@ -107,16 +107,21 @@ impl Transport for TcpConfig {
             let future = future::result(listener)
                 .map(|listener| {
                     // Pull out a stream of sockets for incoming connections
-                    listener.incoming().map(|sock| {
-                        let addr = match sock.peer_addr() {
-                            Ok(addr) => addr.to_multiaddr()
-                                .expect("generating a multiaddr from a socket addr never fails"),
-                            Err(err) => return future::err(err),
-                        };
+                    listener.incoming()
+                        .map(|sock| {
+                            let addr = match sock.peer_addr() {
+                                Ok(addr) => addr.to_multiaddr()
+                                    .expect("generating a multiaddr from a socket addr never fails"),
+                                Err(err) => return future::err(err),
+                            };
 
-                        debug!("Incoming connection from {}", addr);
-                        future::ok((TcpTransStream { inner: sock }, future::ok(addr)))
-                    })
+                            debug!("Incoming connection from {}", addr);
+                            future::ok((TcpTransStream { inner: sock }, future::ok(addr)))
+                        })
+                        .map_err(|err| {
+                            debug!("Error in TCP listener: {:?}", err);
+                            err
+                        })
                 })
                 .flatten_stream();
             Ok((Box::new(future), new_addr))
@@ -131,9 +136,14 @@ impl Transport for TcpConfig {
             // If so, we instantly refuse dialing instead of going through the kernel.
             if socket_addr.port() != 0 && !socket_addr.ip().is_unspecified() {
                 debug!("Dialing {}", addr);
-                let fut = TcpStream::connect(&socket_addr).map(|t| {
-                    (TcpTransStream { inner: t }, future::ok(addr))
-                });
+                let fut = TcpStream::connect(&socket_addr)
+                    .map(|t| {
+                        (TcpTransStream { inner: t }, future::ok(addr))
+                    })
+                    .map_err(move |err| {
+                        debug!("Error while dialing {:?} => {:?}", socket_addr, err);
+                        err
+                    });
                 Ok(Box::new(fut) as Box<_>)
             } else {
                 debug!("Instantly refusing dialing {}, as it is invalid", addr);
