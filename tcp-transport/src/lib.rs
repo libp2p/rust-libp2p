@@ -46,21 +46,22 @@ extern crate libp2p_core as swarm;
 #[macro_use]
 extern crate log;
 extern crate multiaddr;
+extern crate tokio_io;
 extern crate tokio_tcp;
 
 #[cfg(test)]
 extern crate tokio_current_thread;
-#[cfg(test)]
-extern crate tokio_io;
 
+use futures::Poll;
 use futures::future::{self, Future, FutureResult};
 use futures::stream::Stream;
 use multiaddr::{AddrComponent, Multiaddr, ToMultiaddr};
-use std::io::Error as IoError;
+use std::io::{Error as IoError, Read, Write};
 use std::iter;
 use std::net::SocketAddr;
 use swarm::Transport;
 use tokio_tcp::{TcpListener, TcpStream};
+use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Represents the configuration for a TCP/IP transport capability for libp2p.
 ///
@@ -78,11 +79,11 @@ impl TcpConfig {
 }
 
 impl Transport for TcpConfig {
-    type Output = TcpStream;
+    type Output = TcpTransStream;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
     type ListenerUpgrade = FutureResult<(Self::Output, Self::MultiaddrFuture), IoError>;
     type MultiaddrFuture = FutureResult<Multiaddr, IoError>;
-    type Dial = Box<Future<Item = (TcpStream, Self::MultiaddrFuture), Error = IoError>>;
+    type Dial = Box<Future<Item = (TcpTransStream, Self::MultiaddrFuture), Error = IoError>>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
@@ -114,7 +115,7 @@ impl Transport for TcpConfig {
                         };
 
                         debug!("Incoming connection from {}", addr);
-                        future::ok((sock, future::ok(addr)))
+                        future::ok((TcpTransStream { inner: sock }, future::ok(addr)))
                     })
                 })
                 .flatten_stream();
@@ -130,7 +131,9 @@ impl Transport for TcpConfig {
             // If so, we instantly refuse dialing instead of going through the kernel.
             if socket_addr.port() != 0 && !socket_addr.ip().is_unspecified() {
                 debug!("Dialing {}", addr);
-                let fut = TcpStream::connect(&socket_addr).map(|t| (t, future::ok(addr)));
+                let fut = TcpStream::connect(&socket_addr).map(|t| {
+                    (TcpTransStream { inner: t }, future::ok(addr))
+                });
                 Ok(Box::new(fut) as Box<_>)
             } else {
                 debug!("Instantly refusing dialing {}, as it is invalid", addr);
@@ -187,6 +190,51 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
             Ok(SocketAddr::new(ip.clone().into(), port))
         }
         _ => Err(()),
+    }
+}
+
+/// Wraps around a `TcpStream` and adds logging for important events.
+pub struct TcpTransStream {
+    inner: TcpStream
+}
+
+impl Read for TcpTransStream {
+    #[inline]
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
+        self.inner.read(buf)
+    }
+}
+
+impl AsyncRead for TcpTransStream {
+}
+
+impl Write for TcpTransStream {
+    #[inline]
+    fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
+        self.inner.write(buf)
+    }
+
+    #[inline]
+    fn flush(&mut self) -> Result<(), IoError> {
+        self.inner.flush()
+    }
+}
+
+impl AsyncWrite for TcpTransStream {
+    #[inline]
+    fn shutdown(&mut self) -> Poll<(), IoError> {
+        AsyncWrite::shutdown(&mut self.inner)
+    }
+}
+
+impl Drop for TcpTransStream {
+    #[inline]
+    fn drop(&mut self) {
+        if let Ok(addr) = self.inner.peer_addr() {
+            debug!("Dropped TCP connection to {:?}", addr);
+        } else {
+            debug!("Dropped TCP connection to undeterminate peer");
+        }
     }
 }
 
