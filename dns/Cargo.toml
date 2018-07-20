@@ -2,6 +2,7 @@
 name = "libp2p-dns"
 version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
 
 [dependencies]
 libp2p-core = { path = "../core" }
