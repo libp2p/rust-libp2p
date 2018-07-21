@@ -2,6 +2,7 @@
 name = "varint"
 version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
 
 [dependencies]
 num-bigint = { version = "0.1.41", default-features = false }
