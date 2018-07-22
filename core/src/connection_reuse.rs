@@ -45,6 +45,7 @@ use futures::{Async, Future, Poll, Stream};
 use futures::stream::FuturesUnordered;
 use futures::sync::mpsc;
 use multiaddr::Multiaddr;
+use muxing::{AutoCloseStreamMuxer, AutoCloseStreamMuxerInbound, AutoCloseStreamMuxerSubstream};
 use muxing::StreamMuxer;
 use parking_lot::Mutex;
 use std::io::{self, Error as IoError};
@@ -78,18 +79,18 @@ where
     M: StreamMuxer,
 {
     // List of active muxers.
-    active_connections: FnvHashMap<Multiaddr, M>,
+    active_connections: FnvHashMap<Multiaddr, AutoCloseStreamMuxer<M>>,
 
     // List of pending inbound substreams from dialed nodes.
     // Only add to this list elements received through `add_to_next_rx`.
-    next_incoming: Vec<(M, M::InboundSubstream, Multiaddr)>,
+    next_incoming: Vec<(AutoCloseStreamMuxer<M>, AutoCloseStreamMuxerInbound<M>, Multiaddr)>,
 
     // New elements are not directly added to `next_incoming`. Instead they are sent to this
     // channel. This is done so that we can wake up tasks whenever a new element is added.
-    add_to_next_rx: mpsc::UnboundedReceiver<(M, M::InboundSubstream, Multiaddr)>,
+    add_to_next_rx: mpsc::UnboundedReceiver<(AutoCloseStreamMuxer<M>, AutoCloseStreamMuxerInbound<M>, Multiaddr)>,
 
     // Other side of `add_to_next_rx`.
-    add_to_next_tx: mpsc::UnboundedSender<(M, M::InboundSubstream, Multiaddr)>,
+    add_to_next_tx: mpsc::UnboundedSender<(AutoCloseStreamMuxer<M>, AutoCloseStreamMuxerInbound<M>, Multiaddr)>,
 }
 
 impl<T, C> From<UpgradedNode<T, C>> for ConnectionReuse<T, C>
@@ -124,7 +125,7 @@ where
     C::MultiaddrFuture: Future<Item = Multiaddr, Error = IoError>,
     C::NamesIter: Clone, // TODO: not elegant
 {
-    type Output = <C::Output as StreamMuxer>::Substream;
+    type Output = AutoCloseStreamMuxerSubstream<C::Output>;
     type MultiaddrFuture = future::FutureResult<Multiaddr, IoError>;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
     type ListenerUpgrade = FutureResult<(Self::Output, Self::MultiaddrFuture), IoError>;
@@ -148,7 +149,7 @@ where
             .fuse()
             .map(|upgr| {
                 upgr.and_then(|(out, addr)| {
-                    addr.map(move |addr| (out, addr))
+                    addr.map(move |addr| (out.auto_close(), addr))
                 })
             });
 
@@ -190,7 +191,7 @@ where
                     let future = dial
                     .and_then(move |(muxer, addr_fut)| {
                         trace!("Waiting for remote's address");
-                        addr_fut.map(move |addr| (muxer, addr))
+                        addr_fut.map(move |addr| (muxer.auto_close(), addr))
                     })
                     .and_then(move |(muxer, addr)| {
                         muxer.clone().outbound().and_then(move |substream| {
@@ -241,7 +242,7 @@ where
 {
     type Incoming = ConnectionReuseIncoming<C::Output>;
     type IncomingUpgrade =
-        future::FutureResult<(<C::Output as StreamMuxer>::Substream, Self::MultiaddrFuture), IoError>;
+        future::FutureResult<(AutoCloseStreamMuxerSubstream<C::Output>, Self::MultiaddrFuture), IoError>;
 
     #[inline]
     fn next_incoming(self) -> Self::Incoming {
@@ -259,7 +260,7 @@ where
     // The main listener. `S` is from the underlying transport.
     listener: S,
     current_upgrades: FuturesUnordered<F>,
-    connections: Vec<(M, <M as StreamMuxer>::InboundSubstream, Multiaddr)>,
+    connections: Vec<(AutoCloseStreamMuxer<M>, AutoCloseStreamMuxerInbound<M>, Multiaddr)>,
 
     // Shared between the whole connection reuse mechanism.
     shared: Arc<Mutex<Shared<M>>>,
@@ -268,10 +269,10 @@ where
 impl<S, F, M> Stream for ConnectionReuseListener<S, F, M>
 where
     S: Stream<Item = F, Error = IoError>,
-    F: Future<Item = (M, Multiaddr), Error = IoError>,
+    F: Future<Item = (AutoCloseStreamMuxer<M>, Multiaddr), Error = IoError>,
     M: StreamMuxer + Clone + 'static, // TODO: 'static :(
 {
-    type Item = FutureResult<(M::Substream, FutureResult<Multiaddr, IoError>), IoError>;
+    type Item = FutureResult<(AutoCloseStreamMuxerSubstream<M>, FutureResult<Multiaddr, IoError>), IoError>;
     type Error = IoError;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
@@ -369,7 +370,7 @@ impl<M> Future for ConnectionReuseIncoming<M>
 where
     M: Clone + StreamMuxer,
 {
-    type Item = future::FutureResult<(M::Substream, future::FutureResult<Multiaddr, IoError>), IoError>;
+    type Item = future::FutureResult<(AutoCloseStreamMuxerSubstream<M>, future::FutureResult<Multiaddr, IoError>), IoError>;
     type Error = IoError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
