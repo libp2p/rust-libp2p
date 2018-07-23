@@ -23,6 +23,8 @@ extern crate fnv;
 #[macro_use]
 extern crate futures;
 extern crate libp2p_core as core;
+#[macro_use]
+extern crate log;
 extern crate parking_lot;
 extern crate tokio_codec;
 extern crate tokio_io;
@@ -112,7 +114,7 @@ struct MultiplexInner<C> {
     // Buffer of elements pulled from the stream but not processed yet.
     buffer: Vec<codec::Elem>,
     // List of Ids of opened substreams. Used to filter out messages that don't belong to any
-    // substream.
+    // substream. Note that this is handled exclusively by `next_match`.
     opened_substreams: FnvHashSet<u32>,
     // Id of the next outgoing substream. Should always increase by two.
     next_outbound_stream_id: u32,
@@ -120,10 +122,10 @@ struct MultiplexInner<C> {
     to_notify: Vec<task::Task>,
 }
 
-// Processes elements in `inner` until one matching `filter` is found.
-//
-// If `NotReady` is returned, the current task is scheduled for later, just like with any `Poll`.
-// `Ready(Some())` is almost always returned. `Ready(None)` is returned if the stream is EOF.
+/// Processes elements in `inner` until one matching `filter` is found.
+///
+/// If `NotReady` is returned, the current task is scheduled for later, just like with any `Poll`.
+/// `Ready(Some())` is almost always returned. `Ready(None)` is returned if the stream is EOF.
 fn next_match<C, F, O>(inner: &mut MultiplexInner<C>, mut filter: F) -> Poll<Option<O>, IoError>
 where C: AsyncRead + AsyncWrite,
       F: FnMut(&codec::Elem) -> Option<O>,
@@ -146,11 +148,25 @@ where C: AsyncRead + AsyncWrite,
         };
 
         if let Some(elem) = elem {
+            trace!("Received message: {:?}", elem);
+
+            // Handle substreams opening/closing.
+            match elem {
+                codec::Elem::Open { substream_id } => {       // TODO: check even/uneven?
+                    inner.opened_substreams.insert(substream_id);
+                },
+                codec::Elem::Close { substream_id, .. } | codec::Elem::Reset { substream_id, .. } => {
+                    inner.opened_substreams.remove(&substream_id);
+                },
+                _ => ()
+            }
+
             if let Some(out) = filter(&elem) {
                 return Ok(Async::Ready(Some(out)));
             } else {
                 if inner.buffer.len() >= MAX_BUFFER_LEN {
-                    return Err(IoError::new(IoErrorKind::InvalidData, "reached maximum buffer length"));
+                    debug!("Reached mplex maximum buffer length");
+                    return Err(IoError::new(IoErrorKind::Other, "reached maximum buffer length"));
                 }
 
                 if inner.opened_substreams.contains(&elem.substream_id()) || elem.is_open_msg() {
@@ -158,19 +174,14 @@ where C: AsyncRead + AsyncWrite,
                     for task in inner.to_notify.drain(..) {
                         task.notify();
                     }
+                } else {
+                    debug!("Ignored message because the substream wasn't open");
                 }
             }
         } else {
             return Ok(Async::Ready(None));
         }
     }
-}
-
-// Closes a substream in `inner`.
-fn clean_out_substream<C>(inner: &mut MultiplexInner<C>, num: u32) {
-    let was_in = inner.opened_substreams.remove(&num);
-    debug_assert!(was_in, "Dropped substream which wasn't open ; programmer error");
-    inner.buffer.retain(|elem| elem.substream_id() != num);
 }
 
 // Small convenience function that tries to write `elem` to the stream.
@@ -214,7 +225,10 @@ where C: AsyncRead + AsyncWrite + 'static       // TODO: 'static :-/
         // We use an RAII guard, so that we close the substream in case of an error.
         struct OpenedSubstreamGuard<C>(Arc<Mutex<MultiplexInner<C>>>, u32);
         impl<C> Drop for OpenedSubstreamGuard<C> {
-            fn drop(&mut self) { clean_out_substream(&mut self.0.lock(), self.1); }
+            fn drop(&mut self) {
+                debug!("Failed to open outbound substream {}", self.1);
+                self.0.lock().buffer.retain(|elem| elem.substream_id() != self.1);
+            }
         }
         inner.opened_substreams.insert(substream_id);
         let guard = OpenedSubstreamGuard(self.inner.clone(), substream_id);
@@ -233,6 +247,7 @@ where C: AsyncRead + AsyncWrite + 'static       // TODO: 'static :-/
                     future::poll_fn(move || inner.lock().inner.poll_complete())
                 }
             }).map({
+                debug!("Successfully opened outbound substream {}", substream_id);
                 let inner = self.inner.clone();
                 move |()| {
                     mem::forget(guard);
@@ -265,19 +280,20 @@ where C: AsyncRead + AsyncWrite
         let mut inner = self.inner.lock();
 
         if inner.opened_substreams.len() >= MAX_SUBSTREAMS {
+            debug!("Refused substream ; reached maximum number of substreams {}", MAX_SUBSTREAMS);
             return Err(IoError::new(IoErrorKind::ConnectionRefused,
                                     "exceeded maximum number of open substreams"));
         }
 
         let num = try_ready!(next_match(&mut inner, |elem| {
             match elem {
-                codec::Elem::Open { substream_id } => Some(*substream_id),       // TODO: check even/uneven?
+                codec::Elem::Open { substream_id } => Some(*substream_id),
                 _ => None,
             }
         }));
 
         if let Some(num) = num {
-            inner.opened_substreams.insert(num);
+            debug!("Successfully opened inbound substream {}", num);
             Ok(Async::Ready(Some(Substream {
                 inner: self.inner.clone(),
                 current_data: Bytes::new(),
@@ -306,13 +322,14 @@ where C: AsyncRead + AsyncWrite
 {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
         loop {
-            // First transfer from `current_data`.
+            // First, transfer from `current_data`.
             if self.current_data.len() != 0 {
                 let len = cmp::min(self.current_data.len(), buf.len());
                 buf[..len].copy_from_slice(&self.current_data.split_to(len));
                 return Ok(len);
             }
 
+            // Try to find a packet of data in the buffer.
             let mut inner = self.inner.lock();
             let next_data_poll = next_match(&mut inner, |elem| {
                 match elem {
@@ -328,7 +345,15 @@ where C: AsyncRead + AsyncWrite
             match next_data_poll {
                 Ok(Async::Ready(Some(data))) => self.current_data = data.freeze(),
                 Ok(Async::Ready(None)) => return Ok(0),
-                Ok(Async::NotReady) => return Err(IoErrorKind::WouldBlock.into()),
+                Ok(Async::NotReady) => {
+                    // There was no data packet in the buffer about this substream ; maybe it's
+                    // because it has been closed.
+                    if inner.opened_substreams.contains(&self.num) {
+                        return Err(IoErrorKind::WouldBlock.into());
+                    } else {
+                        return Ok(0);
+                    }
+                },
                 Err(err) => return Err(err),
             }
         }
@@ -386,7 +411,7 @@ impl<C> Drop for Substream<C>
 where C: AsyncRead + AsyncWrite
 {
     fn drop(&mut self) {
-        let _ = self.shutdown();
-        clean_out_substream(&mut self.inner.lock(), self.num);
+        let _ = self.shutdown();        // TODO: this doesn't necessarily send the close message
+        self.inner.lock().buffer.retain(|elem| elem.substream_id() != self.num);
     }
 }
