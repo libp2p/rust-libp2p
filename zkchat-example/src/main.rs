@@ -214,7 +214,7 @@ fn main() {
                     let addr = AddrComponent::P2P(n.into_bytes()).into();
                     // TODO: this will always open a new substream instead of reusing existing ones
                     if let Err(err) =
-                        swarm_controller.dial_to_handler(addr, transport.clone().with_upgrade(floodsub_upgrade.clone()))
+                        swarm_controller.dial(addr, transport.clone().with_upgrade(floodsub_upgrade.clone()))
                     {
                         info!("Error while dialing {:?}", err);
                     }
