@@ -24,16 +24,16 @@ libp2p-core = { path = "../core" }
 libp2p-transport-timeout = { path = "../transport-timeout" }
 libp2p-websocket = { path = "../websocket" }
 libp2p-yamux = { path = "../yamux" }
+tokio-current-thread = "0.1"
 tokio-codec = "0.1"
 tokio-io = "0.1"
 
-[target.'cfg(not(target_os = "emscripten"))'.dependencies]
+[target.'cfg(not(any(target_os = "emscripten", target_arch = "wasm32")))'.dependencies]
 libp2p-dns = { path = "../dns" }
 libp2p-secio = { path = "../secio", optional = true, default-features = false }
 libp2p-tcp-transport = { path = "../tcp-transport" }
-tokio-current-thread = "0.1"
 
-[target.'cfg(target_os = "emscripten")'.dependencies]
+[target.'cfg(any(target_os = "emscripten", target_arch = "wasm32"))'.dependencies]
 stdweb = { version = "0.1.3", default-features = false }
 
 [dev-dependencies]
@@ -42,7 +42,6 @@ env_logger = "0.5.4"
 rand = "0.4"
 structopt =  "0.2"
 tokio-current-thread = "0.1"
-tokio-io = "0.1"
 tokio-stdin = "0.1"
 
 [[example]]

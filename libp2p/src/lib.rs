@@ -20,14 +20,14 @@
 
 pub extern crate bytes;
 pub extern crate futures;
-#[cfg(not(target_os = "emscripten"))]
+#[cfg(not(any(target_os = "emscripten", target_arch = "wasm32")))]
 pub extern crate tokio_current_thread;
 pub extern crate multiaddr;
 pub extern crate tokio_io;
 pub extern crate tokio_codec;
 
 pub extern crate libp2p_core as core;
-#[cfg(not(target_os = "emscripten"))]
+#[cfg(not(any(target_os = "emscripten", target_arch = "wasm32")))]
 pub extern crate libp2p_dns as dns;
 pub extern crate libp2p_identify as identify;
 pub extern crate libp2p_kad as kad;
@@ -37,9 +37,9 @@ pub extern crate libp2p_peerstore as peerstore;
 pub extern crate libp2p_ping as ping;
 pub extern crate libp2p_ratelimit as ratelimit;
 pub extern crate libp2p_relay as relay;
-#[cfg(all(not(target_os = "emscripten"), feature = "libp2p-secio"))]
+#[cfg(all(not(any(target_os = "emscripten", target_arch = "wasm32")), feature = "libp2p-secio"))]
 pub extern crate libp2p_secio as secio;
-#[cfg(not(target_os = "emscripten"))]
+#[cfg(not(any(target_os = "emscripten", target_arch = "wasm32")))]
 pub extern crate libp2p_tcp_transport as tcp;
 pub extern crate libp2p_transport_timeout as transport_timeout;
 pub extern crate libp2p_websocket as websocket;
@@ -62,9 +62,9 @@ pub struct CommonTransport {
     inner: CommonTransportInner
 }
 
-#[cfg(not(target_os = "emscripten"))]
+#[cfg(not(any(target_os = "emscripten", target_arch = "wasm32")))]
 pub type InnerImplementation = core::transport::OrTransport<dns::DnsConfig<tcp::TcpConfig>, websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>>;
-#[cfg(target_os = "emscripten")]
+#[cfg(any(target_os = "emscripten", target_arch = "wasm32"))]
 pub type InnerImplementation = websocket::BrowserWsConfig;
 
 #[derive(Debug, Clone)]
@@ -75,7 +75,7 @@ struct CommonTransportInner {
 impl CommonTransport {
     /// Initializes the `CommonTransport`.
     #[inline]
-    #[cfg(not(target_os = "emscripten"))]
+    #[cfg(not(any(target_os = "emscripten", target_arch = "wasm32")))]
     pub fn new() -> CommonTransport {
         let tcp = tcp::TcpConfig::new();
         let with_dns = dns::DnsConfig::new(tcp);
@@ -89,7 +89,7 @@ impl CommonTransport {
 
     /// Initializes the `CommonTransport`.
     #[inline]
-    #[cfg(target_os = "emscripten")]
+    #[cfg(any(target_os = "emscripten", target_arch = "wasm32"))]
     pub fn new() -> CommonTransport {
         let inner = websocket::BrowserWsConfig::new();
         CommonTransport {
