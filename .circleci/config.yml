@@ -68,8 +68,7 @@ jobs:
       - run:
           name: Build for wasm32
           # TODO: we use --release because of https://github.com/rust-lang/rust/issues/49467
-          # TODO: build libp2p instead of libp2p-core
-          command: cargo build --target wasm32-unknown-unknown --package libp2p-core --release
+          command: cargo build --target wasm32-unknown-unknown --package libp2p --release
       - save_cache:
           key: test-wasm-cache
           paths:
