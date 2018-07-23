@@ -60,7 +60,6 @@ extern crate arrayvec;
 extern crate bigint;
 extern crate bs58;
 extern crate bytes;
-extern crate datastore;
 extern crate fnv;
 extern crate futures;
 extern crate libp2p_identify;
