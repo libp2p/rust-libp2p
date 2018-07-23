@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use multiaddr::Multiaddr;
-use std::time::Duration;
 use {PeerId, TTL};
+use std::time::Duration;
 
 /// Implemented on objects that store peers.
 ///
@@ -41,6 +41,11 @@ pub trait Peerstore {
 
     /// Grants access to a peer by its ID or creates it.
     fn peer_or_create(self, peer_id: &PeerId) -> Self::PeerAccess;
+
+    /// Grants access to a random peer of the peer store.
+    ///
+    /// Returns `None` if the peer store is empty.
+    fn random_peer(self) -> Option<(PeerId, Self::PeerAccess)>;
 
     /// Returns a list of peers in this peer store.
     ///

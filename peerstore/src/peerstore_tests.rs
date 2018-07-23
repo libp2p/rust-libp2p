@@ -129,5 +129,12 @@ macro_rules! peerstore_tests {
             thread::sleep(Duration::from_millis(2));
             assert_eq!(peer_store.peer(&peer_id).unwrap().addrs().count(), 1);
         }
+
+        #[test]
+        fn random_peer_when_empty() {
+            $($stmt;)*
+            let peer_store = $create_peerstore;
+            assert!(peer_store.random_peer().is_none());
+        }
     };
 }
