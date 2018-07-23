@@ -374,12 +374,13 @@ where
             };
 
             match mem::replace(&mut *connec, PeerState::Poisonned) {
-                PeerState::Active { muxer, next_incoming, connection_id, listener_id, num_substreams, client_addr } => {
-                    let first_outbound = muxer.clone().outbound();
+                PeerState::Active { muxer, next_incoming, connection_id, listener_id, mut num_substreams, client_addr } => {
+                    let outbound = muxer.clone().outbound();
+                    num_substreams += 1;
                     *connec = PeerState::Active { muxer, next_incoming, connection_id, listener_id, num_substreams, client_addr: client_addr.clone() };
                     trace!("Using existing connection to {} to open outbound substream", self.addr);
                     self.outbound = Some(ConnectionReuseDialOut {
-                        stream: first_outbound,
+                        stream: outbound,
                         connection_id,
                         client_addr,
                     });
@@ -425,6 +426,20 @@ where
                     panic!("Poisonned peer state");
                 },
             }
+        }
+    }
+}
+
+impl<T, C> Drop for ConnectionReuseDial<T, C>
+where 
+    T: Transport,
+    C: ConnectionUpgrade<T::Output, T::MultiaddrFuture>,
+    C::Output: StreamMuxer,
+{
+    fn drop(&mut self) {
+        if let Some(outbound) = self.outbound.take() {
+            let mut shared = self.shared.lock();
+            remove_one_substream(&mut *shared, outbound.connection_id, &outbound.client_addr);
         }
     }
 }
@@ -653,6 +668,28 @@ where
     }
 }
 
+/// Removes one substream from an active connection. Closes the connection if necessary.
+fn remove_one_substream<T, C>(shared: &mut Shared<T, C>, connec_id: u64, addr: &Multiaddr)
+where
+    T: Transport,
+    C: ConnectionUpgrade<T::Output, T::MultiaddrFuture>,
+    C::Output: StreamMuxer,
+{
+    shared.connections.retain(|_, connec| {
+        if let PeerState::Active { connection_id, ref mut num_substreams, .. } = connec {
+            if *connection_id == connec_id {
+                *num_substreams -= 1;
+                if *num_substreams == 0 {
+                    trace!("All substreams to {} closed ; closing main connection", addr);
+                    return false;
+                }
+            }
+        }
+
+        true
+    });
+}
+
 /// Wraps around the `Substream`.
 pub struct ConnectionReuseSubstream<T, C>
 where
@@ -750,20 +787,7 @@ where
     C::Output: StreamMuxer,
 {
     fn drop(&mut self) {
-        // Remove one substream from all the connections whose connection_id matches ours.
         let mut shared = self.shared.lock();
-        shared.connections.retain(|_, connec| {
-            if let PeerState::Active { connection_id, ref mut num_substreams, .. } = connec {
-                if *connection_id == self.connection_id {
-                    *num_substreams -= 1;
-                    if *num_substreams == 0 {
-                        trace!("All substreams to {} closed ; closing main connection", self.addr);
-                        return false;
-                    }
-                }
-            }
-
-            true
-        });
+        remove_one_substream(&mut *shared, self.connection_id, &self.addr);
     }
 }
