@@ -70,6 +70,7 @@
 //! ```
 
 extern crate bs58;
+#[cfg(not(any(target_os = "emscripten", target_arch = "wasm32")))]
 extern crate datastore;
 extern crate futures;
 extern crate libp2p_core;
@@ -86,6 +87,7 @@ pub use self::peerstore::{PeerAccess, Peerstore};
 #[macro_use]
 mod peerstore_tests;
 
+#[cfg(not(any(target_os = "emscripten", target_arch = "wasm32")))]
 pub mod json_peerstore;
 pub mod memory_peerstore;
 mod peer_info;

@@ -6,13 +6,16 @@ license = "MIT"
 
 [dependencies]
 bs58 = "0.2.0"
-datastore = { path = "../datastore" }
 futures = "0.1.0"
 owning_ref = "0.3.3"
 libp2p-core = { path = "../core" }
 multiaddr = { path = "../multiaddr" }
 serde = "1.0"
 serde_derive = "1.0"
+
+
+[target.'cfg(not(any(target_os = "emscripten", target_arch = "wasm32")))'.dependencies]
+datastore = { path = "../datastore" }
 
 [dev-dependencies]
 tempfile = "2.2"
