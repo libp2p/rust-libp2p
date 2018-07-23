@@ -36,7 +36,7 @@ use std::vec::IntoIter as VecIntoIter;
 
 /// Peerstore backend that uses a Json file.
 pub struct JsonPeerstoreWeights {
-    store: JsonFileDatastore<PeerInfo<u32>>,
+    store: JsonFileDatastore<PeerInfo<Weight>>,
 }
 
 impl JsonPeerstoreWeights {
@@ -107,7 +107,7 @@ impl<'a> Peerstore for &'a JsonPeerstoreWeights {
             .wait()  // Wait can never block for the JSON datastore.
             .unwrap_or(Vec::new());
 
-        let sum = list.iter().fold(0u64, |a, v| a + *v.2.extra() as u64);
+        let sum = list.iter().fold(0u64, |a, v| a + v.2.extra().0 as u64);
         if sum == 0 {
             return None;
         }
@@ -115,7 +115,7 @@ impl<'a> Peerstore for &'a JsonPeerstoreWeights {
         let mut num = rand::random::<u64>() % sum;
         let (id, lock) = 'outer: loop {
             for elem in list.iter() {
-                let val = *elem.2.extra() as u64;
+                let val = elem.2.extra().0 as u64;
                 if num <= val {
                     if let Some(lock) = self.store.lock(elem.1.as_str().into()) {
                         break 'outer (elem.0.clone(), JsonPeerstoreWeightsAccess(lock));
@@ -157,7 +157,15 @@ impl<'a> Peerstore for &'a JsonPeerstoreWeights {
     }
 }
 
-pub struct JsonPeerstoreWeightsAccess<'a>(JsonFileDatastoreEntry<'a, PeerInfo<u32>>);
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialOrd, Ord, PartialEq, Eq)]
+struct Weight(u32);
+impl Default for Weight {
+    fn default() -> Weight {
+        Weight(1)
+    }
+}
+
+pub struct JsonPeerstoreWeightsAccess<'a>(JsonFileDatastoreEntry<'a, PeerInfo<Weight>>);
 
 impl<'a> PeerAccess for JsonPeerstoreWeightsAccess<'a> {
     type AddrsIter = VecIntoIter<Multiaddr>;
@@ -187,11 +195,11 @@ impl<'a> PeerAccess for JsonPeerstoreWeightsAccess<'a> {
 impl<'a> PeerAccessWeights for JsonPeerstoreWeightsAccess<'a> {
     #[inline]
     fn weight(&self) -> u32 {
-        *self.0.extra()
+        self.0.extra().0
     }
 
     #[inline]
     fn set_weight(&mut self, value: u32) {
-        *self.0.extra_mut() = value;
+        self.0.extra_mut().0 = value;
     }
 }

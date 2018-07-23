@@ -70,7 +70,7 @@ impl<'a> Peerstore for &'a MemoryPeerstoreWeights {
     fn peer_or_create(self, peer_id: &PeerId) -> Self::PeerAccess {
         let lock = self.store.lock().unwrap();
         let r = OwningRefMut::new(lock)
-            .map_mut(|n| n.entry(peer_id.clone()).or_insert_with(|| PeerInfo::new(0)));
+            .map_mut(|n| n.entry(peer_id.clone()).or_insert_with(|| PeerInfo::new(1)));
         MemoryPeerstoreWeightsAccess(r)
     }
 
