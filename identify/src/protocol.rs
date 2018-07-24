@@ -20,8 +20,7 @@
 
 use bytes::{Bytes, BytesMut};
 use futures::{future, Future, Sink, Stream};
-use libp2p_core::{ConnectionUpgrade, Endpoint, PublicKeyBytes};
-use log::Level;
+use libp2p_core::{ConnectionUpgrade, Endpoint, PublicKey};
 use multiaddr::Multiaddr;
 use protobuf::Message as ProtobufMessage;
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
@@ -29,7 +28,7 @@ use protobuf::RepeatedField;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use structs_proto;
-use tokio_io::codec::Framed;
+use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
 use varint::VarintCodec;
 
@@ -41,6 +40,7 @@ pub struct IdentifyProtocolConfig;
 pub enum IdentifyOutput<T> {
     /// We obtained information from the remote. Happens when we are the dialer.
     RemoteInfo {
+        /// Information about the remote.
         info: IdentifyInfo,
         /// Address the remote sees for us.
         observed_addr: Multiaddr,
@@ -51,8 +51,6 @@ pub enum IdentifyOutput<T> {
     Sender {
         /// Object used to send identify info to the client.
         sender: IdentifySender<T>,
-        /// Observed multiaddress of the client.
-        observed_addr: Multiaddr,
     },
 }
 
@@ -83,7 +81,7 @@ where
         let mut message = structs_proto::Identify::new();
         message.set_agentVersion(info.agent_version);
         message.set_protocolVersion(info.protocol_version);
-        message.set_publicKey(info.public_key.0);
+        message.set_publicKey(info.public_key.into_protobuf_encoding());
         message.set_listenAddrs(listen_addrs);
         message.set_observedAddr(observed_addr.to_bytes());
         message.set_protocols(RepeatedField::from_vec(info.protocols));
@@ -101,7 +99,7 @@ where
 #[derive(Debug, Clone)]
 pub struct IdentifyInfo {
     /// Public key of the node.
-    pub public_key: PublicKeyBytes,
+    pub public_key: PublicKey,
     /// Version of the "global" protocol, eg. `ipfs/1.0.0` or `polkadot/1.0.0`.
     pub protocol_version: String,
     /// Name and version of the client. Can be thought as similar to the `User-Agent` header
@@ -113,29 +111,26 @@ pub struct IdentifyInfo {
     pub protocols: Vec<String>,
 }
 
-impl<C> ConnectionUpgrade<C> for IdentifyProtocolConfig
+impl<C, Maf> ConnectionUpgrade<C, Maf> for IdentifyProtocolConfig
 where
     C: AsyncRead + AsyncWrite + 'static,
+    Maf: Future<Item = Multiaddr, Error = IoError> + 'static,
 {
     type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
     type UpgradeIdentifier = ();
     type Output = IdentifyOutput<C>;
-    type Future = Box<Future<Item = Self::Output, Error = IoError>>;
+    type MultiaddrFuture = future::Either<future::FutureResult<Multiaddr, IoError>, Maf>;
+    type Future = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
     #[inline]
     fn protocol_names(&self) -> Self::NamesIter {
         iter::once((Bytes::from("/ipfs/id/1.0.0"), ()))
     }
 
-    fn upgrade(self, socket: C, _: (), ty: Endpoint, observed_addr: &Multiaddr) -> Self::Future {
-        trace!("Upgrading connection with {:?} as {:?}", observed_addr, ty);
+    fn upgrade(self, socket: C, _: (), ty: Endpoint, remote_addr: Maf) -> Self::Future {
+        trace!("Upgrading connection as {:?}", ty);
 
-        let socket = socket.framed(VarintCodec::default());
-        let observed_addr_log = if log_enabled!(Level::Debug) {
-            Some(observed_addr.clone())
-        } else {
-            None
-        };
+        let socket = Framed::new(socket, VarintCodec::default());
 
         match ty {
             Endpoint::Dialer => {
@@ -144,12 +139,7 @@ where
                     .map(|(msg, _)| msg)
                     .map_err(|(err, _)| err)
                     .and_then(|msg| {
-                        if log_enabled!(Level::Debug) {
-                            debug!("Received identify message from {:?}",
-                                observed_addr_log
-                                    .expect("Programmer error: expected `observed_addr_log' to be \
-                                                non-None since debug log level is enabled"));
-                        }
+                        debug!("Received identify message");
 
                         if let Some(msg) = msg {
                             let (info, observed_addr) = match parse_proto_msg(msg) {
@@ -163,10 +153,12 @@ where
                             trace!("Remote observes us as {:?}", observed_addr);
                             trace!("Information received: {:?}", info);
 
-                            Ok(IdentifyOutput::RemoteInfo {
+                            let out = IdentifyOutput::RemoteInfo {
                                 info,
-                                observed_addr,
-                            })
+                                observed_addr: observed_addr.clone(),
+                            };
+
+                            Ok((out, future::Either::A(future::ok(observed_addr))))
                         } else {
                             debug!("Identify protocol stream closed before receiving info");
                             Err(IoErrorKind::InvalidData.into())
@@ -179,9 +171,12 @@ where
             Endpoint::Listener => {
                 let sender = IdentifySender { inner: socket };
 
-                let future = future::ok(IdentifyOutput::Sender {
-                    sender,
-                    observed_addr: observed_addr.clone(),
+                let future = future::ok({
+                    let io = IdentifyOutput::Sender {
+                        sender,
+                    };
+
+                    (io, future::Either::B(remote_addr))
                 });
 
                 Box::new(future) as Box<_>
@@ -211,9 +206,8 @@ fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> 
             };
 
             let observed_addr = bytes_to_multiaddr(msg.take_observedAddr())?;
-
             let info = IdentifyInfo {
-                public_key: PublicKeyBytes(msg.take_publicKey()),
+                public_key: PublicKey::from_protobuf_encoding(msg.get_publicKey())?,
                 protocol_version: msg.take_protocolVersion(),
                 agent_version: msg.take_agentVersion(),
                 listen_addrs: listen_addrs,
@@ -230,12 +224,11 @@ fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> 
 #[cfg(test)]
 mod tests {
     extern crate libp2p_tcp_transport;
-    extern crate tokio_core;
+    extern crate tokio_current_thread;
 
     use self::libp2p_tcp_transport::TcpConfig;
-    use self::tokio_core::reactor::Core;
     use futures::{Future, Stream};
-    use libp2p_core::{Transport, PublicKeyBytes};
+    use libp2p_core::{PublicKey, Transport};
     use std::sync::mpsc;
     use std::thread;
     use {IdentifyInfo, IdentifyOutput, IdentifyProtocolConfig};
@@ -248,8 +241,7 @@ mod tests {
         let (tx, rx) = mpsc::channel();
 
         let bg_thread = thread::spawn(move || {
-            let mut core = Core::new().unwrap();
-            let transport = TcpConfig::new(core.handle()).with_upgrade(IdentifyProtocolConfig);
+            let transport = TcpConfig::new().with_upgrade(IdentifyProtocolConfig);
 
             let (listener, addr) = transport
                 .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -263,7 +255,7 @@ mod tests {
                 .and_then(|identify| match identify {
                     IdentifyOutput::Sender { sender, .. } => sender.send(
                         IdentifyInfo {
-                            public_key: PublicKeyBytes(vec![1, 2, 3, 4, 5, 7]),
+                            public_key: PublicKey::Ed25519(vec![1, 2, 3, 4, 5, 7]),
                             protocol_version: "proto_version".to_owned(),
                             agent_version: "agent_version".to_owned(),
                             listen_addrs: vec![
@@ -277,11 +269,10 @@ mod tests {
                     _ => panic!(),
                 });
 
-            let _ = core.run(future).unwrap();
+            let _ = tokio_current_thread::block_on_all(future).unwrap();
         });
 
-        let mut core = Core::new().unwrap();
-        let transport = TcpConfig::new(core.handle()).with_upgrade(IdentifyProtocolConfig);
+        let transport = TcpConfig::new().with_upgrade(IdentifyProtocolConfig);
 
         let future = transport
             .dial(rx.recv().unwrap())
@@ -295,7 +286,7 @@ mod tests {
                         observed_addr,
                         "/ip4/100.101.102.103/tcp/5000".parse().unwrap()
                     );
-                    assert_eq!(info.public_key.0, &[1, 2, 3, 4, 5, 7]);
+                    assert_eq!(info.public_key, PublicKey::Ed25519(vec![1, 2, 3, 4, 5, 7]));
                     assert_eq!(info.protocol_version, "proto_version");
                     assert_eq!(info.agent_version, "agent_version");
                     assert_eq!(
@@ -314,7 +305,7 @@ mod tests {
                 _ => panic!(),
             });
 
-        let _ = core.run(future).unwrap();
+        let _ = tokio_current_thread::block_on_all(future).unwrap();
         bg_thread.join().unwrap();
     }
 }

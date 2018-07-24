@@ -48,21 +48,19 @@
 //! extern crate bytes;
 //! extern crate futures;
 //! extern crate multistream_select;
-//! extern crate tokio_core;
+//! extern crate tokio_current_thread;
+//! extern crate tokio_tcp;
 //!
 //! # fn main() {
 //! use bytes::Bytes;
 //! use multistream_select::dialer_select_proto;
 //! use futures::{Future, Sink, Stream};
-//! use tokio_core::net::TcpStream;
-//! use tokio_core::reactor::Core;
-//!
-//! let mut core = Core::new().unwrap();
+//! use tokio_tcp::TcpStream;
 //!
 //! #[derive(Debug, Copy, Clone)]
 //! enum MyProto { Echo, Hello }
 //!
-//! let client = TcpStream::connect(&"127.0.0.1:10333".parse().unwrap(), &core.handle())
+//! let client = TcpStream::connect(&"127.0.0.1:10333".parse().unwrap())
 //!     .from_err()
 //!     .and_then(move |connec| {
 //!         let protos = vec![
@@ -73,7 +71,8 @@
 //!         dialer_select_proto(connec, protos).map(|r| r.0)
 //!     });
 //!
-//! let negotiated_protocol: MyProto = core.run(client).expect("failed to find a protocol");
+//! let negotiated_protocol: MyProto = tokio_current_thread::block_on_all(client)
+//!     .expect("failed to find a protocol");
 //! println!("negotiated: {:?}", negotiated_protocol);
 //! # }
 //! ```
@@ -84,24 +83,22 @@
 //! extern crate bytes;
 //! extern crate futures;
 //! extern crate multistream_select;
-//! extern crate tokio_core;
+//! extern crate tokio_current_thread;
+//! extern crate tokio_tcp;
 //!
 //! # fn main() {
 //! use bytes::Bytes;
 //! use multistream_select::listener_select_proto;
 //! use futures::{Future, Sink, Stream};
-//! use tokio_core::net::TcpListener;
-//! use tokio_core::reactor::Core;
-//!
-//! let mut core = Core::new().unwrap();
+//! use tokio_tcp::TcpListener;
 //!
 //! #[derive(Debug, Copy, Clone)]
 //! enum MyProto { Echo, Hello }
 //!
-//! let server = TcpListener::bind(&"127.0.0.1:0".parse().unwrap(), &core.handle()).unwrap()
+//! let server = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap()
 //!     .incoming()
 //!     .from_err()
-//!     .and_then(move |(connec, _)| {
+//!     .and_then(move |connec| {
 //!         let protos = vec![
 //!             (Bytes::from("/echo/1.0.0"), <Bytes as PartialEq>::eq, MyProto::Echo),
 //!             (Bytes::from("/hello/2.5.0"), <Bytes as PartialEq>::eq, MyProto::Hello),
@@ -114,7 +111,7 @@
 //!         Ok(())
 //!     });
 //!
-//! core.run(server).expect("failed to run server");
+//! tokio_current_thread::block_on_all(server).expect("failed to run server");
 //! # }
 //! ```
 

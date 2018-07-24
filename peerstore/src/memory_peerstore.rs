@@ -21,7 +21,6 @@
 //! Implementation of the `Peerstore` trait that simple stores peers in memory.
 
 use super::TTL;
-use PeerId;
 use multiaddr::Multiaddr;
 use owning_ref::OwningRefMut;
 use peer_info::{AddAddrBehaviour, PeerInfo};
@@ -30,6 +29,7 @@ use std::collections::HashMap;
 use std::iter;
 use std::sync::{Mutex, MutexGuard};
 use std::vec::IntoIter as VecIntoIter;
+use PeerId;
 
 /// Implementation of the `Peerstore` trait that simply stores the peer information in memory.
 #[derive(Debug)]
@@ -75,7 +75,14 @@ impl<'a> Peerstore for &'a MemoryPeerstore {
 
     fn peers(self) -> Self::PeersIter {
         let lock = self.store.lock().unwrap();
-        lock.keys().cloned().collect::<Vec<_>>().into_iter()
+        lock.iter()
+            .filter_map(|(id, info)| {
+                if info.addrs().count() == 0 {
+                    return None // all addresses are expired
+                }
+                Some(id.clone())
+            })
+            .collect::<Vec<_>>().into_iter()
     }
 }
 

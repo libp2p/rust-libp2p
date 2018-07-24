@@ -23,7 +23,7 @@ extern crate env_logger;
 extern crate futures;
 extern crate libp2p;
 extern crate rand;
-extern crate tokio_core;
+extern crate tokio_current_thread;
 extern crate tokio_io;
 extern crate tokio_stdin;
 
@@ -31,10 +31,9 @@ use futures::Stream;
 use futures::future::Future;
 use std::{env, mem};
 use libp2p::core::{either::EitherOutput, upgrade};
-use libp2p::core::{Multiaddr, Transport, PublicKeyBytesSlice};
+use libp2p::core::{Multiaddr, Transport, PublicKey};
 use libp2p::peerstore::PeerId;
 use libp2p::tcp::TcpConfig;
-use tokio_core::reactor::Core;
 use libp2p::websocket::WsConfig;
 
 fn main() {
@@ -45,16 +44,12 @@ fn main() {
         .nth(1)
         .unwrap_or("/ip4/0.0.0.0/tcp/10050".to_owned());
 
-    // We start by building the tokio engine that will run all the sockets.
-    let mut core = Core::new().unwrap();
-
-    // Now let's build the transport stack.
     // We start by creating a `TcpConfig` that indicates that we want TCP/IP.
-    let transport = TcpConfig::new(core.handle())
+    let transport = TcpConfig::new()
         // In addition to TCP/IP, we also want to support the Websockets protocol on top of TCP/IP.
         // The parameter passed to `WsConfig::new()` must be an implementation of `Transport` to be
         // used for the underlying multiaddress.
-        .or_transport(WsConfig::new(TcpConfig::new(core.handle())))
+        .or_transport(WsConfig::new(TcpConfig::new()))
 
         // On top of TCP/IP, we will use either the plaintext protocol or the secio protocol,
         // depending on which one the remote supports.
@@ -71,13 +66,13 @@ fn main() {
 
             upgrade::or(
                 upgrade::map(plain_text, |pt| EitherOutput::First(pt)),
-                upgrade::map(secio, |(socket, _)| EitherOutput::Second(socket))
+                upgrade::map(secio, |out: libp2p::secio::SecioOutput<_>| EitherOutput::Second(out.stream))
             )
         })
 
         // On top of plaintext or secio, we will use the multiplex protocol.
-        .with_upgrade(libp2p::mplex::MultiplexConfig::new())
-        // The object returned by the call to `with_upgrade(MultiplexConfig::new())` can't be used as a
+        .with_upgrade(libp2p::mplex::MplexConfig::new())
+        // The object returned by the call to `with_upgrade(MplexConfig::new())` can't be used as a
         // `Transport` because the output of the upgrade is not a stream but a controller for
         // muxing. We have to explicitly call `into_connection_reuse()` in order to turn this into
         // a `Transport`.
@@ -91,7 +86,7 @@ fn main() {
     // or substream to our server.
     let my_id = {
         let key = (0..2048).map(|_| rand::random::<u8>()).collect::<Vec<_>>();
-        PeerId::from_public_key(PublicKeyBytesSlice(&key))
+        PeerId::from_public_key(PublicKey::Rsa(key))
     };
 
     let (floodsub_upgrade, floodsub_rx) = libp2p::floodsub::FloodSubUpgrade::new(my_id);
@@ -100,8 +95,8 @@ fn main() {
     // outgoing connections for us.
     let (swarm_controller, swarm_future) = libp2p::core::swarm(
         transport.clone().with_upgrade(floodsub_upgrade.clone()),
-        |socket, client_addr| {
-            println!("Successfully negotiated protocol with {}", client_addr);
+        |socket, _| {
+            println!("Successfully negotiated protocol");
             socket
         },
     );
@@ -158,5 +153,5 @@ fn main() {
         .select(stdin.map_err(|_| unreachable!()))
         .map(|_| ())
         .map_err(|e| e.0);
-    core.run(final_fut).unwrap();
+    tokio_current_thread::block_on_all(final_fut).unwrap();
 }

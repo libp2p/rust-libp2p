@@ -29,14 +29,15 @@ use upgrade::{ConnectionUpgrade, Endpoint};
 #[derive(Debug, Copy, Clone)]
 pub struct DeniedConnectionUpgrade;
 
-impl<C> ConnectionUpgrade<C> for DeniedConnectionUpgrade
+impl<C, Maf> ConnectionUpgrade<C, Maf> for DeniedConnectionUpgrade
 where
     C: AsyncRead + AsyncWrite,
 {
     type NamesIter = iter::Empty<(Bytes, ())>;
     type UpgradeIdentifier = (); // TODO: could use `!`
     type Output = (); // TODO: could use `!`
-    type Future = Box<Future<Item = (), Error = io::Error>>; // TODO: could use `!`
+    type MultiaddrFuture = Box<Future<Item = Multiaddr, Error = io::Error>>; // TODO: could use `!`
+    type Future = Box<Future<Item = ((), Self::MultiaddrFuture), Error = io::Error>>; // TODO: could use `!`
 
     #[inline]
     fn protocol_names(&self) -> Self::NamesIter {
@@ -44,7 +45,7 @@ where
     }
 
     #[inline]
-    fn upgrade(self, _: C, _: Self::UpgradeIdentifier, _: Endpoint, _: &Multiaddr) -> Self::Future {
+    fn upgrade(self, _: C, _: Self::UpgradeIdentifier, _: Endpoint, _: Maf) -> Self::Future {
         unreachable!("the denied connection upgrade always fails to negotiate")
     }
 }

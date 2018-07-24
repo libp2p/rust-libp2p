@@ -21,9 +21,10 @@
 pub extern crate bytes;
 pub extern crate futures;
 #[cfg(not(target_os = "emscripten"))]
-pub extern crate tokio_core;
+pub extern crate tokio_current_thread;
 pub extern crate multiaddr;
 pub extern crate tokio_io;
+pub extern crate tokio_codec;
 
 pub extern crate libp2p_core as core;
 #[cfg(not(target_os = "emscripten"))]
@@ -40,19 +41,21 @@ pub extern crate libp2p_relay as relay;
 pub extern crate libp2p_secio as secio;
 #[cfg(not(target_os = "emscripten"))]
 pub extern crate libp2p_tcp_transport as tcp;
+pub extern crate libp2p_transport_timeout as transport_timeout;
 pub extern crate libp2p_websocket as websocket;
+pub extern crate libp2p_yamux as yamux;
 
 pub mod simple;
 
 pub use self::core::{Transport, ConnectionUpgrade, PeerId, swarm};
 pub use self::multiaddr::Multiaddr;
 pub use self::simple::SimpleProtocol;
+pub use self::transport_timeout::TransportTimeout;
 
 /// Implementation of `Transport` that supports the most common protocols.
 ///
 /// The list currently is TCP/IP, DNS, and WebSockets. However this list could change in the
 /// future to get new transports.
-// TODO: handle the emscripten situation, because we shouldn't depend on tokio-core with emscripten
 #[derive(Debug, Clone)]
 pub struct CommonTransport {
     // The actual implementation of everything.
@@ -73,8 +76,8 @@ impl CommonTransport {
     /// Initializes the `CommonTransport`.
     #[inline]
     #[cfg(not(target_os = "emscripten"))]
-    pub fn new(tokio_handle: tokio_core::reactor::Handle) -> CommonTransport {
-        let tcp = tcp::TcpConfig::new(tokio_handle);
+    pub fn new() -> CommonTransport {
+        let tcp = tcp::TcpConfig::new();
         let with_dns = dns::DnsConfig::new(tcp);
         let with_ws = websocket::WsConfig::new(with_dns.clone());
         let inner = with_dns.or_transport(with_ws);
@@ -97,6 +100,7 @@ impl CommonTransport {
 
 impl Transport for CommonTransport {
     type Output = <InnerImplementation as Transport>::Output;
+    type MultiaddrFuture = <InnerImplementation as Transport>::MultiaddrFuture;
     type Listener = <InnerImplementation as Transport>::Listener;
     type ListenerUpgrade = <InnerImplementation as Transport>::ListenerUpgrade;
     type Dial = <InnerImplementation as Transport>::Dial;

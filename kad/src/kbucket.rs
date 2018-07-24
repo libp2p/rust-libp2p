@@ -29,7 +29,7 @@
 
 use arrayvec::ArrayVec;
 use bigint::U512;
-use libp2p_peerstore::PeerId;
+use libp2p_core::PeerId;
 use parking_lot::{Mutex, MutexGuard};
 use std::mem;
 use std::slice::Iter as SliceIter;
@@ -89,11 +89,12 @@ impl<Id, Val> KBucket<Id, Val> {
     // If a node is pending and the timeout has expired, removes the first element of `nodes`
     // and pushes back the node in `pending_node`.
     fn flush(&mut self, timeout: Duration) {
-        if let Some((_, instant)) = self.pending_node {
+        if let Some((pending_node, instant)) = self.pending_node.take() {
             if instant.elapsed() >= timeout {
-                let (pending_node, _) = self.pending_node.take().unwrap();
                 let _ = self.nodes.remove(0);
                 self.nodes.push(pending_node);
+            } else {
+                self.pending_node = Some((pending_node, instant));
             }
         }
     }
@@ -199,6 +200,9 @@ where
         for table in self.tables.iter() {
             let mut table = table.lock();
             table.flush(self.ping_timeout);
+            if table.last_update.elapsed() > self.ping_timeout {
+                continue // ignore bucket with expired nodes
+            }
             for node in table.nodes.iter() {
                 out.push(node.id.clone());
             }
@@ -207,17 +211,32 @@ where
         out.into_iter()
     }
 
+    /// Same as `find_closest`, but includes the local peer as well.
+    pub fn find_closest_with_self(&self, id: &Id) -> VecIntoIter<Id>
+    where
+        Id: Clone,
+    {
+        // TODO: optimize
+        let mut intermediate: Vec<_> = self.find_closest(&id).collect();
+        if let Some(pos) = intermediate
+            .iter()
+            .position(|e| e.distance_with(&id) >= self.my_id.distance_with(&id))
+        {
+            if intermediate[pos] != self.my_id {
+                intermediate.insert(pos, self.my_id.clone());
+            }
+        } else {
+            intermediate.push(self.my_id.clone());
+        }
+        intermediate.into_iter()
+    }
+
     /// Marks the node as "most recent" in its bucket and modifies the value associated to it.
     /// This function should be called whenever we receive a communication from a node.
-    ///
-    /// # Panic
-    ///
-    /// Panics if `id` is equal to the local node ID.
-    ///
     pub fn update(&self, id: Id, value: Val) -> UpdateOutcome<Id, Val> {
         let table = match self.bucket_num(&id) {
             Some(n) => &self.tables[n],
-            None => panic!("tried to update our own node in the kbuckets table"),
+            None => return UpdateOutcome::FailSelfUpdate,
         };
 
         let mut table = table.lock();
@@ -272,10 +291,13 @@ pub enum UpdateOutcome<Id, Val> {
     Added,
     /// The node was already in the bucket and has been refreshed.
     Refreshed(Val),
-    /// The node wasn't added. Instead we need to ping the node passed as parameter.
+    /// The node wasn't added. Instead we need to ping the node passed as parameter, and call
+    /// `update` if it responds.
     NeedPing(Id),
     /// The node wasn't added at all because a node was already pending.
     Discarded,
+    /// Tried to update the local peer ID. This is an invalid operation.
+    FailSelfUpdate,
 }
 
 /// Iterator giving access to a bucket.
@@ -335,7 +357,7 @@ mod tests {
     extern crate rand;
     use self::rand::random;
     use kbucket::{KBucketsTable, UpdateOutcome, MAX_NODES_PER_BUCKET};
-    use libp2p_peerstore::PeerId;
+    use libp2p_core::PeerId;
     use std::thread;
     use std::time::Duration;
 
@@ -364,8 +386,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "tried to update our own node in the kbuckets table")]
-    fn update_local_id_panic() {
+    fn update_local_id_fails() {
         let my_id = {
             let mut bytes = vec![random(); 34];
             bytes[0] = 18;
@@ -374,7 +395,10 @@ mod tests {
         };
 
         let table = KBucketsTable::new(my_id.clone(), Duration::from_secs(5));
-        let _ = table.update(my_id, ());
+        match table.update(my_id, ()) {
+            UpdateOutcome::FailSelfUpdate => (),
+            _ => panic!()
+        }
     }
 
     #[test]

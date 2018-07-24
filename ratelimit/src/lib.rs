@@ -142,7 +142,7 @@ where
     T: Transport + 'static,
     T::Output: AsyncRead + AsyncWrite,
 {
-    type Item = (Connection<T::Output>, Multiaddr);
+    type Item = (Connection<T::Output>, T::MultiaddrFuture);
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -159,9 +159,10 @@ where
     T::Output: AsyncRead + AsyncWrite,
 {
     type Output = Connection<T::Output>;
+    type MultiaddrFuture = T::MultiaddrFuture;
     type Listener = Listener<T>;
     type ListenerUpgrade = ListenerUpgrade<T>;
-    type Dial = Box<Future<Item = (Connection<T::Output>, Multiaddr), Error = io::Error>>;
+    type Dial = Box<Future<Item = (Connection<T::Output>, Self::MultiaddrFuture), Error = io::Error>>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)>
     where

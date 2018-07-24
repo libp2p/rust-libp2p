@@ -25,20 +25,19 @@
 //! The `Stream` component is used to poll the underlying transport, and the `Sink` component is
 //! used to send messages.
 
-use bytes::Bytes;
-use futures::future;
-use futures::{Sink, Stream};
-use libp2p_peerstore::PeerId;
-use libp2p_core::{ConnectionUpgrade, Endpoint, Multiaddr};
+use bytes::{Bytes, BytesMut};
+use futures::{future, sink, Sink, stream, Stream};
+use libp2p_core::{ConnectionUpgrade, Endpoint, Multiaddr, PeerId};
 use protobuf::{self, Message};
 use protobuf_structs;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
+use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
 use varint::VarintCodec;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub enum ConnectionType {
+pub enum KadConnectionType {
     /// Sender hasn't tried to connect to peer.
     NotConnected = 0,
     /// Sender is currently connected to peer.
@@ -49,59 +48,69 @@ pub enum ConnectionType {
     CannotConnect = 3,
 }
 
-impl From<protobuf_structs::dht::Message_ConnectionType> for ConnectionType {
+impl From<protobuf_structs::dht::Message_ConnectionType> for KadConnectionType {
     #[inline]
-    fn from(raw: protobuf_structs::dht::Message_ConnectionType) -> ConnectionType {
+    fn from(raw: protobuf_structs::dht::Message_ConnectionType) -> KadConnectionType {
         use protobuf_structs::dht::Message_ConnectionType::*;
         match raw {
-            NOT_CONNECTED => ConnectionType::NotConnected,
-            CONNECTED => ConnectionType::Connected,
-            CAN_CONNECT => ConnectionType::CanConnect,
-            CANNOT_CONNECT => ConnectionType::CannotConnect,
+            NOT_CONNECTED => KadConnectionType::NotConnected,
+            CONNECTED => KadConnectionType::Connected,
+            CAN_CONNECT => KadConnectionType::CanConnect,
+            CANNOT_CONNECT => KadConnectionType::CannotConnect,
         }
     }
 }
 
-impl Into<protobuf_structs::dht::Message_ConnectionType> for ConnectionType {
+impl Into<protobuf_structs::dht::Message_ConnectionType> for KadConnectionType {
     #[inline]
     fn into(self) -> protobuf_structs::dht::Message_ConnectionType {
         use protobuf_structs::dht::Message_ConnectionType::*;
         match self {
-            ConnectionType::NotConnected => NOT_CONNECTED,
-            ConnectionType::Connected => CONNECTED,
-            ConnectionType::CanConnect => CAN_CONNECT,
-            ConnectionType::CannotConnect => CANNOT_CONNECT,
+            KadConnectionType::NotConnected => NOT_CONNECTED,
+            KadConnectionType::Connected => CONNECTED,
+            KadConnectionType::CanConnect => CAN_CONNECT,
+            KadConnectionType::CannotConnect => CANNOT_CONNECT,
         }
     }
 }
 
 /// Information about a peer, as known by the sender.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Peer {
+pub struct KadPeer {
     pub node_id: PeerId,
     /// The multiaddresses that are known for that peer.
     pub multiaddrs: Vec<Multiaddr>,
-    pub connection_ty: ConnectionType,
+    pub connection_ty: KadConnectionType,
 }
 
-impl<'a> From<&'a mut protobuf_structs::dht::Message_Peer> for Peer {
-    fn from(peer: &'a mut protobuf_structs::dht::Message_Peer) -> Peer {
-        let node_id = PeerId::from_bytes(peer.get_id().to_vec()).unwrap(); // TODO: don't unwrap
-        let addrs = peer.take_addrs()
-			.into_iter()
-			.map(|a| Multiaddr::from_bytes(a).unwrap())		// TODO: don't unwrap
-			.collect();
+impl KadPeer {
+    // Builds a `KadPeer` from its raw protobuf equivalent.
+    // TODO: use TryFrom once stable
+    fn from_peer(peer: &mut protobuf_structs::dht::Message_Peer) -> Result<KadPeer, IoError> {
+        // TODO: this is in fact a CID ; not sure if this should be handled in `from_bytes` or
+        //       as a special case here
+        let node_id = PeerId::from_bytes(peer.get_id().to_vec())
+            .map_err(|_| IoError::new(IoErrorKind::InvalidData, "invalid peer id"))?;
+
+        let mut addrs = Vec::with_capacity(peer.get_addrs().len());
+        for addr in peer.take_addrs().into_iter() {
+            let as_ma = Multiaddr::from_bytes(addr)
+                .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))?;
+            addrs.push(as_ma);
+        }
+        debug_assert_eq!(addrs.len(), addrs.capacity());
+
         let connection_ty = peer.get_connection().into();
 
-        Peer {
+        Ok(KadPeer {
             node_id: node_id,
             multiaddrs: addrs,
             connection_ty: connection_ty,
-        }
+        })
     }
 }
 
-impl Into<protobuf_structs::dht::Message_Peer> for Peer {
+impl Into<protobuf_structs::dht::Message_Peer> for KadPeer {
     fn into(self) -> protobuf_structs::dht::Message_Peer {
         let mut out = protobuf_structs::dht::Message_Peer::new();
         out.set_id(self.node_id.into_bytes());
@@ -118,13 +127,13 @@ impl Into<protobuf_structs::dht::Message_Peer> for Peer {
 #[derive(Debug, Default, Copy, Clone)]
 pub struct KademliaProtocolConfig;
 
-impl<C> ConnectionUpgrade<C> for KademliaProtocolConfig
+impl<C, Maf> ConnectionUpgrade<C, Maf> for KademliaProtocolConfig
 where
     C: AsyncRead + AsyncWrite + 'static, // TODO: 'static :-/
 {
-    type Output =
-        Box<KadStreamSink<Item = KadMsg, Error = IoError, SinkItem = KadMsg, SinkError = IoError>>;
-    type Future = future::FutureResult<Self::Output, IoError>;
+    type Output = KadStreamSink<C>;
+    type MultiaddrFuture = Maf;
+    type Future = future::FutureResult<(Self::Output, Self::MultiaddrFuture), IoError>;
     type NamesIter = iter::Once<(Bytes, ())>;
     type UpgradeIdentifier = ();
 
@@ -134,42 +143,30 @@ where
     }
 
     #[inline]
-    fn upgrade(self, incoming: C, _: (), _: Endpoint, _: &Multiaddr) -> Self::Future {
-        future::ok(kademlia_protocol(incoming))
+    fn upgrade(self, incoming: C, _: (), _: Endpoint, addr: Maf) -> Self::Future {
+        future::ok((kademlia_protocol(incoming), addr))
     }
 }
 
+type KadStreamSink<S> = stream::AndThen<sink::With<stream::FromErr<Framed<S, VarintCodec<Vec<u8>>>, IoError>, KadMsg, fn(KadMsg) -> Result<Vec<u8>, IoError>, Result<Vec<u8>, IoError>>, fn(BytesMut) -> Result<KadMsg, IoError>, Result<KadMsg, IoError>>;
+
 // Upgrades a socket to use the Kademlia protocol.
-fn kademlia_protocol<'a, S>(
+fn kademlia_protocol<S>(
     socket: S,
-) -> Box<KadStreamSink<Item = KadMsg, Error = IoError, SinkItem = KadMsg, SinkError = IoError> + 'a>
+) -> KadStreamSink<S>
 where
-    S: AsyncRead + AsyncWrite + 'a,
+    S: AsyncRead + AsyncWrite,
 {
-    let wrapped = socket
-        .framed(VarintCodec::default())
+    Framed::new(socket, VarintCodec::default())
         .from_err::<IoError>()
-        .with(|request| -> Result<_, IoError> {
+        .with::<_, fn(_) -> _, _>(|request| -> Result<_, IoError> {
             let proto_struct = msg_to_proto(request);
             Ok(proto_struct.write_to_bytes().unwrap()) // TODO: error?
         })
-        .and_then(|bytes| {
+        .and_then::<fn(_) -> _, _>(|bytes| {
             let response = protobuf::parse_from_bytes(&bytes)?;
             proto_to_msg(response)
-        });
-
-    Box::new(wrapped)
-}
-
-/// Custom trait that derives `Sink` and `Stream`, so that we can box it.
-pub trait KadStreamSink:
-    Stream<Item = KadMsg, Error = IoError> + Sink<SinkItem = KadMsg, SinkError = IoError>
-{
-}
-impl<T> KadStreamSink for T
-where
-    T: Stream<Item = KadMsg, Error = IoError> + Sink<SinkItem = KadMsg, SinkError = IoError>,
-{
+        })
 }
 
 /// Message that we can send to a peer or received from a peer.
@@ -193,7 +190,7 @@ pub enum KadMsg {
         /// Identifier of the returned record.
         key: Vec<u8>,
         record: (), //record: Option<protobuf_structs::record::Record>, // TODO: no
-        closer_peers: Vec<Peer>,
+        closer_peers: Vec<KadPeer>,
     },
     /// Request for the list of nodes whose IDs are the closest to `key`. The number of nodes
     /// returned is not specified, but should be around 20.
@@ -204,7 +201,7 @@ pub enum KadMsg {
     /// Response to a `FindNodeReq`.
     FindNodeRes {
         /// Results of the request.
-        closer_peers: Vec<Peer>,
+        closer_peers: Vec<KadPeer>,
     },
 }
 
@@ -230,7 +227,7 @@ fn msg_to_proto(kad_msg: KadMsg) -> protobuf_structs::dht::Message {
             msg.set_clusterLevelRaw(10);
             msg
         }
-        KadMsg::GetValueRes { .. } => unimplemented!(),
+        KadMsg::GetValueRes { .. } => unimplemented!(),     // TODO:
         KadMsg::FindNodeReq { key } => {
             let mut msg = protobuf_structs::dht::Message::new();
             msg.set_field_type(protobuf_structs::dht::Message_MessageType::FIND_NODE);
@@ -240,6 +237,7 @@ fn msg_to_proto(kad_msg: KadMsg) -> protobuf_structs::dht::Message {
         }
         KadMsg::FindNodeRes { closer_peers } => {
             // TODO: if empty, the remote will think it's a request
+            // TODO: not good, possibly exposed in the API
             assert!(!closer_peers.is_empty());
             let mut msg = protobuf_structs::dht::Message::new();
             msg.set_field_type(protobuf_structs::dht::Message_MessageType::FIND_NODE);
@@ -276,13 +274,18 @@ fn proto_to_msg(mut message: protobuf_structs::dht::Message) -> Result<KadMsg, I
                 Ok(KadMsg::FindNodeReq {
                     key: message.take_key(),
                 })
+
             } else {
+                // TODO: for now we don't parse the peer properly, so it is possible that we get
+                //       parsing errors for peers even when they are valid ; we ignore these
+                //       errors for now, but ultimately we should just error altogether
+                let closer_peers = message.mut_closerPeers()
+                    .iter_mut()
+                    .filter_map(|peer| KadPeer::from_peer(peer).ok())
+                    .collect::<Vec<_>>();
+
                 Ok(KadMsg::FindNodeRes {
-                    closer_peers: message
-                        .mut_closerPeers()
-                        .iter_mut()
-                        .map(|peer| peer.into())
-                        .collect(),
+                    closer_peers,
                 })
             }
         }
@@ -302,14 +305,12 @@ fn proto_to_msg(mut message: protobuf_structs::dht::Message) -> Result<KadMsg, I
 #[cfg(test)]
 mod tests {
     extern crate libp2p_tcp_transport;
-    extern crate tokio_core;
+    extern crate tokio_current_thread;
 
     use self::libp2p_tcp_transport::TcpConfig;
-    use self::tokio_core::reactor::Core;
     use futures::{Future, Sink, Stream};
-    use libp2p_peerstore::PeerId;
-    use libp2p_core::{Transport, PublicKeyBytesSlice};
-    use protocol::{ConnectionType, KadMsg, KademliaProtocolConfig, Peer};
+    use libp2p_core::{Transport, PeerId, PublicKey};
+    use protocol::{KadConnectionType, KadMsg, KademliaProtocolConfig, KadPeer};
     use std::sync::mpsc;
     use std::thread;
 
@@ -331,10 +332,10 @@ mod tests {
         });
         test_one(KadMsg::FindNodeRes {
             closer_peers: vec![
-                Peer {
-                    node_id: PeerId::from_public_key(PublicKeyBytesSlice(&[93, 80, 12, 250])),
+                KadPeer {
+                    node_id: PeerId::from_public_key(PublicKey::Rsa(vec![93, 80, 12, 250])),
                     multiaddrs: vec!["/ip4/100.101.102.103/tcp/20105".parse().unwrap()],
-                    connection_ty: ConnectionType::Connected,
+                    connection_ty: KadConnectionType::Connected,
                 },
             ],
         });
@@ -345,8 +346,7 @@ mod tests {
             let (tx, rx) = mpsc::channel();
 
             let bg_thread = thread::spawn(move || {
-                let mut core = Core::new().unwrap();
-                let transport = TcpConfig::new(core.handle()).with_upgrade(KademliaProtocolConfig);
+                let transport = TcpConfig::new().with_upgrade(KademliaProtocolConfig);
 
                 let (listener, addr) = transport
                     .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -363,11 +363,10 @@ mod tests {
                         ()
                     });
 
-                let _ = core.run(future).unwrap();
+                let _ = tokio_current_thread::block_on_all(future).unwrap();
             });
 
-            let mut core = Core::new().unwrap();
-            let transport = TcpConfig::new(core.handle()).with_upgrade(KademliaProtocolConfig);
+            let transport = TcpConfig::new().with_upgrade(KademliaProtocolConfig);
 
             let future = transport
                 .dial(rx.recv().unwrap())
@@ -375,7 +374,7 @@ mod tests {
                 .and_then(|proto| proto.0.send(msg_client))
                 .map(|_| ());
 
-            let _ = core.run(future).unwrap();
+            let _ = tokio_current_thread::block_on_all(future).unwrap();
             bg_thread.join().unwrap();
         }
     }

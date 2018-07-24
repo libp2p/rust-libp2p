@@ -31,6 +31,9 @@ extern crate num_bigint;
 extern crate num_traits;
 extern crate tokio_io;
 
+#[cfg(test)]
+extern crate tokio_codec;
+
 use bytes::{BufMut, Bytes, BytesMut, IntoBuf};
 use futures::{Async, Poll};
 use num_bigint::BigUint;
@@ -518,7 +521,7 @@ mod tests {
     use super::{decode, EncoderState, VarintDecoder};
     use futures::{Future, Stream};
     use num_bigint::BigUint;
-    use tokio_io::codec::FramedRead;
+    use tokio_codec::FramedRead;
 
     #[test]
     fn large_number_fails() {

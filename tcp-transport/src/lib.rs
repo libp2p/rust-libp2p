@@ -27,22 +27,14 @@
 //!
 //! # Usage
 //!
-//! Create [a tokio `Core`](https://docs.rs/tokio-core/0.1/tokio_core/reactor/struct.Core.html),
-//! then grab a handle by calling the `handle()` method on it, then create a `TcpConfig` and pass
-//! the handle.
-//!
 //! Example:
 //!
 //! ```
 //! extern crate libp2p_tcp_transport;
-//! extern crate tokio_core;
-//!
 //! use libp2p_tcp_transport::TcpConfig;
-//! use tokio_core::reactor::Core;
 //!
 //! # fn main() {
-//! let mut core = Core::new().unwrap();
-//! let tcp = TcpConfig::new(core.handle());
+//! let tcp = TcpConfig::new();
 //! # }
 //! ```
 //!
@@ -54,49 +46,48 @@ extern crate libp2p_core as swarm;
 #[macro_use]
 extern crate log;
 extern crate multiaddr;
-extern crate tokio_core;
 extern crate tokio_io;
+extern crate tokio_tcp;
 
-use futures::future::{self, Future, FutureResult, IntoFuture};
+#[cfg(test)]
+extern crate tokio_current_thread;
+
+use futures::Poll;
+use futures::future::{self, Future, FutureResult};
 use futures::stream::Stream;
 use multiaddr::{AddrComponent, Multiaddr, ToMultiaddr};
-use std::io::Error as IoError;
+use std::io::{Error as IoError, Read, Write};
 use std::iter;
 use std::net::SocketAddr;
 use swarm::Transport;
-use tokio_core::net::{TcpListener, TcpStream};
-use tokio_core::reactor::Handle;
+use tokio_tcp::{TcpListener, TcpStream};
+use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Represents the configuration for a TCP/IP transport capability for libp2p.
 ///
-/// Each connection created by this config is tied to a tokio reactor. The TCP sockets created by
-/// libp2p will need to be progressed by running the futures and streams obtained by libp2p
-/// through the tokio reactor.
-#[derive(Debug, Clone)]
-pub struct TcpConfig {
-    event_loop: Handle,
-}
+/// The TCP sockets created by libp2p will need to be progressed by running the futures and streams
+/// obtained by libp2p through the tokio reactor.
+#[derive(Debug, Clone, Default)]
+pub struct TcpConfig {}
 
 impl TcpConfig {
-    /// Creates a new configuration object for TCP/IP. The `Handle` is a tokio reactor the
-    /// connections will be created with.
+    /// Creates a new configuration object for TCP/IP.
     #[inline]
-    pub fn new(handle: Handle) -> TcpConfig {
-        TcpConfig { event_loop: handle }
+    pub fn new() -> TcpConfig {
+        TcpConfig {}
     }
 }
 
 impl Transport for TcpConfig {
-    type Output = TcpStream;
+    type Output = TcpTransStream;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
-    type ListenerUpgrade = FutureResult<(Self::Output, Multiaddr), IoError>;
-    type Dial = Box<Future<Item = (TcpStream, Multiaddr), Error = IoError>>;
+    type ListenerUpgrade = FutureResult<(Self::Output, Self::MultiaddrFuture), IoError>;
+    type MultiaddrFuture = FutureResult<Multiaddr, IoError>;
+    type Dial = Box<Future<Item = (TcpTransStream, Self::MultiaddrFuture), Error = IoError>>;
 
-    /// Listen on the given multi-addr.
-    /// Returns the address back if it isn't supported.
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
-            let listener = TcpListener::bind(&socket_addr, &self.event_loop);
+            let listener = TcpListener::bind(&socket_addr);
             // We need to build the `Multiaddr` to return from this function. If an error happened,
             // just return the original multiaddr.
             let new_addr = match listener {
@@ -116,12 +107,21 @@ impl Transport for TcpConfig {
             let future = future::result(listener)
                 .map(|listener| {
                     // Pull out a stream of sockets for incoming connections
-                    listener.incoming().map(|(sock, addr)| {
-                        let addr = addr.to_multiaddr()
-                            .expect("generating a multiaddr from a socket addr never fails");
-                        debug!("Incoming connection from {}", addr);
-                        Ok((sock, addr)).into_future()
-                    })
+                    listener.incoming()
+                        .map(|sock| {
+                            let addr = match sock.peer_addr() {
+                                Ok(addr) => addr.to_multiaddr()
+                                    .expect("generating a multiaddr from a socket addr never fails"),
+                                Err(err) => return future::err(err),
+                            };
+
+                            debug!("Incoming connection from {}", addr);
+                            future::ok((TcpTransStream { inner: sock }, future::ok(addr)))
+                        })
+                        .map_err(|err| {
+                            debug!("Error in TCP listener: {:?}", err);
+                            err
+                        })
                 })
                 .flatten_stream();
             Ok((Box::new(future), new_addr))
@@ -130,14 +130,25 @@ impl Transport for TcpConfig {
         }
     }
 
-    /// Dial to the given multi-addr.
-    /// Returns either a future which may resolve to a connection,
-    /// or gives back the multiaddress.
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
         if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
-            debug!("Dialing {}", addr);
-            let fut = TcpStream::connect(&socket_addr, &self.event_loop).map(|t| (t, addr));
-            Ok(Box::new(fut) as Box<_>)
+            // As an optimization, we check that the address is not of the form `0.0.0.0`.
+            // If so, we instantly refuse dialing instead of going through the kernel.
+            if socket_addr.port() != 0 && !socket_addr.ip().is_unspecified() {
+                debug!("Dialing {}", addr);
+                let fut = TcpStream::connect(&socket_addr)
+                    .map(|t| {
+                        (TcpTransStream { inner: t }, future::ok(addr))
+                    })
+                    .map_err(move |err| {
+                        debug!("Error while dialing {:?} => {:?}", socket_addr, err);
+                        err
+                    });
+                Ok(Box::new(fut) as Box<_>)
+            } else {
+                debug!("Instantly refusing dialing {}, as it is invalid", addr);
+                Err((self, addr))
+            }
         } else {
             Err((self, addr))
         }
@@ -192,16 +203,61 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
     }
 }
 
+/// Wraps around a `TcpStream` and adds logging for important events.
+pub struct TcpTransStream {
+    inner: TcpStream
+}
+
+impl Read for TcpTransStream {
+    #[inline]
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
+        self.inner.read(buf)
+    }
+}
+
+impl AsyncRead for TcpTransStream {
+}
+
+impl Write for TcpTransStream {
+    #[inline]
+    fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
+        self.inner.write(buf)
+    }
+
+    #[inline]
+    fn flush(&mut self) -> Result<(), IoError> {
+        self.inner.flush()
+    }
+}
+
+impl AsyncWrite for TcpTransStream {
+    #[inline]
+    fn shutdown(&mut self) -> Poll<(), IoError> {
+        AsyncWrite::shutdown(&mut self.inner)
+    }
+}
+
+impl Drop for TcpTransStream {
+    #[inline]
+    fn drop(&mut self) {
+        if let Ok(addr) = self.inner.peer_addr() {
+            debug!("Dropped TCP connection to {:?}", addr);
+        } else {
+            debug!("Dropped TCP connection to undeterminate peer");
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{multiaddr_to_socketaddr, TcpConfig};
-    use futures::Future;
     use futures::stream::Stream;
+    use futures::Future;
     use multiaddr::Multiaddr;
     use std;
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use swarm::Transport;
-    use tokio_core::reactor::Core;
+    use tokio_current_thread;
     use tokio_io;
 
     #[test]
@@ -242,14 +298,7 @@ mod tests {
                 .unwrap()),
             Ok(SocketAddr::new(
                 IpAddr::V6(Ipv6Addr::new(
-                    65535,
-                    65535,
-                    65535,
-                    65535,
-                    65535,
-                    65535,
-                    65535,
-                    65535,
+                    65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535,
                 )),
                 8080,
             ))
@@ -261,10 +310,8 @@ mod tests {
         use std::io::Write;
 
         std::thread::spawn(move || {
-            let mut core = Core::new().unwrap();
             let addr = "/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap();
-            let tcp = TcpConfig::new(core.handle());
-            let handle = core.handle();
+            let tcp = TcpConfig::new();
             let listener = tcp.listen_on(addr).unwrap().0.for_each(|sock| {
                 sock.and_then(|(sock, _)| {
                     // Define what to do with the socket that just connected to us
@@ -274,37 +321,32 @@ mod tests {
                         .map_err(|err| panic!("IO error {:?}", err));
 
                     // Spawn the future as a concurrent task
-                    handle.spawn(handle_conn);
+                    tokio_current_thread::spawn(handle_conn);
 
                     Ok(())
                 })
             });
 
-            core.run(listener).unwrap();
+            tokio_current_thread::block_on_all(listener).unwrap();
         });
         std::thread::sleep(std::time::Duration::from_millis(100));
         let addr = "/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap();
-        let mut core = Core::new().unwrap();
-        let tcp = TcpConfig::new(core.handle());
+        let tcp = TcpConfig::new();
         // Obtain a future socket through dialing
         let socket = tcp.dial(addr.clone()).unwrap();
         // Define what to do with the socket once it's obtained
-        let action = socket.then(|sock| match sock {
-            Ok((mut s, _)) => {
-                let written = s.write(&[0x1, 0x2, 0x3]).unwrap();
-                Ok(written)
-            }
-            Err(x) => Err(x),
+        let action = socket.then(|sock| -> Result<(), ()> {
+            sock.unwrap().0.write(&[0x1, 0x2, 0x3]).unwrap();
+            Ok(())
         });
         // Execute the future in our event loop
-        core.run(action).unwrap();
+        tokio_current_thread::block_on_all(action).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
 
     #[test]
     fn replace_port_0_in_returned_multiaddr_ipv4() {
-        let core = Core::new().unwrap();
-        let tcp = TcpConfig::new(core.handle());
+        let tcp = TcpConfig::new();
 
         let addr = "/ip4/127.0.0.1/tcp/0".parse::<Multiaddr>().unwrap();
         assert!(addr.to_string().contains("tcp/0"));
@@ -315,8 +357,7 @@ mod tests {
 
     #[test]
     fn replace_port_0_in_returned_multiaddr_ipv6() {
-        let core = Core::new().unwrap();
-        let tcp = TcpConfig::new(core.handle());
+        let tcp = TcpConfig::new();
 
         let addr: Multiaddr = "/ip6/::1/tcp/0".parse().unwrap();
         assert!(addr.to_string().contains("tcp/0"));
@@ -327,8 +368,7 @@ mod tests {
 
     #[test]
     fn larger_addr_denied() {
-        let core = Core::new().unwrap();
-        let tcp = TcpConfig::new(core.handle());
+        let tcp = TcpConfig::new();
 
         let addr = "/ip4/127.0.0.1/tcp/12345/tcp/12345"
             .parse::<Multiaddr>()
@@ -338,8 +378,7 @@ mod tests {
 
     #[test]
     fn nat_traversal() {
-        let core = Core::new().unwrap();
-        let tcp = TcpConfig::new(core.handle());
+        let tcp = TcpConfig::new();
 
         let server = "/ip4/127.0.0.1/tcp/10000".parse::<Multiaddr>().unwrap();
         let observed = "/ip4/80.81.82.83/tcp/25000".parse::<Multiaddr>().unwrap();
