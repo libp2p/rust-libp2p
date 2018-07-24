@@ -20,7 +20,6 @@
 
 use bytes::Bytes;
 use futures::future::{self, FutureResult};
-use multiaddr::Multiaddr;
 use std::{iter, io::Error as IoError};
 use tokio_io::{AsyncRead, AsyncWrite};
 use upgrade::{ConnectionUpgrade, Endpoint};
@@ -33,18 +32,19 @@ use upgrade::{ConnectionUpgrade, Endpoint};
 #[derive(Debug, Copy, Clone)]
 pub struct PlainTextConfig;
 
-impl<C> ConnectionUpgrade<C> for PlainTextConfig
+impl<C, F> ConnectionUpgrade<C, F> for PlainTextConfig
 where
     C: AsyncRead + AsyncWrite,
 {
     type Output = C;
-    type Future = FutureResult<C, IoError>;
+    type Future = FutureResult<(C, F), IoError>;
     type UpgradeIdentifier = ();
+    type MultiaddrFuture = F;
     type NamesIter = iter::Once<(Bytes, ())>;
 
     #[inline]
-    fn upgrade(self, i: C, _: (), _: Endpoint, _: &Multiaddr) -> Self::Future {
-        future::ok(i)
+    fn upgrade(self, i: C, _: (), _: Endpoint, remote_addr: F) -> Self::Future {
+        future::ok((i, remote_addr))
     }
 
     #[inline]

@@ -63,10 +63,12 @@ where
     T::Output: AsyncRead + AsyncWrite + Send,
 {
     type Output = Box<AsyncStream>;
+    type MultiaddrFuture = Box<Future<Item = Multiaddr, Error = IoError>>;
     type Listener =
         stream::Map<T::Listener, fn(<T as Transport>::ListenerUpgrade) -> Self::ListenerUpgrade>;
-    type ListenerUpgrade = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>;
-    type Dial = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>;
+    type ListenerUpgrade =
+        Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
+    type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
     fn listen_on(
         self,
@@ -98,10 +100,13 @@ where
 
         let listen = inner_listen.map::<_, fn(_) -> _>(|stream| {
             // Upgrade the listener to websockets like the websockets library requires us to do.
-            let upgraded = stream.and_then(|(stream, mut client_addr)| {
+            let upgraded = stream.and_then(|(stream, client_addr)| {
                 // Need to suffix `/ws` to each client address.
-                client_addr.append(AddrComponent::WS);
-                debug!("Incoming connection from {}", client_addr);
+                let client_addr = client_addr.map(|mut addr| {
+                    addr.append(AddrComponent::WS);
+                    addr
+                });
+                debug!("Incoming connection");
 
                 stream
                     .into_ws()
@@ -140,7 +145,7 @@ where
                     .map(|s| Box::new(Ok(s).into_future()) as Box<Future<Item = _, Error = _>>)
                     .into_future()
                     .flatten()
-                    .map(move |v| (v, client_addr))
+                    .map(move |v| (v, Box::new(client_addr) as Box<Future<Item = _, Error = _>>))
             });
 
             Box::new(upgraded) as Box<Future<Item = _, Error = _>>
@@ -155,8 +160,10 @@ where
             Some(AddrComponent::WS) => false,
             Some(AddrComponent::WSS) => true,
             _ => {
-                trace!("Ignoring dial attempt for {} because it is not a websocket multiaddr",
-                       original_addr);
+                trace!(
+                    "Ignoring dial attempt for {} because it is not a websocket multiaddr",
+                    original_addr
+                );
                 return Err((self, original_addr));
             }
         };
@@ -168,9 +175,10 @@ where
         let inner_dial = match self.transport.dial(inner_addr) {
             Ok(d) => d,
             Err((transport, old_addr)) => {
-                debug!("Failed to dial {} because {} is not supported by the underlying transport",
-                      original_addr,
-                      old_addr);
+                debug!(
+                    "Failed to dial {} because {} is not supported by the underlying transport",
+                    original_addr, old_addr
+                );
                 return Err((
                     WsConfig {
                         transport: transport,
@@ -183,6 +191,15 @@ where
         let dial = inner_dial
             .into_future()
             .and_then(move |(connec, client_addr)| {
+                let client_addr = Box::new(client_addr.map(move |mut addr| {
+                    if is_wss {
+                        addr.append(AddrComponent::WSS);
+                    } else {
+                        addr.append(AddrComponent::WS);
+                    };
+                    addr
+                })) as Box<Future<Item = _, Error = _>>;
+
                 ClientBuilder::new(&ws_addr)
                     .expect("generated ws address is always valid")
                     .async_connect_on(connec)
@@ -208,15 +225,7 @@ where
                         let read_write = RwStreamSink::new(framed_data);
                         Box::new(read_write) as Box<AsyncStream>
                     })
-                    .map(move |c| {
-                        let mut actual_addr = client_addr;
-                        if is_wss {
-                            actual_addr.append(AddrComponent::WSS);
-                        } else {
-                            actual_addr.append(AddrComponent::WS);
-                        };
-                        (c, actual_addr)
-                    })
+                    .map(move |c| (c, client_addr))
             });
 
         Ok(Box::new(dial) as Box<_>)
@@ -280,21 +289,19 @@ fn client_addr_to_ws(client_addr: &Multiaddr, is_wss: bool) -> String {
 #[cfg(test)]
 mod tests {
     extern crate libp2p_tcp_transport as tcp;
-    extern crate tokio_core;
-    use self::tokio_core::reactor::Core;
-    use WsConfig;
+    extern crate tokio_current_thread;
     use futures::{Future, Stream};
     use multiaddr::Multiaddr;
     use swarm::Transport;
+    use WsConfig;
 
     #[test]
     fn dialer_connects_to_listener_ipv4() {
-        let mut core = Core::new().unwrap();
-        let ws_config = WsConfig::new(tcp::TcpConfig::new(core.handle()));
+        let ws_config = WsConfig::new(tcp::TcpConfig::new());
 
         let (listener, addr) = ws_config
             .clone()
-            .listen_on("/ip4/0.0.0.0/tcp/0/ws".parse().unwrap())
+            .listen_on("/ip4/127.0.0.1/tcp/0/ws".parse().unwrap())
             .unwrap();
         assert!(addr.to_string().ends_with("/ws"));
         assert!(!addr.to_string().ends_with("/0/ws"));
@@ -308,13 +315,12 @@ mod tests {
             .select(dialer)
             .map_err(|(e, _)| e)
             .and_then(|(_, n)| n);
-        core.run(future).unwrap();
+        tokio_current_thread::block_on_all(future).unwrap();
     }
 
     #[test]
     fn dialer_connects_to_listener_ipv6() {
-        let mut core = Core::new().unwrap();
-        let ws_config = WsConfig::new(tcp::TcpConfig::new(core.handle()));
+        let ws_config = WsConfig::new(tcp::TcpConfig::new());
 
         let (listener, addr) = ws_config
             .clone()
@@ -332,13 +338,12 @@ mod tests {
             .select(dialer)
             .map_err(|(e, _)| e)
             .and_then(|(_, n)| n);
-        core.run(future).unwrap();
+        tokio_current_thread::block_on_all(future).unwrap();
     }
 
     #[test]
     fn nat_traversal() {
-        let core = Core::new().unwrap();
-        let ws_config = WsConfig::new(tcp::TcpConfig::new(core.handle()));
+        let ws_config = WsConfig::new(tcp::TcpConfig::new());
 
         {
             let server = "/ip4/127.0.0.1/tcp/10000/ws".parse::<Multiaddr>().unwrap();

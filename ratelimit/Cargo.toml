@@ -2,6 +2,7 @@
 name = "libp2p-ratelimit"
 version = "0.1.1"
 authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
 
 [dependencies]
 aio-limited = { git = "https://github.com/paritytech/aio-limited.git" }

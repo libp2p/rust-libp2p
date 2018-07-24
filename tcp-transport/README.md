@@ -6,21 +6,17 @@ Uses [the *tokio* library](https://tokio.rs).
 
 ## Usage
 
-Create [a tokio `Core`](https://docs.rs/tokio-core/0.1/tokio_core/reactor/struct.Core.html),
-then grab a handle by calling the `handle()` method on it, then create a `TcpConfig` and pass
-the handle.
-
 Example:
 
 ```rust
 extern crate libp2p_tcp_transport;
-extern crate tokio_core;
+extern crate tokio_current_thread;
 
 use libp2p_tcp_transport::TcpConfig;
 use tokio_core::reactor::Core;
 
 let mut core = Core::new().unwrap();
-let tcp = TcpConfig::new(core.handle());
+let tcp = TcpConfig::new();
 ```
 
 The `TcpConfig` structs implements the `Transport` trait of the `swarm` library. See the

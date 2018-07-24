@@ -56,16 +56,14 @@
 //! extern crate libp2p_ping;
 //! extern crate libp2p_core;
 //! extern crate libp2p_tcp_transport;
-//! extern crate tokio_core;
+//! extern crate tokio_current_thread;
 //!
 //! use futures::Future;
 //! use libp2p_ping::Ping;
 //! use libp2p_core::Transport;
 //!
 //! # fn main() {
-//! let mut core = tokio_core::reactor::Core::new().unwrap();
-//!
-//! let ping_finished_future = libp2p_tcp_transport::TcpConfig::new(core.handle())
+//! let ping_finished_future = libp2p_tcp_transport::TcpConfig::new()
 //!     .with_upgrade(Ping)
 //!     .dial("127.0.0.1:12345".parse::<libp2p_core::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())
 //!     .and_then(|((mut pinger, service), _)| {
@@ -73,7 +71,7 @@
 //!     });
 //!
 //! // Runs until the ping arrives.
-//! core.run(ping_finished_future).unwrap();
+//! tokio_current_thread::block_on_all(ping_finished_future).unwrap();
 //! # }
 //! ```
 //!
@@ -86,23 +84,22 @@ extern crate log;
 extern crate multistream_select;
 extern crate parking_lot;
 extern crate rand;
+extern crate tokio_codec;
 extern crate tokio_io;
 
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::future::{loop_fn, FutureResult, IntoFuture, Loop};
 use futures::sync::{mpsc, oneshot};
 use futures::{Future, Sink, Stream};
-use libp2p_core::{ConnectionUpgrade, Endpoint, Multiaddr};
-use log::Level;
+use libp2p_core::{ConnectionUpgrade, Endpoint};
 use parking_lot::Mutex;
-use rand::Rand;
-use rand::os::OsRng;
+use rand::{prelude::*, rngs::EntropyRng, distributions::Standard};
 use std::collections::HashMap;
 use std::error::Error;
 use std::io::Error as IoError;
 use std::iter;
 use std::sync::Arc;
-use tokio_io::codec::{Decoder, Encoder};
+use tokio_codec::{Decoder, Encoder, Framed};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Represents a prototype for an upgrade to handle the ping protocol.
@@ -112,7 +109,7 @@ use tokio_io::{AsyncRead, AsyncWrite};
 #[derive(Debug, Copy, Clone, Default)]
 pub struct Ping;
 
-impl<C> ConnectionUpgrade<C> for Ping
+impl<C, Maf> ConnectionUpgrade<C, Maf> for Ping
 where
     C: AsyncRead + AsyncWrite + 'static,
 {
@@ -125,7 +122,8 @@ where
     }
 
     type Output = (Pinger, Box<Future<Item = (), Error = IoError>>);
-    type Future = FutureResult<Self::Output, IoError>;
+    type MultiaddrFuture = Maf;
+    type Future = FutureResult<(Self::Output, Self::MultiaddrFuture), IoError>;
 
     #[inline]
     fn upgrade(
@@ -133,7 +131,7 @@ where
         socket: C,
         _: Self::UpgradeIdentifier,
         _: Endpoint,
-        remote_addr: &Multiaddr,
+        remote_addr: Maf,
     ) -> Self::Future {
         // # How does it work?
         //
@@ -146,34 +144,20 @@ where
         // never produce anything.
         let rx = rx.then(|r| Ok(r.ok())).filter_map(|a| a);
 
-        let os_rng = match OsRng::new() {
-            Ok(r) => r,
-            Err(err) => return Err(err).into_future(),
-        };
-
         let pinger = Pinger {
             send: tx,
-            os_rng: os_rng,
+            rng: EntropyRng::default(),
         };
 
         // Hashmap that associates outgoing payloads to one-shot senders.
         // TODO: can't figure out how to make it work without using an Arc/Mutex
         let expected_pongs = Arc::new(Mutex::new(HashMap::with_capacity(4)));
 
-        let sink_stream = socket
-            .framed(Codec)
-            .map(|msg| Message::Received(msg.freeze()));
+        let sink_stream = Framed::new(socket, Codec).map(|msg| Message::Received(msg.freeze()));
         let (sink, stream) = sink_stream.split();
-
-        let remote_addr = if log_enabled!(Level::Debug) {
-            Some(remote_addr.clone())
-        } else {
-            None
-        };
 
         let future = loop_fn((sink, stream.select(rx)), move |(sink, stream)| {
             let expected_pongs = expected_pongs.clone();
-            let remote_addr = remote_addr.clone();
 
             stream
                 .into_future()
@@ -185,11 +169,7 @@ where
                         match message {
                             Message::Ping(payload, finished) => {
                                 // Ping requested by the user through the `Pinger`.
-                                if log_enabled!(Level::Debug) {
-                                    debug!("Sending ping to {:?} with payload {:?}",
-                                           remote_addr.expect("debug log level is enabled"),
-                                           payload);
-                                }
+                                debug!("Sending ping with payload {:?}", payload);
 
                                 expected_pongs.insert(payload.clone(), finished);
                                 Box::new(
@@ -204,15 +184,13 @@ where
                                     // Payload was ours. Signalling future.
                                     // Errors can happen if the user closed the receiving end of
                                     // the future, which is fine to ignore.
-                                    debug!("Received pong from {:?} (payload={:?}) ; ping fufilled",
-                                       remote_addr.expect("debug log level is enabled"), payload);
+                                    debug!("Received pong (payload={:?}) ; ping fufilled", payload);
                                     let _ = fut.send(());
                                     Box::new(Ok(Loop::Continue((sink, stream))).into_future())
                                         as Box<Future<Item = _, Error = _>>
                                 } else {
                                     // Payload was not ours. Sending it back.
-                                    debug!("Received ping from {:?} (payload={:?}) ; sending back",
-                                       remote_addr.expect("debug log level is enabled"), payload);
+                                    debug!("Received ping (payload={:?}) ; sending back", payload);
                                     Box::new(
                                         sink.send(payload)
                                             .map(|sink| Loop::Continue((sink, stream))),
@@ -228,14 +206,14 @@ where
                 })
         });
 
-        Ok((pinger, Box::new(future) as Box<_>)).into_future()
+        Ok(((pinger, Box::new(future) as Box<_>), remote_addr)).into_future()
     }
 }
 
 /// Controller for the ping service. Makes it possible to send pings to the remote.
 pub struct Pinger {
     send: mpsc::Sender<Message>,
-    os_rng: OsRng,
+    rng: EntropyRng,
 }
 
 impl Pinger {
@@ -245,7 +223,8 @@ impl Pinger {
     ///           timeout yourself when you call this function.
     pub fn ping(&mut self) -> Box<Future<Item = (), Error = Box<Error + Send + Sync>>> {
         let (tx, rx) = oneshot::channel();
-        let payload: [u8; 32] = Rand::rand(&mut self.os_rng);
+
+        let payload: [u8; 32] = self.rng.sample(Standard);
         debug!("Preparing for ping with payload {:?}", payload);
         // Ignore errors if the ponger has been already destroyed. The returned future will never
         // be signalled.
@@ -255,6 +234,15 @@ impl Pinger {
             .from_err()
             .and_then(|_| rx.from_err());
         Box::new(fut) as Box<_>
+    }
+}
+
+impl Clone for Pinger {
+    fn clone(&self) -> Pinger {
+        Pinger {
+            send: self.send.clone(),
+            rng: EntropyRng::default(),
+        }
     }
 }
 
@@ -289,6 +277,7 @@ impl Encoder for Codec {
     fn encode(&mut self, mut data: Bytes, buf: &mut BytesMut) -> Result<(), IoError> {
         if data.len() != 0 {
             let split = 32 * (1 + ((data.len() - 1) / 32));
+            buf.reserve(split);
             buf.put(data.split_to(split));
         }
         Ok(())
@@ -297,22 +286,21 @@ impl Encoder for Codec {
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio_core;
+    extern crate tokio_current_thread;
+    extern crate tokio_tcp;
 
-    use self::tokio_core::net::TcpListener;
-    use self::tokio_core::net::TcpStream;
-    use self::tokio_core::reactor::Core;
+    use self::tokio_tcp::TcpListener;
+    use self::tokio_tcp::TcpStream;
     use super::Ping;
+    use futures::future::{self, join_all};
     use futures::Future;
     use futures::Stream;
-    use futures::future::join_all;
-    use libp2p_core::{ConnectionUpgrade, Endpoint};
+    use libp2p_core::{ConnectionUpgrade, Endpoint, Multiaddr};
+    use std::io::Error as IoError;
 
     #[test]
     fn ping_pong() {
-        let mut core = Core::new().unwrap();
-
-        let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap(), &core.handle()).unwrap();
+        let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap();
         let listener_addr = listener.local_addr().unwrap();
 
         let server = listener
@@ -321,13 +309,13 @@ mod tests {
             .map_err(|(e, _)| e.into())
             .and_then(|(c, _)| {
                 Ping.upgrade(
-                    c.unwrap().0,
+                    c.unwrap(),
                     (),
                     Endpoint::Listener,
-                    &"/ip4/127.0.0.1/tcp/10000".parse().unwrap(),
+                    future::ok::<Multiaddr, IoError>("/ip4/127.0.0.1/tcp/10000".parse().unwrap()),
                 )
             })
-            .and_then(|(mut pinger, service)| {
+            .and_then(|((mut pinger, service), _)| {
                 pinger
                     .ping()
                     .map_err(|_| panic!())
@@ -335,17 +323,17 @@ mod tests {
                     .map_err(|_| panic!())
             });
 
-        let client = TcpStream::connect(&listener_addr, &core.handle())
+        let client = TcpStream::connect(&listener_addr)
             .map_err(|e| e.into())
             .and_then(|c| {
                 Ping.upgrade(
                     c,
                     (),
                     Endpoint::Dialer,
-                    &"/ip4/127.0.0.1/tcp/10000".parse().unwrap(),
+                    future::ok::<Multiaddr, IoError>("/ip4/127.0.0.1/tcp/10000".parse().unwrap()),
                 )
             })
-            .and_then(|(mut pinger, service)| {
+            .and_then(|((mut pinger, service), _)| {
                 pinger
                     .ping()
                     .map_err(|_| panic!())
@@ -353,15 +341,13 @@ mod tests {
                     .map_err(|_| panic!())
             });
 
-        core.run(server.join(client)).unwrap();
+        tokio_current_thread::block_on_all(server.join(client)).unwrap();
     }
 
     #[test]
     fn multipings() {
         // Check that we can send multiple pings in a row and it will still work.
-        let mut core = Core::new().unwrap();
-
-        let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap(), &core.handle()).unwrap();
+        let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap();
         let listener_addr = listener.local_addr().unwrap();
 
         let server = listener
@@ -370,25 +356,25 @@ mod tests {
             .map_err(|(e, _)| e.into())
             .and_then(|(c, _)| {
                 Ping.upgrade(
-                    c.unwrap().0,
+                    c.unwrap(),
                     (),
                     Endpoint::Listener,
-                    &"/ip4/127.0.0.1/tcp/10000".parse().unwrap(),
+                    future::ok::<Multiaddr, IoError>("/ip4/127.0.0.1/tcp/10000".parse().unwrap()),
                 )
             })
-            .and_then(|(_, service)| service.map_err(|_| panic!()));
+            .and_then(|((_, service), _)| service.map_err(|_| panic!()));
 
-        let client = TcpStream::connect(&listener_addr, &core.handle())
+        let client = TcpStream::connect(&listener_addr)
             .map_err(|e| e.into())
             .and_then(|c| {
                 Ping.upgrade(
                     c,
                     (),
                     Endpoint::Dialer,
-                    &"/ip4/127.0.0.1/tcp/1000".parse().unwrap(),
+                    future::ok::<Multiaddr, IoError>("/ip4/127.0.0.1/tcp/10000".parse().unwrap()),
                 )
             })
-            .and_then(|(mut pinger, service)| {
+            .and_then(|((mut pinger, service), _)| {
                 let pings = (0..20).map(move |_| pinger.ping().map_err(|_| ()));
 
                 join_all(pings)
@@ -399,6 +385,6 @@ mod tests {
                     .map_err(|_| panic!())
             });
 
-        core.run(server.select(client)).unwrap_or_else(|_| panic!());
+        tokio_current_thread::block_on_all(server.select(client)).unwrap_or_else(|_| panic!());
     }
 }

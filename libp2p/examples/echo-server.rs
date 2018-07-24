@@ -22,8 +22,8 @@ extern crate bytes;
 extern crate env_logger;
 extern crate futures;
 extern crate libp2p;
-extern crate tokio_core;
-extern crate tokio_io;
+extern crate tokio_codec;
+extern crate tokio_current_thread;
 
 use futures::future::{loop_fn, Future, IntoFuture, Loop};
 use futures::{Sink, Stream};
@@ -32,9 +32,7 @@ use libp2p::SimpleProtocol;
 use libp2p::core::Transport;
 use libp2p::core::{upgrade, either::EitherOutput};
 use libp2p::tcp::TcpConfig;
-use tokio_core::reactor::Core;
-use tokio_io::AsyncRead;
-use tokio_io::codec::BytesCodec;
+use tokio_codec::{BytesCodec, Framed};
 use libp2p::websocket::WsConfig;
 
 fn main() {
@@ -45,16 +43,12 @@ fn main() {
         .nth(1)
         .unwrap_or("/ip4/0.0.0.0/tcp/10333".to_owned());
 
-    // We start by building the tokio engine that will run all the sockets.
-    let mut core = Core::new().unwrap();
-
-    // Now let's build the transport stack.
     // We start by creating a `TcpConfig` that indicates that we want TCP/IP.
-    let transport = TcpConfig::new(core.handle())
+    let transport = TcpConfig::new()
         // In addition to TCP/IP, we also want to support the Websockets protocol on top of TCP/IP.
         // The parameter passed to `WsConfig::new()` must be an implementation of `Transport` to be
         // used for the underlying multiaddress.
-        .or_transport(WsConfig::new(TcpConfig::new(core.handle())))
+        .or_transport(WsConfig::new(TcpConfig::new()))
 
         // On top of TCP/IP, we will use either the plaintext protocol or the secio protocol,
         // depending on which one the remote supports.
@@ -71,13 +65,13 @@ fn main() {
 
             upgrade::or(
                 upgrade::map(plain_text, |pt| EitherOutput::First(pt)),
-                upgrade::map(secio, |(socket, _)| EitherOutput::Second(socket))
+                upgrade::map(secio, |out: libp2p::secio::SecioOutput<_>| EitherOutput::Second(out.stream))
             )
         })
 
         // On top of plaintext or secio, we will use the multiplex protocol.
-        .with_upgrade(libp2p::mplex::MultiplexConfig::new())
-        // The object returned by the call to `with_upgrade(MultiplexConfig::new())` can't be used as a
+        .with_upgrade(libp2p::mplex::MplexConfig::new())
+        // The object returned by the call to `with_upgrade(MplexConfig::new())` can't be used as a
         // `Transport` because the output of the upgrade is not a stream but a controller for
         // muxing. We have to explicitly call `into_connection_reuse()` in order to turn this into
         // a `Transport`.
@@ -94,21 +88,20 @@ fn main() {
         // successfully negotiated. The parameter is the raw socket (implements the AsyncRead
         // and AsyncWrite traits), and the closure must return an implementation of
         // `IntoFuture` that can yield any type of object.
-        Ok(AsyncRead::framed(socket, BytesCodec::new()))
+        Ok(Framed::new(socket, BytesCodec::new()))
     });
 
     // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming and
     // outgoing connections for us.
     let (swarm_controller, swarm_future) = libp2p::core::swarm(
         transport.clone().with_upgrade(proto),
-        |socket, client_addr| {
-            println!("Successfully negotiated protocol with {}", client_addr);
+        |socket, _client_addr| {
+            println!("Successfully negotiated protocol");
 
             // The type of `socket` is exactly what the closure of `SimpleProtocol` returns.
 
             // We loop forever in order to handle all the messages sent by the client.
             loop_fn(socket, move |socket| {
-                let client_addr = client_addr.clone();
                 socket
                     .into_future()
                     .map_err(|(e, _)| e)
@@ -116,15 +109,14 @@ fn main() {
                         if let Some(msg) = msg {
                             // One message has been received. We send it back to the client.
                             println!(
-                                "Received a message from {}: {:?}\n => Sending back \
-                                 identical message to remote",
-                                client_addr, msg
+                                "Received a message: {:?}\n => Sending back \
+                                 identical message to remote", msg
                             );
                             Box::new(rest.send(msg.freeze()).map(|m| Loop::Continue(m)))
                                 as Box<Future<Item = _, Error = _>>
                         } else {
                             // End of stream. Connection closed. Breaking the loop.
-                            println!("Received EOF from {}\n => Dropping connection", client_addr);
+                            println!("Received EOF\n => Dropping connection");
                             Box::new(Ok(Loop::Break(())).into_future())
                                 as Box<Future<Item = _, Error = _>>
                         }
@@ -147,5 +139,5 @@ fn main() {
     // `swarm_future` is a future that contains all the behaviour that we want, but nothing has
     // actually started yet. Because we created the `TcpConfig` with tokio, we need to run the
     // future through the tokio core.
-    core.run(swarm_future).unwrap();
+    tokio_current_thread::block_on_all(swarm_future).unwrap();
 }
