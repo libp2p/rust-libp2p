@@ -114,12 +114,7 @@ impl<T> UniqueConnec<T> {
         self.dial_inner(swarm, multiaddr, transport, false)
     }
 
-    /// Loads the value from the object.
-    ///
-    /// If the object is empty, dials the given multiaddress with the given transport.
-    ///
-    /// The closure of the `swarm` is expected to call `tie_*()` on the `UniqueConnec`. Failure
-    /// to do so will make the `UniqueConnecFuture` produce an error.
+    /// Inner implementation of `dial_*`.
     fn dial_inner<S, Du>(&self, swarm: &SwarmController<S>, multiaddr: &Multiaddr,
                          transport: Du, dial_if_err: bool) -> UniqueConnecFuture<T>
         where T: Clone + 'static,       // TODO: 'static :-/
@@ -191,6 +186,7 @@ impl<T> UniqueConnec<T> {
         self.tie_inner(value, until, true)
     }
 
+    /// Inner implementation of `tie_*`.
     fn tie_inner<F>(&self, value: T, until: F, pass_through: bool) -> impl Future<Item = (), Error = F::Error>
         where F: Future<Item = ()>
     {
