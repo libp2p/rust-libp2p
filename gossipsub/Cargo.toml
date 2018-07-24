@@ -1,20 +1,10 @@
 [package]
-name = "libp2p-floodsub"
+name = "libp2p-gossipsub"
 version = "0.1.0"
-authors = ["pierre <pierre.krieger1708@gmail.com>"]
+authors = ["James Ray (@jamesray1)"]
 
 [dependencies]
-bs58 = "0.2.0"
-byteorder = "1.2.1"
-bytes = "0.4"
-fnv = "1.0"
-futures = "0.1"
-libp2p-core = { path = "../core" }
-log = "0.4.1"
-multiaddr = { path = "../multiaddr" }
-parking_lot = "0.5.3"
-protobuf = "2.0.2"
-smallvec = "0.6.0"
-tokio-codec = "0.1"
-tokio-io = "0.1"
-varint = { path = "../varint-rs" }
+libp2p_floodsub = { path = "../floodsub"}
+libp2p_kad = { path = "../kad"}
+libp2p_core = { path = "../core"}
+time = "0.1"
