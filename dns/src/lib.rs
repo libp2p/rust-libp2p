@@ -100,9 +100,10 @@ where
     T: Transport + 'static, // TODO: 'static :-/
 {
     type Output = T::Output;
+    type MultiaddrFuture = T::MultiaddrFuture;
     type Listener = T::Listener;
     type ListenerUpgrade = T::ListenerUpgrade;
-    type Dial = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>;
+    type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
     #[inline]
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -145,10 +146,10 @@ where
         let resolve_iters = addr.iter()
             .map(move |cmp| match cmp {
                 AddrComponent::DNS4(ref name) => {
-                    future::Either::A(resolve_dns(name, resolver.clone(), ResolveTy::Dns4))
+                    future::Either::A(resolve_dns(name, &resolver, ResolveTy::Dns4))
                 }
                 AddrComponent::DNS6(ref name) => {
-                    future::Either::A(resolve_dns(name, resolver.clone(), ResolveTy::Dns6))
+                    future::Either::A(resolve_dns(name, &resolver, ResolveTy::Dns6))
                 }
                 cmp => future::Either::B(future::ok(cmp)),
             })
@@ -191,19 +192,22 @@ enum ResolveTy {
 // Resolve a DNS name and returns a future with the result.
 fn resolve_dns(
     name: &str,
-    resolver: CpuPoolResolver,
+    resolver: &CpuPoolResolver,
     ty: ResolveTy,
-) -> Box<Future<Item = AddrComponent, Error = IoError>> {
+) -> impl Future<Item = AddrComponent, Error = IoError> {
     let debug_name = if log_enabled!(Level::Trace) {
         Some(name.to_owned())
     } else {
         None
     };
 
-    let future = resolver.resolve(name).and_then(move |addrs| {
+    resolver.resolve(name).and_then(move |addrs| {
         if log_enabled!(Level::Trace) {
-            trace!("DNS component resolution: {} => {:?}",
-                    debug_name.expect("trace log level was enabled"), addrs);
+            trace!(
+                "DNS component resolution: {} => {:?}",
+                debug_name.expect("trace log level was enabled"),
+                addrs
+            );
         }
 
         addrs
@@ -214,24 +218,21 @@ fn resolve_dns(
                 _ => None,
             })
             .next()
-            .ok_or(IoError::new(
-                IoErrorKind::Other,
-                "couldn't find any relevant IP address",
-            ))
-    });
-
-    Box::new(future)
+            .ok_or_else(|| {
+                IoError::new(IoErrorKind::Other, "couldn't find any relevant IP address")
+            })
+    })
 }
 
 #[cfg(test)]
 mod tests {
     extern crate libp2p_tcp_transport;
     use self::libp2p_tcp_transport::TcpConfig;
-    use DnsConfig;
-    use futures::{future, Future};
+    use futures::future;
     use multiaddr::{AddrComponent, Multiaddr};
     use std::io::Error as IoError;
     use swarm::Transport;
+    use DnsConfig;
 
     #[test]
     fn basic_resolve() {
@@ -239,9 +240,10 @@ mod tests {
         struct CustomTransport;
         impl Transport for CustomTransport {
             type Output = <TcpConfig as Transport>::Output;
+            type MultiaddrFuture = <TcpConfig as Transport>::MultiaddrFuture;
             type Listener = <TcpConfig as Transport>::Listener;
             type ListenerUpgrade = <TcpConfig as Transport>::ListenerUpgrade;
-            type Dial = Box<Future<Item = (Self::Output, Multiaddr), Error = IoError>>;
+            type Dial = future::Empty<(Self::Output, Self::MultiaddrFuture), IoError>;
 
             #[inline]
             fn listen_on(
@@ -263,7 +265,7 @@ mod tests {
                     AddrComponent::DNS6(_) => (),
                     _ => panic!(),
                 };
-                Ok(Box::new(future::empty()) as Box<_>)
+                Ok(future::empty())
             }
 
             #[inline]

@@ -10,7 +10,7 @@ through it.
 
 ```rust
 extern crate futures;
-extern crate tokio_core;
+extern crate tokio_current_thread;
 extern crate tokio_io;
 extern crate libp2p_core;
 extern crate libp2p_secio;
@@ -25,7 +25,7 @@ use tokio_io::io::write_all;
 
 let mut core = Core::new().unwrap();
 
-let transport = TcpConfig::new(core.handle())
+let transport = TcpConfig::new()
     .with_upgrade({
         # let private_key = b"";
         //let private_key = include_bytes!("test-rsa-private-key.pk8");
@@ -44,7 +44,7 @@ let future = transport.dial("/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwr
         write_all(connection, "hello world")
     });
 
-core.run(future).unwrap();
+tokio_current_thread::block_on_all(future).unwrap();
 ```
 
 # Manual usage

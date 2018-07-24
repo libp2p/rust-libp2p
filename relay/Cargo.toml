@@ -2,6 +2,7 @@
 name = "libp2p-relay"
 version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
 
 [dependencies]
 bytes = "0.4"
@@ -10,7 +11,8 @@ libp2p-peerstore = { path = "../peerstore" }
 libp2p-core = { path = "../core" }
 log = "0.4"
 multiaddr = { path = "../multiaddr" }
-protobuf = "2"
+protobuf = "2.0.2"
 rand = "0.4"
+tokio-codec = "0.1"
 tokio-io = "0.1"
 varint = { path = "../varint-rs" }

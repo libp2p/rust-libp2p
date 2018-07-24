@@ -18,8 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::prelude::*;
-use multiaddr::Multiaddr;
+use futures::{prelude::*, future};
 use muxing::StreamMuxer;
 use std::io::{Error as IoError, Read, Write};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -215,12 +214,12 @@ pub enum EitherListenUpgrade<A, B> {
     Second(B),
 }
 
-impl<A, B, Ao, Bo> Future for EitherListenUpgrade<A, B>
+impl<A, B, Ao, Bo, Af, Bf> Future for EitherListenUpgrade<A, B>
 where
-    A: Future<Item = (Ao, Multiaddr), Error = IoError>,
-    B: Future<Item = (Bo, Multiaddr), Error = IoError>,
+    A: Future<Item = (Ao, Af), Error = IoError>,
+    B: Future<Item = (Bo, Bf), Error = IoError>,
 {
-    type Item = (EitherOutput<Ao, Bo>, Multiaddr);
+    type Item = (EitherOutput<Ao, Bo>, future::Either<Af, Bf>);
     type Error = IoError;
 
     #[inline]
@@ -228,11 +227,11 @@ where
         match self {
             &mut EitherListenUpgrade::First(ref mut a) => {
                 let (item, addr) = try_ready!(a.poll());
-                Ok(Async::Ready((EitherOutput::First(item), addr)))
+                Ok(Async::Ready((EitherOutput::First(item), future::Either::A(addr))))
             }
             &mut EitherListenUpgrade::Second(ref mut b) => {
                 let (item, addr) = try_ready!(b.poll());
-                Ok(Async::Ready((EitherOutput::Second(item), addr)))
+                Ok(Async::Ready((EitherOutput::Second(item), future::Either::B(addr))))
             }
         }
     }

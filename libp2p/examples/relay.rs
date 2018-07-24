@@ -50,11 +50,12 @@ extern crate bytes;
 extern crate env_logger;
 extern crate futures;
 extern crate libp2p;
+extern crate libp2p_yamux;
 extern crate rand;
 #[macro_use]
 extern crate structopt;
-extern crate tokio_core;
-extern crate tokio_io;
+extern crate tokio_codec;
+extern crate tokio_current_thread;
 
 use libp2p::SimpleProtocol;
 use libp2p::core::Multiaddr;
@@ -66,8 +67,7 @@ use libp2p::relay::{RelayConfig, RelayTransport};
 use std::{error::Error, iter, str::FromStr, sync::Arc, time::Duration};
 use structopt::StructOpt;
 use libp2p::tcp::TcpConfig;
-use tokio_core::reactor::Core;
-use tokio_io::{AsyncRead, codec::BytesCodec};
+use tokio_codec::{BytesCodec, Framed};
 
 fn main() -> Result<(), Box<Error>> {
     env_logger::init();
@@ -120,20 +120,20 @@ struct ListenerOpts {
 }
 
 fn run_dialer(opts: DialerOpts) -> Result<(), Box<Error>> {
-    let mut core = Core::new()?;
-
     let store = Arc::new(MemoryPeerstore::empty());
     for (p, a) in opts.peers {
         store.peer_or_create(&p).add_addr(a, Duration::from_secs(600))
     }
 
     let transport = {
-        let tcp = TcpConfig::new(core.handle());
+        let tcp = TcpConfig::new()
+            .with_upgrade(libp2p_yamux::Config::default())
+            .into_connection_reuse();
         RelayTransport::new(opts.me, tcp, store, iter::once(opts.relay)).with_dummy_muxing()
     };
 
     let echo = SimpleProtocol::new("/echo/1.0.0", |socket| {
-        Ok(AsyncRead::framed(socket, BytesCodec::new()))
+        Ok(Framed::new(socket, BytesCodec::new()))
     });
 
     let (control, future) = libp2p::core::swarm(transport.clone().with_upgrade(echo.clone()), |socket, _| {
@@ -150,32 +150,34 @@ fn run_dialer(opts: DialerOpts) -> Result<(), Box<Error>> {
 
     control.dial(address, transport.with_upgrade(echo)).map_err(|_| "failed to dial")?;
 
-    core.run(future).map_err(From::from)
+    tokio_current_thread::block_on_all(future).map_err(From::from)
 }
 
 fn run_listener(opts: ListenerOpts) -> Result<(), Box<Error>> {
-    let mut core = Core::new()?;
-
     let store = Arc::new(MemoryPeerstore::empty());
     for (p, a) in opts.peers {
         store.peer_or_create(&p).add_addr(a, Duration::from_secs(600))
     }
 
-    let transport = TcpConfig::new(core.handle()).with_dummy_muxing();
+    let transport = TcpConfig::new()
+        .with_upgrade(libp2p_yamux::Config::default())
+        .into_connection_reuse();
+
     let relay = RelayConfig::new(opts.me, transport.clone(), store);
 
     let echo = SimpleProtocol::new("/echo/1.0.0", |socket| {
-        Ok(AsyncRead::framed(socket, BytesCodec::new()))
+        Ok(Framed::new(socket, BytesCodec::new()))
     });
 
     let upgraded = transport.with_upgrade(relay)
         .and_then(|out, endpoint, addr| {
             match out {
                 libp2p::relay::Output::Sealed(future) => {
-                    Either::A(future.map(Either::A))
+                    Either::A(future.map(|out| (Either::A(out), Either::A(addr))))
                 }
                 libp2p::relay::Output::Stream(socket) => {
-                    Either::B(upgrade::apply(socket, echo, endpoint, addr).map(Either::B))
+                    Either::B(upgrade::apply(socket, echo, endpoint, addr)
+                        .map(|(out, addr)| (Either::B(out), Either::B(addr))))
                 }
             }
         });
@@ -183,7 +185,7 @@ fn run_listener(opts: ListenerOpts) -> Result<(), Box<Error>> {
     let (control, future) = libp2p::core::swarm(upgraded, |out, _| {
         match out {
             Either::A(()) => Either::A(future::ok(())),
-            Either::B((socket, _)) => Either::B(loop_fn(socket, move |socket| {
+            Either::B(socket) => Either::B(loop_fn(socket, move |socket| {
                 socket.into_future()
                     .map_err(|(e, _)| e)
                     .and_then(move |(msg, socket)| {
@@ -200,7 +202,7 @@ fn run_listener(opts: ListenerOpts) -> Result<(), Box<Error>> {
     });
 
     control.listen_on(opts.listen).map_err(|_| "failed to listen")?;
-    core.run(future).map_err(From::from)
+    tokio_current_thread::block_on_all(future).map_err(From::from)
 }
 
 // Custom parsers ///////////////////////////////////////////////////////////

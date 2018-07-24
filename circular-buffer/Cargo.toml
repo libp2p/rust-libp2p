@@ -2,6 +2,7 @@
 name = "circular-buffer"
 version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
 
 [dependencies]
 smallvec = { git = "https://github.com/Vurich/rust-smallvec.git", branch = "array-zero" }

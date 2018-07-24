@@ -33,15 +33,13 @@ extern crate futures;
 extern crate libp2p_ping;
 extern crate libp2p_core;
 extern crate libp2p_tcp_transport;
-extern crate tokio_core;
+extern crate tokio_current_thread;
 
 use futures::Future;
 use libp2p_ping::Ping;
 use libp2p_core::Transport;
 
-let mut core = tokio_core::reactor::Core::new().unwrap();
-
-let ping_finished_future = libp2p_tcp_transport::TcpConfig::new(core.handle())
+let ping_finished_future = libp2p_tcp_transport::TcpConfig::new()
     .with_upgrade(Ping)
     .dial("127.0.0.1:12345".parse::<libp2p_core::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())
     .and_then(|((mut pinger, service), _)| {
@@ -49,6 +47,6 @@ let ping_finished_future = libp2p_tcp_transport::TcpConfig::new(core.handle())
     });
 
 // Runs until the ping arrives.
-core.run(ping_finished_future).unwrap();
+tokio_current_thread::block_on_all(ping_finished_future).unwrap();
 ```
 

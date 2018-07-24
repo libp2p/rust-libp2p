@@ -23,19 +23,21 @@ use bytes::BytesMut;
 use codec::{full_codec, FullCodec};
 use crypto::aes::{ctr, KeySize};
 use error::SecioError;
-use futures::Future;
 use futures::future;
 use futures::sink::Sink;
 use futures::stream::Stream;
-use keys_proto::{KeyType as KeyTypeProtobuf, PublicKey as PublicKeyProtobuf};
-use protobuf::Message as ProtobufMessage;
+use futures::Future;
+use libp2p_core::PublicKey;
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
+use protobuf::Message as ProtobufMessage;
 use ring::agreement::EphemeralPrivateKey;
 use ring::hmac::{SigningContext, SigningKey, VerificationKey};
 use ring::rand::SecureRandom;
 use ring::signature::verify as signature_verify;
-use ring::signature::{RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256, ED25519};
+use ring::signature::{ED25519, RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256};
 use ring::{agreement, digest, rand};
+#[cfg(feature = "secp256k1")]
+use secp256k1;
 use std::cmp::{self, Ordering};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::mem;
@@ -43,7 +45,7 @@ use structs_proto::{Exchange, Propose};
 use tokio_io::codec::length_delimited;
 use tokio_io::{AsyncRead, AsyncWrite};
 use untrusted::Input as UntrustedInput;
-use {SecioKeyPair, SecioKeyPairInner, SecioPublicKey};
+use {SecioKeyPair, SecioKeyPairInner};
 
 /// Performs a handshake on the given socket.
 ///
@@ -52,11 +54,12 @@ use {SecioKeyPair, SecioKeyPairInner, SecioPublicKey};
 /// `SecioError`.
 ///
 /// On success, returns an object that implements the `Sink` and `Stream` trait whose items are
-/// buffers of data, plus the public key of the remote.
+/// buffers of data, plus the public key of the remote, plus the ephemeral public key used during
+/// negotiation.
 pub fn handshake<'a, S: 'a>(
     socket: S,
     local_key: SecioKeyPair,
-) -> Box<Future<Item = (FullCodec<S>, SecioPublicKey), Error = SecioError> + 'a>
+) -> Box<Future<Item = (FullCodec<S>, PublicKey, Vec<u8>), Error = SecioError> + 'a>
 where
     S: AsyncRead + AsyncWrite,
 {
@@ -66,7 +69,7 @@ where
     // throughout the various parts of the handshake.
     struct HandshakeContext {
         // Filled with this function's parameters.
-        local_key: SecioKeyPairInner,
+        local_key: SecioKeyPair,
 
         rng: rand::SystemRandom,
         // Locally-generated random number. The array size can be changed without any repercussion.
@@ -79,7 +82,7 @@ where
         // The remote proposition's raw bytes.
         remote_proposition_bytes: BytesMut,
         remote_public_key_in_protobuf_bytes: Vec<u8>,
-        remote_public_key: Option<SecioPublicKey>,
+        remote_public_key: Option<PublicKey>,
 
         // The remote peer's version of `local_nonce`.
         // If the NONCE size is actually part of the protocol, we can change this to a fixed-size
@@ -104,11 +107,11 @@ where
 
         // Ephemeral key generated for the handshake and then thrown away.
         local_tmp_priv_key: Option<EphemeralPrivateKey>,
-        local_tmp_pub_key: [u8; agreement::PUBLIC_KEY_MAX_LEN],
+        local_tmp_pub_key: Vec<u8>,
     }
 
     let context = HandshakeContext {
-        local_key: local_key.inner,
+        local_key,
         rng: rand::SystemRandom::new(),
         local_nonce: Default::default(),
         local_public_key_in_protobuf_bytes: Vec::new(),
@@ -122,7 +125,7 @@ where
         chosen_cipher: None,
         chosen_hash: None,
         local_tmp_priv_key: None,
-        local_tmp_pub_key: [0; agreement::PUBLIC_KEY_MAX_LEN],
+        local_tmp_pub_key: Vec::new(),
     };
 
     // The handshake messages all start with a 4-bytes message length prefix.
@@ -142,21 +145,10 @@ where
 
         // Send our proposition with our nonce, public key and supported protocols.
         .and_then(|mut context| {
-            let mut public_key = PublicKeyProtobuf::new();
-            match context.local_key {
-                SecioKeyPairInner::Rsa { ref public, .. } => {
-                    public_key.set_Type(KeyTypeProtobuf::RSA);
-                    public_key.set_Data(public.clone());
-                },
-                SecioKeyPairInner::Ed25519 { ref key_pair } => {
-                    public_key.set_Type(KeyTypeProtobuf::Ed25519);
-                    public_key.set_Data(key_pair.public_key_bytes().to_owned());
-                },
-            }
-            context.local_public_key_in_protobuf_bytes = public_key.write_to_bytes().unwrap();
+            context.local_public_key_in_protobuf_bytes = context.local_key.to_public_key().into_protobuf_encoding();
 
             let mut proposition = Propose::new();
-            proposition.set_rand(context.local_nonce.clone().to_vec());
+            proposition.set_rand(context.local_nonce.to_vec());
             proposition.set_pubkey(context.local_public_key_in_protobuf_bytes.clone());
             proposition.set_exchanges(algo_support::exchanges::PROPOSITION_STRING.into());
             proposition.set_ciphers(algo_support::ciphers::PROPOSITION_STRING.into());
@@ -195,32 +187,16 @@ where
                         }
                     };
                     context.remote_public_key_in_protobuf_bytes = prop.take_pubkey();
-                    let mut pubkey = {
-                        let bytes = &context.remote_public_key_in_protobuf_bytes;
-                        match protobuf_parse_from_bytes::<PublicKeyProtobuf>(bytes) {
-                            Ok(p) => p,
-                            Err(_) => {
-                                debug!("failed to parse remote's proposition's pubkey protobuf");
-                                return Err(SecioError::HandshakeParsingFailure);
-                            },
-                        }
+                    let pubkey = match PublicKey::from_protobuf_encoding(&context.remote_public_key_in_protobuf_bytes) {
+                        Ok(p) => p,
+                        Err(_) => {
+                            debug!("failed to parse remote's proposition's pubkey protobuf");
+                            return Err(SecioError::HandshakeParsingFailure);
+                        },
                     };
 
                     context.remote_nonce = prop.take_rand();
-                    context.remote_public_key = Some(match pubkey.get_Type() {
-                        KeyTypeProtobuf::RSA => {
-                            SecioPublicKey::Rsa(pubkey.take_Data())
-                        },
-                        KeyTypeProtobuf::Ed25519 => {
-                            SecioPublicKey::Ed25519(pubkey.take_Data())
-                        },
-                        format => {
-                            // TODO: support secp255k1
-                            let err = IoError::new(IoErrorKind::Other, "unsupported protocol");
-                            debug!("unsupported remote pubkey format {:?}", format);
-                            return Err(err.into());
-                        },
-                    });
+                    context.remote_public_key = Some(pubkey);
                     trace!("received proposition from remote ; pubkey = {:?} ; nonce = {:?}",
                            context.remote_public_key, context.remote_nonce);
                     Ok((prop, socket, context))
@@ -285,7 +261,7 @@ where
 
         // Generate an ephemeral key for the negotiation.
         .and_then(|(socket, context)| {
-            match EphemeralPrivateKey::generate(&agreement::ECDH_P256, &context.rng) {
+            match EphemeralPrivateKey::generate(context.chosen_exchange.as_ref().unwrap(), &context.rng) {
                 Ok(tmp_priv_key) => Ok((socket, context, tmp_priv_key)),
                 Err(_) => {
                     debug!("failed to generate ECDH key");
@@ -298,18 +274,18 @@ where
         // contains a signature of the two propositions encoded with our static public key.
         .and_then(|(socket, mut context, tmp_priv)| {
             let exchange = {
-                let local_tmp_pub_key = &mut context.local_tmp_pub_key[..tmp_priv.public_key_len()];
-                tmp_priv.compute_public_key(local_tmp_pub_key).unwrap();
+                let mut local_tmp_pub_key: Vec<u8> = (0 .. tmp_priv.public_key_len()).map(|_| 0).collect();
+                tmp_priv.compute_public_key(&mut local_tmp_pub_key).unwrap();
                 context.local_tmp_priv_key = Some(tmp_priv);
 
                 let mut data_to_sign = context.local_proposition_bytes.clone();
                 data_to_sign.extend_from_slice(&context.remote_proposition_bytes);
-                data_to_sign.extend_from_slice(local_tmp_pub_key);
+                data_to_sign.extend_from_slice(&local_tmp_pub_key);
 
                 let mut exchange = Exchange::new();
-                exchange.set_epubkey(local_tmp_pub_key.to_vec());
+                exchange.set_epubkey(local_tmp_pub_key.clone());
                 exchange.set_signature({
-                    match context.local_key {
+                    match context.local_key.inner {
                         SecioKeyPairInner::Rsa { ref private, .. } => {
                             let mut state = match RSASigningState::new(private.clone()) {
                                 Ok(s) => s,
@@ -334,6 +310,17 @@ where
                         SecioKeyPairInner::Ed25519 { ref key_pair } => {
                             let signature = key_pair.sign(&data_to_sign);
                             signature.as_ref().to_owned()
+                        },
+                        #[cfg(feature = "secp256k1")]
+                        SecioKeyPairInner::Secp256k1 { ref private } => {
+                            let data_to_sign = digest::digest(&digest::SHA256, &data_to_sign);
+                            let message = secp256k1::Message::from_slice(data_to_sign.as_ref())
+                                .expect("digest output length doesn't match secp256k1 input length");
+                            let secp256k1 = secp256k1::Secp256k1::with_caps(secp256k1::ContextFlag::SignOnly);
+                            secp256k1
+                                .sign(&message, private)
+                                .expect("failed to sign message")
+                                .serialize_der(&secp256k1)
                         },
                     }
                 });
@@ -390,7 +377,7 @@ where
             data_to_verify.extend_from_slice(remote_exch.get_epubkey());
 
             match context.remote_public_key {
-                Some(SecioPublicKey::Rsa(ref remote_public_key)) => {
+                Some(PublicKey::Rsa(ref remote_public_key)) => {
                     // TODO: The ring library doesn't like some stuff in our DER public key,
                     //       therefore we scrap the first 24 bytes of the key. A proper fix would
                     //       be to write a DER parser, but that's not trivial.
@@ -406,7 +393,7 @@ where
                         },
                     }
                 },
-                Some(SecioPublicKey::Ed25519(ref remote_public_key)) => {
+                Some(PublicKey::Ed25519(ref remote_public_key)) => {
                     match signature_verify(&ED25519,
                                            UntrustedInput::from(remote_public_key),
                                            UntrustedInput::from(&data_to_verify),
@@ -418,6 +405,32 @@ where
                             return Err(SecioError::SignatureVerificationFailed)
                         },
                     }
+                },
+                #[cfg(feature = "secp256k1")]
+                Some(PublicKey::Secp256k1(ref remote_public_key)) => {
+                    let data_to_verify = digest::digest(&digest::SHA256, &data_to_verify);
+                    let message = secp256k1::Message::from_slice(data_to_verify.as_ref())
+                        .expect("digest output length doesn't match secp256k1 input length");
+                    let secp256k1 = secp256k1::Secp256k1::with_caps(secp256k1::ContextFlag::VerifyOnly);
+                    let signature = secp256k1::Signature::from_der(&secp256k1, remote_exch.get_signature());
+                    let remote_public_key = secp256k1::key::PublicKey::from_slice(&secp256k1, remote_public_key);
+                    if let (Ok(signature), Ok(remote_public_key)) = (signature, remote_public_key) {
+                        match secp256k1.verify(&message, &signature, &remote_public_key) {
+                            Ok(()) => (),
+                            Err(_) => {
+                                debug!("failed to verify the remote's signature");
+                                return Err(SecioError::SignatureVerificationFailed)
+                            },
+                        }
+                    } else {
+                        debug!("remote's secp256k1 signature has wrong format");
+                        return Err(SecioError::SignatureVerificationFailed)
+                    }
+                },
+                #[cfg(not(feature = "secp256k1"))]
+                Some(PublicKey::Secp256k1(_)) => {
+                    debug!("support for secp256k1 was disabled at compile-time");
+                    return Err(SecioError::SignatureVerificationFailed);
                 },
                 None => unreachable!("we store a Some in the remote public key before reaching \
                                       this point")
@@ -433,7 +446,7 @@ where
             let local_priv_key = context.local_tmp_priv_key.take()
                 .expect("we filled this Option earlier, and extract it now");
             let codec = agreement::agree_ephemeral(local_priv_key,
-                                                   &context.chosen_exchange.clone().unwrap(),
+                                                   &context.chosen_exchange.unwrap(),
                                                    UntrustedInput::from(remote_exch.get_epubkey()),
                                                    SecioError::SecretGenerationFailed,
                                                    |key_material| {
@@ -461,7 +474,7 @@ where
                 let (encoding_cipher, encoding_hmac) = {
                     let (iv, rest) = local_infos.split_at(iv_size);
                     let (cipher_key, mac_key) = rest.split_at(cipher_key_size);
-                    let hmac = SigningKey::new(&context.chosen_hash.clone().unwrap(), mac_key);
+                    let hmac = SigningKey::new(&context.chosen_hash.unwrap(), mac_key);
                     let cipher = ctr(chosen_cipher, cipher_key, iv);
                     (cipher, hmac)
                 };
@@ -469,7 +482,7 @@ where
                 let (decoding_cipher, decoding_hmac) = {
                     let (iv, rest) = remote_infos.split_at(iv_size);
                     let (cipher_key, mac_key) = rest.split_at(cipher_key_size);
-                    let hmac = VerificationKey::new(&context.chosen_hash.clone().unwrap(), mac_key);
+                    let hmac = VerificationKey::new(&context.chosen_hash.unwrap(), mac_key);
                     let cipher = ctr(chosen_cipher, cipher_key, iv);
                     (cipher, hmac)
                 };
@@ -482,7 +495,7 @@ where
                 Ok(c) => Ok((c, context)),
                 Err(err) => {
                     debug!("failed to generate shared secret with remote");
-                    return Err(err);
+                    Err(err)
                 },
             }
         })
@@ -504,7 +517,7 @@ where
                     match nonce {
                         Some(ref n) if n == &context.local_nonce => {
                             trace!("secio handshake success");
-                            Ok((rest, context.remote_public_key.expect("we stored a Some earlier")))
+                            Ok((rest, context.remote_public_key.expect("we stored a Some earlier"), context.local_tmp_pub_key))
                         },
                         None => {
                             debug!("unexpected eof during nonce check");
@@ -524,7 +537,7 @@ where
 // Custom algorithm translated from reference implementations. Needs to be the same algorithm
 // amongst all implementations.
 fn stretch_key(key: &SigningKey, result: &mut [u8]) {
-    const SEED: &'static [u8] = b"key expansion";
+    const SEED: &[u8] = b"key expansion";
 
     let mut init_ctxt = SigningContext::with_key(key);
     init_ctxt.update(SEED);
@@ -551,10 +564,10 @@ fn stretch_key(key: &SigningKey, result: &mut [u8]) {
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio_core;
-    use self::tokio_core::net::TcpListener;
-    use self::tokio_core::net::TcpStream;
-    use self::tokio_core::reactor::Core;
+    extern crate tokio_current_thread;
+    extern crate tokio_tcp;
+    use self::tokio_tcp::TcpListener;
+    use self::tokio_tcp::TcpStream;
     use super::handshake;
     use super::stretch_key;
     use futures::Future;
@@ -565,8 +578,6 @@ mod tests {
 
     #[test]
     fn handshake_with_self_succeeds_rsa() {
-        let mut core = Core::new().unwrap();
-
         let key1 = {
             let private = include_bytes!("../tests/test-rsa-private-key.pk8");
             let public = include_bytes!("../tests/test-rsa-public-key.der").to_vec();
@@ -579,43 +590,47 @@ mod tests {
             SecioKeyPair::rsa_from_pkcs8(private, public).unwrap()
         };
 
-        let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap(), &core.handle()).unwrap();
-        let listener_addr = listener.local_addr().unwrap();
-
-        let server = listener
-            .incoming()
-            .into_future()
-            .map_err(|(e, _)| e.into())
-            .and_then(move |(connec, _)| handshake(connec.unwrap().0, key1));
-
-        let client = TcpStream::connect(&listener_addr, &core.handle())
-            .map_err(|e| e.into())
-            .and_then(move |stream| handshake(stream, key2));
-
-        core.run(server.join(client)).unwrap();
+        handshake_with_self_succeeds(key1, key2);
     }
 
     #[test]
     fn handshake_with_self_succeeds_ed25519() {
-        let mut core = Core::new().unwrap();
-
         let key1 = SecioKeyPair::ed25519_generated().unwrap();
         let key2 = SecioKeyPair::ed25519_generated().unwrap();
+        handshake_with_self_succeeds(key1, key2);
+    }
 
-        let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap(), &core.handle()).unwrap();
+    #[test]
+    #[cfg(feature = "secp256k1")]
+    fn handshake_with_self_succeeds_secp256k1() {
+        let key1 = {
+            let key = include_bytes!("../tests/test-secp256k1-private-key.der");
+            SecioKeyPair::secp256k1_from_der(&key[..]).unwrap()
+        };
+
+        let key2 = {
+            let key = include_bytes!("../tests/test-secp256k1-private-key-2.der");
+            SecioKeyPair::secp256k1_from_der(&key[..]).unwrap()
+        };
+
+        handshake_with_self_succeeds(key1, key2);
+    }
+
+    fn handshake_with_self_succeeds(key1: SecioKeyPair, key2: SecioKeyPair) {
+        let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap();
         let listener_addr = listener.local_addr().unwrap();
 
         let server = listener
             .incoming()
             .into_future()
             .map_err(|(e, _)| e.into())
-            .and_then(move |(connec, _)| handshake(connec.unwrap().0, key1));
+            .and_then(move |(connec, _)| handshake(connec.unwrap(), key1));
 
-        let client = TcpStream::connect(&listener_addr, &core.handle())
+        let client = TcpStream::connect(&listener_addr)
             .map_err(|e| e.into())
             .and_then(move |stream| handshake(stream, key2));
 
-        core.run(server.join(client)).unwrap();
+        tokio_current_thread::block_on_all(server.join(client)).unwrap();
     }
 
     #[test]

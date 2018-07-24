@@ -40,7 +40,7 @@ where
     T: Transport,
 {
     type Incoming = future::Empty<Self::IncomingUpgrade, IoError>;
-    type IncomingUpgrade = future::Empty<(T::Output, Multiaddr), IoError>;
+    type IncomingUpgrade = future::Empty<(T::Output, Self::MultiaddrFuture), IoError>;
 
     fn next_incoming(self) -> Self::Incoming
     where
@@ -55,6 +55,7 @@ where
     T: Transport,
 {
     type Output = T::Output;
+    type MultiaddrFuture = T::MultiaddrFuture;
     type Listener = T::Listener;
     type ListenerUpgrade = T::ListenerUpgrade;
     type Dial = T::Dial;
