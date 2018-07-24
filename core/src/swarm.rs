@@ -113,26 +113,52 @@ where
     /// Returns a future that is signalled once the closure in the `swarm` has returned its future.
     /// Therefore if the closure in the swarm has some side effect (eg. write something in a
     /// variable), this side effect will be observable when this future succeeds.
+    #[inline]
     pub fn dial<Du>(&self, multiaddr: Multiaddr, transport: Du)
         -> Result<impl Future<Item = (), Error = IoError>, Multiaddr>
     where
         Du: Transport + 'static, // TODO: 'static :-/
         Du::Output: Into<T::Output>,
     {
+        self.dial_then(multiaddr, transport, |v| v)
+    }
+
+    /// Internal version of `dial` that allows adding a closure that is called after either the
+    /// dialing fails or the handler has been called with the resulting future.
+    ///
+    /// The returned future is filled with the output of `then`.
+    pub(crate) fn dial_then<Du, F>(&self, multiaddr: Multiaddr, transport: Du, then: F)
+        -> Result<impl Future<Item = (), Error = IoError>, Multiaddr>
+    where
+        Du: Transport + 'static, // TODO: 'static :-/
+        Du::Output: Into<T::Output>,
+        F: FnOnce(Result<(), IoError>) -> Result<(), IoError> + 'static,
+    {
         trace!("Swarm dialing {}", multiaddr);
 
         match transport.dial(multiaddr.clone()) {
             Ok(dial) => {
                 let (tx, rx) = oneshot::channel();
+                let mut then = Some(move |val| {
+                    let _ = tx.send(then(val));
+                });
+                let mut then = Box::new(move |val: Result<(), IoError>| {
+                    if let Some(then) = then.take() {
+                        then(val)
+                    } else {
+                        panic!()
+                    }
+                }) as Box<FnMut(_)>;
+
                 let dial = dial.then(|result| {
                     match result {
                         Ok((output, client_addr)) => {
                             let client_addr = Box::new(client_addr) as Box<Future<Item = _, Error = _>>;
-                            Ok((output.into(), tx, client_addr))
+                            Ok((output.into(), then, client_addr))
                         }
                         Err(err) => {
                             debug!("Error in dialer upgrade: {:?}", err);
-                            let _ = tx.send(Err(err));
+                            then(Err(err));
                             Err(())
                         }
                     }
@@ -291,12 +317,12 @@ where
         for n in (0 .. shared.dialers.len()).rev() {
             let (client_addr, mut dialer) = shared.dialers.swap_remove(n);
             match dialer.poll() {
-                Ok(Async::Ready((output, notifier, addr))) => {
+                Ok(Async::Ready((output, mut notifier, addr))) => {
                     trace!("Successfully upgraded dialed connection");
                     // TODO: unlock mutex before calling handler, in order to avoid deadlocks if
                     // the user does something stupid
                     shared.to_process.push(Box::new(handler(output, addr).into_future()));
-                    let _  = notifier.send(Ok(()));
+                    notifier(Ok(()));
                 }
                 Err(()) => {},
                 Ok(Async::NotReady) => {
@@ -352,7 +378,7 @@ struct Shared<T> where T: MuxedTransport + 'static {
     /// Futures that dial a remote address.
     ///
     /// Contains the address we dial, so that we can cancel it if necessary.
-    dialers: Vec<(Multiaddr, Box<Future<Item = (T::Output, oneshot::Sender<Result<(), IoError>>, Box<Future<Item = Multiaddr, Error = IoError>>), Error = ()>>)>,
+    dialers: Vec<(Multiaddr, Box<Future<Item = (T::Output, Box<FnMut(Result<(), IoError>)>, Box<Future<Item = Multiaddr, Error = IoError>>), Error = ()>>)>,
 
     /// List of futures produced by the swarm closure. Must be processed to the end.
     to_process: Vec<Box<Future<Item = (), Error = IoError>>>,

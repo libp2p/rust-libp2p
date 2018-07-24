@@ -91,17 +91,59 @@ impl<T> UniqueConnec<T> {
     /// to do so will make the `UniqueConnecFuture` produce an error.
     pub fn get_or_dial<S, Du>(&self, swarm: &SwarmController<S>, multiaddr: &Multiaddr,
                               transport: Du) -> UniqueConnecFuture<T>
-        where T: Clone,
+        where T: Clone + 'static,       // TODO: 'static :-/
               Du: Transport + 'static, // TODO: 'static :-/
               Du::Output: Into<S::Output>,
               S: Clone + MuxedTransport,
     {
-        self.get(|| {
-            swarm.dial(multiaddr.clone(), transport)
-                .map_err(|_| IoError::new(IoErrorKind::Other, "multiaddress not supported"))
-                .into_future()
-                .flatten()
-        })
+        let mut inner = self.inner.lock();
+        match &*inner {
+            UniqueConnecInner::Empty => (),
+            _ => return UniqueConnecFuture { inner: Arc::downgrade(&self.inner) },
+        };
+
+        let handler = {
+            let inner = Arc::downgrade(&self.inner);
+            move |val: Result<(), IoError>| {
+                if let Some(inner) = inner.upgrade() {
+                    let mut inner = inner.lock();
+                    match val {
+                        Ok(()) => {
+                            match *inner {
+                                UniqueConnecInner::Full { .. } => (),
+                                ref mut v => {
+                                    let err = IoError::new(IoErrorKind::ConnectionRefused,
+                                        "dialing has succeeded but set_until hasn't been called");
+                                    *v = UniqueConnecInner::Errored(err);
+                                },
+                            }
+                        }
+                        Err(ref err) => {
+                            match *inner {
+                                UniqueConnecInner::Full { .. } => (),
+                                ref mut v => {
+                                    let err2 = IoError::new(err.kind(), err.to_string());
+                                    *v = UniqueConnecInner::Errored(err2);
+                                },
+                            }
+                        },
+                    }
+                }
+                val
+            }
+        };
+
+        let dial_fut = swarm.dial_then(multiaddr.clone(), transport, handler)
+            .map_err(|_| IoError::new(IoErrorKind::Other, "multiaddress not supported"))
+            .into_future()
+            .flatten();
+
+        *inner = UniqueConnecInner::Pending {
+            tasks_waiting: Vec::new(),
+            dial_fut: Box::new(dial_fut),
+        };
+
+        UniqueConnecFuture { inner: Arc::downgrade(&self.inner) }
     }
 
     /// Loads the value from the object.
@@ -284,7 +326,7 @@ impl<T> Future for UniqueConnecFuture<T>
                         Ok(Async::NotReady)
                     }
                     Err(err) => {
-                        let tr = IoError::new(IoErrorKind::ConnectionAborted, err.to_string());
+                        let tr = IoError::new(err.kind(), err.to_string());
                         *inner = UniqueConnecInner::Errored(err);
                         Err(tr)
                     },
@@ -298,7 +340,7 @@ impl<T> Future for UniqueConnecFuture<T>
                 Ok(Async::Ready(value))
             },
             UniqueConnecInner::Errored(err) => {
-                let tr = IoError::new(IoErrorKind::ConnectionAborted, err.to_string());
+                let tr = IoError::new(err.kind(), err.to_string());
                 *inner = UniqueConnecInner::Errored(err);
                 Err(tr)
             },
