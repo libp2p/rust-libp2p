@@ -169,10 +169,11 @@ impl<T> UniqueConnec<T> {
         UniqueConnecFuture { inner: Arc::downgrade(&self.inner) }
     }
 
-    /// Puts `value` inside the object. The second parameter is a future whose completion will
-    /// clear up the content. Returns an adjusted version of that same future.
-    ///
-    /// If `clear()` is called, the returned future will automatically complete with an error.
+    /// Puts `value` inside the object.
+    /// Additionally, the `UniqueConnec` will be tied to the `until` future. When the future drops
+    /// or finishes, the `UniqueConnec` is automatically cleared. If the `UniqueConnec` is cleared
+    /// by the user, the future automatically stops.
+    /// The returned future is an adjusted version of that same future.
     ///
     /// Has no effect if the object already contains something.
     pub fn set_until<F>(&self, value: T, until: F) -> impl Future<Item = (), Error = F::Error>
@@ -196,18 +197,26 @@ impl<T> UniqueConnec<T> {
         };
         drop(inner);
 
+        struct Cleaner<T>(Arc<Mutex<UniqueConnecInner<T>>>);
+        impl<T> Drop for Cleaner<T> {
+            #[inline]
+            fn drop(&mut self) {
+                *self.0.lock() = UniqueConnecInner::Empty;
+            }
+        }
+        let cleaner = Cleaner(self.inner.clone());
+
         // The mutex is unlocked when we notify the pending tasks.
         for task in tasks_to_notify {
             task.notify();
         }
 
-        let inner = self.inner.clone();
         let fut = until
             .select(on_clear_rx.then(|_| Ok(())))
             .map(|((), _)| ())
             .map_err(|(err, _)| err)
             .then(move |val| {
-                *inner.lock() = UniqueConnecInner::Empty;
+                drop(cleaner);      // Make sure that `cleaner` gets called there.
                 val
             });
         future::Either::A(fut)
@@ -226,6 +235,12 @@ impl<T> UniqueConnec<T> {
                 *inner = pending;
             },
             UniqueConnecInner::Full { on_clear, .. } => {
+                // TODO: Should we really replace the `Full` with an `Empty` here? What about
+                // letting dropping the future clear the connection automatically? Otherwise
+                // it is possible that the user dials before the future gets dropped, in which
+                // case the future dropping will set the value to `Empty`. But on the other hand,
+                // it is expected that `clear()` is instantaneous and if it is followed with
+                // `dial()` then it should dial.
                 let _ = on_clear.send(());
             },
         };
