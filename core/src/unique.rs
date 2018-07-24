@@ -85,12 +85,43 @@ impl<T> UniqueConnec<T> {
 
     /// Loads the value from the object.
     ///
+    /// If the object is empty or has errored earlier, dials the given multiaddress with the
+    /// given transport.
+    ///
+    /// The closure of the `swarm` is expected to call `set_until()` on the `UniqueConnec`. Failure
+    /// to do so will make the `UniqueConnecFuture` produce an error.
+    #[inline]
+    pub fn dial<S, Du>(&self, swarm: &SwarmController<S>, multiaddr: &Multiaddr,
+                              transport: Du) -> UniqueConnecFuture<T>
+        where T: Clone + 'static,       // TODO: 'static :-/
+              Du: Transport + 'static, // TODO: 'static :-/
+              Du::Output: Into<S::Output>,
+              S: Clone + MuxedTransport,
+    {
+        self.dial_inner(swarm, multiaddr, transport, true)
+    }
+
+    /// Same as `dial`, except that the future will produce an error if an earlier attempt to dial
+    /// has errored.
+    #[inline]
+    pub fn dial_if_empty<S, Du>(&self, swarm: &SwarmController<S>, multiaddr: &Multiaddr,
+                              transport: Du) -> UniqueConnecFuture<T>
+        where T: Clone + 'static,       // TODO: 'static :-/
+              Du: Transport + 'static, // TODO: 'static :-/
+              Du::Output: Into<S::Output>,
+              S: Clone + MuxedTransport,
+    {
+        self.dial_inner(swarm, multiaddr, transport, false)
+    }
+
+    /// Loads the value from the object.
+    ///
     /// If the object is empty, dials the given multiaddress with the given transport.
     ///
     /// The closure of the `swarm` is expected to call `set_until()` on the `UniqueConnec`. Failure
     /// to do so will make the `UniqueConnecFuture` produce an error.
-    pub fn get_or_dial<S, Du>(&self, swarm: &SwarmController<S>, multiaddr: &Multiaddr,
-                              transport: Du) -> UniqueConnecFuture<T>
+    fn dial_inner<S, Du>(&self, swarm: &SwarmController<S>, multiaddr: &Multiaddr,
+                         transport: Du, dial_if_err: bool) -> UniqueConnecFuture<T>
         where T: Clone + 'static,       // TODO: 'static :-/
               Du: Transport + 'static, // TODO: 'static :-/
               Du::Output: Into<S::Output>,
@@ -99,6 +130,7 @@ impl<T> UniqueConnec<T> {
         let mut inner = self.inner.lock();
         match &*inner {
             UniqueConnecInner::Empty => (),
+            UniqueConnecInner::Errored(_) if dial_if_err => (),
             _ => return UniqueConnecFuture { inner: Arc::downgrade(&self.inner) },
         };
 
@@ -241,7 +273,7 @@ impl<T> Default for UniqueConnec<T> {
     }
 }
 
-/// Future returned by `UniqueConnec::get()`.
+/// Future returned by `UniqueConnec::dial()`.
 pub struct UniqueConnecFuture<T> {
     inner: Weak<Mutex<UniqueConnecInner<T>>>,
 }
@@ -263,7 +295,7 @@ impl<T> Future for UniqueConnecFuture<T>
         match mem::replace(&mut *inner, UniqueConnecInner::Empty) {
             UniqueConnecInner::Empty => {
                 // This can happen if `set_until()` is called, and the future expires before the
-                // future returned by `get()` gets polled. This means that the connection has been
+                // future returned by `dial()` gets polled. This means that the connection has been
                 // closed.
                 Err(IoErrorKind::ConnectionAborted.into())
             },
@@ -310,11 +342,11 @@ impl<T> Future for UniqueConnecFuture<T>
 pub enum UniqueConnecState {
     /// The object is empty.
     Empty,
-    /// `get_*` has been called and we are waiting for `set_until` to be called.
+    /// `dial` has been called and we are waiting for `set_until` to be called.
     Pending,
     /// `set_until` has been called.
     Full,
-    /// The future returned by the closure of `get_*` has errored or has finished before
+    /// The future returned by the closure of `dial` has errored or has finished before
     /// `set_until` has been called.
     Errored,
 }
@@ -334,8 +366,7 @@ mod tests {
         let (swarm_ctrl, _swarm_fut) = swarm(DeniedTransport, |_, _| {
             unique2.set_until((), future::empty())
         });
-        let fut = unique.get_or_dial(&swarm_ctrl, &"/ip4/1.2.3.4".parse().unwrap(),
-                                     DeniedTransport);
+        let fut = unique.dial(&swarm_ctrl, &"/ip4/1.2.3.4".parse().unwrap(), DeniedTransport);
         assert!(fut.wait().is_err());
         assert_eq!(unique.state(), UniqueConnecState::Errored);
     }
