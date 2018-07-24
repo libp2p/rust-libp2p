@@ -102,38 +102,29 @@ impl<T> UniqueConnec<T> {
             _ => return UniqueConnecFuture { inner: Arc::downgrade(&self.inner) },
         };
 
-        let handler = {
-            let inner = Arc::downgrade(&self.inner);
+        let weak_inner = Arc::downgrade(&self.inner);
+        let dial_fut = swarm.dial_then(multiaddr.clone(), transport,
             move |val: Result<(), IoError>| {
-                if let Some(inner) = inner.upgrade() {
-                    let mut inner = inner.lock();
-                    match val {
-                        Ok(()) => {
-                            match *inner {
-                                UniqueConnecInner::Full { .. } => (),
-                                ref mut v => {
-                                    let err = IoError::new(IoErrorKind::ConnectionRefused,
-                                        "dialing has succeeded but set_until hasn't been called");
-                                    *v = UniqueConnecInner::Errored(err);
-                                },
-                            }
-                        }
-                        Err(ref err) => {
-                            match *inner {
-                                UniqueConnecInner::Full { .. } => (),
-                                ref mut v => {
-                                    let err2 = IoError::new(err.kind(), err.to_string());
-                                    *v = UniqueConnecInner::Errored(err2);
-                                },
-                            }
-                        },
-                    }
-                }
-                val
-            }
-        };
+                let inner = match weak_inner.upgrade() {
+                    Some(i) => i,
+                    None => return val
+                };
 
-        let dial_fut = swarm.dial_then(multiaddr.clone(), transport, handler)
+                let mut inner = inner.lock();
+                if let UniqueConnecInner::Full { .. } = *inner {
+                    return val;
+                }
+
+                *inner = UniqueConnecInner::Errored(match val {
+                    Ok(()) => IoError::new(IoErrorKind::ConnectionRefused,
+                        "dialing has succeeded but set_until hasn't been called"),
+                    Err(ref err) => IoError::new(err.kind(), err.to_string()),
+                });
+
+                val
+            });
+
+        let dial_fut = dial_fut
             .map_err(|_| IoError::new(IoErrorKind::Other, "multiaddress not supported"))
             .into_future()
             .flatten();
@@ -142,40 +133,6 @@ impl<T> UniqueConnec<T> {
             tasks_waiting: Vec::new(),
             dial_fut: Box::new(dial_fut),
         };
-
-        UniqueConnecFuture { inner: Arc::downgrade(&self.inner) }
-    }
-
-    /// Loads the value from the object.
-    ///
-    /// If the object is empty, calls the closure. The closure should return a future that
-    /// should be signaled after `set_until` has been called. If the future produces an error,
-    /// then the object will empty itself again and the `UniqueConnecFuture` will return an error.
-    /// If the future is finished and `set_until` hasn't been called, then the `UniqueConnecFuture`
-    /// will return an error.
-    pub fn get<F, Fut>(&self, or: F) -> UniqueConnecFuture<T>
-        where F: FnOnce() -> Fut,
-              T: Clone,
-              Fut: IntoFuture<Item = (), Error = IoError>,
-              Fut::Future: Send + Sync + 'static, // TODO: 'static :-/
-    {
-        match &*self.inner.lock() {
-            UniqueConnecInner::Empty => (),
-            _ => return UniqueConnecFuture { inner: Arc::downgrade(&self.inner) },
-        };
-
-        // The mutex is unlocked when we call `or`, in order to avoid potential deadlocks.
-        let dial_fut = or().into_future();
-
-        let mut inner = self.inner.lock();
-        // Since we unlocked the mutex, it's possible that the object was filled in the meanwhile.
-        // Therefore we check again whether it's still `Empty`.
-        if let UniqueConnecInner::Empty = &mut *inner {
-            *inner = UniqueConnecInner::Pending {
-                tasks_waiting: Vec::new(),
-                dial_fut: Box::new(dial_fut),
-            };
-        }
 
         UniqueConnecFuture { inner: Arc::downgrade(&self.inner) }
     }
