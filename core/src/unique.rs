@@ -37,7 +37,7 @@ enum UniqueConnecInner<T> {
     Pending {
         /// Tasks that need to be awakened when the content of this object is set.
         tasks_waiting: Vec<task::Task>,
-        /// Future that represents when `set_until` should have been called.
+        /// Future that represents when `tie_*` should have been called.
         // TODO: Send + Sync bound is meh
         dial_fut: Box<Future<Item = (), Error = IoError> + Send + Sync>,
     },
@@ -88,7 +88,7 @@ impl<T> UniqueConnec<T> {
     /// If the object is empty or has errored earlier, dials the given multiaddress with the
     /// given transport.
     ///
-    /// The closure of the `swarm` is expected to call `set_until()` on the `UniqueConnec`. Failure
+    /// The closure of the `swarm` is expected to call `tie_*()` on the `UniqueConnec`. Failure
     /// to do so will make the `UniqueConnecFuture` produce an error.
     #[inline]
     pub fn dial<S, Du>(&self, swarm: &SwarmController<S>, multiaddr: &Multiaddr,
@@ -118,7 +118,7 @@ impl<T> UniqueConnec<T> {
     ///
     /// If the object is empty, dials the given multiaddress with the given transport.
     ///
-    /// The closure of the `swarm` is expected to call `set_until()` on the `UniqueConnec`. Failure
+    /// The closure of the `swarm` is expected to call `tie_*()` on the `UniqueConnec`. Failure
     /// to do so will make the `UniqueConnecFuture` produce an error.
     fn dial_inner<S, Du>(&self, swarm: &SwarmController<S>, multiaddr: &Multiaddr,
                          transport: Du, dial_if_err: bool) -> UniqueConnecFuture<T>
@@ -149,7 +149,7 @@ impl<T> UniqueConnec<T> {
 
                 *inner = UniqueConnecInner::Errored(match val {
                     Ok(()) => IoError::new(IoErrorKind::ConnectionRefused,
-                        "dialing has succeeded but set_until hasn't been called"),
+                        "dialing has succeeded but tie_* hasn't been called"),
                     Err(ref err) => IoError::new(err.kind(), err.to_string()),
                 });
 
@@ -175,8 +175,23 @@ impl<T> UniqueConnec<T> {
     /// by the user, the future automatically stops.
     /// The returned future is an adjusted version of that same future.
     ///
-    /// Has no effect if the object already contains something.
-    pub fn set_until<F>(&self, value: T, until: F) -> impl Future<Item = (), Error = F::Error>
+    /// If the object already contains something, then `until` is dropped and a dummy future that
+    /// immediately ends is returned.
+    pub fn tie_or_stop<F>(&self, value: T, until: F) -> impl Future<Item = (), Error = F::Error>
+        where F: Future<Item = ()>
+    {
+        self.tie_inner(value, until, false)
+    }
+
+    /// Same as `tie_or_stop`, except that is if the object already contains something, then
+    /// `until` is returned immediately and can live in parallel.
+    pub fn tie_or_passthrough<F>(&self, value: T, until: F) -> impl Future<Item = (), Error = F::Error>
+        where F: Future<Item = ()>
+    {
+        self.tie_inner(value, until, true)
+    }
+
+    fn tie_inner<F>(&self, value: T, until: F, pass_through: bool) -> impl Future<Item = (), Error = F::Error>
         where F: Future<Item = ()>
     {
         let mut tasks_to_notify = Vec::new();
@@ -192,7 +207,11 @@ impl<T> UniqueConnec<T> {
             old @ UniqueConnecInner::Full { .. } => {
                 // Keep the old value.
                 *inner = old;
-                return future::Either::B(until);
+                if pass_through {
+                    return future::Either::B(future::Either::A(until));
+                } else {
+                    return future::Either::B(future::Either::B(future::ok(())));
+                }
             },
         };
         drop(inner);
@@ -225,7 +244,7 @@ impl<T> UniqueConnec<T> {
     /// Clears the content of the object.
     ///
     /// Has no effect if the content is empty or pending.
-    /// If the node was full, calling `clear` will stop the future returned by `set_until`.
+    /// If the node was full, calling `clear` will stop the future returned by `tie_*`.
     pub fn clear(&self) {
         let mut inner = self.inner.lock();
         match mem::replace(&mut *inner, UniqueConnecInner::Empty) {
@@ -309,7 +328,7 @@ impl<T> Future for UniqueConnecFuture<T>
         let mut inner = inner.lock();
         match mem::replace(&mut *inner, UniqueConnecInner::Empty) {
             UniqueConnecInner::Empty => {
-                // This can happen if `set_until()` is called, and the future expires before the
+                // This can happen if `tie_*()` is called, and the future expires before the
                 // future returned by `dial()` gets polled. This means that the connection has been
                 // closed.
                 Err(IoErrorKind::ConnectionAborted.into())
@@ -318,7 +337,7 @@ impl<T> Future for UniqueConnecFuture<T>
                 match dial_fut.poll() {
                     Ok(Async::Ready(())) => {
                         // This happens if we successfully dialed a remote, but the callback
-                        // doesn't call `set_until`. This can be a logic error by the user,
+                        // doesn't call `tie_*`. This can be a logic error by the user,
                         // but could also indicate that the user decided to filter out this
                         // connection for whatever reason.
                         *inner = UniqueConnecInner::Errored(IoErrorKind::ConnectionAborted.into());
@@ -357,12 +376,12 @@ impl<T> Future for UniqueConnecFuture<T>
 pub enum UniqueConnecState {
     /// The object is empty.
     Empty,
-    /// `dial` has been called and we are waiting for `set_until` to be called.
+    /// `dial` has been called and we are waiting for `tie_*` to be called.
     Pending,
-    /// `set_until` has been called.
+    /// `tie_*` has been called.
     Full,
     /// The future returned by the closure of `dial` has errored or has finished before
-    /// `set_until` has been called.
+    /// `tie_*` has been called.
     Errored,
 }
 
@@ -379,7 +398,7 @@ mod tests {
         assert_eq!(unique.state(), UniqueConnecState::Empty);
         let unique2 = unique.clone();
         let (swarm_ctrl, _swarm_fut) = swarm(DeniedTransport, |_, _| {
-            unique2.set_until((), future::empty())
+            unique2.tie_or_stop((), future::empty())
         });
         let fut = unique.dial(&swarm_ctrl, &"/ip4/1.2.3.4".parse().unwrap(), DeniedTransport);
         assert!(fut.wait().is_err());
