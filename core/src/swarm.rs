@@ -393,9 +393,10 @@ mod tests {
     use futures::{Future, future};
     use rand;
     use transport::{self, DeniedTransport, Transport};
+    use std::io::Error as IoError;
     use std::sync::{atomic, Arc};
     use swarm;
-    use tokio_current_thread; 
+    use tokio::runtime::current_thread;
 
     #[test]
     fn transport_error_propagation_listen() {
@@ -413,18 +414,32 @@ mod tests {
     #[test]
     fn basic_dial() {
         let (tx, rx) = transport::connector();
-        let reached = Arc::new(atomic::AtomicBool::new(false));
-        let reached2 = reached.clone();
-        let (swarm_ctrl, swarm_future) = swarm(rx.with_dummy_muxing(), |_, _| {
-            reached2.store(true, atomic::Ordering::SeqCst);
+
+        let reached_tx = Arc::new(atomic::AtomicBool::new(false));
+        let reached_tx2 = reached_tx.clone();
+    
+        let reached_rx = Arc::new(atomic::AtomicBool::new(false));
+        let reached_rx2 = reached_rx.clone();
+
+        let (swarm_ctrl1, swarm_future1) = swarm(rx.with_dummy_muxing(), |_, _| {
+            reached_rx2.store(true, atomic::Ordering::SeqCst);
             future::empty()
         });
-        swarm_ctrl.listen_on("/memory".parse().unwrap()).unwrap();
-        let dial_success = swarm_ctrl.dial("/memory".parse().unwrap(), tx).unwrap();
-        let future = dial_success.select(swarm_future)
-            .map_err(|(err, _)| err);
-        tokio_current_thread::block_on_all(future).unwrap();
-        assert!(reached.load(atomic::Ordering::SeqCst));
+        swarm_ctrl1.listen_on("/memory".parse().unwrap()).unwrap();
+    
+        let (swarm_ctrl2, swarm_future2) = swarm(tx.clone().with_dummy_muxing(), |_, _| {
+            reached_tx2.store(true, atomic::Ordering::SeqCst);
+            future::empty()
+        });
+
+        let dial_success = swarm_ctrl2.dial("/memory".parse().unwrap(), tx).unwrap();
+        let future = swarm_future2
+            .select(swarm_future1).map(|_| ()).map_err(|(err, _)| err)
+            .select(dial_success).map(|_| ()).map_err(|(err, _)| err);
+
+        current_thread::Runtime::new().unwrap().block_on(future).unwrap();
+        assert!(reached_tx.load(atomic::Ordering::SeqCst));
+        assert!(reached_rx.load(atomic::Ordering::SeqCst));
     }
 
     #[test]
@@ -447,7 +462,22 @@ mod tests {
             .map(|_| ())
             .select(swarm_future)
             .map_err(|(err, _)| err);
-        tokio_current_thread::block_on_all(future).unwrap();
+        current_thread::Runtime::new().unwrap().block_on(future).unwrap();
         assert_eq!(reached.load(atomic::Ordering::SeqCst), num_dials);
+    }
+
+    #[test]
+    fn future_isnt_dropped() {
+        // Tests that the future in the closure isn't being dropped.
+        let (tx, rx) = transport::connector();
+        let (swarm_ctrl, swarm_future) = swarm(rx.with_dummy_muxing(), |_, _| {
+            future::empty()
+                .then(|_: Result<(), ()>| -> Result<(), IoError> { panic!() })     // <-- the test
+        });
+        swarm_ctrl.listen_on("/memory".parse().unwrap()).unwrap();
+        let dial_success = swarm_ctrl.dial("/memory".parse().unwrap(), tx).unwrap();
+        let future = dial_success.select(swarm_future)
+            .map_err(|(err, _)| err);
+        current_thread::Runtime::new().unwrap().block_on(future).unwrap();
     }
 }

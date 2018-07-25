@@ -90,6 +90,9 @@ impl<T> UniqueConnec<T> {
     ///
     /// The closure of the `swarm` is expected to call `tie_*()` on the `UniqueConnec`. Failure
     /// to do so will make the `UniqueConnecFuture` produce an error.
+    ///
+    /// One critical property of this method, is that if a connection incomes and `tie_*` is
+    /// called, then it will be returned by the returned future.
     #[inline]
     pub fn dial<S, Du>(&self, swarm: &SwarmController<S>, multiaddr: &Multiaddr,
                               transport: Du) -> UniqueConnecFuture<T>
@@ -142,11 +145,20 @@ impl<T> UniqueConnec<T> {
                     return val;
                 }
 
-                *inner = UniqueConnecInner::Errored(match val {
+                let new_val = UniqueConnecInner::Errored(match val {
                     Ok(()) => IoError::new(IoErrorKind::ConnectionRefused,
                         "dialing has succeeded but tie_* hasn't been called"),
                     Err(ref err) => IoError::new(err.kind(), err.to_string()),
                 });
+
+                match mem::replace(&mut *inner, new_val) {
+                    UniqueConnecInner::Pending { tasks_waiting, .. } => {
+                        for task in tasks_waiting {
+                            task.notify();
+                        }
+                    },
+                    _ => ()
+                };
 
                 val
             });
@@ -383,10 +395,38 @@ pub enum UniqueConnecState {
 
 #[cfg(test)]
 mod tests {
-    use futures::{future, Future};
+    use futures::{future, sync::oneshot, Future};
     use transport::DeniedTransport;
+    use std::io::Error as IoError;
+    use std::time::Duration;
     use {UniqueConnec, UniqueConnecState};
-    use swarm;
+    use {swarm, transport, Transport};
+    use tokio::runtime::current_thread;
+    use tokio_timer;
+
+    #[test]
+    fn basic_working() {
+        let (tx, rx) = transport::connector();
+        let unique_connec = UniqueConnec::empty();
+        let unique_connec2 = unique_connec.clone();
+        assert_eq!(unique_connec.state(), UniqueConnecState::Empty);
+
+        let (swarm_ctrl, swarm_future) = swarm(rx.with_dummy_muxing(), |_, _| {
+            // Note that this handles both the dial and the listen.
+            assert!(unique_connec2.is_alive());
+            unique_connec2.tie_or_stop(12, future::empty())
+        });
+        swarm_ctrl.listen_on("/memory".parse().unwrap()).unwrap();
+
+        let dial_success = unique_connec
+            .dial(&swarm_ctrl, &"/memory".parse().unwrap(), tx)
+            .map(|val| { assert_eq!(val, 12); });
+        assert_eq!(unique_connec.state(), UniqueConnecState::Pending);
+
+        let future = dial_success.select(swarm_future).map_err(|(err, _)| err);
+        current_thread::Runtime::new().unwrap().block_on(future).unwrap();
+        assert_eq!(unique_connec.state(), UniqueConnecState::Full);
+    }
 
     #[test]
     fn invalid_multiaddr_produces_error() {
@@ -401,5 +441,129 @@ mod tests {
         assert_eq!(unique.state(), UniqueConnecState::Errored);
     }
 
-    // TODO: more tests
+    #[test]
+    fn tie_or_stop_stops() {
+        let (tx, rx) = transport::connector();
+        let unique_connec = UniqueConnec::empty();
+        let unique_connec2 = unique_connec.clone();
+
+        // This channel is used to detect whether the future has been dropped.
+        let (msg_tx, msg_rx) = oneshot::channel();
+
+        let mut num_connec = 0;
+        let mut msg_rx = Some(msg_rx);
+        let (swarm_ctrl1, swarm_future1) = swarm(rx.with_dummy_muxing(), move |_, _| {
+            num_connec += 1;
+            if num_connec == 1 {
+                unique_connec2.tie_or_stop(12, future::Either::A(future::empty()))
+            } else {
+                let fut = msg_rx.take().unwrap().map_err(|_| panic!());
+                unique_connec2.tie_or_stop(13, future::Either::B(fut))
+            }
+        });
+        swarm_ctrl1.listen_on("/memory".parse().unwrap()).unwrap();
+
+        let (swarm_ctrl2, swarm_future2) = swarm(tx.clone().with_dummy_muxing(), move |_, _| {
+            future::empty()
+        });
+
+        let dial_success = unique_connec
+            .dial(&swarm_ctrl2, &"/memory".parse().unwrap(), tx.clone())
+            .map(|val| { assert_eq!(val, 12); })
+            .inspect({
+                let c = unique_connec.clone();
+                move |_| { assert!(c.is_alive()); }
+            })
+            .and_then(|_| {
+                tokio_timer::sleep(Duration::from_secs(1))
+                    .map_err(|_| unreachable!())
+            })
+            .and_then(move |_| {
+                swarm_ctrl2.dial("/memory".parse().unwrap(), tx)
+                    .unwrap_or_else(|_| panic!())
+            })
+            .inspect({
+                let c = unique_connec.clone();
+                move |_| {
+                    assert_eq!(c.poll(), Some(12));    // Not 13
+                    assert!(msg_tx.send(()).is_err());
+                }
+            });
+
+        let future = dial_success
+            .select(swarm_future2).map(|_| ()).map_err(|(err, _)| err)
+            .select(swarm_future1).map(|_| ()).map_err(|(err, _)| err);
+
+        current_thread::Runtime::new().unwrap().block_on(future).unwrap();
+        assert!(unique_connec.is_alive());
+    }
+
+    #[test]
+    fn tie_or_passthrough_passes_through() {
+        let (tx, rx) = transport::connector();
+        let unique_connec = UniqueConnec::empty();
+        let unique_connec2 = unique_connec.clone();
+
+        let (swarm_ctrl, swarm_future) = swarm(rx.with_dummy_muxing(), move |_, _| {
+            // Note that this handles both the dial and the listen.
+            let fut = future::empty().then(|_: Result<(), ()>| -> Result<(), IoError> { panic!() });
+            unique_connec2.tie_or_passthrough(12, fut)
+        });
+        swarm_ctrl.listen_on("/memory".parse().unwrap()).unwrap();
+
+        let dial_success = unique_connec
+            .dial(&swarm_ctrl, &"/memory".parse().unwrap(), tx.clone())
+            .map(|val| { assert_eq!(val, 12); });
+
+        swarm_ctrl.dial("/memory".parse().unwrap(), tx)
+            .unwrap();
+
+        let future = dial_success.select(swarm_future).map_err(|(err, _)| err);
+        current_thread::Runtime::new().unwrap().block_on(future).unwrap();
+        assert!(unique_connec.is_alive());
+    }
+
+    #[test]
+    fn cleared_when_future_drops() {
+        let (tx, rx) = transport::connector();
+        let unique_connec = UniqueConnec::empty();
+        let unique_connec2 = unique_connec.clone();
+
+        let (msg_tx, msg_rx) = oneshot::channel();
+        let mut msg_rx = Some(msg_rx);
+
+        let (swarm_ctrl1, swarm_future1) = swarm(rx.with_dummy_muxing(), move |_, _| {
+            future::empty()
+        });
+        swarm_ctrl1.listen_on("/memory".parse().unwrap()).unwrap();
+
+        let (swarm_ctrl2, swarm_future2) = swarm(tx.clone().with_dummy_muxing(), move |_, _| {
+            let fut = msg_rx.take().unwrap().map_err(|_| -> IoError { unreachable!() });
+            unique_connec2.tie_or_stop(12, fut)
+        });
+
+        let dial_success = unique_connec
+            .dial(&swarm_ctrl2, &"/memory".parse().unwrap(), tx)
+            .map(|val| { assert_eq!(val, 12); })
+            .inspect({
+                let c = unique_connec.clone();
+                move |_| { assert!(c.is_alive()); }
+            })
+            .and_then(|_| {
+                msg_tx.send(()).unwrap();
+                tokio_timer::sleep(Duration::from_secs(1))
+                    .map_err(|_| unreachable!())
+            })
+            .inspect({
+                let c = unique_connec.clone();
+                move |_| { assert!(!c.is_alive()); }
+            });
+
+        let future = dial_success
+            .select(swarm_future1).map(|_| ()).map_err(|(err, _)| err)
+            .select(swarm_future2).map(|_| ()).map_err(|(err, _)| err);
+
+        current_thread::Runtime::new().unwrap().block_on(future).unwrap();
+        assert!(!unique_connec.is_alive());
+    }
 }
