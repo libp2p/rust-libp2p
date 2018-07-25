@@ -26,18 +26,22 @@ use rw_stream_sink::RwStreamSink;
 use std::{io, sync::Arc};
 use Transport;
 
-
+/// Builds a new pair of `Transport`s. The dialer can reach the listener by dialing `/memory`.
+#[inline]
 pub fn connector() -> (Dialer, Listener) {
     let (tx, rx) = mpsc::unbounded();
     (Dialer(tx), Listener(Arc::new(Mutex::new(rx))))
 }
 
+/// Same as `connector()`, but allows customizing the type used for transmitting packets between
+/// the two endpoints.
+#[inline]
 pub fn connector_custom_type<T>() -> (Dialer<T>, Listener<T>) {
     let (tx, rx) = mpsc::unbounded();
     (Dialer(tx), Listener(Arc::new(Mutex::new(rx))))
 }
 
-
+/// Dialing end of the memory transport.
 pub struct Dialer<T = Bytes>(mpsc::UnboundedSender<Chan<T>>);
 
 impl<T> Clone for Dialer<T> {
@@ -80,7 +84,7 @@ impl<T: IntoBuf + 'static> Transport for Dialer<T> {
     }
 }
 
-
+/// Receiving end of the memory transport.
 pub struct Listener<T = Bytes>(Arc<Mutex<mpsc::UnboundedReceiver<Chan<T>>>>);
 
 impl<T> Clone for Listener<T> {
@@ -110,10 +114,12 @@ impl<T: IntoBuf + 'static> Transport for Listener<T> {
         Ok((Box::new(stream), addr2))
     }
 
+    #[inline]
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
         Err((self, addr))
     }
 
+    #[inline]
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         if server == observed {
             Some(server.clone())
@@ -123,7 +129,7 @@ impl<T: IntoBuf + 'static> Transport for Listener<T> {
     }
 }
 
-
+/// Returns `true` if and only if the address is `/memory`.
 fn is_memory_addr(a: &Multiaddr) -> bool {
     let mut iter = a.iter();
     if iter.next() != Some(AddrComponent::Memory) {
@@ -135,9 +141,14 @@ fn is_memory_addr(a: &Multiaddr) -> bool {
     true
 }
 
+/// A channel represents an established, in-memory, logical connection between two endpoints.
+///
+/// Implements `AsyncRead` and `AsyncWrite`.
 pub type Channel<T> = RwStreamSink<Chan<T>>;
 
-/// A channel represents an established, in-memory, logical connection between two endoints.
+/// A channel represents an established, in-memory, logical connection between two endpoints.
+///
+/// Implements `Sink` and `Stream`.
 pub struct Chan<T = Bytes> {
     incoming: mpsc::UnboundedReceiver<T>,
     outgoing: mpsc::UnboundedSender<T>,
@@ -147,6 +158,7 @@ impl<T> Stream for Chan<T> {
     type Item = T;
     type Error = io::Error;
 
+    #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         self.incoming.poll().map_err(|()| io::ErrorKind::ConnectionReset.into())
     }
@@ -156,16 +168,19 @@ impl<T> Sink for Chan<T> {
     type SinkItem = T;
     type SinkError = io::Error;
 
+    #[inline]
     fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
         self.outgoing.start_send(item).map_err(|_| io::ErrorKind::ConnectionReset.into())
     }
 
+    #[inline]
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
         self.outgoing.poll_complete().map_err(|_| io::ErrorKind::ConnectionReset.into())
     }
 }
 
 impl<T: IntoBuf> Into<RwStreamSink<Chan<T>>> for Chan<T> {
+    #[inline]
     fn into(self) -> RwStreamSink<Chan<T>> {
         RwStreamSink::new(self)
     }

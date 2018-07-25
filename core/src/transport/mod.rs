@@ -47,6 +47,7 @@ pub mod upgrade;
 pub use self::choice::OrTransport;
 pub use self::denied::DeniedTransport;
 pub use self::dummy::DummyMuxing;
+pub use self::memory::connector;
 pub use self::muxed::MuxedTransport;
 pub use self::upgrade::UpgradedNode;
 
