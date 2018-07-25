@@ -2,6 +2,7 @@
 name = "libp2p-core"
 version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
 
 [dependencies]
 bs58 = "0.2.0"

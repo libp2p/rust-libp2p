@@ -200,6 +200,9 @@ where
         for table in self.tables.iter() {
             let mut table = table.lock();
             table.flush(self.ping_timeout);
+            if table.last_update.elapsed() > self.ping_timeout {
+                continue // ignore bucket with expired nodes
+            }
             for node in table.nodes.iter() {
                 out.push(node.id.clone());
             }
