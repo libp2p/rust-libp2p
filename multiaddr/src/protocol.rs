@@ -40,7 +40,7 @@ pub enum Protocol {
     Libp2pWebrtcStar = 275,
     Libp2pWebrtcDirect = 276,
     P2pCircuit = 290,
-    Memory = 777,
+    Memory = 777,       // TODO: not standard: https://github.com/multiformats/multiaddr/pull/71
 }
 
 impl From<Protocol> for u32 {
