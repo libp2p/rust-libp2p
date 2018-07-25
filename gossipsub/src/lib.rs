@@ -35,9 +35,14 @@ mod constants;
 // gossipsub is an extension of floodsub so it seems to make sense to use everything in floodsub.
 pub use floodsub::*;
 
-use libp2p_kad::high_level::KadSystemConfig;
-use libp2p_kad::kad_server::KadConnecConfig;
-use libp2p_core::PeerId;
+use libp2p_kad::{
+    high_level::KadSystemConfig,
+    kad_server::KadConnecConfig
+};
+use libp2p_core::{
+    peer_id::PeerId,
+    swarm::swarm
+};
 use time::Duration;
 
 /// Membership management
@@ -65,6 +70,8 @@ use time::Duration;
 //! - You can perform queries using the `KadSystem`.
 //!
 
+// TODO: tests!
+
 let sample_peer_id = to_peer_id(ed25519_generated());
 
 // KadSystemConfig
@@ -89,28 +96,37 @@ let kad_system_config = KadSystemConfig {
     request_timeout: Duration.minutes(15),
 }
 
-// For convenient reference from libp2p_kad::high_level::KadSystemConfig;, could delete.
-// pub struct KadSystemConfig<I> {
-//     /// Degree of parallelism on the network. Often called `alpha` in technical papers.
-//     /// No more than this number of remotes will be used at a given time for any given operation.
-//     // TODO: ^ share this number between operations? or does each operation use `alpha` remotes?
-//     pub parallelism: u32,
-//     /// Id of the local peer.
-//     pub local_peer_id: PeerId,
-//     /// List of peers initially known.
-//     pub known_initial_peers: I,
-//     /// Duration after which a node in the k-buckets needs to be pinged again.
-//     pub kbuckets_timeout: Duration,
-//     /// When contacting a node, duration after which we consider it unresponsive.
-//     pub request_timeout: Duration,
-// }
-
 // KadConnecConfig
 // In https://github.com/libp2p/rust-libp2p/blob/master/kad/src/kad_server.rs
 kad_connec_config = KadConnecConfig.new()
 
+// Create a swarm that upgrades incoming connections with the `KadConnecConfig`.
+// https://github.com/libp2p/rust-libp2p/blob/4592d1b21ef8bd41a8176ad651feb1aa6cb1b377/core/src/swarm.rs#L28-L43
 
-// Create a swarm
+// /// Creates a swarm.
+// ///
+// /// Requires an upgraded transport, and a function or closure that will turn the upgrade into a
+// /// `Future` that produces a `()`.
+// ///
+// /// Produces a `SwarmController` and an implementation of `Future`. The controller can be used to
+// /// control, and the `Future` must be driven to completion in order for things to work.
+// ///
+// pub fn swarm<T, H, F>(
+//     transport: T,
+//     handler: H,
+// ) -> (SwarmController<T>, SwarmFuture<T, H, F::Future>)
+// where
+//     T: MuxedTransport + Clone + 'static, // TODO: 'static :-/
+//     H: FnMut(T::Output, Box<Future<Item = Multiaddr, Error = IoError>>) -> F,
+//     F: IntoFuture<Item = (), Error = IoError>,
+
+swarm_inst = swarm(kad_connec_config)
+
+// Build a `KadSystem` from the `KadSystemConfig`. This requires passing a closure that provides
+// the Kademlia controller of a peer.
+// 
+// You can perform queries using the `KadSystem`.
+
 
 // Send a GETNODE message in order to obtain an up-to-date view of the overlay from the passive list of a 
 // subscribed node regardless of age of Provider records.
