@@ -41,12 +41,14 @@ pub mod denied;
 pub mod dummy;
 pub mod map;
 pub mod map_err;
+pub mod memory;
 pub mod muxed;
 pub mod upgrade;
 
 pub use self::choice::OrTransport;
 pub use self::denied::DeniedTransport;
 pub use self::dummy::DummyMuxing;
+pub use self::memory::connector;
 pub use self::muxed::MuxedTransport;
 pub use self::upgrade::UpgradedNode;
 

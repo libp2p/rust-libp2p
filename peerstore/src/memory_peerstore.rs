@@ -75,7 +75,14 @@ impl<'a> Peerstore for &'a MemoryPeerstore {
 
     fn peers(self) -> Self::PeersIter {
         let lock = self.store.lock().unwrap();
-        lock.keys().cloned().collect::<Vec<_>>().into_iter()
+        lock.iter()
+            .filter_map(|(id, info)| {
+                if info.addrs().count() == 0 {
+                    return None // all addresses are expired
+                }
+                Some(id.clone())
+            })
+            .collect::<Vec<_>>().into_iter()
     }
 }
 

@@ -2,6 +2,7 @@
 name = "libp2p-identify"
 version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
 
 [dependencies]
 bytes = "0.4"

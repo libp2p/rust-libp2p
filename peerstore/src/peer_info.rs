@@ -52,13 +52,16 @@ impl PeerInfo {
     ///
     /// > **Note**: Keep in mind that this function is racy because addresses can expire between
     /// >           the moment when you get them and the moment when you process them.
-    // TODO: use -> impl Iterator eventually
     #[inline]
-    pub fn addrs<'a>(&'a self) -> Box<Iterator<Item = &'a Multiaddr> + 'a> {
+    pub fn addrs<'a>(&'a self) -> impl Iterator<Item = &'a Multiaddr> + 'a {
         let now = SystemTime::now();
-        Box::new(self.addrs.iter().filter_map(
-            move |&(ref addr, ref expires)| if *expires >= now { Some(addr) } else { None },
-        ))
+        self.addrs.iter().filter_map(move |(addr, expires)| {
+            if *expires >= now {
+                Some(addr)
+            } else {
+                None
+            }
+        })
     }
 
     /// Sets the list of addresses and their time-to-live.

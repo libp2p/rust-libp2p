@@ -212,6 +212,18 @@ impl<T> UniqueConnec<T> {
             UniqueConnecInner::Full { .. } => UniqueConnecState::Full,
         }
     }
+
+    /// Returns true if the object has a pending or active connection. Returns false if the object
+    /// is empty or the connection has errored earlier.
+    #[inline]
+    pub fn is_alive(&self) -> bool {
+        match self.state() {
+            UniqueConnecState::Empty => false,
+            UniqueConnecState::Errored => false,
+            UniqueConnecState::Pending => true,
+            UniqueConnecState::Full => true,
+        }
+    }
 }
 
 impl<T> Clone for UniqueConnec<T> {
