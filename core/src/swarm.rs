@@ -390,9 +390,12 @@ struct Shared<T> where T: MuxedTransport + 'static {
 
 #[cfg(test)]
 mod tests {
-    use futures::future;
-    use transport::DeniedTransport;
+    use futures::{Future, future};
+    use rand;
+    use transport::{self, DeniedTransport, Transport};
+    use std::sync::{atomic, Arc};
     use swarm;
+    use tokio_current_thread; 
 
     #[test]
     fn transport_error_propagation_listen() {
@@ -405,5 +408,46 @@ mod tests {
         let (swarm_ctrl, _swarm_future) = swarm(DeniedTransport, |_, _| future::empty());
         let addr = "/ip4/127.0.0.1/tcp/10000".parse().unwrap();
         assert!(swarm_ctrl.dial(addr, DeniedTransport).is_err());
+    }
+
+    #[test]
+    fn basic_dial() {
+        let (tx, rx) = transport::connector();
+        let reached = Arc::new(atomic::AtomicBool::new(false));
+        let reached2 = reached.clone();
+        let (swarm_ctrl, swarm_future) = swarm(rx.with_dummy_muxing(), |_, _| {
+            reached2.store(true, atomic::Ordering::SeqCst);
+            future::empty()
+        });
+        swarm_ctrl.listen_on("/memory".parse().unwrap()).unwrap();
+        let dial_success = swarm_ctrl.dial("/memory".parse().unwrap(), tx).unwrap();
+        let future = dial_success.select(swarm_future)
+            .map_err(|(err, _)| err);
+        tokio_current_thread::block_on_all(future).unwrap();
+        assert!(reached.load(atomic::Ordering::SeqCst));
+    }
+
+    #[test]
+    fn dial_multiple_times() {
+        let (tx, rx) = transport::connector();
+        let reached = Arc::new(atomic::AtomicUsize::new(0));
+        let reached2 = reached.clone();
+        let (swarm_ctrl, swarm_future) = swarm(rx.with_dummy_muxing(), |_, _| {
+            reached2.fetch_add(1, atomic::Ordering::SeqCst);
+            future::empty()
+        });
+        swarm_ctrl.listen_on("/memory".parse().unwrap()).unwrap();
+        let num_dials = 20000 + rand::random::<usize>() % 20000;
+        let mut dials = Vec::new();
+        for _ in 0 .. num_dials {
+            let f = swarm_ctrl.dial("/memory".parse().unwrap(), tx.clone()).unwrap();
+            dials.push(f);
+        }
+        let future = future::join_all(dials)
+            .map(|_| ())
+            .select(swarm_future)
+            .map_err(|(err, _)| err);
+        tokio_current_thread::block_on_all(future).unwrap();
+        assert_eq!(reached.load(atomic::Ordering::SeqCst), num_dials);
     }
 }
