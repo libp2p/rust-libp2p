@@ -16,6 +16,7 @@ futures = { version = "0.1", features = ["use_std"] }
 parking_lot = "0.5.3"
 protobuf = "2.0.2"
 quick-error = "1.2"
+rw-stream-sink = { path = "../rw-stream-sink" }
 smallvec = "0.5"
 tokio-io = "0.1"
 
@@ -24,4 +25,5 @@ libp2p-ping = { path = "../ping" }
 libp2p-tcp-transport = { path = "../tcp-transport" }
 libp2p-mplex = { path = "../mplex" }
 rand = "0.5"
+tokio-codec = "0.1"
 tokio-current-thread = "0.1"

@@ -40,6 +40,7 @@ pub enum Protocol {
     Libp2pWebrtcStar = 275,
     Libp2pWebrtcDirect = 276,
     P2pCircuit = 290,
+    Memory = 777,       // TODO: not standard: https://github.com/multiformats/multiaddr/pull/71
 }
 
 impl From<Protocol> for u32 {
@@ -80,6 +81,7 @@ impl ToString for Protocol {
             Protocol::Libp2pWebrtcStar => "p2p-webrtc-star",
             Protocol::Libp2pWebrtcDirect => "p2p-webrtc-direct",
             Protocol::P2pCircuit => "p2p-circuit",
+            Protocol::Memory => "memory",
         }.to_owned()
     }
 }
@@ -112,6 +114,7 @@ impl FromStr for Protocol {
             "p2p-webrtc-star" => Ok(Protocol::Libp2pWebrtcStar),
             "p2p-webrtc-direct" => Ok(Protocol::Libp2pWebrtcDirect),
             "p2p-circuit" => Ok(Protocol::P2pCircuit),
+            "memory" => Ok(Protocol::Memory),
             _ => Err(Error::UnknownProtocolString),
         }
     }
@@ -154,6 +157,7 @@ impl Protocol {
             275 => Ok(Protocol::Libp2pWebrtcStar),
             276 => Ok(Protocol::Libp2pWebrtcDirect),
             290 => Ok(Protocol::P2pCircuit),
+            777 => Ok(Protocol::Memory),
             _ => Err(Error::UnknownProtocol),
         }
     }
@@ -194,6 +198,7 @@ impl Protocol {
             Protocol::Libp2pWebrtcStar => ProtocolArgSize::Fixed { bytes: 0 },
             Protocol::Libp2pWebrtcDirect => ProtocolArgSize::Fixed { bytes: 0 },
             Protocol::P2pCircuit => ProtocolArgSize::Fixed { bytes: 0 },
+            Protocol::Memory => ProtocolArgSize::Fixed { bytes: 0 },
         }
     }
 }
@@ -277,6 +282,7 @@ impl Protocol {
             Protocol::Libp2pWebrtcStar => Ok(AddrComponent::Libp2pWebrtcStar),
             Protocol::Libp2pWebrtcDirect => Ok(AddrComponent::Libp2pWebrtcDirect),
             Protocol::P2pCircuit => Ok(AddrComponent::P2pCircuit),
+            Protocol::Memory => Ok(AddrComponent::Memory),
         }
     }
 }
@@ -306,6 +312,7 @@ pub enum AddrComponent {
     Libp2pWebrtcStar,
     Libp2pWebrtcDirect,
     P2pCircuit,
+    Memory,
 }
 
 impl AddrComponent {
@@ -336,6 +343,7 @@ impl AddrComponent {
             AddrComponent::Libp2pWebrtcStar => Protocol::Libp2pWebrtcStar,
             AddrComponent::Libp2pWebrtcDirect => Protocol::Libp2pWebrtcDirect,
             AddrComponent::P2pCircuit => Protocol::P2pCircuit,
+            AddrComponent::Memory => Protocol::Memory,
         }
     }
 
@@ -428,6 +436,7 @@ impl AddrComponent {
             Protocol::Libp2pWebrtcStar => AddrComponent::Libp2pWebrtcStar,
             Protocol::Libp2pWebrtcDirect => AddrComponent::Libp2pWebrtcDirect,
             Protocol::P2pCircuit => AddrComponent::P2pCircuit,
+            Protocol::Memory => AddrComponent::Memory,
         };
 
         Ok((addr_component, rest))
@@ -472,7 +481,8 @@ impl AddrComponent {
             AddrComponent::Libp2pWebsocketStar |
             AddrComponent::Libp2pWebrtcStar |
             AddrComponent::Libp2pWebrtcDirect |
-            AddrComponent::P2pCircuit => {}
+            AddrComponent::P2pCircuit |
+            AddrComponent::Memory => {}
         };
 
         Ok(())
@@ -513,6 +523,7 @@ impl ToString for AddrComponent {
             AddrComponent::Libp2pWebrtcStar => format!("/p2p-webrtc-star"),
             AddrComponent::Libp2pWebrtcDirect => format!("/p2p-webrtc-direct"),
             AddrComponent::P2pCircuit => format!("/p2p-circuit"),
+            AddrComponent::Memory => format!("/memory"),
         }
     }
 }
