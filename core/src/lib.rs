@@ -216,6 +216,10 @@ extern crate tokio_io;
 
 #[cfg(test)]
 extern crate rand;
+#[cfg(test)]
+extern crate tokio_codec;
+#[cfg(test)]
+extern crate tokio_current_thread;
 
 /// Multi-address re-export.
 pub extern crate multiaddr;
