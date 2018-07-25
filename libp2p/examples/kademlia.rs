@@ -23,21 +23,22 @@ extern crate bytes;
 extern crate env_logger;
 extern crate futures;
 extern crate libp2p;
-extern crate tokio_core;
+extern crate tokio_current_thread;
 extern crate tokio_io;
 
 use bigint::U512;
 use futures::{Future, Stream};
 use libp2p::peerstore::{PeerAccess, PeerId, Peerstore};
 use libp2p::Multiaddr;
+use std::collections::HashMap;
 use std::env;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use libp2p::core::{Transport, PublicKey};
+use libp2p::core::{Transport, PublicKey, UniqueConnec};
 use libp2p::core::{upgrade, either::EitherOutput};
-use libp2p::kad::{ConnectionType, Peer, QueryEvent};
+use libp2p::kad::{KadConnecConfig, KadConnectionType, KadPeer, KadQueryEvent, KadSystem};
+use libp2p::kad::{KadSystemConfig, KadIncomingRequest};
 use libp2p::tcp::TcpConfig;
-use tokio_core::reactor::Core;
 
 fn main() {
     env_logger::init();
@@ -51,15 +52,11 @@ fn main() {
         args
     };
 
-    // We start by building the tokio engine that will run all the sockets.
-    let mut core = Core::new().unwrap();
-
     let peer_store = Arc::new(libp2p::peerstore::memory_peerstore::MemoryPeerstore::empty());
     ipfs_bootstrap(&*peer_store);
 
-    // Now let's build the transport stack.
     // We create a `TcpConfig` that indicates that we want TCP/IP.
-    let transport = TcpConfig::new(core.handle())
+    let transport = TcpConfig::new()
 
         // On top of TCP/IP, we will use either the plaintext protocol or the secio protocol,
         // depending on which one the remote supports.
@@ -81,16 +78,37 @@ fn main() {
         })
 
         // On top of plaintext or secio, we will use the multiplex protocol.
-        .with_upgrade(libp2p::mplex::MultiplexConfig::new())
-        // The object returned by the call to `with_upgrade(MultiplexConfig::new())` can't be used as a
+        .with_upgrade(libp2p::mplex::MplexConfig::new())
+        // The object returned by the call to `with_upgrade(MplexConfig::new())` can't be used as a
         // `Transport` because the output of the upgrade is not a stream but a controller for
         // muxing. We have to explicitly call `into_connection_reuse()` in order to turn this into
         // a `Transport`.
         .into_connection_reuse();
 
-    let transport = libp2p::identify::IdentifyTransport::new(transport, peer_store.clone())
-        .map(|id_out, _| {
-            id_out.socket
+    let addr_resolver = {
+        let peer_store = peer_store.clone();
+        move |peer_id| {
+            peer_store
+                .peer(&peer_id)
+                .into_iter()
+                .flat_map(|peer| peer.addrs())
+                .collect::<Vec<_>>()
+                .into_iter()
+        }
+    };
+
+    let transport = libp2p::identify::PeerIdTransport::new(transport, addr_resolver)
+        .and_then({
+            let peer_store = peer_store.clone();
+            move |id_out, _, remote_addr| {
+                let socket = id_out.socket;
+                let original_addr = id_out.original_addr;
+                id_out.info.map(move |info| {
+                    let peer_id = info.info.public_key.into_peer_id();
+                    peer_store.peer_or_create(&peer_id).add_addr(original_addr, Duration::from_secs(3600));
+                    (socket, remote_addr)
+                })
+            }
         });
 
     // We now have a `transport` variable that can be used either to dial nodes or listen to
@@ -100,52 +118,68 @@ fn main() {
     let my_peer_id = PeerId::from_public_key(PublicKey::Rsa(include_bytes!("test-rsa-public-key.der").to_vec()));
     println!("Local peer id is: {:?}", my_peer_id);
 
-    // Let's put this `transport` into a Kademlia *swarm*. The swarm will handle all the incoming
-    // and outgoing connections for us.
-    let kad_config = libp2p::kad::KademliaConfig {
+    let kad_system = Arc::new(KadSystem::without_init(KadSystemConfig {
         parallelism: 3,
         local_peer_id: my_peer_id.clone(),
-        timeout: Duration::from_secs(2),
-    };
+        kbuckets_timeout: Duration::from_secs(10),
+        request_timeout: Duration::from_secs(10),
+        known_initial_peers: peer_store.peers(),
+    }));
 
-    let kad_ctl_proto = libp2p::kad::KademliaControllerPrototype::new(kad_config, peer_store.peers());
-
-    let proto = libp2p::kad::KademliaUpgrade::from_prototype(&kad_ctl_proto);
+    let active_kad_connections = Arc::new(Mutex::new(HashMap::<_, UniqueConnec<_>>::new()));
 
     // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming and
     // outgoing connections for us.
     let (swarm_controller, swarm_future) = libp2p::core::swarm(
-        transport.clone().with_upgrade(proto.clone()),
+        transport.clone().with_upgrade(KadConnecConfig::new()),
         {
             let peer_store = peer_store.clone();
-            move |kademlia_stream, _| {
+            let kad_system = kad_system.clone();
+            let active_kad_connections = active_kad_connections.clone();
+            move |(kad_ctrl, kad_stream), node_addr| {
                 let peer_store = peer_store.clone();
-                kademlia_stream.for_each(move |req| {
-                    let peer_store = peer_store.clone();
-                    let result = req
-                        .requested_peers()
-                        .map(move |peer_id| {
-                            let addrs = peer_store
-                                .peer(peer_id)
-                                .into_iter()
-                                .flat_map(|p| p.addrs())
-                                .collect::<Vec<_>>();
-                            Peer {
-                                node_id: peer_id.clone(),
-                                multiaddrs: addrs,
-                                connection_ty: ConnectionType::Connected, // meh :-/
+                let kad_system = kad_system.clone();
+                let active_kad_connections = active_kad_connections.clone();
+                node_addr.and_then(move |node_addr| {
+                    let node_id = p2p_multiaddr_to_node_id(node_addr);
+                    let node_id2 = node_id.clone();
+                    let fut = kad_stream.for_each(move |req| {
+                        let peer_store = peer_store.clone();
+                        kad_system.update_kbuckets(node_id2.clone());
+                        match req {
+                            KadIncomingRequest::FindNode { searched, responder } => {
+                                let result = kad_system
+                                    .known_closest_peers(&searched)
+                                    .map(move |peer_id| {
+                                        let addrs = peer_store
+                                            .peer(&peer_id)
+                                            .into_iter()
+                                            .flat_map(|p| p.addrs())
+                                            .collect::<Vec<_>>();
+                                        KadPeer {
+                                            node_id: peer_id.clone(),
+                                            multiaddrs: addrs,
+                                            connection_ty: KadConnectionType::Connected, // meh :-/
+                                        }
+                                    })
+                                    .collect::<Vec<_>>();
+                                responder.respond(result);
+                            },
+                            KadIncomingRequest::PingPong => {
                             }
-                        })
-                        .collect::<Vec<_>>();
-                    req.respond(result);
-                    Ok(())
+                        };
+                        Ok(())
+                    });
+
+                    let mut active_kad_connections = active_kad_connections.lock().unwrap();
+                    active_kad_connections
+                        .entry(node_id)
+                        .or_insert_with(Default::default)
+                        .set_until(kad_ctrl, fut)
                 })
             }
         }
     );
-
-    let (kad_controller, _kad_init) =
-        kad_ctl_proto.start(swarm_controller.clone(), transport.with_upgrade(proto), |out| out);
 
     for listen_addr in listen_addrs {
         let addr = swarm_controller
@@ -154,18 +188,23 @@ fn main() {
         println!("Now listening on {:?}", addr);
     }
 
-    let finish_enum = kad_controller
-        .find_node(my_peer_id.clone())
+    let finish_enum = kad_system
+        .find_node(my_peer_id.clone(), |peer| {
+            let addr = Multiaddr::from(libp2p::multiaddr::AddrComponent::P2P(peer.clone().into_bytes()));
+            active_kad_connections.lock().unwrap().entry(peer.clone())
+                .or_insert_with(Default::default)
+                .get_or_dial(&swarm_controller, &addr, transport.clone().with_upgrade(KadConnecConfig::new()))
+        })
         .filter_map(move |event| {
             match event {
-                QueryEvent::NewKnownMultiaddrs(peers) => {
+                KadQueryEvent::NewKnownMultiaddrs(peers) => {
                     for (peer, addrs) in peers {
                         peer_store.peer_or_create(&peer)
                             .add_addrs(addrs, Duration::from_secs(3600));
                     }
                     None
                 },
-                QueryEvent::Finished(out) => Some(out),
+                KadQueryEvent::Finished(out) => Some(out),
             }
         })
         .into_future()
@@ -185,12 +224,28 @@ fn main() {
     // `swarm_future` is a future that contains all the behaviour that we want, but nothing has
     // actually started yet. Because we created the `TcpConfig` with tokio, we need to run the
     // future through the tokio core.
-    core.run(
+    tokio_current_thread::block_on_all(
         finish_enum
             .select(swarm_future)
             .map(|(n, _)| n)
             .map_err(|(err, _)| err),
     ).unwrap();
+}
+
+/// Expects a multiaddr of the format `/p2p/<node_id>` and returns the node ID.
+/// Panics if the format is not correct.
+fn p2p_multiaddr_to_node_id(client_addr: Multiaddr) -> PeerId {
+	let (first, second);
+	{
+		let mut iter = client_addr.iter();
+		first = iter.next();
+		second = iter.next();
+	}
+	match (first, second) {
+		(Some(libp2p::multiaddr::AddrComponent::P2P(node_id)), None) =>
+			PeerId::from_bytes(node_id).expect("libp2p always reports a valid node id"),
+		_ => panic!("Reported multiaddress is in the wrong format ; programmer error")
+	}
 }
 
 /// Stores initial addresses on the given peer store. Uses a very large timeout.
@@ -199,7 +254,7 @@ where
     P: Peerstore + Clone,
 {
     const ADDRESSES: &[&str] = &[
-        "/ip4/127.0.0.1/tcp/4001/ipfs/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
+        "/ip4/127.0.0.1/tcp/4001/ipfs/QmQRx32wQkw3hB45j4UDw8V9Ju4mGbxMyhs2m8mpFrFkur",
         // TODO: add some bootstrap nodes here
     ];
 

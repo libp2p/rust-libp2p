@@ -21,7 +21,6 @@
 //! Implementation of the `Peerstore` trait that uses a single JSON file as backend.
 
 use super::TTL;
-use PeerId;
 use bs58;
 use datastore::{Datastore, JsonFileDatastore, JsonFileDatastoreEntry, Query};
 use futures::{Future, Stream};
@@ -32,6 +31,7 @@ use std::io::Error as IoError;
 use std::iter;
 use std::path::PathBuf;
 use std::vec::IntoIter as VecIntoIter;
+use PeerId;
 
 /// Peerstore backend that uses a Json file.
 pub struct JsonPeerstore {
@@ -91,7 +91,10 @@ impl<'a> Peerstore for &'a JsonPeerstore {
         });
 
         let list = query
-            .filter_map(|(key, _)| {
+            .filter_map(|(key, info)| {
+                if info.addrs().count() == 0 {
+                    return None // all addresses are expired
+                }
                 // We filter out invalid elements. This can happen if the JSON storage file was
                 // corrupted or manually modified by the user.
                 PeerId::from_bytes(bs58::decode(key).into_vec().ok()?).ok()

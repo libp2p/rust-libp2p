@@ -1,7 +1,8 @@
 [package]
 name = "libp2p-ping"
 version = "0.1.0"
-authors = ["pierre <pierre.krieger1708@gmail.com>"]
+authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
 
 [dependencies]
 bytes = "0.4"
@@ -11,10 +12,11 @@ multiaddr = { path = "../multiaddr" }
 multistream-select = { path = "../multistream-select" }
 futures = "0.1"
 parking_lot = "0.5"
-rand = "0.3"
+rand = "0.5"
 tokio-codec = "0.1"
 tokio-io = "0.1"
 
 [dev-dependencies]
 libp2p-tcp-transport = { path = "../tcp-transport" }
-tokio-core = "0.1"
+tokio-current-thread = "0.1"
+tokio-tcp = "0.1"

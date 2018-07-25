@@ -30,10 +30,10 @@ extern crate libp2p_core;
 extern crate log;
 extern crate tokio_timer;
 
+use futures::{Async, Future, Poll, Stream};
+use libp2p_core::{Multiaddr, MuxedTransport, Transport};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::time::{Duration, Instant};
-use futures::{Future, Poll, Async, Stream};
-use libp2p_core::{Transport, Multiaddr, MuxedTransport};
 use tokio_timer::{Deadline, DeadlineError};
 
 /// Wraps around a `Transport` and adds a timeout to all the incoming and outgoing connections.
@@ -64,7 +64,7 @@ impl<InnerTrans> TransportTimeout<InnerTrans> {
         TransportTimeout {
             inner: trans,
             outgoing_timeout: timeout,
-            incoming_timeout: Duration::from_secs(100 * 365 * 24 * 3600),   // 100 years
+            incoming_timeout: Duration::from_secs(100 * 365 * 24 * 3600), // 100 years
         }
     }
 
@@ -73,14 +73,15 @@ impl<InnerTrans> TransportTimeout<InnerTrans> {
     pub fn with_ingoing_timeout(trans: InnerTrans, timeout: Duration) -> Self {
         TransportTimeout {
             inner: trans,
-            outgoing_timeout: Duration::from_secs(100 * 365 * 24 * 3600),   // 100 years
+            outgoing_timeout: Duration::from_secs(100 * 365 * 24 * 3600), // 100 years
             incoming_timeout: timeout,
         }
     }
 }
 
 impl<InnerTrans> Transport for TransportTimeout<InnerTrans>
-where InnerTrans: Transport,
+where
+    InnerTrans: Transport,
 {
     type Output = InnerTrans::Output;
     type MultiaddrFuture = InnerTrans::MultiaddrFuture;
@@ -97,7 +98,7 @@ where InnerTrans: Transport,
                 };
 
                 Ok((listener, addr))
-            },
+            }
             Err((inner, addr)) => {
                 let transport = TransportTimeout {
                     inner,
@@ -112,11 +113,9 @@ where InnerTrans: Transport,
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
         match self.inner.dial(addr) {
-            Ok(dial) => {
-                Ok(TokioTimerMapErr {
-                    inner: Deadline::new(dial, Instant::now() + self.outgoing_timeout)
-                })
-            },
+            Ok(dial) => Ok(TokioTimerMapErr {
+                inner: Deadline::new(dial, Instant::now() + self.outgoing_timeout),
+            }),
             Err((inner, addr)) => {
                 let transport = TransportTimeout {
                     inner,
@@ -136,7 +135,8 @@ where InnerTrans: Transport,
 }
 
 impl<InnerTrans> MuxedTransport for TransportTimeout<InnerTrans>
-where InnerTrans: MuxedTransport
+where
+    InnerTrans: MuxedTransport,
 {
     type Incoming = TimeoutIncoming<InnerTrans::Incoming>;
     type IncomingUpgrade = TokioTimerMapErr<Deadline<InnerTrans::IncomingUpgrade>>;
@@ -158,7 +158,8 @@ pub struct TimeoutListener<InnerStream> {
 }
 
 impl<InnerStream> Stream for TimeoutListener<InnerStream>
-where InnerStream: Stream,
+where
+    InnerStream: Stream,
 {
     type Item = TokioTimerMapErr<Deadline<InnerStream::Item>>;
     type Error = InnerStream::Error;
@@ -167,7 +168,7 @@ where InnerStream: Stream,
         let inner_fut = try_ready!(self.inner.poll());
         if let Some(inner_fut) = inner_fut {
             let fut = TokioTimerMapErr {
-                inner: Deadline::new(inner_fut, Instant::now() + self.timeout)
+                inner: Deadline::new(inner_fut, Instant::now() + self.timeout),
             };
             Ok(Async::Ready(Some(fut)))
         } else {
@@ -184,7 +185,8 @@ pub struct TimeoutIncoming<InnerFut> {
 }
 
 impl<InnerFut> Future for TimeoutIncoming<InnerFut>
-where InnerFut: Future,
+where
+    InnerFut: Future,
 {
     type Item = TokioTimerMapErr<Deadline<InnerFut::Item>>;
     type Error = InnerFut::Error;
@@ -192,7 +194,7 @@ where InnerFut: Future,
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let inner_fut = try_ready!(self.inner.poll());
         let fut = TokioTimerMapErr {
-            inner: Deadline::new(inner_fut, Instant::now() + self.timeout)
+            inner: Deadline::new(inner_fut, Instant::now() + self.timeout),
         };
         Ok(Async::Ready(fut))
     }
@@ -206,25 +208,25 @@ pub struct TokioTimerMapErr<InnerFut> {
 }
 
 impl<InnerFut> Future for TokioTimerMapErr<InnerFut>
-where InnerFut: Future<Error = DeadlineError<IoError>>
+where
+    InnerFut: Future<Error = DeadlineError<IoError>>,
 {
     type Item = InnerFut::Item;
     type Error = IoError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        self.inner.poll()
-            .map_err(|err: DeadlineError<IoError>| {
-                if err.is_inner() {
-                    err.into_inner().expect("ensured by is_inner()")
-                } else if err.is_elapsed() {
-                    debug!("timeout elapsed for connection");
-                    IoErrorKind::TimedOut.into()
-                } else {
-                    assert!(err.is_timer());
-                    debug!("tokio timer error in timeout wrapper");
-                    let err = err.into_timer().expect("ensure by is_timer()");
-                    IoError::new(IoErrorKind::Other, err)
-                }
-            })
+        self.inner.poll().map_err(|err: DeadlineError<IoError>| {
+            if err.is_inner() {
+                err.into_inner().expect("ensured by is_inner()")
+            } else if err.is_elapsed() {
+                debug!("timeout elapsed for connection");
+                IoErrorKind::TimedOut.into()
+            } else {
+                assert!(err.is_timer());
+                debug!("tokio timer error in timeout wrapper");
+                let err = err.into_timer().expect("ensure by is_timer()");
+                IoError::new(IoErrorKind::Other, err)
+            }
+        })
     }
 }

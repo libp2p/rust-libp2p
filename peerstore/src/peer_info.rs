@@ -26,13 +26,13 @@
 //! If the `PeerInfo` struct ever gets exposed to the public API of the crate, we may want to give
 //! more thoughts about this.
 
-use TTL;
 use multiaddr::Multiaddr;
 use serde::de::Error as DeserializerError;
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::Ordering;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use TTL;
 
 /// Information about a peer.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -52,13 +52,16 @@ impl PeerInfo {
     ///
     /// > **Note**: Keep in mind that this function is racy because addresses can expire between
     /// >           the moment when you get them and the moment when you process them.
-    // TODO: use -> impl Iterator eventually
     #[inline]
-    pub fn addrs<'a>(&'a self) -> Box<Iterator<Item = &'a Multiaddr> + 'a> {
+    pub fn addrs<'a>(&'a self) -> impl Iterator<Item = &'a Multiaddr> + 'a {
         let now = SystemTime::now();
-        Box::new(self.addrs.iter().filter_map(
-            move |&(ref addr, ref expires)| if *expires >= now { Some(addr) } else { None },
-        ))
+        self.addrs.iter().filter_map(move |(addr, expires)| {
+            if *expires >= now {
+                Some(addr)
+            } else {
+                None
+            }
+        })
     }
 
     /// Sets the list of addresses and their time-to-live.
@@ -186,12 +189,10 @@ mod tests {
     #[test]
     fn ser_and_deser() {
         let peer_info = PeerInfo {
-            addrs: vec![
-                (
-                    "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap(),
-                    UNIX_EPOCH,
-                ),
-            ],
+            addrs: vec![(
+                "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap(),
+                UNIX_EPOCH,
+            )],
         };
         let serialized = serde_json::to_string(&peer_info).unwrap();
         let deserialized: PeerInfo = serde_json::from_str(&serialized).unwrap();

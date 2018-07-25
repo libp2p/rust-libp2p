@@ -25,7 +25,7 @@ For a dialer:
 extern crate bytes;
 extern crate futures;
 extern crate multistream_select;
-extern crate tokio_core;
+extern crate tokio_current_thread;
 
 use bytes::Bytes;
 use multistream_select::dialer_select_proto;
@@ -49,7 +49,7 @@ let client = TcpStream::connect(&"127.0.0.1:10333".parse().unwrap(), &core.handl
         dialer_select_proto(connec, protos).map(|r| r.0)
     });
 
-let negotiated_protocol: MyProto = core.run(client).expect("failed to find a protocol");
+let negotiated_protocol: MyProto = tokio_current_thread::block_on_all(client).expect("failed to find a protocol");
 println!("negotiated: {:?}", negotiated_protocol);
 ```
 
@@ -59,7 +59,7 @@ For a listener:
 extern crate bytes;
 extern crate futures;
 extern crate multistream_select;
-extern crate tokio_core;
+extern crate tokio_current_thread;
 
 use bytes::Bytes;
 use multistream_select::listener_select_proto;
@@ -88,5 +88,5 @@ let server = TcpListener::bind(&"127.0.0.1:0".parse().unwrap(), &core.handle()).
         Ok(())
     });
 
-core.run(server).expect("failed to run server");
+tokio_current_thread::block_on_all(server).expect("failed to run server");
 ```

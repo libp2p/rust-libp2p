@@ -2,6 +2,7 @@
 name = "libp2p-websocket"
 version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
 
 [dependencies]
 libp2p-core = { path = "../core" }
@@ -19,4 +20,4 @@ stdweb = { version = "0.1.3", default-features = false }
 
 [target.'cfg(not(target_os = "emscripten"))'.dev-dependencies]
 libp2p-tcp-transport = { path = "../tcp-transport" }
-tokio-core = "0.1"
+tokio-current-thread = "0.1"

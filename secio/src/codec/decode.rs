@@ -24,11 +24,11 @@ use bytes::BytesMut;
 use crypto::symmetriccipher::SynchronousStreamCipher;
 
 use error::SecioError;
+use futures::sink::Sink;
+use futures::stream::Stream;
 use futures::Async;
 use futures::Poll;
 use futures::StartSend;
-use futures::sink::Sink;
-use futures::stream::Stream;
 use ring::hmac;
 
 /// Wraps around a `Stream<Item = BytesMut>`. The buffers produced by the underlying stream
@@ -53,7 +53,7 @@ impl<S> DecoderMiddleware<S> {
         raw_stream: S,
         cipher: Box<SynchronousStreamCipher>,
         hmac_key: hmac::VerificationKey,
-        hmac_num_bytes: usize,      // TODO: remove this parameter
+        hmac_num_bytes: usize, // TODO: remove this parameter
     ) -> DecoderMiddleware<S> {
         DecoderMiddleware {
             cipher_state: cipher,
@@ -92,7 +92,7 @@ where
         let (crypted_data, expected_hash) = frame.split_at(frame.len() - hmac_num_bytes);
         debug_assert_eq!(expected_hash.len(), hmac_num_bytes);
 
-        if let Err(_) = hmac::verify(&self.hmac_key, crypted_data, expected_hash) {
+        if hmac::verify(&self.hmac_key, crypted_data, expected_hash).is_err() {
             debug!("hmac mismatch when decoding secio frame");
             return Err(SecioError::HmacNotMatching);
         }
