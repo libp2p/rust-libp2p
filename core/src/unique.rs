@@ -225,14 +225,16 @@ impl<T> UniqueConnec<T> {
         };
         drop(inner);
 
-        struct Cleaner<T>(Arc<Mutex<UniqueConnecInner<T>>>);
+        struct Cleaner<T>(Weak<Mutex<UniqueConnecInner<T>>>);
         impl<T> Drop for Cleaner<T> {
             #[inline]
             fn drop(&mut self) {
-                *self.0.lock() = UniqueConnecInner::Empty;
+                if let Some(inner) = self.0.upgrade() {
+                    *inner.lock() = UniqueConnecInner::Empty;
+                }
             }
         }
-        let cleaner = Cleaner(self.inner.clone());
+        let cleaner = Cleaner(Arc::downgrade(&self.inner));
 
         // The mutex is unlocked when we notify the pending tasks.
         for task in tasks_to_notify {
