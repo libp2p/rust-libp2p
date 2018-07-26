@@ -50,7 +50,7 @@ use std::collections::hash_map::Entry;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind, Read, Write};
 use std::mem;
 use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
+use std::sync::{Arc, atomic::AtomicUsize, atomic::Ordering};
 use tokio_io::{AsyncRead, AsyncWrite};
 use transport::{MuxedTransport, Transport, UpgradedNode};
 use upgrade::ConnectionUpgrade;
@@ -86,7 +86,7 @@ where
     connections: FnvHashMap<Multiaddr, PeerState<C::Output>>,
 
     /// Tasks to notify when one or more new elements were added to `connections`.
-    notify_on_new_connec: Vec<task::Task>,
+    notify_on_new_connec: FnvHashMap<usize, task::Task>,
 
     /// Next `connection_id` to use when opening a connection.
     next_connection_id: u64,
@@ -142,7 +142,7 @@ where
             shared: Arc::new(Mutex::new(Shared {
                 transport: node,
                 connections: Default::default(),
-                notify_on_new_connec: Vec::new(),
+                notify_on_new_connec: Default::default(),
                 next_connection_id: 0,
                 next_listener_id: 0,
             })),
@@ -365,8 +365,8 @@ where
                         },
                     };
 
-                    for task in shared.notify_on_new_connec.drain(..) {
-                        task.notify();
+                    for task in shared.notify_on_new_connec.drain() {
+                        task.1.notify();
                     }
 
                     e.insert(state)
@@ -508,8 +508,8 @@ where
                     shared.next_connection_id += 1;
                     let state = PeerState::Active { muxer, next_incoming, connection_id, listener_id: Some(self.listener_id), num_substreams: 1, client_addr: client_addr.clone() };
                     shared.connections.insert(client_addr, state);
-                    for to_notify in shared.notify_on_new_connec.drain(..) {
-                        to_notify.notify();
+                    for to_notify in shared.notify_on_new_connec.drain() {
+                        to_notify.1.notify();
                     }
                 }
                 Ok(Async::Ready(None)) | Ok(Async::NotReady) => {
@@ -575,7 +575,11 @@ where
             },
             Ok(Async::Ready(None)) | Ok(Async::NotReady) => {
                 // TODO: will add an element to the list every time
-                shared.notify_on_new_connec.push(task::current());
+                static NEXT_TASK_ID: AtomicUsize = AtomicUsize::new(0);
+                task_local!{
+                    static TASK_ID: usize = NEXT_TASK_ID.fetch_add(1, Ordering::Relaxed)
+                }
+                shared.notify_on_new_connec.insert(TASK_ID.with(|&v| v), task::current());
                 Ok(Async::NotReady)
             },
             Err(err) => Err(err)
