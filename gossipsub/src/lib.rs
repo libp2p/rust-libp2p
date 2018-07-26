@@ -23,6 +23,8 @@
 
 // For more information, please refer to <http://unlicense.org/>
 
+// WIP!
+
 extern crate libp2p_floodsub;
 extern crate libp2p_core;
 extern crate libp2p_kad;
@@ -45,15 +47,15 @@ use libp2p_core::{
 };
 use time::Duration;
 
-/// Membership management
+/// "Membership management
 /// 
 /// Join overlay
 /// 
-/// Obtain initial contact nodes via rendevous with DHT provider records
+/// Obtain initial contact nodes via rendevous with DHT provider records"
  
 // See https://github.com/libp2p/rust-libp2p/blob/8e07c18178ac43cad3fa8974a243a98d9bc8b896/kad/src/lib.rs#L21.
 
-//! Kademlia protocol. Allows peer discovery, records store and records fetch.
+//! "Kademlia protocol. Allows peer discovery, records store and records fetch.
 //!
 //! # Usage
 //!
@@ -67,7 +69,7 @@ use time::Duration;
 //! - Build a `KadSystem` from the `KadSystemConfig`. This requires passing a closure that provides
 //!   the Kademlia controller of a peer.
 //!
-//! - You can perform queries using the `KadSystem`.
+//! - You can perform queries using the `KadSystem`."
 //!
 
 // TODO: tests!
@@ -98,9 +100,10 @@ let kad_system_config = KadSystemConfig {
 
 // KadConnecConfig
 // In https://github.com/libp2p/rust-libp2p/blob/master/kad/src/kad_server.rs
-kad_connec_config = KadConnecConfig.new()
+let kad_connec_config = KadConnecConfig.new()
 
-// Create a swarm that upgrades incoming connections with the `KadConnecConfig`.
+// For reference, quoted verbatim, could delete:
+// "Create a swarm that upgrades incoming connections with the `KadConnecConfig`.
 // https://github.com/libp2p/rust-libp2p/blob/4592d1b21ef8bd41a8176ad651feb1aa6cb1b377/core/src/swarm.rs#L28-L43
 
 // /// Creates a swarm.
@@ -118,17 +121,29 @@ kad_connec_config = KadConnecConfig.new()
 // where
 //     T: MuxedTransport + Clone + 'static, // TODO: 'static :-/
 //     H: FnMut(T::Output, Box<Future<Item = Multiaddr, Error = IoError>>) -> F,
-//     F: IntoFuture<Item = (), Error = IoError>,
+//     F: IntoFuture<Item = (), Error = IoError>,"
 
-swarm_inst = swarm(kad_connec_config)
+// kad_connec_config.upgrade is the upgraded transport.
 
-// Build a `KadSystem` from the `KadSystemConfig`. This requires passing a closure that provides
-// the Kademlia controller of a peer.
-// 
-// You can perform queries using the `KadSystem`.
+/// "[KadConnecConfig] implements `ConnectionUpgrade`. On a successful upgrade, produces a `KadConnecController`
+/// and a `Future`. The controller lets you send queries to the remote and receive answers, while
+/// the `Future` must be driven to completion in order for things to work."
+
+let swarm_inst = |swarm(kad_connec_config.upgrade);
+
+// "Build a `KadSystem` from the `KadSystemConfig`. This requires passing a closure that provides
+// the Kademlia controller of a peer."
+// Assume that the controller is not the above `swarm_inst` and it is `KadConnecController` (which I think is 
+// an output of KadConnecConfig.upgrade and that "passing a
+// closure that provides x" means that the closure has been previously defined, and that we call the closure like 
+// a function with x as an input.
+let kad_system = |kad_peer_controller);
 
 
-// Send a GETNODE message in order to obtain an up-to-date view of the overlay from the passive list of a 
+// "You can perform queries using the `KadSystem`."
+
+
+// "Send a GETNODE message in order to obtain an up-to-date view of the overlay from the passive list of a 
 // subscribed node regardless of age of Provider records.
 
 // Once an up-to-date passive view of the overlay has been
@@ -520,4 +535,4 @@ swarm_inst = swarm(kad_connec_config)
 // - Missing messages and overlay repair are managed by a single background timer instead of
 //   of creating timers left and right for every missing message; that's impractical from an
 //   implementation point of view, at least in Go.
-// - There is no provision for eager overlay repair on `NeighborDown` messages in Plumtree.
+// - There is no provision for eager overlay repair on `NeighborDown` messages in Plumtree."
