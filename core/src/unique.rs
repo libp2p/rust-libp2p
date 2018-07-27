@@ -25,6 +25,7 @@ use {Multiaddr, MuxedTransport, SwarmController, Transport};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::mem;
 use std::sync::{Arc, Weak, atomic::AtomicUsize, atomic::Ordering};
+use transport::interruptible::Interrupt;
 
 /// Storage for a unique connection with a remote.
 pub struct UniqueConnec<T> {
@@ -41,6 +42,9 @@ enum UniqueConnecInner<T> {
         /// Future that represents when `tie_*` should have been called.
         // TODO: Send + Sync bound is meh
         dial_fut: Box<Future<Item = (), Error = IoError> + Send + Sync>,
+        /// Dropping this object will automatically interrupt the dial, which is very useful if
+        /// we clear or drop the `UniqueConnec`.
+        interrupt: Interrupt,
     },
     /// The value of this unique connec has been set.
     /// Can only transition to `Empty` when the future has expired.
@@ -134,6 +138,8 @@ impl<T> UniqueConnec<T> {
         };
 
         let weak_inner = Arc::downgrade(&self.inner);
+
+        let (transport, interrupt) = transport.interruptible();
         let dial_fut = swarm.dial_then(multiaddr.clone(), transport,
             move |val: Result<(), IoError>| {
                 let inner = match weak_inner.upgrade() {
@@ -172,6 +178,7 @@ impl<T> UniqueConnec<T> {
         *inner = UniqueConnecInner::Pending {
             tasks_waiting: Default::default(),
             dial_fut: Box::new(dial_fut),
+            interrupt,
         };
 
         UniqueConnecFuture { inner: Arc::downgrade(&self.inner) }
@@ -360,7 +367,7 @@ impl<T> Future for UniqueConnecFuture<T>
                 // closed.
                 Err(IoErrorKind::ConnectionAborted.into())
             },
-            UniqueConnecInner::Pending { mut tasks_waiting, mut dial_fut } => {
+            UniqueConnecInner::Pending { mut tasks_waiting, mut dial_fut, interrupt } => {
                 match dial_fut.poll() {
                     Ok(Async::Ready(())) => {
                         // This happens if we successfully dialed a remote, but the callback
@@ -376,7 +383,7 @@ impl<T> Future for UniqueConnecFuture<T>
                             static TASK_ID: usize = NEXT_TASK_ID.fetch_add(1, Ordering::Relaxed)
                         }
                         tasks_waiting.insert(TASK_ID.with(|&k| k), task::current());
-                        *inner = UniqueConnecInner::Pending { tasks_waiting, dial_fut };
+                        *inner = UniqueConnecInner::Pending { tasks_waiting, dial_fut, interrupt };
                         Ok(Async::NotReady)
                     }
                     Err(err) => {
@@ -721,4 +728,7 @@ mod tests {
             .select(swarm_future).map(|_| ()).map_err(|(err, _)| err);
         current_thread::Runtime::new().unwrap().block_on(future).unwrap();
     }
+
+    // TODO: test that dialing is interrupted when UniqueConnec is cleared
+    // TODO: test that dialing is interrupted when UniqueConnec is dropped
 }
