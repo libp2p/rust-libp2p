@@ -9,7 +9,7 @@ of *libp2p*.
 
 The main trait that this crate provides is `Transport`, which provides the `dial` and
 `listen_on` methods and can be used to dial or listen on a multiaddress. The `swarm` crate
-itself does not provide any concrete (ie. non-dummy, non-adapter) implementation of this trait.
+itself does not provide any concrete (i.e. non-dummy, non-adapter) implementation of this trait.
 It is implemented on structs that are provided by external crates, such as `TcpConfig` from
 `tcp-transport`, `UdpConfig`, or `WebsocketConfig` (note: as of the writing of this
 documentation, the last two structs don't exist yet).
@@ -20,8 +20,10 @@ possible to group two implementations of `Transport` with the `or_transport` met
 to obtain a single object that supports the protocols of both objects at once. This can be done
 multiple times in a row in order to chain as many implementations as you want.
 
+```
 // TODO: right now only tcp-transport exists, we need to add an example for chaining
 //       multiple transports once that makes sense
+```
 
 ## The `MuxedTransport` trait
 
@@ -92,7 +94,7 @@ instead of opening a new one every time.
 
 > **Note**: Right now the `ConnectionReuse` struct is not fully implemented.
 
-TODO: add an example once the multiplex pull request is merged
+`TODO: add an example once the multiplex pull request is merged`
 
 ## Actual protocols
 
