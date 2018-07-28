@@ -34,11 +34,11 @@ mod codec;
 
 use std::{cmp, iter};
 use std::io::{Read, Write, Error as IoError, ErrorKind as IoErrorKind};
-use std::sync::Arc;
+use std::sync::{Arc, atomic::AtomicUsize, atomic::Ordering};
 use bytes::Bytes;
 use core::{ConnectionUpgrade, Endpoint, StreamMuxer};
 use parking_lot::Mutex;
-use fnv::FnvHashSet;
+use fnv::{FnvHashMap, FnvHashSet};
 use futures::prelude::*;
 use futures::{future, stream::Fuse, task};
 use tokio_codec::Framed;
@@ -79,7 +79,7 @@ where
                 buffer: Vec::with_capacity(32),
                 opened_substreams: Default::default(),
                 next_outbound_stream_id: if endpoint == Endpoint::Dialer { 0 } else { 1 },
-                to_notify: Vec::new(),
+                to_notify: Default::default(),
             }))
         };
 
@@ -118,7 +118,7 @@ struct MultiplexInner<C> {
     // Id of the next outgoing substream. Should always increase by two.
     next_outbound_stream_id: u32,
     // List of tasks to notify when a new element is inserted in `buffer`.
-    to_notify: Vec<task::Task>,
+    to_notify: FnvHashMap<usize, task::Task>,
 }
 
 /// Processes elements in `inner` until one matching `filter` is found.
@@ -138,7 +138,11 @@ where C: AsyncRead + AsyncWrite,
         let elem = match inner.inner.poll() {
             Ok(Async::Ready(item)) => item,
             Ok(Async::NotReady) => {
-                inner.to_notify.push(task::current());
+                static NEXT_TASK_ID: AtomicUsize = AtomicUsize::new(0);
+                task_local!{
+                    static TASK_ID: usize = NEXT_TASK_ID.fetch_add(1, Ordering::Relaxed)
+                }
+                inner.to_notify.insert(TASK_ID.with(|&t| t), task::current());
                 return Ok(Async::NotReady);
             },
             Err(err) => {
@@ -170,8 +174,8 @@ where C: AsyncRead + AsyncWrite,
 
                 if inner.opened_substreams.contains(&elem.substream_id()) || elem.is_open_msg() {
                     inner.buffer.push(elem);
-                    for task in inner.to_notify.drain(..) {
-                        task.notify();
+                    for task in inner.to_notify.drain() {
+                        task.1.notify();
                     }
                 } else {
                     debug!("Ignored message because the substream wasn't open");
