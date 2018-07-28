@@ -47,7 +47,7 @@ use tokio_io::{AsyncRead, AsyncWrite};
 // Maximum number of simultaneously-open substreams.
 const MAX_SUBSTREAMS: usize = 1024;
 // Maximum number of elements in the internal buffer.
-const MAX_BUFFER_LEN: usize = 256;
+const MAX_BUFFER_LEN: usize = 1024;
 
 /// Configuration for the multiplexer.
 #[derive(Debug, Clone, Default)]
@@ -75,6 +75,7 @@ where
     fn upgrade(self, i: C, _: (), endpoint: Endpoint, remote_addr: Maf) -> Self::Future {
         let out = Multiplex {
             inner: Arc::new(Mutex::new(MultiplexInner {
+                error: Ok(()),
                 inner: Framed::new(i, codec::Codec::new()).fuse(),
                 buffer: Vec::with_capacity(32),
                 opened_substreams: Default::default(),
@@ -108,6 +109,8 @@ impl<C> Clone for Multiplex<C> {
 
 // Struct shared throughout the implementation.
 struct MultiplexInner<C> {
+    // Errored that happend earlier. Should poison any attempt to use this `MultiplexError`.
+    error: Result<(), IoError>,
     // Underlying stream.
     inner: Fuse<Framed<C, codec::Codec>>,
     // Buffer of elements pulled from the stream but not processed yet.
@@ -117,7 +120,7 @@ struct MultiplexInner<C> {
     opened_substreams: FnvHashSet<u32>,
     // Id of the next outgoing substream. Should always increase by two.
     next_outbound_stream_id: u32,
-    // List of tasks to notify when a new element is inserted in `buffer`.
+    // List of tasks to notify when a new element is inserted in `buffer` or an error happens.
     to_notify: FnvHashMap<usize, task::Task>,
 }
 
@@ -129,6 +132,12 @@ fn next_match<C, F, O>(inner: &mut MultiplexInner<C>, mut filter: F) -> Poll<Opt
 where C: AsyncRead + AsyncWrite,
       F: FnMut(&codec::Elem) -> Option<O>,
 {
+    // If an error happened earlier, immediately return it.
+    match inner.error {
+        Ok(()) => (),
+        Err(ref err) => return Err(IoError::new(err.kind(), err.to_string())),
+    };
+
     if let Some((offset, out)) = inner.buffer.iter().enumerate().filter_map(|(n, v)| filter(v).map(|v| (n, v))).next() {
         inner.buffer.remove(offset);
         return Ok(Async::Ready(Some(out)));
@@ -146,7 +155,12 @@ where C: AsyncRead + AsyncWrite,
                 return Ok(Async::NotReady);
             },
             Err(err) => {
-                return Err(err);
+                let err2 = IoError::new(err.kind(), err.to_string());
+                inner.error = Err(err);
+                for task in inner.to_notify.drain() {
+                    task.1.notify();
+                }
+                return Err(err2);
             },
         };
 
@@ -169,6 +183,10 @@ where C: AsyncRead + AsyncWrite,
             } else {
                 if inner.buffer.len() >= MAX_BUFFER_LEN {
                     debug!("Reached mplex maximum buffer length");
+                    inner.error = Err(IoError::new(IoErrorKind::Other, "reached maximum buffer length"));
+                    for task in inner.to_notify.drain() {
+                        task.1.notify();
+                    }
                     return Err(IoError::new(IoErrorKind::Other, "reached maximum buffer length"));
                 }
 
