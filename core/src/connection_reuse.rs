@@ -119,7 +119,7 @@ enum PeerState<M> where M: StreamMuxer {
         /// Future that produces the muxer.
         future: Box<Future<Item = (M, Multiaddr), Error = IoError>>,
         /// All the tasks to notify when `future` resolves.
-        notify: Vec<task::Task>,
+        notify: FnvHashMap<usize, task::Task>,
     },
 
     /// An earlier connection attempt errored.
@@ -255,6 +255,12 @@ where
     }
 }
 
+static NEXT_TASK_ID: AtomicUsize = AtomicUsize::new(0);
+// `TASK_ID` is used internally to uniquely identify each task.
+task_local!{
+    static TASK_ID: usize = NEXT_TASK_ID.fetch_add(1, Ordering::Relaxed)
+}
+
 /// Implementation of `Future` for dialing a node.
 pub struct ConnectionReuseDial<T, C>
 where 
@@ -356,7 +362,7 @@ where
                             trace!("Opened new connection to {:?}", self.addr);
                             let future = future.and_then(|(out, addr)| addr.map(move |a| (out, a)));
                             let future = Box::new(future);
-                            PeerState::Pending { future, notify: Vec::new() }
+                            PeerState::Pending { future, notify: Default::default() }
                         },
                         Err(_) => {
                             trace!("Failed to open connection to {:?}, multiaddr not supported", self.addr);
@@ -390,7 +396,7 @@ where
                         Ok(Async::Ready((muxer, client_addr))) => {
                             trace!("Successful new connection to {} ({})", self.addr, client_addr);
                             for task in notify {
-                                task.notify();
+                                task.1.notify();
                             }
                             let next_incoming = muxer.clone().inbound();
                             let first_outbound = muxer.clone().outbound();
@@ -404,7 +410,7 @@ where
                             });
                         },
                         Ok(Async::NotReady) => {
-                            notify.push(task::current());
+                            notify.insert(TASK_ID.with(|&t| t), task::current());
                             *connec = PeerState::Pending { future, notify };
                             return Ok(Async::NotReady);
                         },
@@ -575,10 +581,6 @@ where
             },
             Ok(Async::Ready(None)) | Ok(Async::NotReady) => {
                 // TODO: will add an element to the list every time
-                static NEXT_TASK_ID: AtomicUsize = AtomicUsize::new(0);
-                task_local!{
-                    static TASK_ID: usize = NEXT_TASK_ID.fetch_add(1, Ordering::Relaxed)
-                }
                 shared.notify_on_new_connec.insert(TASK_ID.with(|&v| v), task::current());
                 Ok(Async::NotReady)
             },
@@ -645,8 +647,7 @@ where
                 }
             },
             PeerState::Pending { ref mut notify, .. } => {
-                // TODO: this will add a new element at each iteration
-                notify.push(task::current());
+                notify.insert(TASK_ID.with(|&t| t), task::current());
             },
             PeerState::Errored(_) => {},
             PeerState::Poisonned => {
