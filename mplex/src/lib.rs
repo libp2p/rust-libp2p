@@ -34,7 +34,6 @@ mod codec;
 
 use std::{cmp, iter};
 use std::io::{Read, Write, Error as IoError, ErrorKind as IoErrorKind};
-use std::mem;
 use std::sync::Arc;
 use bytes::Bytes;
 use core::{ConnectionUpgrade, Endpoint, StreamMuxer};
@@ -223,15 +222,17 @@ where C: AsyncRead + AsyncWrite + 'static       // TODO: 'static :-/
         };
 
         // We use an RAII guard, so that we close the substream in case of an error.
-        struct OpenedSubstreamGuard<C>(Arc<Mutex<MultiplexInner<C>>>, u32);
+        struct OpenedSubstreamGuard<C>(Option<Arc<Mutex<MultiplexInner<C>>>>, u32);
         impl<C> Drop for OpenedSubstreamGuard<C> {
             fn drop(&mut self) {
-                debug!("Failed to open outbound substream {}", self.1);
-                self.0.lock().buffer.retain(|elem| elem.substream_id() != self.1);
+                if let Some(inner) = self.0.take() {
+                    debug!("Failed to open outbound substream {}", self.1);
+                    inner.lock().buffer.retain(|elem| elem.substream_id() != self.1);
+                }
             }
         }
         inner.opened_substreams.insert(substream_id);
-        let guard = OpenedSubstreamGuard(self.inner.clone(), substream_id);
+        let mut guard = OpenedSubstreamGuard(Some(self.inner.clone()), substream_id);
 
         // We send `Open { substream_id }`, then flush, then only produce the substream.
         let future = {
@@ -246,18 +247,14 @@ where C: AsyncRead + AsyncWrite + 'static       // TODO: 'static :-/
                 move |()| {
                     future::poll_fn(move || inner.lock().inner.poll_complete())
                 }
-            }).map({
+            }).map(move |()| {
                 debug!("Successfully opened outbound substream {}", substream_id);
-                let inner = self.inner.clone();
-                move |()| {
-                    mem::forget(guard);
-                    Some(Substream {
-                        inner: inner.clone(),
-                        num: substream_id,
-                        current_data: Bytes::new(),
-                        endpoint: Endpoint::Dialer,
-                    })
-                }
+                Some(Substream {
+                    inner: guard.0.take().unwrap(),
+                    num: substream_id,
+                    current_data: Bytes::new(),
+                    endpoint: Endpoint::Dialer,
+                })
             })
         };
 
