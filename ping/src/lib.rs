@@ -99,7 +99,7 @@ use futures::sync::{mpsc, oneshot};
 use futures::{Future, Sink, Stream};
 use libp2p_core::{ConnectionUpgrade, Endpoint};
 use parking_lot::Mutex;
-use rand::{prelude::*, rngs::EntropyRng, distributions::Standard};
+use rand::{distributions::Standard, prelude::*, rngs::EntropyRng};
 use std::collections::HashMap;
 use std::error::Error;
 use std::io::Error as IoError;
@@ -202,8 +202,7 @@ fn upgrade_as_dialer(socket: impl AsyncRead + AsyncWrite + 'static) -> PingOutpu
                             Box::new(
                                 sink.send(payload)
                                     .map(|sink| Loop::Continue((sink, stream))),
-                            )
-                                as Box<Future<Item = _, Error = _>>
+                            ) as Box<Future<Item = _, Error = _>>
                         }
                         Message::Received(payload) => {
                             // Received a payload from the remote.
@@ -224,13 +223,15 @@ fn upgrade_as_dialer(socket: impl AsyncRead + AsyncWrite + 'static) -> PingOutpu
                         }
                     }
                 } else {
-                    Box::new(Ok(Loop::Break(())).into_future())
-                        as Box<Future<Item = _, Error = _>>
+                    Box::new(Ok(Loop::Break(())).into_future()) as Box<Future<Item = _, Error = _>>
                 }
             })
     });
 
-    PingOutput::Pinger { pinger, processing: Box::new(future) as Box<_> }
+    PingOutput::Pinger {
+        pinger,
+        processing: Box::new(future) as Box<_>,
+    }
 }
 
 /// Upgrades a connection from the listener side.
@@ -249,12 +250,10 @@ fn upgrade_as_listener(socket: impl AsyncRead + AsyncWrite + 'static) -> PingOut
                     Box::new(
                         sink.send(payload.freeze())
                             .map(|sink| Loop::Continue((sink, stream))),
-                    )
-                        as Box<Future<Item = _, Error = _>>
+                    ) as Box<Future<Item = _, Error = _>>
                 } else {
                     // Connection was closed
-                    Box::new(Ok(Loop::Break(())).into_future())
-                        as Box<Future<Item = _, Error = _>>
+                    Box::new(Ok(Loop::Break(())).into_future()) as Box<Future<Item = _, Error = _>>
                 }
             })
     });
@@ -280,7 +279,8 @@ impl Pinger {
         debug!("Preparing for ping with payload {:?}", payload);
         // Ignore errors if the ponger has been already destroyed. The returned future will never
         // be signalled.
-        let fut = self.send
+        let fut = self
+            .send
             .clone()
             .send(Message::Ping(Bytes::from(payload.to_vec()), tx))
             .from_err()
@@ -369,11 +369,9 @@ mod tests {
                     future::ok::<Multiaddr, IoError>("/ip4/127.0.0.1/tcp/10000".parse().unwrap()),
                 )
             })
-            .and_then(|(out, _)| {
-                match out {
-                    PingOutput::Ponger(service) => service,
-                    _ => unreachable!()
-                }
+            .and_then(|(out, _)| match out {
+                PingOutput::Ponger(service) => service,
+                _ => unreachable!(),
             });
 
         let client = TcpStream::connect(&listener_addr)
@@ -386,17 +384,16 @@ mod tests {
                     future::ok::<Multiaddr, IoError>("/ip4/127.0.0.1/tcp/10000".parse().unwrap()),
                 )
             })
-            .and_then(|(out, _)| {
-                match out {
-                    PingOutput::Pinger { mut pinger, processing } => {
-                        pinger
-                            .ping()
-                            .map_err(|_| panic!())
-                            .select(processing)
-                            .map_err(|_| panic!())
-                    },
-                    _ => unreachable!()
-                }
+            .and_then(|(out, _)| match out {
+                PingOutput::Pinger {
+                    mut pinger,
+                    processing,
+                } => pinger
+                    .ping()
+                    .map_err(|_| panic!())
+                    .select(processing)
+                    .map_err(|_| panic!()),
+                _ => unreachable!(),
             })
             .map(|_| ());
 
@@ -421,11 +418,9 @@ mod tests {
                     future::ok::<Multiaddr, IoError>("/ip4/127.0.0.1/tcp/10000".parse().unwrap()),
                 )
             })
-            .and_then(|(out, _)| {
-                match out {
-                    PingOutput::Ponger(service) => service,
-                    _ => unreachable!()
-                }
+            .and_then(|(out, _)| match out {
+                PingOutput::Ponger(service) => service,
+                _ => unreachable!(),
             });
 
         let client = TcpStream::connect(&listener_addr)
@@ -438,20 +433,21 @@ mod tests {
                     future::ok::<Multiaddr, IoError>("/ip4/127.0.0.1/tcp/10000".parse().unwrap()),
                 )
             })
-            .and_then(|(out, _)| {
-                match out {
-                    PingOutput::Pinger { mut pinger, processing } => {
-                        let pings = (0..20).map(move |_| pinger.ping().map_err(|_| ()));
+            .and_then(|(out, _)| match out {
+                PingOutput::Pinger {
+                    mut pinger,
+                    processing,
+                } => {
+                    let pings = (0..20).map(move |_| pinger.ping().map_err(|_| ()));
 
-                        join_all(pings)
-                            .map(|_| ())
-                            .map_err(|_| panic!())
-                            .select(processing)
-                            .map(|_| ())
-                            .map_err(|_| panic!())
-                    },
-                    _ => unreachable!()
+                    join_all(pings)
+                        .map(|_| ())
+                        .map_err(|_| panic!())
+                        .select(processing)
+                        .map(|_| ())
+                        .map_err(|_| panic!())
                 }
+                _ => unreachable!(),
             });
 
         tokio_current_thread::block_on_all(server.select(client)).unwrap_or_else(|_| panic!());
