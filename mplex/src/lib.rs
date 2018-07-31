@@ -169,8 +169,18 @@ where C: AsyncRead + AsyncWrite,
 
             // Handle substreams opening/closing.
             match elem {
-                codec::Elem::Open { substream_id } => {       // TODO: check even/uneven?
-                    inner.opened_substreams.insert(substream_id);
+                codec::Elem::Open { substream_id } => {
+                    if (substream_id % 2) == (inner.next_outbound_stream_id % 2) {
+                        inner.error = Err(IoError::new(IoErrorKind::Other, "invalid substream id opened"));
+                        for task in inner.to_notify.drain() {
+                            task.1.notify();
+                        }
+                        return Err(IoError::new(IoErrorKind::Other, "invalid substream id opened"));
+                    }
+
+                    if !inner.opened_substreams.insert(substream_id) {
+                        debug!("Received open message for substream {} which was already open", substream_id)
+                    }
                 },
                 codec::Elem::Close { substream_id, .. } | codec::Elem::Reset { substream_id, .. } => {
                     inner.opened_substreams.remove(&substream_id);
