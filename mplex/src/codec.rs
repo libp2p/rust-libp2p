@@ -50,6 +50,17 @@ impl Elem {
         }
     }
 
+    /// Returns true if this message is `Close` or `Reset`.
+    #[inline]
+    pub fn is_close_or_reset_msg(&self) -> bool {
+        match self {
+            Elem::Close { .. } | Elem::Reset { .. } => true,
+            _ => false,
+        }
+    }
+
+    /// Returns true if this message is `Open`.
+    #[inline]
     pub fn is_open_msg(&self) -> bool {
         if let Elem::Open { .. } = self {
             true

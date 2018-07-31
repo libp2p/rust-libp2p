@@ -195,8 +195,8 @@ where C: AsyncRead + AsyncWrite,
                     for task in inner.to_notify.drain() {
                         task.1.notify();
                     }
-                } else {
-                    debug!("Ignored message because the substream wasn't open");
+                } else if !elem.is_close_or_reset_msg() {
+                    debug!("Ignored message {:?} because the substream wasn't open", elem);
                 }
             }
         } else {
@@ -416,7 +416,7 @@ impl<C> AsyncWrite for Substream<C>
 where C: AsyncRead + AsyncWrite
 {
     fn shutdown(&mut self) -> Poll<(), IoError> {
-        let elem = codec::Elem::Close {
+        let elem = codec::Elem::Reset {
             substream_id: self.num,
             endpoint: self.endpoint,
         };
