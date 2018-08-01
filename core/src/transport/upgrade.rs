@@ -50,14 +50,14 @@ impl<'a, T, C> UpgradedNode<T, C>
 where
     T: Transport + 'a,
     T::Output: AsyncRead + AsyncWrite,
-    C: ConnectionUpgrade<T::Output, T::MultiaddrFuture> + 'a,
+    C: ConnectionUpgrade<T::Output, T::MultiaddrFuture> + 'a +  Clone,
 {
     /// Turns this upgraded node into a `ConnectionReuse`. If the `Output` implements the
     /// `StreamMuxer` trait, the returned object will implement `Transport` and `MuxedTransport`.
     #[inline]
     pub fn into_connection_reuse(self) -> ConnectionReuse<T, C>
     where
-        C::Output: StreamMuxer,
+        C::Output: StreamMuxer + Clone,
     {
         From::from(self)
     }
