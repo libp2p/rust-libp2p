@@ -82,6 +82,8 @@ impl Counter {
     }
 }
 
+type StreamId = usize;
+
 enum PeerState<M>
 where
     M: StreamMuxer + Clone,
@@ -91,9 +93,9 @@ where
         /// The muxer to open new substreams.
         muxer: M,
         /// Unique identifier for this connection in the `ConnectionReuse`.
-        connection_id: usize,
+        // connection_id: usize,
         /// Number of open substreams.
-        num_substreams: usize,
+        substreams: Vec<StreamId>,
         /// Id of the listener that created this connection, or `None` if it was opened by a
         /// dialer.
         listener_id: Option<usize>,
@@ -130,8 +132,8 @@ where
     /// Tasks to notify when one or more new elements were added to `connections`.
     notify_on_new_connec: Mutex<FnvHashMap<usize, task::Task>>,
 
-    /// Counter giving us the next connection_id
-    connection_counter: Counter,
+    /// Counter giving us the next stream_id
+    streams_counter: Counter,
 
     /// Counter giving us the next listener_id
     listener_counter: Counter,
@@ -152,29 +154,22 @@ where
         }
     }
 
-    /// Removes one substream from an active connection.
-    /// Closes the connection if no substream is left.
-    fn remove_substream(&self, connec_id: usize, addr: &Multiaddr) {
-        self.connections.lock().retain(|_, connec| {
-            if let PeerState::Active {
-                connection_id,
-                ref mut num_substreams,
-                ..
-            } = connec
-            {
-                if *connection_id == connec_id {
-                    *num_substreams -= 1;
-                    if *num_substreams == 0 {
-                        trace!(
-                            "All substreams to {} closed ; closing main connection",
-                            addr
-                        );
-                        return false;
-                    }
-                }
-            }
-            true
-        });
+    /// Removes one substream from an active connection. Drops the connection if no substream
+    /// is left. Returns `true` if the connection has been dropped.
+    fn remove_substream(&self, addr: &Multiaddr, stream_id: &StreamId) -> bool {
+        let mut conns = self.connections.lock();
+        let mut drop = false;
+
+        if let Some(PeerState::Active { ref mut substreams, .. }) = conns.get_mut(addr) {
+            substreams.retain(|e| e != stream_id);
+            drop = substreams.is_empty();
+        }
+
+        if drop {
+            conns.remove(addr);
+        }
+
+        drop
     }
 
     /// Clear the cached connection if the entry contains an error. Returns whether an error was
@@ -219,9 +214,8 @@ where
         let mut conns = self.connections.lock();
         let new_state = PeerState::Active {
                 muxer,
-                connection_id: self.connection_counter.next(),
                 listener_id: Some(listener_id),
-                num_substreams: 1,
+                substreams: vec![],
             };
         match conns.insert(addr.clone(), new_state) {
             None | Some(PeerState::Errored(_)) => {
@@ -242,7 +236,7 @@ where
 
     fn poll_outbound(&self,
         addr: Multiaddr,
-        reset: bool) -> Poll<(<C::Output as StreamMuxer>::OutboundSubstream, usize), IoError> {
+        reset: bool) -> Poll<(<C::Output as StreamMuxer>::OutboundSubstream, StreamId), IoError> {
 
         let mut conns = self.connections.lock();
 
@@ -292,8 +286,7 @@ where
                     }
                     PeerState::Active {
                         muxer,
-                        connection_id,
-                        ref mut num_substreams,
+                        ref mut substreams,
                         ..
                     } => {
                         // perfect, let's reuse, update the stream and 
@@ -302,9 +295,10 @@ where
                             "Using existing connection to {} to open outbound substream",
                             addr
                         );
+                        let stream_id = self.streams_counter.next();
+                        substreams.push(stream_id);
                         // mutating the param in place, nothing to be done
-                        *num_substreams += 1;
-                        return Ok(Async::Ready( (muxer.clone().outbound(), connection_id.clone())));
+                        return Ok(Async::Ready((muxer.clone().outbound(), stream_id)));
                     }
                     PeerState::Pending {
                         ref mut future,
@@ -335,15 +329,14 @@ where
                                     task.1.notify();
                                 }
                                 let first_outbound = muxer.clone().outbound();
-                                let connection_id = self.connection_counter.next();
+                                let stream_id = self.streams_counter.next();
 
                                 // our connection was upgraded, replace it.
                                 (PeerState::Active {
                                     muxer,
-                                    connection_id: connection_id.clone(),
-                                    num_substreams: 1,
+                                    substreams: vec![stream_id],
                                     listener_id: None
-                                }, Ok(Async::Ready( (first_outbound, connection_id))))
+                                }, Ok(Async::Ready((first_outbound, stream_id))))
                             }
                         }
                     }
@@ -364,7 +357,7 @@ where
     fn poll_incoming(
         &self,
         listener: Option<usize>,
-    ) -> Poll<Option<(<C::Output as StreamMuxer>::Substream, usize, Multiaddr)>, IoError> {
+    ) -> Poll<Option<(<C::Output as StreamMuxer>::Substream, StreamId, Multiaddr)>, IoError> {
         // Keys of the elements in `connections` to remove afterwards.
         let mut to_remove = Vec::new();
         // Substream to return, if any found.
@@ -376,8 +369,7 @@ where
             let res = {
                 if let PeerState::Active {
                     ref mut muxer,
-                    ref mut num_substreams,
-                    connection_id,
+                    ref mut substreams,
                     listener_id,
                 } = state
                 {
@@ -389,8 +381,9 @@ where
                     match muxer.clone().inbound().poll() {
                         Ok(Async::Ready(Some(inner))) => {
                             trace!("New incoming substream from {}", addr);
-                            *num_substreams += 1;
-                            Ok((inner, connection_id.clone(), addr.clone()))
+                            let stream_id = self.streams_counter.next();
+                            substreams.push(stream_id);
+                            Ok((inner, stream_id, addr.clone()))
                         }
                         Ok(Async::Ready(None)) => {
                             // The muxer isn't capable of opening any inbound stream anymore, so
@@ -457,7 +450,7 @@ where
                 transport: node,
                 connections: Default::default(),
                 notify_on_new_connec: Default::default(),
-                connection_counter: Default::default(),
+                streams_counter: Default::default(),
                 listener_counter: Default::default(),
             }),
         }
@@ -578,27 +571,13 @@ where
     /// The future that will construct the substream, the connection id the muxer comes from, and
     /// the `Future` of the client's multiaddr.
     /// If `None`, we need to grab a new outbound substream from the muxer.
-    outbound: Option<ConnectionReuseDialOut<T, C>>,
+    outbound: Option<(<C::Output as StreamMuxer>::OutboundSubstream, StreamId)>,
 
     // ConnectionsManager between the whole connection reuse mechanism.
     manager: Arc<ConnectionsManager<T, C>>,
 
     // The address we're trying to dial.
     addr: Multiaddr,
-}
-
-struct ConnectionReuseDialOut<T, C>
-where
-    T: Transport,
-    C: ConnectionUpgrade<T::Output, T::MultiaddrFuture>,
-    C::Output: StreamMuxer + Clone,
-{
-    /// The pending outbound substream.
-    stream: <C::Output as StreamMuxer>::OutboundSubstream,
-    /// Id of the connection that was used to create the substream.
-    connection_id: usize,
-    /// Address of the remote.
-    client_addr: Multiaddr,
 }
 
 impl<T, C> Future for ConnectionReuseDial<T, C>
@@ -621,19 +600,19 @@ where
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
             let should_kill_existing_muxer = match self.outbound.take() {
-                Some(mut outbound) => {
-                    match outbound.stream.poll() {
+                Some((mut stream, stream_id)) => {
+                    match stream.poll() {
                         Ok(Async::Ready(Some(inner))) => {
                             trace!("Opened new outgoing substream to {}", self.addr);
                             let manager = self.manager.clone();
                             return Ok(Async::Ready((
                                 ConnectionReuseSubstream {
-                                    connection_id: outbound.connection_id,
                                     inner,
                                     manager,
-                                    addr: outbound.client_addr.clone(),
+                                    stream_id: stream_id,
+                                    addr: self.addr.clone(),
                                 },
-                                future::ok(outbound.client_addr),
+                                future::ok(self.addr.clone()),
                             )));
                         }
                         Ok(Async::NotReady) => return Ok(Async::NotReady),
@@ -659,12 +638,8 @@ where
             };
 
             match self.manager.poll_outbound(self.addr.clone(), should_kill_existing_muxer) {
-                Ok(Async::Ready((stream, connection_id))) => {
-                    self.outbound = Some(ConnectionReuseDialOut {
-                        stream: stream.clone(),
-                        connection_id,
-                        client_addr: self.addr.clone(),
-                    })
+                Ok(Async::Ready(val)) => {
+                    self.outbound = Some(val);
                 }
                 Ok(Async::NotReady) => {
                     return Ok(Async::NotReady)
@@ -685,7 +660,7 @@ where
 {
     fn drop(&mut self) {
         if let Some(outbound) = self.outbound.take() {
-            self.manager.remove_substream(outbound.connection_id, &outbound.client_addr);
+            self.manager.remove_substream(&self.addr, &outbound.1);
         }
     }
 }
@@ -784,12 +759,12 @@ where
                     Ok(Async::NotReady)
                 }
             }
-            Ok(Async::Ready(Some((inner, connection_id, addr)))) => {
+            Ok(Async::Ready(Some((inner, stream_id, addr)))) => {
                 Ok(Async::Ready(Some(future::ok((
                     ConnectionReuseSubstream {
                         inner: inner.clone(),
                         manager: self.manager.clone(),
-                        connection_id: connection_id.clone(),
+                        stream_id,
                         addr: addr.clone(),
                     },
                     future::ok(addr.clone()),
@@ -838,11 +813,11 @@ where
     #[inline]
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self.manager.poll_incoming(None) {
-            Ok(Async::Ready(Some((inner, connection_id, addr)))) => Ok(Async::Ready(future::ok((
+            Ok(Async::Ready(Some((inner, stream_id, addr)))) => Ok(Async::Ready(future::ok((
                 ConnectionReuseSubstream {
                     inner,
                     manager: self.manager.clone(),
-                    connection_id,
+                    stream_id,
                     addr: addr.clone(),
                 },
                 future::ok(addr),
@@ -869,9 +844,9 @@ where
     inner: <C::Output as StreamMuxer>::Substream,
     manager: Arc<ConnectionsManager<T, C>>,
     /// Id this connection was created from.
-    connection_id: usize,
-    /// Address of the remote.
     addr: Multiaddr,
+    /// The Id of this particular stream
+    stream_id: StreamId
 }
 
 impl<T, C> Deref for ConnectionReuseSubstream<T, C>
@@ -956,6 +931,6 @@ where
     C::Output: StreamMuxer + Clone,
 {
     fn drop(&mut self) {
-        self.manager.remove_substream(self.connection_id, &self.addr);
+        self.manager.remove_substream(&self.addr, &self.stream_id);
     }
 }
