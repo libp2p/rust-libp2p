@@ -189,7 +189,7 @@ where
             if let PeerState::Errored(ref err) = e.get() { 
                 trace!("Clearing existing connection to {} which errored earlier: {:?}", e.key(), err);
             } else {
-                return false// nothing to do, quit
+                return false  // nothing to do, quit
             }
             
             // clear the error
@@ -238,10 +238,14 @@ where
             Some(PeerState::Active { .. }) => {
                 // FIXME: Now this is confusing. What exactly is supposed to happen here?
                 trace!("Overwriting active connection {:?}", addr);
+                // do something with open substreams?
             }
         }
     }
 
+    /// Polls for the outbound stream of `addr`. Clears the cached value first if `reset` is true.
+    /// Dials, if no connection is in the internal cache. Returns `Ok(Async::NotReady)` as long as
+    /// the connection isn't establed and ready yet.
     fn poll_outbound(&self,
         addr: Multiaddr,
         reset: bool) -> Poll<(<C::Output as StreamMuxer>::OutboundSubstream, StreamId), IoError> {
@@ -250,6 +254,7 @@ where
 
         if reset {
             conns.remove(&addr);
+            // do something with open substreams?
         }
 
         match conns.entry(addr.clone()) {
@@ -432,6 +437,7 @@ where
 
         for to_remove in to_remove {
             conn.remove(&to_remove);
+            // do something with open substreams?
         }
 
         match ret_value {
@@ -742,7 +748,7 @@ where
         // Process the connections being upgraded.
         loop {
             let (muxer, client_addr) = match self.current_upgrades.poll() {
-                Ok(Async::Ready(Some((muxer, client_addr)))) => (muxer, client_addr),
+                Ok(Async::Ready(Some(val))) => val,
                 Ok(Async::Ready(None)) | Ok(Async::NotReady) => break,
                 Err(err) => {
                     // Insert the rest of the pending upgrades, but not the current one.
@@ -834,6 +840,7 @@ where
                 future::ok(addr),
             )))),
             Ok(Async::Ready(None)) | Ok(Async::NotReady) => {
+                // wake us up, when there is a new connection
                 self.manager.register_notifier(TASK_ID.with(|&v| v), task::current());
                 Ok(Async::NotReady)
             }
