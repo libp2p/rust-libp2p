@@ -41,15 +41,15 @@
 
 use fnv::FnvHashMap;
 use futures::future::{self, FutureResult};
-use futures::{Async, Future, Poll, Stream, stream, task};
 use futures::stream::FuturesUnordered;
+use futures::{stream, task, Async, Future, Poll, Stream};
 use multiaddr::Multiaddr;
 use muxing::StreamMuxer;
 use parking_lot::Mutex;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind, Read, Write};
 use std::mem;
 use std::ops::{Deref, DerefMut};
-use std::sync::{Arc, atomic::AtomicUsize, atomic::Ordering};
+use std::sync::{atomic::AtomicUsize, atomic::Ordering, Arc};
 use tokio_io::{AsyncRead, AsyncWrite};
 use transport::{MuxedTransport, Transport, UpgradedNode};
 use upgrade::ConnectionUpgrade;
@@ -71,7 +71,10 @@ where
     shared: Arc<Shared<T, C>>,
 }
 
-enum PeerState<M> where M: StreamMuxer + Clone {
+enum PeerState<M>
+where
+    M: StreamMuxer + Clone,
+{
     /// Connection is active and can be used to open substreams.
     Active {
         /// The muxer to open new substreams.
@@ -99,9 +102,8 @@ enum PeerState<M> where M: StreamMuxer + Clone {
     },
 
     /// An earlier connection attempt errored.
-    Errored(IoError)
+    Errored(IoError),
 }
-
 
 /// Struct shared between most of the `ConnectionReuse` infrastructure.
 // #[derive(Clone)]
@@ -140,7 +142,7 @@ where
         let mut notifiers = self.notify_on_new_connec.lock();
         for to_notify in notifiers.drain() {
             to_notify.1.notify();
-        };   
+        }
     }
 
     /// generate a new connection id
@@ -156,27 +158,32 @@ where
     }
 
     /// Insert a new connection, returns Some<Value> if an entry was present, notify listeners
-    pub fn insert_connection(&self, addr: Multiaddr, state: PeerState<C::Output>)
-            -> Option<PeerState<C::Output>> {
-        let r = self.replace_connection(addr, state);
+    pub fn insert_connection(
+        &self,
+        addr: Multiaddr,
+        state: PeerState<C::Output>,
+    ) -> Option<PeerState<C::Output>> {
+        let r = self.connections.lock().insert(addr, state);
         self.new_con_notify();
         r
-    }
-
-    /// Replace a new connection, returns Some<Value> if an entry was present, **do not** notify listeners
-    pub fn replace_connection(&self, addr: Multiaddr, state: PeerState<C::Output>)
-            -> Option<PeerState<C::Output>> {
-        self.connections.lock().insert(addr, state)
     }
 
     /// Removes one substream from an active connection. Closes the connection if necessary.
     pub fn remove_substream(&self, connec_id: usize, addr: &Multiaddr) {
         self.connections.lock().retain(|_, connec| {
-            if let PeerState::Active { connection_id, ref mut num_substreams, .. } = connec {
+            if let PeerState::Active {
+                connection_id,
+                ref mut num_substreams,
+                ..
+            } = connec
+            {
                 if *connection_id == connec_id {
                     *num_substreams -= 1;
                     if *num_substreams == 0 {
-                        trace!("All substreams to {} closed ; closing main connection", addr);
+                        trace!(
+                            "All substreams to {} closed ; closing main connection",
+                            addr
+                        );
                         return false;
                     }
                 }
@@ -189,9 +196,10 @@ where
     ///
     /// Returns `Ready(None)` if no connection is matching the `listener`. Returns `NotReady` if
     /// one or more connections are matching the `listener` but they are not ready.
-    fn poll_incoming(&self, listener: Option<usize>)
-        -> Poll<Option<(<C::Output as StreamMuxer>::Substream, usize, Multiaddr)>, IoError>
-    {
+    fn poll_incoming(
+        &self,
+        listener: Option<usize>,
+    ) -> Poll<Option<(<C::Output as StreamMuxer>::Substream, usize, Multiaddr)>, IoError> {
         // Keys of the elements in `connections` to remove afterwards.
         let mut to_remove = Vec::new();
         // Substream to return, if any found.
@@ -199,42 +207,54 @@ where
         let mut found_one = false;
 
         for (addr, state) in self.connections.lock().iter_mut() {
-            let res = if let PeerState::Active { ref mut muxer, ref mut num_substreams,
-                                    connection_id, client_addr, listener_id } = state {
-                if *listener_id == listener {
+            let res = {
+                if let PeerState::Active {
+                    ref mut muxer,
+                    ref mut num_substreams,
+                    connection_id,
+                    client_addr,
+                    listener_id,
+                } = state
+                {
+                    if *listener_id == listener {
+                        continue;
+                    }
+                    found_one = true;
+
+                    match muxer.clone().inbound().poll() {
+                        Ok(Async::Ready(Some(inner))) => {
+                            trace!("New incoming substream from {}", client_addr);
+                            *num_substreams += 1;
+                            Ok((inner, connection_id.clone(), client_addr.clone()))
+                        }
+                        Ok(Async::Ready(None)) => {
+                            // The muxer isn't capable of opening any inbound stream anymore, so
+                            // we close the connection entirely.
+                            trace!("Removing existing connection to {} as it cannot open inbound anymore", addr);
+                            to_remove.push(addr.clone());
+                            continue;
+                        }
+                        Ok(Async::NotReady) => continue,
+                        Err(err) => {
+                            // If an error happens while opening an inbound stream, we close the
+                            // connection entirely.
+                            trace!(
+                                "Error while opening inbound substream to {}: {:?}",
+                                addr,
+                                err
+                            );
+                            to_remove.push(addr.clone());
+                            Err(err)
+                        }
+                    }
+                } else {
+                    if listener.is_none() {
+                        if let PeerState::Pending { ref mut notify, .. } = state {
+                            notify.insert(TASK_ID.with(|&t| t), task::current());
+                        }
+                    }
                     continue;
                 }
-                found_one = true;
-
-                match muxer.clone().inbound().poll() {
-                    Ok(Async::Ready(Some(inner))) => {
-                        trace!("New incoming substream from {}", client_addr);
-                        *num_substreams += 1;
-                        Ok((connection_id.clone(), inner, client_addr.clone()))
-                    },
-                    Err(err) => {
-                        // If an error happens while opening an inbound stream, we close the
-                        // connection entirely.
-                        trace!("Error while opening inbound substream to {}: {:?}", addr, err);
-                        to_remove.push(addr.clone());
-                        Err(err)
-                    },
-                    Ok(Async::Ready(None)) => {
-                        // The muxer isn't capable of opening any inbound stream anymore, so
-                        // we close the connection entirely.
-                        trace!("Removing existing connection to {} as it cannot open inbound anymore", addr);
-                        to_remove.push(addr.clone());
-                        continue
-                    },
-                    Ok(Async::NotReady) => { continue }
-                }
-            } else {
-                 if listener.is_none() {
-                    if let PeerState::Pending { ref mut notify, .. } = state {
-                        notify.insert(TASK_ID.with(|&t| t), task::current());
-                    }
-                }
-                continue
             };
 
             ret_value = Some(res);
@@ -246,8 +266,7 @@ where
         }
 
         match ret_value {
-            Some(Ok((connection_id, inner, addr))) =>
-                Ok(Async::Ready(Some((inner, connection_id, addr)))),
+            Some(Ok(val)) => Ok(Async::Ready(Some(val))),
             Some(Err(err)) => Err(err),
             None => {
                 if found_one {
@@ -259,7 +278,6 @@ where
         }
     }
 }
-
 
 impl<T, C> From<UpgradedNode<T, C>> for ConnectionReuse<T, C>
 where
@@ -287,7 +305,7 @@ where
     T::Output: AsyncRead + AsyncWrite,
     C: ConnectionUpgrade<T::Output, T::MultiaddrFuture> + Clone + 'static, // TODO: 'static :(
     C::Output: StreamMuxer + Clone,
-    <C::Output as StreamMuxer>::Substream : Clone,
+    <C::Output as StreamMuxer>::Substream: Clone,
     C::MultiaddrFuture: Future<Item = Multiaddr, Error = IoError>,
     C::NamesIter: Clone,
     UpgradedNode<T, C>: Clone,
@@ -299,7 +317,6 @@ where
     type Dial = ConnectionReuseDial<T, C>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-
         let (listener, new_addr) = match self.shared.transport.clone().listen_on(addr.clone()) {
             Ok((l, a)) => (l, a),
             Err((_, addr)) => {
@@ -335,14 +352,17 @@ where
 
     #[inline]
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-
         // If an earlier attempt to dial this multiaddress failed, we clear the error. Otherwise
         // the returned `Future` will immediately produce the error.
         let must_clear = match self.shared.connections.lock().get(&addr) {
             Some(&PeerState::Errored(ref err)) => {
-                trace!("Clearing existing connection to {} which errored earlier: {:?}", addr, err);
+                trace!(
+                    "Clearing existing connection to {} which errored earlier: {:?}",
+                    addr,
+                    err
+                );
                 true
-            },
+            }
             _ => false,
         };
         if must_clear {
@@ -358,7 +378,10 @@ where
 
     #[inline]
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.shared.transport.transport().nat_traversal(server, observed)
+        self.shared
+            .transport
+            .transport()
+            .nat_traversal(server, observed)
     }
 }
 
@@ -368,14 +391,14 @@ where
     T::Output: AsyncRead + AsyncWrite,
     C: ConnectionUpgrade<T::Output, T::MultiaddrFuture> + Clone + 'static, // TODO: 'static :(
     C::Output: StreamMuxer + Clone,
-    <C::Output as StreamMuxer>::Substream : Clone,
+    <C::Output as StreamMuxer>::Substream: Clone,
     C::MultiaddrFuture: Future<Item = Multiaddr, Error = IoError>,
     C::NamesIter: Clone,
     UpgradedNode<T, C>: Clone,
 {
     type Incoming = ConnectionReuseIncoming<T, C>;
     type IncomingUpgrade =
-        future::FutureResult<(ConnectionReuseSubstream<T,C>, Self::MultiaddrFuture), IoError>;
+        future::FutureResult<(ConnectionReuseSubstream<T, C>, Self::MultiaddrFuture), IoError>;
 
     #[inline]
     fn next_incoming(self) -> Self::Incoming {
@@ -393,7 +416,7 @@ task_local!{
 
 /// Implementation of `Future` for dialing a node.
 pub struct ConnectionReuseDial<T, C>
-where 
+where
     T: Transport,
     C: ConnectionUpgrade<T::Output, T::MultiaddrFuture>,
     C::Output: StreamMuxer + Clone,
@@ -411,7 +434,7 @@ where
 }
 
 struct ConnectionReuseDialOut<T, C>
-where 
+where
     T: Transport,
     C: ConnectionUpgrade<T::Output, T::MultiaddrFuture>,
     C::Output: StreamMuxer + Clone,
@@ -425,16 +448,19 @@ where
 }
 
 impl<T, C> Future for ConnectionReuseDial<T, C>
-where 
+where
     T: Transport,
     C: ConnectionUpgrade<T::Output, T::MultiaddrFuture>,
     C::Output: StreamMuxer + Clone + 'static,
-    <C::Output as StreamMuxer>::Substream : Clone,
+    <C::Output as StreamMuxer>::Substream: Clone,
     UpgradedNode<T, C>: Transport<Output = C::Output> + Clone,
     <UpgradedNode<T, C> as Transport>::Dial: 'static,
     <UpgradedNode<T, C> as Transport>::MultiaddrFuture: 'static,
 {
-    type Item = (ConnectionReuseSubstream<T, C>, FutureResult<Multiaddr, IoError>);
+    type Item = (
+        ConnectionReuseSubstream<T, C>,
+        FutureResult<Multiaddr, IoError>,
+    );
     type Error = IoError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -445,50 +471,58 @@ where
                         Ok(Async::Ready(Some(inner))) => {
                             trace!("Opened new outgoing substream to {}", self.addr);
                             let shared = self.shared.clone();
-                            return Ok(Async::Ready((ConnectionReuseSubstream {
-                                connection_id: outbound.connection_id,
-                                inner,
-                                shared,
-                                addr: outbound.client_addr.clone(),
-                            }, future::ok(outbound.client_addr))));
-                        },
+                            return Ok(Async::Ready((
+                                ConnectionReuseSubstream {
+                                    connection_id: outbound.connection_id,
+                                    inner,
+                                    shared,
+                                    addr: outbound.client_addr.clone(),
+                                },
+                                future::ok(outbound.client_addr),
+                            )));
+                        }
                         Ok(Async::NotReady) => {
                             self.outbound = Some(outbound);
                             return Ok(Async::NotReady);
-                        },
+                        }
                         Ok(Async::Ready(None)) => {
                             // The muxer can no longer produce outgoing substreams.
                             // Let's reopen a connection.
                             trace!("Closing existing connection to {} ; can't produce outgoing substreams", self.addr);
                             true
-                        },
+                        }
                         Err(err) => {
                             // If we get an error while opening a substream, we decide to ignore it
                             // and open a new muxer.
                             // If opening the muxer produces an error, *then* we will return it.
-                            debug!("Error while opening outgoing substream to {}: {:?}", self.addr, err);
+                            debug!(
+                                "Error while opening outgoing substream to {}: {:?}",
+                                self.addr, err
+                            );
                             true
-                        },
+                        }
                     }
-                },
-                _ => false
+                }
+                _ => false,
             };
-
 
             let is_empty = {
                 let mut conns = self.shared.connections.lock();
                 if should_kill_existing_muxer {
                     conns.remove(&self.addr);
                     true
-
                 } else {
                     let item = conns.get(&self.addr);
 
                     // error'ed, quit early
                     if let Some(PeerState::Errored(err)) = item {
-                        trace!("Existing new connection to {} errored earlier: {:?}", self.addr, err);
+                        trace!(
+                            "Existing new connection to {} errored earlier: {:?}",
+                            self.addr,
+                            err
+                        );
                         let io_err = IoError::new(err.kind(), err.to_string());
-                        return Err(io_err)
+                        return Err(io_err);
                     };
 
                     item.is_none()
@@ -503,13 +537,21 @@ where
                         let future = future.and_then(|(out, addr)| addr.map(move |a| (out, a)));
                         let future = Box::new(future);
                         let connection_id = self.shared.gen_next_connection_id();
-                        PeerState::Pending { future, notify: Default::default(), connection_id }
-                    },
+                        PeerState::Pending {
+                            future,
+                            notify: Default::default(),
+                            connection_id,
+                        }
+                    }
                     Err(_) => {
-                        trace!("Failed to open connection to {:?}, multiaddr not supported", self.addr);
-                        let err = IoError::new(IoErrorKind::ConnectionRefused, "multiaddr not supported");
+                        trace!(
+                            "Failed to open connection to {:?}, multiaddr not supported",
+                            self.addr
+                        );
+                        let err =
+                            IoError::new(IoErrorKind::ConnectionRefused, "multiaddr not supported");
                         PeerState::Errored(err)
-                    },
+                    }
                 };
 
                 self.shared.insert_connection(self.addr.clone(), state);
@@ -518,24 +560,41 @@ where
 
             let mut conn = self.shared.connections.lock();
             if let Some(state) = conn.get_mut(&self.addr) {
-                
-               let replace_with = {
+                let replace_with = {
                     match state {
-                        PeerState::Active { muxer, connection_id, client_addr, ref mut num_substreams, .. } => {
-                            trace!("Using existing connection to {} to open outbound substream", self.addr);
+                        PeerState::Active {
+                            muxer,
+                            connection_id,
+                            client_addr,
+                            ref mut num_substreams,
+                            ..
+                        } => {
+                            trace!(
+                                "Using existing connection to {} to open outbound substream",
+                                self.addr
+                            );
                             self.outbound = Some(ConnectionReuseDialOut {
                                 stream: muxer.clone().outbound(),
                                 connection_id: connection_id.clone(),
                                 client_addr: client_addr.clone(),
                             });
 
+                            // mutating the param in place, nothing to be done
                             *num_substreams += 1;
                             None
-                        },
-                        PeerState::Pending { ref mut future, ref mut notify, connection_id } => {
+                        }
+                        PeerState::Pending {
+                            ref mut future,
+                            ref mut notify,
+                            connection_id,
+                        } => {
                             match future.poll() {
                                 Ok(Async::Ready((muxer, client_addr))) => {
-                                    trace!("Successful new connection to {} ({})", self.addr, client_addr);
+                                    trace!(
+                                        "Successful new connection to {} ({})",
+                                        self.addr,
+                                        client_addr
+                                    );
                                     for task in notify {
                                         task.1.notify();
                                     }
@@ -546,25 +605,30 @@ where
                                         client_addr: client_addr.clone(),
                                     });
 
-                                    Some(PeerState::Active { muxer, connection_id: connection_id.clone(),
-                                                         num_substreams: 1, listener_id: None,
-                                                         client_addr })
-                                },
+                                    // our connection was upgraded, replace it.
+                                    Some(PeerState::Active {
+                                        muxer,
+                                        connection_id: connection_id.clone(),
+                                        num_substreams: 1,
+                                        listener_id: None,
+                                        client_addr,
+                                    })
+                                }
                                 Ok(Async::NotReady) => {
                                     notify.insert(TASK_ID.with(|&t| t), task::current());
                                     return Ok(Async::NotReady);
-                                },
+                                }
                                 Err(err) => {
                                     trace!("Failed new connection to {}: {:?}", self.addr, err);
                                     Some(PeerState::Errored(err))
-                                },
+                                }
                             }
-                        },
+                        }
                         _ => {
                             // Because of a race someone might has changed the Peerstate between
                             // this get_mut and the previous lock. But no harm for us, we can just
                             // loop on and will find it soon enough.
-                            continue
+                            continue;
                         }
                     }
                 };
@@ -578,15 +642,14 @@ where
 }
 
 impl<T, C> Drop for ConnectionReuseDial<T, C>
-where 
+where
     T: Transport,
     C: ConnectionUpgrade<T::Output, T::MultiaddrFuture>,
     C::Output: StreamMuxer + Clone,
 {
     fn drop(&mut self) {
-        let shared = &self.shared;
         if let Some(outbound) = self.outbound.take() {
-            shared.remove_substream(outbound.connection_id, &outbound.client_addr);
+            self.shared.remove_substream(outbound.connection_id, &outbound.client_addr);
         }
     }
 }
@@ -615,12 +678,17 @@ where
     T::Output: AsyncRead + AsyncWrite,
     C: ConnectionUpgrade<T::Output, T::MultiaddrFuture>,
     C::Output: StreamMuxer + Clone,
-    <C::Output as StreamMuxer>::Substream : Clone,
+    <C::Output as StreamMuxer>::Substream: Clone,
     L: Stream<Item = Lu, Error = IoError>,
     Lu: Future<Item = (C::Output, Multiaddr), Error = IoError> + 'static,
 {
-    type Item = FutureResult<(ConnectionReuseSubstream<T, C>,
-                            FutureResult<Multiaddr, IoError>), IoError>;
+    type Item = FutureResult<
+        (
+            ConnectionReuseSubstream<T, C>,
+            FutureResult<Multiaddr, IoError>,
+        ),
+        IoError,
+    >;
     type Error = IoError;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
@@ -649,9 +717,7 @@ where
         loop {
             let (muxer, client_addr) = match self.current_upgrades.poll() {
                 Ok(Async::Ready(Some((muxer, client_addr)))) => (muxer, client_addr),
-                Ok(Async::Ready(None)) | Ok(Async::NotReady) => {
-                    break;
-                },
+                Ok(Async::Ready(None)) | Ok(Async::NotReady) => break,
                 Err(err) => {
                     // Insert the rest of the pending upgrades, but not the current one.
                     debug!("Error while upgrading listener connection: {:?}", err);
@@ -659,17 +725,20 @@ where
                 }
             };
 
-
             // Successfully upgraded a new incoming connection.
             trace!("New multiplexed connection from {}", client_addr);
             let connection_id = self.shared.gen_next_connection_id();
-             
 
-            self.shared.insert_connection(client_addr.clone(),
-                PeerState::Active { muxer, connection_id,
-                                    listener_id: Some(self.listener_id),
-                                    num_substreams: 1,
-                                    client_addr: client_addr });
+            self.shared.insert_connection(
+                client_addr.clone(),
+                PeerState::Active {
+                    muxer,
+                    connection_id,
+                    listener_id: Some(self.listener_id),
+                    num_substreams: 1,
+                    client_addr: client_addr,
+                },
+            );
         }
 
         // Poll all the incoming connections on all the connections we opened.
@@ -681,18 +750,22 @@ where
                 } else {
                     Ok(Async::NotReady)
                 }
-            },
-            Ok(Async::Ready(Some((inner, connection_id, addr)))) => 
+            }
+            Ok(Async::Ready(Some((inner, connection_id, addr)))) => {
                 Ok(Async::Ready(Some(future::ok((
                     ConnectionReuseSubstream {
-                                inner: inner.clone(),
-                                shared: self.shared.clone(),
-                                connection_id: connection_id.clone(),
-                                addr: addr.clone(),
-                            }, future::ok(addr.clone())))))),
-            Err(err) => {
-                Ok(Async::Ready(Some(future::err(IoError::new(err.kind(), err.to_string())))))
+                        inner: inner.clone(),
+                        shared: self.shared.clone(),
+                        connection_id: connection_id.clone(),
+                        addr: addr.clone(),
+                    },
+                    future::ok(addr.clone()),
+                )))))
             }
+            Err(err) => Ok(Async::Ready(Some(future::err(IoError::new(
+                err.kind(),
+                err.to_string(),
+            ))))),
         }
     }
 }
@@ -710,38 +783,44 @@ where
 
 impl<T, C> Future for ConnectionReuseIncoming<T, C>
 where
-    
     T: Transport,
     T::Output: AsyncRead + AsyncWrite,
     C: ConnectionUpgrade<T::Output, T::MultiaddrFuture>,
     C::Output: StreamMuxer + Clone,
-    <C::Output as StreamMuxer>::Substream : Clone,
+    <C::Output as StreamMuxer>::Substream: Clone,
 {
-    type Item = future::FutureResult<(ConnectionReuseSubstream<T, C>,
-                                      future::FutureResult<Multiaddr, IoError>), IoError>;
+    type Item = future::FutureResult<
+        (
+            ConnectionReuseSubstream<T, C>,
+            future::FutureResult<Multiaddr, IoError>,
+        ),
+        IoError,
+    >;
     type Error = IoError;
 
     #[inline]
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self.shared.poll_incoming(None) {
-            Ok(Async::Ready(Some((inner, connection_id, addr)))) => 
-                Ok(Async::Ready(future::ok((
-                    ConnectionReuseSubstream {
-                                inner,
-                                shared: self.shared.clone(),
-                                connection_id,
-                                addr: addr.clone(),
-                            }, future::ok(addr))))),
+            Ok(Async::Ready(Some((inner, connection_id, addr)))) => Ok(Async::Ready(future::ok((
+                ConnectionReuseSubstream {
+                    inner,
+                    shared: self.shared.clone(),
+                    connection_id,
+                    addr: addr.clone(),
+                },
+                future::ok(addr),
+            )))),
             Ok(Async::Ready(None)) | Ok(Async::NotReady) => {
-                self.shared.notify_on_new_connec.lock().insert(TASK_ID.with(|&v| v), task::current());
+                self.shared
+                    .notify_on_new_connec
+                    .lock()
+                    .insert(TASK_ID.with(|&v| v), task::current());
                 Ok(Async::NotReady)
-            },
-            Err(err) => Err(err)
+            }
+            Err(err) => Err(err),
         }
     }
 }
-
-
 
 /// Wraps around the `Substream`.
 pub struct ConnectionReuseSubstream<T, C>
