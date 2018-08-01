@@ -66,6 +66,7 @@ impl KadConnecConfig {
 impl<C, Maf> ConnectionUpgrade<C, Maf> for KadConnecConfig
 where
     C: AsyncRead + AsyncWrite + 'static, // TODO: 'static :-/
+    // Due to implementing these Async traits, this ConnectionUpgrade is a [middleware](core#middlewares).
 {
     type Output = (
         KadConnecController,
