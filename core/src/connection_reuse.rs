@@ -107,7 +107,7 @@ where
         /// Future that produces the muxer.
         future: Box<Future<Item = (M, Multiaddr), Error = IoError>>,
         /// All the tasks to notify when `future` resolves.
-        notify: FnvHashMap<usize, task::Task>,
+        notify: Vec<(usize, task::Task)>,
     },
 
     /// An earlier connection attempt errored.
@@ -130,7 +130,7 @@ where
     connections: Mutex<FnvHashMap<Multiaddr, PeerState<C::Output>>>,
 
     /// Tasks to notify when one or more new elements were added to `connections`.
-    notify_on_new_connec: Mutex<FnvHashMap<usize, task::Task>>,
+    notify_on_new_connec: Mutex<Vec<(usize, task::Task)>>,
 
     /// Counter giving us the next stream_id
     streams_counter: Counter,
@@ -149,8 +149,16 @@ where
     /// consume the tasks in that process
     fn new_con_notify(&self) {
         let mut notifiers = self.notify_on_new_connec.lock();
-        for to_notify in notifiers.drain() {
-            to_notify.1.notify();
+        for (_, task) in notifiers.drain(..) {
+            task.notify();
+        }
+    }
+
+    /// Register `task` under id if not yet registered
+    fn register_notifier(&self, id: usize, task: task::Task) {
+        let mut notifiers = self.notify_on_new_connec.lock();
+        if notifiers.iter().all(|(t, _)| { *t != id }) {
+            notifiers.push((id, task))
         }
     }
 
@@ -223,8 +231,8 @@ where
             },
             Some(PeerState::Pending { ref mut notify, .. }) => {
                 // we need to wake some up, that we have a connection now
-                for to_notify in notify.drain() {
-                    to_notify.1.notify()
+                for (_, task) in notify.drain(..) {
+                    task.notify()
                 }
             }
             Some(PeerState::Active { .. }) => {
@@ -254,13 +262,10 @@ where
                         let future = future.and_then(|(out, addr)| addr.map(move |a| (out, a)));
                         let future = Box::new(future);
 
-                        // make sure we are woken up once this connects
-                        let mut notify : FnvHashMap<usize, task::Task> = Default::default();
-                        notify.insert(TASK_ID.with(|&t| t), task::current());
-
                         PeerState::Pending {
                             future,
-                            notify
+                            // make sure we are woken up once this connects
+                            notify: vec![(TASK_ID.with(|&t| t), task::current())]
                         }
                     }
                     Err(_) => {
@@ -309,7 +314,10 @@ where
                             Ok(Async::NotReady) => {
                                 // no it still isn't ready, keep the current task
                                 // informed but return with NotReady
-                                notify.insert(TASK_ID.with(|&t| t), task::current());
+                                let t_id = TASK_ID.with(|&t| t);
+                                if notify.iter().all(|(id, _)| { *id != t_id }) {
+                                    notify.push((t_id, task::current()));
+                                }
                                 return Ok(Async::NotReady);
                             }
                             Err(err) => {
@@ -325,8 +333,8 @@ where
                                     addr,
                                     client_addr
                                 );
-                                for task in notify {
-                                    task.1.notify();
+                                for (_, task) in notify.drain(..) {
+                                    task.notify();
                                 }
                                 let first_outbound = muxer.clone().outbound();
                                 let stream_id = self.streams_counter.next();
@@ -408,7 +416,10 @@ where
                 } else {
                     if listener.is_none() {
                         if let PeerState::Pending { ref mut notify, .. } = state {
-                            notify.insert(TASK_ID.with(|&t| t), task::current());
+                            let t_id = TASK_ID.with(|&t| t);
+                            if notify.iter().all(|(id, _)| { *id != t_id }) {
+                                notify.push((t_id, task::current()));
+                            }
                         }
                     }
                     continue;
@@ -823,10 +834,7 @@ where
                 future::ok(addr),
             )))),
             Ok(Async::Ready(None)) | Ok(Async::NotReady) => {
-                self.manager
-                    .notify_on_new_connec
-                    .lock()
-                    .insert(TASK_ID.with(|&v| v), task::current());
+                self.manager.register_notifier(TASK_ID.with(|&v| v), task::current());
                 Ok(Async::NotReady)
             }
             Err(err) => Err(err),
