@@ -71,6 +71,17 @@ where
     shared: Arc<Shared<T, C>>,
 }
 
+#[derive(Default)]
+struct Counter {
+    inner: AtomicUsize
+}
+
+impl Counter {
+    pub fn next(&self) -> usize {
+        self.inner.fetch_add(1, Ordering::Relaxed)
+    }
+}
+
 enum PeerState<M>
 where
     M: StreamMuxer + Clone,
@@ -123,11 +134,11 @@ where
     /// Tasks to notify when one or more new elements were added to `connections`.
     notify_on_new_connec: Mutex<FnvHashMap<usize, task::Task>>,
 
-    /// Next `connection_id` to use when opening a connection.
-    next_connection_id: AtomicUsize,
+    /// Counter giving us the next connection_id
+    connection_counter: Counter,
 
-    /// Next `listener_id` for the next listener we create.
-    next_listener_id: AtomicUsize,
+    /// Counter giving us the next listener_id
+    listener_counter: Counter,
 }
 
 impl<T, C> Shared<T, C>
@@ -143,18 +154,6 @@ where
         for to_notify in notifiers.drain() {
             to_notify.1.notify();
         }
-    }
-
-    /// generate a new connection id
-    #[inline]
-    pub fn gen_next_connection_id(&self) -> usize {
-        self.next_connection_id.fetch_add(1, Ordering::Relaxed)
-    }
-
-    /// generate a new listener id
-    #[inline]
-    pub fn gen_next_listener_id(&self) -> usize {
-        self.next_listener_id.fetch_add(1, Ordering::Relaxed)
     }
 
     /// Insert a new connection, returns Some<Value> if an entry was present, notify listeners
@@ -292,8 +291,8 @@ where
                 transport: node,
                 connections: Default::default(),
                 notify_on_new_connec: Default::default(),
-                next_connection_id: Default::default(),
-                next_listener_id: Default::default(),
+                connection_counter: Default::default(),
+                listener_counter: Default::default(),
             }),
         }
     }
@@ -338,7 +337,7 @@ where
             })
             .fuse();
 
-        let listener_id = self.shared.gen_next_listener_id();
+        let listener_id = self.shared.listener_counter.next();
 
         let listener = ConnectionReuseListener {
             shared: self.shared,
@@ -536,7 +535,7 @@ where
                         trace!("Opened new connection to {:?}", self.addr);
                         let future = future.and_then(|(out, addr)| addr.map(move |a| (out, a)));
                         let future = Box::new(future);
-                        let connection_id = self.shared.gen_next_connection_id();
+                        let connection_id = self.shared.connection_counter.next();
                         PeerState::Pending {
                             future,
                             notify: Default::default(),
@@ -727,7 +726,7 @@ where
 
             // Successfully upgraded a new incoming connection.
             trace!("New multiplexed connection from {}", client_addr);
-            let connection_id = self.shared.gen_next_connection_id();
+            let connection_id = self.shared.connection_counter.next();
 
             self.shared.insert_connection(
                 client_addr.clone(),
