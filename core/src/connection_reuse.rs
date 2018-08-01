@@ -204,8 +204,9 @@ where
         // Substream to return, if any found.
         let mut ret_value = None;
         let mut found_one = false;
+        let mut conn = self.connections.lock();
 
-        for (addr, state) in self.connections.lock().iter_mut() {
+        for (addr, state) in conn.iter_mut() {
             let res = {
                 if let PeerState::Active {
                     ref mut muxer,
@@ -261,7 +262,7 @@ where
         }
 
         for to_remove in to_remove {
-            self.connections.lock().remove(&to_remove);
+            conn.remove(&to_remove);
         }
 
         match ret_value {
