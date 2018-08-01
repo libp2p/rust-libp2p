@@ -188,17 +188,70 @@ where
             true
         });
     }
+
+    /// Clear the cached connection if the entry contains an error. Returns whether an error was
+    /// found and has been removed.
+    fn clear_error(&self, addr: Multiaddr) -> bool {
+        let mut conns = self.connections.lock();
+
+        if let Entry::Occupied(e) = conns.entry(addr) {
+            if let PeerState::Errored(ref err) = e.get() { 
+                trace!("Clearing existing connection to {} which errored earlier: {:?}", e.key(), err);
+            } else {
+                return false// nothing to do, quit
+            }
+            
+            // clear the error
+            e.remove();
+            true
+        } else {
+            false
+        }
+    }
 }
 
 impl<T, C> ConnectionsManager<T, C>
 where
-    T: Transport + Clone,
+    T: Transport,
     C: ConnectionUpgrade<T::Output, T::MultiaddrFuture> + Clone,
     C::Output: StreamMuxer + Clone + 'static,
     UpgradedNode<T, C>: Transport<Output = C::Output> + Clone,
     <UpgradedNode<T, C> as Transport>::Dial: 'static,
     <UpgradedNode<T, C> as Transport>::MultiaddrFuture: 'static,
 {
+
+    /// Informs the Manager about a new inbound connection that has been
+    /// established, so it 
+    fn new_inbound(
+        &self,
+        addr: Multiaddr,
+        listener_id: usize,
+        muxer: C::Output,
+    ) {
+        let mut conns = self.connections.lock();
+        let new_state = PeerState::Active {
+                muxer,
+                connection_id: self.connection_counter.next(),
+                listener_id: Some(listener_id),
+                num_substreams: 1,
+            };
+        match conns.insert(addr.clone(), new_state) {
+            None | Some(PeerState::Errored(_)) => {
+                // all good, moving on
+            },
+            Some(PeerState::Pending { ref mut notify, .. }) => {
+                // we need to wake some up, that we have a connection now
+                for to_notify in notify.drain() {
+                    to_notify.1.notify()
+                }
+            }
+            Some(PeerState::Active { .. }) => {
+                // FIXME: Now this is confusing. What exactly is supposed to happen here?
+                trace!("Overwriting active connection {:?}", addr);
+            }
+        }
+    }
+
     fn poll_outbound(&self,
         addr: Multiaddr,
         reset: bool) -> Poll<(<C::Output as StreamMuxer>::OutboundSubstream, usize), IoError> {
@@ -478,23 +531,10 @@ where
 
     #[inline]
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+
         // If an earlier attempt to dial this multiaddress failed, we clear the error. Otherwise
         // the returned `Future` will immediately produce the error.
-        let must_clear = match self.manager.connections.lock().get(&addr) {
-            Some(&PeerState::Errored(ref err)) => {
-                trace!(
-                    "Clearing existing connection to {} which errored earlier: {:?}",
-                    addr,
-                    err
-                );
-                true
-            }
-            _ => false,
-        };
-        if must_clear {
-            self.manager.connections.lock().remove(&addr);
-        }
-
+        self.manager.clear_error(addr.clone());
         Ok(ConnectionReuseDial {
             outbound: None,
             manager: self.manager,
@@ -740,17 +780,11 @@ where
 
             // Successfully upgraded a new incoming connection.
             trace!("New multiplexed connection from {}", client_addr);
-            let connection_id = self.manager.connection_counter.next();
 
-            self.manager.insert_connection(
+            self.manager.new_inbound(
                 client_addr.clone(),
-                PeerState::Active {
-                    muxer,
-                    connection_id,
-                    listener_id: Some(self.listener_id),
-                    num_substreams: 1,
-                },
-            );
+                self.listener_id,
+                muxer);
         }
 
         // Poll all the incoming connections on all the connections we opened.
