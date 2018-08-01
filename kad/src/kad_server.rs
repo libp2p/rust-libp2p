@@ -66,7 +66,8 @@ impl KadConnecConfig {
 impl<C, Maf> ConnectionUpgrade<C, Maf> for KadConnecConfig
 where
     C: AsyncRead + AsyncWrite + 'static, // TODO: 'static :-/
-    // Due to implementing these Async traits, this ConnectionUpgrade is a [middleware](core#middlewares).
+    // Due to implementing these Async traits, this ConnectionUpgrade is a middleware, FMI see:
+    // https://github.com/libp2p/rust-libp2p/tree/master/core#middlewares.
 {
     type Output = (
         KadConnecController,
