@@ -68,7 +68,7 @@ where
     C::Output: StreamMuxer + Clone,
 {
     /// Struct shared between most of the `ConnectionReuse` infrastructure.
-    shared: Arc<Shared<T, C>>,
+    manager: Arc<ConnectionsManager<T, C>>,
 }
 
 #[derive(Default)]
@@ -116,7 +116,7 @@ where
 
 /// Struct shared between most of the `ConnectionReuse` infrastructure.
 // #[derive(Clone)]
-struct Shared<T, C>
+struct ConnectionsManager<T, C>
 where
     T: Transport,
     C: ConnectionUpgrade<T::Output, T::MultiaddrFuture>,
@@ -139,7 +139,7 @@ where
     listener_counter: Counter,
 }
 
-impl<T, C> Shared<T, C>
+impl<T, C> ConnectionsManager<T, C>
 where
     T: Transport,
     C: ConnectionUpgrade<T::Output, T::MultiaddrFuture>,
@@ -190,7 +190,7 @@ where
     }
 }
 
-impl<T, C> Shared<T, C>
+impl<T, C> ConnectionsManager<T, C>
 where
     T: Transport + Clone,
     C: ConnectionUpgrade<T::Output, T::MultiaddrFuture> + Clone,
@@ -413,7 +413,7 @@ where
     #[inline]
     fn from(node: UpgradedNode<T, C>) -> ConnectionReuse<T, C> {
         ConnectionReuse {
-            shared: Arc::new(Shared {
+            manager: Arc::new(ConnectionsManager {
                 transport: node,
                 connections: Default::default(),
                 notify_on_new_connec: Default::default(),
@@ -443,12 +443,12 @@ where
     type Dial = ConnectionReuseDial<T, C>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        let (listener, new_addr) = match self.shared.transport.clone().listen_on(addr.clone()) {
+        let (listener, new_addr) = match self.manager.transport.clone().listen_on(addr.clone()) {
             Ok((l, a)) => (l, a),
             Err((_, addr)) => {
                 return Err((
                     ConnectionReuse {
-                        shared: self.shared,
+                        manager: self.manager,
                     },
                     addr,
                 ));
@@ -464,10 +464,10 @@ where
             })
             .fuse();
 
-        let listener_id = self.shared.listener_counter.next();
+        let listener_id = self.manager.listener_counter.next();
 
         let listener = ConnectionReuseListener {
-            shared: self.shared,
+            manager: self.manager,
             listener,
             listener_id,
             current_upgrades: FuturesUnordered::new(),
@@ -480,7 +480,7 @@ where
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
         // If an earlier attempt to dial this multiaddress failed, we clear the error. Otherwise
         // the returned `Future` will immediately produce the error.
-        let must_clear = match self.shared.connections.lock().get(&addr) {
+        let must_clear = match self.manager.connections.lock().get(&addr) {
             Some(&PeerState::Errored(ref err)) => {
                 trace!(
                     "Clearing existing connection to {} which errored earlier: {:?}",
@@ -492,19 +492,19 @@ where
             _ => false,
         };
         if must_clear {
-            self.shared.connections.lock().remove(&addr);
+            self.manager.connections.lock().remove(&addr);
         }
 
         Ok(ConnectionReuseDial {
             outbound: None,
-            shared: self.shared,
+            manager: self.manager,
             addr,
         })
     }
 
     #[inline]
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.shared
+        self.manager
             .transport
             .transport()
             .nat_traversal(server, observed)
@@ -530,7 +530,7 @@ where
     #[inline]
     fn next_incoming(self) -> Self::Incoming {
         ConnectionReuseIncoming {
-            shared: self.shared,
+            manager: self.manager,
         }
     }
 }
@@ -553,8 +553,8 @@ where
     /// If `None`, we need to grab a new outbound substream from the muxer.
     outbound: Option<ConnectionReuseDialOut<T, C>>,
 
-    // Shared between the whole connection reuse mechanism.
-    shared: Arc<Shared<T, C>>,
+    // ConnectionsManager between the whole connection reuse mechanism.
+    manager: Arc<ConnectionsManager<T, C>>,
 
     // The address we're trying to dial.
     addr: Multiaddr,
@@ -598,12 +598,12 @@ where
                     match outbound.stream.poll() {
                         Ok(Async::Ready(Some(inner))) => {
                             trace!("Opened new outgoing substream to {}", self.addr);
-                            let shared = self.shared.clone();
+                            let manager = self.manager.clone();
                             return Ok(Async::Ready((
                                 ConnectionReuseSubstream {
                                     connection_id: outbound.connection_id,
                                     inner,
-                                    shared,
+                                    manager,
                                     addr: outbound.client_addr.clone(),
                                 },
                                 future::ok(outbound.client_addr),
@@ -631,7 +631,7 @@ where
                 _ => false,
             };
 
-            match self.shared.poll_outbound(self.addr.clone(), should_kill_existing_muxer) {
+            match self.manager.poll_outbound(self.addr.clone(), should_kill_existing_muxer) {
                 Ok(Async::Ready((stream, connection_id))) => {
                     self.outbound = Some(ConnectionReuseDialOut {
                         stream: stream.clone(),
@@ -658,7 +658,7 @@ where
 {
     fn drop(&mut self) {
         if let Some(outbound) = self.outbound.take() {
-            self.shared.remove_substream(outbound.connection_id, &outbound.client_addr);
+            self.manager.remove_substream(outbound.connection_id, &outbound.client_addr);
         }
     }
 }
@@ -677,8 +677,8 @@ where
     /// Opened connections that need to be upgraded.
     current_upgrades: FuturesUnordered<Box<Future<Item = (C::Output, Multiaddr), Error = IoError>>>,
 
-    /// Shared between the whole connection reuse mechanism.
-    shared: Arc<Shared<T, C>>,
+    /// ConnectionsManager between the whole connection reuse mechanism.
+    manager: Arc<ConnectionsManager<T, C>>,
 }
 
 impl<T, C, L, Lu> Stream for ConnectionReuseListener<T, C, L>
@@ -740,9 +740,9 @@ where
 
             // Successfully upgraded a new incoming connection.
             trace!("New multiplexed connection from {}", client_addr);
-            let connection_id = self.shared.connection_counter.next();
+            let connection_id = self.manager.connection_counter.next();
 
-            self.shared.insert_connection(
+            self.manager.insert_connection(
                 client_addr.clone(),
                 PeerState::Active {
                     muxer,
@@ -754,7 +754,7 @@ where
         }
 
         // Poll all the incoming connections on all the connections we opened.
-        match self.shared.poll_incoming(Some(self.listener_id)) {
+        match self.manager.poll_incoming(Some(self.listener_id)) {
             Ok(Async::NotReady) => Ok(Async::NotReady),
             Ok(Async::Ready(None)) => {
                 if self.listener.is_done() && self.current_upgrades.is_empty() {
@@ -767,7 +767,7 @@ where
                 Ok(Async::Ready(Some(future::ok((
                     ConnectionReuseSubstream {
                         inner: inner.clone(),
-                        shared: self.shared.clone(),
+                        manager: self.manager.clone(),
                         connection_id: connection_id.clone(),
                         addr: addr.clone(),
                     },
@@ -789,8 +789,8 @@ where
     C: ConnectionUpgrade<T::Output, T::MultiaddrFuture>,
     C::Output: StreamMuxer + Clone,
 {
-    // Shared between the whole connection reuse system.
-    shared: Arc<Shared<T, C>>,
+    // ConnectionsManager between the whole connection reuse system.
+    manager: Arc<ConnectionsManager<T, C>>,
 }
 
 impl<T, C> Future for ConnectionReuseIncoming<T, C>
@@ -816,18 +816,18 @@ where
 
     #[inline]
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match self.shared.poll_incoming(None) {
+        match self.manager.poll_incoming(None) {
             Ok(Async::Ready(Some((inner, connection_id, addr)))) => Ok(Async::Ready(future::ok((
                 ConnectionReuseSubstream {
                     inner,
-                    shared: self.shared.clone(),
+                    manager: self.manager.clone(),
                     connection_id,
                     addr: addr.clone(),
                 },
                 future::ok(addr),
             )))),
             Ok(Async::Ready(None)) | Ok(Async::NotReady) => {
-                self.shared
+                self.manager
                     .notify_on_new_connec
                     .lock()
                     .insert(TASK_ID.with(|&v| v), task::current());
@@ -846,7 +846,7 @@ where
     C::Output: StreamMuxer + Clone,
 {
     inner: <C::Output as StreamMuxer>::Substream,
-    shared: Arc<Shared<T, C>>,
+    manager: Arc<ConnectionsManager<T, C>>,
     /// Id this connection was created from.
     connection_id: usize,
     /// Address of the remote.
@@ -935,6 +935,6 @@ where
     C::Output: StreamMuxer + Clone,
 {
     fn drop(&mut self) {
-        self.shared.remove_substream(self.connection_id, &self.addr);
+        self.manager.remove_substream(self.connection_id, &self.addr);
     }
 }
