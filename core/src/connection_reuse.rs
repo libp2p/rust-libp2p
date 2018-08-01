@@ -106,8 +106,6 @@ where
         future: Box<Future<Item = (M, Multiaddr), Error = IoError>>,
         /// All the tasks to notify when `future` resolves.
         notify: FnvHashMap<usize, task::Task>,
-        /// Unique identifier for this connection in the `ConnectionReuse`.
-        connection_id: usize,
     },
 
     /// An earlier connection attempt errored.
@@ -145,7 +143,7 @@ where
     C: ConnectionUpgrade<T::Output, T::MultiaddrFuture>,
     C::Output: StreamMuxer + Clone,
 {
-    /// notify all `Tasks` in `self.notify_on_new_connec` that a new connection was established
+    /// Notify all `Tasks` in `self.notify_on_new_connec` that a new connection was established
     /// consume the tasks in that process
     fn new_con_notify(&self) {
         let mut notifiers = self.notify_on_new_connec.lock();
@@ -154,19 +152,9 @@ where
         }
     }
 
-    /// Insert a new connection, returns Some<Value> if an entry was present, notify listeners
-    pub fn insert_connection(
-        &self,
-        addr: Multiaddr,
-        state: PeerState<C::Output>,
-    ) -> Option<PeerState<C::Output>> {
-        let r = self.connections.lock().insert(addr, state);
-        self.new_con_notify();
-        r
-    }
-
-    /// Removes one substream from an active connection. Closes the connection if necessary.
-    pub fn remove_substream(&self, connec_id: usize, addr: &Multiaddr) {
+    /// Removes one substream from an active connection.
+    /// Closes the connection if no substream is left.
+    fn remove_substream(&self, connec_id: usize, addr: &Multiaddr) {
         self.connections.lock().retain(|_, connec| {
             if let PeerState::Active {
                 connection_id,
@@ -271,7 +259,6 @@ where
                         trace!("Opened new connection to {:?}", addr);
                         let future = future.and_then(|(out, addr)| addr.map(move |a| (out, a)));
                         let future = Box::new(future);
-                        let connection_id = self.connection_counter.next();
 
                         // make sure we are woken up once this connects
                         let mut notify : FnvHashMap<usize, task::Task> = Default::default();
@@ -279,8 +266,7 @@ where
 
                         PeerState::Pending {
                             future,
-                            notify,
-                            connection_id,
+                            notify
                         }
                     }
                     Err(_) => {
@@ -322,8 +308,7 @@ where
                     }
                     PeerState::Pending {
                         ref mut future,
-                        ref mut notify,
-                        connection_id,
+                        ref mut notify
                     } => {
                         // was pending, let's check if that has changed
                         match future.poll() {
@@ -350,6 +335,7 @@ where
                                     task.1.notify();
                                 }
                                 let first_outbound = muxer.clone().outbound();
+                                let connection_id = self.connection_counter.next();
 
                                 // our connection was upgraded, replace it.
                                 (PeerState::Active {
@@ -357,7 +343,7 @@ where
                                     connection_id: connection_id.clone(),
                                     num_substreams: 1,
                                     listener_id: None
-                                }, Ok(Async::Ready( (first_outbound, *connection_id))))
+                                }, Ok(Async::Ready( (first_outbound, connection_id))))
                             }
                         }
                     }
@@ -372,8 +358,9 @@ where
 
     /// Polls the incoming substreams on all the incoming connections that match the `listener`.
     ///
-    /// Returns `Ready(None)` if no connection is matching the `listener`. Returns `NotReady` if
-    /// one or more connections are matching the `listener` but they are not ready.
+    /// Returns `Ready<Some<Muxer, connection_id, client_addr>>` for the first matching connection.
+    /// Return `Ready(None)` if no connection is matching the `listener`. Returns `NotReady` if
+    /// one or more connections are matching the `listener` but none is ready yet.
     fn poll_incoming(
         &self,
         listener: Option<usize>,
