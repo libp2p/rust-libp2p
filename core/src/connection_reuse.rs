@@ -232,6 +232,7 @@ where
             },
             Some(PeerState::Pending { ref mut notify, .. }) => {
                 // we need to wake some up, that we have a connection now
+                trace!("Found incoming for pending connection to {}", addr);
                 for (_, task) in notify.drain(..) {
                     task.notify()
                 }
@@ -508,7 +509,10 @@ where
             .map(|upgr| {
                 upgr.and_then(|(out, addr)| {
                     trace!("Waiting for remote's address as listener");
-                    addr.map(move |addr| (out, addr))
+                    addr.map(move |addr| {
+                        trace!("Address found:{:?}", addr);
+                        (out, addr)
+                    })
                 })
             })
             .fuse();
@@ -763,13 +767,17 @@ where
         match self.manager.poll_incoming(Some(self.listener_id)) {
             Ok(Async::NotReady) => Ok(Async::NotReady),
             Ok(Async::Ready(None)) => {
+                trace!("Ready but empty");
                 if self.listener.is_done() && self.current_upgrades.is_empty() {
+                    trace!("Ready, empty, we are, too. Closing;");
                     Ok(Async::Ready(None))
                 } else {
+                    trace!("Ready and empty, but we're still going strong. We'll wait!");
                     Ok(Async::NotReady)
                 }
             }
             Ok(Async::Ready(Some((inner, stream_id, addr)))) => {
+                trace!("Stream {:} for {:?} ready.", stream_id, addr);
                 Ok(Async::Ready(Some(future::ok((
                     ConnectionReuseSubstream {
                         inner,
