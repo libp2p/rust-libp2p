@@ -133,10 +133,9 @@ where C: AsyncRead + AsyncWrite,
       F: FnMut(&codec::Elem) -> Option<O>,
 {
     // If an error happened earlier, immediately return it.
-    match inner.error {
-        Ok(()) => (),
-        Err(ref err) => return Err(IoError::new(err.kind(), err.to_string())),
-    };
+    if let Err(ref err) = inner.error {
+        return Err(IoError::new(err.kind(), err.to_string()));
+    }
 
     if let Some((offset, out)) = inner.buffer.iter().enumerate().filter_map(|(n, v)| filter(v).map(|v| (n, v))).next() {
         inner.buffer.remove(offset);
