@@ -46,10 +46,10 @@ use futures::{stream, task, Async, Future, Poll, Stream};
 use multiaddr::Multiaddr;
 use muxing::StreamMuxer;
 use parking_lot::Mutex;
+use std::collections::hash_map::Entry;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind, Read, Write};
 use std::ops::{Deref, DerefMut};
 use std::sync::{atomic::AtomicUsize, atomic::Ordering, Arc};
-use std::collections::hash_map::Entry;
 use tokio_io::{AsyncRead, AsyncWrite};
 use transport::{MuxedTransport, Transport, UpgradedNode};
 use upgrade::ConnectionUpgrade;
@@ -72,17 +72,21 @@ where
     manager: Arc<ConnectionsManager<T, C>>,
 }
 
+/// Keeps an internal counter, for every new number issued
+/// will increase its internal state.
 #[derive(Default)]
 struct Counter {
-    inner: AtomicUsize
+    inner: AtomicUsize,
 }
 
 impl Counter {
+    /// Returns the next counter, increasing the internal state
     pub fn next(&self) -> usize {
         self.inner.fetch_add(1, Ordering::Relaxed)
     }
 }
 
+/// Alias for improved readability
 type StreamId = usize;
 
 enum PeerState<M>
@@ -93,8 +97,6 @@ where
     Active {
         /// The muxer to open new substreams.
         muxer: M,
-        /// Unique identifier for this connection in the `ConnectionReuse`.
-        // connection_id: usize,
         /// Number of open substreams.
         substreams: Vec<StreamId>,
         /// Id of the listener that created this connection, or `None` if it was opened by a
@@ -116,6 +118,9 @@ where
 }
 
 /// Struct shared between most of the `ConnectionReuse` infrastructure.
+/// Knows about all connections and their current state, allows one to poll for
+/// incoming and outbound connections, while managing all state-transitions that
+/// might occur automatically.
 // #[derive(Clone)]
 struct ConnectionsManager<T, C>
 where
@@ -158,7 +163,7 @@ where
     /// Register `task` under id if not yet registered
     fn register_notifier(&self, id: usize, task: task::Task) {
         let mut notifiers = self.notify_on_new_connec.lock();
-        if notifiers.iter().all(|(t, _)| { *t != id }) {
+        if notifiers.iter().all(|(t, _)| *t != id) {
             notifiers.push((id, task))
         }
     }
@@ -169,7 +174,10 @@ where
         let mut conns = self.connections.lock();
         let mut drop = false;
 
-        if let Some(PeerState::Active { ref mut substreams, .. }) = conns.get_mut(addr) {
+        if let Some(PeerState::Active {
+            ref mut substreams, ..
+        }) = conns.get_mut(addr)
+        {
             substreams.retain(|e| e != stream_id);
             drop = substreams.is_empty();
         }
@@ -187,12 +195,16 @@ where
         let mut conns = self.connections.lock();
 
         if let Entry::Occupied(e) = conns.entry(addr) {
-            if let PeerState::Errored(ref err) = e.get() { 
-                trace!("Clearing existing connection to {} which errored earlier: {:?}", e.key(), err);
+            if let PeerState::Errored(ref err) = e.get() {
+                trace!(
+                    "Clearing existing connection to {} which errored earlier: {:?}",
+                    e.key(),
+                    err
+                );
             } else {
-                return false  // nothing to do, quit
+                return false; // nothing to do, quit
             }
-            
+
             // clear the error
             e.remove();
             true
@@ -211,25 +223,19 @@ where
     <UpgradedNode<T, C> as Transport>::Dial: 'static,
     <UpgradedNode<T, C> as Transport>::MultiaddrFuture: 'static,
 {
-
     /// Informs the Manager about a new inbound connection that has been
-    /// established, so it 
-    fn new_inbound(
-        &self,
-        addr: Multiaddr,
-        listener_id: usize,
-        muxer: C::Output,
-    ) {
+    /// established, so it
+    fn new_inbound(&self, addr: Multiaddr, listener_id: usize, muxer: C::Output) {
         let mut conns = self.connections.lock();
         let new_state = PeerState::Active {
-                muxer,
-                listener_id: Some(listener_id),
-                substreams: vec![],
-            };
+            muxer,
+            listener_id: Some(listener_id),
+            substreams: vec![],
+        };
         match conns.insert(addr.clone(), new_state) {
             None | Some(PeerState::Errored(_)) => {
                 // all good, moving on
-            },
+            }
             Some(PeerState::Pending { ref mut notify, .. }) => {
                 // we need to wake some up, that we have a connection now
                 trace!("Found incoming for pending connection to {}", addr);
@@ -248,10 +254,11 @@ where
     /// Polls for the outbound stream of `addr`. Clears the cached value first if `reset` is true.
     /// Dials, if no connection is in the internal cache. Returns `Ok(Async::NotReady)` as long as
     /// the connection isn't establed and ready yet.
-    fn poll_outbound(&self,
+    fn poll_outbound(
+        &self,
         addr: Multiaddr,
-        reset: bool) -> Poll<(<C::Output as StreamMuxer>::OutboundSubstream, StreamId), IoError> {
-
+        reset: bool,
+    ) -> Poll<(<C::Output as StreamMuxer>::OutboundSubstream, StreamId), IoError> {
         let mut conns = self.connections.lock();
 
         if reset {
@@ -272,7 +279,7 @@ where
                         PeerState::Pending {
                             future,
                             // make sure we are woken up once this connects
-                            notify: vec![(TASK_ID.with(|&t| t), task::current())]
+                            notify: vec![(TASK_ID.with(|&t| t), task::current())],
                         }
                     }
                     Err(_) => {
@@ -301,8 +308,8 @@ where
                         ref mut substreams,
                         ..
                     } => {
-                        // perfect, let's reuse, update the stream and 
-                        // return the new ReuseDialOut
+                        // perfect, let's reuse, update the stream_id and
+                        // return a new outbound
                         trace!(
                             "Using existing connection to {} to open outbound substream",
                             addr
@@ -314,7 +321,7 @@ where
                     }
                     PeerState::Pending {
                         ref mut future,
-                        ref mut notify
+                        ref mut notify,
                     } => {
                         // was pending, let's check if that has changed
                         match future.poll() {
@@ -322,7 +329,7 @@ where
                                 // no it still isn't ready, keep the current task
                                 // informed but return with NotReady
                                 let t_id = TASK_ID.with(|&t| t);
-                                if notify.iter().all(|(id, _)| { *id != t_id }) {
+                                if notify.iter().all(|(id, _)| *id != t_id) {
                                     notify.push((t_id, task::current()));
                                 }
                                 return Ok(Async::NotReady);
@@ -335,11 +342,7 @@ where
                                 (PeerState::Errored(io_err), Err(err))
                             }
                             Ok(Async::Ready((muxer, client_addr))) => {
-                                trace!(
-                                    "Successful new connection to {} ({})",
-                                    addr,
-                                    client_addr
-                                );
+                                trace!("Successful new connection to {} ({})", addr, client_addr);
                                 for (_, task) in notify.drain(..) {
                                     task.notify();
                                 }
@@ -347,11 +350,14 @@ where
                                 let stream_id = self.streams_counter.next();
 
                                 // our connection was upgraded, replace it.
-                                (PeerState::Active {
-                                    muxer,
-                                    substreams: vec![stream_id],
-                                    listener_id: None
-                                }, Ok(Async::Ready((first_outbound, stream_id))))
+                                (
+                                    PeerState::Active {
+                                        muxer,
+                                        substreams: vec![stream_id],
+                                        listener_id: None,
+                                    },
+                                    Ok(Async::Ready((first_outbound, stream_id))),
+                                )
                             }
                         }
                     }
@@ -424,7 +430,7 @@ where
                     if listener.is_none() {
                         if let PeerState::Pending { ref mut notify, .. } = state {
                             let t_id = TASK_ID.with(|&t| t);
-                            if notify.iter().all(|(id, _)| { *id != t_id }) {
+                            if notify.iter().all(|(id, _)| *id != t_id) {
                                 notify.push((t_id, task::current()));
                             }
                         }
@@ -531,7 +537,6 @@ where
 
     #[inline]
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-
         // If an earlier attempt to dial this multiaddress failed, we clear the error. Otherwise
         // the returned `Future` will immediately produce the error.
         self.manager.clear_error(addr.clone());
@@ -653,16 +658,14 @@ where
                 _ => false,
             };
 
-            match self.manager.poll_outbound(self.addr.clone(), should_kill_existing_muxer) {
+            match self.manager
+                .poll_outbound(self.addr.clone(), should_kill_existing_muxer)
+            {
                 Ok(Async::Ready(val)) => {
                     self.outbound = Some(val);
                 }
-                Ok(Async::NotReady) => {
-                    return Ok(Async::NotReady)
-                }
-                Err(err) => {
-                    return Err(err)
-                }
+                Ok(Async::NotReady) => return Ok(Async::NotReady),
+                Err(err) => return Err(err),
             }
         }
     }
@@ -757,10 +760,8 @@ where
             // Successfully upgraded a new incoming connection.
             trace!("New multiplexed connection from {}", client_addr);
 
-            self.manager.new_inbound(
-                client_addr.clone(),
-                self.listener_id,
-                muxer);
+            self.manager
+                .new_inbound(client_addr.clone(), self.listener_id, muxer);
         }
 
         // Poll all the incoming connections on all the connections we opened.
@@ -840,7 +841,8 @@ where
             )))),
             Ok(Async::Ready(None)) | Ok(Async::NotReady) => {
                 // wake us up, when there is a new connection
-                self.manager.register_notifier(TASK_ID.with(|&v| v), task::current());
+                self.manager
+                    .register_notifier(TASK_ID.with(|&v| v), task::current());
                 Ok(Async::NotReady)
             }
             Err(err) => Err(err),
@@ -860,7 +862,7 @@ where
     /// Id this connection was created from.
     addr: Multiaddr,
     /// The Id of this particular stream
-    stream_id: StreamId
+    stream_id: StreamId,
 }
 
 impl<T, C> Deref for ConnectionReuseSubstream<T, C>
