@@ -387,7 +387,7 @@ where
                     listener_id,
                 } = state
                 {
-                    if *listener_id == listener {
+                    if *listener_id != listener {
                         continue;
                     }
                     found_one = true;
@@ -522,7 +522,7 @@ where
             current_upgrades: FuturesUnordered::new(),
         };
 
-        Ok((Box::new(listener) as Box<_>, new_addr))
+        Ok((Box::new(listener), new_addr))
     }
 
     #[inline]
