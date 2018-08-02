@@ -60,7 +60,8 @@ use std::clone::Clone;
 ///
 /// Can be created from an `UpgradedNode` through the `From` trait.
 ///
-/// Implements the `Transport` trait.
+/// Implements the `Transport` trait
+#[derive(Clone)]
 pub struct ConnectionReuse<T, C>
 where
     T: Transport,
@@ -476,12 +477,10 @@ where
 
 impl<T, C> Transport for ConnectionReuse<T, C>
 where
-    T: Transport + Clone + 'static,
+    T: Transport + 'static,
     T::Output: AsyncRead + AsyncWrite,
     C: ConnectionUpgrade<T::Output, T::MultiaddrFuture> + Clone + 'static, // TODO: 'static :(
     C::Output: StreamMuxer + Clone,
-    <C::Output as StreamMuxer>::Substream: Clone,
-    <C::Output as StreamMuxer>::OutboundSubstream: Clone,
     C::MultiaddrFuture: Future<Item = Multiaddr, Error = IoError>,
     C::NamesIter: Clone,
     UpgradedNode<T, C>: Clone,
@@ -550,12 +549,10 @@ where
 
 impl<T, C> MuxedTransport for ConnectionReuse<T, C>
 where
-    T: Transport + Clone + 'static, // TODO: 'static :(
+    T: Transport + 'static, // TODO: 'static :(
     T::Output: AsyncRead + AsyncWrite,
     C: ConnectionUpgrade<T::Output, T::MultiaddrFuture> + Clone + 'static, // TODO: 'static :(
     C::Output: StreamMuxer + Clone,
-    <C::Output as StreamMuxer>::Substream: Clone,
-    <C::Output as StreamMuxer>::OutboundSubstream: Clone,
     C::MultiaddrFuture: Future<Item = Multiaddr, Error = IoError>,
     C::NamesIter: Clone,
     UpgradedNode<T, C>: Clone,
@@ -599,11 +596,9 @@ where
 
 impl<T, C> Future for ConnectionReuseDial<T, C>
 where
-    T: Transport + Clone,
+    T: Transport,
     C: ConnectionUpgrade<T::Output, T::MultiaddrFuture> + Clone,
     C::Output: StreamMuxer + Clone + 'static,
-    <C::Output as StreamMuxer>::Substream: Clone,
-    <C::Output as StreamMuxer>::OutboundSubstream: Clone,
     UpgradedNode<T, C>: Transport<Output = C::Output> + Clone,
     <UpgradedNode<T, C> as Transport>::Dial: 'static,
     <UpgradedNode<T, C> as Transport>::MultiaddrFuture: 'static,
@@ -702,12 +697,10 @@ where
 
 impl<T, C, L, Lu> Stream for ConnectionReuseListener<T, C, L>
 where
-    T: Transport + Clone,
+    T: Transport,
     T::Output: AsyncRead + AsyncWrite,
     C: ConnectionUpgrade<T::Output, T::MultiaddrFuture> + Clone,
     C::Output: StreamMuxer + Clone + 'static,
-    <C::Output as StreamMuxer>::Substream: Clone,
-    <C::Output as StreamMuxer>::OutboundSubstream: Clone,
     UpgradedNode<T, C>: Transport<Output = C::Output> + Clone,
     <UpgradedNode<T, C> as Transport>::Dial: 'static,
     <UpgradedNode<T, C> as Transport>::MultiaddrFuture: 'static,
@@ -779,7 +772,7 @@ where
             Ok(Async::Ready(Some((inner, stream_id, addr)))) => {
                 Ok(Async::Ready(Some(future::ok((
                     ConnectionReuseSubstream {
-                        inner: inner.clone(),
+                        inner,
                         manager: self.manager.clone(),
                         stream_id,
                         addr: addr.clone(),
@@ -808,12 +801,10 @@ where
 
 impl<T, C> Future for ConnectionReuseIncoming<T, C>
 where
-    T: Transport + Clone,
+    T: Transport,
     T::Output: AsyncRead + AsyncWrite,
     C: ConnectionUpgrade<T::Output, T::MultiaddrFuture> + Clone,
     C::Output: StreamMuxer + Clone + 'static,
-    <C::Output as StreamMuxer>::Substream: Clone,
-    <C::Output as StreamMuxer>::OutboundSubstream: Clone,
     UpgradedNode<T, C>: Transport<Output = C::Output> + Clone,
     <UpgradedNode<T, C> as Transport>::Dial: 'static,
     <UpgradedNode<T, C> as Transport>::MultiaddrFuture: 'static,

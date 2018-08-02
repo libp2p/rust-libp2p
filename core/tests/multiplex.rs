@@ -50,7 +50,7 @@ impl<T: Clone> Clone for OnlyOnce<T> {
         )
     }
 }
-impl<T: Transport> Transport for OnlyOnce<T> {
+impl<T: Transport + 'static> Transport for OnlyOnce<T> {
     type Output = T::Output;
     type MultiaddrFuture = T::MultiaddrFuture;
     type Listener = T::Listener;
