@@ -64,7 +64,7 @@ mod tests {
     extern crate tokio_tcp;
     use self::tokio_tcp::TcpListener;
     use self::tokio_tcp::TcpStream;
-    use ::{ctr, KeySize};
+    use stream_cipher::{ctr, KeySize};
     use super::full_codec;
     use super::DecoderMiddleware;
     use super::EncoderMiddleware;

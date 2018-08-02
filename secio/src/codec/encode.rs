@@ -64,13 +64,13 @@ where
 
     fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
 
-        let mut out_data = item;
+        let mut data_buf = item;
         // TODO if SinkError gets refactor to SecioError,
         // then use try_apply_keystream
-        self.cipher_state.apply_keystream(&mut out_data[..]);
-        let signature = hmac::sign(&self.hmac_key, &out_data[..]);
-        out_data.extend_from_slice(signature.as_ref());
-        self.raw_sink.start_send(out_data)
+        self.cipher_state.apply_keystream(&mut data_buf[..]);
+        let signature = hmac::sign(&self.hmac_key, &data_buf[..]);
+        data_buf.extend_from_slice(signature.as_ref());
+        self.raw_sink.start_send(data_buf)
 
     }
 

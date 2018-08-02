@@ -21,7 +21,7 @@
 use algo_support;
 use bytes::BytesMut;
 use codec::{full_codec, FullCodec};
-use super::{KeySize, ctr};
+use stream_cipher::{KeySize, ctr};
 use error::SecioError;
 use futures::future;
 use futures::sink::Sink;

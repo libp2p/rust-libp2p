@@ -110,8 +110,6 @@ use std::error::Error;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use std::sync::Arc;
-use aes_ctr::stream_cipher::generic_array::GenericArray;
-use aes_ctr::stream_cipher::{NewFixStreamCipher, StreamCipherCore};
 use tokio_io::{AsyncRead, AsyncWrite};
 use untrusted::Input;
 
@@ -120,27 +118,8 @@ mod codec;
 mod error;
 mod handshake;
 mod structs_proto;
+mod stream_cipher;
 
-/// AES key size
-#[derive(Clone, Copy)]
-pub enum KeySize {
-    KeySize128,
-    KeySize256,
-}
-
-pub fn ctr(key_size: KeySize, key: &[u8], iv: &[u8]) -> Box<StreamCipherCore + 'static> {
-
-    match key_size {
-        KeySize::KeySize128 => Box::new(aes_ctr::Aes128Ctr::new(
-            GenericArray::from_slice(key),
-            GenericArray::from_slice(iv),
-        )),
-        KeySize::KeySize256 => Box::new(aes_ctr::Aes256Ctr::new(
-            GenericArray::from_slice(key),
-            GenericArray::from_slice(iv),
-        )),
-    }
-}
 
 /// Implementation of the `ConnectionUpgrade` trait of `libp2p_core`. Automatically applies
 /// secio on any connection.
