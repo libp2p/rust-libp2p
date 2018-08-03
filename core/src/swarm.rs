@@ -142,12 +142,11 @@ where
                 let mut then = Some(move |val| {
                     let _ = tx.send(then(val));
                 });
+                // Unfortunately the `Box<FnOnce(_)>` type is still unusable in Rust right now,
+                // so we use a `Box<FnMut(_)>` instead and panic if it is called multiple times.
                 let mut then = Box::new(move |val: Result<(), IoError>| {
-                    if let Some(then) = then.take() {
-                        then(val)
-                    } else {
-                        panic!()
-                    }
+                    let then = then.take().expect("The Boxed FnMut should only be called once");
+                    then(val);
                 }) as Box<FnMut(_)>;
 
                 let dial = dial.then(|result| {
@@ -271,6 +270,8 @@ where
             }
         }
 
+        // We remove each element from `shared.listeners` one by one and add them back only
+        // if relevant.
         for n in (0 .. shared.listeners.len()).rev() {
             let mut listener = shared.listeners.swap_remove(n);
             loop {
@@ -296,6 +297,8 @@ where
             }
         }
 
+        // We remove each element from `shared.listeners_upgrade` one by one and add them back
+        // only if relevant.
         for n in (0 .. shared.listeners_upgrade.len()).rev() {
             let mut listener_upgrade = shared.listeners_upgrade.swap_remove(n);
             match listener_upgrade.poll() {
@@ -314,6 +317,8 @@ where
             }
         }
 
+        // We remove each element from `shared.dialers` one by one and add them back only
+        // if relevant.
         for n in (0 .. shared.dialers.len()).rev() {
             let (client_addr, mut dialer) = shared.dialers.swap_remove(n);
             match dialer.poll() {
@@ -331,6 +336,8 @@ where
             }
         }
 
+        // We remove each element from `shared.to_process` one by one and add them back only
+        // if relevant.
         for n in (0 .. shared.to_process.len()).rev() {
             let mut to_process = shared.to_process.swap_remove(n);
             match to_process.poll() {

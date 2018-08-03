@@ -31,7 +31,7 @@ pub struct Interruptible<T> {
 }
 
 impl<T> Interruptible<T> {
-    /// Internal function that builds a `Interruptible`.
+    /// Internal function that builds an `Interruptible`.
     #[inline]
     pub(crate) fn new(transport: T) -> (Interruptible<T>, Interrupt) {
         let (_tx, rx) = oneshot::channel();
