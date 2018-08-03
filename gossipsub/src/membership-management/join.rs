@@ -20,7 +20,8 @@ use constants::{
 /// Join overlay
 /// 
 /// Obtain initial contact nodes via rendevous with DHT provider records
- 
+
+// Quoted verbatim from:
 // See https://github.com/libp2p/rust-libp2p/blob/8e07c18178ac43cad3fa8974a243a98d9bc8b896/kad/src/lib.rs#L21.
 
 //! "Kademlia protocol. Allows peer discovery, records store and records fetch.
@@ -45,22 +46,10 @@ let sample_peer_id = to_peer_id(ed25519_generated());
 // KadSystemConfig
 // https://github.com/libp2p/rust-libp2p/blob/7507e0bfd9f11520f2d6291120f1b68d0afce80a/kad/src/high_level.rs#L36
 let kad_system_config = KadSystemConfig {
-    /// Sources: http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html
-    /// https://www.kth.se/social/upload/516479a5f276545d6a965080/3-kademlia.pdf
-    /// http://www.scs.stanford.edu/%7Edm/home/papers/kpos.pdf (p. 3, col. 2)
     parallelism: ALPHA,
     local_peer_id: sample_peer_id,
     known_initial_peers: vec![],
-    /// tRefresh in Kademlia implementations, sources:
-    /// http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#refresh
-    /// https://www.kth.se/social/upload/516479a5f276545d6a965080/3-kademlia.pdf
-    /// 1 hour
     kbuckets_timeout: Duration.hour(KBUCKETS_TIMEOUT),
-    /// go gossipsub uses 1 s:
-    /// https://github.com/libp2p/go-floodsub/pull/67/files#diff-013da88fee30f5c765f693797e8b358dR30
-    /// However, https://www.rabbitmq.com/heartbeats.html#heartbeats-timeout uses 60 s, and
-    /// https://gist.github.com/gubatron/cd9cfa66839e18e49846#routing-table uses 15 minutes.
-    /// Let's make a conservative selection and choose 15 minutes for an alpha release.
     request_timeout: Duration.minutes(REQUEST_TIMEOUT),
 }
 
@@ -68,45 +57,7 @@ let kad_system_config = KadSystemConfig {
 // In https://github.com/libp2p/rust-libp2p/blob/master/kad/src/kad_server.rs
 let kad_connec_config = KadConnecConfig.new()
 
-// For reference, quoted verbatim, could delete:
 // "Create a swarm that upgrades incoming connections with the `KadConnecConfig`.
-// https://github.com/libp2p/rust-libp2p/blob/4592d1b21ef8bd41a8176ad651feb1aa6cb1b377/core/src/swarm.rs#L28-L43
-
-// /// "Creates a swarm.
-// ///
-// /// Requires an upgraded transport, and a function or closure that will turn the upgrade into a
-// /// `Future` that produces a `()`.
-// ///
-// /// Produces a `SwarmController` and an implementation of `Future`. The controller can be used to
-// /// control, and the `Future` must be driven to completion in order for things to work.
-// ///
-// pub fn swarm<T, H, F>(
-//     transport: T,
-//     handler: H,
-// ) -> (SwarmController<T>, SwarmFuture<T, H, F::Future>)
-// where
-//     T: MuxedTransport + Clone + 'static, // TODO: 'static :-/
-//     H: FnMut(T::Output, Box<Future<Item = Multiaddr, Error = IoError>>) -> F,
-//     F: IntoFuture<Item = (), Error = IoError>,"
-
-/// "[KadConnecConfig] implements `ConnectionUpgrade`. On a successful upgrade, produces a `KadConnecController`
-/// and a `Future`. The controller lets you send queries to the remote and receive answers, while
-/// the `Future` must be driven to completion in order for things to work."
-/// 
-/// See https://github.com/libp2p/rust-libp2p/blob/master/core/README.md#swarm, plus 
-/// https://github.com/libp2p/rust-libp2p/tree/master/core#the-transport-trait, 
-/// https://github.com/libp2p/rust-libp2p/tree/master/core#connection-upgrades
-
-// Note: this line is probably incorrect as KadConnecConfig doesn't implement the Transport trait.
-// We need to create an object that implements the Transport trait before passing it to the swarm.
-// Pretty sure that KadConnecConfig is an actual protocol:
-// https://github.com/libp2p/rust-libp2p/tree/master/core#actual-protocols
-// I don't think this is right: I think kad_connec_config.upgrade is the upgraded transport,
-// KadConnecConfig::Future.
-// I think we can use `with_upgrade`, see
-// https://github.com/libp2p/rust-libp2p/tree/master/core#actual-protocols
-// for details. No, we can't, KadConnecConfig and ConnectionUpgrade don't implement Transport.
-// But creating a swarm requires passing an object that implement the Transport trait.
 
 let mut core = tokio_core::reactor::Core::new().unwrap();
 
@@ -124,15 +75,14 @@ swarm_controller.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap());
 
 // Runs until everything is finished.
 tokio_current_thread::block_on_all(swarm_future).unwrap();
-// wrong: let swarm_inst = kad_connec_config.upgrade();
-// wrong: let swarm_inst = |kad_peer_controller| kad_connec_config.upgrade();
 
 // "Build a `KadSystem` from the `KadSystemConfig`. This requires passing a closure that provides
 // the Kademlia controller of a peer."
-// `KadConnecController` is an output of KadConnecConfig.upgrade and I think "passing a
-// closure that provides x" means that the closure has been previously defined, and that we call the closure like 
-// a function with x as an input.
-let kad_system_build = |kad_peer_controller| swarm_inst;
+// FMI see https://github.com/libp2p/rust-libp2p/blob/master/kad/src/high_level.rs
+let kad_peer_controller = |peer_id: &PeerId| peer_id
+let kad_system = KadSystem.start(kad_system_config, kad_peer_controller)
+
+// wrong: let kad_system_build = |kad_peer_controller| swarm_inst;
 // Not sure if this above is right, test!
 
 // "You can perform queries using the `KadSystem`."
