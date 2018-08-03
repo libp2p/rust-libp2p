@@ -155,6 +155,7 @@ where
     /// consume the tasks in that process
     fn new_con_notify(&self) {
         let mut notifiers = self.notify_on_new_connec.lock();
+        trace!("Notify {} listeners about a new connection", notifiers.len());
         for (_, task) in notifiers.drain(..) {
             task.notify();
         }
@@ -163,7 +164,8 @@ where
     /// Register `task` under id if not yet registered
     fn register_notifier(&self, id: usize, task: task::Task) {
         let mut notifiers = self.notify_on_new_connec.lock();
-        if notifiers.iter().all(|(t, _)| *t != id) {
+        if !notifiers.iter().any(|(t, _)| *t == id) {
+            trace!("Notify registered for task: {}", id);
             notifiers.push((id, task))
         }
     }
@@ -266,108 +268,104 @@ where
             // do something with open substreams?
         }
 
-        match conns.entry(addr.clone()) {
-            Entry::Vacant(e) => {
-                // Empty: dial, keep in mind, which task wanted to be notified,
-                // then return with `NotReady`
-                e.insert(match self.transport.clone().dial(addr.clone()) {
-                    Ok(future) => {
-                        trace!("Opened new connection to {:?}", addr);
-                        let future = future.and_then(|(out, addr)| addr.map(move |a| (out, a)));
-                        let future = Box::new(future);
+        let state = conns.entry(addr.clone()).or_insert({
+            let state = match self.transport.clone().dial(addr.clone()) {
+                Ok(future) => {
+                    trace!("Opening new connection to {:?}", addr);
+                    let future = future.and_then(|(out, addr)| addr.map(move |a| (out, a)));
+                    let future = Box::new(future);
 
-                        PeerState::Pending {
-                            future,
-                            // make sure we are woken up once this connects
-                            notify: vec![(TASK_ID.with(|&t| t), task::current())],
-                        }
-                    }
-                    Err(_) => {
-                        trace!(
-                            "Failed to open connection to {:?}, multiaddr not supported",
-                            addr
-                        );
-                        let err =
-                            IoError::new(IoErrorKind::ConnectionRefused, "multiaddr not supported");
-                        PeerState::Errored(err)
-                    }
-                });
-                self.new_con_notify();
-
-                Ok(Async::NotReady)
-            }
-            Entry::Occupied(mut e) => {
-                let (replace_with, return_with) = match e.get_mut() {
-                    PeerState::Errored(err) => {
-                        // Error: return it
-                        let io_err = IoError::new(err.kind(), err.to_string());
-                        return Err(io_err);
-                    }
-                    PeerState::Active {
-                        muxer,
-                        ref mut substreams,
-                        ..
-                    } => {
-                        // perfect, let's reuse, update the stream_id and
-                        // return a new outbound
-                        trace!(
-                            "Using existing connection to {} to open outbound substream",
-                            addr
-                        );
-                        let stream_id = self.streams_counter.next();
-                        substreams.push(stream_id);
-                        // mutating the param in place, nothing to be done
-                        return Ok(Async::Ready((muxer.clone().outbound(), stream_id)));
-                    }
                     PeerState::Pending {
-                        ref mut future,
-                        ref mut notify,
-                    } => {
-                        // was pending, let's check if that has changed
-                        match future.poll() {
-                            Ok(Async::NotReady) => {
-                                // no it still isn't ready, keep the current task
-                                // informed but return with NotReady
-                                let t_id = TASK_ID.with(|&t| t);
-                                if notify.iter().all(|(id, _)| *id != t_id) {
-                                    notify.push((t_id, task::current()));
-                                }
-                                return Ok(Async::NotReady);
-                            }
-                            Err(err) => {
-                                // well, looks like connecting failed, replace the
-                                // entry then return the Error
-                                trace!("Failed new connection to {}: {:?}", addr, err);
-                                let io_err = IoError::new(err.kind(), err.to_string());
-                                (PeerState::Errored(io_err), Err(err))
-                            }
-                            Ok(Async::Ready((muxer, client_addr))) => {
-                                trace!("Successful new connection to {} ({})", addr, client_addr);
-                                for (_, task) in notify.drain(..) {
-                                    task.notify();
-                                }
-                                let first_outbound = muxer.clone().outbound();
-                                let stream_id = self.streams_counter.next();
-
-                                // our connection was upgraded, replace it.
-                                (
-                                    PeerState::Active {
-                                        muxer,
-                                        substreams: vec![stream_id],
-                                        listener_id: None,
-                                    },
-                                    Ok(Async::Ready((first_outbound, stream_id))),
-                                )
-                            }
-                        }
+                        future,
+                        // make sure we are woken up once this connects
+                        notify: vec![(TASK_ID.with(|&t| t), task::current())],
                     }
-                };
+                }
+                Err(_) => {
+                    trace!(
+                        "Failed to open connection to {:?}, multiaddr not supported",
+                        addr
+                    );
+                    let err =
+                        IoError::new(IoErrorKind::ConnectionRefused, "multiaddr not supported");
+                    PeerState::Errored(err)
+                }
+            };
+            self.new_con_notify();
+            // Althought we've just started in pending state, there are transports, which are
+            // immediately ready - namely 'memory' - so we need to poll our future right away
+            // rather than waiting for another poll on it.
+            state
+        });
 
-                e.insert(replace_with);
-
-                return_with
+        let (replace_with, return_with) = match state {
+            PeerState::Errored(err) => {
+                // Error: return it
+                let io_err = IoError::new(err.kind(), err.to_string());
+                return Err(io_err);
             }
-        }
+            PeerState::Active {
+                muxer,
+                ref mut substreams,
+                ..
+            } => {
+                // perfect, let's reuse, update the stream_id and
+                // return a new outbound
+                trace!(
+                    "Using existing connection to {} to open outbound substream",
+                    addr
+                );
+                let stream_id = self.streams_counter.next();
+                substreams.push(stream_id);
+                // mutating the param in place, nothing to be done
+                return Ok(Async::Ready((muxer.clone().outbound(), stream_id)));
+            }
+            PeerState::Pending {
+                ref mut future,
+                ref mut notify,
+            } => {
+                // was pending, let's check if that has changed
+                match future.poll() {
+                    Ok(Async::NotReady) => {
+                        // no it still isn't ready, keep the current task
+                        // informed but return with NotReady
+                        let t_id = TASK_ID.with(|&t| t);
+                        if !notify.iter().any(|(id, _)| *id == t_id) {
+                            notify.push((t_id, task::current()));
+                        }
+                        return Ok(Async::NotReady);
+                    }
+                    Err(err) => {
+                        // well, looks like connecting failed, replace the
+                        // entry then return the Error
+                        trace!("Failed new connection to {}: {:?}", addr, err);
+                        let io_err = IoError::new(err.kind(), err.to_string());
+                        (PeerState::Errored(io_err), Err(err))
+                    }
+                    Ok(Async::Ready((muxer, client_addr))) => {
+                        trace!("Successful new connection to {} ({})", addr, client_addr);
+                        for (_, task) in notify.drain(..) {
+                            task.notify();
+                        }
+                        let first_outbound = muxer.clone().outbound();
+                        let stream_id = self.streams_counter.next();
+
+                        // our connection was upgraded, replace it.
+                        (
+                            PeerState::Active {
+                                muxer,
+                                substreams: vec![stream_id],
+                                listener_id: None,
+                            },
+                            Ok(Async::Ready((first_outbound, stream_id))),
+                        )
+                    }
+                }
+            }
+        };
+
+        *state = replace_with;
+        return_with
     }
 
     /// Polls the incoming substreams on all the incoming connections that match the `listener`.
@@ -453,6 +451,7 @@ where
             Some(Err(err)) => Err(err),
             None => {
                 if found_one {
+                    self.register_notifier(TASK_ID.with(|&v| v), task::current());
                     Ok(Async::NotReady)
                 } else {
                     Ok(Async::Ready(None))
@@ -768,12 +767,13 @@ where
         match self.manager.poll_incoming(Some(self.listener_id)) {
             Ok(Async::NotReady) => Ok(Async::NotReady),
             Ok(Async::Ready(None)) => {
-                trace!("Ready but empty");
                 if self.listener.is_done() && self.current_upgrades.is_empty() {
-                    trace!("Ready, empty, we are, too. Closing;");
+                    trace!("Ready but empty; we are, too; Closing!");
                     Ok(Async::Ready(None))
                 } else {
-                    trace!("Ready and empty, but we're still going strong. We'll wait!");
+                    trace!("Ready but empty; but we're still going strong; We'll wait!");
+                    self.manager
+                        .register_notifier(TASK_ID.with(|&v| v), task::current());
                     Ok(Async::NotReady)
                 }
             }
@@ -830,15 +830,17 @@ where
     #[inline]
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self.manager.poll_incoming(None) {
-            Ok(Async::Ready(Some((inner, stream_id, addr)))) => Ok(Async::Ready(future::ok((
-                ConnectionReuseSubstream {
-                    inner,
-                    manager: self.manager.clone(),
-                    stream_id,
-                    addr: addr.clone(),
-                },
-                future::ok(addr),
-            )))),
+            Ok(Async::Ready(Some((inner, stream_id, addr)))) => {
+                trace!("New Incoming Substream found {:} for {}", stream_id, addr);
+                Ok(Async::Ready(future::ok((
+                    ConnectionReuseSubstream {
+                        inner,
+                        manager: self.manager.clone(),
+                        stream_id,
+                        addr: addr.clone(),
+                    },
+                    future::ok(addr),))))
+            },
             Ok(Async::Ready(None)) | Ok(Async::NotReady) => {
                 // wake us up, when there is a new connection
                 self.manager
