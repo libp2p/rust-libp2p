@@ -170,25 +170,16 @@ where
         }
     }
 
-    /// Removes one substream from an active connection. Drops the connection if no substream
-    /// is left. Returns `true` if the connection has been dropped.
-    fn remove_substream(&self, addr: &Multiaddr, stream_id: &StreamId) -> bool {
+    /// Removes one substream from an active connection.
+    fn remove_substream(&self, addr: &Multiaddr, stream_id: &StreamId) {
         let mut conns = self.connections.lock();
-        let mut drop = false;
 
         if let Some(PeerState::Active {
             ref mut substreams, ..
         }) = conns.get_mut(addr)
         {
             substreams.retain(|e| e != stream_id);
-            drop = substreams.is_empty();
         }
-
-        if drop {
-            conns.remove(addr);
-        }
-
-        drop
     }
 
     /// Clear the cached connection if the entry contains an error. Returns whether an error was
