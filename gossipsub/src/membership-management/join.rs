@@ -80,10 +80,8 @@ tokio_current_thread::block_on_all(swarm_future).unwrap();
 // the Kademlia controller of a peer."
 // FMI see https://github.com/libp2p/rust-libp2p/blob/master/kad/src/high_level.rs
 let kad_peer_controller = |peer_id: &PeerId| peer_id
-let kad_system = KadSystem.start(kad_system_config, kad_peer_controller)
-
-// wrong: let kad_system_build = |kad_peer_controller| swarm_inst;
-// Not sure if this above is right, test!
+// Not sure if this is right, or whether we should call it with some &PeerId at run-time.
+let kad_system = KadSystem.start(kad_system_config, kad_peer_controller(sample_peer_id))
 
 // "You can perform queries using the `KadSystem`."
 
