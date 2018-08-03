@@ -15,8 +15,11 @@
 
 /
 
-pub const OVERLAY_SIZE = 10,000
-pub const C_RAND =  4
-pub const C_NEAR = 3
-pub const ACTIVE_LIST_SIZE = 7
-pub const PASSIVE_LIST_SIZE = 42
+pub const OVERLAY_SIZE = 10,000;
+pub const C_RAND =  4;
+pub const C_NEAR = 3;
+pub const ACTIVE_LIST_SIZE = 7;
+pub const PASSIVE_LIST_SIZE = 42;
+pub const ALPHA = 3;
+pub const KBUCKETS_TIMEOUT = 1;
+pub const REQUEST_TIMEOUT = 15;

@@ -72,7 +72,8 @@ where
         Box<Stream<Item = KadIncomingRequest, Error = IoError>>,
     );
     type MultiaddrFuture = Maf;
-    type Future = future::Map<<KademliaProtocolConfig as ConnectionUpgrade<C, Maf>>::Future, fn((<KademliaProtocolConfig as ConnectionUpgrade<C, Maf>>::Output, Maf)) -> (Self::Output, Maf)>;
+    type Future = future::Map<<KademliaProtocolConfig as ConnectionUpgrade<C, Maf>>::Future,
+        fn((<KademliaProtocolConfig as ConnectionUpgrade<C, Maf>>::Output, Maf)) -> (Self::Output, Maf)>;
     type NamesIter = iter::Once<(Bytes, ())>;
     type UpgradeIdentifier = ();
 
@@ -191,7 +192,8 @@ impl KadFindNodeRespond {
 }
 
 // Builds a controller and stream from a stream/sink of raw messages.
-fn build_from_sink_stream<'a, S>(connec: S) -> (KadConnecController, Box<Stream<Item = KadIncomingRequest, Error = IoError> + 'a>)
+fn build_from_sink_stream<'a, S>(connec: S) 
+    -> (KadConnecController, Box<Stream<Item = KadIncomingRequest, Error = IoError> + 'a>)
 where S: Sink<SinkItem = KadMsg, SinkError = IoError> + Stream<Item = KadMsg, Error = IoError> + 'a
 {
     let (tx, rx) = mpsc::unbounded();
@@ -259,7 +261,8 @@ where
                     match message {
                         Some(EventSource::Finished) | None => {
                             let future = future::ok({
-                                let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, true);
+                                let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs,
+                                    true);
                                 (None, state)
                             });
                             Box::new(future)
@@ -275,7 +278,8 @@ where
                                     kad_sink
                                         .send(message)
                                         .map(move |kad_sink| {
-                                            let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, finished);
+                                            let state = (events, kad_sink, responders_tx, send_back_queue,
+                                                expected_pongs, finished);
                                             (None, state)
                                         })
                                 });
@@ -287,7 +291,8 @@ where
                             let future = kad_sink
                                 .send(message)
                                 .map(move |kad_sink| {
-                                    let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, finished);
+                                    let state = (events, kad_sink, responders_tx, send_back_queue,
+                                        expected_pongs, finished);
                                     (None, state)
                                 });
                             Box::new(future) as Box<_>
@@ -299,7 +304,8 @@ where
                             let future = kad_sink
                                 .send(message)
                                 .map(move |kad_sink| {
-                                    let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, finished);
+                                    let state = (events, kad_sink, responders_tx, send_back_queue,
+                                        expected_pongs, finished);
                                     (None, state)
                                 });
                             Box::new(future) as Box<_>
@@ -310,7 +316,8 @@ where
                             let future = kad_sink
                                 .send(message)
                                 .map(move |kad_sink| {
-                                    let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, finished);
+                                    let state = (events, kad_sink, responders_tx, send_back_queue,
+                                        expected_pongs, finished);
                                     (None, state)
                                 });
                             Box::new(future) as Box<_>
@@ -323,7 +330,8 @@ where
                                 // to tell. If it was a PING and we expected a PONG, then the
                                 // remote will see its PING answered only when it PONGs us.
                                 let future = future::ok({
-                                    let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, finished);
+                                    let state = (events, kad_sink, responders_tx, send_back_queue,
+                                        expected_pongs, finished);
                                     let rq = KadIncomingRequest::PingPong;
                                     (Some(rq), state)
                                 });
@@ -332,7 +340,8 @@ where
                                 let future = kad_sink
                                     .send(KadMsg::Ping)
                                     .map(move |kad_sink| {
-                                        let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, finished);
+                                        let state = (events, kad_sink, responders_tx, send_back_queue,
+                                            expected_pongs, finished);
                                         let rq = KadIncomingRequest::PingPong;
                                         (Some(rq), state)
                                     });
@@ -346,7 +355,8 @@ where
                             if let Some(send_back) = send_back_queue.pop_front() {
                                 let _ = send_back.send(message);
                                 let future = future::ok({
-                                    let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, finished);
+                                    let state = (events, kad_sink, responders_tx, send_back_queue,
+                                        expected_pongs, finished);
                                     (None, state)
                                 });
                                 Box::new(future)
@@ -361,7 +371,8 @@ where
                                 Ok(id) => id,
                                 Err(key) => {
                                     debug!("Ignoring FIND_NODE request with invalid key: {:?}", key);
-                                    let future = future::err(IoError::new(IoErrorKind::InvalidData, "invalid key in FIND_NODE"));
+                                    let future = future::err(IoError::new(IoErrorKind::InvalidData,
+                                        "invalid key in FIND_NODE"));
                                     return Box::new(future);
                                 }
                             };
@@ -369,7 +380,8 @@ where
                             let (tx, rx) = oneshot::channel();
                             let _ = responders_tx.unbounded_send(rx);
                             let future = future::ok({
-                                let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, finished);
+                                let state = (events, kad_sink, responders_tx, send_back_queue,
+                                    expected_pongs, finished);
                                 let rq = KadIncomingRequest::FindNode {
                                     searched: peer_id,
                                     responder: KadFindNodeRespond {
@@ -389,7 +401,8 @@ where
                         }
                         Some(EventSource::Remote(KadMsg::PutValue { .. })) => {
                             warn!("PUT_VALUE requests are not implemented yet");
-                            let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, finished);
+                            let state = (events, kad_sink, responders_tx, send_back_queue,
+                                expected_pongs, finished);
                             let future = future::ok((None, state));
                             return Box::new(future);
                         }
@@ -440,7 +453,8 @@ mod tests {
         }
     }
 
-    fn build_test() -> (KadConnecController, impl Stream<Item = KadIncomingRequest, Error = IoError>, KadConnecController, impl Stream<Item = KadIncomingRequest, Error = IoError>) {
+    fn build_test() -> (KadConnecController, impl Stream<Item = KadIncomingRequest, Error = IoError>,
+        KadConnecController, impl Stream<Item = KadIncomingRequest, Error = IoError>) {
         let (a_to_b, b_from_a) = mpsc::unbounded();
         let (b_to_a, a_from_b) = mpsc::unbounded();
 

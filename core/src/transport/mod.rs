@@ -152,7 +152,7 @@ pub trait Transport {
     /// Wraps this transport inside an upgrade. Whenever a connection that uses this transport
     /// is established, it is wrapped inside the upgrade.
     ///
-    /// > **Note**: The concept of an *upgrade* for example includes middlewares such *secio*
+    /// > **Note**: The concept of an *upgrade* for example includes middlewares such as *secio*
     /// >           (communication encryption), *multiplex*, but also a protocol handler.
     #[inline]
     fn with_upgrade<U>(self, upgrade: U) -> UpgradedNode<Self, U>
@@ -167,7 +167,7 @@ pub trait Transport {
     /// Wraps this transport inside an upgrade. Whenever a connection that uses this transport
     /// is established, it is wrapped inside the upgrade.
     ///
-    /// > **Note**: The concept of an *upgrade* for example includes middlewares such *secio*
+    /// > **Note**: The concept of an *upgrade* for example includes middlewares such as *secio*
     /// >           (communication encryption), *multiplex*, but also a protocol handler.
     #[inline]
     fn and_then<C, F, O, Maf>(self, upgrade: C) -> and_then::AndThen<Self, C>
