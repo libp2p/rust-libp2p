@@ -264,11 +264,12 @@ where
         let mut conns = self.connections.lock();
 
         if reset {
+            trace!("Resetting connection to {:}", &addr);
             conns.remove(&addr);
             // do something with open substreams?
         }
 
-        let state = conns.entry(addr.clone()).or_insert({
+        let state = conns.entry(addr.clone()).or_insert_with(|| {
             let state = match self.transport.clone().dial(addr.clone()) {
                 Ok(future) => {
                     trace!("Opening new connection to {:?}", addr);
