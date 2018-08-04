@@ -5,6 +5,7 @@ members = [
     "datastore",
     "dns",
     "floodsub",
+    "gossipsub",
     "identify",
     "kad",
     "libp2p",

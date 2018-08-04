@@ -4,7 +4,15 @@ version = "0.1.0"
 authors = ["James Ray (@jamesray1)"]
 
 [dependencies]
-libp2p_floodsub = { path = "../floodsub"}
-libp2p_kad = { path = "../kad"}
-libp2p_core = { path = "../core"}
+bs58 = "0.2.1"
+futures = "0.1.23"
+libp2p-core = { path = "../core"}
+libp2p-floodsub = { path = "../floodsub"}
+libp2p-kad = { path = "../kad"}
+libp2p-ping = {path = "../ping"}
+libp2p-secio = { path = "../secio"}
+libp2p-tcp-transport = {path = "../tcp-transport"}
+protobuf = "2.0.4"
 time = "0.1"
+tokio-core = "0.1.17"
+tokio-current-thread = "0.1.0"

@@ -25,23 +25,27 @@
 
 // WIP!
 
+extern crate bs58;
 extern crate futures;
 extern crate libp2p_core;
 extern crate libp2p_floodsub;
 extern crate libp2p_kad;
 extern crate libp2p_ping;
+extern crate libp2p_secio;
 extern crate libp2p_tcp_transport;
+extern crate protobuf;
 extern crate time;
-extern crate tokio_current_thread;
+extern crate tokio_core;
+extern crate tokio_current_thread; 
 
-pub usemod rpc_proto;
+mod rpc_proto;
 mod topic;
 mod constants;
 
-pub mod membership-management;
+pub mod membership_management;
 
 // gossipsub is an extension of floodsub so it seems to make sense to use everything in floodsub.
-pub use floodsub::*;
+pub use libp2p_floodsub::*;
 
 // ## Differences from Plumtree/HyParView
 

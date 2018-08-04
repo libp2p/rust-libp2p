@@ -18,11 +18,32 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#![warn(missing_docs)]
+#![allow(missing_docs)]
+// hide missing doc warnings for:
+// warning: missing documentation for a variant
+//   --> varint-rs/src/lib.rs:49:5
+//    |
+// 49 | /     error_chain! {
+// 50 | |         errors {
+// 51 | |             ParseError {
+// 52 | |                 description("error parsing varint")
+// ...  |
+// 63 | |         }
+// 64 | |     }
+//    | |_____^
+// warning: missing documentation for a method
+//    --> varint-rs/src/lib.rs:293:5
+//     |
+// 293 |     pub fn source(&self) -> &T {
+//     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-//! Encoding and decoding state machines for protobuf varints
+// warning: missing documentation for a struct
+//    --> varint-rs/src/lib.rs:416:1
+//     |
+// 416 | pub struct VarintCodec<W> {
+//     | ^^^^^^^^^^^^^^^^^^^^^^^^^
+// TODO: write docs for these
 
-// TODO: Non-allocating `BigUint`?
 extern crate bytes;
 #[macro_use]
 extern crate error_chain;

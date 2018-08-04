@@ -1,3 +1,3 @@
-pub mod active-view-changes;
-pub mod multicast-tree;
+pub mod active_view_changes;
+pub mod multicast_tree;
 pub mod state;

@@ -16,23 +16,23 @@
 /// Sources: http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html
 /// https://www.kth.se/social/upload/516479a5f276545d6a965080/3-kademlia.pdf
 /// http://www.scs.stanford.edu/%7Edm/home/papers/kpos.pdf (p. 3, col. 2)
-pub const ALPHA = 3;
+pub const ALPHA: u8 = 3;
 
 /// tRefresh in Kademlia implementations, sources:
 /// http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#refresh
 /// https://www.kth.se/social/upload/516479a5f276545d6a965080/3-kademlia.pdf
 /// 1 hour
-pub const KBUCKETS_TIMEOUT = 1;
+pub const KBUCKETS_TIMEOUT: u8 = 1;
 
 /// go gossipsub uses 1 s:
 /// https://github.com/libp2p/go-floodsub/pull/67/files#diff-013da88fee30f5c765f693797e8b358dR30
 /// However, https://www.rabbitmq.com/heartbeats.html#heartbeats-timeout uses 60 s, and
 /// https://gist.github.com/gubatron/cd9cfa66839e18e49846#routing-table uses 15 minutes.
 /// Let's make a conservative selection and choose 15 minutes for an alpha release.
-pub const REQUEST_TIMEOUT = 15;
+pub const REQUEST_TIMEOUT: u8 = 15;
 
-pub const OVERLAY_SIZE = 10,000;
-pub const C_RAND =  4;
-pub const C_NEAR = 3;
-pub const ACTIVE_LIST_SIZE = 7;
-pub const PASSIVE_LIST_SIZE = 42;
+pub const OVERLAY_SIZE: usize = 10_000;
+pub const C_RAND: u8 =  4;
+pub const C_NEAR: u8 = 3;
+pub const ACTIVE_LIST_SIZE: u8 = 7;
+pub const PASSIVE_LIST_SIZE: u8 = 42;
