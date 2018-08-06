@@ -95,6 +95,9 @@ extern crate secp256k1;
 extern crate tokio_io;
 extern crate untrusted;
 
+#[cfg(feature = "aes-all")]
+#[macro_use]
+extern crate lazy_static;
 pub use self::error::SecioError;
 
 #[cfg(feature = "secp256k1")]
