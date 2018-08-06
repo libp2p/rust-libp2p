@@ -27,30 +27,30 @@ fn init_overlay() -> KadSystem {
     // "Build a `KadSystemConfig` and a `KadConnecConfig` object that contain the way you want the
     // Kademlia protocol to behave."
 
-    let secio_key_pair_inner = SecioKeyPairInner::Ed25519 {
+    // let secio_key_pair_inner = SecioKeyPairInner::Ed25519 {
 
-    };
+    // };
     let secio_key_pair = SecioKeyPair {
-        inner : 
-    }
+        inner : SecioKeyPairInner::Ed25519
+    };
 
-//     // Inner content of `SecioKeyPair`.
-// #[derive(Clone)]
-// enum SecioKeyPairInner {
-//     Rsa {
-//         public: Vec<u8>,
-//         // We use an `Arc` so that we can clone the enum.
-//         private: Arc<RSAKeyPair>,
-//     },
-//     Ed25519 {
-//         // We use an `Arc` so that we can clone the enum.
-//         key_pair: Arc<Ed25519KeyPair>,
-//     },
-//     #[cfg(feature = "secp256k1")]
-//     Secp256k1 { private: secp256k1::key::SecretKey },
-// }
+    //     // Inner content of `SecioKeyPair`.
+    // #[derive(Clone)]
+    // enum SecioKeyPairInner {
+    //     Rsa {
+    //         public: Vec<u8>,
+    //         // We use an `Arc` so that we can clone the enum.
+    //         private: Arc<RSAKeyPair>,
+    //     },
+    //     Ed25519 {
+    //         // We use an `Arc` so that we can clone the enum.
+    //         key_pair: Arc<Ed25519KeyPair>,
+    //     },
+    //     #[cfg(feature = "secp256k1")]
+    //     Secp256k1 { private: secp256k1::key::SecretKey },
+    // }
 
-    let sample_peer_id = to_peer_id(ed25519_generated());
+    let sample_peer_id = SecioKeyPair::to_peer_id(SecioKeyPair::ed25519_generated());
 
     // KadSystemConfig
     // https://github.com/libp2p/rust-libp2p/blob/7507e0bfd9f11520f2d6291120f1b68d0afce80a/kad/src/high_level.rs#L36
@@ -58,13 +58,13 @@ fn init_overlay() -> KadSystem {
         parallelism: ALPHA,
         local_peer_id: sample_peer_id,
         known_initial_peers: vec![],
-        kbuckets_timeout: Duration.hour(KBUCKETS_TIMEOUT),
-        request_timeout: Duration.minutes(REQUEST_TIMEOUT),
+        kbuckets_timeout: Duration::hours(KBUCKETS_TIMEOUT),
+        request_timeout: Duration::minutes(REQUEST_TIMEOUT),
     };
 
     // KadConnecConfig
     // In https://github.com/libp2p/rust-libp2p/blob/master/kad/src/kad_server.rs
-    let kad_connec_config = KadConnecConfig.new();
+    let kad_connec_config = KadConnecConfig::new();
 
     // "Create a swarm that upgrades incoming connections with the `KadConnecConfig`.
 
@@ -97,12 +97,12 @@ fn init_overlay() -> KadSystem {
     }.start(kad_system_config, kad_peer_controller(sample_peer_id));
     kad_system
 
-    pub struct KBucketsTable<Id, Val> {
-    my_id: Id,
-    tables: Vec<Mutex<KBucket<Id, Val>>>,
-    // The timeout when pinging the first node after which we consider that it no longer responds.
-    ping_timeout: Duration,
-}
+    // pub struct KBucketsTable<Id, Val> {
+    // my_id: Id,
+    // tables: Vec<Mutex<KBucket<Id, Val>>>,
+    // // The timeout when pinging the first node after which we consider that it no longer responds.
+    // ping_timeout: Duration,
+    // }
 }
 
 // "You can perform queries using the `KadSystem`." TODO: Test

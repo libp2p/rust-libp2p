@@ -27,6 +27,7 @@
 
 extern crate bs58;
 extern crate futures;
+extern crate kad;
 extern crate libp2p_core;
 extern crate libp2p_floodsub;
 extern crate libp2p_kad;
