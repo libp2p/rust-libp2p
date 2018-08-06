@@ -592,7 +592,7 @@ fn handle_packet_received(
                    publish.get_data().len());
             continue;
         }
-        let from: Multiaddr = AddrComponent::IPFS(from).into();
+        let from: Multiaddr = AddrComponent::P2P(from).into();
 
         let topics = publish
             .take_topicIDs()
