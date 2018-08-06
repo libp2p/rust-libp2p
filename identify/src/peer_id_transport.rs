@@ -278,7 +278,7 @@ fn multiaddr_to_peerid(addr: Multiaddr) -> Result<PeerId, Multiaddr> {
     }
 
     match components.last() {
-        Some(&AddrComponent::P2P(ref peer_id)) | Some(&AddrComponent::IPFS(ref peer_id)) => {
+        Some(&AddrComponent::P2P(ref peer_id)) => {
             // TODO: `peer_id` is sometimes in fact a CID here
             match PeerId::from_bytes(peer_id.clone()) {
                 Ok(peer_id) => Ok(peer_id),

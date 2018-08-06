@@ -254,7 +254,7 @@ where
     P: Peerstore + Clone,
 {
     const ADDRESSES: &[&str] = &[
-        "/ip4/127.0.0.1/tcp/4001/ipfs/QmQRx32wQkw3hB45j4UDw8V9Ju4mGbxMyhs2m8mpFrFkur",
+        "/ip4/127.0.0.1/tcp/4001/p2p/QmQRx32wQkw3hB45j4UDw8V9Ju4mGbxMyhs2m8mpFrFkur",
         // TODO: add some bootstrap nodes here
     ];
 
@@ -265,12 +265,12 @@ where
             .parse::<Multiaddr>()
             .expect("failed to parse hard-coded multiaddr");
 
-        let ipfs_component = multiaddr.pop().expect("hard-coded multiaddr is empty");
-        let peer = match ipfs_component {
-            libp2p::multiaddr::AddrComponent::IPFS(key) => {
+        let p2p_component = multiaddr.pop().expect("hard-coded multiaddr is empty");
+        let peer = match p2p_component {
+            libp2p::multiaddr::AddrComponent::P2P(key) => {
                 PeerId::from_bytes(key).expect("invalid peer id")
             }
-            _ => panic!("hard-coded multiaddr didn't end with /ipfs/"),
+            _ => panic!("hard-coded multiaddr didn't end with /p2p/"),
         };
 
         peer_store
