@@ -145,7 +145,7 @@ pub(crate) struct Peer {
 impl Peer {
     pub(crate) fn from(mut addr: Multiaddr) -> Option<Peer> {
         match addr.pop() {
-            Some(AddrComponent::P2P(id)) | Some(AddrComponent::IPFS(id)) => {
+            Some(AddrComponent::P2P(id)) => {
                 PeerId::from_bytes(id).ok().map(|pid| {
                     if addr.iter().count() == 0 {
                         Peer {
