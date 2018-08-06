@@ -87,7 +87,7 @@ impl<'a> Peerstore for &'a JsonPeerstore {
             orders: vec![],
             skip: 0,
             limit: u64::max_value(),
-            keys_only: true,
+            keys_only: false,
         });
 
         let list = query
