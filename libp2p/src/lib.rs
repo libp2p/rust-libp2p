@@ -53,6 +53,17 @@
 //! // unless it is run through a tokio runtime.
 //! ```
 //!
+//! The easiest way to create a transport is to use the `CommonTransport` struct. This struct
+//! provides support for the most common protocols.
+//!
+//! Example:
+//!
+//! ```rust
+//! use libp2p::CommonTransport;
+//! let _transport = CommonTransport::new();
+//! // _transport.dial(...);
+//! ```
+//!
 //! See the documentation of the `libp2p-core` crate for more details about transports.
 //!
 //! # Connection upgrades
