@@ -14,13 +14,11 @@ pub enum KeySize {
 pub(crate) fn ctr(key_size: KeySize, key: &[u8], iv: &[u8]) -> Box<StreamCipherCore + 'static> {
     ctr_int(key_size, key, iv)
 }
-
+ 
 /// Returns your stream cipher depending on `KeySize`.
 #[cfg(all(feature = "aes-all", any(target_arch = "x86_64", target_arch = "x86")))]
 pub(crate) fn ctr(key_size: KeySize, key: &[u8], iv: &[u8]) -> Box<StreamCipherCore + 'static> {
-    if is_x86_feature_detected!("aes")
-        && is_x86_feature_detected!("sse2")
-        && is_x86_feature_detected!("sse3") {
+    if *aes_alt::AES_NI {
         ctr_int(key_size, key, iv)
     } else {
         aes_alt::ctr_alt(key_size, key, iv)
@@ -37,6 +35,13 @@ mod aes_alt {
     use self::ctr::stream_cipher::{NewFixStreamCipher, StreamCipherCore};
     use self::ctr::stream_cipher::generic_array::GenericArray;
     use super::KeySize;
+
+    lazy_static! {
+        pub static ref AES_NI: bool = is_x86_feature_detected!("aes")
+            && is_x86_feature_detected!("sse2")
+            && is_x86_feature_detected!("sse3");
+
+   }
 
     /// AES-128 in CTR mode
     pub type Aes128Ctr = Ctr128<Aes128>;
@@ -73,6 +78,22 @@ fn ctr_int(key_size: KeySize, key: &[u8], iv: &[u8]) -> Box<StreamCipherCore + '
     }
 }
 
+#[cfg(all(
+    feature = "aes-all", 
+    any(target_arch = "x86_64", target_arch = "x86"),
+))]
+#[test]
+fn assert_non_native_run() {
+    // this test is for asserting aes unsuported opcode does not break on old cpu
+    let key = [0;16];
+    let iv = [0;16];
+ 
+    let mut aes = ctr(KeySize::KeySize128, &key, &iv);
+    let mut content = [0;16];
+    assert!(aes
+            .try_apply_keystream(&mut content).is_ok());
+     
+}
 
 // aesni compile check for aes-all (aes-all import aesni through aes_ctr only if those checks pass)
 #[cfg(all(

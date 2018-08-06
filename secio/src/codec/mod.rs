@@ -111,7 +111,7 @@ mod tests {
         let (_, decoded) = tokio_current_thread::block_on_all(data_sent.join(data_received))
             .map_err(|_| ())
             .unwrap();
-        assert_eq!(decoded.unwrap(), data);
+        assert_eq!(&decoded.unwrap()[..], &data[..]);
     }
 
     #[test]
