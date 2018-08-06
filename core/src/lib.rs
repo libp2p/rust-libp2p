@@ -210,11 +210,16 @@ extern crate parking_lot;
 extern crate protobuf;
 #[macro_use]
 extern crate quick_error;
+extern crate rw_stream_sink;
 extern crate smallvec;
 extern crate tokio_io;
 
 #[cfg(test)]
 extern crate rand;
+#[cfg(test)]
+extern crate tokio_codec;
+#[cfg(test)]
+extern crate tokio_current_thread;
 
 /// Multi-address re-export.
 pub extern crate multiaddr;

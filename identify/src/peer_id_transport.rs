@@ -296,7 +296,7 @@ fn multiaddr_to_peerid(addr: Multiaddr) -> Result<PeerId, Multiaddr> {
     }
 
     match components.last() {
-        Some(&AddrComponent::P2P(ref peer_id)) | Some(&AddrComponent::IPFS(ref peer_id)) => {
+        Some(&AddrComponent::P2P(ref peer_id)) => {
             match PeerId::from_bytes(peer_id.to_bytes()) {
                 Ok(peer_id) => Ok(peer_id),
                 Err(_) => Err(addr),
