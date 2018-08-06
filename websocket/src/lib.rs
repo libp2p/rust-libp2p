@@ -20,9 +20,6 @@
 
 #![recursion_limit = "512"]
 
-// TODO: use this once stable ; for now we just copy-paste the content of the README.md
-//#![doc(include = "../README.md")]
-
 //! Implementation of the libp2p `Transport` trait for Websockets.
 //!
 //! See the documentation of `swarm` and of libp2p in general to learn how to use the `Transport`

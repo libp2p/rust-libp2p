@@ -18,9 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-// TODO: use this once stable ; for now we just copy-paste the content of the README.md
-//#![doc(include = "../README.md")]
-
 //! Handles the `/ipfs/ping/1.0.0` protocol. This allows pinging a remote node and waiting for an
 //! answer.
 //!
