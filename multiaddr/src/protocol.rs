@@ -4,6 +4,7 @@ use std::convert::From;
 use std::io::{Cursor, Write, Result as IoResult};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use cid::Cid;
+use cid::ToCid;
 use integer_encoding::{VarInt, VarIntWriter};
 
 use {Result, Error};
@@ -255,8 +256,7 @@ impl Protocol {
                 Ok(AddrComponent::SCTP(parsed))
             }
             Protocol::P2P => {
-                let bytes = Cid::from(a)?.to_bytes();
-                Ok(AddrComponent::P2P(bytes))
+                Ok(AddrComponent::P2P(a.to_cid()?))
             }
             Protocol::ONION => unimplemented!(),              // TODO:
             Protocol::QUIC => Ok(AddrComponent::QUIC),
@@ -291,7 +291,7 @@ pub enum AddrComponent {
     UDT,
     UTP,
     UNIX(String),
-    P2P(Vec<u8>),
+    P2P(Cid),
     HTTP,
     HTTPS,
     ONION(Vec<u8>),
@@ -406,8 +406,7 @@ impl AddrComponent {
                 AddrComponent::UNIX(String::from_utf8(data.to_owned())?)
             }
             Protocol::P2P => {
-                let bytes = Cid::from(data)?.to_bytes();
-                AddrComponent::P2P(bytes)
+                AddrComponent::P2P(data.to_cid()?)
             }
             Protocol::ONION => unimplemented!(),      // TODO:
             Protocol::QUIC => AddrComponent::QUIC,
@@ -449,7 +448,8 @@ impl AddrComponent {
                 out.write_varint(bytes.len())?;
                 out.write_all(&bytes)?;
             }
-            AddrComponent::P2P(bytes) => {
+            AddrComponent::P2P(cid) => {
+                let bytes = cid.to_bytes();
                 out.write_varint(bytes.len())?;
                 out.write_all(&bytes)?;
             }
@@ -488,11 +488,7 @@ impl ToString for AddrComponent {
             AddrComponent::UDT => format!("/udt"),
             AddrComponent::UTP => format!("/utp"),
             AddrComponent::UNIX(ref s) => format!("/unix/{}", s.clone()),
-            AddrComponent::P2P(ref bytes) => {
-                // TODO: meh for cloning
-                let c = Cid::from(bytes.clone()).expect("cid is known to be valid");
-                format!("/p2p/{}", c)
-            },
+            AddrComponent::P2P(ref c) => format!("/p2p/{}", c),
             AddrComponent::HTTP => format!("/http"),
             AddrComponent::HTTPS => format!("/https"),
             AddrComponent::ONION(_) => unimplemented!(),//format!("/onion"),        // TODO:
