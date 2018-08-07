@@ -49,6 +49,7 @@ extern crate libp2p_core;
 #[macro_use]
 extern crate log;
 extern crate multiaddr;
+#[cfg(all(unix, not(target_os = "emscripten")))]
 extern crate tokio_uds;
 
 #[cfg(test)]
@@ -64,6 +65,7 @@ use multiaddr::{AddrComponent, Multiaddr};
 use std::io::Error as IoError;
 use std::path::PathBuf;
 use libp2p_core::Transport;
+#[cfg(all(unix, not(target_os = "emscripten")))]
 use tokio_uds::{UnixListener, UnixStream};
 
 /// Represents the configuration for a Unix domain sockets transport capability for libp2p.
