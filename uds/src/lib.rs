@@ -82,7 +82,7 @@ impl UdsConfig {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "emscripten")))]
 impl Transport for UdsConfig {
     type Output = UnixStream;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
@@ -137,7 +137,7 @@ impl Transport for UdsConfig {
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(not(all(unix, not(target_os = "emscripten"))))]
 impl Transport for UdsConfig {
     // TODO: could use `!` for associated types once stable
     type Output = Cursor<Vec<u8>>;
