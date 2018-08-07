@@ -4,6 +4,7 @@ use std::convert::From;
 use std::io::{Cursor, Write, Result as IoResult};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use cid::Cid;
+use cid::ToCid;
 use integer_encoding::{VarInt, VarIntWriter};
 
 use {Result, Error};
@@ -28,8 +29,7 @@ pub enum Protocol {
     UDT = 301,
     UTP = 302,
     UNIX = 400,
-    P2P = 420,
-    IPFS = 421,
+    P2P = 421,
     HTTP = 480,
     HTTPS = 443,
     ONION = 444,
@@ -40,6 +40,7 @@ pub enum Protocol {
     Libp2pWebrtcStar = 275,
     Libp2pWebrtcDirect = 276,
     P2pCircuit = 290,
+    Memory = 777,       // TODO: not standard: https://github.com/multiformats/multiaddr/pull/71
 }
 
 impl From<Protocol> for u32 {
@@ -69,7 +70,6 @@ impl ToString for Protocol {
             Protocol::UTP => "utp",
             Protocol::UNIX => "unix",
             Protocol::P2P => "p2p",
-            Protocol::IPFS => "ipfs",
             Protocol::HTTP => "http",
             Protocol::HTTPS => "https",
             Protocol::ONION => "onion",
@@ -80,6 +80,7 @@ impl ToString for Protocol {
             Protocol::Libp2pWebrtcStar => "p2p-webrtc-star",
             Protocol::Libp2pWebrtcDirect => "p2p-webrtc-direct",
             Protocol::P2pCircuit => "p2p-circuit",
+            Protocol::Memory => "memory",
         }.to_owned()
     }
 }
@@ -101,7 +102,6 @@ impl FromStr for Protocol {
             "utp" => Ok(Protocol::UTP),
             "unix" => Ok(Protocol::UNIX),
             "p2p" => Ok(Protocol::P2P),
-            "ipfs" => Ok(Protocol::IPFS),
             "http" => Ok(Protocol::HTTP),
             "https" => Ok(Protocol::HTTPS),
             "onion" => Ok(Protocol::ONION),
@@ -112,6 +112,7 @@ impl FromStr for Protocol {
             "p2p-webrtc-star" => Ok(Protocol::Libp2pWebrtcStar),
             "p2p-webrtc-direct" => Ok(Protocol::Libp2pWebrtcDirect),
             "p2p-circuit" => Ok(Protocol::P2pCircuit),
+            "memory" => Ok(Protocol::Memory),
             _ => Err(Error::UnknownProtocolString),
         }
     }
@@ -142,8 +143,7 @@ impl Protocol {
             301 => Ok(Protocol::UDT),
             302 => Ok(Protocol::UTP),
             400 => Ok(Protocol::UNIX),
-            420 => Ok(Protocol::P2P),
-            421 => Ok(Protocol::IPFS),
+            421 => Ok(Protocol::P2P),
             480 => Ok(Protocol::HTTP),
             443 => Ok(Protocol::HTTPS),
             444 => Ok(Protocol::ONION),
@@ -154,6 +154,7 @@ impl Protocol {
             275 => Ok(Protocol::Libp2pWebrtcStar),
             276 => Ok(Protocol::Libp2pWebrtcDirect),
             290 => Ok(Protocol::P2pCircuit),
+            777 => Ok(Protocol::Memory),
             _ => Err(Error::UnknownProtocol),
         }
     }
@@ -183,7 +184,6 @@ impl Protocol {
             Protocol::UTP => ProtocolArgSize::Fixed { bytes: 0 },
             Protocol::UNIX => ProtocolArgSize::Variable,
             Protocol::P2P => ProtocolArgSize::Variable,
-            Protocol::IPFS => ProtocolArgSize::Variable,
             Protocol::HTTP => ProtocolArgSize::Fixed { bytes: 0 },
             Protocol::HTTPS => ProtocolArgSize::Fixed { bytes: 0 },
             Protocol::ONION => ProtocolArgSize::Fixed { bytes: 10 },
@@ -194,6 +194,7 @@ impl Protocol {
             Protocol::Libp2pWebrtcStar => ProtocolArgSize::Fixed { bytes: 0 },
             Protocol::Libp2pWebrtcDirect => ProtocolArgSize::Fixed { bytes: 0 },
             Protocol::P2pCircuit => ProtocolArgSize::Fixed { bytes: 0 },
+            Protocol::Memory => ProtocolArgSize::Fixed { bytes: 0 },
         }
     }
 }
@@ -255,12 +256,7 @@ impl Protocol {
                 Ok(AddrComponent::SCTP(parsed))
             }
             Protocol::P2P => {
-                let bytes = Cid::from(a)?.to_bytes();
-                Ok(AddrComponent::P2P(bytes))
-            }
-            Protocol::IPFS => {
-                let bytes = Cid::from(a)?.to_bytes();
-                Ok(AddrComponent::IPFS(bytes))
+                Ok(AddrComponent::P2P(a.to_cid()?))
             }
             Protocol::ONION => unimplemented!(),              // TODO:
             Protocol::QUIC => Ok(AddrComponent::QUIC),
@@ -277,6 +273,7 @@ impl Protocol {
             Protocol::Libp2pWebrtcStar => Ok(AddrComponent::Libp2pWebrtcStar),
             Protocol::Libp2pWebrtcDirect => Ok(AddrComponent::Libp2pWebrtcDirect),
             Protocol::P2pCircuit => Ok(AddrComponent::P2pCircuit),
+            Protocol::Memory => Ok(AddrComponent::Memory),
         }
     }
 }
@@ -294,8 +291,7 @@ pub enum AddrComponent {
     UDT,
     UTP,
     UNIX(String),
-    P2P(Vec<u8>),
-    IPFS(Vec<u8>),
+    P2P(Cid),
     HTTP,
     HTTPS,
     ONION(Vec<u8>),
@@ -306,6 +302,7 @@ pub enum AddrComponent {
     Libp2pWebrtcStar,
     Libp2pWebrtcDirect,
     P2pCircuit,
+    Memory,
 }
 
 impl AddrComponent {
@@ -325,7 +322,6 @@ impl AddrComponent {
             AddrComponent::UTP => Protocol::UTP,
             AddrComponent::UNIX(_) => Protocol::UNIX,
             AddrComponent::P2P(_) => Protocol::P2P,
-            AddrComponent::IPFS(_) => Protocol::IPFS,
             AddrComponent::HTTP => Protocol::HTTP,
             AddrComponent::HTTPS => Protocol::HTTPS,
             AddrComponent::ONION(_) => Protocol::ONION,
@@ -336,6 +332,7 @@ impl AddrComponent {
             AddrComponent::Libp2pWebrtcStar => Protocol::Libp2pWebrtcStar,
             AddrComponent::Libp2pWebrtcDirect => Protocol::Libp2pWebrtcDirect,
             AddrComponent::P2pCircuit => Protocol::P2pCircuit,
+            AddrComponent::Memory => Protocol::Memory,
         }
     }
 
@@ -409,12 +406,7 @@ impl AddrComponent {
                 AddrComponent::UNIX(String::from_utf8(data.to_owned())?)
             }
             Protocol::P2P => {
-                let bytes = Cid::from(data)?.to_bytes();
-                AddrComponent::P2P(bytes)
-            }
-            Protocol::IPFS => {
-                let bytes = Cid::from(data)?.to_bytes();
-                AddrComponent::IPFS(bytes)
+                AddrComponent::P2P(data.to_cid()?)
             }
             Protocol::ONION => unimplemented!(),      // TODO:
             Protocol::QUIC => AddrComponent::QUIC,
@@ -428,6 +420,7 @@ impl AddrComponent {
             Protocol::Libp2pWebrtcStar => AddrComponent::Libp2pWebrtcStar,
             Protocol::Libp2pWebrtcDirect => AddrComponent::Libp2pWebrtcDirect,
             Protocol::P2pCircuit => AddrComponent::P2pCircuit,
+            Protocol::Memory => AddrComponent::Memory,
         };
 
         Ok((addr_component, rest))
@@ -455,7 +448,8 @@ impl AddrComponent {
                 out.write_varint(bytes.len())?;
                 out.write_all(&bytes)?;
             }
-            AddrComponent::P2P(bytes) | AddrComponent::IPFS(bytes) => {
+            AddrComponent::P2P(cid) => {
+                let bytes = cid.to_bytes();
                 out.write_varint(bytes.len())?;
                 out.write_all(&bytes)?;
             }
@@ -472,7 +466,8 @@ impl AddrComponent {
             AddrComponent::Libp2pWebsocketStar |
             AddrComponent::Libp2pWebrtcStar |
             AddrComponent::Libp2pWebrtcDirect |
-            AddrComponent::P2pCircuit => {}
+            AddrComponent::P2pCircuit |
+            AddrComponent::Memory => {}
         };
 
         Ok(())
@@ -493,16 +488,7 @@ impl ToString for AddrComponent {
             AddrComponent::UDT => format!("/udt"),
             AddrComponent::UTP => format!("/utp"),
             AddrComponent::UNIX(ref s) => format!("/unix/{}", s.clone()),
-            AddrComponent::P2P(ref bytes) => {
-                // TODO: meh for cloning
-                let c = Cid::from(bytes.clone()).expect("cid is known to be valid");
-                format!("/p2p/{}", c)
-            },
-            AddrComponent::IPFS(ref bytes) => {
-                // TODO: meh for cloning
-                let c = Cid::from(bytes.clone()).expect("cid is known to be valid");
-                format!("/ipfs/{}", c)
-            },
+            AddrComponent::P2P(ref c) => format!("/p2p/{}", c),
             AddrComponent::HTTP => format!("/http"),
             AddrComponent::HTTPS => format!("/https"),
             AddrComponent::ONION(_) => unimplemented!(),//format!("/onion"),        // TODO:
@@ -513,6 +499,7 @@ impl ToString for AddrComponent {
             AddrComponent::Libp2pWebrtcStar => format!("/p2p-webrtc-star"),
             AddrComponent::Libp2pWebrtcDirect => format!("/p2p-webrtc-direct"),
             AddrComponent::P2pCircuit => format!("/p2p-circuit"),
+            AddrComponent::Memory => format!("/memory"),
         }
     }
 }

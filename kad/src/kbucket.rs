@@ -200,12 +200,35 @@ where
         for table in self.tables.iter() {
             let mut table = table.lock();
             table.flush(self.ping_timeout);
+            if table.last_update.elapsed() > self.ping_timeout {
+                continue // ignore bucket with expired nodes
+            }
             for node in table.nodes.iter() {
                 out.push(node.id.clone());
             }
         }
         out.sort_by(|a, b| b.distance_with(id).cmp(&a.distance_with(id)));
         out.into_iter()
+    }
+
+    /// Same as `find_closest`, but includes the local peer as well.
+    pub fn find_closest_with_self(&self, id: &Id) -> VecIntoIter<Id>
+    where
+        Id: Clone,
+    {
+        // TODO: optimize
+        let mut intermediate: Vec<_> = self.find_closest(&id).collect();
+        if let Some(pos) = intermediate
+            .iter()
+            .position(|e| e.distance_with(&id) >= self.my_id.distance_with(&id))
+        {
+            if intermediate[pos] != self.my_id {
+                intermediate.insert(pos, self.my_id.clone());
+            }
+        } else {
+            intermediate.push(self.my_id.clone());
+        }
+        intermediate.into_iter()
     }
 
     /// Marks the node as "most recent" in its bucket and modifies the value associated to it.

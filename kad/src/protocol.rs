@@ -37,7 +37,7 @@ use tokio_io::{AsyncRead, AsyncWrite};
 use varint::VarintCodec;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub enum ConnectionType {
+pub enum KadConnectionType {
     /// Sender hasn't tried to connect to peer.
     NotConnected = 0,
     /// Sender is currently connected to peer.
@@ -48,45 +48,45 @@ pub enum ConnectionType {
     CannotConnect = 3,
 }
 
-impl From<protobuf_structs::dht::Message_ConnectionType> for ConnectionType {
+impl From<protobuf_structs::dht::Message_ConnectionType> for KadConnectionType {
     #[inline]
-    fn from(raw: protobuf_structs::dht::Message_ConnectionType) -> ConnectionType {
+    fn from(raw: protobuf_structs::dht::Message_ConnectionType) -> KadConnectionType {
         use protobuf_structs::dht::Message_ConnectionType::*;
         match raw {
-            NOT_CONNECTED => ConnectionType::NotConnected,
-            CONNECTED => ConnectionType::Connected,
-            CAN_CONNECT => ConnectionType::CanConnect,
-            CANNOT_CONNECT => ConnectionType::CannotConnect,
+            NOT_CONNECTED => KadConnectionType::NotConnected,
+            CONNECTED => KadConnectionType::Connected,
+            CAN_CONNECT => KadConnectionType::CanConnect,
+            CANNOT_CONNECT => KadConnectionType::CannotConnect,
         }
     }
 }
 
-impl Into<protobuf_structs::dht::Message_ConnectionType> for ConnectionType {
+impl Into<protobuf_structs::dht::Message_ConnectionType> for KadConnectionType {
     #[inline]
     fn into(self) -> protobuf_structs::dht::Message_ConnectionType {
         use protobuf_structs::dht::Message_ConnectionType::*;
         match self {
-            ConnectionType::NotConnected => NOT_CONNECTED,
-            ConnectionType::Connected => CONNECTED,
-            ConnectionType::CanConnect => CAN_CONNECT,
-            ConnectionType::CannotConnect => CANNOT_CONNECT,
+            KadConnectionType::NotConnected => NOT_CONNECTED,
+            KadConnectionType::Connected => CONNECTED,
+            KadConnectionType::CanConnect => CAN_CONNECT,
+            KadConnectionType::CannotConnect => CANNOT_CONNECT,
         }
     }
 }
 
 /// Information about a peer, as known by the sender.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Peer {
+pub struct KadPeer {
     pub node_id: PeerId,
     /// The multiaddresses that are known for that peer.
     pub multiaddrs: Vec<Multiaddr>,
-    pub connection_ty: ConnectionType,
+    pub connection_ty: KadConnectionType,
 }
 
-impl Peer {
-    // Builds a `Peer` from its raw protobuf equivalent.
+impl KadPeer {
+    // Builds a `KadPeer` from its raw protobuf equivalent.
     // TODO: use TryFrom once stable
-    fn from_peer(peer: &mut protobuf_structs::dht::Message_Peer) -> Result<Peer, IoError> {
+    fn from_peer(peer: &mut protobuf_structs::dht::Message_Peer) -> Result<KadPeer, IoError> {
         // TODO: this is in fact a CID ; not sure if this should be handled in `from_bytes` or
         //       as a special case here
         let node_id = PeerId::from_bytes(peer.get_id().to_vec())
@@ -102,7 +102,7 @@ impl Peer {
 
         let connection_ty = peer.get_connection().into();
 
-        Ok(Peer {
+        Ok(KadPeer {
             node_id: node_id,
             multiaddrs: addrs,
             connection_ty: connection_ty,
@@ -110,7 +110,7 @@ impl Peer {
     }
 }
 
-impl Into<protobuf_structs::dht::Message_Peer> for Peer {
+impl Into<protobuf_structs::dht::Message_Peer> for KadPeer {
     fn into(self) -> protobuf_structs::dht::Message_Peer {
         let mut out = protobuf_structs::dht::Message_Peer::new();
         out.set_id(self.node_id.into_bytes());
@@ -190,7 +190,7 @@ pub enum KadMsg {
         /// Identifier of the returned record.
         key: Vec<u8>,
         record: (), //record: Option<protobuf_structs::record::Record>, // TODO: no
-        closer_peers: Vec<Peer>,
+        closer_peers: Vec<KadPeer>,
     },
     /// Request for the list of nodes whose IDs are the closest to `key`. The number of nodes
     /// returned is not specified, but should be around 20.
@@ -201,7 +201,7 @@ pub enum KadMsg {
     /// Response to a `FindNodeReq`.
     FindNodeRes {
         /// Results of the request.
-        closer_peers: Vec<Peer>,
+        closer_peers: Vec<KadPeer>,
     },
 }
 
@@ -237,6 +237,7 @@ fn msg_to_proto(kad_msg: KadMsg) -> protobuf_structs::dht::Message {
         }
         KadMsg::FindNodeRes { closer_peers } => {
             // TODO: if empty, the remote will think it's a request
+            // TODO: not good, possibly exposed in the API
             assert!(!closer_peers.is_empty());
             let mut msg = protobuf_structs::dht::Message::new();
             msg.set_field_type(protobuf_structs::dht::Message_MessageType::FIND_NODE);
@@ -280,7 +281,7 @@ fn proto_to_msg(mut message: protobuf_structs::dht::Message) -> Result<KadMsg, I
                 //       errors for now, but ultimately we should just error altogether
                 let closer_peers = message.mut_closerPeers()
                     .iter_mut()
-                    .filter_map(|peer| Peer::from_peer(peer).ok())
+                    .filter_map(|peer| KadPeer::from_peer(peer).ok())
                     .collect::<Vec<_>>();
 
                 Ok(KadMsg::FindNodeRes {
@@ -309,7 +310,7 @@ mod tests {
     use self::libp2p_tcp_transport::TcpConfig;
     use futures::{Future, Sink, Stream};
     use libp2p_core::{Transport, PeerId, PublicKey};
-    use protocol::{ConnectionType, KadMsg, KademliaProtocolConfig, Peer};
+    use protocol::{KadConnectionType, KadMsg, KademliaProtocolConfig, KadPeer};
     use std::sync::mpsc;
     use std::thread;
 
@@ -331,10 +332,10 @@ mod tests {
         });
         test_one(KadMsg::FindNodeRes {
             closer_peers: vec![
-                Peer {
+                KadPeer {
                     node_id: PeerId::from_public_key(PublicKey::Rsa(vec![93, 80, 12, 250])),
                     multiaddrs: vec!["/ip4/100.101.102.103/tcp/20105".parse().unwrap()],
-                    connection_ty: ConnectionType::Connected,
+                    connection_ty: KadConnectionType::Connected,
                 },
             ],
         });

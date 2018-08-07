@@ -2,6 +2,7 @@
 name = "libp2p"
 version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
 
 [features]
 default = ["libp2p-secio", "libp2p-secio-secp256k1"]

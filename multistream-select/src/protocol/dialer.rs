@@ -59,7 +59,7 @@ where
             .send(BytesMut::from(MULTISTREAM_PROTOCOL_WITH_LF))
             .from_err()
             .map(|inner| Dialer {
-                inner: inner,
+                inner,
                 handshake_finished: false,
             });
         Box::new(future)
@@ -150,7 +150,7 @@ where
                 return Ok(Async::Ready(Some(ListenerToDialerMessage::ProtocolAck {
                     name: protocol,
                 })));
-            } else if frame == &b"na\n"[..] {
+            } else if frame == b"na\n"[..] {
                 return Ok(Async::Ready(Some(ListenerToDialerMessage::NotAvailable)));
             } else {
                 // A varint number of protocols

@@ -135,7 +135,7 @@
 //! extern crate tokio_current_thread;
 //!
 //! use futures::Future;
-//! use libp2p_ping::Ping;
+//! use libp2p_ping::{Ping, PingOutput};
 //! use libp2p_core::Transport;
 //!
 //! # fn main() {
@@ -145,8 +145,14 @@
 //!     // TODO: right now the only available protocol is ping, but we want to replace it with
 //!     //       something that is more simple to use
 //!     .dial("127.0.0.1:12345".parse::<libp2p_core::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())
-//!     .and_then(|((mut pinger, service), _)| {
-//!         pinger.ping().map_err(|_| panic!()).select(service).map_err(|_| panic!())
+//!     .and_then(|(out, _)| {
+//!         match out {
+//!             PingOutput::Ponger(processing) => Box::new(processing) as Box<Future<Item = _, Error = _>>,
+//!             PingOutput::Pinger { mut pinger, processing } => {
+//!                 let f = pinger.ping().map_err(|_| panic!()).select(processing).map(|_| ()).map_err(|(err, _)| err);
+//!                 Box::new(f) as Box<Future<Item = _, Error = _>>
+//!             },
+//!         }
 //!     });
 //!
 //! // Runs until the ping arrives.
@@ -175,7 +181,7 @@
 //! extern crate tokio_current_thread;
 //!
 //! use futures::Future;
-//! use libp2p_ping::Ping;
+//! use libp2p_ping::{Ping, PingOutput};
 //! use libp2p_core::Transport;
 //!
 //! # fn main() {
@@ -183,10 +189,14 @@
 //!     .with_dummy_muxing();
 //!
 //! let (swarm_controller, swarm_future) = libp2p_core::swarm(transport.with_upgrade(Ping),
-//!     |(mut pinger, service), client_addr| {
-//!         pinger.ping().map_err(|_| panic!())
-//!             .select(service).map_err(|_| panic!())
-//!             .map(|_| ())
+//!     |out, client_addr| {
+//!         match out {
+//!             PingOutput::Ponger(processing) => Box::new(processing) as Box<Future<Item = _, Error = _>>,
+//!             PingOutput::Pinger { mut pinger, processing } => {
+//!                 let f = pinger.ping().map_err(|_| panic!()).select(processing).map(|_| ()).map_err(|(err, _)| err);
+//!                 Box::new(f) as Box<Future<Item = _, Error = _>>
+//!             },
+//!         }
 //!     });
 //!
 //! // The `swarm_controller` can then be used to do some operations.
@@ -210,11 +220,16 @@ extern crate parking_lot;
 extern crate protobuf;
 #[macro_use]
 extern crate quick_error;
+extern crate rw_stream_sink;
 extern crate smallvec;
 extern crate tokio_io;
 
 #[cfg(test)]
 extern crate rand;
+#[cfg(test)]
+extern crate tokio_codec;
+#[cfg(test)]
+extern crate tokio_current_thread;
 
 /// Multi-address re-export.
 pub extern crate multiaddr;
@@ -223,6 +238,7 @@ mod connection_reuse;
 mod keys_proto;
 mod peer_id;
 mod public_key;
+mod unique;
 
 pub mod either;
 pub mod muxing;
@@ -237,4 +253,5 @@ pub use self::peer_id::PeerId;
 pub use self::public_key::PublicKey;
 pub use self::swarm::{swarm, SwarmController, SwarmFuture};
 pub use self::transport::{MuxedTransport, Transport};
+pub use self::unique::{UniqueConnec, UniqueConnecFuture, UniqueConnecState};
 pub use self::upgrade::{ConnectionUpgrade, Endpoint};

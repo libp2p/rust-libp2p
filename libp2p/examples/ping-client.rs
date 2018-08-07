@@ -63,8 +63,8 @@ fn main() {
         })
 
         // On top of plaintext or secio, we will use the multiplex protocol.
-        .with_upgrade(libp2p::mplex::MultiplexConfig::new())
-        // The object returned by the call to `with_upgrade(MultiplexConfig::new())` can't be used as a
+        .with_upgrade(libp2p::mplex::MplexConfig::new())
+        // The object returned by the call to `with_upgrade(MplexConfig::new())` can't be used as a
         // `Transport` because the output of the upgrade is not a stream but a controller for
         // muxing. We have to explicitly call `into_connection_reuse()` in order to turn this into
         // a `Transport`.
@@ -78,15 +78,19 @@ fn main() {
     let mut tx = Some(tx);
     let (swarm_controller, swarm_future) = libp2p::core::swarm(
         transport.clone().with_upgrade(libp2p::ping::Ping),
-        |(mut pinger, future), _client_addr| {
-            let tx = tx.take();
-            let ping = pinger.ping().map_err(|_| unreachable!()).inspect(move |_| {
-                println!("Received pong from the remote");
-                if let Some(tx) = tx {
-                    let _ = tx.send(());
-                }
-            });
-            ping.select(future).map(|_| ()).map_err(|(e, _)| e)
+        |out, _client_addr| {
+            if let libp2p::ping::PingOutput::Pinger { mut pinger, processing } = out {
+                let tx = tx.take();
+                let ping = pinger.ping().map_err(|_| unreachable!()).inspect(move |_| {
+                    println!("Received pong from the remote");
+                    if let Some(tx) = tx {
+                        let _ = tx.send(());
+                    }
+                });
+                ping.select(processing).map(|_| ()).map_err(|(e, _)| e)
+            } else {
+                unreachable!()
+            }
         },
     );
 

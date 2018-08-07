@@ -46,8 +46,8 @@ use futures::sync::mpsc;
 use futures::{future, Future, Poll, Sink, Stream};
 use libp2p_core::{ConnectionUpgrade, Endpoint, PeerId};
 use log::Level;
-use multiaddr::{AddrComponent, Multiaddr};
-use parking_lot::{Mutex, RwLock};
+use multiaddr::{AddrComponent, Multiaddr, ToCid};
+use parking_lot::{Mutex, RwLock, RwLockUpgradableReadGuard};
 use protobuf::Message as ProtobufMessage;
 use smallvec::SmallVec;
 use std::fmt;
@@ -469,7 +469,7 @@ impl FloodSubController {
         // Remove the remotes which we failed to send a message to.
         if !failed_to_send.is_empty() {
             // If we fail to upgrade the read lock to a write lock, just ignore `failed_to_send`.
-            if let Ok(mut remote_connections) = remote_connections.try_upgrade() {
+            if let Ok(mut remote_connections) = RwLockUpgradableReadGuard::try_upgrade(remote_connections) {
                 for failed_to_send in failed_to_send {
                     remote_connections.remove(&failed_to_send);
                 }
@@ -592,7 +592,16 @@ fn handle_packet_received(
                    publish.get_data().len());
             continue;
         }
-        let from: Multiaddr = AddrComponent::IPFS(from).into();
+
+        let cid = match from.to_cid() {
+            Ok(cid) => cid,
+            Err(err) => {
+                trace!("Parsing Cid failed: {}. Skipping.", err);
+                continue
+            }
+        };
+
+        let from: Multiaddr = AddrComponent::P2P(cid).into();
 
         let topics = publish
             .take_topicIDs()

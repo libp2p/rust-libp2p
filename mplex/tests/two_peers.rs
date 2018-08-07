@@ -42,7 +42,7 @@ fn client_to_server_outbound() {
 
     let bg_thread = thread::spawn(move || {
         let transport =
-            TcpConfig::new().with_upgrade(multiplex::MultiplexConfig::new());
+            TcpConfig::new().with_upgrade(multiplex::MplexConfig::new());
 
         let (listener, addr) = transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -70,7 +70,7 @@ fn client_to_server_outbound() {
         tokio_current_thread::block_on_all(future).unwrap();
     });
 
-    let transport = TcpConfig::new().with_upgrade(multiplex::MultiplexConfig::new());
+    let transport = TcpConfig::new().with_upgrade(multiplex::MplexConfig::new());
 
     let future = transport
         .dial(rx.recv().unwrap())
@@ -92,7 +92,7 @@ fn client_to_server_inbound() {
 
     let bg_thread = thread::spawn(move || {
         let transport =
-            TcpConfig::new().with_upgrade(multiplex::MultiplexConfig::new());
+            TcpConfig::new().with_upgrade(multiplex::MplexConfig::new());
 
         let (listener, addr) = transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -120,7 +120,7 @@ fn client_to_server_inbound() {
         tokio_current_thread::block_on_all(future).unwrap();
     });
 
-    let transport = TcpConfig::new().with_upgrade(multiplex::MultiplexConfig::new());
+    let transport = TcpConfig::new().with_upgrade(multiplex::MplexConfig::new());
 
     let future = transport
         .dial(rx.recv().unwrap())

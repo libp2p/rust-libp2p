@@ -87,11 +87,14 @@ impl<'a> Peerstore for &'a JsonPeerstore {
             orders: vec![],
             skip: 0,
             limit: u64::max_value(),
-            keys_only: true,
+            keys_only: false,
         });
 
         let list = query
-            .filter_map(|(key, _)| {
+            .filter_map(|(key, info)| {
+                if info.addrs().count() == 0 {
+                    return None // all addresses are expired
+                }
                 // We filter out invalid elements. This can happen if the JSON storage file was
                 // corrupted or manually modified by the user.
                 PeerId::from_bytes(bs58::decode(key).into_vec().ok()?).ok()
