@@ -155,31 +155,51 @@ impl Transport for TcpConfig {
     }
 
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        let server_protocols: Vec<_> = server.iter().collect();
-        let observed_protocols: Vec<_> = observed.iter().collect();
+        // Check that `server` only has two components and retreive them.
+        let mut server_protocols_iter = server.iter();
+        let server_proto1 = match server_protocols_iter.next() {
+            Some(v) => v,
+            None => return None
+        };
+        let server_proto2 = match server_protocols_iter.next() {
+            Some(v) => v,
+            None => return None
+        };
+        if server_protocols_iter.next().is_some() {
+            return None;
+        }
 
-        if server_protocols.len() != 2 || observed_protocols.len() != 2 {
+        // Check that `observed` only has two components and retreive them.
+        let mut observed_protocols_iter = observed.iter();
+        let observed_proto1 = match observed_protocols_iter.next() {
+            Some(v) => v,
+            None => return None
+        };
+        let observed_proto2 = match observed_protocols_iter.next() {
+            Some(v) => v,
+            None => return None
+        };
+        if observed_protocols_iter.next().is_some() {
             return None;
         }
 
         // Check that `server` is a valid TCP/IP address.
-        match (&server_protocols[0], &server_protocols[1]) {
+        match (&server_proto1, &server_proto2) {
             (&AddrComponent::IP4(_), &AddrComponent::TCP(_))
             | (&AddrComponent::IP6(_), &AddrComponent::TCP(_)) => {}
             _ => return None,
         }
 
         // Check that `observed` is a valid TCP/IP address.
-        match (&observed_protocols[0], &observed_protocols[1]) {
+        match (&observed_proto1, &observed_proto2) {
             (&AddrComponent::IP4(_), &AddrComponent::TCP(_))
             | (&AddrComponent::IP6(_), &AddrComponent::TCP(_)) => {}
             _ => return None,
         }
 
-        let result = iter::once(observed_protocols[0].clone())
-            .chain(iter::once(server_protocols[1].clone()))
+        let result = iter::once(observed_proto1.clone())
+            .chain(iter::once(server_proto2.clone()))
             .collect();
-
         Some(result)
     }
 }
