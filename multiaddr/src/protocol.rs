@@ -503,3 +503,17 @@ impl ToString for AddrComponent {
         }
     }
 }
+
+impl From<Ipv4Addr> for AddrComponent {
+    #[inline]
+    fn from(addr: Ipv4Addr) -> AddrComponent {
+        AddrComponent::IP4(addr)
+    }
+}
+
+impl From<Ipv6Addr> for AddrComponent {
+    #[inline]
+    fn from(addr: Ipv6Addr) -> AddrComponent {
+        AddrComponent::IP6(addr)
+    }
+}
