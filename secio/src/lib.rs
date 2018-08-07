@@ -123,7 +123,6 @@ mod handshake;
 mod structs_proto;
 mod stream_cipher;
 
-
 /// Implementation of the `ConnectionUpgrade` trait of `libp2p_core`. Automatically applies
 /// secio on any connection.
 #[derive(Clone)]

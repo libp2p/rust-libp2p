@@ -36,7 +36,7 @@ jobs:
           command: docker run --rm -v "/cache/cargo/registry:/usr/local/cargo/registry" -v "/cache/target:/app/target" -it rust-libp2p cargo test --no-default-features
       - run:
           name: Run tests, inside a docker image, with all features
-          command: docker run --rm -v "/cache/cargo/registry:/usr/local/cargo/registry" -v "/cache/target:/app/target" -it rust-libp2p sh -c 'RUSTFLAGS="-C target-feature=+aes,+ssse3,+sse2" RUSTDOCFLAGS="-C target-feature=+aes,+ssse3,+sse2" cargo test --all-features'
+          command: docker run --rm -v "/cache/cargo/registry:/usr/local/cargo/registry" -v "/cache/target:/app/target" -it rust-libp2p cargo test --all-features
       - save_cache:
           key: test-cache
           paths:
