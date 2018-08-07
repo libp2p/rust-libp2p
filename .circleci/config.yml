@@ -86,7 +86,7 @@ jobs:
           key: test-win32-cache
       - run:
           name: Build for Win32
-          command: cargo test --target x86_64-pc-windows-gnu
+          command: cargo check --target x86_64-pc-windows-gnu
       - save_cache:
           key: test-win32-cache
           paths:
