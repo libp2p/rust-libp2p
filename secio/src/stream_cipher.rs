@@ -19,9 +19,9 @@ pub(crate) fn ctr(key_size: KeySize, key: &[u8], iv: &[u8]) -> Box<StreamCipherC
 #[cfg(all(feature = "aes-all", any(target_arch = "x86_64", target_arch = "x86")))]
 pub(crate) fn ctr(key_size: KeySize, key: &[u8], iv: &[u8]) -> Box<StreamCipherCore + 'static> {
     if *aes_alt::AES_NI {
-        ctr_int(key_size, key, iv)
-    } else {
         aes_alt::ctr_alt(key_size, key, iv)
+    } else {
+        ctr_int(key_size, key, iv)
     }
 }
 
@@ -29,9 +29,9 @@ pub(crate) fn ctr(key_size: KeySize, key: &[u8], iv: &[u8]) -> Box<StreamCipherC
 #[cfg(all(feature = "aes-all", any(target_arch = "x86_64", target_arch = "x86")))]
 mod aes_alt {
     extern crate ctr;
-    extern crate aes_soft;
+    extern crate aesni;
     use self::ctr::Ctr128;
-    use self::aes_soft::{Aes128, Aes256};
+    use self::aesni::{Aes128, Aes256};
     use self::ctr::stream_cipher::{NewFixStreamCipher, StreamCipherCore};
     use self::ctr::stream_cipher::generic_array::GenericArray;
     use super::KeySize;
@@ -99,10 +99,11 @@ fn assert_non_native_run() {
 #[cfg(all(
     feature = "aes-all", 
     any(target_arch = "x86_64", target_arch = "x86"),
-    not(all(target_feature = "aes", target_feature = "ssse3")),
+    any(target_feature = "aes", target_feature = "ssse3"),
 ))]
 compile_error!(
-    "enable aes and ssse3 target features if using aes-all to build, e.g. with \
+    "aes-all must be compile without aes and sse3 flags : currently \
+    is_x86_feature_detected macro will not detect feature correctly otherwhise. \
     RUSTFLAGS=\"-C target-feature=+aes,+ssse3\" enviromental variable. \
     For x86 target arch additionally enable sse2 target feature."
 );
