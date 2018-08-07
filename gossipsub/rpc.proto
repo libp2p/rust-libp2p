@@ -1,5 +1,4 @@
 syntax = "proto2";
-
 // gossipsub: see the original file here:
 // https://github.com/libp2p/go-floodsub/blob/1b4fbb865d4944a602b27e24e8123a57095e9987/pb/rpc.proto
 // https://github.com/libp2p/go-floodsub/pull/67

@@ -16,7 +16,7 @@ use libp2p_kad::{
 };
 use libp2p_ping::Ping;
 use libp2p_secio::SecioKeyPair;
-use time::Duration;
+use std::time::Duration;
 use tokio_core;
 use tokio_current_thread;
 
@@ -26,30 +26,7 @@ fn init_overlay() -> KadSystem {
 
     // "Build a `KadSystemConfig` and a `KadConnecConfig` object that contain the way you want the
     // Kademlia protocol to behave."
-
-    // let secio_key_pair_inner = SecioKeyPairInner::Ed25519 {
-
-    // };
-    let secio_key_pair = SecioKeyPair {
-        inner : SecioKeyPairInner::Ed25519
-    };
-
-    //     // Inner content of `SecioKeyPair`.
-    // #[derive(Clone)]
-    // enum SecioKeyPairInner {
-    //     Rsa {
-    //         public: Vec<u8>,
-    //         // We use an `Arc` so that we can clone the enum.
-    //         private: Arc<RSAKeyPair>,
-    //     },
-    //     Ed25519 {
-    //         // We use an `Arc` so that we can clone the enum.
-    //         key_pair: Arc<Ed25519KeyPair>,
-    //     },
-    //     #[cfg(feature = "secp256k1")]
-    //     Secp256k1 { private: secp256k1::key::SecretKey },
-    // }
-
+    
     let sample_peer_id = SecioKeyPair::to_peer_id(SecioKeyPair::ed25519_generated());
 
     // KadSystemConfig
@@ -58,8 +35,8 @@ fn init_overlay() -> KadSystem {
         parallelism: ALPHA,
         local_peer_id: sample_peer_id,
         known_initial_peers: vec![],
-        kbuckets_timeout: Duration::hours(KBUCKETS_TIMEOUT),
-        request_timeout: Duration::minutes(REQUEST_TIMEOUT),
+        kbuckets_timeout: Duration::from_secs(KBUCKETS_TIMEOUT),
+        request_timeout: Duration::from_secs(REQUEST_TIMEOUT),
     };
 
     // KadConnecConfig
