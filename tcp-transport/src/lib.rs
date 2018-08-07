@@ -52,14 +52,14 @@ extern crate tokio_tcp;
 #[cfg(test)]
 extern crate tokio_current_thread;
 
-use futures::{prelude::*, Poll, Async, future, future::FutureResult};
+use futures::{future, future::FutureResult, prelude::*, Async, Poll};
 use multiaddr::{AddrComponent, Multiaddr, ToMultiaddr};
 use std::io::{Error as IoError, Read, Write};
 use std::iter;
 use std::net::SocketAddr;
 use swarm::Transport;
-use tokio_tcp::{TcpListener, TcpStream, ConnectFuture, Incoming};
 use tokio_io::{AsyncRead, AsyncWrite};
+use tokio_tcp::{ConnectFuture, Incoming, TcpListener, TcpStream};
 
 /// Represents the configuration for a TCP/IP transport capability for libp2p.
 ///
@@ -101,11 +101,8 @@ impl Transport for TcpConfig {
             };
 
             debug!("Now listening on {}", new_addr);
-            let inner = listener
-                .map(TcpListener::incoming)
-                .map_err(Some);
+            let inner = listener.map(TcpListener::incoming).map_err(Some);
             Ok((TcpListenStream { inner }, new_addr))
-
         } else {
             Err((self, addr))
         }
@@ -174,12 +171,12 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
 
     let proto1 = match iter.next() {
         Some(v) => v,
-        None => return Err(())
+        None => return Err(()),
     };
 
     let proto2 = match iter.next() {
         Some(v) => v,
-        None => return Err(())
+        None => return Err(()),
     };
 
     if iter.next().is_some() {
@@ -187,12 +184,8 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
     }
 
     match (proto1, proto2) {
-        (AddrComponent::IP4(ip), AddrComponent::TCP(port)) => {
-            Ok(SocketAddr::new(ip.into(), port))
-        }
-        (AddrComponent::IP6(ip), AddrComponent::TCP(port)) => {
-            Ok(SocketAddr::new(ip.into(), port))
-        }
+        (AddrComponent::IP4(ip), AddrComponent::TCP(port)) => Ok(SocketAddr::new(ip.into(), port)),
+        (AddrComponent::IP6(ip), AddrComponent::TCP(port)) => Ok(SocketAddr::new(ip.into(), port)),
         _ => Err(()),
     }
 }
@@ -211,15 +204,19 @@ impl Future for TcpDialFut {
     fn poll(&mut self) -> Poll<(TcpTransStream, FutureResult<Multiaddr, IoError>), IoError> {
         match self.inner.poll() {
             Ok(Async::Ready(stream)) => {
-                let addr = self.addr.take().expect("TcpDialFut polled again after finished");
+                let addr = self
+                    .addr
+                    .take()
+                    .expect("TcpDialFut polled again after finished");
                 let out = TcpTransStream { inner: stream };
                 Ok(Async::Ready((out, future::ok(addr))))
-            },
-            Ok(Async::NotReady) => {
-                Ok(Async::NotReady)
             }
+            Ok(Async::NotReady) => Ok(Async::NotReady),
             Err(err) => {
-                let addr = self.addr.as_ref().expect("TcpDialFut polled again after finished");
+                let addr = self
+                    .addr
+                    .as_ref()
+                    .expect("TcpDialFut polled again after finished");
                 debug!("Error while dialing {:?} => {:?}", addr, err);
                 Err(err)
             }
@@ -237,7 +234,12 @@ impl Stream for TcpListenStream {
     type Item = FutureResult<(TcpTransStream, FutureResult<Multiaddr, IoError>), IoError>;
     type Error = IoError;
 
-    fn poll(&mut self) -> Poll<Option<FutureResult<(TcpTransStream, FutureResult<Multiaddr, IoError>), IoError>>, IoError> {
+    fn poll(
+        &mut self,
+    ) -> Poll<
+        Option<FutureResult<(TcpTransStream, FutureResult<Multiaddr, IoError>), IoError>>,
+        IoError,
+    > {
         let inner = match self.inner {
             Ok(ref mut inc) => inc,
             Err(ref mut err) => {
@@ -248,7 +250,8 @@ impl Stream for TcpListenStream {
         match inner.poll() {
             Ok(Async::Ready(Some(sock))) => {
                 let addr = match sock.peer_addr() {
-                    Ok(addr) => addr.to_multiaddr()
+                    Ok(addr) => addr
+                        .to_multiaddr()
                         .expect("generating a multiaddr from a socket addr never fails"),
                     Err(err) => return Ok(Async::Ready(Some(future::err(err)))),
                 };
@@ -256,13 +259,9 @@ impl Stream for TcpListenStream {
                 debug!("Incoming connection from {}", addr);
                 let ret = future::ok((TcpTransStream { inner: sock }, future::ok(addr)));
                 Ok(Async::Ready(Some(ret)))
-            },
-            Ok(Async::Ready(None)) => {
-                Ok(Async::Ready(None))
             }
-            Ok(Async::NotReady) => {
-                Ok(Async::NotReady)
-            }
+            Ok(Async::Ready(None)) => Ok(Async::Ready(None)),
+            Ok(Async::NotReady) => Ok(Async::NotReady),
             Err(err) => {
                 debug!("Error in TCP listener: {:?}", err);
                 Err(err)
@@ -274,7 +273,7 @@ impl Stream for TcpListenStream {
 /// Wraps around a `TcpStream` and adds logging for important events.
 #[derive(Debug)]
 pub struct TcpTransStream {
-    inner: TcpStream
+    inner: TcpStream,
 }
 
 impl Read for TcpTransStream {
@@ -284,8 +283,7 @@ impl Read for TcpTransStream {
     }
 }
 
-impl AsyncRead for TcpTransStream {
-}
+impl AsyncRead for TcpTransStream {}
 
 impl Write for TcpTransStream {
     #[inline]
@@ -346,9 +344,11 @@ mod tests {
             ))
         );
         assert_eq!(
-            multiaddr_to_socketaddr(&"/ip4/255.255.255.255/tcp/8080"
-                .parse::<Multiaddr>()
-                .unwrap()),
+            multiaddr_to_socketaddr(
+                &"/ip4/255.255.255.255/tcp/8080"
+                    .parse::<Multiaddr>()
+                    .unwrap()
+            ),
             Ok(SocketAddr::new(
                 IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)),
                 8080,
@@ -362,9 +362,11 @@ mod tests {
             ))
         );
         assert_eq!(
-            multiaddr_to_socketaddr(&"/ip6/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/tcp/8080"
-                .parse::<Multiaddr>()
-                .unwrap()),
+            multiaddr_to_socketaddr(
+                &"/ip6/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/tcp/8080"
+                    .parse::<Multiaddr>()
+                    .unwrap()
+            ),
             Ok(SocketAddr::new(
                 IpAddr::V6(Ipv6Addr::new(
                     65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535,
