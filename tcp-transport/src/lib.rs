@@ -150,28 +150,16 @@ impl Transport for TcpConfig {
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         // Check that `server` only has two components and retreive them.
         let mut server_protocols_iter = server.iter();
-        let server_proto1 = match server_protocols_iter.next() {
-            Some(v) => v,
-            None => return None
-        };
-        let server_proto2 = match server_protocols_iter.next() {
-            Some(v) => v,
-            None => return None
-        };
+        let server_proto1 = server_protocols_iter.next()?;
+        let server_proto2 = server_protocols_iter.next()?;
         if server_protocols_iter.next().is_some() {
             return None;
         }
 
         // Check that `observed` only has two components and retreive them.
         let mut observed_protocols_iter = observed.iter();
-        let observed_proto1 = match observed_protocols_iter.next() {
-            Some(v) => v,
-            None => return None
-        };
-        let observed_proto2 = match observed_protocols_iter.next() {
-            Some(v) => v,
-            None => return None
-        };
+        let observed_proto1 = observed_protocols_iter.next()?;
+        let observed_proto2 = observed_protocols_iter.next()?;
         if observed_protocols_iter.next().is_some() {
             return None;
         }
