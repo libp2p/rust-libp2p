@@ -199,18 +199,28 @@ impl Transport for TcpConfig {
 
 // This type of logic should probably be moved into the multiaddr package
 fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
-    let protocols: Vec<_> = addr.iter().collect();
+    let mut iter = addr.iter();
 
-    if protocols.len() != 2 {
+    let proto1 = match iter.next() {
+        Some(v) => v,
+        None => return Err(())
+    };
+
+    let proto2 = match iter.next() {
+        Some(v) => v,
+        None => return Err(())
+    };
+
+    if iter.next().is_some() {
         return Err(());
     }
 
-    match (&protocols[0], &protocols[1]) {
-        (&AddrComponent::IP4(ref ip), &AddrComponent::TCP(port)) => {
-            Ok(SocketAddr::new(ip.clone().into(), port))
+    match (proto1, proto2) {
+        (AddrComponent::IP4(ip), AddrComponent::TCP(port)) => {
+            Ok(SocketAddr::new(ip.into(), port))
         }
-        (&AddrComponent::IP6(ref ip), &AddrComponent::TCP(port)) => {
-            Ok(SocketAddr::new(ip.clone().into(), port))
+        (AddrComponent::IP6(ip), AddrComponent::TCP(port)) => {
+            Ok(SocketAddr::new(ip.into(), port))
         }
         _ => Err(()),
     }
