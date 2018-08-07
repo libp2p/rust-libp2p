@@ -24,7 +24,7 @@
 //!
 //! # Platform support
 //!
-//! On non-Unix platforms, any attempt to dial or listen will immediately produce an error instead.
+//! This transport only works on Unix platforms.
 //!
 //! # Usage
 //!
@@ -44,12 +44,13 @@
 //! The `UdsConfig` structs implements the `Transport` trait of the `core` library. See the
 //! documentation of `core` and of libp2p in general to learn how to use the `Transport` trait.
 
+#![cfg(all(unix, not(target_os = "emscripten")))]
+
 extern crate futures;
 extern crate libp2p_core;
 #[macro_use]
 extern crate log;
 extern crate multiaddr;
-#[cfg(all(unix, not(target_os = "emscripten")))]
 extern crate tokio_uds;
 
 #[cfg(test)]
@@ -65,7 +66,6 @@ use multiaddr::{AddrComponent, Multiaddr};
 use std::io::Error as IoError;
 use std::path::PathBuf;
 use libp2p_core::Transport;
-#[cfg(all(unix, not(target_os = "emscripten")))]
 use tokio_uds::{UnixListener, UnixStream};
 
 /// Represents the configuration for a Unix domain sockets transport capability for libp2p.
@@ -84,7 +84,6 @@ impl UdsConfig {
     }
 }
 
-#[cfg(all(unix, not(target_os = "emscripten")))]
 impl Transport for UdsConfig {
     type Output = UnixStream;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
@@ -139,31 +138,6 @@ impl Transport for UdsConfig {
     }
 }
 
-#[cfg(not(all(unix, not(target_os = "emscripten"))))]
-impl Transport for UdsConfig {
-    // TODO: could use `!` for associated types once stable
-    type Output = Cursor<Vec<u8>>;
-    type MultiaddrFuture = Box<Future<Item = Multiaddr, Error = io::Error>>;
-    type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = io::Error>>;
-    type ListenerUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = io::Error>>;
-    type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = io::Error>>;
-
-    #[inline]
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        Err((UdsConfig, addr))
-    }
-
-    #[inline]
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-        Err((UdsConfig, addr))
-    }
-
-    #[inline]
-    fn nat_traversal(&self, _: &Multiaddr, _: &Multiaddr) -> Option<Multiaddr> {
-        None
-    }
-}
-
 // This type of logic should probably be moved into the multiaddr package
 fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
     let mut iter = addr.iter();
@@ -209,7 +183,6 @@ mod tests {
         );
     }
 
-    #[cfg(unix)]
     #[test]
     fn communicating_between_dialer_and_listener() {
         use std::io::Write;
