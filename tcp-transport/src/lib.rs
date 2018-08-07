@@ -46,6 +46,7 @@ extern crate libp2p_core as swarm;
 #[macro_use]
 extern crate log;
 extern crate multiaddr;
+extern crate tk_listen;
 extern crate tokio_io;
 extern crate tokio_tcp;
 
@@ -59,7 +60,9 @@ use multiaddr::{AddrComponent, Multiaddr, ToMultiaddr};
 use std::io::{Error as IoError, Read, Write};
 use std::iter;
 use std::net::SocketAddr;
+use std::time::Duration;
 use swarm::Transport;
+use tk_listen::ListenExt;
 use tokio_tcp::{TcpListener, TcpStream};
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -108,6 +111,8 @@ impl Transport for TcpConfig {
                 .map(|listener| {
                     // Pull out a stream of sockets for incoming connections
                     listener.incoming()
+                        .sleep_on_error(Duration::from_secs(1))
+                        .map_err(|()| unreachable!("sleep_on_error cannot err"))
                         .map(|sock| {
                             let addr = match sock.peer_addr() {
                                 Ok(addr) => addr.to_multiaddr()
@@ -117,10 +122,6 @@ impl Transport for TcpConfig {
 
                             debug!("Incoming connection from {}", addr);
                             future::ok((TcpTransStream { inner: sock }, future::ok(addr)))
-                        })
-                        .map_err(|err| {
-                            debug!("Error in TCP listener: {:?}", err);
-                            err
                         })
                 })
                 .flatten_stream();
