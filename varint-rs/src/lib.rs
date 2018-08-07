@@ -390,11 +390,7 @@ impl<T: Default + DecoderHelper> Decoder for VarintDecoder<T> {
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         loop {
             if src.is_empty() {
-                if self.state.is_some() {
-                    break Err(io::Error::from(io::ErrorKind::UnexpectedEof));
-                } else {
-                    break Ok(None);
-                }
+                break Ok(None);
             } else {
                 // We know that the length is not 0, so this cannot fail.
                 let first_byte = src.split_to(1)[0];
@@ -646,7 +642,7 @@ mod tests {
             .map_err(|(out, _)| out)
             .wait();
 
-        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::UnexpectedEof);
+        assert_eq!(result.unwrap(), None);
     }
 
     #[test]
