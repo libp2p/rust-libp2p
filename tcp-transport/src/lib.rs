@@ -58,7 +58,7 @@ use std::io::{Error as IoError, Read, Write};
 use std::iter;
 use std::net::SocketAddr;
 use swarm::Transport;
-use tokio_tcp::{TcpListener, TcpStream, ConnectFuture};
+use tokio_tcp::{TcpListener, TcpStream, ConnectFuture, Incoming};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Represents the configuration for a TCP/IP transport capability for libp2p.
@@ -78,7 +78,7 @@ impl TcpConfig {
 
 impl Transport for TcpConfig {
     type Output = TcpTransStream;
-    type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
+    type Listener = TcpListenStream;
     type ListenerUpgrade = FutureResult<(Self::Output, Self::MultiaddrFuture), IoError>;
     type MultiaddrFuture = FutureResult<Multiaddr, IoError>;
     type Dial = TcpDialFut;
@@ -101,28 +101,11 @@ impl Transport for TcpConfig {
             };
 
             debug!("Now listening on {}", new_addr);
+            let inner = listener
+                .map(TcpListener::incoming)
+                .map_err(Some);
+            Ok((TcpListenStream { inner }, new_addr))
 
-            let future = future::result(listener)
-                .map(|listener| {
-                    // Pull out a stream of sockets for incoming connections
-                    listener.incoming()
-                        .map(|sock| {
-                            let addr = match sock.peer_addr() {
-                                Ok(addr) => addr.to_multiaddr()
-                                    .expect("generating a multiaddr from a socket addr never fails"),
-                                Err(err) => return future::err(err),
-                            };
-
-                            debug!("Incoming connection from {}", addr);
-                            future::ok((TcpTransStream { inner: sock }, future::ok(addr)))
-                        })
-                        .map_err(|err| {
-                            debug!("Error in TCP listener: {:?}", err);
-                            err
-                        })
-                })
-                .flatten_stream();
-            Ok((Box::new(future), new_addr))
         } else {
             Err((self, addr))
         }
@@ -238,6 +221,50 @@ impl Future for TcpDialFut {
             Err(err) => {
                 let addr = self.addr.as_ref().expect("TcpDialFut polled again after finished");
                 debug!("Error while dialing {:?} => {:?}", addr, err);
+                Err(err)
+            }
+        }
+    }
+}
+
+/// Stream that listens on an TCP/IP address.
+#[derive(Debug)]
+pub struct TcpListenStream {
+    inner: Result<Incoming, Option<IoError>>,
+}
+
+impl Stream for TcpListenStream {
+    type Item = FutureResult<(TcpTransStream, FutureResult<Multiaddr, IoError>), IoError>;
+    type Error = IoError;
+
+    fn poll(&mut self) -> Poll<Option<FutureResult<(TcpTransStream, FutureResult<Multiaddr, IoError>), IoError>>, IoError> {
+        let inner = match self.inner {
+            Ok(ref mut inc) => inc,
+            Err(ref mut err) => {
+                return Err(err.take().expect("poll called again after error"));
+            }
+        };
+
+        match inner.poll() {
+            Ok(Async::Ready(Some(sock))) => {
+                let addr = match sock.peer_addr() {
+                    Ok(addr) => addr.to_multiaddr()
+                        .expect("generating a multiaddr from a socket addr never fails"),
+                    Err(err) => return Ok(Async::Ready(Some(future::err(err)))),
+                };
+
+                debug!("Incoming connection from {}", addr);
+                let ret = future::ok((TcpTransStream { inner: sock }, future::ok(addr)));
+                Ok(Async::Ready(Some(ret)))
+            },
+            Ok(Async::Ready(None)) => {
+                Ok(Async::Ready(None))
+            }
+            Ok(Async::NotReady) => {
+                Ok(Async::NotReady)
+            }
+            Err(err) => {
+                debug!("Error in TCP listener: {:?}", err);
                 Err(err)
             }
         }
