@@ -52,15 +52,13 @@ extern crate tokio_tcp;
 #[cfg(test)]
 extern crate tokio_current_thread;
 
-use futures::Poll;
-use futures::future::{self, Future, FutureResult};
-use futures::stream::Stream;
+use futures::{prelude::*, Poll, Async, future, future::FutureResult};
 use multiaddr::{AddrComponent, Multiaddr, ToMultiaddr};
 use std::io::{Error as IoError, Read, Write};
 use std::iter;
 use std::net::SocketAddr;
 use swarm::Transport;
-use tokio_tcp::{TcpListener, TcpStream};
+use tokio_tcp::{TcpListener, TcpStream, ConnectFuture};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Represents the configuration for a TCP/IP transport capability for libp2p.
@@ -83,7 +81,7 @@ impl Transport for TcpConfig {
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
     type ListenerUpgrade = FutureResult<(Self::Output, Self::MultiaddrFuture), IoError>;
     type MultiaddrFuture = FutureResult<Multiaddr, IoError>;
-    type Dial = Box<Future<Item = (TcpTransStream, Self::MultiaddrFuture), Error = IoError>>;
+    type Dial = TcpDialFut;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
@@ -136,15 +134,10 @@ impl Transport for TcpConfig {
             // If so, we instantly refuse dialing instead of going through the kernel.
             if socket_addr.port() != 0 && !socket_addr.ip().is_unspecified() {
                 debug!("Dialing {}", addr);
-                let fut = TcpStream::connect(&socket_addr)
-                    .map(|t| {
-                        (TcpTransStream { inner: t }, future::ok(addr))
-                    })
-                    .map_err(move |err| {
-                        debug!("Error while dialing {:?} => {:?}", socket_addr, err);
-                        err
-                    });
-                Ok(Box::new(fut) as Box<_>)
+                Ok(TcpDialFut {
+                    inner: TcpStream::connect(&socket_addr),
+                    addr: Some(addr),
+                })
             } else {
                 debug!("Instantly refusing dialing {}, as it is invalid", addr);
                 Err((self, addr))
@@ -223,7 +216,38 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
     }
 }
 
+/// Future that dials a TCP/IP address.
+#[derive(Debug)]
+pub struct TcpDialFut {
+    inner: ConnectFuture,
+    addr: Option<Multiaddr>,
+}
+
+impl Future for TcpDialFut {
+    type Item = (TcpTransStream, FutureResult<Multiaddr, IoError>);
+    type Error = IoError;
+
+    fn poll(&mut self) -> Poll<(TcpTransStream, FutureResult<Multiaddr, IoError>), IoError> {
+        match self.inner.poll() {
+            Ok(Async::Ready(stream)) => {
+                let addr = self.addr.take().expect("TcpDialFut polled again after finished");
+                let out = TcpTransStream { inner: stream };
+                Ok(Async::Ready((out, future::ok(addr))))
+            },
+            Ok(Async::NotReady) => {
+                Ok(Async::NotReady)
+            }
+            Err(err) => {
+                let addr = self.addr.as_ref().expect("TcpDialFut polled again after finished");
+                debug!("Error while dialing {:?} => {:?}", addr, err);
+                Err(err)
+            }
+        }
+    }
+}
+
 /// Wraps around a `TcpStream` and adds logging for important events.
+#[derive(Debug)]
 pub struct TcpTransStream {
     inner: TcpStream
 }
