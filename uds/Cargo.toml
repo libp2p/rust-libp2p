@@ -9,6 +9,8 @@ libp2p-core = { path = "../core" }
 log = "0.4.1"
 futures = "0.1"
 multiaddr = { path = "../multiaddr" }
+
+[target.'cfg(all(unix, not(target_os = "emscripten")))'.dependencies]
 tokio-uds = "0.2"
 
 [dev-dependencies]
