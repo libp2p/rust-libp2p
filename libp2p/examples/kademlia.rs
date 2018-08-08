@@ -176,7 +176,7 @@ fn main() {
                     active_kad_connections
                         .entry(node_id)
                         .or_insert_with(Default::default)
-                        .set_until(kad_ctrl, fut)
+                        .tie_or_passthrough(kad_ctrl, fut)
                 })
             }
         }
@@ -195,7 +195,7 @@ fn main() {
             let addr = Multiaddr::from(libp2p::multiaddr::AddrComponent::P2P(cid));
             active_kad_connections.lock().unwrap().entry(peer.clone())
                 .or_insert_with(Default::default)
-                .get_or_dial(&swarm_controller, &addr, transport.clone().with_upgrade(KadConnecConfig::new()))
+                .dial(&swarm_controller, &addr, transport.clone().with_upgrade(KadConnecConfig::new()))
         })
         .filter_map(move |event| {
             match event {

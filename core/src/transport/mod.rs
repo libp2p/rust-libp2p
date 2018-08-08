@@ -39,6 +39,7 @@ pub mod and_then;
 pub mod choice;
 pub mod denied;
 pub mod dummy;
+pub mod interruptible;
 pub mod map;
 pub mod map_err;
 pub mod memory;
@@ -191,5 +192,14 @@ pub trait Transport {
         Self: Sized,
     {
         DummyMuxing::new(self)
+    }
+
+    /// Wraps around the `Transport` and makes it interruptible.
+    #[inline]
+    fn interruptible(self) -> (interruptible::Interruptible<Self>, interruptible::Interrupt)
+    where
+        Self: Sized,
+    {
+        interruptible::Interruptible::new(self)
     }
 }
