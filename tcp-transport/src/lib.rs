@@ -71,13 +71,17 @@ use tokio_io::{AsyncRead, AsyncWrite};
 /// The TCP sockets created by libp2p will need to be progressed by running the futures and streams
 /// obtained by libp2p through the tokio reactor.
 #[derive(Debug, Clone, Default)]
-pub struct TcpConfig {}
+pub struct TcpConfig {
+    sleep_on_error: Duration,
+}
 
 impl TcpConfig {
     /// Creates a new configuration object for TCP/IP.
     #[inline]
     pub fn new() -> TcpConfig {
-        TcpConfig {}
+        TcpConfig {
+            sleep_on_error: Duration::from_millis(100),
+        }
     }
 }
 
@@ -107,11 +111,12 @@ impl Transport for TcpConfig {
 
             debug!("Now listening on {}", new_addr);
 
+            let sleep_on_error = self.sleep_on_error;
             let future = future::result(listener)
-                .map(|listener| {
+                .map(move |listener| {
                     // Pull out a stream of sockets for incoming connections
                     listener.incoming()
-                        .sleep_on_error(Duration::from_secs(1))
+                        .sleep_on_error(sleep_on_error)
                         .map_err(|()| unreachable!("sleep_on_error cannot err"))
                         .map(|sock| {
                             let addr = match sock.peer_addr() {
