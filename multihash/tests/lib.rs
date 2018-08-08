@@ -18,7 +18,7 @@ macro_rules! assert_encode {
     {$( $alg:ident, $data:expr, $expect:expr; )*} => {
         $(
             assert_eq!(
-                encode(Hash::$alg, $data).expect("Must be supported"),
+                encode(Hash::$alg, $data).expect("Must be supported").into_bytes(),
                 hex_to_bytes($expect),
                 "{} encodes correctly", Hash::$alg.name()
             );
@@ -49,7 +49,7 @@ macro_rules! assert_decode {
         $(
             let hash = hex_to_bytes($hash);
             assert_eq!(
-                decode(&hash).unwrap().alg,
+                MultihashRef::from_slice(&hash).unwrap().algorithm(),
                 Hash::$alg,
                 "{} decodes correctly", Hash::$alg.name()
             );
@@ -79,9 +79,9 @@ macro_rules! assert_roundtrip {
     ($( $alg:ident ),*) => {
         $(
             {
-                let hash: Vec<u8> = encode(Hash::$alg, b"helloworld").unwrap();
+                let hash: Vec<u8> = encode(Hash::$alg, b"helloworld").unwrap().into_bytes();
                 assert_eq!(
-                    decode(&hash).unwrap().alg,
+                    MultihashRef::from_slice(&hash).unwrap().algorithm(),
                     Hash::$alg
                 );
             }
