@@ -213,10 +213,10 @@ fn main() {
         .map_err(|(err, _)| err)
         .map(|(out, _)| out.unwrap())
         .and_then(|out| {
-            let local_hash = U512::from(my_peer_id.hash());
+            let local_hash = U512::from(my_peer_id.digest());
             println!("Results of peer discovery for {:?}:", my_peer_id);
             for n in out {
-                let other_hash = U512::from(n.hash());
+                let other_hash = U512::from(n.digest());
                 let dist = 512 - (local_hash ^ other_hash).leading_zeros();
                 println!("* {:?} (distance bits = {:?} (lower is better))", n, dist);
             }

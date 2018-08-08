@@ -82,8 +82,8 @@ impl PeerId {
 
     /// Returns the raw bytes of the hash of this `PeerId`.
     #[inline]
-    pub fn hash(&self) -> &[u8] {
-        self.multihash.hash_data()
+    pub fn digest(&self) -> &[u8] {
+        self.multihash.digest()
     }
 
     /// Checks whether the public key passed as parameter matches the public key of this `PeerId`.

@@ -143,8 +143,8 @@ impl Multihash {
 
     /// Returns the hashed data.
     #[inline]
-    pub fn hash_data(&self) -> &[u8] {
-        self.as_ref().hash_data()
+    pub fn digest(&self) -> &[u8] {
+        self.as_ref().digest()
     }
 }
 
@@ -193,7 +193,7 @@ impl<'a> MultihashRef<'a> {
 
     /// Returns the hashed data.
     #[inline]
-    pub fn hash_data(&self) -> &'a [u8] {
+    pub fn digest(&self) -> &'a [u8] {
         &self.bytes[2..]
     }
 

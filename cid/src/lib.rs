@@ -116,7 +116,7 @@ impl Cid {
             version: self.version,
             codec: self.codec.to_owned(),
             mh_type: mh.algorithm(),
-            mh_len: mh.hash_data().len(),
+            mh_len: mh.digest().len(),
         }
     }
 }
