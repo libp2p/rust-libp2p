@@ -42,6 +42,7 @@ pub extern crate libp2p_secio as secio;
 #[cfg(not(target_os = "emscripten"))]
 pub extern crate libp2p_tcp_transport as tcp;
 pub extern crate libp2p_transport_timeout as transport_timeout;
+pub extern crate libp2p_uds as uds;
 pub extern crate libp2p_websocket as websocket;
 pub extern crate libp2p_yamux as yamux;
 
