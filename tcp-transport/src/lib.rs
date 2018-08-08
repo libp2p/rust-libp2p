@@ -55,6 +55,7 @@ extern crate tokio_current_thread;
 
 use futures::{future, future::FutureResult, prelude::*, Async, Poll};
 use multiaddr::{AddrComponent, Multiaddr, ToMultiaddr};
+use std::fmt;
 use std::io::{Error as IoError, Read, Write};
 use std::iter;
 use std::net::SocketAddr;
@@ -203,6 +204,7 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
 #[derive(Debug)]
 pub struct TcpDialFut {
     inner: ConnectFuture,
+    /// Address we're dialing. Extracted when the `Future` finishes.
     addr: Option<Multiaddr>,
 }
 
@@ -234,7 +236,6 @@ impl Future for TcpDialFut {
 }
 
 /// Stream that listens on an TCP/IP address.
-// TODO: implement Debug
 pub struct TcpListenStream {
     inner: Result<SleepOnError<Incoming>, Option<IoError>>,
 }
@@ -259,6 +260,7 @@ impl Stream for TcpListenStream {
         match inner.poll() {
             Ok(Async::Ready(Some(sock))) => {
                 let addr = match sock.peer_addr() {
+                    // TODO: remove this expect()
                     Ok(addr) => addr
                         .to_multiaddr()
                         .expect("generating a multiaddr from a socket addr never fails"),
@@ -272,6 +274,16 @@ impl Stream for TcpListenStream {
             Ok(Async::Ready(None)) => Ok(Async::Ready(None)),
             Ok(Async::NotReady) => Ok(Async::NotReady),
             Err(()) => unreachable!("sleep_on_error never produces an error"),
+        }
+    }
+}
+
+impl fmt::Debug for TcpListenStream {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.inner {
+            Ok(_) => write!(f, "TcpListenStream"),
+            Err(None) => write!(f, "TcpListenStream(Errored)"),
+            Err(Some(ref err)) => write!(f, "TcpListenStream({:?})", err),
         }
     }
 }
