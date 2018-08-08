@@ -71,25 +71,6 @@ impl Hash {
         }
     }
 
-    /// Get the human readable name.
-    pub fn name(&self) -> &str {
-        match *self {
-            Hash::SHA1 => "SHA1",
-            Hash::SHA2256 => "SHA2-256",
-            Hash::SHA2512 => "SHA2-512",
-            Hash::SHA3512 => "SHA3-512",
-            Hash::SHA3384 => "SHA3-384",
-            Hash::SHA3256 => "SHA3-256",
-            Hash::SHA3224 => "SHA3-224",
-            Hash::Keccak224 => "Keccak-224",
-            Hash::Keccak256 => "Keccak-256",
-            Hash::Keccak384 => "Keccak-384",
-            Hash::Keccak512 => "Keccak-512",
-            Hash::Blake2b => "Blake-2b",
-            Hash::Blake2s => "Blake-2s",
-        }
-    }
-
     /// Returns the algorithm corresponding to a code, or `None` if no algorith is matching.
     pub fn from_code(code: u8) -> Option<Hash> {
         Some(match code {
