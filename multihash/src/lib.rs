@@ -1,8 +1,10 @@
-/// ! # multihash
-/// !
-/// ! Implementation of [multihash](https://github.com/multiformats/multihash)
-/// ! in Rust.
-/// Representation of a Multiaddr.
+//! # Multihash
+//!
+//! Implementation of [multihash](https://github.com/multiformats/multihash) in Rust.
+//!
+//! A `Multihash` is a structure that contains a hashing algorithm, plus some hashed data.
+//! A `MultihashRef` is the same as a `Multihash`, except that it doesn't own its data.
+//!
 
 extern crate sha1;
 extern crate sha2;
