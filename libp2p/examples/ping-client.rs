@@ -78,15 +78,19 @@ fn main() {
     let mut tx = Some(tx);
     let (swarm_controller, swarm_future) = libp2p::core::swarm(
         transport.clone().with_upgrade(libp2p::ping::Ping),
-        |(mut pinger, future), _client_addr| {
-            let tx = tx.take();
-            let ping = pinger.ping().map_err(|_| unreachable!()).inspect(move |_| {
-                println!("Received pong from the remote");
-                if let Some(tx) = tx {
-                    let _ = tx.send(());
-                }
-            });
-            ping.select(future).map(|_| ()).map_err(|(e, _)| e)
+        |out, _client_addr| {
+            if let libp2p::ping::PingOutput::Pinger { mut pinger, processing } = out {
+                let tx = tx.take();
+                let ping = pinger.ping().map_err(|_| unreachable!()).inspect(move |_| {
+                    println!("Received pong from the remote");
+                    if let Some(tx) = tx {
+                        let _ = tx.send(());
+                    }
+                });
+                ping.select(processing).map(|_| ()).map_err(|(e, _)| e)
+            } else {
+                unreachable!()
+            }
         },
     );
 
