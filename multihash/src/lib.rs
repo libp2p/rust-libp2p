@@ -168,7 +168,15 @@ impl<'a> MultihashRef<'a> {
             return Err(DecodeError::BadInputLength);
         }
 
+        // TODO: note that `input[0]` and `input[1]` and technically variable-length integers,
+        // but there's no hashing algorithm implemented in this crate whose code or digest length
+        // is superior to 128
         let code = input[0];
+
+        // TODO: see comment just above about varints
+        if input[0] >= 128 || input[1] >= 128 {
+            return Err(DecodeError::BadInputLength);
+        }
 
         let alg = Hash::from_code(code).ok_or(DecodeError::UnknownCode)?;
         let hash_len = alg.size() as usize;
