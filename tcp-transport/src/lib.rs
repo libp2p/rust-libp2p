@@ -69,13 +69,17 @@ use tokio_tcp::{ConnectFuture, Incoming, TcpListener, TcpStream};
 /// The TCP sockets created by libp2p will need to be progressed by running the futures and streams
 /// obtained by libp2p through the tokio reactor.
 #[derive(Debug, Clone, Default)]
-pub struct TcpConfig {}
+pub struct TcpConfig {
+    sleep_on_error: Duration,
+}
 
 impl TcpConfig {
     /// Creates a new configuration object for TCP/IP.
     #[inline]
     pub fn new() -> TcpConfig {
-        TcpConfig {}
+        TcpConfig {
+            sleep_on_error: Duration::from_millis(100),
+        }
     }
 }
 
