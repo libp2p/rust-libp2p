@@ -98,7 +98,7 @@ pub fn encode(hash: Hash, input: &[u8]) -> Result<Multihash, EncodeError> {
 }
 
 /// Represents a valid multihash.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Multihash {
     bytes: Vec<u8>
 }
@@ -156,7 +156,7 @@ impl<'a> PartialEq<MultihashRef<'a>> for Multihash {
 }
 
 /// Represents a valid multihash.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct MultihashRef<'a> {
     bytes: &'a [u8]
 }

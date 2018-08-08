@@ -7,7 +7,7 @@ use cid::{Cid, Version, Codec, Error, Prefix};
 fn basic_marshalling() {
     let h = multihash::encode(multihash::Hash::SHA2256, b"beep boop").unwrap();
 
-    let cid = Cid::new(Codec::DagProtobuf, Version::V1, &h);
+    let cid = Cid::new(Codec::DagProtobuf, Version::V1, h.as_bytes());
 
     let data = cid.to_bytes();
     let out = Cid::from(data).unwrap();
@@ -45,7 +45,7 @@ fn prefix_roundtrip() {
     let data = b"awesome test content";
     let h = multihash::encode(multihash::Hash::SHA2256, data).unwrap();
 
-    let cid = Cid::new(Codec::DagProtobuf, Version::V1, &h);
+    let cid = Cid::new(Codec::DagProtobuf, Version::V1, h.as_bytes());
     let prefix = cid.prefix();
 
     let cid2 = Cid::new_from_prefix(&prefix, data);

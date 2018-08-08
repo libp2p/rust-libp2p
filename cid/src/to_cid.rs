@@ -71,7 +71,7 @@ impl ToCid for [u8] {
     fn to_cid(&self) -> Result<Cid> {
         if Version::is_v0_binary(self) {
             // Verify that hash can be decoded, this is very cheap
-            multihash::decode(self)?;
+            multihash::MultihashRef::from_slice(self)?;
 
             Ok(Cid::new(Codec::DagProtobuf, Version::V0, self))
         } else {
@@ -85,7 +85,7 @@ impl ToCid for [u8] {
             let hash = &self[cur.position() as usize..];
 
             // Verify that hash can be decoded, this is very cheap
-            multihash::decode(hash)?;
+            multihash::MultihashRef::from_slice(hash)?;
 
             Ok(Cid::new(codec, version, hash))
         }
