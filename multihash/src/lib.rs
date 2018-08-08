@@ -16,7 +16,7 @@ use sha2::Digest;
 use tiny_keccak::Keccak;
 
 pub use hashes::Hash;
-pub use errors::Error;
+pub use errors::{EncodeError, DecodeError};
 
 // Helper macro for encoding input into output using sha1, sha2 or tiny_keccak
 macro_rules! encode {
@@ -47,7 +47,7 @@ macro_rules! match_encoder {
                 Hash::$hashtype => encode!($lib, $method, $input, $output),
             )*
 
-            _ => return Err(Error::UnsupportedType)
+            _ => return Err(EncodeError::UnsupportedType)
         }
     })
 }
@@ -71,7 +71,7 @@ macro_rules! match_encoder {
 /// );
 /// ```
 ///
-pub fn encode(hash: Hash, input: &[u8]) -> Result<Multihash, Error> {
+pub fn encode(hash: Hash, input: &[u8]) -> Result<Multihash, EncodeError> {
     let size = hash.size();
     let mut output = Vec::new();
     output.resize(2 + size as usize, 0);
@@ -104,7 +104,7 @@ pub struct Multihash {
 impl Multihash {
     /// Verifies whether `bytes` contains a valid multihash, and if so returns a `Multihash`.
     #[inline]
-    pub fn from_bytes(bytes: Vec<u8>) -> Result<Multihash, Error> {
+    pub fn from_bytes(bytes: Vec<u8>) -> Result<Multihash, DecodeError> {
         if let Err(err) = MultihashRef::from_slice(&bytes) {
             return Err(err);
         }
@@ -145,23 +145,23 @@ pub struct MultihashRef<'a> {
 
 impl<'a> MultihashRef<'a> {
     /// Verifies whether `bytes` contains a valid multihash, and if so returns a `MultihashRef`.
-    pub fn from_slice(input: &'a [u8]) -> Result<MultihashRef<'a>, Error> {
+    pub fn from_slice(input: &'a [u8]) -> Result<MultihashRef<'a>, DecodeError> {
         if input.is_empty() {
-            return Err(Error::BadInputLength);
+            return Err(DecodeError::BadInputLength);
         }
 
         let code = input[0];
 
-        let alg = Hash::from_code(code)?;
+        let alg = Hash::from_code(code).ok_or(DecodeError::UnknownCode)?;
         let hash_len = alg.size() as usize;
 
         // length of input should be exactly hash_len + 2
         if input.len() != hash_len + 2 {
-            return Err(Error::BadInputLength);
+            return Err(DecodeError::BadInputLength);
         }
 
         if input[1] as usize != hash_len {
-            return Err(Error::BadInputLength);
+            return Err(DecodeError::BadInputLength);
         }
 
         Ok(MultihashRef { bytes: input })

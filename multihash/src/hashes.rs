@@ -1,4 +1,3 @@
-use errors::Error;
 
 /// List of types currently supported in the multihash spec.
 ///
@@ -91,8 +90,8 @@ impl Hash {
         }
     }
 
-    pub fn from_code(code: u8) -> Result<Hash, Error> {
-        Ok(match code {
+    pub fn from_code(code: u8) -> Option<Hash> {
+        Some(match code {
             0x11 => Hash::SHA1,
             0x12 => Hash::SHA2256,
             0x13 => Hash::SHA2512,
@@ -106,7 +105,7 @@ impl Hash {
             0x1D => Hash::Keccak512,
             0x40 => Hash::Blake2b,
             0x41 => Hash::Blake2s,
-            _ => return Err(Error::UnknownCode),
+            _ => return None,
         })
     }
 }
