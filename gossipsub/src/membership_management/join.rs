@@ -4,6 +4,7 @@ use constants::{
     REQUEST_TIMEOUT,
 };
 use futures::Future;
+use futures_core::future::*;
 use libp2p_core::{
     PeerId,
     swarm::swarm,
@@ -12,7 +13,8 @@ use libp2p_core::{
 use libp2p_kad::{
     KadSystemConfig,
     KadConnecConfig,
-    KadSystem
+    KadSystem,
+    kbucket::KBucketsTable
 };
 use libp2p_ping::Ping;
 use libp2p_secio::SecioKeyPair;
@@ -20,34 +22,94 @@ use std::time::Duration;
 use tokio_core;
 use tokio_current_thread;
 
-fn init_overlay() -> KadSystem {
+fn init_overlay() -> Result<KadSystem, Box<Error + Send + Sync>>,
     // The following Kademlia quotes are from:
     // https://github.com/libp2p/rust-libp2p/blob/8e07c18178ac43cad3fa8974a243a98d9bc8b896/kad/src/lib.rs#L21.
 
     // "Build a `KadSystemConfig` and a `KadConnecConfig` object that contain the way you want the
     // Kademlia protocol to behave."
     
-    let sample_peer_id = SecioKeyPair::to_peer_id(SecioKeyPair::ed25519_generated());
+    let oldest_peer_id = SecioKeyPair::to_peer_id(SecioKeyPair::ed25519_generated());
 
     // KadSystemConfig
     // https://github.com/libp2p/rust-libp2p/blob/7507e0bfd9f11520f2d6291120f1b68d0afce80a/kad/src/high_level.rs#L36
     let kad_system_config = KadSystemConfig {
         parallelism: ALPHA,
-        local_peer_id: sample_peer_id,
+        local_peer_id: oldest_peer_id,
         known_initial_peers: vec![],
         kbuckets_timeout: Duration::from_secs(KBUCKETS_TIMEOUT),
         request_timeout: Duration::from_secs(REQUEST_TIMEOUT),
     };
 
+    let mut core = tokio_core::reactor::Core::new().unwrap();
+
     // KadConnecConfig
     // In https://github.com/libp2p/rust-libp2p/blob/master/kad/src/kad_server.rs
-    let kad_connec_config = KadConnecConfig::new();
+    let kad_connec_config = KadConnecConfig::new(tokio_core.handle());
+    // Assuming that the handle is needed,
+    // FMI see https://docs.rs/tokio-core/0.1.17/tokio_core/reactor/struct.Core.html#method.handle
+
+    // Implements core::upgrade::traits::ConnectionUpgrade and .upgrade() which produces a KadConnecController,
+    // but "protocol negotiation" is required before upgrading. See also core::Readme#Connection_upgrades:
+
+    // > Once a socket has been opened with a remote through a `Transport`, it can be *upgraded*. This
+    // consists in negotiating a protocol with the remote (through `multistream-select`), and applying
+    // that protocol on the socket.
+
+    // > A potential connection upgrade is represented with the `ConnectionUpgrade` trait. The trait
+    // consists in a protocol name plus a method that turns the socket into an `Output` object whose
+    // nature and type is specific to each upgrade.
+
+    // > There exists three kinds of connection upgrades: middlewares, muxers, and actual protocols.
+
+    // A description of each ensues. KadConnecConfig doesn't seem to match any of these.
+
+    // > The output of a middleware connection upgrade implements the `AsyncRead` and `AsyncWrite`
+    // traits, just like sockets do. 
+
+    // Doesn't seem to be so. Although the ConnectionUpgrade trait implements the `AsyncRead` and `AsyncWrite`
+    // traits, it's output doesn't seem to in kad_server.
+    // impl<C, Maf> ConnectionUpgrade<C, Maf> for KadConnecConfig
+    // where
+    //     C: AsyncRead + AsyncWrite + 'static, // TODO: 'static :-/
+    // {
+    //     type Output = (
+    //         KadConnecController,
+    //         Box<Stream<Item = KadIncomingRequest, Error = IoError>>,
+    //     );
+
+    // On muxing: If the output of the connection upgrade instead implements the `StreamMuxer` and `Clone`
+    // traits, then you can turn the `UpgradedNode` struct into a `ConnectionReuse` struct by calling
+    // `ConnectionReuse::from(upgraded_node)`.
+
+    // Again, not applicable.
 
     // "Create a swarm that upgrades incoming connections with the `KadConnecConfig`.
 
-    let mut core = tokio_core::reactor::Core::new().unwrap();
+    // > *Actual protocols* work the same way as middlewares, except that their `Output` doesn't
+    // implement the `AsyncRead` and `AsyncWrite` traits. This means that that the return value of
+    // `with_upgrade` does **not** implement the `Transport` trait and thus cannot be used as a
+    // transport.
 
-    let kad_connec_config_transport = kad_connec_config.with_dummy_muxing();
+    // > However the `UpgradedNode` struct returned by `with_upgrade` still provides methods named
+    // `dial`, `listen_on`, and `next_incoming`, which will yield you a `Future` or a `Stream`,
+    // which you can use to obtain the `Output`. This `Output` can then be used in a protocol-specific
+    // way to use the protocol.
+
+    // As mentioned, KadConnecConfig's Output doesn't implement the `AsyncRead` and `AsyncWrite` traits,
+    // but it also doesn't implement `with_upgrade`, just `upgrade`.
+
+    // So it isn't clear how to put a `KadConnecConfig` into a swarm, by first implementing a Transport trait.
+
+    // Could use `PlainTextConfig` or `secio`. For Ethereum a security layer is desirable, so let's try to use
+    // secio.
+    // Note: PlainTextConfig: core/src/upgrade/plaintext.rs
+    // 
+
+    // Done to implement the transport trait in order to put it in a swarm.
+    let kad_connec_config_transport = kad_connec_config//.with_dummy_muxing();
+
+    // with_dummy_muxing: core/src/transport/mod.rs.
 
     let (swarm_controller, swarm_future) = swarm(kad_connec_config_transport,
             Ping, |(mut pinger, service), client_addr| {
@@ -56,23 +118,42 @@ fn init_overlay() -> KadSystem {
             .map(|_| ())
     });
 
-    // The `swarm_controller` can then be used to do some operations.
-    swarm_controller.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap());
+    // let (swarm_controller, swarm_future) = swarm(kad_connec_config_transport,
+    //         Ping, |(mut pinger, service), client_addr| {
+    //     pinger.ping().map_err(|_| panic!())
+    //         .select(service).map_err(|_| panic!())
+    //         .map(|_| ())
+    // });
 
-    // Runs until everything is finished.
-    tokio_current_thread::block_on_all(swarm_future).unwrap();
+    // The `swarm_controller` can then be used to do some operations.
+    // swarm_controller.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap());
 
     // "Build a `KadSystem` from the `KadSystemConfig`. This requires passing a closure that provides
     // the Kademlia controller of a peer."
     // FMI see https://github.com/libp2p/rust-libp2p/blob/master/kad/src/high_level.rs
-    let kad_peer_controller = |peer_id: &PeerId| peer_id;
+    let access = |peer_id: &PeerId| {
+        ok::
+    };
+
+    //     pub fn start<'a, F, Fut>(config: KadSystemConfig<impl Iterator<Item = PeerId>>, access: F)
+    //     -> (KadSystem, impl Future<Item = (), Error = IoError> + 'a)
+    //     where F: FnMut(&PeerId) -> Fut + Clone + 'a,
+    //         Fut: IntoFuture<Item = KadConnecController, Error = IoError>  + 'a,
+    // {
+    //     let system = KadSystem::without_init(config);
+    //     let init_future = system.perform_initialization(access);
+    //     (system, init_future)
+    // }
+
+    // TODO: complete initialization of KadSystem,
+    let kbuckets_table = KBucketsTable {
+        
+    };
 
     let kad_system = KadSystem {
-        kbuckets : KBucketsTable {
-            my_id: sample_peer_id,
-        }
-    }.start(kad_system_config, kad_peer_controller(sample_peer_id));
-    kad_system
+        kbuckets : 
+    }.start(kad_system_config, kad_peer_controller(oldest_peer_id));
+    Ok(kad_system)
 
     // pub struct KBucketsTable<Id, Val> {
     // my_id: Id,
@@ -80,6 +161,9 @@ fn init_overlay() -> KadSystem {
     // // The timeout when pinging the first node after which we consider that it no longer responds.
     // ping_timeout: Duration,
     // }
+    
+    // Runs until everything is finished.
+    tokio_current_thread::block_on_all(swarm_future).unwrap();
 }
 
 // "You can perform queries using the `KadSystem`." TODO: Test

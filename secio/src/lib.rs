@@ -107,8 +107,12 @@ use ring::rand::SystemRandom;
 use ring::signature::{Ed25519KeyPair, RSAKeyPair};
 use rw_stream_sink::RwStreamSink;
 use std::error::Error;
+use std::fs::File;
+use std::io;
+use std::io::prelude::*;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
+use std::path::Path;
 use std::sync::Arc;
 use tokio_io::{AsyncRead, AsyncWrite};
 use untrusted::Input;
@@ -118,6 +122,21 @@ mod codec;
 mod error;
 mod handshake;
 mod structs_proto;
+
+unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
+    ::std::slice::from_raw_parts(
+        (p as *const T) as *const u8,
+        ::std::mem::size_of::<T>(),
+    )
+}
+
+fn constrain<F>(f: F) -> F
+where
+    F: for<'a> Fn(&'a String, &SecioKeyPair)
+        -> Result<(), Box<Error + Send + Sync>>,
+{
+    f
+}
 
 /// Implementation of the `ConnectionUpgrade` trait of `libp2p_core`. Automatically applies
 /// secio on any connection.
@@ -191,11 +210,39 @@ impl SecioKeyPair {
     pub fn ed25519_generated() -> Result<SecioKeyPair, Box<Error + Send + Sync>> {
         let rng = SystemRandom::new();
         let gen = Ed25519KeyPair::generate_pkcs8(&rng).map_err(Box::new)?;
-        Ok(SecioKeyPair::ed25519_from_pkcs8(&gen[..])
-            .expect("failed to parse generated Ed25519 key"))
+        let ed25519_key_pair = SecioKeyPair::ed25519_from_pkcs8(&gen[..])
+            .expect("failed to parse generated Ed25519 key");
+        Ok(ed25519_key_pair)
     }
 
-    // TODO: export the private key of a generated pair.
+    /// Saves a &SecioKeyPair.
+    pub fn save_key_pair(key_pair: &SecioKeyPair) -> io::Result<()> {
+        println!("Would you like to save the key pair to a file? Enter Y to save to ~/Ed25519_key_pair.txt \
+            (won't work on Windows), N for no, or otherwise enter a file path to save to: ");
+        // let reader = io::stdin();
+        let input_text = String::new();
+        // PD: let input = reader.read_line(&mut input_text).expect("failed to read line");
+        let write_key_pair_to_file = constrain(|input, key_pair| {
+            let path = Path::new(&input);
+            let mut file = File::create(path).expect("Error creating file, \
+                check that the file path entered is valid, e.g. ~/Ed25519_key_pair.txt");
+            // TODO: not sure how helpful this above and below error checks are; investigate.
+            file.write_all(unsafe {any_as_u8_slice(&key_pair)}).expect("error writing to file");
+            // TODO: this file should probably be encrypted and password-protected.
+            Ok(())
+        });
+        if input_text == "N" {
+            // do nothing
+        } else if input_text == "Y" {
+            write_key_pair_to_file(&"~/Ed25519_key_pair.txt".to_string(), key_pair).expect("Can't write the key \
+                pair to a file");
+                // TODO: should use better error handling than expect, where used above and below.
+        } else {
+            write_key_pair_to_file(&input_text, key_pair).expect("Can't write the key \
+                pair to a file");
+        }
+        Ok(())
+    }
 
     /// Builds a `SecioKeyPair` from a raw secp256k1 32 bytes private key.
     #[cfg(feature = "secp256k1")]
