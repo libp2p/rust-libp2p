@@ -148,6 +148,13 @@ impl Multihash {
     }
 }
 
+impl<'a> PartialEq<MultihashRef<'a>> for Multihash {
+    #[inline]
+    fn eq(&self, other: &MultihashRef<'a>) -> bool {
+        &*self.bytes == other.bytes
+    }
+}
+
 /// Represents a valid multihash.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct MultihashRef<'a> {
@@ -202,6 +209,13 @@ impl<'a> MultihashRef<'a> {
     #[inline]
     pub fn as_bytes(&self) -> &'a [u8] {
         &self.bytes
+    }
+}
+
+impl<'a> PartialEq<Multihash> for MultihashRef<'a> {
+    #[inline]
+    fn eq(&self, other: &Multihash) -> bool {
+        self.bytes == &*other.bytes
     }
 }
 
