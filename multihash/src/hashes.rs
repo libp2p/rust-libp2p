@@ -33,7 +33,7 @@ pub enum Hash {
 }
 
 impl Hash {
-    /// Get the corresponding hash code
+    /// Get the corresponding hash code.
     pub fn code(&self) -> u8 {
         match *self {
             Hash::SHA1 => 0x11,
@@ -52,7 +52,7 @@ impl Hash {
         }
     }
 
-    /// Get the hash length in bytes
+    /// Get the hash length in bytes.
     pub fn size(&self) -> u8 {
         match *self {
             Hash::SHA1 => 20,
@@ -71,7 +71,7 @@ impl Hash {
         }
     }
 
-    /// Get the human readable name
+    /// Get the human readable name.
     pub fn name(&self) -> &str {
         match *self {
             Hash::SHA1 => "SHA1",
@@ -90,6 +90,7 @@ impl Hash {
         }
     }
 
+    /// Returns the algorithm corresponding to a code, or `None` if no algorith is matching.
     pub fn from_code(code: u8) -> Option<Hash> {
         Some(match code {
             0x11 => Hash::SHA1,
