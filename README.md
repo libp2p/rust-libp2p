@@ -35,6 +35,7 @@ Architecture of the other crates of this repository:
 - `rw-stream-sink`: Utility library that makes it possible to wrap around a tokio `Stream + Sink` of bytes and implements `AsyncRead + AsyncWrite`.
 - `secio`: Implementation of the `secio` protocol. Encrypts communications. Implements the `ConnectionUpgrade` trait of `core`.
 - `tcp-transport`: Implementation of the `Transport` trait of `core` for TCP/IP.
+- `uds`: Implementation of `Transport` for UNIX domain sockets.
 - `varint`: encoding and decoding state machines for protobuf varints.
 - `websocket`: Implementation of the `Transport` trait of `core` for Websockets.
 
