@@ -20,7 +20,7 @@ macro_rules! assert_encode {
             assert_eq!(
                 encode(Hash::$alg, $data).expect("Must be supported").into_bytes(),
                 hex_to_bytes($expect),
-                "{} encodes correctly", Hash::$alg.name()
+                "{:?} encodes correctly", Hash::$alg
             );
         )*
     }
@@ -51,7 +51,7 @@ macro_rules! assert_decode {
             assert_eq!(
                 MultihashRef::from_slice(&hash).unwrap().algorithm(),
                 Hash::$alg,
-                "{} decodes correctly", Hash::$alg.name()
+                "{:?} decodes correctly", Hash::$alg
             );
         )*
     }
@@ -100,5 +100,4 @@ fn assert_roundtrip() {
 #[test]
 fn hash_types() {
     assert_eq!(Hash::SHA2256.size(), 32);
-    assert_eq!(Hash::SHA2256.name(), "SHA2-256");
 }
