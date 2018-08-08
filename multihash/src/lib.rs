@@ -123,6 +123,12 @@ impl Multihash {
         self.bytes
     }
 
+    /// Returns the bytes representation of this multihash.
+    #[inline]
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
     /// Builds a `MultihashRef` corresponding to this `Multihash`.
     #[inline]
     pub fn as_ref(&self) -> MultihashRef {
@@ -182,6 +188,20 @@ impl<'a> MultihashRef<'a> {
     #[inline]
     pub fn hash_data(&self) -> &'a [u8] {
         &self.bytes[2..]
+    }
+
+    /// Builds a `Multihash` that owns the data.
+    ///
+    /// This operation allocates.
+    #[inline]
+    pub fn into_owned(&self) -> Multihash {
+        Multihash { bytes: self.bytes.to_owned() }
+    }
+
+    /// Returns the bytes representation of this multihash.
+    #[inline]
+    pub fn as_bytes(&self) -> &'a [u8] {
+        &self.bytes
     }
 }
 
