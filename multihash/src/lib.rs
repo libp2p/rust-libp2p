@@ -8,15 +8,15 @@ extern crate sha1;
 extern crate sha2;
 extern crate tiny_keccak;
 
+mod errors;
+mod hashes;
+
 use std::fmt::Write;
 use sha2::Digest;
 use tiny_keccak::Keccak;
 
-mod hashes;
-pub use hashes::*;
-
-mod errors;
-pub use errors::*;
+pub use hashes::Hash;
+pub use errors::Error;
 
 // Helper macro for encoding input into output using sha1, sha2 or tiny_keccak
 macro_rules! encode {
