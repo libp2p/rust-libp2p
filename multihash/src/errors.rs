@@ -44,3 +44,26 @@ impl error::Error for DecodeError {
         }
     }
 }
+
+/// Error that can happen when decoding some bytes.
+///
+/// Same as `DecodeError`, but allows retreiving the data whose decoding was attempted.
+#[derive(Debug)]
+pub struct DecodeOwnedError {
+    /// The error.
+    pub error: DecodeError,
+    /// The data whose decoding was attempted.
+    pub data: Vec<u8>,
+}
+
+impl fmt::Display for DecodeOwnedError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(error::Error::description(self))
+    }
+}
+
+impl error::Error for DecodeOwnedError {
+    fn description(&self) -> &str {
+        self.error.description()
+    }
+}

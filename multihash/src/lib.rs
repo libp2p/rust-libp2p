@@ -16,7 +16,7 @@ use sha2::Digest;
 use tiny_keccak::Keccak;
 
 pub use hashes::Hash;
-pub use errors::{EncodeError, DecodeError};
+pub use errors::{EncodeError, DecodeError, DecodeOwnedError};
 
 // Helper macro for encoding input into output using sha1, sha2 or tiny_keccak
 macro_rules! encode {
@@ -104,9 +104,12 @@ pub struct Multihash {
 impl Multihash {
     /// Verifies whether `bytes` contains a valid multihash, and if so returns a `Multihash`.
     #[inline]
-    pub fn from_bytes(bytes: Vec<u8>) -> Result<Multihash, DecodeError> {
+    pub fn from_bytes(bytes: Vec<u8>) -> Result<Multihash, DecodeOwnedError> {
         if let Err(err) = MultihashRef::from_slice(&bytes) {
-            return Err(err);
+            return Err(DecodeOwnedError {
+                error: err,
+                data: bytes,
+            });
         }
 
         Ok(Multihash { bytes })
