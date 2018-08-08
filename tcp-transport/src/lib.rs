@@ -46,6 +46,7 @@ extern crate libp2p_core as swarm;
 #[macro_use]
 extern crate log;
 extern crate multiaddr;
+extern crate tk_listen;
 extern crate tokio_io;
 extern crate tokio_tcp;
 
@@ -57,7 +58,9 @@ use multiaddr::{AddrComponent, Multiaddr, ToMultiaddr};
 use std::io::{Error as IoError, Read, Write};
 use std::iter;
 use std::net::SocketAddr;
+use std::time::Duration;
 use swarm::Transport;
+use tk_listen::{ListenExt, SleepOnError};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_tcp::{ConnectFuture, Incoming, TcpListener, TcpStream};
 
@@ -101,7 +104,9 @@ impl Transport for TcpConfig {
             };
 
             debug!("Now listening on {}", new_addr);
-            let inner = listener.map(TcpListener::incoming).map_err(Some);
+            let inner = listener
+                .map_err(Some)
+                .map(|l| l.incoming().sleep_on_error(Duration::from_secs(1)));
             Ok((TcpListenStream { inner }, new_addr))
         } else {
             Err((self, addr))
@@ -225,9 +230,9 @@ impl Future for TcpDialFut {
 }
 
 /// Stream that listens on an TCP/IP address.
-#[derive(Debug)]
+// TODO: implement Debug
 pub struct TcpListenStream {
-    inner: Result<Incoming, Option<IoError>>,
+    inner: Result<SleepOnError<Incoming>, Option<IoError>>,
 }
 
 impl Stream for TcpListenStream {
@@ -262,10 +267,7 @@ impl Stream for TcpListenStream {
             }
             Ok(Async::Ready(None)) => Ok(Async::Ready(None)),
             Ok(Async::NotReady) => Ok(Async::NotReady),
-            Err(err) => {
-                debug!("Error in TCP listener: {:?}", err);
-                Err(err)
-            }
+            Err(()) => unreachable!("sleep_on_error never produces an error"),
         }
     }
 }
