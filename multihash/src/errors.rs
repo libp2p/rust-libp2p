@@ -10,17 +10,13 @@ pub enum EncodeError {
 impl fmt::Display for EncodeError {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(error::Error::description(self))
+        match *self {
+            EncodeError::UnsupportedType => write!(f, "This type is not supported yet"),
+        }
     }
 }
 
 impl error::Error for EncodeError {
-    #[inline]
-    fn description(&self) -> &str {
-        match *self {
-            EncodeError::UnsupportedType => "This type is not supported yet",
-        }
-    }
 }
 
 /// Error that can happen when decoding some bytes.
@@ -35,18 +31,14 @@ pub enum DecodeError {
 impl fmt::Display for DecodeError {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(error::Error::description(self))
+        match *self {
+            DecodeError::BadInputLength =>  write!(f, "Not matching input length"),
+            DecodeError::UnknownCode => write!(f, "Found unknown code"),
+        }
     }
 }
 
 impl error::Error for DecodeError {
-    #[inline]
-    fn description(&self) -> &str {
-        match *self {
-            DecodeError::BadInputLength => "Not matching input length",
-            DecodeError::UnknownCode => "Found unknown code",
-        }
-    }
 }
 
 /// Error that can happen when decoding some bytes.
@@ -63,13 +55,9 @@ pub struct DecodeOwnedError {
 impl fmt::Display for DecodeOwnedError {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(error::Error::description(self))
+        write!(f, "{}", self.error)
     }
 }
 
 impl error::Error for DecodeOwnedError {
-    #[inline]
-    fn description(&self) -> &str {
-        self.error.description()
-    }
 }
