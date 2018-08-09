@@ -186,7 +186,7 @@ where
     /// substreams
     fn reset_conn(&self, state: Option<PeerState<C::Output>>) {
         if let Some(PeerState::Active { closed, .. }) = state {
-            closed.store(false, Ordering::Relaxed);
+            closed.store(false, Ordering::Release);
         }
     }
 
@@ -331,7 +331,7 @@ where
                 closed,
                 ..
             } => {
-                if closed.load(Ordering::Relaxed) {
+                if closed.load(Ordering::Acquire) {
                     (PeerState::Errored(IoError::new(IoErrorKind::BrokenPipe, "Connection closed")),
                      Err(IoError::new(IoErrorKind::BrokenPipe, "Connection closed")))
                 } else {
@@ -418,7 +418,7 @@ where
 
         for (addr, state) in conn.iter_mut() {
             let res = match state {
-                PeerState::Active { closed, .. } if closed.load(Ordering::Relaxed) => {
+                PeerState::Active { closed, .. } if closed.load(Ordering::Acquire) => {
                     to_remove.push(addr.clone());
                     continue
                 }
@@ -818,7 +818,7 @@ where
     /// will result in it being removed from the cache on the
     /// next poll
     pub fn reset_connection(self) {
-        self.closed.store(true, Ordering::Relaxed);
+        self.closed.store(true, Ordering::Release);
     }
 
 }
@@ -857,7 +857,7 @@ where
 {
     #[inline]
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
-        if self.closed.load(Ordering::Relaxed) {
+        if self.closed.load(Ordering::Acquire) {
             return Err(IoError::new(IoErrorKind::BrokenPipe, "Connection has been closed"));
         }
 
@@ -881,7 +881,7 @@ where
 {
     #[inline]
     fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
-        if self.closed.load(Ordering::Relaxed) {
+        if self.closed.load(Ordering::Acquire) {
             return Err(IoError::new(IoErrorKind::BrokenPipe, "Connection has been closed"));
         }
         self.inner.write(buf)
@@ -889,7 +889,7 @@ where
 
     #[inline]
     fn flush(&mut self) -> Result<(), IoError> {
-        if self.closed.load(Ordering::Relaxed) {
+        if self.closed.load(Ordering::Acquire) {
             return Err(IoError::new(IoErrorKind::BrokenPipe, "Connection has been closed"));
         }
         self.inner.flush()
@@ -904,7 +904,7 @@ where
 {
     #[inline]
     fn shutdown(&mut self) -> Poll<(), IoError> {
-        if self.closed.load(Ordering::Relaxed) {
+        if self.closed.load(Ordering::Acquire) {
             return Err(IoError::new(IoErrorKind::BrokenPipe, "Connection has been closed"));
         }
         self.inner.shutdown()
