@@ -163,12 +163,6 @@ where
         }
     }
 
-    /// Removes the current entry, clears and resets substreams if open.
-    fn reset(&self, addr: &Multiaddr) {
-        let mut conns = self.connections.lock();
-        self.reset_conn(conns.remove(&addr));
-    }
-
     /// resets the connections if the given PeerState is active and has
     /// substreams
     fn reset_conn(&self, state: Option<PeerState<C::Output>>) {
