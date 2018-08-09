@@ -109,9 +109,10 @@ impl Transport for TcpConfig {
             };
 
             debug!("Now listening on {}", new_addr);
+            let sleep_on_error = self.sleep_on_error;
             let inner = listener
                 .map_err(Some)
-                .map(|l| l.incoming().sleep_on_error(Duration::from_secs(1)));
+                .map(move |l| l.incoming().sleep_on_error(sleep_on_error));
             Ok((TcpListenStream { inner }, new_addr))
         } else {
             Err((self, addr))
@@ -178,16 +179,8 @@ impl Transport for TcpConfig {
 // This type of logic should probably be moved into the multiaddr package
 fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
     let mut iter = addr.iter();
-
-    let proto1 = match iter.next() {
-        Some(v) => v,
-        None => return Err(()),
-    };
-
-    let proto2 = match iter.next() {
-        Some(v) => v,
-        None => return Err(()),
-    };
+    let proto1 = iter.next().ok_or(())?;
+    let proto2 = iter.next().ok_or(())?;
 
     if iter.next().is_some() {
         return Err(());
