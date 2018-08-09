@@ -618,15 +618,8 @@ where
     type Error = IoError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match self.manager.poll_outbound(&self.addr) {
-            Ok(Async::Ready((inner, closed))) => {
-                Ok(Async::Ready(
-                    (ConnectionReuseSubstream { inner, closed},
-                     future::ok(self.addr.clone()))))
-            }
-            Err(err) => Err(err),
-            Ok(Async::NotReady) => Ok(Async::NotReady)
-        }
+        let (inner, closed) = try_ready!(self.manager.poll_outbound(&self.addr));
+        Ok(Async::Ready((ConnectionReuseSubstream { inner, closed}, future::ok(self.addr.clone()))))
     }
 }
 
