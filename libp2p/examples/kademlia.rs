@@ -25,11 +25,12 @@ extern crate futures;
 extern crate libp2p;
 extern crate tokio_current_thread;
 extern crate tokio_io;
+extern crate multiaddr;
 
 use bigint::U512;
 use futures::{Future, Stream};
 use libp2p::peerstore::{PeerAccess, PeerId, Peerstore};
-use libp2p::Multiaddr;
+use multiaddr::{Multiaddr, ToCid};
 use std::collections::HashMap;
 use std::env;
 use std::sync::{Arc, Mutex};
@@ -175,7 +176,7 @@ fn main() {
                     active_kad_connections
                         .entry(node_id)
                         .or_insert_with(Default::default)
-                        .set_until(kad_ctrl, fut)
+                        .tie_or_passthrough(kad_ctrl, fut)
                 })
             }
         }
@@ -190,10 +191,11 @@ fn main() {
 
     let finish_enum = kad_system
         .find_node(my_peer_id.clone(), |peer| {
-            let addr = Multiaddr::from(libp2p::multiaddr::AddrComponent::P2P(peer.clone().into_bytes()));
+            let cid = peer.clone().into_bytes().to_cid().unwrap();
+            let addr = Multiaddr::from(libp2p::multiaddr::AddrComponent::P2P(cid));
             active_kad_connections.lock().unwrap().entry(peer.clone())
                 .or_insert_with(Default::default)
-                .get_or_dial(&swarm_controller, &addr, transport.clone().with_upgrade(KadConnecConfig::new()))
+                .dial(&swarm_controller, &addr, transport.clone().with_upgrade(KadConnecConfig::new()))
         })
         .filter_map(move |event| {
             match event {
@@ -243,7 +245,7 @@ fn p2p_multiaddr_to_node_id(client_addr: Multiaddr) -> PeerId {
 	}
 	match (first, second) {
 		(Some(libp2p::multiaddr::AddrComponent::P2P(node_id)), None) =>
-			PeerId::from_bytes(node_id).expect("libp2p always reports a valid node id"),
+			PeerId::from_bytes(node_id.to_bytes()).expect("libp2p always reports a valid node id"),
 		_ => panic!("Reported multiaddress is in the wrong format ; programmer error")
 	}
 }
@@ -254,7 +256,7 @@ where
     P: Peerstore + Clone,
 {
     const ADDRESSES: &[&str] = &[
-        "/ip4/127.0.0.1/tcp/4001/ipfs/QmQRx32wQkw3hB45j4UDw8V9Ju4mGbxMyhs2m8mpFrFkur",
+        "/ip4/127.0.0.1/tcp/4001/p2p/QmQRx32wQkw3hB45j4UDw8V9Ju4mGbxMyhs2m8mpFrFkur",
         // TODO: add some bootstrap nodes here
     ];
 
@@ -265,12 +267,12 @@ where
             .parse::<Multiaddr>()
             .expect("failed to parse hard-coded multiaddr");
 
-        let ipfs_component = multiaddr.pop().expect("hard-coded multiaddr is empty");
-        let peer = match ipfs_component {
-            libp2p::multiaddr::AddrComponent::IPFS(key) => {
-                PeerId::from_bytes(key).expect("invalid peer id")
+        let p2p_component = multiaddr.pop().expect("hard-coded multiaddr is empty");
+        let peer = match p2p_component {
+            libp2p::multiaddr::AddrComponent::P2P(key) => {
+                PeerId::from_bytes(key.to_bytes()).expect("invalid peer id")
             }
-            _ => panic!("hard-coded multiaddr didn't end with /ipfs/"),
+            _ => panic!("hard-coded multiaddr didn't end with /p2p/"),
         };
 
         peer_store

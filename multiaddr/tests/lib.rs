@@ -54,17 +54,17 @@ fn construct_success() {
     ma_valid("/sctp/1234", "840104D2", vec![SCTP]);
     ma_valid("/udp/65535", "11FFFF", vec![UDP]);
     ma_valid("/tcp/65535", "06FFFF", vec![TCP]);
-    ma_valid("/ipfs/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
+    ma_valid("/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
              "A503221220D52EBB89D85B02A284948203A62FF28389C57C9F42BEEC4EC20DB76A68911C0B",
-             vec![IPFS]);
+             vec![P2P]);
     ma_valid("/udp/1234/sctp/1234", "1104D2840104D2", vec![UDP, SCTP]);
     ma_valid("/udp/1234/udt", "1104D2AD02", vec![UDP, UDT]);
     ma_valid("/udp/1234/utp", "1104D2AE02", vec![UDP, UTP]);
     ma_valid("/tcp/1234/http", "0604D2E003", vec![TCP, HTTP]);
     ma_valid("/tcp/1234/https", "0604D2BB03", vec![TCP, HTTPS]);
-    ma_valid("/ipfs/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC/tcp/1234",
+    ma_valid("/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC/tcp/1234",
              "A503221220D52EBB89D85B02A284948203A62FF28389C57C9F42BEEC4EC20DB76A68911C0B0604D2",
-             vec![IPFS, TCP]);
+             vec![P2P, TCP]);
     ma_valid("/ip4/127.0.0.1/udp/1234",
              "047F0000011104D2",
              vec![IP4, UDP]);
@@ -72,36 +72,36 @@ fn construct_success() {
     ma_valid("/ip4/127.0.0.1/tcp/1234",
              "047F0000010604D2",
              vec![IP4, TCP]);
-    ma_valid("/ip4/127.0.0.1/ipfs/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
+    ma_valid("/ip4/127.0.0.1/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
              "047F000001A503221220D52EBB89D85B02A284948203A62FF28389C57C9F42BEEC4EC20DB76A68911C0B",
-             vec![IP4, IPFS]);
-    ma_valid("/ip4/127.0.0.1/ipfs/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC/tcp/1234",
+             vec![IP4, P2P]);
+    ma_valid("/ip4/127.0.0.1/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC/tcp/1234",
              "047F000001A503221220D52EBB89D85B02A284948203A\
 62FF28389C57C9F42BEEC4EC20DB76A68911C0B0604D2",
-             vec![IP4, IPFS, TCP]);
+             vec![IP4, P2P, TCP]);
     // /unix/a/b/c/d/e,
     // /unix/stdio,
     // /ip4/1.2.3.4/tcp/80/unix/a/b/c/d/e/f,
-    // /ip4/127.0.0.1/ipfs/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC/tcp/1234/unix/stdio
+    // /ip4/127.0.0.1/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC/tcp/1234/unix/stdio
     ma_valid("/ip6/2001:8a0:7ac5:4201:3ac9:86ff:fe31:\
-              7095/tcp/8000/ws/ipfs/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
+              7095/tcp/8000/ws/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
              "29200108A07AC542013AC986FFFE317095061F40DD03A5\
 03221220D52EBB89D85B02A284948203A62FF28389C57C9F42BEEC4EC20DB76A68911C0B",
-             vec![IP6, TCP, WS, IPFS]);
+             vec![IP6, TCP, WS, P2P]);
     ma_valid("/p2p-webrtc-star/ip4/127.0.0.\
-              1/tcp/9090/ws/ipfs/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
+              1/tcp/9090/ws/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
              "9302047F000001062382DD03A503221220D52EBB89D85B\
 02A284948203A62FF28389C57C9F42BEEC4EC20DB76A68911C0B",
-             vec![Libp2pWebrtcStar, IP4, TCP, WS, IPFS]);
+             vec![Libp2pWebrtcStar, IP4, TCP, WS, P2P]);
     ma_valid("/ip6/2001:8a0:7ac5:4201:3ac9:86ff:fe31:\
-              7095/tcp/8000/wss/ipfs/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
+              7095/tcp/8000/wss/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
              "29200108A07AC542013AC986FFFE317095061F40DE03A503221220D52EBB8\
 9D85B02A284948203A62FF28389C57C9F42BEEC4EC20DB76A68911C0B",
-             vec![IP6, TCP, WSS, IPFS]);
-    ma_valid("/ip4/127.0.0.1/tcp/9090/p2p-circuit/ipfs/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
+             vec![IP6, TCP, WSS, P2P]);
+    ma_valid("/ip4/127.0.0.1/tcp/9090/p2p-circuit/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
              "047F000001062382A202A503221220D52EBB89D85B\
 02A284948203A62FF28389C57C9F42BEEC4EC20DB76A68911C0B",
-             vec![IP4, TCP, P2pCircuit, IPFS]);
+             vec![IP4, TCP, P2pCircuit, P2P]);
 }
 
 #[test]
@@ -128,8 +128,8 @@ fn construct_fail() {
                      "/ip4/127.0.0.1/udp",
                      "/ip4/127.0.0.1/tcp/jfodsajfidosajfoidsa",
                      "/ip4/127.0.0.1/tcp",
-                     "/ip4/127.0.0.1/ipfs",
-                     "/ip4/127.0.0.1/ipfs/tcp",
+                     "/ip4/127.0.0.1/p2p",
+                     "/ip4/127.0.0.1/p2p/tcp",
                      "/p2p-circuit/50"];
 
     for address in &addresses {
