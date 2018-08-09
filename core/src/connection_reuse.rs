@@ -46,13 +46,36 @@ use futures::{stream, task, Async, Future, Poll, Stream};
 use multiaddr::Multiaddr;
 use muxing::StreamMuxer;
 use parking_lot::Mutex;
-use std::collections::hash_map::Entry;
+use std::collections::{HashMap, hash_map::Entry};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind, Read, Write};
 use std::ops::{Deref, DerefMut};
 use std::sync::{atomic::AtomicUsize, atomic::AtomicBool, atomic::Ordering, Arc};
 use tokio_io::{AsyncRead, AsyncWrite};
 use transport::{MuxedTransport, Transport, UpgradedNode};
 use upgrade::ConnectionUpgrade;
+
+use std::hash::{BuildHasherDefault, Hasher};
+
+#[derive(Default)]
+struct UsizeHasher {
+    state: usize
+}
+
+impl Hasher for UsizeHasher {
+    fn finish(&self) -> u64 {
+        self.state as u64
+    }
+    fn write(&mut self, _i: &[u8]) {
+        unreachable!()
+    }
+    fn write_usize(&mut self, i: usize) {
+        self.state = i;
+    }
+}
+
+type UsizeHasherBuilder = BuildHasherDefault<UsizeHasher>;
+
+
 
 /// Allows reusing the same muxed connection multiple times.
 ///
@@ -105,7 +128,7 @@ where
         /// Future that produces the muxer.
         future: Box<Future<Item = (M, Multiaddr), Error = IoError>>,
         /// All the tasks to notify when `future` resolves.
-        notify: Vec<(usize, task::Task)>,
+        notify: HashMap<usize, task::Task, UsizeHasherBuilder>,
     },
 
     /// An earlier connection attempt errored.
@@ -131,7 +154,7 @@ where
     connections: Mutex<FnvHashMap<Multiaddr, PeerState<C::Output>>>,
 
     /// Tasks to notify when one or more new elements were added to `connections`.
-    notify_on_new_connec: Mutex<Vec<(usize, task::Task)>>,
+    notify_on_new_connec: Mutex<HashMap<usize, task::Task, UsizeHasherBuilder>>,
 
     /// Counter giving us the next listener_id
     listener_counter: Counter,
@@ -148,7 +171,7 @@ where
     fn new_con_notify(&self) {
         let mut notifiers = self.notify_on_new_connec.lock();
         trace!("Notify {} listeners about a new connection", notifiers.len());
-        for (_, task) in notifiers.drain(..) {
+        for (_, task) in notifiers.drain() {
             task.notify();
         }
     }
@@ -156,10 +179,7 @@ where
     /// Register `task` under id if not yet registered
     fn register_notifier(&self, id: usize, task: task::Task) {
         let mut notifiers = self.notify_on_new_connec.lock();
-        if !notifiers.iter().any(|(t, _)| *t == id) {
-            trace!("Notify registered for task: {}", id);
-            notifiers.push((id, task))
-        }
+        notifiers.insert(id, task);
     }
 
     /// resets the connections if the given PeerState is active and has
@@ -253,7 +273,7 @@ where
         if let Some(PeerState::Pending { ref mut notify, .. }) = old_state {
             // we need to wake some up, that we have a connection now
             trace!("Found incoming for pending connection to {}", addr);
-            for (_, task) in notify.drain(..) {
+            for (_, task) in notify.drain() {
                 task.notify()
             }
         } else {
@@ -277,11 +297,11 @@ where
                     let future = future.and_then(|(out, addr)| addr.map(move |a| (out, a)));
                     let future = Box::new(future);
 
-                    PeerState::Pending {
-                        future,
-                        // make sure we are woken up once this connects
-                        notify: vec![(TASK_ID.with(|&t| t), task::current())],
-                    }
+                    let mut notify = HashMap::<usize, task::Task, UsizeHasherBuilder>::default();
+                    // make sure we are woken up once this connects
+                    notify.insert(TASK_ID.with(|&t| t), task::current());
+
+                    PeerState::Pending { future, notify }
                 }
                 Err(_) => {
                     trace!(
@@ -340,10 +360,7 @@ where
                     Ok(Async::NotReady) => {
                         // no it still isn't ready, keep the current task
                         // informed but return with NotReady
-                        let t_id = TASK_ID.with(|&t| t);
-                        if !notify.iter().any(|(id, _)| *id == t_id) {
-                            notify.push((t_id, task::current()));
-                        }
+                        notify.insert(TASK_ID.with(|&t| t), task::current());
                         return Ok(Async::NotReady);
                     }
                     Err(err) => {
@@ -355,7 +372,7 @@ where
                     }
                     Ok(Async::Ready((muxer, client_addr))) => {
                         trace!("Successful new connection to {} ({})", addr, client_addr);
-                        for (_, task) in notify.drain(..) {
+                        for (_, task) in notify.drain() {
                             task.notify();
                         }
                         match poll_for_substream(muxer.clone().outbound(), &addr) {
@@ -436,10 +453,7 @@ where
                     }
                 }
                 PeerState::Pending { ref mut notify, .. } if listener.is_none() => {
-                    let t_id = TASK_ID.with(|&t| t);
-                    if notify.iter().all(|(id, _)| *id != t_id) {
-                        notify.push((t_id, task::current()));
-                    }
+                    notify.insert(TASK_ID.with(|&t| t), task::current());
                     continue
                 }
                 _ => continue
@@ -480,7 +494,8 @@ where
             manager: Arc::new(ConnectionsManager {
                 transport: node,
                 connections: Default::default(),
-                notify_on_new_connec: Default::default(),
+                notify_on_new_connec: Mutex::new(
+                    HashMap::<usize, task::Task, UsizeHasherBuilder>::default()),
                 listener_counter: Default::default(),
             }),
         }
