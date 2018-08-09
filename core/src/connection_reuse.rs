@@ -242,7 +242,7 @@ where
 {
     /// Informs the Manager about a new inbound connection that has been
     /// established, so it
-    fn new_inbound(&self, addr: Multiaddr, listener_id: usize, muxer: C::Output) {
+    fn new_inbound(&self, addr: &Multiaddr, listener_id: usize, muxer: C::Output) {
         let mut conns = self.connections.lock();
         let new_state = PeerState::Active {
             muxer,
@@ -267,7 +267,7 @@ where
     /// the connection isn't establed and ready yet.
     fn poll_outbound(
         &self,
-        addr: Multiaddr,
+        addr: &Multiaddr,
     ) -> Poll<(<C::Output as StreamMuxer>::Substream, Arc<AtomicBool>), IoError> {
         let mut conns = self.connections.lock();
 
@@ -630,7 +630,7 @@ where
     type Error = IoError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match self.manager.poll_outbound(self.addr.clone()) {
+        match self.manager.poll_outbound(&self.addr) {
             Ok(Async::Ready((inner, closed))) => {
                 Ok(Async::Ready(
                     (ConnectionReuseSubstream { inner, closed},
@@ -718,8 +718,7 @@ where
             // Successfully upgraded a new incoming connection.
             trace!("New multiplexed connection from {}", client_addr);
 
-            self.manager
-                .new_inbound(client_addr.clone(), self.listener_id, muxer);
+            self.manager.new_inbound(&client_addr, self.listener_id, muxer);
         }
 
         // Poll all the incoming connections on all the connections we opened.
