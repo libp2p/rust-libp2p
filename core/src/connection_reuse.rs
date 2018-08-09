@@ -135,6 +135,19 @@ where
     Errored(IoError),
 }
 
+impl<M> PeerState<M>
+where
+    M: StreamMuxer + Clone
+{
+    /// resets the connections if the given PeerState is active and has
+    /// substreams. Consume the PeerState while doing so.
+    fn reset_conn(self) {
+        if let PeerState::Active { closed, .. } = self {
+            closed.store(false, Ordering::Release);
+        }
+    }
+}
+
 /// Struct shared between most of the `ConnectionReuse` infrastructure.
 /// Knows about all connections and their current state, allows one to poll for
 /// incoming and outbound connections, while managing all state-transitions that
@@ -180,14 +193,6 @@ where
     fn register_notifier(&self, id: usize, task: task::Task) {
         let mut notifiers = self.notify_on_new_connec.lock();
         notifiers.insert(id, task);
-    }
-
-    /// resets the connections if the given PeerState is active and has
-    /// substreams
-    fn reset_conn(&self, state: Option<PeerState<C::Output>>) {
-        if let Some(PeerState::Active { closed, .. }) = state {
-            closed.store(false, Ordering::Release);
-        }
     }
 
     /// Clear the cached connection if the entry contains an error. Returns whether an error was
@@ -277,7 +282,7 @@ where
                 task.notify()
             }
         } else {
-            self.reset_conn(old_state);
+            old_state.map(|s| s.reset_conn());
         }
     }
 
@@ -464,7 +469,7 @@ where
         }
 
         for to_remove in to_remove {
-            self.reset_conn(conn.remove(&to_remove));
+            conn.remove(&to_remove).map(|s| s.reset_conn());
         }
 
         match ret_value {
