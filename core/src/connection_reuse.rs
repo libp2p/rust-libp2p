@@ -53,7 +53,6 @@ use std::sync::{atomic::AtomicUsize, atomic::AtomicBool, atomic::Ordering, Arc};
 use tokio_io::{AsyncRead, AsyncWrite};
 use transport::{MuxedTransport, Transport, UpgradedNode};
 use upgrade::ConnectionUpgrade;
-use std::clone::Clone;
 
 /// Allows reusing the same muxed connection multiple times.
 ///
@@ -198,7 +197,7 @@ where
 
 fn poll_for_substream<M>(mut outbound: M::OutboundSubstream, addr: &Multiaddr)
     -> (Result<Option<M::Substream>, IoError>, Option<PeerState<M>>)
-where 
+where
     M: StreamMuxer + Clone
 {
     match outbound.poll() {
@@ -401,22 +400,13 @@ where
         let mut conn = self.connections.lock();
 
         for (addr, state) in conn.iter_mut() {
-            let res = {
-                if let PeerState::Active {
-                    ref mut muxer,
-                    listener_id,
-                    closed,
-                } = state
-                {
-                    if closed.load(Ordering::Relaxed) {
-                        to_remove.push(addr.clone());
-                        continue
-                    }
-
-                    if *listener_id != listener {
-                        continue;
-                    }
-
+            let res = match state {
+                PeerState::Active { closed, .. } if closed.load(Ordering::Relaxed) => {
+                    to_remove.push(addr.clone());
+                    continue
+                }
+                PeerState::Active { listener_id, .. } if *listener_id != listener => continue,
+                PeerState::Active { ref mut muxer, closed, .. } => {
                     found_one = true;
 
                     match muxer.clone().inbound().poll() {
@@ -444,17 +434,15 @@ where
                             Err(err)
                         }
                     }
-                } else {
-                    if listener.is_none() {
-                        if let PeerState::Pending { ref mut notify, .. } = state {
-                            let t_id = TASK_ID.with(|&t| t);
-                            if notify.iter().all(|(id, _)| *id != t_id) {
-                                notify.push((t_id, task::current()));
-                            }
-                        }
-                    }
-                    continue;
                 }
+                PeerState::Pending { ref mut notify, .. } if listener.is_none() => {
+                    let t_id = TASK_ID.with(|&t| t);
+                    if notify.iter().all(|(id, _)| *id != t_id) {
+                        notify.push((t_id, task::current()));
+                    }
+                    continue
+                }
+                _ => continue
             };
 
             ret_value = Some(res);
@@ -865,7 +853,7 @@ where
             return Err(IoError::new(IoErrorKind::BrokenPipe, "Connection has been closed"));
         }
 
-        self.inner.read(buf)  
+        self.inner.read(buf)
     }
 }
 
