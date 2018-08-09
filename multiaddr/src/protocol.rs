@@ -1,10 +1,10 @@
+use bs58;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
 use std::convert::From;
 use std::io::{Cursor, Write, Result as IoResult};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use cid::Cid;
-use cid::ToCid;
+use multihash::Multihash;
 use integer_encoding::{VarInt, VarIntWriter};
 
 use {Result, Error};
@@ -256,7 +256,8 @@ impl Protocol {
                 Ok(AddrComponent::SCTP(parsed))
             }
             Protocol::P2P => {
-                Ok(AddrComponent::P2P(a.to_cid()?))
+                let decoded = bs58::decode(a).into_vec()?;
+                Ok(AddrComponent::P2P(Multihash::from_bytes(decoded)?))
             }
             Protocol::ONION => unimplemented!(),              // TODO:
             Protocol::QUIC => Ok(AddrComponent::QUIC),
@@ -291,7 +292,7 @@ pub enum AddrComponent {
     UDT,
     UTP,
     UNIX(String),
-    P2P(Cid),
+    P2P(Multihash),
     HTTP,
     HTTPS,
     ONION(Vec<u8>),
@@ -406,7 +407,7 @@ impl AddrComponent {
                 AddrComponent::UNIX(String::from_utf8(data.to_owned())?)
             }
             Protocol::P2P => {
-                AddrComponent::P2P(data.to_cid()?)
+                AddrComponent::P2P(Multihash::from_bytes(data.to_owned())?)
             }
             Protocol::ONION => unimplemented!(),      // TODO:
             Protocol::QUIC => AddrComponent::QUIC,
@@ -448,8 +449,8 @@ impl AddrComponent {
                 out.write_varint(bytes.len())?;
                 out.write_all(&bytes)?;
             }
-            AddrComponent::P2P(cid) => {
-                let bytes = cid.to_bytes();
+            AddrComponent::P2P(multihash) => {
+                let bytes = multihash.into_bytes();
                 out.write_varint(bytes.len())?;
                 out.write_all(&bytes)?;
             }
@@ -488,7 +489,7 @@ impl ToString for AddrComponent {
             AddrComponent::UDT => format!("/udt"),
             AddrComponent::UTP => format!("/utp"),
             AddrComponent::UNIX(ref s) => format!("/unix/{}", s.clone()),
-            AddrComponent::P2P(ref c) => format!("/p2p/{}", c),
+            AddrComponent::P2P(ref c) => format!("/p2p/{}", bs58::encode(c.as_bytes()).into_string()),
             AddrComponent::HTTP => format!("/http"),
             AddrComponent::HTTPS => format!("/https"),
             AddrComponent::ONION(_) => unimplemented!(),//format!("/onion"),        // TODO:

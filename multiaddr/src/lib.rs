@@ -2,16 +2,17 @@
 ///!
 ///! Implementation of [multiaddr](https://github.com/jbenet/multiaddr)
 ///! in Rust.
+
+extern crate bs58;
 extern crate byteorder;
-extern crate cid;
 extern crate integer_encoding;
+pub extern crate multihash;
 
 mod protocol;
 mod errors;
 
 pub use errors::{Result, Error};
 pub use protocol::{Protocol, ProtocolArgSize, AddrComponent};
-pub use self::cid::{Cid, ToCid};
 
 use std::fmt;
 use std::iter::FromIterator;
