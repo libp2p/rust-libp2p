@@ -21,7 +21,7 @@
 //! Individual messages decoding.
 
 use bytes::BytesMut;
-use crypto::symmetriccipher::SynchronousStreamCipher;
+use super::StreamCipher;
 
 use error::SecioError;
 use futures::sink::Sink;
@@ -40,7 +40,7 @@ use ring::hmac;
 ///
 /// Also implements `Sink` for convenience.
 pub struct DecoderMiddleware<S> {
-    cipher_state: Box<SynchronousStreamCipher>,
+    cipher_state: Box<StreamCipher>,
     hmac_key: hmac::VerificationKey,
     // TODO: when a new version of ring is released, we can use `hmac_key.digest_algorithm().output_len` instead
     hmac_num_bytes: usize,
@@ -51,7 +51,7 @@ impl<S> DecoderMiddleware<S> {
     #[inline]
     pub fn new(
         raw_stream: S,
-        cipher: Box<SynchronousStreamCipher>,
+        cipher: Box<StreamCipher>,
         hmac_key: hmac::VerificationKey,
         hmac_num_bytes: usize, // TODO: remove this parameter
     ) -> DecoderMiddleware<S> {
@@ -88,21 +88,24 @@ where
             debug!("frame too short when decoding secio frame");
             return Err(SecioError::FrameTooShort);
         }
+        let content_length = frame.len() - hmac_num_bytes;
+        {
+            let (crypted_data, expected_hash) = frame.split_at(content_length);
+            debug_assert_eq!(expected_hash.len(), hmac_num_bytes);
 
-        let (crypted_data, expected_hash) = frame.split_at(frame.len() - hmac_num_bytes);
-        debug_assert_eq!(expected_hash.len(), hmac_num_bytes);
-
-        if hmac::verify(&self.hmac_key, crypted_data, expected_hash).is_err() {
-            debug!("hmac mismatch when decoding secio frame");
-            return Err(SecioError::HmacNotMatching);
+            if hmac::verify(&self.hmac_key, crypted_data, expected_hash).is_err() {
+                debug!("hmac mismatch when decoding secio frame");
+                return Err(SecioError::HmacNotMatching);
+            }
         }
 
-        // Note that there is no way to decipher in place with rust-crypto right now.
-        let mut decrypted_data = crypted_data.to_vec();
+        let mut data_buf = frame.to_vec();
+        data_buf.truncate(content_length);
         self.cipher_state
-            .process(&crypted_data, &mut decrypted_data);
+            .try_apply_keystream(&mut data_buf)
+            .map_err::<SecioError,_>(|e|e.into())?;
 
-        Ok(Async::Ready(Some(decrypted_data)))
+        Ok(Async::Ready(Some(data_buf)))
     }
 }
 

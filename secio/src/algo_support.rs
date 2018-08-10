@@ -28,7 +28,7 @@ macro_rules! supported_impl {
         pub mod $mod_name {
             use std::cmp::Ordering;
             #[allow(unused_imports)]
-            use crypto::aes::KeySize;
+            use stream_cipher::KeySize;
             #[allow(unused_imports)]
             use ring::{agreement, digest};
             use error::SecioError;
