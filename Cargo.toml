@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "cid",
     "circular-buffer",
     "datastore",
     "dns",
