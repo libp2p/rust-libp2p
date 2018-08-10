@@ -11,6 +11,7 @@ mod errors;
 
 pub use errors::{Result, Error};
 pub use protocol::{Protocol, ProtocolArgSize, AddrComponent};
+pub use self::cid::{Cid, ToCid};
 
 use std::fmt;
 use std::iter::FromIterator;

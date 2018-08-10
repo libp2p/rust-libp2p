@@ -32,7 +32,7 @@ extern crate protobuf;
 extern crate smallvec;
 extern crate tokio_codec;
 extern crate tokio_io;
-extern crate varint;
+extern crate unsigned_varint;
 
 mod rpc_proto;
 mod topic;
@@ -46,8 +46,8 @@ use futures::sync::mpsc;
 use futures::{future, Future, Poll, Sink, Stream};
 use libp2p_core::{ConnectionUpgrade, Endpoint, PeerId};
 use log::Level;
-use multiaddr::{AddrComponent, Multiaddr};
-use parking_lot::{Mutex, RwLock};
+use multiaddr::{AddrComponent, Multiaddr, ToCid};
+use parking_lot::{Mutex, RwLock, RwLockUpgradableReadGuard};
 use protobuf::Message as ProtobufMessage;
 use smallvec::SmallVec;
 use std::fmt;
@@ -58,7 +58,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
-use varint::VarintCodec;
+use unsigned_varint::codec;
 
 /// Implementation of the `ConnectionUpgrade` for the floodsub protocol.
 #[derive(Debug, Clone)]
@@ -136,7 +136,7 @@ where
             };
 
             // Split the socket into writing and reading parts.
-            let (floodsub_sink, floodsub_stream) = Framed::new(socket, VarintCodec::default())
+            let (floodsub_sink, floodsub_stream) = Framed::new(socket, codec::UviBytes::default())
                 .sink_map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
                 .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
                 .split();
@@ -469,7 +469,7 @@ impl FloodSubController {
         // Remove the remotes which we failed to send a message to.
         if !failed_to_send.is_empty() {
             // If we fail to upgrade the read lock to a write lock, just ignore `failed_to_send`.
-            if let Ok(mut remote_connections) = remote_connections.try_upgrade() {
+            if let Ok(mut remote_connections) = RwLockUpgradableReadGuard::try_upgrade(remote_connections) {
                 for failed_to_send in failed_to_send {
                     remote_connections.remove(&failed_to_send);
                 }
@@ -592,7 +592,16 @@ fn handle_packet_received(
                    publish.get_data().len());
             continue;
         }
-        let from: Multiaddr = AddrComponent::IPFS(from).into();
+
+        let cid = match from.to_cid() {
+            Ok(cid) => cid,
+            Err(err) => {
+                trace!("Parsing Cid failed: {}. Skipping.", err);
+                continue
+            }
+        };
+
+        let from: Multiaddr = AddrComponent::P2P(cid).into();
 
         let topics = publish
             .take_topicIDs()

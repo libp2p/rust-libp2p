@@ -27,11 +27,11 @@ use protocol::DialerToListenerMessage;
 use protocol::ListenerToDialerMessage;
 use protocol::MultistreamSelectError;
 use protocol::MULTISTREAM_PROTOCOL_WITH_LF;
-use std::io::{BufRead, Cursor, Read};
+use std::io::{BufRead, Cursor};
 use tokio_io::codec::length_delimited::Builder as LengthDelimitedBuilder;
 use tokio_io::codec::length_delimited::FramedWrite as LengthDelimitedFramedWrite;
 use tokio_io::{AsyncRead, AsyncWrite};
-use varint;
+use unsigned_varint::decode;
 
 /// Wraps around a `AsyncRead+AsyncWrite`. Assumes that we're on the dialer's side. Produces and
 /// accepts messages.
@@ -154,9 +154,8 @@ where
                 return Ok(Async::Ready(Some(ListenerToDialerMessage::NotAvailable)));
             } else {
                 // A varint number of protocols
-                let mut reader = Cursor::new(frame);
-                let num_protocols: usize = varint::decode(reader.by_ref())?;
-
+                let (num_protocols, remaining) = decode::usize(&frame)?;
+                let reader = Cursor::new(remaining);
                 let mut iter = BufRead::split(reader, b'\r');
                 if !iter.next()
                     .ok_or(MultistreamSelectError::UnknownMessage)??

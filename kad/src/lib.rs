@@ -76,7 +76,7 @@ extern crate smallvec;
 extern crate tokio_codec;
 extern crate tokio_io;
 extern crate tokio_timer;
-extern crate varint;
+extern crate unsigned_varint;
 
 pub use self::high_level::{KadSystemConfig, KadSystem, KadQueryEvent};
 pub use self::kad_server::{KadConnecController, KadConnecConfig, KadIncomingRequest, KadFindNodeRespond};

@@ -24,7 +24,7 @@ use std::mem;
 use bytes::{BufMut, BytesMut};
 use core::Endpoint;
 use tokio_io::codec::{Decoder, Encoder};
-use varint;
+use unsigned_varint::{codec, encode};
 
 // Arbitrary maximum size for a packet.
 // Since data is entirely buffered before being dispatched, we need a limit or remotes could just
@@ -60,7 +60,7 @@ impl Elem {
 }
 
 pub struct Codec {
-    varint_decoder: varint::VarintDecoder<u32>,
+    varint_decoder: codec::Uvi<u32>,
     decoder_state: CodecDecodeState,
 }
 
@@ -75,7 +75,7 @@ enum CodecDecodeState {
 impl Codec {
     pub fn new() -> Codec {
         Codec {
-            varint_decoder: varint::VarintDecoder::new(),
+            varint_decoder: codec::Uvi::default(),
             decoder_state: CodecDecodeState::Begin,
         }
     }
@@ -178,9 +178,12 @@ impl Encoder for Codec {
             },
         };
 
-        let header_bytes = varint::encode(header);
+        let mut header_buf = encode::u64_buffer();
+        let header_bytes = encode::u64(header, &mut header_buf);
+
         let data_len = data.as_ref().len();
-        let data_len_bytes = varint::encode(data_len);
+        let mut data_buf = encode::usize_buffer();
+        let data_len_bytes = encode::usize(data_len, &mut data_buf);
 
         if data_len > MAX_FRAME_SIZE {
             return Err(IoError::new(IoErrorKind::InvalidData, "data size exceed maximum"));
