@@ -7,6 +7,7 @@ workflows:
       - test
       - test-emscripten
       - test-wasm
+      - test-win32
       - integration-test
 
 jobs:
@@ -72,6 +73,25 @@ jobs:
           command: cargo build --target wasm32-unknown-unknown --package libp2p-core --release
       - save_cache:
           key: test-wasm-cache
+          paths:
+            - "~/.cargo"
+            - "./target"
+
+  test-win32:
+    docker:
+      - image: tomaka/rust-mingw-docker
+    steps:
+      - checkout
+      - restore_cache:
+          key: test-win32-cache
+      - run:
+          name: Build for Windows 64 bits
+          command: cargo check --target x86_64-pc-windows-gnu
+      - run:
+          name: Build for Windows 32 bits
+          command: cargo check --target i686-pc-windows-gnu
+      - save_cache:
+          key: test-win32-cache
           paths:
             - "~/.cargo"
             - "./target"
