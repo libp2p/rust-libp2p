@@ -53,8 +53,25 @@ impl PeerId {
     #[inline]
     pub fn from_bytes(data: Vec<u8>) -> Result<PeerId, Vec<u8>> {
         match multihash::Multihash::from_bytes(data) {
-            Ok(multihash) => Ok(PeerId { multihash }),
+            Ok(multihash) => {
+                if multihash.algorithm() == multihash::Hash::SHA2256 {
+                    Ok(PeerId { multihash })
+                } else {
+                    Err(multihash.into_bytes())
+                }
+            },
             Err(err) => Err(err.data),
+        }
+    }
+
+    /// Turns a `Multihash` into a `PeerId`. If the multihash doesn't use the correct algorithm,
+    /// returns back the data as an error.
+    #[inline]
+    pub fn from_multihash(data: multihash::Multihash) -> Result<PeerId, multihash::Multihash> {
+        if data.algorithm() == multihash::Hash::SHA2256 {
+            Ok(PeerId { multihash: data })
+        } else {
+            Err(data)
         }
     }
 
@@ -103,6 +120,13 @@ impl From<PublicKey> for PeerId {
     #[inline]
     fn from(key: PublicKey) -> PeerId {
         PeerId::from_public_key(key)
+    }
+}
+
+impl Into<multihash::Multihash> for PeerId {
+    #[inline]
+    fn into(self) -> multihash::Multihash {
+        self.multihash
     }
 }
 

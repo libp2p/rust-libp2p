@@ -21,7 +21,7 @@
 use futures::{future, stream, Future, Stream};
 use identify_transport::{IdentifyTransport, IdentifyTransportOutcome};
 use libp2p_core::{PeerId, MuxedTransport, Transport};
-use multiaddr::{AddrComponent, Multiaddr, ToCid};
+use multiaddr::{AddrComponent, Multiaddr};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -93,14 +93,8 @@ where
                         .map(move |info| {
                             let peer_id = info.info.public_key.clone().into_peer_id();
                             debug!("Identified {} as {:?}", original_addr, peer_id);
-                            match peer_id.as_bytes().to_cid() {
-                                Ok(cid) => {
-                                    let addr: Multiaddr = AddrComponent::P2P(cid).into();
-                                    Ok(addr)
-                                },
-                                Err(e) => Err(IoError::new(IoErrorKind::InvalidData, e))
-                            }
-                        }).flatten()) as Box<Future<Item = _, Error = _>>;
+                            AddrComponent::P2P(peer_id.into()).into()
+                        })) as Box<Future<Item = _, Error = _>>;
                     (out, real_addr)
                 });
 
@@ -200,14 +194,8 @@ where
                             .map(move |info| {
                                 let peer_id = info.info.public_key.clone().into_peer_id();
                                 debug!("Identified {} as {:?}", original_addr, peer_id);
-                                match peer_id.as_bytes().to_cid() {
-                                    Ok(cid) => {
-                                        let addr: Multiaddr = AddrComponent::P2P(cid).into();
-                                        Ok(addr)
-                                    },
-                                    Err(e) => Err(IoError::new(IoErrorKind::InvalidData, e))
-                                }
-                            }).flatten()) as Box<Future<Item = _, Error = _>>;
+                                AddrComponent::P2P(peer_id.into()).into()
+                            })) as Box<Future<Item = _, Error = _>>;
                         (out, real_addr)
                     });
 
@@ -254,14 +242,8 @@ where
                         .map(move |info| {
                             let peer_id = info.info.public_key.clone().into_peer_id();
                             debug!("Identified {} as {:?}", original_addr, peer_id);
-                            match peer_id.as_bytes().to_cid() {
-                                Ok(cid) => {
-                                    let addr: Multiaddr = AddrComponent::P2P(cid).into();
-                                    Ok(addr)
-                                },
-                                Err(e) => Err(IoError::new(IoErrorKind::InvalidData, e))
-                            }
-                        }).flatten()) as Box<Future<Item = _, Error = _>>;
+                            AddrComponent::P2P(peer_id.into()).into()
+                        })) as Box<Future<Item = _, Error = _>>;
                     (out, real_addr)
                 });
 
@@ -297,7 +279,7 @@ fn multiaddr_to_peerid(addr: Multiaddr) -> Result<PeerId, Multiaddr> {
 
     match components.last() {
         Some(&AddrComponent::P2P(ref peer_id)) => {
-            match PeerId::from_bytes(peer_id.to_bytes()) {
+            match PeerId::from_multihash(peer_id.clone()) {
                 Ok(peer_id) => Ok(peer_id),
                 Err(_) => Err(addr),
             }
@@ -315,7 +297,7 @@ mod tests {
     use PeerIdTransport;
     use futures::{Future, Stream};
     use libp2p_core::{Transport, PeerId, PublicKey};
-    use multiaddr::{AddrComponent, Multiaddr, ToCid};
+    use multiaddr::{AddrComponent, Multiaddr};
     use std::io::Error as IoError;
     use std::iter;
 
@@ -369,7 +351,7 @@ mod tests {
         });
 
         let future = transport
-            .dial(iter::once(AddrComponent::P2P(peer_id.into_bytes().to_cid().unwrap())).collect())
+            .dial(iter::once(AddrComponent::P2P(peer_id.into())).collect())
             .unwrap_or_else(|_| panic!())
             .then::<_, Result<(), ()>>(|_| Ok(()));
 
