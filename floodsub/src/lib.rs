@@ -32,7 +32,7 @@ extern crate protobuf;
 extern crate smallvec;
 extern crate tokio_codec;
 extern crate tokio_io;
-extern crate varint;
+extern crate unsigned_varint;
 
 mod rpc_proto;
 mod topic;
@@ -58,7 +58,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
-use varint::VarintCodec;
+use unsigned_varint::codec;
 
 /// Implementation of the `ConnectionUpgrade` for the floodsub protocol.
 #[derive(Debug, Clone)]
@@ -136,7 +136,7 @@ where
             };
 
             // Split the socket into writing and reading parts.
-            let (floodsub_sink, floodsub_stream) = Framed::new(socket, VarintCodec::default())
+            let (floodsub_sink, floodsub_stream) = Framed::new(socket, codec::UviBytes::default())
                 .sink_map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
                 .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
                 .split();
