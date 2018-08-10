@@ -30,7 +30,7 @@ use protocol::MULTISTREAM_PROTOCOL_WITH_LF;
 use tokio_io::codec::length_delimited::Builder as LengthDelimitedBuilder;
 use tokio_io::codec::length_delimited::FramedWrite as LengthDelimitedFramedWrite;
 use tokio_io::{AsyncRead, AsyncWrite};
-use varint;
+use unsigned_varint::encode;
 
 /// Wraps around a `AsyncRead+AsyncWrite`. Assumes that we're on the listener's side. Produces and
 /// accepts messages.
@@ -126,7 +126,8 @@ where
             ListenerToDialerMessage::ProtocolsListResponse { list } => {
                 use std::iter;
 
-                let mut out_msg = varint::encode(list.len());
+                let mut buf = encode::usize_buffer();
+                let mut out_msg = Vec::from(encode::usize(list.len(), &mut buf));
                 for elem in &list {
                     out_msg.extend(iter::once(b'\r'));
                     out_msg.extend_from_slice(elem);
