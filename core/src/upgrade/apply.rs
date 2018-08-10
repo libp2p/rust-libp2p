@@ -41,6 +41,38 @@ where
     C: AsyncRead + AsyncWrite + 'a,
     Maf: 'a,
 {
+    let future = negotiate(connection, &upgrade, endpoint)
+        .and_then(move |(upgrade_id, connection)| {
+            upgrade.upgrade(connection, upgrade_id, endpoint, remote_addr)
+        })
+        .into_future()
+        .then(|val| {
+            match val {
+                Ok(_) => debug!("Successfully applied negotiated protocol"),
+                Err(_) => debug!("Failed to apply negotiated protocol"),
+            }
+            val
+        });
+
+    Box::new(future)
+}
+
+/// Negotiates a protocol on a stream.
+///
+/// Returns a `Future` that returns the negotiated protocol and the stream.
+#[inline]
+pub fn negotiate<'a, C, I, U, Maf>(
+    connection: C,
+    upgrade: &U,
+    endpoint: Endpoint,
+) -> Box<Future<Item = (U::UpgradeIdentifier, C), Error = IoError> + 'a>
+where
+    U: ConnectionUpgrade<I, Maf> + 'a,
+    U::NamesIter: Clone, // TODO: not elegant
+    C: AsyncRead + AsyncWrite + 'a,
+    Maf: 'a,
+    I: 'a,
+{
     let iter = upgrade
         .protocol_names()
         .map::<_, fn(_) -> _>(|(n, t)| (n, <Bytes as PartialEq>::eq, t));
@@ -59,17 +91,6 @@ where
                 Err(ref err) => debug!("Error while negotiated protocol upgrade: {:?}", err),
             };
             negotiated
-        })
-        .and_then(move |(upgrade_id, connection)| {
-            upgrade.upgrade(connection, upgrade_id, endpoint, remote_addr)
-        })
-        .into_future()
-        .then(|val| {
-            match val {
-                Ok(_) => debug!("Successfully applied negotiated protocol"),
-                Err(_) => debug!("Failed to apply negotiated protocol"),
-            }
-            val
         });
 
     Box::new(future)
