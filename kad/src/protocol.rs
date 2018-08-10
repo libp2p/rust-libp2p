@@ -34,7 +34,7 @@ use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
-use varint::VarintCodec;
+use unsigned_varint::codec;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum KadConnectionType {
@@ -148,7 +148,7 @@ where
     }
 }
 
-type KadStreamSink<S> = stream::AndThen<sink::With<stream::FromErr<Framed<S, VarintCodec<Vec<u8>>>, IoError>, KadMsg, fn(KadMsg) -> Result<Vec<u8>, IoError>, Result<Vec<u8>, IoError>>, fn(BytesMut) -> Result<KadMsg, IoError>, Result<KadMsg, IoError>>;
+type KadStreamSink<S> = stream::AndThen<sink::With<stream::FromErr<Framed<S, codec::UviBytes<Vec<u8>>>, IoError>, KadMsg, fn(KadMsg) -> Result<Vec<u8>, IoError>, Result<Vec<u8>, IoError>>, fn(BytesMut) -> Result<KadMsg, IoError>, Result<KadMsg, IoError>>;
 
 // Upgrades a socket to use the Kademlia protocol.
 fn kademlia_protocol<S>(
@@ -157,7 +157,7 @@ fn kademlia_protocol<S>(
 where
     S: AsyncRead + AsyncWrite,
 {
-    Framed::new(socket, VarintCodec::default())
+    Framed::new(socket, codec::UviBytes::default())
         .from_err::<IoError>()
         .with::<_, fn(_) -> _, _>(|request| -> Result<_, IoError> {
             let proto_struct = msg_to_proto(request);
