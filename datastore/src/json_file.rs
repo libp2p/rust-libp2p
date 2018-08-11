@@ -272,34 +272,42 @@ mod tests {
     use futures::{Future, Stream};
     use tempfile::NamedTempFile;
     use {Filter, FilterOp, FilterTy, Order, Query};
+    use std::path::PathBuf;
+
+    fn gen_random_path() -> PathBuf {
+        let temp_file = NamedTempFile::new().unwrap();
+        temp_file.path().to_path_buf()
+    }
 
     #[test]
     fn open_and_flush() {
-        let temp_file = NamedTempFile::new().unwrap();
-        let datastore = JsonFileDatastore::<Vec<u8>>::new(temp_file.path()).unwrap();
+        let path = gen_random_path();
+
+        let datastore = JsonFileDatastore::<Vec<u8>>::new(&path).unwrap();
         datastore.flush().unwrap();
     }
 
     #[test]
     fn values_store_and_reload() {
-        let temp_file = NamedTempFile::new().unwrap();
+        let path = gen_random_path();
 
-        let datastore = JsonFileDatastore::<Vec<u8>>::new(temp_file.path()).unwrap();
+        let datastore = JsonFileDatastore::<Vec<u8>>::new(&path).unwrap();
         datastore.put("foo".into(), vec![1, 2, 3]);
         datastore.put("bar".into(), vec![0, 255, 127]);
         datastore.flush().unwrap();
         drop(datastore);
 
-        let reload = JsonFileDatastore::<Vec<u8>>::new(temp_file.path()).unwrap();
+
+        let reload = JsonFileDatastore::<Vec<u8>>::new(&path).unwrap();
         assert_eq!(reload.get("bar").unwrap(), &[0, 255, 127]);
         assert_eq!(reload.get("foo").unwrap(), &[1, 2, 3]);
     }
 
     #[test]
     fn query_basic() {
-        let temp_file = NamedTempFile::new().unwrap();
+        let path = gen_random_path();
 
-        let datastore = JsonFileDatastore::<Vec<u8>>::new(temp_file.path()).unwrap();
+        let datastore = JsonFileDatastore::<Vec<u8>>::new(&path).unwrap();
         datastore.put("foo1".into(), vec![6, 7, 8]);
         datastore.put("foo2".into(), vec![6, 7, 8]);
         datastore.put("foo3".into(), vec![7, 8, 9]);
