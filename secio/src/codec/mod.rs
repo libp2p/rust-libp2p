@@ -24,7 +24,7 @@
 use self::decode::DecoderMiddleware;
 use self::encode::EncoderMiddleware;
 
-use crypto::symmetriccipher::SynchronousStreamCipher;
+use aes_ctr::stream_cipher::StreamCipherCore;
 use ring::hmac;
 use tokio_io::codec::length_delimited;
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -35,6 +35,9 @@ mod encode;
 /// Type returned by `full_codec`.
 pub type FullCodec<S> = DecoderMiddleware<EncoderMiddleware<length_delimited::Framed<S>>>;
 
+pub type StreamCipher = StreamCipherCore;
+
+
 /// Takes control of `socket`. Returns an object that implements `future::Sink` and
 /// `future::Stream`. The `Stream` and `Sink` produce and accept `BytesMut` objects.
 ///
@@ -42,9 +45,9 @@ pub type FullCodec<S> = DecoderMiddleware<EncoderMiddleware<length_delimited::Fr
 /// hash algorithm (which are generally decided during the handshake).
 pub fn full_codec<S>(
     socket: length_delimited::Framed<S>,
-    cipher_encoding: Box<SynchronousStreamCipher>,
+    cipher_encoding: Box<StreamCipher>,
     encoding_hmac: hmac::SigningKey,
-    cipher_decoder: Box<SynchronousStreamCipher>,
+    cipher_decoder: Box<StreamCipher>,
     decoding_hmac: hmac::VerificationKey,
 ) -> FullCodec<S>
 where
@@ -61,12 +64,11 @@ mod tests {
     extern crate tokio_tcp;
     use self::tokio_tcp::TcpListener;
     use self::tokio_tcp::TcpStream;
+    use stream_cipher::{ctr, KeySize};
     use super::full_codec;
     use super::DecoderMiddleware;
     use super::EncoderMiddleware;
     use bytes::BytesMut;
-    use crypto::aessafe::AesSafe256Encryptor;
-    use crypto::blockmodes::CtrMode;
     use error::SecioError;
     use futures::sync::mpsc::channel;
     use futures::{Future, Sink, Stream};
@@ -77,6 +79,8 @@ mod tests {
     use std::io::Error as IoError;
     use tokio_io::codec::length_delimited::Framed;
 
+    const NULL_IV : [u8; 16] = [0;16];
+
     #[test]
     fn raw_encode_then_decode() {
         let (data_tx, data_rx) = channel::<BytesMut>(256);
@@ -86,20 +90,15 @@ mod tests {
         let cipher_key: [u8; 32] = rand::random();
         let hmac_key: [u8; 32] = rand::random();
 
+
         let encoder = EncoderMiddleware::new(
             data_tx,
-            Box::new(CtrMode::new(
-                AesSafe256Encryptor::new(&cipher_key),
-                vec![0; 16],
-            )),
+            ctr(KeySize::KeySize256, &cipher_key, &NULL_IV[..]),
             SigningKey::new(&SHA256, &hmac_key),
         );
         let decoder = DecoderMiddleware::new(
             data_rx,
-            Box::new(CtrMode::new(
-                AesSafe256Encryptor::new(&cipher_key),
-                vec![0; 16],
-            )),
+            ctr(KeySize::KeySize256, &cipher_key, &NULL_IV[..]),
             VerificationKey::new(&SHA256, &hmac_key),
             32,
         );
@@ -112,7 +111,7 @@ mod tests {
         let (_, decoded) = tokio_current_thread::block_on_all(data_sent.join(data_received))
             .map_err(|_| ())
             .unwrap();
-        assert_eq!(decoded.unwrap(), data);
+        assert_eq!(&decoded.unwrap()[..], &data[..]);
     }
 
     #[test]
@@ -133,15 +132,9 @@ mod tests {
 
                 full_codec(
                     connec,
-                    Box::new(CtrMode::new(
-                        AesSafe256Encryptor::new(&cipher_key),
-                        vec![0; 16],
-                    )),
+                    ctr(KeySize::KeySize256, &cipher_key, &NULL_IV[..]),
                     SigningKey::new(&SHA256, &hmac_key),
-                    Box::new(CtrMode::new(
-                        AesSafe256Encryptor::new(&cipher_key),
-                        vec![0; 16],
-                    )),
+                    ctr(KeySize::KeySize256, &cipher_key, &NULL_IV[..]),
                     VerificationKey::new(&SHA256, &hmac_key),
                 )
             },
@@ -154,15 +147,9 @@ mod tests {
 
                 full_codec(
                     stream,
-                    Box::new(CtrMode::new(
-                        AesSafe256Encryptor::new(&cipher_key_clone),
-                        vec![0; 16],
-                    )),
+                    ctr(KeySize::KeySize256, &cipher_key_clone, &NULL_IV[..]),
                     SigningKey::new(&SHA256, &hmac_key_clone),
-                    Box::new(CtrMode::new(
-                        AesSafe256Encryptor::new(&cipher_key_clone),
-                        vec![0; 16],
-                    )),
+                    ctr(KeySize::KeySize256, &cipher_key_clone, &NULL_IV[..]),
                     VerificationKey::new(&SHA256, &hmac_key_clone),
                 )
             });

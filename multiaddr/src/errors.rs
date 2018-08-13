@@ -1,5 +1,6 @@
 use std::{net, fmt, error, io, num, string};
-use cid;
+use bs58;
+use multihash;
 use byteorder;
 
 pub type Result<T> = ::std::result::Result<T, Error>;
@@ -46,11 +47,18 @@ impl From<io::Error> for Error {
     }
 }
 
-impl From<cid::Error> for Error {
-    fn from(err: cid::Error) -> Error {
+impl From<multihash::DecodeOwnedError> for Error {
+    fn from(err: multihash::DecodeOwnedError) -> Error {
         Error::ParsingError(err.into())
     }
 }
+
+impl From<bs58::decode::DecodeError> for Error {
+    fn from(err: bs58::decode::DecodeError) -> Error {
+        Error::ParsingError(err.into())
+    }
+}
+
 
 impl From<net::AddrParseError> for Error {
     fn from(err: net::AddrParseError) -> Error {

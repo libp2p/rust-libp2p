@@ -24,7 +24,7 @@ smallvec = "0.5"
 tokio-codec = "0.1"
 tokio-io = "0.1"
 tokio-timer = "0.2"
-varint = { path = "../varint-rs" }
+unsigned-varint = { version = "0.1", features = ["codec"] }
 
 [dev-dependencies]
 libp2p-tcp-transport = { path = "../tcp-transport" }

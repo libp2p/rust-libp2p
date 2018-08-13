@@ -28,7 +28,7 @@ extern crate log;
 extern crate parking_lot;
 extern crate tokio_codec;
 extern crate tokio_io;
-extern crate varint;
+extern crate unsigned_varint;
 
 mod codec;
 
