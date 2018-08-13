@@ -272,16 +272,12 @@ mod tests {
     use futures::{Future, Stream};
     use tempfile::NamedTempFile;
     use {Filter, FilterOp, FilterTy, Order, Query};
-    use std::path::PathBuf;
-
-    fn gen_random_path() -> PathBuf {
-        let temp_file = NamedTempFile::new().unwrap();
-        temp_file.path().to_path_buf()
-    }
 
     #[test]
     fn open_and_flush() {
-        let path = gen_random_path();
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_path_buf();
+        temp_file.close().unwrap();
 
         let datastore = JsonFileDatastore::<Vec<u8>>::new(&path).unwrap();
         datastore.flush().unwrap();
@@ -289,7 +285,9 @@ mod tests {
 
     #[test]
     fn values_store_and_reload() {
-        let path = gen_random_path();
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_path_buf();
+        temp_file.close().unwrap();
 
         let datastore = JsonFileDatastore::<Vec<u8>>::new(&path).unwrap();
         datastore.put("foo".into(), vec![1, 2, 3]);
@@ -305,7 +303,9 @@ mod tests {
 
     #[test]
     fn query_basic() {
-        let path = gen_random_path();
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_path_buf();
+        temp_file.close().unwrap();
 
         let datastore = JsonFileDatastore::<Vec<u8>>::new(&path).unwrap();
         datastore.put("foo1".into(), vec![6, 7, 8]);
