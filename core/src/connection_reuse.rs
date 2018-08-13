@@ -46,7 +46,7 @@ use futures::{stream, task, Async, Future, Poll, Stream};
 use multiaddr::Multiaddr;
 use muxing::StreamMuxer;
 use parking_lot::Mutex;
-use std::collections::{HashMap, hash_map::Entry};
+use std::collections::HashMap;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind, Read, Write};
 use std::ops::{Deref, DerefMut};
 use std::sync::{atomic::AtomicUsize, atomic::AtomicBool, atomic::Ordering, Arc};
@@ -152,7 +152,6 @@ where
 /// Knows about all connections and their current state, allows one to poll for
 /// incoming and outbound connections, while managing all state-transitions that
 /// might occur automatically.
-// #[derive(Clone)]
 struct ConnectionsManager<T, C>
 where
     T: Transport,
@@ -197,26 +196,22 @@ where
 
     /// Clear the cached connection if the entry contains an error. Returns whether an error was
     /// found and has been removed.
-    fn clear_error(&self, addr: Multiaddr) -> bool {
+    fn clear_error(&self, addr: &Multiaddr) -> bool {
         let mut conns = self.connections.lock();
 
-        if let Entry::Occupied(e) = conns.entry(addr) {
-            if let PeerState::Errored(ref err) = e.get() {
-                trace!(
-                    "Clearing existing connection to {} which errored earlier: {:?}",
-                    e.key(),
-                    err
-                );
-            } else {
-                return false; // nothing to do, quit
-            }
-
-            // clear the error
-            e.remove();
-            true
+        if let Some(PeerState::Errored(ref err)) = conns.get(addr) {
+            trace!(
+                "Clearing existing connection to {} which errored earlier: {:?}",
+                addr,
+                err
+            );
         } else {
-            false
+            return false;
         }
+
+        // only reaching the point if the entry was an error
+        conns.remove(addr);
+        return true;
     }
 }
 
@@ -564,7 +559,7 @@ where
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
         // If an earlier attempt to dial this multiaddress failed, we clear the error. Otherwise
         // the returned `Future` will immediately produce the error.
-        self.manager.clear_error(addr.clone());
+        self.manager.clear_error(&addr);
         Ok(ConnectionReuseDial {
             manager: self.manager,
             addr,
