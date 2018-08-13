@@ -140,7 +140,7 @@ where
                 .map(|(k, v)| (k, to_value(v).unwrap()))
                 .collect::<Map<_, _>>(),
         )?;
-        temporary_file.sync_data()?;
+        temporary_file.as_file().sync_data()?;
 
         // Note that `persist` will fail if we try to persist across filesystems. However that
         // shouldn't happen since we created the temporary file in the same directory as the final
@@ -275,9 +275,7 @@ mod tests {
 
     #[test]
     fn open_and_flush() {
-        let temp_file = NamedTempFile::new().unwrap();
-        let path = temp_file.path().to_path_buf();
-        temp_file.close().unwrap();
+        let path = NamedTempFile::new().unwrap().into_temp_path();
 
         let datastore = JsonFileDatastore::<Vec<u8>>::new(&path).unwrap();
         datastore.flush().unwrap();
@@ -285,9 +283,7 @@ mod tests {
 
     #[test]
     fn values_store_and_reload() {
-        let temp_file = NamedTempFile::new().unwrap();
-        let path = temp_file.path().to_path_buf();
-        temp_file.close().unwrap();
+        let path = NamedTempFile::new().unwrap().into_temp_path();
 
         let datastore = JsonFileDatastore::<Vec<u8>>::new(&path).unwrap();
         datastore.put("foo".into(), vec![1, 2, 3]);
@@ -303,9 +299,7 @@ mod tests {
 
     #[test]
     fn query_basic() {
-        let temp_file = NamedTempFile::new().unwrap();
-        let path = temp_file.path().to_path_buf();
-        temp_file.close().unwrap();
+        let path = NamedTempFile::new().unwrap().into_temp_path();
 
         let datastore = JsonFileDatastore::<Vec<u8>>::new(&path).unwrap();
         datastore.put("foo1".into(), vec![6, 7, 8]);
