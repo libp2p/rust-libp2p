@@ -9,6 +9,7 @@ bytes = "0.4.5"
 fnv = "1.0"
 futures = "0.1"
 libp2p-core = { path = "../core" }
+log = "0.4"
 parking_lot = "0.6"
 tokio-codec = "0.1"
 tokio-io = "0.1"
