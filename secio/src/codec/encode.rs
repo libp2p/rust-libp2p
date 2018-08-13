@@ -62,9 +62,8 @@ where
     type SinkItem = BytesMut;
     type SinkError = S::SinkError;
 
-    fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
+    fn start_send(&mut self, mut data_buf: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
 
-        let mut data_buf = item;
         // TODO if SinkError gets refactor to SecioError,
         // then use try_apply_keystream
         self.cipher_state.apply_keystream(&mut data_buf[..]);
