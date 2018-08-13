@@ -36,7 +36,7 @@ use ring::hmac;
 ///
 /// Also implements `Stream` for convenience.
 pub struct EncoderMiddleware<S> {
-    cipher_state: Box<StreamCipher>,
+    cipher_state: StreamCipher,
     hmac_key: hmac::SigningKey,
     raw_sink: S,
 }
@@ -44,7 +44,7 @@ pub struct EncoderMiddleware<S> {
 impl<S> EncoderMiddleware<S> {
     pub fn new(
         raw_sink: S,
-        cipher: Box<StreamCipher>,
+        cipher: StreamCipher,
         hmac_key: hmac::SigningKey,
     ) -> EncoderMiddleware<S> {
         EncoderMiddleware {

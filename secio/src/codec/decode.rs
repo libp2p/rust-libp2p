@@ -40,7 +40,7 @@ use ring::hmac;
 ///
 /// Also implements `Sink` for convenience.
 pub struct DecoderMiddleware<S> {
-    cipher_state: Box<StreamCipher>,
+    cipher_state: StreamCipher,
     hmac_key: hmac::VerificationKey,
     // TODO: when a new version of ring is released, we can use `hmac_key.digest_algorithm().output_len` instead
     hmac_num_bytes: usize,
@@ -51,7 +51,7 @@ impl<S> DecoderMiddleware<S> {
     #[inline]
     pub fn new(
         raw_stream: S,
-        cipher: Box<StreamCipher>,
+        cipher: StreamCipher,
         hmac_key: hmac::VerificationKey,
         hmac_num_bytes: usize, // TODO: remove this parameter
     ) -> DecoderMiddleware<S> {

@@ -18,8 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use super::codec::StreamCipher;
 use aes_ctr::stream_cipher::generic_array::GenericArray;
-use aes_ctr::stream_cipher::{NewFixStreamCipher, StreamCipherCore};
+use aes_ctr::stream_cipher::NewFixStreamCipher;
 use aes_ctr::{Aes128Ctr, Aes256Ctr};
 
 #[derive(Clone, Copy)]
@@ -30,13 +31,13 @@ pub enum KeySize {
 
 /// Returns your stream cipher depending on `KeySize`.
 #[cfg(not(all(feature = "aes-all", any(target_arch = "x86_64", target_arch = "x86"))))]
-pub fn ctr(key_size: KeySize, key: &[u8], iv: &[u8]) -> Box<StreamCipherCore + 'static> {
+pub fn ctr(key_size: KeySize, key: &[u8], iv: &[u8]) -> StreamCipher {
     ctr_int(key_size, key, iv)
 }
  
 /// Returns your stream cipher depending on `KeySize`.
 #[cfg(all(feature = "aes-all", any(target_arch = "x86_64", target_arch = "x86")))]
-pub fn ctr(key_size: KeySize, key: &[u8], iv: &[u8]) -> Box<StreamCipherCore + 'static> {
+pub fn ctr(key_size: KeySize, key: &[u8], iv: &[u8]) -> StreamCipher {
     if *aes_alt::AES_NI {
         aes_alt::ctr_alt(key_size, key, iv)
     } else {
@@ -49,9 +50,10 @@ pub fn ctr(key_size: KeySize, key: &[u8], iv: &[u8]) -> Box<StreamCipherCore + '
 mod aes_alt {
     extern crate ctr;
     extern crate aesni;
+    use ::codec::StreamCipher;
     use self::ctr::Ctr128;
     use self::aesni::{Aes128, Aes256};
-    use self::ctr::stream_cipher::{NewFixStreamCipher, StreamCipherCore};
+    use self::ctr::stream_cipher::NewFixStreamCipher;
     use self::ctr::stream_cipher::generic_array::GenericArray;
     use super::KeySize;
 
@@ -68,7 +70,7 @@ mod aes_alt {
     pub type Aes256Ctr = Ctr128<Aes256>;
     /// Returns alternate stream cipher if target functionalities does not allow standard one.
     /// Eg : aes without sse
-    pub fn ctr_alt(key_size: KeySize, key: &[u8], iv: &[u8]) -> Box<StreamCipherCore + 'static> {
+    pub fn ctr_alt(key_size: KeySize, key: &[u8], iv: &[u8]) -> StreamCipher {
         match key_size {
             KeySize::KeySize128 => Box::new(Aes128Ctr::new(
                 GenericArray::from_slice(key),
@@ -84,7 +86,7 @@ mod aes_alt {
 }
 
 #[inline]
-fn ctr_int(key_size: KeySize, key: &[u8], iv: &[u8]) -> Box<StreamCipherCore + 'static> {
+fn ctr_int(key_size: KeySize, key: &[u8], iv: &[u8]) -> StreamCipher {
     match key_size {
         KeySize::KeySize128 => Box::new(Aes128Ctr::new(
             GenericArray::from_slice(key),
@@ -97,16 +99,14 @@ fn ctr_int(key_size: KeySize, key: &[u8], iv: &[u8]) -> Box<StreamCipherCore + '
     }
 }
 
-
-#[cfg(test)]
-mod tests {
-
-    use super::{KeySize, ctr};
-
-    #[cfg(all(
+#[cfg(all(
         feature = "aes-all", 
         any(target_arch = "x86_64", target_arch = "x86"),
-    ))]
+))]
+#[cfg(test)]
+mod tests {
+    use super::{KeySize, ctr};
+
     #[test]
     fn assert_non_native_run() {
         // this test is for asserting aes unsuported opcode does not break on old cpu
