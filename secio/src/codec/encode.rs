@@ -21,7 +21,7 @@
 //! Individual messages encoding.
 
 use bytes::BytesMut;
-use crypto::symmetriccipher::SynchronousStreamCipher;
+use super::StreamCipher;
 use futures::sink::Sink;
 use futures::stream::Stream;
 use futures::Poll;
@@ -36,7 +36,7 @@ use ring::hmac;
 ///
 /// Also implements `Stream` for convenience.
 pub struct EncoderMiddleware<S> {
-    cipher_state: Box<SynchronousStreamCipher>,
+    cipher_state: Box<StreamCipher>,
     hmac_key: hmac::SigningKey,
     raw_sink: S,
 }
@@ -44,7 +44,7 @@ pub struct EncoderMiddleware<S> {
 impl<S> EncoderMiddleware<S> {
     pub fn new(
         raw_sink: S,
-        cipher: Box<SynchronousStreamCipher>,
+        cipher: Box<StreamCipher>,
         hmac_key: hmac::SigningKey,
     ) -> EncoderMiddleware<S> {
         EncoderMiddleware {
@@ -63,21 +63,15 @@ where
     type SinkError = S::SinkError;
 
     fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
-        let capacity = item.len() + self.hmac_key.digest_algorithm().output_len;
 
-        // Apparently this is the fastest way of doing.
-        // See https://gist.github.com/kirushik/e0d93759b0cd102f814408595c20a9d0
-        let mut out_buffer = BytesMut::from(vec![0; capacity]);
+        let mut data_buf = item;
+        // TODO if SinkError gets refactor to SecioError,
+        // then use try_apply_keystream
+        self.cipher_state.apply_keystream(&mut data_buf[..]);
+        let signature = hmac::sign(&self.hmac_key, &data_buf[..]);
+        data_buf.extend_from_slice(signature.as_ref());
+        self.raw_sink.start_send(data_buf)
 
-        {
-            let (out_data, out_sign) = out_buffer.split_at_mut(item.len());
-            self.cipher_state.process(&item, out_data);
-
-            let signature = hmac::sign(&self.hmac_key, out_data);
-            out_sign.copy_from_slice(signature.as_ref());
-        }
-
-        self.raw_sink.start_send(out_buffer)
     }
 
     #[inline]

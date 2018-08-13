@@ -2,9 +2,11 @@
 ///!
 ///! Implementation of [multiaddr](https://github.com/jbenet/multiaddr)
 ///! in Rust.
+
+extern crate bs58;
 extern crate byteorder;
-extern crate cid;
 extern crate integer_encoding;
+pub extern crate multihash;
 
 mod protocol;
 mod errors;

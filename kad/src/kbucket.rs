@@ -136,8 +136,8 @@ impl KBucketsPeerId for PeerId {
     fn distance_with(&self, other: &Self) -> Self::Distance {
         // Note that we don't compare the hash functions because there's no chance of collision
         // of the same value hashed with two different hash functions.
-        let my_hash = U512::from(self.hash());
-        let other_hash = U512::from(other.hash());
+        let my_hash = U512::from(self.digest());
+        let other_hash = U512::from(other.digest());
         my_hash ^ other_hash
     }
 
@@ -200,6 +200,9 @@ where
         for table in self.tables.iter() {
             let mut table = table.lock();
             table.flush(self.ping_timeout);
+            if table.last_update.elapsed() > self.ping_timeout {
+                continue // ignore bucket with expired nodes
+            }
             for node in table.nodes.iter() {
                 out.push(node.id.clone());
             }

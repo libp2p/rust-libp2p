@@ -21,7 +21,7 @@
 use algo_support;
 use bytes::BytesMut;
 use codec::{full_codec, FullCodec};
-use crypto::aes::{ctr, KeySize};
+use stream_cipher::{KeySize, ctr};
 use error::SecioError;
 use futures::future;
 use futures::sink::Sink;
@@ -456,7 +456,6 @@ where
                 let (cipher_key_size, iv_size) = match chosen_cipher {
                     KeySize::KeySize128 => (16, 16),
                     KeySize::KeySize256 => (32, 16),
-                    _ => panic!()
                 };
 
                 let mut longer_key = vec![0u8; 2 * (iv_size + cipher_key_size + 20)];
@@ -487,8 +486,8 @@ where
                     (cipher, hmac)
                 };
 
-                Ok(full_codec(socket, Box::new(encoding_cipher), encoding_hmac,
-                              Box::new(decoding_cipher), decoding_hmac))
+                Ok(full_codec(socket, encoding_cipher, encoding_hmac,
+                              decoding_cipher, decoding_hmac))
             });
 
             match codec {

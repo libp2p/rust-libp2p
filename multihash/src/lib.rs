@@ -1,22 +1,24 @@
-/// ! # multihash
-/// !
-/// ! Implementation of [multihash](https://github.com/multiformats/multihash)
-/// ! in Rust.
-/// Representation of a Multiaddr.
+//! # Multihash
+//!
+//! Implementation of [multihash](https://github.com/multiformats/multihash) in Rust.
+//!
+//! A `Multihash` is a structure that contains a hashing algorithm, plus some hashed data.
+//! A `MultihashRef` is the same as a `Multihash`, except that it doesn't own its data.
+//!
 
 extern crate sha1;
 extern crate sha2;
 extern crate tiny_keccak;
 
+mod errors;
+mod hashes;
+
 use std::fmt::Write;
 use sha2::Digest;
 use tiny_keccak::Keccak;
 
-mod hashes;
-pub use hashes::*;
-
-mod errors;
-pub use errors::*;
+pub use hashes::Hash;
+pub use errors::{EncodeError, DecodeError, DecodeOwnedError};
 
 // Helper macro for encoding input into output using sha1, sha2 or tiny_keccak
 macro_rules! encode {
@@ -47,20 +49,16 @@ macro_rules! match_encoder {
                 Hash::$hashtype => encode!($lib, $method, $input, $output),
             )*
 
-            _ => return Err(Error::UnsupportedType)
+            _ => return Err(EncodeError::UnsupportedType)
         }
     })
 }
 
-
 /// Encodes data into a multihash.
-///
-/// The returned data is raw bytes.  To make is more human-friendly, you can encode it (hex,
-/// base58, base64, etc).
 ///
 /// # Errors
 ///
-/// Will return an error if the specified hash type is not supported.  See the docs for `Hash`
+/// Will return an error if the specified hash type is not supported. See the docs for `Hash`
 /// to see what is supported.
 ///
 /// # Examples
@@ -69,13 +67,13 @@ macro_rules! match_encoder {
 /// use multihash::{encode, Hash};
 ///
 /// assert_eq!(
-///     encode(Hash::SHA2256, b"hello world").unwrap(),
+///     encode(Hash::SHA2256, b"hello world").unwrap().into_bytes(),
 ///     vec![18, 32, 185, 77, 39, 185, 147, 77, 62, 8, 165, 46, 82, 215, 218, 125, 171, 250, 196,
 ///     132, 239, 227, 122, 83, 128, 238, 144, 136, 247, 172, 226, 239, 205, 233]
 /// );
 /// ```
 ///
-pub fn encode(hash: Hash, input: &[u8]) -> Result<Vec<u8>, Error> {
+pub fn encode(hash: Hash, input: &[u8]) -> Result<Multihash, EncodeError> {
     let size = hash.size();
     let mut output = Vec::new();
     output.resize(2 + size as usize, 0);
@@ -96,59 +94,137 @@ pub fn encode(hash: Hash, input: &[u8]) -> Result<Vec<u8>, Error> {
         Keccak512 => tiny::new_keccak512,
     });
 
-    Ok(output)
+    Ok(Multihash { bytes: output })
 }
 
-/// Decodes bytes into a multihash
-///
-/// # Errors
-///
-/// Returns an error if the bytes are not a valid multihash.
-///
-/// # Examples
-///
-/// ```
-/// use multihash::{decode, Hash, Multihash};
-///
-/// // use the data from the `encode` example
-/// let data = vec![18, 32, 185, 77, 39, 185, 147, 77, 62, 8, 165, 46, 82, 215, 218,
-/// 125, 171, 250, 196, 132, 239, 227, 122, 83, 128, 238, 144, 136, 247, 172, 226, 239, 205, 233];
-///
-/// assert_eq!(
-///     decode(&data).unwrap(),
-///     Multihash {
-///         alg: Hash::SHA2256,
-///         digest: &data[2..]
-///     }
-/// );
-/// ```
-///
-pub fn decode(input: &[u8]) -> Result<Multihash, Error> {
-    if input.is_empty() {
-        return Err(Error::BadInputLength);
-    }
-
-    let code = input[0];
-
-    let alg = Hash::from_code(code)?;
-    let hash_len = alg.size() as usize;
-
-    // length of input should be exactly hash_len + 2
-    if input.len() != hash_len + 2 {
-        return Err(Error::BadInputLength);
-    }
-
-    Ok(Multihash {
-        alg: alg,
-        digest: &input[2..],
-    })
+/// Represents a valid multihash.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Multihash {
+    bytes: Vec<u8>
 }
 
-/// Represents a valid multihash, by associating the hash algorithm with the data
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
-pub struct Multihash<'a> {
-    pub alg: Hash,
-    pub digest: &'a [u8],
+impl Multihash {
+    /// Verifies whether `bytes` contains a valid multihash, and if so returns a `Multihash`.
+    #[inline]
+    pub fn from_bytes(bytes: Vec<u8>) -> Result<Multihash, DecodeOwnedError> {
+        if let Err(err) = MultihashRef::from_slice(&bytes) {
+            return Err(DecodeOwnedError {
+                error: err,
+                data: bytes,
+            });
+        }
+
+        Ok(Multihash { bytes })
+    }
+
+    /// Returns the bytes representation of the multihash.
+    #[inline]
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.bytes
+    }
+
+    /// Returns the bytes representation of this multihash.
+    #[inline]
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    /// Builds a `MultihashRef` corresponding to this `Multihash`.
+    #[inline]
+    pub fn as_ref(&self) -> MultihashRef {
+        MultihashRef { bytes: &self.bytes }
+    }
+
+    /// Returns which hashing algorithm is used in this multihash.
+    #[inline]
+    pub fn algorithm(&self) -> Hash {
+        self.as_ref().algorithm()
+    }
+
+    /// Returns the hashed data.
+    #[inline]
+    pub fn digest(&self) -> &[u8] {
+        self.as_ref().digest()
+    }
+}
+
+impl<'a> PartialEq<MultihashRef<'a>> for Multihash {
+    #[inline]
+    fn eq(&self, other: &MultihashRef<'a>) -> bool {
+        &*self.bytes == other.bytes
+    }
+}
+
+/// Represents a valid multihash.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct MultihashRef<'a> {
+    bytes: &'a [u8]
+}
+
+impl<'a> MultihashRef<'a> {
+    /// Verifies whether `bytes` contains a valid multihash, and if so returns a `MultihashRef`.
+    pub fn from_slice(input: &'a [u8]) -> Result<MultihashRef<'a>, DecodeError> {
+        if input.is_empty() {
+            return Err(DecodeError::BadInputLength);
+        }
+
+        // TODO: note that `input[0]` and `input[1]` and technically variable-length integers,
+        // but there's no hashing algorithm implemented in this crate whose code or digest length
+        // is superior to 128
+        let code = input[0];
+
+        // TODO: see comment just above about varints
+        if input[0] >= 128 || input[1] >= 128 {
+            return Err(DecodeError::BadInputLength);
+        }
+
+        let alg = Hash::from_code(code).ok_or(DecodeError::UnknownCode)?;
+        let hash_len = alg.size() as usize;
+
+        // length of input should be exactly hash_len + 2
+        if input.len() != hash_len + 2 {
+            return Err(DecodeError::BadInputLength);
+        }
+
+        if input[1] as usize != hash_len {
+            return Err(DecodeError::BadInputLength);
+        }
+
+        Ok(MultihashRef { bytes: input })
+    }
+
+    /// Returns which hashing algorithm is used in this multihash.
+    #[inline]
+    pub fn algorithm(&self) -> Hash {
+        Hash::from_code(self.bytes[0]).expect("multihash is known to be valid")
+    }
+
+    /// Returns the hashed data.
+    #[inline]
+    pub fn digest(&self) -> &'a [u8] {
+        &self.bytes[2..]
+    }
+
+    /// Builds a `Multihash` that owns the data.
+    ///
+    /// This operation allocates.
+    #[inline]
+    pub fn into_owned(&self) -> Multihash {
+        Multihash { bytes: self.bytes.to_owned() }
+    }
+
+    /// Returns the bytes representation of this multihash.
+    #[inline]
+    pub fn as_bytes(&self) -> &'a [u8] {
+        &self.bytes
+    }
+}
+
+impl<'a> PartialEq<Multihash> for MultihashRef<'a> {
+    #[inline]
+    fn eq(&self, other: &Multihash) -> bool {
+        self.bytes == &*other.bytes
+    }
 }
 
 /// Convert bytes to a hex representation

@@ -2,6 +2,7 @@
 name = "libp2p-kad"
 version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
 
 [dependencies]
 arrayvec = "0.4.7"
@@ -16,14 +17,14 @@ libp2p-ping = { path = "../ping" }
 libp2p-core = { path = "../core" }
 log = "0.4"
 multiaddr = { path = "../multiaddr" }
-parking_lot = "0.5.1"
+parking_lot = "0.6"
 protobuf = "2.0.2"
 rand = "0.4.2"
 smallvec = "0.5"
 tokio-codec = "0.1"
 tokio-io = "0.1"
 tokio-timer = "0.2"
-varint = { path = "../varint-rs" }
+unsigned-varint = { version = "0.1", features = ["codec"] }
 
 [dev-dependencies]
 libp2p-tcp-transport = { path = "../tcp-transport" }

@@ -30,7 +30,7 @@ extern crate protobuf;
 extern crate rand;
 extern crate tokio_codec;
 extern crate tokio_io;
-extern crate varint;
+extern crate unsigned_varint;
 
 mod copy;
 mod message;
