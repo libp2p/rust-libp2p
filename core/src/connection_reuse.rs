@@ -215,26 +215,29 @@ where
     }
 }
 
-fn poll_for_substream<M>(mut outbound: M::OutboundSubstream, addr: &Multiaddr)
-    -> (Result<Option<M::Substream>, IoError>, Option<PeerState<M>>)
+/// Polls the given outbound of addr for a new substream. Returns `Ok(Some(stream))` if available,
+/// `Ok(None)` if the stream is not ready yet add an `Err` if the stream had failed.
+fn poll_for_substream<O, S>(mut outbound: O, addr: &Multiaddr)
+    -> Result<Option<S>, IoError>
 where
-    M: StreamMuxer + Clone
+
+    S: AsyncRead + AsyncWrite,
+    O: Future<Item = Option<S>, Error = IoError>
 {
     match outbound.poll() {
         Ok(Async::Ready(Some(inner))) => {
             trace!("Opened new outgoing substream to {}", addr);
             // all good, return the new stream
-            (Ok(Some(inner)), None)
+            Ok(Some(inner))
         }
-        Ok(Async::NotReady) => (Ok(None), None),
+        Ok(Async::NotReady) => Ok(None),
         Ok(Async::Ready(None)) => {
             // The muxer can no longer produce outgoing substreams.
             // Let's reopen a connection.
             trace!("Closing existing connection to {} ; can't produce outgoing substreams", addr);
 
             let err = IoError::new(IoErrorKind::ConnectionRefused, "No Streams left");
-            let io_err = IoError::new(IoErrorKind::ConnectionRefused, "No Streams left");
-            (Err(err), Some(PeerState::Errored(io_err)))
+            Err(err)
         }
         Err(err) => {
             // If we get an error while opening a substream, we decide to ignore it
@@ -244,8 +247,7 @@ where
                 "Error while opening outgoing substream to {}: {:?}",
                 addr, err
             );
-            let io_err = IoError::new(err.kind(), err.to_string());
-            (Err(io_err), Some(PeerState::Errored(err)))
+            Err(err)
         }
     }
 }
@@ -342,12 +344,14 @@ where
                         addr
                     );
                     match poll_for_substream(muxer.clone().outbound(), &addr) {
-                        (Ok(Some(stream)), _) => {
+                        Ok(None) => return Ok(Async::NotReady),
+                        Ok(Some(stream)) => {
                             return Ok(Async::Ready((stream, closed.clone())));
                         }
-                        (Err(res), Some(replace)) => (replace, Err(res)),
-                        (Ok(None), _) => return Ok(Async::NotReady),
-                        (Err(res), None ) => return Err(res),
+                        Err(err) => {
+                            let io_err = IoError::new(err.kind(), err.to_string());
+                            (PeerState::Errored(io_err), Err(err))
+                        }
                     }
                 }
             }
@@ -376,7 +380,8 @@ where
                             task.notify();
                         }
                         match poll_for_substream(muxer.clone().outbound(), &addr) {
-                            (Ok(Some(stream)), _) => {
+                            Ok(None) => return Ok(Async::NotReady),
+                            Ok(Some(stream)) => {
                                 let closed = Arc::new(AtomicBool::new(false));
                                 let state = PeerState::Active {
                                     muxer,
@@ -386,9 +391,10 @@ where
 
                                 (state, Ok(Async::Ready((stream, closed))))
                             }
-                            (Err(res), Some(replace)) => (replace, Err(res)),
-                            (Ok(None), _) => return Ok(Async::NotReady),
-                            (Err(res), None ) => return Err(res),
+                            Err(err) => {
+                                let io_err = IoError::new(err.kind(), err.to_string());
+                                (PeerState::Errored(io_err), Err(err))
+                            }
 
                         }
                     }
