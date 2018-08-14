@@ -86,10 +86,10 @@ jobs:
           key: test-win32-cache
       - run:
           name: Build for Windows 64 bits
-          command: cargo check --target x86_64-pc-windows-gnu
+          command: cargo test --target x86_64-pc-windows-gnu
       - run:
           name: Build for Windows 32 bits
-          command: cargo check --target i686-pc-windows-gnu
+          command: cargo test --target i686-pc-windows-gnu
       - save_cache:
           key: test-win32-cache
           paths:
