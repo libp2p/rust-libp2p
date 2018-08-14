@@ -140,7 +140,7 @@ where
                 .map(|(k, v)| (k, to_value(v).unwrap()))
                 .collect::<Map<_, _>>(),
         )?;
-        temporary_file.sync_data()?;
+        temporary_file.as_file().sync_data()?;
 
         // Note that `persist` will fail if we try to persist across filesystems. However that
         // shouldn't happen since we created the temporary file in the same directory as the final
@@ -275,31 +275,33 @@ mod tests {
 
     #[test]
     fn open_and_flush() {
-        let temp_file = NamedTempFile::new().unwrap();
-        let datastore = JsonFileDatastore::<Vec<u8>>::new(temp_file.path()).unwrap();
+        let path = NamedTempFile::new().unwrap().into_temp_path();
+
+        let datastore = JsonFileDatastore::<Vec<u8>>::new(&path).unwrap();
         datastore.flush().unwrap();
     }
 
     #[test]
     fn values_store_and_reload() {
-        let temp_file = NamedTempFile::new().unwrap();
+        let path = NamedTempFile::new().unwrap().into_temp_path();
 
-        let datastore = JsonFileDatastore::<Vec<u8>>::new(temp_file.path()).unwrap();
+        let datastore = JsonFileDatastore::<Vec<u8>>::new(&path).unwrap();
         datastore.put("foo".into(), vec![1, 2, 3]);
         datastore.put("bar".into(), vec![0, 255, 127]);
         datastore.flush().unwrap();
         drop(datastore);
 
-        let reload = JsonFileDatastore::<Vec<u8>>::new(temp_file.path()).unwrap();
+
+        let reload = JsonFileDatastore::<Vec<u8>>::new(&path).unwrap();
         assert_eq!(reload.get("bar").unwrap(), &[0, 255, 127]);
         assert_eq!(reload.get("foo").unwrap(), &[1, 2, 3]);
     }
 
     #[test]
     fn query_basic() {
-        let temp_file = NamedTempFile::new().unwrap();
+        let path = NamedTempFile::new().unwrap().into_temp_path();
 
-        let datastore = JsonFileDatastore::<Vec<u8>>::new(temp_file.path()).unwrap();
+        let datastore = JsonFileDatastore::<Vec<u8>>::new(&path).unwrap();
         datastore.put("foo1".into(), vec![6, 7, 8]);
         datastore.put("foo2".into(), vec![6, 7, 8]);
         datastore.put("foo3".into(), vec![7, 8, 9]);

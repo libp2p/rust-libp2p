@@ -12,7 +12,7 @@ libp2p-core = { path = "../core" }
 log = "0.4.1"
 protobuf = "2.0.2"
 rand = "0.3.17"
-ring = { version = "0.12.1", features = ["rsa_signing"] }
+ring = { version = "0.13.2", features = ["rsa_signing"] }
 aes-ctr = "0.1.0"
 aesni = { version = "0.4.1", features = ["nocheck"], optional = true }
 ctr = { version = "0.1", optional = true }
@@ -20,7 +20,7 @@ lazy_static = { version = "0.2.11", optional = true }
 rw-stream-sink = { path = "../rw-stream-sink" }
 eth-secp256k1 = { git = "https://github.com/paritytech/rust-secp256k1", optional = true }
 tokio-io = "0.1.0"
-untrusted = "0.5.1"
+untrusted = "0.6.2"
 
 [features]
 default = ["secp256k1"]
