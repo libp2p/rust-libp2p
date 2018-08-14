@@ -193,7 +193,7 @@ where C: AsyncRead + AsyncWrite + 'static       // TODO: 'static :-/
 {
     type Substream = Substream<C>;
     type InboundSubstream = InboundSubstream<C>;
-    type OutboundSubstream = Box<Future<Item = Option<Self::Substream>, Error = IoError>>;
+    type OutboundSubstream = Box<Future<Item = Option<Self::Substream>, Error = IoError> + 'static>;
 
     #[inline]
     fn inbound(self) -> Self::InboundSubstream {
