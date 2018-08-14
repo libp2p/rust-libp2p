@@ -35,7 +35,7 @@ mod encode;
 /// Type returned by `full_codec`.
 pub type FullCodec<S> = DecoderMiddleware<EncoderMiddleware<length_delimited::Framed<S>>>;
 
-pub type StreamCipher = Box<dyn StreamCipherCore>;
+pub type StreamCipher = Box<dyn StreamCipherCore + Send>;
 
 
 /// Takes control of `socket`. Returns an object that implements `future::Sink` and
