@@ -36,8 +36,8 @@ where
     type NamesIter = iter::Empty<(Bytes, ())>;
     type UpgradeIdentifier = (); // TODO: could use `!`
     type Output = (); // TODO: could use `!`
-    type MultiaddrFuture = Box<Future<Item = Multiaddr, Error = io::Error>>; // TODO: could use `!`
-    type Future = Box<Future<Item = ((), Self::MultiaddrFuture), Error = io::Error>>; // TODO: could use `!`
+    type MultiaddrFuture = Box<Future<Item = Multiaddr, Error = io::Error> + Send + Sync>; // TODO: could use `!`
+    type Future = Box<Future<Item = ((), Self::MultiaddrFuture), Error = io::Error> + Send + Sync>; // TODO: could use `!`
 
     #[inline]
     fn protocol_names(&self) -> Self::NamesIter {

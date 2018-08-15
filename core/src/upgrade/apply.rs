@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::Bytes;
-use futures::prelude::*;
+use futures::{prelude::*, future};
 use multistream_select;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -29,19 +29,18 @@ use upgrade::{ConnectionUpgrade, Endpoint};
 ///
 /// Returns a `Future` that returns the outcome of the connection upgrade.
 #[inline]
-pub fn apply<'a, C, U, Maf>(
+pub fn apply<C, U, Maf>(
     connection: C,
     upgrade: U,
     endpoint: Endpoint,
     remote_addr: Maf,
-) -> Box<Future<Item = (U::Output, U::MultiaddrFuture), Error = IoError> + 'a>
+) -> impl Future<Item = (U::Output, U::MultiaddrFuture), Error = IoError>
 where
-    U: ConnectionUpgrade<C, Maf> + 'a,
+    U: ConnectionUpgrade<C, Maf>,
     U::NamesIter: Clone, // TODO: not elegant
-    C: AsyncRead + AsyncWrite + 'a,
-    Maf: 'a,
+    C: AsyncRead + AsyncWrite,
 {
-    let future = negotiate(connection, &upgrade, endpoint)
+    negotiate(connection, &upgrade, endpoint)
         .and_then(move |(upgrade_id, connection)| {
             upgrade.upgrade(connection, upgrade_id, endpoint, remote_addr)
         })
@@ -49,29 +48,25 @@ where
         .then(|val| {
             match val {
                 Ok(_) => debug!("Successfully applied negotiated protocol"),
-                Err(_) => debug!("Failed to apply negotiated protocol"),
+                Err(ref err) => debug!("Failed to apply negotiated protocol: {:?}", err),
             }
             val
-        });
-
-    Box::new(future)
+        })
 }
 
 /// Negotiates a protocol on a stream.
 ///
 /// Returns a `Future` that returns the negotiated protocol and the stream.
 #[inline]
-pub fn negotiate<'a, C, I, U, Maf>(
+pub fn negotiate<C, I, U, Maf>(
     connection: C,
     upgrade: &U,
     endpoint: Endpoint,
-) -> Box<Future<Item = (U::UpgradeIdentifier, C), Error = IoError> + 'a>
+) -> impl Future<Item = (U::UpgradeIdentifier, C), Error = IoError>
 where
-    U: ConnectionUpgrade<I, Maf> + 'a,
+    U: ConnectionUpgrade<I, Maf>,
     U::NamesIter: Clone, // TODO: not elegant
-    C: AsyncRead + AsyncWrite + 'a,
-    Maf: 'a,
-    I: 'a,
+    C: AsyncRead + AsyncWrite,
 {
     let iter = upgrade
         .protocol_names()
@@ -79,11 +74,11 @@ where
     debug!("Starting protocol negotiation");
 
     let negotiation = match endpoint {
-        Endpoint::Listener => multistream_select::listener_select_proto(connection, iter),
-        Endpoint::Dialer => multistream_select::dialer_select_proto(connection, iter),
+        Endpoint::Listener => future::Either::A(multistream_select::listener_select_proto(connection, iter)),
+        Endpoint::Dialer => future::Either::B(multistream_select::dialer_select_proto(connection, iter)),
     };
 
-    let future = negotiation
+    negotiation
         .map_err(|err| IoError::new(IoErrorKind::Other, err))
         .then(move |negotiated| {
             match negotiated {
@@ -91,7 +86,5 @@ where
                 Err(ref err) => debug!("Error while negotiated protocol upgrade: {:?}", err),
             };
             negotiated
-        });
-
-    Box::new(future)
+        })
 }

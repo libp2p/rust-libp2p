@@ -46,23 +46,19 @@ where
 {
     /// Takes ownership of a socket and starts the handshake. If the handshake succeeds, the
     /// future returns a `Dialer`.
-    pub fn new<'a>(inner: R) -> Box<Future<Item = Dialer<R>, Error = MultistreamSelectError> + 'a>
-    where
-        R: 'a,
-    {
+    pub fn new(inner: R) -> impl Future<Item = Dialer<R>, Error = MultistreamSelectError> {
         let write = LengthDelimitedBuilder::new()
             .length_field_length(1)
             .new_write(inner);
         let inner = LengthDelimitedFramedRead::new(write);
 
-        let future = inner
+        inner
             .send(BytesMut::from(MULTISTREAM_PROTOCOL_WITH_LF))
             .from_err()
             .map(|inner| Dialer {
                 inner,
                 handshake_finished: false,
-            });
-        Box::new(future)
+            })
     }
 
     /// Grants back the socket. Typically used after a `ProtocolAck` has been received.

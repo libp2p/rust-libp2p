@@ -22,7 +22,7 @@
 //! `multistream-select` for the dialer.
 
 use bytes::Bytes;
-use futures::future::{loop_fn, result, Loop};
+use futures::future::{loop_fn, result, Loop, Either};
 use futures::{Future, Sink, Stream};
 use ProtocolChoiceError;
 
@@ -42,23 +42,23 @@ use tokio_io::{AsyncRead, AsyncWrite};
 /// remote, and the protocol name that we passed (so that you don't have to clone the name). On
 /// success, the function returns the identifier (of type `P`), plus the socket which now uses that
 /// chosen protocol.
-// TODO: remove the Box once -> impl Trait lands
 #[inline]
-pub fn dialer_select_proto<'a, R, I, M, P>(
+pub fn dialer_select_proto<R, I, M, P>(
     inner: R,
     protocols: I,
-) -> Box<Future<Item = (P, R), Error = ProtocolChoiceError> + 'a>
+) -> impl Future<Item = (P, R), Error = ProtocolChoiceError>
 where
-    R: AsyncRead + AsyncWrite + 'a,
-    I: Iterator<Item = (Bytes, M, P)> + 'a,
-    M: FnMut(&Bytes, &Bytes) -> bool + 'a,
-    P: 'a,
+    R: AsyncRead + AsyncWrite,
+    I: Iterator<Item = (Bytes, M, P)>,
+    M: FnMut(&Bytes, &Bytes) -> bool,
 {
     // We choose between the "serial" and "parallel" strategies based on the number of protocols.
     if protocols.size_hint().1.map(|n| n <= 3).unwrap_or(false) {
-        dialer_select_proto_serial(inner, protocols.map(|(n, _, id)| (n, id)))
+        let fut = dialer_select_proto_serial(inner, protocols.map(|(n, _, id)| (n, id)));
+        Either::A(fut)
     } else {
-        dialer_select_proto_parallel(inner, protocols)
+        let fut = dialer_select_proto_parallel(inner, protocols);
+        Either::B(fut)
     }
 }
 
@@ -66,17 +66,15 @@ where
 ///
 /// Same as `dialer_select_proto`. Tries protocols one by one. The iterator doesn't need to produce
 /// match functions, because it's not needed.
-// TODO: remove the Box once -> impl Trait lands
-pub fn dialer_select_proto_serial<'a, R, I, P>(
+pub fn dialer_select_proto_serial<R, I, P>(
     inner: R,
     mut protocols: I,
-) -> Box<Future<Item = (P, R), Error = ProtocolChoiceError> + 'a>
+) -> impl Future<Item = (P, R), Error = ProtocolChoiceError>
 where
-    R: AsyncRead + AsyncWrite + 'a,
-    I: Iterator<Item = (Bytes, P)> + 'a,
-    P: 'a,
+    R: AsyncRead + AsyncWrite,
+    I: Iterator<Item = (Bytes, P)>,
 {
-    let future = Dialer::new(inner).from_err().and_then(move |dialer| {
+    Dialer::new(inner).from_err().and_then(move |dialer| {
         // Similar to a `loop` keyword.
         loop_fn(dialer, move |dialer| {
             result(protocols.next().ok_or(ProtocolChoiceError::NoProtocolFound))
@@ -116,28 +114,23 @@ where
                         }
                     })
         })
-    });
-
-    // The "Rust doesn't have impl Trait yet" tax.
-    Box::new(future)
+    })
 }
 
 /// Helps selecting a protocol amongst the ones supported.
 ///
 /// Same as `dialer_select_proto`. Queries the list of supported protocols from the remote, then
 /// chooses the most appropriate one.
-// TODO: remove the Box once -> impl Trait lands
-pub fn dialer_select_proto_parallel<'a, R, I, M, P>(
+pub fn dialer_select_proto_parallel<R, I, M, P>(
     inner: R,
     protocols: I,
-) -> Box<Future<Item = (P, R), Error = ProtocolChoiceError> + 'a>
+) -> impl Future<Item = (P, R), Error = ProtocolChoiceError>
 where
-    R: AsyncRead + AsyncWrite + 'a,
-    I: Iterator<Item = (Bytes, M, P)> + 'a,
-    M: FnMut(&Bytes, &Bytes) -> bool + 'a,
-    P: 'a,
+    R: AsyncRead + AsyncWrite,
+    I: Iterator<Item = (Bytes, M, P)>,
+    M: FnMut(&Bytes, &Bytes) -> bool,
 {
-    let future = Dialer::new(inner)
+    Dialer::new(inner)
         .from_err()
         .and_then(move |dialer| {
             trace!("requesting protocols list");
@@ -193,8 +186,5 @@ where
                 }
                 _ => Err(ProtocolChoiceError::UnexpectedMessage),
             }
-        });
-
-    // The "Rust doesn't have impl Trait yet" tax.
-    Box::new(future)
+        })
 }
