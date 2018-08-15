@@ -35,7 +35,7 @@ mod encode;
 /// Type returned by `full_codec`.
 pub type FullCodec<S> = DecoderMiddleware<EncoderMiddleware<length_delimited::Framed<S>>>;
 
-pub type StreamCipher = StreamCipherCore;
+pub type StreamCipher = Box<dyn StreamCipherCore + Send>;
 
 
 /// Takes control of `socket`. Returns an object that implements `future::Sink` and
@@ -45,9 +45,9 @@ pub type StreamCipher = StreamCipherCore;
 /// hash algorithm (which are generally decided during the handshake).
 pub fn full_codec<S>(
     socket: length_delimited::Framed<S>,
-    cipher_encoding: Box<StreamCipher>,
+    cipher_encoding: StreamCipher,
     encoding_hmac: hmac::SigningKey,
-    cipher_decoder: Box<StreamCipher>,
+    cipher_decoder: StreamCipher,
     decoding_hmac: hmac::VerificationKey,
 ) -> FullCodec<S>
 where
