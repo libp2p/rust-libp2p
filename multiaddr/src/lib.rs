@@ -53,6 +53,10 @@ impl fmt::Display for Multiaddr {
     }
 }
 
+unsafe impl Send for Multiaddr {}
+unsafe impl Sync for Multiaddr {}
+
+
 impl Multiaddr {
     /// Returns the raw bytes representation of the multiaddr.
     #[inline]
