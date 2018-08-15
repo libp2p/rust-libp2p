@@ -22,7 +22,7 @@
 //! `multistream-select` for the listener.
 
 use bytes::Bytes;
-use futures::future::{err, loop_fn, Loop};
+use futures::future::{err, loop_fn, Loop, Either};
 use futures::{Future, Sink, Stream};
 use ProtocolChoiceError;
 
@@ -45,18 +45,16 @@ use tokio_io::{AsyncRead, AsyncWrite};
 ///
 /// On success, returns the socket and the identifier of the chosen protocol (of type `P`). The
 /// socket now uses this protocol.
-// TODO: remove the Box once -> impl Trait lands
-pub fn listener_select_proto<'a, R, I, M, P>(
+pub fn listener_select_proto<R, I, M, P>(
     inner: R,
     protocols: I,
-) -> Box<Future<Item = (P, R), Error = ProtocolChoiceError> + 'a>
+) -> impl Future<Item = (P, R), Error = ProtocolChoiceError>
 where
-    R: AsyncRead + AsyncWrite + 'a,
-    I: Iterator<Item = (Bytes, M, P)> + Clone + 'a,
-    M: FnMut(&Bytes, &Bytes) -> bool + 'a,
-    P: 'a,
+    R: AsyncRead + AsyncWrite,
+    I: Iterator<Item = (Bytes, M, P)> + Clone,
+    M: FnMut(&Bytes, &Bytes) -> bool,
 {
-    let future = Listener::new(inner).from_err().and_then(move |listener| {
+    Listener::new(inner).from_err().and_then(move |listener| {
         loop_fn(listener, move |listener| {
             let protocols = protocols.clone();
 
@@ -73,7 +71,7 @@ where
                             .send(msg)
                             .from_err()
                             .map(move |listener| (None, listener));
-                        Box::new(fut) as Box<Future<Item = _, Error = ProtocolChoiceError>>
+                        Either::A(Either::A(fut))
                     }
                     Some(DialerToListenerMessage::ProtocolRequest { name }) => {
                         let mut outcome = None;
@@ -91,11 +89,11 @@ where
                             .send(send_back)
                             .from_err()
                             .map(move |listener| (outcome, listener));
-                        Box::new(fut) as Box<Future<Item = _, Error = ProtocolChoiceError>>
+                        Either::A(Either::B(fut))
                     }
                     None => {
                         debug!("no protocol request received");
-                        Box::new(err(ProtocolChoiceError::NoProtocolFound)) as Box<_>
+                        Either::B(err(ProtocolChoiceError::NoProtocolFound))
                     }
                 })
                 .map(|(outcome, listener): (_, Listener<R>)| match outcome {
@@ -103,8 +101,5 @@ where
                     None => Loop::Continue(listener),
                 })
         })
-    });
-
-    // The "Rust doesn't have impl Trait yet" tax.
-    Box::new(future)
+    })
 }
