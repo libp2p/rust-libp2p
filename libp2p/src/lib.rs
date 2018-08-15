@@ -133,3 +133,36 @@ impl Transport for CommonTransport {
         self.inner.inner.nat_traversal(server, observed)
     }
 }
+
+/// The `multiaddr!` macro is an easy way for a user to create a `Multiaddr`.
+///
+/// Example:
+///
+/// ```rust
+/// # #[macro_use]
+/// # extern crate libp2p;
+/// # fn main() {
+/// let _addr = multiaddr![IP4([127, 0, 0, 1]), TCP(10500u16)];
+/// # }
+/// ```
+///
+/// Each element passed to `multiaddr![]` should be a variant of the `AddrComponent` enum. The
+/// optional parameter is casted into the proper type with the `Into` trait.
+///
+/// For example, `IP4([127, 0, 0, 1])` works because `Ipv4Addr` implements `From<[u8; 4]>`.
+#[macro_export]
+macro_rules! multiaddr {
+    ($($comp:ident $(($param:expr))*),+) => {
+        {
+            use std::iter;
+            let elem = iter::empty::<$crate::multiaddr::AddrComponent>();
+            $(
+                let elem = {
+                    let cmp = $crate::multiaddr::AddrComponent::$comp $(( $param.into() ))*;
+                    elem.chain(iter::once(cmp))
+                };
+            )+
+            elem.collect::<$crate::Multiaddr>()
+        }
+    }
+}
