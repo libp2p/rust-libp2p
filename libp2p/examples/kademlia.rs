@@ -30,7 +30,7 @@ extern crate multiaddr;
 use bigint::U512;
 use futures::{Future, Stream};
 use libp2p::peerstore::{PeerAccess, PeerId, Peerstore};
-use multiaddr::{Multiaddr, ToCid};
+use multiaddr::Multiaddr;
 use std::collections::HashMap;
 use std::env;
 use std::sync::{Arc, Mutex};
@@ -191,8 +191,7 @@ fn main() {
 
     let finish_enum = kad_system
         .find_node(my_peer_id.clone(), |peer| {
-            let cid = peer.clone().into_bytes().to_cid().unwrap();
-            let addr = Multiaddr::from(libp2p::multiaddr::AddrComponent::P2P(cid));
+            let addr = Multiaddr::from(libp2p::multiaddr::AddrComponent::P2P(peer.clone().into()));
             active_kad_connections.lock().unwrap().entry(peer.clone())
                 .or_insert_with(Default::default)
                 .dial(&swarm_controller, &addr, transport.clone().with_upgrade(KadConnecConfig::new()))
@@ -213,10 +212,10 @@ fn main() {
         .map_err(|(err, _)| err)
         .map(|(out, _)| out.unwrap())
         .and_then(|out| {
-            let local_hash = U512::from(my_peer_id.hash());
+            let local_hash = U512::from(my_peer_id.digest());
             println!("Results of peer discovery for {:?}:", my_peer_id);
             for n in out {
-                let other_hash = U512::from(n.hash());
+                let other_hash = U512::from(n.digest());
                 let dist = 512 - (local_hash ^ other_hash).leading_zeros();
                 println!("* {:?} (distance bits = {:?} (lower is better))", n, dist);
             }
@@ -245,7 +244,7 @@ fn p2p_multiaddr_to_node_id(client_addr: Multiaddr) -> PeerId {
 	}
 	match (first, second) {
 		(Some(libp2p::multiaddr::AddrComponent::P2P(node_id)), None) =>
-			PeerId::from_bytes(node_id.to_bytes()).expect("libp2p always reports a valid node id"),
+			PeerId::from_multihash(node_id).expect("libp2p always reports a valid node id"),
 		_ => panic!("Reported multiaddress is in the wrong format ; programmer error")
 	}
 }
@@ -270,7 +269,7 @@ where
         let p2p_component = multiaddr.pop().expect("hard-coded multiaddr is empty");
         let peer = match p2p_component {
             libp2p::multiaddr::AddrComponent::P2P(key) => {
-                PeerId::from_bytes(key.to_bytes()).expect("invalid peer id")
+                PeerId::from_multihash(key).expect("invalid peer id")
             }
             _ => panic!("hard-coded multiaddr didn't end with /p2p/"),
         };

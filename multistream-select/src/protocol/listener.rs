@@ -30,7 +30,7 @@ use protocol::MULTISTREAM_PROTOCOL_WITH_LF;
 use tokio_io::codec::length_delimited::Builder as LengthDelimitedBuilder;
 use tokio_io::codec::length_delimited::FramedWrite as LengthDelimitedFramedWrite;
 use tokio_io::{AsyncRead, AsyncWrite};
-use varint;
+use unsigned_varint::encode;
 
 /// Wraps around a `AsyncRead+AsyncWrite`. Assumes that we're on the listener's side. Produces and
 /// accepts messages.
@@ -44,16 +44,13 @@ where
 {
     /// Takes ownership of a socket and starts the handshake. If the handshake succeeds, the
     /// future returns a `Listener`.
-    pub fn new<'a>(inner: R) -> Box<Future<Item = Listener<R>, Error = MultistreamSelectError> + 'a>
-    where
-        R: 'a,
-    {
+    pub fn new(inner: R) -> impl Future<Item = Listener<R>, Error = MultistreamSelectError> {
         let write = LengthDelimitedBuilder::new()
             .length_field_length(1)
             .new_write(inner);
         let inner = LengthDelimitedFramedRead::<Bytes, _>::new(write);
 
-        let future = inner
+        inner
             .into_future()
             .map_err(|(e, _)| e.into())
             .and_then(|(msg, rest)| {
@@ -69,9 +66,7 @@ where
                     .send(BytesMut::from(MULTISTREAM_PROTOCOL_WITH_LF))
                     .from_err()
             })
-            .map(|inner| Listener { inner });
-
-        Box::new(future)
+            .map(|inner| Listener { inner })
     }
 
     /// Grants back the socket. Typically used after a `ProtocolRequest` has been received and a
@@ -126,7 +121,8 @@ where
             ListenerToDialerMessage::ProtocolsListResponse { list } => {
                 use std::iter;
 
-                let mut out_msg = varint::encode(list.len());
+                let mut buf = encode::usize_buffer();
+                let mut out_msg = Vec::from(encode::usize(list.len(), &mut buf));
                 for elem in &list {
                     out_msg.extend(iter::once(b'\r'));
                     out_msg.extend_from_slice(elem);
