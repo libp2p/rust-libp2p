@@ -107,7 +107,7 @@ impl Default for MplexConfig {
 pub enum MaxBufferBehaviour {
     /// Produce an error on all the substreams.
     CloseAll,
-    /// No new message will be read fro mthe underlying ocnnection if the buffer is full.
+    /// No new message will be read from the underlying connection if the buffer is full.
     ///
     /// This can potentially introduce a deadlock if you are waiting for a message from a substream
     /// before processing the messages received on another substream.
@@ -216,6 +216,7 @@ where C: AsyncRead + AsyncWrite,
 
     loop {
         // Check if we reached max buffer length first.
+        debug_assert!(inner.buffer.len() <= inner.config.max_buffer_len);
         if inner.buffer.len() == inner.config.max_buffer_len {
             debug!("Reached mplex maximum buffer length");
             match inner.config.max_buffer_behaviour {
