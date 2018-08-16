@@ -112,6 +112,10 @@ fn init_overlay() -> Result<KadSystem, Box<Error + Send + Sync>>,
             upgrade::map(upgrade, |out: SecioOutput<_>| out.stream).unwrap()
         });
 
+    let mut multiaddr = address
+        .parse::<Multiaddr>()
+        .expect("failed to parse hard-coded multiaddr");
+
     // Done to implement the transport trait in order to put it in a swarm.
     // fn upgrade(self, incoming: C, id: (), endpoint: Endpoint, addr: Maf) -> Self::Future
     // C: AsyncRead + AsyncWrite + 'static, Transport and wrappers around it implements this.
@@ -124,12 +128,12 @@ fn init_overlay() -> Result<KadSystem, Box<Error + Send + Sync>>,
     //     /// The socket comes from a listener.
     //     Listener,
     // }
-    // Assume to choose a dialer as this is creating the kad_connec_config.
+    // Assume to choose a dialer for now as this is creating the kad_connec_config.
     // pub trait ConnectionUpgrade<C, TAddrFut> {
     //  ...
     // /// Type of the future that will resolve to the remote's multiaddr.
-    let kad_connec_config_transport = kad_connec_config
-        .upgrade(transport, (), Dialer, Future::/ip4/0.0.0.0/tcp/0).unwrap();
+    let kad_connec_config_transport_dialer = kad_connec_config
+        .upgrade(transport, (), Dialer, Future::multiaddr).unwrap();
 
     let (swarm_controller, swarm_future) = swarm(kad_connec_config_transport,
             Ping, |(mut pinger, service), client_addr| {
