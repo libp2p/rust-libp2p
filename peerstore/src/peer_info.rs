@@ -27,8 +27,6 @@
 //! more thoughts about this.
 
 use multiaddr::Multiaddr;
-use serde::de::Error as DeserializerError;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::Ordering;
 use std::time::SystemTime;
 use TTL;
@@ -37,7 +35,7 @@ use TTL;
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PeerInfo {
     // Adresses, and the time at which they will be considered expired.
-    addrs: Vec<(SerdeMultiaddr, SystemTime)>,
+    addrs: Vec<(Multiaddr, SystemTime)>,
 }
 
 impl PeerInfo {
@@ -56,7 +54,7 @@ impl PeerInfo {
         let now = SystemTime::now();
         self.addrs.iter().filter_map(move |(addr, expires)| {
             if *expires >= now {
-                Some(&addr.0)
+                Some(addr)
             } else {
                 None
             }
@@ -74,7 +72,7 @@ impl PeerInfo {
         let now = SystemTime::now();
         self.addrs = addrs
             .into_iter()
-            .map(move |(addr, ttl)| (SerdeMultiaddr(addr), now + ttl))
+            .map(move |(addr, ttl)| (addr, now + ttl))
             .collect();
     }
 
@@ -86,7 +84,7 @@ impl PeerInfo {
         let expires = SystemTime::now() + ttl;
 
         if let Some(&mut (_, ref mut existing_expires)) =
-            self.addrs.iter_mut().find(|&&mut (ref a, _)| a.0 == addr)
+            self.addrs.iter_mut().find(|&&mut (ref a, _)| a == &addr)
         {
             if behaviour == AddAddrBehaviour::OverwriteTtl || *existing_expires < expires {
                 *existing_expires = expires;
@@ -94,7 +92,7 @@ impl PeerInfo {
             return;
         }
 
-        self.addrs.push((SerdeMultiaddr(addr), expires));
+        self.addrs.push((addr, expires));
     }
 }
 
@@ -105,33 +103,6 @@ pub enum AddAddrBehaviour {
     OverwriteTtl,
     /// Don't overwrite if the TTL is larger.
     IgnoreTtlIfInferior,
-}
-
-/// Same as `Multiaddr`, but serializable.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct SerdeMultiaddr(Multiaddr);
-
-impl Serialize for SerdeMultiaddr {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        self.0.to_string().serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for SerdeMultiaddr {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let addr: String = Deserialize::deserialize(deserializer)?;
-        let addr = match addr.parse::<Multiaddr>() {
-            Ok(a) => a,
-            Err(err) => return Err(DeserializerError::custom(err)),
-        };
-        Ok(SerdeMultiaddr(addr))
-    }
 }
 
 // The reason why we need to implement the PartialOrd trait is that the datastore library (a
@@ -146,6 +117,7 @@ impl PartialOrd for PeerInfo {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     extern crate serde_json;
@@ -156,7 +128,7 @@ mod tests {
     fn ser_and_deser() {
         let peer_info = PeerInfo {
             addrs: vec![(
-                SerdeMultiaddr("/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap()),
+                "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap(),
                 UNIX_EPOCH,
             )],
         };
