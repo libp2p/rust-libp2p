@@ -112,7 +112,6 @@ use rw_stream_sink::RwStreamSink;
 use std::error::Error;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
-use std::path::Path;
 use std::sync::Arc;
 use tokio_io::{AsyncRead, AsyncWrite};
 use untrusted::Input;
