@@ -29,7 +29,7 @@ use PublicKey;
 // TODO: maybe keep things in decoded version?
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PeerId {
-    multihash: Vec<u8>,
+    multihash: multihash::Multihash,
 }
 
 impl fmt::Debug for PeerId {
@@ -43,17 +43,32 @@ impl PeerId {
     #[inline]
     pub fn from_public_key(public_key: PublicKey) -> PeerId {
         let protobuf = public_key.into_protobuf_encoding();
-        let data = multihash::encode(multihash::Hash::SHA2256, &protobuf)
+        let multihash = multihash::encode(multihash::Hash::SHA2256, &protobuf)
             .expect("sha2-256 is always supported");
-        PeerId { multihash: data }
+        PeerId { multihash }
     }
 
     /// Checks whether `data` is a valid `PeerId`. If so, returns the `PeerId`. If not, returns
     /// back the data as an error.
     #[inline]
     pub fn from_bytes(data: Vec<u8>) -> Result<PeerId, Vec<u8>> {
-        let is_valid = multihash::decode(&data).is_ok();
-        if is_valid {
+        match multihash::Multihash::from_bytes(data) {
+            Ok(multihash) => {
+                if multihash.algorithm() == multihash::Hash::SHA2256 {
+                    Ok(PeerId { multihash })
+                } else {
+                    Err(multihash.into_bytes())
+                }
+            },
+            Err(err) => Err(err.data),
+        }
+    }
+
+    /// Turns a `Multihash` into a `PeerId`. If the multihash doesn't use the correct algorithm,
+    /// returns back the data as an error.
+    #[inline]
+    pub fn from_multihash(data: multihash::Multihash) -> Result<PeerId, multihash::Multihash> {
+        if data.algorithm() == multihash::Hash::SHA2256 {
             Ok(PeerId { multihash: data })
         } else {
             Err(data)
@@ -65,7 +80,7 @@ impl PeerId {
     /// Note that this is not the same as the public key of the peer.
     #[inline]
     pub fn into_bytes(self) -> Vec<u8> {
-        self.multihash
+        self.multihash.into_bytes()
     }
 
     /// Returns a raw bytes representation of this `PeerId`.
@@ -73,21 +88,19 @@ impl PeerId {
     /// Note that this is not the same as the public key of the peer.
     #[inline]
     pub fn as_bytes(&self) -> &[u8] {
-        &self.multihash
+        self.multihash.as_bytes()
     }
 
     /// Returns a base-58 encoded string of this `PeerId`.
     #[inline]
     pub fn to_base58(&self) -> String {
-        bs58::encode(&self.multihash).into_string()
+        bs58::encode(self.multihash.as_bytes()).into_string()
     }
 
     /// Returns the raw bytes of the hash of this `PeerId`.
     #[inline]
-    pub fn hash(&self) -> &[u8] {
-        multihash::decode(&self.multihash)
-            .expect("our inner value should always be valid")
-            .digest
+    pub fn digest(&self) -> &[u8] {
+        self.multihash.digest()
     }
 
     /// Checks whether the public key passed as parameter matches the public key of this `PeerId`.
@@ -95,13 +108,10 @@ impl PeerId {
     /// Returns `None` if this `PeerId`s hash algorithm is not supported when encoding the
     /// given public key, otherwise `Some` boolean as the result of an equality check.
     pub fn is_public_key(&self, public_key: &PublicKey) -> Option<bool> {
-        let alg = multihash::decode(&self.multihash)
-            .expect("our inner value should always be valid")
-            .alg;
+        let alg = self.multihash.algorithm();
         match multihash::encode(alg, &public_key.clone().into_protobuf_encoding()) {
             Ok(compare) => Some(compare == self.multihash),
-            Err(multihash::Error::UnsupportedType) => None,
-            Err(_) => Some(false),
+            Err(multihash::EncodeError::UnsupportedType) => None,
         }
     }
 }
@@ -110,6 +120,13 @@ impl From<PublicKey> for PeerId {
     #[inline]
     fn from(key: PublicKey) -> PeerId {
         PeerId::from_public_key(key)
+    }
+}
+
+impl Into<multihash::Multihash> for PeerId {
+    #[inline]
+    fn into(self) -> multihash::Multihash {
+        self.multihash
     }
 }
 

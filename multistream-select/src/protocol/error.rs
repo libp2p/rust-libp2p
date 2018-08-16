@@ -23,7 +23,7 @@
 use std::error;
 use std::fmt;
 use std::io;
-use varint;
+use unsigned_varint::decode;
 
 /// Error at the multistream-select layer of communication.
 #[derive(Debug)]
@@ -52,9 +52,9 @@ impl From<io::Error> for MultistreamSelectError {
     }
 }
 
-impl From<varint::Error> for MultistreamSelectError {
+impl From<decode::Error> for MultistreamSelectError {
     #[inline]
-    fn from(err: varint::Error) -> MultistreamSelectError {
+    fn from(err: decode::Error) -> MultistreamSelectError {
         MultistreamSelectError::VarintParseError(err.to_string())
     }
 }

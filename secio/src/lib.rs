@@ -78,10 +78,10 @@
 //! `SecioMiddleware` that implements `Sink` and `Stream` and can be used to send packets of data.
 //!
 
+extern crate aes_ctr;
 #[cfg(feature = "secp256k1")]
 extern crate asn1_der;
 extern crate bytes;
-extern crate crypto;
 extern crate futures;
 extern crate libp2p_core;
 #[macro_use]
@@ -95,6 +95,9 @@ extern crate secp256k1;
 extern crate tokio_io;
 extern crate untrusted;
 
+#[cfg(feature = "aes-all")]
+#[macro_use]
+extern crate lazy_static;
 pub use self::error::SecioError;
 
 #[cfg(feature = "secp256k1")]
@@ -122,6 +125,7 @@ mod codec;
 mod error;
 mod handshake;
 mod structs_proto;
+mod stream_cipher;
 
 unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
     ::std::slice::from_raw_parts(
