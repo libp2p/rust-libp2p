@@ -72,8 +72,7 @@ extern crate tokio_current_thread;
 
 use libp2p_core::Transport;
 
-let tokio_core = tokio_core::reactor::Core::new().unwrap();
-let tcp_transport = libp2p_tcp_transport::TcpConfig::new(tokio_core.handle());
+let tcp_transport = libp2p_tcp_transport::TcpConfig::new();
 let upgraded = tcp_transport.with_upgrade(libp2p_core::PlainTextConfig);
 
 // upgraded.dial(...)   // automatically applies the plain text protocol on the socket

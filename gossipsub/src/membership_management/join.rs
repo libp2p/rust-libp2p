@@ -18,8 +18,8 @@ use libp2p_kad::{
 };
 use libp2p_ping::Ping;
 use libp2p_secio::SecioKeyPair;
+use libp2p_tcp_transport::TcpConfig;
 use std::time::Duration;
-use tokio_core;
 use tokio_current_thread;
 
 fn init_overlay() -> Result<KadSystem, Box<Error + Send + Sync>>,
@@ -40,10 +40,6 @@ fn init_overlay() -> Result<KadSystem, Box<Error + Send + Sync>>,
         kbuckets_timeout: Duration::from_secs(KBUCKETS_TIMEOUT),
         request_timeout: Duration::from_secs(REQUEST_TIMEOUT),
     };
-
-    let mut core = tokio_core::reactor::Core::new().unwrap();
-
-    let mut handle = core.handle();
 
     // KadConnecConfig
     // In https://github.com/libp2p/rust-libp2p/blob/master/kad/src/kad_server.rs
@@ -105,11 +101,34 @@ fn init_overlay() -> Result<KadSystem, Box<Error + Send + Sync>>,
     // Note: PlainTextConfig: core/src/upgrade/plaintext.rs
     // 
 
+    let transport = TcpConfig::new()
+        .with_upgrade({
+            let upgrade = SecioConfig {
+                // See the documentation of `SecioKeyPair`.
+                key: ed25519_generated().unwrap(),
+            };
+
+            upgrade::map(upgrade, |out: SecioOutput<_>| out.stream)
+        });
+
     // Done to implement the transport trait in order to put it in a swarm.
-    let kad_connec_config_transport = kad_connec_config//.with_dummy_muxing();
-
-    // with_dummy_muxing: core/src/transport/mod.rs.
-
+    // fn upgrade(self, incoming: C, id: (), endpoint: Endpoint, addr: Maf) -> Self::Future
+    // C: AsyncRead + AsyncWrite + 'static, Transport and wrappers around it implements this.
+    // libp2p_core::upgrade::traits::{ConnectionUpgrade, Endpoint}
+    // /// Type of connection for the upgrade.
+    // #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+    // pub enum Endpoint {
+    //     /// The socket comes from a dialer.
+    //     Dialer,
+    //     /// The socket comes from a listener.
+    //     Listener,
+    // }
+    // Assume to choose a dialer as this is creating the kad_connec_config.
+    // pub trait ConnectionUpgrade<C, TAddrFut> {
+    //  ...
+    // /// Type of the future that will resolve to the remote's multiaddr.
+    let kad_connec_config_transport = kad_connec_config.upgrade(transport, (), Dialer, Future::/ip4/0.0.0.0/tcp/0);
+    
     let (swarm_controller, swarm_future) = swarm(kad_connec_config_transport,
             Ping, |(mut pinger, service), client_addr| {
         pinger.ping().map_err(|_| panic!())
