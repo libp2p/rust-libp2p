@@ -127,21 +127,6 @@ mod handshake;
 mod structs_proto;
 mod stream_cipher;
 
-unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
-    ::std::slice::from_raw_parts(
-        (p as *const T) as *const u8,
-        ::std::mem::size_of::<T>(),
-    )
-}
-
-fn constrain<F>(f: F) -> F
-where
-    F: for<'a> Fn(&'a String, &SecioKeyPair)
-        -> Result<(), Box<Error + Send + Sync>>,
-{
-    f
-}
-
 /// Implementation of the `ConnectionUpgrade` trait of `libp2p_core`. Automatically applies
 /// secio on any connection.
 #[derive(Clone)]
