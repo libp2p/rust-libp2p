@@ -219,35 +219,6 @@ impl SecioKeyPair {
         Ok(ed25519_key_pair)
     }
 
-    /// Saves a &SecioKeyPair.
-    pub fn save_key_pair(key_pair: &SecioKeyPair) -> io::Result<()> {
-        println!("Would you like to save the key pair to a file? Enter Y to save to ~/Ed25519_key_pair.txt \
-            (won't work on Windows), N for no, or otherwise enter a file path to save to: ");
-        // let reader = io::stdin();
-        let input_text = String::new();
-        // PD: let input = reader.read_line(&mut input_text).expect("failed to read line");
-        let write_key_pair_to_file = constrain(|input, key_pair| {
-            let path = Path::new(&input);
-            let mut file = File::create(path).expect("Error creating file, \
-                check that the file path entered is valid, e.g. ~/Ed25519_key_pair.txt");
-            // TODO: not sure how helpful this above and below error checks are; investigate.
-            file.write_all(unsafe {any_as_u8_slice(&key_pair)}).expect("error writing to file");
-            // TODO: this file should probably be encrypted and password-protected.
-            Ok(())
-        });
-        if input_text == "N" {
-            // do nothing
-        } else if input_text == "Y" {
-            write_key_pair_to_file(&"~/Ed25519_key_pair.txt".to_string(), key_pair).expect("Can't write the key \
-                pair to a file");
-                // TODO: should use better error handling than expect, where used above and below.
-        } else {
-            write_key_pair_to_file(&input_text, key_pair).expect("Can't write the key \
-                pair to a file");
-        }
-        Ok(())
-    }
-
     /// Builds a `SecioKeyPair` from a raw secp256k1 32 bytes private key.
     #[cfg(feature = "secp256k1")]
     pub fn secp256k1_raw_key<K>(key: K) -> Result<SecioKeyPair, Box<Error + Send + Sync>>
