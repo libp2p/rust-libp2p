@@ -5,6 +5,7 @@ use constants::{
 };
 use futures::Future;
 use futures_core::future::*;
+use libp2p::CommonTransport;
 use libp2p_core::{
     PeerId,
     swarm::swarm,
@@ -94,21 +95,21 @@ fn init_overlay() -> Result<KadSystem, Box<Error + Send + Sync>>,
     // As mentioned, KadConnecConfig's Output doesn't implement the `AsyncRead` and `AsyncWrite` traits,
     // but it also doesn't implement `with_upgrade`, just `upgrade`.
 
-    // So it isn't clear how to put a `KadConnecConfig` into a swarm, by first implementing a Transport trait.
+    // So it isn't clear how to put a `KadConnecConfig` into a swarm, by first implementing a Transport.
 
     // Could use `PlainTextConfig` or `secio`. For Ethereum a security layer is desirable, so let's try to use
     // secio.
     // Note: PlainTextConfig: core/src/upgrade/plaintext.rs
     // 
 
-    let transport = TcpConfig::new()
+    let transport = CommonTransport::new()
         .with_upgrade({
             let upgrade = SecioConfig {
                 // See the documentation of `SecioKeyPair`.
                 key: ed25519_generated().unwrap(),
-            };
+            }.unwrap();
 
-            upgrade::map(upgrade, |out: SecioOutput<_>| out.stream)
+            upgrade::map(upgrade, |out: SecioOutput<_>| out.stream).unwrap()
         });
 
     // Done to implement the transport trait in order to put it in a swarm.
@@ -127,8 +128,9 @@ fn init_overlay() -> Result<KadSystem, Box<Error + Send + Sync>>,
     // pub trait ConnectionUpgrade<C, TAddrFut> {
     //  ...
     // /// Type of the future that will resolve to the remote's multiaddr.
-    let kad_connec_config_transport = kad_connec_config.upgrade(transport, (), Dialer, Future::/ip4/0.0.0.0/tcp/0);
-    
+    let kad_connec_config_transport = kad_connec_config
+        .upgrade(transport, (), Dialer, Future::/ip4/0.0.0.0/tcp/0).unwrap();
+
     let (swarm_controller, swarm_future) = swarm(kad_connec_config_transport,
             Ping, |(mut pinger, service), client_addr| {
         pinger.ping().map_err(|_| panic!())
