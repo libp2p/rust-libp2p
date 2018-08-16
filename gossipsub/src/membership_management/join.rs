@@ -43,12 +43,11 @@ fn init_overlay() -> Result<KadSystem, Box<Error + Send + Sync>>,
 
     let mut core = tokio_core::reactor::Core::new().unwrap();
 
+    let mut handle = core.handle();
+
     // KadConnecConfig
     // In https://github.com/libp2p/rust-libp2p/blob/master/kad/src/kad_server.rs
-    let kad_connec_config = KadConnecConfig::new(tokio_core.handle());
-    // Assuming that the handle is needed,
-    // FMI see https://docs.rs/tokio-core/0.1.17/tokio_core/reactor/struct.Core.html#method.handle
-
+    let kad_connec_config = KadConnecConfig::new();
     // Implements core::upgrade::traits::ConnectionUpgrade and .upgrade() which produces a KadConnecController,
     // but "protocol negotiation" is required before upgrading. See also core::Readme#Connection_upgrades:
 
@@ -118,22 +117,15 @@ fn init_overlay() -> Result<KadSystem, Box<Error + Send + Sync>>,
             .map(|_| ())
     });
 
-    // let (swarm_controller, swarm_future) = swarm(kad_connec_config_transport,
-    //         Ping, |(mut pinger, service), client_addr| {
-    //     pinger.ping().map_err(|_| panic!())
-    //         .select(service).map_err(|_| panic!())
-    //         .map(|_| ())
-    // });
-
     // The `swarm_controller` can then be used to do some operations.
     // swarm_controller.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap());
 
     // "Build a `KadSystem` from the `KadSystemConfig`. This requires passing a closure that provides
     // the Kademlia controller of a peer."
     // FMI see https://github.com/libp2p/rust-libp2p/blob/master/kad/src/high_level.rs
-    let access = |peer_id: &PeerId| {
-        ok::
-    };
+    // let access = |peer_id: &PeerId| {
+    //     ok::
+    // };
 
     //     pub fn start<'a, F, Fut>(config: KadSystemConfig<impl Iterator<Item = PeerId>>, access: F)
     //     -> (KadSystem, impl Future<Item = (), Error = IoError> + 'a)
@@ -146,14 +138,14 @@ fn init_overlay() -> Result<KadSystem, Box<Error + Send + Sync>>,
     // }
 
     // TODO: complete initialization of KadSystem,
-    let kbuckets_table = KBucketsTable {
+    // let kbuckets_table = KBucketsTable {
         
-    };
+    // };
 
-    let kad_system = KadSystem {
-        kbuckets : 
-    }.start(kad_system_config, kad_peer_controller(oldest_peer_id));
-    Ok(kad_system)
+    // let kad_system = KadSystem {
+    //     kbuckets : 
+    // }.start(kad_system_config, kad_peer_controller(oldest_peer_id));
+    // Ok(kad_system)
 
     // pub struct KBucketsTable<Id, Val> {
     // my_id: Id,
