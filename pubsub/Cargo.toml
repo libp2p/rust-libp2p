@@ -1,0 +1,8 @@
+[package]
+name = "libp2p-pubsub"
+version = "0.1.0"
+authors = ["James Ray (@jamesray1)"]
+
+[dependencies]
+floodsub = { path = "../floodsub"}
+gossipsub = { path = "../gossipsub"}

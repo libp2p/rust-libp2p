@@ -195,8 +195,9 @@ impl SecioKeyPair {
     pub fn ed25519_generated() -> Result<SecioKeyPair, Box<Error + Send + Sync>> {
         let rng = SystemRandom::new();
         let gen = Ed25519KeyPair::generate_pkcs8(&rng).map_err(Box::new)?;
-        Ok(SecioKeyPair::ed25519_from_pkcs8(&gen[..])
-            .expect("failed to parse generated Ed25519 key"))
+        let ed25519_key_pair = SecioKeyPair::ed25519_from_pkcs8(&gen[..])
+            .expect("failed to parse generated Ed25519 key");
+        Ok(ed25519_key_pair)
     }
 
     /// Builds a `SecioKeyPair` from a raw secp256k1 32 bytes private key.

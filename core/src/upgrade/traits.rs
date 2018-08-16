@@ -63,7 +63,7 @@ pub trait ConnectionUpgrade<C, TAddrFut> {
 
     /// This method is called after protocol negotiation has been performed.
     ///
-    /// Because performing the upgrade may not be instantaneous (eg. it may require a handshake),
+    /// Because performing the upgrade may not be instantaneous (e.g. it may require a handshake),
     /// this function returns a future instead of the direct output.
     fn upgrade(
         self,
