@@ -44,9 +44,6 @@ mod constants;
 
 pub mod membership_management;
 
-// gossipsub is an extension of floodsub so it seems to make sense to use everything in floodsub.
-pub use libp2p_floodsub::*;
-
 // ## Differences from Plumtree/HyParView
 
 // There are some noteworthy differences in the protocol described and

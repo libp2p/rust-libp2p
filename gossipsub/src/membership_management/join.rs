@@ -23,6 +23,13 @@ use libp2p_tcp_transport::TcpConfig;
 use std::time::Duration;
 use tokio_current_thread;
 
+// Join overlay
+// 
+// Obtain initial contact nodes via rendevous with DHT provider records.
+
+// "Send a GETNODE message in order to obtain an up-to-date view of the overlay from the passive list of a 
+// subscribed node regardless of age of Provider records.
+
 fn init_overlay() -> Result<KadSystem, Box<Error + Send + Sync>>,
     // The following Kademlia quotes are from:
     // https://github.com/libp2p/rust-libp2p/blob/8e07c18178ac43cad3fa8974a243a98d9bc8b896/kad/src/lib.rs#L21.
@@ -185,12 +192,7 @@ fn init_overlay() -> Result<KadSystem, Box<Error + Send + Sync>>,
 
 // "You can perform queries using the `KadSystem`." TODO: Test
 
-// Join overlay
-// 
-// Obtain initial contact nodes via rendevous with DHT provider records.
 
-// "Send a GETNODE message in order to obtain an up-to-date view of the overlay from the passive list of a 
-// subscribed node regardless of age of Provider records.
 
 
 
