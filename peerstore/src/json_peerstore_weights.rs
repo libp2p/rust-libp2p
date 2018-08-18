@@ -1,4 +1,4 @@
-// Copyright 2017 Parity Technologies (UK) Ltd.
+// Copyright 2018 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -21,35 +21,35 @@
 //! Implementation of the `Peerstore` trait that uses a single JSON file as backend.
 
 use super::TTL;
+use PeerId;
 use bs58;
 use datastore::{Datastore, JsonFileDatastore, JsonFileDatastoreEntry, Query};
 use futures::{Future, Stream};
 use multiaddr::Multiaddr;
 use peer_info::{AddAddrBehaviour, PeerInfo};
-use peerstore::{PeerAccess, Peerstore};
+use peerstore::{PeerAccess, PeerAccessWeights, Peerstore};
 use rand;
 use std::io::Error as IoError;
 use std::iter;
 use std::path::PathBuf;
 use std::vec::IntoIter as VecIntoIter;
-use PeerId;
 
 /// Peerstore backend that uses a Json file.
-pub struct JsonPeerstore {
-    store: JsonFileDatastore<PeerInfo>,
+pub struct JsonPeerstoreWeights {
+    store: JsonFileDatastore<PeerInfo<Weight>>,
 }
 
-impl JsonPeerstore {
+impl JsonPeerstoreWeights {
     /// Opens a new peerstore tied to a JSON file at the given path.
     ///
     /// If the file exists, this function will open it. In any case, flushing the peerstore or
     /// destroying it will write to the file.
     #[inline]
-    pub fn new<P>(path: P) -> Result<JsonPeerstore, IoError>
+    pub fn new<P>(path: P) -> Result<JsonPeerstoreWeights, IoError>
     where
         P: Into<PathBuf>,
     {
-        Ok(JsonPeerstore {
+        Ok(JsonPeerstoreWeights {
             store: JsonFileDatastore::new(path)?,
         })
     }
@@ -65,62 +65,25 @@ impl JsonPeerstore {
     }
 }
 
-impl<'a> Peerstore for &'a JsonPeerstore {
-    type PeerAccess = JsonPeerstoreAccess<'a>;
+impl<'a> Peerstore for &'a JsonPeerstoreWeights {
+    type PeerAccess = JsonPeerstoreWeightsAccess<'a>;
     type PeersIter = Box<Iterator<Item = PeerId>>;
 
     #[inline]
     fn peer(self, peer_id: &PeerId) -> Option<Self::PeerAccess> {
         let hash = bs58::encode(peer_id.as_bytes()).into_string();
-        self.store.lock(hash.into()).map(JsonPeerstoreAccess)
+        self.store.lock(hash.into()).map(JsonPeerstoreWeightsAccess)
     }
 
     #[inline]
     fn peer_or_create(self, peer_id: &PeerId) -> Self::PeerAccess {
         let hash = bs58::encode(peer_id.as_bytes()).into_string();
-        JsonPeerstoreAccess(self.store.lock_or_create(hash.into()))
+        JsonPeerstoreWeightsAccess(self.store.lock_or_create(hash.into()))
     }
 
     fn random_peer(self) -> Option<(PeerId, Self::PeerAccess)> {
-        // Since everything can be racy, we use a loop and continue until everything works.
-        loop {
-            let store_len = self.store.len();
-            if store_len == 0 {
-                return None;
-            }
+        // TODO: optimize
 
-            let num = rand::random::<usize>() % store_len;
-
-            let query = self.store.query(Query {
-                prefix: "".into(),
-                filters: vec![],
-                orders: vec![],
-                skip: num as u64,
-                limit: 1,
-                keys_only: true,
-            });
-
-            // Wait can never block for the JSON datastore.
-            let elem = match query.into_future().wait().ok() {
-                Some((Some((e, _)), _)) => e,
-                _ => continue
-            };
-
-            let id = match PeerId::from_bytes(bs58::decode(&elem).into_vec().ok()?).ok() {
-                Some(id) => id,
-                None => continue
-            };
-
-            let access = match self.store.lock(elem.into()).map(JsonPeerstoreAccess) {
-                Some(acc) => acc,
-                None => continue
-            };
-
-            break Some((id, access))
-        }
-    }
-
-    fn peers(self) -> Self::PeersIter {
         let query = self.store.query(Query {
             prefix: "".into(),
             filters: vec![],
@@ -131,10 +94,53 @@ impl<'a> Peerstore for &'a JsonPeerstore {
         });
 
         let list = query
-            .filter_map(|(key, info)| {
-                if info.addrs().count() == 0 {
-                    return None // all addresses are expired
+            .filter_map(|(key, value)| {
+                // We filter out invalid elements. This can happen if the JSON storage file was
+                // corrupted or manually modified by the user.
+                if let Some(id) = PeerId::from_bytes(bs58::decode(key.clone()).into_vec().ok()?).ok() {
+                    Some((id, key, value))
+                } else {
+                    None
                 }
+            })
+            .collect()
+            .wait()  // Wait can never block for the JSON datastore.
+            .unwrap_or(Vec::new());
+
+        let sum = list.iter().fold(0u64, |a, v| a + v.2.extra().0 as u64);
+        if sum == 0 {
+            return None;
+        }
+
+        let mut num = rand::random::<u64>() % sum;
+        let (id, lock) = 'outer: loop {
+            for elem in list.iter() {
+                let val = elem.2.extra().0 as u64;
+                if num <= val {
+                    if let Some(lock) = self.store.lock(elem.1.as_str().into()) {
+                        break 'outer (elem.0.clone(), JsonPeerstoreWeightsAccess(lock));
+                    }
+                } else {
+                    num -= val;
+                }
+            }
+        };
+
+        Some((id, lock))
+    }
+
+    fn peers(self) -> Self::PeersIter {
+        let query = self.store.query(Query {
+            prefix: "".into(),
+            filters: vec![],
+            orders: vec![],
+            skip: 0,
+            limit: u64::max_value(),
+            keys_only: true,
+        });
+
+        let list = query
+            .filter_map(|(key, _)| {
                 // We filter out invalid elements. This can happen if the JSON storage file was
                 // corrupted or manually modified by the user.
                 PeerId::from_bytes(bs58::decode(key).into_vec().ok()?).ok()
@@ -151,9 +157,17 @@ impl<'a> Peerstore for &'a JsonPeerstore {
     }
 }
 
-pub struct JsonPeerstoreAccess<'a>(JsonFileDatastoreEntry<'a, PeerInfo>);
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialOrd, Ord, PartialEq, Eq)]
+struct Weight(u32);
+impl Default for Weight {
+    fn default() -> Weight {
+        Weight(1)
+    }
+}
 
-impl<'a> PeerAccess for JsonPeerstoreAccess<'a> {
+pub struct JsonPeerstoreWeightsAccess<'a>(JsonFileDatastoreEntry<'a, PeerInfo<Weight>>);
+
+impl<'a> PeerAccess for JsonPeerstoreWeightsAccess<'a> {
     type AddrsIter = VecIntoIter<Multiaddr>;
 
     #[inline]
@@ -178,34 +192,14 @@ impl<'a> PeerAccess for JsonPeerstoreAccess<'a> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    extern crate tempfile;
-    peerstore_tests!(
-        {::json_peerstore::JsonPeerstore::new(temp_file.path()).unwrap()}
-        {let temp_file = self::tempfile::NamedTempFile::new().unwrap()}
-    );
+impl<'a> PeerAccessWeights for JsonPeerstoreWeightsAccess<'a> {
+    #[inline]
+    fn weight(&self) -> u32 {
+        self.0.extra().0
+    }
 
-    #[test]
-    fn reload() {
-        let temp_file = self::tempfile::NamedTempFile::new().unwrap();
-        let peer_store = ::json_peerstore::JsonPeerstore::new(temp_file.path()).unwrap();
-
-        let peer_id = PeerId::from_public_key(PublicKey::Ed25519(vec![1, 2, 3]));
-        let addr = "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap();
-
-        peer_store
-            .peer_or_create(&peer_id)
-            .add_addr(addr.clone(), Duration::from_millis(5000));
-        peer_store.flush().unwrap();
-        drop(peer_store);
-
-        let peer_store = ::json_peerstore::JsonPeerstore::new(temp_file.path()).unwrap();
-        let addrs = peer_store
-            .peer(&peer_id)
-            .unwrap()
-            .addrs()
-            .collect::<Vec<_>>();
-        assert_eq!(addrs, &[addr]);
+    #[inline]
+    fn set_weight(&mut self, value: u32) {
+        self.0.extra_mut().0 = value;
     }
 }
