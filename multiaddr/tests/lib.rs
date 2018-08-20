@@ -1,5 +1,7 @@
 extern crate multiaddr;
 extern crate data_encoding;
+extern crate serde_json;
+extern crate bincode;
 
 use data_encoding::hex;
 use multiaddr::*;
@@ -172,4 +174,25 @@ fn to_multiaddr() {
 fn from_bytes_fail() {
     let bytes = vec![1, 2, 3, 4];
     assert!(Multiaddr::from_bytes(bytes).is_err());
+}
+
+
+#[test]
+fn ser_and_deser_json() {
+    let addr : Multiaddr = "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap();
+    let serialized = serde_json::to_string(&addr).unwrap();
+    assert_eq!(serialized, "\"/ip4/0.0.0.0/tcp/0\"");
+    let deserialized: Multiaddr = serde_json::from_str(&serialized).unwrap();
+    assert_eq!(addr, deserialized);
+}
+
+
+#[test]
+fn ser_and_deser_bincode() {
+    let addr : Multiaddr = "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap();
+    let serialized = bincode::serialize(&addr).unwrap();
+    // compact addressing
+    assert_eq!(serialized, vec![8, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 6, 0, 0]);
+    let deserialized: Multiaddr = bincode::deserialize(&serialized).unwrap();
+    assert_eq!(addr, deserialized);
 }

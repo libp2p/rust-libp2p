@@ -6,6 +6,7 @@
 extern crate bs58;
 extern crate byteorder;
 extern crate integer_encoding;
+extern crate serde;
 pub extern crate multihash;
 
 mod protocol;
@@ -14,7 +15,10 @@ mod errors;
 pub use errors::{Result, Error};
 pub use protocol::{Protocol, ProtocolArgSize, AddrComponent};
 
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeserializerError};
+
 use std::fmt;
+use std::result::Result as StdResult;
 use std::iter::FromIterator;
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, IpAddr, Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
@@ -23,6 +27,35 @@ use std::str::FromStr;
 #[derive(PartialEq, Eq, Clone, Hash)]
 pub struct Multiaddr {
     bytes: Vec<u8>,
+}
+
+impl Serialize for Multiaddr {
+    fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        if serializer.is_human_readable() {
+            // Serialize to a human-readable string "2015-05-15T17:01:00Z".
+            self.to_string().serialize(serializer)
+        } else {
+            self.to_bytes().serialize(serializer)
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Multiaddr {
+    fn deserialize<D>(deserializer: D) -> StdResult<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        if deserializer.is_human_readable() {
+            let addr: String = Deserialize::deserialize(deserializer)?;
+            addr.parse::<Multiaddr>().map_err(|err| DeserializerError::custom(err))
+        } else {
+            let addr: Vec<u8> = Deserialize::deserialize(deserializer)?;
+            Multiaddr::from_bytes(addr).map_err(|err| DeserializerError::custom(err))
+        }
+    }
 }
 
 impl fmt::Debug for Multiaddr {
