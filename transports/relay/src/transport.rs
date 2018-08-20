@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use core::Transport;
+use core::transport::{Transport, ListenerResult, DialResult, TransportError};
 use futures::{stream, prelude::*};
 use message::{CircuitRelay, CircuitRelay_Peer, CircuitRelay_Type};
 use multiaddr::Multiaddr;
@@ -51,26 +51,30 @@ where
     type ListenerUpgrade = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error>>;
     type Dial = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error>>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        Err((self, addr))
+    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
+        Err((self, TransportError::ListenNotSupported(addr)))
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
         match RelayAddr::parse(&addr) {
             RelayAddr::Malformed => {
-                debug!("malformed address: {}", addr);
-                return Err((self, addr));
+                let err = io::Error::new(io::ErrorKind::InvalidInput,
+                                         format!("malformed address: {}", addr));
+                return Err((self, TransportError::DialingFailed(addr, err)));
             }
             RelayAddr::Multihop => {
-                debug!("multihop address: {}", addr);
-                return Err((self, addr));
+                let err = io::Error::new(io::ErrorKind::InvalidInput,
+                                         format!("multihop address: {}", addr));
+                return Err((self, TransportError::DialingFailed(addr, err)));
             }
             RelayAddr::Address { relay, dest } => {
                 if let Some(ref r) = relay {
-                    let f = self.relay_via(r, &dest).map_err(|this| (this, addr))?;
+                    let f = self.relay_via(r, &dest)
+                        .map_err(|(this, err)| (this, TransportError::DialingFailed(addr, err)))?;
                     Ok(Box::new(f))
                 } else {
-                    let f = self.relay_to(&dest).map_err(|this| (this, addr))?;
+                    let f = self.relay_to(&dest)
+                        .map_err(|(this, err)| (this, TransportError::DialingFailed(addr, err)))?;
                     Ok(Box::new(f))
                 }
             }
@@ -106,7 +110,8 @@ where
     }
 
     // Relay to destination over any available relay node.
-    fn relay_to(self, destination: &Peer) -> Result<impl Future<Item=(T::Output, T::MultiaddrFuture), Error=io::Error>, Self> {
+    fn relay_to(self, destination: &Peer)
+        -> Result<impl Future<Item=(T::Output, T::MultiaddrFuture), Error=io::Error>, (Self, io::Error)> {
         trace!("relay_to {:?}", destination.id);
         let mut dials = Vec::new();
         for relay in &*self.relays {
@@ -120,8 +125,8 @@ where
         }
 
         if dials.is_empty() {
-            info!("no relay available for {:?}", destination.id);
-            return Err(self);
+            let msg = format!("no relay available for {:?}", destination.id);
+            return Err((self, io::Error::new(io::ErrorKind::NotFound, msg)));
         }
 
         // Try one relay after another and stick to the first working one.
@@ -144,7 +149,8 @@ where
     }
 
     // Relay to destination via the given peer.
-    fn relay_via(self, relay: &Peer, destination: &Peer) -> Result<impl Future<Item=(T::Output, T::MultiaddrFuture), Error=io::Error>, Self> {
+    fn relay_via(self, relay: &Peer, destination: &Peer)
+        -> Result<impl Future<Item=(T::Output, T::MultiaddrFuture), Error=io::Error>, (Self, io::Error)> {
         trace!("relay_via {:?} to {:?}", relay.id, destination.id);
         let mut addresses = Vec::new();
 
@@ -160,8 +166,8 @@ where
 
         // no relay address => bail out
         if addresses.is_empty() {
-            info!("no available address for relay: {:?}", relay.id);
-            return Err(self);
+            let msg = format!("no available address for relay: {:?}", relay.id);
+            return Err((self, io::Error::new(io::ErrorKind::NotFound, msg)));
         }
 
         let relay = relay.clone();

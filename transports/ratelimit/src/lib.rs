@@ -29,7 +29,7 @@ extern crate tokio_io;
 
 use aio_limited::{Limited, Limiter};
 use futures::prelude::*;
-use libp2p_core::{Multiaddr, Transport};
+use libp2p_core::{Multiaddr, Transport, ListenerResult, DialResult};
 use std::io;
 use tokio_executor::Executor;
 use tokio_io::{AsyncRead, AsyncWrite, io::{ReadHalf, WriteHalf}};
@@ -164,7 +164,7 @@ where
     type ListenerUpgrade = ListenerUpgrade<T>;
     type Dial = Box<Future<Item = (Connection<T::Output>, Self::MultiaddrFuture), Error = io::Error>>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)>
+    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self>
     where
         Self: Sized,
     {
@@ -181,7 +181,7 @@ where
             .map_err(|(transport, a)| (RateLimited::from_parts(transport, r, w), a))
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)>
+    fn dial(self, addr: Multiaddr) -> DialResult<Self>
     where
         Self: Sized,
     {

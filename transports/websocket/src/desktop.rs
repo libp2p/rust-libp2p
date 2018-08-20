@@ -22,7 +22,7 @@ use futures::{stream, Future, IntoFuture, Sink, Stream};
 use multiaddr::{AddrComponent, Multiaddr};
 use rw_stream_sink::RwStreamSink;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use swarm::Transport;
+use swarm::{Transport, ListenerResult, DialResult, TransportError};
 use tokio_io::{AsyncRead, AsyncWrite};
 use websocket::client::builder::ClientBuilder;
 use websocket::message::OwnedMessage;
@@ -73,11 +73,11 @@ where
     fn listen_on(
         self,
         original_addr: Multiaddr,
-    ) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+    ) -> ListenerResult<Self> {
         let mut inner_addr = original_addr.clone();
         match inner_addr.pop() {
             Some(AddrComponent::WS) => {}
-            _ => return Err((self, original_addr)),
+            _ => return Err((self, TransportError::ListenNotSupported(original_addr))),
         };
 
         let (inner_listen, new_addr) = match self.transport.listen_on(inner_addr) {
@@ -86,12 +86,12 @@ where
                 new_addr.append(AddrComponent::WS);
                 (listen, new_addr)
             }
-            Err((transport, _)) => {
+            Err((transport, err)) => {
                 return Err((
                     WsConfig {
                         transport: transport,
                     },
-                    original_addr,
+                    err,
                 ));
             }
         };
@@ -154,7 +154,7 @@ where
         Ok((listen, new_addr))
     }
 
-    fn dial(self, original_addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+    fn dial(self, original_addr: Multiaddr) -> DialResult<Self> {
         let mut inner_addr = original_addr.clone();
         let is_wss = match inner_addr.pop() {
             Some(AddrComponent::WS) => false,
@@ -164,7 +164,7 @@ where
                     "Ignoring dial attempt for {} because it is not a websocket multiaddr",
                     original_addr
                 );
-                return Err((self, original_addr));
+                return Err((self, TransportError::DialNotSupported(original_addr)));
             }
         };
 
@@ -174,16 +174,16 @@ where
 
         let inner_dial = match self.transport.dial(inner_addr) {
             Ok(d) => d,
-            Err((transport, old_addr)) => {
+            Err((transport, err)) => {
                 debug!(
                     "Failed to dial {} because {} is not supported by the underlying transport",
-                    original_addr, old_addr
+                    original_addr, err
                 );
                 return Err((
                     WsConfig {
                         transport: transport,
                     },
-                    original_addr,
+                    err,
                 ));
             }
         };

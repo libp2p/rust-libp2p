@@ -21,7 +21,7 @@
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::io::Error as IoError;
-use transport::{MuxedTransport, Transport};
+use transport::{MuxedTransport, Transport, ListenerResult, DialResult};
 use upgrade::Endpoint;
 
 /// See the `Transport::and_then` method.
@@ -51,18 +51,18 @@ where
     type Dial = Box<Future<Item = (O, Self::MultiaddrFuture), Error = IoError>>;
 
     #[inline]
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
         let upgrade = self.upgrade;
 
         let (listening_stream, new_addr) = match self.transport.listen_on(addr) {
             Ok((l, new_addr)) => (l, new_addr),
-            Err((trans, addr)) => {
+            Err((trans, err)) => {
                 let builder = AndThen {
                     transport: trans,
                     upgrade: upgrade,
                 };
 
-                return Err((builder, addr));
+                return Err((builder, err));
             }
         };
 
@@ -83,7 +83,7 @@ where
     }
 
     #[inline]
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
         let upgrade = self.upgrade;
 
         let dialed_fut = match self.transport.dial(addr.clone()) {

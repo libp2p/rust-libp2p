@@ -24,7 +24,7 @@ use multiaddr::Multiaddr;
 use muxing::StreamMuxer;
 use std::io::Error as IoError;
 use tokio_io::{AsyncRead, AsyncWrite};
-use transport::{MuxedTransport, Transport};
+use transport::{MuxedTransport, Transport, TransportError, ListenerResult, DialResult};
 use upgrade::{apply, ConnectionUpgrade, Endpoint};
 
 /// Implements the `Transport` trait. Dials or listens, then upgrades any dialed or received
@@ -77,7 +77,7 @@ where
     pub fn dial(
         self,
         addr: Multiaddr,
-    ) -> Result<Box<Future<Item = (C::Output, C::MultiaddrFuture), Error = IoError> + 'a>, (Self, Multiaddr)>
+    ) -> Result<Box<Future<Item = (C::Output, C::MultiaddrFuture), Error = IoError> + 'a>, (Self, TransportError)>
     where
         C::NamesIter: Clone, // TODO: not elegant
     {
@@ -157,7 +157,7 @@ where
             >,
             Multiaddr,
         ),
-        (Self, Multiaddr),
+        (Self, TransportError),
     >
     where
         C::NamesIter: Clone, // TODO: not elegant
@@ -212,12 +212,12 @@ where
     type Dial = Box<Future<Item = (C::Output, Self::MultiaddrFuture), Error = IoError>>;
 
     #[inline]
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
         self.listen_on(addr)
     }
 
     #[inline]
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
         self.dial(addr)
     }
 

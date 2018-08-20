@@ -162,7 +162,7 @@ pub extern crate libp2p_yamux as yamux;
 
 pub mod simple;
 
-pub use self::core::{Transport, ConnectionUpgrade, PeerId, swarm};
+pub use self::core::{Transport, ConnectionUpgrade, PeerId, swarm, ListenerResult, DialResult};
 pub use self::multiaddr::Multiaddr;
 pub use self::simple::SimpleProtocol;
 pub use self::transport_timeout::TransportTimeout;
@@ -221,7 +221,7 @@ impl Transport for CommonTransport {
     type Dial = <InnerImplementation as Transport>::Dial;
 
     #[inline]
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
         match self.inner.inner.listen_on(addr) {
             Ok(res) => Ok(res),
             Err((inner, addr)) => {
@@ -232,7 +232,7 @@ impl Transport for CommonTransport {
     }
 
     #[inline]
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
         match self.inner.inner.dial(addr) {
             Ok(res) => Ok(res),
             Err((inner, addr)) => {

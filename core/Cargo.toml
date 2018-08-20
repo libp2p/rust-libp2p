@@ -19,6 +19,8 @@ quick-error = "1.2"
 rw-stream-sink = { path = "../misc/rw-stream-sink" }
 smallvec = "0.5"
 tokio-io = "0.1"
+failure = "0.1.2"
+failure_derive = "0.1.2"
 
 [dev-dependencies]
 libp2p-ping = { path = "../protocols/ping" }

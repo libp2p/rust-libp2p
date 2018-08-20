@@ -30,7 +30,7 @@
 //! together in a complex chain of protocols negotiation.
 
 use futures::prelude::*;
-use multiaddr::Multiaddr;
+use multiaddr::{Multiaddr, Error as MultiaddrError};
 use std::io::Error as IoError;
 use tokio_io::{AsyncRead, AsyncWrite};
 use upgrade::{ConnectionUpgrade, Endpoint};
@@ -53,6 +53,36 @@ pub use self::dummy::DummyMuxing;
 pub use self::memory::connector;
 pub use self::muxed::MuxedTransport;
 pub use self::upgrade::UpgradedNode;
+
+
+// This is a new error type that you've created. It represents the ways a
+// toolchain could be invalid.
+//
+// The custom derive for Fail derives an impl of both Fail and Display.
+// We don't do any other magic like creating new types.
+#[derive(Debug, Fail)]
+pub enum TransportError {
+    #[fail(display= "Error parsing Address {}: {}", addr, err)]
+    MultiAddrParseError {
+        addr: Multiaddr,
+        #[cause] err: MultiaddrError
+    },
+    #[fail(display = "Listening is not support for Multiaddress {}", _0)]
+    ListenNotSupported(Multiaddr),
+
+    #[fail(display = "Listening on Multiaddress {} failed: {}", _0, _1)]
+    ListenFailed(Multiaddr, #[cause] IoError),
+
+    #[fail(display = "Dialing is not support for Multiaddress {}", _0)]
+    DialNotSupported(Multiaddr),
+
+    #[fail(display = "Dialing for Multiaddress {} failed: {}", _0, _1)]
+    DialingFailed(Multiaddr, #[cause] IoError),
+}
+
+pub type ListenerResult<T> = Result<(<T as Transport>::Listener, Multiaddr), (T, TransportError)>;
+pub type DialResult<T> = Result<<T as Transport>::Dial, (T, TransportError)>;
+
 
 /// A transport is an object that can be used to produce connections by listening or dialing a
 /// peer.
@@ -93,17 +123,17 @@ pub trait Transport {
     ///
     /// Returns the address back if it isn't supported.
     ///
-    /// > **Note**: The reason why we need to change the `Multiaddr` on success is to handle
+    /// > **Note**: The reason why w eneed to change the `Multiaddr` on success is to handle
     /// >             situations such as turning `/ip4/127.0.0.1/tcp/0` into
     /// >             `/ip4/127.0.0.1/tcp/<actual port>`.
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)>
+    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self>
     where
         Self: Sized;
 
     /// Dial to the given multi-addr.
     ///
     /// Returns either a future which may resolve to a connection, or gives back the multiaddress.
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)>
+    fn dial(self, addr: Multiaddr) -> DialResult<Self>
     where
         Self: Sized;
 

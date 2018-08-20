@@ -65,7 +65,7 @@ use futures::stream::Stream;
 use multiaddr::{AddrComponent, Multiaddr};
 use std::io::Error as IoError;
 use std::path::PathBuf;
-use libp2p_core::Transport;
+use libp2p_core::{Transport, TransportError, ListenerResult, DialResult};
 use tokio_uds::{UnixListener, UnixStream};
 
 /// Represents the configuration for a Unix domain sockets transport capability for libp2p.
@@ -91,14 +91,14 @@ impl Transport for UdsConfig {
     type MultiaddrFuture = FutureResult<Multiaddr, IoError>;
     type Dial = Box<Future<Item = (UnixStream, Self::MultiaddrFuture), Error = IoError> + Send + Sync>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
         if let Ok(path) = multiaddr_to_path(&addr) {
             let listener = UnixListener::bind(&path);
             // We need to build the `Multiaddr` to return from this function. If an error happened,
             // just return the original multiaddr.
             match listener {
                 Ok(_) => {},
-                Err(_) => return Err((self, addr)),
+                Err(e) => return Err((self, TransportError::ListenFailed(addr, e))),
             };
 
             debug!("Now listening on {}", addr);
@@ -115,17 +115,17 @@ impl Transport for UdsConfig {
                 .flatten_stream();
             Ok((Box::new(future), new_addr))
         } else {
-            Err((self, addr))
+            Err((self, TransportError::ListenNotSupported(addr)))
         }
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
         if let Ok(path) = multiaddr_to_path(&addr) {
             debug!("Dialing {}", addr);
             let fut = UnixStream::connect(&path).map(|t| (t, future::ok(addr)));
             Ok(Box::new(fut) as Box<_>)
         } else {
-            Err((self, addr))
+            Err((self, TransportError::DialNotSupported(addr)))
         }
     }
 

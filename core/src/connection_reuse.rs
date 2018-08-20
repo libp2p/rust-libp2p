@@ -50,7 +50,7 @@ use parking_lot::Mutex;
 use std::io::{self, Error as IoError};
 use std::sync::Arc;
 use tokio_io::{AsyncRead, AsyncWrite};
-use transport::{MuxedTransport, Transport, UpgradedNode};
+use transport::{MuxedTransport, Transport, UpgradedNode, ListenerResult, DialResult};
 use upgrade::ConnectionUpgrade;
 
 /// Allows reusing the same muxed connection multiple times.
@@ -130,16 +130,16 @@ where
     type ListenerUpgrade = FutureResult<(Self::Output, Self::MultiaddrFuture), IoError>;
     type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
         let (listener, new_addr) = match self.inner.listen_on(addr.clone()) {
             Ok((l, a)) => (l, a),
-            Err((inner, addr)) => {
+            Err((inner, err)) => {
                 return Err((
                     ConnectionReuse {
                         inner: inner,
                         shared: self.shared,
                     },
-                    addr,
+                    err
                 ));
             }
         };
@@ -162,7 +162,7 @@ where
         Ok((Box::new(listener) as Box<_>, new_addr))
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
         // If we already have an active connection, use it!
         let substream = if let Some(muxer) = self.shared
             .lock()

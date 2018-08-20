@@ -29,7 +29,7 @@ use std::iter;
 use std::sync::{Arc, Mutex};
 use stdweb::web::TypedArray;
 use stdweb::{self, Reference};
-use swarm::Transport;
+use transport::{MuxedTransport, Transport, ListenerResult, DialResult};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Represents the configuration for a websocket transport capability for libp2p.
@@ -60,12 +60,12 @@ impl Transport for BrowserWsConfig {
     type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
     #[inline]
-    fn listen_on(self, a: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+    fn listen_on(self, a: Multiaddr) -> ListenerResult<Self> {
         // Listening is never supported.
         Err((self, a))
     }
 
-    fn dial(self, original_addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+    fn dial(self, original_addr: Multiaddr) -> DialResult<Self> {
         // Making sure we are initialized before we dial. Initialization is protected by a simple
         // boolean static variable, so it's not a problem to call it multiple times and the cost
         // is negligible.

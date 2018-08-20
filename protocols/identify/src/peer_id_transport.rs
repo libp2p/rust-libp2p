@@ -20,7 +20,7 @@
 
 use futures::{future, stream, Future, Stream};
 use identify_transport::{IdentifyTransport, IdentifyTransportOutcome};
-use libp2p_core::{PeerId, MuxedTransport, Transport};
+use libp2p_core::{PeerId, MuxedTransport, Transport, ListenerResult, DialResult};
 use multiaddr::{AddrComponent, Multiaddr};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -57,7 +57,7 @@ where
     type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
     #[inline]
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
         // Note that `listen_on` expects a "regular" multiaddr (eg. `/ip/.../tcp/...`),
         // and not `/p2p/<foo>`.
 
@@ -105,7 +105,7 @@ where
     }
 
     #[inline]
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
         match multiaddr_to_peerid(addr.clone()) {
             Ok(peer_id) => {
                 // If the multiaddress is a peer ID, try each known multiaddress (taken from the
@@ -296,7 +296,7 @@ mod tests {
     use self::libp2p_tcp_transport::TcpConfig;
     use PeerIdTransport;
     use futures::{Future, Stream};
-    use libp2p_core::{Transport, PeerId, PublicKey};
+    use libp2p_core::{Transport, PeerId, ListenerResult, DialResult, PublicKey};
     use multiaddr::{AddrComponent, Multiaddr};
     use std::io::Error as IoError;
     use std::iter;
@@ -320,11 +320,11 @@ mod tests {
             fn listen_on(
                 self,
                 _: Multiaddr,
-            ) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+            ) -> ListenerResult<Self> {
                 unreachable!()
             }
             #[inline]
-            fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+            fn dial(self, addr: Multiaddr) -> DialResult<Self> {
                 assert_eq!(
                     addr,
                     "/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap()

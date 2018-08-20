@@ -21,7 +21,7 @@
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::io::Error as IoError;
-use transport::{MuxedTransport, Transport};
+use transport::{MuxedTransport, Transport, ListenerResult, DialResult};
 
 /// See `Transport::map_err_dial`.
 #[derive(Debug, Copy, Clone)]
@@ -49,14 +49,14 @@ where
     type ListenerUpgrade = T::ListenerUpgrade;
     type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
         match self.transport.listen_on(addr) {
             Ok(l) => Ok(l),
             Err((transport, addr)) => Err((MapErrDial { transport, map: self.map }, addr)),
         }
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
         let map = self.map;
 
         match self.transport.dial(addr.clone()) {

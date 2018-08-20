@@ -20,7 +20,7 @@
 
 use futures::{future, prelude::*, sync::oneshot};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use transport::{MuxedTransport, Transport};
+use transport::{MuxedTransport, Transport, ListenerResult, DialResult};
 use Multiaddr;
 
 /// See `Transport::interruptible`.
@@ -52,7 +52,7 @@ where
     type Dial = InterruptibleDial<T::Dial>;
 
     #[inline]
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
         match self.transport.listen_on(addr) {
             Ok(val) => Ok(val),
             Err((transport, addr)) => Err((Interruptible { transport, rx: self.rx }, addr)),
@@ -60,7 +60,7 @@ where
     }
 
     #[inline]
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
         match self.transport.dial(addr) {
             Ok(future) => {
                 Ok(InterruptibleDial {

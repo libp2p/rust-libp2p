@@ -26,7 +26,8 @@ use parking_lot::Mutex;
 use std::fmt;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::sync::Arc;
-use {Multiaddr, MuxedTransport, Transport};
+use transport::{Transport, TransportError};
+use {Multiaddr, MuxedTransport};
 
 /// Creates a swarm.
 ///
@@ -115,7 +116,7 @@ where
     /// variable), this side effect will be observable when this future succeeds.
     #[inline]
     pub fn dial<Du>(&self, multiaddr: Multiaddr, transport: Du)
-        -> Result<impl Future<Item = (), Error = IoError>, Multiaddr>
+        -> Result<impl Future<Item = (), Error = IoError>, TransportError>
     where
         Du: Transport + 'static, // TODO: 'static :-/
         Du::Output: Into<T::Output>,
@@ -128,7 +129,7 @@ where
     ///
     /// The returned future is filled with the output of `then`.
     pub(crate) fn dial_then<Du, F>(&self, multiaddr: Multiaddr, transport: Du, then: F)
-        -> Result<impl Future<Item = (), Error = IoError>, Multiaddr>
+        -> Result<impl Future<Item = (), Error = IoError>, TransportError>
     where
         Du: Transport + 'static, // TODO: 'static :-/
         Du::Output: Into<T::Output>,
@@ -178,7 +179,7 @@ where
                     }
                 }))
             }
-            Err((_, multiaddr)) => Err(multiaddr),
+            Err((_, err)) => Err(err),
         }
     }
 
@@ -196,7 +197,7 @@ where
     /// Adds a multiaddr to listen on. All the incoming connections will use the `upgrade` that
     /// was passed to `swarm`.
     // TODO: add a way to cancel a listener
-    pub fn listen_on(&self, multiaddr: Multiaddr) -> Result<Multiaddr, Multiaddr> {
+    pub fn listen_on(&self, multiaddr: Multiaddr) -> Result<Multiaddr, TransportError> {
         match self.transport.clone().listen_on(multiaddr) {
             Ok((listener, new_addr)) => {
                 trace!("Swarm listening on {}", new_addr);

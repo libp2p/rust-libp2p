@@ -22,8 +22,7 @@ use futures::future;
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::io::{self, Cursor};
-use transport::MuxedTransport;
-use transport::Transport;
+use transport::{MuxedTransport, Transport, TransportError, ListenerResult, DialResult};
 
 /// Dummy implementation of `Transport` that just denies every single attempt.
 #[derive(Debug, Copy, Clone)]
@@ -38,13 +37,13 @@ impl Transport for DeniedTransport {
     type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = io::Error> + Send + Sync>;
 
     #[inline]
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        Err((DeniedTransport, addr))
+    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
+        Err((DeniedTransport, TransportError::ListenNotSupported(addr)))
     }
 
     #[inline]
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-        Err((DeniedTransport, addr))
+    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
+        Err((DeniedTransport, TransportError::DialNotSupported(addr)))
     }
 
     #[inline]
