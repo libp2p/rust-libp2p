@@ -44,14 +44,16 @@ use futures::{future, stream::Fuse, task};
 use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
 
-// Maximum number of simultaneously-open substreams.
-const MAX_SUBSTREAMS: usize = 1024;
-// Maximum number of elements in the internal buffer.
-const MAX_BUFFER_LEN: usize = 1024;
-
 /// Configuration for the multiplexer.
-#[derive(Debug, Clone, Default)]
-pub struct MplexConfig;
+#[derive(Debug, Clone)]
+pub struct MplexConfig {
+    /// Maximum number of simultaneously-open substreams.
+    max_substreams: usize,
+    /// Maximum number of elements in the internal buffer.
+    max_buffer_len: usize,
+    /// Behaviour when the buffer size limit is reached.
+    max_buffer_behaviour: MaxBufferBehaviour,
+}
 
 impl MplexConfig {
     /// Builds the default configuration.
@@ -59,6 +61,57 @@ impl MplexConfig {
     pub fn new() -> MplexConfig {
         Default::default()
     }
+
+    /// Sets the maximum number of simultaneously opened substreams, after which an error is
+    /// generated and the connection closes.
+    ///
+    /// A limit is necessary in order to avoid DoS attacks.
+    #[inline]
+    pub fn max_substreams(&mut self, max: usize) -> &mut Self {
+        self.max_substreams = max;
+        self
+    }
+
+    /// Sets the maximum number of pending incoming messages.
+    ///
+    /// A limit is necessary in order to avoid DoS attacks.
+    #[inline]
+    pub fn max_buffer_len(&mut self, max: usize) -> &mut Self {
+        self.max_buffer_len = max;
+        self
+    }
+
+    /// Sets the behaviour when the maximum buffer length has been reached.
+    ///
+    /// See the documentation of `MaxBufferBehaviour`.
+    #[inline]
+    pub fn max_buffer_len_behaviour(&mut self, behaviour: MaxBufferBehaviour) -> &mut Self {
+        self.max_buffer_behaviour = behaviour;
+        self
+    }
+}
+
+impl Default for MplexConfig {
+    #[inline]
+    fn default() -> MplexConfig {
+        MplexConfig {
+            max_substreams: 128,
+            max_buffer_len: 4096,
+            max_buffer_behaviour: MaxBufferBehaviour::CloseAll,
+        }
+    }
+}
+
+/// Behaviour when the maximum length of the buffer is reached.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum MaxBufferBehaviour {
+    /// Produce an error on all the substreams.
+    CloseAll,
+    /// No new message will be read from the underlying connection if the buffer is full.
+    ///
+    /// This can potentially introduce a deadlock if you are waiting for a message from a substream
+    /// before processing the messages received on another substream.
+    Block,
 }
 
 impl<C, Maf> ConnectionUpgrade<C, Maf> for MplexConfig
@@ -73,11 +126,14 @@ where
 
     #[inline]
     fn upgrade(self, i: C, _: (), endpoint: Endpoint, remote_addr: Maf) -> Self::Future {
+        let max_buffer_len = self.max_buffer_len;
+
         let out = Multiplex {
             inner: Arc::new(Mutex::new(MultiplexInner {
                 error: Ok(()),
                 inner: Framed::new(i, codec::Codec::new()).fuse(),
-                buffer: Vec::with_capacity(32),
+                config: self,
+                buffer: Vec::with_capacity(max_buffer_len),
                 opened_substreams: Default::default(),
                 next_outbound_stream_id: if endpoint == Endpoint::Dialer { 0 } else { 1 },
                 to_notify: Default::default(),
@@ -113,6 +169,8 @@ struct MultiplexInner<C> {
     error: Result<(), IoError>,
     // Underlying stream.
     inner: Fuse<Framed<C, codec::Codec>>,
+    /// The original configuration.
+    config: MplexConfig,
     // Buffer of elements pulled from the stream but not processed yet.
     buffer: Vec<codec::Elem>,
     // List of Ids of opened substreams. Used to filter out messages that don't belong to any
@@ -120,7 +178,8 @@ struct MultiplexInner<C> {
     opened_substreams: FnvHashSet<u32>,
     // Id of the next outgoing substream. Should always increase by two.
     next_outbound_stream_id: u32,
-    // List of tasks to notify when a new element is inserted in `buffer` or an error happens.
+    /// List of tasks to notify when a new element is inserted in `buffer` or an error happens or
+    /// when the buffer was full and no longer is.
     to_notify: FnvHashMap<usize, task::Task>,
 }
 
@@ -138,18 +197,46 @@ where C: AsyncRead + AsyncWrite,
     }
 
     if let Some((offset, out)) = inner.buffer.iter().enumerate().filter_map(|(n, v)| filter(v).map(|v| (n, v))).next() {
+        // The buffer was full and no longer is, so let's notify everything.
+        if inner.buffer.len() == inner.config.max_buffer_len {
+            for task in inner.to_notify.drain() {
+                task.1.notify();
+            }
+        }
+
         inner.buffer.remove(offset);
         return Ok(Async::Ready(Some(out)));
     }
 
+    // TODO: replace with another system
+    static NEXT_TASK_ID: AtomicUsize = AtomicUsize::new(0);
+    task_local!{
+        static TASK_ID: usize = NEXT_TASK_ID.fetch_add(1, Ordering::Relaxed)
+    }
+
     loop {
+        // Check if we reached max buffer length first.
+        debug_assert!(inner.buffer.len() <= inner.config.max_buffer_len);
+        if inner.buffer.len() == inner.config.max_buffer_len {
+            debug!("Reached mplex maximum buffer length");
+            match inner.config.max_buffer_behaviour {
+                MaxBufferBehaviour::CloseAll => {
+                    inner.error = Err(IoError::new(IoErrorKind::Other, "reached maximum buffer length"));
+                    for task in inner.to_notify.drain() {
+                        task.1.notify();
+                    }
+                    return Err(IoError::new(IoErrorKind::Other, "reached maximum buffer length"));
+                },
+                MaxBufferBehaviour::Block => {
+                    inner.to_notify.insert(TASK_ID.with(|&t| t), task::current());
+                    return Ok(Async::Ready(None));
+                },
+            }
+        }
+
         let elem = match inner.inner.poll() {
             Ok(Async::Ready(item)) => item,
             Ok(Async::NotReady) => {
-                static NEXT_TASK_ID: AtomicUsize = AtomicUsize::new(0);
-                task_local!{
-                    static TASK_ID: usize = NEXT_TASK_ID.fetch_add(1, Ordering::Relaxed)
-                }
                 inner.to_notify.insert(TASK_ID.with(|&t| t), task::current());
                 return Ok(Async::NotReady);
             },
@@ -190,15 +277,6 @@ where C: AsyncRead + AsyncWrite,
             if let Some(out) = filter(&elem) {
                 return Ok(Async::Ready(Some(out)));
             } else {
-                if inner.buffer.len() >= MAX_BUFFER_LEN {
-                    debug!("Reached mplex maximum buffer length");
-                    inner.error = Err(IoError::new(IoErrorKind::Other, "reached maximum buffer length"));
-                    for task in inner.to_notify.drain() {
-                        task.1.notify();
-                    }
-                    return Err(IoError::new(IoErrorKind::Other, "reached maximum buffer length"));
-                }
-
                 if inner.opened_substreams.contains(&elem.substream_id()) || elem.is_open_msg() {
                     inner.buffer.push(elem);
                     for task in inner.to_notify.drain() {
@@ -307,8 +385,8 @@ where C: AsyncRead + AsyncWrite
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let mut inner = self.inner.lock();
 
-        if inner.opened_substreams.len() >= MAX_SUBSTREAMS {
-            debug!("Refused substream ; reached maximum number of substreams {}", MAX_SUBSTREAMS);
+        if inner.opened_substreams.len() >= inner.config.max_substreams {
+            debug!("Refused substream ; reached maximum number of substreams {}", inner.config.max_substreams);
             return Err(IoError::new(IoErrorKind::ConnectionRefused,
                                     "exceeded maximum number of open substreams"));
         }
