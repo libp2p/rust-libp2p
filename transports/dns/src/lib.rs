@@ -47,7 +47,7 @@ use multiaddr::{AddrComponent, Multiaddr};
 use std::fmt;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::net::IpAddr;
-use swarm::{Transport, ListenerResult, DialResult};
+use swarm::{Transport, TransportResult};
 use tokio_dns::{CpuPoolResolver, Resolver};
 
 /// Represents the configuration for a DNS transport capability of libp2p.
@@ -103,11 +103,11 @@ where
     type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
     #[inline]
-    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
+    fn listen_on(&self, addr: Multiaddr) -> TransportResult<(Self::Listener, Multiaddr)> {
         self.inner.listen_on(addr)
     }
 
-    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
+    fn dial(&self, addr: Multiaddr) -> TransportResult<Self::Dial> {
         let contains_dns = addr.iter().any(|cmp| match cmp {
             AddrComponent::DNS4(_) => true,
             AddrComponent::DNS6(_) => true,
@@ -210,7 +210,7 @@ mod tests {
     use futures::future;
     use multiaddr::{AddrComponent, Multiaddr};
     use std::io::Error as IoError;
-    use swarm::{Transport, ListenerResult, DialResult};
+    use swarm::{Transport, TransportResult};
     use DnsConfig;
 
     #[test]
@@ -228,11 +228,11 @@ mod tests {
             fn listen_on(
                 &self,
                 _addr: Multiaddr,
-            ) -> ListenerResult<Self::Listener> {
+            ) -> TransportResult<(Self::Listener, Multiaddr)> {
                 unreachable!()
             }
 
-            fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
+            fn dial(&self, addr: Multiaddr) -> TransportResult<Self::Dial> {
                 let addr = addr.iter().collect::<Vec<_>>();
                 assert_eq!(addr.len(), 2);
                 match addr[1] {

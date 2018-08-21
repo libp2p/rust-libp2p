@@ -65,7 +65,7 @@ use futures::stream::Stream;
 use multiaddr::{AddrComponent, Multiaddr};
 use std::io::Error as IoError;
 use std::path::PathBuf;
-use libp2p_core::{Transport, TransportError, ListenerResult, DialResult};
+use libp2p_core::{Transport, TransportError, TransportResult};
 use tokio_uds::{UnixListener, UnixStream};
 
 /// Represents the configuration for a Unix domain sockets transport capability for libp2p.
@@ -91,7 +91,7 @@ impl Transport for UdsConfig {
     type MultiaddrFuture = FutureResult<Multiaddr, IoError>;
     type Dial = Box<Future<Item = (UnixStream, Self::MultiaddrFuture), Error = IoError> + Send + Sync>;
 
-    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
+    fn listen_on(&self, addr: Multiaddr) -> TransportResult<(Self::Listener, Multiaddr)> {
         if let Ok(path) = multiaddr_to_path(&addr) {
             let listener = UnixListener::bind(&path);
             // We need to build the `Multiaddr` to return from this function. If an error happened,
@@ -119,7 +119,7 @@ impl Transport for UdsConfig {
         }
     }
 
-    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
+    fn dial(&self, addr: Multiaddr) -> TransportResult<Self::Dial> {
         if let Ok(path) = multiaddr_to_path(&addr) {
             debug!("Dialing {}", addr);
             let fut = UnixStream::connect(&path).map(|t| (t, future::ok(addr)));

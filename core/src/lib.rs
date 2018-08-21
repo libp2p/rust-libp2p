@@ -256,6 +256,6 @@ pub use self::muxing::StreamMuxer;
 pub use self::peer_id::PeerId;
 pub use self::public_key::PublicKey;
 pub use self::swarm::{swarm, SwarmController, SwarmFuture};
-pub use self::transport::{MuxedTransport, Transport, TransportError, DialResult, ListenerResult};
+pub use self::transport::{MuxedTransport, Transport, TransportError, TransportResult};
 pub use self::unique::{UniqueConnec, UniqueConnecFuture, UniqueConnecState};
 pub use self::upgrade::{ConnectionUpgrade, Endpoint};

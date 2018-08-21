@@ -29,7 +29,7 @@ extern crate tokio_io;
 use bytes::BytesMut;
 use futures::future::Future;
 use futures::{Sink, Stream};
-use libp2p_core::{Multiaddr, MuxedTransport, StreamMuxer, Transport, transport, ListenerResult, DialResult};
+use libp2p_core::{Multiaddr, MuxedTransport, StreamMuxer, Transport, transport, TransportResult};
 use std::sync::atomic;
 use std::thread;
 use tokio_io::codec::length_delimited::Framed;
@@ -56,10 +56,10 @@ impl<T: Transport> Transport for OnlyOnce<T> {
     type Listener = T::Listener;
     type ListenerUpgrade = T::ListenerUpgrade;
     type Dial = T::Dial;
-    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
+    fn listen_on(&self, addr: Multiaddr) -> TransportResult<(Self::Listener, Multiaddr)> {
         Ok(self.0.listen_on(addr).unwrap_or_else(|_| panic!()))
     }
-    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
+    fn dial(&self, addr: Multiaddr) -> TransportResult<Self::Dial> {
         assert!(!self.1.swap(true, atomic::Ordering::SeqCst));
         Ok(self.0.dial(addr).unwrap_or_else(|_| panic!()))
     }

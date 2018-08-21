@@ -30,7 +30,7 @@
 //! together in a complex chain of protocols negotiation.
 
 use futures::prelude::*;
-use multiaddr::{Multiaddr, Error as MultiaddrError};
+use multiaddr::Multiaddr;
 use std::io::Error as IoError;
 use tokio_io::{AsyncRead, AsyncWrite};
 use upgrade::{ConnectionUpgrade, Endpoint};
@@ -70,9 +70,7 @@ pub enum TransportError {
     DialingFailed(Multiaddr, #[cause] IoError),
 }
 
-pub type ListenerResult<L> = Result<(L, Multiaddr), TransportError>;
-pub type DialResult<D> = Result<D, TransportError>;
-
+pub type TransportResult<L> = Result<L, TransportError>;
 
 /// A transport is an object that can be used to produce connections by listening or dialing a
 /// peer.
@@ -116,14 +114,14 @@ pub trait Transport {
     /// > **Note**: The reason why w eneed to change the `Multiaddr` on success is to handle
     /// >             situations such as turning `/ip4/127.0.0.1/tcp/0` into
     /// >             `/ip4/127.0.0.1/tcp/<actual port>`.
-    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener>
+    fn listen_on(&self, addr: Multiaddr) -> TransportResult<(Self::Listener, Multiaddr)>
     where
         Self: Sized;
 
     /// Dial to the given multi-addr.
     ///
     /// Returns either a future which may resolve to a connection, or gives back the multiaddress.
-    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial>
+    fn dial(&self, addr: Multiaddr) -> TransportResult<Self::Dial>
     where
         Self: Sized;
 

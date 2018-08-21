@@ -22,7 +22,7 @@ use either::{EitherListenStream, EitherListenUpgrade, EitherOutput};
 use futures::{prelude::*, future};
 use multiaddr::Multiaddr;
 use std::io::Error as IoError;
-use transport::{MuxedTransport, Transport, ListenerResult, DialResult};
+use transport::{MuxedTransport, Transport, TransportResult};
 
 /// Struct returned by `or_transport()`.
 #[derive(Debug, Copy, Clone)]
@@ -46,7 +46,7 @@ where
     type Dial =
         EitherListenUpgrade<<A::Dial as IntoFuture>::Future, <B::Dial as IntoFuture>::Future>;
 
-    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
+    fn listen_on(&self, addr: Multiaddr) -> TransportResult<(Self::Listener, Multiaddr)> {
         if let Ok((connec, addr)) = self.0.listen_on(addr.clone()) {
             return Ok((EitherListenStream::First(connec), addr))
         }
@@ -55,7 +55,7 @@ where
             .map(|(connec, addr)| (EitherListenStream::Second(connec), addr))
     }
 
-    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
+    fn dial(&self, addr: Multiaddr) -> TransportResult<Self::Dial> {
         if let Ok(connec) = self.0.dial(addr.clone()) {
             return Ok(EitherListenUpgrade::First(connec))
         }

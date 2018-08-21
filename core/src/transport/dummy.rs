@@ -21,7 +21,7 @@
 use futures::future;
 use multiaddr::Multiaddr;
 use std::io::Error as IoError;
-use transport::{MuxedTransport, Transport, ListenerResult, DialResult};
+use transport::{MuxedTransport, Transport, TransportResult};
 
 /// Dummy implementation of `MuxedTransport` that uses an inner `Transport`.
 #[derive(Debug, Copy, Clone)]
@@ -61,7 +61,7 @@ where
     type Dial = T::Dial;
 
     #[inline]
-    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener>
+    fn listen_on(&self, addr: Multiaddr) -> TransportResult<(Self::Listener, Multiaddr)>
     where
         Self: Sized,
     {
@@ -70,7 +70,7 @@ where
     }
 
     #[inline]
-    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial>
+    fn dial(&self, addr: Multiaddr) -> TransportResult<Self::Dial>
     where
         Self: Sized,
     {

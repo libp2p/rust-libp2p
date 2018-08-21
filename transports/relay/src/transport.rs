@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use core::transport::{Transport, ListenerResult, DialResult, TransportError};
+use core::transport::{Transport, TransportResult, TransportError};
 use futures::{stream, prelude::*};
 use message::{CircuitRelay, CircuitRelay_Peer, CircuitRelay_Type};
 use multiaddr::Multiaddr;
@@ -51,11 +51,11 @@ where
     type ListenerUpgrade = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error>>;
     type Dial = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error>>;
 
-    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
+    fn listen_on(&self, addr: Multiaddr) -> TransportResult<(Self::Listener, Multiaddr)> {
         Err(TransportError::ListenNotSupported(addr))
     }
 
-    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
+    fn dial(&self, addr: Multiaddr) -> TransportResult<Self::Dial> {
         match RelayAddr::parse(&addr) {
             RelayAddr::Malformed => {
                 let err = io::Error::new(io::ErrorKind::InvalidInput,

@@ -24,7 +24,7 @@ use multiaddr::{AddrComponent, Multiaddr};
 use parking_lot::Mutex;
 use rw_stream_sink::RwStreamSink;
 use std::{io, sync::Arc};
-use transport::{Transport, TransportError,  ListenerResult, DialResult};
+use transport::{Transport, TransportError,  TransportResult};
 
 /// Builds a new pair of `Transport`s. The dialer can reach the listener by dialing `/memory`.
 #[inline]
@@ -57,11 +57,11 @@ impl<T: IntoBuf + 'static> Transport for Dialer<T> {
     type MultiaddrFuture = FutureResult<Multiaddr, io::Error>;
     type Dial = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error>>;
 
-    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
+    fn listen_on(&self, addr: Multiaddr) -> TransportResult<(Self::Listener, Multiaddr)> {
         Err(TransportError::ListenNotSupported(addr))
     }
 
-    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
+    fn dial(&self, addr: Multiaddr) -> TransportResult<Self::Dial> {
         if !is_memory_addr(&addr) {
             return Err(TransportError::DialNotSupported(addr))
         }
@@ -100,7 +100,7 @@ impl<T: IntoBuf + 'static> Transport for Listener<T> {
     type MultiaddrFuture = FutureResult<Multiaddr, io::Error>;
     type Dial = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error>>;
 
-    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
+    fn listen_on(&self, addr: Multiaddr) -> TransportResult<(Self::Listener, Multiaddr)> {
         if !is_memory_addr(&addr) {
             return Err(TransportError::ListenNotSupported(addr))
         }
@@ -115,7 +115,7 @@ impl<T: IntoBuf + 'static> Transport for Listener<T> {
     }
 
     #[inline]
-    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
+    fn dial(&self, addr: Multiaddr) -> TransportResult<Self::Dial> {
         Err(TransportError::DialNotSupported(addr))
     }
 

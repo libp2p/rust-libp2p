@@ -58,7 +58,7 @@ use std::io::{Error as IoError, Read, Write};
 use std::iter;
 use std::net::SocketAddr;
 use std::time::Duration;
-use libp2p_core::transport::{Transport, TransportError, ListenerResult, DialResult};
+use libp2p_core::transport::{Transport, TransportError, TransportResult};
 use tk_listen::{ListenExt, SleepOnError};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_tcp::{ConnectFuture, Incoming, TcpListener, TcpStream};
@@ -89,7 +89,7 @@ impl Transport for TcpConfig {
     type MultiaddrFuture = FutureResult<Multiaddr, IoError>;
     type Dial = TcpDialFut;
 
-    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
+    fn listen_on(&self, addr: Multiaddr) -> TransportResult<(Self::Listener, Multiaddr)> {
         if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
             let listener = TcpListener::bind(&socket_addr);
             // We need to build the `Multiaddr` to return from this function. If an error happened,
@@ -117,7 +117,7 @@ impl Transport for TcpConfig {
         }
     }
 
-    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
+    fn dial(&self, addr: Multiaddr) -> TransportResult<Self::Dial> {
         if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
             // As an optimization, we check that the address is not of the form `0.0.0.0`.
             // If so, we instantly refuse dialing instead of going through the kernel.

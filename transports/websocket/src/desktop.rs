@@ -22,7 +22,7 @@ use futures::{stream, Future, IntoFuture, Sink, Stream};
 use multiaddr::{AddrComponent, Multiaddr};
 use rw_stream_sink::RwStreamSink;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use swarm::{Transport, ListenerResult, DialResult, TransportError};
+use swarm::{Transport, TransportResult, TransportError};
 use tokio_io::{AsyncRead, AsyncWrite};
 use websocket::client::builder::ClientBuilder;
 use websocket::message::OwnedMessage;
@@ -73,7 +73,7 @@ where
     fn listen_on(
         &self,
         original_addr: Multiaddr,
-    ) -> ListenerResult<Self::Listener> {
+    ) -> TransportResult<(Self::Listener, Multiaddr)> {
         let mut inner_addr = original_addr.clone();
         match inner_addr.pop() {
             Some(AddrComponent::WS) => {}
@@ -145,7 +145,7 @@ where
         Ok((listen, new_addr))
     }
 
-    fn dial(&self, original_addr: Multiaddr) -> DialResult<Self::Dial> {
+    fn dial(&self, original_addr: Multiaddr) -> TransportResult<Self::Dial> {
         let mut inner_addr = original_addr.clone();
         let is_wss = match inner_addr.pop() {
             Some(AddrComponent::WS) => false,

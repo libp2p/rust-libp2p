@@ -40,7 +40,7 @@
 //! `MuxedTransport` trait.
 
 use fnv::FnvHashMap;
-use futures::future::{self, Either, FutureResult};
+use futures::future::{self, FutureResult};
 use futures::{Async, Future, Poll, Stream};
 use futures::stream::FuturesUnordered;
 use futures::sync::mpsc;
@@ -50,7 +50,7 @@ use parking_lot::Mutex;
 use std::io::{self, Error as IoError};
 use std::sync::Arc;
 use tokio_io::{AsyncRead, AsyncWrite};
-use transport::{MuxedTransport, Transport, UpgradedNode, ListenerResult, DialResult};
+use transport::{MuxedTransport, Transport, UpgradedNode, TransportResult};
 use upgrade::ConnectionUpgrade;
 
 /// Allows reusing the same muxed connection multiple times.
@@ -130,7 +130,7 @@ where
     type ListenerUpgrade = FutureResult<(Self::Output, Self::MultiaddrFuture), IoError>;
     type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
-    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
+    fn listen_on(&self, addr: Multiaddr) -> TransportResult<(Self::Listener, Multiaddr)> {
         let (listener, new_addr) = self.inner.listen_on(addr.clone())?;
 
         let listener = listener
@@ -151,7 +151,7 @@ where
         Ok((Box::new(listener) as Box<_>, new_addr))
     }
 
-    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
+    fn dial(&self, addr: Multiaddr) -> TransportResult<Self::Dial> {
         // FIXME: this doesn't properly work yet.
         // If we already have an active connection, use it!
         // if let Some(muxer) = self.shared.lock().active_connections.get(&addr).map(|m| m.clone()) {

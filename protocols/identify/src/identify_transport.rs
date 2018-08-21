@@ -20,7 +20,7 @@
 
 use fnv::FnvHashMap;
 use futures::{future, Future, Stream};
-use libp2p_core::{Multiaddr, MuxedTransport, Transport, ListenerResult, DialResult};
+use libp2p_core::{Multiaddr, MuxedTransport, Transport, TransportResult};
 use parking_lot::Mutex;
 use protocol::{IdentifyInfo, IdentifyOutput, IdentifyProtocolConfig};
 use std::collections::hash_map::Entry;
@@ -73,7 +73,7 @@ where
     type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
     #[inline]
-    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
+    fn listen_on(&self, addr: Multiaddr) -> TransportResult<(Self::Listener, Multiaddr)> {
         let (listener, new_addr) = self.transport.clone().listen_on(addr.clone())?;
 
         let identify_upgrade = self.transport.clone().with_upgrade(IdentifyProtocolConfig);
@@ -137,7 +137,7 @@ where
     }
 
     #[inline]
-    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
+    fn dial(&self, addr: Multiaddr) -> TransportResult<Self::Dial> {
         // We dial a first time the node.
         let dial = self.transport.clone().dial(addr)?;
 
