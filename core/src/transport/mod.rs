@@ -57,11 +57,6 @@ pub use self::upgrade::UpgradedNode;
 
 #[derive(Debug, Fail)]
 pub enum TransportError {
-    #[fail(display= "Error parsing Address {}: {}", addr, err)]
-    MultiAddrParseError {
-        addr: Multiaddr,
-        #[cause] err: MultiaddrError
-    },
     #[fail(display = "Listening is not support for Multiaddress {}", _0)]
     ListenNotSupported(Multiaddr),
 
