@@ -29,7 +29,7 @@ use std::iter;
 use std::sync::{Arc, Mutex};
 use stdweb::web::TypedArray;
 use stdweb::{self, Reference};
-use swarm::{MuxedTransport, Transport, ListenerResult, DialResult};
+use swarm::{MuxedTransport, Transport, TransportError, ListenerResult, DialResult};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Represents the configuration for a websocket transport capability for libp2p.
