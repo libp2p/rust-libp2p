@@ -164,32 +164,25 @@ where
     type ListenerUpgrade = ListenerUpgrade<T>;
     type Dial = Box<Future<Item = (Connection<T::Output>, Self::MultiaddrFuture), Error = io::Error>>;
 
-    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self>
+    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener>
     where
         Self: Sized,
     {
-        let r = self.rlimiter;
-        let w = self.wlimiter;
+        let r = self.rlimiter.clone();
+        let w = self.wlimiter.clone();
         self.value
             .listen_on(addr)
-            .map(|(listener, a)| {
-                (
-                    Listener(RateLimited::from_parts(listener, r.clone(), w.clone())),
-                    a,
-                )
-            })
-            .map_err(|(transport, a)| (RateLimited::from_parts(transport, r, w), a))
+            .map(|(listener, a)|
+                    (Listener(RateLimited::from_parts(listener, r, w)), a)
+            )
     }
 
-    fn dial(self, addr: Multiaddr) -> DialResult<Self>
+    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial>
     where
         Self: Sized,
     {
-        let r = self.rlimiter;
-        let w = self.wlimiter;
-        let r2 = r.clone();
-        let w2 = w.clone();
-
+        let r = self.rlimiter.clone();
+        let w = self.wlimiter.clone();
         self.value
             .dial(addr)
             .map(move |dial| {
@@ -197,7 +190,6 @@ where
                     .and_then(move |(conn, addr)| Ok((Connection::new(conn, r, w)?, addr)));
                 Box::new(future) as Box<_>
             })
-            .map_err(|(transport, a)| (RateLimited::from_parts(transport, r2, w2), a))
     }
 
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {

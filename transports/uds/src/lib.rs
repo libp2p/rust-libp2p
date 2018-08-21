@@ -91,14 +91,14 @@ impl Transport for UdsConfig {
     type MultiaddrFuture = FutureResult<Multiaddr, IoError>;
     type Dial = Box<Future<Item = (UnixStream, Self::MultiaddrFuture), Error = IoError> + Send + Sync>;
 
-    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
+    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
         if let Ok(path) = multiaddr_to_path(&addr) {
             let listener = UnixListener::bind(&path);
             // We need to build the `Multiaddr` to return from this function. If an error happened,
             // just return the original multiaddr.
             match listener {
                 Ok(_) => {},
-                Err(e) => return Err((self, TransportError::ListenFailed(addr, e))),
+                Err(e) => return Err(TransportError::ListenFailed(addr, e)),
             };
 
             debug!("Now listening on {}", addr);
@@ -115,17 +115,17 @@ impl Transport for UdsConfig {
                 .flatten_stream();
             Ok((Box::new(future), new_addr))
         } else {
-            Err((self, TransportError::ListenNotSupported(addr)))
+            Err(TransportError::ListenNotSupported(addr))
         }
     }
 
-    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
+    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
         if let Ok(path) = multiaddr_to_path(&addr) {
             debug!("Dialing {}", addr);
             let fut = UnixStream::connect(&path).map(|t| (t, future::ok(addr)));
             Ok(Box::new(fut) as Box<_>)
         } else {
-            Err((self, TransportError::DialNotSupported(addr)))
+            Err(TransportError::DialNotSupported(addr))
         }
     }
 

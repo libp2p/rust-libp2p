@@ -57,19 +57,19 @@ impl<T: IntoBuf + 'static> Transport for Dialer<T> {
     type MultiaddrFuture = FutureResult<Multiaddr, io::Error>;
     type Dial = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error>>;
 
-    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
-        Err((self, TransportError::ListenNotSupported(addr)))
+    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
+        Err(TransportError::ListenNotSupported(addr))
     }
 
-    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
+    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
         if !is_memory_addr(&addr) {
-            return Err((self, TransportError::DialNotSupported(addr)))
+            return Err(TransportError::DialNotSupported(addr))
         }
         let (a_tx, a_rx) = mpsc::unbounded();
         let (b_tx, b_rx) = mpsc::unbounded();
         let a = Chan { incoming: a_rx, outgoing: b_tx };
         let b = Chan { incoming: b_rx, outgoing: a_tx };
-        let future = self.0.send(b)
+        let future = self.0.clone().send(b)
             .map(move |_| (a.into(), future::ok(addr)))
             .map_err(|_| io::ErrorKind::ConnectionRefused.into());
         Ok(Box::new(future))
@@ -100,9 +100,9 @@ impl<T: IntoBuf + 'static> Transport for Listener<T> {
     type MultiaddrFuture = FutureResult<Multiaddr, io::Error>;
     type Dial = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error>>;
 
-    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
+    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
         if !is_memory_addr(&addr) {
-            return Err((self, TransportError::ListenNotSupported(addr)))
+            return Err(TransportError::ListenNotSupported(addr))
         }
         let addr2 = addr.clone();
         let receiver = self.0.clone();
@@ -115,8 +115,8 @@ impl<T: IntoBuf + 'static> Transport for Listener<T> {
     }
 
     #[inline]
-    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
-        Err((self, TransportError::DialNotSupported(addr)))
+    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
+        Err(TransportError::DialNotSupported(addr))
     }
 
     #[inline]

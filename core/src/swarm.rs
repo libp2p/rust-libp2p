@@ -137,50 +137,47 @@ where
     {
         trace!("Swarm dialing {}", multiaddr);
 
-        match transport.dial(multiaddr.clone()) {
-            Ok(dial) => {
-                let (tx, rx) = oneshot::channel();
-                let mut then = Some(move |val| {
-                    let _ = tx.send(then(val));
-                });
-                // Unfortunately the `Box<FnOnce(_)>` type is still unusable in Rust right now,
-                // so we use a `Box<FnMut(_)>` instead and panic if it is called multiple times.
-                let mut then = Box::new(move |val: Result<(), IoError>| {
-                    let then = then.take().expect("The Boxed FnMut should only be called once");
-                    then(val);
-                }) as Box<FnMut(_)>;
+        let dial = transport.dial(multiaddr.clone())?;
 
-                let dial = dial.then(|result| {
-                    match result {
-                        Ok((output, client_addr)) => {
-                            let client_addr = Box::new(client_addr) as Box<Future<Item = _, Error = _>>;
-                            Ok((output.into(), then, client_addr))
-                        }
-                        Err(err) => {
-                            debug!("Error in dialer upgrade: {:?}", err);
-                            then(Err(err));
-                            Err(())
-                        }
-                    }
-                });
+        let (tx, rx) = oneshot::channel();
+        let mut then = Some(move |val| {
+            let _ = tx.send(then(val));
+        });
+        // Unfortunately the `Box<FnOnce(_)>` type is still unusable in Rust right now,
+        // so we use a `Box<FnMut(_)>` instead and panic if it is called multiple times.
+        let mut then = Box::new(move |val: Result<(), IoError>| {
+            let then = then.take().expect("The Boxed FnMut should only be called once");
+            then(val);
+        }) as Box<FnMut(_)>;
 
-                let mut shared = self.shared.lock();
-                shared.dialers.push((multiaddr, Box::new(dial) as Box<_>));
-                if let Some(task) = shared.task_to_notify.take() {
-                    task.notify();
+        let dial = dial.then(|result| {
+            match result {
+                Ok((output, client_addr)) => {
+                    let client_addr = Box::new(client_addr) as Box<Future<Item = _, Error = _>>;
+                    Ok((output.into(), then, client_addr))
                 }
-
-                Ok(rx.then(|result| {
-                    match result {
-                        Ok(Ok(())) => Ok(()),
-                        Ok(Err(err)) => Err(err),
-                        Err(_) => Err(IoError::new(IoErrorKind::ConnectionAborted,
-                            "dial cancelled the swarm future has been destroyed")),
-                    }
-                }))
+                Err(err) => {
+                    debug!("Error in dialer upgrade: {:?}", err);
+                    then(Err(err));
+                    Err(())
+                }
             }
-            Err((_, err)) => Err(err),
+        });
+
+        let mut shared = self.shared.lock();
+        shared.dialers.push((multiaddr, Box::new(dial) as Box<_>));
+        if let Some(task) = shared.task_to_notify.take() {
+            task.notify();
         }
+
+        Ok(rx.then(|result| {
+            match result {
+                Ok(Ok(())) => Ok(()),
+                Ok(Err(err)) => Err(err),
+                Err(_) => Err(IoError::new(IoErrorKind::ConnectionAborted,
+                    "dial cancelled the swarm future has been destroyed")),
+            }
+        }))
     }
 
     /// Interrupts all dialing attempts to a specific multiaddress.
@@ -198,27 +195,23 @@ where
     /// was passed to `swarm`.
     // TODO: add a way to cancel a listener
     pub fn listen_on(&self, multiaddr: Multiaddr) -> Result<Multiaddr, TransportError> {
-        match self.transport.clone().listen_on(multiaddr) {
-            Ok((listener, new_addr)) => {
-                trace!("Swarm listening on {}", new_addr);
-                let mut shared = self.shared.lock();
-                let listener = Box::new(
-                    listener.map(|f| {
-                        let f = f.map(|(out, maf)| {
-                            (out, Box::new(maf) as Box<Future<Item = Multiaddr, Error = IoError>>)
-                        });
+        let (listener, new_addr) = self.transport.clone().listen_on(multiaddr)?;
+        trace!("Swarm listening on {}", new_addr);
+        let mut shared = self.shared.lock();
+        let listener = Box::new(
+            listener.map(|f| {
+                let f = f.map(|(out, maf)| {
+                    (out, Box::new(maf) as Box<Future<Item = Multiaddr, Error = IoError>>)
+                });
 
-                        Box::new(f) as Box<Future<Item = _, Error = _>>
-                    }),
-                ) as Box<Stream<Item = _, Error = _>>;
-                shared.listeners.push(listener.into_future());
-                if let Some(task) = shared.task_to_notify.take() {
-                    task.notify();
-                }
-                Ok(new_addr)
-            }
-            Err((_, multiaddr)) => Err(multiaddr),
+                Box::new(f) as Box<Future<Item = _, Error = _>>
+            }),
+        ) as Box<Stream<Item = _, Error = _>>;
+        shared.listeners.push(listener.into_future());
+        if let Some(task) = shared.task_to_notify.take() {
+            task.notify();
         }
+        Ok(new_addr)
     }
 }
 

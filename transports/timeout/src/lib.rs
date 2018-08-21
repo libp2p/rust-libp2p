@@ -90,43 +90,21 @@ where
     type ListenerUpgrade = TokioTimerMapErr<Timeout<InnerTrans::ListenerUpgrade>>;
     type Dial = TokioTimerMapErr<Timeout<InnerTrans::Dial>>;
 
-    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
-        match self.inner.listen_on(addr) {
-            Ok((listener, addr)) => {
-                let listener = TimeoutListener {
-                    inner: listener,
-                    timeout: self.incoming_timeout,
-                };
-
-                Ok((listener, addr))
-            }
-            Err((inner, addr)) => {
-                let transport = TransportTimeout {
-                    inner,
-                    outgoing_timeout: self.outgoing_timeout,
-                    incoming_timeout: self.incoming_timeout,
-                };
-
-                Err((transport, addr))
-            }
-        }
+    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
+        self.inner.listen_on(addr).map(|(listener, addr)|
+            (TimeoutListener {
+                inner: listener,
+                timeout: self.incoming_timeout,
+            }, addr)
+        )
     }
 
-    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
-        match self.inner.dial(addr) {
-            Ok(dial) => Ok(TokioTimerMapErr {
+    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
+        self.inner.dial(addr).map(|dial|
+            TokioTimerMapErr {
                 inner: Timeout::new(dial, self.outgoing_timeout),
-            }),
-            Err((inner, addr)) => {
-                let transport = TransportTimeout {
-                    inner,
-                    outgoing_timeout: self.outgoing_timeout,
-                    incoming_timeout: self.incoming_timeout,
-                };
-
-                Err((transport, addr))
             }
-        }
+        )
     }
 
     #[inline]

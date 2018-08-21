@@ -61,23 +61,21 @@ where
     type Dial = T::Dial;
 
     #[inline]
-    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self>
+    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener>
     where
         Self: Sized,
     {
         self.inner
             .listen_on(addr)
-            .map_err(|(inner, addr)| (DummyMuxing { inner }, addr))
     }
 
     #[inline]
-    fn dial(self, addr: Multiaddr) -> DialResult<Self>
+    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial>
     where
         Self: Sized,
     {
         self.inner
             .dial(addr)
-            .map_err(|(inner, addr)| (DummyMuxing { inner }, addr))
     }
 
     #[inline]

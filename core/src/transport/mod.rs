@@ -75,8 +75,8 @@ pub enum TransportError {
     DialingFailed(Multiaddr, #[cause] IoError),
 }
 
-pub type ListenerResult<T> = Result<(<T as Transport>::Listener, Multiaddr), (T, TransportError)>;
-pub type DialResult<T> = Result<<T as Transport>::Dial, (T, TransportError)>;
+pub type ListenerResult<L> = Result<(L, Multiaddr), TransportError>;
+pub type DialResult<D> = Result<D, TransportError>;
 
 
 /// A transport is an object that can be used to produce connections by listening or dialing a
@@ -121,14 +121,14 @@ pub trait Transport {
     /// > **Note**: The reason why w eneed to change the `Multiaddr` on success is to handle
     /// >             situations such as turning `/ip4/127.0.0.1/tcp/0` into
     /// >             `/ip4/127.0.0.1/tcp/<actual port>`.
-    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self>
+    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener>
     where
         Self: Sized;
 
     /// Dial to the given multi-addr.
     ///
     /// Returns either a future which may resolve to a connection, or gives back the multiaddress.
-    fn dial(self, addr: Multiaddr) -> DialResult<Self>
+    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial>
     where
         Self: Sized;
 

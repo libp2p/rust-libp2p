@@ -60,12 +60,12 @@ impl Transport for BrowserWsConfig {
     type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
     #[inline]
-    fn listen_on(self, a: Multiaddr) -> ListenerResult<Self> {
+    fn listen_on(&self, a: Multiaddr) -> ListenerResult<Self::Listener> {
         // Listening is never supported.
-        Err((self, a))
+        Err(TransportError::ListenNotSupported(a))
     }
 
-    fn dial(self, original_addr: Multiaddr) -> DialResult<Self> {
+    fn dial(&self, original_addr: Multiaddr) -> DialResult<Self::Dial> {
         // Making sure we are initialized before we dial. Initialization is protected by a simple
         // boolean static variable, so it's not a problem to call it multiple times and the cost
         // is negligible.
@@ -75,7 +75,7 @@ impl Transport for BrowserWsConfig {
         // a string) on success.
         let inner_addr = match multiaddr_to_target(&original_addr) {
             Ok(a) => a,
-            Err(_) => return Err((self, original_addr)),
+            Err(_) => return Err(TransportError::DialNotSupported(original_addr)),
         };
 
         debug!("Dialing {}", original_addr);
@@ -91,7 +91,7 @@ impl Transport for BrowserWsConfig {
             };
             match val.into_reference() {
                 Some(ws) => ws,
-                None => return Err((self, original_addr)), // `false` was returned by `js!`
+                None => return Err(TransportError::DialNotSupported(original_addr)), // `false` was returned by `js!`
             }
         };
 

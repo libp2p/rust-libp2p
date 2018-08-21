@@ -73,19 +73,10 @@ where
     type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
     #[inline]
-    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
-        let (listener, new_addr) = match self.transport.clone().listen_on(addr.clone()) {
-            Ok((l, a)) => (l, a),
-            Err((inner, addr)) => {
-                let id = IdentifyTransport {
-                    transport: inner,
-                    cache: self.cache,
-                };
-                return Err((id, addr));
-            }
-        };
+    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
+        let (listener, new_addr) = self.transport.clone().listen_on(addr.clone())?;
 
-        let identify_upgrade = self.transport.with_upgrade(IdentifyProtocolConfig);
+        let identify_upgrade = self.transport.clone().with_upgrade(IdentifyProtocolConfig);
         let cache = self.cache.clone();
 
         let listener = listener.map(move |connec| {
@@ -103,10 +94,10 @@ where
                     // identify protocol.
                     let info_future = cache_entry(&cache, client_addr.clone(), { let client_addr = client_addr.clone(); move || {
                         debug!("No cache entry for {}, dialing back in order to identify", client_addr);
-                        future::lazy(|| { trace!("Starting identify back"); identify_upgrade
+                        future::lazy(move || { trace!("Starting identify back");identify_upgrade
                             .dial(client_addr)
-                            .unwrap_or_else(|(_, addr)| {
-                                panic!("the multiaddr {} was determined to be valid earlier", addr)
+                            .unwrap_or_else(|err| {
+                                panic!("the multiaddr was determined to be valid earlier, but {} ", err)
                             }) })
                             .map(move |(identify, _)| {
                                 let (info, observed_addr) = match identify {
@@ -146,21 +137,12 @@ where
     }
 
     #[inline]
-    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
+    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
         // We dial a first time the node.
-        let dial = match self.transport.clone().dial(addr) {
-            Ok(d) => d,
-            Err((transport, addr)) => {
-                let id = IdentifyTransport {
-                    transport,
-                    cache: self.cache,
-                };
-                return Err((id, addr));
-            }
-        };
+        let dial = self.transport.clone().dial(addr)?;
 
         // Once successfully dialed, we dial again to identify.
-        let identify_upgrade = self.transport.with_upgrade(IdentifyProtocolConfig);
+        let identify_upgrade = self.transport.clone().with_upgrade(IdentifyProtocolConfig);
         let cache = self.cache.clone();
         let future = dial
             .and_then(move |(connec, client_addr)| {
@@ -171,10 +153,10 @@ where
                 trace!("Dialing successful ; client address is {}", addr);
                 let info_future = cache_entry(&cache, addr.clone(), { let addr = addr.clone(); move || {
                     trace!("No cache entry for {} ; dialing again for identification", addr);
-                    future::lazy(|| { trace!("Starting identify back"); identify_upgrade
+                    future::lazy(move || { trace!("Starting identify back"); identify_upgrade
                         .dial(addr)
-                        .unwrap_or_else(|(_, addr)| {
-                            panic!("the multiaddr {} was determined to be valid earlier", addr)
+                        .unwrap_or_else(|err| {
+                            panic!("the multiaddr was determined to be valid earlier, but {}", err)
                         }) })
                         .map(move |(identify, _)| {
                             let (info, observed_addr) = match identify {
@@ -238,10 +220,10 @@ where
                     // identify protocol.
                     let info_future = cache_entry(&cache, client_addr.clone(), { let client_addr = client_addr.clone(); move || {
                         debug!("No cache entry from {} ; dialing back to identify", client_addr);
-                        future::lazy(|| { trace!("Starting identify back"); identify_upgrade
+                        future::lazy(move || { trace!("Starting identify back"); identify_upgrade
                             .dial(client_addr)
-                            .unwrap_or_else(|(_, client_addr)| {
-                                panic!("the multiaddr {} was determined to be valid earlier", client_addr)
+                            .unwrap_or_else(|err| {
+                                panic!("the multiaddr was determined to be valid earlier, but {}", err)
                             }) })
                             .map(move |(identify, _)| {
                                 let (info, observed_addr) = match identify {

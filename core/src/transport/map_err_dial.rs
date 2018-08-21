@@ -49,23 +49,15 @@ where
     type ListenerUpgrade = T::ListenerUpgrade;
     type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
-    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
-        match self.transport.listen_on(addr) {
-            Ok(l) => Ok(l),
-            Err((transport, addr)) => Err((MapErrDial { transport, map: self.map }, addr)),
-        }
+    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
+        self.transport.listen_on(addr)
     }
 
-    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
-        let map = self.map;
-
-        match self.transport.dial(addr.clone()) {
-            Ok(future) => {
-                let future = future.into_future().map_err(move |err| map(err, addr));
-                Ok(Box::new(future))
-            }
-            Err((transport, addr)) => Err((MapErrDial { transport, map }, addr)),
-        }
+    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
+        let map = self.map.clone();
+        Ok(Box::new(self.transport.dial(addr.clone())?
+            .into_future()
+            .map_err(move |err| map(err, addr))))
     }
 
     #[inline]

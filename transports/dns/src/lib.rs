@@ -94,7 +94,7 @@ where
 
 impl<T> Transport for DnsConfig<T>
 where
-    T: Transport + 'static, // TODO: 'static :-/
+    T: Transport + Clone + 'static, // TODO: 'static :-/
 {
     type Output = T::Output;
     type MultiaddrFuture = T::MultiaddrFuture;
@@ -103,20 +103,11 @@ where
     type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
     #[inline]
-    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
-        match self.inner.listen_on(addr) {
-            Ok(r) => Ok(r),
-            Err((inner, addr)) => Err((
-                DnsConfig {
-                    inner,
-                    resolver: self.resolver,
-                },
-                addr,
-            )),
-        }
+    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
+        self.inner.listen_on(addr)
     }
 
-    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
+    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
         let contains_dns = addr.iter().any(|cmp| match cmp {
             AddrComponent::DNS4(_) => true,
             AddrComponent::DNS6(_) => true,
@@ -125,28 +116,19 @@ where
 
         if !contains_dns {
             trace!("Pass-through address without DNS: {}", addr);
-            return match self.inner.dial(addr) {
-                Ok(d) => Ok(Box::new(d) as Box<_>),
-                Err((inner, addr)) => Err((
-                    DnsConfig {
-                        inner,
-                        resolver: self.resolver,
-                    },
-                    addr,
-                )),
-            };
+            return self.inner.dial(addr).map(|d| Box::new(d) as Box<_>);
         }
 
-        let resolver = self.resolver;
+        let resolver = &self.resolver;
 
         trace!("Dialing address with DNS: {}", addr);
         let resolve_iters = addr.iter()
             .map(move |cmp| match cmp {
                 AddrComponent::DNS4(ref name) => {
-                    future::Either::A(resolve_dns(name, &resolver, ResolveTy::Dns4))
+                    future::Either::A(resolve_dns(name, resolver, ResolveTy::Dns4))
                 }
                 AddrComponent::DNS6(ref name) => {
-                    future::Either::A(resolve_dns(name, &resolver, ResolveTy::Dns6))
+                    future::Either::A(resolve_dns(name, resolver, ResolveTy::Dns6))
                 }
                 cmp => future::Either::B(future::ok(cmp)),
             })
@@ -159,7 +141,7 @@ where
             outcome
         });
 
-        let inner = self.inner;
+        let inner = self.inner.clone();
         let future = new_addr
             .and_then(move |addr| {
                 inner
@@ -244,13 +226,13 @@ mod tests {
 
             #[inline]
             fn listen_on(
-                self,
+                &self,
                 _addr: Multiaddr,
-            ) -> ListenerResult<Self> {
+            ) -> ListenerResult<Self::Listener> {
                 unreachable!()
             }
 
-            fn dial(self, addr: Multiaddr) -> DialResult<Self> {
+            fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
                 let addr = addr.iter().collect::<Vec<_>>();
                 assert_eq!(addr.len(), 2);
                 match addr[1] {

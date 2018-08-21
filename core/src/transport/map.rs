@@ -50,36 +50,27 @@ where
     type ListenerUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
     type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
-    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
-        let map = self.map;
+    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
+        let map = self.map.clone();
 
-        match self.transport.listen_on(addr) {
-            Ok((stream, listen_addr)) => {
-                let stream = stream.map(move |future| {
-                    let map = map.clone();
-                    let future = future
-                        .into_future()
-                        .map(move |(output, addr)| (map(output, Endpoint::Listener), addr));
-                    Box::new(future) as Box<_>
-                });
-                Ok((Box::new(stream), listen_addr))
-            }
-            Err((transport, addr)) => Err((Map { transport, map }, addr)),
-        }
+        let (stream, listen_addr) = self.transport.listen_on(addr)?;
+        let stream = stream.map(move |future| {
+            let map = map.clone();
+            let future = future
+                .into_future()
+                .map(move |(output, addr)| (map(output, Endpoint::Listener), addr));
+            Box::new(future) as Box<_>
+        });
+        Ok((Box::new(stream), listen_addr))
     }
 
-    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
-        let map = self.map;
+    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
+        let map = self.map.clone();
 
-        match self.transport.dial(addr) {
-            Ok(future) => {
-                let future = future
-                    .into_future()
-                    .map(move |(output, addr)| (map(output, Endpoint::Dialer), addr));
-                Ok(Box::new(future))
-            }
-            Err((transport, addr)) => Err((Map { transport, map }, addr)),
-        }
+        let future = self.transport.dial(addr)?
+            .into_future()
+            .map(move |(output, addr)| (map(output, Endpoint::Dialer), addr));
+        Ok(Box::new(future))
     }
 
     #[inline]

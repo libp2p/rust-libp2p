@@ -89,7 +89,7 @@ impl Transport for TcpConfig {
     type MultiaddrFuture = FutureResult<Multiaddr, IoError>;
     type Dial = TcpDialFut;
 
-    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
+    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
         if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
             let listener = TcpListener::bind(&socket_addr);
             // We need to build the `Multiaddr` to return from this function. If an error happened,
@@ -113,11 +113,11 @@ impl Transport for TcpConfig {
                 .map(move |l| l.incoming().sleep_on_error(sleep_on_error));
             Ok((TcpListenStream { inner }, new_addr))
         } else {
-            Err((self, TransportError::ListenNotSupported(addr)))
+            Err(TransportError::ListenNotSupported(addr))
         }
     }
 
-    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
+    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
         if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
             // As an optimization, we check that the address is not of the form `0.0.0.0`.
             // If so, we instantly refuse dialing instead of going through the kernel.
@@ -129,10 +129,10 @@ impl Transport for TcpConfig {
                 })
             } else {
                 debug!("Instantly refusing dialing {}, as it is invalid", addr);
-                Err((self, TransportError::DialNotSupported(addr)))
+                Err(TransportError::DialNotSupported(addr))
             }
         } else {
-            Err((self, TransportError::DialNotSupported(addr)))
+            Err(TransportError::DialNotSupported(addr))
         }
     }
 

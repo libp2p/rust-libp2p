@@ -51,30 +51,30 @@ where
     type ListenerUpgrade = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error>>;
     type Dial = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error>>;
 
-    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
-        Err((self, TransportError::ListenNotSupported(addr)))
+    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
+        Err(TransportError::ListenNotSupported(addr))
     }
 
-    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
+    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
         match RelayAddr::parse(&addr) {
             RelayAddr::Malformed => {
                 let err = io::Error::new(io::ErrorKind::InvalidInput,
                                          format!("malformed address: {}", addr));
-                return Err((self, TransportError::DialingFailed(addr, err)));
+                return Err(TransportError::DialingFailed(addr, err));
             }
             RelayAddr::Multihop => {
                 let err = io::Error::new(io::ErrorKind::InvalidInput,
                                          format!("multihop address: {}", addr));
-                return Err((self, TransportError::DialingFailed(addr, err)));
+                return Err(TransportError::DialingFailed(addr, err));
             }
             RelayAddr::Address { relay, dest } => {
                 if let Some(ref r) = relay {
                     let f = self.relay_via(r, &dest)
-                        .map_err(|(this, err)| (this, TransportError::DialingFailed(addr, err)))?;
+                        .map_err(|err| TransportError::DialingFailed(addr, err))?;
                     Ok(Box::new(f))
                 } else {
                     let f = self.relay_to(&dest)
-                        .map_err(|(this, err)| (this, TransportError::DialingFailed(addr, err)))?;
+                        .map_err(|err| TransportError::DialingFailed(addr, err))?;
                     Ok(Box::new(f))
                 }
             }
@@ -110,8 +110,8 @@ where
     }
 
     // Relay to destination over any available relay node.
-    fn relay_to(self, destination: &Peer)
-        -> Result<impl Future<Item=(T::Output, T::MultiaddrFuture), Error=io::Error>, (Self, io::Error)> {
+    fn relay_to(&self, destination: &Peer)
+        -> Result<impl Future<Item=(T::Output, T::MultiaddrFuture), Error=io::Error>, io::Error> {
         trace!("relay_to {:?}", destination.id);
         let mut dials = Vec::new();
         for relay in &*self.relays {
@@ -126,7 +126,7 @@ where
 
         if dials.is_empty() {
             let msg = format!("no relay available for {:?}", destination.id);
-            return Err((self, io::Error::new(io::ErrorKind::NotFound, msg)));
+            return Err(io::Error::new(io::ErrorKind::NotFound, msg));
         }
 
         // Try one relay after another and stick to the first working one.
@@ -149,8 +149,8 @@ where
     }
 
     // Relay to destination via the given peer.
-    fn relay_via(self, relay: &Peer, destination: &Peer)
-        -> Result<impl Future<Item=(T::Output, T::MultiaddrFuture), Error=io::Error>, (Self, io::Error)> {
+    fn relay_via(&self, relay: &Peer, destination: &Peer)
+        -> Result<impl Future<Item=(T::Output, T::MultiaddrFuture), Error=io::Error>, io::Error> {
         trace!("relay_via {:?} to {:?}", relay.id, destination.id);
         let mut addresses = Vec::new();
 
@@ -167,12 +167,12 @@ where
         // no relay address => bail out
         if addresses.is_empty() {
             let msg = format!("no available address for relay: {:?}", relay.id);
-            return Err((self, io::Error::new(io::ErrorKind::NotFound, msg)));
+            return Err(io::Error::new(io::ErrorKind::NotFound, msg));
         }
 
         let relay = relay.clone();
         let message = self.hop_message(destination);
-        let transport = self.transport.with_upgrade(protocol::Source(message));
+        let transport = self.transport.clone().with_upgrade(protocol::Source(message));
         let future = stream::iter_ok(addresses.into_iter())
             .filter_map(move |addr| transport.clone().dial(addr).ok())
             .and_then(|dial| dial)

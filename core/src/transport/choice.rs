@@ -46,28 +46,21 @@ where
     type Dial =
         EitherListenUpgrade<<A::Dial as IntoFuture>::Future, <B::Dial as IntoFuture>::Future>;
 
-    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
-        let first = match self.0.listen_on(addr.clone()) {
-            Ok((connec, addr)) => return Ok((EitherListenStream::First(connec), addr)),
-            Err((first, _err)) => first
-        };
-
-        match self.1.listen_on(addr) {
-            Ok((connec, addr)) => Ok((EitherListenStream::Second(connec), addr)),
-            Err((second, err)) => Err((OrTransport(first, second), err)),
+    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
+        if let Ok((connec, addr)) = self.0.listen_on(addr.clone()) {
+            return Ok((EitherListenStream::First(connec), addr))
         }
+
+        self.1.listen_on(addr)
+            .map(|(connec, addr)| (EitherListenStream::Second(connec), addr))
     }
 
-    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
-        let first = match self.0.dial(addr.clone()) {
-            Ok(connec) => return Ok(EitherListenUpgrade::First(connec)),
-            Err((first, _err)) => first,
-        };
-
-        match self.1.dial(addr) {
-            Ok(connec) => Ok(EitherListenUpgrade::Second(connec)),
-            Err((second, err)) => Err((OrTransport(first, second), err)),
+    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
+        if let Ok(connec) = self.0.dial(addr.clone()) {
+            return Ok(EitherListenUpgrade::First(connec))
         }
+        self.1.dial(addr)
+            .map(|connec| EitherListenUpgrade::Second(connec))
     }
 
     #[inline]

@@ -56,10 +56,10 @@ impl<T: Transport> Transport for OnlyOnce<T> {
     type Listener = T::Listener;
     type ListenerUpgrade = T::ListenerUpgrade;
     type Dial = T::Dial;
-    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
+    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
         Ok(self.0.listen_on(addr).unwrap_or_else(|_| panic!()))
     }
-    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
+    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
         assert!(!self.1.swap(true, atomic::Ordering::SeqCst));
         Ok(self.0.dial(addr).unwrap_or_else(|_| panic!()))
     }

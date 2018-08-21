@@ -57,21 +57,11 @@ where
     type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
     #[inline]
-    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
+    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
         // Note that `listen_on` expects a "regular" multiaddr (eg. `/ip/.../tcp/...`),
         // and not `/p2p/<foo>`.
 
-        let (listener, listened_addr) = match self.transport.listen_on(addr) {
-            Ok((listener, addr)) => (listener, addr),
-            Err((inner, addr)) => {
-                let id = PeerIdTransport {
-                    transport: inner,
-                    addr_resolver: self.addr_resolver,
-                };
-
-                return Err((id, addr));
-            }
-        };
+        let (listener, listened_addr) = self.transport.listen_on(addr)?;
 
         let listener = listener.map(move |connec| {
             let fut = connec
@@ -105,7 +95,7 @@ where
     }
 
     #[inline]
-    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
+    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
         match multiaddr_to_peerid(addr.clone()) {
             Ok(peer_id) => {
                 // If the multiaddress is a peer ID, try each known multiaddress (taken from the
@@ -117,14 +107,14 @@ where
 
                 trace!("Try dialing peer ID {:?} ; loading multiaddrs from addr resolver", peer_id);
 
-                let transport = self.transport;
+                let transport = self.transport.clone();
                 let future = stream::iter_ok(addrs)
                     // Try to dial each address through the transport.
                     .filter_map(move |addr| {
-                        match transport.clone().dial(addr) {
+                        match transport.dial(addr) {
                             Ok(dial) => Some(dial),
-                            Err((_, addr)) => {
-                                debug!("Address {} not supported by underlying transport", addr);
+                            Err(err) => {
+                                debug!("Address not supported by underlying transport: {}", err);
                                 None
                             },
                         }
@@ -164,16 +154,7 @@ where
             Err(addr) => {
                 // If the multiaddress is something else, propagate it to the underlying transport.
                 trace!("Propagating {} to the underlying transport", addr);
-                let dial = match self.transport.dial(addr) {
-                    Ok(d) => d,
-                    Err((inner, addr)) => {
-                        let id = PeerIdTransport {
-                            transport: inner,
-                            addr_resolver: self.addr_resolver,
-                        };
-                        return Err((id, addr));
-                    }
-                };
+                let dial = self.transport.dial(addr)?;
 
                 let future = dial
                     .and_then(move |(connec, original_addr)| {
@@ -318,13 +299,13 @@ mod tests {
             type Dial = <TcpConfig as Transport>::Dial;
             #[inline]
             fn listen_on(
-                self,
+                &self,
                 _: Multiaddr,
-            ) -> ListenerResult<Self> {
+            ) -> ListenerResult<Self::Listener> {
                 unreachable!()
             }
             #[inline]
-            fn dial(self, addr: Multiaddr) -> DialResult<Self> {
+            fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
                 assert_eq!(
                     addr,
                     "/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap()

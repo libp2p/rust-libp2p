@@ -52,24 +52,16 @@ where
     type Dial = InterruptibleDial<T::Dial>;
 
     #[inline]
-    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
-        match self.transport.listen_on(addr) {
-            Ok(val) => Ok(val),
-            Err((transport, addr)) => Err((Interruptible { transport, rx: self.rx }, addr)),
-        }
+    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
+        self.transport.listen_on(addr)
     }
 
     #[inline]
-    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
-        match self.transport.dial(addr) {
-            Ok(future) => {
-                Ok(InterruptibleDial {
-                    inner: future,
-                    rx: self.rx,
-                })
-            }
-            Err((transport, addr)) => Err((Interruptible { transport, rx: self.rx }, addr)),
-        }
+    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
+        Ok(InterruptibleDial {
+            inner: self.transport.dial(addr)?,
+            rx: self.rx.clone(),
+        })
     }
 
     #[inline]

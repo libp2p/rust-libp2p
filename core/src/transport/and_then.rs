@@ -51,20 +51,10 @@ where
     type Dial = Box<Future<Item = (O, Self::MultiaddrFuture), Error = IoError>>;
 
     #[inline]
-    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
-        let upgrade = self.upgrade;
+    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
+        let upgrade = self.upgrade.clone();
 
-        let (listening_stream, new_addr) = match self.transport.listen_on(addr) {
-            Ok((l, new_addr)) => (l, new_addr),
-            Err((trans, err)) => {
-                let builder = AndThen {
-                    transport: trans,
-                    upgrade: upgrade,
-                };
-
-                return Err((builder, err));
-            }
-        };
+        let (listening_stream, new_addr) = self.transport.listen_on(addr)?;
 
         // Try to negotiate the protocol.
         // Note that failing to negotiate a protocol will never produce a future with an error.
@@ -83,22 +73,10 @@ where
     }
 
     #[inline]
-    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
-        let upgrade = self.upgrade;
+    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
+        let upgrade = self.upgrade.clone();
 
-        let dialed_fut = match self.transport.dial(addr.clone()) {
-            Ok(f) => f,
-            Err((trans, addr)) => {
-                let builder = AndThen {
-                    transport: trans,
-                    upgrade: upgrade,
-                };
-
-                return Err((builder, addr));
-            }
-        };
-
-        let future = dialed_fut
+        let future = self.transport.dial(addr.clone())?
             // Try to negotiate the protocol.
             .and_then(move |(connection, client_addr)| {
                 upgrade(connection, Endpoint::Dialer, client_addr)

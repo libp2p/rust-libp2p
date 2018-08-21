@@ -221,25 +221,13 @@ impl Transport for CommonTransport {
     type Dial = <InnerImplementation as Transport>::Dial;
 
     #[inline]
-    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
-        match self.inner.inner.listen_on(addr) {
-            Ok(res) => Ok(res),
-            Err((inner, addr)) => {
-                let trans = CommonTransport { inner: CommonTransportInner { inner: inner } };
-                Err((trans, addr))
-            }
-        }
+    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
+        self.inner.inner.listen_on(addr)
     }
 
     #[inline]
-    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
-        match self.inner.inner.dial(addr) {
-            Ok(res) => Ok(res),
-            Err((inner, addr)) => {
-                let trans = CommonTransport { inner: CommonTransportInner { inner: inner } };
-                Err((trans, addr))
-            }
-        }
+    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
+        self.inner.inner.dial(addr)
     }
 
     #[inline]

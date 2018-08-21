@@ -50,7 +50,7 @@ impl<'a, T, C> UpgradedNode<T, C>
 where
     T: Transport + 'a,
     T::Output: AsyncRead + AsyncWrite,
-    C: ConnectionUpgrade<T::Output, T::MultiaddrFuture> + 'a,
+    C: ConnectionUpgrade<T::Output, T::MultiaddrFuture> + Clone + 'a,
 {
     /// Turns this upgraded node into a `ConnectionReuse`. If the `Output` implements the
     /// `StreamMuxer` trait, the returned object will implement `Transport` and `MuxedTransport`.
@@ -75,27 +75,15 @@ where
     /// requirements.
     #[inline]
     pub fn dial(
-        self,
+        &self,
         addr: Multiaddr,
-    ) -> Result<Box<Future<Item = (C::Output, C::MultiaddrFuture), Error = IoError> + 'a>, (Self, TransportError)>
+    ) -> Result<Box<Future<Item = (C::Output, C::MultiaddrFuture), Error = IoError> + 'a>, TransportError>
     where
         C::NamesIter: Clone, // TODO: not elegant
     {
-        let upgrade = self.upgrade;
+        let upgrade = self.upgrade.clone();
 
-        let dialed_fut = match self.transports.dial(addr.clone()) {
-            Ok(f) => f,
-            Err((trans, addr)) => {
-                let builder = UpgradedNode {
-                    transports: trans,
-                    upgrade: upgrade,
-                };
-
-                return Err((builder, addr));
-            }
-        };
-
-        let future = dialed_fut
+        let future = self.transports.dial(addr.clone())?
             // Try to negotiate the protocol.
             .and_then(move |(connection, client_addr)| {
                 apply(connection, upgrade, Endpoint::Dialer, client_addr)
@@ -123,7 +111,7 @@ where
         C::NamesIter: Clone, // TODO: not elegant
         C: Clone,
     {
-        let upgrade = self.upgrade;
+        let upgrade = self.upgrade.clone();
 
         let future = self.transports.next_incoming().map(|future| {
             // Try to negotiate the protocol.
@@ -144,7 +132,7 @@ where
     /// trait requirements.
     #[inline]
     pub fn listen_on(
-        self,
+        &self,
         addr: Multiaddr,
     ) -> Result<
         (
@@ -157,25 +145,15 @@ where
             >,
             Multiaddr,
         ),
-        (Self, TransportError),
+        TransportError,
     >
     where
         C::NamesIter: Clone, // TODO: not elegant
         C: Clone,
     {
-        let upgrade = self.upgrade;
+        let upgrade = self.upgrade.clone();
 
-        let (listening_stream, new_addr) = match self.transports.listen_on(addr) {
-            Ok((l, new_addr)) => (l, new_addr),
-            Err((trans, addr)) => {
-                let builder = UpgradedNode {
-                    transports: trans,
-                    upgrade: upgrade,
-                };
-
-                return Err((builder, addr));
-            }
-        };
+        let (listening_stream, new_addr) = self.transports.listen_on(addr)?;
 
         // Try to negotiate the protocol.
         // Note that failing to negotiate a protocol will never produce a future with an error.
@@ -212,12 +190,12 @@ where
     type Dial = Box<Future<Item = (C::Output, Self::MultiaddrFuture), Error = IoError>>;
 
     #[inline]
-    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
+    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
         self.listen_on(addr)
     }
 
     #[inline]
-    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
+    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
         self.dial(addr)
     }
 

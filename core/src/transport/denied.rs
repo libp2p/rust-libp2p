@@ -37,13 +37,13 @@ impl Transport for DeniedTransport {
     type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = io::Error> + Send + Sync>;
 
     #[inline]
-    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
-        Err((DeniedTransport, TransportError::ListenNotSupported(addr)))
+    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
+        Err(TransportError::ListenNotSupported(addr))
     }
 
     #[inline]
-    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
-        Err((DeniedTransport, TransportError::DialNotSupported(addr)))
+    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
+        Err(TransportError::DialNotSupported(addr))
     }
 
     #[inline]

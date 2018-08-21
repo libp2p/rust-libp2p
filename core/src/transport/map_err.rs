@@ -50,38 +50,30 @@ where
         Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
     type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
-    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
-        let map = self.map;
+    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
+        let map = self.map.clone();
 
-        match self.transport.listen_on(addr) {
-            Ok((stream, listen_addr)) => {
-                let map2 = map.clone();
-                let stream = stream
-                    .map(move |future| {
-                        let map = map.clone();
-                        let future = future.into_future().map_err(move |err| map(err));
-                        Box::new(future) as Box<_>
-                    })
-                    .map_err(move |err| {
-                        let map = map2.clone();
-                        map(err)
-                    });
-                Ok((Box::new(stream), listen_addr))
-            }
-            Err((transport, addr)) => Err((MapErr { transport, map }, addr)),
-        }
+        let (stream, listen_addr) = self.transport.listen_on(addr)?;
+        let map2 = map.clone();
+        let stream = stream
+            .map(move |future| {
+                let map = map.clone();
+                let future = future.into_future().map_err(move |err| map(err));
+                Box::new(future) as Box<_>
+            })
+            .map_err(move |err| {
+                let map = map2.clone();
+                map(err)
+            });
+        Ok((Box::new(stream), listen_addr))
     }
 
-    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
-        let map = self.map;
+    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
+        let map = self.map.clone();
 
-        match self.transport.dial(addr) {
-            Ok(future) => {
-                let future = future.into_future().map_err(move |err| map(err));
-                Ok(Box::new(future))
-            }
-            Err((transport, addr)) => Err((MapErr { transport, map }, addr)),
-        }
+        Ok(Box::new(self.transport.dial(addr)?
+            .into_future()
+            .map_err(move |err| map(err))))
     }
 
     #[inline]

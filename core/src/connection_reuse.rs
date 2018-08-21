@@ -130,27 +130,16 @@ where
     type ListenerUpgrade = FutureResult<(Self::Output, Self::MultiaddrFuture), IoError>;
     type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
 
-    fn listen_on(self, addr: Multiaddr) -> ListenerResult<Self> {
-        let (listener, new_addr) = match self.inner.listen_on(addr.clone()) {
-            Ok((l, a)) => (l, a),
-            Err((inner, err)) => {
-                return Err((
-                    ConnectionReuse {
-                        inner: inner,
-                        shared: self.shared,
-                    },
-                    err
-                ));
-            }
-        };
+    fn listen_on(&self, addr: Multiaddr) -> ListenerResult<Self::Listener> {
+        let (listener, new_addr) = self.inner.listen_on(addr.clone())?;
 
         let listener = listener
             .fuse()
-            .map(|upgr| {
-                upgr.and_then(|(out, addr)| {
-                    addr.map(move |addr| (out, addr))
-                })
-            });
+            .map(|upgr|
+                upgr.and_then(|(out, addr)|
+                    addr.map(move |a| (out, a))
+                )
+            );
 
         let listener = ConnectionReuseListener {
             shared: self.shared.clone(),
@@ -162,66 +151,44 @@ where
         Ok((Box::new(listener) as Box<_>, new_addr))
     }
 
-    fn dial(self, addr: Multiaddr) -> DialResult<Self> {
+    fn dial(&self, addr: Multiaddr) -> DialResult<Self::Dial> {
+        // FIXME: this doesn't properly work yet.
         // If we already have an active connection, use it!
-        let substream = if let Some(muxer) = self.shared
-            .lock()
-            .active_connections
-            .get(&addr)
-            .map(|muxer| muxer.clone())
-        {
-            let a = addr.clone();
-            Either::A(muxer.outbound().map(move |s| s.map(move |s| (s, future::ok(a)))))
-        } else {
-            Either::B(future::ok(None))
-        };
+        // if let Some(muxer) = self.shared.lock().active_connections.get(&addr).map(|m| m.clone()) {
+        //     let a = addr.clone();
+        //     let f = muxer.outbound()
+        //         .map(move |s| s.map(move |s| (s, future::ok(a))))
+        //         .map(|o| Either::A(future::ok(o)));
+        //     let b = Box::new(f);
+        //     return Ok(b)
+        // }
 
         let shared = self.shared.clone();
-        let inner = self.inner;
-        let future = substream.and_then(move |outbound| {
-            if let Some(o) = outbound {
-                debug!("Using existing multiplexed connection to {}", addr);
-                return Either::A(future::ok(o));
-            }
-            // The previous stream muxer did not yield a new substream => start new dial
-            debug!("No existing connection to {}; dialing", addr);
-            match inner.dial(addr.clone()) {
-                Ok(dial) => {
-                    let future = dial
-                    .and_then(move |(muxer, addr_fut)| {
-                        trace!("Waiting for remote's address");
-                        addr_fut.map(move |addr| (muxer, addr))
-                    })
-                    .and_then(move |(muxer, addr)| {
-                        muxer.clone().outbound().and_then(move |substream| {
-                            if let Some(s) = substream {
-                                // Replace the active connection because we are the most recent.
-                                let mut lock = shared.lock();
-                                lock.active_connections.insert(addr.clone(), muxer.clone());
-                                // TODO: doesn't need locking ; the sender could be extracted
-                                let _ = lock.add_to_next_tx.unbounded_send((
-                                    muxer.clone(),
-                                    muxer.inbound(),
-                                    addr.clone(),
-                                ));
-                                Ok((s, future::ok(addr)))
-                            } else {
-                                error!("failed to dial to {}", addr);
-                                shared.lock().active_connections.remove(&addr);
-                                Err(io::Error::new(io::ErrorKind::Other, "dial failed"))
-                            }
-                        })
-                    });
-                    Either::B(Either::A(future))
-                }
-                Err(_) => {
-                    let e = io::Error::new(io::ErrorKind::Other, "transport rejected dial");
-                    Either::B(Either::B(future::err(e)))
-                }
-            }
-        });
 
-        Ok(Box::new(future) as Box<_>)
+        Ok(Box::new(self.inner.dial(addr.clone())?
+            .and_then(move |(muxer, addr_fut)| {
+                trace!("Waiting for remote's address");
+                addr_fut.map(move |addr| muxer.clone()
+                    .outbound().and_then(move |substream| {
+                        if let Some(s) = substream {
+                            // Replace the active connection because we are the most recent.
+                            let mut lock = shared.lock();
+                            lock.active_connections.insert(addr.clone(), muxer.clone());
+                            // TODO: doesn't need locking ; the sender could be extracted
+                            let _ = lock.add_to_next_tx.unbounded_send((
+                                muxer.clone(),
+                                muxer.inbound(),
+                                addr.clone(),
+                            ));
+                            Ok((s, future::ok(addr)))
+                        } else {
+                            error!("failed to dial to {}", addr);
+                            shared.lock().active_connections.remove(&addr);
+                            Err(io::Error::new(io::ErrorKind::Other, "dial failed"))
+                        }
+                    })
+                )
+            }).flatten()) as Box<_>)
     }
 
     #[inline]
