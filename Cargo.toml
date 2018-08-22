@@ -20,6 +20,6 @@ members = [
     "transports/tcp",
     "transports/uds",
     "transports/websocket",
-    "transports/helpers/transport-timeout",
-    "transports/helpers/ratelimit",
+    "transports/modifiers/transport-timeout",
+    "transports/modifiers/ratelimit",
 ]
