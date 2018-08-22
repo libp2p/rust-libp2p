@@ -18,9 +18,9 @@ members = [
     "rw-stream-sink",
     "secio",
     "core",
-    "tcp-transport",
     "transport-timeout",
-    "uds",
-    "websocket",
+    "transports/tcp",
+    "transports/uds",
+    "transports/websocket",
     "yamux"
 ]

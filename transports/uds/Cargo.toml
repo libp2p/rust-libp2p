@@ -5,10 +5,10 @@ authors = ["Parity Technologies <admin@parity.io>"]
 description = "Unix domain sockets transport for libp2p"
 
 [target.'cfg(all(unix, not(target_os = "emscripten")))'.dependencies]
-libp2p-core = { path = "../core" }
+libp2p-core = { path = "../../core" }
 log = "0.4.1"
 futures = "0.1"
-multiaddr = { path = "../multiaddr" }
+multiaddr = { path = "../../multiaddr" }
 tokio-uds = "0.2"
 
 [target.'cfg(all(unix, not(target_os = "emscripten")))'.dev-dependencies]

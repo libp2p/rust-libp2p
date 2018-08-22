@@ -28,6 +28,6 @@ secp256k1 = ["eth-secp256k1"]
 aes-all = ["ctr","aesni","lazy_static"]
 
 [dev-dependencies]
-libp2p-tcp-transport = { path = "../tcp-transport" }
+libp2p-tcp-transport = { path = "../transports/tcp" }
 tokio-current-thread = "0.1"
 tokio-tcp = "0.1"
