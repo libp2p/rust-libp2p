@@ -18,9 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-// TODO: use this once stable ; for now we just copy-paste the content of the README.md
-//#![doc(include = "../README.md")]
-
 //! # libp2p-dns
 //!
 //! This crate provides the type `DnsConfig` that allows one to resolve the `/dns4/` and `/dns6/`

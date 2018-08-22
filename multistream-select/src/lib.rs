@@ -18,9 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-// TODO: use this once stable ; for now we just copy-paste the content of the README.md
-//#![doc(include = "../README.md")]
-
 //! # Multistream-select
 //!
 //! This crate implements the `multistream-select` protocol, which is the protocol used by libp2p

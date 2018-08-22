@@ -18,9 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-// TODO: use this once stable ; for now we just copy-paste the content of the README.md
-//#![doc(include = "../README.md")]
-
 //! This crate provides the `RwStreamSink` type. It wraps around a `Stream + Sink` that produces
 //! and accepts byte arrays, and implements `AsyncRead` and `AsyncWrite`.
 //!
