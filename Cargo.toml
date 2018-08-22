@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "cid",
     "circular-buffer",
     "datastore",
     "dns",
@@ -21,7 +20,7 @@ members = [
     "core",
     "tcp-transport",
     "transport-timeout",
-    "varint-rs",
+    "uds",
     "websocket",
     "yamux"
 ]

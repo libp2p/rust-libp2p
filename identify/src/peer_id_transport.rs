@@ -93,7 +93,7 @@ where
                         .map(move |info| {
                             let peer_id = info.info.public_key.clone().into_peer_id();
                             debug!("Identified {} as {:?}", original_addr, peer_id);
-                            AddrComponent::P2P(peer_id.into_bytes()).into()
+                            AddrComponent::P2P(peer_id.into()).into()
                         })) as Box<Future<Item = _, Error = _>>;
                     (out, real_addr)
                 });
@@ -194,7 +194,7 @@ where
                             .map(move |info| {
                                 let peer_id = info.info.public_key.clone().into_peer_id();
                                 debug!("Identified {} as {:?}", original_addr, peer_id);
-                                AddrComponent::P2P(peer_id.into_bytes()).into()
+                                AddrComponent::P2P(peer_id.into()).into()
                             })) as Box<Future<Item = _, Error = _>>;
                         (out, real_addr)
                     });
@@ -242,7 +242,7 @@ where
                         .map(move |info| {
                             let peer_id = info.info.public_key.clone().into_peer_id();
                             debug!("Identified {} as {:?}", original_addr, peer_id);
-                            AddrComponent::P2P(peer_id.into_bytes()).into()
+                            AddrComponent::P2P(peer_id.into()).into()
                         })) as Box<Future<Item = _, Error = _>>;
                     (out, real_addr)
                 });
@@ -279,8 +279,7 @@ fn multiaddr_to_peerid(addr: Multiaddr) -> Result<PeerId, Multiaddr> {
 
     match components.last() {
         Some(&AddrComponent::P2P(ref peer_id)) => {
-            // TODO: `peer_id` is sometimes in fact a CID here
-            match PeerId::from_bytes(peer_id.clone()) {
+            match PeerId::from_multihash(peer_id.clone()) {
                 Ok(peer_id) => Ok(peer_id),
                 Err(_) => Err(addr),
             }
@@ -352,7 +351,7 @@ mod tests {
         });
 
         let future = transport
-            .dial(iter::once(AddrComponent::P2P(peer_id.into_bytes())).collect())
+            .dial(iter::once(AddrComponent::P2P(peer_id.into())).collect())
             .unwrap_or_else(|_| panic!())
             .then::<_, Result<(), ()>>(|_| Ok(()));
 

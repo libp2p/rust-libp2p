@@ -118,7 +118,7 @@ extern crate futures;
 extern crate log;
 extern crate smallvec;
 extern crate tokio_io;
-extern crate varint;
+extern crate unsigned_varint;
 
 mod dialer_select;
 mod error;

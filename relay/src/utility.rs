@@ -26,7 +26,7 @@ use protobuf::{self, Message};
 use std::{io, error::Error, iter::FromIterator};
 use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
-use varint::VarintCodec;
+use unsigned_varint::codec;
 
 pub(crate) fn is_success(msg: &CircuitRelay) -> bool {
     msg.get_field_type() == CircuitRelay_Type::STATUS
@@ -41,13 +41,13 @@ pub(crate) fn status(s: CircuitRelay_Status) -> CircuitRelay {
 }
 
 pub(crate) struct Io<T> {
-    codec: Framed<T, VarintCodec<Vec<u8>>>,
+    codec: Framed<T, codec::UviBytes<Vec<u8>>>,
 }
 
 impl<T: AsyncRead + AsyncWrite> Io<T> {
     pub(crate) fn new(c: T) -> Io<T> {
         Io {
-            codec: Framed::new(c, VarintCodec::default()),
+            codec: Framed::new(c, codec::UviBytes::default()),
         }
     }
 
@@ -146,7 +146,7 @@ impl Peer {
     pub(crate) fn from(mut addr: Multiaddr) -> Option<Peer> {
         match addr.pop() {
             Some(AddrComponent::P2P(id)) => {
-                PeerId::from_bytes(id).ok().map(|pid| {
+                PeerId::from_multihash(id).ok().map(|pid| {
                     if addr.iter().count() == 0 {
                         Peer {
                             id: pid,
