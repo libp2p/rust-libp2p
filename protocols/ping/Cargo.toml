@@ -6,10 +6,10 @@ license = "MIT"
 
 [dependencies]
 bytes = "0.4"
-libp2p-core = { path = "../core" }
+libp2p-core = { path = "../../core" }
 log = "0.4.1"
-multiaddr = { path = "../utils/multiaddr" }
-multistream-select = { path = "../utils/multistream-select" }
+multiaddr = { path = "../../utils/multiaddr" }
+multistream-select = { path = "../../utils/multistream-select" }
 futures = "0.1"
 parking_lot = "0.6"
 rand = "0.5"
@@ -17,6 +17,6 @@ tokio-codec = "0.1"
 tokio-io = "0.1"
 
 [dev-dependencies]
-libp2p-tcp-transport = { path = "../transports/tcp" }
+libp2p-tcp-transport = { path = "../../transports/tcp" }
 tokio-current-thread = "0.1"
 tokio-tcp = "0.1"

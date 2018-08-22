@@ -21,7 +21,7 @@ smallvec = "0.5"
 tokio-io = "0.1"
 
 [dev-dependencies]
-libp2p-ping = { path = "../ping" }
+libp2p-ping = { path = "../protocols/ping" }
 libp2p-tcp-transport = { path = "../transports/tcp" }
 libp2p-mplex = { path = "../muxers/mplex" }
 rand = "0.5"
