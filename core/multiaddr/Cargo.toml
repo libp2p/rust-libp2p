@@ -11,7 +11,7 @@ version = "0.3.0"
 [dependencies]
 bs58 = "0.2.0"
 byteorder = "~0.4"
-multihash = { path = "../../utils/multihash" }
+multihash = { path = "../multihash" }
 integer-encoding = "~1.0.3"
 serde = "1.0.70"
 
