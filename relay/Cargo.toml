@@ -7,10 +7,10 @@ license = "MIT"
 [dependencies]
 bytes = "0.4"
 futures = "0.1"
-libp2p-peerstore = { path = "../peerstore" }
+libp2p-peerstore = { path = "../utils/peerstore" }
 libp2p-core = { path = "../core" }
 log = "0.4"
-multiaddr = { path = "../multiaddr" }
+multiaddr = { path = "../utils/multiaddr" }
 protobuf = "2.0.2"
 rand = "0.4"
 tokio-codec = "0.1"
