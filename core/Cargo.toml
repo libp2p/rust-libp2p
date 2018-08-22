@@ -11,12 +11,12 @@ fnv = "1.0"
 log = "0.4"
 multiaddr = { path = "../utils/multiaddr" }
 multihash = { path = "../utils/multihash" }
-multistream-select = { path = "../utils/multistream-select" }
+multistream-select = { path = "../transports/helpers/multistream-select" }
 futures = { version = "0.1", features = ["use_std"] }
 parking_lot = "0.6"
 protobuf = "2.0.2"
 quick-error = "1.2"
-rw-stream-sink = { path = "../utils/rw-stream-sink" }
+rw-stream-sink = { path = "../transports/helpers/rw-stream-sink" }
 smallvec = "0.5"
 tokio-io = "0.1"
 

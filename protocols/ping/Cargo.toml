@@ -9,7 +9,7 @@ bytes = "0.4"
 libp2p-core = { path = "../../core" }
 log = "0.4.1"
 multiaddr = { path = "../../utils/multiaddr" }
-multistream-select = { path = "../../utils/multistream-select" }
+multistream-select = { path = "../../transports/helpers/multistream-select" }
 futures = "0.1"
 parking_lot = "0.6"
 rand = "0.5"
