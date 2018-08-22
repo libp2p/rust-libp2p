@@ -5,12 +5,13 @@ members = [
     "identify",
     "kad",
     "libp2p",
-    "mplex",
     "ping",
     "ratelimit",
     "relay",
     "secio",
     "core",
+    "muxers/mplex",
+    "muxers/yamux",
     "utils/circular-buffer",
     "utils/multiaddr",
     "utils/multihash",
@@ -22,5 +23,4 @@ members = [
     "transports/tcp",
     "transports/uds",
     "transports/websocket",
-    "yamux"
 ]

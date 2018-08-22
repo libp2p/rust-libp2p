@@ -23,7 +23,7 @@ tokio-io = "0.1"
 [dev-dependencies]
 libp2p-ping = { path = "../ping" }
 libp2p-tcp-transport = { path = "../transports/tcp" }
-libp2p-mplex = { path = "../mplex" }
+libp2p-mplex = { path = "../muxers/mplex" }
 rand = "0.5"
 tokio = "0.1"
 tokio-codec = "0.1"
