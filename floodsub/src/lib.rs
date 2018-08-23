@@ -141,7 +141,7 @@ where
                 .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
                 .split();
 
-            // Build the channel that will be used to communicate outgoing message to this remote.
+            // Build the channel that will be used to communicate outgoing messages to this remote.
             let (input_tx, input_rx) = mpsc::unbounded();
             input_tx
                 .unbounded_send(init_msg.into())
@@ -322,7 +322,7 @@ impl FloodSubController {
     /// Same as `unsubscribe` but unsubscribes from multiple topics at once.
     ///
     /// Since this results in a single packet sent to the remotes, it is preferable to use this
-    /// method when ybsubscribing from multiple topics at once rather than call `unsubscribe`
+    /// method when unsubscribing from multiple topics at once rather than call `unsubscribe`
     /// multiple times.
     #[inline]
     pub fn unsubscribe_many<'a, I>(&self, topics: I)
@@ -390,7 +390,7 @@ impl FloodSubController {
     {
         let topics = topics.into_iter().collect::<Vec<_>>();
 
-        debug!("Queueing publish message ; topics = {:?} ; data_len = {:?}",
+        debug!("Queueing publish message: topics = {:?} ; data_len = {:?}",
                topics.iter().map(|t| t.hash().clone().into_string()).collect::<Vec<_>>(),
                data.len());
 

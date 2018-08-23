@@ -1,3 +1,9 @@
+syntax = "proto2";
+// gossipsub: see the original file here:
+// https://github.com/libp2p/go-floodsub/blob/1b4fbb865d4944a602b27e24e8123a57095e9987/pb/rpc.proto
+// https://github.com/libp2p/go-floodsub/pull/67
+// For the specification, see:
+// https://github.com/libp2p/specs/tree/master/pubsub
 package floodsub.pb;
 
 message RPC {
@@ -8,6 +14,8 @@ message RPC {
 		optional bool subscribe = 1; // subscribe or unsubcribe
 		optional string topicid = 2;
 	}
+
+    optional ControlMessage control = 3;
 }
 
 message Message {
@@ -15,6 +23,30 @@ message Message {
 	optional bytes data = 2;
 	optional bytes seqno = 3;
 	repeated string topicIDs = 4;
+}
+
+message ControlMessage {
+    repeated ControlIHave ihave = 1;
+    repeated ControlIWant iwant = 2;
+    repeated ControlGraft graft = 3;
+    repeated ControlPrune prune = 4;
+}
+
+message ControlIHave {
+    optional string topicID = 1;
+    repeated string messageIDs = 2;
+}
+
+message ControlIWant {
+    repeated string messageIDs = 1;
+}
+
+message ControlGraft {
+    optional string topicID = 1;
+}
+
+message ControlPrune {
+    optional string topicID = 1;
 }
 
 // topicID = hash(topicDescriptor); (not the topic.name)
