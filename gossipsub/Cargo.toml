@@ -1,8 +1,0 @@
-[package]
-name = "gossipsub"
-version = "0.1.0"
-authors = ["James Ray <16969914+jamesray1@users.noreply.github.com>"]
-license = "Unlicense"
-
-[dependencies]
-libp2p-floodsub = { path = "../core" }
