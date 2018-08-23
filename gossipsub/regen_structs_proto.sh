@@ -11,3 +11,6 @@ docker run --rm -v `pwd`:/usr/code:z -w /usr/code rust /bin/bash -c " \
 sudo chown $USER:$USER *.rs;
 
 mv -f rpc.rs ./src/rpc_proto.rs;
+
+# For copying and pasting into a terminal for those who don't have Ubuntu
+# protoc --rust_out . rpc.proto; sudo chown $USER:$USER *.rs; mv -f rpc.rs ./src/rpc_proto.rs;

@@ -31,7 +31,16 @@ extern crate libp2p_floodsub;
 // Glob import due to gossipsub extending on floodsub
 use libp2p_floodsub::*;
 
+/// Implementation of the `ConnectionUpgrade` for the gossipsub protocol.
+#[derive(Debug, Clone)]
+pub struct GossipSubUpgrade {
+    inner: Arc<Inner>,
+}
 
+impl FloodSubUpgrade {
+    /// Builds a new `GossipSubUpgrade`. Also returns a `FloodSubReceiver` that will stream incoming
+    /// messages for the gossipsub system.
+    pub fn new
 
 #[cfg(test)]
 mod tests {
