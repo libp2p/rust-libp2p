@@ -562,6 +562,7 @@ where
 }
 
 /// Implementation of `Future` that yields the next incoming substream from a dialed connection.
+#[must_use = "futures do nothing unless polled"]
 pub struct ConnectionReuseIncoming<T, D, M>
 where
     T: Transport,
