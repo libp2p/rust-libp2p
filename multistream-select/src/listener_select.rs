@@ -22,14 +22,11 @@
 //! `multistream-select` for the listener.
 
 use bytes::Bytes;
-use futures::future::{err, loop_fn, Loop, Either};
-use futures::{Future, Sink, Stream};
-use ProtocolChoiceError;
-
-use protocol::DialerToListenerMessage;
-use protocol::Listener;
-use protocol::ListenerToDialerMessage;
+use futures::{prelude::*, sink, stream::StreamFuture};
+use protocol::{DialerToListenerMessage, Listener, ListenerFuture, ListenerToDialerMessage};
+use std::mem;
 use tokio_io::{AsyncRead, AsyncWrite};
+use ProtocolChoiceError;
 
 /// Helps selecting a protocol amongst the ones supported.
 ///
@@ -45,61 +42,111 @@ use tokio_io::{AsyncRead, AsyncWrite};
 ///
 /// On success, returns the socket and the identifier of the chosen protocol (of type `P`). The
 /// socket now uses this protocol.
-pub fn listener_select_proto<R, I, M, P>(
-    inner: R,
-    protocols: I,
-) -> impl Future<Item = (P, R), Error = ProtocolChoiceError>
+pub fn listener_select_proto<R, I, M, P>(inner: R, protocols: I) -> ListenerSelectFuture<R, I, P>
 where
     R: AsyncRead + AsyncWrite,
     I: Iterator<Item = (Bytes, M, P)> + Clone,
     M: FnMut(&Bytes, &Bytes) -> bool,
 {
-    Listener::new(inner).from_err().and_then(move |listener| {
-        loop_fn(listener, move |listener| {
-            let protocols = protocols.clone();
+    ListenerSelectFuture::AwaitListener { listener_fut: Listener::new(inner), protocols }
+}
 
-            listener
-                .into_future()
-                .map_err(|(e, _)| e.into())
-                .and_then(move |(message, listener)| match message {
-                    Some(DialerToListenerMessage::ProtocolsListRequest) => {
-                        let msg = ListenerToDialerMessage::ProtocolsListResponse {
-                            list: protocols.map(|(p, _, _)| p).collect(),
-                        };
-                        trace!("protocols list response: {:?}", msg);
-                        let fut = listener
-                            .send(msg)
-                            .from_err()
-                            .map(move |listener| (None, listener));
-                        Either::A(Either::A(fut))
-                    }
-                    Some(DialerToListenerMessage::ProtocolRequest { name }) => {
-                        let mut outcome = None;
-                        let mut send_back = ListenerToDialerMessage::NotAvailable;
-                        for (supported, mut matches, value) in protocols {
-                            if matches(&name, &supported) {
-                                send_back =
-                                    ListenerToDialerMessage::ProtocolAck { name: name.clone() };
-                                outcome = Some(value);
-                                break;
-                            }
+
+pub enum ListenerSelectFuture<R: AsyncRead + AsyncWrite, I, P> {
+    AwaitListener {
+        listener_fut: ListenerFuture<R>,
+        protocols: I
+    },
+    Incoming {
+        stream: StreamFuture<Listener<R>>,
+        protocols: I
+    },
+    Outgoing {
+        sender: sink::Send<Listener<R>>,
+        protocols: I,
+        outcome: Option<P>
+    },
+    Undefined
+}
+
+impl<R, I, M, P> Future for ListenerSelectFuture<R, I, P>
+where
+    I: Iterator<Item=(Bytes, M, P)> + Clone,
+    M: FnMut(&Bytes, &Bytes) -> bool,
+    R: AsyncRead + AsyncWrite,
+{
+    type Item = (P, R);
+    type Error = ProtocolChoiceError;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        loop {
+            match mem::replace(self, ListenerSelectFuture::Undefined) {
+                ListenerSelectFuture::AwaitListener { mut listener_fut, protocols } => {
+                    let listener = match listener_fut.poll()? {
+                        Async::Ready(l) => l,
+                        Async::NotReady => {
+                            *self = ListenerSelectFuture::AwaitListener { listener_fut, protocols };
+                            return Ok(Async::NotReady)
                         }
-                        trace!("requested: {:?}, response: {:?}", name, send_back);
-                        let fut = listener
-                            .send(send_back)
-                            .from_err()
-                            .map(move |listener| (outcome, listener));
-                        Either::A(Either::B(fut))
+                    };
+                    let stream = listener.into_future();
+                    *self = ListenerSelectFuture::Incoming { stream, protocols };
+                }
+                ListenerSelectFuture::Incoming { mut stream, protocols } => {
+                    let (msg, listener) = match stream.poll().map_err(|(e, _)| ProtocolChoiceError::from(e))? {
+                        Async::Ready(x) => x,
+                        Async::NotReady => {
+                            *self = ListenerSelectFuture::Incoming { stream, protocols };
+                            return Ok(Async::NotReady)
+                        }
+                    };
+                    match msg {
+                        Some(DialerToListenerMessage::ProtocolsListRequest) => {
+                            let msg = ListenerToDialerMessage::ProtocolsListResponse {
+                                list: protocols.clone().map(|(p, _, _)| p).collect(),
+                            };
+                            trace!("protocols list response: {:?}", msg);
+                            let sender = listener.send(msg);
+                            *self = ListenerSelectFuture::Outgoing { sender, protocols, outcome: None }
+                        }
+                        Some(DialerToListenerMessage::ProtocolRequest { name }) => {
+                            let mut outcome = None;
+                            let mut send_back = ListenerToDialerMessage::NotAvailable;
+                            for (supported, mut matches, value) in protocols.clone() {
+                                if matches(&name, &supported) {
+                                    send_back = ListenerToDialerMessage::ProtocolAck {name: name.clone()};
+                                    outcome = Some(value);
+                                    break;
+                                }
+                            }
+                            trace!("requested: {:?}, response: {:?}", name, send_back);
+                            let sender = listener.send(send_back);
+                            *self = ListenerSelectFuture::Outgoing { sender, protocols, outcome }
+                        }
+                        None => {
+                            debug!("no protocol request received");
+                            return Err(ProtocolChoiceError::NoProtocolFound)
+                        }
                     }
-                    None => {
-                        debug!("no protocol request received");
-                        Either::B(err(ProtocolChoiceError::NoProtocolFound))
+                }
+                ListenerSelectFuture::Outgoing { mut sender, protocols, outcome } => {
+                    let listener = match sender.poll()? {
+                        Async::Ready(l) => l,
+                        Async::NotReady => {
+                            *self = ListenerSelectFuture::Outgoing { sender, protocols, outcome };
+                            return Ok(Async::NotReady)
+                        }
+                    };
+                    if let Some(p) = outcome {
+                        return Ok(Async::Ready((p, listener.into_inner())))
+                    } else {
+                        let stream = listener.into_future();
+                        *self = ListenerSelectFuture::Incoming { stream, protocols };
                     }
-                })
-                .map(|(outcome, listener): (_, Listener<R>)| match outcome {
-                    Some(outcome) => Loop::Break((outcome, listener.into_inner())),
-                    None => Loop::Continue(listener),
-                })
-        })
-    })
+                }
+                ListenerSelectFuture::Undefined =>
+                    panic!("ListenerSelectFuture::poll called after completion")
+            }
+        }
+    }
 }
