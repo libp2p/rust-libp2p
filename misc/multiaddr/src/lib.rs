@@ -275,7 +275,7 @@ impl Multiaddr {
     }
 }
 
-impl From<AddrComponent> for Multiaddr {
+impl<'a> From<AddrComponent<'a>> for Multiaddr {
     fn from(addr: AddrComponent) -> Multiaddr {
         let mut out = Vec::new();
         addr.write_bytes(&mut out).expect(
@@ -286,7 +286,7 @@ impl From<AddrComponent> for Multiaddr {
 }
 
 impl<'a> IntoIterator for &'a Multiaddr {
-    type Item = AddrComponent;
+    type Item = AddrComponent<'a>;
     type IntoIter = Iter<'a>;
 
     #[inline]
@@ -295,10 +295,10 @@ impl<'a> IntoIterator for &'a Multiaddr {
     }
 }
 
-impl FromIterator<AddrComponent> for Multiaddr {
+impl<'a> FromIterator<AddrComponent<'a>> for Multiaddr {
     fn from_iter<T>(iter: T) -> Self
     where
-        T: IntoIterator<Item = AddrComponent>,
+        T: IntoIterator<Item = AddrComponent<'a>>,
     {
         let mut bytes = Vec::new();
         for cmp in iter {
@@ -348,9 +348,9 @@ impl FromStr for Multiaddr {
 pub struct Iter<'a>(&'a [u8]);
 
 impl<'a> Iterator for Iter<'a> {
-    type Item = AddrComponent;
+    type Item = AddrComponent<'a>;
 
-    fn next(&mut self) -> Option<AddrComponent> {
+    fn next(&mut self) -> Option<Self::Item> {
         if self.0.is_empty() {
             return None;
         }

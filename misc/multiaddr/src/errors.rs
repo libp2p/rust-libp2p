@@ -1,4 +1,4 @@
-use std::{net, fmt, error, io, num, string};
+use std::{net, fmt, error, io, num, str, string};
 use bs58;
 use multihash;
 use byteorder;
@@ -79,6 +79,12 @@ impl From<num::ParseIntError> for Error {
 
 impl From<string::FromUtf8Error> for Error {
     fn from(err: string::FromUtf8Error) -> Error {
+        Error::ParsingError(err.into())
+    }
+}
+
+impl From<str::Utf8Error> for Error {
+    fn from(err: str::Utf8Error) -> Error {
         Error::ParsingError(err.into())
     }
 }
