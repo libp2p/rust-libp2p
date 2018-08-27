@@ -593,7 +593,7 @@ fn handle_packet_received(
             continue;
         }
 
-        let peer_id = match PeerId::from_bytes(bytes.to_vec()) {
+        let peer_id = match PeerId::from_bytes(from.clone()) {
             Ok(id) => id,
             Err(err) => {
                 trace!("Parsing PeerId failed: {:?}. Skipping.", err);
