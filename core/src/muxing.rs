@@ -18,9 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::prelude::*;
-use std::io::Error as IoError;
+use futures::{future, prelude::*};
+use std::io::{Read, Write, Error as IoError};
 use std::ops::Deref;
+use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Implemented on objects that can open and manage substreams.
 pub trait StreamMuxer {
@@ -65,6 +66,26 @@ pub trait StreamMuxer {
     fn destroy_substream(&self, substream: Self::Substream);
 }
 
+/// Polls for an inbound from the muxer but wraps the output in an object that
+/// implements `Read`/`Write`/`AsyncRead`/`AsyncWrite`.
+pub fn inbound_from_ref_and_wrap<P>(muxer: P) -> impl Future<Item = Option<SubstreamArc<P>>, Error = IoError>
+    where P: Deref + Clone, P::Target: StreamMuxer
+{
+    let muxer2 = muxer.clone();
+    future::poll_fn(move || muxer.poll_inbound())
+        .map(|substream| substream.map(move |s| substream_from_ref(muxer2, s)))
+}
+
+/// Same as `outbound_from_ref`, but wraps the output in an object that
+/// implements `Read`/`Write`/`AsyncRead`/`AsyncWrite`.
+pub fn outbound_from_ref_and_wrap<P>(muxer: P) -> impl Future<Item = Option<SubstreamArc<P>>, Error = IoError>
+    where P: Deref + Clone, P::Target: StreamMuxer
+{
+    let muxer2 = muxer.clone();
+    outbound_from_ref(muxer)
+        .map(|substream| substream.map(move |s| substream_from_ref(muxer2, s)))
+}
+
 /// Builds a new future for an outbound substream, where the muxer is a reference.
 pub fn outbound_from_ref<P>(muxer: P) -> OutboundSubstreamArcFuture<P>
     where P: Deref, P::Target: StreamMuxer
@@ -100,5 +121,71 @@ impl<P> Drop for OutboundSubstreamArcFuture<P>
 {
     fn drop(&mut self) {
         self.muxer.destroy_outbound(self.outbound.take().expect("outbound was empty"))
+    }
+}
+
+/// Builds an implementation of `Read`/`Write`/`AsyncRead`/`AsyncWrite` from an `Arc` to the
+/// muxer and a substream.
+pub fn substream_from_ref<P>(muxer: P, substream: <P::Target as StreamMuxer>::Substream)
+    -> SubstreamArc<P>
+    where P: Deref, P::Target: StreamMuxer
+{
+    SubstreamArc {
+        muxer,
+        substream: Some(substream),
+    }
+}
+
+/// Stream returned by `substream_from_ref`.
+pub struct SubstreamArc<P>
+    where P: Deref, P::Target: StreamMuxer
+{
+    muxer: P,
+    substream: Option<<P::Target as StreamMuxer>::Substream>,
+}
+
+impl<P> Read for SubstreamArc<P>
+    where P: Deref, P::Target: StreamMuxer
+{
+    #[inline]
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
+        self.muxer.read_substream(self.substream.as_mut().expect("substream was empty"), buf)
+    }
+}
+
+impl<P> AsyncRead for SubstreamArc<P>
+    where P: Deref, P::Target: StreamMuxer
+{
+}
+
+impl<P> Write for SubstreamArc<P>
+    where P: Deref, P::Target: StreamMuxer
+{
+    #[inline]
+    fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
+        self.muxer.write_substream(self.substream.as_mut().expect("substream was empty"), buf)
+    }
+
+    #[inline]
+    fn flush(&mut self) -> Result<(), IoError> {
+        self.muxer.flush_substream(self.substream.as_mut().expect("substream was empty"))
+    }
+}
+
+impl<P> AsyncWrite for SubstreamArc<P>
+    where P: Deref, P::Target: StreamMuxer
+{
+    #[inline]
+    fn shutdown(&mut self) -> Poll<(), IoError> {
+        self.muxer.shutdown_substream(self.substream.as_mut().expect("substream was empty"))
+    }
+}
+
+impl<P> Drop for SubstreamArc<P>
+    where P: Deref, P::Target: StreamMuxer
+{
+    #[inline]
+    fn drop(&mut self) {
+        self.muxer.destroy_substream(self.substream.take().expect("substream was empty"))
     }
 }

@@ -28,9 +28,9 @@ extern crate tokio_io;
 
 use futures::future::Future;
 use futures::{Sink, Stream};
-use std::sync::mpsc;
+use std::sync::{Arc, mpsc};
 use std::thread;
-use swarm::{StreamMuxer, Transport};
+use swarm::{muxing, Transport};
 use tcp::TcpConfig;
 use tokio_io::codec::length_delimited::Framed;
 
@@ -52,8 +52,8 @@ fn client_to_server_outbound() {
         let future = listener
             .into_future()
             .map_err(|(err, _)| err)
-            .and_then(|(client, _)| client.unwrap().map(|v| v.0))
-            .and_then(|client| client.outbound())
+            .and_then(|(client, _)| client.unwrap().map(|v| Arc::new(v.0)))
+            .and_then(|client| muxing::outbound_from_ref_and_wrap(client))
             .map(|client| Framed::<_, bytes::BytesMut>::new(client.unwrap()))
             .and_then(|client| {
                 client
@@ -75,7 +75,7 @@ fn client_to_server_outbound() {
     let future = transport
         .dial(rx.recv().unwrap())
         .unwrap()
-        .and_then(|client| client.0.inbound())
+        .and_then(|client| muxing::inbound_from_ref_and_wrap(Arc::new(client.0)))
         .map(|server| Framed::<_, bytes::BytesMut>::new(server.unwrap()))
         .and_then(|server| server.send("hello world".into()))
         .map(|_| ());
@@ -103,7 +103,7 @@ fn client_to_server_inbound() {
             .into_future()
             .map_err(|(err, _)| err)
             .and_then(|(client, _)| client.unwrap().map(|v| v.0))
-            .and_then(|client| client.inbound())
+            .and_then(|client| muxing::inbound_from_ref_and_wrap(Arc::new(client)))
             .map(|client| Framed::<_, bytes::BytesMut>::new(client.unwrap()))
             .and_then(|client| {
                 client
@@ -125,7 +125,7 @@ fn client_to_server_inbound() {
     let future = transport
         .dial(rx.recv().unwrap())
         .unwrap()
-        .and_then(|(client, _)| client.outbound())
+        .and_then(|(client, _)| muxing::outbound_from_ref_and_wrap(Arc::new(client)))
         .map(|server| Framed::<_, bytes::BytesMut>::new(server.unwrap()))
         .and_then(|server| server.send("hello world".into()))
         .map(|_| ());
