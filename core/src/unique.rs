@@ -428,7 +428,7 @@ pub enum UniqueConnecState {
 
 #[cfg(test)]
 mod tests {
-    use futures::{future, sync::oneshot, Future};
+    use futures::{future, sync::oneshot, Future, Stream};
     use transport::DeniedTransport;
     use std::io::Error as IoError;
     use std::sync::{Arc, atomic};
@@ -446,7 +446,7 @@ mod tests {
         let unique_connec2 = unique_connec.clone();
         assert_eq!(unique_connec.state(), UniqueConnecState::Empty);
 
-        let (swarm_ctrl, swarm_future) = swarm(rx.with_dummy_muxing(), |_, _| {
+        let (swarm_ctrl, swarm_stream) = swarm(rx.with_dummy_muxing(), |_, _| {
             // Note that this handles both the dial and the listen.
             assert!(unique_connec2.is_alive());
             unique_connec2.tie_or_stop(12, future::empty())
@@ -458,7 +458,7 @@ mod tests {
             .map(|val| { assert_eq!(val, 12); });
         assert_eq!(unique_connec.state(), UniqueConnecState::Pending);
 
-        let future = dial_success.select(swarm_future).map_err(|(err, _)| err);
+        let future = dial_success.select(swarm_stream.for_each(|_| Ok(()))).map_err(|(err, _)| err);
         current_thread::Runtime::new().unwrap().block_on(future).unwrap();
         assert_eq!(unique_connec.state(), UniqueConnecState::Full);
     }
@@ -489,7 +489,7 @@ mod tests {
 
         let mut num_connec = 0;
         let mut msg_rx = Some(msg_rx);
-        let (swarm_ctrl1, swarm_future1) = swarm(rx.with_dummy_muxing(), move |_, _| {
+        let (swarm_ctrl1, swarm_stream1) = swarm(rx.with_dummy_muxing(), move |_, _| {
             num_connec += 1;
             if num_connec == 1 {
                 unique_connec2.tie_or_stop(12, future::Either::A(future::empty()))
@@ -500,7 +500,7 @@ mod tests {
         });
         swarm_ctrl1.listen_on("/memory".parse().unwrap()).unwrap();
 
-        let (swarm_ctrl2, swarm_future2) = swarm(tx.clone().with_dummy_muxing(), move |_, _| {
+        let (swarm_ctrl2, swarm_stream2) = swarm(tx.clone().with_dummy_muxing(), move |_, _| {
             future::empty()
         });
 
@@ -528,8 +528,8 @@ mod tests {
             });
 
         let future = dial_success
-            .select(swarm_future2).map(|_| ()).map_err(|(err, _)| err)
-            .select(swarm_future1).map(|_| ()).map_err(|(err, _)| err);
+            .select(swarm_stream2.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err)
+            .select(swarm_stream1.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err);
 
         current_thread::Runtime::new().unwrap().block_on(future).unwrap();
         assert!(unique_connec.is_alive());
@@ -544,7 +544,7 @@ mod tests {
         let unique_connec2 = unique_connec.clone();
 
         let mut num = 12;
-        let (swarm_ctrl, swarm_future) = swarm(rx.with_dummy_muxing(), move |_, _| {
+        let (swarm_ctrl, swarm_stream) = swarm(rx.with_dummy_muxing(), move |_, _| {
             // Note that this handles both the dial and the listen.
             let fut = future::empty().then(|_: Result<(), ()>| -> Result<(), IoError> { panic!() });
             num += 1;
@@ -559,7 +559,7 @@ mod tests {
         swarm_ctrl.dial("/memory".parse().unwrap(), tx)
             .unwrap();
 
-        let future = dial_success.select(swarm_future).map_err(|(err, _)| err);
+        let future = dial_success.select(swarm_stream.for_each(|_| Ok(()))).map_err(|(err, _)| err);
         current_thread::Runtime::new().unwrap().block_on(future).unwrap();
         assert_eq!(unique_connec.poll(), Some(13));
     }
@@ -575,12 +575,12 @@ mod tests {
         let (msg_tx, msg_rx) = oneshot::channel();
         let mut msg_rx = Some(msg_rx);
 
-        let (swarm_ctrl1, swarm_future1) = swarm(rx.with_dummy_muxing(), move |_, _| {
+        let (swarm_ctrl1, swarm_stream1) = swarm(rx.with_dummy_muxing(), move |_, _| {
             future::empty()
         });
         swarm_ctrl1.listen_on("/memory".parse().unwrap()).unwrap();
 
-        let (swarm_ctrl2, swarm_future2) = swarm(tx.clone().with_dummy_muxing(), move |_, _| {
+        let (swarm_ctrl2, swarm_stream2) = swarm(tx.clone().with_dummy_muxing(), move |_, _| {
             let fut = msg_rx.take().unwrap().map_err(|_| -> IoError { unreachable!() });
             unique_connec2.tie_or_stop(12, fut)
         });
@@ -603,8 +603,8 @@ mod tests {
             });
 
         let future = dial_success
-            .select(swarm_future1).map(|_| ()).map_err(|(err, _)| err)
-            .select(swarm_future2).map(|_| ()).map_err(|(err, _)| err);
+            .select(swarm_stream1.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err)
+            .select(swarm_stream2.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err);
 
         current_thread::Runtime::new().unwrap().block_on(future).unwrap();
         assert!(!unique_connec.is_alive());
@@ -617,14 +617,14 @@ mod tests {
         let unique_connec = UniqueConnec::empty();
         let unique_connec2 = unique_connec.clone();
 
-        let (swarm_ctrl1, swarm_future1) = swarm(rx.with_dummy_muxing(), move |_, _| {
+        let (swarm_ctrl1, swarm_stream1) = swarm(rx.with_dummy_muxing(), move |_, _| {
             future::empty()
         });
         swarm_ctrl1.listen_on("/memory".parse().unwrap()).unwrap();
 
         let finished = Arc::new(atomic::AtomicBool::new(false));
         let finished2 = finished.clone();
-        let (swarm_ctrl2, swarm_future2) = swarm(tx.clone().with_dummy_muxing(), move |_, _| {
+        let (swarm_ctrl2, swarm_stream2) = swarm(tx.clone().with_dummy_muxing(), move |_, _| {
             let finished2 = finished2.clone();
             unique_connec2.tie_or_stop(12, future::empty()).then(move |v| {
                 finished2.store(true, atomic::Ordering::Relaxed);
@@ -656,8 +656,8 @@ mod tests {
             });
 
         let future = dial_success
-            .select(swarm_future1).map(|_| ()).map_err(|(err, _)| err)
-            .select(swarm_future2).map(|_| ()).map_err(|(err, _)| err);
+            .select(swarm_stream1.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err)
+            .select(swarm_stream2.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err);
 
         current_thread::Runtime::new().unwrap().block_on(future).unwrap();
         assert!(!unique_connec.is_alive());
@@ -670,14 +670,14 @@ mod tests {
         let unique_connec = UniqueConnec::empty();
         let mut unique_connec2 = Some(unique_connec.clone());
 
-        let (swarm_ctrl1, swarm_future1) = swarm(rx.with_dummy_muxing(), move |_, _| {
+        let (swarm_ctrl1, swarm_stream1) = swarm(rx.with_dummy_muxing(), move |_, _| {
             future::empty()
         });
         swarm_ctrl1.listen_on("/memory".parse().unwrap()).unwrap();
 
         let finished = Arc::new(atomic::AtomicBool::new(false));
         let finished2 = finished.clone();
-        let (swarm_ctrl2, swarm_future2) = swarm(tx.clone().with_dummy_muxing(), move |_, _| {
+        let (swarm_ctrl2, swarm_stream2) = swarm(tx.clone().with_dummy_muxing(), move |_, _| {
             let finished2 = finished2.clone();
             unique_connec2.take().unwrap().tie_or_stop(12, future::empty()).then(move |v| {
                 finished2.store(true, atomic::Ordering::Relaxed);
@@ -701,8 +701,8 @@ mod tests {
             });
 
         let future = dial_success
-            .select(swarm_future1).map(|_| ()).map_err(|(err, _)| err)
-            .select(swarm_future2).map(|_| ()).map_err(|(err, _)| err);
+            .select(swarm_stream1.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err)
+            .select(swarm_stream2.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err);
 
         current_thread::Runtime::new().unwrap().block_on(future).unwrap();
     }
@@ -713,7 +713,7 @@ mod tests {
         // longer exists.
         let (tx, rx) = transport::connector();
 
-        let (swarm_ctrl, swarm_future) = swarm(rx.with_dummy_muxing(), move |_, _| {
+        let (swarm_ctrl, swarm_stream) = swarm(rx.with_dummy_muxing(), move |_, _| {
             future::empty()
         });
         swarm_ctrl.listen_on("/memory".parse().unwrap()).unwrap();
@@ -728,7 +728,7 @@ mod tests {
         drop(unique_connec);
 
         let future = dial_success
-            .select(swarm_future).map(|_| ()).map_err(|(err, _)| err);
+            .select(swarm_stream.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err);
         current_thread::Runtime::new().unwrap().block_on(future).unwrap();
     }
 

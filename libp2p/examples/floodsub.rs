@@ -93,7 +93,7 @@ fn main() {
 
     // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming and
     // outgoing connections for us.
-    let (swarm_controller, swarm_future) = libp2p::core::swarm(
+    let (swarm_controller, swarm_stream) = libp2p::core::swarm(
         transport.clone().with_upgrade(floodsub_upgrade.clone()),
         |socket, _| {
             println!("Successfully negotiated protocol");
@@ -146,7 +146,8 @@ fn main() {
         })
     };
 
-    let final_fut = swarm_future
+    let final_fut = swarm_stream
+        .for_each(|_| Ok(()))
         .select(floodsub_rx)
         .map(|_| ())
         .map_err(|e| e.0)
