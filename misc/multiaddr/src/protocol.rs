@@ -1,12 +1,14 @@
 use bs58;
-use std::net::{Ipv4Addr, Ipv6Addr};
-use std::str::FromStr;
-use std::convert::From;
-use std::io::{Cursor, Write, Result as IoResult};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use std::{
+    convert::From,
+    fmt,
+    io::{Cursor, Write, Result as IoResult},
+    net::{Ipv4Addr, Ipv6Addr},
+    str::FromStr
+};
 use multihash::Multihash;
 use unsigned_varint::{encode, decode};
-
 use {Result, Error};
 
 ///! # Protocol
@@ -55,33 +57,33 @@ impl From<Protocol> for u64 {
     }
 }
 
-impl ToString for Protocol {
-    fn to_string(&self) -> String {
-        match *self {
-            Protocol::IP4 => "ip4",
-            Protocol::TCP => "tcp",
-            Protocol::UDP => "udp",
-            Protocol::DCCP => "dccp",
-            Protocol::IP6 => "ip6",
-            Protocol::DNS4 => "dns4",
-            Protocol::DNS6 => "dns6",
-            Protocol::SCTP => "sctp",
-            Protocol::UDT => "udt",
-            Protocol::UTP => "utp",
-            Protocol::UNIX => "unix",
-            Protocol::P2P => "p2p",
-            Protocol::HTTP => "http",
-            Protocol::HTTPS => "https",
-            Protocol::ONION => "onion",
-            Protocol::QUIC => "quic",
-            Protocol::WS => "ws",
-            Protocol::WSS => "wss",
-            Protocol::Libp2pWebsocketStar => "p2p-websocket-star",
-            Protocol::Libp2pWebrtcStar => "p2p-webrtc-star",
-            Protocol::Libp2pWebrtcDirect => "p2p-webrtc-direct",
-            Protocol::P2pCircuit => "p2p-circuit",
-            Protocol::Memory => "memory",
-        }.to_owned()
+impl fmt::Display for Protocol {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Protocol::IP4 => f.write_str("ip4"),
+            Protocol::TCP => f.write_str("tcp"),
+            Protocol::UDP => f.write_str("udp"),
+            Protocol::DCCP => f.write_str("dccp"),
+            Protocol::IP6 => f.write_str("ip6"),
+            Protocol::DNS4 => f.write_str("dns4"),
+            Protocol::DNS6 => f.write_str("dns6"),
+            Protocol::SCTP => f.write_str("sctp"),
+            Protocol::UDT => f.write_str("udt"),
+            Protocol::UTP => f.write_str("utp"),
+            Protocol::UNIX => f.write_str("unix"),
+            Protocol::P2P => f.write_str("p2p"),
+            Protocol::HTTP => f.write_str("http"),
+            Protocol::HTTPS => f.write_str("https"),
+            Protocol::ONION => f.write_str("onion"),
+            Protocol::QUIC => f.write_str("quic"),
+            Protocol::WS => f.write_str("ws"),
+            Protocol::WSS => f.write_str("wss"),
+            Protocol::Libp2pWebsocketStar => f.write_str("p2p-websocket-star"),
+            Protocol::Libp2pWebrtcStar => f.write_str("p2p-webrtc-star"),
+            Protocol::Libp2pWebrtcDirect => f.write_str("p2p-webrtc-direct"),
+            Protocol::P2pCircuit => f.write_str("p2p-circuit"),
+            Protocol::Memory => f.write_str("memory"),
+        }
     }
 }
 
