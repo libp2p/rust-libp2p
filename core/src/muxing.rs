@@ -1,4 +1,4 @@
-// Copyright 2017 Parity Technologies (UK) Ltd.
+// Copyright 2018 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,34 +18,87 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::future::Future;
+use futures::prelude::*;
 use std::io::Error as IoError;
-use tokio_io::{AsyncRead, AsyncWrite};
+use std::ops::Deref;
 
-/// Implemented on objects that can be turned into a substream.
-///
-/// > **Note**: The methods of this trait consume the object, but if the object implements `Clone`
-/// >           then you can clone it and keep the original in order to open additional substreams.
+/// Implemented on objects that can open and manage substreams.
 pub trait StreamMuxer {
     /// Type of the object that represents the raw substream where data can be read and written.
-    type Substream: AsyncRead + AsyncWrite;
-
-    /// Future that will be resolved when a new incoming substream is open.
-    ///
-    /// A `None` item signals that the underlying resource has been exhausted and
-    /// no more substreams can be created.
-    type InboundSubstream: Future<Item = Option<Self::Substream>, Error = IoError>;
+    type Substream;
 
     /// Future that will be resolved when the outgoing substream is open.
-    ///
-    /// A `None` item signals that the underlying resource has been exhausted and
-    /// no more substreams can be created.
-    type OutboundSubstream: Future<Item = Option<Self::Substream>, Error = IoError>;
+    type OutboundSubstream;
 
-    /// Produces a future that will be resolved when a new incoming substream arrives.
-    fn inbound(self) -> Self::InboundSubstream;
+    /// Polls for an inbound substream.
+    ///
+    /// This function behaves the same as a `Stream`.
+    fn poll_inbound(&self) -> Poll<Option<Self::Substream>, IoError>;
 
     /// Opens a new outgoing substream, and produces a future that will be resolved when it becomes
     /// available.
-    fn outbound(self) -> Self::OutboundSubstream;
+    fn open_outbound(&self) -> Self::OutboundSubstream;
+
+    /// Polls the outbound substream.
+    ///
+    /// May panic or produce an undefined result if an earlier polling returned `Ready` or `Err`.
+    fn poll_outbound(&self, substream: &mut Self::OutboundSubstream) -> Poll<Option<Self::Substream>, IoError>;
+
+    /// Destroys an outbound substream. Use this after the outbound substream has finished, or if
+    /// you want to interrupt it.
+    fn destroy_outbound(&self, substream: Self::OutboundSubstream);
+
+    /// Reads data from a substream. The behaviour is the same as `std::io::Read::read`.
+    fn read_substream(&self, substream: &mut Self::Substream, buf: &mut [u8]) -> Result<usize, IoError>;
+
+    /// Write data to a substream. The behaviour is the same as `std::io::Write::write`.
+    fn write_substream(&self, substream: &mut Self::Substream, buf: &[u8]) -> Result<usize, IoError>;
+
+    /// Flushes a substream. The behaviour is the same as `std::io::Write::flush`.
+    fn flush_substream(&self, substream: &mut Self::Substream) -> Result<(), IoError>;
+
+    /// Attempts to shut down a substream. The behaviour is the same as
+    /// `tokio_io::AsyncWrite::shutdown`.
+    fn shutdown_substream(&self, substream: &mut Self::Substream) -> Poll<(), IoError>;
+
+    /// Destroys a substream.
+    fn destroy_substream(&self, substream: Self::Substream);
+}
+
+/// Builds a new future for an outbound substream, where the muxer is a reference.
+pub fn outbound_from_ref<P>(muxer: P) -> OutboundSubstreamArcFuture<P>
+    where P: Deref, P::Target: StreamMuxer
+{
+    let outbound = muxer.open_outbound();
+    OutboundSubstreamArcFuture {
+        muxer,
+        outbound: Some(outbound),
+    }
+}
+
+/// Future returned by `outbound_from_ref`.
+pub struct OutboundSubstreamArcFuture<P>
+    where P: Deref, P::Target: StreamMuxer
+{
+    muxer: P,
+    outbound: Option<<P::Target as StreamMuxer>::OutboundSubstream>,
+}
+
+impl<P> Future for OutboundSubstreamArcFuture<P>
+    where P: Deref, P::Target: StreamMuxer
+{
+    type Item = Option<<P::Target as StreamMuxer>::Substream>;
+    type Error = IoError;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        self.muxer.poll_outbound(self.outbound.as_mut().expect("outbound was empty"))
+    }
+}
+
+impl<P> Drop for OutboundSubstreamArcFuture<P>
+    where P: Deref, P::Target: StreamMuxer
+{
+    fn drop(&mut self) {
+        self.muxer.destroy_outbound(self.outbound.take().expect("outbound was empty"))
+    }
 }

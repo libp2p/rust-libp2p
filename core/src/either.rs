@@ -101,51 +101,113 @@ where
     B: StreamMuxer,
 {
     type Substream = EitherOutput<A::Substream, B::Substream>;
-    type InboundSubstream = EitherInbound<A, B>;
     type OutboundSubstream = EitherOutbound<A, B>;
 
-    #[inline]
-    fn inbound(self) -> Self::InboundSubstream {
-        match self {
-            EitherOutput::First(a) => EitherInbound::A(a.inbound()),
-            EitherOutput::Second(b) => EitherInbound::B(b.inbound()),
-        }
-    }
-
-    #[inline]
-    fn outbound(self) -> Self::OutboundSubstream {
-        match self {
-            EitherOutput::First(a) => EitherOutbound::A(a.outbound()),
-            EitherOutput::Second(b) => EitherOutbound::B(b.outbound()),
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum EitherInbound<A: StreamMuxer, B: StreamMuxer> {
-    A(A::InboundSubstream),
-    B(B::InboundSubstream),
-}
-
-impl<A, B> Future for EitherInbound<A, B>
-where
-    A: StreamMuxer,
-    B: StreamMuxer,
-{
-    type Item = Option<EitherOutput<A::Substream, B::Substream>>;
-    type Error = IoError;
-
-    #[inline]
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+    fn poll_inbound(&self) -> Poll<Option<Self::Substream>, IoError> {
         match *self {
-            EitherInbound::A(ref mut a) => {
-                let item = try_ready!(a.poll());
-                Ok(Async::Ready(item.map(EitherOutput::First)))
-            }
-            EitherInbound::B(ref mut b) => {
-                let item = try_ready!(b.poll());
-                Ok(Async::Ready(item.map(EitherOutput::Second)))
-            }
+            EitherOutput::First(ref inner) => inner.poll_inbound().map(|p| p.map(|o| o.map(EitherOutput::First))),
+            EitherOutput::Second(ref inner) => inner.poll_inbound().map(|p| p.map(|o| o.map(EitherOutput::Second))),
+        }
+    }
+
+    fn open_outbound(&self) -> Self::OutboundSubstream {
+        match *self {
+            EitherOutput::First(ref inner) => EitherOutbound::A(inner.open_outbound()),
+            EitherOutput::Second(ref inner) => EitherOutbound::B(inner.open_outbound()),
+        }
+    }
+
+    fn poll_outbound(&self, substream: &mut Self::OutboundSubstream) -> Poll<Option<Self::Substream>, IoError> {
+        match (self, substream) {
+            (EitherOutput::First(ref inner), EitherOutbound::A(ref mut substream)) => {
+                inner.poll_outbound(substream).map(|p| p.map(|o| o.map(EitherOutput::First)))
+            },
+            (EitherOutput::Second(ref inner), EitherOutbound::B(ref mut substream)) => {
+                inner.poll_outbound(substream).map(|p| p.map(|o| o.map(EitherOutput::Second)))
+            },
+            _ => panic!("Wrong API usage")
+        }
+    }
+
+    fn destroy_outbound(&self, substream: Self::OutboundSubstream) {
+        match *self {
+            EitherOutput::First(ref inner) => {
+                match substream {
+                    EitherOutbound::A(substream) => inner.destroy_outbound(substream),
+                    _ => panic!("Wrong API usage")
+                }
+            },
+            EitherOutput::Second(ref inner) => {
+                match substream {
+                    EitherOutbound::B(substream) => inner.destroy_outbound(substream),
+                    _ => panic!("Wrong API usage")
+                }
+            },
+        }
+    }
+
+    fn read_substream(&self, substream: &mut Self::Substream, buf: &mut [u8]) -> Result<usize, IoError> {
+        match (self, substream) {
+            (EitherOutput::First(ref inner), EitherOutput::First(ref mut substream)) => {
+                inner.read_substream(substream, buf)
+            },
+            (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut substream)) => {
+                inner.read_substream(substream, buf)
+            },
+            _ => panic!("Wrong API usage")
+        }
+    }
+
+    fn write_substream(&self, substream: &mut Self::Substream, buf: &[u8]) -> Result<usize, IoError> {
+        match (self, substream) {
+            (EitherOutput::First(ref inner), EitherOutput::First(ref mut substream)) => {
+                inner.write_substream(substream, buf)
+            },
+            (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut substream)) => {
+                inner.write_substream(substream, buf)
+            },
+            _ => panic!("Wrong API usage")
+        }
+    }
+
+    fn flush_substream(&self, substream: &mut Self::Substream) -> Result<(), IoError> {
+        match (self, substream) {
+            (EitherOutput::First(ref inner), EitherOutput::First(ref mut substream)) => {
+                inner.flush_substream(substream)
+            },
+            (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut substream)) => {
+                inner.flush_substream(substream)
+            },
+            _ => panic!("Wrong API usage")
+        }
+    }
+
+    fn shutdown_substream(&self, substream: &mut Self::Substream) -> Poll<(), IoError> {
+        match (self, substream) {
+            (EitherOutput::First(ref inner), EitherOutput::First(ref mut substream)) => {
+                inner.shutdown_substream(substream)
+            },
+            (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut substream)) => {
+                inner.shutdown_substream(substream)
+            },
+            _ => panic!("Wrong API usage")
+        }
+    }
+
+    fn destroy_substream(&self, substream: Self::Substream) {
+        match *self {
+            EitherOutput::First(ref inner) => {
+                match substream {
+                    EitherOutput::First(substream) => inner.destroy_substream(substream),
+                    _ => panic!("Wrong API usage")
+                }
+            },
+            EitherOutput::Second(ref inner) => {
+                match substream {
+                    EitherOutput::Second(substream) => inner.destroy_substream(substream),
+                    _ => panic!("Wrong API usage")
+                }
+            },
         }
     }
 }
@@ -154,29 +216,6 @@ where
 pub enum EitherOutbound<A: StreamMuxer, B: StreamMuxer> {
     A(A::OutboundSubstream),
     B(B::OutboundSubstream),
-}
-
-impl<A, B> Future for EitherOutbound<A, B>
-where
-    A: StreamMuxer,
-    B: StreamMuxer,
-{
-    type Item = Option<EitherOutput<A::Substream, B::Substream>>;
-    type Error = IoError;
-
-    #[inline]
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match *self {
-            EitherOutbound::A(ref mut a) => {
-                let item = try_ready!(a.poll());
-                Ok(Async::Ready(item.map(EitherOutput::First)))
-            }
-            EitherOutbound::B(ref mut b) => {
-                let item = try_ready!(b.poll());
-                Ok(Async::Ready(item.map(EitherOutput::Second)))
-            }
-        }
-    }
 }
 
 /// Implements `Stream` and dispatches all method calls to either `First` or `Second`.
