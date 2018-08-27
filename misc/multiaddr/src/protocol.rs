@@ -5,7 +5,7 @@ use std::convert::From;
 use std::io::{Cursor, Write, Result as IoResult};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use multihash::Multihash;
-use integer_encoding::{VarInt, VarIntWriter};
+use unsigned_varint::{encode, decode};
 
 use {Result, Error};
 
@@ -340,20 +340,13 @@ impl AddrComponent {
     /// Builds an `AddrComponent` from an array that starts with a bytes representation. On
     /// success, also returns the rest of the slice.
     pub fn from_bytes(input: &[u8]) -> Result<(AddrComponent, &[u8])> {
-        let (proto_num, proto_id_len) = u64::decode_var(input);   // TODO: will panic if ID too large
-
+        let (proto_num, input) = decode::u64(input)?;
         let protocol_id = Protocol::from(proto_num)?;
-        let (data_offset, data_size) = match protocol_id.size() {
-            ProtocolArgSize::Fixed { bytes } => {
-                (0, bytes)
-            },
-            ProtocolArgSize::Variable => {
-                let (data_size, varint_len) = u64::decode_var(&input[proto_id_len..]);      // TODO: will panic if ID too large
-                (varint_len, data_size as usize)
-            },
+        let (data_size, input) = match protocol_id.size() {
+            ProtocolArgSize::Fixed { bytes } => (bytes, input),
+            ProtocolArgSize::Variable => decode::usize(input)?
         };
-
-        let (data, rest) = input[proto_id_len..][data_offset..].split_at(data_size);
+        let (data, rest) = input.split_at(data_size);
 
         let addr_component = match protocol_id {
             Protocol::IP4 => {
@@ -429,7 +422,7 @@ impl AddrComponent {
 
     /// Turns this address component into bytes by writing it to a `Write`.
     pub fn write_bytes<W: Write>(self, out: &mut W) -> IoResult<()> {
-        out.write_varint(Into::<u64>::into(self.protocol_id()))?;
+        out.write_all(encode::u64(self.protocol_id().into(), &mut encode::u64_buffer()))?;
 
         match self {
             AddrComponent::IP4(addr) => {
@@ -446,12 +439,12 @@ impl AddrComponent {
             }
             AddrComponent::DNS4(s) | AddrComponent::DNS6(s) | AddrComponent::UNIX(s) => {
                 let bytes = s.as_bytes();
-                out.write_varint(bytes.len())?;
+                out.write_all(encode::usize(bytes.len(), &mut encode::usize_buffer()))?;
                 out.write_all(&bytes)?;
             }
             AddrComponent::P2P(multihash) => {
                 let bytes = multihash.into_bytes();
-                out.write_varint(bytes.len())?;
+                out.write_all(encode::usize(bytes.len(), &mut encode::usize_buffer()))?;
                 out.write_all(&bytes)?;
             }
             AddrComponent::ONION(_) => {

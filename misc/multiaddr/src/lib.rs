@@ -5,8 +5,8 @@
 
 extern crate bs58;
 extern crate byteorder;
-extern crate integer_encoding;
 extern crate serde;
+extern crate unsigned_varint;
 pub extern crate multihash;
 
 mod protocol;
