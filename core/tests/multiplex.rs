@@ -29,8 +29,8 @@ extern crate tokio_io;
 use bytes::BytesMut;
 use futures::future::Future;
 use futures::{Sink, Stream};
-use libp2p_core::{Multiaddr, MuxedTransport, StreamMuxer, Transport, transport};
-use std::sync::atomic;
+use libp2p_core::{muxing, Multiaddr, MuxedTransport, Transport, transport};
+use std::sync::{atomic, Arc};
 use std::thread;
 use tokio_io::codec::length_delimited::Framed;
 
@@ -105,7 +105,7 @@ fn client_to_server_outbound() {
         .with_upgrade(multiplex::MplexConfig::new())
         .dial("/memory".parse().unwrap())
         .unwrap_or_else(|_| panic!())
-        .and_then(|client| client.0.outbound())
+        .and_then(|client| muxing::outbound_from_ref_and_wrap(Arc::new(client.0)))
         .map(|server| Framed::<_, BytesMut>::new(server.unwrap()))
         .and_then(|server| server.send("hello world".into()))
         .map(|_| ());
@@ -199,10 +199,10 @@ fn use_opened_listen_to_dial() {
             .into_future()
             .map_err(|(err, _)| err)
             .and_then(|(client, _)| client.unwrap())
-            .map(|client| client.0)
+            .map(|client| Arc::new(client.0))
             .and_then(|c| {
                 let c2 = c.clone();
-                c.clone().inbound().map(move |i| (c2, i))
+                muxing::inbound_from_ref_and_wrap(c.clone()).map(move |i| (c2, i))
             })
             .map(|(muxer, client)| (muxer, Framed::<_, BytesMut>::new(client.unwrap())))
             .and_then(|(muxer, client)| {
@@ -214,7 +214,7 @@ fn use_opened_listen_to_dial() {
             .and_then(|(muxer, (msg, _))| {
                 let msg = msg.unwrap();
                 assert_eq!(msg, "hello world");
-                muxer.outbound()
+                muxing::outbound_from_ref_and_wrap(muxer)
             })
             .map(|client| Framed::<_, BytesMut>::new(client.unwrap()))
             .and_then(|client| client.into_future().map_err(|(err, _)| err))

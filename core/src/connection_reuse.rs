@@ -58,7 +58,6 @@ use upgrade::ConnectionUpgrade;
 /// Can be created from an `UpgradedNode` through the `From` trait.
 ///
 /// Implements the `Transport` trait.
-#[derive(Clone)]
 pub struct ConnectionReuse<T, C>
 where
     T: Transport,
@@ -71,6 +70,22 @@ where
 
     // Struct shared between most of the `ConnectionReuse` infrastructure.
     shared: Arc<Mutex<Shared<C::Output>>>,
+}
+
+impl<T, C> Clone for ConnectionReuse<T, C>
+where
+    T: Transport + Clone,
+    T::Output: AsyncRead + AsyncWrite,
+    C: ConnectionUpgrade<T::Output, T::MultiaddrFuture> + Clone,
+    C::Output: StreamMuxer
+{
+    #[inline]
+    fn clone(&self) -> Self {
+        ConnectionReuse {
+            inner: self.inner.clone(),
+            shared: self.shared.clone(),
+        }
+    }
 }
 
 struct Shared<M> {
@@ -121,7 +136,7 @@ where
     C::MultiaddrFuture: Future<Item = Multiaddr, Error = IoError>,
     C::NamesIter: Clone, // TODO: not elegant
 {
-    type Output = <C::Output as StreamMuxer>::Substream;
+    type Output = muxing::SubstreamArc<Arc<C::Output>>;
     type MultiaddrFuture = future::FutureResult<Multiaddr, IoError>;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
     type ListenerUpgrade = FutureResult<(Self::Output, Self::MultiaddrFuture), IoError>;
@@ -168,7 +183,7 @@ where
             .map(|muxer| muxer.clone())
         {
             let a = addr.clone();
-            Either::A(muxing::outbound_from_ref(muxer).map(|o| o.map(move |s| (s, future::ok(a)))))
+            Either::A(muxing::outbound_from_ref_and_wrap(muxer).map(|o| o.map(move |s| (s, future::ok(a)))))
         } else {
             Either::B(future::ok(None))
         };
@@ -197,9 +212,10 @@ where
                                 lock.active_connections.insert(addr.clone(), muxer.clone());
                                 // TODO: doesn't need locking ; the sender could be extracted
                                 let _ = lock.add_to_next_tx.unbounded_send((
-                                    muxer,
+                                    muxer.clone(),
                                     addr.clone(),
                                 ));
+                                let s = muxing::substream_from_ref(muxer, s);
                                 Ok((s, future::ok(addr)))
                             } else {
                                 error!("failed to dial to {}", addr);
@@ -237,7 +253,7 @@ where
 {
     type Incoming = ConnectionReuseIncoming<C::Output>;
     type IncomingUpgrade =
-        future::FutureResult<(<C::Output as StreamMuxer>::Substream, Self::MultiaddrFuture), IoError>;
+        future::FutureResult<(muxing::SubstreamArc<Arc<C::Output>>, Self::MultiaddrFuture), IoError>;
 
     #[inline]
     fn next_incoming(self) -> Self::Incoming {
@@ -267,7 +283,7 @@ where
     F: Future<Item = (M, Multiaddr), Error = IoError>,
     M: StreamMuxer + 'static, // TODO: 'static :(
 {
-    type Item = FutureResult<(M::Substream, FutureResult<Multiaddr, IoError>), IoError>;
+    type Item = FutureResult<(muxing::SubstreamArc<Arc<M>>, FutureResult<Multiaddr, IoError>), IoError>;
     type Error = IoError;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
@@ -328,7 +344,8 @@ where
                         .insert(client_addr.clone(), muxer.clone());
                     // A new substream is ready.
                     self.connections
-                        .push((muxer, client_addr.clone()));
+                        .push((muxer.clone(), client_addr.clone()));
+                    let incoming = muxing::substream_from_ref(muxer, incoming);
                     return Ok(Async::Ready(Some(
                         future::ok((incoming, future::ok(client_addr))),
                     )));
@@ -362,7 +379,7 @@ impl<M> Future for ConnectionReuseIncoming<M>
 where
     M: StreamMuxer,
 {
-    type Item = future::FutureResult<(M::Substream, future::FutureResult<Multiaddr, IoError>), IoError>;
+    type Item = future::FutureResult<(muxing::SubstreamArc<Arc<M>>, future::FutureResult<Multiaddr, IoError>), IoError>;
     type Error = IoError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -396,8 +413,9 @@ where
                     // A substream is ready ; push back the muxer for the next time this function
                     // is called, then return.
                     debug!("New incoming substream");
-                    lock.next_incoming.push((muxer, addr.clone()));
-                    return Ok(Async::Ready(future::ok((value, future::ok(addr)))));
+                    lock.next_incoming.push((muxer.clone(), addr.clone()));
+                    let substream = muxing::substream_from_ref(muxer, value);
+                    return Ok(Async::Ready(future::ok((substream, future::ok(addr)))));
                 }
                 Ok(Async::NotReady) => {
                     lock.next_incoming.push((muxer, addr));
