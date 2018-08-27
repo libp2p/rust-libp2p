@@ -99,12 +99,13 @@ impl<T> UniqueConnec<T> {
     /// One critical property of this method, is that if a connection incomes and `tie_*` is
     /// called, then it will be returned by the returned future.
     #[inline]
-    pub fn dial<S, Du>(&self, swarm: &SwarmController<S>, multiaddr: &Multiaddr,
-                              transport: Du) -> UniqueConnecFuture<T>
+    pub fn dial<S, Du, F>(&self, swarm: &SwarmController<S, F>, multiaddr: &Multiaddr,
+                          transport: Du) -> UniqueConnecFuture<T>
         where T: Clone + 'static,       // TODO: 'static :-/
               Du: Transport + 'static, // TODO: 'static :-/
               Du::Output: Into<S::Output>,
               S: Clone + MuxedTransport,
+              F: 'static,
     {
         self.dial_inner(swarm, multiaddr, transport, true)
     }
@@ -112,23 +113,25 @@ impl<T> UniqueConnec<T> {
     /// Same as `dial`, except that the future will produce an error if an earlier attempt to dial
     /// has errored.
     #[inline]
-    pub fn dial_if_empty<S, Du>(&self, swarm: &SwarmController<S>, multiaddr: &Multiaddr,
-                              transport: Du) -> UniqueConnecFuture<T>
+    pub fn dial_if_empty<S, Du, F>(&self, swarm: &SwarmController<S, F>, multiaddr: &Multiaddr,
+                                   transport: Du) -> UniqueConnecFuture<T>
         where T: Clone + 'static,       // TODO: 'static :-/
               Du: Transport + 'static, // TODO: 'static :-/
               Du::Output: Into<S::Output>,
               S: Clone + MuxedTransport,
+              F: 'static,
     {
         self.dial_inner(swarm, multiaddr, transport, false)
     }
 
     /// Inner implementation of `dial_*`.
-    fn dial_inner<S, Du>(&self, swarm: &SwarmController<S>, multiaddr: &Multiaddr,
-                         transport: Du, dial_if_err: bool) -> UniqueConnecFuture<T>
+    fn dial_inner<S, Du, F>(&self, swarm: &SwarmController<S, F>, multiaddr: &Multiaddr,
+                            transport: Du, dial_if_err: bool) -> UniqueConnecFuture<T>
         where T: Clone + 'static,       // TODO: 'static :-/
               Du: Transport + 'static, // TODO: 'static :-/
               Du::Output: Into<S::Output>,
               S: Clone + MuxedTransport,
+              F: 'static,
     {
         let mut inner = self.inner.lock();
         match &*inner {
