@@ -31,12 +31,17 @@ extern crate libp2p_floodsub;
 // Glob import due to gossipsub extending on floodsub
 use libp2p_floodsub::*;
 
+// No modifications to FloodsubUpgrade
+// TODO: use something else with less boilerplate code /
+// copying and pasting from floodsub, particularly if kept unchanged
+// e.g. https://stackoverflow.com/questions/23623957/how-to-typecast-and-inherit-rust-structs
 /// Implementation of the `ConnectionUpgrade` for the gossipsub protocol.
 #[derive(Debug, Clone)]
 pub struct GossipSubUpgrade {
     inner: Arc<Inner>,
 }
 
+// No modifications to FloodsubUpgrade
 impl GossipSubUpgrade {
     /// Builds a new `GossipSubUpgrade`. Also returns a `FloodSubReceiver` that will stream incoming
     /// messages for the gossipsub system.
@@ -54,9 +59,9 @@ impl GossipSubUpgrade {
             received: Mutex::new(FnvHashSet::default()),
         });
 
-        let upgrade = FloodSubUpgrade { inner: inner };
+        let upgrade = GossipSubUpgrade { inner: inner };
 
-        let receiver = FloodSubReceiver { inner: output_rx };
+        let receiver = GossipSSubReceiver { inner: output_rx };
 
         (upgrade, receiver)
     }
