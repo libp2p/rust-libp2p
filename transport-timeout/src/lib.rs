@@ -33,8 +33,9 @@ extern crate tokio_timer;
 use futures::{Async, Future, Poll, Stream};
 use libp2p_core::{Multiaddr, MuxedTransport, Transport};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use std::time::{Duration, Instant};
-use tokio_timer::{Deadline, DeadlineError};
+use std::time::Duration;
+use tokio_timer::Timeout;
+use tokio_timer::timeout::Error as TimeoutError;
 
 /// Wraps around a `Transport` and adds a timeout to all the incoming and outgoing connections.
 ///
@@ -86,8 +87,8 @@ where
     type Output = InnerTrans::Output;
     type MultiaddrFuture = InnerTrans::MultiaddrFuture;
     type Listener = TimeoutListener<InnerTrans::Listener>;
-    type ListenerUpgrade = TokioTimerMapErr<Deadline<InnerTrans::ListenerUpgrade>>;
-    type Dial = TokioTimerMapErr<Deadline<InnerTrans::Dial>>;
+    type ListenerUpgrade = TokioTimerMapErr<Timeout<InnerTrans::ListenerUpgrade>>;
+    type Dial = TokioTimerMapErr<Timeout<InnerTrans::Dial>>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         match self.inner.listen_on(addr) {
@@ -114,7 +115,7 @@ where
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
         match self.inner.dial(addr) {
             Ok(dial) => Ok(TokioTimerMapErr {
-                inner: Deadline::new(dial, Instant::now() + self.outgoing_timeout),
+                inner: Timeout::new(dial, self.outgoing_timeout),
             }),
             Err((inner, addr)) => {
                 let transport = TransportTimeout {
@@ -139,7 +140,7 @@ where
     InnerTrans: MuxedTransport,
 {
     type Incoming = TimeoutIncoming<InnerTrans::Incoming>;
-    type IncomingUpgrade = TokioTimerMapErr<Deadline<InnerTrans::IncomingUpgrade>>;
+    type IncomingUpgrade = TokioTimerMapErr<Timeout<InnerTrans::IncomingUpgrade>>;
 
     #[inline]
     fn next_incoming(self) -> Self::Incoming {
@@ -161,14 +162,14 @@ impl<InnerStream> Stream for TimeoutListener<InnerStream>
 where
     InnerStream: Stream,
 {
-    type Item = TokioTimerMapErr<Deadline<InnerStream::Item>>;
+    type Item = TokioTimerMapErr<Timeout<InnerStream::Item>>;
     type Error = InnerStream::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         let inner_fut = try_ready!(self.inner.poll());
         if let Some(inner_fut) = inner_fut {
             let fut = TokioTimerMapErr {
-                inner: Deadline::new(inner_fut, Instant::now() + self.timeout),
+                inner: Timeout::new(inner_fut, self.timeout),
             };
             Ok(Async::Ready(Some(fut)))
         } else {
@@ -188,19 +189,19 @@ impl<InnerFut> Future for TimeoutIncoming<InnerFut>
 where
     InnerFut: Future,
 {
-    type Item = TokioTimerMapErr<Deadline<InnerFut::Item>>;
+    type Item = TokioTimerMapErr<Timeout<InnerFut::Item>>;
     type Error = InnerFut::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let inner_fut = try_ready!(self.inner.poll());
         let fut = TokioTimerMapErr {
-            inner: Deadline::new(inner_fut, Instant::now() + self.timeout),
+            inner: Timeout::new(inner_fut, self.timeout),
         };
         Ok(Async::Ready(fut))
     }
 }
 
-/// Wraps around a `Future`. Turns the error type from `DeadlineError<IoError>` to `IoError`.
+/// Wraps around a `Future`. Turns the error type from `TimeoutError<IoError>` to `IoError`.
 // TODO: can be replaced with `impl Future` once `impl Trait` are fully stable in Rust
 //       (https://github.com/rust-lang/rust/issues/34511)
 pub struct TokioTimerMapErr<InnerFut> {
@@ -209,13 +210,13 @@ pub struct TokioTimerMapErr<InnerFut> {
 
 impl<InnerFut> Future for TokioTimerMapErr<InnerFut>
 where
-    InnerFut: Future<Error = DeadlineError<IoError>>,
+    InnerFut: Future<Error = TimeoutError<IoError>>,
 {
     type Item = InnerFut::Item;
     type Error = IoError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        self.inner.poll().map_err(|err: DeadlineError<IoError>| {
+        self.inner.poll().map_err(|err: TimeoutError<IoError>| {
             if err.is_inner() {
                 err.into_inner().expect("ensured by is_inner()")
             } else if err.is_elapsed() {

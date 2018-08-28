@@ -30,8 +30,8 @@ use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::mem;
-use std::time::{Duration, Instant};
-use tokio_timer::Deadline;
+use std::time::Duration;
+use tokio_timer::Timeout;
 
 /// Prototype for a future Kademlia protocol running on a socket.
 #[derive(Debug, Clone)]
@@ -331,7 +331,7 @@ where F: FnMut(&PeerId) -> Fut + 'a,
                 .and_then(move |controller| {
                     controller.find_node(&searched_key2)
                 });
-            let with_deadline = Deadline::new(current_attempt, Instant::now() + request_timeout)
+            let with_deadline = Timeout::new(current_attempt, request_timeout)
                 .map_err(|err| {
                     if let Some(err) = err.into_inner() {
                         err
