@@ -14,7 +14,7 @@ futures = "0.1"
 multiaddr = { path = "./misc/multiaddr" }
 libp2p-mplex = { path = "./muxers/mplex" }
 libp2p-identify = { path = "./protocols/identify" }
-libp2p-kad = { path = "./transports/kad" }
+libp2p-kad = { path = "./protocols/kad" }
 libp2p-floodsub = { path = "./protocols/floodsub" }
 libp2p-peerstore = { path = "./stores/peerstore" }
 libp2p-ping = { path = "./protocols/ping" }
@@ -83,7 +83,7 @@ members = [
     "transports/dns",
     "protocols/floodsub",
     "protocols/identify",
-    "transports/kad",
+    "protocols/kad",
     "protocols/ping",
     "transports/relay",
     "protocols/secio",
