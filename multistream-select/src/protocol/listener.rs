@@ -183,12 +183,13 @@ impl<T: AsyncRead + AsyncWrite> Future for ListenerFuture<T> {
             match mem::replace(self, ListenerFuture::Undefined) {
                 ListenerFuture::Await { mut inner } => {
                     let (msg, socket) =
-                        match inner.poll().map_err(|(e, _)| MultistreamSelectError::from(e))? {
-                            Async::Ready(x) => x,
-                            Async::NotReady => {
+                        match inner.poll() {
+                            Ok(Async::Ready(x)) => x,
+                            Ok(Async::NotReady) => {
                                 *self = ListenerFuture::Await { inner };
                                 return Ok(Async::NotReady)
                             }
+                            Err((e, _)) => return Err(MultistreamSelectError::from(e))
                         };
                     if msg.as_ref().map(|b| &b[..]) != Some(MULTISTREAM_PROTOCOL_WITH_LF) {
                         debug!("failed handshake; received: {:?}", msg);
