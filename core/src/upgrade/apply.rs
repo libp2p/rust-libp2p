@@ -177,6 +177,10 @@ where
         let f = <Bytes as PartialEq>::eq as fn(&Bytes, &Bytes) -> bool;
         self.0.next().map(|(b, id)| (b, f, id))
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.0.size_hint()
+    }
 }
 
 

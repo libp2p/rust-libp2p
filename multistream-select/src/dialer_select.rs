@@ -69,6 +69,10 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         self.0.next().map(|(b, _, p)| (b, p))
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.0.size_hint()
+    }
 }
 
 
