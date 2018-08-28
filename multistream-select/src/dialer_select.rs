@@ -120,7 +120,6 @@ where
                 DialerSelectSeq::NextProtocol { dialer, mut protocols } => {
                     let (proto_name, proto_value) =
                         protocols.next().ok_or(ProtocolChoiceError::NoProtocolFound)?;
-
                     let req = DialerToListenerMessage::ProtocolRequest {
                         name: proto_name.clone()
                     };
@@ -132,18 +131,33 @@ where
                     let dialer = match sender.poll()? {
                         Async::Ready(d) => d,
                         Async::NotReady => {
-                            *self = DialerSelectSeq::SendProtocol { sender, proto_name, proto_value, protocols };
+                            *self = DialerSelectSeq::SendProtocol {
+                                sender,
+                                proto_name,
+                                proto_value,
+                                protocols
+                            };
                             return Ok(Async::NotReady)
                         }
                     };
                     let stream = dialer.into_future();
-                    *self = DialerSelectSeq::AwaitProtocol { stream, proto_name, proto_value, protocols };
+                    *self = DialerSelectSeq::AwaitProtocol {
+                        stream,
+                        proto_name,
+                        proto_value,
+                        protocols
+                    };
                 }
                 DialerSelectSeq::AwaitProtocol { mut stream, proto_name, proto_value, protocols } => {
                     let (m, r) = match stream.poll().map_err(|(e, _)| ProtocolChoiceError::from(e))? {
                         Async::Ready(x) => x,
                         Async::NotReady => {
-                            *self = DialerSelectSeq::AwaitProtocol { stream, proto_name, proto_value, protocols };
+                            *self = DialerSelectSeq::AwaitProtocol {
+                                stream,
+                                proto_name,
+                                proto_value,
+                                protocols
+                            };
                             return Ok(Async::NotReady)
                         }
                     };
@@ -261,12 +275,10 @@ where
                                 break;
                             }
                         }
-
                         if found.is_some() {
                             break;
                         }
                     }
-
                     let (proto_name, proto_val) = found.ok_or(ProtocolChoiceError::NoProtocolFound)?;
                     trace!("sending {:?}", proto_name);
                     let sender = d.send(DialerToListenerMessage::ProtocolRequest {

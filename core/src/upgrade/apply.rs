@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::Bytes;
-use futures::{prelude::*, future};
+use futures::{prelude::*, future::Either};
 use multistream_select;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -74,8 +74,8 @@ where
     debug!("Starting protocol negotiation");
 
     let negotiation = match endpoint {
-        Endpoint::Listener => future::Either::A(multistream_select::listener_select_proto(connection, iter)),
-        Endpoint::Dialer => future::Either::B(multistream_select::dialer_select_proto(connection, iter)),
+        Endpoint::Listener => Either::A(multistream_select::listener_select_proto(connection, iter)),
+        Endpoint::Dialer => Either::B(multistream_select::dialer_select_proto(connection, iter)),
     };
 
     negotiation
