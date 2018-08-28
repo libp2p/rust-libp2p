@@ -8,7 +8,7 @@ description = "Unix domain sockets transport for libp2p"
 libp2p-core = { path = "../../core" }
 log = "0.4.1"
 futures = "0.1"
-multiaddr = { path = "../../core/multiaddr" }
+multiaddr = { path = "../../misc/multiaddr" }
 tokio-uds = "0.2"
 
 [target.'cfg(all(unix, not(target_os = "emscripten")))'.dev-dependencies]

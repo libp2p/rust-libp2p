@@ -11,7 +11,7 @@ libp2p-secio-secp256k1 = ["libp2p-secio/secp256k1"]
 [dependencies]
 bytes = "0.4"
 futures = "0.1"
-multiaddr = { path = "./core/multiaddr" }
+multiaddr = { path = "./misc/multiaddr" }
 libp2p-mplex = { path = "./muxers/mplex" }
 libp2p-identify = { path = "./protocols/identify" }
 libp2p-kad = { path = "./transports/kad" }
@@ -76,10 +76,10 @@ name = "relay"
 [workspace]
 members = [
     "core",
-    "core/multiaddr",
-    "core/multihash",
-    "core/multistream-select",
-    "core/rw-stream-sink",
+    "misc/multiaddr",
+    "misc/multihash",
+    "misc/multistream-select",
+    "misc/rw-stream-sink",
     "transports/dns",
     "protocols/floodsub",
     "protocols/identify",

@@ -8,8 +8,8 @@ license = "MIT"
 bytes = "0.4"
 libp2p-core = { path = "../../core" }
 log = "0.4.1"
-multiaddr = { path = "../../core/multiaddr" }
-multistream-select = { path = "../../core/multistream-select" }
+multiaddr = { path = "../../misc/multiaddr" }
+multistream-select = { path = "../../misc/multistream-select" }
 futures = "0.1"
 parking_lot = "0.6"
 rand = "0.5"
