@@ -23,7 +23,7 @@ rand = "0.4.2"
 smallvec = "0.5"
 tokio-codec = "0.1"
 tokio-io = "0.1"
-tokio-timer = "0.2"
+tokio-timer = "0.2.6"
 unsigned-varint = { version = "0.1", features = ["codec"] }
 
 [dev-dependencies]

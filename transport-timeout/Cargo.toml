@@ -8,4 +8,4 @@ license = "MIT"
 futures = "0.1"
 libp2p-core = { path = "../core" }
 log = "0.4.1"
-tokio-timer = "0.2.0"
+tokio-timer = "0.2.6"
