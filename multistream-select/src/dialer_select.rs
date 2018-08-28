@@ -28,6 +28,9 @@ use std::mem;
 use tokio_io::{AsyncRead, AsyncWrite};
 use ProtocolChoiceError;
 
+pub type DialerSelectFuture<R, I, P> =
+    Either<DialerSelectSeq<R, IgnoreMatchFn<I>, P>, DialerSelectPar<R, I, P>>;
+
 /// Helps selecting a protocol amongst the ones supported.
 ///
 /// This function expects a socket and a list of protocols. It uses the `multistream-select`
@@ -40,24 +43,34 @@ use ProtocolChoiceError;
 /// success, the function returns the identifier (of type `P`), plus the socket which now uses that
 /// chosen protocol.
 #[inline]
-pub fn dialer_select_proto<R, I, M, P>(
-    inner: R,
-    protocols: I,
-) -> impl Future<Item = (P, R), Error = ProtocolChoiceError>
+pub fn dialer_select_proto<R, I, M, P>(inner: R, protocols: I) -> DialerSelectFuture<R, I, P>
 where
     R: AsyncRead + AsyncWrite,
-    I: Iterator<Item = (Bytes, M, P)>,
+    I: Iterator<Item=(Bytes, M, P)>,
     M: FnMut(&Bytes, &Bytes) -> bool,
 {
     // We choose between the "serial" and "parallel" strategies based on the number of protocols.
     if protocols.size_hint().1.map(|n| n <= 3).unwrap_or(false) {
-        let fut = dialer_select_proto_serial(inner, protocols.map(|(n, _, id)| (n, id)));
-        Either::A(fut)
+        Either::A(dialer_select_proto_serial(inner, IgnoreMatchFn(protocols)))
     } else {
-        let fut = dialer_select_proto_parallel(inner, protocols);
-        Either::B(fut)
+        Either::B(dialer_select_proto_parallel(inner, protocols))
     }
 }
+
+
+pub struct IgnoreMatchFn<I>(I);
+
+impl<I, M, P> Iterator for IgnoreMatchFn<I>
+where
+    I: Iterator<Item=(Bytes, M, P)>
+{
+    type Item = (Bytes, P);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next().map(|(b, _, p)| (b, p))
+    }
+}
+
 
 /// Helps selecting a protocol amongst the ones supported.
 ///
