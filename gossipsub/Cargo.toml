@@ -5,4 +5,5 @@ authors = ["James Ray <16969914+jamesray1@users.noreply.github.com>"]
 license = "Unlicense"
 
 [dependencies]
+futures = "0.1"
 libp2p-floodsub = { path = "../core" }

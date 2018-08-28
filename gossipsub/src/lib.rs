@@ -37,10 +37,36 @@ pub struct GossipSubUpgrade {
     inner: Arc<Inner>,
 }
 
-impl FloodSubUpgrade {
+impl GossipSubUpgrade {
     /// Builds a new `GossipSubUpgrade`. Also returns a `FloodSubReceiver` that will stream incoming
     /// messages for the gossipsub system.
-    pub fn new
+    pub fn new(my_id: PeerId) -> (GossipSubUpgrade, GossipSubReceiver) {
+        // Assume to keep unbounded for backwards compatibility, even though gossipsub bounds
+        // broadcasting to TARGET_MESH_DEGREE peers, with LOW_WM_MESH_DEGREE and HIGH_WM_MESH_DEGREE.
+        let (output_tx, output_rx) = mpsc::unbounded();
+
+        let inner = Arc::new(Inner {
+            peer_id: my_id.into_bytes(),
+            output_tx: output_tx,
+            remote_connections: RwLock::new(FnvHashMap::default()),
+            subscribed_topics: RwLock::new(Vec::new()),
+            seq_no: AtomicUsize::new(0),
+            received: Mutex::new(FnvHashSet::default()),
+        });
+
+        let upgrade = FloodSubUpgrade { inner: inner };
+
+        let receiver = FloodSubReceiver { inner: output_rx };
+
+        (upgrade, receiver)
+    }
+}
+
+/// Implementation of `Stream` that provides messages for the subscribed topics you subscribed to.
+pub struct GossipSubReceiver {
+    inner: mpsc::UnboundedReceiver<Message>,
+}
+
 
 #[cfg(test)]
 mod tests {
