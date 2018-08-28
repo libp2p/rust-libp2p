@@ -16,7 +16,7 @@ libp2p-mplex = { path = "./muxers/mplex" }
 libp2p-identify = { path = "./protocols/identify" }
 libp2p-kad = { path = "./transports/kad" }
 libp2p-floodsub = { path = "./protocols/floodsub" }
-libp2p-peerstore = { path = "./utils/peerstore" }
+libp2p-peerstore = { path = "./stores/peerstore" }
 libp2p-ping = { path = "./protocols/ping" }
 libp2p-ratelimit = { path = "./transports/ratelimit" }
 libp2p-relay = { path = "./transports/relay" }
@@ -89,8 +89,8 @@ members = [
     "protocols/secio",
     "muxers/mplex",
     "muxers/yamux",
-    "utils/peerstore",
-    "utils/datastore",
+    "stores/peerstore",
+    "stores/datastore",
     "transports/tcp",
     "transports/uds",
     "transports/websocket",
