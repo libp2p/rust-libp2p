@@ -89,6 +89,7 @@
 //! Example:
 //!
 //! ```rust
+//! # #[cfg(all(not(target_os = "emscripten"), feature = "libp2p-secio"))] {
 //! use libp2p::{Transport, tcp::TcpConfig, secio::{SecioConfig, SecioKeyPair}};
 //! let tcp_transport = TcpConfig::new();
 //! let secio_upgrade = SecioConfig {
@@ -98,6 +99,7 @@
 //! // let _ = with_security.dial(...);
 //! // `with_security` also implements the `Transport` trait, and all the connections opened
 //! // through it will automatically negotiate the `secio` protocol.
+//! # }
 //! ```
 //!
 //! See the documentation of the `libp2p-core` crate for more details about upgrades.
