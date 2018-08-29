@@ -49,6 +49,15 @@ impl Elem {
         }
     }
 
+    pub fn endpoint(&self) -> Option<Endpoint> {
+        match *self {
+            Elem::Open { .. } => None,
+            Elem::Data { endpoint, .. } => Some(endpoint),
+            Elem::Close { endpoint, .. } => Some(endpoint),
+            Elem::Reset { endpoint, .. } => Some(endpoint)
+        }
+    }
+
     /// Returns true if this message is `Close` or `Reset`.
     #[inline]
     pub fn is_close_or_reset_msg(&self) -> bool {

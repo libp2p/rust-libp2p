@@ -20,16 +20,28 @@
 
 use bytes::Bytes;
 use futures::future::Future;
-use std::io::Error as IoError;
+use std::{io::Error as IoError, ops::Not};
 
 /// Type of connection for the upgrade.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Endpoint {
     /// The socket comes from a dialer.
     Dialer,
     /// The socket comes from a listener.
     Listener,
 }
+
+impl Not for Endpoint {
+    type Output = Endpoint;
+
+    fn not(self) -> Self::Output {
+        match self {
+            Endpoint::Dialer => Endpoint::Listener,
+            Endpoint::Listener => Endpoint::Dialer
+        }
+    }
+}
+
 
 /// Implemented on structs that describe a possible upgrade to a connection between two peers.
 ///
