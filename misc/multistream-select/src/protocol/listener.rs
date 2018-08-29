@@ -164,6 +164,8 @@ where
 }
 
 
+/// Future, returned by `Listener::new` which performs the handshake and returns
+/// the `Listener` if successful.
 pub enum ListenerFuture<T: AsyncRead + AsyncWrite> {
     Await {
         inner: StreamFuture<LengthDelimitedFramedRead<Bytes, LengthDelimitedFramedWrite<T, BytesMut>>>

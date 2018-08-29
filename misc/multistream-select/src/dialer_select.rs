@@ -28,6 +28,8 @@ use std::mem;
 use tokio_io::{AsyncRead, AsyncWrite};
 use ProtocolChoiceError;
 
+/// Future, returned by `dialer_select_proto`, which selects a protocol and dialer
+/// either sequentially of by considering all protocols in parallel.
 pub type DialerSelectFuture<R, I, P> =
     Either<DialerSelectSeq<R, IgnoreMatchFn<I>, P>, DialerSelectPar<R, I, P>>;
 
@@ -58,6 +60,7 @@ where
 }
 
 
+/// Iterator, which ignores match predicates of the iterator it wraps.
 pub struct IgnoreMatchFn<I>(I);
 
 impl<I, M, P> Iterator for IgnoreMatchFn<I>
@@ -89,6 +92,8 @@ where
 }
 
 
+/// Future, returned by `dialer_select_proto_serial` which selects a protocol
+/// and dialer sequentially.
 pub enum DialerSelectSeq<R: AsyncRead + AsyncWrite, I, P> {
     AwaitDialer {
         dialer_fut: DialerFuture<R>,
@@ -211,6 +216,9 @@ where
 }
 
 
+/// Future, returned by `dialer_select_proto_parallel`, which selects a protocol and dialer in
+/// parellel, by first requesting the liste of protocols supported by the remote endpoint and
+/// then selecting the most appropriate one by applying a match predicate to the result.
 pub enum DialerSelectPar<R: AsyncRead + AsyncWrite, I, P> {
     AwaitDialer {
         dialer_fut: DialerFuture<R>,

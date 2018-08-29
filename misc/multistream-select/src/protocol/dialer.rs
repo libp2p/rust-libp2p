@@ -177,7 +177,7 @@ where
     }
 }
 
-
+/// Future, returned by `Dialer::new`, which send the handshake and returns the actual `Dialer`.
 pub struct DialerFuture<T: AsyncWrite> {
     inner: sink::Send<LengthDelimitedFramedRead<Bytes, LengthDelimitedFramedWrite<T, BytesMut>>>
 }

@@ -44,6 +44,7 @@ where
 }
 
 
+/// Future, returned from `apply` which performs a connection upgrade.
 pub enum UpgradeApplyFuture<C, U, Maf>
 where
     U: ConnectionUpgrade<C, Maf>,
@@ -134,6 +135,7 @@ where
 }
 
 
+/// Future, returned by `negotiate`, which negotiates a protocol and stream.
 pub struct NegotiationFuture<R: AsyncRead + AsyncWrite, I, P> {
     inner: Either<ListenerSelectFuture<R, I, P>, DialerSelectFuture<R, I, P>>
 }
@@ -164,6 +166,8 @@ where
 }
 
 
+/// Iterator adapter which adds equality matching predicates to items.
+/// Used in `NegotiationFuture`.
 #[derive(Clone)]
 pub struct ProtocolNames<I>(I);
 
