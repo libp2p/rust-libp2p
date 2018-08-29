@@ -32,8 +32,10 @@
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::io::Error as IoError;
+use std::error::Error as StdError;
 use tokio_io::{AsyncRead, AsyncWrite};
 use upgrade::{ConnectionUpgrade, Endpoint};
+use std::fmt;
 
 pub mod and_then;
 pub mod choice;
@@ -55,19 +57,40 @@ pub use self::muxed::MuxedTransport;
 pub use self::upgrade::UpgradedNode;
 
 
-#[derive(Debug, Fail)]
+#[derive(Debug)]
 pub enum TransportError {
-    #[fail(display = "Listening is not support for Multiaddress {}", _0)]
     ListenNotSupported(Multiaddr),
-
-    #[fail(display = "Listening on Multiaddress {} failed: {}", _0, _1)]
-    ListenFailed(Multiaddr, #[cause] IoError),
-
-    #[fail(display = "Dialing is not support for Multiaddress {}", _0)]
+    ListenFailed(Multiaddr, IoError),
     DialNotSupported(Multiaddr),
+    DialingFailed(Multiaddr, IoError),
+}
 
-    #[fail(display = "Dialing for Multiaddress {} failed: {}", _0, _1)]
-    DialingFailed(Multiaddr, #[cause] IoError),
+impl fmt::Display for TransportError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            TransportError::ListenNotSupported(ref addr) =>
+                f.write_str(&format!("Listening is not support for Multiaddress {}", addr)),
+            TransportError::ListenFailed(ref addr, ref io_err) =>
+                f.write_str(&format!("Listening on Multiaddress {} failed: {}", addr, io_err)),
+            TransportError::DialNotSupported(ref addr) =>
+                f.write_str(&format!("Dialing is not support for Multiaddress {}", addr)),
+            TransportError::DialingFailed(ref addr, ref io_err) =>
+                f.write_str(&format!("Dialing for Multiaddress {} failed: {}", addr, io_err)),
+        }
+    }
+}
+
+
+impl StdError for TransportError {
+    fn description(&self) -> &str {
+        match *self {
+            TransportError::ListenNotSupported(_) =>  "Listening is not support",
+            TransportError::ListenFailed(_, _) => "Listening failed",
+            TransportError::DialNotSupported(_) => "Dialing is not support",
+            TransportError::DialingFailed(_, _) => "Dialing failed",
+
+        }
+    }
 }
 
 pub type TransportResult<L> = Result<L, TransportError>;
