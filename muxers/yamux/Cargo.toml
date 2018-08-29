@@ -1,0 +1,13 @@
+[package]
+name = "libp2p-yamux"
+version = "0.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
+
+[dependencies]
+bytes = "0.4"
+futures = "0.1"
+libp2p-core = { path = "../../core" }
+log = "0.4"
+tokio-io = "0.1"
+yamux = { git = "https://github.com/paritytech/yamux" }

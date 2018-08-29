@@ -1,0 +1,32 @@
+[package]
+name = "libp2p-kad"
+version = "0.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
+
+[dependencies]
+arrayvec = "0.4.7"
+bs58 = "0.2.0"
+bigint = "4.2"
+bytes = "0.4"
+datastore = { path = "../../stores/datastore" }
+fnv = "1.0"
+futures = "0.1"
+libp2p-identify = { path = "../../protocols/identify" }
+libp2p-ping = { path = "../../protocols/ping" }
+libp2p-core = { path = "../../core" }
+log = "0.4"
+multiaddr = { path = "../../misc/multiaddr" }
+parking_lot = "0.6"
+protobuf = "2.0.2"
+rand = "0.4.2"
+smallvec = "0.5"
+tokio-codec = "0.1"
+tokio-io = "0.1"
+tokio-timer = "0.2.6"
+unsigned-varint = { version = "0.1", features = ["codec"] }
+
+[dev-dependencies]
+libp2p-tcp-transport = { path = "../../transports/tcp" }
+rand = "0.4.2"
+tokio-current-thread = "0.1"
