@@ -166,9 +166,9 @@ where
                     };
                 }
                 DialerSelectSeq::AwaitProtocol { mut stream, proto_name, proto_value, protocols } => {
-                    let (m, r) = match stream.poll().map_err(|(e, _)| ProtocolChoiceError::from(e))? {
-                        Async::Ready(x) => x,
-                        Async::NotReady => {
+                    let (m, r) = match stream.poll() {
+                        Ok(Async::Ready(x)) => x,
+                        Ok(Async::NotReady) => {
                             *self = DialerSelectSeq::AwaitProtocol {
                                 stream,
                                 proto_name,
@@ -177,6 +177,7 @@ where
                             };
                             return Ok(Async::NotReady)
                         }
+                        Err((e, _)) => return Err(ProtocolChoiceError::from(e))
                     };
                     trace!("received {:?}", m);
                     match m.ok_or(ProtocolChoiceError::UnexpectedMessage)? {
@@ -272,12 +273,13 @@ where
                     *self = DialerSelectPar::AwaitResponse { stream, protocols };
                 }
                 DialerSelectPar::AwaitResponse { mut stream, protocols } => {
-                    let (m, d) = match stream.poll().map_err(|(e, _)| ProtocolChoiceError::from(e))? {
-                        Async::Ready(x) => x,
-                        Async::NotReady => {
+                    let (m, d) = match stream.poll() {
+                        Ok(Async::Ready(x)) => x,
+                        Ok(Async::NotReady) => {
                             *self = DialerSelectPar::AwaitResponse { stream, protocols };
                             return Ok(Async::NotReady)
                         }
+                        Err((e, _)) => return Err(ProtocolChoiceError::from(e))
                     };
                     trace!("protocols list response: {:?}", m);
                     let list = match m {
@@ -315,12 +317,13 @@ where
                     *self = DialerSelectPar::AwaitProtocol { stream, proto_name, proto_val };
                 }
                 DialerSelectPar::AwaitProtocol { mut stream, proto_name, proto_val } => {
-                    let (m, r) = match stream.poll().map_err(|(e, _)| ProtocolChoiceError::from(e))? {
-                        Async::Ready(x) => x,
-                        Async::NotReady => {
+                    let (m, r) = match stream.poll() {
+                        Ok(Async::Ready(x)) => x,
+                        Ok(Async::NotReady) => {
                             *self = DialerSelectPar::AwaitProtocol { stream, proto_name, proto_val };
                             return Ok(Async::NotReady)
                         }
+                        Err((e, _)) => return Err(ProtocolChoiceError::from(e))
                     };
                     trace!("received {:?}", m);
                     match m {

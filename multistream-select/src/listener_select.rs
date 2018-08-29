@@ -93,12 +93,13 @@ where
                     *self = ListenerSelectFuture::Incoming { stream, protocols };
                 }
                 ListenerSelectFuture::Incoming { mut stream, protocols } => {
-                    let (msg, listener) = match stream.poll().map_err(|(e, _)| ProtocolChoiceError::from(e))? {
-                        Async::Ready(x) => x,
-                        Async::NotReady => {
+                    let (msg, listener) = match stream.poll() {
+                        Ok(Async::Ready(x)) => x,
+                        Ok(Async::NotReady) => {
                             *self = ListenerSelectFuture::Incoming { stream, protocols };
                             return Ok(Async::NotReady)
                         }
+                        Err((e, _)) => return Err(ProtocolChoiceError::from(e))
                     };
                     match msg {
                         Some(DialerToListenerMessage::ProtocolsListRequest) => {
