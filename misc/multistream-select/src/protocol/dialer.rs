@@ -27,7 +27,6 @@ use protocol::DialerToListenerMessage;
 use protocol::ListenerToDialerMessage;
 use protocol::MultistreamSelectError;
 use protocol::MULTISTREAM_PROTOCOL_WITH_LF;
-use std::io::{BufRead, Cursor};
 use tokio_io::codec::length_delimited::Builder as LengthDelimitedBuilder;
 use tokio_io::codec::length_delimited::FramedWrite as LengthDelimitedFramedWrite;
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -150,31 +149,19 @@ where
                 return Ok(Async::Ready(Some(ListenerToDialerMessage::NotAvailable)));
             } else {
                 // A varint number of protocols
-                let (num_protocols, remaining) = decode::usize(&frame)?;
-                let reader = Cursor::new(remaining);
-                let mut iter = BufRead::split(reader, b'\r');
-                if !iter.next()
-                    .ok_or(MultistreamSelectError::UnknownMessage)??
-                    .is_empty()
-                {
-                    return Err(MultistreamSelectError::UnknownMessage);
+                let (num_protocols, mut remaining) = decode::usize(&frame)?;
+                if num_protocols > 1000 { // TODO: configurable limit
+                    return Err(MultistreamSelectError::VarintParseError("too many protocols".into()))
                 }
-
                 let mut out = Vec::with_capacity(num_protocols);
-                for proto in iter.by_ref().take(num_protocols) {
-                    let mut proto = proto?;
-                    let poped = proto.pop(); // Pop the `\n`
-                    if poped != Some(b'\n') {
-                        return Err(MultistreamSelectError::UnknownMessage);
+                for _ in 0 .. num_protocols {
+                    let (len, rem) = decode::usize(remaining)?;
+                    if len == 0 || len > rem.len() || rem[len - 1] != b'\n' {
+                        return Err(MultistreamSelectError::UnknownMessage)
                     }
-                    out.push(Bytes::from(proto));
+                    out.push(Bytes::from(&rem[.. len - 1]));
+                    remaining = &rem[len ..]
                 }
-
-                // Making sure that the number of protocols was correct.
-                if iter.next().is_some() || out.len() != num_protocols {
-                    return Err(MultistreamSelectError::UnknownMessage);
-                }
-
                 return Ok(Async::Ready(Some(
                     ListenerToDialerMessage::ProtocolsListResponse { list: out },
                 )));
