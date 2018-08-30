@@ -1,26 +1,99 @@
+[package]
+name = "libp2p"
+version = "0.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
+
+[features]
+default = ["libp2p-secio", "libp2p-secio-secp256k1"]
+libp2p-secio-secp256k1 = ["libp2p-secio/secp256k1"]
+
+[dependencies]
+bytes = "0.4"
+futures = "0.1"
+multiaddr = { path = "./misc/multiaddr" }
+libp2p-mplex = { path = "./muxers/mplex" }
+libp2p-identify = { path = "./protocols/identify" }
+libp2p-kad = { path = "./protocols/kad" }
+libp2p-floodsub = { path = "./protocols/floodsub" }
+libp2p-peerstore = { path = "./stores/peerstore" }
+libp2p-ping = { path = "./protocols/ping" }
+libp2p-ratelimit = { path = "./transports/ratelimit" }
+libp2p-relay = { path = "./transports/relay" }
+libp2p-core = { path = "./core" }
+libp2p-transport-timeout = { path = "./transports/timeout" }
+libp2p-uds = { path = "./transports/uds" }
+libp2p-websocket = { path = "./transports/websocket" }
+libp2p-yamux = { path = "./muxers/yamux" }
+tokio-codec = "0.1"
+tokio-io = "0.1"
+
+[target.'cfg(not(target_os = "emscripten"))'.dependencies]
+libp2p-dns = { path = "./transports/dns" }
+libp2p-secio = { path = "./protocols/secio", optional = true, default-features = false }
+libp2p-tcp-transport = { path = "./transports/tcp" }
+tokio-current-thread = "0.1"
+
+[target.'cfg(target_os = "emscripten")'.dependencies]
+stdweb = { version = "0.1.3", default-features = false }
+
+[dev-dependencies]
+bigint = "4.2"
+env_logger = "0.5.4"
+rand = "0.4"
+structopt =  "0.2"
+tokio-current-thread = "0.1"
+tokio-io = "0.1"
+tokio-stdin = "0.1"
+
+[[example]]
+name = "echo-dialer"
+required-features = ["libp2p-secio"]
+
+[[example]]
+name = "echo-server"
+required-features = ["libp2p-secio"]
+
+[[example]]
+name = "floodsub"
+required-features = ["libp2p-secio"]
+
+[[example]]
+name = "kademlia"
+required-features = ["libp2p-secio"]
+
+[[example]]
+name = "ping-client"
+required-features = ["libp2p-secio"]
+
+[[example]]
+name = "random_peerid"
+
+[[example]]
+name = "relay"
+
+
 [workspace]
 members = [
-    "circular-buffer",
-    "datastore",
-    "dns",
-    "floodsub",
-    "identify",
-    "kad",
-    "libp2p",
-    "multiaddr",
-    "multihash",
-    "mplex",
-    "multistream-select",
-    "peerstore",
-    "ping",
-    "ratelimit",
-    "relay",
-    "rw-stream-sink",
-    "secio",
     "core",
-    "tcp-transport",
-    "transport-timeout",
-    "uds",
-    "websocket",
-    "yamux"
+    "misc/multiaddr",
+    "misc/multihash",
+    "misc/multistream-select",
+    "misc/rw-stream-sink",
+    "transports/dns",
+    "protocols/floodsub",
+    "protocols/identify",
+    "protocols/kad",
+    "protocols/ping",
+    "transports/relay",
+    "protocols/secio",
+    "muxers/mplex",
+    "muxers/yamux",
+    "stores/peerstore",
+    "stores/datastore",
+    "transports/tcp",
+    "transports/uds",
+    "transports/websocket",
+    "transports/timeout",
+    "transports/ratelimit",
 ]
