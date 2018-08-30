@@ -68,7 +68,8 @@ pub trait StreamMuxer {
 
 /// Polls for an inbound from the muxer but wraps the output in an object that
 /// implements `Read`/`Write`/`AsyncRead`/`AsyncWrite`.
-pub fn inbound_from_ref_and_wrap<P>(muxer: P) -> impl Future<Item = Option<SubstreamArc<P>>, Error = IoError>
+#[inline]
+pub fn inbound_from_ref_and_wrap<P>(muxer: P) -> impl Future<Item = Option<SubstreamRef<P>>, Error = IoError>
     where P: Deref + Clone, P::Target: StreamMuxer
 {
     let muxer2 = muxer.clone();
@@ -78,47 +79,76 @@ pub fn inbound_from_ref_and_wrap<P>(muxer: P) -> impl Future<Item = Option<Subst
 
 /// Same as `outbound_from_ref`, but wraps the output in an object that
 /// implements `Read`/`Write`/`AsyncRead`/`AsyncWrite`.
-pub fn outbound_from_ref_and_wrap<P>(muxer: P) -> impl Future<Item = Option<SubstreamArc<P>>, Error = IoError>
+#[inline]
+pub fn outbound_from_ref_and_wrap<P>(muxer: P) -> OutboundSubstreamRefWrapFuture<P>
     where P: Deref + Clone, P::Target: StreamMuxer
 {
-    let muxer2 = muxer.clone();
-    outbound_from_ref(muxer)
-        .map(|substream| substream.map(move |s| substream_from_ref(muxer2, s)))
+    let inner = outbound_from_ref(muxer);
+    OutboundSubstreamRefWrapFuture { inner }
+}
+
+/// Future returned by `outbound_from_ref_and_wrap`.
+pub struct OutboundSubstreamRefWrapFuture<P>
+    where P: Deref + Clone, P::Target: StreamMuxer
+{
+    inner: OutboundSubstreamRefFuture<P>,
+}
+
+impl<P> Future for OutboundSubstreamRefWrapFuture<P>
+    where P: Deref + Clone, P::Target: StreamMuxer
+{
+    type Item = Option<SubstreamRef<P>>;
+    type Error = IoError;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        match self.inner.poll() {
+            Ok(Async::Ready(Some(substream))) => {
+                let out = substream_from_ref(self.inner.muxer.clone(), substream);
+                Ok(Async::Ready(Some(out)))
+            },
+            Ok(Async::Ready(None)) => Ok(Async::Ready(None)),
+            Ok(Async::NotReady) => Ok(Async::NotReady),
+            Err(err) => Err(err)
+        }
+    }
 }
 
 /// Builds a new future for an outbound substream, where the muxer is a reference.
-pub fn outbound_from_ref<P>(muxer: P) -> OutboundSubstreamArcFuture<P>
+#[inline]
+pub fn outbound_from_ref<P>(muxer: P) -> OutboundSubstreamRefFuture<P>
     where P: Deref, P::Target: StreamMuxer
 {
     let outbound = muxer.open_outbound();
-    OutboundSubstreamArcFuture {
+    OutboundSubstreamRefFuture {
         muxer,
         outbound: Some(outbound),
     }
 }
 
 /// Future returned by `outbound_from_ref`.
-pub struct OutboundSubstreamArcFuture<P>
+pub struct OutboundSubstreamRefFuture<P>
     where P: Deref, P::Target: StreamMuxer
 {
     muxer: P,
     outbound: Option<<P::Target as StreamMuxer>::OutboundSubstream>,
 }
 
-impl<P> Future for OutboundSubstreamArcFuture<P>
+impl<P> Future for OutboundSubstreamRefFuture<P>
     where P: Deref, P::Target: StreamMuxer
 {
     type Item = Option<<P::Target as StreamMuxer>::Substream>;
     type Error = IoError;
 
+    #[inline]
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         self.muxer.poll_outbound(self.outbound.as_mut().expect("outbound was empty"))
     }
 }
 
-impl<P> Drop for OutboundSubstreamArcFuture<P>
+impl<P> Drop for OutboundSubstreamRefFuture<P>
     where P: Deref, P::Target: StreamMuxer
 {
+    #[inline]
     fn drop(&mut self) {
         self.muxer.destroy_outbound(self.outbound.take().expect("outbound was empty"))
     }
@@ -126,25 +156,26 @@ impl<P> Drop for OutboundSubstreamArcFuture<P>
 
 /// Builds an implementation of `Read`/`Write`/`AsyncRead`/`AsyncWrite` from an `Arc` to the
 /// muxer and a substream.
+#[inline]
 pub fn substream_from_ref<P>(muxer: P, substream: <P::Target as StreamMuxer>::Substream)
-    -> SubstreamArc<P>
+    -> SubstreamRef<P>
     where P: Deref, P::Target: StreamMuxer
 {
-    SubstreamArc {
+    SubstreamRef {
         muxer,
         substream: Some(substream),
     }
 }
 
 /// Stream returned by `substream_from_ref`.
-pub struct SubstreamArc<P>
+pub struct SubstreamRef<P>
     where P: Deref, P::Target: StreamMuxer
 {
     muxer: P,
     substream: Option<<P::Target as StreamMuxer>::Substream>,
 }
 
-impl<P> Read for SubstreamArc<P>
+impl<P> Read for SubstreamRef<P>
     where P: Deref, P::Target: StreamMuxer
 {
     #[inline]
@@ -153,12 +184,12 @@ impl<P> Read for SubstreamArc<P>
     }
 }
 
-impl<P> AsyncRead for SubstreamArc<P>
+impl<P> AsyncRead for SubstreamRef<P>
     where P: Deref, P::Target: StreamMuxer
 {
 }
 
-impl<P> Write for SubstreamArc<P>
+impl<P> Write for SubstreamRef<P>
     where P: Deref, P::Target: StreamMuxer
 {
     #[inline]
@@ -172,7 +203,7 @@ impl<P> Write for SubstreamArc<P>
     }
 }
 
-impl<P> AsyncWrite for SubstreamArc<P>
+impl<P> AsyncWrite for SubstreamRef<P>
     where P: Deref, P::Target: StreamMuxer
 {
     #[inline]
@@ -181,7 +212,7 @@ impl<P> AsyncWrite for SubstreamArc<P>
     }
 }
 
-impl<P> Drop for SubstreamArc<P>
+impl<P> Drop for SubstreamRef<P>
     where P: Deref, P::Target: StreamMuxer
 {
     #[inline]

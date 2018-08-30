@@ -136,7 +136,7 @@ where
     C::MultiaddrFuture: Future<Item = Multiaddr, Error = IoError>,
     C::NamesIter: Clone, // TODO: not elegant
 {
-    type Output = muxing::SubstreamArc<Arc<C::Output>>;
+    type Output = muxing::SubstreamRef<Arc<C::Output>>;
     type MultiaddrFuture = future::FutureResult<Multiaddr, IoError>;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
     type ListenerUpgrade = FutureResult<(Self::Output, Self::MultiaddrFuture), IoError>;
@@ -253,7 +253,7 @@ where
 {
     type Incoming = ConnectionReuseIncoming<C::Output>;
     type IncomingUpgrade =
-        future::FutureResult<(muxing::SubstreamArc<Arc<C::Output>>, Self::MultiaddrFuture), IoError>;
+        future::FutureResult<(muxing::SubstreamRef<Arc<C::Output>>, Self::MultiaddrFuture), IoError>;
 
     #[inline]
     fn next_incoming(self) -> Self::Incoming {
@@ -283,7 +283,7 @@ where
     F: Future<Item = (M, Multiaddr), Error = IoError>,
     M: StreamMuxer + 'static, // TODO: 'static :(
 {
-    type Item = FutureResult<(muxing::SubstreamArc<Arc<M>>, FutureResult<Multiaddr, IoError>), IoError>;
+    type Item = FutureResult<(muxing::SubstreamRef<Arc<M>>, FutureResult<Multiaddr, IoError>), IoError>;
     type Error = IoError;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
@@ -379,7 +379,7 @@ impl<M> Future for ConnectionReuseIncoming<M>
 where
     M: StreamMuxer,
 {
-    type Item = future::FutureResult<(muxing::SubstreamArc<Arc<M>>, future::FutureResult<Multiaddr, IoError>), IoError>;
+    type Item = future::FutureResult<(muxing::SubstreamRef<Arc<M>>, future::FutureResult<Multiaddr, IoError>), IoError>;
     type Error = IoError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
