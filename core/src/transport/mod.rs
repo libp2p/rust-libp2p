@@ -134,7 +134,7 @@ pub trait Transport {
     ///
     /// Returns the address back if it isn't supported.
     ///
-    /// > **Note**: The reason why w eneed to change the `Multiaddr` on success is to handle
+    /// > **Note**: The reason why we need to change the `Multiaddr` on success is to handle
     /// >             situations such as turning `/ip4/127.0.0.1/tcp/0` into
     /// >             `/ip4/127.0.0.1/tcp/<actual port>`.
     fn listen_on(&self, addr: Multiaddr) -> TransportResult<(Self::Listener, Multiaddr)>
