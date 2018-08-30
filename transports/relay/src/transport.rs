@@ -110,8 +110,7 @@ where
     }
 
     // Relay to destination over any available relay node.
-    fn relay_to(&self, destination: &Peer)
-        -> Result<impl Future<Item=(T::Output, T::MultiaddrFuture), Error=io::Error>, io::Error> {
+    fn relay_to(&self, destination: &Peer) -> Result<impl Future<Item=(T::Output, T::MultiaddrFuture), Error=io::Error>, io::Error> {
         trace!("relay_to {:?}", destination.id);
         let mut dials = Vec::new();
         for relay in &*self.relays {
