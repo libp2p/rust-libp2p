@@ -25,7 +25,7 @@ extern crate libp2p;
 extern crate tokio_current_thread;
 extern crate tokio_io;
 
-use futures::{Future, Stream};
+use futures::Future;
 use futures::sync::oneshot;
 use std::env;
 use libp2p::core::Transport;
@@ -76,7 +76,7 @@ fn main() {
     // represents a connection that is always denied.
     let (tx, rx) = oneshot::channel();
     let mut tx = Some(tx);
-    let (swarm_controller, swarm_stream) = libp2p::core::swarm(
+    let (swarm_controller, swarm_future) = libp2p::core::swarm(
         transport.clone().with_upgrade(libp2p::ping::Ping),
         |out, _client_addr| {
             if let libp2p::ping::PingOutput::Pinger { mut pinger, processing } = out {
@@ -106,11 +106,11 @@ fn main() {
     // the `listen_on` function. For example if you pass `/ip4/0.0.0.0/tcp/0`, then the port `0`
     // will be replaced with the actual port.
 
-    // `swarm_stream` is a future that contains all the behaviour that we want, but nothing has
+    // `swarm_future` is a future that contains all the behaviour that we want, but nothing has
     // actually started yet. Because we created the `TcpConfig` with tokio, we need to run the
     // future through the tokio core.
     tokio_current_thread::block_on_all(
-        rx.select(swarm_stream.for_each(|_| Ok(())).map_err(|_| unreachable!()))
+        rx.select(swarm_future.map_err(|_| unreachable!()))
             .map_err(|(e, _)| e)
             .map(|_| ()),
     ).unwrap();

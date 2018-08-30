@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::{Bytes, IntoBuf};
-use futures::{future::{self, FutureResult}, prelude::*, Stream, stream, sync::mpsc};
+use futures::{future::{self, FutureResult}, prelude::*, stream, sync::mpsc};
 use multiaddr::{AddrComponent, Multiaddr};
 use parking_lot::Mutex;
 use rw_stream_sink::RwStreamSink;
@@ -264,8 +264,7 @@ mod tests {
             .map(|_| ())
             .map_err(|((), _)| io::Error::new(io::ErrorKind::Other, "receive error"));
 
-        let future = future.for_each(|_| Ok(()))
-            .select(finish_rx)
+        let future = future.select(finish_rx)
             .map(|_| ())
             .map_err(|(e, _)| e);
 

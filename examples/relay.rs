@@ -136,7 +136,7 @@ fn run_dialer(opts: DialerOpts) -> Result<(), Box<Error>> {
         Ok(Framed::new(socket, BytesCodec::new()))
     });
 
-    let (control, stream) = libp2p::core::swarm(transport.clone().with_upgrade(echo.clone()), |socket, _| {
+    let (control, future) = libp2p::core::swarm(transport.clone().with_upgrade(echo.clone()), |socket, _| {
         println!("sending \"hello world\"");
         socket.send("hello world".into())
             .and_then(|socket| socket.into_future().map_err(|(e, _)| e).map(|(m, _)| m))
@@ -150,7 +150,7 @@ fn run_dialer(opts: DialerOpts) -> Result<(), Box<Error>> {
 
     control.dial(address, transport.with_upgrade(echo)).map_err(|_| "failed to dial")?;
 
-    tokio_current_thread::block_on_all(stream.for_each(|_| Ok(()))).map_err(From::from)
+    tokio_current_thread::block_on_all(future).map_err(From::from)
 }
 
 fn run_listener(opts: ListenerOpts) -> Result<(), Box<Error>> {
@@ -182,7 +182,7 @@ fn run_listener(opts: ListenerOpts) -> Result<(), Box<Error>> {
             }
         });
 
-    let (control, stream) = libp2p::core::swarm(upgraded, |out, _| {
+    let (control, future) = libp2p::core::swarm(upgraded, |out, _| {
         match out {
             Either::A(()) => Either::A(future::ok(())),
             Either::B(socket) => Either::B(loop_fn(socket, move |socket| {
@@ -202,7 +202,7 @@ fn run_listener(opts: ListenerOpts) -> Result<(), Box<Error>> {
     });
 
     control.listen_on(opts.listen).map_err(|_| "failed to listen")?;
-    tokio_current_thread::block_on_all(stream.for_each(|_| Ok(()))).map_err(From::from)
+    tokio_current_thread::block_on_all(future).map_err(From::from)
 }
 
 // Custom parsers ///////////////////////////////////////////////////////////

@@ -93,7 +93,7 @@ fn main() {
     // connections for us. The second parameter we pass is the connection upgrade that is accepted
     // by the listening part. We don't want to accept anything, so we pass a dummy object that
     // represents a connection that is always denied.
-    let (swarm_controller, swarm_stream) = libp2p::core::swarm(
+    let (swarm_controller, swarm_future) = libp2p::core::swarm(
         transport.clone().with_upgrade(proto.clone()),
         |echo, _client_addr| {
             // `echo` is what the closure used when initializing `proto` returns.
@@ -127,11 +127,10 @@ fn main() {
     // the `listen_on` function. For example if you pass `/ip4/0.0.0.0/tcp/0`, then the port `0`
     // will be replaced with the actual port.
 
-    // `swarm_stream` is a future that contains all the behaviour that we want, but nothing has
+    // `swarm_future` is a future that contains all the behaviour that we want, but nothing has
     // actually started yet. Because we created the `TcpConfig` with tokio, we need to run the
     // future through the tokio core.
-    let final_future = swarm_stream
-        .for_each(|_| Ok(()))
+    let final_future = swarm_future
         .select(finished_rx.map_err(|_| unreachable!()))
         .map(|_| ())
         .map_err(|(err, _)| err);

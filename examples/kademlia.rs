@@ -133,7 +133,7 @@ fn main() {
 
     // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming and
     // outgoing connections for us.
-    let (swarm_controller, swarm_stream) = libp2p::core::swarm(
+    let (swarm_controller, swarm_future) = libp2p::core::swarm(
         transport.clone().with_upgrade(KadConnecConfig::new()),
         {
             let peer_store = peer_store.clone();
@@ -224,12 +224,12 @@ fn main() {
             Ok(())
         });
 
-    // `swarm_stream` is a future that contains all the behaviour that we want, but nothing has
+    // `swarm_future` is a future that contains all the behaviour that we want, but nothing has
     // actually started yet. Because we created the `TcpConfig` with tokio, we need to run the
     // future through the tokio core.
     tokio_current_thread::block_on_all(
         finish_enum
-            .select(swarm_stream.for_each(|_| Ok(())))
+            .select(swarm_future)
             .map(|(n, _)| n)
             .map_err(|(err, _)| err),
     ).unwrap();

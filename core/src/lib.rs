@@ -177,7 +177,7 @@
 //! extern crate libp2p_tcp_transport;
 //! extern crate tokio_current_thread;
 //!
-//! use futures::{Future, Stream};
+//! use futures::Future;
 //! use libp2p_ping::{Ping, PingOutput};
 //! use libp2p_core::Transport;
 //!
@@ -185,7 +185,7 @@
 //! let transport = libp2p_tcp_transport::TcpConfig::new()
 //!     .with_dummy_muxing();
 //!
-//! let (swarm_controller, swarm_stream) = libp2p_core::swarm(transport.with_upgrade(Ping),
+//! let (swarm_controller, swarm_future) = libp2p_core::swarm(transport.with_upgrade(Ping),
 //!     |out, client_addr| {
 //!         match out {
 //!             PingOutput::Ponger(processing) => Box::new(processing) as Box<Future<Item = _, Error = _>>,
@@ -200,7 +200,7 @@
 //! swarm_controller.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap());
 //!
 //! // Runs until everything is finished.
-//! tokio_current_thread::block_on_all(swarm_stream.for_each(|_| Ok(()))).unwrap();
+//! tokio_current_thread::block_on_all(swarm_future).unwrap();
 //! # }
 //! ```
 
@@ -252,7 +252,7 @@ pub use self::multiaddr::{AddrComponent, Multiaddr};
 pub use self::muxing::StreamMuxer;
 pub use self::peer_id::PeerId;
 pub use self::public_key::PublicKey;
-pub use self::swarm::{swarm, SwarmController, SwarmStream};
+pub use self::swarm::{swarm, SwarmController, SwarmFuture};
 pub use self::transport::{MuxedTransport, Transport};
 pub use self::unique::{UniqueConnec, UniqueConnecFuture, UniqueConnecState};
 pub use self::upgrade::{ConnectionUpgrade, Endpoint};

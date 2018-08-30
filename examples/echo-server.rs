@@ -93,7 +93,7 @@ fn main() {
 
     // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming and
     // outgoing connections for us.
-    let (swarm_controller, swarm_stream) = libp2p::core::swarm(
+    let (swarm_controller, swarm_future) = libp2p::core::swarm(
         transport.clone().with_upgrade(proto),
         |socket, _client_addr| {
             println!("Successfully negotiated protocol");
@@ -136,8 +136,8 @@ fn main() {
     // will be replaced with the actual port.
     println!("Now listening on {:?}", address);
 
-    // `swarm_stream` is a stream that contains all the behaviour that we want, but nothing has
+    // `swarm_future` is a future that contains all the behaviour that we want, but nothing has
     // actually started yet. Because we created the `TcpConfig` with tokio, we need to run the
     // future through the tokio core.
-    tokio_current_thread::block_on_all(swarm_stream.for_each(|_| Ok(()))).unwrap();
+    tokio_current_thread::block_on_all(swarm_future).unwrap();
 }
