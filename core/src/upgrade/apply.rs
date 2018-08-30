@@ -35,17 +35,27 @@ where
     U::NamesIter: Clone, // TODO: not elegant
     C: AsyncRead + AsyncWrite,
 {
-    UpgradeApplyFuture::Init {
-        future: negotiate(conn, &upgrade, e),
-        upgrade,
-        endpoint: e,
-        remote
+    UpgradeApplyFuture {
+        inner: UpgradeApplyState::Init {
+            future: negotiate(conn, &upgrade, e),
+            upgrade,
+            endpoint: e,
+            remote
+        }
     }
 }
 
-
 /// Future, returned from `apply` which performs a connection upgrade.
-pub enum UpgradeApplyFuture<C, U, Maf>
+pub struct UpgradeApplyFuture<C, U, Maf>
+where
+    U: ConnectionUpgrade<C, Maf>,
+    C: AsyncRead + AsyncWrite
+{
+    inner: UpgradeApplyState<C, U, Maf>
+}
+
+
+enum UpgradeApplyState<C, U, Maf>
 where
     U: ConnectionUpgrade<C, Maf>,
     C: AsyncRead + AsyncWrite
@@ -73,23 +83,23 @@ where
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
-            match mem::replace(self, UpgradeApplyFuture::Undefined) {
-                UpgradeApplyFuture::Init { mut future, upgrade, endpoint, remote } => {
+            match mem::replace(&mut self.inner, UpgradeApplyState::Undefined) {
+                UpgradeApplyState::Init { mut future, upgrade, endpoint, remote } => {
                     let (upgrade_id, connection) = match future.poll()? {
                         Async::Ready(x) => x,
                         Async::NotReady => {
-                            *self = UpgradeApplyFuture::Init { future, upgrade, endpoint, remote };
+                            self.inner = UpgradeApplyState::Init { future, upgrade, endpoint, remote };
                             return Ok(Async::NotReady)
                         }
                     };
-                    *self = UpgradeApplyFuture::Upgrade {
+                    self.inner = UpgradeApplyState::Upgrade {
                         future: upgrade.upgrade(connection, upgrade_id, endpoint, remote)
                     };
                 }
-                UpgradeApplyFuture::Upgrade { mut future } => {
+                UpgradeApplyState::Upgrade { mut future } => {
                     match future.poll() {
                         Ok(Async::NotReady) => {
-                            *self = UpgradeApplyFuture::Upgrade { future };
+                            self.inner = UpgradeApplyState::Upgrade { future };
                             return Ok(Async::NotReady)
                         }
                         Ok(Async::Ready(x)) => {
@@ -102,8 +112,8 @@ where
                         }
                     }
                 }
-                UpgradeApplyFuture::Undefined =>
-                    panic!("UpgradeApplyFuture::poll called after completion")
+                UpgradeApplyState::Undefined =>
+                    panic!("UpgradeApplyState::poll called after completion")
             }
         }
     }

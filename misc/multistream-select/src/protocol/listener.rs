@@ -51,7 +51,9 @@ where
             .length_field_length(1)
             .new_write(inner);
         let inner = LengthDelimitedFramedRead::<Bytes, _>::new(write);
-        ListenerFuture::Await { inner: inner.into_future() }
+        ListenerFuture {
+            inner: ListenerFutureState::Await { inner: inner.into_future() }
+        }
     }
 
     /// Grants back the socket. Typically used after a `ProtocolRequest` has been received and a
@@ -166,7 +168,11 @@ where
 
 /// Future, returned by `Listener::new` which performs the handshake and returns
 /// the `Listener` if successful.
-pub enum ListenerFuture<T: AsyncRead + AsyncWrite> {
+pub struct ListenerFuture<T: AsyncRead + AsyncWrite> {
+    inner: ListenerFutureState<T>
+}
+
+enum ListenerFutureState<T: AsyncRead + AsyncWrite> {
     Await {
         inner: StreamFuture<LengthDelimitedFramedRead<Bytes, LengthDelimitedFramedWrite<T, BytesMut>>>
     },
@@ -182,13 +188,13 @@ impl<T: AsyncRead + AsyncWrite> Future for ListenerFuture<T> {
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
-            match mem::replace(self, ListenerFuture::Undefined) {
-                ListenerFuture::Await { mut inner } => {
+            match mem::replace(&mut self.inner, ListenerFutureState::Undefined) {
+                ListenerFutureState::Await { mut inner } => {
                     let (msg, socket) =
                         match inner.poll() {
                             Ok(Async::Ready(x)) => x,
                             Ok(Async::NotReady) => {
-                                *self = ListenerFuture::Await { inner };
+                                self.inner = ListenerFutureState::Await { inner };
                                 return Ok(Async::NotReady)
                             }
                             Err((e, _)) => return Err(MultistreamSelectError::from(e))
@@ -199,19 +205,19 @@ impl<T: AsyncRead + AsyncWrite> Future for ListenerFuture<T> {
                     }
                     trace!("sending back /multistream/<version> to finish the handshake");
                     let sender = socket.send(BytesMut::from(MULTISTREAM_PROTOCOL_WITH_LF));
-                    *self = ListenerFuture::Reply { sender }
+                    self.inner = ListenerFutureState::Reply { sender }
                 }
-                ListenerFuture::Reply { mut sender } => {
+                ListenerFutureState::Reply { mut sender } => {
                     let listener = match sender.poll()? {
                         Async::Ready(x) => x,
                         Async::NotReady => {
-                            *self = ListenerFuture::Reply { sender };
+                            self.inner = ListenerFutureState::Reply { sender };
                             return Ok(Async::NotReady)
                         }
                     };
                     return Ok(Async::Ready(Listener { inner: listener }))
                 }
-                ListenerFuture::Undefined => panic!("ListenerFuture::poll called after completion")
+                ListenerFutureState::Undefined => panic!("ListenerFutureState::poll called after completion")
             }
         }
     }
