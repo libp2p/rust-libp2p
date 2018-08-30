@@ -124,7 +124,7 @@ where
                 let mut buf = encode::usize_buffer();
                 let mut out_msg = Vec::from(encode::usize(list.len(), &mut buf));
                 for elem in &list {
-                    out_msg.extend(iter::once(b'\r'));
+                    out_msg.extend(encode::usize(elem.len(), &mut buf));
                     out_msg.extend_from_slice(elem);
                     out_msg.extend(iter::once(b'\n'));
                 }
