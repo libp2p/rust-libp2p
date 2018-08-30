@@ -18,8 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#![type_length_limit = "2097152"]
-
 extern crate bigint;
 extern crate bytes;
 extern crate env_logger;
