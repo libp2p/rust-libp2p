@@ -21,7 +21,7 @@
 //! Contains the `Dialer` wrapper, which allows raw communications with a listener.
 
 use bytes::{Bytes, BytesMut};
-use futures::{Async, AsyncSink, Future, Poll, Sink, StartSend, Stream};
+use futures::{prelude::*, sink, Async, AsyncSink, StartSend};
 use length_delimited::LengthDelimitedFramedRead;
 use protocol::DialerToListenerMessage;
 use protocol::ListenerToDialerMessage;
@@ -31,6 +31,7 @@ use tokio_io::codec::length_delimited::Builder as LengthDelimitedBuilder;
 use tokio_io::codec::length_delimited::FramedWrite as LengthDelimitedFramedWrite;
 use tokio_io::{AsyncRead, AsyncWrite};
 use unsigned_varint::decode;
+
 
 /// Wraps around a `AsyncRead+AsyncWrite`. Assumes that we're on the dialer's side. Produces and
 /// accepts messages.
@@ -45,19 +46,12 @@ where
 {
     /// Takes ownership of a socket and starts the handshake. If the handshake succeeds, the
     /// future returns a `Dialer`.
-    pub fn new(inner: R) -> impl Future<Item = Dialer<R>, Error = MultistreamSelectError> {
-        let write = LengthDelimitedBuilder::new()
-            .length_field_length(1)
-            .new_write(inner);
-        let inner = LengthDelimitedFramedRead::new(write);
-
-        inner
-            .send(BytesMut::from(MULTISTREAM_PROTOCOL_WITH_LF))
-            .from_err()
-            .map(|inner| Dialer {
-                inner,
-                handshake_finished: false,
-            })
+    pub fn new(inner: R) -> DialerFuture<R> {
+        let write = LengthDelimitedBuilder::new().length_field_length(1).new_write(inner);
+        let sender = LengthDelimitedFramedRead::new(write);
+        DialerFuture {
+            inner: sender.send(BytesMut::from(MULTISTREAM_PROTOCOL_WITH_LF))
+        }
     }
 
     /// Grants back the socket. Typically used after a `ProtocolAck` has been received.
@@ -169,6 +163,22 @@ where
         }
     }
 }
+
+/// Future, returned by `Dialer::new`, which send the handshake and returns the actual `Dialer`.
+pub struct DialerFuture<T: AsyncWrite> {
+    inner: sink::Send<LengthDelimitedFramedRead<Bytes, LengthDelimitedFramedWrite<T, BytesMut>>>
+}
+
+impl<T: AsyncWrite> Future for DialerFuture<T> {
+    type Item = Dialer<T>;
+    type Error = MultistreamSelectError;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let inner = try_ready!(self.inner.poll());
+        Ok(Async::Ready(Dialer { inner, handshake_finished: false }))
+    }
+}
+
 
 #[cfg(test)]
 mod tests {

@@ -28,9 +28,9 @@ mod listener;
 
 const MULTISTREAM_PROTOCOL_WITH_LF: &[u8] = b"/multistream/1.0.0\n";
 
-pub use self::dialer::Dialer;
+pub use self::dialer::{Dialer, DialerFuture};
 pub use self::error::MultistreamSelectError;
-pub use self::listener::Listener;
+pub use self::listener::{Listener, ListenerFuture};
 
 /// Message sent from the dialer to the listener.
 #[derive(Debug, Clone, PartialEq, Eq)]

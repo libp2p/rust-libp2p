@@ -21,16 +21,18 @@
 //! Contains the `Listener` wrapper, which allows raw communications with a dialer.
 
 use bytes::{Bytes, BytesMut};
-use futures::{Async, AsyncSink, Future, Poll, Sink, StartSend, Stream};
+use futures::{Async, AsyncSink, prelude::*, sink, stream::StreamFuture};
 use length_delimited::LengthDelimitedFramedRead;
 use protocol::DialerToListenerMessage;
 use protocol::ListenerToDialerMessage;
 use protocol::MultistreamSelectError;
 use protocol::MULTISTREAM_PROTOCOL_WITH_LF;
+use std::mem;
 use tokio_io::codec::length_delimited::Builder as LengthDelimitedBuilder;
 use tokio_io::codec::length_delimited::FramedWrite as LengthDelimitedFramedWrite;
 use tokio_io::{AsyncRead, AsyncWrite};
 use unsigned_varint::encode;
+
 
 /// Wraps around a `AsyncRead+AsyncWrite`. Assumes that we're on the listener's side. Produces and
 /// accepts messages.
@@ -44,29 +46,14 @@ where
 {
     /// Takes ownership of a socket and starts the handshake. If the handshake succeeds, the
     /// future returns a `Listener`.
-    pub fn new(inner: R) -> impl Future<Item = Listener<R>, Error = MultistreamSelectError> {
+    pub fn new(inner: R) -> ListenerFuture<R> {
         let write = LengthDelimitedBuilder::new()
             .length_field_length(1)
             .new_write(inner);
         let inner = LengthDelimitedFramedRead::<Bytes, _>::new(write);
-
-        inner
-            .into_future()
-            .map_err(|(e, _)| e.into())
-            .and_then(|(msg, rest)| {
-                if msg.as_ref().map(|b| &b[..]) != Some(MULTISTREAM_PROTOCOL_WITH_LF) {
-                    debug!("failed handshake; received: {:?}", msg);
-                    return Err(MultistreamSelectError::FailedHandshake);
-                }
-                Ok(rest)
-            })
-            .and_then(|socket| {
-                trace!("sending back /multistream/<version> to finish the handshake");
-                socket
-                    .send(BytesMut::from(MULTISTREAM_PROTOCOL_WITH_LF))
-                    .from_err()
-            })
-            .map(|inner| Listener { inner })
+        ListenerFuture {
+            inner: ListenerFutureState::Await { inner: inner.into_future() }
+        }
     }
 
     /// Grants back the socket. Typically used after a `ProtocolRequest` has been received and a
@@ -177,6 +164,65 @@ where
         }
     }
 }
+
+
+/// Future, returned by `Listener::new` which performs the handshake and returns
+/// the `Listener` if successful.
+pub struct ListenerFuture<T: AsyncRead + AsyncWrite> {
+    inner: ListenerFutureState<T>
+}
+
+enum ListenerFutureState<T: AsyncRead + AsyncWrite> {
+    Await {
+        inner: StreamFuture<LengthDelimitedFramedRead<Bytes, LengthDelimitedFramedWrite<T, BytesMut>>>
+    },
+    Reply {
+        sender: sink::Send<LengthDelimitedFramedRead<Bytes, LengthDelimitedFramedWrite<T, BytesMut>>>
+    },
+    Undefined
+}
+
+impl<T: AsyncRead + AsyncWrite> Future for ListenerFuture<T> {
+    type Item = Listener<T>;
+    type Error = MultistreamSelectError;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        loop {
+            match mem::replace(&mut self.inner, ListenerFutureState::Undefined) {
+                ListenerFutureState::Await { mut inner } => {
+                    let (msg, socket) =
+                        match inner.poll() {
+                            Ok(Async::Ready(x)) => x,
+                            Ok(Async::NotReady) => {
+                                self.inner = ListenerFutureState::Await { inner };
+                                return Ok(Async::NotReady)
+                            }
+                            Err((e, _)) => return Err(MultistreamSelectError::from(e))
+                        };
+                    if msg.as_ref().map(|b| &b[..]) != Some(MULTISTREAM_PROTOCOL_WITH_LF) {
+                        debug!("failed handshake; received: {:?}", msg);
+                        return Err(MultistreamSelectError::FailedHandshake)
+                    }
+                    trace!("sending back /multistream/<version> to finish the handshake");
+                    let sender = socket.send(BytesMut::from(MULTISTREAM_PROTOCOL_WITH_LF));
+                    self.inner = ListenerFutureState::Reply { sender }
+                }
+                ListenerFutureState::Reply { mut sender } => {
+                    let listener = match sender.poll()? {
+                        Async::Ready(x) => x,
+                        Async::NotReady => {
+                            self.inner = ListenerFutureState::Reply { sender };
+                            return Ok(Async::NotReady)
+                        }
+                    };
+                    return Ok(Async::Ready(Listener { inner: listener }))
+                }
+                ListenerFutureState::Undefined => panic!("ListenerFutureState::poll called after completion")
+            }
+        }
+    }
+}
+
 
 #[cfg(test)]
 mod tests {

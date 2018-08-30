@@ -113,6 +113,7 @@
 //! ```
 
 extern crate bytes;
+#[macro_use]
 extern crate futures;
 #[macro_use]
 extern crate log;
@@ -128,6 +129,6 @@ mod tests;
 
 pub mod protocol;
 
-pub use self::dialer_select::dialer_select_proto;
+pub use self::dialer_select::{dialer_select_proto, DialerSelectFuture};
 pub use self::error::ProtocolChoiceError;
-pub use self::listener_select::listener_select_proto;
+pub use self::listener_select::{listener_select_proto, ListenerSelectFuture};
