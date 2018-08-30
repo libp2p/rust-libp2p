@@ -82,13 +82,11 @@ impl fmt::Display for TransportError {
 
 
 impl StdError for TransportError {
-    fn description(&self) -> &str {
+    fn cause(&self) -> Option<&StdError> {
         match *self {
-            TransportError::ListenNotSupported(_) =>  "Listening is not support",
-            TransportError::ListenFailed(_, _) => "Listening failed",
-            TransportError::DialNotSupported(_) => "Dialing is not support",
-            TransportError::DialingFailed(_, _) => "Dialing failed",
-
+            TransportError::ListenFailed(_, ref cause)
+            | TransportError::DialingFailed(_, ref cause) => Some(cause),
+            _ => None
         }
     }
 }
