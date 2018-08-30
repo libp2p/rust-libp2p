@@ -154,14 +154,19 @@ where
     fn dial(&self, addr: Multiaddr) -> TransportResult<Self::Dial> {
         // FIXME: this doesn't properly work yet.
         // If we already have an active connection, use it!
-        // if let Some(muxer) = self.shared.lock().active_connections.get(&addr).map(|m| m.clone()) {
-        //     let a = addr.clone();
-        //     let f = muxer.outbound()
-        //         .map(move |s| s.map(move |s| (s, future::ok(a))))
-        //         .map(|o| Either::A(future::ok(o)));
-        //     let b = Box::new(f);
-        //     return Ok(b)
-        // }
+        if let Some(muxer) = self.shared.lock().active_connections.get(&addr).map(|m| m.clone()) {
+            let a = addr.clone();
+            let f = muxer.outbound()
+                .and_then(move |substream| {
+                    if let Some(s) = substream {
+                        Ok((s, future::ok(a)))
+                    } else {
+                        error!("failed to dial to {}", addr);
+                        Err(io::Error::new(io::ErrorKind::Other, "dial failed"))
+                    }
+                });
+            return Ok(Box::new(f));
+        }
 
         let shared = self.shared.clone();
 
