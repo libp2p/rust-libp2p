@@ -252,22 +252,24 @@ where
         let mut shared = self.shared.lock();
         let handler = &mut self.handler;
 
-        match shared.next_incoming.poll() {
-            Ok(Async::Ready(connec)) => {
-                debug!("Swarm received new multiplexed incoming connection");
-                shared.next_incoming = self.transport.clone().next_incoming();
-                let connec = connec.map(|(out, maf)| {
-                    (out, Box::new(maf) as Box<Future<Item = Multiaddr, Error = IoError>>)
-                });
-                shared.listeners_upgrade.push(Box::new(connec) as Box<_>);
-                return Ok(Async::Ready(Some(SwarmEvent::IncomingConnection)));
-            }
-            Ok(Async::NotReady) => (),
-            Err(err) => {
-                // TODO: should that stop everything?
-                debug!("Error in multiplexed incoming connection: {:?}", err);
-                shared.next_incoming = self.transport.clone().next_incoming();
-                return Ok(Async::Ready(Some(SwarmEvent::IncomingError(err))));
+        loop {
+            match shared.next_incoming.poll() {
+                Ok(Async::Ready(connec)) => {
+                    debug!("Swarm received new multiplexed incoming connection");
+                    shared.next_incoming = self.transport.clone().next_incoming();
+                    let connec = connec.map(|(out, maf)| {
+                        (out, Box::new(maf) as Box<Future<Item = Multiaddr, Error = IoError>>)
+                    });
+                    shared.listeners_upgrade.push(Box::new(connec) as Box<_>);
+                    break;
+                }
+                Ok(Async::NotReady) => (),
+                Err(err) => {
+                    // TODO: should that stop everything?
+                    debug!("Error in multiplexed incoming connection: {:?}", err);
+                    shared.next_incoming = self.transport.clone().next_incoming();
+                    return Ok(Async::Ready(Some(SwarmEvent::IncomingError(err))));
+                }
             }
         }
 
@@ -418,9 +420,6 @@ struct Shared<T, F> where T: MuxedTransport + 'static {
 /// Event that happens in the swarm.
 #[derive(Debug)]
 pub enum SwarmEvent<F> {
-    /// A successful connection has arrived.
-    IncomingConnection,
-
     /// An error has happened while polling the muxed transport for incoming connections.
     IncomingError(IoError),
 
