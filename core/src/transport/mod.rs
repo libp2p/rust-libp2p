@@ -116,7 +116,7 @@ pub trait Transport {
     /// implementation of `Transport` is only responsible for handling the protocols it supports.
     ///
     /// Returns `None` if nothing can be determined. This happens if this trait implementation
-    /// doesn't recognize the protocols, or if `server` and `observed` are related.
+    /// doesn't recognize the protocols, or if `server` and `observed` are unrelated.
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
 
     /// Applies a function on the output of the `Transport`.
