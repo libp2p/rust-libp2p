@@ -227,7 +227,7 @@ fn main() {
     // future through the tokio core.
     tokio_current_thread::block_on_all(
         finish_enum
-            .select(swarm_future)
+            .select(swarm_future.for_each(|_| Ok(())))
             .map(|(n, _)| n)
             .map_err(|(err, _)| err),
     ).unwrap();

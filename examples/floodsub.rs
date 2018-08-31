@@ -147,6 +147,7 @@ fn main() {
     };
 
     let final_fut = swarm_future
+        .for_each(|_| Ok(()))
         .select(floodsub_rx)
         .map(|_| ())
         .map_err(|e| e.0)
