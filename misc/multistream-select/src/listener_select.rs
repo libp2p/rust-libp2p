@@ -22,14 +22,11 @@
 //! `multistream-select` for the listener.
 
 use bytes::Bytes;
-use futures::future::{err, loop_fn, Loop, Either};
-use futures::{Future, Sink, Stream};
-use ProtocolChoiceError;
-
-use protocol::DialerToListenerMessage;
-use protocol::Listener;
-use protocol::ListenerToDialerMessage;
+use futures::{prelude::*, sink, stream::StreamFuture};
+use protocol::{DialerToListenerMessage, Listener, ListenerFuture, ListenerToDialerMessage};
+use std::mem;
 use tokio_io::{AsyncRead, AsyncWrite};
+use ProtocolChoiceError;
 
 /// Helps selecting a protocol amongst the ones supported.
 ///
@@ -45,61 +42,122 @@ use tokio_io::{AsyncRead, AsyncWrite};
 ///
 /// On success, returns the socket and the identifier of the chosen protocol (of type `P`). The
 /// socket now uses this protocol.
-pub fn listener_select_proto<R, I, M, P>(
-    inner: R,
-    protocols: I,
-) -> impl Future<Item = (P, R), Error = ProtocolChoiceError>
+pub fn listener_select_proto<R, I, M, P>(inner: R, protocols: I) -> ListenerSelectFuture<R, I, P>
 where
     R: AsyncRead + AsyncWrite,
     I: Iterator<Item = (Bytes, M, P)> + Clone,
     M: FnMut(&Bytes, &Bytes) -> bool,
 {
-    Listener::new(inner).from_err().and_then(move |listener| {
-        loop_fn(listener, move |listener| {
-            let protocols = protocols.clone();
+    ListenerSelectFuture {
+        inner: ListenerSelectState::AwaitListener { listener_fut: Listener::new(inner), protocols }
+    }
+}
 
-            listener
-                .into_future()
-                .map_err(|(e, _)| e.into())
-                .and_then(move |(message, listener)| match message {
-                    Some(DialerToListenerMessage::ProtocolsListRequest) => {
-                        let msg = ListenerToDialerMessage::ProtocolsListResponse {
-                            list: protocols.map(|(p, _, _)| p).collect(),
-                        };
-                        trace!("protocols list response: {:?}", msg);
-                        let fut = listener
-                            .send(msg)
-                            .from_err()
-                            .map(move |listener| (None, listener));
-                        Either::A(Either::A(fut))
-                    }
-                    Some(DialerToListenerMessage::ProtocolRequest { name }) => {
-                        let mut outcome = None;
-                        let mut send_back = ListenerToDialerMessage::NotAvailable;
-                        for (supported, mut matches, value) in protocols {
-                            if matches(&name, &supported) {
-                                send_back =
-                                    ListenerToDialerMessage::ProtocolAck { name: name.clone() };
-                                outcome = Some(value);
-                                break;
+/// Future, returned by `listener_select_proto` which selects a protocol among the ones supported.
+pub struct ListenerSelectFuture<R: AsyncRead + AsyncWrite, I, P> {
+    inner: ListenerSelectState<R, I, P>
+}
+
+enum ListenerSelectState<R: AsyncRead + AsyncWrite, I, P> {
+    AwaitListener {
+        listener_fut: ListenerFuture<R>,
+        protocols: I
+    },
+    Incoming {
+        stream: StreamFuture<Listener<R>>,
+        protocols: I
+    },
+    Outgoing {
+        sender: sink::Send<Listener<R>>,
+        protocols: I,
+        outcome: Option<P>
+    },
+    Undefined
+}
+
+impl<R, I, M, P> Future for ListenerSelectFuture<R, I, P>
+where
+    I: Iterator<Item=(Bytes, M, P)> + Clone,
+    M: FnMut(&Bytes, &Bytes) -> bool,
+    R: AsyncRead + AsyncWrite,
+{
+    type Item = (P, R);
+    type Error = ProtocolChoiceError;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        loop {
+            match mem::replace(&mut self.inner, ListenerSelectState::Undefined) {
+                ListenerSelectState::AwaitListener { mut listener_fut, protocols } => {
+                    let listener = match listener_fut.poll()? {
+                        Async::Ready(l) => l,
+                        Async::NotReady => {
+                            self.inner = ListenerSelectState::AwaitListener { listener_fut, protocols };
+                            return Ok(Async::NotReady)
+                        }
+                    };
+                    let stream = listener.into_future();
+                    self.inner = ListenerSelectState::Incoming { stream, protocols };
+                }
+                ListenerSelectState::Incoming { mut stream, protocols } => {
+                    let (msg, listener) = match stream.poll() {
+                        Ok(Async::Ready(x)) => x,
+                        Ok(Async::NotReady) => {
+                            self.inner = ListenerSelectState::Incoming { stream, protocols };
+                            return Ok(Async::NotReady)
+                        }
+                        Err((e, _)) => return Err(ProtocolChoiceError::from(e))
+                    };
+                    match msg {
+                        Some(DialerToListenerMessage::ProtocolsListRequest) => {
+                            let msg = ListenerToDialerMessage::ProtocolsListResponse {
+                                list: protocols.clone().map(|(p, _, _)| p).collect(),
+                            };
+                            trace!("protocols list response: {:?}", msg);
+                            let sender = listener.send(msg);
+                            self.inner = ListenerSelectState::Outgoing {
+                                sender,
+                                protocols,
+                                outcome: None
                             }
                         }
-                        trace!("requested: {:?}, response: {:?}", name, send_back);
-                        let fut = listener
-                            .send(send_back)
-                            .from_err()
-                            .map(move |listener| (outcome, listener));
-                        Either::A(Either::B(fut))
+                        Some(DialerToListenerMessage::ProtocolRequest { name }) => {
+                            let mut outcome = None;
+                            let mut send_back = ListenerToDialerMessage::NotAvailable;
+                            for (supported, mut matches, value) in protocols.clone() {
+                                if matches(&name, &supported) {
+                                    send_back = ListenerToDialerMessage::ProtocolAck {name: name.clone()};
+                                    outcome = Some(value);
+                                    break;
+                                }
+                            }
+                            trace!("requested: {:?}, response: {:?}", name, send_back);
+                            let sender = listener.send(send_back);
+                            self.inner = ListenerSelectState::Outgoing { sender, protocols, outcome }
+                        }
+                        None => {
+                            debug!("no protocol request received");
+                            return Err(ProtocolChoiceError::NoProtocolFound)
+                        }
                     }
-                    None => {
-                        debug!("no protocol request received");
-                        Either::B(err(ProtocolChoiceError::NoProtocolFound))
+                }
+                ListenerSelectState::Outgoing { mut sender, protocols, outcome } => {
+                    let listener = match sender.poll()? {
+                        Async::Ready(l) => l,
+                        Async::NotReady => {
+                            self.inner = ListenerSelectState::Outgoing { sender, protocols, outcome };
+                            return Ok(Async::NotReady)
+                        }
+                    };
+                    if let Some(p) = outcome {
+                        return Ok(Async::Ready((p, listener.into_inner())))
+                    } else {
+                        let stream = listener.into_future();
+                        self.inner = ListenerSelectState::Incoming { stream, protocols }
                     }
-                })
-                .map(|(outcome, listener): (_, Listener<R>)| match outcome {
-                    Some(outcome) => Loop::Break((outcome, listener.into_inner())),
-                    None => Loop::Continue(listener),
-                })
-        })
-    })
+                }
+                ListenerSelectState::Undefined =>
+                    panic!("ListenerSelectState::poll called after completion")
+            }
+        }
+    }
 }
