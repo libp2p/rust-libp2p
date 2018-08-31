@@ -109,21 +109,10 @@ where T: Transport,
 
     #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        match self.inner.poll() {
-            Ok(Async::Ready(Some(value))) => {
-                let map = self.map.clone();
-                let value = MapErrListenerUpgrade {
-                    inner: value,
-                    map: Some(map),
-                };
-                Ok(Async::Ready(Some(value)))
-            },
-            Ok(Async::Ready(None)) => Ok(Async::Ready(None)),
-            Ok(Async::NotReady) => Ok(Async::NotReady),
-            Err(err) => {
-                let map = self.map.clone();
-                Err(map(err))
-            }
+        match try_ready!(self.inner.poll()) {
+            Some(value) => Ok(Async::Ready(
+                Some(MapErrListenerUpgrade { inner: value, map: Some(self.map.clone()) }))),
+            None => Ok(Async::Ready(None))
         }
     }
 }
