@@ -45,7 +45,7 @@ use futures::{Async, Future, Poll, Stream};
 use futures::stream::FuturesUnordered;
 use futures::sync::mpsc;
 use multiaddr::Multiaddr;
-use muxing::StreamMuxer;
+use muxing::{self, StreamMuxer};
 use parking_lot::Mutex;
 use std::io::{self, Error as IoError};
 use std::sync::Arc;
@@ -58,7 +58,6 @@ use upgrade::ConnectionUpgrade;
 /// Can be created from an `UpgradedNode` through the `From` trait.
 ///
 /// Implements the `Transport` trait.
-#[derive(Clone)]
 pub struct ConnectionReuse<T, C>
 where
     T: Transport,
@@ -73,23 +72,36 @@ where
     shared: Arc<Mutex<Shared<C::Output>>>,
 }
 
-struct Shared<M>
+impl<T, C> Clone for ConnectionReuse<T, C>
 where
-    M: StreamMuxer,
+    T: Transport + Clone,
+    T::Output: AsyncRead + AsyncWrite,
+    C: ConnectionUpgrade<T::Output, T::MultiaddrFuture> + Clone,
+    C::Output: StreamMuxer
 {
+    #[inline]
+    fn clone(&self) -> Self {
+        ConnectionReuse {
+            inner: self.inner.clone(),
+            shared: self.shared.clone(),
+        }
+    }
+}
+
+struct Shared<M> {
     // List of active muxers.
-    active_connections: FnvHashMap<Multiaddr, M>,
+    active_connections: FnvHashMap<Multiaddr, Arc<M>>,
 
     // List of pending inbound substreams from dialed nodes.
     // Only add to this list elements received through `add_to_next_rx`.
-    next_incoming: Vec<(M, M::InboundSubstream, Multiaddr)>,
+    next_incoming: Vec<(Arc<M>, Multiaddr)>,
 
     // New elements are not directly added to `next_incoming`. Instead they are sent to this
     // channel. This is done so that we can wake up tasks whenever a new element is added.
-    add_to_next_rx: mpsc::UnboundedReceiver<(M, M::InboundSubstream, Multiaddr)>,
+    add_to_next_rx: mpsc::UnboundedReceiver<(Arc<M>, Multiaddr)>,
 
     // Other side of `add_to_next_rx`.
-    add_to_next_tx: mpsc::UnboundedSender<(M, M::InboundSubstream, Multiaddr)>,
+    add_to_next_tx: mpsc::UnboundedSender<(Arc<M>, Multiaddr)>,
 }
 
 impl<T, C> From<UpgradedNode<T, C>> for ConnectionReuse<T, C>
@@ -120,11 +132,11 @@ where
     T: Transport + 'static, // TODO: 'static :(
     T::Output: AsyncRead + AsyncWrite,
     C: ConnectionUpgrade<T::Output, T::MultiaddrFuture> + Clone + 'static, // TODO: 'static :(
-    C::Output: StreamMuxer + Clone,
+    C::Output: StreamMuxer,
     C::MultiaddrFuture: Future<Item = Multiaddr, Error = IoError>,
     C::NamesIter: Clone, // TODO: not elegant
 {
-    type Output = <C::Output as StreamMuxer>::Substream;
+    type Output = muxing::SubstreamRef<Arc<C::Output>>;
     type MultiaddrFuture = future::FutureResult<Multiaddr, IoError>;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
     type ListenerUpgrade = FutureResult<(Self::Output, Self::MultiaddrFuture), IoError>;
@@ -171,7 +183,7 @@ where
             .map(|muxer| muxer.clone())
         {
             let a = addr.clone();
-            Either::A(muxer.outbound().map(move |s| s.map(move |s| (s, future::ok(a)))))
+            Either::A(muxing::outbound_from_ref_and_wrap(muxer).map(|o| o.map(move |s| (s, future::ok(a)))))
         } else {
             Either::B(future::ok(None))
         };
@@ -190,10 +202,10 @@ where
                     let future = dial
                     .and_then(move |(muxer, addr_fut)| {
                         trace!("Waiting for remote's address");
-                        addr_fut.map(move |addr| (muxer, addr))
+                        addr_fut.map(move |addr| (Arc::new(muxer), addr))
                     })
                     .and_then(move |(muxer, addr)| {
-                        muxer.clone().outbound().and_then(move |substream| {
+                        muxing::outbound_from_ref(muxer.clone()).and_then(move |substream| {
                             if let Some(s) = substream {
                                 // Replace the active connection because we are the most recent.
                                 let mut lock = shared.lock();
@@ -201,9 +213,9 @@ where
                                 // TODO: doesn't need locking ; the sender could be extracted
                                 let _ = lock.add_to_next_tx.unbounded_send((
                                     muxer.clone(),
-                                    muxer.inbound(),
                                     addr.clone(),
                                 ));
+                                let s = muxing::substream_from_ref(muxer, s);
                                 Ok((s, future::ok(addr)))
                             } else {
                                 error!("failed to dial to {}", addr);
@@ -235,13 +247,13 @@ where
     T: Transport + 'static, // TODO: 'static :(
     T::Output: AsyncRead + AsyncWrite,
     C: ConnectionUpgrade<T::Output, T::MultiaddrFuture> + Clone + 'static, // TODO: 'static :(
-    C::Output: StreamMuxer + Clone,
+    C::Output: StreamMuxer,
     C::MultiaddrFuture: Future<Item = Multiaddr, Error = IoError>,
     C::NamesIter: Clone, // TODO: not elegant
 {
     type Incoming = ConnectionReuseIncoming<C::Output>;
     type IncomingUpgrade =
-        future::FutureResult<(<C::Output as StreamMuxer>::Substream, Self::MultiaddrFuture), IoError>;
+        future::FutureResult<(muxing::SubstreamRef<Arc<C::Output>>, Self::MultiaddrFuture), IoError>;
 
     #[inline]
     fn next_incoming(self) -> Self::Incoming {
@@ -259,7 +271,7 @@ where
     // The main listener. `S` is from the underlying transport.
     listener: S,
     current_upgrades: FuturesUnordered<F>,
-    connections: Vec<(M, <M as StreamMuxer>::InboundSubstream, Multiaddr)>,
+    connections: Vec<(Arc<M>, Multiaddr)>,
 
     // Shared between the whole connection reuse mechanism.
     shared: Arc<Mutex<Shared<M>>>,
@@ -269,9 +281,9 @@ impl<S, F, M> Stream for ConnectionReuseListener<S, F, M>
 where
     S: Stream<Item = F, Error = IoError>,
     F: Future<Item = (M, Multiaddr), Error = IoError>,
-    M: StreamMuxer + Clone + 'static, // TODO: 'static :(
+    M: StreamMuxer + 'static, // TODO: 'static :(
 {
-    type Item = FutureResult<(M::Substream, FutureResult<Multiaddr, IoError>), IoError>;
+    type Item = FutureResult<(muxing::SubstreamRef<Arc<M>>, FutureResult<Multiaddr, IoError>), IoError>;
     type Error = IoError;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
@@ -304,9 +316,7 @@ where
         loop {
             match self.current_upgrades.poll() {
                 Ok(Async::Ready(Some((muxer, client_addr)))) => {
-                    let next_incoming = muxer.clone().inbound();
-                    self.connections
-                        .push((muxer.clone(), next_incoming, client_addr.clone()));
+                    self.connections.push((Arc::new(muxer), client_addr.clone()));
                 }
                 Err(err) => {
                     debug!("error while upgrading listener connection: {:?}", err);
@@ -318,8 +328,8 @@ where
 
         // Check whether any incoming substream is ready.
         for n in (0..self.connections.len()).rev() {
-            let (muxer, mut next_incoming, client_addr) = self.connections.swap_remove(n);
-            match next_incoming.poll() {
+            let (muxer, client_addr) = self.connections.swap_remove(n);
+            match muxer.poll_inbound() {
                 Ok(Async::Ready(None)) => {
                     // stream muxer gave us a `None` => connection should be considered closed
                     debug!("no more inbound substreams on {}", client_addr);
@@ -333,15 +343,15 @@ where
                         .active_connections
                         .insert(client_addr.clone(), muxer.clone());
                     // A new substream is ready.
-                    let mut new_next = muxer.clone().inbound();
                     self.connections
-                        .push((muxer, new_next, client_addr.clone()));
+                        .push((muxer.clone(), client_addr.clone()));
+                    let incoming = muxing::substream_from_ref(muxer, incoming);
                     return Ok(Async::Ready(Some(
                         future::ok((incoming, future::ok(client_addr))),
                     )));
                 }
                 Ok(Async::NotReady) => {
-                    self.connections.push((muxer, next_incoming, client_addr));
+                    self.connections.push((muxer, client_addr));
                 }
                 Err(err) => {
                     debug!("error while upgrading the multiplexed incoming connection: {:?}", err);
@@ -367,9 +377,9 @@ where
 
 impl<M> Future for ConnectionReuseIncoming<M>
 where
-    M: Clone + StreamMuxer,
+    M: StreamMuxer,
 {
-    type Item = future::FutureResult<(M::Substream, future::FutureResult<Multiaddr, IoError>), IoError>;
+    type Item = future::FutureResult<(muxing::SubstreamRef<Arc<M>>, future::FutureResult<Multiaddr, IoError>), IoError>;
     type Error = IoError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -393,8 +403,8 @@ where
 
         // Check whether any incoming substream is ready.
         for n in (0..lock.next_incoming.len()).rev() {
-            let (muxer, mut future, addr) = lock.next_incoming.swap_remove(n);
-            match future.poll() {
+            let (muxer, addr) = lock.next_incoming.swap_remove(n);
+            match muxer.poll_inbound() {
                 Ok(Async::Ready(None)) => {
                     debug!("no inbound substream for {}", addr);
                     lock.active_connections.remove(&addr);
@@ -403,12 +413,12 @@ where
                     // A substream is ready ; push back the muxer for the next time this function
                     // is called, then return.
                     debug!("New incoming substream");
-                    let next = muxer.clone().inbound();
-                    lock.next_incoming.push((muxer, next, addr.clone()));
-                    return Ok(Async::Ready(future::ok((value, future::ok(addr)))));
+                    lock.next_incoming.push((muxer.clone(), addr.clone()));
+                    let substream = muxing::substream_from_ref(muxer, value);
+                    return Ok(Async::Ready(future::ok((substream, future::ok(addr)))));
                 }
                 Ok(Async::NotReady) => {
-                    lock.next_incoming.push((muxer, future, addr));
+                    lock.next_incoming.push((muxer, addr));
                 }
                 Err(err) => {
                     // In case of error, we just not push back the element, which drops it.
