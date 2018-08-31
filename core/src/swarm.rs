@@ -158,8 +158,9 @@ where
                         }
                         Err(err) => {
                             debug!("Error in dialer upgrade: {:?}", err);
+                            let err_clone = IoError::new(err.kind(), err.to_string());
                             then(Err(err));
-                            Err(())
+                            Err(err_clone)
                         }
                     }
                 });
@@ -338,10 +339,11 @@ where
                     shared.to_process.push(handler(output, addr).into_future());
                     notifier(Ok(()));
                 }
-                Err(()) => {
+                Err(error) => {
                     // TODO: pass an error to the event
                     return Ok(Async::Ready(Some(SwarmEvent::DialFailed {
                         client_addr,
+                        error,
                     })));
                 },
                 Ok(Async::NotReady) => {
@@ -407,7 +409,7 @@ struct Shared<T, F> where T: MuxedTransport + 'static {
     /// Futures that dial a remote address.
     ///
     /// Contains the address we dial, so that we can cancel it if necessary.
-    dialers: Vec<(Multiaddr, Box<Future<Item = (T::Output, Box<FnMut(Result<(), IoError>)>, Box<Future<Item = Multiaddr, Error = IoError>>), Error = ()>>)>,
+    dialers: Vec<(Multiaddr, Box<Future<Item = (T::Output, Box<FnMut(Result<(), IoError>)>, Box<Future<Item = Multiaddr, Error = IoError>>), Error = IoError>>)>,
 
     /// List of futures produced by the swarm closure. Must be processed to the end.
     to_process: Vec<F>,
@@ -444,6 +446,8 @@ pub enum SwarmEvent<F> {
     DialFailed {
         /// Address we were trying to dial.
         client_addr: Multiaddr,
+        /// Error that happened.
+        error: IoError,
     },
 
     /// A future returned by the handler has finished.
