@@ -262,9 +262,8 @@ where
                         (out, Box::new(maf) as Box<Future<Item = Multiaddr, Error = IoError>>)
                     });
                     shared.listeners_upgrade.push(Box::new(connec) as Box<_>);
-                    break;
                 }
-                Ok(Async::NotReady) => (),
+                Ok(Async::NotReady) => break,
                 Err(err) => {
                     // TODO: should that stop everything?
                     debug!("Error in multiplexed incoming connection: {:?}", err);
