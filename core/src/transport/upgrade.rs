@@ -57,7 +57,7 @@ where
     #[inline]
     pub fn into_connection_reuse(self) -> ConnectionReuse<T, C>
     where
-        C::Output: StreamMuxer + Clone,
+        C::Output: StreamMuxer,
     {
         From::from(self)
     }
