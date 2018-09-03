@@ -34,10 +34,10 @@ jobs:
           command: docker build --pull --no-cache -t rust-libp2p -f .circleci/images/rust-libp2p/Dockerfile .
       - run:
           name: Run tests, inside a docker image, with no feature
-          command: docker run --rm -v "/cache/cargo/registry:/usr/local/cargo/registry" -v "/cache/target:/app/target" -it rust-libp2p cargo test --no-default-features
+          command: docker run --rm -v "/cache/cargo/registry:/usr/local/cargo/registry" -v "/cache/target:/app/target" -it rust-libp2p cargo test --all --no-default-features
       - run:
           name: Run tests, inside a docker image, with all features
-          command: docker run --rm -v "/cache/cargo/registry:/usr/local/cargo/registry" -v "/cache/target:/app/target" -it rust-libp2p cargo test --all-features
+          command: docker run --rm -v "/cache/cargo/registry:/usr/local/cargo/registry" -v "/cache/target:/app/target" -it rust-libp2p cargo test --all --all-features
       - save_cache:
           key: test-cache
           paths:
@@ -106,9 +106,9 @@ jobs:
       - restore_cache:
           key: integration-test-cache
       - run:
-          command: cargo run -p libp2p --example ping-client -- /ip4/127.0.0.1/tcp/4001
+          command: cargo run --example ping-client -- /ip4/127.0.0.1/tcp/4001
       - run:
-          command: cargo run -p libp2p --example echo-dialer -- /ip4/127.0.0.1/tcp/10333
+          command: cargo run --example echo-dialer -- /ip4/127.0.0.1/tcp/10333
       - save_cache:
           key: integration-test-cache
           paths:
