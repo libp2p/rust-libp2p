@@ -33,8 +33,8 @@ extern crate unsigned_varint;
 mod codec;
 
 use std::{cmp, iter};
-use std::io::{Read, Write, Error as IoError, ErrorKind as IoErrorKind};
-use std::sync::{Arc, atomic::AtomicUsize, atomic::Ordering};
+use std::io::{Error as IoError, ErrorKind as IoErrorKind};
+use std::sync::{atomic::AtomicUsize, atomic::Ordering};
 use bytes::Bytes;
 use core::{ConnectionUpgrade, Endpoint, StreamMuxer};
 use parking_lot::Mutex;
@@ -129,7 +129,7 @@ where
         let max_buffer_len = self.max_buffer_len;
 
         let out = Multiplex {
-            inner: Arc::new(Mutex::new(MultiplexInner {
+            inner: Mutex::new(MultiplexInner {
                 error: Ok(()),
                 inner: Framed::new(i, codec::Codec::new()).fuse(),
                 config: self,
@@ -137,7 +137,7 @@ where
                 opened_substreams: Default::default(),
                 next_outbound_stream_id: if endpoint == Endpoint::Dialer { 0 } else { 1 },
                 to_notify: Default::default(),
-            }))
+            })
         };
 
         future::ok((out, remote_addr))
@@ -151,16 +151,7 @@ where
 
 /// Multiplexer. Implements the `StreamMuxer` trait.
 pub struct Multiplex<C> {
-    inner: Arc<Mutex<MultiplexInner<C>>>,
-}
-
-impl<C> Clone for Multiplex<C> {
-    #[inline]
-    fn clone(&self) -> Self {
-        Multiplex {
-            inner: self.inner.clone(),
-        }
-    }
+    inner: Mutex<MultiplexInner<C>>,
 }
 
 // Struct shared throughout the implementation.
@@ -308,81 +299,12 @@ where C: AsyncRead + AsyncWrite
 }
 
 impl<C> StreamMuxer for Multiplex<C>
-where C: AsyncRead + AsyncWrite + 'static       // TODO: 'static :-/
-{
-    type Substream = Substream<C>;
-    type InboundSubstream = InboundSubstream<C>;
-    type OutboundSubstream = Box<Future<Item = Option<Self::Substream>, Error = IoError> + 'static>;
-
-    #[inline]
-    fn inbound(self) -> Self::InboundSubstream {
-        InboundSubstream { inner: self.inner }
-    }
-
-    #[inline]
-    fn outbound(self) -> Self::OutboundSubstream {
-        let mut inner = self.inner.lock();
-
-        // Assign a substream ID now.
-        let substream_id = {
-            let n = inner.next_outbound_stream_id;
-            inner.next_outbound_stream_id += 2;
-            n
-        };
-
-        // We use an RAII guard, so that we close the substream in case of an error.
-        struct OpenedSubstreamGuard<C>(Option<Arc<Mutex<MultiplexInner<C>>>>, u32);
-        impl<C> Drop for OpenedSubstreamGuard<C> {
-            fn drop(&mut self) {
-                if let Some(inner) = self.0.take() {
-                    debug!("Failed to open outbound substream {}", self.1);
-                    inner.lock().buffer.retain(|elem| elem.substream_id() != self.1);
-                }
-            }
-        }
-        inner.opened_substreams.insert(substream_id);
-        let mut guard = OpenedSubstreamGuard(Some(self.inner.clone()), substream_id);
-
-        // We send `Open { substream_id }`, then flush, then only produce the substream.
-        let future = {
-            future::poll_fn({
-                let inner = self.inner.clone();
-                move || {
-                    let elem = codec::Elem::Open { substream_id };
-                    poll_send(&mut inner.lock(), elem)
-                }
-            }).and_then({
-                let inner = self.inner.clone();
-                move |()| {
-                    future::poll_fn(move || inner.lock().inner.poll_complete())
-                }
-            }).map(move |()| {
-                debug!("Successfully opened outbound substream {}", substream_id);
-                Some(Substream {
-                    inner: guard.0.take().unwrap(),
-                    num: substream_id,
-                    current_data: Bytes::new(),
-                    endpoint: Endpoint::Dialer,
-                })
-            })
-        };
-
-        Box::new(future) as Box<_>
-    }
-}
-
-/// Future to the next incoming substream.
-pub struct InboundSubstream<C> {
-    inner: Arc<Mutex<MultiplexInner<C>>>,
-}
-
-impl<C> Future for InboundSubstream<C>
 where C: AsyncRead + AsyncWrite
 {
-    type Item = Option<Substream<C>>;
-    type Error = IoError;
+    type Substream = Substream;
+    type OutboundSubstream = OutboundSubstream;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+    fn poll_inbound(&self) -> Poll<Option<Self::Substream>, IoError> {
         let mut inner = self.inner.lock();
 
         if inner.opened_substreams.len() >= inner.config.max_substreams {
@@ -401,7 +323,6 @@ where C: AsyncRead + AsyncWrite
         if let Some(num) = num {
             debug!("Successfully opened inbound substream {}", num);
             Ok(Async::Ready(Some(Substream {
-                inner: self.inner.clone(),
                 current_data: Bytes::new(),
                 num,
                 endpoint: Endpoint::Listener,
@@ -410,28 +331,81 @@ where C: AsyncRead + AsyncWrite
             Ok(Async::Ready(None))
         }
     }
-}
 
-/// Active substream to the remote. Implements `AsyncRead` and `AsyncWrite`.
-pub struct Substream<C>
-where C: AsyncRead + AsyncWrite
-{
-    inner: Arc<Mutex<MultiplexInner<C>>>,
-    num: u32,
-    // Read buffer. Contains data read from `inner` but not yet dispatched by a call to `read()`.
-    current_data: Bytes,
-    endpoint: Endpoint,
-}
+    fn open_outbound(&self) -> Self::OutboundSubstream {
+        let mut inner = self.inner.lock();
 
-impl<C> Read for Substream<C>
-where C: AsyncRead + AsyncWrite
-{
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
+        // Assign a substream ID now.
+        let substream_id = {
+            let n = inner.next_outbound_stream_id;
+            inner.next_outbound_stream_id += 2;
+            n
+        };
+
+        inner.opened_substreams.insert(substream_id);
+
+        OutboundSubstream {
+            num: substream_id,
+            state: OutboundSubstreamState::SendElem(codec::Elem::Open { substream_id }),
+        }
+    }
+
+    fn poll_outbound(&self, substream: &mut Self::OutboundSubstream) -> Poll<Option<Self::Substream>, IoError> {
+        loop {
+            let polling = match substream.state {
+                OutboundSubstreamState::SendElem(ref elem) => {
+                    let mut inner = self.inner.lock();
+                    poll_send(&mut inner, elem.clone())
+                },
+                OutboundSubstreamState::Flush => {
+                    let mut inner = self.inner.lock();
+                    inner.inner.poll_complete()
+                },
+                OutboundSubstreamState::Done => {
+                    panic!("Polling outbound substream after it's been succesfully open");
+                },
+            };
+
+            match polling {
+                Ok(Async::Ready(())) => (),
+                Ok(Async::NotReady) => return Ok(Async::NotReady),
+                Err(err) => {
+                    debug!("Failed to open outbound substream {}", substream.num);
+                    self.inner.lock().buffer.retain(|elem| elem.substream_id() != substream.num);
+                    return Err(err)
+                },
+            };
+
+            // Going to next step.
+            match substream.state {
+                OutboundSubstreamState::SendElem(_) => {
+                    substream.state = OutboundSubstreamState::Flush;
+                },
+                OutboundSubstreamState::Flush => {
+                    debug!("Successfully opened outbound substream {}", substream.num);
+                    substream.state = OutboundSubstreamState::Done;
+                    return Ok(Async::Ready(Some(Substream {
+                        num: substream.num,
+                        current_data: Bytes::new(),
+                        endpoint: Endpoint::Dialer,
+                    })));
+                },
+                OutboundSubstreamState::Done => unreachable!(),
+            }
+        }
+    }
+
+    #[inline]
+    fn destroy_outbound(&self, _substream: Self::OutboundSubstream) {
+        // Nothing to do.
+    }
+
+    fn read_substream(&self, substream: &mut Self::Substream, buf: &mut [u8]) -> Result<usize, IoError> {
         loop {
             // First, transfer from `current_data`.
-            if self.current_data.len() != 0 {
-                let len = cmp::min(self.current_data.len(), buf.len());
-                buf[..len].copy_from_slice(&self.current_data.split_to(len));
+            if substream.current_data.len() != 0 {
+                let len = cmp::min(substream.current_data.len(), buf.len());
+                buf[..len].copy_from_slice(&substream.current_data.split_to(len));
                 return Ok(len);
             }
 
@@ -439,22 +413,22 @@ where C: AsyncRead + AsyncWrite
             let mut inner = self.inner.lock();
             let next_data_poll = next_match(&mut inner, |elem| {
                 match elem {
-                    &codec::Elem::Data { ref substream_id, ref data, .. } if *substream_id == self.num => {     // TODO: check endpoint?
+                    &codec::Elem::Data { ref substream_id, ref data, .. } if *substream_id == substream.num => {     // TODO: check endpoint?
                         Some(data.clone())
                     },
                     _ => None,
                 }
             });
 
-            // We're in a loop, so all we need to do is set `self.current_data` to the data we
+            // We're in a loop, so all we need to do is set `substream.current_data` to the data we
             // just read and wait for the next iteration.
             match next_data_poll {
-                Ok(Async::Ready(Some(data))) => self.current_data = data.freeze(),
+                Ok(Async::Ready(Some(data))) => substream.current_data = data.freeze(),
                 Ok(Async::Ready(None)) => return Ok(0),
                 Ok(Async::NotReady) => {
                     // There was no data packet in the buffer about this substream ; maybe it's
                     // because it has been closed.
-                    if inner.opened_substreams.contains(&self.num) {
+                    if inner.opened_substreams.contains(&substream.num) {
                         return Err(IoErrorKind::WouldBlock.into());
                     } else {
                         return Ok(0);
@@ -464,21 +438,12 @@ where C: AsyncRead + AsyncWrite
             }
         }
     }
-}
 
-impl<C> AsyncRead for Substream<C>
-where C: AsyncRead + AsyncWrite
-{
-}
-
-impl<C> Write for Substream<C>
-where C: AsyncRead + AsyncWrite
-{
-    fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
+    fn write_substream(&self, substream: &mut Self::Substream, buf: &[u8]) -> Result<usize, IoError> {
         let elem = codec::Elem::Data {
-            substream_id: self.num,
+            substream_id: substream.num,
             data: From::from(buf),
-            endpoint: self.endpoint,
+            endpoint: substream.endpoint,
         };
 
         let mut inner = self.inner.lock();
@@ -489,7 +454,7 @@ where C: AsyncRead + AsyncWrite
         }
     }
 
-    fn flush(&mut self) -> Result<(), IoError> {
+    fn flush_substream(&self, _substream: &mut Self::Substream) -> Result<(), IoError> {
         let mut inner = self.inner.lock();
         match inner.inner.poll_complete() {
             Ok(Async::Ready(())) => Ok(()),
@@ -497,27 +462,44 @@ where C: AsyncRead + AsyncWrite
             Err(err) => Err(err),
         }
     }
-}
 
-impl<C> AsyncWrite for Substream<C>
-where C: AsyncRead + AsyncWrite
-{
-    fn shutdown(&mut self) -> Poll<(), IoError> {
+    fn shutdown_substream(&self, substream: &mut Self::Substream) -> Poll<(), IoError> {
         let elem = codec::Elem::Reset {
-            substream_id: self.num,
-            endpoint: self.endpoint,
+            substream_id: substream.num,
+            endpoint: substream.endpoint,
         };
 
         let mut inner = self.inner.lock();
         poll_send(&mut inner, elem)
     }
+
+    fn destroy_substream(&self, mut substream: Self::Substream) {
+        let _ = self.shutdown_substream(&mut substream);        // TODO: this doesn't necessarily send the close message
+        self.inner.lock().buffer.retain(|elem| elem.substream_id() != substream.num);
+    }
 }
 
-impl<C> Drop for Substream<C>
-where C: AsyncRead + AsyncWrite
-{
-    fn drop(&mut self) {
-        let _ = self.shutdown();        // TODO: this doesn't necessarily send the close message
-        self.inner.lock().buffer.retain(|elem| elem.substream_id() != self.num);
-    }
+/// Active attempt to open an outbound substream.
+pub struct OutboundSubstream {
+    /// Substream number.
+    num: u32,
+    state: OutboundSubstreamState,
+}
+
+enum OutboundSubstreamState {
+    /// We need to send `Elem` on the underlying stream.
+    SendElem(codec::Elem),
+    /// We need to flush the underlying stream.
+    Flush,
+    /// The substream is open and the `OutboundSubstream` is now useless.
+    Done,
+}
+
+/// Active substream to the remote.
+pub struct Substream {
+    /// Substream number.
+    num: u32,
+    // Read buffer. Contains data read from `inner` but not yet dispatched by a call to `read()`.
+    current_data: Bytes,
+    endpoint: Endpoint,
 }

@@ -23,30 +23,27 @@ extern crate futures;
 #[macro_use]
 extern crate log;
 extern crate libp2p_core as core;
+extern crate parking_lot;
 extern crate tokio_io;
 extern crate yamux;
 
 use bytes::Bytes;
 use core::Endpoint;
 use futures::{future::{self, FutureResult}, prelude::*};
+use parking_lot::Mutex;
 use std::{io, iter};
+use std::io::{Read, Write, Error as IoError};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 
-pub struct Yamux<C>(yamux::Connection<C>);
-
-impl<C> Clone for Yamux<C> {
-    fn clone(&self) -> Self {
-        Yamux(self.0.clone())
-    }
-}
+pub struct Yamux<C>(Mutex<yamux::Connection<C>>);
 
 impl<C> Yamux<C>
 where
     C: AsyncRead + AsyncWrite + 'static
 {
     pub fn new(c: C, cfg: yamux::Config, mode: yamux::Mode) -> Self {
-        Yamux(yamux::Connection::new(c, cfg, mode))
+        Yamux(Mutex::new(yamux::Connection::new(c, cfg, mode)))
     }
 }
 
@@ -55,31 +52,11 @@ where
     C: AsyncRead + AsyncWrite + 'static
 {
     type Substream = yamux::StreamHandle<C>;
-    type InboundSubstream = InboundFuture<C>;
     type OutboundSubstream = FutureResult<Option<Self::Substream>, io::Error>;
 
-    fn inbound(self) -> Self::InboundSubstream {
-        InboundFuture(self.0)
-    }
-
-    fn outbound(self) -> Self::OutboundSubstream {
-        let stream = self.0.open_stream().map_err(|e| io::Error::new(io::ErrorKind::Other, e));
-        future::result(stream)
-    }
-}
-
-
-pub struct InboundFuture<C>(yamux::Connection<C>);
-
-impl<C> Future for InboundFuture<C>
-where
-    C: AsyncRead + AsyncWrite + 'static
-{
-    type Item = Option<yamux::StreamHandle<C>>;
-    type Error = io::Error;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match self.0.poll() {
+    #[inline]
+    fn poll_inbound(&self) -> Poll<Option<Self::Substream>, IoError> {
+        match self.0.lock().poll() {
             Err(e) => {
                 error!("connection error: {}", e);
                 Err(io::Error::new(io::ErrorKind::Other, e))
@@ -89,7 +66,47 @@ where
             Ok(Async::Ready(Some(stream))) => Ok(Async::Ready(Some(stream)))
         }
     }
+
+    #[inline]
+    fn open_outbound(&self) -> Self::OutboundSubstream {
+        let stream = self.0.lock().open_stream().map_err(|e| io::Error::new(io::ErrorKind::Other, e));
+        future::result(stream)
+    }
+
+    #[inline]
+    fn poll_outbound(&self, substream: &mut Self::OutboundSubstream) -> Poll<Option<Self::Substream>, IoError> {
+        substream.poll()
+    }
+
+    #[inline]
+    fn destroy_outbound(&self, _substream: Self::OutboundSubstream) {
+    }
+
+    #[inline]
+    fn read_substream(&self, substream: &mut Self::Substream, buf: &mut [u8]) -> Result<usize, IoError> {
+        substream.read(buf)
+    }
+
+    #[inline]
+    fn write_substream(&self, substream: &mut Self::Substream, buf: &[u8]) -> Result<usize, IoError> {
+        substream.write(buf)
+    }
+
+    #[inline]
+    fn flush_substream(&self, substream: &mut Self::Substream) -> Result<(), IoError> {
+        substream.flush()
+    }
+
+    #[inline]
+    fn shutdown_substream(&self, substream: &mut Self::Substream) -> Poll<(), IoError> {
+        substream.shutdown()
+    }
+
+    #[inline]
+    fn destroy_substream(&self, _substream: Self::Substream) {
+    }
 }
+
 
 
 #[derive(Clone)]
