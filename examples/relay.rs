@@ -128,7 +128,9 @@ fn run_dialer(opts: DialerOpts) -> Result<(), Box<Error>> {
     let transport = {
         let tcp = TcpConfig::new()
             .with_upgrade(libp2p_yamux::Config::default())
-            .into_connection_reuse();
+            .map(|val, _| ((), val))
+            .into_connection_reuse()
+            .map(|((), val), _| val);
         RelayTransport::new(opts.me, tcp, store, iter::once(opts.relay)).with_dummy_muxing()
     };
 
@@ -161,7 +163,9 @@ fn run_listener(opts: ListenerOpts) -> Result<(), Box<Error>> {
 
     let transport = TcpConfig::new()
         .with_upgrade(libp2p_yamux::Config::default())
-        .into_connection_reuse();
+        .map(|val, _| ((), val))
+        .into_connection_reuse()
+        .map(|((), val), _| val);
 
     let relay = RelayConfig::new(opts.me, transport.clone(), store);
 

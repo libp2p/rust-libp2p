@@ -18,10 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use connection_reuse::ConnectionReuse;
 use futures::prelude::*;
 use multiaddr::Multiaddr;
-use muxing::StreamMuxer;
 use std::io::Error as IoError;
 use tokio_io::{AsyncRead, AsyncWrite};
 use transport::{MuxedTransport, Transport};
@@ -52,16 +50,6 @@ where
     T::Output: AsyncRead + AsyncWrite,
     C: ConnectionUpgrade<T::Output, T::MultiaddrFuture> + 'a,
 {
-    /// Turns this upgraded node into a `ConnectionReuse`. If the `Output` implements the
-    /// `StreamMuxer` trait, the returned object will implement `Transport` and `MuxedTransport`.
-    #[inline]
-    pub fn into_connection_reuse(self) -> ConnectionReuse<T, C>
-    where
-        C::Output: StreamMuxer,
-    {
-        From::from(self)
-    }
-
     /// Returns a reference to the inner `Transport`.
     #[inline]
     pub fn transport(&self) -> &T {
