@@ -16,7 +16,7 @@ parking_lot = "0.6"
 protobuf = "2.0.2"
 tokio-codec = "0.1"
 tokio-io = "0.1.0"
-unsigned-varint = { version = "0.1", features = ["codec"] }
+unsigned-varint = { version = "0.2", features = ["codec"] }
 
 [dev-dependencies]
 libp2p-tcp-transport = { path = "../../transports/tcp" }
