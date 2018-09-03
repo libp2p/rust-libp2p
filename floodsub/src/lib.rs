@@ -478,6 +478,8 @@ impl FloodSubController {
 
         debug!("Message queued for {} remotes", num_dispatched);
     }
+
+    pub fn graft()
 }
 
 /// Implementation of `Stream` that provides messages for the subscribed topics you subscribed to.

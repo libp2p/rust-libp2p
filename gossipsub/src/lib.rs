@@ -31,6 +31,9 @@ extern crate libp2p_floodsub;
 // Glob import due to gossipsub extending on floodsub
 use libp2p_floodsub::*;
 
+use rpc_proto;
+use constants;
+
 // No modifications to FloodsubUpgrade
 // TODO: use something else with less boilerplate code /
 // copying and pasting from floodsub, particularly if kept unchanged
@@ -43,7 +46,7 @@ pub struct GossipSubUpgrade {
 
 // No modifications to FloodsubUpgrade
 impl GossipSubUpgrade {
-    /// Builds a new `GossipSubUpgrade`. Also returns a `FloodSubReceiver` that will stream incoming
+    /// Builds a new `GossipSubUpgrade`. Also returns a `GossipSubReceiver` that will stream incoming
     /// messages for the gossipsub system.
     pub fn new(my_id: PeerId) -> (GossipSubUpgrade, GossipSubReceiver) {
         // Assume to keep unbounded for backwards compatibility, even though gossipsub bounds
@@ -61,7 +64,7 @@ impl GossipSubUpgrade {
 
         let upgrade = GossipSubUpgrade { inner: inner };
 
-        let receiver = GossipSSubReceiver { inner: output_rx };
+        let receiver = GossipSubReceiver { inner: output_rx };
 
         (upgrade, receiver)
     }
@@ -72,11 +75,38 @@ pub struct GossipSubReceiver {
     inner: mpsc::UnboundedReceiver<Message>,
 }
 
+// Periodically stabilizing the mesh overlay
+// at each peer:
+//   loop:
+//     if |peers| < D_low:
+//        select D - |peers| non-mesh peers at random and add them to the mesh
+//     if |peers| > D_high:
+//        select |peers| - D mesh peers at random and remove them from the mesh
+//     sleep t
 
 #[cfg(test)]
 mod tests {
     #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
+    #[ignore]
+    fn it_sends_ihave() {
+        
+    }
+
+    #[test]
+    #[ignore]
+    fn it_sends_iwant() {
+        
+    }
+
+    #[test]
+    #[ignore]
+    fn it_sends_graft() {
+        
+    }
+
+    #[test]
+    #[ignore]
+    fn it_sends_prune() {
+        
     }
 }
