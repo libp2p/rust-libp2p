@@ -38,7 +38,7 @@ use {Multiaddr, MuxedTransport, Transport};
 pub fn swarm<T, H, F>(
     transport: T,
     handler: H,
-) -> (SwarmController<T, F::Future>, SwarmFuture<T, F::Future, H>)
+) -> (SwarmController<T, F::Future>, SwarmEvents<T, F::Future, H>)
 where
     T: MuxedTransport + Clone + 'static, // TODO: 'static :-/
     H: FnMut(T::Output, Box<Future<Item = Multiaddr, Error = IoError>>) -> F,
@@ -53,7 +53,7 @@ where
         task_to_notify: None,
     }));
 
-    let future = SwarmFuture {
+    let future = SwarmEvents {
         transport: transport.clone(),
         shared: shared.clone(),
         handler: handler,
@@ -225,7 +225,7 @@ where
 
 /// Future that must be driven to completion in order for the swarm to work.
 // TODO: rename to `SwarmStream`
-pub struct SwarmFuture<T, F, H>
+pub struct SwarmEvents<T, F, H>
 where
     T: MuxedTransport + 'static, // TODO: 'static :-/
 {
@@ -239,7 +239,7 @@ where
     handler: H,
 }
 
-impl<T, H, If, F> Stream for SwarmFuture<T, F, H>
+impl<T, H, If, F> Stream for SwarmEvents<T, F, H>
 where
     T: MuxedTransport + Clone + 'static, // TODO: 'static :-/,
     H: FnMut(T::Output, Box<Future<Item = Multiaddr, Error = IoError>>) -> If,
