@@ -78,7 +78,9 @@ fn client_to_server_outbound() {
     let bg_thread = thread::spawn(move || {
         let future = rx
             .with_upgrade(multiplex::MplexConfig::new())
+            .map(|val, _| ((), val))
             .into_connection_reuse()
+            .map(|((), val), _| val)
             .listen_on("/memory".parse().unwrap())
             .unwrap_or_else(|_| panic!()).0
             .into_future()
@@ -124,7 +126,9 @@ fn connection_reused_for_dialing() {
     let bg_thread = thread::spawn(move || {
         let future = OnlyOnce::from(rx)
             .with_upgrade(multiplex::MplexConfig::new())
+            .map(|val, _| ((), val))
             .into_connection_reuse()
+            .map(|((), val), _| val)
             .listen_on("/memory".parse().unwrap())
             .unwrap_or_else(|_| panic!()).0
             .into_future()
@@ -160,7 +164,9 @@ fn connection_reused_for_dialing() {
 
     let transport = OnlyOnce::from(tx)
         .with_upgrade(multiplex::MplexConfig::new())
-        .into_connection_reuse();
+        .map(|val, _| ((), val))
+        .into_connection_reuse()
+        .map(|((), val), _| val);
 
     let future = transport
         .clone()
@@ -229,7 +235,9 @@ fn use_opened_listen_to_dial() {
 
     let transport = OnlyOnce::from(tx)
         .with_upgrade(multiplex::MplexConfig::new())
-        .into_connection_reuse();
+        .map(|val, _| ((), val))
+        .into_connection_reuse()
+        .map(|((), val), _| val);
 
     let future = transport
         .clone()

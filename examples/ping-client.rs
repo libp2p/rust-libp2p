@@ -68,7 +68,9 @@ fn main() {
         // `Transport` because the output of the upgrade is not a stream but a controller for
         // muxing. We have to explicitly call `into_connection_reuse()` in order to turn this into
         // a `Transport`.
-        .into_connection_reuse();
+        .map(|val, _| ((), val))
+        .into_connection_reuse()
+        .map(|((), val), _| val);
 
     // Let's put this `transport` into a *swarm*. The swarm will handle all the incoming
     // connections for us. The second parameter we pass is the connection upgrade that is accepted
