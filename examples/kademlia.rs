@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+// Libp2p's code unfortunately produces very large types. Rust's default length limit for type
+// names is not large enough, therefore we need this attribute.
 #![type_length_limit = "2097152"]
 
 extern crate bigint;
