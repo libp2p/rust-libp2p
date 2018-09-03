@@ -133,7 +133,7 @@ where
                 error: Ok(()),
                 inner: Framed::new(i, codec::Codec::new()).fuse(),
                 config: self,
-                buffer: Vec::with_capacity(max_buffer_len),
+                buffer: Vec::with_capacity(cmp::min(max_buffer_len, 512)),
                 opened_substreams: Default::default(),
                 next_outbound_stream_id: if endpoint == Endpoint::Dialer { 0 } else { 1 },
                 to_notify: Default::default(),
