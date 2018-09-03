@@ -25,6 +25,8 @@ extern crate libp2p_core;
 extern crate libp2p_tcp_transport;
 extern crate tokio_current_thread;
 extern crate tokio_io;
+extern crate env_logger;
+
 
 use bytes::BytesMut;
 use futures::future::Future;
@@ -50,7 +52,7 @@ impl<T: Clone> Clone for OnlyOnce<T> {
         )
     }
 }
-impl<T: Transport> Transport for OnlyOnce<T> {
+impl<T: Transport + 'static> Transport for OnlyOnce<T> {
     type Output = T::Output;
     type MultiaddrFuture = T::MultiaddrFuture;
     type Listener = T::Listener;
@@ -68,11 +70,14 @@ impl<T: Transport> Transport for OnlyOnce<T> {
     }
 }
 
+
+
 #[test]
 fn client_to_server_outbound() {
     // A client opens a connection to a server, then an outgoing substream, then sends a message
     // on that substream.
 
+    let _ = env_logger::try_init();
     let (tx, rx) = transport::connector();
 
     let bg_thread = thread::spawn(move || {
@@ -83,7 +88,7 @@ fn client_to_server_outbound() {
             .unwrap_or_else(|_| panic!()).0
             .into_future()
             .map_err(|(err, _)| err)
-            .and_then(|(client, _)| client.unwrap())
+            .and_then(|(client, _)| { client.expect("Client could not be created") })
             .map(|client| client.0)
             .map(|client| Framed::<_, BytesMut>::new(client))
             .and_then(|client| {
@@ -119,6 +124,7 @@ fn connection_reused_for_dialing() {
     // A client dials the same multiaddress twice in a row. We check that it uses two substreams
     // instead of opening two different connections.
 
+    let _ = env_logger::try_init();
     let (tx, rx) = transport::connector();
 
     let bg_thread = thread::spawn(move || {
@@ -189,6 +195,7 @@ fn use_opened_listen_to_dial() {
     // substream on that same connection, that the client has to accept. The client then sends a
     // message on that new substream.
 
+    let _ = env_logger::try_init();
     let (tx, rx) = transport::connector();
 
     let bg_thread = thread::spawn(move || {
