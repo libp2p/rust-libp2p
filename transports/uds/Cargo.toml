@@ -1,0 +1,17 @@
+[package]
+name = "libp2p-uds"
+version = "0.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+description = "Unix domain sockets transport for libp2p"
+
+[target.'cfg(all(unix, not(target_os = "emscripten")))'.dependencies]
+libp2p-core = { path = "../../core" }
+log = "0.4.1"
+futures = "0.1"
+multiaddr = { path = "../../misc/multiaddr" }
+tokio-uds = "0.2"
+
+[target.'cfg(all(unix, not(target_os = "emscripten")))'.dev-dependencies]
+tempfile = "3.0"
+tokio-current-thread = "0.1"
+tokio-io = "0.1"
