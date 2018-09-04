@@ -37,6 +37,7 @@ use tokio_io::{AsyncRead, AsyncWrite};
 ///
 /// [`copy`]: fn.copy.html
 #[derive(Debug)]
+#[must_use = "futures do nothing unless polled"]
 pub struct Copy<R, W> {
     reader: Option<R>,
     read_done: bool,

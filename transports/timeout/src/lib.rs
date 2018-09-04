@@ -180,6 +180,7 @@ where
 
 // TODO: can be removed and replaced with an `impl Future` once impl Trait is fully stable
 //       in Rust (https://github.com/rust-lang/rust/issues/34511)
+#[must_use = "futures do nothing unless polled"]
 pub struct TimeoutIncoming<InnerFut> {
     inner: InnerFut,
     timeout: Duration,
@@ -204,6 +205,7 @@ where
 /// Wraps around a `Future`. Turns the error type from `TimeoutError<IoError>` to `IoError`.
 // TODO: can be replaced with `impl Future` once `impl Trait` are fully stable in Rust
 //       (https://github.com/rust-lang/rust/issues/34511)
+#[must_use = "futures do nothing unless polled"]
 pub struct TokioTimerMapErr<InnerFut> {
     inner: InnerFut,
 }

@@ -213,6 +213,7 @@ where
 }
 
 #[derive(Debug, Copy, Clone)]
+#[must_use = "futures do nothing unless polled"]
 pub enum EitherOutbound<A: StreamMuxer, B: StreamMuxer> {
     A(A::OutboundSubstream),
     B(B::OutboundSubstream),
@@ -220,6 +221,7 @@ pub enum EitherOutbound<A: StreamMuxer, B: StreamMuxer> {
 
 /// Implements `Stream` and dispatches all method calls to either `First` or `Second`.
 #[derive(Debug, Copy, Clone)]
+#[must_use = "futures do nothing unless polled"]
 pub enum EitherListenStream<A, B> {
     First(A),
     Second(B),
@@ -248,6 +250,7 @@ where
 //         If Rust had impl Trait we could use the Either enum from the futures crate and add some
 //         modifiers to it. This custom enum is a combination of Either and these modifiers.
 #[derive(Debug, Copy, Clone)]
+#[must_use = "futures do nothing unless polled"]
 pub enum EitherListenUpgrade<A, B> {
     First(A),
     Second(B),
