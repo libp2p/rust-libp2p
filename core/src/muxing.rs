@@ -34,6 +34,10 @@ pub trait StreamMuxer {
     /// Polls for an inbound substream.
     ///
     /// This function behaves the same as a `Stream`.
+    ///
+    /// If `NotReady` is returned, then the current task will be notified once the muxer
+    /// is ready to be polled, similar to the API of `Stream::poll()`.
+    /// However, only the latest task that was used to call this method may be notified.
     fn poll_inbound(&self) -> Poll<Option<Self::Substream>, IoError>;
 
     /// Opens a new outgoing substream, and produces a future that will be resolved when it becomes
@@ -43,6 +47,11 @@ pub trait StreamMuxer {
     /// Polls the outbound substream.
     ///
     /// May panic or produce an undefined result if an earlier polling returned `Ready` or `Err`.
+    ///
+    /// If `NotReady` is returned, then the current task will be notified once the substream
+    /// is ready to be polled, similar to the API of `Future::poll()`.
+    /// However, for each individual outbound substream, only the latest task that was used to
+    /// call this method may be notified.
     fn poll_outbound(
         &self,
         substream: &mut Self::OutboundSubstream,
@@ -53,6 +62,11 @@ pub trait StreamMuxer {
     fn destroy_outbound(&self, substream: Self::OutboundSubstream);
 
     /// Reads data from a substream. The behaviour is the same as `std::io::Read::read`.
+    ///
+    /// If `WouldBlock` is returned, then the current task will be notified once the substream
+    /// is ready to be read, similar to the API of `AsyncRead`.
+    /// However, for each individual substream, only the latest task that was used to call this
+    /// method may be notified.
     fn read_substream(
         &self,
         substream: &mut Self::Substream,
@@ -60,6 +74,11 @@ pub trait StreamMuxer {
     ) -> Result<usize, IoError>;
 
     /// Write data to a substream. The behaviour is the same as `std::io::Write::write`.
+    ///
+    /// If `WouldBlock` is returned, then the current task will be notified once the substream
+    /// is ready to be written, similar to the API of `AsyncWrite`.
+    /// However, for each individual substream, only the latest task that was used to call this
+    /// method may be notified.
     fn write_substream(
         &self,
         substream: &mut Self::Substream,
@@ -67,10 +86,20 @@ pub trait StreamMuxer {
     ) -> Result<usize, IoError>;
 
     /// Flushes a substream. The behaviour is the same as `std::io::Write::flush`.
+    ///
+    /// If `WouldBlock` is returned, then the current task will be notified once the substream
+    /// is ready to be flushed, similar to the API of `AsyncWrite`.
+    /// However, for each individual substream, only the latest task that was used to call this
+    /// method may be notified.
     fn flush_substream(&self, substream: &mut Self::Substream) -> Result<(), IoError>;
 
     /// Attempts to shut down a substream. The behaviour is the same as
     /// `tokio_io::AsyncWrite::shutdown`.
+    ///
+    /// If `NotReady` is returned, then the current task will be notified once the substream
+    /// is ready to be shut down, similar to the API of `AsyncWrite::shutdown()`.
+    /// However, for each individual substream, only the latest task that was used to call this
+    /// method may be notified.
     fn shutdown_substream(&self, substream: &mut Self::Substream) -> Poll<(), IoError>;
 
     /// Destroys a substream.
