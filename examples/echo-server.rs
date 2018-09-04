@@ -141,5 +141,5 @@ fn main() {
     // `swarm_future` is a future that contains all the behaviour that we want, but nothing has
     // actually started yet. Because we created the `TcpConfig` with tokio, we need to run the
     // future through the tokio core.
-    tokio_current_thread::block_on_all(swarm_future).unwrap();
+    tokio_current_thread::block_on_all(swarm_future.for_each(|_| Ok(()))).unwrap();
 }
