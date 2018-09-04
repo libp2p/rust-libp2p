@@ -75,7 +75,9 @@ fn main() {
         // `Transport` because the output of the upgrade is not a stream but a controller for
         // muxing. We have to explicitly call `into_connection_reuse()` in order to turn this into
         // a `Transport`.
-        .into_connection_reuse();
+        .map(|val, _| ((), val))
+        .into_connection_reuse()
+        .map(|((), val), _| val);
 
     // Building a struct that represents the protocol that we are going to use for dialing.
     let proto = SimpleProtocol::new("/echo/1.0.0", |socket| {

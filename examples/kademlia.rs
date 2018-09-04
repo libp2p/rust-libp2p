@@ -88,7 +88,9 @@ fn main() {
         // `Transport` because the output of the upgrade is not a stream but a controller for
         // muxing. We have to explicitly call `into_connection_reuse()` in order to turn this into
         // a `Transport`.
-        .into_connection_reuse();
+        .map(|val, _| ((), val))
+        .into_connection_reuse()
+        .map(|((), val), _| val);
 
     let addr_resolver = {
         let peer_store = peer_store.clone();
