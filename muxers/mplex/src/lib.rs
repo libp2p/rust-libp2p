@@ -423,7 +423,7 @@ where C: AsyncRead + AsyncWrite
             // We're in a loop, so all we need to do is set `substream.current_data` to the data we
             // just read and wait for the next iteration.
             match next_data_poll {
-                Ok(Async::Ready(Some(data))) => substream.current_data = data.freeze(),
+                Ok(Async::Ready(Some(data))) => substream.current_data = data,
                 Ok(Async::Ready(None)) => return Ok(0),
                 Ok(Async::NotReady) => {
                     // There was no data packet in the buffer about this substream ; maybe it's
