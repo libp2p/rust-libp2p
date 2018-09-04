@@ -224,7 +224,6 @@ where
 }
 
 /// Future that must be driven to completion in order for the swarm to work.
-// TODO: rename to `SwarmStream`
 pub struct SwarmEvents<T, F, H>
 where
     T: MuxedTransport + 'static, // TODO: 'static :-/
@@ -339,7 +338,6 @@ where
                     notifier(Ok(()));
                 }
                 Err(error) => {
-                    // TODO: pass an error to the event
                     return Ok(Async::Ready(Some(SwarmEvent::DialFailed {
                         client_addr,
                         error,
