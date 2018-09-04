@@ -214,6 +214,11 @@ where C: AsyncRead + AsyncWrite,
     }
 
     if let Some((offset, out)) = inner.buffer.iter().enumerate().filter_map(|(n, v)| filter(v).map(|v| (n, v))).next() {
+        // The buffer was full and no longer is, so let's notify everything.
+        if inner.buffer.len() == inner.config.max_buffer_len {
+            executor::Notify::notify(&*inner.notifier_read, 0);
+        }
+
         inner.buffer.remove(offset);
         return Ok(Async::Ready(Some(out)));
     }
@@ -230,13 +235,14 @@ where C: AsyncRead + AsyncWrite,
                 },
                 MaxBufferBehaviour::Block => {
                     inner.notifier_read.to_notify.lock().insert(TASK_ID.with(|&t| t), task::current());
-                    return Ok(Async::Ready(None));
+                    return Ok(Async::NotReady);
                 },
             }
         }
 
         let elem = match inner.inner.poll_stream_notify(&inner.notifier_read, 0) {
-            Ok(Async::Ready(item)) => item,
+            Ok(Async::Ready(Some(item))) => item,
+            Ok(Async::Ready(None)) => return Ok(Async::Ready(None)),
             Ok(Async::NotReady) => {
                 inner.notifier_read.to_notify.lock().insert(TASK_ID.with(|&t| t), task::current());
                 return Ok(Async::NotReady);
@@ -248,38 +254,34 @@ where C: AsyncRead + AsyncWrite,
             },
         };
 
-        if let Some(elem) = elem {
-            trace!("Received message: {:?}", elem);
+        trace!("Received message: {:?}", elem);
 
-            // Handle substreams opening/closing.
-            match elem {
-                codec::Elem::Open { substream_id } => {
-                    if (substream_id % 2) == (inner.next_outbound_stream_id % 2) {
-                        inner.error = Err(IoError::new(IoErrorKind::Other, "invalid substream id opened"));
-                        return Err(IoError::new(IoErrorKind::Other, "invalid substream id opened"));
-                    }
-
-                    if !inner.opened_substreams.insert(substream_id) {
-                        debug!("Received open message for substream {} which was already open", substream_id)
-                    }
-                },
-                codec::Elem::Close { substream_id, .. } | codec::Elem::Reset { substream_id, .. } => {
-                    inner.opened_substreams.remove(&substream_id);
-                },
-                _ => ()
-            }
-
-            if let Some(out) = filter(&elem) {
-                return Ok(Async::Ready(Some(out)));
-            } else {
-                if inner.opened_substreams.contains(&elem.substream_id()) || elem.is_open_msg() {
-                    inner.buffer.push(elem);
-                } else if !elem.is_close_or_reset_msg() {
-                    debug!("Ignored message {:?} because the substream wasn't open", elem);
+        // Handle substreams opening/closing.
+        match elem {
+            codec::Elem::Open { substream_id } => {
+                if (substream_id % 2) == (inner.next_outbound_stream_id % 2) {
+                    inner.error = Err(IoError::new(IoErrorKind::Other, "invalid substream id opened"));
+                    return Err(IoError::new(IoErrorKind::Other, "invalid substream id opened"));
                 }
-            }
+
+                if !inner.opened_substreams.insert(substream_id) {
+                    debug!("Received open message for substream {} which was already open", substream_id)
+                }
+            },
+            codec::Elem::Close { substream_id, .. } | codec::Elem::Reset { substream_id, .. } => {
+                inner.opened_substreams.remove(&substream_id);
+            },
+            _ => ()
+        }
+
+        if let Some(out) = filter(&elem) {
+            return Ok(Async::Ready(Some(out)));
         } else {
-            return Ok(Async::Ready(None));
+            if inner.opened_substreams.contains(&elem.substream_id()) || elem.is_open_msg() {
+                inner.buffer.push(elem);
+            } else if !elem.is_close_or_reset_msg() {
+                debug!("Ignored message {:?} because the substream wasn't open", elem);
+            }
         }
     }
 }
