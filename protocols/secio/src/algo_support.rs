@@ -28,7 +28,7 @@ macro_rules! supported_impl {
         pub mod $mod_name {
             use std::cmp::Ordering;
             #[allow(unused_imports)]
-            use stream_cipher::KeySize;
+            use stream_cipher::Cipher;
             #[allow(unused_imports)]
             use ring::{agreement, digest};
             use error::SecioError;
@@ -83,9 +83,10 @@ supported_impl!(
 // TODO: the Go & JS implementations advertise Blowfish ; however doing so in Rust leads to
 //       runtime errors
 supported_impl!(
-    ciphers: KeySize,
-    "AES-128" => KeySize::KeySize128,
-    "AES-256" => KeySize::KeySize256,
+    ciphers: Cipher,
+    "AES-128" => Cipher::Aes128,
+    "AES-256" => Cipher::Aes256,
+    "TwofishCTR" => Cipher::Twofish,
 );
 
 supported_impl!(

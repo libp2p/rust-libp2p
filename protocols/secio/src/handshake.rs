@@ -21,7 +21,7 @@
 use algo_support;
 use bytes::BytesMut;
 use codec::{full_codec, FullCodec};
-use stream_cipher::{KeySize, ctr};
+use stream_cipher::{Cipher, ctr};
 use error::SecioError;
 use futures::future;
 use futures::sink::Sink;
@@ -102,7 +102,7 @@ where
         // Crypto algorithms chosen for the communication.
         chosen_exchange: Option<&'static agreement::Algorithm>,
         // We only support AES for now, so store just a key size.
-        chosen_cipher: Option<KeySize>,
+        chosen_cipher: Option<Cipher>,
         chosen_hash: Option<&'static digest::Algorithm>,
 
         // Ephemeral key generated for the handshake and then thrown away.
@@ -453,10 +453,8 @@ where
                 let key = SigningKey::new(context.chosen_hash.unwrap(), key_material);
 
                 let chosen_cipher = context.chosen_cipher.unwrap();
-                let (cipher_key_size, iv_size) = match chosen_cipher {
-                    KeySize::KeySize128 => (16, 16),
-                    KeySize::KeySize256 => (32, 16),
-                };
+                let cipher_key_size = chosen_cipher.key_size();
+                let iv_size = chosen_cipher.iv_size();
 
                 let mut longer_key = vec![0u8; 2 * (iv_size + cipher_key_size + 20)];
                 stretch_key(&key, &mut longer_key);
