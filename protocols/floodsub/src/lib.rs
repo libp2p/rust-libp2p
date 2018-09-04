@@ -519,6 +519,7 @@ pub struct Message {
 }
 
 /// Implementation of `Future` that must be driven to completion in order for floodsub to work.
+#[must_use = "futures do nothing unless polled"]
 pub struct FloodSubFuture {
     inner: Box<Future<Item = (), Error = IoError>>,
 }

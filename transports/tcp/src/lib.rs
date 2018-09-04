@@ -192,6 +192,7 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
 
 /// Future that dials a TCP/IP address.
 #[derive(Debug)]
+#[must_use = "futures do nothing unless polled"]
 pub struct TcpDialFut {
     inner: ConnectFuture,
     /// Address we're dialing. Extracted when the `Future` finishes.

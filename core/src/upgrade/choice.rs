@@ -92,6 +92,7 @@ pub enum EitherUpgradeIdentifier<A, B> {
 //         If Rust had impl Trait we could use the Either enum from the futures crate and add some
 //         modifiers to it. This custom enum is a combination of Either and these modifiers.
 #[derive(Debug, Copy, Clone)]
+#[must_use = "futures do nothing unless polled"]
 pub enum EitherConnUpgrFuture<A, B> {
     First(A),
     Second(B),
