@@ -222,6 +222,7 @@ where
 }
 
 /// Future that must be driven to completion in order for the swarm to work.
+#[must_use = "futures do nothing unless polled"]
 pub struct SwarmFuture<T, H>
 where
     T: MuxedTransport + 'static, // TODO: 'static :-/

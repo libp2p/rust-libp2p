@@ -135,6 +135,7 @@ impl<T: Transport> Stream for Listener<T> {
     }
 }
 
+#[must_use = "futures do nothing unless polled"]
 pub struct ListenerUpgrade<T: Transport>(RateLimited<T::ListenerUpgrade>);
 
 impl<T> Future for ListenerUpgrade<T>

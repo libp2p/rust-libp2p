@@ -342,6 +342,7 @@ impl<T> Drop for UniqueConnec<T> {
 }
 
 /// Future returned by `UniqueConnec::dial()`.
+#[must_use = "futures do nothing unless polled"]
 pub struct UniqueConnecFuture<T> {
     inner: Weak<Mutex<UniqueConnecInner<T>>>,
 }
