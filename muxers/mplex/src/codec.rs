@@ -20,7 +20,7 @@
 
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::mem;
-use bytes::{BufMut, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 use core::Endpoint;
 use tokio_io::codec::{Decoder, Encoder};
 use unsigned_varint::{codec, encode};
@@ -33,7 +33,7 @@ const MAX_FRAME_SIZE: usize = 32 * 1024 * 1024;
 #[derive(Debug, Clone)]
 pub enum Elem {
     Open { substream_id: u32 },
-    Data { substream_id: u32, endpoint: Endpoint, data: BytesMut },
+    Data { substream_id: u32, endpoint: Endpoint, data: Bytes },
     Close { substream_id: u32, endpoint: Endpoint },
     Reset { substream_id: u32, endpoint: Endpoint },
 }
@@ -137,8 +137,8 @@ impl Decoder for Codec {
                     let substream_id = (header >> 3) as u32;
                     let out = match header & 7 {
                         0 => Elem::Open { substream_id },
-                        1 => Elem::Data { substream_id, endpoint: Endpoint::Listener, data: buf },
-                        2 => Elem::Data { substream_id, endpoint: Endpoint::Dialer, data: buf },
+                        1 => Elem::Data { substream_id, endpoint: Endpoint::Listener, data: buf.freeze() },
+                        2 => Elem::Data { substream_id, endpoint: Endpoint::Dialer, data: buf.freeze() },
                         3 => Elem::Close { substream_id, endpoint: Endpoint::Listener },
                         4 => Elem::Close { substream_id, endpoint: Endpoint::Dialer },
                         5 => Elem::Reset { substream_id, endpoint: Endpoint::Listener },
@@ -168,7 +168,7 @@ impl Encoder for Codec {
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let (header, data) = match item {
             Elem::Open { substream_id } => {
-                ((substream_id as u64) << 3, BytesMut::new())
+                ((substream_id as u64) << 3, Bytes::new())
             },
             Elem::Data { substream_id, endpoint: Endpoint::Listener, data } => {
                 ((substream_id as u64) << 3 | 1, data)
@@ -177,16 +177,16 @@ impl Encoder for Codec {
                 ((substream_id as u64) << 3 | 2, data)
             },
             Elem::Close { substream_id, endpoint: Endpoint::Listener } => {
-                ((substream_id as u64) << 3 | 3, BytesMut::new())
+                ((substream_id as u64) << 3 | 3, Bytes::new())
             },
             Elem::Close { substream_id, endpoint: Endpoint::Dialer } => {
-                ((substream_id as u64) << 3 | 4, BytesMut::new())
+                ((substream_id as u64) << 3 | 4, Bytes::new())
             },
             Elem::Reset { substream_id, endpoint: Endpoint::Listener } => {
-                ((substream_id as u64) << 3 | 5, BytesMut::new())
+                ((substream_id as u64) << 3 | 5, Bytes::new())
             },
             Elem::Reset { substream_id, endpoint: Endpoint::Dialer } => {
-                ((substream_id as u64) << 3 | 6, BytesMut::new())
+                ((substream_id as u64) << 3 | 6, Bytes::new())
             },
         };
 
