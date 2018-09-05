@@ -18,14 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::stream::StreamFuture;
-use futures::sync::oneshot;
-use futures::task;
-use futures::{Async, Future, IntoFuture, Poll, Stream};
+use futures::sync::{oneshot, mpsc};
+use futures::{Async, Future, IntoFuture, Poll, Stream, future, stream};
 use parking_lot::Mutex;
 use std::fmt;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::sync::Arc;
+use tokio_executor;
 use {Multiaddr, MuxedTransport, Transport};
 
 /// Creates a swarm.
@@ -37,48 +36,88 @@ use {Multiaddr, MuxedTransport, Transport};
 /// control, and the `Future` must be driven to completion in order for things to work.
 pub fn swarm<T, H, F>(
     transport: T,
-    handler: H,
-) -> (SwarmController<T, F::Future>, SwarmEvents<T, F::Future, H>)
+    mut handler: H,
+) -> (SwarmController<T, F::Future>, SwarmEvents<F::Future>)
 where
     T: MuxedTransport + Clone + 'static, // TODO: 'static :-/
-    H: FnMut(T::Output, Box<Future<Item = Multiaddr, Error = IoError> + Send>) -> F,
+    T::Incoming: Send,
+    T::IncomingUpgrade: Send,
+    T::MultiaddrFuture: Send,
+    H: FnMut(T::Output, Box<Future<Item = Multiaddr, Error = IoError> + Send>) -> F + Send + 'static,
     F: IntoFuture<Item = (), Error = IoError>,
+    F::Future: Send + 'static,
 {
-    let shared = Arc::new(Mutex::new(Shared {
-        next_incoming: transport.clone().next_incoming(),
-        listeners: Vec::new(),
-        listeners_upgrade: Vec::new(),
-        dialers: Vec::new(),
-        to_process: Vec::new(),
-        task_to_notify: None,
-    }));
+    let handler = Arc::new(Mutex::new(move |out, addr| handler(out, addr).into_future()));
+    let (ev_tx, ev_rx) = mpsc::unbounded();
+    let (ts_tx, ts_rx) = mpsc::unbounded();
 
-    let future = SwarmEvents {
-        transport: transport.clone(),
-        shared: shared.clone(),
-        handler: handler,
-    };
+    // Create the task that handles incoming substreams.
+    {
+        let transport = transport.clone();
+        let events_tx = ev_tx.clone();
+        let handler = handler.clone();
+        let mut next_incoming = transport.next_incoming();
+        let future = future::poll_fn(move || {
+            match next_incoming.poll() {
+                Ok(Async::Ready(incoming)) => {
+                    let events_tx = events_tx.clone();
+                    let handler = handler.clone();
+                    trace!("Incoming muxed connection");
 
-    let controller = SwarmController { transport, shared };
+                    tokio_executor::spawn(incoming.then(move |outcome| {
+                        match outcome {
+                            Ok((output, client_addr)) => {
+                                trace!("Successfully negotiated incoming connection");
+                                let mut handler = handler.lock();
+                                let handler = &mut *handler;
+                                let client_addr = Box::new(client_addr) as
+                                    Box<Future<Item = _, Error = _> + Send>;
+                                let to_process = (*handler)(output, client_addr).into_future();
+                                spawn_to_process(to_process, events_tx);
+                                Ok(())
+                            },
+                            Err(err) => {
+                                let _ = events_tx.unbounded_send(SwarmEvent::ListenerUpgradeError(err));
+                                Ok(())
+                            },
+                        }
+                    }));
+                    Ok(Async::Ready(()))
+                },
+                Ok(Async::NotReady) => {
+                    Ok(Async::NotReady)
+                },
+                Err(err) => {
+                    let _ = events_tx.unbounded_send(SwarmEvent::IncomingError(err));
+                    Ok(Async::Ready(()))
+                },
+            }
+        });
+        let _ = ts_tx.unbounded_send(Box::new(future) as Box<_>);
+    }
 
-    (controller, future)
+    let controller = SwarmController { transport, handler, sender: ev_tx, to_spawn: ts_tx };
+    let events = SwarmEvents { inner: ev_rx, to_spawn: ts_rx.fuse() };
+    (controller, events)
 }
 
 /// Allows control of what the swarm is doing.
-pub struct SwarmController<T, F>
-where
-    T: MuxedTransport + 'static, // TODO: 'static :-/
-{
-    /// Shared between the swarm infrastructure.
-    shared: Arc<Mutex<Shared<T, F>>>,
-
+pub struct SwarmController<T, F> where T: Transport {
     /// Transport used to dial or listen.
     transport: T,
+
+    /// Handler for incoming connections.
+    handler: Arc<Mutex<FnMut(T::Output, Box<Future<Item = Multiaddr, Error = IoError> + Send>) -> F + Send>>,
+
+    /// Sender to use to propagate events to the `SwarmEvents`.
+    sender: mpsc::UnboundedSender<SwarmEvent<F>>,
+
+    /// Sender for futures to dispatch to execute.
+    to_spawn: mpsc::UnboundedSender<Box<Future<Item = (), Error = ()> + Send>>,
 }
 
 impl<T, F> fmt::Debug for SwarmController<T, F>
-where
-    T: fmt::Debug + MuxedTransport + 'static, // TODO: 'static :-/
+where T: Transport + fmt::Debug
 {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt.debug_tuple("SwarmController")
@@ -89,12 +128,14 @@ where
 
 impl<T, F> Clone for SwarmController<T, F>
 where
-    T: MuxedTransport + Clone + 'static, // TODO: 'static :-/
+    T: Transport + Clone
 {
     fn clone(&self) -> Self {
         SwarmController {
             transport: self.transport.clone(),
-            shared: self.shared.clone(),
+            handler: self.handler.clone(),
+            sender: self.sender.clone(),
+            to_spawn: self.to_spawn.clone(),
         }
     }
 }
@@ -107,7 +148,7 @@ where
     T::Listener: Send,
     T::ListenerUpgrade: Send,
     T::Output: Send,
-    F: 'static,
+    F: Future<Item = (), Error = IoError> + Send + 'static,
 {
     /// Asks the swarm to dial the node with the given multiaddress. The connection is then
     /// upgraded using the `upgrade`, and the output is sent to the handler that was passed when
@@ -123,10 +164,12 @@ where
         transport: Du,
     ) -> Result<impl Future<Item = (), Error = IoError>, Multiaddr>
     where
-        Du: Transport + 'static, // TODO: 'static :-/
+        Du: Transport + Clone + 'static, // TODO: 'static :-/
         Du::Dial: Send,
         Du::MultiaddrFuture: Send,
-        Du::Output: Into<T::Output>,
+        Du::Listener: Send,
+        Du::ListenerUpgrade: Send,
+        Du::Output: Send + Into<T::Output>,
     {
         self.dial_then(multiaddr, transport, |v| v)
     }
@@ -142,95 +185,129 @@ where
         then: TThen,
     ) -> Result<impl Future<Item = (), Error = IoError>, Multiaddr>
     where
-        Du: Transport + 'static, // TODO: 'static :-/
+        Du: Transport + Clone + 'static, // TODO: 'static :-/
         Du::Dial: Send,
         Du::MultiaddrFuture: Send,
-        Du::Output: Into<T::Output>,
+        Du::Listener: Send,
+        Du::ListenerUpgrade: Send,
+        Du::Output: Send + Into<T::Output>,
         TThen: FnOnce(Result<(), IoError>) -> Result<(), IoError> + Send + 'static,
     {
         trace!("Swarm dialing {}", multiaddr);
 
-        match transport.dial(multiaddr.clone()) {
-            Ok(dial) => {
-                let (tx, rx) = oneshot::channel();
-                let mut then = Some(move |val| {
-                    let _ = tx.send(then(val));
-                });
-                // Unfortunately the `Box<FnOnce(_)>` type is still unusable in Rust right now,
-                // so we use a `Box<FnMut(_)>` instead and panic if it is called multiple times.
-                let mut then = Box::new(move |val: Result<(), IoError>| {
-                    let then = then
-                        .take()
-                        .expect("The Boxed FnMut should only be called once");
-                    then(val);
-                }) as Box<FnMut(_) + Send>;
+        let dial = match transport.clone().dial(multiaddr.clone()) {
+            Ok(d) => d,
+            Err((_, addr)) => return Err(addr)
+        };
 
-                let dial = dial.then(|result| match result {
-                    Ok((output, client_addr)) => {
-                        let client_addr =
-                            Box::new(client_addr) as Box<Future<Item = _, Error = _> + Send>;
-                        Ok((output.into(), then, client_addr))
-                    }
-                    Err(err) => {
-                        debug!("Error in dialer upgrade: {:?}", err);
-                        let err_clone = IoError::new(err.kind(), err.to_string());
-                        then(Err(err));
-                        Err(err_clone)
-                    }
-                });
+        let (rx, mut then) = {
+            let (tx, rx) = oneshot::channel();
+            let mut then = Some(move |val| {
+                let _ = tx.send(then(val));
+            });
+            // Unfortunately the `Box<FnOnce(_)>` type is still unusable in Rust right now,
+            // so we use a `Box<FnMut(_)>` instead and panic if it is called multiple times.
+            let then = Box::new(move |val: Result<(), IoError>| {
+                let then = then
+                    .take()
+                    .expect("The Boxed FnMut should only be called once");
+                then(val);
+            }) as Box<FnMut(_) + Send>;
+            (rx, then)
+        };
 
-                let mut shared = self.shared.lock();
-                shared.dialers.push((multiaddr, Box::new(dial) as Box<_>));
-                if let Some(task) = shared.task_to_notify.take() {
-                    task.notify();
-                }
+        let events_tx = self.sender.clone();
+        let handler = self.handler.clone();
 
-                Ok(rx.then(|result| match result {
-                    Ok(Ok(())) => Ok(()),
-                    Ok(Err(err)) => Err(err),
-                    Err(_) => Err(IoError::new(
-                        IoErrorKind::ConnectionAborted,
-                        "dial cancelled the swarm future has been destroyed",
-                    )),
-                }))
+        let dial = dial.then(move |result| match result {
+            Ok((output, client_addr)) => {
+                trace!("Successfully dialed address {}", multiaddr);
+                let client_addr = Box::new(client_addr) as Box<Future<Item = _, Error = _> + Send>;
+                let mut handler = handler.lock();
+                let handler = &mut *handler;
+                let to_process = (*handler)(output.into(), client_addr);
+                then(Ok(()));
+                spawn_to_process(to_process, events_tx);
+                Ok(())
             }
-            Err((_, multiaddr)) => Err(multiaddr),
-        }
-    }
+            Err(err) => {
+                debug!("Error in dialer upgrade: {:?}", err);
+                let err_clone = IoError::new(err.kind(), err.to_string());
+                then(Err(err));
+                let _ = events_tx.unbounded_send(SwarmEvent::DialFailed {
+                    client_addr: multiaddr,
+                    error: err_clone,
+                });
+                Ok(())
+            }
+        });
 
-    /// Interrupts all dialing attempts to a specific multiaddress.
-    ///
-    /// Has no effect if the dialing attempt has already succeeded, in which case it will be
-    /// dispatched to the handler.
-    pub fn interrupt_dial(&self, multiaddr: &Multiaddr) {
-        let mut shared = self.shared.lock();
-        shared.dialers.retain(|dialer| &dialer.0 != multiaddr);
+        let _ = self.to_spawn.unbounded_send(Box::new(dial) as Box<_>);
+
+        Ok(rx.then(|result| match result {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(err)) => Err(err),
+            Err(_) => Err(IoError::new(
+                IoErrorKind::ConnectionAborted,
+                "dial cancelled the swarm future has been destroyed",
+            )),
+        }))
     }
 
     /// Adds a multiaddr to listen on. All the incoming connections will use the `upgrade` that
     /// was passed to `swarm`.
     // TODO: add a way to cancel a listener
     pub fn listen_on(&self, multiaddr: Multiaddr) -> Result<Multiaddr, Multiaddr> {
+        let events_tx = self.sender.clone();
+        let events_tx2 = self.sender.clone();
+        let handler = self.handler.clone();
+
         match self.transport.clone().listen_on(multiaddr) {
             Ok((listener, new_addr)) => {
                 trace!("Swarm listening on {}", new_addr);
-                let mut shared = self.shared.lock();
-                let listener = Box::new(listener.map(|f| {
-                    let f = f.map(|(out, maf)| {
-                        (
-                            out,
-                            Box::new(maf) as Box<Future<Item = Multiaddr, Error = IoError> + Send>,
-                        )
+                let listen_addr = new_addr.clone();
+
+                let listener = listener
+                    .for_each(move |incoming| {
+                        let events_tx = events_tx.clone();
+                        let handler = handler.clone();
+                        trace!("Incoming connection on listener");
+
+                        tokio_executor::spawn(incoming.then(move |outcome| {
+                            match outcome {
+                                Ok((output, client_addr)) => {
+                                    trace!("Successfully negotiated incoming connection");
+                                    let mut handler = handler.lock();
+                                    let handler = &mut *handler;
+                                    let client_addr = Box::new(client_addr) as
+                                        Box<Future<Item = _, Error = _> + Send>;
+                                    let to_process = (*handler)(output, client_addr).into_future();
+                                    spawn_to_process(to_process, events_tx);
+                                    Ok(())
+                                },
+                                Err(err) => {
+                                    let _ = events_tx.unbounded_send(SwarmEvent::ListenerUpgradeError(err));
+                                    Ok(())
+                                },
+                            }
+                        }));
+                        Ok(())
+                    })
+                    .then(move |outcome| {
+                        let _ = match outcome {
+                            Ok(()) => {
+                                trace!("Listener to {} gracefully closed", listen_addr);
+                                let _ = events_tx2.unbounded_send(SwarmEvent::ListenerClosed { listen_addr });
+                            },
+                            Err(error) => {
+                                trace!("Listener to {} errored: {:?}", listen_addr, error);
+                                let _ = events_tx2.unbounded_send(SwarmEvent::ListenerError { listen_addr, error });
+                            },
+                        };
+                        Ok(())
                     });
 
-                    Box::new(f) as Box<Future<Item = _, Error = _> + Send>
-                })) as Box<Stream<Item = _, Error = _> + Send>;
-                shared
-                    .listeners
-                    .push((new_addr.clone(), listener.into_future()));
-                if let Some(task) = shared.task_to_notify.take() {
-                    task.notify();
-                }
+                let _ = self.to_spawn.unbounded_send(Box::new(listener) as Box<_>);
                 Ok(new_addr)
             }
             Err((_, multiaddr)) => Err(multiaddr),
@@ -238,237 +315,69 @@ where
     }
 }
 
-/// Future that must be driven to completion in order for the swarm to work.
-#[must_use = "futures do nothing unless polled"]
-pub struct SwarmEvents<T, F, H>
-where
-    T: MuxedTransport + 'static, // TODO: 'static :-/
+/// Spawns a task that processes `to_process` and reports back to `events`.
+fn spawn_to_process<F>(to_process: F, events: mpsc::UnboundedSender<SwarmEvent<F>>)
+where F: Future<Item = (), Error = IoError> + Send + 'static
 {
-    /// Shared between the swarm infrastructure.
-    shared: Arc<Mutex<Shared<T, F>>>,
+    let mut to_process = Some(to_process);
+    let fut = future::poll_fn(move || {
+        let mut local_toprocess = to_process.take().expect("Future polled after it's been completed");
+        match local_toprocess.poll() {
+            Ok(Async::Ready(())) => {
+                trace!("Substream gracefully closed");
+                let _ = events.unbounded_send(SwarmEvent::HandlerFinished {
+                    handler_future: local_toprocess,
+                });
+                Ok(Async::Ready(()))
+            },
+            Ok(Async::NotReady) => {
+                to_process = Some(local_toprocess);
+                Ok(Async::NotReady)
+            },
+            Err(error) => {
+                trace!("Substream errored: {:?}", error);
+                let _ = events.unbounded_send(SwarmEvent::HandlerError {
+                    handler_future: local_toprocess,
+                    error,
+                });
+                Ok(Async::Ready(()))
+            },
+        }
+    });
 
-    /// The transport used to dial.
-    transport: T,
-
-    /// Swarm handler.
-    handler: H,
+    tokio_executor::spawn(Box::new(fut) as Box<_>);
 }
 
-impl<T, H, If, F> Stream for SwarmEvents<T, F, H>
-where
-    T: MuxedTransport + Clone + 'static, // TODO: 'static :-/,
-    T::MultiaddrFuture: Send,
-    T::IncomingUpgrade: Send,
-    H: FnMut(T::Output, Box<Future<Item = Multiaddr, Error = IoError> + Send>) -> If,
-    If: IntoFuture<Future = F, Item = (), Error = IoError>,
-    F: Future<Item = (), Error = IoError> + 'static, // TODO: 'static :-/
-{
+/// Stream of the events that happen the swarm.
+#[must_use = "futures do nothing unless polled"]
+pub struct SwarmEvents<F> {
+    inner: mpsc::UnboundedReceiver<SwarmEvent<F>>,
+    to_spawn: stream::Fuse<mpsc::UnboundedReceiver<Box<Future<Item = (), Error = ()> + Send>>>,
+}
+
+impl<F> Stream for SwarmEvents<F> {
     type Item = SwarmEvent<F>;
     type Error = IoError;
 
+    #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let mut shared = self.shared.lock();
-        let handler = &mut self.handler;
-
         loop {
-            match shared.next_incoming.poll() {
-                Ok(Async::Ready(connec)) => {
-                    debug!("Swarm received new multiplexed incoming connection");
-                    shared.next_incoming = self.transport.clone().next_incoming();
-                    let connec = connec.map(|(out, maf)| {
-                        (
-                            out,
-                            Box::new(maf) as Box<Future<Item = Multiaddr, Error = IoError> + Send>,
-                        )
-                    });
-                    shared.listeners_upgrade.push(Box::new(connec) as Box<_>);
-                }
+            match self.to_spawn.poll() {
+                Ok(Async::Ready(Some(val))) => {
+                    trace!("Spawning processing future");
+                    tokio_executor::spawn(val);
+                },
+                Ok(Async::Ready(None)) => break,
                 Ok(Async::NotReady) => break,
-                Err(err) => {
-                    // TODO: should that stop everything?
-                    debug!("Error in multiplexed incoming connection: {:?}", err);
-                    shared.next_incoming = self.transport.clone().next_incoming();
-                    return Ok(Async::Ready(Some(SwarmEvent::IncomingError(err))));
-                }
+                Err(()) => unreachable!("An UnboundedReceiver can never error")
             }
         }
 
-        // We remove each element from `shared.listeners` one by one and add them back only
-        // if relevant.
-        for n in (0..shared.listeners.len()).rev() {
-            let (listen_addr, mut listener) = shared.listeners.swap_remove(n);
-            loop {
-                match listener.poll() {
-                    Ok(Async::Ready((Some(upgrade), remaining))) => {
-                        trace!("Swarm received new connection on listener socket");
-                        shared.listeners_upgrade.push(upgrade);
-                        listener = remaining.into_future();
-                    }
-                    Ok(Async::Ready((None, _))) => {
-                        debug!("Listener closed gracefully");
-                        return Ok(Async::Ready(Some(SwarmEvent::ListenerClosed {
-                            listen_addr,
-                        })));
-                    }
-                    Err((error, _)) => {
-                        debug!("Error in listener: {:?}", error);
-                        return Ok(Async::Ready(Some(SwarmEvent::ListenerError {
-                            listen_addr,
-                            error,
-                        })));
-                    }
-                    Ok(Async::NotReady) => {
-                        shared.listeners.push((listen_addr, listener));
-                        break;
-                    }
-                }
-            }
+        match self.inner.poll() {
+            Ok(val) => Ok(val),
+            Err(()) => unreachable!("An UnboundedReceiver can never error")
         }
-
-        // We remove each element from `shared.listeners_upgrade` one by one and add them back
-        // only if relevant.
-        for n in (0..shared.listeners_upgrade.len()).rev() {
-            let mut listener_upgrade = shared.listeners_upgrade.swap_remove(n);
-            match listener_upgrade.poll() {
-                Ok(Async::Ready((output, client_addr))) => {
-                    debug!("Successfully upgraded incoming connection");
-                    // TODO: unlock mutex before calling handler, in order to avoid deadlocks if
-                    // the user does something stupid
-                    shared
-                        .to_process
-                        .push(handler(output, client_addr).into_future());
-                }
-                Err(err) => {
-                    debug!("Error in listener upgrade: {:?}", err);
-                    return Ok(Async::Ready(Some(SwarmEvent::ListenerUpgradeError(err))));
-                }
-                Ok(Async::NotReady) => {
-                    shared.listeners_upgrade.push(listener_upgrade);
-                }
-            }
-        }
-
-        // We remove each element from `shared.dialers` one by one and add them back only
-        // if relevant.
-        for n in (0..shared.dialers.len()).rev() {
-            let (client_addr, mut dialer) = shared.dialers.swap_remove(n);
-            match dialer.poll() {
-                Ok(Async::Ready((output, mut notifier, addr))) => {
-                    trace!("Successfully upgraded dialed connection");
-                    // TODO: unlock mutex before calling handler, in order to avoid deadlocks if
-                    // the user does something stupid
-                    shared.to_process.push(handler(output, addr).into_future());
-                    notifier(Ok(()));
-                }
-                Err(error) => {
-                    return Ok(Async::Ready(Some(SwarmEvent::DialFailed {
-                        client_addr,
-                        error,
-                    })));
-                }
-                Ok(Async::NotReady) => {
-                    shared.dialers.push((client_addr, dialer));
-                }
-            }
-        }
-
-        // We remove each element from `shared.to_process` one by one and add them back only
-        // if relevant.
-        for n in (0..shared.to_process.len()).rev() {
-            let mut to_process = shared.to_process.swap_remove(n);
-            match to_process.poll() {
-                Ok(Async::Ready(())) => {
-                    trace!("Future returned by swarm handler driven to completion");
-                    return Ok(Async::Ready(Some(SwarmEvent::HandlerFinished {
-                        handler_future: to_process,
-                    })));
-                }
-                Err(error) => {
-                    debug!("Error in processing: {:?}", error);
-                    return Ok(Async::Ready(Some(SwarmEvent::HandlerError {
-                        handler_future: to_process,
-                        error,
-                    })));
-                }
-                Ok(Async::NotReady) => {
-                    shared.to_process.push(to_process);
-                }
-            }
-        }
-
-        // TODO: we never return `Ok(Ready)` because there's no way to know whether
-        //       `next_incoming()` can produce anything more in the future ; also we would need to
-        //       know when the controller has been dropped
-        shared.task_to_notify = Some(task::current());
-        Ok(Async::NotReady)
     }
-}
-
-// TODO: stronger typing
-struct Shared<T, F>
-where
-    T: MuxedTransport + 'static,
-{
-    /// Next incoming substream on the transport.
-    next_incoming: T::Incoming,
-
-    /// All the active listeners.
-    listeners: Vec<(
-        Multiaddr,
-        StreamFuture<
-            Box<
-                Stream<
-                        Item = Box<
-                            Future<
-                                    Item = (
-                                        T::Output,
-                                        Box<Future<Item = Multiaddr, Error = IoError> + Send>,
-                                    ),
-                                    Error = IoError,
-                                > + Send,
-                        >,
-                        Error = IoError,
-                    > + Send,
-            >,
-        >,
-    )>,
-
-    /// Futures that upgrade an incoming listening connection to a full connection.
-    listeners_upgrade: Vec<
-        Box<
-            Future<
-                    Item = (
-                        T::Output,
-                        Box<Future<Item = Multiaddr, Error = IoError> + Send>,
-                    ),
-                    Error = IoError,
-                > + Send,
-        >,
-    >,
-
-    /// Futures that dial a remote address.
-    ///
-    /// Contains the address we dial, so that we can cancel it if necessary.
-    dialers: Vec<(
-        Multiaddr,
-        Box<
-            Future<
-                    Item = (
-                        T::Output,
-                        Box<FnMut(Result<(), IoError>) + Send>,
-                        Box<Future<Item = Multiaddr, Error = IoError> + Send>,
-                    ),
-                    Error = IoError,
-                > + Send,
-        >,
-    )>,
-
-    /// List of futures produced by the swarm closure. Must be processed to the end.
-    to_process: Vec<F>,
-
-    /// The task to notify whenever we add a new element in one of the lists.
-    /// Necessary so that the task wakes up and the element gets polled.
-    task_to_notify: Option<task::Task>,
 }
 
 /// Event that happens in the swarm.

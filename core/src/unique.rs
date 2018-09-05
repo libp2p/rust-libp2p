@@ -108,17 +108,19 @@ impl<T> UniqueConnec<T> {
     ) -> UniqueConnecFuture<T>
     where
         T: Clone + Send + 'static, // TODO: 'static :-/
-        Du: Transport + 'static,   // TODO: 'static :-/
-        Du::Output: Into<S::Output>,
+        Du: Transport + Clone + 'static,   // TODO: 'static :-/
+        Du::Output: Into<S::Output> + Send,
         Du::Dial: Send,
+        Du::Listener: Send,
+        Du::ListenerUpgrade: Send,
         Du::MultiaddrFuture: Send,
-        S: Clone + MuxedTransport,
+        S: Clone + MuxedTransport + 'static,
         S::Dial: Send,
         S::Listener: Send,
         S::ListenerUpgrade: Send,
         S::Output: Send,
         S::MultiaddrFuture: Send,
-        F: 'static,
+        F: Future<Item = (), Error = IoError> + Send + 'static,
     {
         self.dial_inner(swarm, multiaddr, transport, true)
     }
@@ -134,17 +136,19 @@ impl<T> UniqueConnec<T> {
     ) -> UniqueConnecFuture<T>
     where
         T: Clone + Send + 'static, // TODO: 'static :-/
-        Du: Transport + 'static,   // TODO: 'static :-/
-        Du::Output: Into<S::Output>,
+        Du: Transport + Clone + 'static,   // TODO: 'static :-/
+        Du::Output: Into<S::Output> + Send,
         Du::Dial: Send,
+        Du::Listener: Send,
+        Du::ListenerUpgrade: Send,
         Du::MultiaddrFuture: Send,
-        S: Clone + MuxedTransport,
+        S: Clone + MuxedTransport + 'static,
         S::Dial: Send,
         S::Listener: Send,
         S::ListenerUpgrade: Send,
         S::Output: Send,
         S::MultiaddrFuture: Send,
-        F: 'static,
+        F: Future<Item = (), Error = IoError> + Send + 'static,
     {
         self.dial_inner(swarm, multiaddr, transport, false)
     }
@@ -159,17 +163,19 @@ impl<T> UniqueConnec<T> {
     ) -> UniqueConnecFuture<T>
     where
         T: Clone + Send + 'static, // TODO: 'static :-/
-        Du: Transport + 'static,   // TODO: 'static :-/
-        Du::Output: Into<S::Output>,
+        Du: Transport + Clone + 'static,   // TODO: 'static :-/
+        Du::Output: Into<S::Output> + Send,
         Du::Dial: Send,
+        Du::Listener: Send,
+        Du::ListenerUpgrade: Send,
         Du::MultiaddrFuture: Send,
-        S: Clone + MuxedTransport,
+        S: Clone + MuxedTransport + 'static,
         S::Dial: Send,
         S::Listener: Send,
         S::ListenerUpgrade: Send,
         S::Output: Send,
         S::MultiaddrFuture: Send,
-        F: 'static,
+        F: Future<Item = (), Error = IoError> + Send + 'static,
     {
         let mut inner = self.inner.lock();
         match &*inner {
