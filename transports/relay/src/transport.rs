@@ -39,17 +39,21 @@ pub struct RelayTransport<T, P> {
 
 impl<T, P, S> Transport for RelayTransport<T, P>
 where
-    T: Transport + Clone + 'static,
-    T::Output: AsyncRead + AsyncWrite,
+    T: Transport + Send + Clone + 'static,
+    T::Dial: Send,
+    T::Listener: Send,
+    T::ListenerUpgrade: Send,
+    T::MultiaddrFuture: Send,
+    T::Output: AsyncRead + AsyncWrite + Send,
     P: Deref<Target=S> + Clone + 'static,
     S: 'static,
     for<'a> &'a S: Peerstore
 {
     type Output = T::Output;
     type MultiaddrFuture = T::MultiaddrFuture;
-    type Listener = Box<Stream<Item=Self::ListenerUpgrade, Error=io::Error>>;
-    type ListenerUpgrade = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error>>;
-    type Dial = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error>>;
+    type Listener = Box<Stream<Item=Self::ListenerUpgrade, Error=io::Error> + Send>;
+    type ListenerUpgrade = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error> + Send>;
+    type Dial = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error> + Send>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         Err((self, addr))
@@ -85,7 +89,11 @@ where
 impl<T, P, S> RelayTransport<T, P>
 where
     T: Transport + Clone + 'static,
-    T::Output: AsyncRead + AsyncWrite,
+    T::Dial: Send,
+    T::Listener: Send,
+    T::ListenerUpgrade: Send,
+    T::MultiaddrFuture: Send,
+    T::Output: AsyncRead + AsyncWrite + Send,
     P: Deref<Target=S> + Clone + 'static,
     for<'a> &'a S: Peerstore
 {

@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{prelude::*, future};
+use futures::{future, prelude::*};
 use muxing::StreamMuxer;
 use std::io::{Error as IoError, Read, Write};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -105,8 +105,12 @@ where
 
     fn poll_inbound(&self) -> Poll<Option<Self::Substream>, IoError> {
         match *self {
-            EitherOutput::First(ref inner) => inner.poll_inbound().map(|p| p.map(|o| o.map(EitherOutput::First))),
-            EitherOutput::Second(ref inner) => inner.poll_inbound().map(|p| p.map(|o| o.map(EitherOutput::Second))),
+            EitherOutput::First(ref inner) => inner
+                .poll_inbound()
+                .map(|p| p.map(|o| o.map(EitherOutput::First))),
+            EitherOutput::Second(ref inner) => inner
+                .poll_inbound()
+                .map(|p| p.map(|o| o.map(EitherOutput::Second))),
         }
     }
 
@@ -117,56 +121,63 @@ where
         }
     }
 
-    fn poll_outbound(&self, substream: &mut Self::OutboundSubstream) -> Poll<Option<Self::Substream>, IoError> {
+    fn poll_outbound(
+        &self,
+        substream: &mut Self::OutboundSubstream,
+    ) -> Poll<Option<Self::Substream>, IoError> {
         match (self, substream) {
-            (EitherOutput::First(ref inner), EitherOutbound::A(ref mut substream)) => {
-                inner.poll_outbound(substream).map(|p| p.map(|o| o.map(EitherOutput::First)))
-            },
-            (EitherOutput::Second(ref inner), EitherOutbound::B(ref mut substream)) => {
-                inner.poll_outbound(substream).map(|p| p.map(|o| o.map(EitherOutput::Second)))
-            },
-            _ => panic!("Wrong API usage")
+            (EitherOutput::First(ref inner), EitherOutbound::A(ref mut substream)) => inner
+                .poll_outbound(substream)
+                .map(|p| p.map(|o| o.map(EitherOutput::First))),
+            (EitherOutput::Second(ref inner), EitherOutbound::B(ref mut substream)) => inner
+                .poll_outbound(substream)
+                .map(|p| p.map(|o| o.map(EitherOutput::Second))),
+            _ => panic!("Wrong API usage"),
         }
     }
 
     fn destroy_outbound(&self, substream: Self::OutboundSubstream) {
         match *self {
-            EitherOutput::First(ref inner) => {
-                match substream {
-                    EitherOutbound::A(substream) => inner.destroy_outbound(substream),
-                    _ => panic!("Wrong API usage")
-                }
+            EitherOutput::First(ref inner) => match substream {
+                EitherOutbound::A(substream) => inner.destroy_outbound(substream),
+                _ => panic!("Wrong API usage"),
             },
-            EitherOutput::Second(ref inner) => {
-                match substream {
-                    EitherOutbound::B(substream) => inner.destroy_outbound(substream),
-                    _ => panic!("Wrong API usage")
-                }
+            EitherOutput::Second(ref inner) => match substream {
+                EitherOutbound::B(substream) => inner.destroy_outbound(substream),
+                _ => panic!("Wrong API usage"),
             },
         }
     }
 
-    fn read_substream(&self, substream: &mut Self::Substream, buf: &mut [u8]) -> Result<usize, IoError> {
+    fn read_substream(
+        &self,
+        substream: &mut Self::Substream,
+        buf: &mut [u8],
+    ) -> Result<usize, IoError> {
         match (self, substream) {
             (EitherOutput::First(ref inner), EitherOutput::First(ref mut substream)) => {
                 inner.read_substream(substream, buf)
-            },
+            }
             (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut substream)) => {
                 inner.read_substream(substream, buf)
-            },
-            _ => panic!("Wrong API usage")
+            }
+            _ => panic!("Wrong API usage"),
         }
     }
 
-    fn write_substream(&self, substream: &mut Self::Substream, buf: &[u8]) -> Result<usize, IoError> {
+    fn write_substream(
+        &self,
+        substream: &mut Self::Substream,
+        buf: &[u8],
+    ) -> Result<usize, IoError> {
         match (self, substream) {
             (EitherOutput::First(ref inner), EitherOutput::First(ref mut substream)) => {
                 inner.write_substream(substream, buf)
-            },
+            }
             (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut substream)) => {
                 inner.write_substream(substream, buf)
-            },
-            _ => panic!("Wrong API usage")
+            }
+            _ => panic!("Wrong API usage"),
         }
     }
 
@@ -174,11 +185,11 @@ where
         match (self, substream) {
             (EitherOutput::First(ref inner), EitherOutput::First(ref mut substream)) => {
                 inner.flush_substream(substream)
-            },
+            }
             (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut substream)) => {
                 inner.flush_substream(substream)
-            },
-            _ => panic!("Wrong API usage")
+            }
+            _ => panic!("Wrong API usage"),
         }
     }
 
@@ -186,27 +197,23 @@ where
         match (self, substream) {
             (EitherOutput::First(ref inner), EitherOutput::First(ref mut substream)) => {
                 inner.shutdown_substream(substream)
-            },
+            }
             (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut substream)) => {
                 inner.shutdown_substream(substream)
-            },
-            _ => panic!("Wrong API usage")
+            }
+            _ => panic!("Wrong API usage"),
         }
     }
 
     fn destroy_substream(&self, substream: Self::Substream) {
         match *self {
-            EitherOutput::First(ref inner) => {
-                match substream {
-                    EitherOutput::First(substream) => inner.destroy_substream(substream),
-                    _ => panic!("Wrong API usage")
-                }
+            EitherOutput::First(ref inner) => match substream {
+                EitherOutput::First(substream) => inner.destroy_substream(substream),
+                _ => panic!("Wrong API usage"),
             },
-            EitherOutput::Second(ref inner) => {
-                match substream {
-                    EitherOutput::Second(substream) => inner.destroy_substream(substream),
-                    _ => panic!("Wrong API usage")
-                }
+            EitherOutput::Second(ref inner) => match substream {
+                EitherOutput::Second(substream) => inner.destroy_substream(substream),
+                _ => panic!("Wrong API usage"),
             },
         }
     }
@@ -238,9 +245,11 @@ where
     #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         match self {
-            &mut EitherListenStream::First(ref mut a) => a.poll()
+            &mut EitherListenStream::First(ref mut a) => a
+                .poll()
                 .map(|i| i.map(|v| v.map(EitherListenUpgrade::First))),
-            &mut EitherListenStream::Second(ref mut a) => a.poll()
+            &mut EitherListenStream::Second(ref mut a) => a
+                .poll()
                 .map(|i| i.map(|v| v.map(EitherListenUpgrade::Second))),
         }
     }
@@ -269,11 +278,17 @@ where
         match self {
             &mut EitherListenUpgrade::First(ref mut a) => {
                 let (item, addr) = try_ready!(a.poll());
-                Ok(Async::Ready((EitherOutput::First(item), future::Either::A(addr))))
+                Ok(Async::Ready((
+                    EitherOutput::First(item),
+                    future::Either::A(addr),
+                )))
             }
             &mut EitherListenUpgrade::Second(ref mut b) => {
                 let (item, addr) = try_ready!(b.poll());
-                Ok(Async::Ready((EitherOutput::Second(item), future::Either::B(addr))))
+                Ok(Async::Ready((
+                    EitherOutput::Second(item),
+                    future::Either::B(addr),
+                )))
             }
         }
     }

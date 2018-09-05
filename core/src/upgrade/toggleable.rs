@@ -83,7 +83,8 @@ where
 
     type Output = U::Output;
     type MultiaddrFuture = U::MultiaddrFuture;
-    type Future = future::Either<future::Empty<(U::Output, U::MultiaddrFuture), IoError>, U::Future>;
+    type Future =
+        future::Either<future::Empty<(U::Output, U::MultiaddrFuture), IoError>, U::Future>;
 
     #[inline]
     fn upgrade(
@@ -110,7 +111,8 @@ pub struct ToggleableIter<I> {
 }
 
 impl<I> Iterator for ToggleableIter<I>
-where I: Iterator
+where
+    I: Iterator,
 {
     type Item = I::Item;
 
@@ -131,5 +133,4 @@ where I: Iterator
     }
 }
 
-impl<I> ExactSizeIterator for ToggleableIter<I>
-where I: ExactSizeIterator {}
+impl<I> ExactSizeIterator for ToggleableIter<I> where I: ExactSizeIterator {}

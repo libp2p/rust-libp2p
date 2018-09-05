@@ -18,6 +18,7 @@ protobuf = "2.0.2"
 quick-error = "1.2"
 rw-stream-sink = { path = "../misc/rw-stream-sink" }
 smallvec = "0.5"
+tokio-executor = "0.1"
 tokio-io = "0.1"
 
 [dev-dependencies]

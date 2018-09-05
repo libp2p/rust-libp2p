@@ -219,6 +219,7 @@ extern crate protobuf;
 extern crate quick_error;
 extern crate rw_stream_sink;
 extern crate smallvec;
+extern crate tokio_executor;
 extern crate tokio_io;
 
 #[cfg(test)]

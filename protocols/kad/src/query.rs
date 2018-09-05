@@ -59,10 +59,10 @@ pub enum QueryEvent<TOut> {
 pub fn find_node<'a, FBuckets, FFindNode>(
     query_params: QueryParams<FBuckets, FFindNode>,
     searched_key: PeerId,
-) -> Box<Stream<Item = QueryEvent<Vec<PeerId>>, Error = IoError> + 'a>
+) -> Box<Stream<Item = QueryEvent<Vec<PeerId>>, Error = IoError> + Send + 'a>
 where
     FBuckets: Fn(PeerId) -> Vec<PeerId> + 'a + Clone,
-    FFindNode: Fn(Multiaddr, PeerId) -> Box<Future<Item = Vec<protocol::Peer>, Error = IoError>> + 'a + Clone,
+    FFindNode: Fn(Multiaddr, PeerId) -> Box<Future<Item = Vec<protocol::Peer>, Error = IoError> + Send> + 'a + Clone,
 {
     query(query_params, searched_key, 20) // TODO: constant
 }
@@ -74,10 +74,10 @@ where
 pub fn refresh<'a, FBuckets, FFindNode>(
     query_params: QueryParams<FBuckets, FFindNode>,
     bucket_num: usize,
-) -> Box<Stream<Item = QueryEvent<()>, Error = IoError> + 'a>
+) -> Box<Stream<Item = QueryEvent<()>, Error = IoError> + Send + 'a>
 where
     FBuckets: Fn(PeerId) -> Vec<PeerId> + 'a + Clone,
-    FFindNode: Fn(Multiaddr, PeerId) -> Box<Future<Item = Vec<protocol::Peer>, Error = IoError>> + 'a + Clone,
+    FFindNode: Fn(Multiaddr, PeerId) -> Box<Future<Item = Vec<protocol::Peer>, Error = IoError> + Send> + 'a + Clone,
 {
     let peer_id = match gen_random_id(&query_params.local_id, bucket_num) {
         Ok(p) => p,
@@ -132,10 +132,10 @@ fn query<'a, FBuckets, FFindNode>(
     query_params: QueryParams<FBuckets, FFindNode>,
     searched_key: PeerId,
     num_results: usize,
-) -> Box<Stream<Item = QueryEvent<Vec<PeerId>>, Error = IoError> + 'a>
+) -> Box<Stream<Item = QueryEvent<Vec<PeerId>>, Error = IoError> + Send + 'a>
 where
     FBuckets: Fn(PeerId) -> Vec<PeerId> + 'a + Clone,
-    FFindNode: Fn(Multiaddr, PeerId) -> Box<Future<Item = Vec<protocol::Peer>, Error = IoError>> + 'a + Clone,
+    FFindNode: Fn(Multiaddr, PeerId) -> Box<Future<Item = Vec<protocol::Peer>, Error = IoError> + Send> + 'a + Clone,
 {
     debug!("Start query for {:?} ; num results = {}", searched_key, num_results);
 
@@ -147,7 +147,7 @@ where
         result: Vec<PeerId>,
         // For each open connection, a future with the response of the remote.
         // Note that don't use a `SmallVec` here because `select_all` produces a `Vec`.
-        current_attempts_fut: Vec<Box<Future<Item = Vec<protocol::Peer>, Error = IoError> + 'a>>,
+        current_attempts_fut: Vec<Box<Future<Item = Vec<protocol::Peer>, Error = IoError> + Send + 'a>>,
         // For each open connection, the peer ID that we are connected to.
         // Must always have the same length as `current_attempts_fut`.
         current_attempts_addrs: SmallVec<[PeerId; 32]>,

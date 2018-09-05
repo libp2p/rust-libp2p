@@ -65,7 +65,10 @@ where
         let map = self.map;
 
         match self.transport.dial(addr) {
-            Ok(future) => Ok(MapErrDial { inner: future, map: Some(map) }),
+            Ok(future) => Ok(MapErrDial {
+                inner: future,
+                map: Some(map),
+            }),
             Err((transport, addr)) => Err((MapErr { transport, map }, addr)),
         }
     }
@@ -95,13 +98,16 @@ where
 
 /// Listening stream for `MapErr`.
 pub struct MapErrListener<T, F>
-where T: Transport {
+where
+    T: Transport,
+{
     inner: T::Listener,
     map: F,
 }
 
 impl<T, F> Stream for MapErrListener<T, F>
-where T: Transport,
+where
+    T: Transport,
     F: FnOnce(IoError) -> IoError + Clone,
 {
     type Item = MapErrListenerUpgrade<T, F>;
@@ -110,22 +116,27 @@ where T: Transport,
     #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         match try_ready!(self.inner.poll()) {
-            Some(value) => Ok(Async::Ready(
-                Some(MapErrListenerUpgrade { inner: value, map: Some(self.map.clone()) }))),
-            None => Ok(Async::Ready(None))
+            Some(value) => Ok(Async::Ready(Some(MapErrListenerUpgrade {
+                inner: value,
+                map: Some(self.map.clone()),
+            }))),
+            None => Ok(Async::Ready(None)),
         }
     }
 }
 
 /// Listening upgrade future for `MapErr`.
 pub struct MapErrListenerUpgrade<T, F>
-where T: Transport {
+where
+    T: Transport,
+{
     inner: T::ListenerUpgrade,
     map: Option<F>,
 }
 
 impl<T, F> Future for MapErrListenerUpgrade<T, F>
-where T: Transport,
+where
+    T: Transport,
     F: FnOnce(IoError) -> IoError,
 {
     type Item = (T::Output, T::MultiaddrFuture);
@@ -134,9 +145,7 @@ where T: Transport,
     #[inline]
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self.inner.poll() {
-            Ok(Async::Ready(value)) => {
-                Ok(Async::Ready(value))
-            },
+            Ok(Async::Ready(value)) => Ok(Async::Ready(value)),
             Ok(Async::NotReady) => Ok(Async::NotReady),
             Err(err) => {
                 let map = self.map.take().expect("poll() called again after error");
@@ -148,7 +157,8 @@ where T: Transport,
 
 /// Dialing future for `MapErr`.
 pub struct MapErrDial<T, F>
-where T: Transport,
+where
+    T: Transport,
     F: FnOnce(IoError) -> IoError,
 {
     inner: T::Dial,
@@ -156,7 +166,8 @@ where T: Transport,
 }
 
 impl<T, F> Future for MapErrDial<T, F>
-where T: Transport,
+where
+    T: Transport,
     F: FnOnce(IoError) -> IoError,
 {
     type Item = (T::Output, T::MultiaddrFuture);
@@ -165,9 +176,7 @@ where T: Transport,
     #[inline]
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self.inner.poll() {
-            Ok(Async::Ready(value)) => {
-                Ok(Async::Ready(value))
-            },
+            Ok(Async::Ready(value)) => Ok(Async::Ready(value)),
             Ok(Async::NotReady) => Ok(Async::NotReady),
             Err(err) => {
                 let map = self.map.take().expect("poll() called again after error");
@@ -179,14 +188,16 @@ where T: Transport,
 
 /// Incoming future for `MapErr`.
 pub struct MapErrIncoming<T, F>
-where T: MuxedTransport
+where
+    T: MuxedTransport,
 {
     inner: T::Incoming,
     map: Option<F>,
 }
 
 impl<T, F> Future for MapErrIncoming<T, F>
-where T: MuxedTransport,
+where
+    T: MuxedTransport,
     F: FnOnce(IoError) -> IoError,
 {
     type Item = MapErrIncomingUpgrade<T, F>;
@@ -202,7 +213,7 @@ where T: MuxedTransport,
                     map: Some(map),
                 };
                 Ok(Async::Ready(value))
-            },
+            }
             Ok(Async::NotReady) => Ok(Async::NotReady),
             Err(err) => {
                 let map = self.map.take().expect("poll() called again after error");
@@ -214,14 +225,16 @@ where T: MuxedTransport,
 
 /// Incoming upgrade future for `MapErr`.
 pub struct MapErrIncomingUpgrade<T, F>
-where T: MuxedTransport
+where
+    T: MuxedTransport,
 {
     inner: T::IncomingUpgrade,
     map: Option<F>,
 }
 
 impl<T, F> Future for MapErrIncomingUpgrade<T, F>
-where T: MuxedTransport,
+where
+    T: MuxedTransport,
     F: FnOnce(IoError) -> IoError,
 {
     type Item = (T::Output, T::MultiaddrFuture);
@@ -230,9 +243,7 @@ where T: MuxedTransport,
     #[inline]
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self.inner.poll() {
-            Ok(Async::Ready(value)) => {
-                Ok(Async::Ready(value))
-            },
+            Ok(Async::Ready(value)) => Ok(Async::Ready(value)),
             Ok(Async::NotReady) => Ok(Async::NotReady),
             Err(err) => {
                 let map = self.map.take().expect("poll() called again after error");

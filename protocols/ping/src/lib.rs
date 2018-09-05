@@ -65,10 +65,10 @@
 //!     .dial("127.0.0.1:12345".parse::<libp2p_core::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())
 //!     .and_then(|(out, _)| {
 //!         match out {
-//!             PingOutput::Ponger(processing) => Box::new(processing) as Box<Future<Item = _, Error = _>>,
+//!             PingOutput::Ponger(processing) => Box::new(processing) as Box<Future<Item = _, Error = _> + Send>,
 //!             PingOutput::Pinger { mut pinger, processing } => {
 //!                 let f = pinger.ping().map_err(|_| panic!()).select(processing).map(|_| ()).map_err(|(err, _)| err);
-//!                 Box::new(f) as Box<Future<Item = _, Error = _>>
+//!                 Box::new(f) as Box<Future<Item = _, Error = _> + Send>
 //!             },
 //!         }
 //!     });
@@ -118,15 +118,15 @@ pub enum PingOutput {
         /// Object to use in order to ping the remote.
         pinger: Pinger,
         /// Future that drives the processing of the pings.
-        processing: Box<Future<Item = (), Error = IoError>>,
+        processing: Box<Future<Item = (), Error = IoError> + Send>,
     },
     /// We are on the listening side.
-    Ponger(Box<Future<Item = (), Error = IoError>>),
+    Ponger(Box<Future<Item = (), Error = IoError> + Send>),
 }
 
 impl<C, Maf> ConnectionUpgrade<C, Maf> for Ping
 where
-    C: AsyncRead + AsyncWrite + 'static,
+    C: AsyncRead + AsyncWrite + Send + 'static,
 {
     type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
     type UpgradeIdentifier = ();
@@ -158,7 +158,7 @@ where
 }
 
 /// Upgrades a connection from the dialer side.
-fn upgrade_as_dialer(socket: impl AsyncRead + AsyncWrite + 'static) -> PingOutput {
+fn upgrade_as_dialer(socket: impl AsyncRead + AsyncWrite + Send + 'static) -> PingOutput {
     // # How does it work?
     //
     // All the actual processing is performed by the *ponger*.
@@ -199,7 +199,7 @@ fn upgrade_as_dialer(socket: impl AsyncRead + AsyncWrite + 'static) -> PingOutpu
                             Box::new(
                                 sink.send(payload)
                                     .map(|sink| Loop::Continue((sink, stream))),
-                            ) as Box<Future<Item = _, Error = _>>
+                            ) as Box<Future<Item = _, Error = _> + Send>
                         }
                         Message::Received(payload) => {
                             // Received a payload from the remote.
@@ -210,17 +210,17 @@ fn upgrade_as_dialer(socket: impl AsyncRead + AsyncWrite + 'static) -> PingOutpu
                                 debug!("Received pong (payload={:?}) ; ping fufilled", payload);
                                 let _ = fut.send(());
                                 Box::new(Ok(Loop::Continue((sink, stream))).into_future())
-                                    as Box<Future<Item = _, Error = _>>
+                                    as Box<Future<Item = _, Error = _> + Send>
                             } else {
                                 // Payload was unexpected. Closing connection.
                                 debug!("Received invalid payload ({:?}) ; closing", payload);
                                 Box::new(Ok(Loop::Break(())).into_future())
-                                    as Box<Future<Item = _, Error = _>>
+                                    as Box<Future<Item = _, Error = _> + Send>
                             }
                         }
                     }
                 } else {
-                    Box::new(Ok(Loop::Break(())).into_future()) as Box<Future<Item = _, Error = _>>
+                    Box::new(Ok(Loop::Break(())).into_future()) as Box<Future<Item = _, Error = _> + Send>
                 }
             })
     });
@@ -232,7 +232,7 @@ fn upgrade_as_dialer(socket: impl AsyncRead + AsyncWrite + 'static) -> PingOutpu
 }
 
 /// Upgrades a connection from the listener side.
-fn upgrade_as_listener(socket: impl AsyncRead + AsyncWrite + 'static) -> PingOutput {
+fn upgrade_as_listener(socket: impl AsyncRead + AsyncWrite + Send + 'static) -> PingOutput {
     let sink_stream = Framed::new(socket, Codec);
     let (sink, stream) = sink_stream.split();
 
@@ -247,10 +247,10 @@ fn upgrade_as_listener(socket: impl AsyncRead + AsyncWrite + 'static) -> PingOut
                     Box::new(
                         sink.send(payload.freeze())
                             .map(|sink| Loop::Continue((sink, stream))),
-                    ) as Box<Future<Item = _, Error = _>>
+                    ) as Box<Future<Item = _, Error = _> + Send>
                 } else {
                     // Connection was closed
-                    Box::new(Ok(Loop::Break(())).into_future()) as Box<Future<Item = _, Error = _>>
+                    Box::new(Ok(Loop::Break(())).into_future()) as Box<Future<Item = _, Error = _> + Send>
                 }
             })
     });
@@ -269,7 +269,7 @@ impl Pinger {
     ///
     /// **Note**: Please be aware that there is no timeout on the ping. You should handle the
     ///           timeout yourself when you call this function.
-    pub fn ping(&mut self) -> Box<Future<Item = (), Error = Box<Error + Send + Sync>>> {
+    pub fn ping(&mut self) -> Box<Future<Item = (), Error = Box<Error + Send + Sync>> + Send> {
         let (tx, rx) = oneshot::channel();
 
         let payload: [u8; 32] = self.rng.sample(Standard);

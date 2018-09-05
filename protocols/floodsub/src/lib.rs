@@ -91,8 +91,8 @@ impl FloodSubUpgrade {
 
 impl<C, Maf> ConnectionUpgrade<C, Maf> for FloodSubUpgrade
 where
-    C: AsyncRead + AsyncWrite + 'static,
-    Maf: Future<Item = Multiaddr, Error = IoError> + 'static,
+    C: AsyncRead + AsyncWrite + Send + 'static,
+    Maf: Future<Item = Multiaddr, Error = IoError> + Send + 'static,
 {
     type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
     type UpgradeIdentifier = ();
@@ -104,7 +104,7 @@ where
 
     type Output = FloodSubFuture;
     type MultiaddrFuture = future::FutureResult<Multiaddr, IoError>;
-    type Future = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
+    type Future = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
 
     #[inline]
     fn upgrade(
@@ -208,7 +208,7 @@ where
                                     // TODO: what if multiple connections?
                                     inner.remote_connections.write().remove(&remote_addr);
                                     let future = future::ok(future::Loop::Break(()));
-                                    Box::new(future) as Box<Future<Item = _, Error = _>>
+                                    Box::new(future) as Box<Future<Item = _, Error = _> + Send>
                                 }
                             }
                         })
@@ -521,7 +521,7 @@ pub struct Message {
 /// Implementation of `Future` that must be driven to completion in order for floodsub to work.
 #[must_use = "futures do nothing unless polled"]
 pub struct FloodSubFuture {
-    inner: Box<Future<Item = (), Error = IoError>>,
+    inner: Box<Future<Item = (), Error = IoError> + Send>,
 }
 
 impl Future for FloodSubFuture {

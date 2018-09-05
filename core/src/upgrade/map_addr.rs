@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::io::Error as IoError;
 use futures::{future, prelude::*};
+use std::io::Error as IoError;
 use tokio_io::{AsyncRead, AsyncWrite};
 use upgrade::{ConnectionUpgrade, Endpoint};
 use Multiaddr;
@@ -27,7 +27,8 @@ use Multiaddr;
 /// Applies a closure on the output of a connection upgrade.
 #[inline]
 pub fn map_with_addr<U, F, I, O>(upgrade: U, map: F) -> MapAddr<U, F>
-    where F: FnOnce(I, &Multiaddr) -> O
+where
+    F: FnOnce(I, &Multiaddr) -> O,
 {
     MapAddr { upgrade, map }
 }
@@ -42,11 +43,11 @@ pub struct MapAddr<U, F> {
 impl<C, U, F, O, Maf> ConnectionUpgrade<C, Maf> for MapAddr<U, F>
 where
     U: ConnectionUpgrade<C, Maf>,
-    U::Future: 'static,     // TODO: 'static :(
-    U::MultiaddrFuture: Future<Item = Multiaddr, Error = IoError> + 'static,    // TODO: 'static :(
-    U::Output: 'static,     // TODO: 'static :(
+    U::Future: Send + 'static, // TODO: 'static :(
+    U::MultiaddrFuture: Future<Item = Multiaddr, Error = IoError> + Send + 'static, // TODO: 'static :(
+    U::Output: Send + 'static, // TODO: 'static :(
     C: AsyncRead + AsyncWrite,
-    F: FnOnce(U::Output, &Multiaddr) -> O + 'static,     // TODO: 'static :(
+    F: FnOnce(U::Output, &Multiaddr) -> O + Send + 'static, // TODO: 'static :(
 {
     type NamesIter = U::NamesIter;
     type UpgradeIdentifier = U::UpgradeIdentifier;
@@ -57,7 +58,7 @@ where
 
     type Output = O;
     type MultiaddrFuture = future::FutureResult<Multiaddr, IoError>;
-    type Future = Box<Future<Item = (O, Self::MultiaddrFuture), Error = IoError>>;
+    type Future = Box<Future<Item = (O, Self::MultiaddrFuture), Error = IoError> + Send>;
 
     fn upgrade(
         self,
@@ -67,7 +68,8 @@ where
         remote_addr: Maf,
     ) -> Self::Future {
         let map = self.map;
-        let fut = self.upgrade
+        let fut = self
+            .upgrade
             .upgrade(socket, id, ty, remote_addr)
             .and_then(|(out, addr)| {
                 addr.map(move |addr| {

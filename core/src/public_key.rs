@@ -18,10 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use PeerId;
 use keys_proto;
 use protobuf::{self, Message};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
+use PeerId;
 
 /// Public key used by the remote.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47,15 +47,15 @@ impl PublicKey {
             PublicKey::Rsa(data) => {
                 public_key.set_Type(keys_proto::KeyType::RSA);
                 public_key.set_Data(data);
-            },
+            }
             PublicKey::Ed25519(data) => {
                 public_key.set_Type(keys_proto::KeyType::Ed25519);
                 public_key.set_Data(data);
-            },
+            }
             PublicKey::Secp256k1(data) => {
                 public_key.set_Type(keys_proto::KeyType::Secp256k1);
                 public_key.set_Data(data);
-            },
+            }
         };
 
         public_key
@@ -68,22 +68,16 @@ impl PublicKey {
     /// Used at various locations in the wire protocol of libp2p.
     #[inline]
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<PublicKey, IoError> {
-        let mut pubkey = protobuf::parse_from_bytes::<keys_proto::PublicKey>(bytes)
-            .map_err(|err| {
+        let mut pubkey =
+            protobuf::parse_from_bytes::<keys_proto::PublicKey>(bytes).map_err(|err| {
                 debug!("failed to parse public key's protobuf encoding");
                 IoError::new(IoErrorKind::InvalidData, err)
             })?;
 
         Ok(match pubkey.get_Type() {
-            keys_proto::KeyType::RSA => {
-                PublicKey::Rsa(pubkey.take_Data())
-            },
-            keys_proto::KeyType::Ed25519 => {
-                PublicKey::Ed25519(pubkey.take_Data())
-            },
-            keys_proto::KeyType::Secp256k1 => {
-                PublicKey::Secp256k1(pubkey.take_Data())
-            },
+            keys_proto::KeyType::RSA => PublicKey::Rsa(pubkey.take_Data()),
+            keys_proto::KeyType::Ed25519 => PublicKey::Ed25519(pubkey.take_Data()),
+            keys_proto::KeyType::Secp256k1 => PublicKey::Secp256k1(pubkey.take_Data()),
         })
     }
 
@@ -101,8 +95,9 @@ mod tests {
 
     #[test]
     fn key_into_protobuf_then_back() {
-        let key = PublicKey::Rsa((0 .. 2048).map(|_| -> u8 { random() }).collect());
-        let second = PublicKey::from_protobuf_encoding(&key.clone().into_protobuf_encoding()).unwrap();
+        let key = PublicKey::Rsa((0..2048).map(|_| -> u8 { random() }).collect());
+        let second =
+            PublicKey::from_protobuf_encoding(&key.clone().into_protobuf_encoding()).unwrap();
         assert_eq!(key, second);
     }
 }
