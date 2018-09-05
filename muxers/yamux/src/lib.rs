@@ -105,6 +105,14 @@ where
     #[inline]
     fn destroy_substream(&self, _substream: Self::Substream) {
     }
+
+    #[inline]
+    fn close_inbound(&self) {
+    }
+
+    #[inline]
+    fn close_outbound(&self) {
+    }
 }
 
 

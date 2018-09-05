@@ -219,7 +219,9 @@ extern crate protobuf;
 extern crate quick_error;
 extern crate rw_stream_sink;
 extern crate smallvec;
+extern crate tokio_executor;
 extern crate tokio_io;
+extern crate void;
 
 #[cfg(test)]
 extern crate rand;
@@ -243,6 +245,7 @@ mod unique;
 
 pub mod either;
 pub mod muxing;
+pub mod nodes;
 pub mod swarm;
 pub mod transport;
 pub mod upgrade;

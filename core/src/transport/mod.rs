@@ -126,7 +126,7 @@ pub trait Transport {
     /// Turns this `Transport` into an abstract boxed transport.
     #[inline]
     fn boxed(self) -> boxed::Boxed<Self::Output>
-    where Self: Sized + MuxedTransport + Clone + Send + Sync + 'static,
+    where Self: Sized + Clone + Send + Sync + 'static,
           Self::Dial: Send + 'static,
           Self::Listener: Send + 'static,
           Self::ListenerUpgrade: Send + 'static,
