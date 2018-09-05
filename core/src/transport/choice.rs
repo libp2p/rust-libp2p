@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use either::{EitherListenStream, EitherListenUpgrade, EitherOutput};
-use futures::{prelude::*, future};
+use futures::{future, prelude::*};
 use multiaddr::Multiaddr;
 use std::io::Error as IoError;
 use transport::{MuxedTransport, Transport};
@@ -89,12 +89,14 @@ where
     B::Incoming: Send + 'static,        // TODO: meh :-/
     A::IncomingUpgrade: Send + 'static, // TODO: meh :-/
     B::IncomingUpgrade: Send + 'static, // TODO: meh :-/
-    A::Output: 'static,          // TODO: meh :-/
-    B::Output: 'static,          // TODO: meh :-/
+    A::Output: 'static,                 // TODO: meh :-/
+    B::Output: 'static,                 // TODO: meh :-/
 {
     type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError> + Send>;
-    type IncomingUpgrade =
-        Box<Future<Item = (EitherOutput<A::Output, B::Output>, Self::MultiaddrFuture), Error = IoError> + Send>;
+    type IncomingUpgrade = Box<
+        Future<Item = (EitherOutput<A::Output, B::Output>, Self::MultiaddrFuture), Error = IoError>
+            + Send,
+    >;
 
     #[inline]
     fn next_incoming(self) -> Self::Incoming {

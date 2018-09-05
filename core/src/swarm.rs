@@ -20,8 +20,8 @@
 
 use futures::stream::StreamFuture;
 use futures::sync::oneshot;
-use futures::{Async, Future, IntoFuture, Poll, Stream};
 use futures::task;
+use futures::{Async, Future, IntoFuture, Poll, Stream};
 use parking_lot::Mutex;
 use std::fmt;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -59,10 +59,7 @@ where
         handler: handler,
     };
 
-    let controller = SwarmController {
-        transport,
-        shared,
-    };
+    let controller = SwarmController { transport, shared };
 
     (controller, future)
 }
@@ -120,8 +117,11 @@ where
     /// Therefore if the closure in the swarm has some side effect (eg. write something in a
     /// variable), this side effect will be observable when this future succeeds.
     #[inline]
-    pub fn dial<Du>(&self, multiaddr: Multiaddr, transport: Du)
-        -> Result<impl Future<Item = (), Error = IoError>, Multiaddr>
+    pub fn dial<Du>(
+        &self,
+        multiaddr: Multiaddr,
+        transport: Du,
+    ) -> Result<impl Future<Item = (), Error = IoError>, Multiaddr>
     where
         Du: Transport + 'static, // TODO: 'static :-/
         Du::Dial: Send,
@@ -135,8 +135,12 @@ where
     /// dialing fails or the handler has been called with the resulting future.
     ///
     /// The returned future is filled with the output of `then`.
-    pub(crate) fn dial_then<Du, TThen>(&self, multiaddr: Multiaddr, transport: Du, then: TThen)
-        -> Result<impl Future<Item = (), Error = IoError>, Multiaddr>
+    pub(crate) fn dial_then<Du, TThen>(
+        &self,
+        multiaddr: Multiaddr,
+        transport: Du,
+        then: TThen,
+    ) -> Result<impl Future<Item = (), Error = IoError>, Multiaddr>
     where
         Du: Transport + 'static, // TODO: 'static :-/
         Du::Dial: Send,
@@ -155,22 +159,23 @@ where
                 // Unfortunately the `Box<FnOnce(_)>` type is still unusable in Rust right now,
                 // so we use a `Box<FnMut(_)>` instead and panic if it is called multiple times.
                 let mut then = Box::new(move |val: Result<(), IoError>| {
-                    let then = then.take().expect("The Boxed FnMut should only be called once");
+                    let then = then
+                        .take()
+                        .expect("The Boxed FnMut should only be called once");
                     then(val);
                 }) as Box<FnMut(_) + Send>;
 
-                let dial = dial.then(|result| {
-                    match result {
-                        Ok((output, client_addr)) => {
-                            let client_addr = Box::new(client_addr) as Box<Future<Item = _, Error = _> + Send>;
-                            Ok((output.into(), then, client_addr))
-                        }
-                        Err(err) => {
-                            debug!("Error in dialer upgrade: {:?}", err);
-                            let err_clone = IoError::new(err.kind(), err.to_string());
-                            then(Err(err));
-                            Err(err_clone)
-                        }
+                let dial = dial.then(|result| match result {
+                    Ok((output, client_addr)) => {
+                        let client_addr =
+                            Box::new(client_addr) as Box<Future<Item = _, Error = _> + Send>;
+                        Ok((output.into(), then, client_addr))
+                    }
+                    Err(err) => {
+                        debug!("Error in dialer upgrade: {:?}", err);
+                        let err_clone = IoError::new(err.kind(), err.to_string());
+                        then(Err(err));
+                        Err(err_clone)
                     }
                 });
 
@@ -180,13 +185,13 @@ where
                     task.notify();
                 }
 
-                Ok(rx.then(|result| {
-                    match result {
-                        Ok(Ok(())) => Ok(()),
-                        Ok(Err(err)) => Err(err),
-                        Err(_) => Err(IoError::new(IoErrorKind::ConnectionAborted,
-                            "dial cancelled the swarm future has been destroyed")),
-                    }
+                Ok(rx.then(|result| match result {
+                    Ok(Ok(())) => Ok(()),
+                    Ok(Err(err)) => Err(err),
+                    Err(_) => Err(IoError::new(
+                        IoErrorKind::ConnectionAborted,
+                        "dial cancelled the swarm future has been destroyed",
+                    )),
                 }))
             }
             Err((_, multiaddr)) => Err(multiaddr),
@@ -199,9 +204,7 @@ where
     /// dispatched to the handler.
     pub fn interrupt_dial(&self, multiaddr: &Multiaddr) {
         let mut shared = self.shared.lock();
-        shared.dialers.retain(|dialer| {
-            &dialer.0 != multiaddr
-        });
+        shared.dialers.retain(|dialer| &dialer.0 != multiaddr);
     }
 
     /// Adds a multiaddr to listen on. All the incoming connections will use the `upgrade` that
@@ -212,16 +215,19 @@ where
             Ok((listener, new_addr)) => {
                 trace!("Swarm listening on {}", new_addr);
                 let mut shared = self.shared.lock();
-                let listener = Box::new(
-                    listener.map(|f| {
-                        let f = f.map(|(out, maf)| {
-                            (out, Box::new(maf) as Box<Future<Item = Multiaddr, Error = IoError> + Send>)
-                        });
+                let listener = Box::new(listener.map(|f| {
+                    let f = f.map(|(out, maf)| {
+                        (
+                            out,
+                            Box::new(maf) as Box<Future<Item = Multiaddr, Error = IoError> + Send>,
+                        )
+                    });
 
-                        Box::new(f) as Box<Future<Item = _, Error = _> + Send>
-                    }),
-                ) as Box<Stream<Item = _, Error = _> + Send>;
-                shared.listeners.push((new_addr.clone(), listener.into_future()));
+                    Box::new(f) as Box<Future<Item = _, Error = _> + Send>
+                })) as Box<Stream<Item = _, Error = _> + Send>;
+                shared
+                    .listeners
+                    .push((new_addr.clone(), listener.into_future()));
                 if let Some(task) = shared.task_to_notify.take() {
                     task.notify();
                 }
@@ -255,7 +261,7 @@ where
     T::IncomingUpgrade: Send,
     H: FnMut(T::Output, Box<Future<Item = Multiaddr, Error = IoError> + Send>) -> If,
     If: IntoFuture<Future = F, Item = (), Error = IoError>,
-    F: Future<Item = (), Error = IoError> + 'static,        // TODO: 'static :-/
+    F: Future<Item = (), Error = IoError> + 'static, // TODO: 'static :-/
 {
     type Item = SwarmEvent<F>;
     type Error = IoError;
@@ -270,7 +276,10 @@ where
                     debug!("Swarm received new multiplexed incoming connection");
                     shared.next_incoming = self.transport.clone().next_incoming();
                     let connec = connec.map(|(out, maf)| {
-                        (out, Box::new(maf) as Box<Future<Item = Multiaddr, Error = IoError> + Send>)
+                        (
+                            out,
+                            Box::new(maf) as Box<Future<Item = Multiaddr, Error = IoError> + Send>,
+                        )
                     });
                     shared.listeners_upgrade.push(Box::new(connec) as Box<_>);
                 }
@@ -286,7 +295,7 @@ where
 
         // We remove each element from `shared.listeners` one by one and add them back only
         // if relevant.
-        for n in (0 .. shared.listeners.len()).rev() {
+        for n in (0..shared.listeners.len()).rev() {
             let (listen_addr, mut listener) = shared.listeners.swap_remove(n);
             loop {
                 match listener.poll() {
@@ -298,9 +307,9 @@ where
                     Ok(Async::Ready((None, _))) => {
                         debug!("Listener closed gracefully");
                         return Ok(Async::Ready(Some(SwarmEvent::ListenerClosed {
-                            listen_addr
+                            listen_addr,
                         })));
-                    },
+                    }
                     Err((error, _)) => {
                         debug!("Error in listener: {:?}", error);
                         return Ok(Async::Ready(Some(SwarmEvent::ListenerError {
@@ -318,14 +327,16 @@ where
 
         // We remove each element from `shared.listeners_upgrade` one by one and add them back
         // only if relevant.
-        for n in (0 .. shared.listeners_upgrade.len()).rev() {
+        for n in (0..shared.listeners_upgrade.len()).rev() {
             let mut listener_upgrade = shared.listeners_upgrade.swap_remove(n);
             match listener_upgrade.poll() {
                 Ok(Async::Ready((output, client_addr))) => {
                     debug!("Successfully upgraded incoming connection");
                     // TODO: unlock mutex before calling handler, in order to avoid deadlocks if
                     // the user does something stupid
-                    shared.to_process.push(handler(output, client_addr).into_future());
+                    shared
+                        .to_process
+                        .push(handler(output, client_addr).into_future());
                 }
                 Err(err) => {
                     debug!("Error in listener upgrade: {:?}", err);
@@ -333,13 +344,13 @@ where
                 }
                 Ok(Async::NotReady) => {
                     shared.listeners_upgrade.push(listener_upgrade);
-                },
+                }
             }
         }
 
         // We remove each element from `shared.dialers` one by one and add them back only
         // if relevant.
-        for n in (0 .. shared.dialers.len()).rev() {
+        for n in (0..shared.dialers.len()).rev() {
             let (client_addr, mut dialer) = shared.dialers.swap_remove(n);
             match dialer.poll() {
                 Ok(Async::Ready((output, mut notifier, addr))) => {
@@ -354,16 +365,16 @@ where
                         client_addr,
                         error,
                     })));
-                },
+                }
                 Ok(Async::NotReady) => {
                     shared.dialers.push((client_addr, dialer));
-                },
+                }
             }
         }
 
         // We remove each element from `shared.to_process` one by one and add them back only
         // if relevant.
-        for n in (0 .. shared.to_process.len()).rev() {
+        for n in (0..shared.to_process.len()).rev() {
             let mut to_process = shared.to_process.swap_remove(n);
             match to_process.poll() {
                 Ok(Async::Ready(())) => {
@@ -394,7 +405,10 @@ where
 }
 
 // TODO: stronger typing
-struct Shared<T, F> where T: MuxedTransport + 'static {
+struct Shared<T, F>
+where
+    T: MuxedTransport + 'static,
+{
     /// Next incoming substream on the transport.
     next_incoming: T::Incoming,
 
@@ -404,21 +418,50 @@ struct Shared<T, F> where T: MuxedTransport + 'static {
         StreamFuture<
             Box<
                 Stream<
-                    Item = Box<Future<Item = (T::Output, Box<Future<Item = Multiaddr, Error = IoError> + Send>), Error = IoError> + Send>,
-                    Error = IoError,
-                > + Send,
+                        Item = Box<
+                            Future<
+                                    Item = (
+                                        T::Output,
+                                        Box<Future<Item = Multiaddr, Error = IoError> + Send>,
+                                    ),
+                                    Error = IoError,
+                                > + Send,
+                        >,
+                        Error = IoError,
+                    > + Send,
             >,
         >,
     )>,
 
     /// Futures that upgrade an incoming listening connection to a full connection.
-    listeners_upgrade:
-        Vec<Box<Future<Item = (T::Output, Box<Future<Item = Multiaddr, Error = IoError> + Send>), Error = IoError> + Send>>,
+    listeners_upgrade: Vec<
+        Box<
+            Future<
+                    Item = (
+                        T::Output,
+                        Box<Future<Item = Multiaddr, Error = IoError> + Send>,
+                    ),
+                    Error = IoError,
+                > + Send,
+        >,
+    >,
 
     /// Futures that dial a remote address.
     ///
     /// Contains the address we dial, so that we can cancel it if necessary.
-    dialers: Vec<(Multiaddr, Box<Future<Item = (T::Output, Box<FnMut(Result<(), IoError>) + Send>, Box<Future<Item = Multiaddr, Error = IoError> + Send>), Error = IoError> + Send>)>,
+    dialers: Vec<(
+        Multiaddr,
+        Box<
+            Future<
+                    Item = (
+                        T::Output,
+                        Box<FnMut(Result<(), IoError>) + Send>,
+                        Box<Future<Item = Multiaddr, Error = IoError> + Send>,
+                    ),
+                    Error = IoError,
+                > + Send,
+        >,
+    )>,
 
     /// List of futures produced by the swarm closure. Must be processed to the end.
     to_process: Vec<F>,
@@ -476,18 +519,22 @@ pub enum SwarmEvent<F> {
 
 #[cfg(test)]
 mod tests {
-    use futures::{Future, Stream, future};
+    use futures::{future, Future, Stream};
     use rand;
-    use transport::{self, DeniedTransport, Transport};
     use std::io::Error as IoError;
     use std::sync::{atomic, Arc};
     use swarm;
     use tokio::runtime::current_thread;
+    use transport::{self, DeniedTransport, Transport};
 
     #[test]
     fn transport_error_propagation_listen() {
         let (swarm_ctrl, _swarm_future) = swarm(DeniedTransport, |_, _| future::empty());
-        assert!(swarm_ctrl.listen_on("/ip4/127.0.0.1/tcp/10000".parse().unwrap()).is_err());
+        assert!(
+            swarm_ctrl
+                .listen_on("/ip4/127.0.0.1/tcp/10000".parse().unwrap())
+                .is_err()
+        );
     }
 
     #[test]
@@ -503,7 +550,7 @@ mod tests {
 
         let reached_tx = Arc::new(atomic::AtomicBool::new(false));
         let reached_tx2 = reached_tx.clone();
-    
+
         let reached_rx = Arc::new(atomic::AtomicBool::new(false));
         let reached_rx2 = reached_rx.clone();
 
@@ -512,18 +559,26 @@ mod tests {
             future::empty()
         });
         swarm_ctrl1.listen_on("/memory".parse().unwrap()).unwrap();
-    
+
         let (swarm_ctrl2, swarm_future2) = swarm(tx.clone().with_dummy_muxing(), |_, _| {
             reached_tx2.store(true, atomic::Ordering::SeqCst);
             future::empty()
         });
 
         let dial_success = swarm_ctrl2.dial("/memory".parse().unwrap(), tx).unwrap();
-        let future = swarm_future2.for_each(|_| Ok(()))
-            .select(swarm_future1.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err)
-            .select(dial_success).map(|_| ()).map_err(|(err, _)| err);
+        let future = swarm_future2
+            .for_each(|_| Ok(()))
+            .select(swarm_future1.for_each(|_| Ok(())))
+            .map(|_| ())
+            .map_err(|(err, _)| err)
+            .select(dial_success)
+            .map(|_| ())
+            .map_err(|(err, _)| err);
 
-        current_thread::Runtime::new().unwrap().block_on(future).unwrap();
+        current_thread::Runtime::new()
+            .unwrap()
+            .block_on(future)
+            .unwrap();
         assert!(reached_tx.load(atomic::Ordering::SeqCst));
         assert!(reached_rx.load(atomic::Ordering::SeqCst));
     }
@@ -540,15 +595,20 @@ mod tests {
         swarm_ctrl.listen_on("/memory".parse().unwrap()).unwrap();
         let num_dials = 20000 + rand::random::<usize>() % 20000;
         let mut dials = Vec::new();
-        for _ in 0 .. num_dials {
-            let f = swarm_ctrl.dial("/memory".parse().unwrap(), tx.clone()).unwrap();
+        for _ in 0..num_dials {
+            let f = swarm_ctrl
+                .dial("/memory".parse().unwrap(), tx.clone())
+                .unwrap();
             dials.push(f);
         }
         let future = future::join_all(dials)
             .map(|_| ())
             .select(swarm_future.for_each(|_| Ok(())))
             .map_err(|(err, _)| err);
-        current_thread::Runtime::new().unwrap().block_on(future).unwrap();
+        current_thread::Runtime::new()
+            .unwrap()
+            .block_on(future)
+            .unwrap();
         assert_eq!(reached.load(atomic::Ordering::SeqCst), num_dials);
     }
 
@@ -557,13 +617,16 @@ mod tests {
         // Tests that the future in the closure isn't being dropped.
         let (tx, rx) = transport::connector();
         let (swarm_ctrl, swarm_future) = swarm(rx.with_dummy_muxing(), |_, _| {
-            future::empty()
-                .then(|_: Result<(), ()>| -> Result<(), IoError> { panic!() })     // <-- the test
+            future::empty().then(|_: Result<(), ()>| -> Result<(), IoError> { panic!() }) // <-- the test
         });
         swarm_ctrl.listen_on("/memory".parse().unwrap()).unwrap();
         let dial_success = swarm_ctrl.dial("/memory".parse().unwrap(), tx).unwrap();
-        let future = dial_success.select(swarm_future.for_each(|_| Ok(())))
+        let future = dial_success
+            .select(swarm_future.for_each(|_| Ok(())))
             .map_err(|(err, _)| err);
-        current_thread::Runtime::new().unwrap().block_on(future).unwrap();
+        current_thread::Runtime::new()
+            .unwrap()
+            .block_on(future)
+            .unwrap();
     }
 }

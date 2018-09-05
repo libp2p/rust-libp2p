@@ -20,7 +20,7 @@
 
 use bytes::Bytes;
 use futures::future::{self, FutureResult};
-use std::{iter, io::Error as IoError};
+use std::{io::Error as IoError, iter};
 use tokio_io::{AsyncRead, AsyncWrite};
 use upgrade::{ConnectionUpgrade, Endpoint};
 

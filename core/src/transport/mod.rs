@@ -126,11 +126,12 @@ pub trait Transport {
     /// Turns this `Transport` into an abstract boxed transport.
     #[inline]
     fn boxed(self) -> boxed::Boxed<Self::Output>
-    where Self: Sized + MuxedTransport + Clone + Send + Sync + 'static,
-          Self::Dial: Send + 'static,
-          Self::Listener: Send + 'static,
-          Self::ListenerUpgrade: Send + 'static,
-          Self::MultiaddrFuture: Send + 'static,
+    where
+        Self: Sized + MuxedTransport + Clone + Send + Sync + 'static,
+        Self::Dial: Send + 'static,
+        Self::Listener: Send + 'static,
+        Self::ListenerUpgrade: Send + 'static,
+        Self::MultiaddrFuture: Send + 'static,
     {
         boxed::boxed(self)
     }
@@ -140,13 +141,14 @@ pub trait Transport {
     /// This is the version if the transport supports muxing.
     #[inline]
     fn boxed_muxed(self) -> boxed::BoxedMuxed<Self::Output>
-    where Self: Sized + MuxedTransport + Clone + Send + Sync + 'static,
-          Self::Dial: Send + 'static,
-          Self::Listener: Send + 'static,
-          Self::ListenerUpgrade: Send + 'static,
-          Self::MultiaddrFuture: Send + 'static,
-          Self::Incoming: Send + 'static,
-          Self::IncomingUpgrade: Send + 'static,
+    where
+        Self: Sized + MuxedTransport + Clone + Send + Sync + 'static,
+        Self::Dial: Send + 'static,
+        Self::Listener: Send + 'static,
+        Self::ListenerUpgrade: Send + 'static,
+        Self::MultiaddrFuture: Send + 'static,
+        Self::Incoming: Send + 'static,
+        Self::IncomingUpgrade: Send + 'static,
     {
         boxed::boxed_muxed(self)
     }
@@ -156,7 +158,7 @@ pub trait Transport {
     fn map<F, O>(self, map: F) -> map::Map<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Output, Endpoint) -> O + Clone + 'static,        // TODO: 'static :-/
+        F: FnOnce(Self::Output, Endpoint) -> O + Clone + 'static, // TODO: 'static :-/
     {
         map::Map::new(self, map)
     }
@@ -166,7 +168,7 @@ pub trait Transport {
     fn map_err<F>(self, map_err: F) -> map_err::MapErr<Self, F>
     where
         Self: Sized,
-        F: FnOnce(IoError) -> IoError + Clone + 'static,        // TODO: 'static :-/
+        F: FnOnce(IoError) -> IoError + Clone + 'static, // TODO: 'static :-/
     {
         map_err::MapErr::new(self, map_err)
     }
@@ -178,7 +180,7 @@ pub trait Transport {
     fn map_err_dial<F>(self, map_err: F) -> map_err_dial::MapErrDial<Self, F>
     where
         Self: Sized,
-        F: FnOnce(IoError, Multiaddr) -> IoError + Clone + 'static,        // TODO: 'static :-/
+        F: FnOnce(IoError, Multiaddr) -> IoError + Clone + 'static, // TODO: 'static :-/
     {
         map_err_dial::MapErrDial::new(self, map_err)
     }

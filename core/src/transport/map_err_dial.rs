@@ -40,7 +40,7 @@ impl<T, F> MapErrDial<T, F> {
 
 impl<T, F> Transport for MapErrDial<T, F>
 where
-    T: Transport + 'static,                          // TODO: 'static :-/
+    T: Transport + 'static, // TODO: 'static :-/
     T::Dial: Send,
     F: FnOnce(IoError, Multiaddr) -> IoError + Clone + Send + 'static, // TODO: 'static :-/
 {
@@ -53,7 +53,13 @@ where
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         match self.transport.listen_on(addr) {
             Ok(l) => Ok(l),
-            Err((transport, addr)) => Err((MapErrDial { transport, map: self.map }, addr)),
+            Err((transport, addr)) => Err((
+                MapErrDial {
+                    transport,
+                    map: self.map,
+                },
+                addr,
+            )),
         }
     }
 
@@ -77,7 +83,7 @@ where
 
 impl<T, F> MuxedTransport for MapErrDial<T, F>
 where
-    T: MuxedTransport + 'static,                     // TODO: 'static :-/
+    T: MuxedTransport + 'static, // TODO: 'static :-/
     T::Dial: Send,
     F: FnOnce(IoError, Multiaddr) -> IoError + Clone + Send + 'static, // TODO: 'static :-/
 {

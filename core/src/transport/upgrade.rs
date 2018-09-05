@@ -72,7 +72,10 @@ where
     pub fn dial(
         self,
         addr: Multiaddr,
-    ) -> Result<Box<Future<Item = (C::Output, C::MultiaddrFuture), Error = IoError> + Send + 'a>, (Self, Multiaddr)>
+    ) -> Result<
+        Box<Future<Item = (C::Output, C::MultiaddrFuture), Error = IoError> + Send + 'a>,
+        (Self, Multiaddr),
+    >
     where
         C::NamesIter: Clone, // TODO: not elegant
     {
@@ -108,10 +111,12 @@ where
         self,
     ) -> Box<
         Future<
-                Item = Box<Future<Item = (C::Output, C::MultiaddrFuture), Error = IoError> + Send + 'a>,
+                Item = Box<
+                    Future<Item = (C::Output, C::MultiaddrFuture), Error = IoError> + Send + 'a,
+                >,
                 Error = IoError,
-            >
-            + Send + 'a,
+            > + Send
+            + 'a,
     >
     where
         T: MuxedTransport,
@@ -147,10 +152,13 @@ where
         (
             Box<
                 Stream<
-                        Item = Box<Future<Item = (C::Output, C::MultiaddrFuture), Error = IoError> + Send + 'a>,
+                        Item = Box<
+                            Future<Item = (C::Output, C::MultiaddrFuture), Error = IoError>
+                                + Send
+                                + 'a,
+                        >,
                         Error = IoError,
-                    >
-                    + Send
+                    > + Send
                     + 'a,
             >,
             Multiaddr,
@@ -211,7 +219,8 @@ where
     type Output = C::Output;
     type MultiaddrFuture = C::MultiaddrFuture;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError> + Send>;
-    type ListenerUpgrade = Box<Future<Item = (C::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
+    type ListenerUpgrade =
+        Box<Future<Item = (C::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
     type Dial = Box<Future<Item = (C::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
 
     #[inline]
@@ -247,7 +256,8 @@ where
     C::UpgradeIdentifier: Send,
 {
     type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError> + Send>;
-    type IncomingUpgrade = Box<Future<Item = (C::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
+    type IncomingUpgrade =
+        Box<Future<Item = (C::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
 
     #[inline]
     fn next_incoming(self) -> Self::Incoming {

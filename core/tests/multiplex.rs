@@ -20,8 +20,8 @@
 
 extern crate bytes;
 extern crate futures;
-extern crate libp2p_mplex as multiplex;
 extern crate libp2p_core;
+extern crate libp2p_mplex as multiplex;
 extern crate libp2p_tcp_transport;
 extern crate tokio_current_thread;
 extern crate tokio_io;
@@ -29,7 +29,7 @@ extern crate tokio_io;
 use bytes::BytesMut;
 use futures::future::Future;
 use futures::{Sink, Stream};
-use libp2p_core::{muxing, Multiaddr, MuxedTransport, Transport, transport};
+use libp2p_core::{muxing, transport, Multiaddr, MuxedTransport, Transport};
 use std::sync::{atomic, Arc};
 use std::thread;
 use tokio_io::codec::length_delimited::Framed;
@@ -82,7 +82,8 @@ fn client_to_server_outbound() {
             .into_connection_reuse()
             .map(|((), val), _| val)
             .listen_on("/memory".parse().unwrap())
-            .unwrap_or_else(|_| panic!()).0
+            .unwrap_or_else(|_| panic!())
+            .0
             .into_future()
             .map_err(|(err, _)| err)
             .and_then(|(client, _)| client.unwrap())
@@ -93,8 +94,7 @@ fn client_to_server_outbound() {
                     .into_future()
                     .map_err(|(err, _)| err)
                     .map(|(msg, _)| msg)
-            })
-            .and_then(|msg| {
+            }).and_then(|msg| {
                 let msg = msg.unwrap();
                 assert_eq!(msg, "hello world");
                 Ok(())
@@ -130,7 +130,8 @@ fn connection_reused_for_dialing() {
             .into_connection_reuse()
             .map(|((), val), _| val)
             .listen_on("/memory".parse().unwrap())
-            .unwrap_or_else(|_| panic!()).0
+            .unwrap_or_else(|_| panic!())
+            .0
             .into_future()
             .map_err(|(err, _)| err)
             .and_then(|(client, rest)| client.unwrap().map(move |c| (c.0, rest)))
@@ -140,13 +141,11 @@ fn connection_reused_for_dialing() {
                     .into_future()
                     .map(|v| (v, rest))
                     .map_err(|(err, _)| err)
-            })
-            .and_then(|((msg, _), rest)| {
+            }).and_then(|((msg, _), rest)| {
                 let msg = msg.unwrap();
                 assert_eq!(msg, "hello world");
                 Ok(rest)
-            })
-            .flatten_stream()
+            }).flatten_stream()
             .into_future()
             .map_err(|(err, _)| err)
             .and_then(|(client, _)| client.unwrap())
@@ -181,8 +180,7 @@ fn connection_reused_for_dialing() {
                 .unwrap_or_else(|_| panic!())
                 .map(|server| Framed::<_, BytesMut>::new(server.0))
                 .map(|server| (first_connec, server))
-        })
-        .and_then(|(_first, second)| second.send("second message".into()))
+        }).and_then(|(_first, second)| second.send("second message".into()))
         .map(|_| ());
 
     tokio_current_thread::block_on_all(future).unwrap();
@@ -201,7 +199,8 @@ fn use_opened_listen_to_dial() {
         let future = OnlyOnce::from(rx)
             .with_upgrade(multiplex::MplexConfig::new())
             .listen_on("/memory".parse().unwrap())
-            .unwrap_or_else(|_| panic!()).0
+            .unwrap_or_else(|_| panic!())
+            .0
             .into_future()
             .map_err(|(err, _)| err)
             .and_then(|(client, _)| client.unwrap())
@@ -209,20 +208,17 @@ fn use_opened_listen_to_dial() {
             .and_then(|c| {
                 let c2 = c.clone();
                 muxing::inbound_from_ref_and_wrap(c.clone()).map(move |i| (c2, i))
-            })
-            .map(|(muxer, client)| (muxer, Framed::<_, BytesMut>::new(client.unwrap())))
+            }).map(|(muxer, client)| (muxer, Framed::<_, BytesMut>::new(client.unwrap())))
             .and_then(|(muxer, client)| {
                 client
                     .into_future()
                     .map(move |msg| (muxer, msg))
                     .map_err(|(err, _)| err)
-            })
-            .and_then(|(muxer, (msg, _))| {
+            }).and_then(|(muxer, (msg, _))| {
                 let msg = msg.unwrap();
                 assert_eq!(msg, "hello world");
                 muxing::outbound_from_ref_and_wrap(muxer)
-            })
-            .map(|client| Framed::<_, BytesMut>::new(client.unwrap()))
+            }).map(|client| Framed::<_, BytesMut>::new(client.unwrap()))
             .and_then(|client| client.into_future().map_err(|(err, _)| err))
             .and_then(|(msg, _)| {
                 let msg = msg.unwrap();
@@ -252,8 +248,7 @@ fn use_opened_listen_to_dial() {
                 .and_then(|server| server)
                 .map(|server| Framed::<_, BytesMut>::new(server.0))
                 .map(|server| (first_connec, server))
-        })
-        .and_then(|(_first, second)| second.send("second message".into()))
+        }).and_then(|(_first, second)| second.send("second message".into()))
         .map(|_| ());
 
     tokio_current_thread::block_on_all(future).unwrap();

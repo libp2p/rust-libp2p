@@ -19,13 +19,13 @@
 // DEALINGS IN THE SOFTWARE.
 
 use fnv::FnvHashMap;
-use futures::{future, sync::oneshot, task, Async, Future, Poll, IntoFuture};
+use futures::{future, sync::oneshot, task, Async, Future, IntoFuture, Poll};
 use parking_lot::Mutex;
-use {Multiaddr, MuxedTransport, SwarmController, Transport};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::mem;
-use std::sync::{Arc, Weak, atomic::AtomicUsize, atomic::Ordering};
+use std::sync::{atomic::AtomicUsize, atomic::Ordering, Arc, Weak};
 use transport::interruptible::Interrupt;
+use {Multiaddr, MuxedTransport, SwarmController, Transport};
 
 /// Storage for a unique connection with a remote.
 pub struct UniqueConnec<T> {
@@ -78,7 +78,8 @@ impl<T> UniqueConnec<T> {
 
     /// Instantly returns the value from the object if there is any.
     pub fn poll(&self) -> Option<T>
-        where T: Clone,
+    where
+        T: Clone,
     {
         let inner = self.inner.lock();
         if let UniqueConnecInner::Full { ref value, .. } = &*inner {
@@ -99,20 +100,25 @@ impl<T> UniqueConnec<T> {
     /// One critical property of this method, is that if a connection incomes and `tie_*` is
     /// called, then it will be returned by the returned future.
     #[inline]
-    pub fn dial<S, F, Du>(&self, swarm: &SwarmController<S, F>, multiaddr: &Multiaddr,
-                          transport: Du) -> UniqueConnecFuture<T>
-        where T: Clone + Send + 'static,       // TODO: 'static :-/
-              Du: Transport + 'static, // TODO: 'static :-/
-              Du::Output: Into<S::Output>,
-              Du::Dial: Send,
-              Du::MultiaddrFuture: Send,
-              S: Clone + MuxedTransport,
-              S::Dial: Send,
-              S::Listener: Send,
-              S::ListenerUpgrade: Send,
-              S::Output: Send,
-              S::MultiaddrFuture: Send,
-              F: 'static,
+    pub fn dial<S, F, Du>(
+        &self,
+        swarm: &SwarmController<S, F>,
+        multiaddr: &Multiaddr,
+        transport: Du,
+    ) -> UniqueConnecFuture<T>
+    where
+        T: Clone + Send + 'static, // TODO: 'static :-/
+        Du: Transport + 'static,   // TODO: 'static :-/
+        Du::Output: Into<S::Output>,
+        Du::Dial: Send,
+        Du::MultiaddrFuture: Send,
+        S: Clone + MuxedTransport,
+        S::Dial: Send,
+        S::Listener: Send,
+        S::ListenerUpgrade: Send,
+        S::Output: Send,
+        S::MultiaddrFuture: Send,
+        F: 'static,
     {
         self.dial_inner(swarm, multiaddr, transport, true)
     }
@@ -120,55 +126,72 @@ impl<T> UniqueConnec<T> {
     /// Same as `dial`, except that the future will produce an error if an earlier attempt to dial
     /// has errored.
     #[inline]
-    pub fn dial_if_empty<S, F, Du>(&self, swarm: &SwarmController<S, F>, multiaddr: &Multiaddr,
-                                   transport: Du) -> UniqueConnecFuture<T>
-        where T: Clone + Send + 'static,       // TODO: 'static :-/
-              Du: Transport + 'static, // TODO: 'static :-/
-              Du::Output: Into<S::Output>,
-              Du::Dial: Send,
-              Du::MultiaddrFuture: Send,
-              S: Clone + MuxedTransport,
-              S::Dial: Send,
-              S::Listener: Send,
-              S::ListenerUpgrade: Send,
-              S::Output: Send,
-              S::MultiaddrFuture: Send,
-              F: 'static,
+    pub fn dial_if_empty<S, F, Du>(
+        &self,
+        swarm: &SwarmController<S, F>,
+        multiaddr: &Multiaddr,
+        transport: Du,
+    ) -> UniqueConnecFuture<T>
+    where
+        T: Clone + Send + 'static, // TODO: 'static :-/
+        Du: Transport + 'static,   // TODO: 'static :-/
+        Du::Output: Into<S::Output>,
+        Du::Dial: Send,
+        Du::MultiaddrFuture: Send,
+        S: Clone + MuxedTransport,
+        S::Dial: Send,
+        S::Listener: Send,
+        S::ListenerUpgrade: Send,
+        S::Output: Send,
+        S::MultiaddrFuture: Send,
+        F: 'static,
     {
         self.dial_inner(swarm, multiaddr, transport, false)
     }
 
     /// Inner implementation of `dial_*`.
-    fn dial_inner<S, F, Du>(&self, swarm: &SwarmController<S, F>, multiaddr: &Multiaddr,
-                            transport: Du, dial_if_err: bool) -> UniqueConnecFuture<T>
-        where T: Clone + Send + 'static,       // TODO: 'static :-/
-              Du: Transport + 'static, // TODO: 'static :-/
-              Du::Output: Into<S::Output>,
-              Du::Dial: Send,
-              Du::MultiaddrFuture: Send,
-              S: Clone + MuxedTransport,
-              S::Dial: Send,
-              S::Listener: Send,
-              S::ListenerUpgrade: Send,
-              S::Output: Send,
-              S::MultiaddrFuture: Send,
-              F: 'static,
+    fn dial_inner<S, F, Du>(
+        &self,
+        swarm: &SwarmController<S, F>,
+        multiaddr: &Multiaddr,
+        transport: Du,
+        dial_if_err: bool,
+    ) -> UniqueConnecFuture<T>
+    where
+        T: Clone + Send + 'static, // TODO: 'static :-/
+        Du: Transport + 'static,   // TODO: 'static :-/
+        Du::Output: Into<S::Output>,
+        Du::Dial: Send,
+        Du::MultiaddrFuture: Send,
+        S: Clone + MuxedTransport,
+        S::Dial: Send,
+        S::Listener: Send,
+        S::ListenerUpgrade: Send,
+        S::Output: Send,
+        S::MultiaddrFuture: Send,
+        F: 'static,
     {
         let mut inner = self.inner.lock();
         match &*inner {
             UniqueConnecInner::Empty => (),
             UniqueConnecInner::Errored(_) if dial_if_err => (),
-            _ => return UniqueConnecFuture { inner: Arc::downgrade(&self.inner) },
+            _ => {
+                return UniqueConnecFuture {
+                    inner: Arc::downgrade(&self.inner),
+                }
+            }
         };
 
         let weak_inner = Arc::downgrade(&self.inner);
 
         let (transport, interrupt) = transport.interruptible();
-        let dial_fut = swarm.dial_then(multiaddr.clone(), transport,
+        let dial_fut = swarm.dial_then(
+            multiaddr.clone(),
+            transport,
             move |val: Result<(), IoError>| {
                 let inner = match weak_inner.upgrade() {
                     Some(i) => i,
-                    None => return val
+                    None => return val,
                 };
 
                 let mut inner = inner.lock();
@@ -177,8 +200,10 @@ impl<T> UniqueConnec<T> {
                 }
 
                 let new_val = UniqueConnecInner::Errored(match val {
-                    Ok(()) => IoError::new(IoErrorKind::ConnectionRefused,
-                        "dialing has succeeded but tie_* hasn't been called"),
+                    Ok(()) => IoError::new(
+                        IoErrorKind::ConnectionRefused,
+                        "dialing has succeeded but tie_* hasn't been called",
+                    ),
                     Err(ref err) => IoError::new(err.kind(), err.to_string()),
                 });
 
@@ -187,12 +212,13 @@ impl<T> UniqueConnec<T> {
                         for task in tasks_waiting {
                             task.1.notify();
                         }
-                    },
-                    _ => ()
+                    }
+                    _ => (),
                 };
 
                 val
-            });
+            },
+        );
 
         let dial_fut = dial_fut
             .map_err(|_| IoError::new(IoErrorKind::Other, "multiaddress not supported"))
@@ -205,7 +231,9 @@ impl<T> UniqueConnec<T> {
             interrupt,
         };
 
-        UniqueConnecFuture { inner: Arc::downgrade(&self.inner) }
+        UniqueConnecFuture {
+            inner: Arc::downgrade(&self.inner),
+        }
     }
 
     /// Puts `value` inside the object.
@@ -217,33 +245,45 @@ impl<T> UniqueConnec<T> {
     /// If the object already contains something, then `until` is dropped and a dummy future that
     /// immediately ends is returned.
     pub fn tie_or_stop<F>(&self, value: T, until: F) -> impl Future<Item = (), Error = F::Error>
-        where F: Future<Item = ()>
+    where
+        F: Future<Item = ()>,
     {
         self.tie_inner(value, until, false)
     }
 
     /// Same as `tie_or_stop`, except that is if the object already contains something, then
     /// `until` is returned immediately and can live in parallel.
-    pub fn tie_or_passthrough<F>(&self, value: T, until: F) -> impl Future<Item = (), Error = F::Error>
-        where F: Future<Item = ()>
+    pub fn tie_or_passthrough<F>(
+        &self,
+        value: T,
+        until: F,
+    ) -> impl Future<Item = (), Error = F::Error>
+    where
+        F: Future<Item = ()>,
     {
         self.tie_inner(value, until, true)
     }
 
     /// Inner implementation of `tie_*`.
-    fn tie_inner<F>(&self, value: T, until: F, pass_through: bool) -> impl Future<Item = (), Error = F::Error>
-        where F: Future<Item = ()>
+    fn tie_inner<F>(
+        &self,
+        value: T,
+        until: F,
+        pass_through: bool,
+    ) -> impl Future<Item = (), Error = F::Error>
+    where
+        F: Future<Item = ()>,
     {
         let mut tasks_to_notify = Default::default();
 
         let mut inner = self.inner.lock();
         let (on_clear, on_clear_rx) = oneshot::channel();
         match mem::replace(&mut *inner, UniqueConnecInner::Full { value, on_clear }) {
-            UniqueConnecInner::Empty => {},
-            UniqueConnecInner::Errored(_) => {},
+            UniqueConnecInner::Empty => {}
+            UniqueConnecInner::Errored(_) => {}
             UniqueConnecInner::Pending { tasks_waiting, .. } => {
                 tasks_to_notify = tasks_waiting;
-            },
+            }
             old @ UniqueConnecInner::Full { .. } => {
                 // Keep the old value.
                 *inner = old;
@@ -252,7 +292,7 @@ impl<T> UniqueConnec<T> {
                 } else {
                     return future::Either::B(future::Either::B(future::ok(())));
                 }
-            },
+            }
         };
         drop(inner);
 
@@ -277,7 +317,7 @@ impl<T> UniqueConnec<T> {
             .map(|((), _)| ())
             .map_err(|(err, _)| err)
             .then(move |val| {
-                drop(cleaner);      // Make sure that `cleaner` gets called there.
+                drop(cleaner); // Make sure that `cleaner` gets called there.
                 val
             });
         future::Either::A(fut)
@@ -290,11 +330,11 @@ impl<T> UniqueConnec<T> {
     pub fn clear(&self) {
         let mut inner = self.inner.lock();
         match mem::replace(&mut *inner, UniqueConnecInner::Empty) {
-            UniqueConnecInner::Empty => {},
-            UniqueConnecInner::Errored(_) => {},
+            UniqueConnecInner::Empty => {}
+            UniqueConnecInner::Errored(_) => {}
             pending @ UniqueConnecInner::Pending { .. } => {
                 *inner = pending;
-            },
+            }
             UniqueConnecInner::Full { on_clear, .. } => {
                 // TODO: Should we really replace the `Full` with an `Empty` here? What about
                 // letting dropping the future clear the connection automatically? Otherwise
@@ -303,7 +343,7 @@ impl<T> UniqueConnec<T> {
                 // it is expected that `clear()` is instantaneous and if it is followed with
                 // `dial()` then it should dial.
                 let _ = on_clear.send(());
-            },
+            }
         };
     }
 
@@ -354,12 +394,15 @@ impl<T> Drop for UniqueConnec<T> {
         // Notify the waiting futures if we are the last `UniqueConnec`.
         if let Some(inner) = Arc::get_mut(&mut self.inner) {
             match *inner.get_mut() {
-                UniqueConnecInner::Pending { ref mut tasks_waiting, .. } => {
+                UniqueConnecInner::Pending {
+                    ref mut tasks_waiting,
+                    ..
+                } => {
                     for task in tasks_waiting.drain() {
                         task.1.notify();
                     }
-                },
-                _ => ()
+                }
+                _ => (),
             }
         }
     }
@@ -372,8 +415,9 @@ pub struct UniqueConnecFuture<T> {
 }
 
 impl<T> Future for UniqueConnecFuture<T>
-    where T: Clone
-{    
+where
+    T: Clone,
+{
     type Item = T;
     type Error = IoError;
 
@@ -391,8 +435,12 @@ impl<T> Future for UniqueConnecFuture<T>
                 // future returned by `dial()` gets polled. This means that the connection has been
                 // closed.
                 Err(IoErrorKind::ConnectionAborted.into())
-            },
-            UniqueConnecInner::Pending { mut tasks_waiting, mut dial_fut, interrupt } => {
+            }
+            UniqueConnecInner::Pending {
+                mut tasks_waiting,
+                mut dial_fut,
+                interrupt,
+            } => {
                 match dial_fut.poll() {
                     Ok(Async::Ready(())) => {
                         // This happens if we successfully dialed a remote, but the callback
@@ -401,35 +449,39 @@ impl<T> Future for UniqueConnecFuture<T>
                         // connection for whatever reason.
                         *inner = UniqueConnecInner::Errored(IoErrorKind::ConnectionAborted.into());
                         Err(IoErrorKind::ConnectionAborted.into())
-                    },
+                    }
                     Ok(Async::NotReady) => {
                         static NEXT_TASK_ID: AtomicUsize = AtomicUsize::new(0);
                         task_local! {
                             static TASK_ID: usize = NEXT_TASK_ID.fetch_add(1, Ordering::Relaxed)
                         }
                         tasks_waiting.insert(TASK_ID.with(|&k| k), task::current());
-                        *inner = UniqueConnecInner::Pending { tasks_waiting, dial_fut, interrupt };
+                        *inner = UniqueConnecInner::Pending {
+                            tasks_waiting,
+                            dial_fut,
+                            interrupt,
+                        };
                         Ok(Async::NotReady)
                     }
                     Err(err) => {
                         let tr = IoError::new(err.kind(), err.to_string());
                         *inner = UniqueConnecInner::Errored(err);
                         Err(tr)
-                    },
+                    }
                 }
-            },
+            }
             UniqueConnecInner::Full { value, on_clear } => {
                 *inner = UniqueConnecInner::Full {
                     value: value.clone(),
-                    on_clear
+                    on_clear,
                 };
                 Ok(Async::Ready(value))
-            },
+            }
             UniqueConnecInner::Errored(err) => {
                 let tr = IoError::new(err.kind(), err.to_string());
                 *inner = UniqueConnecInner::Errored(err);
                 Err(tr)
-            },
+            }
         }
     }
 }
@@ -451,14 +503,14 @@ pub enum UniqueConnecState {
 #[cfg(test)]
 mod tests {
     use futures::{future, sync::oneshot, Future, Stream};
-    use transport::DeniedTransport;
     use std::io::Error as IoError;
-    use std::sync::{Arc, atomic};
+    use std::sync::{atomic, Arc};
     use std::time::Duration;
-    use {UniqueConnec, UniqueConnecState};
-    use {swarm, transport, Transport};
     use tokio::runtime::current_thread;
     use tokio_timer;
+    use transport::DeniedTransport;
+    use {swarm, transport, Transport};
+    use {UniqueConnec, UniqueConnecState};
 
     #[test]
     fn basic_working() {
@@ -477,11 +529,18 @@ mod tests {
 
         let dial_success = unique_connec
             .dial(&swarm_ctrl, &"/memory".parse().unwrap(), tx)
-            .map(|val| { assert_eq!(val, 12); });
+            .map(|val| {
+                assert_eq!(val, 12);
+            });
         assert_eq!(unique_connec.state(), UniqueConnecState::Pending);
 
-        let future = dial_success.select(swarm_future.for_each(|_| Ok(()))).map_err(|(err, _)| err);
-        current_thread::Runtime::new().unwrap().block_on(future).unwrap();
+        let future = dial_success
+            .select(swarm_future.for_each(|_| Ok(())))
+            .map_err(|(err, _)| err);
+        current_thread::Runtime::new()
+            .unwrap()
+            .block_on(future)
+            .unwrap();
         assert_eq!(unique_connec.state(), UniqueConnecState::Full);
     }
 
@@ -494,7 +553,11 @@ mod tests {
         let (swarm_ctrl, _swarm_fut) = swarm(DeniedTransport, |_, _| {
             unique2.tie_or_stop((), future::empty())
         });
-        let fut = unique.dial(&swarm_ctrl, &"/ip4/1.2.3.4".parse().unwrap(), DeniedTransport);
+        let fut = unique.dial(
+            &swarm_ctrl,
+            &"/ip4/1.2.3.4".parse().unwrap(),
+            DeniedTransport,
+        );
         assert!(fut.wait().is_err());
         assert_eq!(unique.state(), UniqueConnecState::Errored);
     }
@@ -522,38 +585,43 @@ mod tests {
         });
         swarm_ctrl1.listen_on("/memory".parse().unwrap()).unwrap();
 
-        let (swarm_ctrl2, swarm_future2) = swarm(tx.clone().with_dummy_muxing(), move |_, _| {
-            future::empty()
-        });
+        let (swarm_ctrl2, swarm_future2) =
+            swarm(tx.clone().with_dummy_muxing(), move |_, _| future::empty());
 
         let dial_success = unique_connec
             .dial(&swarm_ctrl2, &"/memory".parse().unwrap(), tx.clone())
-            .map(|val| { assert_eq!(val, 12); })
-            .inspect({
-                let c = unique_connec.clone();
-                move |_| { assert!(c.is_alive()); }
-            })
-            .and_then(|_| {
-                tokio_timer::sleep(Duration::from_secs(1))
-                    .map_err(|_| unreachable!())
-            })
-            .and_then(move |_| {
-                swarm_ctrl2.dial("/memory".parse().unwrap(), tx)
-                    .unwrap_or_else(|_| panic!())
-            })
-            .inspect({
+            .map(|val| {
+                assert_eq!(val, 12);
+            }).inspect({
                 let c = unique_connec.clone();
                 move |_| {
-                    assert_eq!(c.poll(), Some(12));    // Not 13
+                    assert!(c.is_alive());
+                }
+            }).and_then(|_| tokio_timer::sleep(Duration::from_secs(1)).map_err(|_| unreachable!()))
+            .and_then(move |_| {
+                swarm_ctrl2
+                    .dial("/memory".parse().unwrap(), tx)
+                    .unwrap_or_else(|_| panic!())
+            }).inspect({
+                let c = unique_connec.clone();
+                move |_| {
+                    assert_eq!(c.poll(), Some(12)); // Not 13
                     assert!(msg_tx.send(()).is_err());
                 }
             });
 
         let future = dial_success
-            .select(swarm_future2.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err)
-            .select(swarm_future1.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err);
+            .select(swarm_future2.for_each(|_| Ok(())))
+            .map(|_| ())
+            .map_err(|(err, _)| err)
+            .select(swarm_future1.for_each(|_| Ok(())))
+            .map(|_| ())
+            .map_err(|(err, _)| err);
 
-        current_thread::Runtime::new().unwrap().block_on(future).unwrap();
+        current_thread::Runtime::new()
+            .unwrap()
+            .block_on(future)
+            .unwrap();
         assert!(unique_connec.is_alive());
     }
 
@@ -576,13 +644,19 @@ mod tests {
 
         let dial_success = unique_connec
             .dial(&swarm_ctrl, &"/memory".parse().unwrap(), tx.clone())
-            .map(|val| { assert_eq!(val, 13); });
+            .map(|val| {
+                assert_eq!(val, 13);
+            });
 
-        swarm_ctrl.dial("/memory".parse().unwrap(), tx)
+        swarm_ctrl.dial("/memory".parse().unwrap(), tx).unwrap();
+
+        let future = dial_success
+            .select(swarm_future.for_each(|_| Ok(())))
+            .map_err(|(err, _)| err);
+        current_thread::Runtime::new()
+            .unwrap()
+            .block_on(future)
             .unwrap();
-
-        let future = dial_success.select(swarm_future.for_each(|_| Ok(()))).map_err(|(err, _)| err);
-        current_thread::Runtime::new().unwrap().block_on(future).unwrap();
         assert_eq!(unique_connec.poll(), Some(13));
     }
 
@@ -597,38 +671,49 @@ mod tests {
         let (msg_tx, msg_rx) = oneshot::channel();
         let mut msg_rx = Some(msg_rx);
 
-        let (swarm_ctrl1, swarm_future1) = swarm(rx.with_dummy_muxing(), move |_, _| {
-            future::empty()
-        });
+        let (swarm_ctrl1, swarm_future1) =
+            swarm(rx.with_dummy_muxing(), move |_, _| future::empty());
         swarm_ctrl1.listen_on("/memory".parse().unwrap()).unwrap();
 
         let (swarm_ctrl2, swarm_future2) = swarm(tx.clone().with_dummy_muxing(), move |_, _| {
-            let fut = msg_rx.take().unwrap().map_err(|_| -> IoError { unreachable!() });
+            let fut = msg_rx
+                .take()
+                .unwrap()
+                .map_err(|_| -> IoError { unreachable!() });
             unique_connec2.tie_or_stop(12, fut)
         });
 
         let dial_success = unique_connec
             .dial(&swarm_ctrl2, &"/memory".parse().unwrap(), tx)
-            .map(|val| { assert_eq!(val, 12); })
-            .inspect({
+            .map(|val| {
+                assert_eq!(val, 12);
+            }).inspect({
                 let c = unique_connec.clone();
-                move |_| { assert!(c.is_alive()); }
-            })
-            .and_then(|_| {
+                move |_| {
+                    assert!(c.is_alive());
+                }
+            }).and_then(|_| {
                 msg_tx.send(()).unwrap();
-                tokio_timer::sleep(Duration::from_secs(1))
-                    .map_err(|_| unreachable!())
-            })
-            .inspect({
+                tokio_timer::sleep(Duration::from_secs(1)).map_err(|_| unreachable!())
+            }).inspect({
                 let c = unique_connec.clone();
-                move |_| { assert!(!c.is_alive()); }
+                move |_| {
+                    assert!(!c.is_alive());
+                }
             });
 
         let future = dial_success
-            .select(swarm_future1.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err)
-            .select(swarm_future2.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err);
+            .select(swarm_future1.for_each(|_| Ok(())))
+            .map(|_| ())
+            .map_err(|(err, _)| err)
+            .select(swarm_future2.for_each(|_| Ok(())))
+            .map(|_| ())
+            .map_err(|(err, _)| err);
 
-        current_thread::Runtime::new().unwrap().block_on(future).unwrap();
+        current_thread::Runtime::new()
+            .unwrap()
+            .block_on(future)
+            .unwrap();
         assert!(!unique_connec.is_alive());
     }
 
@@ -639,36 +724,34 @@ mod tests {
         let unique_connec = UniqueConnec::empty();
         let unique_connec2 = unique_connec.clone();
 
-        let (swarm_ctrl1, swarm_future1) = swarm(rx.with_dummy_muxing(), move |_, _| {
-            future::empty()
-        });
+        let (swarm_ctrl1, swarm_future1) =
+            swarm(rx.with_dummy_muxing(), move |_, _| future::empty());
         swarm_ctrl1.listen_on("/memory".parse().unwrap()).unwrap();
 
         let finished = Arc::new(atomic::AtomicBool::new(false));
         let finished2 = finished.clone();
         let (swarm_ctrl2, swarm_future2) = swarm(tx.clone().with_dummy_muxing(), move |_, _| {
             let finished2 = finished2.clone();
-            unique_connec2.tie_or_stop(12, future::empty()).then(move |v| {
-                finished2.store(true, atomic::Ordering::Relaxed);
-                v
-            })
+            unique_connec2
+                .tie_or_stop(12, future::empty())
+                .then(move |v| {
+                    finished2.store(true, atomic::Ordering::Relaxed);
+                    v
+                })
         });
 
         let dial_success = unique_connec
             .dial(&swarm_ctrl2, &"/memory".parse().unwrap(), tx)
-            .map(|val| { assert_eq!(val, 12); })
-            .inspect({
+            .map(|val| {
+                assert_eq!(val, 12);
+            }).inspect({
                 let c = unique_connec.clone();
                 move |_| {
                     assert!(c.is_alive());
                     c.clear();
                     assert!(!c.is_alive());
                 }
-            })
-            .and_then(|_| {
-                tokio_timer::sleep(Duration::from_secs(1))
-                    .map_err(|_| unreachable!())
-            })
+            }).and_then(|_| tokio_timer::sleep(Duration::from_secs(1)).map_err(|_| unreachable!()))
             .inspect({
                 let c = unique_connec.clone();
                 move |_| {
@@ -678,10 +761,17 @@ mod tests {
             });
 
         let future = dial_success
-            .select(swarm_future1.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err)
-            .select(swarm_future2.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err);
+            .select(swarm_future1.for_each(|_| Ok(())))
+            .map(|_| ())
+            .map_err(|(err, _)| err)
+            .select(swarm_future2.for_each(|_| Ok(())))
+            .map(|_| ())
+            .map_err(|(err, _)| err);
 
-        current_thread::Runtime::new().unwrap().block_on(future).unwrap();
+        current_thread::Runtime::new()
+            .unwrap()
+            .block_on(future)
+            .unwrap();
         assert!(!unique_connec.is_alive());
     }
 
@@ -692,41 +782,48 @@ mod tests {
         let unique_connec = UniqueConnec::empty();
         let mut unique_connec2 = Some(unique_connec.clone());
 
-        let (swarm_ctrl1, swarm_future1) = swarm(rx.with_dummy_muxing(), move |_, _| {
-            future::empty()
-        });
+        let (swarm_ctrl1, swarm_future1) =
+            swarm(rx.with_dummy_muxing(), move |_, _| future::empty());
         swarm_ctrl1.listen_on("/memory".parse().unwrap()).unwrap();
 
         let finished = Arc::new(atomic::AtomicBool::new(false));
         let finished2 = finished.clone();
         let (swarm_ctrl2, swarm_future2) = swarm(tx.clone().with_dummy_muxing(), move |_, _| {
             let finished2 = finished2.clone();
-            unique_connec2.take().unwrap().tie_or_stop(12, future::empty()).then(move |v| {
-                finished2.store(true, atomic::Ordering::Relaxed);
-                v
-            })
+            unique_connec2
+                .take()
+                .unwrap()
+                .tie_or_stop(12, future::empty())
+                .then(move |v| {
+                    finished2.store(true, atomic::Ordering::Relaxed);
+                    v
+                })
         });
 
         let dial_success = unique_connec
             .dial(&swarm_ctrl2, &"/memory".parse().unwrap(), tx)
-            .map(|val| { assert_eq!(val, 12); })
-            .inspect(move |_| {
+            .map(|val| {
+                assert_eq!(val, 12);
+            }).inspect(move |_| {
                 assert!(unique_connec.is_alive());
                 drop(unique_connec);
-            })
-            .and_then(|_| {
-                tokio_timer::sleep(Duration::from_secs(1))
-                    .map_err(|_| unreachable!())
-            })
+            }).and_then(|_| tokio_timer::sleep(Duration::from_secs(1)).map_err(|_| unreachable!()))
             .inspect(move |_| {
                 assert!(finished.load(atomic::Ordering::Relaxed));
             });
 
         let future = dial_success
-            .select(swarm_future1.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err)
-            .select(swarm_future2.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err);
+            .select(swarm_future1.for_each(|_| Ok(())))
+            .map(|_| ())
+            .map_err(|(err, _)| err)
+            .select(swarm_future2.for_each(|_| Ok(())))
+            .map(|_| ())
+            .map_err(|(err, _)| err);
 
-        current_thread::Runtime::new().unwrap().block_on(future).unwrap();
+        current_thread::Runtime::new()
+            .unwrap()
+            .block_on(future)
+            .unwrap();
     }
 
     #[test]
@@ -735,9 +832,7 @@ mod tests {
         // longer exists.
         let (tx, rx) = transport::connector();
 
-        let (swarm_ctrl, swarm_future) = swarm(rx.with_dummy_muxing(), move |_, _| {
-            future::empty()
-        });
+        let (swarm_ctrl, swarm_future) = swarm(rx.with_dummy_muxing(), move |_, _| future::empty());
         swarm_ctrl.listen_on("/memory".parse().unwrap()).unwrap();
 
         let unique_connec = UniqueConnec::empty();
@@ -750,8 +845,13 @@ mod tests {
         drop(unique_connec);
 
         let future = dial_success
-            .select(swarm_future.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err);
-        current_thread::Runtime::new().unwrap().block_on(future).unwrap();
+            .select(swarm_future.for_each(|_| Ok(())))
+            .map(|_| ())
+            .map_err(|(err, _)| err);
+        current_thread::Runtime::new()
+            .unwrap()
+            .block_on(future)
+            .unwrap();
     }
 
     // TODO: test that dialing is interrupted when UniqueConnec is cleared

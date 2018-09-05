@@ -41,7 +41,7 @@ impl<T, F> Map<T, F> {
 
 impl<T, F, D> Transport for Map<T, F>
 where
-    T: Transport + 'static,                  // TODO: 'static :-/
+    T: Transport + 'static, // TODO: 'static :-/
     T::Dial: Send,
     T::Listener: Send,
     T::ListenerUpgrade: Send,
@@ -50,7 +50,8 @@ where
     type Output = D;
     type MultiaddrFuture = T::MultiaddrFuture;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError> + Send>;
-    type ListenerUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
+    type ListenerUpgrade =
+        Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
     type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -93,7 +94,7 @@ where
 
 impl<T, F, D> MuxedTransport for Map<T, F>
 where
-    T: MuxedTransport + 'static,             // TODO: 'static :-/
+    T: MuxedTransport + 'static, // TODO: 'static :-/
     T::Dial: Send,
     T::Listener: Send,
     T::ListenerUpgrade: Send,
@@ -102,14 +103,13 @@ where
     F: FnOnce(T::Output, Endpoint) -> D + Clone + Send + 'static, // TODO: 'static :-/
 {
     type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError> + Send>;
-    type IncomingUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
+    type IncomingUpgrade =
+        Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
 
     fn next_incoming(self) -> Self::Incoming {
         let map = self.map;
         let future = self.transport.next_incoming().map(move |upgrade| {
-            let future = upgrade.map(move |(output, addr)| {
-                (map(output, Endpoint::Listener), addr)
-            });
+            let future = upgrade.map(move |(output, addr)| (map(output, Endpoint::Listener), addr));
             Box::new(future) as Box<_>
         });
         Box::new(future)

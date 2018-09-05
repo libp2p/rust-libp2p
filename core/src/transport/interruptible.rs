@@ -35,7 +35,10 @@ impl<T> Interruptible<T> {
     #[inline]
     pub(crate) fn new(transport: T) -> (Interruptible<T>, Interrupt) {
         let (_tx, rx) = oneshot::channel();
-        let transport = Interruptible { transport, rx: rx.shared() };
+        let transport = Interruptible {
+            transport,
+            rx: rx.shared(),
+        };
         let int = Interrupt { _tx };
         (transport, int)
     }
@@ -55,20 +58,30 @@ where
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         match self.transport.listen_on(addr) {
             Ok(val) => Ok(val),
-            Err((transport, addr)) => Err((Interruptible { transport, rx: self.rx }, addr)),
+            Err((transport, addr)) => Err((
+                Interruptible {
+                    transport,
+                    rx: self.rx,
+                },
+                addr,
+            )),
         }
     }
 
     #[inline]
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
         match self.transport.dial(addr) {
-            Ok(future) => {
-                Ok(InterruptibleDial {
-                    inner: future,
+            Ok(future) => Ok(InterruptibleDial {
+                inner: future,
+                rx: self.rx,
+            }),
+            Err((transport, addr)) => Err((
+                Interruptible {
+                    transport,
                     rx: self.rx,
-                })
-            }
-            Err((transport, addr)) => Err((Interruptible { transport, rx: self.rx }, addr)),
+                },
+                addr,
+            )),
         }
     }
 
@@ -103,7 +116,8 @@ pub struct InterruptibleDial<F> {
 }
 
 impl<F> Future for InterruptibleDial<F>
-    where F: Future<Error = IoError>
+where
+    F: Future<Error = IoError>,
 {
     type Item = F::Item;
     type Error = IoError;
@@ -112,8 +126,11 @@ impl<F> Future for InterruptibleDial<F>
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self.rx.poll() {
             Ok(Async::Ready(_)) | Err(_) => {
-                return Err(IoError::new(IoErrorKind::ConnectionAborted, "connection interrupted"));
-            },
+                return Err(IoError::new(
+                    IoErrorKind::ConnectionAborted,
+                    "connection interrupted",
+                ));
+            }
             Ok(Async::NotReady) => (),
         };
 

@@ -34,8 +34,10 @@ impl Transport for DeniedTransport {
     type Output = Cursor<Vec<u8>>;
     type MultiaddrFuture = Box<Future<Item = Multiaddr, Error = io::Error> + Send + Sync>;
     type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = io::Error> + Send + Sync>;
-    type ListenerUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = io::Error> + Send + Sync>;
-    type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = io::Error> + Send + Sync>;
+    type ListenerUpgrade =
+        Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = io::Error> + Send + Sync>;
+    type Dial =
+        Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = io::Error> + Send + Sync>;
 
     #[inline]
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
