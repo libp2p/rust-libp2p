@@ -264,7 +264,9 @@ mod tests {
             .map(|_| ())
             .map_err(|((), _)| io::Error::new(io::ErrorKind::Other, "receive error"));
 
-        let future = future.select(finish_rx)
+        let future = future
+            .for_each(|_| Ok(()))
+            .select(finish_rx)
             .map(|_| ())
             .map_err(|(e, _)| e);
 

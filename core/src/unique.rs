@@ -99,12 +99,13 @@ impl<T> UniqueConnec<T> {
     /// One critical property of this method, is that if a connection incomes and `tie_*` is
     /// called, then it will be returned by the returned future.
     #[inline]
-    pub fn dial<S, Du>(&self, swarm: &SwarmController<S>, multiaddr: &Multiaddr,
-                              transport: Du) -> UniqueConnecFuture<T>
+    pub fn dial<S, F, Du>(&self, swarm: &SwarmController<S, F>, multiaddr: &Multiaddr,
+                          transport: Du) -> UniqueConnecFuture<T>
         where T: Clone + 'static,       // TODO: 'static :-/
               Du: Transport + 'static, // TODO: 'static :-/
               Du::Output: Into<S::Output>,
               S: Clone + MuxedTransport,
+              F: 'static,
     {
         self.dial_inner(swarm, multiaddr, transport, true)
     }
@@ -112,23 +113,25 @@ impl<T> UniqueConnec<T> {
     /// Same as `dial`, except that the future will produce an error if an earlier attempt to dial
     /// has errored.
     #[inline]
-    pub fn dial_if_empty<S, Du>(&self, swarm: &SwarmController<S>, multiaddr: &Multiaddr,
-                              transport: Du) -> UniqueConnecFuture<T>
+    pub fn dial_if_empty<S, F, Du>(&self, swarm: &SwarmController<S, F>, multiaddr: &Multiaddr,
+                                   transport: Du) -> UniqueConnecFuture<T>
         where T: Clone + 'static,       // TODO: 'static :-/
               Du: Transport + 'static, // TODO: 'static :-/
               Du::Output: Into<S::Output>,
               S: Clone + MuxedTransport,
+              F: 'static,
     {
         self.dial_inner(swarm, multiaddr, transport, false)
     }
 
     /// Inner implementation of `dial_*`.
-    fn dial_inner<S, Du>(&self, swarm: &SwarmController<S>, multiaddr: &Multiaddr,
-                         transport: Du, dial_if_err: bool) -> UniqueConnecFuture<T>
+    fn dial_inner<S, F, Du>(&self, swarm: &SwarmController<S, F>, multiaddr: &Multiaddr,
+                            transport: Du, dial_if_err: bool) -> UniqueConnecFuture<T>
         where T: Clone + 'static,       // TODO: 'static :-/
               Du: Transport + 'static, // TODO: 'static :-/
               Du::Output: Into<S::Output>,
               S: Clone + MuxedTransport,
+              F: 'static,
     {
         let mut inner = self.inner.lock();
         match &*inner {
@@ -342,6 +345,7 @@ impl<T> Drop for UniqueConnec<T> {
 }
 
 /// Future returned by `UniqueConnec::dial()`.
+#[must_use = "futures do nothing unless polled"]
 pub struct UniqueConnecFuture<T> {
     inner: Weak<Mutex<UniqueConnecInner<T>>>,
 }
@@ -425,7 +429,7 @@ pub enum UniqueConnecState {
 
 #[cfg(test)]
 mod tests {
-    use futures::{future, sync::oneshot, Future};
+    use futures::{future, sync::oneshot, Future, Stream};
     use transport::DeniedTransport;
     use std::io::Error as IoError;
     use std::sync::{Arc, atomic};
@@ -455,7 +459,7 @@ mod tests {
             .map(|val| { assert_eq!(val, 12); });
         assert_eq!(unique_connec.state(), UniqueConnecState::Pending);
 
-        let future = dial_success.select(swarm_future).map_err(|(err, _)| err);
+        let future = dial_success.select(swarm_future.for_each(|_| Ok(()))).map_err(|(err, _)| err);
         current_thread::Runtime::new().unwrap().block_on(future).unwrap();
         assert_eq!(unique_connec.state(), UniqueConnecState::Full);
     }
@@ -525,8 +529,8 @@ mod tests {
             });
 
         let future = dial_success
-            .select(swarm_future2).map(|_| ()).map_err(|(err, _)| err)
-            .select(swarm_future1).map(|_| ()).map_err(|(err, _)| err);
+            .select(swarm_future2.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err)
+            .select(swarm_future1.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err);
 
         current_thread::Runtime::new().unwrap().block_on(future).unwrap();
         assert!(unique_connec.is_alive());
@@ -556,7 +560,7 @@ mod tests {
         swarm_ctrl.dial("/memory".parse().unwrap(), tx)
             .unwrap();
 
-        let future = dial_success.select(swarm_future).map_err(|(err, _)| err);
+        let future = dial_success.select(swarm_future.for_each(|_| Ok(()))).map_err(|(err, _)| err);
         current_thread::Runtime::new().unwrap().block_on(future).unwrap();
         assert_eq!(unique_connec.poll(), Some(13));
     }
@@ -600,8 +604,8 @@ mod tests {
             });
 
         let future = dial_success
-            .select(swarm_future1).map(|_| ()).map_err(|(err, _)| err)
-            .select(swarm_future2).map(|_| ()).map_err(|(err, _)| err);
+            .select(swarm_future1.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err)
+            .select(swarm_future2.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err);
 
         current_thread::Runtime::new().unwrap().block_on(future).unwrap();
         assert!(!unique_connec.is_alive());
@@ -653,8 +657,8 @@ mod tests {
             });
 
         let future = dial_success
-            .select(swarm_future1).map(|_| ()).map_err(|(err, _)| err)
-            .select(swarm_future2).map(|_| ()).map_err(|(err, _)| err);
+            .select(swarm_future1.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err)
+            .select(swarm_future2.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err);
 
         current_thread::Runtime::new().unwrap().block_on(future).unwrap();
         assert!(!unique_connec.is_alive());
@@ -698,8 +702,8 @@ mod tests {
             });
 
         let future = dial_success
-            .select(swarm_future1).map(|_| ()).map_err(|(err, _)| err)
-            .select(swarm_future2).map(|_| ()).map_err(|(err, _)| err);
+            .select(swarm_future1.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err)
+            .select(swarm_future2.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err);
 
         current_thread::Runtime::new().unwrap().block_on(future).unwrap();
     }
@@ -725,7 +729,7 @@ mod tests {
         drop(unique_connec);
 
         let future = dial_success
-            .select(swarm_future).map(|_| ()).map_err(|(err, _)| err);
+            .select(swarm_future.for_each(|_| Ok(()))).map(|_| ()).map_err(|(err, _)| err);
         current_thread::Runtime::new().unwrap().block_on(future).unwrap();
     }
 

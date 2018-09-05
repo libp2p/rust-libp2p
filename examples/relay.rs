@@ -128,7 +128,9 @@ fn run_dialer(opts: DialerOpts) -> Result<(), Box<Error>> {
     let transport = {
         let tcp = TcpConfig::new()
             .with_upgrade(libp2p_yamux::Config::default())
-            .into_connection_reuse();
+            .map(|val, _| ((), val))
+            .into_connection_reuse()
+            .map(|((), val), _| val);
         RelayTransport::new(opts.me, tcp, store, iter::once(opts.relay)).with_dummy_muxing()
     };
 
@@ -150,7 +152,7 @@ fn run_dialer(opts: DialerOpts) -> Result<(), Box<Error>> {
 
     control.dial(address, transport.with_upgrade(echo)).map_err(|_| "failed to dial")?;
 
-    tokio_current_thread::block_on_all(future).map_err(From::from)
+    tokio_current_thread::block_on_all(future.for_each(|_| Ok(()))).map_err(From::from)
 }
 
 fn run_listener(opts: ListenerOpts) -> Result<(), Box<Error>> {
@@ -161,7 +163,9 @@ fn run_listener(opts: ListenerOpts) -> Result<(), Box<Error>> {
 
     let transport = TcpConfig::new()
         .with_upgrade(libp2p_yamux::Config::default())
-        .into_connection_reuse();
+        .map(|val, _| ((), val))
+        .into_connection_reuse()
+        .map(|((), val), _| val);
 
     let relay = RelayConfig::new(opts.me, transport.clone(), store);
 
@@ -202,7 +206,7 @@ fn run_listener(opts: ListenerOpts) -> Result<(), Box<Error>> {
     });
 
     control.listen_on(opts.listen).map_err(|_| "failed to listen")?;
-    tokio_current_thread::block_on_all(future).map_err(From::from)
+    tokio_current_thread::block_on_all(future.for_each(|_| Ok(()))).map_err(From::from)
 }
 
 // Custom parsers ///////////////////////////////////////////////////////////

@@ -22,22 +22,42 @@ use super::codec::StreamCipher;
 use aes_ctr::stream_cipher::generic_array::GenericArray;
 use aes_ctr::stream_cipher::NewFixStreamCipher;
 use aes_ctr::{Aes128Ctr, Aes256Ctr};
+use ctr::Ctr128;
+use twofish::Twofish;
 
 #[derive(Clone, Copy)]
-pub enum KeySize {
-    KeySize128,
-    KeySize256,
+pub enum Cipher {
+    Aes128,
+    Aes256,
+    Twofish,
 }
 
-/// Returns your stream cipher depending on `KeySize`.
+impl Cipher {
+    /// Returns the size of in bytes of the key expected by the cipher.
+    pub fn key_size(&self) -> usize {
+        match *self {
+            Cipher::Aes128 => 16,
+            Cipher::Aes256 => 32,
+            Cipher::Twofish => 32,
+        }
+    }
+
+    /// Returns the size of in bytes of the IV expected by the cipher.
+    #[inline]
+    pub fn iv_size(&self) -> usize {
+        16      // CTR 128
+    }
+}
+
+/// Returns your stream cipher depending on `Cipher`.
 #[cfg(not(all(feature = "aes-all", any(target_arch = "x86_64", target_arch = "x86"))))]
-pub fn ctr(key_size: KeySize, key: &[u8], iv: &[u8]) -> StreamCipher {
+pub fn ctr(key_size: Cipher, key: &[u8], iv: &[u8]) -> StreamCipher {
     ctr_int(key_size, key, iv)
 }
  
-/// Returns your stream cipher depending on `KeySize`.
+/// Returns your stream cipher depending on `Cipher`.
 #[cfg(all(feature = "aes-all", any(target_arch = "x86_64", target_arch = "x86")))]
-pub fn ctr(key_size: KeySize, key: &[u8], iv: &[u8]) -> StreamCipher {
+pub fn ctr(key_size: Cipher, key: &[u8], iv: &[u8]) -> StreamCipher {
     if *aes_alt::AES_NI {
         aes_alt::ctr_alt(key_size, key, iv)
     } else {
@@ -48,14 +68,14 @@ pub fn ctr(key_size: KeySize, key: &[u8], iv: &[u8]) -> StreamCipher {
 
 #[cfg(all(feature = "aes-all", any(target_arch = "x86_64", target_arch = "x86")))]
 mod aes_alt {
-    extern crate ctr;
     extern crate aesni;
     use ::codec::StreamCipher;
-    use self::ctr::Ctr128;
+    use ctr::Ctr128;
     use self::aesni::{Aes128, Aes256};
-    use self::ctr::stream_cipher::NewFixStreamCipher;
-    use self::ctr::stream_cipher::generic_array::GenericArray;
-    use super::KeySize;
+    use ctr::stream_cipher::NewFixStreamCipher;
+    use ctr::stream_cipher::generic_array::GenericArray;
+    use twofish::Twofish;
+    use super::Cipher;
 
     lazy_static! {
         pub static ref AES_NI: bool = is_x86_feature_detected!("aes")
@@ -70,13 +90,17 @@ mod aes_alt {
     pub type Aes256Ctr = Ctr128<Aes256>;
     /// Returns alternate stream cipher if target functionalities does not allow standard one.
     /// Eg : aes without sse
-    pub fn ctr_alt(key_size: KeySize, key: &[u8], iv: &[u8]) -> StreamCipher {
+    pub fn ctr_alt(key_size: Cipher, key: &[u8], iv: &[u8]) -> StreamCipher {
         match key_size {
-            KeySize::KeySize128 => Box::new(Aes128Ctr::new(
+            Cipher::Aes128 => Box::new(Aes128Ctr::new(
                 GenericArray::from_slice(key),
                 GenericArray::from_slice(iv),
             )),
-            KeySize::KeySize256 => Box::new(Aes256Ctr::new(
+            Cipher::Aes256 => Box::new(Aes256Ctr::new(
+                GenericArray::from_slice(key),
+                GenericArray::from_slice(iv),
+            )),
+            Cipher::Twofish => Box::new(Ctr128::<Twofish>::new(
                 GenericArray::from_slice(key),
                 GenericArray::from_slice(iv),
             )),
@@ -86,13 +110,17 @@ mod aes_alt {
 }
 
 #[inline]
-fn ctr_int(key_size: KeySize, key: &[u8], iv: &[u8]) -> StreamCipher {
+fn ctr_int(key_size: Cipher, key: &[u8], iv: &[u8]) -> StreamCipher {
     match key_size {
-        KeySize::KeySize128 => Box::new(Aes128Ctr::new(
+        Cipher::Aes128 => Box::new(Aes128Ctr::new(
             GenericArray::from_slice(key),
             GenericArray::from_slice(iv),
         )),
-        KeySize::KeySize256 => Box::new(Aes256Ctr::new(
+        Cipher::Aes256 => Box::new(Aes256Ctr::new(
+            GenericArray::from_slice(key),
+            GenericArray::from_slice(iv),
+        )),
+        Cipher::Twofish => Box::new(Ctr128::<Twofish>::new(
             GenericArray::from_slice(key),
             GenericArray::from_slice(iv),
         )),
@@ -105,7 +133,7 @@ fn ctr_int(key_size: KeySize, key: &[u8], iv: &[u8]) -> StreamCipher {
 ))]
 #[cfg(test)]
 mod tests {
-    use super::{KeySize, ctr};
+    use super::{Cipher, ctr};
 
     #[test]
     fn assert_non_native_run() {
@@ -113,7 +141,7 @@ mod tests {
         let key = [0;16];
         let iv = [0;16];
      
-        let mut aes = ctr(KeySize::KeySize128, &key, &iv);
+        let mut aes = ctr(Cipher::Aes128, &key, &iv);
         let mut content = [0;16];
         assert!(aes
                 .try_apply_keystream(&mut content).is_ok());
