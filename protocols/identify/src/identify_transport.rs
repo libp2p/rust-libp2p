@@ -48,7 +48,7 @@ impl<Trans> Clone for IdentifyTransport<Trans>
     }
 }
 
-type CacheEntry = future::Shared<Box<Future<Item = IdentifyTransportOutcome, Error = IoError>>>;
+type CacheEntry = future::Shared<Box<Future<Item = IdentifyTransportOutcome, Error = IoError> + Send>>;
 
 impl<Trans> IdentifyTransport<Trans> {
     /// Creates an `IdentifyTransport` that wraps around the given transport and peerstore.
@@ -63,14 +63,18 @@ impl<Trans> IdentifyTransport<Trans> {
 
 impl<Trans> Transport for IdentifyTransport<Trans>
 where
-    Trans: Transport + Clone + 'static, // TODO: 'static :(
-    Trans::Output: AsyncRead + AsyncWrite,
+    Trans: Transport + Clone + Send + 'static, // TODO: 'static :(
+    Trans::Dial: Send,
+    Trans::Listener: Send,
+    Trans::ListenerUpgrade: Send,
+    Trans::MultiaddrFuture: Send,
+    Trans::Output: AsyncRead + AsyncWrite + Send,
 {
     type Output = IdentifyTransportOutput<Trans::Output>;
     type MultiaddrFuture = future::FutureResult<Multiaddr, IoError>;
-    type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
-    type ListenerUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
-    type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
+    type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError> + Send>;
+    type ListenerUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
+    type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
 
     #[inline]
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -139,7 +143,7 @@ where
                     Ok((out, future::ok(client_addr)))
                 });
 
-                Box::new(fut) as Box<Future<Item = _, Error = _>>
+                Box::new(fut) as Box<Future<Item = _, Error = _> + Send>
             });
 
         Ok((Box::new(listener) as Box<_>, new_addr))
@@ -213,11 +217,17 @@ where
 
 impl<Trans> MuxedTransport for IdentifyTransport<Trans>
 where
-    Trans: MuxedTransport + Clone + 'static,
-    Trans::Output: AsyncRead + AsyncWrite,
+    Trans: MuxedTransport + Clone + Send + 'static,
+    Trans::Dial: Send,
+    Trans::Listener: Send,
+    Trans::ListenerUpgrade: Send,
+    Trans::MultiaddrFuture: Send,
+    Trans::Output: AsyncRead + AsyncWrite + Send,
+    Trans::Incoming: Send,
+    Trans::IncomingUpgrade: Send,
 {
-    type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError>>;
-    type IncomingUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
+    type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError> + Send>;
+    type IncomingUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
 
     #[inline]
     fn next_incoming(self) -> Self::Incoming {
@@ -274,7 +284,7 @@ where
                     Ok((out, future::ok(client_addr)))
                 });
 
-            Box::new(future) as Box<Future<Item = _, Error = _>>
+            Box::new(future) as Box<Future<Item = _, Error = _> + Send>
         });
 
         Box::new(future) as Box<_>
@@ -286,7 +296,7 @@ pub struct IdentifyTransportOutput<S> {
     /// The socket to communicate with the remote.
     pub socket: S,
     /// Outcome of the identification of the remote.
-    pub info: Box<Future<Item = IdentifyTransportOutcome, Error = IoError>>,
+    pub info: Box<Future<Item = IdentifyTransportOutcome, Error = IoError> + Send>,
 }
 
 /// Outcome of the identification of the remote.
@@ -301,7 +311,7 @@ pub struct IdentifyTransportOutcome {
 fn cache_entry<F, Fut>(cache: &Mutex<FnvHashMap<Multiaddr, CacheEntry>>, addr: Multiaddr, if_no_entry: F)
     -> impl Future<Item = IdentifyTransportOutcome, Error = IoError>
 where F: FnOnce() -> Fut,
-      Fut: Future<Item = IdentifyTransportOutcome, Error = IoError> + 'static,
+      Fut: Future<Item = IdentifyTransportOutcome, Error = IoError> + Send + 'static,
 {
     trace!("Looking up cache entry for {}", addr);
     let mut cache = cache.lock();
@@ -313,7 +323,7 @@ where F: FnOnce() -> Fut,
 
         Entry::Vacant(entry) => {
             trace!("No cache entry available");
-            let future = (Box::new(if_no_entry()) as Box<Future<Item = _, Error = _>>).shared();
+            let future = (Box::new(if_no_entry()) as Box<Future<Item = _, Error = _> + Send>).shared();
             entry.insert(future.clone());
             future::Either::B(future)
         },

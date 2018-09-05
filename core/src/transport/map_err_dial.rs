@@ -41,13 +41,14 @@ impl<T, F> MapErrDial<T, F> {
 impl<T, F> Transport for MapErrDial<T, F>
 where
     T: Transport + 'static,                          // TODO: 'static :-/
-    F: FnOnce(IoError, Multiaddr) -> IoError + Clone + 'static, // TODO: 'static :-/
+    T::Dial: Send,
+    F: FnOnce(IoError, Multiaddr) -> IoError + Clone + Send + 'static, // TODO: 'static :-/
 {
     type Output = T::Output;
     type MultiaddrFuture = T::MultiaddrFuture;
     type Listener = T::Listener;
     type ListenerUpgrade = T::ListenerUpgrade;
-    type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
+    type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         match self.transport.listen_on(addr) {
@@ -77,7 +78,8 @@ where
 impl<T, F> MuxedTransport for MapErrDial<T, F>
 where
     T: MuxedTransport + 'static,                     // TODO: 'static :-/
-    F: FnOnce(IoError, Multiaddr) -> IoError + Clone + 'static, // TODO: 'static :-/
+    T::Dial: Send,
+    F: FnOnce(IoError, Multiaddr) -> IoError + Clone + Send + 'static, // TODO: 'static :-/
 {
     type Incoming = T::Incoming;
     type IncomingUpgrade = T::IncomingUpgrade;

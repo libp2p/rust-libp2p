@@ -41,7 +41,7 @@ pub fn swarm<T, H, F>(
 ) -> (SwarmController<T, F::Future>, SwarmEvents<T, F::Future, H>)
 where
     T: MuxedTransport + Clone + 'static, // TODO: 'static :-/
-    H: FnMut(T::Output, Box<Future<Item = Multiaddr, Error = IoError>>) -> F,
+    H: FnMut(T::Output, Box<Future<Item = Multiaddr, Error = IoError> + Send>) -> F,
     F: IntoFuture<Item = (), Error = IoError>,
 {
     let shared = Arc::new(Mutex::new(Shared {
@@ -105,6 +105,11 @@ where
 impl<T, F> SwarmController<T, F>
 where
     T: MuxedTransport + Clone + 'static, // TODO: 'static :-/
+    T::Dial: Send,
+    T::MultiaddrFuture: Send,
+    T::Listener: Send,
+    T::ListenerUpgrade: Send,
+    T::Output: Send,
     F: 'static,
 {
     /// Asks the swarm to dial the node with the given multiaddress. The connection is then
@@ -119,6 +124,8 @@ where
         -> Result<impl Future<Item = (), Error = IoError>, Multiaddr>
     where
         Du: Transport + 'static, // TODO: 'static :-/
+        Du::Dial: Send,
+        Du::MultiaddrFuture: Send,
         Du::Output: Into<T::Output>,
     {
         self.dial_then(multiaddr, transport, |v| v)
@@ -132,8 +139,10 @@ where
         -> Result<impl Future<Item = (), Error = IoError>, Multiaddr>
     where
         Du: Transport + 'static, // TODO: 'static :-/
+        Du::Dial: Send,
+        Du::MultiaddrFuture: Send,
         Du::Output: Into<T::Output>,
-        TThen: FnOnce(Result<(), IoError>) -> Result<(), IoError> + 'static,
+        TThen: FnOnce(Result<(), IoError>) -> Result<(), IoError> + Send + 'static,
     {
         trace!("Swarm dialing {}", multiaddr);
 
@@ -148,12 +157,12 @@ where
                 let mut then = Box::new(move |val: Result<(), IoError>| {
                     let then = then.take().expect("The Boxed FnMut should only be called once");
                     then(val);
-                }) as Box<FnMut(_)>;
+                }) as Box<FnMut(_) + Send>;
 
                 let dial = dial.then(|result| {
                     match result {
                         Ok((output, client_addr)) => {
-                            let client_addr = Box::new(client_addr) as Box<Future<Item = _, Error = _>>;
+                            let client_addr = Box::new(client_addr) as Box<Future<Item = _, Error = _> + Send>;
                             Ok((output.into(), then, client_addr))
                         }
                         Err(err) => {
@@ -206,12 +215,12 @@ where
                 let listener = Box::new(
                     listener.map(|f| {
                         let f = f.map(|(out, maf)| {
-                            (out, Box::new(maf) as Box<Future<Item = Multiaddr, Error = IoError>>)
+                            (out, Box::new(maf) as Box<Future<Item = Multiaddr, Error = IoError> + Send>)
                         });
 
-                        Box::new(f) as Box<Future<Item = _, Error = _>>
+                        Box::new(f) as Box<Future<Item = _, Error = _> + Send>
                     }),
-                ) as Box<Stream<Item = _, Error = _>>;
+                ) as Box<Stream<Item = _, Error = _> + Send>;
                 shared.listeners.push((new_addr.clone(), listener.into_future()));
                 if let Some(task) = shared.task_to_notify.take() {
                     task.notify();
@@ -242,7 +251,9 @@ where
 impl<T, H, If, F> Stream for SwarmEvents<T, F, H>
 where
     T: MuxedTransport + Clone + 'static, // TODO: 'static :-/,
-    H: FnMut(T::Output, Box<Future<Item = Multiaddr, Error = IoError>>) -> If,
+    T::MultiaddrFuture: Send,
+    T::IncomingUpgrade: Send,
+    H: FnMut(T::Output, Box<Future<Item = Multiaddr, Error = IoError> + Send>) -> If,
     If: IntoFuture<Future = F, Item = (), Error = IoError>,
     F: Future<Item = (), Error = IoError> + 'static,        // TODO: 'static :-/
 {
@@ -259,7 +270,7 @@ where
                     debug!("Swarm received new multiplexed incoming connection");
                     shared.next_incoming = self.transport.clone().next_incoming();
                     let connec = connec.map(|(out, maf)| {
-                        (out, Box::new(maf) as Box<Future<Item = Multiaddr, Error = IoError>>)
+                        (out, Box::new(maf) as Box<Future<Item = Multiaddr, Error = IoError> + Send>)
                     });
                     shared.listeners_upgrade.push(Box::new(connec) as Box<_>);
                 }
@@ -393,21 +404,21 @@ struct Shared<T, F> where T: MuxedTransport + 'static {
         StreamFuture<
             Box<
                 Stream<
-                    Item = Box<Future<Item = (T::Output, Box<Future<Item = Multiaddr, Error = IoError>>), Error = IoError>>,
+                    Item = Box<Future<Item = (T::Output, Box<Future<Item = Multiaddr, Error = IoError> + Send>), Error = IoError> + Send>,
                     Error = IoError,
-                >,
+                > + Send,
             >,
         >,
     )>,
 
     /// Futures that upgrade an incoming listening connection to a full connection.
     listeners_upgrade:
-        Vec<Box<Future<Item = (T::Output, Box<Future<Item = Multiaddr, Error = IoError>>), Error = IoError>>>,
+        Vec<Box<Future<Item = (T::Output, Box<Future<Item = Multiaddr, Error = IoError> + Send>), Error = IoError> + Send>>,
 
     /// Futures that dial a remote address.
     ///
     /// Contains the address we dial, so that we can cancel it if necessary.
-    dialers: Vec<(Multiaddr, Box<Future<Item = (T::Output, Box<FnMut(Result<(), IoError>)>, Box<Future<Item = Multiaddr, Error = IoError>>), Error = IoError>>)>,
+    dialers: Vec<(Multiaddr, Box<Future<Item = (T::Output, Box<FnMut(Result<(), IoError>) + Send>, Box<Future<Item = Multiaddr, Error = IoError> + Send>), Error = IoError> + Send>)>,
 
     /// List of futures produced by the swarm closure. Must be processed to the end.
     to_process: Vec<F>,

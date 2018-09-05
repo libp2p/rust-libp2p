@@ -76,8 +76,9 @@ impl KadSystem {
     /// This future should be driven to completion by the caller.
     pub fn start<'a, F, Fut>(config: KadSystemConfig<impl Iterator<Item = PeerId>>, access: F)
         -> (KadSystem, impl Future<Item = (), Error = IoError> + 'a)
-        where F: FnMut(&PeerId) -> Fut + Clone + 'a,
-            Fut: IntoFuture<Item = KadConnecController, Error = IoError>  + 'a,
+        where F: FnMut(&PeerId) -> Fut + Send + Clone + 'a,
+            Fut: IntoFuture<Item = KadConnecController, Error = IoError> + 'a,
+            Fut::Future: Send,
     {
         let system = KadSystem::without_init(config);
         let init_future = system.perform_initialization(access);
@@ -102,8 +103,9 @@ impl KadSystem {
 
     /// Starts an initialization process.
     pub fn perform_initialization<'a, F, Fut>(&self, access: F) -> impl Future<Item = (), Error = IoError> + 'a
-        where F: FnMut(&PeerId) -> Fut + Clone + 'a,
+        where F: FnMut(&PeerId) -> Fut + Send + Clone + 'a,
             Fut: IntoFuture<Item = KadConnecController, Error = IoError>  + 'a,
+            Fut::Future: Send,
     {
         let futures: Vec<_> = (0..256)      // TODO: 256 is arbitrary
             .map(|n| {
@@ -147,8 +149,9 @@ impl KadSystem {
     /// Starts a query for an iterative `FIND_NODE` request.
     pub fn find_node<'a, F, Fut>(&self, searched_key: PeerId, access: F)
         -> impl Stream<Item = KadQueryEvent<Vec<PeerId>>, Error = IoError> + 'a
-    where F: FnMut(&PeerId) -> Fut + 'a,
+    where F: FnMut(&PeerId) -> Fut + Send + 'a,
         Fut: IntoFuture<Item = KadConnecController, Error = IoError>  + 'a,
+        Fut::Future: Send,
     {
         query(access, &self.kbuckets, searched_key, self.parallelism as usize,
               20, self.request_timeout)  // TODO: arbitrary const
@@ -162,14 +165,15 @@ impl KadSystem {
 fn refresh<'a, F, Fut>(bucket_num: usize, access: F, kbuckets: &KBucketsTable<PeerId, ()>,
                         parallelism: usize, request_timeout: Duration)
     -> impl Stream<Item = KadQueryEvent<()>, Error = IoError> + 'a
-where F: FnMut(&PeerId) -> Fut + 'a,
+where F: FnMut(&PeerId) -> Fut + Send + 'a,
     Fut: IntoFuture<Item = KadConnecController, Error = IoError> + 'a,
+    Fut::Future: Send,
 {
     let peer_id = match gen_random_id(kbuckets.my_id(), bucket_num) {
         Ok(p) => p,
         Err(()) => {
             let stream = stream::once(Ok(KadQueryEvent::Finished(())));
-            return Box::new(stream) as Box<Stream<Item = _, Error = _>>;
+            return Box::new(stream) as Box<Stream<Item = _, Error = _> + Send>;
         },
     };
 
@@ -180,7 +184,7 @@ where F: FnMut(&PeerId) -> Fut + 'a,
                 KadQueryEvent::Finished(_) => KadQueryEvent::Finished(()),
             }
         });
-    Box::new(stream) as Box<Stream<Item = _, Error = _>>
+    Box::new(stream) as Box<Stream<Item = _, Error = _> + Send>
 }
 
 // Generates a random `PeerId` that belongs to the given bucket.
@@ -227,6 +231,7 @@ fn query<'a, F, Fut>(
 ) -> impl Stream<Item = KadQueryEvent<Vec<PeerId>>, Error = IoError> + 'a
 where F: FnMut(&PeerId) -> Fut + 'a,
       Fut: IntoFuture<Item = KadConnecController, Error = IoError> + 'a,
+      Fut::Future: Send,
 {
     debug!("Start query for {:?} ; num results = {}", searched_key, num_results);
 
@@ -240,7 +245,7 @@ where F: FnMut(&PeerId) -> Fut + 'a,
         result: Vec<PeerId>,
         // For each open connection, a future with the response of the remote.
         // Note that don't use a `SmallVec` here because `select_all` produces a `Vec`.
-        current_attempts_fut: Vec<Box<Future<Item = Vec<protocol::KadPeer>, Error = IoError> + 'a>>,
+        current_attempts_fut: Vec<Box<Future<Item = Vec<protocol::KadPeer>, Error = IoError> + Send + 'a>>,
         // For each open connection, the peer ID that we are connected to.
         // Must always have the same length as `current_attempts_fut`.
         current_attempts_addrs: SmallVec<[PeerId; 32]>,

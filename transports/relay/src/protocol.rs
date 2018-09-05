@@ -46,17 +46,21 @@ pub struct RelayConfig<T, P> {
 // but otherwise the stream is not programmatically accessible.
 pub enum Output<C> {
     Stream(C),
-    Sealed(Box<Future<Item=(), Error=io::Error>>)
+    Sealed(Box<Future<Item=(), Error=io::Error> + Send>)
 }
 
 impl<C, T, P, S, Maf> ConnectionUpgrade<C, Maf> for RelayConfig<T, P>
 where
-    C: AsyncRead + AsyncWrite + 'static,
-    T: Transport + Clone + 'static,
-    T::Output: AsyncRead + AsyncWrite,
-    P: Deref<Target=S> + Clone + 'static,
+    C: AsyncRead + AsyncWrite + Send + 'static,
+    T: Transport + Clone + Send + 'static,
+    T::Dial: Send,
+    T::Listener: Send,
+    T::ListenerUpgrade: Send,
+    T::MultiaddrFuture: Send,
+    T::Output: AsyncRead + AsyncWrite + Send,
+    P: Deref<Target=S> + Clone + Send + 'static,
     S: 'static,
-    Maf: 'static,
+    Maf: Send + 'static,
     for<'a> &'a S: Peerstore
 {
     type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
@@ -68,7 +72,7 @@ where
 
     type Output = Output<C>;
     type MultiaddrFuture = Maf;
-    type Future = Box<Future<Item=(Self::Output, Maf), Error=io::Error>>;
+    type Future = Box<Future<Item=(Self::Output, Maf), Error=io::Error> + Send>;
 
     fn upgrade(self, conn: C, _: (), _: Endpoint, remote_addr: Maf) -> Self::Future {
         let future = Io::new(conn).recv().and_then(move |(message, io)| {
@@ -98,7 +102,11 @@ where
 impl<T, P, S> RelayConfig<T, P>
 where
     T: Transport + Clone + 'static,
-    T::Output: AsyncRead + AsyncWrite,
+    T::Dial: Send,      // TODO: remove
+    T::Listener: Send,      // TODO: remove
+    T::ListenerUpgrade: Send,      // TODO: remove
+    T::MultiaddrFuture: Send,      // TODO: remove
+    T::Output: Send + AsyncRead + AsyncWrite,
     P: Deref<Target = S> + Clone + 'static,
     for<'a> &'a S: Peerstore,
 {
@@ -268,8 +276,8 @@ pub(crate) struct Source(pub(crate) CircuitRelay);
 
 impl<C, Maf> ConnectionUpgrade<C, Maf> for Source
 where
-    C: AsyncRead + AsyncWrite + 'static,
-    Maf: 'static,
+    C: AsyncRead + AsyncWrite + Send + 'static,
+    Maf: Send + 'static,
 {
     type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
     type UpgradeIdentifier = ();
@@ -280,7 +288,7 @@ where
 
     type Output = C;
     type MultiaddrFuture = Maf;
-    type Future = Box<Future<Item=(Self::Output, Maf), Error=io::Error>>;
+    type Future = Box<Future<Item=(Self::Output, Maf), Error=io::Error> + Send>;
 
     fn upgrade(self, conn: C, _: (), _: Endpoint, remote_addr: Maf) -> Self::Future {
         let future = Io::new(conn)
