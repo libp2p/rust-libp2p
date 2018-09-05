@@ -24,6 +24,19 @@ use std::io::Error as IoError;
 use std::sync::Arc;
 use transport::{MuxedTransport, Transport};
 
+/// See the `Transport::boxed` method.
+#[inline]
+pub fn boxed<T>(transport: T) -> Boxed<T::Output>
+where T: Transport + Clone + Send + Sync + 'static,
+      T::Dial: Send + 'static,
+      T::Listener: Send + 'static,
+      T::ListenerUpgrade: Send + 'static,
+      T::MultiaddrFuture: Send + 'static,
+{
+    Boxed {
+        inner: Arc::new(transport) as Arc<_>
+    }
+}
 /// See the `Transport::boxed_muxed` method.
 #[inline]
 pub fn boxed_muxed<T>(transport: T) -> BoxedMuxed<T::Output>
@@ -51,17 +64,14 @@ trait Abstract<O> {
     fn listen_on(&self, addr: Multiaddr) -> Result<(Listener<O>, Multiaddr), Multiaddr>;
     fn dial(&self, addr: Multiaddr) -> Result<Dial<O>, Multiaddr>;
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
-    fn next_incoming(&self) -> Incoming<O>;
 }
 
 impl<T, O> Abstract<O> for T
-where T: MuxedTransport<Output = O> + Clone + 'static,
+where T: Transport<Output = O> + Clone + 'static,
       T::Dial: Send + 'static,
       T::Listener: Send + 'static,
       T::ListenerUpgrade: Send + 'static,
       T::MultiaddrFuture: Send + 'static,
-      T::Incoming: Send + 'static,
-      T::IncomingUpgrade: Send + 'static,
 {
     fn listen_on(&self, addr: Multiaddr) -> Result<(Listener<O>, Multiaddr), Multiaddr> {
         let (listener, new_addr) = Transport::listen_on(self.clone(), addr)
@@ -85,7 +95,21 @@ where T: MuxedTransport<Output = O> + Clone + 'static,
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         Transport::nat_traversal(self, server, observed)
     }
+}
 
+trait AbstractMuxed<O>: Abstract<O> {
+    fn next_incoming(&self) -> Incoming<O>;
+}
+
+impl<T, O> AbstractMuxed<O> for T
+where T: MuxedTransport<Output = O> + Clone + 'static,
+      T::Dial: Send + 'static,
+      T::Listener: Send + 'static,
+      T::ListenerUpgrade: Send + 'static,
+      T::MultiaddrFuture: Send + 'static,
+      T::Incoming: Send + 'static,
+      T::IncomingUpgrade: Send + 'static,
+{
     fn next_incoming(&self) -> Incoming<O> {
         let fut = MuxedTransport::next_incoming(self.clone())
             .map(|upgrade| {
@@ -98,8 +122,52 @@ where T: MuxedTransport<Output = O> + Clone + 'static,
 
 /// See the `Transport::boxed` method.
 // TODO: implement Debug
-pub struct BoxedMuxed<O> {
+pub struct Boxed<O> {
     inner: Arc<Abstract<O> + Send + Sync>,
+}
+
+impl<O> Clone for Boxed<O> {
+    #[inline]
+    fn clone(&self) -> Self {
+        Boxed {
+            inner: self.inner.clone(),
+        }
+    }
+}
+
+impl<O> Transport for Boxed<O> {
+    type Output = O;
+    type MultiaddrFuture = MultiaddrFuture;
+    type Listener = Listener<O>;
+    type ListenerUpgrade = ListenerUpgrade<O>;
+    type Dial = Dial<O>;
+
+    #[inline]
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+        match self.inner.listen_on(addr) {
+            Ok(listen) => Ok(listen),
+            Err(addr) => Err((self, addr))
+        }
+    }
+
+    #[inline]
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+        match self.inner.dial(addr) {
+            Ok(dial) => Ok(dial),
+            Err(addr) => Err((self, addr))
+        }
+    }
+
+    #[inline]
+    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        self.inner.nat_traversal(server, observed)
+    }
+}
+
+/// See the `Transport::boxed_muxed` method.
+// TODO: implement Debug
+pub struct BoxedMuxed<O> {
+    inner: Arc<AbstractMuxed<O> + Send + Sync>,
 }
 
 impl<O> Clone for BoxedMuxed<O> {
