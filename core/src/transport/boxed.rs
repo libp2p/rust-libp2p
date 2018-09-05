@@ -27,29 +27,32 @@ use transport::{MuxedTransport, Transport};
 /// See the `Transport::boxed` method.
 #[inline]
 pub fn boxed<T>(transport: T) -> Boxed<T::Output>
-where T: Transport + Clone + Send + Sync + 'static,
-      T::Dial: Send + 'static,
-      T::Listener: Send + 'static,
-      T::ListenerUpgrade: Send + 'static,
-      T::MultiaddrFuture: Send + 'static,
+where
+    T: Transport + Clone + Send + Sync + 'static,
+    T::Dial: Send + 'static,
+    T::Listener: Send + 'static,
+    T::ListenerUpgrade: Send + 'static,
+    T::MultiaddrFuture: Send + 'static,
 {
     Boxed {
-        inner: Arc::new(transport) as Arc<_>
+        inner: Arc::new(transport) as Arc<_>,
     }
 }
+
 /// See the `Transport::boxed_muxed` method.
 #[inline]
 pub fn boxed_muxed<T>(transport: T) -> BoxedMuxed<T::Output>
-where T: MuxedTransport + Clone + Send + Sync + 'static,
-      T::Dial: Send + 'static,
-      T::Listener: Send + 'static,
-      T::ListenerUpgrade: Send + 'static,
-      T::MultiaddrFuture: Send + 'static,
-      T::Incoming: Send + 'static,
-      T::IncomingUpgrade: Send + 'static,
+where
+    T: MuxedTransport + Clone + Send + Sync + 'static,
+    T::Dial: Send + 'static,
+    T::Listener: Send + 'static,
+    T::ListenerUpgrade: Send + 'static,
+    T::MultiaddrFuture: Send + 'static,
+    T::Incoming: Send + 'static,
+    T::IncomingUpgrade: Send + 'static,
 {
     BoxedMuxed {
-        inner: Arc::new(transport) as Arc<_>
+        inner: Arc::new(transport) as Arc<_>,
     }
 }
 
@@ -67,20 +70,20 @@ trait Abstract<O> {
 }
 
 impl<T, O> Abstract<O> for T
-where T: Transport<Output = O> + Clone + 'static,
-      T::Dial: Send + 'static,
-      T::Listener: Send + 'static,
-      T::ListenerUpgrade: Send + 'static,
-      T::MultiaddrFuture: Send + 'static,
+where
+    T: Transport<Output = O> + Clone + 'static,
+    T::Dial: Send + 'static,
+    T::Listener: Send + 'static,
+    T::ListenerUpgrade: Send + 'static,
+    T::MultiaddrFuture: Send + 'static,
 {
     fn listen_on(&self, addr: Multiaddr) -> Result<(Listener<O>, Multiaddr), Multiaddr> {
-        let (listener, new_addr) = Transport::listen_on(self.clone(), addr)
-            .map_err(|(_, addr)| addr)?;
-        let fut = listener
-            .map(|upgrade| {
-                let fut = upgrade.map(|(out, addr)| (out, Box::new(addr) as MultiaddrFuture));
-                Box::new(fut) as ListenerUpgrade<O>
-            });
+        let (listener, new_addr) =
+            Transport::listen_on(self.clone(), addr).map_err(|(_, addr)| addr)?;
+        let fut = listener.map(|upgrade| {
+            let fut = upgrade.map(|(out, addr)| (out, Box::new(addr) as MultiaddrFuture));
+            Box::new(fut) as ListenerUpgrade<O>
+        });
         Ok((Box::new(fut) as Box<_>, new_addr))
     }
 
@@ -102,20 +105,20 @@ trait AbstractMuxed<O>: Abstract<O> {
 }
 
 impl<T, O> AbstractMuxed<O> for T
-where T: MuxedTransport<Output = O> + Clone + 'static,
-      T::Dial: Send + 'static,
-      T::Listener: Send + 'static,
-      T::ListenerUpgrade: Send + 'static,
-      T::MultiaddrFuture: Send + 'static,
-      T::Incoming: Send + 'static,
-      T::IncomingUpgrade: Send + 'static,
+where
+    T: MuxedTransport<Output = O> + Clone + 'static,
+    T::Dial: Send + 'static,
+    T::Listener: Send + 'static,
+    T::ListenerUpgrade: Send + 'static,
+    T::MultiaddrFuture: Send + 'static,
+    T::Incoming: Send + 'static,
+    T::IncomingUpgrade: Send + 'static,
 {
     fn next_incoming(&self) -> Incoming<O> {
-        let fut = MuxedTransport::next_incoming(self.clone())
-            .map(|upgrade| {
-                let fut = upgrade.map(|(out, addr)| (out, Box::new(addr) as MultiaddrFuture));
-                Box::new(fut) as IncomingUpgrade<O>
-            });
+        let fut = MuxedTransport::next_incoming(self.clone()).map(|upgrade| {
+            let fut = upgrade.map(|(out, addr)| (out, Box::new(addr) as MultiaddrFuture));
+            Box::new(fut) as IncomingUpgrade<O>
+        });
         Box::new(fut) as Box<_>
     }
 }
@@ -146,7 +149,7 @@ impl<O> Transport for Boxed<O> {
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         match self.inner.listen_on(addr) {
             Ok(listen) => Ok(listen),
-            Err(addr) => Err((self, addr))
+            Err(addr) => Err((self, addr)),
         }
     }
 
@@ -154,7 +157,7 @@ impl<O> Transport for Boxed<O> {
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
         match self.inner.dial(addr) {
             Ok(dial) => Ok(dial),
-            Err(addr) => Err((self, addr))
+            Err(addr) => Err((self, addr)),
         }
     }
 
@@ -190,7 +193,7 @@ impl<O> Transport for BoxedMuxed<O> {
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         match self.inner.listen_on(addr) {
             Ok(listen) => Ok(listen),
-            Err(addr) => Err((self, addr))
+            Err(addr) => Err((self, addr)),
         }
     }
 
@@ -198,7 +201,7 @@ impl<O> Transport for BoxedMuxed<O> {
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
         match self.inner.dial(addr) {
             Ok(dial) => Ok(dial),
-            Err(addr) => Err((self, addr))
+            Err(addr) => Err((self, addr)),
         }
     }
 
