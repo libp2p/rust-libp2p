@@ -64,7 +64,7 @@ mod tests {
     extern crate tokio_tcp;
     use self::tokio_tcp::TcpListener;
     use self::tokio_tcp::TcpStream;
-    use stream_cipher::{ctr, KeySize};
+    use stream_cipher::{ctr, Cipher};
     use super::full_codec;
     use super::DecoderMiddleware;
     use super::EncoderMiddleware;
@@ -93,12 +93,12 @@ mod tests {
 
         let encoder = EncoderMiddleware::new(
             data_tx,
-            ctr(KeySize::KeySize256, &cipher_key, &NULL_IV[..]),
+            ctr(Cipher::Aes256, &cipher_key, &NULL_IV[..]),
             SigningKey::new(&SHA256, &hmac_key),
         );
         let decoder = DecoderMiddleware::new(
             data_rx,
-            ctr(KeySize::KeySize256, &cipher_key, &NULL_IV[..]),
+            ctr(Cipher::Aes256, &cipher_key, &NULL_IV[..]),
             VerificationKey::new(&SHA256, &hmac_key),
             32,
         );
@@ -114,11 +114,11 @@ mod tests {
         assert_eq!(&decoded.unwrap()[..], &data[..]);
     }
 
-    #[test]
-    fn full_codec_encode_then_decode() {
+    fn full_codec_encode_then_decode(cipher: Cipher) {
         let cipher_key: [u8; 32] = rand::random();
         let cipher_key_clone = cipher_key.clone();
-        let hmac_key: [u8; 32] = rand::random();
+        let key_size = cipher.key_size();
+        let hmac_key: [u8; 16] = rand::random();
         let hmac_key_clone = hmac_key.clone();
         let data = b"hello world";
         let data_clone = data.clone();
@@ -132,9 +132,9 @@ mod tests {
 
                 full_codec(
                     connec,
-                    ctr(KeySize::KeySize256, &cipher_key, &NULL_IV[..]),
+                    ctr(cipher, &cipher_key[..key_size], &NULL_IV[..]),
                     SigningKey::new(&SHA256, &hmac_key),
-                    ctr(KeySize::KeySize256, &cipher_key, &NULL_IV[..]),
+                    ctr(cipher, &cipher_key[..key_size], &NULL_IV[..]),
                     VerificationKey::new(&SHA256, &hmac_key),
                 )
             },
@@ -147,9 +147,9 @@ mod tests {
 
                 full_codec(
                     stream,
-                    ctr(KeySize::KeySize256, &cipher_key_clone, &NULL_IV[..]),
+                    ctr(cipher, &cipher_key_clone[..key_size], &NULL_IV[..]),
                     SigningKey::new(&SHA256, &hmac_key_clone),
-                    ctr(KeySize::KeySize256, &cipher_key_clone, &NULL_IV[..]),
+                    ctr(cipher, &cipher_key_clone[..key_size], &NULL_IV[..]),
                     VerificationKey::new(&SHA256, &hmac_key_clone),
                 )
             });
@@ -168,5 +168,20 @@ mod tests {
 
         let received = tokio_current_thread::block_on_all(fin).unwrap();
         assert_eq!(received, data);
+    }
+
+    #[test]
+    fn full_codec_encode_then_decode_aes128() {
+        full_codec_encode_then_decode(Cipher::Aes128);
+    }
+
+    #[test]
+    fn full_codec_encode_then_decode_aes256() {
+        full_codec_encode_then_decode(Cipher::Aes256);
+    }
+
+    #[test]
+    fn full_codec_encode_then_decode_twofish() {
+        full_codec_encode_then_decode(Cipher::Twofish);
     }
 }
