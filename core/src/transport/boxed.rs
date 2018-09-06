@@ -20,6 +20,7 @@
 
 use futures::prelude::*;
 use multiaddr::Multiaddr;
+use std::fmt;
 use std::io::Error as IoError;
 use std::sync::Arc;
 use transport::{MuxedTransport, Transport};
@@ -123,9 +124,14 @@ where
 }
 
 /// See the `Transport::boxed` method.
-// TODO: implement Debug
 pub struct Boxed<O> {
     inner: Arc<Abstract<O> + Send + Sync>,
+}
+
+impl<O> fmt::Debug for Boxed<O> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "BoxedTransport")
+    }
 }
 
 impl<O> Clone for Boxed<O> {
@@ -167,9 +173,14 @@ impl<O> Transport for Boxed<O> {
 }
 
 /// See the `Transport::boxed_muxed` method.
-// TODO: implement Debug
 pub struct BoxedMuxed<O> {
     inner: Arc<AbstractMuxed<O> + Send + Sync>,
+}
+
+impl<O> fmt::Debug for BoxedMuxed<O> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "BoxedMuxedTransport")
+    }
 }
 
 impl<O> Clone for BoxedMuxed<O> {
