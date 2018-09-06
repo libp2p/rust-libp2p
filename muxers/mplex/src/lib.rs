@@ -53,6 +53,8 @@ pub struct MplexConfig {
     max_buffer_len: usize,
     /// Behaviour when the buffer size limit is reached.
     max_buffer_behaviour: MaxBufferBehaviour,
+    /// When sending data, split it into frames whose maximum size is this value.
+    split_send_size: usize,
 }
 
 impl MplexConfig {
@@ -98,6 +100,7 @@ impl Default for MplexConfig {
             max_substreams: 128,
             max_buffer_len: 4096,
             max_buffer_behaviour: MaxBufferBehaviour::CloseAll,
+            split_send_size: 1024,
         }
     }
 }
@@ -460,15 +463,18 @@ where C: AsyncRead + AsyncWrite
     }
 
     fn write_substream(&self, substream: &mut Self::Substream, buf: &[u8]) -> Result<usize, IoError> {
+        let mut inner = self.inner.lock();
+
+        let to_write = cmp::min(buf.len(), inner.config.split_send_size);
+
         let elem = codec::Elem::Data {
             substream_id: substream.num,
-            data: From::from(buf),
+            data: From::from(&buf[..to_write]),
             endpoint: substream.endpoint,
         };
 
-        let mut inner = self.inner.lock();
         match poll_send(&mut inner, elem) {
-            Ok(Async::Ready(())) => Ok(buf.len()),
+            Ok(Async::Ready(())) => Ok(to_write),
             Ok(Async::NotReady) => Err(IoErrorKind::WouldBlock.into()),
             Err(err) => Err(err),
         }
