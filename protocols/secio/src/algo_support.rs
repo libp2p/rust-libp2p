@@ -70,6 +70,9 @@ macro_rules! concat_comma {
     ($first:expr, $($rest:expr),*) => (
         concat!($first $(, ',', $rest)*)
     );
+    ($elem:expr) => (
+        $elem
+    );
 }
 
 // TODO: there's no library in the Rust ecosystem that supports P-521, but the Go & JS
