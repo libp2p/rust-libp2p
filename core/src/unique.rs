@@ -101,10 +101,17 @@ impl<T> UniqueConnec<T> {
     #[inline]
     pub fn dial<S, F, Du>(&self, swarm: &SwarmController<S, F>, multiaddr: &Multiaddr,
                           transport: Du) -> UniqueConnecFuture<T>
-        where T: Clone + 'static,       // TODO: 'static :-/
+        where T: Clone + Send + 'static,       // TODO: 'static :-/
               Du: Transport + 'static, // TODO: 'static :-/
               Du::Output: Into<S::Output>,
+              Du::Dial: Send,
+              Du::MultiaddrFuture: Send,
               S: Clone + MuxedTransport,
+              S::Dial: Send,
+              S::Listener: Send,
+              S::ListenerUpgrade: Send,
+              S::Output: Send,
+              S::MultiaddrFuture: Send,
               F: 'static,
     {
         self.dial_inner(swarm, multiaddr, transport, true)
@@ -115,10 +122,17 @@ impl<T> UniqueConnec<T> {
     #[inline]
     pub fn dial_if_empty<S, F, Du>(&self, swarm: &SwarmController<S, F>, multiaddr: &Multiaddr,
                                    transport: Du) -> UniqueConnecFuture<T>
-        where T: Clone + 'static,       // TODO: 'static :-/
+        where T: Clone + Send + 'static,       // TODO: 'static :-/
               Du: Transport + 'static, // TODO: 'static :-/
               Du::Output: Into<S::Output>,
+              Du::Dial: Send,
+              Du::MultiaddrFuture: Send,
               S: Clone + MuxedTransport,
+              S::Dial: Send,
+              S::Listener: Send,
+              S::ListenerUpgrade: Send,
+              S::Output: Send,
+              S::MultiaddrFuture: Send,
               F: 'static,
     {
         self.dial_inner(swarm, multiaddr, transport, false)
@@ -127,10 +141,17 @@ impl<T> UniqueConnec<T> {
     /// Inner implementation of `dial_*`.
     fn dial_inner<S, F, Du>(&self, swarm: &SwarmController<S, F>, multiaddr: &Multiaddr,
                             transport: Du, dial_if_err: bool) -> UniqueConnecFuture<T>
-        where T: Clone + 'static,       // TODO: 'static :-/
+        where T: Clone + Send + 'static,       // TODO: 'static :-/
               Du: Transport + 'static, // TODO: 'static :-/
               Du::Output: Into<S::Output>,
+              Du::Dial: Send,
+              Du::MultiaddrFuture: Send,
               S: Clone + MuxedTransport,
+              S::Dial: Send,
+              S::Listener: Send,
+              S::ListenerUpgrade: Send,
+              S::Output: Send,
+              S::MultiaddrFuture: Send,
               F: 'static,
     {
         let mut inner = self.inner.lock();

@@ -50,12 +50,12 @@ impl<T> Clone for Dialer<T> {
     }
 }
 
-impl<T: IntoBuf + 'static> Transport for Dialer<T> {
+impl<T: IntoBuf + Send + 'static> Transport for Dialer<T> {
     type Output = Channel<T>;
-    type Listener = Box<Stream<Item=Self::ListenerUpgrade, Error=io::Error>>;
+    type Listener = Box<Stream<Item=Self::ListenerUpgrade, Error=io::Error> + Send>;
     type ListenerUpgrade = FutureResult<(Self::Output, Self::MultiaddrFuture), io::Error>;
     type MultiaddrFuture = FutureResult<Multiaddr, io::Error>;
-    type Dial = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error>>;
+    type Dial = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error> + Send>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         Err((self, addr))
@@ -93,12 +93,12 @@ impl<T> Clone for Listener<T> {
     }
 }
 
-impl<T: IntoBuf + 'static> Transport for Listener<T> {
+impl<T: IntoBuf + Send + 'static> Transport for Listener<T> {
     type Output = Channel<T>;
-    type Listener = Box<Stream<Item=Self::ListenerUpgrade, Error=io::Error>>;
+    type Listener = Box<Stream<Item=Self::ListenerUpgrade, Error=io::Error> + Send>;
     type ListenerUpgrade = FutureResult<(Self::Output, Self::MultiaddrFuture), io::Error>;
     type MultiaddrFuture = FutureResult<Multiaddr, io::Error>;
-    type Dial = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error>>;
+    type Dial = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error> + Send>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         if !is_memory_addr(&addr) {
@@ -200,12 +200,12 @@ mod tests {
         #[derive(Clone)]
         struct Echo(mpsc::UnboundedSender<()>);
 
-        impl<Maf: 'static> ConnectionUpgrade<memory::Channel<Bytes>, Maf> for Echo {
+        impl<Maf: Send + 'static> ConnectionUpgrade<memory::Channel<Bytes>, Maf> for Echo {
             type NamesIter = iter::Once<(Bytes, ())>;
             type UpgradeIdentifier = ();
             type Output = ();
             type MultiaddrFuture = Maf;
-            type Future = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error>>;
+            type Future = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error> + Send>;
 
             fn protocol_names(&self) -> Self::NamesIter {
                 iter::once(("/echo/1.0.0".into(), ()))
