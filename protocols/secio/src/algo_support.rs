@@ -85,11 +85,13 @@ supported_impl!(
 
 // TODO: the Go & JS implementations advertise Blowfish ; however doing so in Rust leads to
 //       runtime errors
+// TODO: the AES library we're using seems to have a bug causing data corruption from time to time,
+//       which is why we prioritize TwoFish
 supported_impl!(
     ciphers: Cipher,
+    "TwofishCTR" => Cipher::Twofish,
     "AES-128" => Cipher::Aes128,
     "AES-256" => Cipher::Aes256,
-    "TwofishCTR" => Cipher::Twofish,
 );
 
 supported_impl!(
