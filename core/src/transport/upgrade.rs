@@ -47,8 +47,15 @@ impl<T, C> UpgradedNode<T, C> {
 impl<'a, T, C> UpgradedNode<T, C>
 where
     T: Transport + 'a,
-    T::Output: AsyncRead + AsyncWrite,
-    C: ConnectionUpgrade<T::Output, T::MultiaddrFuture> + 'a,
+    T::Dial: Send,
+    T::Listener: Send,
+    T::ListenerUpgrade: Send,
+    T::MultiaddrFuture: Send,
+    T::Output: Send + AsyncRead + AsyncWrite,
+    C: ConnectionUpgrade<T::Output, T::MultiaddrFuture> + Send + 'a,
+    C::NamesIter: Send,
+    C::Future: Send,
+    C::UpgradeIdentifier: Send,
 {
     /// Returns a reference to the inner `Transport`.
     #[inline]
@@ -65,7 +72,7 @@ where
     pub fn dial(
         self,
         addr: Multiaddr,
-    ) -> Result<Box<Future<Item = (C::Output, C::MultiaddrFuture), Error = IoError> + 'a>, (Self, Multiaddr)>
+    ) -> Result<Box<Future<Item = (C::Output, C::MultiaddrFuture), Error = IoError> + Send + 'a>, (Self, Multiaddr)>
     where
         C::NamesIter: Clone, // TODO: not elegant
     {
@@ -101,13 +108,15 @@ where
         self,
     ) -> Box<
         Future<
-                Item = Box<Future<Item = (C::Output, C::MultiaddrFuture), Error = IoError> + 'a>,
+                Item = Box<Future<Item = (C::Output, C::MultiaddrFuture), Error = IoError> + Send + 'a>,
                 Error = IoError,
             >
-            + 'a,
+            + Send + 'a,
     >
     where
         T: MuxedTransport,
+        T::Incoming: Send,
+        T::IncomingUpgrade: Send,
         C::NamesIter: Clone, // TODO: not elegant
         C: Clone,
     {
@@ -119,7 +128,7 @@ where
                 apply(connection, upgrade, Endpoint::Listener, client_addr)
             });
 
-            Box::new(future) as Box<Future<Item = _, Error = _>>
+            Box::new(future) as Box<Future<Item = _, Error = _> + Send>
         });
 
         Box::new(future) as Box<_>
@@ -138,9 +147,10 @@ where
         (
             Box<
                 Stream<
-                        Item = Box<Future<Item = (C::Output, C::MultiaddrFuture), Error = IoError> + 'a>,
+                        Item = Box<Future<Item = (C::Output, C::MultiaddrFuture), Error = IoError> + Send + 'a>,
                         Error = IoError,
                     >
+                    + Send
                     + 'a,
             >,
             Multiaddr,
@@ -187,17 +197,22 @@ where
 impl<T, C> Transport for UpgradedNode<T, C>
 where
     T: Transport + 'static,
-    T::Output: AsyncRead + AsyncWrite,
-    C: ConnectionUpgrade<T::Output, T::MultiaddrFuture> + 'static,
+    T::Dial: Send,
+    T::Listener: Send,
+    T::ListenerUpgrade: Send,
+    T::MultiaddrFuture: Send,
+    T::Output: Send + AsyncRead + AsyncWrite,
+    C: ConnectionUpgrade<T::Output, T::MultiaddrFuture> + Clone + Send + 'static,
     C::MultiaddrFuture: Future<Item = Multiaddr, Error = IoError>,
-    C::NamesIter: Clone, // TODO: not elegant
-    C: Clone,
+    C::NamesIter: Clone + Send,
+    C::Future: Send,
+    C::UpgradeIdentifier: Send,
 {
     type Output = C::Output;
     type MultiaddrFuture = C::MultiaddrFuture;
-    type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
-    type ListenerUpgrade = Box<Future<Item = (C::Output, Self::MultiaddrFuture), Error = IoError>>;
-    type Dial = Box<Future<Item = (C::Output, Self::MultiaddrFuture), Error = IoError>>;
+    type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError> + Send>;
+    type ListenerUpgrade = Box<Future<Item = (C::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
+    type Dial = Box<Future<Item = (C::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
 
     #[inline]
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -218,14 +233,21 @@ where
 impl<T, C> MuxedTransport for UpgradedNode<T, C>
 where
     T: MuxedTransport + 'static,
-    T::Output: AsyncRead + AsyncWrite,
-    C: ConnectionUpgrade<T::Output, T::MultiaddrFuture> + 'static,
+    T::Dial: Send,
+    T::Listener: Send,
+    T::ListenerUpgrade: Send,
+    T::MultiaddrFuture: Send,
+    T::Output: Send + AsyncRead + AsyncWrite,
+    T::Incoming: Send,
+    T::IncomingUpgrade: Send,
+    C: ConnectionUpgrade<T::Output, T::MultiaddrFuture> + Clone + Send + 'static,
     C::MultiaddrFuture: Future<Item = Multiaddr, Error = IoError>,
-    C::NamesIter: Clone, // TODO: not elegant
-    C: Clone,
+    C::NamesIter: Clone + Send,
+    C::Future: Send,
+    C::UpgradeIdentifier: Send,
 {
-    type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError>>;
-    type IncomingUpgrade = Box<Future<Item = (C::Output, Self::MultiaddrFuture), Error = IoError>>;
+    type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError> + Send>;
+    type IncomingUpgrade = Box<Future<Item = (C::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
 
     #[inline]
     fn next_incoming(self) -> Self::Incoming {

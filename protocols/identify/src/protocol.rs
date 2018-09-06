@@ -61,7 +61,7 @@ pub struct IdentifySender<T> {
 
 impl<'a, T> IdentifySender<T>
 where
-    T: AsyncWrite + 'a,
+    T: AsyncWrite + Send + 'a,
 {
     /// Sends back information to the client. Returns a future that is signalled whenever the
     /// info have been sent.
@@ -69,7 +69,7 @@ where
         self,
         info: IdentifyInfo,
         observed_addr: &Multiaddr,
-    ) -> Box<Future<Item = (), Error = IoError> + 'a> {
+    ) -> Box<Future<Item = (), Error = IoError> + Send + 'a> {
         debug!("Sending identify info to client");
         trace!("Sending: {:?}", info);
 
@@ -113,14 +113,14 @@ pub struct IdentifyInfo {
 
 impl<C, Maf> ConnectionUpgrade<C, Maf> for IdentifyProtocolConfig
 where
-    C: AsyncRead + AsyncWrite + 'static,
-    Maf: Future<Item = Multiaddr, Error = IoError> + 'static,
+    C: AsyncRead + AsyncWrite + Send + 'static,
+    Maf: Future<Item = Multiaddr, Error = IoError> + Send + 'static,
 {
     type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
     type UpgradeIdentifier = ();
     type Output = IdentifyOutput<C>;
     type MultiaddrFuture = future::Either<future::FutureResult<Multiaddr, IoError>, Maf>;
-    type Future = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
+    type Future = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
 
     #[inline]
     fn protocol_names(&self) -> Self::NamesIter {

@@ -59,16 +59,20 @@ impl<T> Transport for WsConfig<T>
 where
     // TODO: this 'static is pretty arbitrary and is necessary because of the websocket library
     T: Transport + 'static,
+    T::Dial: Send,
+    T::MultiaddrFuture: Send,
+    T::Listener: Send,
+    T::ListenerUpgrade: Send,
     // TODO: this Send is pretty arbitrary and is necessary because of the websocket library
     T::Output: AsyncRead + AsyncWrite + Send,
 {
-    type Output = Box<AsyncStream>;
-    type MultiaddrFuture = Box<Future<Item = Multiaddr, Error = IoError>>;
+    type Output = Box<AsyncStream + Send>;
+    type MultiaddrFuture = Box<Future<Item = Multiaddr, Error = IoError> + Send>;
     type Listener =
         stream::Map<T::Listener, fn(<T as Transport>::ListenerUpgrade) -> Self::ListenerUpgrade>;
     type ListenerUpgrade =
-        Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
-    type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
+        Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
+    type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
 
     fn listen_on(
         self,
@@ -139,16 +143,16 @@ where
                                     .map(|v| v.expect("we only take while this is Some"));
 
                                 let read_write = RwStreamSink::new(framed_data);
-                                Box::new(read_write) as Box<AsyncStream>
+                                Box::new(read_write) as Box<AsyncStream + Send>
                             })
                     })
-                    .map(|s| Box::new(Ok(s).into_future()) as Box<Future<Item = _, Error = _>>)
+                    .map(|s| Box::new(Ok(s).into_future()) as Box<Future<Item = _, Error = _> + Send>)
                     .into_future()
                     .flatten()
-                    .map(move |v| (v, Box::new(client_addr) as Box<Future<Item = _, Error = _>>))
+                    .map(move |v| (v, Box::new(client_addr) as Box<Future<Item = _, Error = _> + Send>))
             });
 
-            Box::new(upgraded) as Box<Future<Item = _, Error = _>>
+            Box::new(upgraded) as Box<Future<Item = _, Error = _> + Send>
         });
 
         Ok((listen, new_addr))
@@ -198,7 +202,7 @@ where
                         addr.append(AddrComponent::WS);
                     };
                     addr
-                })) as Box<Future<Item = _, Error = _>>;
+                })) as Box<Future<Item = _, Error = _> + Send>;
 
                 ClientBuilder::new(&ws_addr)
                     .expect("generated ws address is always valid")
@@ -223,7 +227,7 @@ where
                                 }
                             });
                         let read_write = RwStreamSink::new(framed_data);
-                        Box::new(read_write) as Box<AsyncStream>
+                        Box::new(read_write) as Box<AsyncStream + Send>
                     })
                     .map(move |c| (c, client_addr))
             });

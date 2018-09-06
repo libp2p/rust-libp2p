@@ -82,6 +82,7 @@ extern crate aes_ctr;
 #[cfg(feature = "secp256k1")]
 extern crate asn1_der;
 extern crate bytes;
+extern crate ctr;
 extern crate futures;
 extern crate libp2p_core;
 #[macro_use]
@@ -93,6 +94,7 @@ extern crate rw_stream_sink;
 #[cfg(feature = "secp256k1")]
 extern crate secp256k1;
 extern crate tokio_io;
+extern crate twofish;
 extern crate untrusted;
 
 #[cfg(feature = "aes-all")]
@@ -287,12 +289,12 @@ where
 
 impl<S, Maf> libp2p_core::ConnectionUpgrade<S, Maf> for SecioConfig
 where
-    S: AsyncRead + AsyncWrite + 'static, // TODO: 'static :(
-    Maf: 'static,                        // TODO: 'static :(
+    S: AsyncRead + AsyncWrite + Send + 'static, // TODO: 'static :(
+    Maf: Send + 'static,                        // TODO: 'static :(
 {
     type Output = SecioOutput<S>;
     type MultiaddrFuture = Maf;
-    type Future = Box<Future<Item = (Self::Output, Maf), Error = IoError>>;
+    type Future = Box<Future<Item = (Self::Output, Maf), Error = IoError> + Send>;
     type NamesIter = iter::Once<(Bytes, ())>;
     type UpgradeIdentifier = ();
 
@@ -340,7 +342,7 @@ pub struct SecioMiddleware<S> {
 
 impl<S> SecioMiddleware<S>
 where
-    S: AsyncRead + AsyncWrite,
+    S: AsyncRead + AsyncWrite + Send,
 {
     /// Attempts to perform a handshake on the given socket.
     ///
@@ -349,7 +351,7 @@ where
     pub fn handshake<'a>(
         socket: S,
         key_pair: SecioKeyPair,
-    ) -> Box<Future<Item = (SecioMiddleware<S>, PublicKey, Vec<u8>), Error = SecioError> + 'a>
+    ) -> Box<Future<Item = (SecioMiddleware<S>, PublicKey, Vec<u8>), Error = SecioError> + Send + 'a>
     where
         S: 'a,
     {

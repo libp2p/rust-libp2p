@@ -27,7 +27,7 @@ extern crate rand;
 extern crate tokio_current_thread;
 extern crate tokio_io;
 
-use futures::{future, future::Future};
+use futures::{future, future::Future, Stream};
 use libp2p_core::Transport;
 use libp2p_tcp_transport::TcpConfig;
 use std::sync::{atomic, Arc};
@@ -52,7 +52,7 @@ fn lots_of_swarms() {
         );
 
         swarm_controllers.push(ctrl);
-        swarm_futures.push(fut);
+        swarm_futures.push(fut.for_each(|_| Ok(())));
     }
 
     let mut addresses = Vec::new();

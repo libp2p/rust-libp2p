@@ -45,16 +45,21 @@ impl<Trans, AddrRes> PeerIdTransport<Trans, AddrRes> {
 
 impl<Trans, AddrRes, AddrResOut> Transport for PeerIdTransport<Trans, AddrRes>
 where
-    Trans: Transport + Clone + 'static, // TODO: 'static :(
-    Trans::Output: AsyncRead + AsyncWrite,
+    Trans: Transport + Clone + Send + 'static, // TODO: 'static :(
+    Trans::Dial: Send,
+    Trans::Listener: Send,
+    Trans::ListenerUpgrade: Send,
+    Trans::MultiaddrFuture: Send,
+    Trans::Output: AsyncRead + AsyncWrite + Send,
     AddrRes: Fn(PeerId) -> AddrResOut + 'static,       // TODO: 'static :(
     AddrResOut: IntoIterator<Item = Multiaddr> + 'static,       // TODO: 'static :(
+    AddrResOut::IntoIter: Send,
 {
     type Output = PeerIdTransportOutput<Trans::Output>;
-    type MultiaddrFuture = Box<Future<Item = Multiaddr, Error = IoError>>;
-    type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
-    type ListenerUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
-    type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
+    type MultiaddrFuture = Box<Future<Item = Multiaddr, Error = IoError> + Send>;
+    type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError> + Send>;
+    type ListenerUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
+    type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
 
     #[inline]
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -94,11 +99,11 @@ where
                             let peer_id = info.info.public_key.clone().into_peer_id();
                             debug!("Identified {} as {:?}", original_addr, peer_id);
                             AddrComponent::P2P(peer_id.into()).into()
-                        })) as Box<Future<Item = _, Error = _>>;
+                        })) as Box<Future<Item = _, Error = _> + Send>;
                     (out, real_addr)
                 });
 
-            Box::new(fut) as Box<Future<Item = _, Error = _>>
+            Box::new(fut) as Box<Future<Item = _, Error = _> + Send>
         });
 
         Ok((Box::new(listener) as Box<_>, listened_addr))
@@ -155,7 +160,7 @@ where
                             original_addr: original_addr,
                         };
                         // Replace the multiaddress with the one of the form `/p2p/...` or `/ipfs/...`.
-                        Ok((out, Box::new(future::ok(addr)) as Box<Future<Item = _, Error = _>>))
+                        Ok((out, Box::new(future::ok(addr)) as Box<Future<Item = _, Error = _> + Send>))
                     });
 
                 Ok(Box::new(future) as Box<_>)
@@ -195,7 +200,7 @@ where
                                 let peer_id = info.info.public_key.clone().into_peer_id();
                                 debug!("Identified {} as {:?}", original_addr, peer_id);
                                 AddrComponent::P2P(peer_id.into()).into()
-                            })) as Box<Future<Item = _, Error = _>>;
+                            })) as Box<Future<Item = _, Error = _> + Send>;
                         (out, real_addr)
                     });
 
@@ -212,13 +217,20 @@ where
 
 impl<Trans, AddrRes, AddrResOut> MuxedTransport for PeerIdTransport<Trans, AddrRes>
 where
-    Trans: MuxedTransport + Clone + 'static,
-    Trans::Output: AsyncRead + AsyncWrite,
+    Trans: MuxedTransport + Clone + Send + 'static,
+    Trans::Dial: Send,
+    Trans::Listener: Send,
+    Trans::ListenerUpgrade: Send,
+    Trans::MultiaddrFuture: Send,
+    Trans::Output: AsyncRead + AsyncWrite + Send,
+    Trans::Incoming: Send,
+    Trans::IncomingUpgrade: Send,
     AddrRes: Fn(PeerId) -> AddrResOut + 'static,       // TODO: 'static :(
     AddrResOut: IntoIterator<Item = Multiaddr> + 'static,   // TODO: 'static :(
+    AddrResOut::IntoIter: Send,
 {
-    type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError>>;
-    type IncomingUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
+    type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError> + Send>;
+    type IncomingUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
 
     #[inline]
     fn next_incoming(self) -> Self::Incoming {
@@ -243,11 +255,11 @@ where
                             let peer_id = info.info.public_key.clone().into_peer_id();
                             debug!("Identified {} as {:?}", original_addr, peer_id);
                             AddrComponent::P2P(peer_id.into()).into()
-                        })) as Box<Future<Item = _, Error = _>>;
+                        })) as Box<Future<Item = _, Error = _> + Send>;
                     (out, real_addr)
                 });
 
-            Box::new(future) as Box<Future<Item = _, Error = _>>
+            Box::new(future) as Box<Future<Item = _, Error = _> + Send>
         });
 
         Box::new(future) as Box<_>
@@ -261,7 +273,7 @@ pub struct PeerIdTransportOutput<S> {
 
     /// Identification of the remote.
     /// This may not be known immediately, hence why we use a future.
-    pub info: Box<Future<Item = IdentifyTransportOutcome, Error = IoError>>,
+    pub info: Box<Future<Item = IdentifyTransportOutcome, Error = IoError> + Send>,
 
     /// Original address of the remote.
     /// This layer turns the address of the remote into the `/p2p/...` form, but stores the
@@ -313,8 +325,8 @@ mod tests {
         impl Transport for UnderlyingTrans {
             type Output = <TcpConfig as Transport>::Output;
             type MultiaddrFuture = <TcpConfig as Transport>::MultiaddrFuture;
-            type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
-            type ListenerUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
+            type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError> + Send>;
+            type ListenerUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
             type Dial = <TcpConfig as Transport>::Dial;
             #[inline]
             fn listen_on(

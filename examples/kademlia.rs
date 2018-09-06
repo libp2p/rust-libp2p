@@ -18,7 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#![type_length_limit = "2097152"]
+// Libp2p's code unfortunately produces very large types. Rust's default length limit for type
+// names is not large enough, therefore we need this attribute.
+#![type_length_limit = "4194304"]
 
 extern crate bigint;
 extern crate bytes;
@@ -231,7 +233,7 @@ fn main() {
     // future through the tokio core.
     tokio_current_thread::block_on_all(
         finish_enum
-            .select(swarm_future)
+            .select(swarm_future.for_each(|_| Ok(())))
             .map(|(n, _)| n)
             .map_err(|(err, _)| err),
     ).unwrap();

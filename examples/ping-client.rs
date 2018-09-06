@@ -25,7 +25,7 @@ extern crate libp2p;
 extern crate tokio_current_thread;
 extern crate tokio_io;
 
-use futures::Future;
+use futures::{Future, Stream};
 use futures::sync::oneshot;
 use std::env;
 use libp2p::core::Transport;
@@ -112,7 +112,7 @@ fn main() {
     // actually started yet. Because we created the `TcpConfig` with tokio, we need to run the
     // future through the tokio core.
     tokio_current_thread::block_on_all(
-        rx.select(swarm_future.map_err(|_| unreachable!()))
+        rx.select(swarm_future.for_each(|_| Ok(())).map_err(|_| unreachable!()))
             .map_err(|(e, _)| e)
             .map(|_| ()),
     ).unwrap();
