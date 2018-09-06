@@ -59,9 +59,9 @@ use {SecioKeyPair, SecioKeyPairInner};
 pub fn handshake<'a, S: 'a>(
     socket: S,
     local_key: SecioKeyPair,
-) -> Box<Future<Item = (FullCodec<S>, PublicKey, Vec<u8>), Error = SecioError> + 'a>
+) -> Box<Future<Item = (FullCodec<S>, PublicKey, Vec<u8>), Error = SecioError> + Send + 'a>
 where
-    S: AsyncRead + AsyncWrite,
+    S: AsyncRead + AsyncWrite + Send,
 {
     // TODO: could be rewritten as a coroutine once coroutines land in stable Rust
 

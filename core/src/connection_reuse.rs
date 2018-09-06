@@ -129,7 +129,7 @@ enum PeerState<D, M> where M: StreamMuxer {
     // TODO: stronger Future type
     Pending {
         /// Future that produces the muxer.
-        future: Box<Future<Item = ((D, M), Multiaddr), Error = IoError>>,
+        future: Box<Future<Item = ((D, M), Multiaddr), Error = IoError> + Send>,
         /// All the tasks to notify when `future` resolves.
         notify: FnvHashMap<usize, task::Task>,
     },
@@ -164,15 +164,19 @@ where
 
 impl<T, D, M> Transport for ConnectionReuse<T, D, M>
 where
-    T: Transport + 'static, // TODO: 'static :(
+    T: Transport + Send + 'static, // TODO: 'static :(
+    T::Dial: Send,
+    T::MultiaddrFuture: Send,
+    T::Listener: Send,
+    T::ListenerUpgrade: Send,
     T: Transport<Output = (D, M)> + Clone + 'static, // TODO: 'static :(
-    M: StreamMuxer + 'static,
-    D: Clone + 'static,
+    M: Send + Sync + StreamMuxer + 'static,
+    D: Send + Clone + 'static,
     T: Clone,
 {
     type Output = (D, ConnectionReuseSubstream<T, D, M>);
     type MultiaddrFuture = future::FutureResult<Multiaddr, IoError>;
-    type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
+    type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError> + Send>;
     type ListenerUpgrade = FutureResult<(Self::Output, Self::MultiaddrFuture), IoError>;
     type Dial = ConnectionReuseDial<T, D, M>;
 
@@ -245,10 +249,14 @@ where
 
 impl<T, D, M> MuxedTransport for ConnectionReuse<T, D, M>
 where
-    T: Transport + 'static, // TODO: 'static :(
+    T: Transport + Send + 'static, // TODO: 'static :(
+    T::Dial: Send,
+    T::MultiaddrFuture: Send,
+    T::Listener: Send,
+    T::ListenerUpgrade: Send,
     T: Transport<Output = (D, M)> + Clone + 'static, // TODO: 'static :(
-    M: StreamMuxer + 'static,
-    D: Clone + 'static,
+    M: Send + Sync + StreamMuxer + 'static,
+    D: Send + Clone + 'static,
     T: Clone,
 {
     type Incoming = ConnectionReuseIncoming<T, D, M>;
@@ -305,10 +313,10 @@ where
 impl<T, D, M> Future for ConnectionReuseDial<T, D, M>
 where 
     T: Transport<Output = (D, M)> + Clone,
-    M: StreamMuxer + 'static,
-    D: Clone + 'static,
-    <T as Transport>::Dial: 'static,
-    <T as Transport>::MultiaddrFuture: 'static,
+    M: Send + StreamMuxer + 'static,
+    D: Send + Clone + 'static,
+    <T as Transport>::Dial: Send + 'static,
+    <T as Transport>::MultiaddrFuture: Send + 'static,
 {
     type Item = ((D, ConnectionReuseSubstream<T, D, M>), FutureResult<Multiaddr, IoError>);
     type Error = IoError;
@@ -471,7 +479,7 @@ where
     /// Identifier for this listener. Used to determine which connections were opened by it.
     listener_id: u64,
     /// Opened connections that need to be upgraded.
-    current_upgrades: FuturesUnordered<Box<Future<Item = (T::Output, Multiaddr), Error = IoError>>>,
+    current_upgrades: FuturesUnordered<Box<Future<Item = (T::Output, Multiaddr), Error = IoError> + Send>>,
 
     /// Shared between the whole connection reuse mechanism.
     shared: Arc<Mutex<Shared<T, D, M>>>,
@@ -484,7 +492,7 @@ where
     M: StreamMuxer,
     D: Clone,
     L: Stream<Item = Lu, Error = IoError>,
-    Lu: Future<Item = (T::Output, Multiaddr), Error = IoError> + 'static,
+    Lu: Future<Item = (T::Output, Multiaddr), Error = IoError> + Send + 'static,
 {
     type Item = FutureResult<((D, ConnectionReuseSubstream<T, D, M>), FutureResult<Multiaddr, IoError>), IoError>;
     type Error = IoError;

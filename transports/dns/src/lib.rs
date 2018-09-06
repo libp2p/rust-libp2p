@@ -94,13 +94,14 @@ where
 
 impl<T> Transport for DnsConfig<T>
 where
-    T: Transport + 'static, // TODO: 'static :-/
+    T: Transport + Send + 'static, // TODO: 'static :-/
+    T::Dial: Send,
 {
     type Output = T::Output;
     type MultiaddrFuture = T::MultiaddrFuture;
     type Listener = T::Listener;
     type ListenerUpgrade = T::ListenerUpgrade;
-    type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
+    type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
 
     #[inline]
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {

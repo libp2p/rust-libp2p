@@ -289,12 +289,12 @@ where
 
 impl<S, Maf> libp2p_core::ConnectionUpgrade<S, Maf> for SecioConfig
 where
-    S: AsyncRead + AsyncWrite + 'static, // TODO: 'static :(
-    Maf: 'static,                        // TODO: 'static :(
+    S: AsyncRead + AsyncWrite + Send + 'static, // TODO: 'static :(
+    Maf: Send + 'static,                        // TODO: 'static :(
 {
     type Output = SecioOutput<S>;
     type MultiaddrFuture = Maf;
-    type Future = Box<Future<Item = (Self::Output, Maf), Error = IoError>>;
+    type Future = Box<Future<Item = (Self::Output, Maf), Error = IoError> + Send>;
     type NamesIter = iter::Once<(Bytes, ())>;
     type UpgradeIdentifier = ();
 
@@ -342,7 +342,7 @@ pub struct SecioMiddleware<S> {
 
 impl<S> SecioMiddleware<S>
 where
-    S: AsyncRead + AsyncWrite,
+    S: AsyncRead + AsyncWrite + Send,
 {
     /// Attempts to perform a handshake on the given socket.
     ///
@@ -351,7 +351,7 @@ where
     pub fn handshake<'a>(
         socket: S,
         key_pair: SecioKeyPair,
-    ) -> Box<Future<Item = (SecioMiddleware<S>, PublicKey, Vec<u8>), Error = SecioError> + 'a>
+    ) -> Box<Future<Item = (SecioMiddleware<S>, PublicKey, Vec<u8>), Error = SecioError> + Send + 'a>
     where
         S: 'a,
     {
