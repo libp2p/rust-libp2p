@@ -85,26 +85,26 @@ impl<A, B> MuxedTransport for OrTransport<A, B>
 where
     A: MuxedTransport,
     B: MuxedTransport,
-    A::Incoming: 'static,        // TODO: meh :-/
-    B::Incoming: 'static,        // TODO: meh :-/
-    A::IncomingUpgrade: 'static, // TODO: meh :-/
-    B::IncomingUpgrade: 'static, // TODO: meh :-/
+    A::Incoming: Send + 'static,        // TODO: meh :-/
+    B::Incoming: Send + 'static,        // TODO: meh :-/
+    A::IncomingUpgrade: Send + 'static, // TODO: meh :-/
+    B::IncomingUpgrade: Send + 'static, // TODO: meh :-/
     A::Output: 'static,          // TODO: meh :-/
     B::Output: 'static,          // TODO: meh :-/
 {
-    type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError>>;
+    type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError> + Send>;
     type IncomingUpgrade =
-        Box<Future<Item = (EitherOutput<A::Output, B::Output>, Self::MultiaddrFuture), Error = IoError>>;
+        Box<Future<Item = (EitherOutput<A::Output, B::Output>, Self::MultiaddrFuture), Error = IoError> + Send>;
 
     #[inline]
     fn next_incoming(self) -> Self::Incoming {
         let first = self.0.next_incoming().map(|out| {
             let fut = out.map(move |(v, addr)| (EitherOutput::First(v), future::Either::A(addr)));
-            Box::new(fut) as Box<Future<Item = _, Error = _>>
+            Box::new(fut) as Box<Future<Item = _, Error = _> + Send>
         });
         let second = self.1.next_incoming().map(|out| {
             let fut = out.map(move |(v, addr)| (EitherOutput::Second(v), future::Either::B(addr)));
-            Box::new(fut) as Box<Future<Item = _, Error = _>>
+            Box::new(fut) as Box<Future<Item = _, Error = _> + Send>
         });
         let future = first.select(second).map(|(i, _)| i).map_err(|(e, _)| e);
         Box::new(future) as Box<_>

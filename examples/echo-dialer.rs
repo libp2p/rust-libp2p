@@ -133,6 +133,7 @@ fn main() {
     // actually started yet. Because we created the `TcpConfig` with tokio, we need to run the
     // future through the tokio core.
     let final_future = swarm_future
+        .for_each(|_| Ok(()))
         .select(finished_rx.map_err(|_| unreachable!()))
         .map(|_| ())
         .map_err(|(err, _)| err);

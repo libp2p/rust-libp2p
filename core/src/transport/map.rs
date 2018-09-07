@@ -42,13 +42,16 @@ impl<T, F> Map<T, F> {
 impl<T, F, D> Transport for Map<T, F>
 where
     T: Transport + 'static,                  // TODO: 'static :-/
-    F: FnOnce(T::Output, Endpoint) -> D + Clone + 'static, // TODO: 'static :-/
+    T::Dial: Send,
+    T::Listener: Send,
+    T::ListenerUpgrade: Send,
+    F: FnOnce(T::Output, Endpoint) -> D + Clone + Send + 'static, // TODO: 'static :-/
 {
     type Output = D;
     type MultiaddrFuture = T::MultiaddrFuture;
-    type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
-    type ListenerUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
-    type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
+    type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError> + Send>;
+    type ListenerUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
+    type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         let map = self.map;
@@ -91,10 +94,15 @@ where
 impl<T, F, D> MuxedTransport for Map<T, F>
 where
     T: MuxedTransport + 'static,             // TODO: 'static :-/
-    F: FnOnce(T::Output, Endpoint) -> D + Clone + 'static, // TODO: 'static :-/
+    T::Dial: Send,
+    T::Listener: Send,
+    T::ListenerUpgrade: Send,
+    T::Incoming: Send,
+    T::IncomingUpgrade: Send,
+    F: FnOnce(T::Output, Endpoint) -> D + Clone + Send + 'static, // TODO: 'static :-/
 {
-    type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError>>;
-    type IncomingUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>>;
+    type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError> + Send>;
+    type IncomingUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
 
     fn next_incoming(self) -> Self::Incoming {
         let map = self.map;

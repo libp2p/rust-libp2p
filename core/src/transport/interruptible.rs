@@ -96,6 +96,7 @@ pub struct Interrupt {
     _tx: oneshot::Sender<()>,
 }
 
+#[must_use = "futures do nothing unless polled"]
 pub struct InterruptibleDial<F> {
     inner: F,
     rx: future::Shared<oneshot::Receiver<()>>,

@@ -38,6 +38,7 @@ use tokio_io::{AsyncRead, AsyncWrite};
 use upgrade::{ConnectionUpgrade, Endpoint};
 
 pub mod and_then;
+pub mod boxed;
 pub mod choice;
 pub mod denied;
 pub mod dummy;
@@ -49,6 +50,7 @@ pub mod memory;
 pub mod muxed;
 pub mod upgrade;
 
+pub use self::boxed::BoxedMuxed;
 pub use self::choice::OrTransport;
 pub use self::denied::DeniedTransport;
 pub use self::dummy::DummyMuxing;
@@ -120,6 +122,34 @@ pub trait Transport {
     /// Returns `None` if nothing can be determined. This happens if this trait implementation
     /// doesn't recognize the protocols, or if `server` and `observed` are related.
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
+
+    /// Turns this `Transport` into an abstract boxed transport.
+    #[inline]
+    fn boxed(self) -> boxed::Boxed<Self::Output>
+    where Self: Sized + MuxedTransport + Clone + Send + Sync + 'static,
+          Self::Dial: Send + 'static,
+          Self::Listener: Send + 'static,
+          Self::ListenerUpgrade: Send + 'static,
+          Self::MultiaddrFuture: Send + 'static,
+    {
+        boxed::boxed(self)
+    }
+
+    /// Turns this `Transport` into an abstract boxed transport.
+    ///
+    /// This is the version if the transport supports muxing.
+    #[inline]
+    fn boxed_muxed(self) -> boxed::BoxedMuxed<Self::Output>
+    where Self: Sized + MuxedTransport + Clone + Send + Sync + 'static,
+          Self::Dial: Send + 'static,
+          Self::Listener: Send + 'static,
+          Self::ListenerUpgrade: Send + 'static,
+          Self::MultiaddrFuture: Send + 'static,
+          Self::Incoming: Send + 'static,
+          Self::IncomingUpgrade: Send + 'static,
+    {
+        boxed::boxed_muxed(self)
+    }
 
     /// Applies a function on the output of the `Transport`.
     #[inline]

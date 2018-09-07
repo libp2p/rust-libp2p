@@ -64,18 +64,21 @@ pub struct LoopUpg<Inner> {
 impl<State, Socket, Inner, Out, AddrFut> ConnectionUpgrade<(State, Socket), AddrFut>
     for LoopUpg<Inner>
 where
-    State: 'static,
-    Socket: AsyncRead + AsyncWrite + 'static,
+    State: Send + 'static,
+    Socket: AsyncRead + AsyncWrite + Send + 'static,
     Inner: ConnectionUpgrade<
             (State, Socket),
             AddrFut,
             Output = Loop<State, Socket, Out>,
             MultiaddrFuture = AddrFut,
         > + Clone
+        + Send
         + 'static,
-    Inner::NamesIter: Clone + 'static,
-    AddrFut: 'static,
-    Out: 'static,
+    Inner::NamesIter: Clone + Send + 'static,
+    Inner::UpgradeIdentifier: Send,
+    Inner::Future: Send,
+    AddrFut: Send + 'static,
+    Out: Send + 'static,
 {
     type NamesIter = Inner::NamesIter;
     type UpgradeIdentifier = Inner::UpgradeIdentifier;
@@ -86,7 +89,7 @@ where
 
     type Output = Out;
     type MultiaddrFuture = AddrFut;
-    type Future = Box<Future<Item = (Out, Self::MultiaddrFuture), Error = IoError>>;
+    type Future = Box<Future<Item = (Out, Self::MultiaddrFuture), Error = IoError> + Send>;
 
     fn upgrade(
         self,

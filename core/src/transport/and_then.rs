@@ -40,15 +40,18 @@ pub struct AndThen<T, C> {
 impl<T, C, F, O, Maf> Transport for AndThen<T, C>
 where
     T: Transport + 'static,
-    C: FnOnce(T::Output, Endpoint, T::MultiaddrFuture) -> F + Clone + 'static,
-    F: Future<Item = (O, Maf), Error = IoError> + 'static,
+    T::Dial: Send,
+    T::Listener: Send,
+    T::ListenerUpgrade: Send,
+    C: FnOnce(T::Output, Endpoint, T::MultiaddrFuture) -> F + Clone + Send + 'static,
+    F: Future<Item = (O, Maf), Error = IoError> + Send + 'static,
     Maf: Future<Item = Multiaddr, Error = IoError> + 'static,
 {
     type Output = O;
     type MultiaddrFuture = Maf;
-    type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError>>;
-    type ListenerUpgrade = Box<Future<Item = (O, Self::MultiaddrFuture), Error = IoError>>;
-    type Dial = Box<Future<Item = (O, Self::MultiaddrFuture), Error = IoError>>;
+    type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError> + Send>;
+    type ListenerUpgrade = Box<Future<Item = (O, Self::MultiaddrFuture), Error = IoError> + Send>;
+    type Dial = Box<Future<Item = (O, Self::MultiaddrFuture), Error = IoError> + Send>;
 
     #[inline]
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -116,12 +119,17 @@ where
 impl<T, C, F, O, Maf> MuxedTransport for AndThen<T, C>
 where
     T: MuxedTransport + 'static,
-    C: FnOnce(T::Output, Endpoint, T::MultiaddrFuture) -> F + Clone + 'static,
-    F: Future<Item = (O, Maf), Error = IoError> + 'static,
+    T::Dial: Send,
+    T::Listener: Send,
+    T::ListenerUpgrade: Send,
+    T::Incoming: Send,
+    T::IncomingUpgrade: Send,
+    C: FnOnce(T::Output, Endpoint, T::MultiaddrFuture) -> F + Clone + Send + 'static,
+    F: Future<Item = (O, Maf), Error = IoError> + Send + 'static,
     Maf: Future<Item = Multiaddr, Error = IoError> + 'static,
 {
-    type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError>>;
-    type IncomingUpgrade = Box<Future<Item = (O, Self::MultiaddrFuture), Error = IoError>>;
+    type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError> + Send>;
+    type IncomingUpgrade = Box<Future<Item = (O, Self::MultiaddrFuture), Error = IoError> + Send>;
 
     #[inline]
     fn next_incoming(self) -> Self::Incoming {
@@ -134,7 +142,7 @@ where
                 upgrade(connection, Endpoint::Listener, client_addr)
             });
 
-            Box::new(future) as Box<Future<Item = _, Error = _>>
+            Box::new(future) as Box<Future<Item = _, Error = _> + Send>
         });
 
         Box::new(future) as Box<_>
