@@ -178,4 +178,9 @@ mod tests {
     fn full_codec_encode_then_decode_aes256() {
         full_codec_encode_then_decode(Cipher::Aes256);
     }
+
+    #[test]
+    fn full_codec_encode_then_decode_null() {
+        full_codec_encode_then_decode(Cipher::Null);
+    }
 }

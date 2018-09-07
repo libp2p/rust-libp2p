@@ -35,7 +35,7 @@ pub enum SecioError {
     HandshakeParsingFailure,
 
     /// There is no protocol supported by both the local and remote hosts.
-    NoSupportIntersection(&'static str, String),
+    NoSupportIntersection,
 
     /// Failed to generate nonce.
     NonceGenerationFailed,
@@ -73,7 +73,7 @@ impl error::Error for SecioError {
             SecioError::HandshakeParsingFailure => {
                 "Failed to parse one of the handshake protobuf messages"
             }
-            SecioError::NoSupportIntersection(_, _) => {
+            SecioError::NoSupportIntersection => {
                 "There is no protocol supported by both the local and remote hosts"
             }
             SecioError::NonceGenerationFailed => "Failed to generate nonce",

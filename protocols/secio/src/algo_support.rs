@@ -23,76 +23,124 @@
 //! One important part of the SECIO handshake is negotiating algorithms. This is what this module
 //! helps you with.
 
-macro_rules! supported_impl {
-    ($mod_name:ident: $ty:ty, $($name:expr => $val:expr),*,) => (
-        pub mod $mod_name {
-            use std::cmp::Ordering;
-            #[allow(unused_imports)]
-            use stream_cipher::Cipher;
-            #[allow(unused_imports)]
-            use ring::{agreement, digest};
-            use error::SecioError;
+use error::SecioError;
+use libp2p_core::Endpoint;
+use ring::{agreement, digest};
+use stream_cipher::Cipher;
 
-            /// String to advertise to the remote.
-            pub const PROPOSITION_STRING: &'static str = concat_comma!($($name),*);
+pub(crate) const DEFAULT_AGREEMENTS_PROPOSITION: &str = "P-256,P384";
+pub(crate) const DEFAULT_CIPHERS_PROPOSITION: &str = "AES-128,AES-256,NULL";
+pub(crate) const DEFAULT_DIGESTS_PROPOSITION: &str = "SHA256,SHA512";
 
-            /// Choose which algorithm to use based on the remote's advertised list.
-            pub fn select_best(hashes_ordering: Ordering, input: &str) -> Result<$ty, SecioError> {
-                match hashes_ordering {
-                    Ordering::Less | Ordering::Equal => {
-                        for second_elem in input.split(',') {
-                            $(
-                                if $name == second_elem {
-                                    return Ok($val);
-                                }
-                            )+
-                        }
-                    },
-                    Ordering::Greater => {
-                        $(
-                            for second_elem in input.split(',') {
-                                if $name == second_elem {
-                                    return Ok($val);
-                                }
-                            }
-                        )+
-                    },
-                };
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum KeyAgreement {
+    EcdhP256,
+    EcdhP384
+}
 
-                Err(SecioError::NoSupportIntersection(PROPOSITION_STRING, input.to_owned()))
+pub fn key_agreements_proposition<'a, I>(xchgs: I) -> String
+where
+    I: IntoIterator<Item=&'a KeyAgreement>
+{
+    let mut s = String::new();
+    for x in xchgs {
+        match x {
+            KeyAgreement::EcdhP256 => s.push_str("P-256,"),
+            KeyAgreement::EcdhP384 => s.push_str("P-384,")
+        }
+    }
+    s.pop(); // remove trailing comma if any
+    s
+}
+
+pub fn select_agreement<'a>(r: Endpoint, ours: &str, theirs: &str) -> Result<&'a agreement::Algorithm, SecioError> {
+    let (a, b) = match r {
+        Endpoint::Dialer => (ours, theirs),
+        Endpoint::Listener => (theirs, ours)
+    };
+    for x in a.split(',') {
+        if b.split(',').any(|y| x == y) {
+            match x {
+                "P-256" => return Ok(&agreement::ECDH_P256),
+                "P-384" => return Ok(&agreement::ECDH_P384),
+                _ => continue
             }
         }
-    );
+    }
+    Err(SecioError::NoSupportIntersection)
 }
 
-// Concatenates several strings with commas.
-macro_rules! concat_comma {
-    ($first:expr, $($rest:expr),*) => (
-        concat!($first $(, ',', $rest)*)
-    );
-    ($elem:expr) => (
-        $elem
-    );
+
+pub fn ciphers_proposition<'a, I>(ciphers: I) -> String
+where
+    I: IntoIterator<Item=&'a Cipher>
+{
+    let mut s = String::new();
+    for c in ciphers {
+        match c {
+            Cipher::Aes128 => s.push_str("AES-128,"),
+            Cipher::Aes256 => s.push_str("AES-256,"),
+            Cipher::Null => s.push_str("NULL,")
+        }
+    }
+    s.pop(); // remove trailing comma if any
+    s
 }
 
-// TODO: there's no library in the Rust ecosystem that supports P-521, but the Go & JS
-//       implementations advertise it
-supported_impl!(
-    exchanges: &'static agreement::Algorithm,
-    "P-256" => &agreement::ECDH_P256,
-    "P-384" => &agreement::ECDH_P384,
-);
+pub fn select_cipher(r: Endpoint, ours: &str, theirs: &str) -> Result<Cipher, SecioError> {
+    let (a, b) = match r {
+        Endpoint::Dialer => (ours, theirs),
+        Endpoint::Listener => (theirs, ours)
+    };
+    for x in a.split(',') {
+        if b.split(',').any(|y| x == y) {
+            match x {
+                "AES-128" => return Ok(Cipher::Aes128),
+                "AES-256" => return Ok(Cipher::Aes256),
+                "NULL" => return Ok(Cipher::Null),
+                _ => continue
+            }
+        }
+    }
+    Err(SecioError::NoSupportIntersection)
+}
 
-// TODO: the Go & JS implementations advertise Blowfish ; however doing so in Rust leads to
-//       runtime errors
-supported_impl!(
-    ciphers: Cipher,
-    "AES-128" => Cipher::Aes128,
-    "AES-256" => Cipher::Aes256,
-);
 
-supported_impl!(
-    hashes: &'static digest::Algorithm,
-    "SHA256" => &digest::SHA256,
-    "SHA512" => &digest::SHA512,
-);
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum Digest {
+    Sha256,
+    Sha512
+}
+
+pub fn digests_proposition<'a, I>(digests: I) -> String
+where
+    I: IntoIterator<Item=&'a Digest>
+{
+    let mut s = String::new();
+    for d in digests {
+        match d {
+            Digest::Sha256 => s.push_str("SHA256,"),
+            Digest::Sha512 => s.push_str("SHA512,")
+        }
+    }
+    s.pop(); // remove trailing comma if any
+    s
+}
+
+pub fn select_digest<'a>(r: Endpoint, ours: &str, theirs: &str) -> Result<&'a digest::Algorithm, SecioError> {
+    let (a, b) = match r {
+        Endpoint::Dialer => (ours, theirs),
+        Endpoint::Listener => (theirs, ours)
+    };
+    for x in a.split(',') {
+        if b.split(',').any(|y| x == y) {
+            match x {
+                "SHA256" => return Ok(&digest::SHA256),
+                "SHA512" => return Ok(&digest::SHA512),
+                _ => continue
+            }
+        }
+    }
+    Err(SecioError::NoSupportIntersection)
+}
+

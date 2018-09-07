@@ -49,10 +49,9 @@
 //!         //let private_key = include_bytes!("test-rsa-private-key.pk8");
 //!         # let public_key = vec![];
 //!         //let public_key = include_bytes!("test-rsa-public-key.der").to_vec();
-//!         let upgrade = SecioConfig {
-//!             // See the documentation of `SecioKeyPair`.
-//!             key: SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap(),
-//!         };
+//!         // See the documentation of `SecioKeyPair`.
+//!         let keypair = SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap();
+//!         let upgrade = SecioConfig::new(keypair);
 //!
 //!         upgrade::map(upgrade, |out: SecioOutput<_>| out.stream)
 //!     });
@@ -102,7 +101,7 @@ use asn1_der::{traits::FromDerEncoded, traits::FromDerObject, DerObject};
 use bytes::{Bytes, BytesMut};
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
-use libp2p_core::{PeerId, PublicKey};
+use libp2p_core::{Endpoint, PeerId, PublicKey};
 use ring::rand::SystemRandom;
 use ring::signature::{Ed25519KeyPair, RSAKeyPair};
 use rw_stream_sink::RwStreamSink;
@@ -120,12 +119,53 @@ mod handshake;
 mod stream_cipher;
 mod structs_proto;
 
+pub use algo_support::{Digest, KeyAgreement};
+pub use stream_cipher::Cipher;
+
 /// Implementation of the `ConnectionUpgrade` trait of `libp2p_core`. Automatically applies
 /// secio on any connection.
 #[derive(Clone)]
 pub struct SecioConfig {
     /// Private and public keys of the local node.
-    pub key: SecioKeyPair,
+    pub(crate) key: SecioKeyPair,
+    pub(crate) agreements_prop: Option<String>,
+    pub(crate) ciphers_prop: Option<String>,
+    pub(crate) digests_prop: Option<String>
+}
+
+impl SecioConfig {
+    pub fn new(kp: SecioKeyPair) -> Self {
+        SecioConfig {
+            key: kp,
+            agreements_prop: None,
+            ciphers_prop: None,
+            digests_prop: None
+        }
+    }
+
+    pub fn key_agreements<'a, I>(mut self, xs: I) -> Self
+    where
+        I: IntoIterator<Item=&'a KeyAgreement>
+    {
+        self.agreements_prop = Some(algo_support::key_agreements_proposition(xs));
+        self
+    }
+
+    pub fn ciphers<'a, I>(mut self, xs: I) -> Self
+    where
+        I: IntoIterator<Item=&'a Cipher>
+    {
+        self.ciphers_prop = Some(algo_support::ciphers_proposition(xs));
+        self
+    }
+
+    pub fn digests<'a, I>(mut self, xs: I) -> Self
+    where
+        I: IntoIterator<Item=&'a Digest>
+    {
+        self.digests_prop = Some(algo_support::digests_proposition(xs));
+        self
+    }
 }
 
 /// Private and public keys of the local node.
@@ -303,12 +343,12 @@ where
         self,
         incoming: S,
         _: (),
-        _: libp2p_core::Endpoint,
+        e: libp2p_core::Endpoint,
         remote_addr: Maf,
     ) -> Self::Future {
         debug!("Starting secio upgrade");
 
-        let fut = SecioMiddleware::handshake(incoming, self.key);
+        let fut = SecioMiddleware::handshake(incoming, self, e);
         let wrapped = fut.map(|(stream_sink, pubkey, ephemeral)| {
             let mapped = stream_sink.map_err(map_err as fn(_) -> _);
             SecioOutput {
@@ -345,12 +385,13 @@ where
     /// communications, plus the public key of the remote, plus the ephemeral public key.
     pub fn handshake<'a>(
         socket: S,
-        key_pair: SecioKeyPair,
+        config: SecioConfig,
+        role: Endpoint
     ) -> Box<Future<Item = (SecioMiddleware<S>, PublicKey, Vec<u8>), Error = SecioError> + Send + 'a>
     where
         S: 'a,
     {
-        let fut = handshake::handshake(socket, key_pair).map(|(inner, pubkey, ephemeral)| {
+        let fut = handshake::handshake(socket, config, role).map(|(inner, pubkey, ephemeral)| {
             let inner = SecioMiddleware { inner };
             (inner, pubkey, ephemeral)
         });
