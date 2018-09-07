@@ -27,7 +27,7 @@ use futures::future;
 use futures::sink::Sink;
 use futures::stream::Stream;
 use futures::Future;
-use libp2p_core::{Endpoint, PublicKey};
+use libp2p_core::PublicKey;
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
 use protobuf::Message as ProtobufMessage;
 use ring::agreement::EphemeralPrivateKey;
@@ -38,7 +38,7 @@ use ring::signature::{ED25519, RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_
 use ring::{agreement, digest, rand};
 #[cfg(feature = "secp256k1")]
 use secp256k1;
-use std::cmp;
+use std::cmp::{self, Ordering};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::mem;
 use structs_proto::{Exchange, Propose};
@@ -58,8 +58,7 @@ use {SecioConfig, SecioKeyPairInner};
 /// negotiation.
 pub fn handshake<'a, S: 'a>(
     socket: S,
-    config: SecioConfig,
-    role: Endpoint
+    config: SecioConfig
 ) -> Box<Future<Item = (FullCodec<S>, PublicKey, Vec<u8>), Error = SecioError> + Send + 'a>
 where
     S: AsyncRead + AsyncWrite + Send,
@@ -90,7 +89,15 @@ where
         // array instead of a `Vec`.
         remote_nonce: Vec<u8>,
 
-        role: Endpoint,
+        // Set to `ordering(
+        //             hash(concat(remote-pubkey, local-none)),
+        //             hash(concat(local-pubkey, remote-none))
+        //         )`.
+        // `Ordering::Equal` is an invalid value (as it would mean we're talking to ourselves).
+        //
+        // Since everything is symmetrical, this value is used to determine what should be ours
+        // and what should be the remote's.
+        hashes_ordering: Ordering,
 
         // Crypto algorithms chosen for the communication.
         chosen_exchange: Option<&'static agreement::Algorithm>,
@@ -113,7 +120,7 @@ where
         remote_public_key_in_protobuf_bytes: Vec::new(),
         remote_public_key: None,
         remote_nonce: Vec::new(),
-        role,
+        hashes_ordering: Ordering::Equal,
         chosen_exchange: None,
         chosen_cipher: None,
         chosen_hash: None,
@@ -220,12 +227,32 @@ where
 
         // Decide which algorithms to use (thanks to the remote's proposition).
         .and_then(move |(remote_prop, socket, mut context)| {
+            // In order to determine which protocols to use, we compute two hashes and choose
+            // based on which hash is larger.
+            context.hashes_ordering = {
+                let oh1 = {
+                    let mut ctx = digest::Context::new(&digest::SHA256);
+                    ctx.update(&context.remote_public_key_in_protobuf_bytes);
+                    ctx.update(&context.local_nonce);
+                    ctx.finish()
+                };
+
+                let oh2 = {
+                    let mut ctx = digest::Context::new(&digest::SHA256);
+                    ctx.update(&context.local_public_key_in_protobuf_bytes);
+                    ctx.update(&context.remote_nonce);
+                    ctx.finish()
+                };
+
+                oh1.as_ref().cmp(&oh2.as_ref())
+            };
+
             context.chosen_exchange = {
                 let ours = context.config.agreements_prop.as_ref()
                     .map(|s| s.as_ref())
                     .unwrap_or(algo_support::DEFAULT_AGREEMENTS_PROPOSITION);
                 let theirs = &remote_prop.get_exchanges();
-                Some(match algo_support::select_agreement(context.role, ours, theirs) {
+                Some(match algo_support::select_agreement(context.hashes_ordering, ours, theirs) {
                     Ok(a) => a,
                     Err(err) => {
                         debug!("failed to select an exchange protocol");
@@ -238,7 +265,7 @@ where
                     .map(|s| s.as_ref())
                     .unwrap_or(algo_support::DEFAULT_CIPHERS_PROPOSITION);
                 let theirs = &remote_prop.get_ciphers();
-                Some(match algo_support::select_cipher(context.role, ours, theirs) {
+                Some(match algo_support::select_cipher(context.hashes_ordering, ours, theirs) {
                     Ok(a) => {
                         debug!("selected cipher: {:?}", a);
                         a
@@ -254,7 +281,7 @@ where
                     .map(|s| s.as_ref())
                     .unwrap_or(algo_support::DEFAULT_DIGESTS_PROPOSITION);
                 let theirs = &remote_prop.get_hashes();
-                Some(match algo_support::select_digest(context.role, ours, theirs) {
+                Some(match algo_support::select_digest(context.hashes_ordering, ours, theirs) {
                     Ok(a) => {
                         debug!("selected hash: {:?}", a);
                         a
@@ -471,9 +498,10 @@ where
 
                 let (local_infos, remote_infos) = {
                     let (first_half, second_half) = longer_key.split_at(longer_key.len() / 2);
-                    match context.role {
-                        Endpoint::Dialer => (second_half, first_half),
-                        Endpoint::Listener => (first_half, second_half),
+                    match context.hashes_ordering {
+                        Ordering::Equal => panic!(),
+                        Ordering::Less => (second_half, first_half),
+                        Ordering::Greater => (first_half, second_half),
                     }
                 };
 
@@ -493,8 +521,7 @@ where
                     (cipher, hmac)
                 };
 
-                Ok(full_codec(socket, encoding_cipher, encoding_hmac, decoding_cipher,
-                              decoding_hmac))
+                Ok(full_codec(socket, encoding_cipher, encoding_hmac, decoding_cipher, decoding_hmac))
             });
 
             match codec {
@@ -572,7 +599,6 @@ fn stretch_key(key: &SigningKey, result: &mut [u8]) {
 mod tests {
     extern crate tokio_current_thread;
     extern crate tokio_tcp;
-    use libp2p_core::Endpoint;
     use self::tokio_tcp::TcpListener;
     use self::tokio_tcp::TcpStream;
     use super::handshake;
@@ -631,11 +657,11 @@ mod tests {
             .incoming()
             .into_future()
             .map_err(|(e, _)| e.into())
-            .and_then(move |(connec, _)| handshake(connec.unwrap(), key1, Endpoint::Listener));
+            .and_then(move |(connec, _)| handshake(connec.unwrap(), key1));
 
         let client = TcpStream::connect(&listener_addr)
             .map_err(|e| e.into())
-            .and_then(move |stream| handshake(stream, key2, Endpoint::Dialer));
+            .and_then(move |stream| handshake(stream, key2));
 
         tokio_current_thread::block_on_all(server.join(client)).unwrap();
     }

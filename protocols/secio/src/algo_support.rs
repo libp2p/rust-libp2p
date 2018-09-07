@@ -24,13 +24,24 @@
 //! helps you with.
 
 use error::SecioError;
-use libp2p_core::Endpoint;
 use ring::{agreement, digest};
+use std::cmp::Ordering;
 use stream_cipher::Cipher;
 
-pub(crate) const DEFAULT_AGREEMENTS_PROPOSITION: &str = "P-256,P384";
+const ECDH_P256: &str = "P-256";
+const ECDH_P384: &str = "P-384";
+
+const AES_128: &str = "AES-128";
+const AES_256: &str = "AES-256";
+const NULL: &str = "NULL";
+
+const SHA_256: &str = "SHA256";
+const SHA_512: &str = "SHA512";
+
+pub(crate) const DEFAULT_AGREEMENTS_PROPOSITION: &str = "P-256,P-384";
 pub(crate) const DEFAULT_CIPHERS_PROPOSITION: &str = "AES-128,AES-256,NULL";
 pub(crate) const DEFAULT_DIGESTS_PROPOSITION: &str = "SHA256,SHA512";
+
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum KeyAgreement {
@@ -45,24 +56,30 @@ where
     let mut s = String::new();
     for x in xchgs {
         match x {
-            KeyAgreement::EcdhP256 => s.push_str("P-256,"),
-            KeyAgreement::EcdhP384 => s.push_str("P-384,")
+            KeyAgreement::EcdhP256 => {
+                s.push_str(ECDH_P256);
+                s.push(',')
+            }
+            KeyAgreement::EcdhP384 => {
+                s.push_str(ECDH_P384);
+                s.push(',')
+            }
         }
     }
     s.pop(); // remove trailing comma if any
     s
 }
 
-pub fn select_agreement<'a>(r: Endpoint, ours: &str, theirs: &str) -> Result<&'a agreement::Algorithm, SecioError> {
+pub fn select_agreement<'a>(r: Ordering, ours: &str, theirs: &str) -> Result<&'a agreement::Algorithm, SecioError> {
     let (a, b) = match r {
-        Endpoint::Dialer => (ours, theirs),
-        Endpoint::Listener => (theirs, ours)
+        Ordering::Less | Ordering::Equal => (theirs, ours),
+        Ordering::Greater =>  (ours, theirs)
     };
     for x in a.split(',') {
         if b.split(',').any(|y| x == y) {
             match x {
-                "P-256" => return Ok(&agreement::ECDH_P256),
-                "P-384" => return Ok(&agreement::ECDH_P384),
+                ECDH_P256 => return Ok(&agreement::ECDH_P256),
+                ECDH_P384 => return Ok(&agreement::ECDH_P384),
                 _ => continue
             }
         }
@@ -78,26 +95,35 @@ where
     let mut s = String::new();
     for c in ciphers {
         match c {
-            Cipher::Aes128 => s.push_str("AES-128,"),
-            Cipher::Aes256 => s.push_str("AES-256,"),
-            Cipher::Null => s.push_str("NULL,")
+            Cipher::Aes128 => {
+                s.push_str(AES_128);
+                s.push(',')
+            }
+            Cipher::Aes256 => {
+                s.push_str(AES_256);
+                s.push(',')
+            }
+            Cipher::Null => {
+                s.push_str(NULL);
+                s.push(',')
+            }
         }
     }
     s.pop(); // remove trailing comma if any
     s
 }
 
-pub fn select_cipher(r: Endpoint, ours: &str, theirs: &str) -> Result<Cipher, SecioError> {
+pub fn select_cipher(r: Ordering, ours: &str, theirs: &str) -> Result<Cipher, SecioError> {
     let (a, b) = match r {
-        Endpoint::Dialer => (ours, theirs),
-        Endpoint::Listener => (theirs, ours)
+        Ordering::Less | Ordering::Equal => (theirs, ours),
+        Ordering::Greater =>  (ours, theirs)
     };
     for x in a.split(',') {
         if b.split(',').any(|y| x == y) {
             match x {
-                "AES-128" => return Ok(Cipher::Aes128),
-                "AES-256" => return Ok(Cipher::Aes256),
-                "NULL" => return Ok(Cipher::Null),
+                AES_128 => return Ok(Cipher::Aes128),
+                AES_256 => return Ok(Cipher::Aes256),
+                NULL => return Ok(Cipher::Null),
                 _ => continue
             }
         }
@@ -119,24 +145,30 @@ where
     let mut s = String::new();
     for d in digests {
         match d {
-            Digest::Sha256 => s.push_str("SHA256,"),
-            Digest::Sha512 => s.push_str("SHA512,")
+            Digest::Sha256 => {
+                s.push_str(SHA_256);
+                s.push(',')
+            }
+            Digest::Sha512 => {
+                s.push_str(SHA_512);
+                s.push(',')
+            }
         }
     }
     s.pop(); // remove trailing comma if any
     s
 }
 
-pub fn select_digest<'a>(r: Endpoint, ours: &str, theirs: &str) -> Result<&'a digest::Algorithm, SecioError> {
+pub fn select_digest<'a>(r: Ordering, ours: &str, theirs: &str) -> Result<&'a digest::Algorithm, SecioError> {
     let (a, b) = match r {
-        Endpoint::Dialer => (ours, theirs),
-        Endpoint::Listener => (theirs, ours)
+        Ordering::Less | Ordering::Equal => (theirs, ours),
+        Ordering::Greater =>  (ours, theirs)
     };
     for x in a.split(',') {
         if b.split(',').any(|y| x == y) {
             match x {
-                "SHA256" => return Ok(&digest::SHA256),
-                "SHA512" => return Ok(&digest::SHA512),
+                SHA_256 => return Ok(&digest::SHA256),
+                SHA_512 => return Ok(&digest::SHA512),
                 _ => continue
             }
         }

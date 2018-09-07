@@ -101,7 +101,7 @@ use asn1_der::{traits::FromDerEncoded, traits::FromDerObject, DerObject};
 use bytes::{Bytes, BytesMut};
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
-use libp2p_core::{Endpoint, PeerId, PublicKey};
+use libp2p_core::{PeerId, PublicKey};
 use ring::rand::SystemRandom;
 use ring::signature::{Ed25519KeyPair, RSAKeyPair};
 use rw_stream_sink::RwStreamSink;
@@ -343,12 +343,12 @@ where
         self,
         incoming: S,
         _: (),
-        e: libp2p_core::Endpoint,
+        _: libp2p_core::Endpoint,
         remote_addr: Maf,
     ) -> Self::Future {
         debug!("Starting secio upgrade");
 
-        let fut = SecioMiddleware::handshake(incoming, self, e);
+        let fut = SecioMiddleware::handshake(incoming, self);
         let wrapped = fut.map(|(stream_sink, pubkey, ephemeral)| {
             let mapped = stream_sink.map_err(map_err as fn(_) -> _);
             SecioOutput {
@@ -386,12 +386,11 @@ where
     pub fn handshake<'a>(
         socket: S,
         config: SecioConfig,
-        role: Endpoint
     ) -> Box<Future<Item = (SecioMiddleware<S>, PublicKey, Vec<u8>), Error = SecioError> + Send + 'a>
     where
         S: 'a,
     {
-        let fut = handshake::handshake(socket, config, role).map(|(inner, pubkey, ephemeral)| {
+        let fut = handshake::handshake(socket, config).map(|(inner, pubkey, ephemeral)| {
             let inner = SecioMiddleware { inner };
             (inner, pubkey, ephemeral)
         });
