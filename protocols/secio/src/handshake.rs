@@ -484,8 +484,8 @@ where
                     (cipher, hmac)
                 };
 
-                Ok(full_codec(socket, encoding_cipher, encoding_hmac,
-                              decoding_cipher, decoding_hmac))
+                Ok(full_codec(socket, encoding_cipher, encoding_hmac, decoding_cipher,
+                              decoding_hmac))
             });
 
             match codec {
