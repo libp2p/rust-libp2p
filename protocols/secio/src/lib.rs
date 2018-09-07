@@ -78,11 +78,10 @@
 //! `SecioMiddleware` that implements `Sink` and `Stream` and can be used to send packets of data.
 //!
 
-extern crate aes_ctr;
 #[cfg(feature = "secp256k1")]
 extern crate asn1_der;
 extern crate bytes;
-extern crate ctr;
+extern crate crypto;
 extern crate futures;
 extern crate libp2p_core;
 #[macro_use]
@@ -94,12 +93,8 @@ extern crate rw_stream_sink;
 #[cfg(feature = "secp256k1")]
 extern crate secp256k1;
 extern crate tokio_io;
-extern crate twofish;
 extern crate untrusted;
 
-#[cfg(feature = "aes-all")]
-#[macro_use]
-extern crate lazy_static;
 pub use self::error::SecioError;
 
 #[cfg(feature = "secp256k1")]
@@ -122,8 +117,8 @@ mod algo_support;
 mod codec;
 mod error;
 mod handshake;
-mod structs_proto;
 mod stream_cipher;
+mod structs_proto;
 
 /// Implementation of the `ConnectionUpgrade` trait of `libp2p_core`. Automatically applies
 /// secio on any connection.

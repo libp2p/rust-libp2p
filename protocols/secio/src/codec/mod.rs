@@ -24,7 +24,7 @@
 use self::decode::DecoderMiddleware;
 use self::encode::EncoderMiddleware;
 
-use aes_ctr::stream_cipher::StreamCipherCore;
+use crypto::symmetriccipher::SynchronousStreamCipher;
 use ring::hmac;
 use tokio_io::codec::length_delimited;
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -35,7 +35,7 @@ mod encode;
 /// Type returned by `full_codec`.
 pub type FullCodec<S> = DecoderMiddleware<EncoderMiddleware<length_delimited::Framed<S>>>;
 
-pub type StreamCipher = Box<dyn StreamCipherCore + Send>;
+pub type StreamCipher = Box<dyn SynchronousStreamCipher + Send>;
 
 
 /// Takes control of `socket`. Returns an object that implements `future::Sink` and
@@ -79,7 +79,7 @@ mod tests {
     use std::io::Error as IoError;
     use tokio_io::codec::length_delimited::Framed;
 
-    const NULL_IV : [u8; 16] = [0;16];
+    const NULL_IV : [u8; 16] = [0; 16];
 
     #[test]
     fn raw_encode_then_decode() {
@@ -89,7 +89,6 @@ mod tests {
 
         let cipher_key: [u8; 32] = rand::random();
         let hmac_key: [u8; 32] = rand::random();
-
 
         let encoder = EncoderMiddleware::new(
             data_tx,
@@ -111,7 +110,7 @@ mod tests {
         let (_, decoded) = tokio_current_thread::block_on_all(data_sent.join(data_received))
             .map_err(|_| ())
             .unwrap();
-        assert_eq!(&decoded.unwrap()[..], &data[..]);
+        assert_eq!(decoded.unwrap(), data);
     }
 
     fn full_codec_encode_then_decode(cipher: Cipher) {
@@ -178,10 +177,5 @@ mod tests {
     #[test]
     fn full_codec_encode_then_decode_aes256() {
         full_codec_encode_then_decode(Cipher::Aes256);
-    }
-
-    #[test]
-    fn full_codec_encode_then_decode_twofish() {
-        full_codec_encode_then_decode(Cipher::Twofish);
     }
 }
