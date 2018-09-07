@@ -204,10 +204,10 @@ fn main() {
         })
         .filter_map(move |event| {
             match event {
-                KadQueryEvent::NewKnownMultiaddrs(peers) => {
-                    for (peer, addrs) in peers {
-                        peer_store.peer_or_create(&peer)
-                            .add_addrs(addrs, Duration::from_secs(3600));
+                KadQueryEvent::PeersReported(peers) => {
+                    for peer in peers {
+                        peer_store.peer_or_create(&peer.node_id)
+                            .add_addrs(peer.multiaddrs, Duration::from_secs(3600));
                     }
                     None
                 },

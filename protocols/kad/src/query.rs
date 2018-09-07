@@ -49,7 +49,7 @@ pub struct QueryParams<FBuckets, FFindNode> {
 #[derive(Debug, Clone)]
 pub enum QueryEvent<TOut> {
     /// Learned about new mutiaddresses for the given peers.
-    NewKnownMultiaddrs(Vec<(PeerId, Vec<Multiaddr>)>),
+    PeersReported(Vec<(PeerId, Vec<Multiaddr>)>),
     /// Finished the processing of the query. Contains the result.
     Finished(TOut),
 }
@@ -86,7 +86,7 @@ where
 
     let stream = find_node(query_params, peer_id).map(|event| {
         match event {
-            QueryEvent::NewKnownMultiaddrs(peers) => QueryEvent::NewKnownMultiaddrs(peers),
+            QueryEvent::PeersReported(peers) => QueryEvent::PeersReported(peers),
             QueryEvent::Finished(_) => QueryEvent::Finished(()),
         }
     });
@@ -355,7 +355,7 @@ where
                 }
             }
 
-            future::ok((Some(QueryEvent::NewKnownMultiaddrs(new_known_multiaddrs)), state))
+            future::ok((Some(QueryEvent::PeersReported(new_known_multiaddrs)), state))
         });
 
         Some(future::Either::B(future))

@@ -23,7 +23,6 @@ use futures::{future, Future, IntoFuture, stream, Stream};
 use kad_server::KadConnecController;
 use kbucket::{KBucketsTable, KBucketsPeerId};
 use libp2p_core::PeerId;
-use multiaddr::Multiaddr;
 use protocol;
 use rand;
 use smallvec::SmallVec;
@@ -64,7 +63,7 @@ pub struct KadSystem {
 #[derive(Debug, Clone)]
 pub enum KadQueryEvent<TOut> {
     /// Learned about new mutiaddresses for the given peers.
-    NewKnownMultiaddrs(Vec<(PeerId, Vec<Multiaddr>)>),
+    PeersReported(Vec<protocol::KadPeer>),
     /// Finished the processing of the query. Contains the result.
     Finished(TOut),
 }
@@ -180,7 +179,7 @@ where F: FnMut(&PeerId) -> Fut + Send + 'a,
     let stream = query(access, kbuckets, peer_id, parallelism, 20, request_timeout)        // TODO: 20 is arbitrary
         .map(|event| {
             match event {
-                KadQueryEvent::NewKnownMultiaddrs(peers) => KadQueryEvent::NewKnownMultiaddrs(peers),
+                KadQueryEvent::PeersReported(peers) => KadQueryEvent::PeersReported(peers),
                 KadQueryEvent::Finished(_) => KadQueryEvent::Finished(()),
             }
         });
@@ -413,15 +412,12 @@ where F: FnMut(&PeerId) -> Fut + 'a,
             let mut local_nearest_node_updated = false;
 
             // Update `state` with the actual content of the message.
-            let mut new_known_multiaddrs = Vec::with_capacity(closer_peers.len());
+            let mut peers_reported = Vec::with_capacity(closer_peers.len());
             for mut peer in closer_peers {
                 // Update the peerstore with the information sent by
                 // the remote.
-                {
-                    let multiaddrs = mem::replace(&mut peer.multiaddrs, Vec::new());
-                    trace!("Reporting multiaddresses for {:?}: {:?}", peer.node_id, multiaddrs);
-                    new_known_multiaddrs.push((peer.node_id.clone(), multiaddrs));
-                }
+                trace!("Reporting multiaddresses for {:?}: {:?}", peer.node_id, peer.multiaddrs);
+                peers_reported.push(peer.clone());
 
                 if peer.node_id.distance_with(&searched_key)
                     <= state.result[0].distance_with(&searched_key)
@@ -458,7 +454,7 @@ where F: FnMut(&PeerId) -> Fut + 'a,
                 }
             }
 
-            future::ok((Some(KadQueryEvent::NewKnownMultiaddrs(new_known_multiaddrs)), state))
+            future::ok((Some(KadQueryEvent::PeersReported(peers_reported)), state))
         });
 
         Some(future::Either::B(future))
