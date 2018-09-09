@@ -506,7 +506,9 @@ where C: AsyncRead + AsyncWrite
 
     fn destroy_substream(&self, mut substream: Self::Substream) {
         let _ = self.shutdown_substream(&mut substream);        // TODO: this doesn't necessarily send the close message
-        self.inner.lock().buffer.retain(|elem| elem.substream_id() != substream.num);
+        self.inner.lock().buffer.retain(|elem| {
+            elem.substream_id() != substream.num || elem.endpoint() == Some(substream.endpoint)
+        })
     }
 }
 
