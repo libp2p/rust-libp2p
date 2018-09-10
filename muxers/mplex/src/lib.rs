@@ -390,7 +390,9 @@ where C: AsyncRead + AsyncWrite
                 },
                 Err(err) => {
                     debug!("Failed to open outbound substream {}", substream.num);
-                    inner.buffer.retain(|elem| elem.substream_id() != substream.num);
+                    inner.buffer.retain(|elem| {
+                        elem.substream_id() != substream.num || elem.endpoint() == Some(Endpoint::Dialer)
+                    });
                     return Err(err)
                 },
             };
