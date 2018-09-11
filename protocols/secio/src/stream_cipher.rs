@@ -21,6 +21,7 @@
 use super::codec::StreamCipher;
 use crypto::{aessafe, blockmodes::CtrModeX8, symmetriccipher::SynchronousStreamCipher};
 
+/// Possible encryption ciphers.
 #[derive(Clone, Copy, Debug)]
 pub enum Cipher {
     Aes128,
@@ -48,6 +49,8 @@ impl Cipher {
     }
 }
 
+/// A no-op cipher which does not encrypt or decrypt at all.
+/// Obviously only useful for debugging purposes.
 #[derive(Clone, Copy, Debug)]
 pub struct NullCipher;
 

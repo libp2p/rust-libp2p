@@ -39,16 +39,18 @@ const SHA_256: &str = "SHA256";
 const SHA_512: &str = "SHA512";
 
 pub(crate) const DEFAULT_AGREEMENTS_PROPOSITION: &str = "P-256,P-384";
-pub(crate) const DEFAULT_CIPHERS_PROPOSITION: &str = "AES-128,AES-256,NULL";
+pub(crate) const DEFAULT_CIPHERS_PROPOSITION: &str = "AES-128,AES-256";
 pub(crate) const DEFAULT_DIGESTS_PROPOSITION: &str = "SHA256,SHA512";
 
 
+/// Possible key agreement algorithms.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum KeyAgreement {
     EcdhP256,
     EcdhP384
 }
 
+/// Return a proposition string from the given sequence of `KeyAgreement` values.
 pub fn key_agreements_proposition<'a, I>(xchgs: I) -> String
 where
     I: IntoIterator<Item=&'a KeyAgreement>
@@ -70,6 +72,10 @@ where
     s
 }
 
+/// Given two key agreement proposition strings try to figure out a match.
+///
+/// The `Ordering` parameter determines which argument is preferred. If `Less` or `Equal` we
+/// try for each of `theirs` every one of `ours`, for `Greater` it's the other way around.
 pub fn select_agreement<'a>(r: Ordering, ours: &str, theirs: &str) -> Result<&'a agreement::Algorithm, SecioError> {
     let (a, b) = match r {
         Ordering::Less | Ordering::Equal => (theirs, ours),
@@ -88,6 +94,7 @@ pub fn select_agreement<'a>(r: Ordering, ours: &str, theirs: &str) -> Result<&'a
 }
 
 
+/// Return a proposition string from the given sequence of `Cipher` values.
 pub fn ciphers_proposition<'a, I>(ciphers: I) -> String
 where
     I: IntoIterator<Item=&'a Cipher>
@@ -113,6 +120,10 @@ where
     s
 }
 
+/// Given two cipher proposition strings try to figure out a match.
+///
+/// The `Ordering` parameter determines which argument is preferred. If `Less` or `Equal` we
+/// try for each of `theirs` every one of `ours`, for `Greater` it's the other way around.
 pub fn select_cipher(r: Ordering, ours: &str, theirs: &str) -> Result<Cipher, SecioError> {
     let (a, b) = match r {
         Ordering::Less | Ordering::Equal => (theirs, ours),
@@ -132,12 +143,14 @@ pub fn select_cipher(r: Ordering, ours: &str, theirs: &str) -> Result<Cipher, Se
 }
 
 
+/// Possible digest algorithms.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Digest {
     Sha256,
     Sha512
 }
 
+/// Return a proposition string from the given sequence of `Digest` values.
 pub fn digests_proposition<'a, I>(digests: I) -> String
 where
     I: IntoIterator<Item=&'a Digest>
@@ -159,6 +172,10 @@ where
     s
 }
 
+/// Given two digest proposition strings try to figure out a match.
+///
+/// The `Ordering` parameter determines which argument is preferred. If `Less` or `Equal` we
+/// try for each of `theirs` every one of `ours`, for `Greater` it's the other way around.
 pub fn select_digest<'a>(r: Ordering, ours: &str, theirs: &str) -> Result<&'a digest::Algorithm, SecioError> {
     let (a, b) = match r {
         Ordering::Less | Ordering::Equal => (theirs, ours),

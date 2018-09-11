@@ -134,6 +134,7 @@ pub struct SecioConfig {
 }
 
 impl SecioConfig {
+    /// Create a new `SecioConfig` with the given keypair.
     pub fn new(kp: SecioKeyPair) -> Self {
         SecioConfig {
             key: kp,
@@ -143,6 +144,7 @@ impl SecioConfig {
         }
     }
 
+    /// Override the default set of supported key agreement algorithms.
     pub fn key_agreements<'a, I>(mut self, xs: I) -> Self
     where
         I: IntoIterator<Item=&'a KeyAgreement>
@@ -151,6 +153,7 @@ impl SecioConfig {
         self
     }
 
+    /// Override the default set of supported ciphers.
     pub fn ciphers<'a, I>(mut self, xs: I) -> Self
     where
         I: IntoIterator<Item=&'a Cipher>
@@ -159,6 +162,7 @@ impl SecioConfig {
         self
     }
 
+    /// Override the default set of supported digest algorithms.
     pub fn digests<'a, I>(mut self, xs: I) -> Self
     where
         I: IntoIterator<Item=&'a Digest>
