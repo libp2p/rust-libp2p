@@ -65,11 +65,11 @@ impl KadConnecConfig {
 
 impl<C, Maf> ConnectionUpgrade<C, Maf> for KadConnecConfig
 where
-    C: AsyncRead + AsyncWrite + 'static, // TODO: 'static :-/
+    C: AsyncRead + AsyncWrite + Send + 'static, // TODO: 'static :-/
 {
     type Output = (
         KadConnecController,
-        Box<Stream<Item = KadIncomingRequest, Error = IoError>>,
+        Box<Stream<Item = KadIncomingRequest, Error = IoError> + Send>,
     );
     type MultiaddrFuture = Maf;
     type Future = future::Map<<KademliaProtocolConfig as ConnectionUpgrade<C, Maf>>::Future, fn((<KademliaProtocolConfig as ConnectionUpgrade<C, Maf>>::Output, Maf)) -> (Self::Output, Maf)>;
@@ -191,8 +191,8 @@ impl KadFindNodeRespond {
 }
 
 // Builds a controller and stream from a stream/sink of raw messages.
-fn build_from_sink_stream<'a, S>(connec: S) -> (KadConnecController, Box<Stream<Item = KadIncomingRequest, Error = IoError> + 'a>)
-where S: Sink<SinkItem = KadMsg, SinkError = IoError> + Stream<Item = KadMsg, Error = IoError> + 'a
+fn build_from_sink_stream<'a, S>(connec: S) -> (KadConnecController, Box<Stream<Item = KadIncomingRequest, Error = IoError> + Send + 'a>)
+where S: Sink<SinkItem = KadMsg, SinkError = IoError> + Stream<Item = KadMsg, Error = IoError> + Send + 'a
 {
     let (tx, rx) = mpsc::unbounded();
     let future = kademlia_handler(connec, rx);
@@ -211,9 +211,9 @@ where S: Sink<SinkItem = KadMsg, SinkError = IoError> + Stream<Item = KadMsg, Er
 fn kademlia_handler<'a, S>(
     kad_bistream: S,
     rq_rx: mpsc::UnboundedReceiver<(KadMsg, oneshot::Sender<KadMsg>)>,
-) -> Box<Stream<Item = KadIncomingRequest, Error = IoError> + 'a>
+) -> Box<Stream<Item = KadIncomingRequest, Error = IoError> + Send + 'a>
 where
-    S: Stream<Item = KadMsg, Error = IoError> + Sink<SinkItem = KadMsg, SinkError = IoError> + 'a,
+    S: Stream<Item = KadMsg, Error = IoError> + Sink<SinkItem = KadMsg, SinkError = IoError> + Send + 'a,
 {
     let (kad_sink, kad_stream) = kad_bistream.split();
 
@@ -255,7 +255,7 @@ where
             Some(events
                 .into_future()
                 .map_err(|(err, _)| err)
-                .and_then(move |(message, events)| -> Box<Future<Item = _, Error = _>> {
+                .and_then(move |(message, events)| -> Box<Future<Item = _, Error = _> + Send> {
                     match message {
                         Some(EventSource::Finished) | None => {
                             let future = future::ok({
@@ -397,7 +397,7 @@ where
                 }))
     }).filter_map(|val| val);
 
-    Box::new(stream) as Box<Stream<Item = _, Error = IoError>>
+    Box::new(stream) as Box<Stream<Item = _, Error = IoError> + Send>
 }
 
 #[cfg(test)]

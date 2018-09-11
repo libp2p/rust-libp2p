@@ -23,7 +23,6 @@ use futures::{future, Future, IntoFuture, stream, Stream};
 use kad_server::KadConnecController;
 use kbucket::{KBucketsTable, KBucketsPeerId};
 use libp2p_core::PeerId;
-use multiaddr::Multiaddr;
 use protocol;
 use rand;
 use smallvec::SmallVec;
@@ -64,7 +63,7 @@ pub struct KadSystem {
 #[derive(Debug, Clone)]
 pub enum KadQueryEvent<TOut> {
     /// Learned about new mutiaddresses for the given peers.
-    NewKnownMultiaddrs(Vec<(PeerId, Vec<Multiaddr>)>),
+    PeersReported(Vec<protocol::KadPeer>),
     /// Finished the processing of the query. Contains the result.
     Finished(TOut),
 }
@@ -76,8 +75,9 @@ impl KadSystem {
     /// This future should be driven to completion by the caller.
     pub fn start<'a, F, Fut>(config: KadSystemConfig<impl Iterator<Item = PeerId>>, access: F)
         -> (KadSystem, impl Future<Item = (), Error = IoError> + 'a)
-        where F: FnMut(&PeerId) -> Fut + Clone + 'a,
-            Fut: IntoFuture<Item = KadConnecController, Error = IoError>  + 'a,
+        where F: FnMut(&PeerId) -> Fut + Send + Clone + 'a,
+            Fut: IntoFuture<Item = KadConnecController, Error = IoError> + 'a,
+            Fut::Future: Send,
     {
         let system = KadSystem::without_init(config);
         let init_future = system.perform_initialization(access);
@@ -102,8 +102,9 @@ impl KadSystem {
 
     /// Starts an initialization process.
     pub fn perform_initialization<'a, F, Fut>(&self, access: F) -> impl Future<Item = (), Error = IoError> + 'a
-        where F: FnMut(&PeerId) -> Fut + Clone + 'a,
+        where F: FnMut(&PeerId) -> Fut + Send + Clone + 'a,
             Fut: IntoFuture<Item = KadConnecController, Error = IoError>  + 'a,
+            Fut::Future: Send,
     {
         let futures: Vec<_> = (0..256)      // TODO: 256 is arbitrary
             .map(|n| {
@@ -147,8 +148,9 @@ impl KadSystem {
     /// Starts a query for an iterative `FIND_NODE` request.
     pub fn find_node<'a, F, Fut>(&self, searched_key: PeerId, access: F)
         -> impl Stream<Item = KadQueryEvent<Vec<PeerId>>, Error = IoError> + 'a
-    where F: FnMut(&PeerId) -> Fut + 'a,
+    where F: FnMut(&PeerId) -> Fut + Send + 'a,
         Fut: IntoFuture<Item = KadConnecController, Error = IoError>  + 'a,
+        Fut::Future: Send,
     {
         query(access, &self.kbuckets, searched_key, self.parallelism as usize,
               20, self.request_timeout)  // TODO: arbitrary const
@@ -162,25 +164,26 @@ impl KadSystem {
 fn refresh<'a, F, Fut>(bucket_num: usize, access: F, kbuckets: &KBucketsTable<PeerId, ()>,
                         parallelism: usize, request_timeout: Duration)
     -> impl Stream<Item = KadQueryEvent<()>, Error = IoError> + 'a
-where F: FnMut(&PeerId) -> Fut + 'a,
+where F: FnMut(&PeerId) -> Fut + Send + 'a,
     Fut: IntoFuture<Item = KadConnecController, Error = IoError> + 'a,
+    Fut::Future: Send,
 {
     let peer_id = match gen_random_id(kbuckets.my_id(), bucket_num) {
         Ok(p) => p,
         Err(()) => {
             let stream = stream::once(Ok(KadQueryEvent::Finished(())));
-            return Box::new(stream) as Box<Stream<Item = _, Error = _>>;
+            return Box::new(stream) as Box<Stream<Item = _, Error = _> + Send>;
         },
     };
 
     let stream = query(access, kbuckets, peer_id, parallelism, 20, request_timeout)        // TODO: 20 is arbitrary
         .map(|event| {
             match event {
-                KadQueryEvent::NewKnownMultiaddrs(peers) => KadQueryEvent::NewKnownMultiaddrs(peers),
+                KadQueryEvent::PeersReported(peers) => KadQueryEvent::PeersReported(peers),
                 KadQueryEvent::Finished(_) => KadQueryEvent::Finished(()),
             }
         });
-    Box::new(stream) as Box<Stream<Item = _, Error = _>>
+    Box::new(stream) as Box<Stream<Item = _, Error = _> + Send>
 }
 
 // Generates a random `PeerId` that belongs to the given bucket.
@@ -227,6 +230,7 @@ fn query<'a, F, Fut>(
 ) -> impl Stream<Item = KadQueryEvent<Vec<PeerId>>, Error = IoError> + 'a
 where F: FnMut(&PeerId) -> Fut + 'a,
       Fut: IntoFuture<Item = KadConnecController, Error = IoError> + 'a,
+      Fut::Future: Send,
 {
     debug!("Start query for {:?} ; num results = {}", searched_key, num_results);
 
@@ -240,7 +244,7 @@ where F: FnMut(&PeerId) -> Fut + 'a,
         result: Vec<PeerId>,
         // For each open connection, a future with the response of the remote.
         // Note that don't use a `SmallVec` here because `select_all` produces a `Vec`.
-        current_attempts_fut: Vec<Box<Future<Item = Vec<protocol::KadPeer>, Error = IoError> + 'a>>,
+        current_attempts_fut: Vec<Box<Future<Item = Vec<protocol::KadPeer>, Error = IoError> + Send + 'a>>,
         // For each open connection, the peer ID that we are connected to.
         // Must always have the same length as `current_attempts_fut`.
         current_attempts_addrs: SmallVec<[PeerId; 32]>,
@@ -408,15 +412,12 @@ where F: FnMut(&PeerId) -> Fut + 'a,
             let mut local_nearest_node_updated = false;
 
             // Update `state` with the actual content of the message.
-            let mut new_known_multiaddrs = Vec::with_capacity(closer_peers.len());
+            let mut peers_reported = Vec::with_capacity(closer_peers.len());
             for mut peer in closer_peers {
                 // Update the peerstore with the information sent by
                 // the remote.
-                {
-                    let multiaddrs = mem::replace(&mut peer.multiaddrs, Vec::new());
-                    trace!("Reporting multiaddresses for {:?}: {:?}", peer.node_id, multiaddrs);
-                    new_known_multiaddrs.push((peer.node_id.clone(), multiaddrs));
-                }
+                trace!("Reporting multiaddresses for {:?}: {:?}", peer.node_id, peer.multiaddrs);
+                peers_reported.push(peer.clone());
 
                 if peer.node_id.distance_with(&searched_key)
                     <= state.result[0].distance_with(&searched_key)
@@ -453,7 +454,7 @@ where F: FnMut(&PeerId) -> Fut + 'a,
                 }
             }
 
-            future::ok((Some(KadQueryEvent::NewKnownMultiaddrs(new_known_multiaddrs)), state))
+            future::ok((Some(KadQueryEvent::PeersReported(peers_reported)), state))
         });
 
         Some(future::Either::B(future))

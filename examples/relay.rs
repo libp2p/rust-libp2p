@@ -152,7 +152,7 @@ fn run_dialer(opts: DialerOpts) -> Result<(), Box<Error>> {
 
     control.dial(address, transport.with_upgrade(echo)).map_err(|_| "failed to dial")?;
 
-    tokio_current_thread::block_on_all(future).map_err(From::from)
+    tokio_current_thread::block_on_all(future.for_each(|_| Ok(()))).map_err(From::from)
 }
 
 fn run_listener(opts: ListenerOpts) -> Result<(), Box<Error>> {
@@ -206,7 +206,7 @@ fn run_listener(opts: ListenerOpts) -> Result<(), Box<Error>> {
     });
 
     control.listen_on(opts.listen).map_err(|_| "failed to listen")?;
-    tokio_current_thread::block_on_all(future).map_err(From::from)
+    tokio_current_thread::block_on_all(future.for_each(|_| Ok(()))).map_err(From::from)
 }
 
 // Custom parsers ///////////////////////////////////////////////////////////

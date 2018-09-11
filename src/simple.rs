@@ -62,8 +62,8 @@ where
     C: AsyncRead + AsyncWrite,
     F: Fn(C) -> O,
     O: IntoFuture<Error = IoError>,
-    O::Future: 'static,
-    Maf: 'static,
+    O::Future: Send + 'static,
+    Maf: Send + 'static,
 {
     type NamesIter = iter::Once<(Bytes, ())>;
     type UpgradeIdentifier = ();
@@ -75,7 +75,7 @@ where
 
     type Output = O::Item;
     type MultiaddrFuture = Maf;
-    type Future = Box<Future<Item = (O::Item, Self::MultiaddrFuture), Error = IoError>>;
+    type Future = Box<Future<Item = (O::Item, Self::MultiaddrFuture), Error = IoError> + Send>;
 
     #[inline]
     fn upgrade(self, socket: C, _: (), _: Endpoint, client_addr: Maf) -> Self::Future {
