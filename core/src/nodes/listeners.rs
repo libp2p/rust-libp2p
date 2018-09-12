@@ -75,7 +75,7 @@ where
 
 impl<TTrans> ListenersStream<TTrans>
 where
-    TTrans: Transport + Clone,
+    TTrans: Transport,
 {
     /// Starts a new stream of listeners.
     #[inline]
@@ -101,7 +101,10 @@ where
     /// Start listening on a multiaddress.
     ///
     /// Returns an error if the transport doesn't support the given multiaddress.
-    pub fn listen_on(&mut self, addr: Multiaddr) -> Result<Multiaddr, Multiaddr> {
+    pub fn listen_on(&mut self, addr: Multiaddr) -> Result<Multiaddr, Multiaddr>
+    where
+        TTrans: Clone,
+    {
         let (listener, new_addr) = self
             .transport
             .clone()
@@ -186,10 +189,8 @@ where
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         f.debug_struct("ListenersStream")
             .field("transport", &self.transport)
-            .field(
-                "listeners",
-                &format!("{} active listeners", self.listeners.len()),
-            ).finish()
+            .field("listeners", &self.listeners().collect::<Vec<_>>())
+            .finish()
     }
 }
 
