@@ -19,12 +19,14 @@
 // DEALINGS IN THE SOFTWARE.
 
 use super::codec::StreamCipher;
-use crypto::{aessafe, blockmodes::CtrModeX8};
+use crypto::{aessafe, blockmodes::CtrModeX8, symmetriccipher::SynchronousStreamCipher};
 
-#[derive(Clone, Copy)]
+/// Possible encryption ciphers.
+#[derive(Clone, Copy, Debug)]
 pub enum Cipher {
     Aes128,
     Aes256,
+    Null
 }
 
 impl Cipher {
@@ -33,20 +35,35 @@ impl Cipher {
         match *self {
             Cipher::Aes128 => 16,
             Cipher::Aes256 => 32,
+            Cipher::Null => 0
         }
     }
 
     /// Returns the size of in bytes of the IV expected by the cipher.
     #[inline]
     pub fn iv_size(&self) -> usize {
-        16      // CTR 128
+        match self {
+            Cipher::Aes128 | Cipher::Aes256 => 16,
+            Cipher::Null => 0
+        }
+    }
+}
+
+/// A no-op cipher which does not encrypt or decrypt at all.
+/// Obviously only useful for debugging purposes.
+#[derive(Clone, Copy, Debug)]
+pub struct NullCipher;
+
+impl SynchronousStreamCipher for NullCipher {
+    fn process(&mut self, input: &[u8], output: &mut [u8]) {
+        output.copy_from_slice(input)
     }
 }
 
 /// Returns your stream cipher depending on `Cipher`.
 #[inline]
-pub fn ctr(key_size: Cipher, key: &[u8], iv: &[u8]) -> StreamCipher {
-    match key_size {
+pub fn ctr(c: Cipher, key: &[u8], iv: &[u8]) -> StreamCipher {
+    match c {
         Cipher::Aes128 => {
             let aes_dec = aessafe::AesSafe128EncryptorX8::new(key);
             Box::new(CtrModeX8::new(aes_dec, iv))
@@ -55,5 +72,7 @@ pub fn ctr(key_size: Cipher, key: &[u8], iv: &[u8]) -> StreamCipher {
             let aes_dec = aessafe::AesSafe256EncryptorX8::new(key);
             Box::new(CtrModeX8::new(aes_dec, iv))
         },
+        Cipher::Null => Box::new(NullCipher)
     }
 }
+

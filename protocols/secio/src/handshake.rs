@@ -45,7 +45,7 @@ use structs_proto::{Exchange, Propose};
 use tokio_io::codec::length_delimited;
 use tokio_io::{AsyncRead, AsyncWrite};
 use untrusted::Input as UntrustedInput;
-use {SecioKeyPair, SecioKeyPairInner};
+use {SecioConfig, SecioKeyPairInner};
 
 /// Performs a handshake on the given socket.
 ///
@@ -58,7 +58,7 @@ use {SecioKeyPair, SecioKeyPairInner};
 /// negotiation.
 pub fn handshake<'a, S: 'a>(
     socket: S,
-    local_key: SecioKeyPair,
+    config: SecioConfig
 ) -> Box<Future<Item = (FullCodec<S>, PublicKey, Vec<u8>), Error = SecioError> + Send + 'a>
 where
     S: AsyncRead + AsyncWrite + Send,
@@ -68,8 +68,8 @@ where
     // This struct contains the whole context of a handshake, and is filled progressively
     // throughout the various parts of the handshake.
     struct HandshakeContext {
-        // Filled with this function's parameters.
-        local_key: SecioKeyPair,
+        // Filled with this function's parameter.
+        config: SecioConfig,
 
         rng: rand::SystemRandom,
         // Locally-generated random number. The array size can be changed without any repercussion.
@@ -111,7 +111,7 @@ where
     }
 
     let context = HandshakeContext {
-        local_key,
+        config,
         rng: rand::SystemRandom::new(),
         local_nonce: Default::default(),
         local_public_key_in_protobuf_bytes: Vec::new(),
@@ -145,14 +145,36 @@ where
 
         // Send our proposition with our nonce, public key and supported protocols.
         .and_then(|mut context| {
-            context.local_public_key_in_protobuf_bytes = context.local_key.to_public_key().into_protobuf_encoding();
+            context.local_public_key_in_protobuf_bytes = context.config.key.to_public_key().into_protobuf_encoding();
 
             let mut proposition = Propose::new();
             proposition.set_rand(context.local_nonce.to_vec());
             proposition.set_pubkey(context.local_public_key_in_protobuf_bytes.clone());
-            proposition.set_exchanges(algo_support::exchanges::PROPOSITION_STRING.into());
-            proposition.set_ciphers(algo_support::ciphers::PROPOSITION_STRING.into());
-            proposition.set_hashes(algo_support::hashes::PROPOSITION_STRING.into());
+
+            if let Some(ref p) = context.config.agreements_prop {
+                trace!("agreements proposition: {}", p);
+                proposition.set_exchanges(p.clone())
+            } else {
+                trace!("agreements proposition: {}", algo_support::DEFAULT_AGREEMENTS_PROPOSITION);
+                proposition.set_exchanges(algo_support::DEFAULT_AGREEMENTS_PROPOSITION.into())
+            }
+
+            if let Some(ref p) = context.config.ciphers_prop {
+                trace!("ciphers proposition: {}", p);
+                proposition.set_ciphers(p.clone())
+            } else {
+                trace!("ciphers proposition: {}", algo_support::DEFAULT_CIPHERS_PROPOSITION);
+                proposition.set_ciphers(algo_support::DEFAULT_CIPHERS_PROPOSITION.into())
+            }
+
+            if let Some(ref p) = context.config.digests_prop {
+                trace!("digests proposition: {}", p);
+                proposition.set_hashes(p.clone())
+            } else {
+                trace!("digests proposition: {}", algo_support::DEFAULT_DIGESTS_PROPOSITION);
+                proposition.set_hashes(algo_support::DEFAULT_DIGESTS_PROPOSITION.into())
+            }
+
             let proposition_bytes = proposition.write_to_bytes().unwrap();
             context.local_proposition_bytes = proposition_bytes.clone();
 
@@ -226,8 +248,11 @@ where
             };
 
             context.chosen_exchange = {
-                let list = &remote_prop.get_exchanges();
-                Some(match algo_support::exchanges::select_best(context.hashes_ordering, list) {
+                let ours = context.config.agreements_prop.as_ref()
+                    .map(|s| s.as_ref())
+                    .unwrap_or(algo_support::DEFAULT_AGREEMENTS_PROPOSITION);
+                let theirs = &remote_prop.get_exchanges();
+                Some(match algo_support::select_agreement(context.hashes_ordering, ours, theirs) {
                     Ok(a) => a,
                     Err(err) => {
                         debug!("failed to select an exchange protocol");
@@ -236,9 +261,15 @@ where
                 })
             };
             context.chosen_cipher = {
-                let list = &remote_prop.get_ciphers();
-                Some(match algo_support::ciphers::select_best(context.hashes_ordering, list) {
-                    Ok(a) => a,
+                let ours = context.config.ciphers_prop.as_ref()
+                    .map(|s| s.as_ref())
+                    .unwrap_or(algo_support::DEFAULT_CIPHERS_PROPOSITION);
+                let theirs = &remote_prop.get_ciphers();
+                Some(match algo_support::select_cipher(context.hashes_ordering, ours, theirs) {
+                    Ok(a) => {
+                        debug!("selected cipher: {:?}", a);
+                        a
+                    }
                     Err(err) => {
                         debug!("failed to select a cipher protocol");
                         return Err(err);
@@ -246,9 +277,15 @@ where
                 })
             };
             context.chosen_hash = {
-                let list = &remote_prop.get_hashes();
-                Some(match algo_support::hashes::select_best(context.hashes_ordering, list) {
-                    Ok(a) => a,
+                let ours = context.config.digests_prop.as_ref()
+                    .map(|s| s.as_ref())
+                    .unwrap_or(algo_support::DEFAULT_DIGESTS_PROPOSITION);
+                let theirs = &remote_prop.get_hashes();
+                Some(match algo_support::select_digest(context.hashes_ordering, ours, theirs) {
+                    Ok(a) => {
+                        debug!("selected hash: {:?}", a);
+                        a
+                    }
                     Err(err) => {
                         debug!("failed to select a hash protocol");
                         return Err(err);
@@ -285,7 +322,7 @@ where
                 let mut exchange = Exchange::new();
                 exchange.set_epubkey(local_tmp_pub_key.clone());
                 exchange.set_signature({
-                    match context.local_key.inner {
+                    match context.config.key.inner {
                         SecioKeyPairInner::Rsa { ref private, .. } => {
                             let mut state = match RSASigningState::new(private.clone()) {
                                 Ok(s) => s,
@@ -484,8 +521,7 @@ where
                     (cipher, hmac)
                 };
 
-                Ok(full_codec(socket, encoding_cipher, encoding_hmac, decoding_cipher,
-                              decoding_hmac))
+                Ok(full_codec(socket, encoding_cipher, encoding_hmac, decoding_cipher, decoding_hmac))
             });
 
             match codec {
@@ -571,7 +607,7 @@ mod tests {
     use futures::Stream;
     use ring::digest::SHA256;
     use ring::hmac::SigningKey;
-    use SecioKeyPair;
+    use {SecioConfig, SecioKeyPair};
 
     #[test]
     fn handshake_with_self_succeeds_rsa() {
@@ -587,14 +623,14 @@ mod tests {
             SecioKeyPair::rsa_from_pkcs8(private, public).unwrap()
         };
 
-        handshake_with_self_succeeds(key1, key2);
+        handshake_with_self_succeeds(SecioConfig::new(key1), SecioConfig::new(key2));
     }
 
     #[test]
     fn handshake_with_self_succeeds_ed25519() {
         let key1 = SecioKeyPair::ed25519_generated().unwrap();
         let key2 = SecioKeyPair::ed25519_generated().unwrap();
-        handshake_with_self_succeeds(key1, key2);
+        handshake_with_self_succeeds(SecioConfig::new(key1), SecioConfig::new(key2));
     }
 
     #[test]
@@ -610,10 +646,10 @@ mod tests {
             SecioKeyPair::secp256k1_from_der(&key[..]).unwrap()
         };
 
-        handshake_with_self_succeeds(key1, key2);
+        handshake_with_self_succeeds(SecioConfig::new(key1), SecioConfig::new(key2));
     }
 
-    fn handshake_with_self_succeeds(key1: SecioKeyPair, key2: SecioKeyPair) {
+    fn handshake_with_self_succeeds(key1: SecioConfig, key2: SecioConfig) {
         let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap();
         let listener_addr = listener.local_addr().unwrap();
 

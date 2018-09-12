@@ -25,9 +25,9 @@
 //! Here is a list of all the major concepts of libp2p.
 //!
 //! ## Multiaddr
-//! 
+//!
 //! A `Multiaddr` is a way to reach a node. Examples:
-//! 
+//!
 //! * `/ip4/80.123.90.4/tcp/5432`
 //! * `/ip6/[::1]/udp/10560`
 //! * `/unix//path/to/socket`
@@ -92,9 +92,7 @@
 //! # #[cfg(all(not(target_os = "emscripten"), feature = "libp2p-secio"))] {
 //! use libp2p::{Transport, tcp::TcpConfig, secio::{SecioConfig, SecioKeyPair}};
 //! let tcp_transport = TcpConfig::new();
-//! let secio_upgrade = SecioConfig {
-//!     key: SecioKeyPair::ed25519_generated().unwrap(),
-//! };
+//! let secio_upgrade = SecioConfig::new(SecioKeyPair::ed25519_generated().unwrap());
 //! let with_security = tcp_transport.with_upgrade(secio_upgrade);
 //! // let _ = with_security.dial(...);
 //! // `with_security` also implements the `Transport` trait, and all the connections opened
