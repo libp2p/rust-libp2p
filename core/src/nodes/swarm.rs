@@ -393,6 +393,9 @@ where
     /// Handles a node reached event from the collection.
     ///
     /// Optionally returns an event to return from the stream.
+    ///
+    /// > **Note**: The event **must** have been produced by the collection of nodes, otherwise
+    /// >           panics will likely happen.
     fn handle_node_reached(
         &mut self,
         peer_id: PeerId,
@@ -490,6 +493,9 @@ where
     /// Handles a reach error event from the collection.
     ///
     /// Optionally returns an event to return from the stream.
+    ///
+    /// > **Note**: The event **must** have been produced by the collection of nodes, otherwise
+    /// >           panics will likely happen.
     fn handle_reach_error(
         &mut self,
         reach_id: ReachAttemptId,
