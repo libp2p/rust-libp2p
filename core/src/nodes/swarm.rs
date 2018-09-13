@@ -124,12 +124,16 @@ where
     NodeClosed {
         /// Identifier of the node.
         peer_id: PeerId,
+        /// Address we were connected to. `None` if not known.
+        address: Option<Multiaddr>,
     },
 
     /// The muxer of a node has produced an error.
     NodeError {
         /// Identifier of the node.
         peer_id: PeerId,
+        /// Address we were connected to. `None` if not known.
+        address: Option<Multiaddr>,
         /// The error that happened.
         error: IoError,
         /// Pending outbound substreams that were cancelled.
@@ -975,18 +979,19 @@ where
                     error,
                     closed_outbound_substreams,
                 }))) => {
-                    self.connected_multiaddresses.remove(&peer_id);
+                    let address = self.connected_multiaddresses.remove(&peer_id);
                     debug_assert!(!self.out_reach_attempts.contains_key(&peer_id));
                     return Ok(Async::Ready(Some(SwarmEvent::NodeError {
                         peer_id,
+                        address,
                         error,
                         closed_outbound_substreams,
                     })));
                 }
                 Ok(Async::Ready(Some(CollectionEvent::NodeClosed { peer_id }))) => {
-                    self.connected_multiaddresses.remove(&peer_id);
+                    let address = self.connected_multiaddresses.remove(&peer_id);
                     debug_assert!(!self.out_reach_attempts.contains_key(&peer_id));
-                    return Ok(Async::Ready(Some(SwarmEvent::NodeClosed { peer_id })));
+                    return Ok(Async::Ready(Some(SwarmEvent::NodeClosed { peer_id, address })));
                 }
                 Ok(Async::Ready(Some(CollectionEvent::NodeMultiaddr { peer_id, address }))) => {
                     debug_assert!(!self.out_reach_attempts.contains_key(&peer_id));
