@@ -399,17 +399,24 @@ where
         reach_id: ReachAttemptId,
         closed_outbound_substreams: Option<Vec<TUserData>>,
     ) -> Option<SwarmEvent<TTrans, TMuxer, TUserData>> {
-        // Clear the known multiaddress for this peer.
-        self.connected_multiaddresses.remove(&peer_id);
+        // We first start looking in the incoming attempts. While this makes the code less optimal,
+        // it also makes the logic easier.
+        if let Some(in_pos) = self
+            .other_reach_attempts
+            .iter()
+            .position(|i| i.0 == reach_id)
+        {
+            let (_, endpoint) = self.other_reach_attempts.swap_remove(in_pos);
 
-        // If in out reach attempts, then all good.
-        if let Some(attempt) = self.out_reach_attempts.remove(&peer_id) {
-            debug_assert_eq!(attempt.id, reach_id);
-            self.connected_multiaddresses
-                .insert(peer_id.clone(), attempt.cur_attempted.clone());
-            let endpoint = ConnectedPoint::Dialer {
-                address: attempt.cur_attempted,
-            };
+            // Clear the known multiaddress for this peer.
+            self.connected_multiaddresses.remove(&peer_id);
+            // Cancel any outgoing attempt to this peer.
+            if let Some(attempt) = self.out_reach_attempts.remove(&peer_id) {
+                self.active_nodes
+                    .interrupt(attempt.id)
+                    .expect("State inconsistency: invalid reach attempt cancel");
+            }
+
             if let Some(closed_outbound_substreams) = closed_outbound_substreams {
                 return Some(SwarmEvent::Replaced {
                     peer_id,
@@ -421,13 +428,24 @@ where
             }
         }
 
-        // If this is not an outgoing reach attempt, check the incoming reach attempts.
-        if let Some(in_pos) = self
-            .other_reach_attempts
-            .iter()
-            .position(|i| i.0 == reach_id)
-        {
-            let (_, endpoint) = self.other_reach_attempts.swap_remove(in_pos);
+        // Otherwise, try for outgoing attempts.
+        let is_outgoing_and_ok = if let Some(attempt) = self.out_reach_attempts.get(&peer_id) {
+            attempt.id == reach_id
+        } else {
+            false
+        };
+
+        // We only remove the attempt from `out_reach_attempts` if it both matches the reach id
+        // and the expected peer id.
+        if is_outgoing_and_ok {
+            let attempt = self.out_reach_attempts.remove(&peer_id).unwrap();
+
+            self.connected_multiaddresses
+                .insert(peer_id.clone(), attempt.cur_attempted.clone());
+            let endpoint = ConnectedPoint::Dialer {
+                address: attempt.cur_attempted,
+            };
+
             if let Some(closed_outbound_substreams) = closed_outbound_substreams {
                 return Some(SwarmEvent::Replaced {
                     peer_id,
