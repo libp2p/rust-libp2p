@@ -120,24 +120,6 @@ pub trait StreamMuxer {
     /// If supported, sends a hint to the remote that we may no longer open any further outbound
     /// substream. Calling `poll_outbound` afterwards may or may not produce `None`.
     fn close_outbound(&self);
-
-    /// Turns this stream muxer into a `StreamMuxerBox`.
-    #[inline]
-    fn boxed(self) -> StreamMuxerBox
-    where Self: Sized + Send + Sync + 'static,
-          Self::OutboundSubstream: Send,
-          Self::Substream: Send,
-    {
-        let wrap = Wrap {
-            inner: self,
-            substreams: Mutex::new(Default::default()),
-            next_substream: AtomicUsize::new(0),
-            outbound: Mutex::new(Default::default()),
-            next_outbound: AtomicUsize::new(0),
-        };
-
-        StreamMuxerBox { inner: Box::new(wrap) }
-    }
 }
 
 /// Polls for an inbound from the muxer but wraps the output in an object that
@@ -339,6 +321,28 @@ where
 /// Abstract `StreamMuxer`.
 pub struct StreamMuxerBox {
     inner: Box<StreamMuxer<Substream = usize, OutboundSubstream = usize> + Send + Sync>,
+}
+
+impl StreamMuxerBox {
+    /// Turns a stream muxer into a `StreamMuxerBox`.
+    pub fn new<T>(muxer: T) -> StreamMuxerBox
+    where
+        T: StreamMuxer + Send + Sync + 'static,
+        T::OutboundSubstream: Send,
+        T::Substream: Send,
+    {
+        let wrap = Wrap {
+            inner: muxer,
+            substreams: Mutex::new(Default::default()),
+            next_substream: AtomicUsize::new(0),
+            outbound: Mutex::new(Default::default()),
+            next_outbound: AtomicUsize::new(0),
+        };
+
+        StreamMuxerBox {
+            inner: Box::new(wrap),
+        }
+    }
 }
 
 impl StreamMuxer for StreamMuxerBox {
