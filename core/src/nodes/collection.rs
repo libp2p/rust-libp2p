@@ -274,7 +274,7 @@ where
                     TaskKnownState::Pending { interrupt } => {
                         let _ = interrupt.send(());
                     }
-                    _ => unreachable!(),
+                    TaskKnownState::Interrupted | TaskKnownState::Connected(_) => unreachable!(),
                 };
             }
         }
@@ -359,7 +359,10 @@ where
         // Set the task to `Interrupted` so that we ignore further messages from this closed node.
         match self.tasks.insert(task_id, TaskKnownState::Interrupted) {
             Some(TaskKnownState::Connected(ref p)) if p == &peer_id => (),
-            _ => panic!("Inconsistent state"),
+            None
+            | Some(TaskKnownState::Connected(_))
+            | Some(TaskKnownState::Pending { .. })
+            | Some(TaskKnownState::Interrupted) => panic!("Inconsistent state"),
         }
         user_datas
     }
@@ -581,7 +584,7 @@ where
     Node {
         /// The object that is actually processing things.
         /// This is an `Option` because we need to be able to extract it.
-        node: Option<NodeStream<TMuxer, TAddrFut, usize>>,
+        node: NodeStream<TMuxer, TAddrFut, usize>,
         /// Receiving end for events sent from the main `CollectionStream`.
         in_events_rx: mpsc::UnboundedReceiver<ExtToInMessage>,
     },
@@ -618,7 +621,7 @@ where
                     let _ = self.events_tx.unbounded_send((event, self.id));
 
                     Some(NodeTaskInner::Node {
-                        node: Some(NodeStream::new(muxer, addr_fut)),
+                        node: NodeStream::new(muxer, addr_fut),
                         in_events_rx: rx,
                     })
                 }
@@ -650,8 +653,6 @@ where
             loop {
                 match in_events_rx.poll() {
                     Ok(Async::Ready(Some(ExtToInMessage::OpenSubstream(user_data)))) => match node
-                        .as_mut()
-                        .expect("must always be Some")
                         .open_substream(user_data)
                     {
                         Ok(()) => (),
@@ -672,7 +673,7 @@ where
 
             // Process the node.
             loop {
-                match node.as_mut().expect("must always be Some").poll() {
+                match node.poll() {
                     Ok(Async::NotReady) => break,
                     Ok(Async::Ready(Some(event))) => {
                         let event = InToExtMessage::NodeEvent(event);
