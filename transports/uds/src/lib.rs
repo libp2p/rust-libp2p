@@ -148,7 +148,7 @@ fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
     }
 
     match path {
-        Some(AddrComponent::UNIX(ref path)) => Ok(path.into()),
+        Some(AddrComponent::UNIX(ref path)) => Ok(path.as_ref().into()),
         _ => Err(())
     }
 }
@@ -159,8 +159,7 @@ mod tests {
     use futures::stream::Stream;
     use futures::Future;
     use multiaddr::{AddrComponent, Multiaddr};
-    use std;
-    use std::path::Path;
+    use std::{self, borrow::Cow, path::Path};
     use libp2p_core::Transport;
     use tempfile;
     use tokio_current_thread;
@@ -189,7 +188,7 @@ mod tests {
 
         let temp_dir = tempfile::tempdir().unwrap();
         let socket = temp_dir.path().join("socket");
-        let addr = Multiaddr::from(AddrComponent::UNIX(socket.to_string_lossy().into_owned()));
+        let addr = Multiaddr::from(AddrComponent::UNIX(Cow::Owned(socket.to_string_lossy().into_owned())));
         let addr2 = addr.clone();
 
         std::thread::spawn(move || {

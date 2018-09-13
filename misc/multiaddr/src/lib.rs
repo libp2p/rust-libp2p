@@ -266,9 +266,9 @@ impl Multiaddr {
     /// assert_eq!(address.pop().unwrap(), AddrComponent::UDT);
     /// ```
     ///
-    pub fn pop(&mut self) -> Option<AddrComponent> {
+    pub fn pop<'a>(&mut self) -> Option<AddrComponent<'a>> {
         // Note: could be more optimized
-        let mut list = self.iter().collect::<Vec<_>>();
+        let mut list = self.iter().map(AddrComponent::acquire).collect::<Vec<_>>();
         let last_elem = list.pop();
         *self = list.into_iter().collect();
         last_elem

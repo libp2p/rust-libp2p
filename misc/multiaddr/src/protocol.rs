@@ -304,6 +304,35 @@ pub enum AddrComponent<'a> {
 }
 
 impl<'a> AddrComponent<'a> {
+    pub fn acquire<'b>(self) -> AddrComponent<'b> {
+        use AddrComponent::*;
+        match self {
+            DNS4(cow) => DNS4(Cow::Owned(cow.into_owned())),
+            DNS6(cow) => DNS6(Cow::Owned(cow.into_owned())),
+            UNIX(cow) => UNIX(Cow::Owned(cow.into_owned())),
+            ONION(cow) => ONION(Cow::Owned(cow.into_owned())),
+            IP4(a) => IP4(a),
+            TCP(a) => TCP(a),
+            UDP(a) => UDP(a),
+            DCCP(a) => DCCP(a),
+            IP6(a) => IP6(a),
+            SCTP(a) => SCTP(a),
+            UDT => UDT,
+            UTP => UTP,
+            P2P(a) => P2P(a),
+            HTTP => HTTP,
+            HTTPS => HTTPS,
+            QUIC => QUIC,
+            WS => WS,
+            WSS => WSS,
+            Libp2pWebsocketStar => Libp2pWebsocketStar,
+            Libp2pWebrtcStar => Libp2pWebrtcStar,
+            Libp2pWebrtcDirect => Libp2pWebrtcDirect,
+            P2pCircuit => P2pCircuit,
+            Memory => Memory
+        }
+    }
+
     /// Returns the `Protocol` corresponding to this `AddrComponent`.
     #[inline]
     pub fn protocol_id(&self) -> Protocol {
