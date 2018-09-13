@@ -13,7 +13,11 @@ log = "0.4.1"
 protobuf = "2.0.2"
 rand = "0.3.17"
 ring = { version = "0.12", features = ["rsa_signing"] }
-rust-crypto = "^0.2"
+aes-ctr = "0.1.0"
+aesni = { version = "0.4.1", features = ["nocheck"], optional = true }
+twofish = "0.1.0"
+ctr = "0.1"
+lazy_static = { version = "0.2.11", optional = true }
 rw-stream-sink = { path = "../../misc/rw-stream-sink" }
 eth-secp256k1 = { git = "https://github.com/paritytech/rust-secp256k1", optional = true }
 tokio-io = "0.1.0"
@@ -22,6 +26,7 @@ untrusted = "0.5"
 [features]
 default = ["secp256k1"]
 secp256k1 = ["eth-secp256k1"]
+aes-all = ["aesni","lazy_static"]
 
 [dev-dependencies]
 libp2p-tcp-transport = { path = "../../transports/tcp" }
