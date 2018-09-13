@@ -397,6 +397,7 @@ where
         &mut self,
         peer_id: PeerId,
         reach_id: ReachAttemptId,
+        closed_outbound_substreams: Option<Vec<TUserData>>,
     ) -> Option<SwarmEvent<TTrans, TMuxer, TUserData>> {
         // Clear the known multiaddress for this peer.
         self.connected_multiaddresses.remove(&peer_id);
@@ -406,12 +407,18 @@ where
             debug_assert_eq!(attempt.id, reach_id);
             self.connected_multiaddresses
                 .insert(peer_id.clone(), attempt.cur_attempted.clone());
-            return Some(SwarmEvent::Connected {
-                peer_id,
-                endpoint: ConnectedPoint::Dialer {
-                    address: attempt.cur_attempted,
-                },
-            });
+            let endpoint = ConnectedPoint::Dialer {
+                address: attempt.cur_attempted,
+            };
+            if let Some(closed_outbound_substreams) = closed_outbound_substreams {
+                return Some(SwarmEvent::Replaced {
+                    peer_id,
+                    endpoint,
+                    closed_outbound_substreams,
+                });
+            } else {
+                return Some(SwarmEvent::Connected { peer_id, endpoint });
+            }
         }
 
         // If this is not an outgoing reach attempt, check the incoming reach attempts.
@@ -421,7 +428,15 @@ where
             .position(|i| i.0 == reach_id)
         {
             let (_, endpoint) = self.other_reach_attempts.swap_remove(in_pos);
-            return Some(SwarmEvent::Connected { peer_id, endpoint });
+            if let Some(closed_outbound_substreams) = closed_outbound_substreams {
+                return Some(SwarmEvent::Replaced {
+                    peer_id,
+                    endpoint,
+                    closed_outbound_substreams,
+                });
+            } else {
+                return Some(SwarmEvent::Connected { peer_id, endpoint });
+            }
         }
 
         // If in neither, check outgoing reach attempts again as we may have a public
@@ -906,9 +921,19 @@ where
         loop {
             match self.active_nodes.poll() {
                 Ok(Async::NotReady) => break,
-                Ok(Async::Ready(Some(CollectionEvent::NodeReached { peer_id, id, .. })))
-                | Ok(Async::Ready(Some(CollectionEvent::NodeReplaced { peer_id, id, .. }))) => {
-                    if let Some(event) = self.handle_node_reached(peer_id, id) {
+                Ok(Async::Ready(Some(CollectionEvent::NodeReached { peer_id, id }))) => {
+                    if let Some(event) = self.handle_node_reached(peer_id, id, None) {
+                        return Ok(Async::Ready(Some(event)));
+                    }
+                }
+                Ok(Async::Ready(Some(CollectionEvent::NodeReplaced {
+                    peer_id,
+                    id,
+                    closed_outbound_substreams,
+                }))) => {
+                    if let Some(event) =
+                        self.handle_node_reached(peer_id, id, Some(closed_outbound_substreams))
+                    {
                         return Ok(Async::Ready(Some(event)));
                     }
                 }
