@@ -110,6 +110,8 @@ where
         peer_id: PeerId,
         /// Outbound substream attempts that have been closed in the process.
         closed_outbound_substreams: Vec<TUserData>,
+        /// Multiaddr we were connected to, or `None` if it was unknown.
+        closed_multiaddr: Option<Multiaddr>,
         /// If `Listener`, then we received the connection. If `Dial`, then it's a connection that
         /// we opened.
         endpoint: ConnectedPoint,
@@ -412,7 +414,7 @@ where
             let (_, endpoint) = self.other_reach_attempts.swap_remove(in_pos);
 
             // Clear the known multiaddress for this peer.
-            self.connected_multiaddresses.remove(&peer_id);
+            let closed_multiaddr = self.connected_multiaddresses.remove(&peer_id);
             // Cancel any outgoing attempt to this peer.
             if let Some(attempt) = self.out_reach_attempts.remove(&peer_id) {
                 self.active_nodes
@@ -424,6 +426,7 @@ where
                 return Some(SwarmEvent::Replaced {
                     peer_id,
                     endpoint,
+                    closed_multiaddr,
                     closed_outbound_substreams,
                 });
             } else {
@@ -443,7 +446,7 @@ where
         if is_outgoing_and_ok {
             let attempt = self.out_reach_attempts.remove(&peer_id).unwrap();
 
-            self.connected_multiaddresses
+            let closed_multiaddr = self.connected_multiaddresses
                 .insert(peer_id.clone(), attempt.cur_attempted.clone());
             let endpoint = ConnectedPoint::Dialer {
                 address: attempt.cur_attempted,
@@ -453,6 +456,7 @@ where
                 return Some(SwarmEvent::Replaced {
                     peer_id,
                     endpoint,
+                    closed_multiaddr,
                     closed_outbound_substreams,
                 });
             } else {
