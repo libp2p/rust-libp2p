@@ -18,9 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use fnv::FnvHashMap;
 use futures::{future, prelude::*};
+use parking_lot::Mutex;
 use std::io::{Error as IoError, Read, Write};
 use std::ops::Deref;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Implemented on objects that can open and manage substreams.
@@ -46,12 +49,17 @@ pub trait StreamMuxer {
 
     /// Polls the outbound substream.
     ///
-    /// May panic or produce an undefined result if an earlier polling returned `Ready` or `Err`.
+    /// If this returns `Ok(Ready(None))`, that means that the outbound channel is closed and that
+    /// opening any further outbound substream will likely produce `None` as well. The existing
+    /// outbound substream attempts may however still succeed.
     ///
     /// If `NotReady` is returned, then the current task will be notified once the substream
     /// is ready to be polled, similar to the API of `Future::poll()`.
     /// However, for each individual outbound substream, only the latest task that was used to
     /// call this method may be notified.
+    ///
+    /// May panic or produce an undefined result if an earlier polling of the same substream
+    /// returned `Ready` or `Err`.
     fn poll_outbound(
         &self,
         substream: &mut Self::OutboundSubstream,
@@ -104,6 +112,14 @@ pub trait StreamMuxer {
 
     /// Destroys a substream.
     fn destroy_substream(&self, substream: Self::Substream);
+
+    /// If supported, sends a hint to the remote that we may no longer accept any further inbound
+    /// substream. Calling `poll_inbound` afterwards may or may not produce `None`.
+    fn close_inbound(&self);
+
+    /// If supported, sends a hint to the remote that we may no longer open any further outbound
+    /// substream. Calling `poll_outbound` afterwards may or may not produce `None`.
+    fn close_outbound(&self);
 }
 
 /// Polls for an inbound from the muxer but wraps the output in an object that
@@ -299,5 +315,208 @@ where
     fn drop(&mut self) {
         self.muxer
             .destroy_substream(self.substream.take().expect("substream was empty"))
+    }
+}
+
+/// Abstract `StreamMuxer`.
+pub struct StreamMuxerBox {
+    inner: Box<StreamMuxer<Substream = usize, OutboundSubstream = usize> + Send + Sync>,
+}
+
+impl StreamMuxerBox {
+    /// Turns a stream muxer into a `StreamMuxerBox`.
+    pub fn new<T>(muxer: T) -> StreamMuxerBox
+    where
+        T: StreamMuxer + Send + Sync + 'static,
+        T::OutboundSubstream: Send,
+        T::Substream: Send,
+    {
+        let wrap = Wrap {
+            inner: muxer,
+            substreams: Mutex::new(Default::default()),
+            next_substream: AtomicUsize::new(0),
+            outbound: Mutex::new(Default::default()),
+            next_outbound: AtomicUsize::new(0),
+        };
+
+        StreamMuxerBox {
+            inner: Box::new(wrap),
+        }
+    }
+}
+
+impl StreamMuxer for StreamMuxerBox {
+    type Substream = usize; // TODO: use a newtype
+    type OutboundSubstream = usize; // TODO: use a newtype
+
+    #[inline]
+    fn poll_inbound(&self) -> Poll<Option<Self::Substream>, IoError> {
+        self.inner.poll_inbound()
+    }
+
+    #[inline]
+    fn open_outbound(&self) -> Self::OutboundSubstream {
+        self.inner.open_outbound()
+    }
+
+    #[inline]
+    fn poll_outbound(
+        &self,
+        substream: &mut Self::OutboundSubstream,
+    ) -> Poll<Option<Self::Substream>, IoError> {
+        self.inner.poll_outbound(substream)
+    }
+
+    #[inline]
+    fn destroy_outbound(&self, substream: Self::OutboundSubstream) {
+        self.inner.destroy_outbound(substream)
+    }
+
+    #[inline]
+    fn read_substream(
+        &self,
+        substream: &mut Self::Substream,
+        buf: &mut [u8],
+    ) -> Result<usize, IoError>
+    {
+        self.inner.read_substream(substream, buf)
+    }
+
+    #[inline]
+    fn write_substream(
+        &self,
+        substream: &mut Self::Substream,
+        buf: &[u8],
+    ) -> Result<usize, IoError> {
+        self.inner.write_substream(substream, buf)
+    }
+
+    #[inline]
+    fn flush_substream(&self, substream: &mut Self::Substream) -> Result<(), IoError> {
+        self.inner.flush_substream(substream)
+    }
+
+    #[inline]
+    fn shutdown_substream(&self, substream: &mut Self::Substream) -> Poll<(), IoError> {
+        self.inner.shutdown_substream(substream)
+    }
+
+    #[inline]
+    fn destroy_substream(&self, substream: Self::Substream) {
+        self.inner.destroy_substream(substream)
+    }
+
+    #[inline]
+    fn close_inbound(&self) {
+        self.inner.close_inbound()
+    }
+
+    #[inline]
+    fn close_outbound(&self) {
+        self.inner.close_outbound()
+    }
+}
+
+struct Wrap<T> where T: StreamMuxer {
+    inner: T,
+    substreams: Mutex<FnvHashMap<usize, T::Substream>>,
+    next_substream: AtomicUsize,
+    outbound: Mutex<FnvHashMap<usize, T::OutboundSubstream>>,
+    next_outbound: AtomicUsize,
+}
+
+impl<T> StreamMuxer for Wrap<T> where T: StreamMuxer {
+    type Substream = usize; // TODO: use a newtype
+    type OutboundSubstream = usize; // TODO: use a newtype
+
+    #[inline]
+    fn poll_inbound(&self) -> Poll<Option<Self::Substream>, IoError> {
+        match try_ready!(self.inner.poll_inbound()) {
+            Some(substream) => {
+                let id = self.next_substream.fetch_add(1, Ordering::Relaxed);
+                self.substreams.lock().insert(id, substream);
+                Ok(Async::Ready(Some(id)))
+            },
+            None => Ok(Async::Ready(None)),
+        }
+    }
+
+    #[inline]
+    fn open_outbound(&self) -> Self::OutboundSubstream {
+        let outbound = self.inner.open_outbound();
+        let id = self.next_outbound.fetch_add(1, Ordering::Relaxed);
+        self.outbound.lock().insert(id, outbound);
+        id
+    }
+
+    #[inline]
+    fn poll_outbound(
+        &self,
+        substream: &mut Self::OutboundSubstream,
+    ) -> Poll<Option<Self::Substream>, IoError> {
+        let mut list = self.outbound.lock();
+        match try_ready!(self.inner.poll_outbound(list.get_mut(substream).unwrap())) {
+            Some(substream) => {
+                let id = self.next_substream.fetch_add(1, Ordering::Relaxed);
+                self.substreams.lock().insert(id, substream);
+                Ok(Async::Ready(Some(id)))
+            },
+            None => Ok(Async::Ready(None)),
+        }
+    }
+
+    #[inline]
+    fn destroy_outbound(&self, substream: Self::OutboundSubstream) {
+        let mut list = self.outbound.lock();
+        self.inner.destroy_outbound(list.remove(&substream).unwrap())
+    }
+
+    #[inline]
+    fn read_substream(
+        &self,
+        substream: &mut Self::Substream,
+        buf: &mut [u8],
+    ) -> Result<usize, IoError>
+    {
+        let mut list = self.substreams.lock();
+        self.inner.read_substream(list.get_mut(substream).unwrap(), buf)
+    }
+
+    #[inline]
+    fn write_substream(
+        &self,
+        substream: &mut Self::Substream,
+        buf: &[u8],
+    ) -> Result<usize, IoError> {
+        let mut list = self.substreams.lock();
+        self.inner.write_substream(list.get_mut(substream).unwrap(), buf)
+    }
+
+    #[inline]
+    fn flush_substream(&self, substream: &mut Self::Substream) -> Result<(), IoError> {
+        let mut list = self.substreams.lock();
+        self.inner.flush_substream(list.get_mut(substream).unwrap())
+    }
+
+    #[inline]
+    fn shutdown_substream(&self, substream: &mut Self::Substream) -> Poll<(), IoError> {
+        let mut list = self.substreams.lock();
+        self.inner.shutdown_substream(list.get_mut(substream).unwrap())
+    }
+
+    #[inline]
+    fn destroy_substream(&self, substream: Self::Substream) {
+        let mut list = self.substreams.lock();
+        self.inner.destroy_substream(list.remove(&substream).unwrap())
+    }
+
+    #[inline]
+    fn close_inbound(&self) {
+        self.inner.close_inbound()
+    }
+
+    #[inline]
+    fn close_outbound(&self) {
+        self.inner.close_outbound()
     }
 }
