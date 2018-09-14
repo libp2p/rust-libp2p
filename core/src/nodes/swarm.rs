@@ -421,6 +421,7 @@ where
             let closed_multiaddr = self.connected_multiaddresses.remove(&peer_id);
             // Cancel any outgoing attempt to this peer.
             if let Some(attempt) = self.out_reach_attempts.remove(&peer_id) {
+                debug_assert_ne!(attempt.id, reach_id);
                 self.active_nodes
                     .interrupt(attempt.id)
                     .expect("State inconsistency: invalid reach attempt cancel");
@@ -508,7 +509,16 @@ where
         &mut self,
         reach_id: ReachAttemptId,
         error: IoError,
-    ) -> Option<SwarmEvent<TTrans, TMuxer, TUserData>> {
+    ) -> Option<SwarmEvent<TTrans, TMuxer, TUserData>>
+    where
+        TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
+        TTrans::Dial: Send + 'static,
+        TTrans::MultiaddrFuture: Send + 'static,
+        TMuxer: Send + Sync + 'static,
+        TMuxer::OutboundSubstream: Send,
+        TMuxer::Substream: Send,
+        TUserData: Send + 'static,
+    {
         // Search for the attempt in `out_reach_attempts`.
         // TODO: could be more optimal than iterating over everything
         let out_reach_peer_id = self
@@ -522,9 +532,19 @@ where
             let num_remain = attempt.next_attempts.len();
             let failed_addr = attempt.cur_attempted.clone();
 
-            if !attempt.next_attempts.is_empty() {
+            loop {
+                if attempt.next_attempts.is_empty() {
+                    break;
+                }
+
                 attempt.cur_attempted = attempt.next_attempts.remove(0);
+                match self.transport().clone().dial(attempt.cur_attempted.clone()) {
+                    Ok(fut) => attempt.id = self.active_nodes.add_reach_attempt(fut),
+                    Err(_) => continue,
+                };
+
                 self.out_reach_attempts.insert(peer_id.clone(), attempt);
+                break;
             }
 
             return Some(SwarmEvent::DialError {
@@ -905,6 +925,7 @@ where
 impl<TTrans, TMuxer, TUserData> Stream for Swarm<TTrans, TMuxer, TUserData>
 where
     TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
+    TTrans::Dial: Send + 'static,
     TTrans::MultiaddrFuture: Future<Item = Multiaddr, Error = IoError> + Send + 'static,
     TTrans::ListenerUpgrade: Send + 'static,
     TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
