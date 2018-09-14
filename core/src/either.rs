@@ -210,6 +210,20 @@ where
             },
         }
     }
+
+    fn close_inbound(&self) {
+        match *self {
+            EitherOutput::First(ref inner) => inner.close_inbound(),
+            EitherOutput::Second(ref inner) => inner.close_inbound(),
+        }
+    }
+
+    fn close_outbound(&self) {
+        match *self {
+            EitherOutput::First(ref inner) => inner.close_outbound(),
+            EitherOutput::Second(ref inner) => inner.close_outbound(),
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone)]

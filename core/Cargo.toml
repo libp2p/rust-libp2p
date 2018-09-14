@@ -18,7 +18,9 @@ protobuf = "2.0.2"
 quick-error = "1.2"
 rw-stream-sink = { path = "../misc/rw-stream-sink" }
 smallvec = "0.5"
+tokio-executor = "0.1.4"
 tokio-io = "0.1"
+void = "1"
 
 [dev-dependencies]
 libp2p-ping = { path = "../protocols/ping" }
