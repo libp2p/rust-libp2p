@@ -304,6 +304,7 @@ pub enum AddrComponent<'a> {
 }
 
 impl<'a> AddrComponent<'a> {
+    /// Turn this `AddrComponent` into one that owns its data, thus being valid for any lifetime.
     pub fn acquire<'b>(self) -> AddrComponent<'b> {
         use AddrComponent::*;
         match self {
