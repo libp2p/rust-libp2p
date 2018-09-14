@@ -142,6 +142,7 @@ pub extern crate libp2p_core as core;
 #[cfg(not(target_os = "emscripten"))]
 pub extern crate libp2p_dns as dns;
 pub extern crate libp2p_identify as identify;
+pub extern crate libp2p_identify_x as idx;
 pub extern crate libp2p_kad as kad;
 pub extern crate libp2p_floodsub as floodsub;
 pub extern crate libp2p_mplex as mplex;
