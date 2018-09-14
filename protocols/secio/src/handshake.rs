@@ -499,7 +499,10 @@ where
                 let (local_infos, remote_infos) = {
                     let (first_half, second_half) = longer_key.split_at(longer_key.len() / 2);
                     match context.hashes_ordering {
-                        Ordering::Equal => panic!(),
+                        Ordering::Equal => {
+                            let msg = "equal digest of public key and nonce for local and remote";
+                            return Err(SecioError::InvalidProposition(msg))
+                        }
                         Ordering::Less => (second_half, first_half),
                         Ordering::Greater => (first_half, second_half),
                     }
