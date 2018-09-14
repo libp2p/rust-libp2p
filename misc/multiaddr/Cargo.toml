@@ -12,8 +12,8 @@ version = "0.3.0"
 bs58 = "0.2.0"
 byteorder = "~0.4"
 multihash = { path = "../multihash" }
-integer-encoding = "~1.0.3"
 serde = "1.0.70"
+unsigned-varint = "0.1"
 
 [dev-dependencies]
 data-encoding = "~1.1.2"

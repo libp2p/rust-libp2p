@@ -5,8 +5,8 @@
 
 extern crate bs58;
 extern crate byteorder;
-extern crate integer_encoding;
 extern crate serde;
+extern crate unsigned_varint;
 pub extern crate multihash;
 
 mod protocol;
@@ -266,16 +266,16 @@ impl Multiaddr {
     /// assert_eq!(address.pop().unwrap(), AddrComponent::UDT);
     /// ```
     ///
-    pub fn pop(&mut self) -> Option<AddrComponent> {
+    pub fn pop<'a>(&mut self) -> Option<AddrComponent<'a>> {
         // Note: could be more optimized
-        let mut list = self.iter().collect::<Vec<_>>();
+        let mut list = self.iter().map(AddrComponent::acquire).collect::<Vec<_>>();
         let last_elem = list.pop();
         *self = list.into_iter().collect();
         last_elem
     }
 }
 
-impl From<AddrComponent> for Multiaddr {
+impl<'a> From<AddrComponent<'a>> for Multiaddr {
     fn from(addr: AddrComponent) -> Multiaddr {
         let mut out = Vec::new();
         addr.write_bytes(&mut out).expect(
@@ -286,7 +286,7 @@ impl From<AddrComponent> for Multiaddr {
 }
 
 impl<'a> IntoIterator for &'a Multiaddr {
-    type Item = AddrComponent;
+    type Item = AddrComponent<'a>;
     type IntoIter = Iter<'a>;
 
     #[inline]
@@ -295,10 +295,10 @@ impl<'a> IntoIterator for &'a Multiaddr {
     }
 }
 
-impl FromIterator<AddrComponent> for Multiaddr {
+impl<'a> FromIterator<AddrComponent<'a>> for Multiaddr {
     fn from_iter<T>(iter: T) -> Self
     where
-        T: IntoIterator<Item = AddrComponent>,
+        T: IntoIterator<Item = AddrComponent<'a>>,
     {
         let mut bytes = Vec::new();
         for cmp in iter {
@@ -348,9 +348,9 @@ impl FromStr for Multiaddr {
 pub struct Iter<'a>(&'a [u8]);
 
 impl<'a> Iterator for Iter<'a> {
-    type Item = AddrComponent;
+    type Item = AddrComponent<'a>;
 
-    fn next(&mut self) -> Option<AddrComponent> {
+    fn next(&mut self) -> Option<Self::Item> {
         if self.0.is_empty() {
             return None;
         }

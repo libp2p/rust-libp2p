@@ -1,12 +1,15 @@
 use bs58;
-use std::net::{Ipv4Addr, Ipv6Addr};
-use std::str::FromStr;
-use std::convert::From;
-use std::io::{Cursor, Write, Result as IoResult};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use std::{
+    borrow::Cow,
+    convert::From,
+    fmt,
+    io::{Cursor, Write, Result as IoResult},
+    net::{Ipv4Addr, Ipv6Addr},
+    str::{self, FromStr}
+};
 use multihash::Multihash;
-use integer_encoding::{VarInt, VarIntWriter};
-
+use unsigned_varint::{encode, decode};
 use {Result, Error};
 
 ///! # Protocol
@@ -55,33 +58,33 @@ impl From<Protocol> for u64 {
     }
 }
 
-impl ToString for Protocol {
-    fn to_string(&self) -> String {
-        match *self {
-            Protocol::IP4 => "ip4",
-            Protocol::TCP => "tcp",
-            Protocol::UDP => "udp",
-            Protocol::DCCP => "dccp",
-            Protocol::IP6 => "ip6",
-            Protocol::DNS4 => "dns4",
-            Protocol::DNS6 => "dns6",
-            Protocol::SCTP => "sctp",
-            Protocol::UDT => "udt",
-            Protocol::UTP => "utp",
-            Protocol::UNIX => "unix",
-            Protocol::P2P => "p2p",
-            Protocol::HTTP => "http",
-            Protocol::HTTPS => "https",
-            Protocol::ONION => "onion",
-            Protocol::QUIC => "quic",
-            Protocol::WS => "ws",
-            Protocol::WSS => "wss",
-            Protocol::Libp2pWebsocketStar => "p2p-websocket-star",
-            Protocol::Libp2pWebrtcStar => "p2p-webrtc-star",
-            Protocol::Libp2pWebrtcDirect => "p2p-webrtc-direct",
-            Protocol::P2pCircuit => "p2p-circuit",
-            Protocol::Memory => "memory",
-        }.to_owned()
+impl fmt::Display for Protocol {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Protocol::IP4 => f.write_str("ip4"),
+            Protocol::TCP => f.write_str("tcp"),
+            Protocol::UDP => f.write_str("udp"),
+            Protocol::DCCP => f.write_str("dccp"),
+            Protocol::IP6 => f.write_str("ip6"),
+            Protocol::DNS4 => f.write_str("dns4"),
+            Protocol::DNS6 => f.write_str("dns6"),
+            Protocol::SCTP => f.write_str("sctp"),
+            Protocol::UDT => f.write_str("udt"),
+            Protocol::UTP => f.write_str("utp"),
+            Protocol::UNIX => f.write_str("unix"),
+            Protocol::P2P => f.write_str("p2p"),
+            Protocol::HTTP => f.write_str("http"),
+            Protocol::HTTPS => f.write_str("https"),
+            Protocol::ONION => f.write_str("onion"),
+            Protocol::QUIC => f.write_str("quic"),
+            Protocol::WS => f.write_str("ws"),
+            Protocol::WSS => f.write_str("wss"),
+            Protocol::Libp2pWebsocketStar => f.write_str("p2p-websocket-star"),
+            Protocol::Libp2pWebrtcStar => f.write_str("p2p-webrtc-star"),
+            Protocol::Libp2pWebrtcDirect => f.write_str("p2p-webrtc-direct"),
+            Protocol::P2pCircuit => f.write_str("p2p-circuit"),
+            Protocol::Memory => f.write_str("memory"),
+        }
     }
 }
 
@@ -223,7 +226,7 @@ impl Protocol {
     ///            AddrComponent::IP4(Ipv4Addr::new(127, 0, 0, 1)));
     /// ```
     ///
-    pub fn parse_data(&self, a: &str) -> Result<AddrComponent> {
+    pub fn parse_data<'a>(&self, a: &'a str) -> Result<AddrComponent<'a>> {
         match *self {
             Protocol::IP4 => {
                 let addr = Ipv4Addr::from_str(a)?;
@@ -233,12 +236,8 @@ impl Protocol {
                 let addr = Ipv6Addr::from_str(a)?;
                 Ok(AddrComponent::IP6(addr))
             }
-            Protocol::DNS4 => {
-                Ok(AddrComponent::DNS4(a.to_owned()))
-            }
-            Protocol::DNS6 => {
-                Ok(AddrComponent::DNS6(a.to_owned()))
-            }
+            Protocol::DNS4 => Ok(AddrComponent::DNS4(Cow::Borrowed(a))),
+            Protocol::DNS6 => Ok(AddrComponent::DNS6(Cow::Borrowed(a))),
             Protocol::TCP => {
                 let parsed: u16 = a.parse()?;
                 Ok(AddrComponent::TCP(parsed))
@@ -262,9 +261,7 @@ impl Protocol {
             Protocol::ONION => unimplemented!(),              // TODO:
             Protocol::QUIC => Ok(AddrComponent::QUIC),
             Protocol::UTP => Ok(AddrComponent::UTP),
-            Protocol::UNIX => {
-                Ok(AddrComponent::UNIX(a.to_owned()))
-            }
+            Protocol::UNIX => Ok(AddrComponent::UNIX(Cow::Borrowed(a))),
             Protocol::UDT => Ok(AddrComponent::UDT),
             Protocol::HTTP => Ok(AddrComponent::HTTP),
             Protocol::HTTPS => Ok(AddrComponent::HTTPS),
@@ -280,22 +277,22 @@ impl Protocol {
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
-pub enum AddrComponent {
+pub enum AddrComponent<'a> {
     IP4(Ipv4Addr),
     TCP(u16),
     UDP(u16),
     DCCP(u16),
     IP6(Ipv6Addr),
-    DNS4(String),
-    DNS6(String),
+    DNS4(Cow<'a, str>),
+    DNS6(Cow<'a, str>),
     SCTP(u16),
     UDT,
     UTP,
-    UNIX(String),
+    UNIX(Cow<'a, str>),
     P2P(Multihash),
     HTTP,
     HTTPS,
-    ONION(Vec<u8>),
+    ONION(Cow<'a, [u8]>),
     QUIC,
     WS,
     WSS,
@@ -306,7 +303,37 @@ pub enum AddrComponent {
     Memory,
 }
 
-impl AddrComponent {
+impl<'a> AddrComponent<'a> {
+    /// Turn this `AddrComponent` into one that owns its data, thus being valid for any lifetime.
+    pub fn acquire<'b>(self) -> AddrComponent<'b> {
+        use AddrComponent::*;
+        match self {
+            DNS4(cow) => DNS4(Cow::Owned(cow.into_owned())),
+            DNS6(cow) => DNS6(Cow::Owned(cow.into_owned())),
+            UNIX(cow) => UNIX(Cow::Owned(cow.into_owned())),
+            ONION(cow) => ONION(Cow::Owned(cow.into_owned())),
+            IP4(a) => IP4(a),
+            TCP(a) => TCP(a),
+            UDP(a) => UDP(a),
+            DCCP(a) => DCCP(a),
+            IP6(a) => IP6(a),
+            SCTP(a) => SCTP(a),
+            UDT => UDT,
+            UTP => UTP,
+            P2P(a) => P2P(a),
+            HTTP => HTTP,
+            HTTPS => HTTPS,
+            QUIC => QUIC,
+            WS => WS,
+            WSS => WSS,
+            Libp2pWebsocketStar => Libp2pWebsocketStar,
+            Libp2pWebrtcStar => Libp2pWebrtcStar,
+            Libp2pWebrtcDirect => Libp2pWebrtcDirect,
+            P2pCircuit => P2pCircuit,
+            Memory => Memory
+        }
+    }
+
     /// Returns the `Protocol` corresponding to this `AddrComponent`.
     #[inline]
     pub fn protocol_id(&self) -> Protocol {
@@ -340,20 +367,13 @@ impl AddrComponent {
     /// Builds an `AddrComponent` from an array that starts with a bytes representation. On
     /// success, also returns the rest of the slice.
     pub fn from_bytes(input: &[u8]) -> Result<(AddrComponent, &[u8])> {
-        let (proto_num, proto_id_len) = u64::decode_var(input);   // TODO: will panic if ID too large
-
+        let (proto_num, input) = decode::u64(input)?;
         let protocol_id = Protocol::from(proto_num)?;
-        let (data_offset, data_size) = match protocol_id.size() {
-            ProtocolArgSize::Fixed { bytes } => {
-                (0, bytes)
-            },
-            ProtocolArgSize::Variable => {
-                let (data_size, varint_len) = u64::decode_var(&input[proto_id_len..]);      // TODO: will panic if ID too large
-                (varint_len, data_size as usize)
-            },
+        let (data_size, input) = match protocol_id.size() {
+            ProtocolArgSize::Fixed { bytes } => (bytes, input),
+            ProtocolArgSize::Variable => decode::usize(input)?
         };
-
-        let (data, rest) = input[proto_id_len..][data_offset..].split_at(data_size);
+        let (data, rest) = input.split_at(data_size);
 
         let addr_component = match protocol_id {
             Protocol::IP4 => {
@@ -361,10 +381,10 @@ impl AddrComponent {
             },
             Protocol::IP6 => {
                 let mut rdr = Cursor::new(data);
-                let mut seg = vec![];
+                let mut seg = [0; 8];
 
-                for _ in 0..8 {
-                    seg.push(rdr.read_u16::<BigEndian>()?);
+                for i in 0..8 {
+                    seg[i] = rdr.read_u16::<BigEndian>()?;
                 }
 
                 let addr = Ipv6Addr::new(seg[0],
@@ -378,10 +398,10 @@ impl AddrComponent {
                 AddrComponent::IP6(addr)
             }
             Protocol::DNS4 => {
-                AddrComponent::DNS4(String::from_utf8(data.to_owned())?)
+                AddrComponent::DNS4(Cow::Borrowed(str::from_utf8(data)?))
             }
             Protocol::DNS6 => {
-                AddrComponent::DNS6(String::from_utf8(data.to_owned())?)
+                AddrComponent::DNS6(Cow::Borrowed(str::from_utf8(data)?))
             }
             Protocol::TCP => {
                 let mut rdr = Cursor::new(data);
@@ -404,7 +424,7 @@ impl AddrComponent {
                 AddrComponent::SCTP(num)
             }
             Protocol::UNIX => {
-                AddrComponent::UNIX(String::from_utf8(data.to_owned())?)
+                AddrComponent::UNIX(Cow::Borrowed(str::from_utf8(data)?))
             }
             Protocol::P2P => {
                 AddrComponent::P2P(Multihash::from_bytes(data.to_owned())?)
@@ -429,7 +449,7 @@ impl AddrComponent {
 
     /// Turns this address component into bytes by writing it to a `Write`.
     pub fn write_bytes<W: Write>(self, out: &mut W) -> IoResult<()> {
-        out.write_varint(Into::<u64>::into(self.protocol_id()))?;
+        out.write_all(encode::u64(self.protocol_id().into(), &mut encode::u64_buffer()))?;
 
         match self {
             AddrComponent::IP4(addr) => {
@@ -446,12 +466,12 @@ impl AddrComponent {
             }
             AddrComponent::DNS4(s) | AddrComponent::DNS6(s) | AddrComponent::UNIX(s) => {
                 let bytes = s.as_bytes();
-                out.write_varint(bytes.len())?;
+                out.write_all(encode::usize(bytes.len(), &mut encode::usize_buffer()))?;
                 out.write_all(&bytes)?;
             }
             AddrComponent::P2P(multihash) => {
                 let bytes = multihash.into_bytes();
-                out.write_varint(bytes.len())?;
+                out.write_all(encode::usize(bytes.len(), &mut encode::usize_buffer()))?;
                 out.write_all(&bytes)?;
             }
             AddrComponent::ONION(_) => {
@@ -475,46 +495,46 @@ impl AddrComponent {
     }
 }
 
-impl ToString for AddrComponent {
-    fn to_string(&self) -> String {
-        match *self {
-            AddrComponent::IP4(ref addr) => format!("/ip4/{}", addr),
-            AddrComponent::TCP(port) => format!("/tcp/{}", port),
-            AddrComponent::UDP(port) => format!("/udp/{}", port),
-            AddrComponent::DCCP(port) => format!("/dccp/{}", port),
-            AddrComponent::IP6(ref addr) => format!("/ip6/{}", addr),
-            AddrComponent::DNS4(ref s) => format!("/dns4/{}", s.clone()),
-            AddrComponent::DNS6(ref s) => format!("/dns6/{}", s.clone()),
-            AddrComponent::SCTP(port) => format!("/sctp/{}", port),
-            AddrComponent::UDT => format!("/udt"),
-            AddrComponent::UTP => format!("/utp"),
-            AddrComponent::UNIX(ref s) => format!("/unix/{}", s.clone()),
-            AddrComponent::P2P(ref c) => format!("/p2p/{}", bs58::encode(c.as_bytes()).into_string()),
-            AddrComponent::HTTP => format!("/http"),
-            AddrComponent::HTTPS => format!("/https"),
-            AddrComponent::ONION(_) => unimplemented!(),//format!("/onion"),        // TODO:
-            AddrComponent::QUIC => format!("/quic"),
-            AddrComponent::WS => format!("/ws"),
-            AddrComponent::WSS => format!("/wss"),
-            AddrComponent::Libp2pWebsocketStar => format!("/p2p-websocket-star"),
-            AddrComponent::Libp2pWebrtcStar => format!("/p2p-webrtc-star"),
-            AddrComponent::Libp2pWebrtcDirect => format!("/p2p-webrtc-direct"),
-            AddrComponent::P2pCircuit => format!("/p2p-circuit"),
-            AddrComponent::Memory => format!("/memory"),
+impl<'a> fmt::Display for AddrComponent<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            AddrComponent::IP4(addr) => write!(f, "/ip4/{}", addr),
+            AddrComponent::TCP(port) => write!(f, "/tcp/{}", port),
+            AddrComponent::UDP(port) => write!(f, "/udp/{}", port),
+            AddrComponent::DCCP(port) => write!(f, "/dccp/{}", port),
+            AddrComponent::IP6(addr) => write!(f, "/ip6/{}", addr),
+            AddrComponent::DNS4(s) => write!(f, "/dns4/{}", s),
+            AddrComponent::DNS6(s) => write!(f, "/dns6/{}", s),
+            AddrComponent::SCTP(port) => write!(f, "/sctp/{}", port),
+            AddrComponent::UDT => f.write_str("/udt"),
+            AddrComponent::UTP => f.write_str("/utp"),
+            AddrComponent::UNIX(s) => write!(f, "/unix/{}", s),
+            AddrComponent::P2P(c) => write!(f, "/p2p/{}", bs58::encode(c.as_bytes()).into_string()),
+            AddrComponent::HTTP => f.write_str("/http"),
+            AddrComponent::HTTPS => f.write_str("/https"),
+            AddrComponent::ONION(_) => unimplemented!(),//write!("/onion"),        // TODO:
+            AddrComponent::QUIC => f.write_str("/quic"),
+            AddrComponent::WS => f.write_str("/ws"),
+            AddrComponent::WSS => f.write_str("/wss"),
+            AddrComponent::Libp2pWebsocketStar => f.write_str("/p2p-websocket-star"),
+            AddrComponent::Libp2pWebrtcStar => f.write_str("/p2p-webrtc-star"),
+            AddrComponent::Libp2pWebrtcDirect => f.write_str("/p2p-webrtc-direct"),
+            AddrComponent::P2pCircuit => f.write_str("/p2p-circuit"),
+            AddrComponent::Memory => f.write_str("/memory"),
         }
     }
 }
 
-impl From<Ipv4Addr> for AddrComponent {
+impl<'a> From<Ipv4Addr> for AddrComponent<'a> {
     #[inline]
-    fn from(addr: Ipv4Addr) -> AddrComponent {
+    fn from(addr: Ipv4Addr) -> Self {
         AddrComponent::IP4(addr)
     }
 }
 
-impl From<Ipv6Addr> for AddrComponent {
+impl<'a> From<Ipv6Addr> for AddrComponent<'a> {
     #[inline]
-    fn from(addr: Ipv6Addr) -> AddrComponent {
+    fn from(addr: Ipv6Addr) -> Self {
         AddrComponent::IP6(addr)
     }
 }

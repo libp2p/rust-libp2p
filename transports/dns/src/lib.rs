@@ -149,7 +149,7 @@ where
                 AddrComponent::DNS6(ref name) => {
                     future::Either::A(resolve_dns(name, &resolver, ResolveTy::Dns6))
                 }
-                cmp => future::Either::B(future::ok(cmp)),
+                cmp => future::Either::B(future::ok(cmp.acquire())),
             })
             .collect::<Vec<_>>()
             .into_iter();
@@ -188,11 +188,11 @@ enum ResolveTy {
 }
 
 // Resolve a DNS name and returns a future with the result.
-fn resolve_dns(
+fn resolve_dns<'a>(
     name: &str,
     resolver: &CpuPoolResolver,
     ty: ResolveTy,
-) -> impl Future<Item = AddrComponent, Error = IoError> {
+) -> impl Future<Item = AddrComponent<'a>, Error = IoError> {
     let debug_name = if log_enabled!(Level::Trace) {
         Some(name.to_owned())
     } else {
