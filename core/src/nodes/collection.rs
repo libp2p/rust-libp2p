@@ -92,6 +92,18 @@ enum TaskKnownState {
     Connected(PeerId),
 }
 
+impl TaskKnownState {
+    /// Returns `true` for `Pending`.
+    #[inline]
+    fn is_pending(&self) -> bool {
+        match *self {
+            TaskKnownState::Pending { .. } => true,
+            TaskKnownState::Interrupted => false,
+            TaskKnownState::Connected(_) => false,
+        }
+    }
+}
+
 /// Event that can happen on the `CollectionStream`.
 // TODO: implement Debug
 pub enum CollectionEvent<TMuxer, TUserData>
@@ -466,7 +478,9 @@ where
 
                     let replaced_node = self.nodes.insert(peer_id.clone(), (task_id, sender));
                     let user_datas = extract_from_attempt(&mut self.outbound_attempts, &peer_id);
-                    if replaced_node.is_some() {
+                    if let Some(replaced_node) = replaced_node {
+                        let old = self.tasks.insert(replaced_node.0, TaskKnownState::Interrupted);
+                        debug_assert_eq!(old.map(|s| s.is_pending()), Some(false));
                         Ok(Async::Ready(Some(CollectionEvent::NodeReplaced {
                             peer_id,
                             closed_outbound_substreams: user_datas,
