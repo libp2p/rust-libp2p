@@ -42,11 +42,11 @@ pub struct MapAddr<U, F> {
 impl<C, U, F, O, Maf> ConnectionUpgrade<C, Maf> for MapAddr<U, F>
 where
     U: ConnectionUpgrade<C, Maf>,
-    U::Future: 'static,     // TODO: 'static :(
-    U::MultiaddrFuture: Future<Item = Multiaddr, Error = IoError> + 'static,    // TODO: 'static :(
-    U::Output: 'static,     // TODO: 'static :(
+    U::Future: Send + 'static,     // TODO: 'static :(
+    U::MultiaddrFuture: Future<Item = Multiaddr, Error = IoError> + Send + 'static,    // TODO: 'static :(
+    U::Output: Send + 'static,     // TODO: 'static :(
     C: AsyncRead + AsyncWrite,
-    F: FnOnce(U::Output, &Multiaddr) -> O + 'static,     // TODO: 'static :(
+    F: FnOnce(U::Output, &Multiaddr) -> O + Send + 'static,     // TODO: 'static :(
 {
     type NamesIter = U::NamesIter;
     type UpgradeIdentifier = U::UpgradeIdentifier;
@@ -57,7 +57,7 @@ where
 
     type Output = O;
     type MultiaddrFuture = future::FutureResult<Multiaddr, IoError>;
-    type Future = Box<Future<Item = (O, Self::MultiaddrFuture), Error = IoError>>;
+    type Future = Box<Future<Item = (O, Self::MultiaddrFuture), Error = IoError> + Send>;
 
     fn upgrade(
         self,

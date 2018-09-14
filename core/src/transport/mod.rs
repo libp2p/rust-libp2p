@@ -29,13 +29,16 @@
 //! `UpgradedNode::or_upgrade` methods, you can combine multiple transports and/or upgrades
 //! together in a complex chain of protocols negotiation.
 
+use connection_reuse::ConnectionReuse;
 use futures::prelude::*;
 use multiaddr::Multiaddr;
+use muxing::StreamMuxer;
 use std::io::Error as IoError;
 use tokio_io::{AsyncRead, AsyncWrite};
 use upgrade::{ConnectionUpgrade, Endpoint};
 
 pub mod and_then;
+pub mod boxed;
 pub mod choice;
 pub mod denied;
 pub mod dummy;
@@ -47,6 +50,7 @@ pub mod memory;
 pub mod muxed;
 pub mod upgrade;
 
+pub use self::boxed::BoxedMuxed;
 pub use self::choice::OrTransport;
 pub use self::denied::DeniedTransport;
 pub use self::dummy::DummyMuxing;
@@ -116,8 +120,36 @@ pub trait Transport {
     /// implementation of `Transport` is only responsible for handling the protocols it supports.
     ///
     /// Returns `None` if nothing can be determined. This happens if this trait implementation
-    /// doesn't recognize the protocols, or if `server` and `observed` are unrelated.
+    /// doesn't recognize the protocols, or if `server` and `observed` are related.
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
+
+    /// Turns this `Transport` into an abstract boxed transport.
+    #[inline]
+    fn boxed(self) -> boxed::Boxed<Self::Output>
+    where Self: Sized + MuxedTransport + Clone + Send + Sync + 'static,
+          Self::Dial: Send + 'static,
+          Self::Listener: Send + 'static,
+          Self::ListenerUpgrade: Send + 'static,
+          Self::MultiaddrFuture: Send + 'static,
+    {
+        boxed::boxed(self)
+    }
+
+    /// Turns this `Transport` into an abstract boxed transport.
+    ///
+    /// This is the version if the transport supports muxing.
+    #[inline]
+    fn boxed_muxed(self) -> boxed::BoxedMuxed<Self::Output>
+    where Self: Sized + MuxedTransport + Clone + Send + Sync + 'static,
+          Self::Dial: Send + 'static,
+          Self::Listener: Send + 'static,
+          Self::ListenerUpgrade: Send + 'static,
+          Self::MultiaddrFuture: Send + 'static,
+          Self::Incoming: Send + 'static,
+          Self::IncomingUpgrade: Send + 'static,
+    {
+        boxed::boxed_muxed(self)
+    }
 
     /// Applies a function on the output of the `Transport`.
     #[inline]
@@ -205,6 +237,17 @@ pub trait Transport {
         Self: Sized,
     {
         DummyMuxing::new(self)
+    }
+
+    /// Turns this `Transport` into a `ConnectionReuse`. If the `Output` implements the
+    /// `StreamMuxer` trait, the returned object will implement `Transport` and `MuxedTransport`.
+    #[inline]
+    fn into_connection_reuse<D, M>(self) -> ConnectionReuse<Self, D, M>
+    where
+        Self: Sized + Transport<Output = (D, M)>,
+        M: StreamMuxer,
+    {
+        ConnectionReuse::new(self)
     }
 
     /// Wraps around the `Transport` and makes it interruptible.

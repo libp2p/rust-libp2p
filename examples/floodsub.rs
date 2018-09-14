@@ -59,9 +59,9 @@ fn main() {
             let secio = {
                 let private_key = include_bytes!("test-rsa-private-key.pk8");
                 let public_key = include_bytes!("test-rsa-public-key.der").to_vec();
-                libp2p::secio::SecioConfig {
-                    key: libp2p::secio::SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap(),
-                }
+                libp2p::secio::SecioConfig::new(
+                    libp2p::secio::SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap()
+                )
             };
 
             upgrade::or(
@@ -76,7 +76,9 @@ fn main() {
         // `Transport` because the output of the upgrade is not a stream but a controller for
         // muxing. We have to explicitly call `into_connection_reuse()` in order to turn this into
         // a `Transport`.
-        .into_connection_reuse();
+        .map(|val, _| ((), val))
+        .into_connection_reuse()
+        .map(|((), val), _| val);
 
     // We now have a `transport` variable that can be used either to dial nodes or listen to
     // incoming connections, and that will automatically apply secio and multiplex on top
@@ -147,6 +149,7 @@ fn main() {
     };
 
     let final_fut = swarm_future
+        .for_each(|_| Ok(()))
         .select(floodsub_rx)
         .map(|_| ())
         .map_err(|e| e.0)

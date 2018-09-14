@@ -49,10 +49,9 @@
 //!         //let private_key = include_bytes!("test-rsa-private-key.pk8");
 //!         # let public_key = vec![];
 //!         //let public_key = include_bytes!("test-rsa-public-key.der").to_vec();
-//!         let upgrade = SecioConfig {
-//!             // See the documentation of `SecioKeyPair`.
-//!             key: SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap(),
-//!         };
+//!         // See the documentation of `SecioKeyPair`.
+//!         let keypair = SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap();
+//!         let upgrade = SecioConfig::new(keypair);
 //!
 //!         upgrade::map(upgrade, |out: SecioOutput<_>| out.stream)
 //!     });
@@ -78,10 +77,10 @@
 //! `SecioMiddleware` that implements `Sink` and `Stream` and can be used to send packets of data.
 //!
 
-extern crate aes_ctr;
 #[cfg(feature = "secp256k1")]
 extern crate asn1_der;
 extern crate bytes;
+extern crate crypto;
 extern crate futures;
 extern crate libp2p_core;
 #[macro_use]
@@ -95,9 +94,6 @@ extern crate secp256k1;
 extern crate tokio_io;
 extern crate untrusted;
 
-#[cfg(feature = "aes-all")]
-#[macro_use]
-extern crate lazy_static;
 pub use self::error::SecioError;
 
 #[cfg(feature = "secp256k1")]
@@ -120,15 +116,60 @@ mod algo_support;
 mod codec;
 mod error;
 mod handshake;
-mod structs_proto;
 mod stream_cipher;
+mod structs_proto;
+
+pub use algo_support::{Digest, KeyAgreement};
+pub use stream_cipher::Cipher;
 
 /// Implementation of the `ConnectionUpgrade` trait of `libp2p_core`. Automatically applies
 /// secio on any connection.
 #[derive(Clone)]
 pub struct SecioConfig {
     /// Private and public keys of the local node.
-    pub key: SecioKeyPair,
+    pub(crate) key: SecioKeyPair,
+    pub(crate) agreements_prop: Option<String>,
+    pub(crate) ciphers_prop: Option<String>,
+    pub(crate) digests_prop: Option<String>
+}
+
+impl SecioConfig {
+    /// Create a new `SecioConfig` with the given keypair.
+    pub fn new(kp: SecioKeyPair) -> Self {
+        SecioConfig {
+            key: kp,
+            agreements_prop: None,
+            ciphers_prop: None,
+            digests_prop: None
+        }
+    }
+
+    /// Override the default set of supported key agreement algorithms.
+    pub fn key_agreements<'a, I>(mut self, xs: I) -> Self
+    where
+        I: IntoIterator<Item=&'a KeyAgreement>
+    {
+        self.agreements_prop = Some(algo_support::key_agreements_proposition(xs));
+        self
+    }
+
+    /// Override the default set of supported ciphers.
+    pub fn ciphers<'a, I>(mut self, xs: I) -> Self
+    where
+        I: IntoIterator<Item=&'a Cipher>
+    {
+        self.ciphers_prop = Some(algo_support::ciphers_proposition(xs));
+        self
+    }
+
+    /// Override the default set of supported digest algorithms.
+    pub fn digests<'a, I>(mut self, xs: I) -> Self
+    where
+        I: IntoIterator<Item=&'a Digest>
+    {
+        self.digests_prop = Some(algo_support::digests_proposition(xs));
+        self
+    }
 }
 
 /// Private and public keys of the local node.
@@ -197,6 +238,18 @@ impl SecioKeyPair {
         let gen = Ed25519KeyPair::generate_pkcs8(&rng).map_err(Box::new)?;
         Ok(SecioKeyPair::ed25519_from_pkcs8(&gen[..])
             .expect("failed to parse generated Ed25519 key"))
+    }
+
+    /// Generates a new random sec256k1 key pair.
+    #[cfg(feature = "secp256k1")]
+    pub fn secp256k1_generated() -> Result<SecioKeyPair, Box<Error + Send + Sync>> {
+        let secp = secp256k1::Secp256k1::with_caps(secp256k1::ContextFlag::Full);
+        let (private, _) = secp.generate_keypair(&mut ::rand::thread_rng())
+            .expect("failed to generate secp256k1 key");
+
+        Ok(SecioKeyPair {
+            inner: SecioKeyPairInner::Secp256k1 { private },
+        })
     }
 
     /// Builds a `SecioKeyPair` from a raw secp256k1 32 bytes private key.
@@ -287,12 +340,12 @@ where
 
 impl<S, Maf> libp2p_core::ConnectionUpgrade<S, Maf> for SecioConfig
 where
-    S: AsyncRead + AsyncWrite + 'static, // TODO: 'static :(
-    Maf: 'static,                        // TODO: 'static :(
+    S: AsyncRead + AsyncWrite + Send + 'static, // TODO: 'static :(
+    Maf: Send + 'static,                        // TODO: 'static :(
 {
     type Output = SecioOutput<S>;
     type MultiaddrFuture = Maf;
-    type Future = Box<Future<Item = (Self::Output, Maf), Error = IoError>>;
+    type Future = Box<Future<Item = (Self::Output, Maf), Error = IoError> + Send>;
     type NamesIter = iter::Once<(Bytes, ())>;
     type UpgradeIdentifier = ();
 
@@ -311,7 +364,7 @@ where
     ) -> Self::Future {
         debug!("Starting secio upgrade");
 
-        let fut = SecioMiddleware::handshake(incoming, self.key);
+        let fut = SecioMiddleware::handshake(incoming, self);
         let wrapped = fut.map(|(stream_sink, pubkey, ephemeral)| {
             let mapped = stream_sink.map_err(map_err as fn(_) -> _);
             SecioOutput {
@@ -340,7 +393,7 @@ pub struct SecioMiddleware<S> {
 
 impl<S> SecioMiddleware<S>
 where
-    S: AsyncRead + AsyncWrite,
+    S: AsyncRead + AsyncWrite + Send,
 {
     /// Attempts to perform a handshake on the given socket.
     ///
@@ -348,12 +401,12 @@ where
     /// communications, plus the public key of the remote, plus the ephemeral public key.
     pub fn handshake<'a>(
         socket: S,
-        key_pair: SecioKeyPair,
-    ) -> Box<Future<Item = (SecioMiddleware<S>, PublicKey, Vec<u8>), Error = SecioError> + 'a>
+        config: SecioConfig,
+    ) -> Box<Future<Item = (SecioMiddleware<S>, PublicKey, Vec<u8>), Error = SecioError> + Send + 'a>
     where
         S: 'a,
     {
-        let fut = handshake::handshake(socket, key_pair).map(|(inner, pubkey, ephemeral)| {
+        let fut = handshake::handshake(socket, config).map(|(inner, pubkey, ephemeral)| {
             let inner = SecioMiddleware { inner };
             (inner, pubkey, ephemeral)
         });

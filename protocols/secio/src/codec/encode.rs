@@ -21,7 +21,7 @@
 //! Individual messages encoding.
 
 use bytes::BytesMut;
-use super::StreamCipher;
+use codec::StreamCipher;
 use futures::sink::Sink;
 use futures::stream::Stream;
 use futures::Poll;
@@ -62,15 +62,22 @@ where
     type SinkItem = BytesMut;
     type SinkError = S::SinkError;
 
-    fn start_send(&mut self, mut data_buf: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
+    fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
+        let capacity = item.len() + self.hmac_key.digest_algorithm().output_len;
 
-        // TODO if SinkError gets refactor to SecioError,
-        // then use try_apply_keystream
-        self.cipher_state.apply_keystream(&mut data_buf[..]);
-        let signature = hmac::sign(&self.hmac_key, &data_buf[..]);
-        data_buf.extend_from_slice(signature.as_ref());
-        self.raw_sink.start_send(data_buf)
+        // Apparently this is the fastest way of doing.
+        // See https://gist.github.com/kirushik/e0d93759b0cd102f814408595c20a9d0
+        let mut out_buffer = BytesMut::from(vec![0; capacity]);
 
+        {
+            let (out_data, out_sign) = out_buffer.split_at_mut(item.len());
+            self.cipher_state.process(&item, out_data);
+
+            let signature = hmac::sign(&self.hmac_key, out_data);
+            out_sign.copy_from_slice(signature.as_ref());
+        }
+
+        self.raw_sink.start_send(out_buffer)
     }
 
     #[inline]

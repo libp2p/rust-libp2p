@@ -58,9 +58,9 @@ fn main() {
             let secio = {
                 let private_key = include_bytes!("test-rsa-private-key.pk8");
                 let public_key = include_bytes!("test-rsa-public-key.der").to_vec();
-                libp2p::secio::SecioConfig {
-                    key: libp2p::secio::SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap(),
-                }
+                let keypair = libp2p::secio::SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap();
+                libp2p::secio::SecioConfig::new(keypair)
+
             };
 
             upgrade::or(
@@ -75,7 +75,9 @@ fn main() {
         // `Transport` because the output of the upgrade is not a stream but a controller for
         // muxing. We have to explicitly call `into_connection_reuse()` in order to turn this into
         // a `Transport`.
-        .into_connection_reuse();
+        .map(|val, _| ((), val))
+        .into_connection_reuse()
+        .map(|((), val), _| val);
 
     // Building a struct that represents the protocol that we are going to use for dialing.
     let proto = SimpleProtocol::new("/echo/1.0.0", |socket| {
@@ -131,6 +133,7 @@ fn main() {
     // actually started yet. Because we created the `TcpConfig` with tokio, we need to run the
     // future through the tokio core.
     let final_future = swarm_future
+        .for_each(|_| Ok(()))
         .select(finished_rx.map_err(|_| unreachable!()))
         .map(|_| ())
         .map_err(|(err, _)| err);

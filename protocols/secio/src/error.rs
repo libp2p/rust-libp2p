@@ -20,7 +20,7 @@
 
 //! Defines the `SecioError` enum that groups all possible errors in SECIO.
 
-use aes_ctr::stream_cipher::LoopError;
+use crypto::symmetriccipher::SymmetricCipherError;
 use std::error;
 use std::fmt;
 use std::io::Error as IoError;
@@ -35,7 +35,7 @@ pub enum SecioError {
     HandshakeParsingFailure,
 
     /// There is no protocol supported by both the local and remote hosts.
-    NoSupportIntersection(&'static str, String),
+    NoSupportIntersection,
 
     /// Failed to generate nonce.
     NonceGenerationFailed,
@@ -55,8 +55,8 @@ pub enum SecioError {
     /// The final check of the handshake failed.
     NonceVerificationFailed,
 
-    /// Error with block cipher.
-    CipherError(LoopError),
+    /// Error while decoding/encoding data.
+    CipherError(SymmetricCipherError),
 
     /// The received frame was of invalid length.
     FrameTooShort,
@@ -73,7 +73,7 @@ impl error::Error for SecioError {
             SecioError::HandshakeParsingFailure => {
                 "Failed to parse one of the handshake protobuf messages"
             }
-            SecioError::NoSupportIntersection(_, _) => {
+            SecioError::NoSupportIntersection => {
                 "There is no protocol supported by both the local and remote hosts"
             }
             SecioError::NonceGenerationFailed => "Failed to generate nonce",
@@ -111,9 +111,9 @@ impl fmt::Display for SecioError {
     }
 }
 
-impl From<LoopError> for SecioError {
+impl From<SymmetricCipherError> for SecioError {
     #[inline]
-    fn from(err: LoopError) -> SecioError {
+    fn from(err: SymmetricCipherError) -> SecioError {
         SecioError::CipherError(err)
     }
 }

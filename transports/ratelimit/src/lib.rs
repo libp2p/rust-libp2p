@@ -135,6 +135,7 @@ impl<T: Transport> Stream for Listener<T> {
     }
 }
 
+#[must_use = "futures do nothing unless polled"]
 pub struct ListenerUpgrade<T: Transport>(RateLimited<T::ListenerUpgrade>);
 
 impl<T> Future for ListenerUpgrade<T>
@@ -156,13 +157,15 @@ where
 impl<T> Transport for RateLimited<T>
 where
     T: Transport + 'static,
-    T::Output: AsyncRead + AsyncWrite,
+    T::Dial: Send,
+    T::MultiaddrFuture: Send,
+    T::Output: AsyncRead + AsyncWrite + Send,
 {
     type Output = Connection<T::Output>;
     type MultiaddrFuture = T::MultiaddrFuture;
     type Listener = Listener<T>;
     type ListenerUpgrade = ListenerUpgrade<T>;
-    type Dial = Box<Future<Item = (Connection<T::Output>, Self::MultiaddrFuture), Error = io::Error>>;
+    type Dial = Box<Future<Item = (Connection<T::Output>, Self::MultiaddrFuture), Error = io::Error> + Send>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)>
     where
