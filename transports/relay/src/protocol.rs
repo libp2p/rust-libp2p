@@ -234,14 +234,14 @@ fn stop_message(from: &Peer, dest: &Peer) -> CircuitRelay {
     let mut f = CircuitRelay_Peer::new();
     f.set_id(from.id.as_bytes().to_vec());
     for a in &from.addrs {
-        f.mut_addrs().push(a.to_bytes())
+        f.mut_addrs().push(a.to_bytes().to_vec())
     }
     msg.set_srcPeer(f);
 
     let mut d = CircuitRelay_Peer::new();
     d.set_id(dest.id.as_bytes().to_vec());
     for a in &dest.addrs {
-        d.mut_addrs().push(a.to_bytes())
+        d.mut_addrs().push(a.to_bytes().to_vec())
     }
     msg.set_dstPeer(d);
 

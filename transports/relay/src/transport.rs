@@ -203,7 +203,7 @@ where
         from.set_id(self.my_id.as_bytes().to_vec());
         if let Some(me) = self.peers.peer(&self.my_id) {
             for a in me.addrs() {
-                from.mut_addrs().push(a.to_bytes())
+                from.mut_addrs().push(a.to_bytes().to_vec())
             }
         }
         msg.set_srcPeer(from);
@@ -211,7 +211,7 @@ where
         let mut dest = CircuitRelay_Peer::new();
         dest.set_id(destination.id.as_bytes().to_vec());
         for a in &destination.addrs {
-            dest.mut_addrs().push(a.to_bytes())
+            dest.mut_addrs().push(a.to_bytes().to_vec())
         }
         msg.set_dstPeer(dest);
 

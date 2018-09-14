@@ -46,7 +46,7 @@ use futures::sync::mpsc;
 use futures::{future, Future, Poll, Sink, Stream};
 use libp2p_core::{ConnectionUpgrade, Endpoint, PeerId};
 use log::Level;
-use multiaddr::{AddrComponent, Multiaddr};
+use multiaddr::{Protocol, Multiaddr};
 use parking_lot::{Mutex, RwLock, RwLockUpgradableReadGuard};
 use protobuf::Message as ProtobufMessage;
 use smallvec::SmallVec;
@@ -602,7 +602,7 @@ fn handle_packet_received(
             }
         };
 
-        let from: Multiaddr = AddrComponent::P2P(peer_id.into()).into();
+        let from: Multiaddr = Protocol::P2p(peer_id.into()).into();
 
         let topics = publish
             .take_topicIDs()

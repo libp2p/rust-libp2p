@@ -1,29 +1,118 @@
-extern crate multiaddr;
-extern crate data_encoding;
-extern crate serde_json;
+extern crate bs58;
 extern crate bincode;
+extern crate data_encoding;
+extern crate multiaddr;
+extern crate multihash;
+extern crate quickcheck;
+extern crate rand;
+extern crate serde_json;
 
-use data_encoding::hex;
+use data_encoding::HEXUPPER;
 use multiaddr::*;
-use std::net::{SocketAddrV4, SocketAddrV6, Ipv4Addr, Ipv6Addr};
+use multihash::Multihash;
+use quickcheck::{Arbitrary, Gen, QuickCheck};
+use rand::Rng;
+use std::{
+    borrow::Cow,
+    iter::FromIterator,
+    net::{SocketAddrV4, SocketAddrV6, Ipv4Addr, Ipv6Addr},
+    str::FromStr
+};
+
+// Property tests
 
 #[test]
-fn protocol_to_code() {
-    assert_eq!(Protocol::IP4 as usize, 4);
+fn to_from_bytes_identity() {
+    fn prop(a: Ma) -> bool {
+        let b = a.0.to_bytes();
+        Some(a) == Multiaddr::from_bytes(b).ok().map(Ma)
+    }
+    QuickCheck::new().quickcheck(prop as fn(Ma) -> bool)
 }
 
 #[test]
-fn protocol_to_name() {
-    assert_eq!(Protocol::TCP.to_string(), "tcp");
+fn to_from_str_identity() {
+    fn prop(a: Ma) -> bool {
+        let b = a.0.to_string();
+        Some(a) == Multiaddr::from_str(&b).ok().map(Ma)
+    }
+    QuickCheck::new().quickcheck(prop as fn(Ma) -> bool)
 }
+
+
+// Arbitrary impls
+
+
+#[derive(PartialEq, Eq, Clone, Hash, Debug)]
+struct Ma(Multiaddr);
+
+impl Arbitrary for Ma {
+    fn arbitrary<G: Gen>(g: &mut G) -> Self {
+        let iter = (0 .. g.next_u32() % 128).map(|_| Proto::arbitrary(g).0);
+        Ma(Multiaddr::from_iter(iter))
+    }
+}
+
+#[derive(PartialEq, Eq, Clone, Debug)]
+struct Proto(Protocol<'static>);
+
+impl Arbitrary for Proto {
+    fn arbitrary<G: Gen>(g: &mut G) -> Self {
+        use Protocol::*;
+        match g.gen_range(0, 22) { // TODO: Add Protocol::Quic
+             0 => Proto(Dccp(g.gen())),
+             1 => Proto(Dns4(Cow::Owned(SubString::arbitrary(g).0))),
+             2 => Proto(Dns6(Cow::Owned(SubString::arbitrary(g).0))),
+             3 => Proto(Http),
+             4 => Proto(Https),
+             5 => Proto(Ip4(Ipv4Addr::arbitrary(g))),
+             6 => Proto(Ip6(Ipv6Addr::arbitrary(g))),
+             7 => Proto(P2pWebRtcDirect),
+             8 => Proto(P2pWebRtcStar),
+             9 => Proto(P2pWebSocketStar),
+            10 => Proto(Memory),
+            // TODO: impl Arbitrary for Multihash:
+            11 => Proto(P2p(multihash("QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC"))),
+            12 => Proto(P2pCircuit),
+            13 => Proto(Quic),
+            14 => Proto(Sctp(g.gen())),
+            15 => Proto(Tcp(g.gen())),
+            16 => Proto(Udp(g.gen())),
+            17 => Proto(Udt),
+            18 => Proto(Unix(Cow::Owned(SubString::arbitrary(g).0))),
+            19 => Proto(Utp),
+            20 => Proto(Ws),
+            21 => Proto(Wss),
+             _ => panic!("outside range")
+        }
+    }
+}
+
+#[derive(PartialEq, Eq, Clone, Debug)]
+struct SubString(String); // ASCII string without '/'
+
+impl Arbitrary for SubString {
+    fn arbitrary<G: Gen>(g: &mut G) -> Self {
+        let mut s = String::arbitrary(g);
+        s.retain(|c| c.is_ascii() && c != '/');
+        SubString(s)
+    }
+}
+
+
+// other unit tests
 
 
 fn ma_valid(source: &str, target: &str, protocols: Vec<Protocol>) {
     let parsed = source.parse::<Multiaddr>().unwrap();
-    assert_eq!(hex::encode(parsed.to_bytes().as_slice()), target);
-    assert_eq!(parsed.iter().map(|addr| addr.protocol_id()).collect::<Vec<_>>(), protocols);
+    assert_eq!(HEXUPPER.encode(&parsed.to_bytes()[..]), target);
+    assert_eq!(parsed.iter().collect::<Vec<_>>(), protocols);
     assert_eq!(source.parse::<Multiaddr>().unwrap().to_string(), source);
-    assert_eq!(Multiaddr::from_bytes(hex::decode(target.as_bytes()).unwrap()).unwrap(), parsed);
+    assert_eq!(Multiaddr::from_bytes(HEXUPPER.decode(target.as_bytes()).unwrap()).unwrap(), parsed);
+}
+
+fn multihash(s: &str) -> Multihash {
+    Multihash::from_bytes(bs58::decode(s).into_vec().unwrap()).unwrap()
 }
 
 #[test]
@@ -42,68 +131,61 @@ fn multiaddr_eq() {
 fn construct_success() {
     use Protocol::*;
 
-    ma_valid("/ip4/1.2.3.4", "0401020304", vec![IP4]);
-    ma_valid("/ip4/0.0.0.0", "0400000000", vec![IP4]);
-    ma_valid("/ip6/::1", "2900000000000000000000000000000001", vec![IP6]);
+    let local: Ipv4Addr = "127.0.0.1".parse().unwrap();
+    let addr6: Ipv6Addr = "2001:8a0:7ac5:4201:3ac9:86ff:fe31:7095".parse().unwrap();
+
+    ma_valid("/ip4/1.2.3.4", "0401020304", vec![Ip4("1.2.3.4".parse().unwrap())]);
+    ma_valid("/ip4/0.0.0.0", "0400000000", vec![Ip4("0.0.0.0".parse().unwrap())]);
+    ma_valid("/ip6/::1", "2900000000000000000000000000000001", vec![Ip6("::1".parse().unwrap())]);
     ma_valid("/ip6/2601:9:4f81:9700:803e:ca65:66e8:c21",
              "29260100094F819700803ECA6566E80C21",
-             vec![IP6]);
-    ma_valid("/udp/0", "110000", vec![UDP]);
-    ma_valid("/tcp/0", "060000", vec![TCP]);
-    ma_valid("/sctp/0", "84010000", vec![SCTP]);
-    ma_valid("/udp/1234", "1104D2", vec![UDP]);
-    ma_valid("/tcp/1234", "0604D2", vec![TCP]);
-    ma_valid("/sctp/1234", "840104D2", vec![SCTP]);
-    ma_valid("/udp/65535", "11FFFF", vec![UDP]);
-    ma_valid("/tcp/65535", "06FFFF", vec![TCP]);
+             vec![Ip6("2601:9:4f81:9700:803e:ca65:66e8:c21".parse().unwrap())]);
+    ma_valid("/udp/0", "110000", vec![Udp(0)]);
+    ma_valid("/tcp/0", "060000", vec![Tcp(0)]);
+    ma_valid("/sctp/0", "84010000", vec![Sctp(0)]);
+    ma_valid("/udp/1234", "1104D2", vec![Udp(1234)]);
+    ma_valid("/tcp/1234", "0604D2", vec![Tcp(1234)]);
+    ma_valid("/sctp/1234", "840104D2", vec![Sctp(1234)]);
+    ma_valid("/udp/65535", "11FFFF", vec![Udp(65535)]);
+    ma_valid("/tcp/65535", "06FFFF", vec![Tcp(65535)]);
     ma_valid("/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
              "A503221220D52EBB89D85B02A284948203A62FF28389C57C9F42BEEC4EC20DB76A68911C0B",
-             vec![P2P]);
-    ma_valid("/udp/1234/sctp/1234", "1104D2840104D2", vec![UDP, SCTP]);
-    ma_valid("/udp/1234/udt", "1104D2AD02", vec![UDP, UDT]);
-    ma_valid("/udp/1234/utp", "1104D2AE02", vec![UDP, UTP]);
-    ma_valid("/tcp/1234/http", "0604D2E003", vec![TCP, HTTP]);
-    ma_valid("/tcp/1234/https", "0604D2BB03", vec![TCP, HTTPS]);
+             vec![P2p(multihash("QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC"))]);
+    ma_valid("/udp/1234/sctp/1234", "1104D2840104D2", vec![Udp(1234), Sctp(1234)]);
+    ma_valid("/udp/1234/udt", "1104D2AD02", vec![Udp(1234), Udt]);
+    ma_valid("/udp/1234/utp", "1104D2AE02", vec![Udp(1234), Utp]);
+    ma_valid("/tcp/1234/http", "0604D2E003", vec![Tcp(1234), Http]);
+    ma_valid("/tcp/1234/https", "0604D2BB03", vec![Tcp(1234), Https]);
     ma_valid("/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC/tcp/1234",
              "A503221220D52EBB89D85B02A284948203A62FF28389C57C9F42BEEC4EC20DB76A68911C0B0604D2",
-             vec![P2P, TCP]);
-    ma_valid("/ip4/127.0.0.1/udp/1234",
-             "047F0000011104D2",
-             vec![IP4, UDP]);
-    ma_valid("/ip4/127.0.0.1/udp/0", "047F000001110000", vec![IP4, UDP]);
-    ma_valid("/ip4/127.0.0.1/tcp/1234",
-             "047F0000010604D2",
-             vec![IP4, TCP]);
+             vec![P2p(multihash("QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC")), Tcp(1234)]);
+    ma_valid("/ip4/127.0.0.1/udp/1234", "047F0000011104D2", vec![Ip4(local.clone()), Udp(1234)]);
+    ma_valid("/ip4/127.0.0.1/udp/0", "047F000001110000", vec![Ip4(local.clone()), Udp(0)]);
+    ma_valid("/ip4/127.0.0.1/tcp/1234", "047F0000010604D2", vec![Ip4(local.clone()), Tcp(1234)]);
     ma_valid("/ip4/127.0.0.1/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
              "047F000001A503221220D52EBB89D85B02A284948203A62FF28389C57C9F42BEEC4EC20DB76A68911C0B",
-             vec![IP4, P2P]);
+             vec![Ip4(local.clone()), P2p(multihash("QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC"))]);
     ma_valid("/ip4/127.0.0.1/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC/tcp/1234",
-             "047F000001A503221220D52EBB89D85B02A284948203A\
-62FF28389C57C9F42BEEC4EC20DB76A68911C0B0604D2",
-             vec![IP4, P2P, TCP]);
+             "047F000001A503221220D52EBB89D85B02A284948203A62FF28389C57C9F42BEEC4EC20DB76A68911C0B0604D2",
+             vec![Ip4(local.clone()), P2p(multihash("QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC")), Tcp(1234)]);
     // /unix/a/b/c/d/e,
     // /unix/stdio,
     // /ip4/1.2.3.4/tcp/80/unix/a/b/c/d/e/f,
     // /ip4/127.0.0.1/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC/tcp/1234/unix/stdio
-    ma_valid("/ip6/2001:8a0:7ac5:4201:3ac9:86ff:fe31:\
-              7095/tcp/8000/ws/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
-             "29200108A07AC542013AC986FFFE317095061F40DD03A5\
-03221220D52EBB89D85B02A284948203A62FF28389C57C9F42BEEC4EC20DB76A68911C0B",
-             vec![IP6, TCP, WS, P2P]);
-    ma_valid("/p2p-webrtc-star/ip4/127.0.0.\
-              1/tcp/9090/ws/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
-             "9302047F000001062382DD03A503221220D52EBB89D85B\
-02A284948203A62FF28389C57C9F42BEEC4EC20DB76A68911C0B",
-             vec![Libp2pWebrtcStar, IP4, TCP, WS, P2P]);
-    ma_valid("/ip6/2001:8a0:7ac5:4201:3ac9:86ff:fe31:\
-              7095/tcp/8000/wss/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
-             "29200108A07AC542013AC986FFFE317095061F40DE03A503221220D52EBB8\
-9D85B02A284948203A62FF28389C57C9F42BEEC4EC20DB76A68911C0B",
-             vec![IP6, TCP, WSS, P2P]);
+    ma_valid("/ip6/2001:8a0:7ac5:4201:3ac9:86ff:fe31:7095/tcp/8000/ws/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
+             "29200108A07AC542013AC986FFFE317095061F40DD03A503221220D52EBB89D85B02A284948203A62FF28389C57C9F42BEEC4EC20DB76A68911C0B",
+             vec![Ip6(addr6.clone()), Tcp(8000), Ws, P2p(multihash("QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC"))
+             ]);
+    ma_valid("/p2p-webrtc-star/ip4/127.0.0.1/tcp/9090/ws/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
+             "9302047F000001062382DD03A503221220D52EBB89D85B02A284948203A62FF28389C57C9F42BEEC4EC20DB76A68911C0B",
+             vec![P2pWebRtcStar, Ip4(local.clone()), Tcp(9090), Ws, P2p(multihash("QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC"))
+             ]);
+    ma_valid("/ip6/2001:8a0:7ac5:4201:3ac9:86ff:fe31:7095/tcp/8000/wss/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
+             "29200108A07AC542013AC986FFFE317095061F40DE03A503221220D52EBB89D85B02A284948203A62FF28389C57C9F42BEEC4EC20DB76A68911C0B",
+             vec![Ip6(addr6.clone()), Tcp(8000), Wss, P2p(multihash("QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC"))]);
     ma_valid("/ip4/127.0.0.1/tcp/9090/p2p-circuit/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
-             "047F000001062382A202A503221220D52EBB89D85B\
-02A284948203A62FF28389C57C9F42BEEC4EC20DB76A68911C0B",
-             vec![IP4, TCP, P2pCircuit, P2P]);
+             "047F000001062382A202A503221220D52EBB89D85B02A284948203A62FF28389C57C9F42BEEC4EC20DB76A68911C0B",
+             vec![Ip4(local.clone()), Tcp(9090), P2pCircuit, P2p(multihash("QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC"))]);
 }
 
 #[test]

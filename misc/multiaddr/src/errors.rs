@@ -9,23 +9,25 @@ pub type Result<T> = ::std::result::Result<T, Error>;
 /// Error types
 #[derive(Debug)]
 pub enum Error {
-    UnknownProtocol,
-    UnknownProtocolString,
+    DataLessThanLen,
     InvalidMultiaddr,
-    MissingAddress,
-    ParsingError(Box<error::Error + Send + Sync>),
-    InvalidUvar(decode::Error)
+    InvalidProtocolString,
+    InvalidUvar(decode::Error),
+    ParsingError(Box<dyn error::Error + Send + Sync>),
+    UnknownProtocolId(u32),
+    UnknownProtocolString
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Error::UnknownProtocol => f.write_str("unknown protocol"),
-            Error::UnknownProtocolString => f.write_str("unknown protocol string"),
+            Error::DataLessThanLen => f.write_str("we have less data than indicated by length"),
             Error::InvalidMultiaddr => f.write_str("invalid multiaddr"),
-            Error::MissingAddress => f.write_str("protocol requires address, none given"),
+            Error::InvalidProtocolString => f.write_str("invalid protocol string"),
+            Error::InvalidUvar(e) => write!(f, "failed to decode unsigned varint: {}", e),
             Error::ParsingError(e) => write!(f, "failed to parse: {}", e),
-            Error::InvalidUvar(e) => write!(f, "failed to decode unsigned varint: {}", e)
+            Error::UnknownProtocolId(id) => write!(f, "unknown protocol id: {}", id),
+            Error::UnknownProtocolString => f.write_str("unknown protocol string")
         }
     }
 }

@@ -197,7 +197,7 @@ fn main() {
 
     let finish_enum = kad_system
         .find_node(my_peer_id.clone(), |peer| {
-            let addr = Multiaddr::from(libp2p::multiaddr::AddrComponent::P2P(peer.clone().into()));
+            let addr = Multiaddr::from(libp2p::multiaddr::Protocol::P2p(peer.clone().into()));
             active_kad_connections.lock().unwrap().entry(peer.clone())
                 .or_insert_with(Default::default)
                 .dial(&swarm_controller, &addr, transport.clone().with_upgrade(KadConnecConfig::new()))
@@ -249,7 +249,7 @@ fn p2p_multiaddr_to_node_id(client_addr: Multiaddr) -> PeerId {
 		second = iter.next();
 	}
 	match (first, second) {
-		(Some(libp2p::multiaddr::AddrComponent::P2P(node_id)), None) =>
+		(Some(libp2p::multiaddr::Protocol::P2p(node_id)), None) =>
 			PeerId::from_multihash(node_id).expect("libp2p always reports a valid node id"),
 		_ => panic!("Reported multiaddress is in the wrong format ; programmer error")
 	}
@@ -274,7 +274,7 @@ where
 
         let p2p_component = multiaddr.pop().expect("hard-coded multiaddr is empty");
         let peer = match p2p_component {
-            libp2p::multiaddr::AddrComponent::P2P(key) => {
+            libp2p::multiaddr::Protocol::P2p(key) => {
                 PeerId::from_multihash(key).expect("invalid peer id")
             }
             _ => panic!("hard-coded multiaddr didn't end with /p2p/"),

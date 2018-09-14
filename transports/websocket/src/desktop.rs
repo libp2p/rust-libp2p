@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{stream, Future, IntoFuture, Sink, Stream};
-use multiaddr::{AddrComponent, Multiaddr};
+use multiaddr::{Protocol, Multiaddr};
 use rw_stream_sink::RwStreamSink;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use swarm::Transport;
@@ -80,14 +80,14 @@ where
     ) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         let mut inner_addr = original_addr.clone();
         match inner_addr.pop() {
-            Some(AddrComponent::WS) => {}
+            Some(Protocol::Ws) => {}
             _ => return Err((self, original_addr)),
         };
 
         let (inner_listen, new_addr) = match self.transport.listen_on(inner_addr) {
             Ok((listen, mut new_addr)) => {
                 // Need to suffix `/ws` to the listening address.
-                new_addr.append(AddrComponent::WS);
+                new_addr.append(Protocol::Ws);
                 (listen, new_addr)
             }
             Err((transport, _)) => {
@@ -107,7 +107,7 @@ where
             let upgraded = stream.and_then(|(stream, client_addr)| {
                 // Need to suffix `/ws` to each client address.
                 let client_addr = client_addr.map(|mut addr| {
-                    addr.append(AddrComponent::WS);
+                    addr.append(Protocol::Ws);
                     addr
                 });
                 debug!("Incoming connection");
@@ -161,8 +161,8 @@ where
     fn dial(self, original_addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
         let mut inner_addr = original_addr.clone();
         let is_wss = match inner_addr.pop() {
-            Some(AddrComponent::WS) => false,
-            Some(AddrComponent::WSS) => true,
+            Some(Protocol::Ws) => false,
+            Some(Protocol::Wss) => true,
             _ => {
                 trace!(
                     "Ignoring dial attempt for {} because it is not a websocket multiaddr",
@@ -197,9 +197,9 @@ where
             .and_then(move |(connec, client_addr)| {
                 let client_addr = Box::new(client_addr.map(move |mut addr| {
                     if is_wss {
-                        addr.append(AddrComponent::WSS);
+                        addr.append(Protocol::Wss);
                     } else {
-                        addr.append(AddrComponent::WS);
+                        addr.append(Protocol::Ws);
                     };
                     addr
                 })) as Box<Future<Item = _, Error = _> + Send>;
@@ -238,14 +238,14 @@ where
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         let mut server = server.clone();
         let last_proto = match server.pop() {
-            Some(v @ AddrComponent::WS) | Some(v @ AddrComponent::WSS) => v,
+            Some(v @ Protocol::Ws) | Some(v @ Protocol::Wss) => v,
             _ => return None,
         };
 
         let mut observed = observed.clone();
         match observed.pop() {
-            Some(AddrComponent::WS) => false,
-            Some(AddrComponent::WSS) => true,
+            Some(Protocol::Ws) => false,
+            Some(Protocol::Wss) => true,
             _ => return None,
         };
 
@@ -266,16 +266,16 @@ fn client_addr_to_ws(client_addr: &Multiaddr, is_wss: bool) -> String {
             "127.0.0.1".to_owned()
         } else {
             match (&protocols[0], &protocols[1]) {
-                (&AddrComponent::IP4(ref ip), &AddrComponent::TCP(port)) => {
+                (&Protocol::Ip4(ref ip), &Protocol::Tcp(port)) => {
                     format!("{}:{}", ip, port)
                 }
-                (&AddrComponent::IP6(ref ip), &AddrComponent::TCP(port)) => {
+                (&Protocol::Ip6(ref ip), &Protocol::Tcp(port)) => {
                     format!("[{}]:{}", ip, port)
                 }
-                (&AddrComponent::DNS4(ref ns), &AddrComponent::TCP(port)) => {
+                (&Protocol::Dns4(ref ns), &Protocol::Tcp(port)) => {
                     format!("{}:{}", ns, port)
                 }
-                (&AddrComponent::DNS6(ref ns), &AddrComponent::TCP(port)) => {
+                (&Protocol::Dns6(ref ns), &Protocol::Tcp(port)) => {
                     format!("{}:{}", ns, port)
                 }
                 _ => "127.0.0.1".to_owned(),

@@ -51,7 +51,7 @@ extern crate tokio_tcp;
 extern crate tokio_current_thread;
 
 use futures::{future, future::FutureResult, prelude::*, Async, Poll};
-use multiaddr::{AddrComponent, Multiaddr, ToMultiaddr};
+use multiaddr::{Protocol, Multiaddr, ToMultiaddr};
 use std::fmt;
 use std::io::{Error as IoError, Read, Write};
 use std::iter;
@@ -212,15 +212,15 @@ impl Transport for TcpConfig {
 
         // Check that `server` is a valid TCP/IP address.
         match (&server_proto1, &server_proto2) {
-            (&AddrComponent::IP4(_), &AddrComponent::TCP(_))
-            | (&AddrComponent::IP6(_), &AddrComponent::TCP(_)) => {}
+            (&Protocol::Ip4(_), &Protocol::Tcp(_))
+            | (&Protocol::Ip6(_), &Protocol::Tcp(_)) => {}
             _ => return None,
         }
 
         // Check that `observed` is a valid TCP/IP address.
         match (&observed_proto1, &observed_proto2) {
-            (&AddrComponent::IP4(_), &AddrComponent::TCP(_))
-            | (&AddrComponent::IP6(_), &AddrComponent::TCP(_)) => {}
+            (&Protocol::Ip4(_), &Protocol::Tcp(_))
+            | (&Protocol::Ip6(_), &Protocol::Tcp(_)) => {}
             _ => return None,
         }
 
@@ -242,8 +242,8 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
     }
 
     match (proto1, proto2) {
-        (AddrComponent::IP4(ip), AddrComponent::TCP(port)) => Ok(SocketAddr::new(ip.into(), port)),
-        (AddrComponent::IP6(ip), AddrComponent::TCP(port)) => Ok(SocketAddr::new(ip.into(), port)),
+        (Protocol::Ip4(ip), Protocol::Tcp(port)) => Ok(SocketAddr::new(ip.into(), port)),
+        (Protocol::Ip6(ip), Protocol::Tcp(port)) => Ok(SocketAddr::new(ip.into(), port)),
         _ => Err(()),
     }
 }

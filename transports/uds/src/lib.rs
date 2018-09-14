@@ -62,7 +62,7 @@ extern crate tokio_io;
 
 use futures::future::{self, Future, FutureResult};
 use futures::stream::Stream;
-use multiaddr::{AddrComponent, Multiaddr};
+use multiaddr::{Protocol, Multiaddr};
 use std::io::Error as IoError;
 use std::path::PathBuf;
 use libp2p_core::Transport;
@@ -148,7 +148,7 @@ fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
     }
 
     match path {
-        Some(AddrComponent::UNIX(ref path)) => Ok(path.as_ref().into()),
+        Some(Protocol::Unix(ref path)) => Ok(path.as_ref().into()),
         _ => Err(())
     }
 }
@@ -158,7 +158,7 @@ mod tests {
     use super::{multiaddr_to_path, UdsConfig};
     use futures::stream::Stream;
     use futures::Future;
-    use multiaddr::{AddrComponent, Multiaddr};
+    use multiaddr::{Protocol, Multiaddr};
     use std::{self, borrow::Cow, path::Path};
     use libp2p_core::Transport;
     use tempfile;
@@ -173,11 +173,11 @@ mod tests {
         );
 
         assert_eq!(
-            multiaddr_to_path(&Multiaddr::from(AddrComponent::UNIX("/tmp/foo".into()))),
+            multiaddr_to_path(&Multiaddr::from(Protocol::Unix("/tmp/foo".into()))),
             Ok(Path::new("/tmp/foo").to_owned())
         );
         assert_eq!(
-            multiaddr_to_path(&Multiaddr::from(AddrComponent::UNIX("/home/bar/baz".into()))),
+            multiaddr_to_path(&Multiaddr::from(Protocol::Unix("/home/bar/baz".into()))),
             Ok(Path::new("/home/bar/baz").to_owned())
         );
     }
@@ -188,7 +188,7 @@ mod tests {
 
         let temp_dir = tempfile::tempdir().unwrap();
         let socket = temp_dir.path().join("socket");
-        let addr = Multiaddr::from(AddrComponent::UNIX(Cow::Owned(socket.to_string_lossy().into_owned())));
+        let addr = Multiaddr::from(Protocol::Unix(Cow::Owned(socket.to_string_lossy().into_owned())));
         let addr2 = addr.clone();
 
         std::thread::spawn(move || {
