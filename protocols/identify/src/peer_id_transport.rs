@@ -284,13 +284,11 @@ pub struct PeerIdTransportOutput<S> {
 // If the multiaddress is in the form `/p2p/...`, turn it into a `PeerId`.
 // Otherwise, return it as-is.
 fn multiaddr_to_peerid(addr: Multiaddr) -> Result<PeerId, Multiaddr> {
-    let components = addr.iter().collect::<Vec<_>>();
-    if components.len() < 1 {
-        return Err(addr);
+    if addr.iter().next().is_none() {
+        return Err(addr)
     }
-
-    match components.last() {
-        Some(&AddrComponent::P2P(ref peer_id)) => {
+    match addr.iter().last() {
+        Some(AddrComponent::P2P(ref peer_id)) => {
             match PeerId::from_multihash(peer_id.clone()) {
                 Ok(peer_id) => Ok(peer_id),
                 Err(_) => Err(addr),
