@@ -467,14 +467,20 @@ where
                     }
                 }
                 Ok(Async::Ready(Some((InToExtMessage::NodeReached(peer_id, sender), task_id)))) => {
-                    match self
-                        .tasks
-                        .insert(task_id, TaskKnownState::Connected(peer_id.clone()))
                     {
-                        Some(TaskKnownState::Pending { .. }) => (),
-                        Some(TaskKnownState::Interrupted) => continue,
-                        None | Some(TaskKnownState::Connected(_)) => panic!("Inconsistent state"),
-                    };
+                        let existing = match self.tasks.get_mut(&task_id) {
+                            Some(state) => state,
+                            None => panic!("Inconsistent state")
+                        };
+
+                        match existing {
+                            TaskKnownState::Pending { .. } => (),
+                            TaskKnownState::Interrupted => continue,
+                            TaskKnownState::Connected(_) => panic!("Inconsistent state"),
+                        }
+
+                        *existing = TaskKnownState::Connected(peer_id.clone());
+                    }
 
                     let replaced_node = self.nodes.insert(peer_id.clone(), (task_id, sender));
                     let user_datas = extract_from_attempt(&mut self.outbound_attempts, &peer_id);

@@ -370,17 +370,19 @@ where
         // the borrow checker yells at us.
 
         if self.active_nodes.peer_mut(&peer_id).is_some() {
+            debug_assert!(!self.out_reach_attempts.contains_key(&peer_id));
             return Peer::Connected(PeerConnected {
                 peer: self
                     .active_nodes
                     .peer_mut(&peer_id)
                     .expect("we checked for Some"),
                 peer_id,
-                connected_multiaddresses: &self.connected_multiaddresses,
+                connected_multiaddresses: &mut self.connected_multiaddresses,
             });
         }
 
         if self.out_reach_attempts.get_mut(&peer_id).is_some() {
+            debug_assert!(!self.connected_multiaddresses.contains_key(&peer_id));
             return Peer::PendingConnect(PeerPendingConnect {
                 attempt: match self.out_reach_attempts.entry(peer_id.clone()) {
                     Entry::Occupied(e) => e,
@@ -390,6 +392,7 @@ where
             });
         }
 
+        debug_assert!(!self.connected_multiaddresses.contains_key(&peer_id));
         Peer::NotConnected(PeerNotConnected {
             nodes: self,
             peer_id,
@@ -398,7 +401,7 @@ where
 
     /// Handles a node reached event from the collection.
     ///
-    /// Optionally returns an event to return from the stream.
+    /// Returns an event to return from the stream.
     ///
     /// > **Note**: The event **must** have been produced by the collection of nodes, otherwise
     /// >           panics will likely happen.
@@ -407,7 +410,16 @@ where
         peer_id: PeerId,
         reach_id: ReachAttemptId,
         closed_outbound_substreams: Option<Vec<TUserData>>,
-    ) -> Option<SwarmEvent<TTrans, TMuxer, TUserData>> {
+    ) -> SwarmEvent<TTrans, TMuxer, TUserData>
+    where
+        TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
+        TTrans::Dial: Send + 'static,
+        TTrans::MultiaddrFuture: Send + 'static,
+        TMuxer: Send + Sync + 'static,
+        TMuxer::OutboundSubstream: Send,
+        TMuxer::Substream: Send,
+        TUserData: Send + 'static,
+    {
         // We first start looking in the incoming attempts. While this makes the code less optimal,
         // it also makes the logic easier.
         if let Some(in_pos) = self
@@ -428,14 +440,14 @@ where
             }
 
             if let Some(closed_outbound_substreams) = closed_outbound_substreams {
-                return Some(SwarmEvent::Replaced {
+                return SwarmEvent::Replaced {
                     peer_id,
                     endpoint,
                     closed_multiaddr,
                     closed_outbound_substreams,
-                });
+                };
             } else {
-                return Some(SwarmEvent::Connected { peer_id, endpoint });
+                return SwarmEvent::Connected { peer_id, endpoint };
             }
         }
 
@@ -458,14 +470,14 @@ where
             };
 
             if let Some(closed_outbound_substreams) = closed_outbound_substreams {
-                return Some(SwarmEvent::Replaced {
+                return SwarmEvent::Replaced {
                     peer_id,
                     endpoint,
                     closed_multiaddr,
                     closed_outbound_substreams,
-                });
+                };
             } else {
-                return Some(SwarmEvent::Connected { peer_id, endpoint });
+                return SwarmEvent::Connected { peer_id, endpoint };
             }
         }
 
@@ -482,17 +494,32 @@ where
             let num_remain = attempt.next_attempts.len();
             let failed_addr = attempt.cur_attempted.clone();
 
-            if !attempt.next_attempts.is_empty() {
+            let opened_attempts = self.active_nodes.peer_mut(&peer_id)
+                .expect("Inconsistent state ; received NodeReached event for invalid node")
+                .close();
+            debug_assert!(opened_attempts.is_empty());
+
+            loop {
+                if attempt.next_attempts.is_empty() {
+                    break;
+                }
+
                 attempt.cur_attempted = attempt.next_attempts.remove(0);
+                match self.transport().clone().dial(attempt.cur_attempted.clone()) {
+                    Ok(fut) => attempt.id = self.active_nodes.add_reach_attempt(fut),
+                    Err(_) => continue,
+                };
+
                 self.out_reach_attempts.insert(peer_id.clone(), attempt);
+                break;
             }
 
-            return Some(SwarmEvent::PublicKeyMismatch {
+            return SwarmEvent::PublicKeyMismatch {
                 remain_addrs_attempt: num_remain,
                 expected_peer_id: peer_id,
                 actual_peer_id: wrong_peer_id,
                 multiaddr: failed_addr,
-            });
+            };
         }
 
         // We didn't find any entry in neither the outgoing connections not ingoing connections.
@@ -741,7 +768,7 @@ where
 {
     peer: CollecPeerMut<'a, TUserData>,
     /// Reference to the `connected_multiaddresses` field of the parent.
-    connected_multiaddresses: &'a FnvHashMap<PeerId, Multiaddr>,
+    connected_multiaddresses: &'a mut FnvHashMap<PeerId, Multiaddr>,
     peer_id: PeerId,
 }
 
@@ -756,12 +783,13 @@ where
     // TODO: consider returning a `PeerNotConnected` ; however this makes all the borrows things
     // much more annoying to deal with
     pub fn close(self) -> Vec<TUserData> {
+        self.connected_multiaddresses.remove(&self.peer_id);
         self.peer.close()
     }
 
     /// Returns the outcome of the future that resolves the multiaddress of the peer.
     #[inline]
-    pub fn multiaddr(&self) -> Option<&'a Multiaddr> {
+    pub fn multiaddr(&self) -> Option<&Multiaddr> {
         self.connected_multiaddresses.get(&self.peer_id)
     }
 
@@ -975,20 +1003,16 @@ where
             match self.active_nodes.poll() {
                 Ok(Async::NotReady) => break,
                 Ok(Async::Ready(Some(CollectionEvent::NodeReached { peer_id, id }))) => {
-                    if let Some(event) = self.handle_node_reached(peer_id, id, None) {
-                        return Ok(Async::Ready(Some(event)));
-                    }
+                    let event = self.handle_node_reached(peer_id, id, None);
+                    return Ok(Async::Ready(Some(event)));
                 }
                 Ok(Async::Ready(Some(CollectionEvent::NodeReplaced {
                     peer_id,
                     id,
                     closed_outbound_substreams,
                 }))) => {
-                    if let Some(event) =
-                        self.handle_node_reached(peer_id, id, Some(closed_outbound_substreams))
-                    {
-                        return Ok(Async::Ready(Some(event)));
-                    }
+                    let event = self.handle_node_reached(peer_id, id, Some(closed_outbound_substreams));
+                    return Ok(Async::Ready(Some(event)));
                 }
                 Ok(Async::Ready(Some(CollectionEvent::ReachError { id, error }))) => {
                     if let Some(event) = self.handle_reach_error(id, error) {
