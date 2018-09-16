@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use fnv::FnvHashMap;
-use futures::prelude::*;
+use futures::{prelude::*, future};
 use muxing;
 use nodes::collection::{
     CollectionEvent, CollectionStream, PeerMut as CollecPeerMut, ReachAttemptId,
@@ -27,7 +27,7 @@ use nodes::collection::{
 use nodes::listeners::{ListenersEvent, ListenersStream};
 use nodes::node::Substream;
 use std::collections::hash_map::{Entry, OccupiedEntry};
-use std::io::Error as IoError;
+use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use void::Void;
 use {Endpoint, Multiaddr, PeerId, Transport};
 
@@ -489,7 +489,7 @@ where
             .find(|(_, a)| a.id == reach_id)
             .map(|(p, _)| p.clone());
         if let Some(wrong_peer_id) = wrong_peer_id {
-            let mut attempt = self.out_reach_attempts.remove(&wrong_peer_id).unwrap();
+            let attempt = self.out_reach_attempts.remove(&wrong_peer_id).unwrap();
 
             let num_remain = attempt.next_attempts.len();
             let failed_addr = attempt.cur_attempted.clone();
@@ -499,19 +499,19 @@ where
                 .close();
             debug_assert!(opened_attempts.is_empty());
 
-            loop {
-                if attempt.next_attempts.is_empty() {
-                    break;
-                }
-
+            if !attempt.next_attempts.is_empty() {
+                let mut attempt = attempt;
                 attempt.cur_attempted = attempt.next_attempts.remove(0);
-                match self.transport().clone().dial(attempt.cur_attempted.clone()) {
-                    Ok(fut) => attempt.id = self.active_nodes.add_reach_attempt(fut),
-                    Err(_) => continue,
+                attempt.id = match self.transport().clone().dial(attempt.cur_attempted.clone()) {
+                    Ok(fut) => self.active_nodes.add_reach_attempt(fut),
+                    Err((_, addr)) => {
+                        let msg = format!("unsupported multiaddr {}", addr);
+                        let fut = future::err(IoError::new(IoErrorKind::Other, msg));
+                        self.active_nodes.add_reach_attempt::<_, future::FutureResult<Multiaddr, IoError>>(fut)
+                    },
                 };
 
                 self.out_reach_attempts.insert(peer_id.clone(), attempt);
-                break;
             }
 
             return SwarmEvent::PublicKeyMismatch {
@@ -559,19 +559,19 @@ where
             let num_remain = attempt.next_attempts.len();
             let failed_addr = attempt.cur_attempted.clone();
 
-            loop {
-                if attempt.next_attempts.is_empty() {
-                    break;
-                }
-
+            if !attempt.next_attempts.is_empty() {
+                let mut attempt = attempt;
                 attempt.cur_attempted = attempt.next_attempts.remove(0);
-                match self.transport().clone().dial(attempt.cur_attempted.clone()) {
-                    Ok(fut) => attempt.id = self.active_nodes.add_reach_attempt(fut),
-                    Err(_) => continue,
+                attempt.id = match self.transport().clone().dial(attempt.cur_attempted.clone()) {
+                    Ok(fut) => self.active_nodes.add_reach_attempt(fut),
+                    Err((_, addr)) => {
+                        let msg = format!("unsupported multiaddr {}", addr);
+                        let fut = future::err(IoError::new(IoErrorKind::Other, msg));
+                        self.active_nodes.add_reach_attempt::<_, future::FutureResult<Multiaddr, IoError>>(fut)
+                    },
                 };
 
                 self.out_reach_attempts.insert(peer_id.clone(), attempt);
-                break;
             }
 
             return Some(SwarmEvent::DialError {
