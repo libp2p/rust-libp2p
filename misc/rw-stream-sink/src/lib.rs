@@ -196,6 +196,9 @@ mod tests {
         fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
             self.1.poll_complete()
         }
+        fn close(&mut self) -> Poll<(), Self::SinkError> {
+            self.1.close()
+        }
     }
 
     #[test]

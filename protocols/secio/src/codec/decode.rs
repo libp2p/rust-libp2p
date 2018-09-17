@@ -125,4 +125,9 @@ where
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
         self.raw_stream.poll_complete()
     }
+
+    #[inline]
+    fn close(&mut self) -> Poll<(), Self::SinkError> {
+        self.raw_stream.close()
+    }
 }
