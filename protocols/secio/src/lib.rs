@@ -436,6 +436,11 @@ where
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
         self.inner.poll_complete()
     }
+
+    #[inline]
+    fn close(&mut self) -> Poll<(), Self::SinkError> {
+        self.inner.close()
+    }
 }
 
 impl<S> Stream for SecioMiddleware<S>
