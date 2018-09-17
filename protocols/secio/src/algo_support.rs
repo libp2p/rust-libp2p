@@ -33,13 +33,14 @@ const ECDH_P384: &str = "P-384";
 
 const AES_128: &str = "AES-128";
 const AES_256: &str = "AES-256";
+const TWOFISH_CTR: &str = "TwofishCTR";
 const NULL: &str = "NULL";
 
 const SHA_256: &str = "SHA256";
 const SHA_512: &str = "SHA512";
 
 pub(crate) const DEFAULT_AGREEMENTS_PROPOSITION: &str = "P-256,P-384";
-pub(crate) const DEFAULT_CIPHERS_PROPOSITION: &str = "AES-128,AES-256";
+pub(crate) const DEFAULT_CIPHERS_PROPOSITION: &str = "AES-128,AES-256,TwofishCTR";
 pub(crate) const DEFAULT_DIGESTS_PROPOSITION: &str = "SHA256,SHA512";
 
 
@@ -110,6 +111,10 @@ where
                 s.push_str(AES_256);
                 s.push(',')
             }
+            Cipher::TwofishCtr => {
+                s.push_str(TWOFISH_CTR);
+                s.push(',')
+            }
             Cipher::Null => {
                 s.push_str(NULL);
                 s.push(',')
@@ -134,6 +139,7 @@ pub fn select_cipher(r: Ordering, ours: &str, theirs: &str) -> Result<Cipher, Se
             match x {
                 AES_128 => return Ok(Cipher::Aes128),
                 AES_256 => return Ok(Cipher::Aes256),
+                TWOFISH_CTR => return Ok(Cipher::TwofishCtr),
                 NULL => return Ok(Cipher::Null),
                 _ => continue
             }
