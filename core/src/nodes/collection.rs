@@ -374,7 +374,13 @@ where
             None
             | Some(TaskKnownState::Connected(_))
             | Some(TaskKnownState::Pending { .. })
-            | Some(TaskKnownState::Interrupted) => panic!("Inconsistent state"),
+            | Some(TaskKnownState::Interrupted) => {
+                panic!("The task_id we have was retreived from self.nodes. We insert in this \
+                       hashmap when we reach a node, in which case we also insert Connected in \
+                       self.tasks with the corresponding peer ID. Once a task is Connected, it \
+                       can no longer switch back to Pending. We switch the state to Interrupted \
+                       only when we remove from self.nodes at the same time.")
+            },
         }
         user_datas
     }
@@ -393,7 +399,9 @@ fn extract_from_attempt<TUserData>(
 
     let mut user_datas = Vec::with_capacity(to_remove.len());
     for to_remove in to_remove {
-        let (_, user_data) = outbound_attempts.remove(&to_remove).unwrap();
+        let (_, user_data) = outbound_attempts.remove(&to_remove)
+            .expect("The elements in to_remove were found by iterating once over the hashmap and \
+                     are therefore known to be valid and unique");
         user_datas.push(user_data);
     }
     user_datas
@@ -417,7 +425,12 @@ where
                     let peer_id = match self.tasks.get(&task_id) {
                         Some(TaskKnownState::Connected(ref peer_id)) => peer_id.clone(),
                         Some(TaskKnownState::Interrupted) => continue, // Ignore messages from this task.
-                        None | Some(TaskKnownState::Pending { .. }) => panic!("State mismatch"),
+                        None | Some(TaskKnownState::Pending { .. }) => {
+                            panic!("We insert Pending in self.tasks when a node is opened, and we \
+                                    set it to Connected when we receive a NodeReached event from \
+                                    this task. The way the task works, we are guaranteed to \
+                                    a NodeReached event before any NodeEvent.")
+                        }
                     };
 
                     match event {
@@ -440,7 +453,15 @@ where
                             let (_peer_id, actual_data) = self
                                 .outbound_attempts
                                 .remove(&user_data)
-                                .expect("State inconsistency in collection outbound user data");
+                                .expect("We insert a unique usize in outbound_attempts at the \
+                                         same time as we ask the node to open a substream with \
+                                         this usize. The API of the node is guaranteed to produce \
+                                         the value we passed when the substream is actually \
+                                         opened. The only other places where we remove from \
+                                         outbound_attempts are if the outbound failed, or if the
+                                         node's task errored or was closed. If the node's task
+                                         is closed by us, we set its state to `Interrupted` so
+                                         that event that it produces are not processed.");
                             debug_assert_eq!(_peer_id, peer_id);
                             Ok(Async::Ready(Some(CollectionEvent::OutboundSubstream {
                                 peer_id,
@@ -457,7 +478,15 @@ where
                             let (_peer_id, actual_data) = self
                                 .outbound_attempts
                                 .remove(&user_data)
-                                .expect("State inconsistency in collection outbound user data");
+                                .expect("We insert a unique usize in outbound_attempts at the \
+                                         same time as we ask the node to open a substream with \
+                                         this usize. The API of the node is guaranteed to produce \
+                                         the value we passed when the substream is actually \
+                                         opened. The only other places where we remove from \
+                                         outbound_attempts are if the outbound succeeds, or if the
+                                         node's task errored or was closed. If the node's task
+                                         is closed by us, we set its state to `Interrupted` so
+                                         that event that it produces are not processed.");
                             debug_assert_eq!(_peer_id, peer_id);
                             Ok(Async::Ready(Some(CollectionEvent::OutboundClosed {
                                 peer_id,
@@ -470,13 +499,24 @@ where
                     {
                         let existing = match self.tasks.get_mut(&task_id) {
                             Some(state) => state,
-                            None => panic!("Inconsistent state")
+                            None => panic!("We insert in self.tasks the corresponding task_id \
+                                            when we create a task, and we only remove from it \
+                                            if we receive the events NodeClosed, NodeError and \
+                                            ReachError, that are produced only when a task ends. \
+                                            After a task ends, we don't receive any more event \
+                                            from it.")
                         };
 
                         match existing {
                             TaskKnownState::Pending { .. } => (),
                             TaskKnownState::Interrupted => continue,
-                            TaskKnownState::Connected(_) => panic!("Inconsistent state"),
+                            TaskKnownState::Connected(_) => {
+                                panic!("The only code that sets a task to the Connected state \
+                                        is when we receive a NodeReached event. If we are already \
+                                        connected, that would mean we received NodeReached twice, \
+                                        which is not possible as a task changes state after \
+                                        sending this event.")
+                            },
                         }
 
                         *existing = TaskKnownState::Connected(peer_id.clone());
@@ -503,7 +543,12 @@ where
                     let peer_id = match self.tasks.remove(&task_id) {
                         Some(TaskKnownState::Connected(peer_id)) => peer_id.clone(),
                         Some(TaskKnownState::Interrupted) => continue, // Ignore messages from this task.
-                        None | Some(TaskKnownState::Pending { .. }) => panic!("State mismatch"),
+                        None | Some(TaskKnownState::Pending { .. }) => {
+                            panic!("We insert Pending in self.tasks when a node is opened, and we \
+                                    set it to Connected when we receive a NodeReached event from \
+                                    this task. The way the task works, we are guaranteed to \
+                                    a NodeReached event before a NodeClosed.")
+                        }
                     };
 
                     let val = self.nodes.remove(&peer_id);
@@ -517,7 +562,12 @@ where
                     let peer_id = match self.tasks.remove(&task_id) {
                         Some(TaskKnownState::Connected(peer_id)) => peer_id.clone(),
                         Some(TaskKnownState::Interrupted) => continue, // Ignore messages from this task.
-                        None | Some(TaskKnownState::Pending { .. }) => panic!("State mismatch"),
+                        None | Some(TaskKnownState::Pending { .. }) => {
+                            panic!("We insert Pending in self.tasks when a node is opened, and we \
+                                    set it to Connected when we receive a NodeReached event from \
+                                    this task. The way the task works, we are guaranteed to \
+                                    a NodeReached event before a NodeError.")
+                        }
                     };
 
                     let val = self.nodes.remove(&peer_id);
@@ -533,7 +583,12 @@ where
                     match self.tasks.remove(&task_id) {
                         Some(TaskKnownState::Interrupted) => continue,
                         Some(TaskKnownState::Pending { .. }) => (),
-                        None | Some(TaskKnownState::Connected(_)) => panic!("Inconsistent state"),
+                        None | Some(TaskKnownState::Connected(_)) => {
+                            panic!("We insert Pending in self.tasks when a node is opened, and we \
+                                    set it to Connected when we receive a NodeReached event from \
+                                    this task. The way the task works, we are guaranteed to \
+                                    a NodeReached event before a ReachError.")
+                        }
                     };
 
                     Ok(Async::Ready(Some(CollectionEvent::ReachError {
@@ -545,7 +600,10 @@ where
                     self.to_notify = Some(task::current());
                     Ok(Async::NotReady)
                 }
-                Ok(Async::Ready(None)) => unreachable!("The tx is in self as well"),
+                Ok(Async::Ready(None)) => {
+                    unreachable!("The sender is in self as well, therefore the receiver never \
+                                  closes.")
+                },
                 Err(()) => unreachable!("An unbounded receiver never errors"),
             };
         }
