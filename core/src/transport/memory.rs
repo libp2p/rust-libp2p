@@ -177,6 +177,11 @@ impl<T> Sink for Chan<T> {
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
         self.outgoing.poll_complete().map_err(|_| io::ErrorKind::ConnectionReset.into())
     }
+
+    #[inline]
+    fn close(&mut self) -> Poll<(), Self::SinkError> {
+        self.outgoing.close().map_err(|_| io::ErrorKind::ConnectionReset.into())
+    }
 }
 
 impl<T: IntoBuf> Into<RwStreamSink<Chan<T>>> for Chan<T> {

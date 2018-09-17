@@ -211,6 +211,11 @@ where
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
         self.inner.poll_complete()
     }
+
+    #[inline]
+    fn close(&mut self) -> Poll<(), Self::SinkError> {
+        self.inner.close()
+    }
 }
 
 fn decode_length_prefix(buf: &[u8]) -> u16 {
