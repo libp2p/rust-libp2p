@@ -47,7 +47,7 @@ impl TopicHash {
 /// Built topic.
 #[derive(Debug, Clone)]
 pub struct Topic {
-    descriptor: rpc_proto::TopicDescriptor,
+    pub descriptor: rpc_proto::TopicDescriptor,
     hash: TopicHash,
 }
 

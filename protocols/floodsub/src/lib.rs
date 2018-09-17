@@ -359,7 +359,7 @@ impl FloodSubController {
         for (topic, subscribe) in topics {
             let mut subscription = rpc_proto::RPC_SubOpts::new();
             subscription.set_subscribe(subscribe);
-            subscription.set_topicid(topic.hash().clone().into_string());
+            subscription.set_topicid(topic.descriptor.name);
             proto.mut_subscriptions().push(subscription);
 
             if subscribe {
