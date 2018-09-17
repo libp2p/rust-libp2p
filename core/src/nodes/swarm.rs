@@ -375,7 +375,7 @@ where
                 peer: self
                     .active_nodes
                     .peer_mut(&peer_id)
-                    .expect("we checked for Some"),
+                    .expect("we checked for Some just above"),
                 peer_id,
                 connected_multiaddresses: &mut self.connected_multiaddresses,
             });
@@ -436,7 +436,10 @@ where
                 debug_assert_ne!(attempt.id, reach_id);
                 self.active_nodes
                     .interrupt(attempt.id)
-                    .expect("State inconsistency: invalid reach attempt cancel");
+                    .expect("We insert in out_reach_attempts only when we call \
+                             active_nodes.add_reach_attempt, and we remove only when we call \
+                             interrupt or when a reach attempt succeeds or errors. Therefore the \
+                             out_reach_attempts should always be in sync with the actual attempts");
             }
 
             if let Some(closed_outbound_substreams) = closed_outbound_substreams {
@@ -461,7 +464,9 @@ where
         // We only remove the attempt from `out_reach_attempts` if it both matches the reach id
         // and the expected peer id.
         if is_outgoing_and_ok {
-            let attempt = self.out_reach_attempts.remove(&peer_id).unwrap();
+            let attempt = self.out_reach_attempts.remove(&peer_id)
+                .expect("is_outgoing_and_ok is true only if self.out_reach_attempts.get(&peer_id) \
+                         returned Some");
 
             let closed_multiaddr = self.connected_multiaddresses
                 .insert(peer_id.clone(), attempt.cur_attempted.clone());
@@ -489,13 +494,17 @@ where
             .find(|(_, a)| a.id == reach_id)
             .map(|(p, _)| p.clone());
         if let Some(wrong_peer_id) = wrong_peer_id {
-            let attempt = self.out_reach_attempts.remove(&wrong_peer_id).unwrap();
+            let attempt = self.out_reach_attempts.remove(&wrong_peer_id)
+                .expect("wrong_peer_id is a key that is grabbed from out_reach_attempts");
 
             let num_remain = attempt.next_attempts.len();
             let failed_addr = attempt.cur_attempted.clone();
 
             let opened_attempts = self.active_nodes.peer_mut(&peer_id)
-                .expect("Inconsistent state ; received NodeReached event for invalid node")
+                .expect("When we receive a NodeReached or NodeReplaced event from active_nodes, \
+                         it is guaranteed that the PeerId is valid and therefore that \
+                         active_nodes.peer_mut succeeds with this ID. handle_node_reached is \
+                         called only to handle these events.")
                 .close();
             debug_assert!(opened_attempts.is_empty());
 
@@ -523,7 +532,12 @@ where
         }
 
         // We didn't find any entry in neither the outgoing connections not ingoing connections.
-        panic!("State inconsistency ; received unknown ReachAttemptId in NodeReached")
+        panic!("The API of collection guarantees that the id sent back in NodeReached and \
+                NodeReplaced events (which is where we call handle_node_reached) is one that was \
+                passed to add_reach_attempt. Whenever we call add_reach_attempt, we also insert \
+                at the same time an entry either in out_reach_attempts or in \
+                other_reach_attempts. It is therefore guaranteed that we find back this ID in \
+                either of these two sets");
     }
 
     /// Handles a reach error event from the collection.
@@ -554,7 +568,8 @@ where
             .find(|(_, a)| a.id == reach_id)
             .map(|(p, _)| p.clone());
         if let Some(peer_id) = out_reach_peer_id {
-            let mut attempt = self.out_reach_attempts.remove(&peer_id).unwrap();
+            let mut attempt = self.out_reach_attempts.remove(&peer_id)
+                .expect("out_reach_peer_id is a key that is grabbed from out_reach_attempts");
 
             let num_remain = attempt.next_attempts.len();
             let failed_addr = attempt.cur_attempted.clone();
@@ -603,7 +618,12 @@ where
         }
 
         // The id was neither in the outbound list nor the inbound list.
-        panic!("State inconsistency: received unknown ReachAttemptId")
+        panic!("The API of collection guarantees that the id sent back in ReachError events \
+                (which is where we call handle_reach_error) is one that was passed to \
+                add_reach_attempt. Whenever we call add_reach_attempt, we also insert \
+                at the same time an entry either in out_reach_attempts or in \
+                other_reach_attempts. It is therefore guaranteed that we find back this ID in \
+                either of these two sets");
     }
 }
 
@@ -822,7 +842,11 @@ where
     pub fn interrupt(self) {
         let attempt = self.attempt.remove();
         if let Err(_) = self.active_nodes.interrupt(attempt.id) {
-            panic!("State inconsistency ; interrupted invalid ReachAttemptId");
+            panic!("We retreived this attempt.id from out_reach_attempts. We insert in \
+                    out_reach_attempts only at the same time as we call add_reach_attempt. \
+                    Whenever we receive a NodeReached, NodeReplaced or ReachError event, which \
+                    invalidate the attempt.id, we also remove the corresponding entry in \
+                    out_reach_attempts.");
         }
     }
 
@@ -943,7 +967,9 @@ where
         Ok(PeerPendingConnect {
             attempt: match self.nodes.out_reach_attempts.entry(self.peer_id) {
                 Entry::Occupied(e) => e,
-                Entry::Vacant(_) => panic!("We inserted earlier"),
+                Entry::Vacant(_) => {
+                    panic!("We called out_reach_attempts.insert with this peer id just above")
+                },
             },
             active_nodes: &mut self.nodes.active_nodes,
         })
