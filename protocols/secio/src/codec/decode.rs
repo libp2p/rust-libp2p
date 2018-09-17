@@ -21,7 +21,8 @@
 //! Individual messages decoding.
 
 use bytes::BytesMut;
-use codec::StreamCipher;
+use super::StreamCipher;
+
 use error::SecioError;
 use futures::sink::Sink;
 use futures::stream::Stream;
@@ -87,21 +88,24 @@ where
             debug!("frame too short when decoding secio frame");
             return Err(SecioError::FrameTooShort);
         }
+        let content_length = frame.len() - hmac_num_bytes;
+        {
+            let (crypted_data, expected_hash) = frame.split_at(content_length);
+            debug_assert_eq!(expected_hash.len(), hmac_num_bytes);
 
-        let (crypted_data, expected_hash) = frame.split_at(frame.len() - hmac_num_bytes);
-        debug_assert_eq!(expected_hash.len(), hmac_num_bytes);
-
-        if hmac::verify(&self.hmac_key, crypted_data, expected_hash).is_err() {
-            debug!("hmac mismatch when decoding secio frame");
-            return Err(SecioError::HmacNotMatching);
+            if hmac::verify(&self.hmac_key, crypted_data, expected_hash).is_err() {
+                debug!("hmac mismatch when decoding secio frame");
+                return Err(SecioError::HmacNotMatching);
+            }
         }
 
-        // Note that there is no way to decipher in place with rust-crypto right now.
-        let mut decrypted_data = crypted_data.to_vec();
+        let mut data_buf = frame.to_vec();
+        data_buf.truncate(content_length);
         self.cipher_state
-            .process(&crypted_data, &mut decrypted_data);
+            .try_apply_keystream(&mut data_buf)
+            .map_err::<SecioError,_>(|e|e.into())?;
 
-        Ok(Async::Ready(Some(decrypted_data)))
+        Ok(Async::Ready(Some(data_buf)))
     }
 }
 

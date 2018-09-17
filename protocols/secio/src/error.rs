@@ -20,7 +20,7 @@
 
 //! Defines the `SecioError` enum that groups all possible errors in SECIO.
 
-use crypto::symmetriccipher::SymmetricCipherError;
+use aes_ctr::stream_cipher::LoopError;
 use std::error;
 use std::fmt;
 use std::io::Error as IoError;
@@ -55,8 +55,8 @@ pub enum SecioError {
     /// The final check of the handshake failed.
     NonceVerificationFailed,
 
-    /// Error while decoding/encoding data.
-    CipherError(SymmetricCipherError),
+    /// Error with block cipher.
+    CipherError(LoopError),
 
     /// The received frame was of invalid length.
     FrameTooShort,
@@ -115,9 +115,9 @@ impl fmt::Display for SecioError {
     }
 }
 
-impl From<SymmetricCipherError> for SecioError {
+impl From<LoopError> for SecioError {
     #[inline]
-    fn from(err: SymmetricCipherError) -> SecioError {
+    fn from(err: LoopError) -> SecioError {
         SecioError::CipherError(err)
     }
 }
