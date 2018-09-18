@@ -82,6 +82,7 @@ extern crate aes_ctr;
 extern crate asn1_der;
 extern crate bytes;
 extern crate ctr;
+#[macro_use]
 extern crate futures;
 extern crate libp2p_core;
 #[macro_use]
