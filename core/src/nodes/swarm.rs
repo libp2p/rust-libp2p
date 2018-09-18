@@ -639,9 +639,9 @@ where
 }
 
 /// State of a peer in the system.
-pub enum Peer<'a, TTrans, TInEvent, TOutEvent, THandlerBuild>
+pub enum Peer<'a, TTrans: 'a, TInEvent: 'a, TOutEvent: 'a, THandlerBuild: 'a>
 where
-    TTrans: Transport + 'a,
+    TTrans: Transport,
 {
     /// We are connected to this peer.
     Connected(PeerConnected<'a, TInEvent>),
@@ -745,7 +745,7 @@ where
 }
 
 /// Peer we are potentially going to connect to.
-pub enum PeerPotentialConnect<'a, TInEvent, TOutEvent> {
+pub enum PeerPotentialConnect<'a, TInEvent: 'a, TOutEvent: 'a> {
     /// We are connected to this peer.
     Connected(PeerConnected<'a, TInEvent>),
 
@@ -787,7 +787,7 @@ impl<'a, TInEvent, TOutEvent> PeerPotentialConnect<'a, TInEvent, TOutEvent> {
 }
 
 /// Access to a peer we are connected to.
-pub struct PeerConnected<'a, TInEvent> {
+pub struct PeerConnected<'a, TInEvent: 'a> {
     peer: CollecPeerMut<'a, TInEvent>,
     /// Reference to the `connected_multiaddresses` field of the parent.
     connected_multiaddresses: &'a mut FnvHashMap<PeerId, Multiaddr>,
@@ -819,7 +819,7 @@ impl<'a, TInEvent> PeerConnected<'a, TInEvent> {
 }
 
 /// Access to a peer we are attempting to connect to.
-pub struct PeerPendingConnect<'a, TInEvent, TOutEvent> {
+pub struct PeerPendingConnect<'a, TInEvent: 'a, TOutEvent: 'a> {
     attempt: OccupiedEntry<'a, PeerId, OutReachAttempt>,
     active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent>,
 }
@@ -865,9 +865,9 @@ impl<'a, TInEvent, TOutEvent> PeerPendingConnect<'a, TInEvent, TOutEvent> {
 }
 
 /// Access to a peer we're not connected to.
-pub struct PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandlerBuild>
+pub struct PeerNotConnected<'a, TTrans: 'a, TInEvent: 'a, TOutEvent: 'a, THandlerBuild: 'a>
 where
-    TTrans: Transport + 'a,
+    TTrans: Transport,
 {
     peer_id: PeerId,
     nodes: &'a mut Swarm<TTrans, TInEvent, TOutEvent, THandlerBuild>,

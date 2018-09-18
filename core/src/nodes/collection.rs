@@ -282,7 +282,7 @@ impl<TInEvent, TOutEvent> CollectionStream<TInEvent, TOutEvent> {
 }
 
 /// Access to a peer in the collection.
-pub struct PeerMut<'a, TInEvent> {
+pub struct PeerMut<'a, TInEvent: 'a> {
     inner: OccupiedEntry<'a, PeerId, (ReachAttemptId, mpsc::UnboundedSender<TInEvent>)>,
     tasks: &'a mut FnvHashMap<ReachAttemptId, TaskKnownState>,
 }
