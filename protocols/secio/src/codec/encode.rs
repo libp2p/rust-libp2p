@@ -50,22 +50,6 @@ impl<S> EncoderMiddleware<S> {
     }
 }
 
-impl<S> EncoderMiddleware<S>
-where
-    S: Sink<SinkItem = BytesMut>,
-{
-    fn send_pending(&mut self) -> Poll<(), S::SinkError> {
-        if let Some(data) = self.pending.take() {
-            if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data)? {
-                self.pending = Some(data);
-                return Ok(Async::NotReady)
-            }
-        }
-        debug_assert!(self.pending.is_none());
-        Ok(Async::Ready(()))
-    }
-}
-
 impl<S> Sink for EncoderMiddleware<S>
 where
     S: Sink<SinkItem = BytesMut>,
@@ -74,9 +58,13 @@ where
     type SinkError = S::SinkError;
 
     fn start_send(&mut self, mut data_buf: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
-        if self.send_pending()?.is_not_ready() {
-            return Ok(AsyncSink::NotReady(data_buf))
+        if let Some(data) = self.pending.take() {
+            if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data)? {
+                self.pending = Some(data);
+                return Ok(AsyncSink::NotReady(data_buf))
+            }
         }
+        debug_assert!(self.pending.is_none());
         // TODO if SinkError gets refactor to SecioError, then use try_apply_keystream
         self.cipher_state.apply_keystream(&mut data_buf[..]);
         let signature = hmac::sign(&self.hmac_key, &data_buf[..]);
@@ -89,13 +77,23 @@ where
 
     #[inline]
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
-        try_ready!(self.send_pending());
+        if let Some(data) = self.pending.take() {
+            if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data)? {
+                self.pending = Some(data);
+                return Ok(Async::NotReady)
+            }
+        }
         self.raw_sink.poll_complete()
     }
 
     #[inline]
     fn close(&mut self) -> Poll<(), Self::SinkError> {
-        try_ready!(self.send_pending());
+        if let Some(data) = self.pending.take() {
+            if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data)? {
+                self.pending = Some(data);
+                return Ok(Async::NotReady)
+            }
+        }
         self.raw_sink.close()
     }
 }
