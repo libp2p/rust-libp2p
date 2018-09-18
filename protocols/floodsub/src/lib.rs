@@ -126,7 +126,7 @@ where
                 for topic in subscribed_topics.iter() {
                     let mut subscription = rpc_proto::RPC_SubOpts::new();
                     subscription.set_subscribe(true);
-                    subscription.set_topicid(topic.hash().clone().into_string());
+                    subscription.set_topicid(topic.descriptor.clone().get_name().to_string());
                     proto.mut_subscriptions().push(subscription);
                 }
 
@@ -257,7 +257,7 @@ struct RemoteInfo {
     // Sender to send data over the socket to that host.
     sender: mpsc::UnboundedSender<BytesMut>,
     // Topics the remote is registered to.
-    subscribed_topics: RwLock<FnvHashSet<TopicHash>>,
+    subscribed_topics: RwLock<FnvHashSet<String>>,
 }
 
 impl fmt::Debug for Inner {
@@ -348,10 +348,10 @@ impl FloodSubController {
         if log_enabled!(Level::Debug) {
             debug!("Queuing sub/unsub message ; sub = {:?} ; unsub = {:?}",
                 topics.clone().filter(|t| t.1)
-                        .map(|t| t.0.hash().clone().into_string())
+                        .map(|t| t.0.descriptor.clone().get_name().to_string())
                         .collect::<Vec<_>>(),
                 topics.clone().filter(|t| !t.1)
-                        .map(|t| t.0.hash().clone().into_string())
+                        .map(|t| t.0.descriptor.clone().get_name().to_string())
                         .collect::<Vec<_>>());
         }
 
@@ -359,13 +359,14 @@ impl FloodSubController {
         for (topic, subscribe) in topics {
             let mut subscription = rpc_proto::RPC_SubOpts::new();
             subscription.set_subscribe(subscribe);
-            subscription.set_topicid(topic.descriptor.name);
+            subscription.set_topicid(topic.descriptor.get_name().to_string());
             proto.mut_subscriptions().push(subscription);
 
             if subscribe {
                 subscribed_topics.push(topic.clone());
             } else {
-                subscribed_topics.retain(|t| t.hash() != topic.hash())
+                subscribed_topics.retain(|t| t.descriptor.get_name().to_string() != 
+                    topic.descriptor.get_name().to_string())
             }
         }
 
@@ -391,7 +392,7 @@ impl FloodSubController {
         let topics = topics.into_iter().collect::<Vec<_>>();
 
         debug!("Queueing publish message ; topics = {:?} ; data_len = {:?}",
-               topics.iter().map(|t| t.hash().clone().into_string()).collect::<Vec<_>>(),
+               topics.iter().map(|t| t.descriptor.get_name().to_string()).collect::<Vec<_>>(),
                data.len());
 
         // Build the `Vec<u8>` containing our sequence number for this message.
@@ -413,7 +414,7 @@ impl FloodSubController {
         msg.set_topicIDs(
             topics
                 .iter()
-                .map(|t| t.hash().clone().into_string())
+                .map(|t| t.descriptor.get_name().to_string())
                 .collect(),
         );
 
@@ -515,7 +516,7 @@ pub struct Message {
     /// List of topics of this message.
     ///
     /// Each message can belong to multiple topics at once.
-    pub topics: Vec<TopicHash>,
+    pub topics: Vec<String>,
 }
 
 /// Implementation of `Future` that must be driven to completion in order for floodsub to work.
@@ -567,7 +568,7 @@ fn handle_packet_received(
         let remote = &remote_connec[remote_addr];
         let mut topics = remote.subscribed_topics.write();
         for subscription in input.mut_subscriptions().iter_mut() {
-            let topic = TopicHash::from_raw(subscription.take_topicid());
+            let topic = subscription.take_topicid();
             let subscribe = subscription.get_subscribe();
             if subscribe {
                 trace!("Remote {} subscribed to {:?}", remote_addr, topic); topics.insert(topic);
@@ -607,7 +608,6 @@ fn handle_packet_received(
         let topics = publish
             .take_topicIDs()
             .into_iter()
-            .map(|h| TopicHash::from_raw(h))
             .collect::<Vec<_>>();
 
         trace!("Processing message for topics {:?} ; payload = {} bytes",
