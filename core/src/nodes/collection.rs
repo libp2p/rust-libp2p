@@ -291,7 +291,9 @@ impl<'a, TInEvent> PeerMut<'a, TInEvent> {
     /// Sends an event to the given node.
     #[inline]
     pub fn send_event(&mut self, event: TInEvent) {
-        let _ = self.inner.get_mut().1.unbounded_send(event); // TODO: unwrap
+        // It is possible that the sender is closed if the task has already finished but we
+        // haven't been polled in the meanwhile.
+        let _ = self.inner.get_mut().1.unbounded_send(event);
     }
 
     /// Closes the connections to this node.
@@ -569,26 +571,21 @@ where
         } = self.inner
         {
             // Start by handling commands received from the outside of the task.
-            loop {
-                let mut local_rx = match in_events_rx.take() {
-                    Some(rx) => rx,
-                    None => break
-                };
-
-                match local_rx.poll() {
-                    Ok(Async::Ready(Some(event))) => {
-                        node.inject_event(event);
-                    },
-                    Ok(Async::Ready(None)) => {
-                        // Node closed by the external API ; start shutdown process.
-                        node.shutdown();
+            if let Some(mut local_rx) = in_events_rx.take() {
+                *in_events_rx = loop {
+                    match local_rx.poll() {
+                        Ok(Async::Ready(Some(event))) => {
+                            node.inject_event(event);
+                        },
+                        Ok(Async::Ready(None)) => {
+                            // Node closed by the external API ; start shutdown process.
+                            node.shutdown();
+                            break None;
+                        }
+                        Ok(Async::NotReady) => break Some(local_rx),
+                        Err(()) => unreachable!("An unbounded receiver never errors"),
                     }
-                    Ok(Async::NotReady) => {
-                        *in_events_rx = Some(local_rx);
-                        break
-                    },
-                    Err(()) => unreachable!("An unbounded receiver never errors"),
-                }
+                };
             }
 
             // Process the node.
