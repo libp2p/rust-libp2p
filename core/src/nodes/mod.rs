@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 pub mod collection;
+pub mod handled_node;
 pub mod listeners;
 pub mod node;
 pub mod swarm;

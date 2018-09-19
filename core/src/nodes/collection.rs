@@ -21,7 +21,8 @@
 use fnv::FnvHashMap;
 use futures::{prelude::*, sync::mpsc, sync::oneshot, task};
 use muxing::StreamMuxer;
-use nodes::node::{NodeEvent, NodeStream, Substream};
+use nodes::node::Substream;
+use nodes::handled_node::{HandledNode, NodeHandler};
 use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, OccupiedEntry};
 use std::io::Error as IoError;
@@ -49,12 +50,9 @@ use {Multiaddr, PeerId};
 
 /// Implementation of `Stream` that handles a collection of nodes.
 // TODO: implement Debug
-pub struct CollectionStream<TMuxer, TUserData>
-where
-    TMuxer: StreamMuxer,
-{
+pub struct CollectionStream<TInEvent, TOutEvent> {
     /// List of nodes, with a sender allowing to communicate messages.
-    nodes: FnvHashMap<PeerId, (ReachAttemptId, mpsc::UnboundedSender<ExtToInMessage>)>,
+    nodes: FnvHashMap<PeerId, (ReachAttemptId, mpsc::UnboundedSender<TInEvent>)>,
     /// Known state of a task. Tasks are identified by the reach attempt ID.
     tasks: FnvHashMap<ReachAttemptId, TaskKnownState>,
     /// Identifier for the next task to spawn.
@@ -67,18 +65,9 @@ where
     to_notify: Option<task::Task>,
 
     /// Sender to emit events to the outside. Meant to be cloned and sent to tasks.
-    events_tx: mpsc::UnboundedSender<(InToExtMessage<TMuxer>, ReachAttemptId)>,
+    events_tx: mpsc::UnboundedSender<(InToExtMessage<TInEvent, TOutEvent>, ReachAttemptId)>,
     /// Receiver side for the events.
-    events_rx: mpsc::UnboundedReceiver<(InToExtMessage<TMuxer>, ReachAttemptId)>,
-
-    /// Instead of passing directly the user data when opening an outbound substream attempt, we
-    /// store it here and pass a `usize` to the node. This makes it possible to instantly close
-    /// some attempts if necessary.
-    // TODO: use something else than hashmap? we often need to iterate over everything, and a
-    // SmallVec may be better
-    outbound_attempts: FnvHashMap<usize, (PeerId, TUserData)>,
-    /// Identifier for the next entry in `outbound_attempts`.
-    next_outbound_attempt: usize,
+    events_rx: mpsc::UnboundedReceiver<(InToExtMessage<TInEvent, TOutEvent>, ReachAttemptId)>,
 }
 
 /// State of a task, as known by the frontend (the `ColletionStream`). Asynchronous compared to
@@ -106,10 +95,7 @@ impl TaskKnownState {
 
 /// Event that can happen on the `CollectionStream`.
 // TODO: implement Debug
-pub enum CollectionEvent<TMuxer, TUserData>
-where
-    TMuxer: StreamMuxer,
-{
+pub enum CollectionEvent<TOutEvent> {
     /// A connection to a node has succeeded.
     NodeReached {
         /// Identifier of the node.
@@ -125,8 +111,6 @@ where
     NodeReplaced {
         /// Identifier of the node.
         peer_id: PeerId,
-        /// Outbound substream attempts that have been closed in the process.
-        closed_outbound_substreams: Vec<TUserData>,
         /// Identifier of the reach attempt that succeeded.
         id: ReachAttemptId,
     },
@@ -146,8 +130,6 @@ where
         peer_id: PeerId,
         /// The error that happened.
         error: IoError,
-        /// Pending outbound substreams that were cancelled.
-        closed_outbound_substreams: Vec<TUserData>,
     },
 
     /// An error happened on the future that was trying to reach a node.
@@ -158,46 +140,12 @@ where
         error: IoError,
     },
 
-    /// The multiaddress of the node has been resolved.
-    NodeMultiaddr {
+    /// A node has produced an event.
+    NodeEvent {
         /// Identifier of the node.
         peer_id: PeerId,
-        /// Address that has been resolved, or error that occured on the substream.
-        address: Result<Multiaddr, IoError>,
-    },
-
-    /// A new inbound substream arrived.
-    InboundSubstream {
-        /// Identifier of the node.
-        peer_id: PeerId,
-        /// The newly-opened substream.
-        substream: Substream<TMuxer>,
-    },
-
-    /// An outbound substream has successfully been opened.
-    OutboundSubstream {
-        /// Identifier of the node.
-        peer_id: PeerId,
-        /// Identifier of the substream. Same as what was returned by `open_substream`.
-        user_data: TUserData,
-        /// The newly-opened substream.
-        substream: Substream<TMuxer>,
-    },
-
-    /// The inbound side of a muxer has been gracefully closed. No more inbound substreams will
-    /// be produced.
-    InboundClosed {
-        /// Identifier of the node.
-        peer_id: PeerId,
-    },
-
-    /// An outbound substream couldn't be opened because the muxer is no longer capable of opening
-    /// more substreams.
-    OutboundClosed {
-        /// Identifier of the node.
-        peer_id: PeerId,
-        /// Identifier of the substream. Same as what was returned by `open_substream`.
-        user_data: TUserData,
+        /// The produced event.
+        event: TOutEvent,
     },
 }
 
@@ -205,10 +153,7 @@ where
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ReachAttemptId(usize);
 
-impl<TMuxer, TUserData> CollectionStream<TMuxer, TUserData>
-where
-    TMuxer: StreamMuxer,
-{
+impl<TInEvent, TOutEvent> CollectionStream<TInEvent, TOutEvent> {
     /// Creates a new empty collection.
     #[inline]
     pub fn new() -> Self {
@@ -222,8 +167,6 @@ where
             to_notify: None,
             events_tx,
             events_rx,
-            outbound_attempts: Default::default(),
-            next_outbound_attempt: 0,
         }
     }
 
@@ -231,14 +174,17 @@ where
     ///
     /// This method spawns a task dedicated to resolving this future and processing the node's
     /// events.
-    pub fn add_reach_attempt<TFut, TAddrFut>(&mut self, future: TFut) -> ReachAttemptId
+    pub fn add_reach_attempt<TFut, TMuxer, TAddrFut, THandler>(&mut self, future: TFut, handler: THandler)
+        -> ReachAttemptId
     where
         TFut: Future<Item = ((PeerId, TMuxer), TAddrFut), Error = IoError> + Send + 'static,
-        TMuxer: Send + Sync + 'static,
-        TMuxer::OutboundSubstream: Send,
-        TMuxer::Substream: Send,
         TAddrFut: Future<Item = Multiaddr, Error = IoError> + Send + 'static,
-        TUserData: Send + 'static,
+        THandler: NodeHandler<Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
+        TInEvent: Send + 'static,
+        TOutEvent: Send + 'static,
+        THandler::OutboundOpenInfo: Send + 'static,     // TODO: shouldn't be required?
+        TMuxer: StreamMuxer + Send + Sync + 'static,  // TODO: Send + Sync + 'static shouldn't be required
+        TMuxer::OutboundSubstream: Send + 'static,  // TODO: shouldn't be required
     {
         let reach_attempt_id = self.next_task_id;
         self.next_task_id.0 += 1;
@@ -255,6 +201,7 @@ where
             inner: NodeTaskInner::Future {
                 future,
                 interrupt: interrupt_rx,
+                handler: Some(handler),
             },
             events_tx: self.events_tx.clone(),
             id: reach_attempt_id,
@@ -294,20 +241,24 @@ where
         Ok(())
     }
 
+    /// Sends an event to all nodes.
+    pub fn broadcast_event(&mut self, event: &TInEvent)
+    where TInEvent: Clone,
+    {
+        for &(_, ref sender) in self.nodes.values() {
+            let _ = sender.unbounded_send(event.clone()); // TODO: unwrap
+        }
+    }
+
     /// Grants access to an object that allows controlling a node of the collection.
     ///
     /// Returns `None` if we don't have a connection to this peer.
     #[inline]
-    pub fn peer_mut(&mut self, id: &PeerId) -> Option<PeerMut<TUserData>>
-    where
-        TUserData: Send + 'static,
-    {
+    pub fn peer_mut(&mut self, id: &PeerId) -> Option<PeerMut<TInEvent>> {
         match self.nodes.entry(id.clone()) {
             Entry::Occupied(inner) => Some(PeerMut {
                 inner,
                 tasks: &mut self.tasks,
-                next_outbound_attempt: &mut self.next_outbound_attempt,
-                outbound_attempts: &mut self.outbound_attempts,
             }),
             Entry::Vacant(_) => None,
         }
@@ -331,43 +282,25 @@ where
 }
 
 /// Access to a peer in the collection.
-pub struct PeerMut<'a, TUserData>
-where
-    TUserData: Send + 'static,
-{
-    next_outbound_attempt: &'a mut usize,
-    outbound_attempts: &'a mut FnvHashMap<usize, (PeerId, TUserData)>,
-    inner: OccupiedEntry<'a, PeerId, (ReachAttemptId, mpsc::UnboundedSender<ExtToInMessage>)>,
+pub struct PeerMut<'a, TInEvent: 'a> {
+    inner: OccupiedEntry<'a, PeerId, (ReachAttemptId, mpsc::UnboundedSender<TInEvent>)>,
     tasks: &'a mut FnvHashMap<ReachAttemptId, TaskKnownState>,
 }
 
-impl<'a, TUserData> PeerMut<'a, TUserData>
-where
-    TUserData: Send + 'static,
-{
-    /// Starts the process of opening a new outbound substream towards the peer.
-    pub fn open_substream(&mut self, user_data: TUserData) {
-        let id = *self.next_outbound_attempt;
-        *self.next_outbound_attempt += 1;
-
-        self.outbound_attempts
-            .insert(id, (self.inner.key().clone(), user_data));
-
-        let _ = self
-            .inner
-            .get_mut()
-            .1
-            .unbounded_send(ExtToInMessage::OpenSubstream(id));
+impl<'a, TInEvent> PeerMut<'a, TInEvent> {
+    /// Sends an event to the given node.
+    #[inline]
+    pub fn send_event(&mut self, event: TInEvent) {
+        // It is possible that the sender is closed if the task has already finished but we
+        // haven't been polled in the meanwhile.
+        let _ = self.inner.get_mut().1.unbounded_send(event);
     }
 
     /// Closes the connections to this node.
     ///
-    /// This cancels all the attempted outgoing substream attempts, and returns them.
-    ///
-    /// No event will be generated for this node.
-    pub fn close(self) -> Vec<TUserData> {
+    /// No further event will be generated for this node.
+    pub fn close(self) {
         let (peer_id, (task_id, _)) = self.inner.remove_entry();
-        let user_datas = extract_from_attempt(self.outbound_attempts, &peer_id);
         // Set the task to `Interrupted` so that we ignore further messages from this closed node.
         match self.tasks.insert(task_id, TaskKnownState::Interrupted) {
             Some(TaskKnownState::Connected(ref p)) if p == &peer_id => (),
@@ -382,36 +315,11 @@ where
                        only when we remove from self.nodes at the same time.")
             },
         }
-        user_datas
     }
 }
 
-/// Extract from the hashmap the entries matching `node`.
-fn extract_from_attempt<TUserData>(
-    outbound_attempts: &mut FnvHashMap<usize, (PeerId, TUserData)>,
-    node: &PeerId,
-) -> Vec<TUserData> {
-    let to_remove: Vec<usize> = outbound_attempts
-        .iter()
-        .filter(|(_, &(ref key, _))| key == node)
-        .map(|(&k, _)| k)
-        .collect();
-
-    let mut user_datas = Vec::with_capacity(to_remove.len());
-    for to_remove in to_remove {
-        let (_, user_data) = outbound_attempts.remove(&to_remove)
-            .expect("The elements in to_remove were found by iterating once over the hashmap and \
-                     are therefore known to be valid and unique");
-        user_datas.push(user_data);
-    }
-    user_datas
-}
-
-impl<TMuxer, TUserData> Stream for CollectionStream<TMuxer, TUserData>
-where
-    TMuxer: StreamMuxer,
-{
-    type Item = CollectionEvent<TMuxer, TUserData>;
+impl<TInEvent, TOutEvent> Stream for CollectionStream<TInEvent, TOutEvent> {
+    type Item = CollectionEvent<TOutEvent>;
     type Error = Void; // TODO: use ! once stable
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
@@ -433,67 +341,10 @@ where
                         }
                     };
 
-                    match event {
-                        NodeEvent::Multiaddr(address) => {
-                            Ok(Async::Ready(Some(CollectionEvent::NodeMultiaddr {
-                                peer_id,
-                                address,
-                            })))
-                        }
-                        NodeEvent::InboundSubstream { substream } => {
-                            Ok(Async::Ready(Some(CollectionEvent::InboundSubstream {
-                                peer_id,
-                                substream,
-                            })))
-                        }
-                        NodeEvent::OutboundSubstream {
-                            user_data,
-                            substream,
-                        } => {
-                            let (_peer_id, actual_data) = self
-                                .outbound_attempts
-                                .remove(&user_data)
-                                .expect("We insert a unique usize in outbound_attempts at the \
-                                         same time as we ask the node to open a substream with \
-                                         this usize. The API of the node is guaranteed to produce \
-                                         the value we passed when the substream is actually \
-                                         opened. The only other places where we remove from \
-                                         outbound_attempts are if the outbound failed, or if the
-                                         node's task errored or was closed. If the node's task
-                                         is closed by us, we set its state to `Interrupted` so
-                                         that event that it produces are not processed.");
-                            debug_assert_eq!(_peer_id, peer_id);
-                            Ok(Async::Ready(Some(CollectionEvent::OutboundSubstream {
-                                peer_id,
-                                user_data: actual_data,
-                                substream,
-                            })))
-                        }
-                        NodeEvent::InboundClosed => {
-                            Ok(Async::Ready(Some(CollectionEvent::InboundClosed {
-                                peer_id,
-                            })))
-                        }
-                        NodeEvent::OutboundClosed { user_data } => {
-                            let (_peer_id, actual_data) = self
-                                .outbound_attempts
-                                .remove(&user_data)
-                                .expect("We insert a unique usize in outbound_attempts at the \
-                                         same time as we ask the node to open a substream with \
-                                         this usize. The API of the node is guaranteed to produce \
-                                         the value we passed when the substream is actually \
-                                         opened. The only other places where we remove from \
-                                         outbound_attempts are if the outbound succeeds, or if the
-                                         node's task errored or was closed. If the node's task
-                                         is closed by us, we set its state to `Interrupted` so
-                                         that event that it produces are not processed.");
-                            debug_assert_eq!(_peer_id, peer_id);
-                            Ok(Async::Ready(Some(CollectionEvent::OutboundClosed {
-                                peer_id,
-                                user_data: actual_data,
-                            })))
-                        }
-                    }
+                    Ok(Async::Ready(Some(CollectionEvent::NodeEvent {
+                        peer_id,
+                        event,
+                    })))
                 }
                 Ok(Async::Ready(Some((InToExtMessage::NodeReached(peer_id, sender), task_id)))) => {
                     {
@@ -523,13 +374,11 @@ where
                     }
 
                     let replaced_node = self.nodes.insert(peer_id.clone(), (task_id, sender));
-                    let user_datas = extract_from_attempt(&mut self.outbound_attempts, &peer_id);
                     if let Some(replaced_node) = replaced_node {
                         let old = self.tasks.insert(replaced_node.0, TaskKnownState::Interrupted);
                         debug_assert_eq!(old.map(|s| s.is_pending()), Some(false));
                         Ok(Async::Ready(Some(CollectionEvent::NodeReplaced {
                             peer_id,
-                            closed_outbound_substreams: user_datas,
                             id: task_id,
                         })))
                     } else {
@@ -553,9 +402,6 @@ where
 
                     let val = self.nodes.remove(&peer_id);
                     debug_assert!(val.is_some());
-                    debug_assert!(
-                        extract_from_attempt(&mut self.outbound_attempts, &peer_id).is_empty()
-                    );
                     Ok(Async::Ready(Some(CollectionEvent::NodeClosed { peer_id })))
                 }
                 Ok(Async::Ready(Some((InToExtMessage::NodeError(err), task_id)))) => {
@@ -572,11 +418,9 @@ where
 
                     let val = self.nodes.remove(&peer_id);
                     debug_assert!(val.is_some());
-                    let user_datas = extract_from_attempt(&mut self.outbound_attempts, &peer_id);
                     Ok(Async::Ready(Some(CollectionEvent::NodeError {
                         peer_id,
                         error: err,
-                        closed_outbound_substreams: user_datas,
                     })))
                 }
                 Ok(Async::Ready(Some((InToExtMessage::ReachError(err), task_id)))) => {
@@ -610,45 +454,37 @@ where
     }
 }
 
-/// Message to transmit from the public API to a task.
-#[derive(Debug, Clone)]
-enum ExtToInMessage {
-    /// A new substream shall be opened.
-    OpenSubstream(usize),
-}
-
 /// Message to transmit from a task to the public API.
-enum InToExtMessage<TMuxer>
-where
-    TMuxer: StreamMuxer,
-{
+enum InToExtMessage<TInEvent, TOutEvent> {
     /// A connection to a node has succeeded.
     /// Closing the returned sender will end the task.
-    NodeReached(PeerId, mpsc::UnboundedSender<ExtToInMessage>),
+    NodeReached(PeerId, mpsc::UnboundedSender<TInEvent>),
     NodeClosed,
     NodeError(IoError),
     ReachError(IoError),
     /// An event from the node.
-    NodeEvent(NodeEvent<TMuxer, usize>),
+    NodeEvent(TOutEvent),
 }
 
 /// Implementation of `Future` that handles a single node, and all the communications between
 /// the various components of the `CollectionStream`.
-struct NodeTask<TFut, TMuxer, TAddrFut>
+struct NodeTask<TFut, TMuxer, TAddrFut, THandler, TInEvent, TOutEvent>
 where
     TMuxer: StreamMuxer,
+    THandler: NodeHandler<Substream<TMuxer>>,
 {
     /// Sender to transmit events to the outside.
-    events_tx: mpsc::UnboundedSender<(InToExtMessage<TMuxer>, ReachAttemptId)>,
+    events_tx: mpsc::UnboundedSender<(InToExtMessage<TInEvent, TOutEvent>, ReachAttemptId)>,
     /// Inner state of the `NodeTask`.
-    inner: NodeTaskInner<TFut, TMuxer, TAddrFut>,
+    inner: NodeTaskInner<TFut, TMuxer, TAddrFut, THandler, TInEvent>,
     /// Identifier of the attempt.
     id: ReachAttemptId,
 }
 
-enum NodeTaskInner<TFut, TMuxer, TAddrFut>
+enum NodeTaskInner<TFut, TMuxer, TAddrFut, THandler, TInEvent>
 where
     TMuxer: StreamMuxer,
+    THandler: NodeHandler<Substream<TMuxer>>,
 {
     /// Future to resolve to connect to the node.
     Future {
@@ -656,23 +492,26 @@ where
         future: TFut,
         /// Allows interrupting the attempt.
         interrupt: oneshot::Receiver<()>,
+        /// The handler that will be used to build the `HandledNode`.
+        handler: Option<THandler>,
     },
 
     /// Fully functional node.
     Node {
         /// The object that is actually processing things.
-        /// This is an `Option` because we need to be able to extract it.
-        node: NodeStream<TMuxer, TAddrFut, usize>,
-        /// Receiving end for events sent from the main `CollectionStream`.
-        in_events_rx: mpsc::UnboundedReceiver<ExtToInMessage>,
+        node: HandledNode<TMuxer, TAddrFut, THandler>,
+        /// Receiving end for events sent from the main `CollectionStream`. `None` if closed.
+        in_events_rx: Option<mpsc::UnboundedReceiver<TInEvent>>,
     },
 }
 
-impl<TFut, TMuxer, TAddrFut> Future for NodeTask<TFut, TMuxer, TAddrFut>
+impl<TFut, TMuxer, TAddrFut, THandler, TInEvent, TOutEvent> Future for
+    NodeTask<TFut, TMuxer, TAddrFut, THandler, TInEvent, TOutEvent>
 where
     TMuxer: StreamMuxer,
     TFut: Future<Item = ((PeerId, TMuxer), TAddrFut), Error = IoError>,
     TAddrFut: Future<Item = Multiaddr, Error = IoError>,
+    THandler: NodeHandler<Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent>,
 {
     type Item = ();
     type Error = ();
@@ -685,6 +524,7 @@ where
         let new_state = if let NodeTaskInner::Future {
             ref mut future,
             ref mut interrupt,
+            ref mut handler,
         } = self.inner
         {
             match interrupt.poll() {
@@ -698,9 +538,12 @@ where
                     let event = InToExtMessage::NodeReached(peer_id, sender);
                     let _ = self.events_tx.unbounded_send((event, self.id));
 
+                    let handler = handler.take()
+                        .expect("The handler is only extracted right before we switch state");
+
                     Some(NodeTaskInner::Node {
-                        node: NodeStream::new(muxer, addr_fut),
-                        in_events_rx: rx,
+                        node: HandledNode::new(muxer, addr_fut, handler),
+                        in_events_rx: Some(rx),
                     })
                 }
                 Ok(Async::NotReady) => {
@@ -728,25 +571,21 @@ where
         } = self.inner
         {
             // Start by handling commands received from the outside of the task.
-            loop {
-                match in_events_rx.poll() {
-                    Ok(Async::Ready(Some(ExtToInMessage::OpenSubstream(user_data)))) => match node
-                        .open_substream(user_data)
-                    {
-                        Ok(()) => (),
-                        Err(user_data) => {
-                            let event =
-                                InToExtMessage::NodeEvent(NodeEvent::OutboundClosed { user_data });
-                            let _ = self.events_tx.unbounded_send((event, self.id));
+            if let Some(mut local_rx) = in_events_rx.take() {
+                *in_events_rx = loop {
+                    match local_rx.poll() {
+                        Ok(Async::Ready(Some(event))) => {
+                            node.inject_event(event);
+                        },
+                        Ok(Async::Ready(None)) => {
+                            // Node closed by the external API ; start shutdown process.
+                            node.shutdown();
+                            break None;
                         }
-                    },
-                    Ok(Async::Ready(None)) => {
-                        // Node closed by the external API ; end the task
-                        return Ok(Async::Ready(()));
+                        Ok(Async::NotReady) => break Some(local_rx),
+                        Err(()) => unreachable!("An unbounded receiver never errors"),
                     }
-                    Ok(Async::NotReady) => break,
-                    Err(()) => unreachable!("An unbounded receiver never errors"),
-                }
+                };
             }
 
             // Process the node.
