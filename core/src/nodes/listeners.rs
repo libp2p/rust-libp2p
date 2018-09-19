@@ -219,3 +219,39 @@ where
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    extern crate libp2p_tcp_transport;
+    use super::*;
+    use transport;
+    use tokio::runtime::current_thread::Runtime;
+
+    #[test]
+    fn incoming_event() {
+        let (tx, rx) = transport::connector();
+
+        let mut listeners = ListenersStream::new(rx);
+        listeners.listen_on("/memory".parse().unwrap()).unwrap();
+
+        let dial = tx.dial("/memory".parse().unwrap()).unwrap_or_else(|_| panic!());
+
+        let future = listeners
+            .into_future()
+            .map_err(|(err, _)| err)
+            .and_then(|(event, _)| {
+                match event {
+                    Some(ListenersEvent::Incoming { listen_addr, upgrade }) => {
+                        assert_eq!(listen_addr, "/memory".parse().unwrap());
+                        upgrade.map(|_| ()).map_err(|_| panic!())
+                    },
+                    _ => panic!()
+                }
+            })
+            .select(dial.map(|_| ()).map_err(|_| panic!()))
+            .map_err(|(err, _)| err);
+
+        let mut runtime = Runtime::new().unwrap();
+        runtime.block_on(future).unwrap();
+    }
+}
