@@ -511,6 +511,10 @@ where
             let num_remain = attempt.next_attempts.len();
             let failed_addr = attempt.cur_attempted.clone();
 
+            // Note: at the moment, a peer id mismatch can drop a legitimate connection, which is
+            // why we have to purge `connected_multiaddresses`.
+            // See https://github.com/libp2p/rust-libp2p/issues/502
+            self.connected_multiaddresses.remove(&peer_id);
             self.active_nodes.peer_mut(&peer_id)
                 .expect("When we receive a NodeReached or NodeReplaced event from active_nodes, \
                          it is guaranteed that the PeerId is valid and therefore that \
