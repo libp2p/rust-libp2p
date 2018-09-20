@@ -253,7 +253,7 @@ pub mod transport;
 pub mod upgrade;
 
 pub use self::connection_reuse::ConnectionReuse;
-pub use self::multiaddr::{AddrComponent, Multiaddr};
+pub use self::multiaddr::Multiaddr;
 pub use self::muxing::StreamMuxer;
 pub use self::peer_id::PeerId;
 pub use self::public_key::PublicKey;

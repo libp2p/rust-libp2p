@@ -43,7 +43,7 @@ extern crate tokio_io;
 
 use futures::future::{self, Future};
 use log::Level;
-use multiaddr::{AddrComponent, Multiaddr};
+use multiaddr::{Protocol, Multiaddr};
 use std::fmt;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::net::IpAddr;
@@ -119,8 +119,8 @@ where
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
         let contains_dns = addr.iter().any(|cmp| match cmp {
-            AddrComponent::DNS4(_) => true,
-            AddrComponent::DNS6(_) => true,
+            Protocol::Dns4(_) => true,
+            Protocol::Dns6(_) => true,
             _ => false,
         });
 
@@ -143,10 +143,10 @@ where
         trace!("Dialing address with DNS: {}", addr);
         let resolve_iters = addr.iter()
             .map(move |cmp| match cmp {
-                AddrComponent::DNS4(ref name) => {
+                Protocol::Dns4(ref name) => {
                     future::Either::A(resolve_dns(name, &resolver, ResolveTy::Dns4))
                 }
-                AddrComponent::DNS6(ref name) => {
+                Protocol::Dns6(ref name) => {
                     future::Either::A(resolve_dns(name, &resolver, ResolveTy::Dns6))
                 }
                 cmp => future::Either::B(future::ok(cmp.acquire())),
@@ -192,7 +192,7 @@ fn resolve_dns<'a>(
     name: &str,
     resolver: &CpuPoolResolver,
     ty: ResolveTy,
-) -> impl Future<Item = AddrComponent<'a>, Error = IoError> {
+) -> impl Future<Item = Protocol<'a>, Error = IoError> {
     let debug_name = if log_enabled!(Level::Trace) {
         Some(name.to_owned())
     } else {
@@ -211,8 +211,8 @@ fn resolve_dns<'a>(
         addrs
             .into_iter()
             .filter_map(move |addr| match (addr, ty) {
-                (IpAddr::V4(addr), ResolveTy::Dns4) => Some(AddrComponent::IP4(addr)),
-                (IpAddr::V6(addr), ResolveTy::Dns6) => Some(AddrComponent::IP6(addr)),
+                (IpAddr::V4(addr), ResolveTy::Dns4) => Some(Protocol::Ip4(addr)),
+                (IpAddr::V6(addr), ResolveTy::Dns6) => Some(Protocol::Ip6(addr)),
                 _ => None,
             })
             .next()
@@ -227,7 +227,7 @@ mod tests {
     extern crate libp2p_tcp_transport;
     use self::libp2p_tcp_transport::TcpConfig;
     use futures::future;
-    use multiaddr::{AddrComponent, Multiaddr};
+    use multiaddr::{Protocol, Multiaddr};
     use std::io::Error as IoError;
     use swarm::Transport;
     use DnsConfig;
@@ -255,12 +255,12 @@ mod tests {
                 let addr = addr.iter().collect::<Vec<_>>();
                 assert_eq!(addr.len(), 2);
                 match addr[1] {
-                    AddrComponent::TCP(_) => (),
+                    Protocol::Tcp(_) => (),
                     _ => panic!(),
                 };
                 match addr[0] {
-                    AddrComponent::DNS4(_) => (),
-                    AddrComponent::DNS6(_) => (),
+                    Protocol::Dns4(_) => (),
+                    Protocol::Dns6(_) => (),
                     _ => panic!(),
                 };
                 Ok(future::empty())

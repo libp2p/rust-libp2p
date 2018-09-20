@@ -24,7 +24,7 @@ use fnv::FnvHashSet;
 use futures::{future, Future, stream, Stream};
 use kbucket::KBucketsPeerId;
 use libp2p_core::PeerId;
-use multiaddr::{AddrComponent, Multiaddr};
+use multiaddr::{Protocol, Multiaddr};
 use protocol;
 use rand;
 use smallvec::SmallVec;
@@ -237,7 +237,7 @@ where
         // For each node in `to_contact`, start an RPC query and a corresponding entry in the two
         // `state.current_attempts_*` fields.
         for peer in to_contact {
-            let multiaddr: Multiaddr = AddrComponent::P2P(peer.clone().into_bytes()).into();
+            let multiaddr: Multiaddr = Protocol::P2p(peer.clone().into_bytes()).into();
 
             let searched_key2 = searched_key.clone();
             let current_attempt = find_node_rpc(multiaddr.clone(), searched_key2); // TODO: suboptimal

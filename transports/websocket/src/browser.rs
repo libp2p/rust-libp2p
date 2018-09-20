@@ -21,7 +21,7 @@
 use futures::stream::Then as StreamThen;
 use futures::sync::{mpsc, oneshot};
 use futures::{future, future::FutureResult, Async, Future, Poll, Stream};
-use multiaddr::{AddrComponent, Multiaddr};
+use multiaddr::{Protocol, Multiaddr};
 use rw_stream_sink::RwStreamSink;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::io::{Read, Write};
@@ -227,19 +227,19 @@ impl Transport for BrowserWsConfig {
 
         // Check that `server` is a valid TCP/IP address.
         match (&server_proto0, &server_proto1, &server_proto2) {
-            (&AddrComponent::IP4(_), &AddrComponent::TCP(_), &AddrComponent::WS)
-            | (&AddrComponent::IP6(_), &AddrComponent::TCP(_), &AddrComponent::WS)
-            | (&AddrComponent::IP4(_), &AddrComponent::TCP(_), &AddrComponent::WSS)
-            | (&AddrComponent::IP6(_), &AddrComponent::TCP(_), &AddrComponent::WSS) => {}
+            (&Protocol::Ip4(_), &Protocol::Tcp(_), &Protocol::Ws)
+            | (&Protocol::Ip6(_), &Protocol::Tcp(_), &Protocol::Ws)
+            | (&Protocol::Ip4(_), &Protocol::Tcp(_), &Protocol::Wss)
+            | (&Protocol::Ip6(_), &Protocol::Tcp(_), &Protocol::Wss) => {}
             _ => return None,
         }
 
         // Check that `observed` is a valid TCP/IP address.
         match (&obs_proto0, &obs_proto1, &obs_proto2) {
-            (&AddrComponent::IP4(_), &AddrComponent::TCP(_), &AddrComponent::WS)
-            | (&AddrComponent::IP6(_), &AddrComponent::TCP(_), &AddrComponent::WS)
-            | (&AddrComponent::IP4(_), &AddrComponent::TCP(_), &AddrComponent::WSS)
-            | (&AddrComponent::IP6(_), &AddrComponent::TCP(_), &AddrComponent::WSS) => {}
+            (&Protocol::Ip4(_), &Protocol::Tcp(_), &Protocol::Ws)
+            | (&Protocol::Ip6(_), &Protocol::Tcp(_), &Protocol::Ws)
+            | (&Protocol::Ip4(_), &Protocol::Tcp(_), &Protocol::Wss)
+            | (&Protocol::Ip6(_), &Protocol::Tcp(_), &Protocol::Wss) => {}
             _ => return None,
         }
 
@@ -333,40 +333,40 @@ fn multiaddr_to_target(addr: &Multiaddr) -> Result<String, ()> {
     }
 
     match (&protocols[0], &protocols[1], &protocols[2]) {
-        (&AddrComponent::IP4(ref ip), &AddrComponent::TCP(port), &AddrComponent::WS) => {
+        (&Protocol::Ip4(ref ip), &Protocol::Tcp(port), &Protocol::Ws) => {
             if ip.is_unspecified() || port == 0 {
                 return Err(());
             }
             Ok(format!("ws://{}:{}/", ip, port))
         }
-        (&AddrComponent::IP6(ref ip), &AddrComponent::TCP(port), &AddrComponent::WS) => {
+        (&Protocol::Ip6(ref ip), &Protocol::Tcp(port), &Protocol::Ws) => {
             if ip.is_unspecified() || port == 0 {
                 return Err(());
             }
             Ok(format!("ws://[{}]:{}/", ip, port))
         }
-        (&AddrComponent::IP4(ref ip), &AddrComponent::TCP(port), &AddrComponent::WSS) => {
+        (&Protocol::Ip4(ref ip), &Protocol::Tcp(port), &Protocol::Wss) => {
             if ip.is_unspecified() || port == 0 {
                 return Err(());
             }
             Ok(format!("wss://{}:{}/", ip, port))
         }
-        (&AddrComponent::IP6(ref ip), &AddrComponent::TCP(port), &AddrComponent::WSS) => {
+        (&Protocol::Ip6(ref ip), &Protocol::Tcp(port), &Protocol::Wss) => {
             if ip.is_unspecified() || port == 0 {
                 return Err(());
             }
             Ok(format!("wss://[{}]:{}/", ip, port))
         }
-        (&AddrComponent::DNS4(ref ns), &AddrComponent::TCP(port), &AddrComponent::WS) => {
+        (&Protocol::Dns4(ref ns), &Protocol::Tcp(port), &Protocol::Ws) => {
             Ok(format!("ws://{}:{}/", ns, port))
         }
-        (&AddrComponent::DNS6(ref ns), &AddrComponent::TCP(port), &AddrComponent::WS) => {
+        (&Protocol::Dns6(ref ns), &Protocol::Tcp(port), &Protocol::Ws) => {
             Ok(format!("ws://{}:{}/", ns, port))
         }
-        (&AddrComponent::DNS4(ref ns), &AddrComponent::TCP(port), &AddrComponent::WSS) => {
+        (&Protocol::Dns4(ref ns), &Protocol::Tcp(port), &Protocol::Wss) => {
             Ok(format!("wss://{}:{}/", ns, port))
         }
-        (&AddrComponent::DNS6(ref ns), &AddrComponent::TCP(port), &AddrComponent::WSS) => {
+        (&Protocol::Dns6(ref ns), &Protocol::Tcp(port), &Protocol::Wss) => {
             Ok(format!("wss://{}:{}/", ns, port))
         }
         _ => Err(()),
