@@ -105,8 +105,15 @@ use tokio_io::{AsyncRead, AsyncWrite};
 ///
 /// According to the design of libp2p, this struct would normally contain the configuration options
 /// for the protocol, but in the case of `Ping` no configuration is required.
-#[derive(Debug, Copy, Clone, Default)]
+#[derive(Debug, Copy, Clone)]
 pub struct Ping<TUserData = ()>(PhantomData<TUserData>);
+
+impl<TUserData> Default for Ping<TUserData> {
+    #[inline]
+    fn default() -> Self {
+        Ping(PhantomData)
+    }
+}
 
 /// Output of a `Ping` upgrade.
 pub enum PingOutput<TSocket, TUserData> {
