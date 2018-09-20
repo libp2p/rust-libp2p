@@ -428,7 +428,7 @@ impl FloodSubController {
             .insert(hash((self.inner.peer_id.clone(), seq_no_bytes)));
 
         self.broadcast(proto, |r_top| {
-            topics.iter().any(|t| r_top.iter().any(|to| to == t.hash()))
+            topics.iter().any(|t| r_top.iter().any(|to| *to == t.descriptor.get_name().to_string()))
         });
     }
 
@@ -436,7 +436,7 @@ impl FloodSubController {
     // for which `filter` returns true.
     fn broadcast<F>(&self, message: rpc_proto::RPC, mut filter: F)
     where
-        F: FnMut(&FnvHashSet<TopicHash>) -> bool,
+        F: FnMut(&FnvHashSet<String>) -> bool,
     {
         let bytes = message
             .write_to_bytes()
@@ -635,7 +635,8 @@ fn handle_packet_received(
             let subscribed_topics = inner.subscribed_topics.read();
             topics
                 .iter()
-                .any(|t| subscribed_topics.iter().any(|topic| topic.hash() == t))
+                .any(|t| subscribed_topics.iter().any(|topic| 
+                    topic.descriptor.clone().get_name().to_string() == *t))
         };
         if dispatch_locally {
             // Ignore if channel is closed.
