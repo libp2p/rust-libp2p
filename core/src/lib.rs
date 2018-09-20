@@ -131,22 +131,23 @@
 //! extern crate libp2p_tcp_transport;
 //! extern crate tokio_current_thread;
 //!
-//! use futures::Future;
+//! use futures::{Future, Stream};
 //! use libp2p_ping::{Ping, PingOutput};
 //! use libp2p_core::Transport;
 //!
 //! # fn main() {
 //! let ping_finished_future = libp2p_tcp_transport::TcpConfig::new()
 //!     // We have a `TcpConfig` struct that implements `Transport`, and apply a `Ping` upgrade on it.
-//!     .with_upgrade(Ping)
+//!     .with_upgrade(Ping::default())
 //!     // TODO: right now the only available protocol is ping, but we want to replace it with
 //!     //       something that is more simple to use
 //!     .dial("127.0.0.1:12345".parse::<libp2p_core::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())
 //!     .and_then(|(out, _)| {
 //!         match out {
 //!             PingOutput::Ponger(processing) => Box::new(processing) as Box<Future<Item = _, Error = _>>,
-//!             PingOutput::Pinger { mut pinger, processing } => {
-//!                 let f = pinger.ping().map_err(|_| panic!()).select(processing).map(|_| ()).map_err(|(err, _)| err);
+//!             PingOutput::Pinger(mut pinger) => {
+//!                 pinger.ping(());
+//!                 let f = pinger.into_future().map(|_| ()).map_err(|(err, _)| err);
 //!                 Box::new(f) as Box<Future<Item = _, Error = _>>
 //!             },
 //!         }
@@ -185,12 +186,13 @@
 //! let transport = libp2p_tcp_transport::TcpConfig::new()
 //!     .with_dummy_muxing();
 //!
-//! let (swarm_controller, swarm_future) = libp2p_core::swarm(transport.with_upgrade(Ping),
+//! let (swarm_controller, swarm_future) = libp2p_core::swarm(transport.with_upgrade(Ping::default()),
 //!     |out, client_addr| {
 //!         match out {
 //!             PingOutput::Ponger(processing) => Box::new(processing) as Box<Future<Item = _, Error = _>>,
-//!             PingOutput::Pinger { mut pinger, processing } => {
-//!                 let f = pinger.ping().map_err(|_| panic!()).select(processing).map(|_| ()).map_err(|(err, _)| err);
+//!             PingOutput::Pinger(mut pinger) => {
+//!                 pinger.ping(());
+//!                 let f = pinger.into_future().map(|_| ()).map_err(|(err, _)| err);
 //!                 Box::new(f) as Box<Future<Item = _, Error = _>>
 //!             },
 //!         }
