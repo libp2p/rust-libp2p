@@ -393,7 +393,7 @@ impl ToMultiaddr for SocketAddrV4 {
 
 impl ToMultiaddr for SocketAddrV6 {
     fn to_multiaddr(&self) -> Result<Multiaddr> {
-        // TODO: Should how should we handle `flowinfo` and `scope_id`?
+        // TODO: Should we handle `flowinfo` and `scope_id`?
         let mut m = self.ip().to_multiaddr()?;
         m.append(Protocol::Tcp(self.port()));
         Ok(m)

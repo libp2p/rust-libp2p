@@ -36,7 +36,7 @@ const UTP: u32 = 302;
 const WS: u32 = 477;
 const WSS: u32 = 478;
 
-/// `Protocol` describes all possible protocols.
+/// `Protocol` describes all possible multiaddress protocols.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Protocol<'a> {
     Dccp(u16),
@@ -65,6 +65,12 @@ pub enum Protocol<'a> {
 }
 
 impl<'a> Protocol<'a> {
+    /// Parse a protocol value from the given iterator of string slices.
+    ///
+    /// The parsing only consumes the minimum amount of string slices necessary to
+    /// produce a well-formed protocol. The same iterator can thus be used to parse
+    /// a sequence of protocols in succession. It is up to client code to check
+    /// that iteration has finished whenever appropriate.
     pub fn from_str_parts<I>(mut iter: I) -> Result<Self>
     where
         I: Iterator<Item=&'a str>
@@ -128,6 +134,8 @@ impl<'a> Protocol<'a> {
         }
     }
 
+    /// Parse a single `Protocol` value from its byte slice representation,
+    /// returning the protocol as well as the remaining byte slice.
     pub fn from_bytes(input: &'a [u8]) -> Result<(Self, &'a [u8])> {
         fn split_at(n: usize, input: &[u8]) -> Result<(&[u8], &[u8])> {
             if input.len() < n {
@@ -222,6 +230,8 @@ impl<'a> Protocol<'a> {
         }
     }
 
+    /// Encode this protocol by writing its binary representation into
+    /// the given `Write` impl.
     pub fn write_bytes<W: Write>(&self, w: &mut W) -> io::Result<()> {
         let mut buf = encode::u32_buffer();
         match self {
