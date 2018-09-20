@@ -225,7 +225,7 @@ impl Multiaddr {
                 continue;
             }
 
-            if &self.bytes[i..next] == &input[..] {
+            if self.bytes[i..next] == input[..] {
                 matches = true;
                 input_pos = i;
                 break;
@@ -284,7 +284,7 @@ impl<'a> From<Protocol<'a>> for Multiaddr {
     fn from(p: Protocol<'a>) -> Multiaddr {
         let mut w = Vec::new();
         p.write_bytes(&mut w).expect("writing to a Vec never fails");
-        Multiaddr { bytes: w.into() }
+        Multiaddr { bytes: w }
     }
 }
 
@@ -307,7 +307,7 @@ impl<'a> FromIterator<Protocol<'a>> for Multiaddr {
         for cmp in iter {
             cmp.write_bytes(&mut writer).expect("writing to a Vec never fails");
         }
-        Multiaddr { bytes: writer.into() }
+        Multiaddr { bytes: writer }
     }
 }
 
@@ -329,7 +329,7 @@ impl FromStr for Multiaddr {
             p.write_bytes(&mut writer).expect("writing to a Vec never fails");
         }
 
-        Ok(Multiaddr { bytes: writer.into() })
+        Ok(Multiaddr { bytes: writer })
     }
 }
 
@@ -411,13 +411,13 @@ impl ToMultiaddr for IpAddr {
 
 impl ToMultiaddr for Ipv4Addr {
     fn to_multiaddr(&self) -> Result<Multiaddr> {
-        Ok(Protocol::Ip4(self.clone()).into())
+        Ok(Protocol::Ip4(*self).into())
     }
 }
 
 impl ToMultiaddr for Ipv6Addr {
     fn to_multiaddr(&self) -> Result<Multiaddr> {
-        Ok(Protocol::Ip6(self.clone()).into())
+        Ok(Protocol::Ip6(*self).into())
     }
 }
 
