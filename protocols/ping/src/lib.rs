@@ -157,7 +157,7 @@ where TSocket: AsyncRead + AsyncWrite,
         inner: Framed::new(socket, Codec),
         need_writer_flush: false,
         needs_close: false,
-        sent_pongs: VecDeque::with_capacity(4),
+        sent_pings: VecDeque::with_capacity(4),
         rng: EntropyRng::default(),
         pings_to_send: VecDeque::with_capacity(4),
         to_notify: None,
@@ -188,8 +188,8 @@ pub struct PingDialer<TSocket, TUserData> {
     need_writer_flush: bool,
     /// If true, need to close the sink.
     needs_close: bool,
-    /// List of pongs that have been sent to the remote and that are waiting for an answer.
-    sent_pongs: VecDeque<(Bytes, TUserData)>,
+    /// List of pings that have been sent to the remote and that are waiting for an answer.
+    sent_pings: VecDeque<(Bytes, TUserData)>,
     /// Random number generator for the ping payload.
     rng: EntropyRng,
     /// List of pings to send to the remote.
@@ -224,11 +224,14 @@ where TSocket: AsyncRead + AsyncWrite,
         while let Some((ping, user_data)) = self.pings_to_send.pop_front() {
             match self.inner.start_send(ping.clone()) {
                 Ok(AsyncSink::Ready) => self.need_writer_flush = true,
-                Ok(AsyncSink::NotReady(_)) => break,
+                Ok(AsyncSink::NotReady(_)) => {
+                    self.pings_to_send.push_front((ping, user_data));
+                    break;
+                },
                 Err(err) => return Err(err),
             }
 
-            self.sent_pongs.push_back((ping, user_data));
+            self.sent_pings.push_back((ping, user_data));
         }
 
         if self.need_writer_flush {
@@ -242,8 +245,8 @@ where TSocket: AsyncRead + AsyncWrite,
         loop {
             match self.inner.poll() {
                 Ok(Async::Ready(Some(pong))) => {
-                    if let Some(pos) = self.sent_pongs.iter().position(|&(ref p, _)| p == &pong) {
-                        let (_, user_data) = self.sent_pongs.remove(pos)
+                    if let Some(pos) = self.sent_pings.iter().position(|&(ref p, _)| p == &pong) {
+                        let (_, user_data) = self.sent_pings.remove(pos)
                             .expect("Grabbed a valid position just above");
                         return Ok(Async::Ready(Some(user_data)));
                     } else {
@@ -301,7 +304,6 @@ where TSocket: AsyncRead + AsyncWrite
                 PingListenerState::Listening => {
                     match self.inner.poll() {
                         Ok(Async::Ready(Some(payload))) => {
-                            // TODO: decode into Bytes directly instead of freezing here?
                             debug!("Received ping (payload={:?}) ; sending back", payload);
                             self.state = PingListenerState::Sending(payload.freeze())
                         },
@@ -354,7 +356,7 @@ where TSocket: AsyncRead + AsyncWrite
 struct Codec;
 
 impl Decoder for Codec {
-    type Item = BytesMut;       // TODO: use Bytes to avoid a copy?
+    type Item = BytesMut;
     type Error = IoError;
 
     #[inline]
