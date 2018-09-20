@@ -5,7 +5,7 @@ use std::{
     borrow::Cow,
     convert::From,
     fmt,
-    io::{Cursor, Write},
+    io::{self, Cursor, Write},
     net::{Ipv4Addr, Ipv6Addr},
     str::{self, FromStr}
 };
@@ -222,7 +222,7 @@ impl<'a> Protocol<'a> {
         }
     }
 
-    pub fn write_bytes<W: Write>(&self, w: &mut W) -> Result<()> {
+    pub fn write_bytes<W: Write>(&self, w: &mut W) -> io::Result<()> {
         let mut buf = encode::u32_buffer();
         match self {
             Protocol::Ip4(addr) => {

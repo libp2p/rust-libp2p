@@ -75,7 +75,7 @@ where
 
         let listen_addrs = info.listen_addrs
             .into_iter()
-            .map(|addr| addr.into_bytes().to_vec())
+            .map(|addr| addr.into_bytes())
             .collect();
 
         let mut message = structs_proto::Identify::new();
@@ -83,7 +83,7 @@ where
         message.set_protocolVersion(info.protocol_version);
         message.set_publicKey(info.public_key.into_protobuf_encoding());
         message.set_listenAddrs(listen_addrs);
-        message.set_observedAddr(observed_addr.to_bytes().to_vec());
+        message.set_observedAddr(observed_addr.to_bytes());
         message.set_protocols(RepeatedField::from_vec(info.protocols));
 
         let bytes = message

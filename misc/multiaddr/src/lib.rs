@@ -5,7 +5,6 @@
 
 extern crate bs58;
 extern crate byteorder;
-extern crate bytes;
 extern crate serde;
 extern crate unsigned_varint;
 pub extern crate multihash;
@@ -13,7 +12,6 @@ pub extern crate multihash;
 mod protocol;
 mod errors;
 
-use bytes::Bytes;
 use serde::{
     Deserialize,
     Deserializer,
@@ -33,7 +31,7 @@ pub use protocol::Protocol;
 
 /// Representation of a Multiaddr.
 #[derive(PartialEq, Eq, Clone, Hash)]
-pub struct Multiaddr { bytes: Bytes }
+pub struct Multiaddr { bytes: Vec<u8> }
 
 impl Serialize for Multiaddr {
     fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
@@ -71,13 +69,13 @@ impl<'de> Deserialize<'de> for Multiaddr {
                 self.visit_str(&v)
             }
             fn visit_bytes<E: de::Error>(self, v: &[u8]) -> StdResult<Self::Value, E> {
-                Multiaddr::from_bytes(v).map_err(DeserializerError::custom)
+                self.visit_byte_buf(v.into())
             }
             fn visit_borrowed_bytes<E: de::Error>(self, v: &'de [u8]) -> StdResult<Self::Value, E> {
-                self.visit_bytes(v)
+                self.visit_byte_buf(v.into())
             }
             fn visit_byte_buf<E: de::Error>(self, v: Vec<u8>) -> StdResult<Self::Value, E> {
-                self.visit_bytes(&v)
+                Multiaddr::from_bytes(v).map_err(DeserializerError::custom)
             }
         }
 
@@ -120,18 +118,17 @@ impl fmt::Display for Multiaddr {
 impl Multiaddr {
     /// Returns the raw bytes representation of the multiaddr.
     #[inline]
-    pub fn into_bytes(self) -> Bytes {
+    pub fn into_bytes(self) -> Vec<u8> {
         self.bytes
     }
 
     /// Return a copy to disallow changing the bytes directly
-    pub fn to_bytes(&self) -> Bytes {
+    pub fn to_bytes(&self) -> Vec<u8> {
         self.bytes.clone()
     }
 
     /// Produces a `Multiaddr` from its bytes representation.
-    pub fn from_bytes<B: Into<Bytes>>(bytes: B) -> Result<Multiaddr> {
-        let bytes = bytes.into();
+    pub fn from_bytes(bytes: Vec<u8>) -> Result<Multiaddr> {
         {
             let mut ptr = &bytes[..];
             while !ptr.is_empty() {

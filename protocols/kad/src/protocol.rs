@@ -115,7 +115,7 @@ impl Into<protobuf_structs::dht::Message_Peer> for KadPeer {
         let mut out = protobuf_structs::dht::Message_Peer::new();
         out.set_id(self.node_id.into_bytes());
         for addr in self.multiaddrs {
-            out.mut_addrs().push(addr.into_bytes().to_vec());
+            out.mut_addrs().push(addr.into_bytes());
         }
         out.set_connection(self.connection_ty.into());
         out
