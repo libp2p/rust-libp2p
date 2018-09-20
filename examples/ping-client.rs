@@ -79,17 +79,21 @@ fn main() {
     let (tx, rx) = oneshot::channel();
     let mut tx = Some(tx);
     let (swarm_controller, swarm_future) = libp2p::core::swarm(
-        transport.clone().with_upgrade(libp2p::ping::Ping),
+        transport.clone().with_upgrade(libp2p::ping::Ping::default()),
         |out, _client_addr| {
-            if let libp2p::ping::PingOutput::Pinger { mut pinger, processing } = out {
+            if let libp2p::ping::PingOutput::Pinger(mut pinger) = out {
                 let tx = tx.take();
-                let ping = pinger.ping().map_err(|_| unreachable!()).inspect(move |_| {
-                    println!("Received pong from the remote");
-                    if let Some(tx) = tx {
-                        let _ = tx.send(());
-                    }
-                });
-                ping.select(processing).map(|_| ()).map_err(|(e, _)| e)
+                pinger.ping(());
+                pinger
+                    .into_future()
+                    .map(move |_| {
+                        println!("Received pong from the remote");
+                        if let Some(tx) = tx {
+                            let _ = tx.send(());
+                        }
+                        ()
+                    })
+                    .map_err(|(e, _)| e)
             } else {
                 unreachable!()
             }
@@ -99,7 +103,7 @@ fn main() {
     // We now use the controller to dial to the address.
     swarm_controller
         .dial(target_addr.parse().expect("invalid multiaddr"),
-            transport.with_upgrade(libp2p::ping::Ping))
+            transport.with_upgrade(libp2p::ping::Ping::default()))
         // If the multiaddr protocol exists but is not supported, then we get an error containing
         // the original multiaddress.
         .expect("unsupported multiaddr");
