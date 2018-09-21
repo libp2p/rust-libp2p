@@ -229,7 +229,7 @@ where TSocket: AsyncRead + AsyncWrite,
         if self.needs_close {
             match self.inner.close() {
                 Ok(Async::Ready(())) => return Ok(Async::Ready(None)),
-                Ok(Async::NotReady) => (),
+                Ok(Async::NotReady) => return Ok(Async::NotReady),
                 Err(err) => return Err(err),
             }
         }
