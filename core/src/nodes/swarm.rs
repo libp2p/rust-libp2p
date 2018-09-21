@@ -499,19 +499,21 @@ where
 
         // If in neither, check outgoing reach attempts again as we may have a public
         // key mismatch.
-        let wrong_peer_id = self
+        let expected_peer_id = self
             .out_reach_attempts
             .iter()
             .find(|(_, a)| a.id == reach_id)
             .map(|(p, _)| p.clone());
-        if let Some(wrong_peer_id) = wrong_peer_id {
-            let attempt = self.out_reach_attempts.remove(&wrong_peer_id)
-                .expect("wrong_peer_id is a key that is grabbed from out_reach_attempts");
+        if let Some(expected_peer_id) = expected_peer_id {
+            let attempt = self.out_reach_attempts.remove(&expected_peer_id)
+                .expect("expected_peer_id is a key that is grabbed from out_reach_attempts");
 
             let num_remain = attempt.next_attempts.len();
             let failed_addr = attempt.cur_attempted.clone();
 
-            // Note: at the moment, a peer id mismatch can drop a legitimate connection, which is
+            // Since the `peer_id` (the unexpected peer id) is now successfully connected, we have
+            // to drop it from active_nodes.
+            // TODO: at the moment, a peer id mismatch can drop a legitimate connection, which is
             // why we have to purge `connected_multiaddresses`.
             // See https://github.com/libp2p/rust-libp2p/issues/502
             self.connected_multiaddresses.remove(&peer_id);
@@ -534,13 +536,13 @@ where
                     },
                 };
 
-                self.out_reach_attempts.insert(peer_id.clone(), attempt);
+                self.out_reach_attempts.insert(expected_peer_id.clone(), attempt);
             }
 
             return SwarmEvent::PublicKeyMismatch {
                 remain_addrs_attempt: num_remain,
-                expected_peer_id: peer_id,
-                actual_peer_id: wrong_peer_id,
+                expected_peer_id,
+                actual_peer_id: peer_id,
                 multiaddr: failed_addr,
             };
         }
