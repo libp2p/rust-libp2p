@@ -159,6 +159,12 @@ impl<TInEvent, TOutEvent> CollectionStream<TInEvent, TOutEvent> {
                 };
 
                 entry.remove();
+                self.inner.task(id.0)
+                    .expect("whenever we receive a NodeClosed event, we remove the \
+                             corresponding entry from self.tasks ; therefore all elements in \
+                             self.tasks are valid tasks in the HandledNodesTasks ; qed")
+                    .close();
+
                 Ok(())
             }
         }
