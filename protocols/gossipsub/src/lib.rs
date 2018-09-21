@@ -63,7 +63,7 @@ impl GossipSubController {
         I::IntoIter: Clone,
     {
         // This function exists for convenience.
-        self.sub_unsub_multi(topics.into_iter().map::<_, fn(_) -> _>(|t| (t, false)));
+        self.graft_prune_multi(topics.into_iter().map::<_, fn(_) -> _>(|t| (t, false)));
     }
 
     // Inner implementation. The iterator should produce a boolean that is true if we graft and
