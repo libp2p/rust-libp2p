@@ -6,4 +6,4 @@ license = "Unlicense"
 
 [dependencies]
 futures = "0.1"
-libp2p-floodsub = { path = "../../core" }
+libp2p-floodsub = { path = "../floodsub" }
