@@ -20,7 +20,7 @@
 
 use futures::{future::{self, Either}, prelude::*};
 use message::{CircuitRelay, CircuitRelay_Peer, CircuitRelay_Status, CircuitRelay_Type};
-use multiaddr::{AddrComponent, Multiaddr, Protocol};
+use multiaddr::{Protocol, Multiaddr};
 use peerstore::PeerId;
 use protobuf::{self, Message};
 use std::{io, error::Error, iter::FromIterator};
@@ -103,11 +103,10 @@ impl RelayAddr {
     pub(crate) fn parse(addr: &Multiaddr) -> RelayAddr {
         let mut iter = addr.iter().peekable();
 
-        let relay = if let Some(&AddrComponent::P2pCircuit) = iter.peek() {
+        let relay = if let Some(&Protocol::P2pCircuit) = iter.peek() {
             None // Address begins with "p2p-circuit", i.e. no relay is specified.
         } else {
-            let prefix = iter.by_ref()
-                .take_while(|ac| ac.protocol_id() != Protocol::P2pCircuit);
+            let prefix = iter.by_ref().take_while(|p| *p != Protocol::P2pCircuit);
             match Peer::from(Multiaddr::from_iter(prefix)) {
                 None => return RelayAddr::Malformed,
                 peer => peer,
@@ -115,13 +114,12 @@ impl RelayAddr {
         };
 
         // After the (optional) relay, "p2p-circuit" is expected.
-        if Some(Protocol::P2pCircuit) != iter.next().map(|ac| ac.protocol_id()) {
+        if Some(Protocol::P2pCircuit) != iter.next() {
             return RelayAddr::Malformed;
         }
 
         let dest = {
-            let suffix = iter.by_ref()
-                .take_while(|ac| ac.protocol_id() != Protocol::P2pCircuit);
+            let suffix = iter.by_ref().take_while(|p| *p != Protocol::P2pCircuit);
             match Peer::from(Multiaddr::from_iter(suffix)) {
                 None => return RelayAddr::Malformed,
                 Some(p) => p,
@@ -145,7 +143,7 @@ pub(crate) struct Peer {
 impl Peer {
     pub(crate) fn from(mut addr: Multiaddr) -> Option<Peer> {
         match addr.pop() {
-            Some(AddrComponent::P2P(id)) => {
+            Some(Protocol::P2p(id)) => {
                 PeerId::from_multihash(id).ok().map(|pid| {
                     if addr.iter().count() == 0 {
                         Peer {

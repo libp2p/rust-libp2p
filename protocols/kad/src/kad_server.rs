@@ -438,6 +438,9 @@ mod tests {
         fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
             self.1.poll_complete()
         }
+        fn close(&mut self) -> Poll<(), Self::SinkError> {
+            self.1.close()
+        }
     }
 
     fn build_test() -> (KadConnecController, impl Stream<Item = KadIncomingRequest, Error = IoError>, KadConnecController, impl Stream<Item = KadIncomingRequest, Error = IoError>) {

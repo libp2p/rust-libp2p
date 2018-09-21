@@ -512,6 +512,14 @@ where C: AsyncRead + AsyncWrite
             elem.substream_id() != substream.num || elem.endpoint() == Some(substream.endpoint)
         })
     }
+
+    #[inline]
+    fn close_inbound(&self) {
+    }
+
+    #[inline]
+    fn close_outbound(&self) {
+    }
 }
 
 /// Active attempt to open an outbound substream.

@@ -106,6 +106,11 @@ where
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
         Ok(self.inner.poll_complete()?)
     }
+
+    #[inline]
+    fn close(&mut self) -> Poll<(), Self::SinkError> {
+        Ok(self.inner.close()?)
+    }
 }
 
 impl<R> Stream for Dialer<R>

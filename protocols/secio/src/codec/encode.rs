@@ -21,11 +21,8 @@
 //! Individual messages encoding.
 
 use bytes::BytesMut;
-use codec::StreamCipher;
-use futures::sink::Sink;
-use futures::stream::Stream;
-use futures::Poll;
-use futures::StartSend;
+use super::StreamCipher;
+use futures::prelude::*;
 use ring::hmac;
 
 /// Wraps around a `Sink`. Encodes the buffers passed to it and passes it to the underlying sink.
@@ -39,18 +36,16 @@ pub struct EncoderMiddleware<S> {
     cipher_state: StreamCipher,
     hmac_key: hmac::SigningKey,
     raw_sink: S,
+    pending: Option<BytesMut> // buffer encrypted data which can not be sent right away
 }
 
 impl<S> EncoderMiddleware<S> {
-    pub fn new(
-        raw_sink: S,
-        cipher: StreamCipher,
-        hmac_key: hmac::SigningKey,
-    ) -> EncoderMiddleware<S> {
+    pub fn new(raw: S, cipher: StreamCipher, key: hmac::SigningKey) -> EncoderMiddleware<S> {
         EncoderMiddleware {
             cipher_state: cipher,
-            hmac_key,
-            raw_sink,
+            hmac_key: key,
+            raw_sink: raw,
+            pending: None
         }
     }
 }
@@ -62,27 +57,44 @@ where
     type SinkItem = BytesMut;
     type SinkError = S::SinkError;
 
-    fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
-        let capacity = item.len() + self.hmac_key.digest_algorithm().output_len;
-
-        // Apparently this is the fastest way of doing.
-        // See https://gist.github.com/kirushik/e0d93759b0cd102f814408595c20a9d0
-        let mut out_buffer = BytesMut::from(vec![0; capacity]);
-
-        {
-            let (out_data, out_sign) = out_buffer.split_at_mut(item.len());
-            self.cipher_state.process(&item, out_data);
-
-            let signature = hmac::sign(&self.hmac_key, out_data);
-            out_sign.copy_from_slice(signature.as_ref());
+    fn start_send(&mut self, mut data_buf: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
+        if let Some(data) = self.pending.take() {
+            if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data)? {
+                self.pending = Some(data);
+                return Ok(AsyncSink::NotReady(data_buf))
+            }
         }
-
-        self.raw_sink.start_send(out_buffer)
+        debug_assert!(self.pending.is_none());
+        // TODO if SinkError gets refactor to SecioError, then use try_apply_keystream
+        self.cipher_state.apply_keystream(&mut data_buf[..]);
+        let signature = hmac::sign(&self.hmac_key, &data_buf[..]);
+        data_buf.extend_from_slice(signature.as_ref());
+        if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data_buf)? {
+            self.pending = Some(data)
+        }
+        Ok(AsyncSink::Ready)
     }
 
     #[inline]
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
+        if let Some(data) = self.pending.take() {
+            if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data)? {
+                self.pending = Some(data);
+                return Ok(Async::NotReady)
+            }
+        }
         self.raw_sink.poll_complete()
+    }
+
+    #[inline]
+    fn close(&mut self) -> Poll<(), Self::SinkError> {
+        if let Some(data) = self.pending.take() {
+            if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data)? {
+                self.pending = Some(data);
+                return Ok(Async::NotReady)
+            }
+        }
+        self.raw_sink.close()
     }
 }
 

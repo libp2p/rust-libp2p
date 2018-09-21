@@ -20,7 +20,7 @@
 
 use bytes::{Bytes, IntoBuf};
 use futures::{future::{self, FutureResult}, prelude::*, stream, sync::mpsc};
-use multiaddr::{AddrComponent, Multiaddr};
+use multiaddr::{Protocol, Multiaddr};
 use parking_lot::Mutex;
 use rw_stream_sink::RwStreamSink;
 use std::{io, sync::Arc};
@@ -132,7 +132,7 @@ impl<T: IntoBuf + Send + 'static> Transport for Listener<T> {
 /// Returns `true` if and only if the address is `/memory`.
 fn is_memory_addr(a: &Multiaddr) -> bool {
     let mut iter = a.iter();
-    if iter.next() != Some(AddrComponent::Memory) {
+    if iter.next() != Some(Protocol::Memory) {
         return false;
     }
     if iter.next().is_some() {
@@ -176,6 +176,11 @@ impl<T> Sink for Chan<T> {
     #[inline]
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
         self.outgoing.poll_complete().map_err(|_| io::ErrorKind::ConnectionReset.into())
+    }
+
+    #[inline]
+    fn close(&mut self) -> Poll<(), Self::SinkError> {
+        self.outgoing.close().map_err(|_| io::ErrorKind::ConnectionReset.into())
     }
 }
 
