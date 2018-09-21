@@ -241,7 +241,7 @@ impl<'a, TInEvent> PeerMut<'a, TInEvent> {
             debug_assert_eq!(old_task_id, Some(self.inner.id()));
         } else {
             panic!("a PeerMut can only be created if an entry is present in nodes ; an entry in \
-                    nodes always matched a Connected entry in tasks");
+                    nodes always matched a Connected entry in tasks ; qed");
         };
 
         self.inner.close();
@@ -288,8 +288,9 @@ impl<TInEvent, TOutEvent> Stream for CollectionStream<TInEvent, TOutEvent> {
                     },
                     (None, _) => {
                         panic!("self.tasks is always kept in sync with the tasks in self.inner ; \
-                            when we add a task in self.inner we add a corresponding entry in \
-                            self.tasks, and remove the entry only when the task is closed")
+                                when we add a task in self.inner we add a corresponding entry in \
+                                self.tasks, and remove the entry only when the task is closed ; \
+                                qed")
                     },
                 }
             },
@@ -329,7 +330,7 @@ impl<TInEvent, TOutEvent> Stream for CollectionStream<TInEvent, TOutEvent> {
                     _ => panic!("we can only receive NodeEvent events from a task after we \
                                  received a corresponding NodeReached event from that same task ; \
                                  when we receive a NodeReached event, we ensure that the entry in \
-                                 self.tasks is switched to the Connected state"),
+                                 self.tasks is switched to the Connected state ; qed"),
                 };
 
                 Ok(Async::Ready(Some(CollectionEvent::NodeEvent {
