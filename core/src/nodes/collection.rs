@@ -160,9 +160,10 @@ impl<TInEvent, TOutEvent> CollectionStream<TInEvent, TOutEvent> {
 
                 entry.remove();
                 self.inner.task(id.0)
-                    .expect("whenever we receive a NodeClosed event, we remove the \
-                             corresponding entry from self.tasks ; therefore all elements in \
-                             self.tasks are valid tasks in the HandledNodesTasks ; qed")
+                    .expect("whenever we receive a TaskClosed event or interrupt a task, we \
+                             remove the corresponding entry from self.tasks ; therefore all \
+                             elements in self.tasks are valid tasks in the \
+                             HandledNodesTasks ; qed")
                     .close();
 
                 Ok(())
@@ -271,11 +272,15 @@ impl<TInEvent, TOutEvent> Stream for CollectionStream<TInEvent, TOutEvent> {
                         })))
                     },
                     (Some(TaskState::Connected(peer_id)), Ok(())) => {
+                        let _node_task_id = self.nodes.remove(&peer_id);
+                        debug_assert_eq!(_node_task_id, Some(id));
                         Ok(Async::Ready(Some(CollectionEvent::NodeClosed {
                             peer_id,
                         })))
                     },
                     (Some(TaskState::Connected(peer_id)), Err(err)) => {
+                        let _node_task_id = self.nodes.remove(&peer_id);
+                        debug_assert_eq!(_node_task_id, Some(id));
                         Ok(Async::Ready(Some(CollectionEvent::NodeError {
                             peer_id,
                             error: err,
@@ -293,14 +298,15 @@ impl<TInEvent, TOutEvent> Stream for CollectionStream<TInEvent, TOutEvent> {
                 let former_task_id = self.nodes.insert(peer_id.clone(), id);
                 let _former_state = self.tasks.insert(id, TaskState::Connected(peer_id.clone()));
                 debug_assert_eq!(_former_state, Some(TaskState::Pending));
-                
+
                 // It is possible that we already have a task connected to the same peer. In this
                 // case, we need to emit a `NodeReplaced` event.
                 if let Some(former_task_id) = former_task_id {
                     self.inner.task(former_task_id)
-                        .expect("whenever we receive a NodeClosed event, we remove the \
-                                 corresponding entry from self.tasks ; therefore all elements in \
-                                 self.tasks are valid tasks in the HandledNodesTasks ; qed")
+                        .expect("whenever we receive a TaskClosed event or close a node, we \
+                                 remove the corresponding entry from self.nodes ; therefore all \
+                                 elements in self.nodes are valid tasks in the \
+                                 HandledNodesTasks ; qed")
                         .close();
                     let _former_other_state = self.tasks.remove(&former_task_id);
                     debug_assert_eq!(_former_other_state, Some(TaskState::Connected(peer_id.clone())));
