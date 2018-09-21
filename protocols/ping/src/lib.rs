@@ -226,6 +226,14 @@ where TSocket: AsyncRead + AsyncWrite,
     type Error = IoError;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        if self.needs_close {
+            match self.inner.close() {
+                Ok(Async::Ready(())) => return Ok(Async::Ready(None)),
+                Ok(Async::NotReady) => return Ok(Async::NotReady),
+                Err(err) => return Err(err),
+            }
+        }
+
         self.to_notify = Some(task::current());
 
         while let Some((ping, user_data)) = self.pings_to_send.pop_front() {
@@ -257,7 +265,7 @@ where TSocket: AsyncRead + AsyncWrite,
                             .expect("Grabbed a valid position just above");
                         return Ok(Async::Ready(Some(user_data)));
                     } else {
-                        debug!("Received pong that doesn't match what we went: {:?}", pong);
+                        debug!("Received pong that doesn't match what we sent: {:?}", pong);
                     }
                 },
                 Ok(Async::NotReady) => break,
