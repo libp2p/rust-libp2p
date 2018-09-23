@@ -27,7 +27,7 @@ use nodes::handled_node_tasks::{Task as HandledNodesTask, TaskId};
 use nodes::handled_node::NodeHandler;
 use std::collections::hash_map::Entry;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use void::Void;
+use std::mem;
 use {Multiaddr, PeerId};
 
 // TODO: make generic over PeerId
@@ -56,25 +56,10 @@ enum TaskState {
 
 /// Event that can happen on the `CollectionStream`.
 // TODO: implement Debug
-pub enum CollectionEvent<TOutEvent> {
-    /// A connection to a node has succeeded.
-    NodeReached {
-        /// Identifier of the node.
-        peer_id: PeerId,
-        /// Identifier of the reach attempt that succeeded.
-        id: ReachAttemptId,
-    },
-
-    /// A connection to a node has succeeded and replaces a former connection.
-    ///
-    /// The opened substreams of the former node will keep working (unless the remote decides to
-    /// close them).
-    NodeReplaced {
-        /// Identifier of the node.
-        peer_id: PeerId,
-        /// Identifier of the reach attempt that succeeded.
-        id: ReachAttemptId,
-    },
+pub enum CollectionEvent<'a, TInEvent, TOutEvent> {
+    /// A connection to a node has succeeded. You must use the provided event in order to accept
+    /// the connection.
+    NodeReached(CollectionReachEvent<'a, TInEvent, TOutEvent>),
 
     /// A connection to a node has been closed.
     ///
@@ -108,6 +93,97 @@ pub enum CollectionEvent<TOutEvent> {
         /// The produced event.
         event: TOutEvent,
     },
+}
+
+/// Event that happens when we reach a node.
+#[must_use = "The node reached event is used to accept the newly-opened connection"]
+pub struct CollectionReachEvent<'a, TInEvent: 'a, TOutEvent: 'a> {
+    /// Peer id we connected to.
+    peer_id: PeerId,
+    /// The task id that reached the node.
+    id: TaskId,
+    /// The `CollectionStream` we are referencing.
+    parent: &'a mut CollectionStream<TInEvent, TOutEvent>,
+}
+
+impl<'a, TInEvent, TOutEvent> CollectionReachEvent<'a, TInEvent, TOutEvent> {
+    /// Returns the peer id the node that has been reached.
+    #[inline]
+    pub fn peer_id(&self) -> &PeerId {
+        &self.peer_id
+    }
+
+    /// Returns the reach attempt that reached the node.
+    #[inline]
+    pub fn reach_attempt_id(&self) -> ReachAttemptId {
+        ReachAttemptId(self.id)
+    }
+
+    /// Returns `true` if accepting this reached node would replace an existing connection to that
+    /// node.
+    #[inline]
+    pub fn would_replace(&self) -> bool {
+        self.parent.nodes.contains_key(&self.peer_id)
+    }
+
+    /// Accepts the new node.
+    pub fn accept(self) -> (CollectionNodeAccept, PeerId) {
+        // Set the state of the task to `Connected`.
+        let former_task_id = self.parent.nodes.insert(self.peer_id.clone(), self.id);
+        let _former_state = self.parent.tasks.insert(self.id, TaskState::Connected(self.peer_id.clone()));
+        debug_assert_eq!(_former_state, Some(TaskState::Pending));
+
+        // It is possible that we already have a task connected to the same peer. In this
+        // case, we need to emit a `NodeReplaced` event.
+        let ret_value = if let Some(former_task_id) = former_task_id {
+            self.parent.inner.task(former_task_id)
+                .expect("whenever we receive a TaskClosed event or close a node, we remove the \
+                         corresponding entry from self.nodes ; therefore all elements in \
+                         self.nodes are valid tasks in the HandledNodesTasks ; qed")
+                .close();
+            let _former_other_state = self.parent.tasks.remove(&former_task_id);
+            debug_assert_eq!(_former_other_state, Some(TaskState::Connected(self.peer_id.clone())));
+
+            // TODO: we unfortunatel yhave to clone the peer id here
+            (CollectionNodeAccept::ReplacedExisting, self.peer_id.clone())
+        } else {
+            // TODO: we unfortunately have to clone the peer id here
+            (CollectionNodeAccept::NewEntry, self.peer_id.clone())
+        };
+
+        // Don't run the destructor.
+        mem::forget(self);
+
+        ret_value
+    }
+
+    /// Denies the node.
+    ///
+    /// Has the same effect as dropping the event without accepting it.
+    #[inline]
+    pub fn deny(self) -> PeerId {
+        // TODO: we unfortunately have to clone the id here, in order to be explicit
+        let peer_id = self.peer_id.clone();
+        drop(self);  // Just to be explicit
+        peer_id
+    }
+}
+
+impl<'a, TInEvent, TOutEvent> Drop for CollectionReachEvent<'a, TInEvent, TOutEvent> {
+    fn drop(&mut self) {
+        let task_state = self.parent.tasks.remove(&self.id);
+        debug_assert!(if let Some(TaskState::Pending) = task_state { true } else { false });
+        self.parent.inner.task(self.id).unwrap().close();       // TODO: prove the unwrap
+    }
+}
+
+/// Outcome of accepting a node.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum CollectionNodeAccept {
+    /// We replaced an existing node.
+    ReplacedExisting,
+    /// We didn't replace anything existing.
+    NewEntry,
 }
 
 /// Identifier for a future that attempts to reach a node.
@@ -217,7 +293,11 @@ impl<TInEvent, TOutEvent> CollectionStream<TInEvent, TOutEvent> {
     }
 
     /// Provides an API similar to `Stream`, except that it cannot error.
-    pub fn poll(&mut self) -> Async<Option<CollectionEvent<TOutEvent>>> {
+    ///
+    /// > **Note**: we use a regular `poll` method instead of implementing `Stream` in order to
+    /// > remove the `Err` variant, but also because we want the `CollectionStream` to stay
+    /// > borrowed if necessary.
+    pub fn poll(&mut self) -> Async<Option<CollectionEvent<TInEvent, TOutEvent>>> {
         let item = match self.inner.poll() {
             Async::Ready(item) => item,
             Async::NotReady => return Async::NotReady,
@@ -263,34 +343,11 @@ impl<TInEvent, TOutEvent> CollectionStream<TInEvent, TOutEvent> {
                 }
             },
             Some(HandledNodesEvent::NodeReached { id, peer_id }) => {
-                // Set the state of the task to `Connected`.
-                let former_task_id = self.nodes.insert(peer_id.clone(), id);
-                let _former_state = self.tasks.insert(id, TaskState::Connected(peer_id.clone()));
-                debug_assert_eq!(_former_state, Some(TaskState::Pending));
-
-                // It is possible that we already have a task connected to the same peer. In this
-                // case, we need to emit a `NodeReplaced` event.
-                if let Some(former_task_id) = former_task_id {
-                    self.inner.task(former_task_id)
-                        .expect("whenever we receive a TaskClosed event or close a node, we \
-                                 remove the corresponding entry from self.nodes ; therefore all \
-                                 elements in self.nodes are valid tasks in the \
-                                 HandledNodesTasks ; qed")
-                        .close();
-                    let _former_other_state = self.tasks.remove(&former_task_id);
-                    debug_assert_eq!(_former_other_state, Some(TaskState::Connected(peer_id.clone())));
-
-                    Async::Ready(Some(CollectionEvent::NodeReplaced {
-                        peer_id,
-                        id: ReachAttemptId(id),
-                    }))
-
-                } else {
-                    Async::Ready(Some(CollectionEvent::NodeReached {
-                        peer_id,
-                        id: ReachAttemptId(id),
-                    }))
-                }
+                Async::Ready(Some(CollectionEvent::NodeReached(CollectionReachEvent {
+                    parent: self,
+                    id,
+                    peer_id,
+                })))
             },
             Some(HandledNodesEvent::NodeEvent { id, event }) => {
                 let peer_id = match self.tasks.get(&id) {
@@ -339,15 +396,5 @@ impl<'a, TInEvent> PeerMut<'a, TInEvent> {
         };
 
         self.inner.close();
-    }
-}
-
-impl<TInEvent, TOutEvent> Stream for CollectionStream<TInEvent, TOutEvent> {
-    type Item = CollectionEvent<TOutEvent>;
-    type Error = Void; // TODO: use ! once stable
-
-    #[inline]
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        Ok(self.poll())
     }
 }
