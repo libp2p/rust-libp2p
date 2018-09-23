@@ -25,9 +25,8 @@ use nodes::node::Substream;
 use nodes::handled_node_tasks::{HandledNodesEvent, HandledNodesTasks};
 use nodes::handled_node_tasks::{Task as HandledNodesTask, TaskId};
 use nodes::handled_node::NodeHandler;
-use std::collections::hash_map::Entry;
+use std::{collections::hash_map::Entry, fmt, mem};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use std::mem;
 use {Multiaddr, PeerId};
 
 // TODO: make generic over PeerId
@@ -55,7 +54,6 @@ enum TaskState {
 }
 
 /// Event that can happen on the `CollectionStream`.
-// TODO: implement Debug
 pub enum CollectionEvent<'a, TInEvent, TOutEvent> {
     /// A connection to a node has succeeded. You must use the provided event in order to accept
     /// the connection.
@@ -93,6 +91,43 @@ pub enum CollectionEvent<'a, TInEvent, TOutEvent> {
         /// The produced event.
         event: TOutEvent,
     },
+}
+
+impl<'a, TInEvent, TOutEvent> fmt::Debug for CollectionEvent<'a, TInEvent, TOutEvent>
+where TOutEvent: fmt::Debug
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match *self {
+            CollectionEvent::NodeReached(ref inner) => {
+                f.debug_tuple("CollectionEvent::NodeReached")
+                .field(inner)
+                .finish()
+            },
+            CollectionEvent::NodeClosed { ref peer_id } => {
+                f.debug_struct("CollectionEvent::NodeClosed")
+                .field("peer_id", peer_id)
+                .finish()
+            },
+            CollectionEvent::NodeError { ref peer_id, ref error } => {
+                f.debug_struct("CollectionEvent::NodeError")
+                .field("peer_id", peer_id)
+                .field("error", error)
+                .finish()
+            },
+            CollectionEvent::ReachError { ref id, ref error } => {
+                f.debug_struct("CollectionEvent::ReachError")
+                .field("id", id)
+                .field("error", error)
+                .finish()
+            },
+            CollectionEvent::NodeEvent { ref peer_id, ref event } => {
+                f.debug_struct("CollectionEvent::NodeEvent")
+                .field("peer_id", peer_id)
+                .field("event", event)
+                .finish()
+            },
+        }
+    }
 }
 
 /// Event that happens when we reach a node.
@@ -144,7 +179,7 @@ impl<'a, TInEvent, TOutEvent> CollectionReachEvent<'a, TInEvent, TOutEvent> {
             let _former_other_state = self.parent.tasks.remove(&former_task_id);
             debug_assert_eq!(_former_other_state, Some(TaskState::Connected(self.peer_id.clone())));
 
-            // TODO: we unfortunatel yhave to clone the peer id here
+            // TODO: we unfortunately have to clone the peer id here
             (CollectionNodeAccept::ReplacedExisting, self.peer_id.clone())
         } else {
             // TODO: we unfortunately have to clone the peer id here
@@ -166,6 +201,15 @@ impl<'a, TInEvent, TOutEvent> CollectionReachEvent<'a, TInEvent, TOutEvent> {
         let peer_id = self.peer_id.clone();
         drop(self);  // Just to be explicit
         peer_id
+    }
+}
+
+impl<'a, TInEvent, TOutEvent> fmt::Debug for CollectionReachEvent<'a, TInEvent, TOutEvent> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        f.debug_struct("CollectionReachEvent")
+            .field("peer_id", &self.peer_id)
+            .field("reach_attempt_id", &self.reach_attempt_id())
+            .finish()
     }
 }
 
