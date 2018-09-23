@@ -32,7 +32,6 @@ use {Multiaddr, PeerId};
 // TODO: make generic over PeerId
 
 /// Implementation of `Stream` that handles a collection of nodes.
-// TODO: implement Debug
 pub struct CollectionStream<TInEvent, TOutEvent> {
     /// Object that handles the tasks.
     inner: HandledNodesTasks<TInEvent, TOutEvent>,
@@ -42,6 +41,23 @@ pub struct CollectionStream<TInEvent, TOutEvent> {
     /// List of tasks and their state. If `Connected`, then a corresponding entry must be present
     /// in `nodes`.
     tasks: FnvHashMap<TaskId, TaskState>,
+}
+
+impl<TInEvent, TOutEvent> fmt::Debug for CollectionStream<TInEvent, TOutEvent> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        let mut list = f.debug_list();
+        for (id, task) in &self.tasks {
+            match *task {
+                TaskState::Pending => {
+                    list.entry(&format!("Pending({:?})", ReachAttemptId(*id)))
+                },
+                TaskState::Connected(ref peer_id) => {
+                    list.entry(&format!("Connected({:?})", peer_id))
+                }
+            };
+        }
+        list.finish()
+    }
 }
 
 /// State of a task.
