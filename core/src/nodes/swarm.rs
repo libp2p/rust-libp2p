@@ -642,6 +642,101 @@ where
                 other_reach_attempts. It is therefore guaranteed that we find back this ID in \
                 either of these two sets");
     }
+
+    /// Provides an API similar to `Stream`, except that it cannot error.
+    pub fn poll(&mut self) -> Async<Option<SwarmEvent<TTrans, TOutEvent>>>
+    where
+        TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
+        TTrans::Dial: Send + 'static,
+        TTrans::MultiaddrFuture: Future<Item = Multiaddr, Error = IoError> + Send + 'static,
+        TTrans::ListenerUpgrade: Send + 'static,
+        TMuxer: StreamMuxer + Send + Sync + 'static,
+        TMuxer::OutboundSubstream: Send,
+        TMuxer::Substream: Send,
+        TInEvent: Send + 'static,
+        TOutEvent: Send + 'static,
+        THandlerBuild: HandlerFactory<Handler = THandler>,
+        THandler: NodeHandler<Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
+        THandler::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
+    {
+        // Start by polling the listeners for events.
+        match self.listeners.poll() {
+            Async::NotReady => (),
+            Async::Ready(Some(ListenersEvent::Incoming {
+                upgrade,
+                listen_addr,
+            })) => {
+                let id = self.active_nodes.add_reach_attempt(upgrade, self.handler_build.new_handler());
+                self.other_reach_attempts.push((
+                    id,
+                    ConnectedPoint::Listener {
+                        listen_addr: listen_addr.clone(),
+                    },
+                ));
+                return Async::Ready(Some(SwarmEvent::IncomingConnection {
+                    listen_addr,
+                }));
+            }
+            Async::Ready(Some(ListenersEvent::Closed {
+                listen_addr,
+                listener,
+                result,
+            })) => {
+                return Async::Ready(Some(SwarmEvent::ListenerClosed {
+                    listen_addr,
+                    listener,
+                    result,
+                }));
+            }
+            Async::Ready(None) => unreachable!("The listeners stream never finishes"),
+        }
+
+        // Poll the existing nodes.
+        loop {
+            match self.active_nodes.poll() {
+                Async::NotReady => break,
+                Async::Ready(Some(CollectionEvent::NodeReached { peer_id, id })) => {
+                    let event = self.handle_node_reached(peer_id, id, false);
+                    return Async::Ready(Some(event));
+                }
+                Async::Ready(Some(CollectionEvent::NodeReplaced {
+                    peer_id,
+                    id,
+                })) => {
+                    let event = self.handle_node_reached(peer_id, id, true);
+                    return Async::Ready(Some(event));
+                }
+                Async::Ready(Some(CollectionEvent::ReachError { id, error })) => {
+                    if let Some(event) = self.handle_reach_error(id, error) {
+                        return Async::Ready(Some(event));
+                    }
+                }
+                Async::Ready(Some(CollectionEvent::NodeError {
+                    peer_id,
+                    error,
+                })) => {
+                    let address = self.connected_multiaddresses.remove(&peer_id);
+                    debug_assert!(!self.out_reach_attempts.contains_key(&peer_id));
+                    return Async::Ready(Some(SwarmEvent::NodeError {
+                        peer_id,
+                        address,
+                        error,
+                    }));
+                }
+                Async::Ready(Some(CollectionEvent::NodeClosed { peer_id })) => {
+                    let address = self.connected_multiaddresses.remove(&peer_id);
+                    debug_assert!(!self.out_reach_attempts.contains_key(&peer_id));
+                    return Async::Ready(Some(SwarmEvent::NodeClosed { peer_id, address }));
+                }
+                Async::Ready(Some(CollectionEvent::NodeEvent { peer_id, event })) => {
+                    return Async::Ready(Some(SwarmEvent::NodeEvent { peer_id, event }));
+                }
+                Async::Ready(None) => unreachable!("CollectionStream never ends"),
+            }
+        }
+
+        Async::NotReady
+    }
 }
 
 /// State of a peer in the system.
@@ -995,85 +1090,8 @@ where
     type Item = SwarmEvent<TTrans, TOutEvent>;
     type Error = Void; // TODO: use `!` once stable
 
+    #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        // Start by polling the listeners for events.
-        match self.listeners.poll() {
-            Ok(Async::NotReady) => (),
-            Ok(Async::Ready(Some(ListenersEvent::Incoming {
-                upgrade,
-                listen_addr,
-            }))) => {
-                let id = self.active_nodes.add_reach_attempt(upgrade, self.handler_build.new_handler());
-                self.other_reach_attempts.push((
-                    id,
-                    ConnectedPoint::Listener {
-                        listen_addr: listen_addr.clone(),
-                    },
-                ));
-                return Ok(Async::Ready(Some(SwarmEvent::IncomingConnection {
-                    listen_addr,
-                })));
-            }
-            Ok(Async::Ready(Some(ListenersEvent::Closed {
-                listen_addr,
-                listener,
-                result,
-            }))) => {
-                return Ok(Async::Ready(Some(SwarmEvent::ListenerClosed {
-                    listen_addr,
-                    listener,
-                    result,
-                })));
-            }
-            Ok(Async::Ready(None)) => unreachable!("The listeners stream never finishes"),
-            Err(_) => unreachable!("The listeners stream never errors"), // TODO: remove variant
-        }
-
-        // Poll the existing nodes.
-        loop {
-            match self.active_nodes.poll() {
-                Ok(Async::NotReady) => break,
-                Ok(Async::Ready(Some(CollectionEvent::NodeReached { peer_id, id }))) => {
-                    let event = self.handle_node_reached(peer_id, id, false);
-                    return Ok(Async::Ready(Some(event)));
-                }
-                Ok(Async::Ready(Some(CollectionEvent::NodeReplaced {
-                    peer_id,
-                    id,
-                }))) => {
-                    let event = self.handle_node_reached(peer_id, id, true);
-                    return Ok(Async::Ready(Some(event)));
-                }
-                Ok(Async::Ready(Some(CollectionEvent::ReachError { id, error }))) => {
-                    if let Some(event) = self.handle_reach_error(id, error) {
-                        return Ok(Async::Ready(Some(event)));
-                    }
-                }
-                Ok(Async::Ready(Some(CollectionEvent::NodeError {
-                    peer_id,
-                    error,
-                }))) => {
-                    let address = self.connected_multiaddresses.remove(&peer_id);
-                    debug_assert!(!self.out_reach_attempts.contains_key(&peer_id));
-                    return Ok(Async::Ready(Some(SwarmEvent::NodeError {
-                        peer_id,
-                        address,
-                        error,
-                    })));
-                }
-                Ok(Async::Ready(Some(CollectionEvent::NodeClosed { peer_id }))) => {
-                    let address = self.connected_multiaddresses.remove(&peer_id);
-                    debug_assert!(!self.out_reach_attempts.contains_key(&peer_id));
-                    return Ok(Async::Ready(Some(SwarmEvent::NodeClosed { peer_id, address })));
-                }
-                Ok(Async::Ready(Some(CollectionEvent::NodeEvent { peer_id, event }))) => {
-                    return Ok(Async::Ready(Some(SwarmEvent::NodeEvent { peer_id, event })));
-                }
-                Ok(Async::Ready(None)) => unreachable!("CollectionStream never ends"),
-                Err(_) => unreachable!("CollectionStream never errors"),
-            }
-        }
-
-        Ok(Async::NotReady)
+        Ok(self.poll())
     }
 }

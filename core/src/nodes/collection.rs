@@ -215,6 +215,100 @@ impl<TInEvent, TOutEvent> CollectionStream<TInEvent, TOutEvent> {
     pub fn connections(&self) -> impl Iterator<Item = &PeerId> {
         self.nodes.keys()
     }
+
+    /// Provides an API similar to `Stream`, except that it cannot error.
+    pub fn poll(&mut self) -> Async<Option<CollectionEvent<TOutEvent>>> {
+        let item = match self.inner.poll() {
+            Async::Ready(item) => item,
+            Async::NotReady => return Async::NotReady,
+        };
+
+        match item {
+            Some(HandledNodesEvent::TaskClosed { id, result }) => {
+                match (self.tasks.remove(&id), result) {
+                    (Some(TaskState::Pending), Err(err)) => {
+                        Async::Ready(Some(CollectionEvent::ReachError {
+                            id: ReachAttemptId(id),
+                            error: err,
+                        }))
+                    },
+                    (Some(TaskState::Pending), Ok(())) => {
+                        // TODO: this variant shouldn't happen ; prove this
+                        Async::Ready(Some(CollectionEvent::ReachError {
+                            id: ReachAttemptId(id),
+                            error: IoError::new(IoErrorKind::Other, "couldn't reach the node"),
+                        }))
+                    },
+                    (Some(TaskState::Connected(peer_id)), Ok(())) => {
+                        let _node_task_id = self.nodes.remove(&peer_id);
+                        debug_assert_eq!(_node_task_id, Some(id));
+                        Async::Ready(Some(CollectionEvent::NodeClosed {
+                            peer_id,
+                        }))
+                    },
+                    (Some(TaskState::Connected(peer_id)), Err(err)) => {
+                        let _node_task_id = self.nodes.remove(&peer_id);
+                        debug_assert_eq!(_node_task_id, Some(id));
+                        Async::Ready(Some(CollectionEvent::NodeError {
+                            peer_id,
+                            error: err,
+                        }))
+                    },
+                    (None, _) => {
+                        panic!("self.tasks is always kept in sync with the tasks in self.inner ; \
+                                when we add a task in self.inner we add a corresponding entry in \
+                                self.tasks, and remove the entry only when the task is closed ; \
+                                qed")
+                    },
+                }
+            },
+            Some(HandledNodesEvent::NodeReached { id, peer_id }) => {
+                // Set the state of the task to `Connected`.
+                let former_task_id = self.nodes.insert(peer_id.clone(), id);
+                let _former_state = self.tasks.insert(id, TaskState::Connected(peer_id.clone()));
+                debug_assert_eq!(_former_state, Some(TaskState::Pending));
+
+                // It is possible that we already have a task connected to the same peer. In this
+                // case, we need to emit a `NodeReplaced` event.
+                if let Some(former_task_id) = former_task_id {
+                    self.inner.task(former_task_id)
+                        .expect("whenever we receive a TaskClosed event or close a node, we \
+                                 remove the corresponding entry from self.nodes ; therefore all \
+                                 elements in self.nodes are valid tasks in the \
+                                 HandledNodesTasks ; qed")
+                        .close();
+                    let _former_other_state = self.tasks.remove(&former_task_id);
+                    debug_assert_eq!(_former_other_state, Some(TaskState::Connected(peer_id.clone())));
+
+                    Async::Ready(Some(CollectionEvent::NodeReplaced {
+                        peer_id,
+                        id: ReachAttemptId(id),
+                    }))
+
+                } else {
+                    Async::Ready(Some(CollectionEvent::NodeReached {
+                        peer_id,
+                        id: ReachAttemptId(id),
+                    }))
+                }
+            },
+            Some(HandledNodesEvent::NodeEvent { id, event }) => {
+                let peer_id = match self.tasks.get(&id) {
+                    Some(TaskState::Connected(peer_id)) => peer_id.clone(),
+                    _ => panic!("we can only receive NodeEvent events from a task after we \
+                                 received a corresponding NodeReached event from that same task ; \
+                                 when we receive a NodeReached event, we ensure that the entry in \
+                                 self.tasks is switched to the Connected state ; qed"),
+                };
+
+                Async::Ready(Some(CollectionEvent::NodeEvent {
+                    peer_id,
+                    event,
+                }))
+            }
+            None => Async::Ready(None),
+        }
+    }
 }
 
 /// Access to a peer in the collection.
@@ -252,93 +346,8 @@ impl<TInEvent, TOutEvent> Stream for CollectionStream<TInEvent, TOutEvent> {
     type Item = CollectionEvent<TOutEvent>;
     type Error = Void; // TODO: use ! once stable
 
+    #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let item = try_ready!(self.inner.poll());
-
-        match item {
-            Some(HandledNodesEvent::TaskClosed { id, result }) => {
-                match (self.tasks.remove(&id), result) {
-                    (Some(TaskState::Pending), Err(err)) => {
-                        Ok(Async::Ready(Some(CollectionEvent::ReachError {
-                            id: ReachAttemptId(id),
-                            error: err,
-                        })))
-                    },
-                    (Some(TaskState::Pending), Ok(())) => {
-                        // TODO: this variant shouldn't happen ; prove this
-                        Ok(Async::Ready(Some(CollectionEvent::ReachError {
-                            id: ReachAttemptId(id),
-                            error: IoError::new(IoErrorKind::Other, "couldn't reach the node"),
-                        })))
-                    },
-                    (Some(TaskState::Connected(peer_id)), Ok(())) => {
-                        let _node_task_id = self.nodes.remove(&peer_id);
-                        debug_assert_eq!(_node_task_id, Some(id));
-                        Ok(Async::Ready(Some(CollectionEvent::NodeClosed {
-                            peer_id,
-                        })))
-                    },
-                    (Some(TaskState::Connected(peer_id)), Err(err)) => {
-                        let _node_task_id = self.nodes.remove(&peer_id);
-                        debug_assert_eq!(_node_task_id, Some(id));
-                        Ok(Async::Ready(Some(CollectionEvent::NodeError {
-                            peer_id,
-                            error: err,
-                        })))
-                    },
-                    (None, _) => {
-                        panic!("self.tasks is always kept in sync with the tasks in self.inner ; \
-                                when we add a task in self.inner we add a corresponding entry in \
-                                self.tasks, and remove the entry only when the task is closed ; \
-                                qed")
-                    },
-                }
-            },
-            Some(HandledNodesEvent::NodeReached { id, peer_id }) => {
-                // Set the state of the task to `Connected`.
-                let former_task_id = self.nodes.insert(peer_id.clone(), id);
-                let _former_state = self.tasks.insert(id, TaskState::Connected(peer_id.clone()));
-                debug_assert_eq!(_former_state, Some(TaskState::Pending));
-
-                // It is possible that we already have a task connected to the same peer. In this
-                // case, we need to emit a `NodeReplaced` event.
-                if let Some(former_task_id) = former_task_id {
-                    self.inner.task(former_task_id)
-                        .expect("whenever we receive a TaskClosed event or close a node, we \
-                                 remove the corresponding entry from self.nodes ; therefore all \
-                                 elements in self.nodes are valid tasks in the \
-                                 HandledNodesTasks ; qed")
-                        .close();
-                    let _former_other_state = self.tasks.remove(&former_task_id);
-                    debug_assert_eq!(_former_other_state, Some(TaskState::Connected(peer_id.clone())));
-
-                    Ok(Async::Ready(Some(CollectionEvent::NodeReplaced {
-                        peer_id,
-                        id: ReachAttemptId(id),
-                    })))
-
-                } else {
-                    Ok(Async::Ready(Some(CollectionEvent::NodeReached {
-                        peer_id,
-                        id: ReachAttemptId(id),
-                    })))
-                }
-            },
-            Some(HandledNodesEvent::NodeEvent { id, event }) => {
-                let peer_id = match self.tasks.get(&id) {
-                    Some(TaskState::Connected(peer_id)) => peer_id.clone(),
-                    _ => panic!("we can only receive NodeEvent events from a task after we \
-                                 received a corresponding NodeReached event from that same task ; \
-                                 when we receive a NodeReached event, we ensure that the entry in \
-                                 self.tasks is switched to the Connected state ; qed"),
-                };
-
-                Ok(Async::Ready(Some(CollectionEvent::NodeEvent {
-                    peer_id,
-                    event,
-                })))
-            }
-            None => Ok(Async::Ready(None)),
-        }
+        Ok(self.poll())
     }
 }
