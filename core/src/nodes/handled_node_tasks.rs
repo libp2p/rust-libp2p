@@ -26,7 +26,7 @@ use nodes::handled_node::{HandledNode, NodeHandler};
 use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, OccupiedEntry};
 use std::io::Error as IoError;
-use std::mem;
+use std::{fmt, mem};
 use tokio_executor;
 use void::Void;
 use {Multiaddr, PeerId};
@@ -69,6 +69,14 @@ pub struct HandledNodesTasks<TInEvent, TOutEvent> {
     events_tx: mpsc::UnboundedSender<(InToExtMessage<TOutEvent>, TaskId)>,
     /// Receiver side for the events.
     events_rx: mpsc::UnboundedReceiver<(InToExtMessage<TOutEvent>, TaskId)>,
+}
+
+impl<TInEvent, TOutEvent> fmt::Debug for HandledNodesTasks<TInEvent, TOutEvent> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        f.debug_list()
+            .entries(self.tasks.keys().cloned())
+            .finish()
+    }
 }
 
 /// Event that can happen on the `HandledNodesTasks`.
@@ -273,6 +281,14 @@ impl<'a, TInEvent> Task<'a, TInEvent> {
     }
 }
 
+impl<'a, TInEvent> fmt::Debug for Task<'a, TInEvent> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        f.debug_tuple("Task")
+            .field(&self.id())
+            .finish()
+    }
+}
+
 impl<TInEvent, TOutEvent> Stream for HandledNodesTasks<TInEvent, TOutEvent> {
     type Item = HandledNodesEvent<TOutEvent>;
     type Error = Void; // TODO: use ! once stable
@@ -284,6 +300,7 @@ impl<TInEvent, TOutEvent> Stream for HandledNodesTasks<TInEvent, TOutEvent> {
 }
 
 /// Message to transmit from a task to the public API.
+#[derive(Debug)]
 enum InToExtMessage<TOutEvent> {
     /// A connection to a node has succeeded.
     NodeReached(PeerId),
