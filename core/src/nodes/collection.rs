@@ -70,7 +70,7 @@ enum TaskState {
 }
 
 /// Event that can happen on the `CollectionStream`.
-pub enum CollectionEvent<'a, TInEvent, TOutEvent> {
+pub enum CollectionEvent<'a, TInEvent:'a , TOutEvent: 'a> {
     /// A connection to a node has succeeded. You must use the provided event in order to accept
     /// the connection.
     NodeReached(CollectionReachEvent<'a, TInEvent, TOutEvent>),
