@@ -27,7 +27,7 @@ use nodes::handled_node_tasks::{Task as HandledNodesTask, TaskId};
 use nodes::handled_node::NodeHandler;
 use std::{collections::hash_map::Entry, fmt, mem};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use {Multiaddr, PeerId};
+use PeerId;
 
 // TODO: make generic over PeerId
 
@@ -265,11 +265,10 @@ impl<TInEvent, TOutEvent> CollectionStream<TInEvent, TOutEvent> {
     ///
     /// This method spawns a task dedicated to resolving this future and processing the node's
     /// events.
-    pub fn add_reach_attempt<TFut, TMuxer, TAddrFut, THandler>(&mut self, future: TFut, handler: THandler)
+    pub fn add_reach_attempt<TFut, TMuxer, THandler>(&mut self, future: TFut, handler: THandler)
         -> ReachAttemptId
     where
-        TFut: Future<Item = ((PeerId, TMuxer), TAddrFut), Error = IoError> + Send + 'static,
-        TAddrFut: Future<Item = Multiaddr, Error = IoError> + Send + 'static,
+        TFut: Future<Item = (PeerId, TMuxer), Error = IoError> + Send + 'static,
         THandler: NodeHandler<Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,

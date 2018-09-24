@@ -181,7 +181,7 @@ fn run_listener(opts: ListenerOpts) -> Result<(), Box<Error>> {
                 }
                 libp2p::relay::Output::Stream(socket) => {
                     Either::B(upgrade::apply(socket, echo, endpoint, addr)
-                        .map(|(out, addr)| (Either::B(out), Either::B(addr))))
+                        .map(|out| Either::B(out)))
                 }
             }
         });

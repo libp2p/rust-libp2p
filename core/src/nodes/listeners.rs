@@ -60,6 +60,8 @@ where
         upgrade: TTrans::ListenerUpgrade,
         /// Address of the listener which received the connection.
         listen_addr: Multiaddr,
+        /// Address used to send back data to the incoming client.
+        send_back_addr: Multiaddr,
     },
 
     /// A listener has closed, either gracefully or with an error.
@@ -144,12 +146,13 @@ where
                 Ok(Async::NotReady) => {
                     self.listeners.push(listener);
                 }
-                Ok(Async::Ready(Some(upgrade))) => {
+                Ok(Async::Ready(Some((upgrade, send_back_addr)))) => {
                     let listen_addr = listener.address.clone();
                     self.listeners.push(listener);
                     return Async::Ready(Some(ListenersEvent::Incoming {
                         upgrade,
                         listen_addr,
+                        send_back_addr,
                     }));
                 }
                 Ok(Async::Ready(None)) => {
@@ -247,8 +250,9 @@ mod tests {
             .map_err(|(err, _)| err)
             .and_then(|(event, _)| {
                 match event {
-                    Some(ListenersEvent::Incoming { listen_addr, upgrade }) => {
+                    Some(ListenersEvent::Incoming { listen_addr, upgrade, send_back_addr }) => {
                         assert_eq!(listen_addr, "/memory".parse().unwrap());
+                        assert_eq!(send_back_addr, "/memory".parse().unwrap());
                         upgrade.map(|_| ()).map_err(|_| panic!())
                     },
                     _ => panic!()

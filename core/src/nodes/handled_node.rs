@@ -22,7 +22,6 @@ use muxing::StreamMuxer;
 use nodes::node::{NodeEvent, NodeStream, Substream};
 use futures::prelude::*;
 use std::io::Error as IoError;
-use Multiaddr;
 
 /// Handler for the substreams of a node.
 ///
@@ -52,9 +51,6 @@ pub trait NodeHandler<TSubstream> {
     /// Indicates the handler that an outbound substream failed to open because the outbound
     /// part of the muxer has been closed.
     fn inject_outbound_closed(&mut self, user_data: Self::OutboundOpenInfo);
-
-    /// Indicates the handler that the multiaddr future has resolved.
-    fn inject_multiaddr(&mut self, multiaddr: Result<Multiaddr, IoError>);
 
     /// Injects an event coming from the outside in the handler.
     fn inject_event(&mut self, event: Self::InEvent);
@@ -119,28 +115,27 @@ impl<TOutboundOpenInfo, TCustom> NodeHandlerEvent<TOutboundOpenInfo, TCustom> {
 
 /// A node combined with an implementation of `NodeHandler`.
 // TODO: impl Debug
-pub struct HandledNode<TMuxer, TAddrFut, THandler>
+pub struct HandledNode<TMuxer, THandler>
 where
     TMuxer: StreamMuxer,
     THandler: NodeHandler<Substream<TMuxer>>,
 {
     /// Node that handles the muxing. Can be `None` if the handled node is shutting down.
-    node: Option<NodeStream<TMuxer, TAddrFut, THandler::OutboundOpenInfo>>,
+    node: Option<NodeStream<TMuxer, THandler::OutboundOpenInfo>>,
     /// Handler that processes substreams.
     handler: THandler,
 }
 
-impl<TMuxer, TAddrFut, THandler> HandledNode<TMuxer, TAddrFut, THandler>
+impl<TMuxer, THandler> HandledNode<TMuxer, THandler>
 where
     TMuxer: StreamMuxer,
     THandler: NodeHandler<Substream<TMuxer>>,
-    TAddrFut: Future<Item = Multiaddr, Error = IoError>,
 {
     /// Builds a new `HandledNode`.
     #[inline]
-    pub fn new(muxer: TMuxer, multiaddr_future: TAddrFut, handler: THandler) -> Self {
+    pub fn new(muxer: TMuxer, handler: THandler) -> Self {
         HandledNode {
-            node: Some(NodeStream::new(muxer, multiaddr_future)),
+            node: Some(NodeStream::new(muxer)),
             handler,
         }
     }
@@ -188,11 +183,10 @@ where
     }
 }
 
-impl<TMuxer, TAddrFut, THandler> Stream for HandledNode<TMuxer, TAddrFut, THandler>
+impl<TMuxer, THandler> Stream for HandledNode<TMuxer, THandler>
 where
     TMuxer: StreamMuxer,
     THandler: NodeHandler<Substream<TMuxer>>,
-    TAddrFut: Future<Item = Multiaddr, Error = IoError>,
 {
     type Item = THandler::OutEvent;
     type Error = IoError;
@@ -217,9 +211,6 @@ where
                         // Breaking from the loop without putting back the node.
                         self.handler.shutdown();
                         break;
-                    },
-                    Ok(Async::Ready(Some(NodeEvent::Multiaddr(result)))) => {
-                        self.handler.inject_multiaddr(result);
                     },
                     Ok(Async::Ready(Some(NodeEvent::OutboundClosed { user_data }))) => {
                         self.handler.inject_outbound_closed(user_data);
@@ -267,7 +258,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::{future, task};
+    use futures::task;
     use muxing::StreamMuxer;
     use tokio::runtime::current_thread;
 
@@ -312,7 +303,6 @@ mod tests {
                 assert!(!self.substream_attempt_cancelled);
                 self.substream_attempt_cancelled = true;
             }
-            fn inject_multiaddr(&mut self, _: Result<Multiaddr, IoError>) {}
             fn inject_event(&mut self, _: Self::InEvent) { panic!() }
             fn shutdown(&mut self) {
                 assert!(self.inbound_closed);
@@ -340,7 +330,7 @@ mod tests {
             }
         }
 
-        let handled = HandledNode::new(InstaCloseMuxer, future::empty(), Handler {
+        let handled = HandledNode::new(InstaCloseMuxer, Handler {
             did_substream_attempt: false,
             inbound_closed: false,
             substream_attempt_cancelled: false,

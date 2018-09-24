@@ -29,7 +29,7 @@ use std::io::Error as IoError;
 use std::{fmt, mem};
 use tokio_executor;
 use void::Void;
-use {Multiaddr, PeerId};
+use PeerId;
 
 // TODO: make generic over PeerId
 
@@ -133,11 +133,10 @@ impl<TInEvent, TOutEvent> HandledNodesTasks<TInEvent, TOutEvent> {
     ///
     /// This method spawns a task dedicated to resolving this future and processing the node's
     /// events.
-    pub fn add_reach_attempt<TFut, TMuxer, TAddrFut, THandler>(&mut self, future: TFut, handler: THandler)
+    pub fn add_reach_attempt<TFut, TMuxer, THandler>(&mut self, future: TFut, handler: THandler)
         -> TaskId
     where
-        TFut: Future<Item = ((PeerId, TMuxer), TAddrFut), Error = IoError> + Send + 'static,
-        TAddrFut: Future<Item = Multiaddr, Error = IoError> + Send + 'static,
+        TFut: Future<Item = (PeerId, TMuxer), Error = IoError> + Send + 'static,
         THandler: NodeHandler<Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
@@ -312,7 +311,7 @@ enum InToExtMessage<TOutEvent> {
 
 /// Implementation of `Future` that handles a single node, and all the communications between
 /// the various components of the `HandledNodesTasks`.
-struct NodeTask<TFut, TMuxer, TAddrFut, THandler, TInEvent, TOutEvent>
+struct NodeTask<TFut, TMuxer, THandler, TInEvent, TOutEvent>
 where
     TMuxer: StreamMuxer,
     THandler: NodeHandler<Substream<TMuxer>>,
@@ -322,12 +321,12 @@ where
     /// Receiving end for events sent from the main `HandledNodesTasks`.
     in_events_rx: stream::Fuse<mpsc::UnboundedReceiver<TInEvent>>,
     /// Inner state of the `NodeTask`.
-    inner: NodeTaskInner<TFut, TMuxer, TAddrFut, THandler, TInEvent>,
+    inner: NodeTaskInner<TFut, TMuxer, THandler, TInEvent>,
     /// Identifier of the attempt.
     id: TaskId,
 }
 
-enum NodeTaskInner<TFut, TMuxer, TAddrFut, THandler, TInEvent>
+enum NodeTaskInner<TFut, TMuxer, THandler, TInEvent>
 where
     TMuxer: StreamMuxer,
     THandler: NodeHandler<Substream<TMuxer>>,
@@ -345,18 +344,17 @@ where
     },
 
     /// Fully functional node.
-    Node(HandledNode<TMuxer, TAddrFut, THandler>),
+    Node(HandledNode<TMuxer, THandler>),
 
     /// A panic happened while polling.
     Poisoned,
 }
 
-impl<TFut, TMuxer, TAddrFut, THandler, TInEvent, TOutEvent> Future for
-    NodeTask<TFut, TMuxer, TAddrFut, THandler, TInEvent, TOutEvent>
+impl<TFut, TMuxer, THandler, TInEvent, TOutEvent> Future for
+    NodeTask<TFut, TMuxer, THandler, TInEvent, TOutEvent>
 where
     TMuxer: StreamMuxer,
-    TFut: Future<Item = ((PeerId, TMuxer), TAddrFut), Error = IoError>,
-    TAddrFut: Future<Item = Multiaddr, Error = IoError>,
+    TFut: Future<Item = (PeerId, TMuxer), Error = IoError>,
     THandler: NodeHandler<Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent>,
 {
     type Item = ();
@@ -379,9 +377,9 @@ where
 
                     // Check whether dialing succeeded.
                     match future.poll() {
-                        Ok(Async::Ready(((peer_id, muxer), addr_fut))) => {
+                        Ok(Async::Ready((peer_id, muxer))) => {
                             let event = InToExtMessage::NodeReached(peer_id);
-                            let mut node = HandledNode::new(muxer, addr_fut, handler);
+                            let mut node = HandledNode::new(muxer, handler);
                             for event in events_buffer {
                                 node.inject_event(event);
                             }

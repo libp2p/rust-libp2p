@@ -50,9 +50,8 @@ where
     T::Dial: Send,
     T::Listener: Send,
     T::ListenerUpgrade: Send,
-    T::MultiaddrFuture: Send,
     T::Output: Send + AsyncRead + AsyncWrite,
-    C: ConnectionUpgrade<T::Output, T::MultiaddrFuture> + Send + 'a,
+    C: ConnectionUpgrade<T::Output> + Send + 'a,
     C::NamesIter: Send,
     C::Future: Send,
     C::UpgradeIdentifier: Send,
@@ -72,7 +71,7 @@ where
     pub fn dial(
         self,
         addr: Multiaddr,
-    ) -> Result<Box<Future<Item = (C::Output, C::MultiaddrFuture), Error = IoError> + Send + 'a>, (Self, Multiaddr)>
+    ) -> Result<Box<Future<Item = C::Output, Error = IoError> + Send + 'a>, (Self, Multiaddr)>
     where
         C::NamesIter: Clone, // TODO: not elegant
     {
@@ -92,8 +91,8 @@ where
 
         let future = dialed_fut
             // Try to negotiate the protocol.
-            .and_then(move |(connection, client_addr)| {
-                apply(connection, upgrade, Endpoint::Dialer, client_addr)
+            .and_then(move |connection| {
+                apply(connection, upgrade, Endpoint::Dialer, &addr)
             });
 
         Ok(Box::new(future))
@@ -108,7 +107,7 @@ where
         self,
     ) -> Box<
         Future<
-                Item = Box<Future<Item = (C::Output, C::MultiaddrFuture), Error = IoError> + Send + 'a>,
+                Item = (Box<Future<Item = C::Output, Error = IoError> + Send + 'a>, Multiaddr),
                 Error = IoError,
             >
             + Send + 'a,
@@ -122,13 +121,14 @@ where
     {
         let upgrade = self.upgrade;
 
-        let future = self.transports.next_incoming().map(|future| {
+        let future = self.transports.next_incoming().map(|(future, client_addr)| {
             // Try to negotiate the protocol.
-            let future = future.and_then(move |(connection, client_addr)| {
-                apply(connection, upgrade, Endpoint::Listener, client_addr)
+            let addr = client_addr.clone();
+            let future = future.and_then(move |connection| {
+                apply(connection, upgrade, Endpoint::Listener, &addr)
             });
 
-            Box::new(future) as Box<Future<Item = _, Error = _> + Send>
+            (Box::new(future) as Box<Future<Item = _, Error = _> + Send>, client_addr)
         });
 
         Box::new(future) as Box<_>
@@ -147,7 +147,7 @@ where
         (
             Box<
                 Stream<
-                        Item = Box<Future<Item = (C::Output, C::MultiaddrFuture), Error = IoError> + Send + 'a>,
+                        Item = (Box<Future<Item = C::Output, Error = IoError> + Send + 'a>, Multiaddr),
                         Error = IoError,
                     >
                     + Send
@@ -179,15 +179,16 @@ where
         // Note that failing to negotiate a protocol will never produce a future with an error.
         // Instead the `stream` will produce `Ok(Err(...))`.
         // `stream` can only produce an `Err` if `listening_stream` produces an `Err`.
-        let stream = listening_stream.map(move |connection| {
+        let stream = listening_stream.map(move |(connection, client_addr)| {
             let upgrade = upgrade.clone();
+            let addr = client_addr.clone();
             let connection = connection
                 // Try to negotiate the protocol.
-                .and_then(move |(connection, client_addr)| {
-                    apply(connection, upgrade, Endpoint::Listener, client_addr)
+                .and_then(move |connection| {
+                    apply(connection, upgrade, Endpoint::Listener, &addr)
                 });
 
-            Box::new(connection) as Box<_>
+            (Box::new(connection) as Box<_>, client_addr)
         });
 
         Ok((Box::new(stream), new_addr))
@@ -200,19 +201,16 @@ where
     T::Dial: Send,
     T::Listener: Send,
     T::ListenerUpgrade: Send,
-    T::MultiaddrFuture: Send,
     T::Output: Send + AsyncRead + AsyncWrite,
-    C: ConnectionUpgrade<T::Output, T::MultiaddrFuture> + Clone + Send + 'static,
-    C::MultiaddrFuture: Future<Item = Multiaddr, Error = IoError>,
+    C: ConnectionUpgrade<T::Output> + Clone + Send + 'static,
     C::NamesIter: Clone + Send,
     C::Future: Send,
     C::UpgradeIdentifier: Send,
 {
     type Output = C::Output;
-    type MultiaddrFuture = C::MultiaddrFuture;
-    type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError> + Send>;
-    type ListenerUpgrade = Box<Future<Item = (C::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
-    type Dial = Box<Future<Item = (C::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
+    type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError> + Send>;
+    type ListenerUpgrade = Box<Future<Item = C::Output, Error = IoError> + Send>;
+    type Dial = Box<Future<Item = C::Output, Error = IoError> + Send>;
 
     #[inline]
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -236,18 +234,16 @@ where
     T::Dial: Send,
     T::Listener: Send,
     T::ListenerUpgrade: Send,
-    T::MultiaddrFuture: Send,
     T::Output: Send + AsyncRead + AsyncWrite,
     T::Incoming: Send,
     T::IncomingUpgrade: Send,
-    C: ConnectionUpgrade<T::Output, T::MultiaddrFuture> + Clone + Send + 'static,
-    C::MultiaddrFuture: Future<Item = Multiaddr, Error = IoError>,
+    C: ConnectionUpgrade<T::Output> + Clone + Send + 'static,
     C::NamesIter: Clone + Send,
     C::Future: Send,
     C::UpgradeIdentifier: Send,
 {
-    type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError> + Send>;
-    type IncomingUpgrade = Box<Future<Item = (C::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
+    type Incoming = Box<Future<Item = (Self::IncomingUpgrade, Multiaddr), Error = IoError> + Send>;
+    type IncomingUpgrade = Box<Future<Item = C::Output, Error = IoError> + Send>;
 
     #[inline]
     fn next_incoming(self) -> Self::Incoming {

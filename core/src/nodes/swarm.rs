@@ -93,12 +93,16 @@ where
     IncomingConnection {
         /// Address of the listener which received the connection.
         listen_addr: Multiaddr,
+        /// Address used to send back data to the incoming connection.
+        send_back_addr: Multiaddr,
     },
 
     /// An error happened when negotiating a new connection.
     IncomingConnectionError {
         /// Address of the listener which received the connection.
         listen_addr: Multiaddr,
+        /// Address used to send back data to the incoming connection.
+        send_back_addr: Multiaddr,
         /// The error that happened.
         error: IoError,
     },
@@ -208,6 +212,8 @@ pub enum ConnectedPoint {
     Listener {
         /// Address of the listener that received the connection.
         listen_addr: Multiaddr,
+        /// Address to send back data to the remote.
+        send_back_addr: Multiaddr,
     },
 }
 
@@ -344,7 +350,6 @@ where
     where
         TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
         TTrans::Dial: Send + 'static,
-        TTrans::MultiaddrFuture: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TMuxer::Substream: Send,
@@ -430,7 +435,6 @@ where
     where
         TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
         TTrans::Dial: Send + 'static,
-        TTrans::MultiaddrFuture: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TMuxer::Substream: Send,
@@ -442,7 +446,7 @@ where
             Err((_, addr)) => {
                 let msg = format!("unsupported multiaddr {}", addr);
                 let fut = future::err(IoError::new(IoErrorKind::Other, msg));
-                self.active_nodes.add_reach_attempt::<_, _, future::FutureResult<Multiaddr, IoError>, _>(fut, self.handler_build.new_handler())
+                self.active_nodes.add_reach_attempt(fut, self.handler_build.new_handler())
             },
         };
 
@@ -463,7 +467,6 @@ where
     where
         TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
         TTrans::Dial: Send + 'static,
-        TTrans::MultiaddrFuture: Future<Item = Multiaddr, Error = IoError> + Send + 'static,
         TTrans::ListenerUpgrade: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
@@ -480,16 +483,19 @@ where
             Async::Ready(Some(ListenersEvent::Incoming {
                 upgrade,
                 listen_addr,
+                send_back_addr,
             })) => {
                 let id = self.active_nodes.add_reach_attempt(upgrade, self.handler_build.new_handler());
                 self.reach_attempts.other_reach_attempts.push((
                     id,
                     ConnectedPoint::Listener {
                         listen_addr: listen_addr.clone(),
+                        send_back_addr: send_back_addr.clone(),
                     },
                 ));
                 return Async::Ready(Some(SwarmEvent::IncomingConnection {
                     listen_addr,
+                    send_back_addr,
                 }));
             }
             Async::Ready(Some(ListenersEvent::Closed {
@@ -591,7 +597,6 @@ fn handle_node_reached<TTrans, TMuxer, TInEvent, TOutEvent>(
 where
     TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
     TTrans::Dial: Send + 'static,
-    TTrans::MultiaddrFuture: Send + 'static,
     TMuxer: StreamMuxer + Send + Sync + 'static,
     TMuxer::OutboundSubstream: Send,
     TMuxer::Substream: Send,
@@ -769,8 +774,8 @@ where TTrans: Transport
                     error,
                 });
             }
-            ConnectedPoint::Listener { listen_addr } => {
-                return (Default::default(), SwarmEvent::IncomingConnectionError { listen_addr, error });
+            ConnectedPoint::Listener { listen_addr, send_back_addr } => {
+                return (Default::default(), SwarmEvent::IncomingConnectionError { listen_addr, send_back_addr, error });
             }
         }
     }
@@ -849,7 +854,6 @@ where
     where
         TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
         TTrans::Dial: Send + 'static,
-        TTrans::MultiaddrFuture: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TMuxer::Substream: Send,
@@ -870,7 +874,6 @@ where
         TFn: FnOnce(&PeerId) -> Multiaddr,
         TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
         TTrans::Dial: Send + 'static,
-        TTrans::MultiaddrFuture: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TMuxer::Substream: Send,
@@ -1036,7 +1039,6 @@ where
     where
         TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
         TTrans::Dial: Send + 'static,
-        TTrans::MultiaddrFuture: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TMuxer::Substream: Send,
@@ -1060,7 +1062,6 @@ where
         TIter: IntoIterator<Item = Multiaddr>,
         TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
         TTrans::Dial: Send + 'static,
-        TTrans::MultiaddrFuture: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TMuxer::Substream: Send,
@@ -1082,7 +1083,6 @@ where
     where
         TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
         TTrans::Dial: Send + 'static,
-        TTrans::MultiaddrFuture: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TMuxer::Substream: Send,
@@ -1108,7 +1108,6 @@ impl<TTrans, TMuxer, TInEvent, TOutEvent, THandler, THandlerBuild> Stream for
 where
     TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
     TTrans::Dial: Send + 'static,
-    TTrans::MultiaddrFuture: Future<Item = Multiaddr, Error = IoError> + Send + 'static,
     TTrans::ListenerUpgrade: Send + 'static,
     TMuxer: StreamMuxer + Send + Sync + 'static,
     TMuxer::OutboundSubstream: Send,
