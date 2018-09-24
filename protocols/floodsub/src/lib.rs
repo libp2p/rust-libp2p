@@ -260,6 +260,12 @@ struct RemoteInfo {
     subscribed_topics: RwLock<FnvHashSet<TopicHash>>,
 }
 
+// impl RemoteInfo {
+//     pub fn getRemoteInfo() -> Self {
+//         RemoteInfo 
+//     }
+// }
+
 impl fmt::Debug for Inner {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt.debug_struct("Inner")
@@ -478,8 +484,6 @@ impl FloodSubController {
 
         debug!("Message queued for {} remotes", num_dispatched);
     }
-
-    pub fn graft()
 }
 
 /// Implementation of `Stream` that provides messages for the subscribed topics you subscribed to.

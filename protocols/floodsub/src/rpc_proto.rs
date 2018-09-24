@@ -666,7 +666,7 @@ impl ::protobuf::Message for Message {
         for v in &self.topicIDs {
             os.write_string(4, &v)?;
         };
-        os.write_unknown_fields(self.get_unknown_fields())?;proto
+        os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
     }
 
