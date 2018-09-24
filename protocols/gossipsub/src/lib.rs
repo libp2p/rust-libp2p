@@ -38,11 +38,11 @@ extern crate protobuf;
 
 // TODO: implement getters in floodsub for private stuff, or make them public: 
 // libp2p_floodsub::{RemoteInfo, Inner,
-//      FloodSubController.broadcast}
+//      FloodSubController.broadcast()}
 use libp2p_core::PeerId;
 // Glob import due to gossipsub extending on floodsub
 use libp2p_floodsub::*;
-//private: use libp2p_floodsub::RemoteInfo;
+// private: use libp2p_floodsub::RemoteInfo;
 use fnv::FnvHashMap;
 use futures::sync::mpsc;
 use log::Level;
@@ -66,12 +66,20 @@ pub struct GossipSubUpgrade {
 type RemoteConnections = RwLock<FnvHashMap<Multiaddr, RemoteInfo>>;
 
 #[derive(Debug, Clone)]
-struct GInner {
+pub struct GInner {
     // g_remote_connections: RemoteConnections,
     mesh: Map<TopicHash, Vec<PeerId>>,
     fanout: Map<TopicHash, Vec<PeerId>>,
-
+    mcache: Vec<Message>,
 }
+
+impl GInner {
+    pub fn put(&self, msg: Message) {
+        self.mcache.push(msg)
+    }
+    pub fn 
+}
+
 
 /// Allows one to control the behaviour of the floodsub system.
 #[derive(Clone)]
