@@ -276,7 +276,7 @@ where
 {
     /// Creates a new node events stream.
     #[inline]
-    pub fn new(transport: TTrans) -> Swarm<TTrans, TInEvent, TOutEvent, fn() -> THandler>
+    pub fn new(transport: TTrans) -> Swarm<TTrans, TInEvent, TOutEvent, fn(ConnectedPoint) -> THandler>
     where THandler: Default,
     {
         // TODO: with_capacity?
@@ -288,7 +288,7 @@ where
                 other_reach_attempts: Vec::new(),
                 connected_endpoints: Default::default(),
             },
-            handler_build: Default::default,
+            handler_build: |_| Default::default(),
         }
     }
 
