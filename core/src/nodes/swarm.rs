@@ -253,15 +253,15 @@ pub trait HandlerFactory {
     type Handler;
 
     /// Creates a new handler.
-    fn new_handler(&self) -> Self::Handler;
+    fn new_handler(&self, endpoint: ConnectedPoint) -> Self::Handler;
 }
 
-impl<T, THandler> HandlerFactory for T where T: Fn() -> THandler {
+impl<T, THandler> HandlerFactory for T where T: Fn(ConnectedPoint) -> THandler {
     type Handler = THandler;
 
     #[inline]
-    fn new_handler(&self) -> THandler {
-        (*self)()
+    fn new_handler(&self, endpoint: ConnectedPoint) -> THandler {
+        (*self)(endpoint)
     }
 }
 
@@ -361,7 +361,9 @@ where
             Err((_, addr)) => return Err(addr),
         };
 
-        let reach_id = self.active_nodes.add_reach_attempt(future, self.handler_build.new_handler());
+        let endpoint = ConnectedPoint::Dialer { address: addr.clone() };
+
+        let reach_id = self.active_nodes.add_reach_attempt(future, self.handler_build.new_handler(endpoint));
         self.reach_attempts.other_reach_attempts
             .push((reach_id, ConnectedPoint::Dialer { address: addr }));
         Ok(())
@@ -441,12 +443,15 @@ where
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
     {
+        let endpoint = ConnectedPoint::Dialer { address: first.clone() };
         let reach_id = match self.transport().clone().dial(first.clone()) {
-            Ok(fut) => self.active_nodes.add_reach_attempt(fut, self.handler_build.new_handler()),
+            Ok(fut) => {
+                self.active_nodes.add_reach_attempt(fut, self.handler_build.new_handler(endpoint))
+            },
             Err((_, addr)) => {
                 let msg = format!("unsupported multiaddr {}", addr);
                 let fut = future::err(IoError::new(IoErrorKind::Other, msg));
-                self.active_nodes.add_reach_attempt(fut, self.handler_build.new_handler())
+                self.active_nodes.add_reach_attempt(fut, self.handler_build.new_handler(endpoint))
             },
         };
 
@@ -485,7 +490,12 @@ where
                 listen_addr,
                 send_back_addr,
             })) => {
-                let id = self.active_nodes.add_reach_attempt(upgrade, self.handler_build.new_handler());
+                let endpoint = ConnectedPoint::Listener {
+                    listen_addr: listen_addr.clone(),
+                    send_back_addr: send_back_addr.clone(),
+                };
+
+                let id = self.active_nodes.add_reach_attempt(upgrade, self.handler_build.new_handler(endpoint));
                 self.reach_attempts.other_reach_attempts.push((
                     id,
                     ConnectedPoint::Listener {
