@@ -322,7 +322,7 @@ impl FloodSubController {
     /// Same as `unsubscribe` but unsubscribes from multiple topics at once.
     ///
     /// Since this results in a single packet sent to the remotes, it is preferable to use this
-    /// method when ybsubscribing from multiple topics at once rather than call `unsubscribe`
+    /// method when unsubscribing from multiple topics at once rather than call `unsubscribe`
     /// multiple times.
     #[inline]
     pub fn unsubscribe_many<'a, I>(&self, topics: I)
