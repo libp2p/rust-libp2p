@@ -25,6 +25,7 @@ tokio-io = "0.1.0"
 untrusted = { version = "0.5", optional = true }
 sha2 = "0.7.1"
 ed25519-dalek = "0.8.0"
+hmac = "0.6.3"
 
 [features]
 default = ["rsa", "secp256k1"]

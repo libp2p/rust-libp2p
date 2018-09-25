@@ -20,7 +20,7 @@
 
 use algo_support;
 use bytes::BytesMut;
-use codec::{full_codec, FullCodec};
+use codec::{full_codec, FullCodec, Hmac};
 use stream_cipher::{Cipher, ctr};
 use ed25519_dalek::{PublicKey as Ed25519PublicKey, Signature as Ed25519Signature};
 use error::SecioError;
@@ -33,7 +33,6 @@ use libp2p_core::PublicKey;
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
 use protobuf::Message as ProtobufMessage;
 use rand::{self, RngCore};
-use ring::hmac::{SigningContext, SigningKey, VerificationKey};
 #[cfg(feature = "rsa")]
 use ring::signature::{RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256, verify as ring_verify};
 #[cfg(feature = "rsa")]
@@ -495,14 +494,13 @@ where
         // Generate a key from the local ephemeral private key and the remote ephemeral public key,
         // derive from it a ciper key, an iv, and a hmac key, and build the encoder/decoder.
         .and_then(|(socket, context, key_material)| {
-            let key = SigningKey::new(context.chosen_hash.unwrap().into(), &key_material);
-
             let chosen_cipher = context.chosen_cipher.unwrap();
             let cipher_key_size = chosen_cipher.key_size();
             let iv_size = chosen_cipher.iv_size();
 
+            let key = Hmac::from_key(context.chosen_hash.unwrap(), &key_material);
             let mut longer_key = vec![0u8; 2 * (iv_size + cipher_key_size + 20)];
-            stretch_key(&key, &mut longer_key);
+            stretch_key(key, &mut longer_key);
 
             let (local_infos, remote_infos) = {
                 let (first_half, second_half) = longer_key.split_at(longer_key.len() / 2);
@@ -519,7 +517,7 @@ where
             let (encoding_cipher, encoding_hmac) = {
                 let (iv, rest) = local_infos.split_at(iv_size);
                 let (cipher_key, mac_key) = rest.split_at(cipher_key_size);
-                let hmac = SigningKey::new(context.chosen_hash.unwrap().into(), mac_key);
+                let hmac = Hmac::from_key(context.chosen_hash.unwrap().into(), mac_key);
                 let cipher = ctr(chosen_cipher, cipher_key, iv);
                 (cipher, hmac)
             };
@@ -527,7 +525,7 @@ where
             let (decoding_cipher, decoding_hmac) = {
                 let (iv, rest) = remote_infos.split_at(iv_size);
                 let (cipher_key, mac_key) = rest.split_at(cipher_key_size);
-                let hmac = VerificationKey::new(context.chosen_hash.unwrap().into(), mac_key);
+                let hmac = Hmac::from_key(context.chosen_hash.unwrap().into(), mac_key);
                 let cipher = ctr(chosen_cipher, cipher_key, iv);
                 (cipher, hmac)
             };
@@ -570,21 +568,30 @@ where
     Box::new(future)
 }
 
-// Custom algorithm translated from reference implementations. Needs to be the same algorithm
-// amongst all implementations.
-fn stretch_key(key: &SigningKey, result: &mut [u8]) {
+/// Custom algorithm translated from reference implementations. Needs to be the same algorithm
+/// amongst all implementations.
+fn stretch_key(hmac: Hmac, result: &mut [u8]) {
+    match hmac {
+        Hmac::Sha256(hmac) => stretch_key_inner(hmac, result),
+        Hmac::Sha512(hmac) => stretch_key_inner(hmac, result),
+    }
+}
+
+fn stretch_key_inner<D: ::hmac::digest::Digest + Clone>(hmac: ::hmac::Hmac<D>, result: &mut [u8])
+where ::hmac::Hmac<D>: Clone {
+    use ::hmac::Mac;
     const SEED: &[u8] = b"key expansion";
 
-    let mut init_ctxt = SigningContext::with_key(key);
-    init_ctxt.update(SEED);
-    let mut a = init_ctxt.sign();
+    let mut init_ctxt = hmac.clone();
+    init_ctxt.input(SEED);
+    let mut a = init_ctxt.result().code();
 
     let mut j = 0;
     while j < result.len() {
-        let mut context = SigningContext::with_key(key);
-        context.update(a.as_ref());
-        context.update(SEED);
-        let b = context.sign();
+        let mut context = hmac.clone();
+        context.input(a.as_ref());
+        context.input(SEED);
+        let b = context.result().code();
 
         let todo = cmp::min(b.as_ref().len(), result.len() - j);
 
@@ -592,9 +599,9 @@ fn stretch_key(key: &SigningKey, result: &mut [u8]) {
 
         j += todo;
 
-        let mut context = SigningContext::with_key(key);
-        context.update(a.as_ref());
-        a = context.sign();
+        let mut context = hmac.clone();
+        context.input(a.as_ref());
+        a = context.result().code();
     }
 }
 
@@ -606,10 +613,10 @@ mod tests {
     use self::tokio_tcp::TcpStream;
     use super::handshake;
     use super::stretch_key;
+    use algo_support::Digest;
+    use codec::Hmac;
     use futures::Future;
     use futures::Stream;
-    use ring::digest::SHA256;
-    use ring::hmac::SigningKey;
     use {SecioConfig, SecioKeyPair};
 
     #[test]
@@ -674,8 +681,8 @@ mod tests {
     fn stretch() {
         let mut output = [0u8; 32];
 
-        let key1 = SigningKey::new(&SHA256, &[]);
-        stretch_key(&key1, &mut output);
+        let key1 = Hmac::from_key(Digest::Sha256, &[]);
+        stretch_key(key1, &mut output);
         assert_eq!(
             &output,
             &[
@@ -684,8 +691,8 @@ mod tests {
             ]
         );
 
-        let key2 = SigningKey::new(
-            &SHA256,
+        let key2 = Hmac::from_key(
+            Digest::Sha256,
             &[
                 157, 166, 80, 144, 77, 193, 198, 6, 23, 220, 87, 220, 191, 72, 168, 197, 54, 33,
                 219, 225, 84, 156, 165, 37, 149, 224, 244, 32, 170, 79, 125, 35, 171, 26, 178, 176,
@@ -693,7 +700,7 @@ mod tests {
                 89, 145, 5, 162, 108, 230, 55, 54, 9, 17,
             ],
         );
-        stretch_key(&key2, &mut output);
+        stretch_key(key2, &mut output);
         assert_eq!(
             &output,
             &[
@@ -702,8 +709,8 @@ mod tests {
             ]
         );
 
-        let key3 = SigningKey::new(
-            &SHA256,
+        let key3 = Hmac::from_key(
+            Digest::Sha256,
             &[
                 98, 219, 94, 104, 97, 70, 139, 13, 185, 110, 56, 36, 66, 3, 80, 224, 32, 205, 102,
                 170, 59, 32, 140, 245, 86, 102, 231, 68, 85, 249, 227, 243, 57, 53, 171, 36, 62,
@@ -711,7 +718,7 @@ mod tests {
                 19, 48, 127, 127, 55, 82, 117, 154, 124, 108,
             ],
         );
-        stretch_key(&key3, &mut output);
+        stretch_key(key3, &mut output);
         assert_eq!(
             &output,
             &[

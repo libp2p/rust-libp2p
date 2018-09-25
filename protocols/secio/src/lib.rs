@@ -84,6 +84,7 @@ extern crate bytes;
 extern crate ctr;
 extern crate ed25519_dalek;
 extern crate futures;
+extern crate hmac;
 extern crate libp2p_core;
 #[macro_use]
 extern crate log;
