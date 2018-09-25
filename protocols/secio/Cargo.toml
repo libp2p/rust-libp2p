@@ -12,7 +12,7 @@ libp2p-core = { path = "../../core" }
 log = "0.4.1"
 protobuf = "2.0.2"
 rand = "0.5"
-ring = { version = "0.12", features = ["rsa_signing"] }
+ring = { version = "0.12", default-features = false, optional = true }
 aes-ctr = "0.1.0"
 aesni = { version = "0.4.1", features = ["nocheck"], optional = true }
 twofish = "0.1.0"
@@ -27,9 +27,10 @@ sha2 = "0.7.1"
 ed25519-dalek = "0.8.0"
 
 [features]
-default = ["secp256k1"]
+default = ["rsa", "secp256k1"]
+rsa = ["ring/rsa_signing"]
 secp256k1 = ["eth-secp256k1"]
-aes-all = ["aesni","lazy_static"]
+aes-all = ["aesni", "lazy_static"]
 
 [dev-dependencies]
 libp2p-tcp-transport = { path = "../../transports/tcp" }

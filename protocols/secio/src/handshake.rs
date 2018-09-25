@@ -33,8 +33,9 @@ use protobuf::Message as ProtobufMessage;
 use ring::agreement::EphemeralPrivateKey;
 use ring::hmac::{SigningContext, SigningKey, VerificationKey};
 use ring::rand::SecureRandom;
-use ring::signature::verify as signature_verify;
-use ring::signature::{ED25519, RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256};
+use ring::signature::{ED25519, verify as signature_verify};
+#[cfg(feature = "rsa")]
+use ring::signature::{RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256};
 use ring::{agreement, digest, rand};
 #[cfg(feature = "secp256k1")]
 use secp256k1;
@@ -324,6 +325,7 @@ where
                 exchange.set_epubkey(local_tmp_pub_key.clone());
                 exchange.set_signature({
                     match context.config.key.inner {
+                        #[cfg(feature = "rsa")]
                         SecioKeyPairInner::Rsa { ref private, .. } => {
                             let mut state = match RSASigningState::new(private.clone()) {
                                 Ok(s) => s,
@@ -415,6 +417,7 @@ where
             data_to_verify.extend_from_slice(remote_exch.get_epubkey());
 
             match context.remote_public_key {
+                #[cfg(feature = "rsa")]
                 Some(PublicKey::Rsa(ref remote_public_key)) => {
                     // TODO: The ring library doesn't like some stuff in our DER public key,
                     //       therefore we scrap the first 24 bytes of the key. A proper fix would
@@ -464,6 +467,11 @@ where
                         debug!("remote's secp256k1 signature has wrong format");
                         return Err(SecioError::SignatureVerificationFailed)
                     }
+                },
+                #[cfg(not(feature = "rsa"))]
+                Some(PublicKey::Rsa(_)) => {
+                    debug!("support for RSA was disabled at compile-time");
+                    return Err(SecioError::SignatureVerificationFailed);
                 },
                 #[cfg(not(feature = "secp256k1"))]
                 Some(PublicKey::Secp256k1(_)) => {
@@ -614,6 +622,7 @@ mod tests {
     use {SecioConfig, SecioKeyPair};
 
     #[test]
+    #[cfg(feature = "rsa")]
     fn handshake_with_self_succeeds_rsa() {
         let key1 = {
             let private = include_bytes!("../tests/test-rsa-private-key.pk8");
