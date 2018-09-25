@@ -22,6 +22,7 @@ use algo_support;
 use bytes::BytesMut;
 use codec::{full_codec, FullCodec};
 use stream_cipher::{Cipher, ctr};
+use ed25519_dalek::{PublicKey as Ed25519PublicKey, Signature as Ed25519Signature};
 use error::SecioError;
 use futures::future;
 use futures::sink::Sink;
@@ -33,9 +34,8 @@ use protobuf::Message as ProtobufMessage;
 use ring::agreement::EphemeralPrivateKey;
 use ring::hmac::{SigningContext, SigningKey, VerificationKey};
 use ring::rand::SecureRandom;
-use ring::signature::{ED25519, verify as signature_verify};
 #[cfg(feature = "rsa")]
-use ring::signature::{RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256};
+use ring::signature::{RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256, verify as ring_verify};
 use ring::{agreement, digest, rand};
 #[cfg(feature = "secp256k1")]
 use secp256k1;
@@ -46,6 +46,7 @@ use std::mem;
 use structs_proto::{Exchange, Propose};
 use tokio_io::codec::length_delimited;
 use tokio_io::{AsyncRead, AsyncWrite};
+#[cfg(feature = "rsa")]
 use untrusted::Input as UntrustedInput;
 use {SecioConfig, SecioKeyPairInner};
 
@@ -422,10 +423,10 @@ where
                     // TODO: The ring library doesn't like some stuff in our DER public key,
                     //       therefore we scrap the first 24 bytes of the key. A proper fix would
                     //       be to write a DER parser, but that's not trivial.
-                    match signature_verify(&RSA_PKCS1_2048_8192_SHA256,
-                                           UntrustedInput::from(&remote_public_key[24..]),
-                                           UntrustedInput::from(&data_to_verify),
-                                           UntrustedInput::from(remote_exch.get_signature()))
+                    match ring_verify(&RSA_PKCS1_2048_8192_SHA256,
+                                      UntrustedInput::from(&remote_public_key[24..]),
+                                      UntrustedInput::from(&data_to_verify),
+                                      UntrustedInput::from(remote_exch.get_signature()))
                     {
                         Ok(()) => (),
                         Err(_) => {
@@ -435,16 +436,20 @@ where
                     }
                 },
                 Some(PublicKey::Ed25519(ref remote_public_key)) => {
-                    match signature_verify(&ED25519,
-                                           UntrustedInput::from(remote_public_key),
-                                           UntrustedInput::from(&data_to_verify),
-                                           UntrustedInput::from(remote_exch.get_signature()))
-                    {
-                        Ok(()) => (),
-                        Err(_) => {
-                            debug!("failed to verify the remote's signature");
-                            return Err(SecioError::SignatureVerificationFailed)
-                        },
+                    let signature = Ed25519Signature::from_bytes(remote_exch.get_signature());
+                    let pubkey = Ed25519PublicKey::from_bytes(remote_public_key);
+
+                    if let (Ok(signature), Ok(pubkey)) = (signature, pubkey) {
+                        match pubkey.verify::<Sha512>(&data_to_verify, &signature) {
+                            Ok(()) => (),
+                            Err(_) => {
+                                debug!("failed to verify the remote's signature");
+                                return Err(SecioError::SignatureVerificationFailed)
+                            }
+                        }
+                    } else {
+                        debug!("the remote's signature or publickey are in the wrong format");
+                        return Err(SecioError::SignatureVerificationFailed)
                     }
                 },
                 #[cfg(feature = "secp256k1")]

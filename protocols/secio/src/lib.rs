@@ -97,6 +97,7 @@ extern crate secp256k1;
 extern crate sha2;
 extern crate tokio_io;
 extern crate twofish;
+#[cfg(feature = "rsa")]
 extern crate untrusted;
 
 #[cfg(feature = "aes-all")]
