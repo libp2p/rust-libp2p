@@ -36,7 +36,8 @@ use rand::{self, RngCore};
 use ring::hmac::{SigningContext, SigningKey, VerificationKey};
 #[cfg(feature = "rsa")]
 use ring::signature::{RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256, verify as ring_verify};
-use ring::{digest, rand::SystemRandom};
+#[cfg(feature = "rsa")]
+use ring::rand::SystemRandom;
 #[cfg(feature = "secp256k1")]
 use secp256k1;
 use sha2::{Digest as ShaDigestTrait, Sha256, Sha512};
@@ -345,7 +346,7 @@ where
                         },
                         #[cfg(feature = "secp256k1")]
                         SecioKeyPairInner::Secp256k1 { ref private } => {
-                            let data_to_sign = digest::digest(&digest::SHA256, &data_to_sign);
+                            let data_to_sign = Sha256::digest(&data_to_sign);
                             let message = secp256k1::Message::from_slice(data_to_sign.as_ref())
                                 .expect("digest output length doesn't match secp256k1 input length");
                             let secp256k1 = secp256k1::Secp256k1::with_caps(secp256k1::ContextFlag::SignOnly);
@@ -445,7 +446,7 @@ where
                 },
                 #[cfg(feature = "secp256k1")]
                 Some(PublicKey::Secp256k1(ref remote_public_key)) => {
-                    let data_to_verify = digest::digest(&digest::SHA256, &data_to_verify);
+                    let data_to_verify = Sha256::digest(&data_to_verify);
                     let message = secp256k1::Message::from_slice(data_to_verify.as_ref())
                         .expect("digest output length doesn't match secp256k1 input length");
                     let secp256k1 = secp256k1::Secp256k1::with_caps(secp256k1::ContextFlag::VerifyOnly);
