@@ -22,10 +22,12 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 
 // For more information, please refer to <http://unlicense.org/>
+
 pub struct MessageCache {
     msgs: Map<MsgId>
 }
 
+// Golang impl:
 // func NewMessageCache(gossip, history int) *MessageCache {
 // 	return &MessageCache{
 // 		msgs:    make(map[string]*pb.Message),

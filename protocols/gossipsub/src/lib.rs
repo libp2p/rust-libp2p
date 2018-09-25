@@ -63,7 +63,7 @@ pub struct GossipSubUpgrade {
     g_inner: Arc<GInner>,
 }
 
-type RemoteConnections = RwLock<FnvHashMap<Multiaddr, RemoteInfo>>;
+// type RemoteConnections = RwLock<FnvHashMap<Multiaddr, RemoteInfo>>;
 
 #[derive(Debug, Clone)]
 pub struct GInner {
@@ -77,11 +77,11 @@ impl GInner {
     pub fn put(&self, msg: Message) {
         self.mcache.push(msg)
     }
-    pub fn 
+    pub fn get(&self, id: ()) {}
 }
 
 
-/// Allows one to control the behaviour of the floodsub system.
+/// Allows one to control the behaviour of the gossipsub system.
 #[derive(Clone)]
 pub struct GossipSubController {
     f: FloodSubController,
