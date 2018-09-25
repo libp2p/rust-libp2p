@@ -32,11 +32,11 @@ use futures::Future;
 use libp2p_core::PublicKey;
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
 use protobuf::Message as ProtobufMessage;
+use rand::{self, RngCore};
 use ring::hmac::{SigningContext, SigningKey, VerificationKey};
-use ring::rand::SecureRandom;
 #[cfg(feature = "rsa")]
 use ring::signature::{RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256, verify as ring_verify};
-use ring::{agreement, digest, rand};
+use ring::{digest, rand::SystemRandom};
 #[cfg(feature = "secp256k1")]
 use secp256k1;
 use sha2::{Digest as ShaDigestTrait, Sha256, Sha512};
@@ -74,7 +74,6 @@ where
         // Filled with this function's parameter.
         config: SecioConfig,
 
-        rng: rand::SystemRandom,
         // Locally-generated random number. The array size can be changed without any repercussion.
         local_nonce: [u8; 16],
 
@@ -115,7 +114,6 @@ where
 
     let context = HandshakeContext {
         config,
-        rng: rand::SystemRandom::new(),
         local_nonce: Default::default(),
         local_public_key_in_protobuf_bytes: Vec::new(),
         local_proposition_bytes: Vec::new(),
@@ -140,7 +138,7 @@ where
     let future = future::ok::<_, SecioError>(context)
         // Generate our nonce.
         .and_then(|mut context| {
-            context.rng.fill(&mut context.local_nonce)
+            rand::thread_rng().try_fill_bytes(&mut context.local_nonce)
                 .map_err(|_| SecioError::NonceGenerationFailed)?;
             trace!("starting handshake ; local nonce = {:?}", context.local_nonce);
             Ok(context)
@@ -330,9 +328,8 @@ where
                                 },
                             };
                             let mut signature = vec![0; private.public_modulus_len()];
-                            match state.sign(&RSA_PKCS1_SHA256, &context.rng, &data_to_sign,
-                                             &mut signature)
-                            {
+                            let rng = SystemRandom::new();
+                            match state.sign(&RSA_PKCS1_SHA256, &rng, &data_to_sign, &mut signature) {
                                 Ok(_) => (),
                                 Err(_) => {
                                     debug!("failed to sign local exchange");
@@ -491,12 +488,12 @@ where
             let local_priv_key = context.local_tmp_priv_key.take()
                 .expect("we filled this Option earlier, and extract it now");
             exchange::agree(context.chosen_exchange.unwrap(), local_priv_key, remote_exch.get_epubkey())
-                .map(move |key_material| (remote_exch, socket, context, key_material))
+                .map(move |key_material| (socket, context, key_material))
         })
 
         // Generate a key from the local ephemeral private key and the remote ephemeral public key,
         // derive from it a ciper key, an iv, and a hmac key, and build the encoder/decoder.
-        .and_then(|(remote_exch, socket, mut context, key_material)| {
+        .and_then(|(socket, context, key_material)| {
             let key = SigningKey::new(context.chosen_hash.unwrap().into(), &key_material);
 
             let chosen_cipher = context.chosen_cipher.unwrap();
