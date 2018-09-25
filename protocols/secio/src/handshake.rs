@@ -38,6 +38,7 @@ use ring::signature::{ED25519, RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_
 use ring::{agreement, digest, rand};
 #[cfg(feature = "secp256k1")]
 use secp256k1;
+use sha2::{Digest, Sha256};
 use std::cmp::{self, Ordering};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::mem;
@@ -231,17 +232,17 @@ where
             // based on which hash is larger.
             context.hashes_ordering = {
                 let oh1 = {
-                    let mut ctx = digest::Context::new(&digest::SHA256);
-                    ctx.update(&context.remote_public_key_in_protobuf_bytes);
-                    ctx.update(&context.local_nonce);
-                    ctx.finish()
+                    let mut ctx = Sha256::new();
+                    ctx.input(&context.remote_public_key_in_protobuf_bytes);
+                    ctx.input(&context.local_nonce);
+                    ctx.result()
                 };
 
                 let oh2 = {
-                    let mut ctx = digest::Context::new(&digest::SHA256);
-                    ctx.update(&context.local_public_key_in_protobuf_bytes);
-                    ctx.update(&context.remote_nonce);
-                    ctx.finish()
+                    let mut ctx = Sha256::new();
+                    ctx.input(&context.local_public_key_in_protobuf_bytes);
+                    ctx.input(&context.remote_nonce);
+                    ctx.result()
                 };
 
                 oh1.as_ref().cmp(&oh2.as_ref())

@@ -22,6 +22,7 @@ rw-stream-sink = { path = "../../misc/rw-stream-sink" }
 eth-secp256k1 = { git = "https://github.com/paritytech/rust-secp256k1", optional = true }
 tokio-io = "0.1.0"
 untrusted = "0.5"
+sha2 = "0.7.1"
 
 [features]
 default = ["secp256k1"]
