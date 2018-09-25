@@ -24,9 +24,10 @@
 //! helps you with.
 
 use error::SecioError;
-use ring::{agreement, digest};
+use ring::digest;
 use std::cmp::Ordering;
 use stream_cipher::Cipher;
+use KeyAgreement;
 
 const ECDH_P256: &str = "P-256";
 const ECDH_P384: &str = "P-384";
@@ -42,14 +43,6 @@ const SHA_512: &str = "SHA512";
 pub(crate) const DEFAULT_AGREEMENTS_PROPOSITION: &str = "P-256,P-384";
 pub(crate) const DEFAULT_CIPHERS_PROPOSITION: &str = "AES-128,AES-256,TwofishCTR";
 pub(crate) const DEFAULT_DIGESTS_PROPOSITION: &str = "SHA256,SHA512";
-
-
-/// Possible key agreement algorithms.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum KeyAgreement {
-    EcdhP256,
-    EcdhP384
-}
 
 /// Return a proposition string from the given sequence of `KeyAgreement` values.
 pub fn key_agreements_proposition<'a, I>(xchgs: I) -> String
@@ -77,7 +70,7 @@ where
 ///
 /// The `Ordering` parameter determines which argument is preferred. If `Less` or `Equal` we
 /// try for each of `theirs` every one of `ours`, for `Greater` it's the other way around.
-pub fn select_agreement<'a>(r: Ordering, ours: &str, theirs: &str) -> Result<&'a agreement::Algorithm, SecioError> {
+pub fn select_agreement<'a>(r: Ordering, ours: &str, theirs: &str) -> Result<KeyAgreement, SecioError> {
     let (a, b) = match r {
         Ordering::Less | Ordering::Equal => (theirs, ours),
         Ordering::Greater =>  (ours, theirs)
@@ -85,8 +78,8 @@ pub fn select_agreement<'a>(r: Ordering, ours: &str, theirs: &str) -> Result<&'a
     for x in a.split(',') {
         if b.split(',').any(|y| x == y) {
             match x {
-                ECDH_P256 => return Ok(&agreement::ECDH_P256),
-                ECDH_P384 => return Ok(&agreement::ECDH_P384),
+                ECDH_P256 => return Ok(KeyAgreement::EcdhP256),
+                ECDH_P384 => return Ok(KeyAgreement::EcdhP384),
                 _ => continue
             }
         }

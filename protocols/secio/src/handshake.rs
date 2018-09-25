@@ -24,6 +24,7 @@ use codec::{full_codec, FullCodec};
 use stream_cipher::{Cipher, ctr};
 use ed25519_dalek::{PublicKey as Ed25519PublicKey, Signature as Ed25519Signature};
 use error::SecioError;
+use exchange;
 use futures::future;
 use futures::sink::Sink;
 use futures::stream::Stream;
@@ -31,7 +32,6 @@ use futures::Future;
 use libp2p_core::PublicKey;
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
 use protobuf::Message as ProtobufMessage;
-use ring::agreement::EphemeralPrivateKey;
 use ring::hmac::{SigningContext, SigningKey, VerificationKey};
 use ring::rand::SecureRandom;
 #[cfg(feature = "rsa")]
@@ -48,7 +48,7 @@ use tokio_io::codec::length_delimited;
 use tokio_io::{AsyncRead, AsyncWrite};
 #[cfg(feature = "rsa")]
 use untrusted::Input as UntrustedInput;
-use {SecioConfig, SecioKeyPairInner};
+use {KeyAgreement, SecioConfig, SecioKeyPairInner};
 
 /// Performs a handshake on the given socket.
 ///
@@ -103,13 +103,13 @@ where
         hashes_ordering: Ordering,
 
         // Crypto algorithms chosen for the communication.
-        chosen_exchange: Option<&'static agreement::Algorithm>,
+        chosen_exchange: Option<KeyAgreement>,
         // We only support AES for now, so store just a key size.
         chosen_cipher: Option<Cipher>,
         chosen_hash: Option<algo_support::Digest>,
 
         // Ephemeral key generated for the handshake and then thrown away.
-        local_tmp_priv_key: Option<EphemeralPrivateKey>,
+        local_tmp_priv_key: Option<exchange::AgreementPrivateKey>,
         local_tmp_pub_key: Vec<u8>,
     }
 
@@ -301,29 +301,23 @@ where
 
         // Generate an ephemeral key for the negotiation.
         .and_then(|(socket, context)| {
-            match EphemeralPrivateKey::generate(context.chosen_exchange.as_ref().unwrap(), &context.rng) {
-                Ok(tmp_priv_key) => Ok((socket, context, tmp_priv_key)),
-                Err(_) => {
-                    debug!("failed to generate ECDH key");
-                    Err(SecioError::EphemeralKeyGenerationFailed)
-                },
-            }
+            exchange::generate_agreement(context.chosen_exchange.unwrap())
+                .map(move |(tmp_priv_key, tmp_pub_key)| (socket, context, tmp_priv_key, tmp_pub_key))
         })
 
         // Send the ephemeral pub key to the remote in an `Exchange` struct. The `Exchange` also
         // contains a signature of the two propositions encoded with our static public key.
-        .and_then(|(socket, mut context, tmp_priv)| {
+        .and_then(|(socket, mut context, tmp_priv, tmp_pub_key)| {
             let exchange = {
-                let mut local_tmp_pub_key: Vec<u8> = (0 .. tmp_priv.public_key_len()).map(|_| 0).collect();
-                tmp_priv.compute_public_key(&mut local_tmp_pub_key).unwrap();
                 context.local_tmp_priv_key = Some(tmp_priv);
+                context.local_tmp_pub_key = tmp_pub_key.clone();
 
                 let mut data_to_sign = context.local_proposition_bytes.clone();
                 data_to_sign.extend_from_slice(&context.remote_proposition_bytes);
-                data_to_sign.extend_from_slice(&local_tmp_pub_key);
+                data_to_sign.extend_from_slice(&tmp_pub_key);
 
                 let mut exchange = Exchange::new();
-                exchange.set_epubkey(local_tmp_pub_key.clone());
+                exchange.set_epubkey(tmp_pub_key);
                 exchange.set_signature({
                     match context.config.key.inner {
                         #[cfg(feature = "rsa")]
@@ -496,58 +490,52 @@ where
         .and_then(|(remote_exch, socket, mut context)| {
             let local_priv_key = context.local_tmp_priv_key.take()
                 .expect("we filled this Option earlier, and extract it now");
-            let codec = agreement::agree_ephemeral(local_priv_key,
-                                                   &context.chosen_exchange.unwrap(),
-                                                   UntrustedInput::from(remote_exch.get_epubkey()),
-                                                   SecioError::SecretGenerationFailed,
-                                                   |key_material| {
-                let key = SigningKey::new(context.chosen_hash.unwrap().into(), key_material);
+            exchange::agree(context.chosen_exchange.unwrap(), local_priv_key, remote_exch.get_epubkey())
+                .map(move |key_material| (remote_exch, socket, context, key_material))
+        })
 
-                let chosen_cipher = context.chosen_cipher.unwrap();
-                let cipher_key_size = chosen_cipher.key_size();
-                let iv_size = chosen_cipher.iv_size();
+        // Generate a key from the local ephemeral private key and the remote ephemeral public key,
+        // derive from it a ciper key, an iv, and a hmac key, and build the encoder/decoder.
+        .and_then(|(remote_exch, socket, mut context, key_material)| {
+            let key = SigningKey::new(context.chosen_hash.unwrap().into(), &key_material);
 
-                let mut longer_key = vec![0u8; 2 * (iv_size + cipher_key_size + 20)];
-                stretch_key(&key, &mut longer_key);
+            let chosen_cipher = context.chosen_cipher.unwrap();
+            let cipher_key_size = chosen_cipher.key_size();
+            let iv_size = chosen_cipher.iv_size();
 
-                let (local_infos, remote_infos) = {
-                    let (first_half, second_half) = longer_key.split_at(longer_key.len() / 2);
-                    match context.hashes_ordering {
-                        Ordering::Equal => {
-                            let msg = "equal digest of public key and nonce for local and remote";
-                            return Err(SecioError::InvalidProposition(msg))
-                        }
-                        Ordering::Less => (second_half, first_half),
-                        Ordering::Greater => (first_half, second_half),
+            let mut longer_key = vec![0u8; 2 * (iv_size + cipher_key_size + 20)];
+            stretch_key(&key, &mut longer_key);
+
+            let (local_infos, remote_infos) = {
+                let (first_half, second_half) = longer_key.split_at(longer_key.len() / 2);
+                match context.hashes_ordering {
+                    Ordering::Equal => {
+                        let msg = "equal digest of public key and nonce for local and remote";
+                        return Err(SecioError::InvalidProposition(msg))
                     }
-                };
+                    Ordering::Less => (second_half, first_half),
+                    Ordering::Greater => (first_half, second_half),
+                }
+            };
 
-                let (encoding_cipher, encoding_hmac) = {
-                    let (iv, rest) = local_infos.split_at(iv_size);
-                    let (cipher_key, mac_key) = rest.split_at(cipher_key_size);
-                    let hmac = SigningKey::new(context.chosen_hash.unwrap().into(), mac_key);
-                    let cipher = ctr(chosen_cipher, cipher_key, iv);
-                    (cipher, hmac)
-                };
+            let (encoding_cipher, encoding_hmac) = {
+                let (iv, rest) = local_infos.split_at(iv_size);
+                let (cipher_key, mac_key) = rest.split_at(cipher_key_size);
+                let hmac = SigningKey::new(context.chosen_hash.unwrap().into(), mac_key);
+                let cipher = ctr(chosen_cipher, cipher_key, iv);
+                (cipher, hmac)
+            };
 
-                let (decoding_cipher, decoding_hmac) = {
-                    let (iv, rest) = remote_infos.split_at(iv_size);
-                    let (cipher_key, mac_key) = rest.split_at(cipher_key_size);
-                    let hmac = VerificationKey::new(context.chosen_hash.unwrap().into(), mac_key);
-                    let cipher = ctr(chosen_cipher, cipher_key, iv);
-                    (cipher, hmac)
-                };
+            let (decoding_cipher, decoding_hmac) = {
+                let (iv, rest) = remote_infos.split_at(iv_size);
+                let (cipher_key, mac_key) = rest.split_at(cipher_key_size);
+                let hmac = VerificationKey::new(context.chosen_hash.unwrap().into(), mac_key);
+                let cipher = ctr(chosen_cipher, cipher_key, iv);
+                (cipher, hmac)
+            };
 
-                Ok(full_codec(socket, encoding_cipher, encoding_hmac, decoding_cipher, decoding_hmac))
-            });
-
-            match codec {
-                Ok(c) => Ok((c, context)),
-                Err(err) => {
-                    debug!("failed to generate shared secret with remote");
-                    Err(err)
-                },
-            }
+            let codec = full_codec(socket, encoding_cipher, encoding_hmac, decoding_cipher, decoding_hmac);
+            Ok((codec, context))
         })
 
         // We send back their nonce to check if the connection works.
