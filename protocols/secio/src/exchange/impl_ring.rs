@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! This module handles the key agreement process. Typically ECDH.
+//! Implementation of the key agreement process using the `ring` library.
 
 use futures::{future, prelude::*};
 use ring::agreement as ring_agreement;

@@ -132,16 +132,8 @@ mod structs_proto;
 mod stream_cipher;
 
 pub use algo_support::Digest;
+pub use exchange::KeyAgreement;
 pub use stream_cipher::Cipher;
-
-/// Possible key agreement algorithms.
-// Note that this is not in the `exchange` module because we want the list of supported algorithms
-// to be the same on all platforms.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum KeyAgreement {
-    EcdhP256,
-    EcdhP384
-}
 
 /// Implementation of the `ConnectionUpgrade` trait of `libp2p_core`. Automatically applies
 /// secio on any connection.
