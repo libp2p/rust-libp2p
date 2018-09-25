@@ -182,7 +182,7 @@ where
 ///
 /// The `Ordering` parameter determines which argument is preferred. If `Less` or `Equal` we
 /// try for each of `theirs` every one of `ours`, for `Greater` it's the other way around.
-pub fn select_digest<'a>(r: Ordering, ours: &str, theirs: &str) -> Result<&'a digest::Algorithm, SecioError> {
+pub fn select_digest<'a>(r: Ordering, ours: &str, theirs: &str) -> Result<Digest, SecioError> {
     let (a, b) = match r {
         Ordering::Less | Ordering::Equal => (theirs, ours),
         Ordering::Greater =>  (ours, theirs)
@@ -190,8 +190,8 @@ pub fn select_digest<'a>(r: Ordering, ours: &str, theirs: &str) -> Result<&'a di
     for x in a.split(',') {
         if b.split(',').any(|y| x == y) {
             match x {
-                SHA_256 => return Ok(&digest::SHA256),
-                SHA_512 => return Ok(&digest::SHA512),
+                SHA_256 => return Ok(Digest::Sha256),
+                SHA_512 => return Ok(Digest::Sha512),
                 _ => continue
             }
         }
@@ -199,3 +199,12 @@ pub fn select_digest<'a>(r: Ordering, ours: &str, theirs: &str) -> Result<&'a di
     Err(SecioError::NoSupportIntersection)
 }
 
+impl Into<&'static digest::Algorithm> for Digest {
+    #[inline]
+    fn into(self) -> &'static digest::Algorithm {
+        match self {
+            Digest::Sha256 => &digest::SHA256,
+            Digest::Sha512 => &digest::SHA512,
+        }
+    }
+}

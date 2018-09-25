@@ -38,7 +38,7 @@ use ring::signature::{ED25519, RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_
 use ring::{agreement, digest, rand};
 #[cfg(feature = "secp256k1")]
 use secp256k1;
-use sha2::{Digest, Sha256};
+use sha2::{Digest as ShaDigestTrait, Sha256};
 use std::cmp::{self, Ordering};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::mem;
@@ -104,7 +104,7 @@ where
         chosen_exchange: Option<&'static agreement::Algorithm>,
         // We only support AES for now, so store just a key size.
         chosen_cipher: Option<Cipher>,
-        chosen_hash: Option<&'static digest::Algorithm>,
+        chosen_hash: Option<algo_support::Digest>,
 
         // Ephemeral key generated for the handshake and then thrown away.
         local_tmp_priv_key: Option<EphemeralPrivateKey>,
@@ -488,7 +488,7 @@ where
                                                    UntrustedInput::from(remote_exch.get_epubkey()),
                                                    SecioError::SecretGenerationFailed,
                                                    |key_material| {
-                let key = SigningKey::new(context.chosen_hash.unwrap(), key_material);
+                let key = SigningKey::new(context.chosen_hash.unwrap().into(), key_material);
 
                 let chosen_cipher = context.chosen_cipher.unwrap();
                 let cipher_key_size = chosen_cipher.key_size();
@@ -512,7 +512,7 @@ where
                 let (encoding_cipher, encoding_hmac) = {
                     let (iv, rest) = local_infos.split_at(iv_size);
                     let (cipher_key, mac_key) = rest.split_at(cipher_key_size);
-                    let hmac = SigningKey::new(&context.chosen_hash.unwrap(), mac_key);
+                    let hmac = SigningKey::new(context.chosen_hash.unwrap().into(), mac_key);
                     let cipher = ctr(chosen_cipher, cipher_key, iv);
                     (cipher, hmac)
                 };
@@ -520,7 +520,7 @@ where
                 let (decoding_cipher, decoding_hmac) = {
                     let (iv, rest) = remote_infos.split_at(iv_size);
                     let (cipher_key, mac_key) = rest.split_at(cipher_key_size);
-                    let hmac = VerificationKey::new(&context.chosen_hash.unwrap(), mac_key);
+                    let hmac = VerificationKey::new(context.chosen_hash.unwrap().into(), mac_key);
                     let cipher = ctr(chosen_cipher, cipher_key, iv);
                     (cipher, hmac)
                 };
