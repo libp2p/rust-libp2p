@@ -11,7 +11,7 @@ futures = "0.1"
 libp2p-core = { path = "../../core" }
 log = "0.4.1"
 protobuf = "2.0.2"
-rand = "0.3.17"
+rand = "0.5"
 ring = { version = "0.12", features = ["rsa_signing"] }
 aes-ctr = "0.1.0"
 aesni = { version = "0.4.1", features = ["nocheck"], optional = true }
@@ -19,10 +19,12 @@ twofish = "0.1.0"
 ctr = "0.1"
 lazy_static = { version = "0.2.11", optional = true }
 rw-stream-sink = { path = "../../misc/rw-stream-sink" }
-eth-secp256k1 = { git = "https://github.com/paritytech/rust-secp256k1", optional = true }
+# TODO: use the paritytech repo after https://github.com/paritytech/rust-secp256k1/pull/14
+eth-secp256k1 = { git = "https://github.com/tomaka/rust-secp256k1", branch = "pub-rand", optional = true }
 tokio-io = "0.1.0"
 untrusted = "0.5"
 sha2 = "0.7.1"
+ed25519-dalek = "0.8.0"
 
 [features]
 default = ["secp256k1"]

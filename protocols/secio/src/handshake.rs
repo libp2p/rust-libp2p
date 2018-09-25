@@ -38,7 +38,7 @@ use ring::signature::{ED25519, RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_
 use ring::{agreement, digest, rand};
 #[cfg(feature = "secp256k1")]
 use secp256k1;
-use sha2::{Digest as ShaDigestTrait, Sha256};
+use sha2::{Digest as ShaDigestTrait, Sha256, Sha512};
 use std::cmp::{self, Ordering};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::mem;
@@ -346,8 +346,8 @@ where
                             signature
                         },
                         SecioKeyPairInner::Ed25519 { ref key_pair } => {
-                            let signature = key_pair.sign(&data_to_sign);
-                            signature.as_ref().to_owned()
+                            let signature = key_pair.sign::<Sha512>(&data_to_sign);
+                            signature.to_bytes().to_vec()
                         },
                         #[cfg(feature = "secp256k1")]
                         SecioKeyPairInner::Secp256k1 { ref private } => {

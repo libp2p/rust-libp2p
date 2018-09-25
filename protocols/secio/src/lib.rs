@@ -82,6 +82,7 @@ extern crate aes_ctr;
 extern crate asn1_der;
 extern crate bytes;
 extern crate ctr;
+extern crate ed25519_dalek;
 extern crate futures;
 extern crate libp2p_core;
 #[macro_use]
@@ -105,11 +106,11 @@ pub use self::error::SecioError;
 #[cfg(feature = "secp256k1")]
 use asn1_der::{traits::FromDerEncoded, traits::FromDerObject, DerObject};
 use bytes::{Bytes, BytesMut};
+use ed25519_dalek::Keypair as Ed25519KeyPair;
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
 use libp2p_core::{PeerId, PublicKey};
-use ring::rand::SystemRandom;
-use ring::signature::{Ed25519KeyPair, RSAKeyPair};
+use ring::signature::RSAKeyPair;
 use rw_stream_sink::RwStreamSink;
 use std::error::Error;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -224,33 +225,22 @@ impl SecioKeyPair {
         })
     }
 
-    /// Builds a `SecioKeyPair` from a PKCS8 ED25519 private key.
-    pub fn ed25519_from_pkcs8<K>(key: K) -> Result<SecioKeyPair, Box<Error + Send + Sync>>
-    where
-        K: AsRef<[u8]>,
-    {
-        let key_pair = Ed25519KeyPair::from_pkcs8(Input::from(key.as_ref())).map_err(Box::new)?;
-
-        Ok(SecioKeyPair {
-            inner: SecioKeyPairInner::Ed25519 {
-                key_pair: Arc::new(key_pair),
-            },
-        })
-    }
-
     /// Generates a new Ed25519 key pair and uses it.
     pub fn ed25519_generated() -> Result<SecioKeyPair, Box<Error + Send + Sync>> {
-        let rng = SystemRandom::new();
-        let gen = Ed25519KeyPair::generate_pkcs8(&rng).map_err(Box::new)?;
-        Ok(SecioKeyPair::ed25519_from_pkcs8(&gen[..])
-            .expect("failed to parse generated Ed25519 key"))
+        let mut csprng = rand::OsRng::new()?;
+        let keypair: Ed25519KeyPair = Ed25519KeyPair::generate::<sha2::Sha512, _>(&mut csprng);
+        Ok(SecioKeyPair {
+            inner: SecioKeyPairInner::Ed25519 {
+                key_pair: Arc::new(keypair),
+            }
+        })
     }
 
     /// Generates a new random sec256k1 key pair.
     #[cfg(feature = "secp256k1")]
     pub fn secp256k1_generated() -> Result<SecioKeyPair, Box<Error + Send + Sync>> {
         let secp = secp256k1::Secp256k1::with_caps(secp256k1::ContextFlag::Full);
-        let (private, _) = secp.generate_keypair(&mut ::rand::thread_rng())
+        let (private, _) = secp.generate_keypair(&mut secp256k1::rand::thread_rng())
             .expect("failed to generate secp256k1 key");
 
         Ok(SecioKeyPair {
@@ -294,7 +284,7 @@ impl SecioKeyPair {
         match self.inner {
             SecioKeyPairInner::Rsa { ref public, .. } => PublicKey::Rsa(public.clone()),
             SecioKeyPairInner::Ed25519 { ref key_pair } => {
-                PublicKey::Ed25519(key_pair.public_key_bytes().to_vec())
+                PublicKey::Ed25519(key_pair.public.as_bytes().to_vec())
             }
             #[cfg(feature = "secp256k1")]
             SecioKeyPairInner::Secp256k1 { ref private } => {
