@@ -77,6 +77,8 @@
 //! `SecioMiddleware` that implements `Sink` and `Stream` and can be used to send packets of data.
 //!
 
+#![recursion_limit = "128"]
+
 extern crate aes_ctr;
 #[cfg(feature = "secp256k1")]
 extern crate asn1_der;
@@ -96,6 +98,9 @@ extern crate rw_stream_sink;
 #[cfg(feature = "secp256k1")]
 extern crate secp256k1;
 extern crate sha2;
+#[cfg(target_os = "emscripten")]
+#[macro_use]
+extern crate stdweb;
 extern crate tokio_io;
 extern crate twofish;
 #[cfg(feature = "rsa")]

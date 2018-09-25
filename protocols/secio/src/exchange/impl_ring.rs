@@ -59,7 +59,7 @@ pub fn generate_agreement(algorithm: KeyAgreement) -> impl Future<Item = (Agreem
 }
 
 /// Finish the agreement. On success, returns the shared key that both remote agreed upon.
-pub fn agree(algorithm: KeyAgreement, my_private_key: AgreementPrivateKey, other_public_key: &[u8])
+pub fn agree(algorithm: KeyAgreement, my_private_key: AgreementPrivateKey, other_public_key: &[u8], _out_size: usize)
     -> impl Future<Item = Vec<u8>, Error = SecioError>
 {
     ring_agreement::agree_ephemeral(my_private_key, algorithm.into(),

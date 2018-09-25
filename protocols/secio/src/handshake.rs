@@ -487,7 +487,8 @@ where
         .and_then(|(remote_exch, socket, mut context)| {
             let local_priv_key = context.local_tmp_priv_key.take()
                 .expect("we filled this Option earlier, and extract it now");
-            exchange::agree(context.chosen_exchange.unwrap(), local_priv_key, remote_exch.get_epubkey())
+            let key_size = context.chosen_hash.as_ref().unwrap().num_bytes();
+            exchange::agree(context.chosen_exchange.unwrap(), local_priv_key, remote_exch.get_epubkey(), key_size)
                 .map(move |key_material| (socket, context, key_material))
         })
 

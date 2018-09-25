@@ -24,6 +24,7 @@
 //! helps you with.
 
 use error::SecioError;
+#[cfg(feature = "ring")]
 use ring::digest;
 use std::cmp::Ordering;
 use stream_cipher::Cipher;
@@ -149,6 +150,17 @@ pub enum Digest {
     Sha512
 }
 
+impl Digest {
+    /// Returns the size in bytes of a digest of this kind.
+    #[inline]
+    pub fn num_bytes(&self) -> usize {
+        match *self {
+            Digest::Sha256 => 256 / 8,
+            Digest::Sha512 => 512 / 8,
+        }
+    }
+}
+
 /// Return a proposition string from the given sequence of `Digest` values.
 pub fn digests_proposition<'a, I>(digests: I) -> String
 where
@@ -192,6 +204,7 @@ pub fn select_digest<'a>(r: Ordering, ours: &str, theirs: &str) -> Result<Digest
     Err(SecioError::NoSupportIntersection)
 }
 
+#[cfg(feature = "ring")]
 impl Into<&'static digest::Algorithm> for Digest {
     #[inline]
     fn into(self) -> &'static digest::Algorithm {

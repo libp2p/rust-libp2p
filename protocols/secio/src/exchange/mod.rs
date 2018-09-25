@@ -24,6 +24,10 @@ use futures::prelude::*;
 use SecioError;
 
 #[path = "impl_ring.rs"]
+#[cfg(not(target_os = "emscripten"))]
+mod platform;
+#[path = "impl_webcrypto.rs"]
+#[cfg(target_os = "emscripten")]
 mod platform;
 
 /// Possible key agreement algorithms.
@@ -46,9 +50,9 @@ pub fn generate_agreement(algorithm: KeyAgreement) -> impl Future<Item = (Agreem
 
 /// Finish the agreement. On success, returns the shared key that both remote agreed upon.
 #[inline]
-pub fn agree(algorithm: KeyAgreement, my_private_key: AgreementPrivateKey, other_public_key: &[u8])
+pub fn agree(algorithm: KeyAgreement, my_private_key: AgreementPrivateKey, other_public_key: &[u8], out_size: usize)
     -> impl Future<Item = Vec<u8>, Error = SecioError>
 {
-    platform::agree(algorithm, my_private_key.0, other_public_key)
+    platform::agree(algorithm, my_private_key.0, other_public_key, out_size)
 }
 
