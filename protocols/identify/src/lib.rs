@@ -65,6 +65,10 @@
 //! a `IdentifySender` struct that can be used to transmit back to the remote the information about
 //! it.
 
+// avoid our own warnings
+// TODO: remove
+#![allow(deprecated)]
+
 extern crate bytes;
 extern crate fnv;
 extern crate futures;
@@ -79,8 +83,10 @@ extern crate tokio_codec;
 extern crate tokio_io;
 extern crate unsigned_varint;
 
+pub use self::id_transport::IdentifyTransport;
 pub use self::protocol::{IdentifyInfo, IdentifyOutput};
 pub use self::protocol::{IdentifyProtocolConfig, IdentifySender};
 
+mod id_transport;
 mod protocol;
 mod structs_proto;
