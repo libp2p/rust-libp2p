@@ -20,7 +20,7 @@
 
 use futures::stream::Then as StreamThen;
 use futures::sync::{mpsc, oneshot};
-use futures::{future, future::FutureResult, Async, Future, Poll, Stream};
+use futures::{Async, Future, Poll, Stream};
 use multiaddr::{Protocol, Multiaddr};
 use rw_stream_sink::RwStreamSink;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -53,11 +53,9 @@ impl BrowserWsConfig {
 
 impl Transport for BrowserWsConfig {
     type Output = BrowserWsConn;
-    type MultiaddrFuture = FutureResult<Multiaddr, IoError>;
-    type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError> + Send>; // TODO: use `!`
-    type ListenerUpgrade =
-        Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>; // TODO: use `!`
-    type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
+    type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError> + Send>; // TODO: use `!`
+    type ListenerUpgrade = Box<Future<Item = Self::Output, Error = IoError> + Send>; // TODO: use `!`
+    type Dial = Box<Future<Item = Self::Output, Error = IoError> + Send>;
 
     #[inline]
     fn listen_on(self, a: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -196,7 +194,7 @@ impl Transport for BrowserWsConfig {
 
         Ok(Box::new(open_rx.then(|result| {
             match result {
-                Ok(Ok(r)) => Ok((r, future::ok(original_addr))),
+                Ok(Ok(r)) => Ok(r),
                 Ok(Err(e)) => Err(e),
                 // `Err` would happen here if `open_tx` is destroyed. `open_tx` is captured by
                 // the `WebSocket`, and the `WebSocket` is captured by `open_cb`, which is itself

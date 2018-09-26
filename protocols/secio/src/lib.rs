@@ -58,7 +58,7 @@
 //!
 //! let future = transport.dial("/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap())
 //!        .unwrap_or_else(|_| panic!("Unable to dial node"))
-//!     .and_then(|(connection, _)| {
+//!     .and_then(|connection| {
 //!         // Sends "hello world" on the connection, will be encrypted.
 //!         write_all(connection, "hello world")
 //!     });
@@ -106,7 +106,7 @@ use asn1_der::{traits::FromDerEncoded, traits::FromDerObject, DerObject};
 use bytes::{Bytes, BytesMut};
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
-use libp2p_core::{PeerId, PublicKey};
+use libp2p_core::{Multiaddr, PeerId, PublicKey};
 use ring::rand::SystemRandom;
 use ring::signature::{Ed25519KeyPair, RSAKeyPair};
 use rw_stream_sink::RwStreamSink;
@@ -343,14 +343,12 @@ where
     pub ephemeral_public_key: Vec<u8>,
 }
 
-impl<S, Maf> libp2p_core::ConnectionUpgrade<S, Maf> for SecioConfig
+impl<S> libp2p_core::ConnectionUpgrade<S> for SecioConfig
 where
     S: AsyncRead + AsyncWrite + Send + 'static, // TODO: 'static :(
-    Maf: Send + 'static,                        // TODO: 'static :(
 {
     type Output = SecioOutput<S>;
-    type MultiaddrFuture = Maf;
-    type Future = Box<Future<Item = (Self::Output, Maf), Error = IoError> + Send>;
+    type Future = Box<Future<Item = Self::Output, Error = IoError> + Send>;
     type NamesIter = iter::Once<(Bytes, ())>;
     type UpgradeIdentifier = ();
 
@@ -365,7 +363,7 @@ where
         incoming: S,
         _: (),
         _: libp2p_core::Endpoint,
-        remote_addr: Maf,
+        _: &Multiaddr,
     ) -> Self::Future {
         debug!("Starting secio upgrade");
 
@@ -378,7 +376,7 @@ where
                 ephemeral_public_key: ephemeral,
             }
         }).map_err(map_err);
-        Box::new(wrapped.map(move |out| (out, remote_addr)))
+        Box::new(wrapped)
     }
 }
 

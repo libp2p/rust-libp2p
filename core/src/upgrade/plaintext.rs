@@ -23,6 +23,7 @@ use futures::future::{self, FutureResult};
 use std::{iter, io::Error as IoError};
 use tokio_io::{AsyncRead, AsyncWrite};
 use upgrade::{ConnectionUpgrade, Endpoint};
+use Multiaddr;
 
 /// Implementation of the `ConnectionUpgrade` that negotiates the `/plaintext/1.0.0` protocol and
 /// simply passes communications through without doing anything more.
@@ -32,19 +33,18 @@ use upgrade::{ConnectionUpgrade, Endpoint};
 #[derive(Debug, Copy, Clone)]
 pub struct PlainTextConfig;
 
-impl<C, F> ConnectionUpgrade<C, F> for PlainTextConfig
+impl<C> ConnectionUpgrade<C> for PlainTextConfig
 where
     C: AsyncRead + AsyncWrite,
 {
     type Output = C;
-    type Future = FutureResult<(C, F), IoError>;
+    type Future = FutureResult<C, IoError>;
     type UpgradeIdentifier = ();
-    type MultiaddrFuture = F;
     type NamesIter = iter::Once<(Bytes, ())>;
 
     #[inline]
-    fn upgrade(self, i: C, _: (), _: Endpoint, remote_addr: F) -> Self::Future {
-        future::ok((i, remote_addr))
+    fn upgrade(self, i: C, _: (), _: Endpoint, _: &Multiaddr) -> Self::Future {
+        future::ok(i)
     }
 
     #[inline]

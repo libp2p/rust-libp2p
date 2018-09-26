@@ -105,13 +105,11 @@ impl<T> UniqueConnec<T> {
               Du: Transport + 'static, // TODO: 'static :-/
               Du::Output: Into<S::Output>,
               Du::Dial: Send,
-              Du::MultiaddrFuture: Send,
               S: Clone + MuxedTransport,
               S::Dial: Send,
               S::Listener: Send,
               S::ListenerUpgrade: Send,
               S::Output: Send,
-              S::MultiaddrFuture: Send,
               F: 'static,
     {
         self.dial_inner(swarm, multiaddr, transport, true)
@@ -126,13 +124,11 @@ impl<T> UniqueConnec<T> {
               Du: Transport + 'static, // TODO: 'static :-/
               Du::Output: Into<S::Output>,
               Du::Dial: Send,
-              Du::MultiaddrFuture: Send,
               S: Clone + MuxedTransport,
               S::Dial: Send,
               S::Listener: Send,
               S::ListenerUpgrade: Send,
               S::Output: Send,
-              S::MultiaddrFuture: Send,
               F: 'static,
     {
         self.dial_inner(swarm, multiaddr, transport, false)
@@ -145,13 +141,11 @@ impl<T> UniqueConnec<T> {
               Du: Transport + 'static, // TODO: 'static :-/
               Du::Output: Into<S::Output>,
               Du::Dial: Send,
-              Du::MultiaddrFuture: Send,
               S: Clone + MuxedTransport,
               S::Dial: Send,
               S::Listener: Send,
               S::ListenerUpgrade: Send,
               S::Output: Send,
-              S::MultiaddrFuture: Send,
               F: 'static,
     {
         let mut inner = self.inner.lock();

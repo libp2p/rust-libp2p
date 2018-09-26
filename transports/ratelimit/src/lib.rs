@@ -119,16 +119,16 @@ impl<C: AsyncRead + AsyncWrite> AsyncWrite for Connection<C> {
 pub struct Listener<T: Transport>(RateLimited<T::Listener>);
 
 impl<T: Transport> Stream for Listener<T> {
-    type Item = ListenerUpgrade<T>;
+    type Item = (ListenerUpgrade<T>, Multiaddr);
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         match try_ready!(self.0.value.poll()) {
-            Some(upgrade) => {
+            Some((upgrade, addr)) => {
                 let r = self.0.rlimiter.clone();
                 let w = self.0.wlimiter.clone();
                 let u = ListenerUpgrade(RateLimited::from_parts(upgrade, r, w));
-                Ok(Async::Ready(Some(u)))
+                Ok(Async::Ready(Some((u, addr))))
             }
             None => Ok(Async::Ready(None)),
         }
@@ -143,14 +143,14 @@ where
     T: Transport + 'static,
     T::Output: AsyncRead + AsyncWrite,
 {
-    type Item = (Connection<T::Output>, T::MultiaddrFuture);
+    type Item = Connection<T::Output>;
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let (conn, addr) = try_ready!(self.0.value.poll());
+        let conn = try_ready!(self.0.value.poll());
         let r = self.0.rlimiter.clone();
         let w = self.0.wlimiter.clone();
-        Ok(Async::Ready((Connection::new(conn, r, w)?, addr)))
+        Ok(Async::Ready(Connection::new(conn, r, w)?))
     }
 }
 
@@ -158,14 +158,12 @@ impl<T> Transport for RateLimited<T>
 where
     T: Transport + 'static,
     T::Dial: Send,
-    T::MultiaddrFuture: Send,
     T::Output: AsyncRead + AsyncWrite + Send,
 {
     type Output = Connection<T::Output>;
-    type MultiaddrFuture = T::MultiaddrFuture;
     type Listener = Listener<T>;
     type ListenerUpgrade = ListenerUpgrade<T>;
-    type Dial = Box<Future<Item = (Connection<T::Output>, Self::MultiaddrFuture), Error = io::Error> + Send>;
+    type Dial = Box<Future<Item = Connection<T::Output>, Error = io::Error> + Send>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)>
     where
@@ -197,7 +195,7 @@ where
             .dial(addr)
             .map(move |dial| {
                 let future = dial
-                    .and_then(move |(conn, addr)| Ok((Connection::new(conn, r, w)?, addr)));
+                    .and_then(move |conn| Ok(Connection::new(conn, r, w)?));
                 Box::new(future) as Box<_>
             })
             .map_err(|(transport, a)| (RateLimited::from_parts(transport, r2, w2), a))

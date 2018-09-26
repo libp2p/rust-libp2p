@@ -22,6 +22,7 @@ use futures::future;
 use std::io::Error as IoError;
 use tokio_io::{AsyncRead, AsyncWrite};
 use upgrade::{ConnectionUpgrade, Endpoint};
+use Multiaddr;
 
 /// Wraps around a `ConnectionUpgrade` and makes it possible to enable or disable an upgrade.
 #[inline]
@@ -65,10 +66,10 @@ impl<U> Toggleable<U> {
     }
 }
 
-impl<C, U, Maf> ConnectionUpgrade<C, Maf> for Toggleable<U>
+impl<C, U> ConnectionUpgrade<C> for Toggleable<U>
 where
     C: AsyncRead + AsyncWrite,
-    U: ConnectionUpgrade<C, Maf>,
+    U: ConnectionUpgrade<C>,
 {
     type NamesIter = ToggleableIter<U::NamesIter>;
     type UpgradeIdentifier = U::UpgradeIdentifier;
@@ -82,8 +83,7 @@ where
     }
 
     type Output = U::Output;
-    type MultiaddrFuture = U::MultiaddrFuture;
-    type Future = future::Either<future::Empty<(U::Output, U::MultiaddrFuture), IoError>, U::Future>;
+    type Future = future::Either<future::Empty<U::Output, IoError>, U::Future>;
 
     #[inline]
     fn upgrade(
@@ -91,7 +91,7 @@ where
         socket: C,
         id: Self::UpgradeIdentifier,
         ty: Endpoint,
-        remote_addr: Maf,
+        remote_addr: &Multiaddr,
     ) -> Self::Future {
         if self.enabled {
             future::Either::B(self.inner.upgrade(socket, id, ty, remote_addr))

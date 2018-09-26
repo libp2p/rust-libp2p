@@ -32,10 +32,9 @@ pub struct DeniedTransport;
 impl Transport for DeniedTransport {
     // TODO: could use `!` for associated types once stable
     type Output = Cursor<Vec<u8>>;
-    type MultiaddrFuture = Box<Future<Item = Multiaddr, Error = io::Error> + Send + Sync>;
-    type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = io::Error> + Send + Sync>;
-    type ListenerUpgrade = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = io::Error> + Send + Sync>;
-    type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = io::Error> + Send + Sync>;
+    type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = io::Error> + Send + Sync>;
+    type ListenerUpgrade = Box<Future<Item = Self::Output, Error = io::Error> + Send + Sync>;
+    type Dial = Box<Future<Item = Self::Output, Error = io::Error> + Send + Sync>;
 
     #[inline]
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -54,8 +53,8 @@ impl Transport for DeniedTransport {
 }
 
 impl MuxedTransport for DeniedTransport {
-    type Incoming = future::Empty<Self::IncomingUpgrade, io::Error>;
-    type IncomingUpgrade = future::Empty<(Self::Output, Self::MultiaddrFuture), io::Error>;
+    type Incoming = future::Empty<(Self::IncomingUpgrade, Multiaddr), io::Error>;
+    type IncomingUpgrade = future::Empty<Self::Output, io::Error>;
 
     #[inline]
     fn next_incoming(self) -> Self::Incoming {

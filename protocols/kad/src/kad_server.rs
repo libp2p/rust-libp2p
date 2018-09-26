@@ -36,7 +36,7 @@
 use bytes::Bytes;
 use futures::sync::{mpsc, oneshot};
 use futures::{future, Future, Sink, stream, Stream};
-use libp2p_core::{ConnectionUpgrade, Endpoint, PeerId};
+use libp2p_core::{ConnectionUpgrade, Endpoint, Multiaddr, PeerId};
 use protocol::{self, KadMsg, KademliaProtocolConfig, KadPeer};
 use std::collections::VecDeque;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -63,7 +63,7 @@ impl KadConnecConfig {
     }
 }
 
-impl<C, Maf> ConnectionUpgrade<C, Maf> for KadConnecConfig
+impl<C> ConnectionUpgrade<C> for KadConnecConfig
 where
     C: AsyncRead + AsyncWrite + Send + 'static, // TODO: 'static :-/
 {
@@ -71,23 +71,20 @@ where
         KadConnecController,
         Box<Stream<Item = KadIncomingRequest, Error = IoError> + Send>,
     );
-    type MultiaddrFuture = Maf;
-    type Future = future::Map<<KademliaProtocolConfig as ConnectionUpgrade<C, Maf>>::Future, fn((<KademliaProtocolConfig as ConnectionUpgrade<C, Maf>>::Output, Maf)) -> (Self::Output, Maf)>;
+    type Future = future::Map<<KademliaProtocolConfig as ConnectionUpgrade<C>>::Future, fn((<KademliaProtocolConfig as ConnectionUpgrade<C>>::Output)) -> Self::Output>;
     type NamesIter = iter::Once<(Bytes, ())>;
     type UpgradeIdentifier = ();
 
     #[inline]
     fn protocol_names(&self) -> Self::NamesIter {
-        ConnectionUpgrade::<C, Maf>::protocol_names(&self.raw_proto)
+        ConnectionUpgrade::<C>::protocol_names(&self.raw_proto)
     }
 
     #[inline]
-    fn upgrade(self, incoming: C, id: (), endpoint: Endpoint, addr: Maf) -> Self::Future {
+    fn upgrade(self, incoming: C, id: (), endpoint: Endpoint, addr: &Multiaddr) -> Self::Future {
         self.raw_proto
             .upgrade(incoming, id, endpoint, addr)
-            .map::<fn(_) -> _, _>(move |(connec, addr)| {
-                (build_from_sink_stream(connec), addr)
-            })
+            .map::<fn(_) -> _, _>(build_from_sink_stream)
     }
 }
 

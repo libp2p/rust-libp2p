@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use either::{EitherListenStream, EitherListenUpgrade, EitherOutput};
-use futures::{prelude::*, future};
+use either::{EitherListenStream, EitherOutput, EitherFuture};
+use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::io::Error as IoError;
 use transport::{MuxedTransport, Transport};
@@ -41,10 +41,8 @@ where
 {
     type Output = EitherOutput<A::Output, B::Output>;
     type Listener = EitherListenStream<A::Listener, B::Listener>;
-    type ListenerUpgrade = EitherListenUpgrade<A::ListenerUpgrade, B::ListenerUpgrade>;
-    type MultiaddrFuture = future::Either<A::MultiaddrFuture, B::MultiaddrFuture>;
-    type Dial =
-        EitherListenUpgrade<<A::Dial as IntoFuture>::Future, <B::Dial as IntoFuture>::Future>;
+    type ListenerUpgrade = EitherFuture<A::ListenerUpgrade, B::ListenerUpgrade>;
+    type Dial = EitherFuture<A::Dial, B::Dial>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         let (first, addr) = match self.0.listen_on(addr) {
@@ -60,12 +58,12 @@ where
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
         let (first, addr) = match self.0.dial(addr) {
-            Ok(connec) => return Ok(EitherListenUpgrade::First(connec)),
+            Ok(connec) => return Ok(EitherFuture::First(connec)),
             Err(err) => err,
         };
 
         match self.1.dial(addr) {
-            Ok(connec) => Ok(EitherListenUpgrade::Second(connec)),
+            Ok(connec) => Ok(EitherFuture::Second(connec)),
             Err((second, addr)) => Err((OrTransport(first, second), addr)),
         }
     }
@@ -92,19 +90,18 @@ where
     A::Output: 'static,          // TODO: meh :-/
     B::Output: 'static,          // TODO: meh :-/
 {
-    type Incoming = Box<Future<Item = Self::IncomingUpgrade, Error = IoError> + Send>;
-    type IncomingUpgrade =
-        Box<Future<Item = (EitherOutput<A::Output, B::Output>, Self::MultiaddrFuture), Error = IoError> + Send>;
+    type Incoming = Box<Future<Item = (Self::IncomingUpgrade, Multiaddr), Error = IoError> + Send>;
+    type IncomingUpgrade = Box<Future<Item = EitherOutput<A::Output, B::Output>, Error = IoError> + Send>;
 
     #[inline]
     fn next_incoming(self) -> Self::Incoming {
-        let first = self.0.next_incoming().map(|out| {
-            let fut = out.map(move |(v, addr)| (EitherOutput::First(v), future::Either::A(addr)));
-            Box::new(fut) as Box<Future<Item = _, Error = _> + Send>
+        let first = self.0.next_incoming().map(|(out, addr)| {
+            let fut = out.map(EitherOutput::First);
+            (Box::new(fut) as Box<Future<Item = _, Error = _> + Send>, addr)
         });
-        let second = self.1.next_incoming().map(|out| {
-            let fut = out.map(move |(v, addr)| (EitherOutput::Second(v), future::Either::B(addr)));
-            Box::new(fut) as Box<Future<Item = _, Error = _> + Send>
+        let second = self.1.next_incoming().map(|(out, addr)| {
+            let fut = out.map(EitherOutput::Second);
+            (Box::new(fut) as Box<Future<Item = _, Error = _> + Send>, addr)
         });
         let future = first.select(second).map(|(i, _)| i).map_err(|(e, _)| e);
         Box::new(future) as Box<_>

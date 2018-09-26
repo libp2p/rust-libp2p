@@ -28,7 +28,7 @@ extern crate tokio_io;
 extern crate yamux;
 
 use bytes::Bytes;
-use core::Endpoint;
+use core::{Endpoint, Multiaddr};
 use futures::{future::{self, FutureResult}, prelude::*};
 use parking_lot::Mutex;
 use std::{io, iter};
@@ -132,10 +132,9 @@ impl Default for Config {
     }
 }
 
-impl<C, M> core::ConnectionUpgrade<C, M> for Config
+impl<C> core::ConnectionUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + 'static,
-    M: 'static
 {
     type UpgradeIdentifier = ();
     type NamesIter = iter::Once<(Bytes, ())>;
@@ -145,15 +144,15 @@ where
     }
 
     type Output = Yamux<C>;
-    type MultiaddrFuture = M;
-    type Future = FutureResult<(Yamux<C>, M), io::Error>;
+    type Future = FutureResult<Yamux<C>, io::Error>;
 
-    fn upgrade(self, i: C, _: (), end: Endpoint, remote: M) -> Self::Future {
+    fn upgrade(self, i: C, _: (), end: Endpoint, _: &Multiaddr) -> Self::Future {
         let mode = match end {
             Endpoint::Dialer => yamux::Mode::Client,
             Endpoint::Listener => yamux::Mode::Server
         };
-        future::ok((Yamux::new(i, self.0, mode), remote))
+
+        future::ok(Yamux::new(i, self.0, mode))
     }
 }
 

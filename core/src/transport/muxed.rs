@@ -22,14 +22,15 @@ use futures::prelude::*;
 use futures::stream;
 use std::io::Error as IoError;
 use transport::Transport;
+use Multiaddr;
 
 /// Extension trait for `Transport`. Implemented on structs that provide a `Transport` on which
 /// the dialed node can dial you back.
 pub trait MuxedTransport: Transport {
     /// Future resolving to a future that will resolve to an incoming connection.
-    type Incoming: Future<Item = Self::IncomingUpgrade, Error = IoError>;
+    type Incoming: Future<Item = (Self::IncomingUpgrade, Multiaddr), Error = IoError>;
     /// Future resolving to an incoming connection.
-    type IncomingUpgrade: Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>;
+    type IncomingUpgrade: Future<Item = Self::Output, Error = IoError>;
 
     /// Returns the next incoming substream opened by a node that we dialed ourselves.
     ///

@@ -46,7 +46,6 @@ where
     T: Transport,
 {
     type Output = T::Output;
-    type MultiaddrFuture = T::MultiaddrFuture;
     type Listener = T::Listener;
     type ListenerUpgrade = T::ListenerUpgrade;
     type Dial = InterruptibleDial<T::Dial>;

@@ -52,7 +52,6 @@ impl<T: Clone> Clone for OnlyOnce<T> {
 }
 impl<T: Transport> Transport for OnlyOnce<T> {
     type Output = T::Output;
-    type MultiaddrFuture = T::MultiaddrFuture;
     type Listener = T::Listener;
     type ListenerUpgrade = T::ListenerUpgrade;
     type Dial = T::Dial;
@@ -85,8 +84,7 @@ fn client_to_server_outbound() {
             .unwrap_or_else(|_| panic!()).0
             .into_future()
             .map_err(|(err, _)| err)
-            .and_then(|(client, _)| client.unwrap())
-            .map(|client| client.0)
+            .and_then(|(client, _)| client.unwrap().0)
             .map(|client| Framed::<_, BytesMut>::new(client))
             .and_then(|client| {
                 client
@@ -107,7 +105,7 @@ fn client_to_server_outbound() {
         .with_upgrade(multiplex::MplexConfig::new())
         .dial("/memory".parse().unwrap())
         .unwrap_or_else(|_| panic!())
-        .and_then(|client| muxing::outbound_from_ref_and_wrap(Arc::new(client.0)))
+        .and_then(|client| muxing::outbound_from_ref_and_wrap(Arc::new(client)))
         .map(|server| Framed::<_, BytesMut>::new(server.unwrap()))
         .and_then(|server| server.send("hello world".into()))
         .map(|_| ());
@@ -133,7 +131,7 @@ fn connection_reused_for_dialing() {
             .unwrap_or_else(|_| panic!()).0
             .into_future()
             .map_err(|(err, _)| err)
-            .and_then(|(client, rest)| client.unwrap().map(move |c| (c.0, rest)))
+            .and_then(|(client, rest)| client.unwrap().0.map(move |c| (c, rest)))
             .map(|(client, rest)| (Framed::<_, BytesMut>::new(client), rest))
             .and_then(|(client, rest)| {
                 client
@@ -149,8 +147,7 @@ fn connection_reused_for_dialing() {
             .flatten_stream()
             .into_future()
             .map_err(|(err, _)| err)
-            .and_then(|(client, _)| client.unwrap())
-            .map(|client| client.0)
+            .and_then(|(client, _)| client.unwrap().0)
             .map(|client| Framed::<_, BytesMut>::new(client))
             .and_then(|client| client.into_future().map_err(|(err, _)| err))
             .and_then(|(msg, _)| {
@@ -172,14 +169,14 @@ fn connection_reused_for_dialing() {
         .clone()
         .dial("/memory".parse().unwrap())
         .unwrap_or_else(|_| panic!())
-        .map(|server| Framed::<_, BytesMut>::new(server.0))
+        .map(|server| Framed::<_, BytesMut>::new(server))
         .and_then(|server| server.send("hello world".into()))
         .and_then(|first_connec| {
             transport
                 .clone()
                 .dial("/memory".parse().unwrap())
                 .unwrap_or_else(|_| panic!())
-                .map(|server| Framed::<_, BytesMut>::new(server.0))
+                .map(|server| Framed::<_, BytesMut>::new(server))
                 .map(|server| (first_connec, server))
         })
         .and_then(|(_first, second)| second.send("second message".into()))
@@ -204,8 +201,8 @@ fn use_opened_listen_to_dial() {
             .unwrap_or_else(|_| panic!()).0
             .into_future()
             .map_err(|(err, _)| err)
-            .and_then(|(client, _)| client.unwrap())
-            .map(|client| Arc::new(client.0))
+            .and_then(|(client, _)| client.unwrap().0)
+            .map(|client| Arc::new(client))
             .and_then(|c| {
                 let c2 = c.clone();
                 muxing::inbound_from_ref_and_wrap(c.clone()).map(move |i| (c2, i))
@@ -243,14 +240,14 @@ fn use_opened_listen_to_dial() {
         .clone()
         .dial("/memory".parse().unwrap())
         .unwrap_or_else(|_| panic!())
-        .map(|server| Framed::<_, BytesMut>::new(server.0))
+        .map(|server| Framed::<_, BytesMut>::new(server))
         .and_then(|server| server.send("hello world".into()))
         .and_then(|first_connec| {
             transport
                 .clone()
                 .next_incoming()
-                .and_then(|server| server)
-                .map(|server| Framed::<_, BytesMut>::new(server.0))
+                .and_then(|(server, _)| server)
+                .map(|server| Framed::<_, BytesMut>::new(server))
                 .map(|server| (first_connec, server))
         })
         .and_then(|(_first, second)| second.send("second message".into()))

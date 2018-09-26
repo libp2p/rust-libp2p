@@ -24,14 +24,15 @@ use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
 use std::{io::{Error as IoError, ErrorKind as IoErrorKind}, mem};
 use tokio_io::{AsyncRead, AsyncWrite};
 use upgrade::{ConnectionUpgrade, Endpoint};
+use Multiaddr;
 
 /// Applies a connection upgrade on a socket.
 ///
 /// Returns a `Future` that returns the outcome of the connection upgrade.
 #[inline]
-pub fn apply<C, U, Maf>(conn: C, upgrade: U, e: Endpoint, remote: Maf) -> UpgradeApplyFuture<C, U, Maf>
+pub fn apply<C, U>(conn: C, upgrade: U, e: Endpoint, remote: &Multiaddr) -> UpgradeApplyFuture<C, U>
 where
-    U: ConnectionUpgrade<C, Maf>,
+    U: ConnectionUpgrade<C>,
     U::NamesIter: Clone, // TODO: not elegant
     C: AsyncRead + AsyncWrite,
 {
@@ -40,31 +41,30 @@ where
             future: negotiate(conn, &upgrade, e),
             upgrade,
             endpoint: e,
-            remote
+            remote: remote.clone()
         }
     }
 }
 
 /// Future, returned from `apply` which performs a connection upgrade.
-pub struct UpgradeApplyFuture<C, U, Maf>
+pub struct UpgradeApplyFuture<C, U>
 where
-    U: ConnectionUpgrade<C, Maf>,
+    U: ConnectionUpgrade<C>,
     C: AsyncRead + AsyncWrite
 {
-    inner: UpgradeApplyState<C, U, Maf>
+    inner: UpgradeApplyState<C, U>
 }
 
-
-enum UpgradeApplyState<C, U, Maf>
+enum UpgradeApplyState<C, U>
 where
-    U: ConnectionUpgrade<C, Maf>,
+    U: ConnectionUpgrade<C>,
     C: AsyncRead + AsyncWrite
 {
     Init {
         future: NegotiationFuture<C, ProtocolNames<U::NamesIter>, U::UpgradeIdentifier>,
         upgrade: U,
         endpoint: Endpoint,
-        remote: Maf
+        remote: Multiaddr
     },
     Upgrade {
         future: U::Future
@@ -72,13 +72,13 @@ where
     Undefined
 }
 
-impl<C, U, Maf> Future for UpgradeApplyFuture<C, U, Maf>
+impl<C, U> Future for UpgradeApplyFuture<C, U>
 where
-    U: ConnectionUpgrade<C, Maf>,
+    U: ConnectionUpgrade<C>,
     U::NamesIter: Clone,
     C: AsyncRead + AsyncWrite
 {
-    type Item = (U::Output, U::MultiaddrFuture);
+    type Item = U::Output;
     type Error = IoError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -93,7 +93,7 @@ where
                         }
                     };
                     self.inner = UpgradeApplyState::Upgrade {
-                        future: upgrade.upgrade(connection, upgrade_id, endpoint, remote)
+                        future: upgrade.upgrade(connection, upgrade_id, endpoint, &remote)
                     };
                 }
                 UpgradeApplyState::Upgrade { mut future } => {
@@ -124,13 +124,13 @@ where
 ///
 /// Returns a `Future` that returns the negotiated protocol and the stream.
 #[inline]
-pub fn negotiate<C, I, U, Maf>(
+pub fn negotiate<C, I, U>(
     connection: C,
     upgrade: &U,
     endpoint: Endpoint,
 ) -> NegotiationFuture<C, ProtocolNames<U::NamesIter>, U::UpgradeIdentifier>
 where
-    U: ConnectionUpgrade<I, Maf>,
+    U: ConnectionUpgrade<I>,
     U::NamesIter: Clone, // TODO: not elegant
     C: AsyncRead + AsyncWrite,
 {
@@ -143,7 +143,6 @@ where
         }
     }
 }
-
 
 /// Future, returned by `negotiate`, which negotiates a protocol and stream.
 pub struct NegotiationFuture<R: AsyncRead + AsyncWrite, I, P> {
@@ -174,7 +173,6 @@ where
         }
     }
 }
-
 
 /// Iterator adapter which adds equality matching predicates to items.
 /// Used in `NegotiationFuture`.
