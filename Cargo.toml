@@ -76,6 +76,7 @@ members = [
     "misc/multihash",
     "misc/multistream-select",
     "misc/rw-stream-sink",
+    "net-test",
     "transports/dns",
     "protocols/floodsub",
     "protocols/identify",

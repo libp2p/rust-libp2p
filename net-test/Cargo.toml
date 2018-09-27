@@ -1,0 +1,14 @@
+[package]
+name = "netsim-tests"
+version = "0.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
+
+[dependencies]
+futures = "0.1"
+netsim = "0.2"
+rand = "0.5"
+tokio = "0.1"
+tokio-codec = "0.1"
+tokio-core = "0.1"
+libp2p = { path = ".." }
