@@ -78,7 +78,7 @@ impl Hash {
         }
     }
 
-    /// Returns the algorithm corresponding to a code, or `None` if no algorith is matching.
+    /// Returns the algorithm corresponding to a code, or `None` if no algorithm is matching.
     pub fn from_code(code: u16) -> Option<Hash> {
         Some(match code {
             0x11 => Hash::SHA1,
