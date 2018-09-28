@@ -36,9 +36,6 @@ extern crate multiaddr;
 extern crate parking_lot;
 extern crate protobuf;
 
-// TODO: implement getters in floodsub for private stuff, or make them public: 
-// libp2p_floodsub::{RemoteInfo, Inner,
-//      FloodSubController.broadcast()}
 use libp2p_core::PeerId;
 // Glob import due to gossipsub extending on floodsub
 use libp2p_floodsub::*;
@@ -51,6 +48,7 @@ use parking_lot::RwLock;
 use protobuf::Message as ProtobufMessage;
 use std::iter::Map;
 use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
 
 // TODO: code repetition has been attempted to be minimised, but further minimisation could probably be done.
 
@@ -80,6 +78,37 @@ impl GInner {
     pub fn get(&self, id: ()) {}
 }
 
+// Copied and pasted from floodsub (it's private)
+struct RemoteInfo {
+    // Sender to send data over the socket to that host.
+    sender: mpsc::UnboundedSender<BytesMut>,
+    // Topics the remote is registered to.
+    subscribed_topics: RwLock<FnvHashSet<TopicHash>>,
+}
+
+// Copied and pasted from floodsub (it's private)
+struct Inner {
+    // Our local peer ID multihash, to pass as the source.
+    peer_id: Vec<u8>,
+
+    // Channel where to send the messages that should be dispatched to the user.
+    output_tx: mpsc::UnboundedSender<Message>,
+
+    // Active connections with a remote.
+    remote_connections: RwLock<FnvHashMap<Multiaddr, RemoteInfo>>,
+
+    // List of topics we're subscribed to. Necessary in order to filter out messages that we
+    // erroneously receive.
+    subscribed_topics: RwLock<Vec<Topic>>,
+
+    // Sequence number for the messages we send.
+    seq_no: AtomicUsize,
+
+    // We keep track of the messages we received (in the format `(remote ID, seq_no)`) so that we
+    // don't dispatch the same message twice if we receive it twice on the network.
+    // TODO: the `HashSet` will keep growing indefinitely :-/
+    received: Mutex<FnvHashSet<u64>>,
+}
 
 /// Allows one to control the behaviour of the gossipsub system.
 #[derive(Clone)]
@@ -132,7 +161,7 @@ impl GossipSubController {
             }
         }
 
-        self.broadcast(proto, |_| true);
+        // self.broadcast(proto, |_| true);
     }
 
 }
