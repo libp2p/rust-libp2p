@@ -98,5 +98,19 @@ fn assert_roundtrip() {
 
 #[test]
 fn hash_types() {
+    assert_eq!(Hash::SHA1.size(), 20);
     assert_eq!(Hash::SHA2256.size(), 32);
+    assert_eq!(Hash::SHA2512.size(), 64);
+    assert_eq!(Hash::SHA3224.size(), 28);
+    assert_eq!(Hash::SHA3256.size(), 32);
+    assert_eq!(Hash::SHA3384.size(), 48);
+    assert_eq!(Hash::SHA3512.size(), 64);
+    assert_eq!(Hash::Keccak224.size(), 28);
+    assert_eq!(Hash::Keccak256.size(), 32);
+    assert_eq!(Hash::Keccak384.size(), 48);
+    assert_eq!(Hash::Keccak512.size(), 64);
+    assert_eq!(Hash::Blake2b512.size(), 64);
+    assert_eq!(Hash::Blake2b256.size(), 32);
+    assert_eq!(Hash::Blake2s256.size(), 32);
+    assert_eq!(Hash::Blake2s128.size(), 16);
 }
