@@ -7,11 +7,10 @@ fn hex_to_bytes(s: &str) -> Vec<u8> {
     let mut c = 0;
     let mut v = Vec::new();
     while c < s.len() {
-        v.push(u8::from_str_radix(&s[c..c+2], 16).unwrap());
+        v.push(u8::from_str_radix(&s[c..c + 2], 16).unwrap());
         c += 2;
     }
     v
-
 }
 
 macro_rules! assert_encode {
@@ -92,8 +91,8 @@ macro_rules! assert_roundtrip {
 #[test]
 fn assert_roundtrip() {
     assert_roundtrip!(
-        SHA1, SHA2256, SHA2512, SHA3224, SHA3256, SHA3384, SHA3512,
-        Keccak224, Keccak256, Keccak384, Keccak512
+        SHA1, SHA2256, SHA2512, SHA3224, SHA3256, SHA3384, SHA3512, Keccak224, Keccak256,
+        Keccak384, Keccak512
     );
 }
 

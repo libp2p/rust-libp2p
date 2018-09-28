@@ -1,4 +1,4 @@
-use std::{fmt, error};
+use std::{error, fmt};
 
 /// Error that can happen when encoding some bytes into a multihash.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -16,8 +16,7 @@ impl fmt::Display for EncodeError {
     }
 }
 
-impl error::Error for EncodeError {
-}
+impl error::Error for EncodeError {}
 
 /// Error that can happen when decoding some bytes.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -32,14 +31,13 @@ impl fmt::Display for DecodeError {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            DecodeError::BadInputLength =>  write!(f, "Not matching input length"),
+            DecodeError::BadInputLength => write!(f, "Not matching input length"),
             DecodeError::UnknownCode => write!(f, "Found unknown code"),
         }
     }
 }
 
-impl error::Error for DecodeError {
-}
+impl error::Error for DecodeError {}
 
 /// Error that can happen when decoding some bytes.
 ///
@@ -59,5 +57,4 @@ impl fmt::Display for DecodeOwnedError {
     }
 }
 
-impl error::Error for DecodeOwnedError {
-}
+impl error::Error for DecodeOwnedError {}
