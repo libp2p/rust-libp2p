@@ -82,8 +82,8 @@ macro_rules! match_encoder {
 /// ```
 ///
 pub fn encode(hash: Hash, input: &[u8]) -> Result<Multihash, EncodeError> {
-    let mut buf = encode::u64_buffer();
-    let code = encode::u64(hash.code(), &mut buf);
+    let mut buf = encode::u16_buffer();
+    let code = encode::u16(hash.code(), &mut buf);
 
     let header_len = code.len() + 1;
     let size = hash.size();
@@ -183,9 +183,9 @@ impl<'a> MultihashRef<'a> {
             return Err(DecodeError::BadInputLength);
         }
 
-        // NOTE: We choose u64 here because there is no hashing algorithm implemented in this crate
-        // whose length exceeds 2^63 - 1.
-        let (code, bytes) = decode::u64(&input).map_err(|_| DecodeError::BadInputLength)?;
+        // NOTE: We choose u16 here because there is no hashing algorithm implemented in this crate
+        // whose length exceeds 2^16 - 1.
+        let (code, bytes) = decode::u16(&input).map_err(|_| DecodeError::BadInputLength)?;
 
         let alg = Hash::from_code(code).ok_or(DecodeError::UnknownCode)?;
         let hash_len = alg.size() as usize;
@@ -205,14 +205,14 @@ impl<'a> MultihashRef<'a> {
     /// Returns which hashing algorithm is used in this multihash.
     #[inline]
     pub fn algorithm(&self) -> Hash {
-        let (code, _) = decode::u64(&self.bytes).expect("multihash is known to be valid algorithm");
+        let (code, _) = decode::u16(&self.bytes).expect("multihash is known to be valid algorithm");
         Hash::from_code(code).expect("multihash is known to be valid")
     }
 
     /// Returns the hashed data.
     #[inline]
     pub fn digest(&self) -> &'a [u8] {
-        let (_, bytes) = decode::u64(&self.bytes).expect("multihash is known to be valid digest");
+        let (_, bytes) = decode::u16(&self.bytes).expect("multihash is known to be valid digest");
         &bytes[1..]
     }
 

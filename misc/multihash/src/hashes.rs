@@ -37,7 +37,7 @@ pub enum Hash {
 
 impl Hash {
     /// Get the corresponding hash code.
-    pub fn code(&self) -> u64 {
+    pub fn code(&self) -> u16 {
         match *self {
             Hash::SHA1 => 0x11,
             Hash::SHA2256 => 0x12,
@@ -79,7 +79,7 @@ impl Hash {
     }
 
     /// Returns the algorithm corresponding to a code, or `None` if no algorith is matching.
-    pub fn from_code(code: u64) -> Option<Hash> {
+    pub fn from_code(code: u16) -> Option<Hash> {
         Some(match code {
             0x11 => Hash::SHA1,
             0x12 => Hash::SHA2256,
