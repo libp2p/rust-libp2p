@@ -157,7 +157,7 @@ where
 {
     #[inline]
     fn shutdown(&mut self) -> Poll<(), IoError> {
-        self.inner.poll_complete()
+        self.inner.close()
     }
 }
 

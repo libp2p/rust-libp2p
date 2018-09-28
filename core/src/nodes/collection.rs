@@ -19,78 +19,39 @@
 // DEALINGS IN THE SOFTWARE.
 
 use fnv::FnvHashMap;
-use futures::{prelude::*, sync::mpsc, sync::oneshot, task};
+use futures::prelude::*;
 use muxing::StreamMuxer;
 use nodes::node::Substream;
-use nodes::handled_node::{HandledNode, NodeHandler};
-use smallvec::SmallVec;
-use std::collections::hash_map::{Entry, OccupiedEntry};
-use std::io::Error as IoError;
-use tokio_executor;
+use nodes::handled_node_tasks::{HandledNodesEvent, HandledNodesTasks};
+use nodes::handled_node_tasks::{Task as HandledNodesTask, TaskId};
+use nodes::handled_node::NodeHandler;
+use std::collections::hash_map::Entry;
+use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use void::Void;
 use {Multiaddr, PeerId};
 
 // TODO: make generic over PeerId
 
-// Implementor notes
-// =================
-//
-// This collection of nodes spawns a task for each individual node to process. This means that
-// events happen on the background at the same time as the `CollectionStream` is being polled.
-//
-// In order to make the API non-racy and avoid issues, we totally separate the state in the
-// `CollectionStream` and the states that the task nodes can access. They are only allowed to
-// exchange messages. The state in the `CollectionStream` is therefore delayed compared to the
-// tasks, and is updated only when `poll()` is called.
-//
-// The only thing that we must be careful about is substreams, as they are "detached" from the
-// state of the `CollectionStream` and allowed to process in parallel. This is why there is no
-// "substream closed" event being reported, as it could potentially create confusions and race
-// conditions in the user's code. See similar comments in the documentation of `NodeStream`.
-
 /// Implementation of `Stream` that handles a collection of nodes.
 // TODO: implement Debug
 pub struct CollectionStream<TInEvent, TOutEvent> {
-    /// List of nodes, with a sender allowing to communicate messages.
-    nodes: FnvHashMap<PeerId, (ReachAttemptId, mpsc::UnboundedSender<TInEvent>)>,
-    /// Known state of a task. Tasks are identified by the reach attempt ID.
-    tasks: FnvHashMap<ReachAttemptId, TaskKnownState>,
-    /// Identifier for the next task to spawn.
-    next_task_id: ReachAttemptId,
-
-    /// List of node tasks to spawn.
-    // TODO: stronger typing?
-    to_spawn: SmallVec<[Box<Future<Item = (), Error = ()> + Send>; 8]>,
-    /// Task to notify when an element is added to `to_spawn`.
-    to_notify: Option<task::Task>,
-
-    /// Sender to emit events to the outside. Meant to be cloned and sent to tasks.
-    events_tx: mpsc::UnboundedSender<(InToExtMessage<TInEvent, TOutEvent>, ReachAttemptId)>,
-    /// Receiver side for the events.
-    events_rx: mpsc::UnboundedReceiver<(InToExtMessage<TInEvent, TOutEvent>, ReachAttemptId)>,
+    /// Object that handles the tasks.
+    inner: HandledNodesTasks<TInEvent, TOutEvent>,
+    /// List of nodes, with the task id that handles this node. The corresponding entry in `tasks`
+    /// must always be in the `Connected` state.
+    nodes: FnvHashMap<PeerId, TaskId>,
+    /// List of tasks and their state. If `Connected`, then a corresponding entry must be present
+    /// in `nodes`.
+    tasks: FnvHashMap<TaskId, TaskState>,
 }
 
-/// State of a task, as known by the frontend (the `ColletionStream`). Asynchronous compared to
-/// the actual state.
-enum TaskKnownState {
+/// State of a task.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum TaskState {
     /// Task is attempting to reach a peer.
-    Pending { interrupt: oneshot::Sender<()> },
-    /// The user interrupted this task.
-    Interrupted,
+    Pending,
     /// The task is connected to a peer.
     Connected(PeerId),
-}
-
-impl TaskKnownState {
-    /// Returns `true` for `Pending`.
-    #[inline]
-    fn is_pending(&self) -> bool {
-        match *self {
-            TaskKnownState::Pending { .. } => true,
-            TaskKnownState::Interrupted => false,
-            TaskKnownState::Connected(_) => false,
-        }
-    }
 }
 
 /// Event that can happen on the `CollectionStream`.
@@ -151,22 +112,16 @@ pub enum CollectionEvent<TOutEvent> {
 
 /// Identifier for a future that attempts to reach a node.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ReachAttemptId(usize);
+pub struct ReachAttemptId(TaskId);
 
 impl<TInEvent, TOutEvent> CollectionStream<TInEvent, TOutEvent> {
     /// Creates a new empty collection.
     #[inline]
     pub fn new() -> Self {
-        let (events_tx, events_rx) = mpsc::unbounded();
-
         CollectionStream {
+            inner: HandledNodesTasks::new(),
             nodes: Default::default(),
             tasks: Default::default(),
-            next_task_id: ReachAttemptId(0),
-            to_spawn: SmallVec::new(),
-            to_notify: None,
-            events_tx,
-            events_rx,
         }
     }
 
@@ -186,81 +141,62 @@ impl<TInEvent, TOutEvent> CollectionStream<TInEvent, TOutEvent> {
         TMuxer: StreamMuxer + Send + Sync + 'static,  // TODO: Send + Sync + 'static shouldn't be required
         TMuxer::OutboundSubstream: Send + 'static,  // TODO: shouldn't be required
     {
-        let reach_attempt_id = self.next_task_id;
-        self.next_task_id.0 += 1;
-
-        let (interrupt_tx, interrupt_rx) = oneshot::channel();
-        self.tasks.insert(
-            reach_attempt_id,
-            TaskKnownState::Pending {
-                interrupt: interrupt_tx,
-            },
-        );
-
-        let task = Box::new(NodeTask {
-            inner: NodeTaskInner::Future {
-                future,
-                interrupt: interrupt_rx,
-                handler: Some(handler),
-            },
-            events_tx: self.events_tx.clone(),
-            id: reach_attempt_id,
-        });
-
-        self.to_spawn.push(task);
-
-        if let Some(task) = self.to_notify.take() {
-            task.notify();
-        }
-
-        reach_attempt_id
+        let id = self.inner.add_reach_attempt(future, handler);
+        self.tasks.insert(id, TaskState::Pending);
+        ReachAttemptId(id)
     }
 
     /// Interrupts a reach attempt.
     ///
     /// Returns `Ok` if something was interrupted, and `Err` if the ID is not or no longer valid.
     pub fn interrupt(&mut self, id: ReachAttemptId) -> Result<(), ()> {
-        match self.tasks.entry(id) {
-            Entry::Vacant(_) => return Err(()),
-            Entry::Occupied(mut entry) => {
+        match self.tasks.entry(id.0) {
+            Entry::Vacant(_) => Err(()),
+            Entry::Occupied(entry) => {
                 match entry.get() {
-                    &TaskKnownState::Connected(_) => return Err(()),
-                    &TaskKnownState::Interrupted => return Err(()),
-                    &TaskKnownState::Pending { .. } => (),
+                    &TaskState::Connected(_) => return Err(()),
+                    &TaskState::Pending => (),
                 };
 
-                match entry.insert(TaskKnownState::Interrupted) {
-                    TaskKnownState::Pending { interrupt } => {
-                        let _ = interrupt.send(());
-                    }
-                    TaskKnownState::Interrupted | TaskKnownState::Connected(_) => unreachable!(),
-                };
+                entry.remove();
+                self.inner.task(id.0)
+                    .expect("whenever we receive a TaskClosed event or interrupt a task, we \
+                             remove the corresponding entry from self.tasks ; therefore all \
+                             elements in self.tasks are valid tasks in the \
+                             HandledNodesTasks ; qed")
+                    .close();
+
+                Ok(())
             }
         }
-
-        Ok(())
     }
 
     /// Sends an event to all nodes.
+    #[inline]
     pub fn broadcast_event(&mut self, event: &TInEvent)
     where TInEvent: Clone,
     {
-        for &(_, ref sender) in self.nodes.values() {
-            let _ = sender.unbounded_send(event.clone()); // TODO: unwrap
-        }
+        // TODO: remove the ones we're not connected to?
+        self.inner.broadcast_event(event)
     }
 
-    /// Grants access to an object that allows controlling a node of the collection.
+    /// Grants access to an object that allows controlling a peer of the collection.
     ///
     /// Returns `None` if we don't have a connection to this peer.
     #[inline]
     pub fn peer_mut(&mut self, id: &PeerId) -> Option<PeerMut<TInEvent>> {
-        match self.nodes.entry(id.clone()) {
-            Entry::Occupied(inner) => Some(PeerMut {
+        let task = match self.nodes.get(id) {
+            Some(&task) => task,
+            None => return None,
+        };
+
+        match self.inner.task(task) {
+            Some(inner) => Some(PeerMut {
                 inner,
                 tasks: &mut self.tasks,
+                nodes: &mut self.nodes,
             }),
-            Entry::Vacant(_) => None,
+            None => None,
         }
     }
 
@@ -283,38 +219,32 @@ impl<TInEvent, TOutEvent> CollectionStream<TInEvent, TOutEvent> {
 
 /// Access to a peer in the collection.
 pub struct PeerMut<'a, TInEvent: 'a> {
-    inner: OccupiedEntry<'a, PeerId, (ReachAttemptId, mpsc::UnboundedSender<TInEvent>)>,
-    tasks: &'a mut FnvHashMap<ReachAttemptId, TaskKnownState>,
+    inner: HandledNodesTask<'a, TInEvent>,
+    tasks: &'a mut FnvHashMap<TaskId, TaskState>,
+    nodes: &'a mut FnvHashMap<PeerId, TaskId>,
 }
 
 impl<'a, TInEvent> PeerMut<'a, TInEvent> {
     /// Sends an event to the given node.
     #[inline]
     pub fn send_event(&mut self, event: TInEvent) {
-        // It is possible that the sender is closed if the task has already finished but we
-        // haven't been polled in the meanwhile.
-        let _ = self.inner.get_mut().1.unbounded_send(event);
+        self.inner.send_event(event)
     }
 
     /// Closes the connections to this node.
     ///
     /// No further event will be generated for this node.
     pub fn close(self) {
-        let (peer_id, (task_id, _)) = self.inner.remove_entry();
-        // Set the task to `Interrupted` so that we ignore further messages from this closed node.
-        match self.tasks.insert(task_id, TaskKnownState::Interrupted) {
-            Some(TaskKnownState::Connected(ref p)) if p == &peer_id => (),
-            None
-            | Some(TaskKnownState::Connected(_))
-            | Some(TaskKnownState::Pending { .. })
-            | Some(TaskKnownState::Interrupted) => {
-                panic!("The task_id we have was retreived from self.nodes. We insert in this \
-                       hashmap when we reach a node, in which case we also insert Connected in \
-                       self.tasks with the corresponding peer ID. Once a task is Connected, it \
-                       can no longer switch back to Pending. We switch the state to Interrupted \
-                       only when we remove from self.nodes at the same time.")
-            },
-        }
+        let task_state = self.tasks.remove(&self.inner.id());
+        if let Some(TaskState::Connected(peer_id)) = task_state {
+            let old_task_id = self.nodes.remove(&peer_id);
+            debug_assert_eq!(old_task_id, Some(self.inner.id()));
+        } else {
+            panic!("a PeerMut can only be created if an entry is present in nodes ; an entry in \
+                    nodes always matched a Connected entry in tasks ; qed");
+        };
+
+        self.inner.close();
     }
 }
 
@@ -323,295 +253,92 @@ impl<TInEvent, TOutEvent> Stream for CollectionStream<TInEvent, TOutEvent> {
     type Error = Void; // TODO: use ! once stable
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        for to_spawn in self.to_spawn.drain() {
-            tokio_executor::spawn(to_spawn);
-        }
+        let item = try_ready!(self.inner.poll());
 
-        loop {
-            return match self.events_rx.poll() {
-                Ok(Async::Ready(Some((InToExtMessage::NodeEvent(event), task_id)))) => {
-                    let peer_id = match self.tasks.get(&task_id) {
-                        Some(TaskKnownState::Connected(ref peer_id)) => peer_id.clone(),
-                        Some(TaskKnownState::Interrupted) => continue, // Ignore messages from this task.
-                        None | Some(TaskKnownState::Pending { .. }) => {
-                            panic!("We insert Pending in self.tasks when a node is opened, and we \
-                                    set it to Connected when we receive a NodeReached event from \
-                                    this task. The way the task works, we are guaranteed to \
-                                    a NodeReached event before any NodeEvent.")
-                        }
-                    };
-
-                    Ok(Async::Ready(Some(CollectionEvent::NodeEvent {
-                        peer_id,
-                        event,
-                    })))
-                }
-                Ok(Async::Ready(Some((InToExtMessage::NodeReached(peer_id, sender), task_id)))) => {
-                    {
-                        let existing = match self.tasks.get_mut(&task_id) {
-                            Some(state) => state,
-                            None => panic!("We insert in self.tasks the corresponding task_id \
-                                            when we create a task, and we only remove from it \
-                                            if we receive the events NodeClosed, NodeError and \
-                                            ReachError, that are produced only when a task ends. \
-                                            After a task ends, we don't receive any more event \
-                                            from it.")
-                        };
-
-                        match existing {
-                            TaskKnownState::Pending { .. } => (),
-                            TaskKnownState::Interrupted => continue,
-                            TaskKnownState::Connected(_) => {
-                                panic!("The only code that sets a task to the Connected state \
-                                        is when we receive a NodeReached event. If we are already \
-                                        connected, that would mean we received NodeReached twice, \
-                                        which is not possible as a task changes state after \
-                                        sending this event.")
-                            },
-                        }
-
-                        *existing = TaskKnownState::Connected(peer_id.clone());
-                    }
-
-                    let replaced_node = self.nodes.insert(peer_id.clone(), (task_id, sender));
-                    if let Some(replaced_node) = replaced_node {
-                        let old = self.tasks.insert(replaced_node.0, TaskKnownState::Interrupted);
-                        debug_assert_eq!(old.map(|s| s.is_pending()), Some(false));
-                        Ok(Async::Ready(Some(CollectionEvent::NodeReplaced {
-                            peer_id,
-                            id: task_id,
+        match item {
+            Some(HandledNodesEvent::TaskClosed { id, result }) => {
+                match (self.tasks.remove(&id), result) {
+                    (Some(TaskState::Pending), Err(err)) => {
+                        Ok(Async::Ready(Some(CollectionEvent::ReachError {
+                            id: ReachAttemptId(id),
+                            error: err,
                         })))
-                    } else {
-                        Ok(Async::Ready(Some(CollectionEvent::NodeReached {
-                            peer_id,
-                            id: task_id,
+                    },
+                    (Some(TaskState::Pending), Ok(())) => {
+                        // TODO: this variant shouldn't happen ; prove this
+                        Ok(Async::Ready(Some(CollectionEvent::ReachError {
+                            id: ReachAttemptId(id),
+                            error: IoError::new(IoErrorKind::Other, "couldn't reach the node"),
                         })))
-                    }
+                    },
+                    (Some(TaskState::Connected(peer_id)), Ok(())) => {
+                        let _node_task_id = self.nodes.remove(&peer_id);
+                        debug_assert_eq!(_node_task_id, Some(id));
+                        Ok(Async::Ready(Some(CollectionEvent::NodeClosed {
+                            peer_id,
+                        })))
+                    },
+                    (Some(TaskState::Connected(peer_id)), Err(err)) => {
+                        let _node_task_id = self.nodes.remove(&peer_id);
+                        debug_assert_eq!(_node_task_id, Some(id));
+                        Ok(Async::Ready(Some(CollectionEvent::NodeError {
+                            peer_id,
+                            error: err,
+                        })))
+                    },
+                    (None, _) => {
+                        panic!("self.tasks is always kept in sync with the tasks in self.inner ; \
+                                when we add a task in self.inner we add a corresponding entry in \
+                                self.tasks, and remove the entry only when the task is closed ; \
+                                qed")
+                    },
                 }
-                Ok(Async::Ready(Some((InToExtMessage::NodeClosed, task_id)))) => {
-                    let peer_id = match self.tasks.remove(&task_id) {
-                        Some(TaskKnownState::Connected(peer_id)) => peer_id.clone(),
-                        Some(TaskKnownState::Interrupted) => continue, // Ignore messages from this task.
-                        None | Some(TaskKnownState::Pending { .. }) => {
-                            panic!("We insert Pending in self.tasks when a node is opened, and we \
-                                    set it to Connected when we receive a NodeReached event from \
-                                    this task. The way the task works, we are guaranteed to \
-                                    a NodeReached event before a NodeClosed.")
-                        }
-                    };
+            },
+            Some(HandledNodesEvent::NodeReached { id, peer_id }) => {
+                // Set the state of the task to `Connected`.
+                let former_task_id = self.nodes.insert(peer_id.clone(), id);
+                let _former_state = self.tasks.insert(id, TaskState::Connected(peer_id.clone()));
+                debug_assert_eq!(_former_state, Some(TaskState::Pending));
 
-                    let val = self.nodes.remove(&peer_id);
-                    debug_assert!(val.is_some());
-                    Ok(Async::Ready(Some(CollectionEvent::NodeClosed { peer_id })))
-                }
-                Ok(Async::Ready(Some((InToExtMessage::NodeError(err), task_id)))) => {
-                    let peer_id = match self.tasks.remove(&task_id) {
-                        Some(TaskKnownState::Connected(peer_id)) => peer_id.clone(),
-                        Some(TaskKnownState::Interrupted) => continue, // Ignore messages from this task.
-                        None | Some(TaskKnownState::Pending { .. }) => {
-                            panic!("We insert Pending in self.tasks when a node is opened, and we \
-                                    set it to Connected when we receive a NodeReached event from \
-                                    this task. The way the task works, we are guaranteed to \
-                                    a NodeReached event before a NodeError.")
-                        }
-                    };
+                // It is possible that we already have a task connected to the same peer. In this
+                // case, we need to emit a `NodeReplaced` event.
+                if let Some(former_task_id) = former_task_id {
+                    self.inner.task(former_task_id)
+                        .expect("whenever we receive a TaskClosed event or close a node, we \
+                                 remove the corresponding entry from self.nodes ; therefore all \
+                                 elements in self.nodes are valid tasks in the \
+                                 HandledNodesTasks ; qed")
+                        .close();
+                    let _former_other_state = self.tasks.remove(&former_task_id);
+                    debug_assert_eq!(_former_other_state, Some(TaskState::Connected(peer_id.clone())));
 
-                    let val = self.nodes.remove(&peer_id);
-                    debug_assert!(val.is_some());
-                    Ok(Async::Ready(Some(CollectionEvent::NodeError {
+                    Ok(Async::Ready(Some(CollectionEvent::NodeReplaced {
                         peer_id,
-                        error: err,
+                        id: ReachAttemptId(id),
+                    })))
+
+                } else {
+                    Ok(Async::Ready(Some(CollectionEvent::NodeReached {
+                        peer_id,
+                        id: ReachAttemptId(id),
                     })))
                 }
-                Ok(Async::Ready(Some((InToExtMessage::ReachError(err), task_id)))) => {
-                    match self.tasks.remove(&task_id) {
-                        Some(TaskKnownState::Interrupted) => continue,
-                        Some(TaskKnownState::Pending { .. }) => (),
-                        None | Some(TaskKnownState::Connected(_)) => {
-                            panic!("We insert Pending in self.tasks when a node is opened, and we \
-                                    set it to Connected when we receive a NodeReached event from \
-                                    this task. The way the task works, we are guaranteed to \
-                                    a NodeReached event before a ReachError.")
-                        }
-                    };
-
-                    Ok(Async::Ready(Some(CollectionEvent::ReachError {
-                        id: task_id,
-                        error: err,
-                    })))
-                }
-                Ok(Async::NotReady) => {
-                    self.to_notify = Some(task::current());
-                    Ok(Async::NotReady)
-                }
-                Ok(Async::Ready(None)) => {
-                    unreachable!("The sender is in self as well, therefore the receiver never \
-                                  closes.")
-                },
-                Err(()) => unreachable!("An unbounded receiver never errors"),
-            };
-        }
-    }
-}
-
-/// Message to transmit from a task to the public API.
-enum InToExtMessage<TInEvent, TOutEvent> {
-    /// A connection to a node has succeeded.
-    /// Closing the returned sender will end the task.
-    NodeReached(PeerId, mpsc::UnboundedSender<TInEvent>),
-    NodeClosed,
-    NodeError(IoError),
-    ReachError(IoError),
-    /// An event from the node.
-    NodeEvent(TOutEvent),
-}
-
-/// Implementation of `Future` that handles a single node, and all the communications between
-/// the various components of the `CollectionStream`.
-struct NodeTask<TFut, TMuxer, TAddrFut, THandler, TInEvent, TOutEvent>
-where
-    TMuxer: StreamMuxer,
-    THandler: NodeHandler<Substream<TMuxer>>,
-{
-    /// Sender to transmit events to the outside.
-    events_tx: mpsc::UnboundedSender<(InToExtMessage<TInEvent, TOutEvent>, ReachAttemptId)>,
-    /// Inner state of the `NodeTask`.
-    inner: NodeTaskInner<TFut, TMuxer, TAddrFut, THandler, TInEvent>,
-    /// Identifier of the attempt.
-    id: ReachAttemptId,
-}
-
-enum NodeTaskInner<TFut, TMuxer, TAddrFut, THandler, TInEvent>
-where
-    TMuxer: StreamMuxer,
-    THandler: NodeHandler<Substream<TMuxer>>,
-{
-    /// Future to resolve to connect to the node.
-    Future {
-        /// The future that will attempt to reach the node.
-        future: TFut,
-        /// Allows interrupting the attempt.
-        interrupt: oneshot::Receiver<()>,
-        /// The handler that will be used to build the `HandledNode`.
-        handler: Option<THandler>,
-    },
-
-    /// Fully functional node.
-    Node {
-        /// The object that is actually processing things.
-        node: HandledNode<TMuxer, TAddrFut, THandler>,
-        /// Receiving end for events sent from the main `CollectionStream`. `None` if closed.
-        in_events_rx: Option<mpsc::UnboundedReceiver<TInEvent>>,
-    },
-}
-
-impl<TFut, TMuxer, TAddrFut, THandler, TInEvent, TOutEvent> Future for
-    NodeTask<TFut, TMuxer, TAddrFut, THandler, TInEvent, TOutEvent>
-where
-    TMuxer: StreamMuxer,
-    TFut: Future<Item = ((PeerId, TMuxer), TAddrFut), Error = IoError>,
-    TAddrFut: Future<Item = Multiaddr, Error = IoError>,
-    THandler: NodeHandler<Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent>,
-{
-    type Item = ();
-    type Error = ();
-
-    fn poll(&mut self) -> Poll<(), ()> {
-        // Remember that this poll function is dedicated to a single node and is run
-        // asynchronously.
-
-        // First, handle if we are still trying to reach a node.
-        let new_state = if let NodeTaskInner::Future {
-            ref mut future,
-            ref mut interrupt,
-            ref mut handler,
-        } = self.inner
-        {
-            match interrupt.poll() {
-                Ok(Async::NotReady) => (),
-                Ok(Async::Ready(())) | Err(_) => return Ok(Async::Ready(())),
-            }
-
-            match future.poll() {
-                Ok(Async::Ready(((peer_id, muxer), addr_fut))) => {
-                    let (sender, rx) = mpsc::unbounded();
-                    let event = InToExtMessage::NodeReached(peer_id, sender);
-                    let _ = self.events_tx.unbounded_send((event, self.id));
-
-                    let handler = handler.take()
-                        .expect("The handler is only extracted right before we switch state");
-
-                    Some(NodeTaskInner::Node {
-                        node: HandledNode::new(muxer, addr_fut, handler),
-                        in_events_rx: Some(rx),
-                    })
-                }
-                Ok(Async::NotReady) => {
-                    return Ok(Async::NotReady);
-                }
-                Err(error) => {
-                    // End the task
-                    let event = InToExtMessage::ReachError(error);
-                    let _ = self.events_tx.unbounded_send((event, self.id));
-                    return Ok(Async::Ready(()));
-                }
-            }
-        } else {
-            None
-        };
-
-        if let Some(new_state) = new_state {
-            self.inner = new_state;
-        }
-
-        // Then handle if we're a node.
-        if let NodeTaskInner::Node {
-            ref mut node,
-            ref mut in_events_rx,
-        } = self.inner
-        {
-            // Start by handling commands received from the outside of the task.
-            if let Some(mut local_rx) = in_events_rx.take() {
-                *in_events_rx = loop {
-                    match local_rx.poll() {
-                        Ok(Async::Ready(Some(event))) => {
-                            node.inject_event(event);
-                        },
-                        Ok(Async::Ready(None)) => {
-                            // Node closed by the external API ; start shutdown process.
-                            node.shutdown();
-                            break None;
-                        }
-                        Ok(Async::NotReady) => break Some(local_rx),
-                        Err(()) => unreachable!("An unbounded receiver never errors"),
-                    }
+            },
+            Some(HandledNodesEvent::NodeEvent { id, event }) => {
+                let peer_id = match self.tasks.get(&id) {
+                    Some(TaskState::Connected(peer_id)) => peer_id.clone(),
+                    _ => panic!("we can only receive NodeEvent events from a task after we \
+                                 received a corresponding NodeReached event from that same task ; \
+                                 when we receive a NodeReached event, we ensure that the entry in \
+                                 self.tasks is switched to the Connected state ; qed"),
                 };
-            }
 
-            // Process the node.
-            loop {
-                match node.poll() {
-                    Ok(Async::NotReady) => break,
-                    Ok(Async::Ready(Some(event))) => {
-                        let event = InToExtMessage::NodeEvent(event);
-                        let _ = self.events_tx.unbounded_send((event, self.id));
-                    }
-                    Ok(Async::Ready(None)) => {
-                        let event = InToExtMessage::NodeClosed;
-                        let _ = self.events_tx.unbounded_send((event, self.id));
-                        return Ok(Async::Ready(())); // End the task.
-                    }
-                    Err(err) => {
-                        let event = InToExtMessage::NodeError(err);
-                        let _ = self.events_tx.unbounded_send((event, self.id));
-                        return Ok(Async::Ready(())); // End the task.
-                    }
-                }
+                Ok(Async::Ready(Some(CollectionEvent::NodeEvent {
+                    peer_id,
+                    event,
+                })))
             }
+            None => Ok(Async::Ready(None)),
         }
-
-        // Nothing's ready. The current task should have been registered by all of the inner
-        // handlers.
-        Ok(Async::NotReady)
     }
 }

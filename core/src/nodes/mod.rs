@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+mod handled_node_tasks;
+
 pub mod collection;
 pub mod handled_node;
 pub mod listeners;
