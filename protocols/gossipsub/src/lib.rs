@@ -26,6 +26,7 @@
 //! gossipsub: an extensible baseline pubsub protocol
 //! For a specification, see https://github.com/libp2p/specs/tree/master/pubsub/gossipsub.
 
+extern crate bytes;
 extern crate fnv;
 extern crate futures;
 extern crate libp2p_core;
@@ -36,21 +37,29 @@ extern crate multiaddr;
 extern crate parking_lot;
 extern crate protobuf;
 
-use libp2p_core::PeerId;
-// Glob import due to gossipsub extending on floodsub
-use libp2p_floodsub::*;
-// private: use libp2p_floodsub::RemoteInfo;
-use fnv::FnvHashMap;
+use bytes::BytesMut;
+use fnv::{FnvHashMap, FnvHashSet};
 use futures::sync::mpsc;
+use libp2p_core::PeerId;
+use libp2p_floodsub::{
+    FloodSubUpgrade,
+    Message,
+    Topic,
+    TopicHash,
+};
 use log::Level;
 use multiaddr::Multiaddr;
-use parking_lot::RwLock;
-use protobuf::Message as ProtobufMessage;
+use parking_lot::{
+    Mutex,
+    RwLock,
+};
+use std::fmt;
 use std::iter::Map;
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 
-// TODO: code repetition has been attempted to be minimised, but further minimisation could probably be done.
+// TODO: code repetition has been attempted to be minimised, but further 
+// minimisation could probably be done.
 
 mod constants;
 mod rpc_proto;
@@ -69,13 +78,6 @@ pub struct GInner {
     mesh: Map<TopicHash, Vec<PeerId>>,
     fanout: Map<TopicHash, Vec<PeerId>>,
     mcache: Vec<Message>,
-}
-
-impl GInner {
-    pub fn put(&self, msg: Message) {
-        self.mcache.push(msg)
-    }
-    pub fn get(&self, id: ()) {}
 }
 
 // Copied and pasted from floodsub (it's private)
@@ -108,6 +110,28 @@ struct Inner {
     // don't dispatch the same message twice if we receive it twice on the network.
     // TODO: the `HashSet` will keep growing indefinitely :-/
     received: Mutex<FnvHashSet<u64>>,
+}
+
+impl fmt::Debug for Inner {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_struct("Inner")
+            .field("peer_id", &self.peer_id)
+            .field(
+                "num_remote_connections",
+                &self.remote_connections.read().len(),
+            )
+            .field("subscribed_topics", &*self.subscribed_topics.read())
+            .field("seq_no", &self.seq_no)
+            .field("received", &self.received)
+            .finish()
+    }
+}
+
+// Copied and pasted from floodsub (field is private)
+/// Allows one to control the behaviour of the floodsub system.
+#[derive(Clone)]
+pub struct FloodSubController {
+    inner: Arc<Inner>,
 }
 
 /// Allows one to control the behaviour of the gossipsub system.
@@ -147,7 +171,7 @@ impl GossipSubController {
                         .collect::<Vec<_>>());
         }
 
-        let mut subscribed_topics = self.inner.subscribed_topics.write();
+        let mut subscribed_topics = self.f.inner.subscribed_topics.write();
         for (topic, subscribe) in topics {
             let mut subscription = rpc_proto::RPC_SubOpts::new();
             subscription.set_subscribe(subscribe);

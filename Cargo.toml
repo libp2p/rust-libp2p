@@ -82,7 +82,7 @@ members = [
     "misc/rw-stream-sink",
     "transports/dns",
     "protocols/floodsub",
-    "protocols/gossipsub",
+    "protocols/gossipsub-and-floodsub",
     "protocols/identify",
     "protocols/kad",
     "protocols/ping",

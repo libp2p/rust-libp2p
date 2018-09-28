@@ -1,0 +1,24 @@
+[package]
+name = "libp2p-gossipsub-and-floodsub" # It's verbose, but libp2p-pubsub and
+# libp2p-gossipsub aren't descriptive enough.
+version = "0.1.0"
+authors = ["James Ray <16969914+jamesray1@users.noreply.github.com>", 
+    "Parity Technologies <admin@parity.io>"]
+    # gossipsub is authored by James Ray, floodsub by Parity Technologies.
+license = "Unlicense" # Unlicense for gossipsub, MIT for floodsub
+
+[dependencies]
+bs58 = "0.2.0"
+byteorder = "1.2.1"
+bytes = "0.4"
+fnv = "1.0"
+futures = "0.1"
+libp2p-core = { path = "../../core" }
+log = "0.4.1"
+multiaddr = { path = "../../misc/multiaddr" }
+parking_lot = "0.6"
+protobuf = "2.0.2"
+smallvec = "0.6.0"
+tokio-codec = "0.1"
+tokio-io = "0.1"
+unsigned-varint = { version = "0.2.1", features = ["codec"] }
