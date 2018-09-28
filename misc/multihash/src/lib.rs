@@ -4,8 +4,8 @@
 //!
 //! A `Multihash` is a structure that contains a hashing algorithm, plus some hashed data.
 //! A `MultihashRef` is the same as a `Multihash`, except that it doesn't own its data.
-//!
 
+extern crate blake2;
 extern crate sha1;
 extern crate sha2;
 extern crate tiny_keccak;
@@ -23,7 +23,7 @@ use unsigned_varint::{decode, encode};
 pub use errors::{DecodeError, DecodeOwnedError, EncodeError};
 pub use hashes::Hash;
 
-// Helper macro for encoding input into output using sha1, sha2 or tiny_keccak
+// Helper macro for encoding input into output using sha1, sha2, tiny_keccak, or blake2
 macro_rules! encode {
     (sha1, Sha1, $input:expr, $output:expr) => {{
         let mut hasher = sha1::Sha1::new();
@@ -39,6 +39,11 @@ macro_rules! encode {
         let mut kec = Keccak::$constructor();
         kec.update($input);
         kec.finalize($output);
+    }};
+    (blake2, $algorithm:ident, $input:expr, $output:expr) => {{
+        let mut hasher = blake2::$algorithm::default();
+        hasher.input($input);
+        $output.copy_from_slice(hasher.result().as_ref());
     }};
 }
 
@@ -100,6 +105,8 @@ pub fn encode(hash: Hash, input: &[u8]) -> Result<Multihash, EncodeError> {
         Keccak256 => tiny::new_keccak256,
         Keccak384 => tiny::new_keccak384,
         Keccak512 => tiny::new_keccak512,
+        Blake2b512 => blake2::Blake2b,
+        Blake2s256 => blake2::Blake2s,
     });
 
     Ok(Multihash { bytes: output })
