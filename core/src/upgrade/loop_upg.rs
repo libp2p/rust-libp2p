@@ -21,8 +21,7 @@
 use futures::{future, future::Loop as FutLoop, prelude::*};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use tokio_io::{AsyncRead, AsyncWrite};
-use upgrade::{negotiate, ConnectionUpgrade, Endpoint};
-use Multiaddr;
+use upgrade::{negotiate, ConnectionUpgrade, ConnectedPoint};
 
 /// Looping connection upgrade.
 ///
@@ -92,11 +91,10 @@ where
         self,
         (state, socket): (State, Socket),
         id: Self::UpgradeIdentifier,
-        endpoint: Endpoint,
-        remote_addr: &Multiaddr,
+        endpoint: ConnectedPoint,
     ) -> Self::Future {
         let inner = self.inner;
-        let remote_addr = remote_addr.clone();
+        let endpoint = endpoint.clone();
 
         let fut = future::loop_fn(
             (state, socket, id, MAX_LOOPS),
@@ -105,9 +103,10 @@ where
                 // negotiated. So what we have to do is upgrade then negotiate the next protocol
                 // (if necessary), and then only continue iteration in the `future::loop_fn`.
                 let inner = inner.clone();
+                let endpoint = endpoint.clone();
                 inner
                     .clone()
-                    .upgrade((state, socket), id, endpoint, &remote_addr)
+                    .upgrade((state, socket), id, endpoint.clone())
                     .and_then(move |loop_out| match loop_out {
                         Loop::Continue(state, socket) => {
                             // Produce an error if we reached the recursion limit.
@@ -118,7 +117,7 @@ where
                                 )));
                             }
 
-                            let nego = negotiate(socket, &inner, endpoint);
+                            let nego = negotiate(socket, &inner, &endpoint);
                             let fut = nego.map(move |(id, socket)| {
                                 FutLoop::Continue((
                                     state,

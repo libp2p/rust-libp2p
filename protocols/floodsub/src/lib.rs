@@ -44,7 +44,7 @@ use bytes::{Bytes, BytesMut};
 use fnv::{FnvHashMap, FnvHashSet, FnvHasher};
 use futures::sync::mpsc;
 use futures::{future, Future, Poll, Sink, Stream};
-use libp2p_core::{ConnectionUpgrade, Endpoint, PeerId};
+use libp2p_core::{ConnectionUpgrade, ConnectedPoint, PeerId};
 use log::Level;
 use multiaddr::{Protocol, Multiaddr};
 use parking_lot::{Mutex, RwLock, RwLockUpgradableReadGuard};
@@ -109,13 +109,16 @@ where
         self,
         socket: C,
         _: Self::UpgradeIdentifier,
-        _: Endpoint,
-        remote_addr: &Multiaddr,
+        endpoint: ConnectedPoint,
     ) -> Self::Future {
         debug!("Upgrading connection as floodsub");
 
         let future = {
-            let remote_addr = remote_addr.clone();
+            // TODO: wrong ; the send_back_addr is a bad way to track things
+            let remote_addr = match endpoint {
+                ConnectedPoint::Dialer { address } => address.clone(),
+                ConnectedPoint::Listener { send_back_addr, .. } => send_back_addr.clone(),
+            };
 
             // Whenever a new node connects, we send to it a message containing the topics we are
             // already subscribed to.

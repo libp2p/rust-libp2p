@@ -36,7 +36,7 @@
 use bytes::Bytes;
 use futures::sync::{mpsc, oneshot};
 use futures::{future, Future, Sink, stream, Stream};
-use libp2p_core::{ConnectionUpgrade, Endpoint, Multiaddr, PeerId};
+use libp2p_core::{ConnectionUpgrade, ConnectedPoint, PeerId};
 use protocol::{self, KadMsg, KademliaProtocolConfig, KadPeer};
 use std::collections::VecDeque;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -81,9 +81,9 @@ where
     }
 
     #[inline]
-    fn upgrade(self, incoming: C, id: (), endpoint: Endpoint, addr: &Multiaddr) -> Self::Future {
+    fn upgrade(self, incoming: C, id: (), endpoint: ConnectedPoint) -> Self::Future {
         self.raw_proto
-            .upgrade(incoming, id, endpoint, addr)
+            .upgrade(incoming, id, endpoint)
             .map::<fn(_) -> _, _>(build_from_sink_stream)
     }
 }

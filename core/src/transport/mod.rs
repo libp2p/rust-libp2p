@@ -35,7 +35,7 @@ use multiaddr::Multiaddr;
 use muxing::StreamMuxer;
 use std::io::Error as IoError;
 use tokio_io::{AsyncRead, AsyncWrite};
-use upgrade::{ConnectionUpgrade, Endpoint};
+use upgrade::{ConnectionUpgrade, ConnectedPoint, Endpoint};
 
 pub mod and_then;
 pub mod boxed;
@@ -213,7 +213,7 @@ pub trait Transport {
     fn and_then<C, F, O>(self, upgrade: C) -> and_then::AndThen<Self, C>
     where
         Self: Sized,
-        C: FnOnce(Self::Output, Endpoint, &Multiaddr) -> F + Clone + 'static,
+        C: FnOnce(Self::Output, ConnectedPoint) -> F + Clone + 'static,
         F: Future<Item = O, Error = IoError> + 'static,
     {
         and_then::and_then(self, upgrade)

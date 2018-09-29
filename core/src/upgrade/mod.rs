@@ -34,4 +34,4 @@ pub use self::loop_upg::{loop_upg, Loop};
 pub use self::map::map;
 pub use self::plaintext::PlainTextConfig;
 pub use self::toggleable::toggleable;
-pub use self::traits::{ConnectionUpgrade, Endpoint};
+pub use self::traits::{ConnectedPoint, ConnectionUpgrade, Endpoint};

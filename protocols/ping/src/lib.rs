@@ -93,7 +93,7 @@ extern crate tokio_io;
 
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::{prelude::*, future::{FutureResult, IntoFuture}, task};
-use libp2p_core::{ConnectionUpgrade, Endpoint, Multiaddr};
+use libp2p_core::{ConnectionUpgrade, ConnectedPoint};
 use rand::{distributions::Standard, prelude::*, rngs::EntropyRng};
 use std::collections::VecDeque;
 use std::io::Error as IoError;
@@ -143,12 +143,11 @@ where
         self,
         socket: TSocket,
         _: Self::UpgradeIdentifier,
-        endpoint: Endpoint,
-        _: &Multiaddr,
+        endpoint: ConnectedPoint
     ) -> Self::Future {
         let out = match endpoint {
-            Endpoint::Dialer => upgrade_as_dialer(socket),
-            Endpoint::Listener => upgrade_as_listener(socket),
+            ConnectedPoint::Dialer { .. } => upgrade_as_dialer(socket),
+            ConnectedPoint::Listener { .. } => upgrade_as_listener(socket),
         };
 
         Ok(out).into_future()
@@ -407,7 +406,7 @@ mod tests {
     use self::tokio_tcp::TcpStream;
     use super::{Ping, PingOutput};
     use futures::{Future, Stream};
-    use libp2p_core::{ConnectionUpgrade, Endpoint};
+    use libp2p_core::{ConnectionUpgrade, ConnectedPoint};
 
     // TODO: rewrite tests with the MemoryTransport
 
@@ -424,8 +423,10 @@ mod tests {
                 Ping::<()>::default().upgrade(
                     c.unwrap(),
                     (),
-                    Endpoint::Listener,
-                    &"/ip4/127.0.0.1/tcp/10000".parse().unwrap(),
+                    ConnectedPoint::Listener {
+                        send_back_addr: "/ip4/127.0.0.1/tcp/10001".parse().unwrap(),
+                        listen_addr: "/ip4/127.0.0.1/tcp/10000".parse().unwrap(),
+                    },
                 )
             })
             .and_then(|out| match out {
@@ -439,8 +440,7 @@ mod tests {
                 Ping::<()>::default().upgrade(
                     c,
                     (),
-                    Endpoint::Dialer,
-                    &"/ip4/127.0.0.1/tcp/10000".parse().unwrap(),
+                    ConnectedPoint::Dialer { address: "/ip4/127.0.0.1/tcp/10000".parse().unwrap() },
                 )
             })
             .and_then(|out| match out {
@@ -469,8 +469,10 @@ mod tests {
                 Ping::<u32>::default().upgrade(
                     c.unwrap(),
                     (),
-                    Endpoint::Listener,
-                    &"/ip4/127.0.0.1/tcp/10000".parse().unwrap(),
+                    ConnectedPoint::Listener {
+                        listen_addr: "/ip4/127.0.0.1/tcp/10000".parse().unwrap(),
+                        send_back_addr: "/ip4/127.0.0.1/tcp/10001".parse().unwrap()
+                    },
                 )
             })
             .and_then(|out| match out {
@@ -484,8 +486,7 @@ mod tests {
                 Ping::<u32>::default().upgrade(
                     c,
                     (),
-                    Endpoint::Dialer,
-                    &"/ip4/127.0.0.1/tcp/10000".parse().unwrap(),
+                    ConnectedPoint::Dialer { address: "/ip4/127.0.0.1/tcp/10000".parse().unwrap() },
                 )
             })
             .and_then(|out| match out {

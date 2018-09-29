@@ -20,7 +20,7 @@
 
 use bytes::{Bytes, BytesMut};
 use futures::{future, Future, Sink, Stream};
-use libp2p_core::{ConnectionUpgrade, Endpoint, Multiaddr, PublicKey};
+use libp2p_core::{ConnectionUpgrade, ConnectedPoint, Multiaddr, PublicKey};
 use protobuf::Message as ProtobufMessage;
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
 use protobuf::RepeatedField;
@@ -124,13 +124,13 @@ where
         iter::once((Bytes::from("/ipfs/id/1.0.0"), ()))
     }
 
-    fn upgrade(self, socket: C, _: (), ty: Endpoint, _: &Multiaddr) -> Self::Future {
-        trace!("Upgrading connection as {:?}", ty);
+    fn upgrade(self, socket: C, _: (), endpoint: ConnectedPoint) -> Self::Future {
+        trace!("Upgrading connection as {:?}", endpoint);
 
         let socket = Framed::new(socket, codec::UviBytes::default());
 
-        match ty {
-            Endpoint::Dialer => {
+        match endpoint {
+            ConnectedPoint::Dialer { .. } => {
                 let future = socket
                     .into_future()
                     .map(|(msg, _)| msg)
@@ -163,7 +163,7 @@ where
                 Box::new(future) as Box<_>
             }
 
-            Endpoint::Listener => {
+            ConnectedPoint::Listener { .. } => {
                 let sender = IdentifySender { inner: socket };
                 let future = future::ok(IdentifyOutput::Sender { sender });
                 Box::new(future) as Box<_>

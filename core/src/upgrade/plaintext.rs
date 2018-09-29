@@ -22,8 +22,7 @@ use bytes::Bytes;
 use futures::future::{self, FutureResult};
 use std::{iter, io::Error as IoError};
 use tokio_io::{AsyncRead, AsyncWrite};
-use upgrade::{ConnectionUpgrade, Endpoint};
-use Multiaddr;
+use upgrade::{ConnectionUpgrade, ConnectedPoint};
 
 /// Implementation of the `ConnectionUpgrade` that negotiates the `/plaintext/1.0.0` protocol and
 /// simply passes communications through without doing anything more.
@@ -43,7 +42,7 @@ where
     type NamesIter = iter::Once<(Bytes, ())>;
 
     #[inline]
-    fn upgrade(self, i: C, _: (), _: Endpoint, _: &Multiaddr) -> Self::Future {
+    fn upgrade(self, i: C, _: (), _: ConnectedPoint) -> Self::Future {
         future::ok(i)
     }
 

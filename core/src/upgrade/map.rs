@@ -21,8 +21,7 @@
 use std::io::Error as IoError;
 use futures::prelude::*;
 use tokio_io::{AsyncRead, AsyncWrite};
-use upgrade::{ConnectionUpgrade, Endpoint};
-use Multiaddr;
+use upgrade::{ConnectionUpgrade, ConnectedPoint};
 
 /// Applies a closure on the output of a connection upgrade.
 #[inline]
@@ -58,12 +57,11 @@ where
         self,
         socket: C,
         id: Self::UpgradeIdentifier,
-        ty: Endpoint,
-        remote_addr: &Multiaddr,
+        endpoint: ConnectedPoint,
     ) -> Self::Future {
         let map = self.map;
         let fut = self.upgrade
-            .upgrade(socket, id, ty, remote_addr)
+            .upgrade(socket, id, endpoint)
             .map(map);
         Box::new(fut) as Box<_>
     }

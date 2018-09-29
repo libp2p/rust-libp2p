@@ -260,4 +260,4 @@ pub use self::public_key::PublicKey;
 pub use self::swarm::{swarm, SwarmController, SwarmEvents};
 pub use self::transport::{MuxedTransport, Transport};
 pub use self::unique::{UniqueConnec, UniqueConnecFuture, UniqueConnecState};
-pub use self::upgrade::{ConnectionUpgrade, Endpoint};
+pub use self::upgrade::{ConnectedPoint, ConnectionUpgrade, Endpoint};

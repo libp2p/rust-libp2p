@@ -21,8 +21,7 @@
 use bytes::Bytes;
 use futures::future;
 use tokio_io::{AsyncRead, AsyncWrite};
-use upgrade::{ConnectionUpgrade, Endpoint};
-use Multiaddr;
+use upgrade::{ConnectionUpgrade, ConnectedPoint};
 
 /// Builds a new `ConnectionUpgrade` that chooses between `A` and `B`.
 ///
@@ -62,15 +61,14 @@ where
         self,
         socket: C,
         id: Self::UpgradeIdentifier,
-        ty: Endpoint,
-        remote_addr: &Multiaddr,
+        endpoint: ConnectedPoint,
     ) -> Self::Future {
         match id {
             EitherUpgradeIdentifier::First(id) => {
-                future::Either::A(self.0.upgrade(socket, id, ty, remote_addr))
+                future::Either::A(self.0.upgrade(socket, id, endpoint))
             }
             EitherUpgradeIdentifier::Second(id) => {
-                future::Either::B(self.1.upgrade(socket, id, ty, remote_addr))
+                future::Either::B(self.1.upgrade(socket, id, endpoint))
             }
         }
     }
