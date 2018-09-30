@@ -294,7 +294,6 @@ mod tests {
             inbound_closed: bool,
             substream_attempt_cancelled: bool,
             shutdown_called: bool,
-            to_notify: Option<task::Task>
         };
         impl<T> NodeHandler<T> for Handler {
             type InEvent = ();
@@ -315,9 +314,6 @@ mod tests {
                 assert!(self.inbound_closed);
                 assert!(self.substream_attempt_cancelled);
                 self.shutdown_called = true;
-                if let Some(task) = self.to_notify.take() {
-                    task.notify();
-                }
             }
             fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<(), ()>>, IoError> {
                 if self.shutdown_called {
@@ -326,7 +322,6 @@ mod tests {
                     self.did_substream_attempt = true;
                     Ok(Async::Ready(Some(NodeHandlerEvent::OutboundSubstreamRequest(()))))
                 } else {
-                    self.to_notify = Some(task::current());
                     Ok(Async::NotReady)
                 }
             }
@@ -342,7 +337,6 @@ mod tests {
             inbound_closed: false,
             substream_attempt_cancelled: false,
             shutdown_called: false,
-            to_notify: None,
         });
 
         current_thread::Runtime::new().unwrap().block_on(handled.for_each(|_| Ok(()))).unwrap();
