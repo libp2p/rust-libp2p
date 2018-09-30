@@ -24,7 +24,7 @@
 //! helps you with.
 
 use error::SecioError;
-#[cfg(feature = "ring")]
+#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
 use ring::digest;
 use std::cmp::Ordering;
 use stream_cipher::Cipher;
@@ -204,7 +204,7 @@ pub fn select_digest<'a>(r: Ordering, ours: &str, theirs: &str) -> Result<Digest
     Err(SecioError::NoSupportIntersection)
 }
 
-#[cfg(feature = "ring")]
+#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
 impl Into<&'static digest::Algorithm> for Digest {
     #[inline]
     fn into(self) -> &'static digest::Algorithm {

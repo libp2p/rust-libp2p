@@ -33,9 +33,9 @@ use libp2p_core::PublicKey;
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
 use protobuf::Message as ProtobufMessage;
 use rand::{self, RngCore};
-#[cfg(feature = "rsa")]
+#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
 use ring::signature::{RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256, verify as ring_verify};
-#[cfg(feature = "rsa")]
+#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
 use ring::rand::SystemRandom;
 #[cfg(feature = "secp256k1")]
 use secp256k1;
@@ -46,7 +46,7 @@ use std::mem;
 use structs_proto::{Exchange, Propose};
 use tokio_io::codec::length_delimited;
 use tokio_io::{AsyncRead, AsyncWrite};
-#[cfg(feature = "rsa")]
+#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
 use untrusted::Input as UntrustedInput;
 use {KeyAgreement, SecioConfig, SecioKeyPairInner};
 
@@ -318,7 +318,7 @@ where
                 exchange.set_epubkey(tmp_pub_key);
                 exchange.set_signature({
                     match context.config.key.inner {
-                        #[cfg(feature = "rsa")]
+                        #[cfg(all(feature = "ring", not(target_os = "emscripten")))]
                         SecioKeyPairInner::Rsa { ref private, .. } => {
                             let mut state = match RSASigningState::new(private.clone()) {
                                 Ok(s) => s,
@@ -409,7 +409,7 @@ where
             data_to_verify.extend_from_slice(remote_exch.get_epubkey());
 
             match context.remote_public_key {
-                #[cfg(feature = "rsa")]
+                #[cfg(all(feature = "ring", not(target_os = "emscripten")))]
                 Some(PublicKey::Rsa(ref remote_public_key)) => {
                     // TODO: The ring library doesn't like some stuff in our DER public key,
                     //       therefore we scrap the first 24 bytes of the key. A proper fix would
@@ -464,7 +464,7 @@ where
                         return Err(SecioError::SignatureVerificationFailed)
                     }
                 },
-                #[cfg(not(feature = "rsa"))]
+                #[cfg(not(all(feature = "ring", not(target_os = "emscripten"))))]
                 Some(PublicKey::Rsa(_)) => {
                     debug!("support for RSA was disabled at compile-time");
                     return Err(SecioError::SignatureVerificationFailed);
@@ -621,7 +621,7 @@ mod tests {
     use {SecioConfig, SecioKeyPair};
 
     #[test]
-    #[cfg(feature = "rsa")]
+    #[cfg(all(feature = "ring", not(target_os = "emscripten")))]
     fn handshake_with_self_succeeds_rsa() {
         let key1 = {
             let private = include_bytes!("../tests/test-rsa-private-key.pk8");

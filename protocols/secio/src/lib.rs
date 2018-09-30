@@ -92,7 +92,7 @@ extern crate libp2p_core;
 extern crate log;
 extern crate protobuf;
 extern crate rand;
-#[cfg(feature = "ring")]
+#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
 extern crate ring;
 extern crate rw_stream_sink;
 #[cfg(feature = "secp256k1")]
@@ -103,7 +103,7 @@ extern crate sha2;
 extern crate stdweb;
 extern crate tokio_io;
 extern crate twofish;
-#[cfg(feature = "rsa")]
+#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
 extern crate untrusted;
 
 #[cfg(feature = "aes-all")]
@@ -118,7 +118,7 @@ use ed25519_dalek::Keypair as Ed25519KeyPair;
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
 use libp2p_core::{PeerId, PublicKey};
-#[cfg(feature = "rsa")]
+#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
 use ring::signature::RSAKeyPair;
 use rw_stream_sink::RwStreamSink;
 use std::error::Error;
@@ -126,7 +126,7 @@ use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use std::sync::Arc;
 use tokio_io::{AsyncRead, AsyncWrite};
-#[cfg(feature = "rsa")]
+#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
 use untrusted::Input;
 
 mod algo_support;
@@ -220,7 +220,7 @@ pub struct SecioKeyPair {
 
 impl SecioKeyPair {
     /// Builds a `SecioKeyPair` from a PKCS8 private key and public key.
-    #[cfg(feature = "rsa")]
+    #[cfg(all(feature = "ring", not(target_os = "emscripten")))]
     pub fn rsa_from_pkcs8<P>(
         private: &[u8],
         public: P,
@@ -295,7 +295,7 @@ impl SecioKeyPair {
     /// Returns the public key corresponding to this key pair.
     pub fn to_public_key(&self) -> PublicKey {
         match self.inner {
-            #[cfg(feature = "rsa")]
+            #[cfg(all(feature = "ring", not(target_os = "emscripten")))]
             SecioKeyPairInner::Rsa { ref public, .. } => PublicKey::Rsa(public.clone()),
             SecioKeyPairInner::Ed25519 { ref key_pair } => {
                 PublicKey::Ed25519(key_pair.public.as_bytes().to_vec())
@@ -322,7 +322,7 @@ impl SecioKeyPair {
 // Inner content of `SecioKeyPair`.
 #[derive(Clone)]
 enum SecioKeyPairInner {
-    #[cfg(feature = "rsa")]
+    #[cfg(all(feature = "ring", not(target_os = "emscripten")))]
     Rsa {
         public: Vec<u8>,
         // We use an `Arc` so that we can clone the enum.
