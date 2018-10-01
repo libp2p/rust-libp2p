@@ -69,7 +69,9 @@ pub fn generate_agreement(algorithm: KeyAgreement) -> impl Future<Item = (Agreem
 
     rx
         .map(move |(private, public): (AgreementPrivateKey, Reference)| {
-            let array = public.downcast::<ArrayBuffer>().unwrap();      // TODO: prove
+            // TODO: is this actually true? the WebCrypto specs are blurry
+            let array = public.downcast::<ArrayBuffer>()
+                .expect("The output of crypto.subtle.exportKey is always an ArrayBuffer");
             (private, Vec::<u8>::from(array))
         })
         .map_err(|_| unreachable!())
@@ -126,7 +128,9 @@ pub fn agree(algorithm: KeyAgreement, key: AgreementPrivateKey, other_public_key
 
     rx
         .map(move |buffer| {
-            Vec::<u8>::from(buffer.downcast::<ArrayBuffer>().unwrap())      // TODO: prove
+            Vec::<u8>::from(buffer.downcast::<ArrayBuffer>().
+                expect("We put the bits into a Uint8Array, which can be casted into \
+                        an ArrayBuffer"))
         })
         .map_err(|_| unreachable!())
 }
