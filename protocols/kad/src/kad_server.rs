@@ -37,6 +37,7 @@ use bytes::Bytes;
 use futures::sync::{mpsc, oneshot};
 use futures::{future, Future, Sink, stream, Stream};
 use libp2p_core::{ConnectionUpgrade, Endpoint, PeerId};
+use multihash::Multihash;
 use protocol::{self, KadMsg, KademliaProtocolConfig, KadPeer};
 use std::collections::VecDeque;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -109,7 +110,7 @@ impl KadConnecController {
         searched_key: &PeerId,
     ) -> impl Future<Item = Vec<KadPeer>, Error = IoError> {
         let message = protocol::KadMsg::FindNodeReq {
-            key: searched_key.clone().into_bytes(),
+            key: searched_key.clone().into(),
         };
 
         let (tx, rx) = oneshot::channel();
@@ -146,10 +147,10 @@ impl KadConnecController {
     // TODO: future item could be `impl Iterator` instead
     pub fn get_providers(
         &self,
-        searched_key: &PeerId,
+        searched_key: &Multihash,
     ) -> impl Future<Item = (Vec<KadPeer>, Vec<KadPeer>), Error = IoError> {
         let message = protocol::KadMsg::GetProvidersReq {
-            key: searched_key.clone().into_bytes(),
+            key: searched_key.clone(),
         };
 
         let (tx, rx) = oneshot::channel();
@@ -183,11 +184,11 @@ impl KadConnecController {
     }
 
     /// Sends an `ADD_PROVIDER` message to the node.
-    pub fn add_provider(&self, key: &PeerId, provider_peer: KadPeer) -> Result<(), IoError> {
+    pub fn add_provider(&self, key: Multihash, provider_peer: KadPeer) -> Result<(), IoError> {
         // Dummy channel, as the `tx` is going to be dropped anyway.
         let (tx, _rx) = oneshot::channel();
         let message = protocol::KadMsg::AddProvider {
-            key: key.clone().into_bytes(),
+            key,
             provider_peer,
         };
         match self.inner.unbounded_send((message, tx)) {
@@ -228,7 +229,7 @@ pub enum KadIncomingRequest {
     /// Find the nodes closest to `searched` and return the known providers for `searched`.
     GetProviders {
         /// The value being searched.
-        searched: PeerId,
+        searched: Multihash,
         /// Object to use to respond to the request.
         responder: KadGetProvidersRespond,
     },
@@ -239,7 +240,7 @@ pub enum KadIncomingRequest {
     /// request for the given key.
     AddProvider {
         /// The key of the provider.
-        key: PeerId,
+        key: Multihash,
         /// The provider to register.
         provider_peer: KadPeer,
     },
@@ -454,21 +455,12 @@ where
                             }
                         }
                         Some(EventSource::Remote(KadMsg::FindNodeReq { key })) => {
-                            let peer_id = match PeerId::from_bytes(key) {
-                                Ok(id) => id,
-                                Err(key) => {
-                                    debug!("Ignoring FIND_NODE request with invalid key: {:?}", key);
-                                    let future = future::err(IoError::new(IoErrorKind::InvalidData, "invalid key in FIND_NODE"));
-                                    return Box::new(future);
-                                }
-                            };
-
                             let (tx, rx) = oneshot::channel();
                             let _ = responders_tx.unbounded_send(rx);
                             let future = future::ok({
                                 let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, finished);
                                 let rq = KadIncomingRequest::FindNode {
-                                    searched: peer_id,
+                                    searched: key,
                                     responder: KadFindNodeRespond {
                                         inner: tx
                                     }
@@ -479,21 +471,12 @@ where
                             Box::new(future)
                         }
                         Some(EventSource::Remote(KadMsg::GetProvidersReq { key })) => {
-                            let peer_id = match PeerId::from_bytes(key) {
-                                Ok(id) => id,
-                                Err(key) => {
-                                    debug!("Ignoring GET_PROVIDERS request with invalid key: {:?}", key);
-                                    let future = future::err(IoError::new(IoErrorKind::InvalidData, "invalid key in GET_PROVIDERS"));
-                                    return Box::new(future);
-                                }
-                            };
-
                             let (tx, rx) = oneshot::channel();
                             let _ = responders_tx.unbounded_send(rx);
                             let future = future::ok({
                                 let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, finished);
                                 let rq = KadIncomingRequest::GetProviders {
-                                    searched: peer_id,
+                                    searched: key,
                                     responder: KadGetProvidersRespond {
                                         inner: tx
                                     }
@@ -504,15 +487,6 @@ where
                             Box::new(future)
                         }
                         Some(EventSource::Remote(KadMsg::AddProvider { key, provider_peer })) => {
-                            let key = match PeerId::from_bytes(key) {
-                                Ok(id) => id,
-                                Err(key) => {
-                                    debug!("Ignoring ADD_PROVIDER request with invalid key: {:?}", key);
-                                    let future = future::err(IoError::new(IoErrorKind::InvalidData, "invalid key in ADD_PROVIDER"));
-                                    return Box::new(future);
-                                }
-                            };
-
                             let future = future::ok({
                                 let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, finished);
                                 let rq = KadIncomingRequest::AddProvider { key, provider_peer };
