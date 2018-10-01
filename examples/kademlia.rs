@@ -172,6 +172,10 @@ fn main() {
                                     .collect::<Vec<_>>();
                                 responder.respond(result);
                             },
+                            KadIncomingRequest::GetProviders { .. } => {
+                            },
+                            KadIncomingRequest::AddProvider { .. } => {
+                            },
                             KadIncomingRequest::PingPong => {
                             }
                         };
