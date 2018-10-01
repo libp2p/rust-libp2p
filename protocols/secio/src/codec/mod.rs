@@ -60,9 +60,9 @@ impl Hmac {
         // TODO: it would be nice to tweak the hmac crate to add an equivalent to new_varkey that
         //       never errors
         match algorithm {
-            Digest::Sha256 => Hmac::Sha256(Hmac::new_varkey(key)
+            Digest::Sha256 => Hmac::Sha256(Mac::new_varkey(key)
                 .expect("Hmac::new_varkey accepts any key length")),
-            Digest::Sha512 => Hmac::Sha512(Hmac::new_varkey(key)
+            Digest::Sha512 => Hmac::Sha512(Mac::new_varkey(key)
                 .expect("Hmac::new_varkey accepts any key length")),
         }
     }

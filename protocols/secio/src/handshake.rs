@@ -176,7 +176,9 @@ where
                 proposition.set_hashes(algo_support::DEFAULT_DIGESTS_PROPOSITION.into())
             }
 
-            let proposition_bytes = proposition.write_to_bytes().unwrap();
+            let proposition_bytes = proposition.write_to_bytes()
+                .expect("we fill all the elements of proposition, therefore writing can never \
+                         fail ; qed");
             context.local_proposition_bytes = proposition_bytes.clone();
 
             trace!("sending proposition to remote");
@@ -299,7 +301,9 @@ where
 
         // Generate an ephemeral key for the negotiation.
         .and_then(|(socket, context)| {
-            exchange::generate_agreement(context.chosen_exchange.unwrap())
+            let exchange = context.chosen_exchange
+                .expect("chosen_exchange is set to Some earlier then never touched again ; qed");
+            exchange::generate_agreement(exchange)
                 .map(move |(tmp_priv_key, tmp_pub_key)| (socket, context, tmp_priv_key, tmp_pub_key))
         })
 
@@ -487,7 +491,9 @@ where
         .and_then(|(remote_exch, socket, mut context)| {
             let local_priv_key = context.local_tmp_priv_key.take()
                 .expect("we filled this Option earlier, and extract it now");
-            let key_size = context.chosen_hash.as_ref().unwrap().num_bytes();
+            let key_size = context.chosen_hash.as_ref()
+                .expect("chosen_hash is set to Some earlier never modified again ; qed")
+                .num_bytes();
             exchange::agree(context.chosen_exchange.unwrap(), local_priv_key, remote_exch.get_epubkey(), key_size)
                 .map(move |key_material| (socket, context, key_material))
         })
@@ -495,11 +501,14 @@ where
         // Generate a key from the local ephemeral private key and the remote ephemeral public key,
         // derive from it a ciper key, an iv, and a hmac key, and build the encoder/decoder.
         .and_then(|(socket, context, key_material)| {
-            let chosen_cipher = context.chosen_cipher.unwrap();
+            let chosen_cipher = context.chosen_cipher
+                .expect("chosen_cipher is set to Some earlier never modified again ; qed");
             let cipher_key_size = chosen_cipher.key_size();
             let iv_size = chosen_cipher.iv_size();
 
-            let key = Hmac::from_key(context.chosen_hash.unwrap(), &key_material);
+            let chosen_hash = context.chosen_hash
+                .expect("chosen_hash is set to Some earlier never modified again ; qed");
+            let key = Hmac::from_key(chosen_hash, &key_material);
             let mut longer_key = vec![0u8; 2 * (iv_size + cipher_key_size + 20)];
             stretch_key(key, &mut longer_key);
 
@@ -518,7 +527,7 @@ where
             let (encoding_cipher, encoding_hmac) = {
                 let (iv, rest) = local_infos.split_at(iv_size);
                 let (cipher_key, mac_key) = rest.split_at(cipher_key_size);
-                let hmac = Hmac::from_key(context.chosen_hash.unwrap().into(), mac_key);
+                let hmac = Hmac::from_key(chosen_hash.into(), mac_key);
                 let cipher = ctr(chosen_cipher, cipher_key, iv);
                 (cipher, hmac)
             };
@@ -526,7 +535,7 @@ where
             let (decoding_cipher, decoding_hmac) = {
                 let (iv, rest) = remote_infos.split_at(iv_size);
                 let (cipher_key, mac_key) = rest.split_at(cipher_key_size);
-                let hmac = Hmac::from_key(context.chosen_hash.unwrap().into(), mac_key);
+                let hmac = Hmac::from_key(chosen_hash.into(), mac_key);
                 let cipher = ctr(chosen_cipher, cipher_key, iv);
                 (cipher, hmac)
             };
