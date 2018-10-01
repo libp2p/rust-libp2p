@@ -1,4 +1,3 @@
-
 /// List of types currently supported in the multihash spec.
 ///
 /// Not all hash types are supported by this library.
@@ -26,15 +25,19 @@ pub enum Hash {
     Keccak384,
     /// Keccak-512 (64-byte hash size)
     Keccak512,
+    /// BLAKE2b-512 (64-byte hash size)
+    Blake2b512,
     /// Encoding unsupported
-    Blake2b,
+    Blake2b256,
+    /// BLAKE2s-256 (32-byte hash size)
+    Blake2s256,
     /// Encoding unsupported
-    Blake2s,
+    Blake2s128,
 }
 
 impl Hash {
     /// Get the corresponding hash code.
-    pub fn code(&self) -> u8 {
+    pub fn code(&self) -> u16 {
         match *self {
             Hash::SHA1 => 0x11,
             Hash::SHA2256 => 0x12,
@@ -47,8 +50,10 @@ impl Hash {
             Hash::Keccak256 => 0x1B,
             Hash::Keccak384 => 0x1C,
             Hash::Keccak512 => 0x1D,
-            Hash::Blake2b => 0x40,
-            Hash::Blake2s => 0x41,
+            Hash::Blake2b512 => 0xB240,
+            Hash::Blake2b256 => 0xB220,
+            Hash::Blake2s256 => 0xB260,
+            Hash::Blake2s128 => 0xB250,
         }
     }
 
@@ -66,13 +71,15 @@ impl Hash {
             Hash::Keccak256 => 32,
             Hash::Keccak384 => 48,
             Hash::Keccak512 => 64,
-            Hash::Blake2b => 64,
-            Hash::Blake2s => 32,
+            Hash::Blake2b512 => 64,
+            Hash::Blake2b256 => 32,
+            Hash::Blake2s256 => 32,
+            Hash::Blake2s128 => 16,
         }
     }
 
-    /// Returns the algorithm corresponding to a code, or `None` if no algorith is matching.
-    pub fn from_code(code: u8) -> Option<Hash> {
+    /// Returns the algorithm corresponding to a code, or `None` if no algorithm is matching.
+    pub fn from_code(code: u16) -> Option<Hash> {
         Some(match code {
             0x11 => Hash::SHA1,
             0x12 => Hash::SHA2256,
@@ -85,8 +92,10 @@ impl Hash {
             0x1B => Hash::Keccak256,
             0x1C => Hash::Keccak384,
             0x1D => Hash::Keccak512,
-            0x40 => Hash::Blake2b,
-            0x41 => Hash::Blake2s,
+            0xB240 => Hash::Blake2b512,
+            0xB220 => Hash::Blake2b256,
+            0xB260 => Hash::Blake2s256,
+            0xB250 => Hash::Blake2s128,
             _ => return None,
         })
     }

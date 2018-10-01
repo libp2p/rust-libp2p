@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use fnv::FnvHashMap;
-use futures::{prelude::*, stream, sync::mpsc, task};
+use futures::{prelude::*, stream, sync::mpsc};
 use muxing::StreamMuxer;
 use nodes::node::Substream;
 use nodes::handled_node::{HandledNode, NodeHandler};
@@ -62,8 +62,6 @@ pub struct HandledNodesTasks<TInEvent, TOutEvent> {
     /// List of node tasks to spawn.
     // TODO: stronger typing?
     to_spawn: SmallVec<[Box<Future<Item = (), Error = ()> + Send>; 8]>,
-    /// Task to notify when an element is added to `to_spawn`.
-    to_notify: Option<task::Task>,
 
     /// Sender to emit events to the outside. Meant to be cloned and sent to tasks.
     events_tx: mpsc::UnboundedSender<(InToExtMessage<TOutEvent>, TaskId)>,
@@ -115,7 +113,6 @@ impl<TInEvent, TOutEvent> HandledNodesTasks<TInEvent, TOutEvent> {
             tasks: Default::default(),
             next_task_id: TaskId(0),
             to_spawn: SmallVec::new(),
-            to_notify: None,
             events_tx,
             events_rx,
         }
@@ -155,12 +152,6 @@ impl<TInEvent, TOutEvent> HandledNodesTasks<TInEvent, TOutEvent> {
         });
 
         self.to_spawn.push(task);
-
-        // We notify the polling task so that `to_spawn` gets flushed.
-        if let Some(task) = self.to_notify.take() {
-            task.notify();
-        }
-
         task_id
     }
 
@@ -264,7 +255,6 @@ impl<TInEvent, TOutEvent> Stream for HandledNodesTasks<TInEvent, TOutEvent> {
                     }
                 }
                 Ok(Async::NotReady) => {
-                    self.to_notify = Some(task::current());
                     break Ok(Async::NotReady);
                 }
                 Ok(Async::Ready(None)) => {
