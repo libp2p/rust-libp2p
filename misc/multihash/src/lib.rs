@@ -4,39 +4,47 @@
 //!
 //! A `Multihash` is a structure that contains a hashing algorithm, plus some hashed data.
 //! A `MultihashRef` is the same as a `Multihash`, except that it doesn't own its data.
-//!
 
+extern crate blake2;
 extern crate sha1;
 extern crate sha2;
 extern crate tiny_keccak;
+extern crate unsigned_varint;
 
 mod errors;
 mod hashes;
 
 use std::fmt::Write;
+
 use sha2::Digest;
 use tiny_keccak::Keccak;
+use unsigned_varint::{decode, encode};
 
+pub use errors::{DecodeError, DecodeOwnedError, EncodeError};
 pub use hashes::Hash;
-pub use errors::{EncodeError, DecodeError, DecodeOwnedError};
 
-// Helper macro for encoding input into output using sha1, sha2 or tiny_keccak
+// Helper macro for encoding input into output using sha1, sha2, tiny_keccak, or blake2
 macro_rules! encode {
-    (sha1, Sha1, $input:expr, $output:expr) => ({
+    (sha1, Sha1, $input:expr, $output:expr) => {{
         let mut hasher = sha1::Sha1::new();
         hasher.update($input);
         $output.copy_from_slice(&hasher.digest().bytes());
-    });
-    (sha2, $algorithm:ident, $input:expr, $output:expr) => ({
+    }};
+    (sha2, $algorithm:ident, $input:expr, $output:expr) => {{
         let mut hasher = sha2::$algorithm::default();
         hasher.input($input);
         $output.copy_from_slice(hasher.result().as_ref());
-    });
-    (tiny, $constructor:ident, $input:expr, $output:expr) => ({
+    }};
+    (tiny, $constructor:ident, $input:expr, $output:expr) => {{
         let mut kec = Keccak::$constructor();
         kec.update($input);
         kec.finalize($output);
-    });
+    }};
+    (blake2, $algorithm:ident, $input:expr, $output:expr) => {{
+        let mut hasher = blake2::$algorithm::default();
+        hasher.input($input);
+        $output.copy_from_slice(hasher.result().as_ref());
+    }};
 }
 
 // And another one to keep the matching DRY
@@ -74,13 +82,18 @@ macro_rules! match_encoder {
 /// ```
 ///
 pub fn encode(hash: Hash, input: &[u8]) -> Result<Multihash, EncodeError> {
-    let size = hash.size();
-    let mut output = Vec::new();
-    output.resize(2 + size as usize, 0);
-    output[0] = hash.code();
-    output[1] = size;
+    let mut buf = encode::u16_buffer();
+    let code = encode::u16(hash.code(), &mut buf);
 
-    match_encoder!(hash for (input, &mut output[2..]) {
+    let header_len = code.len() + 1;
+    let size = hash.size();
+
+    let mut output = Vec::new();
+    output.resize(header_len + size as usize, 0);
+    output[..code.len()].copy_from_slice(code);
+    output[code.len()] = size;
+
+    match_encoder!(hash for (input, &mut output[header_len..]) {
         SHA1 => sha1::Sha1,
         SHA2256 => sha2::Sha256,
         SHA2512 => sha2::Sha512,
@@ -92,6 +105,8 @@ pub fn encode(hash: Hash, input: &[u8]) -> Result<Multihash, EncodeError> {
         Keccak256 => tiny::new_keccak256,
         Keccak384 => tiny::new_keccak384,
         Keccak512 => tiny::new_keccak512,
+        Blake2b512 => blake2::Blake2b,
+        Blake2s256 => blake2::Blake2s,
     });
 
     Ok(Multihash { bytes: output })
@@ -100,7 +115,7 @@ pub fn encode(hash: Hash, input: &[u8]) -> Result<Multihash, EncodeError> {
 /// Represents a valid multihash.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Multihash {
-    bytes: Vec<u8>
+    bytes: Vec<u8>,
 }
 
 impl Multihash {
@@ -158,7 +173,7 @@ impl<'a> PartialEq<MultihashRef<'a>> for Multihash {
 /// Represents a valid multihash.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct MultihashRef<'a> {
-    bytes: &'a [u8]
+    bytes: &'a [u8],
 }
 
 impl<'a> MultihashRef<'a> {
@@ -168,25 +183,19 @@ impl<'a> MultihashRef<'a> {
             return Err(DecodeError::BadInputLength);
         }
 
-        // TODO: note that `input[0]` and `input[1]` and technically variable-length integers,
-        // but there's no hashing algorithm implemented in this crate whose code or digest length
-        // is superior to 128
-        let code = input[0];
-
-        // TODO: see comment just above about varints
-        if input[0] >= 128 || input[1] >= 128 {
-            return Err(DecodeError::BadInputLength);
-        }
+        // NOTE: We choose u16 here because there is no hashing algorithm implemented in this crate
+        // whose length exceeds 2^16 - 1.
+        let (code, bytes) = decode::u16(&input).map_err(|_| DecodeError::BadInputLength)?;
 
         let alg = Hash::from_code(code).ok_or(DecodeError::UnknownCode)?;
         let hash_len = alg.size() as usize;
 
-        // length of input should be exactly hash_len + 2
-        if input.len() != hash_len + 2 {
+        // Length of input after hash code should be exactly hash_len + 1
+        if bytes.len() != hash_len + 1 {
             return Err(DecodeError::BadInputLength);
         }
 
-        if input[1] as usize != hash_len {
+        if bytes[0] as usize != hash_len {
             return Err(DecodeError::BadInputLength);
         }
 
@@ -196,13 +205,15 @@ impl<'a> MultihashRef<'a> {
     /// Returns which hashing algorithm is used in this multihash.
     #[inline]
     pub fn algorithm(&self) -> Hash {
-        Hash::from_code(self.bytes[0]).expect("multihash is known to be valid")
+        let (code, _) = decode::u16(&self.bytes).expect("multihash is known to be valid algorithm");
+        Hash::from_code(code).expect("multihash is known to be valid")
     }
 
     /// Returns the hashed data.
     #[inline]
     pub fn digest(&self) -> &'a [u8] {
-        &self.bytes[2..]
+        let (_, bytes) = decode::u16(&self.bytes).expect("multihash is known to be valid digest");
+        &bytes[1..]
     }
 
     /// Builds a `Multihash` that owns the data.
@@ -210,7 +221,9 @@ impl<'a> MultihashRef<'a> {
     /// This operation allocates.
     #[inline]
     pub fn into_owned(&self) -> Multihash {
-        Multihash { bytes: self.bytes.to_owned() }
+        Multihash {
+            bytes: self.bytes.to_owned(),
+        }
     }
 
     /// Returns the bytes representation of this multihash.
