@@ -233,7 +233,12 @@ impl<'a, TInEvent, TOutEvent> Drop for CollectionReachEvent<'a, TInEvent, TOutEv
     fn drop(&mut self) {
         let task_state = self.parent.tasks.remove(&self.id);
         debug_assert!(if let Some(TaskState::Pending) = task_state { true } else { false });
-        self.parent.inner.task(self.id).unwrap().close();       // TODO: prove the unwrap
+        self.parent.inner.task(self.id)
+            .expect("we create the CollectionReachEvent with a valid task id ; the \
+                     CollectionReachEvent mutably borrows the collection, therefore nothing \
+                     can delete this task during the lifetime of the CollectionReachEvent ; \
+                     therefore the task is still valid when we delete it ; qed")
+            .close();
     }
 }
 
