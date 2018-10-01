@@ -71,7 +71,7 @@ where
 ///
 /// The `Ordering` parameter determines which argument is preferred. If `Less` or `Equal` we
 /// try for each of `theirs` every one of `ours`, for `Greater` it's the other way around.
-pub fn select_agreement<'a>(r: Ordering, ours: &str, theirs: &str) -> Result<KeyAgreement, SecioError> {
+pub fn select_agreement(r: Ordering, ours: &str, theirs: &str) -> Result<KeyAgreement, SecioError> {
     let (a, b) = match r {
         Ordering::Less | Ordering::Equal => (theirs, ours),
         Ordering::Greater =>  (ours, theirs)
@@ -187,7 +187,7 @@ where
 ///
 /// The `Ordering` parameter determines which argument is preferred. If `Less` or `Equal` we
 /// try for each of `theirs` every one of `ours`, for `Greater` it's the other way around.
-pub fn select_digest<'a>(r: Ordering, ours: &str, theirs: &str) -> Result<Digest, SecioError> {
+pub fn select_digest(r: Ordering, ours: &str, theirs: &str) -> Result<Digest, SecioError> {
     let (a, b) = match r {
         Ordering::Less | Ordering::Equal => (theirs, ours),
         Ordering::Greater =>  (ours, theirs)

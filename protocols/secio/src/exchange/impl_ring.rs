@@ -43,7 +43,7 @@ pub type AgreementPrivateKey = ring_agreement::EphemeralPrivateKey;
 ///
 /// Returns the opaque private key and the corresponding public key.
 pub fn generate_agreement(algorithm: KeyAgreement) -> impl Future<Item = (AgreementPrivateKey, Vec<u8>), Error = SecioError> {
-    let rng = ring_rand::SystemRandom::new(); // TODO: don't recreate that here?
+    let rng = ring_rand::SystemRandom::new();
 
     match ring_agreement::EphemeralPrivateKey::generate(algorithm.into(), &rng) {
         Ok(tmp_priv_key) => {
