@@ -21,7 +21,7 @@
 //! Individual messages decoding.
 
 use bytes::BytesMut;
-use super::StreamCipher;
+use super::{Hmac, StreamCipher};
 
 use error::SecioError;
 use futures::sink::Sink;
@@ -29,7 +29,6 @@ use futures::stream::Stream;
 use futures::Async;
 use futures::Poll;
 use futures::StartSend;
-use ring::hmac;
 
 /// Wraps around a `Stream<Item = BytesMut>`. The buffers produced by the underlying stream
 /// are decoded using the cipher and hmac.
@@ -41,9 +40,7 @@ use ring::hmac;
 /// Also implements `Sink` for convenience.
 pub struct DecoderMiddleware<S> {
     cipher_state: StreamCipher,
-    hmac_key: hmac::VerificationKey,
-    // TODO: when a new version of ring is released, we can use `hmac_key.digest_algorithm().output_len` instead
-    hmac_num_bytes: usize,
+    hmac: Hmac,
     raw_stream: S,
 }
 
@@ -52,14 +49,12 @@ impl<S> DecoderMiddleware<S> {
     pub fn new(
         raw_stream: S,
         cipher: StreamCipher,
-        hmac_key: hmac::VerificationKey,
-        hmac_num_bytes: usize, // TODO: remove this parameter
+        hmac: Hmac,
     ) -> DecoderMiddleware<S> {
         DecoderMiddleware {
             cipher_state: cipher,
-            hmac_key,
+            hmac,
             raw_stream,
-            hmac_num_bytes,
         }
     }
 }
@@ -81,19 +76,16 @@ where
             Err(err) => return Err(err.into()),
         };
 
-        // TODO: when a new version of ring is released, we can use `hmac_key.digest_algorithm().output_len` instead
-        let hmac_num_bytes = self.hmac_num_bytes;
-
-        if frame.len() < hmac_num_bytes {
+        if frame.len() < self.hmac.num_bytes() {
             debug!("frame too short when decoding secio frame");
             return Err(SecioError::FrameTooShort);
         }
-        let content_length = frame.len() - hmac_num_bytes;
+        let content_length = frame.len() - self.hmac.num_bytes();
         {
             let (crypted_data, expected_hash) = frame.split_at(content_length);
-            debug_assert_eq!(expected_hash.len(), hmac_num_bytes);
+            debug_assert_eq!(expected_hash.len(), self.hmac.num_bytes());
 
-            if hmac::verify(&self.hmac_key, crypted_data, expected_hash).is_err() {
+            if self.hmac.verify(crypted_data, expected_hash).is_err() {
                 debug!("hmac mismatch when decoding secio frame");
                 return Err(SecioError::HmacNotMatching);
             }
