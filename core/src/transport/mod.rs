@@ -35,7 +35,7 @@ use multiaddr::Multiaddr;
 use muxing::StreamMuxer;
 use std::io::Error as IoError;
 use tokio_io::{AsyncRead, AsyncWrite};
-use upgrade::{ConnectionUpgrade, Endpoint};
+use upgrade::{ConnectionUpgrade, ConnectedPoint, Endpoint};
 
 pub mod and_then;
 pub mod boxed;
@@ -77,19 +77,15 @@ pub trait Transport {
     /// An item should be produced whenever a connection is received at the lowest level of the
     /// transport stack. The item is a `Future` that is signalled once some pre-processing has
     /// taken place, and that connection has been upgraded to the wanted protocols.
-    type Listener: Stream<Item = Self::ListenerUpgrade, Error = IoError>;
-
-    /// Future that produces the multiaddress of the remote.
-    type MultiaddrFuture: Future<Item = Multiaddr, Error = IoError>;
+    type Listener: Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>;
 
     /// After a connection has been received, we may need to do some asynchronous pre-processing
     /// on it (eg. an intermediary protocol negotiation). While this pre-processing takes place, we
     /// want to be able to continue polling on the listener.
-    // TODO: we could move the `MultiaddrFuture` to the `Listener` trait
-    type ListenerUpgrade: Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>;
+    type ListenerUpgrade: Future<Item = Self::Output, Error = IoError>;
 
     /// A future which indicates that we are currently dialing to a peer.
-    type Dial: Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>;
+    type Dial: Future<Item = Self::Output, Error = IoError>;
 
     /// Listen on the given multiaddr. Returns a stream of incoming connections, plus a modified
     /// version of the `Multiaddr`. This new `Multiaddr` is the one that that should be advertised
@@ -130,7 +126,6 @@ pub trait Transport {
           Self::Dial: Send + 'static,
           Self::Listener: Send + 'static,
           Self::ListenerUpgrade: Send + 'static,
-          Self::MultiaddrFuture: Send + 'static,
     {
         boxed::boxed(self)
     }
@@ -144,7 +139,6 @@ pub trait Transport {
           Self::Dial: Send + 'static,
           Self::Listener: Send + 'static,
           Self::ListenerUpgrade: Send + 'static,
-          Self::MultiaddrFuture: Send + 'static,
           Self::Incoming: Send + 'static,
           Self::IncomingUpgrade: Send + 'static,
     {
@@ -205,7 +199,7 @@ pub trait Transport {
     where
         Self: Sized,
         Self::Output: AsyncRead + AsyncWrite,
-        U: ConnectionUpgrade<Self::Output, Self::MultiaddrFuture>,
+        U: ConnectionUpgrade<Self::Output>,
     {
         UpgradedNode::new(self, upgrade)
     }
@@ -216,12 +210,11 @@ pub trait Transport {
     /// > **Note**: The concept of an *upgrade* for example includes middlewares such *secio*
     /// >           (communication encryption), *multiplex*, but also a protocol handler.
     #[inline]
-    fn and_then<C, F, O, Maf>(self, upgrade: C) -> and_then::AndThen<Self, C>
+    fn and_then<C, F, O>(self, upgrade: C) -> and_then::AndThen<Self, C>
     where
         Self: Sized,
-        C: FnOnce(Self::Output, Endpoint, Self::MultiaddrFuture) -> F + Clone + 'static,
-        F: Future<Item = (O, Maf), Error = IoError> + 'static,
-        Maf: Future<Item = Multiaddr, Error = IoError> + 'static,
+        C: FnOnce(Self::Output, ConnectedPoint) -> F + Clone + 'static,
+        F: Future<Item = O, Error = IoError> + 'static,
     {
         and_then::and_then(self, upgrade)
     }

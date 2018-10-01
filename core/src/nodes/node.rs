@@ -24,16 +24,12 @@ use smallvec::SmallVec;
 use std::fmt;
 use std::io::Error as IoError;
 use std::sync::Arc;
-use Multiaddr;
 
 // Implementor notes
 // =================
 //
 // In order to minimize the risk of bugs in higher-level code, we want to avoid as much as
 // possible having a racy API. The behaviour of methods should be well-defined and predictable.
-// As an example, calling the `multiaddr()` method should return `Some` only after a
-// `MultiaddrResolved` event has been emitted and never before, even if we technically already
-// know the address.
 //
 // In order to respect this coding practice, we should theoretically provide events such as "data
 // incoming on a substream", or "a substream is ready to be written". This would however make the
@@ -53,7 +49,7 @@ use Multiaddr;
 ///
 /// The stream will close once both the inbound and outbound channels are closed, and no more
 /// outbound substream attempt is pending.
-pub struct NodeStream<TMuxer, TAddrFut, TUserData>
+pub struct NodeStream<TMuxer, TUserData>
 where
     TMuxer: muxing::StreamMuxer,
 {
@@ -63,24 +59,11 @@ where
     inbound_finished: bool,
     /// If true, the outbound side of the muxer has closed earlier.
     outbound_finished: bool,
-    /// Address of the node ; can be empty if the address hasn't been resolved yet.
-    address: Addr<TAddrFut>,
     /// List of substreams we are currently opening.
     outbound_substreams: SmallVec<[(TUserData, TMuxer::OutboundSubstream); 8]>,
     /// Task to notify when a new element is added to `outbound_substreams`, so that we can start
     /// polling it.
     to_notify: Option<task::Task>,
-}
-
-/// Address of the node.
-#[derive(Debug, Clone)]
-enum Addr<TAddrFut> {
-    /// Future that will resolve the address.
-    Future(TAddrFut),
-    /// The address is now known.
-    Resolved(Multiaddr),
-    /// An error happened while resolving the future.
-    Errored,
 }
 
 /// A successfully opened substream.
@@ -91,12 +74,6 @@ pub enum NodeEvent<TMuxer, TUserData>
 where
     TMuxer: muxing::StreamMuxer,
 {
-    /// The multiaddress future of the node has been resolved.
-    ///
-    /// If this succeeded, after this event has been emitted calling `multiaddr()` will return
-    /// `Some`.
-    Multiaddr(Result<Multiaddr, IoError>),
-
     /// A new inbound substream arrived.
     InboundSubstream {
         /// The newly-opened substream.
@@ -126,33 +103,19 @@ where
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct OutboundSubstreamId(usize);
 
-impl<TMuxer, TAddrFut, TUserData> NodeStream<TMuxer, TAddrFut, TUserData>
+impl<TMuxer, TUserData> NodeStream<TMuxer, TUserData>
 where
     TMuxer: muxing::StreamMuxer,
-    TAddrFut: Future<Item = Multiaddr, Error = IoError>,
 {
     /// Creates a new node events stream.
     #[inline]
-    pub fn new(muxer: TMuxer, multiaddr_future: TAddrFut) -> Self {
+    pub fn new(muxer: TMuxer) -> Self {
         NodeStream {
             muxer: Arc::new(muxer),
             inbound_finished: false,
             outbound_finished: false,
-            address: Addr::Future(multiaddr_future),
             outbound_substreams: SmallVec::new(),
             to_notify: None,
-        }
-    }
-
-    /// Returns the multiaddress of the node, if already known.
-    ///
-    /// This method will always return `None` before a successful `Multiaddr` event has been
-    /// returned by `poll()`, and will always return `Some` afterwards.
-    #[inline]
-    pub fn multiaddr(&self) -> Option<&Multiaddr> {
-        match self.address {
-            Addr::Resolved(ref addr) => Some(addr),
-            Addr::Future(_) | Addr::Errored => None,
         }
     }
 
@@ -206,10 +169,9 @@ where
     }
 }
 
-impl<TMuxer, TAddrFut, TUserData> Stream for NodeStream<TMuxer, TAddrFut, TUserData>
+impl<TMuxer, TUserData> Stream for NodeStream<TMuxer, TUserData>
 where
     TMuxer: muxing::StreamMuxer,
-    TAddrFut: Future<Item = Multiaddr, Error = IoError>,
 {
     type Item = NodeEvent<TMuxer, TUserData>;
     type Error = IoError;
@@ -261,26 +223,6 @@ where
             }
         }
 
-        // Check whether the multiaddress is resolved.
-        {
-            let poll = match self.address {
-                Addr::Future(ref mut fut) => Some(fut.poll()),
-                Addr::Resolved(_) | Addr::Errored => None,
-            };
-
-            match poll {
-                Some(Ok(Async::NotReady)) | None => {}
-                Some(Ok(Async::Ready(addr))) => {
-                    self.address = Addr::Resolved(addr.clone());
-                    return Ok(Async::Ready(Some(NodeEvent::Multiaddr(Ok(addr)))));
-                }
-                Some(Err(err)) => {
-                    self.address = Addr::Errored;
-                    return Ok(Async::Ready(Some(NodeEvent::Multiaddr(Err(err)))));
-                }
-            }
-        }
-
         // Closing the node if there's no way we can do anything more.
         if self.inbound_finished && self.outbound_finished && self.outbound_substreams.is_empty() {
             return Ok(Async::Ready(None));
@@ -292,14 +234,12 @@ where
     }
 }
 
-impl<TMuxer, TAddrFut, TUserData> fmt::Debug for NodeStream<TMuxer, TAddrFut, TUserData>
+impl<TMuxer, TUserData> fmt::Debug for NodeStream<TMuxer, TUserData>
 where
     TMuxer: muxing::StreamMuxer,
-    TAddrFut: Future<Item = Multiaddr, Error = IoError>,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         f.debug_struct("NodeStream")
-            .field("address", &self.multiaddr())
             .field("inbound_finished", &self.inbound_finished)
             .field("outbound_finished", &self.outbound_finished)
             .field("outbound_substreams", &self.outbound_substreams.len())
@@ -307,7 +247,7 @@ where
     }
 }
 
-impl<TMuxer, TAddrFut, TUserData> Drop for NodeStream<TMuxer, TAddrFut, TUserData>
+impl<TMuxer, TUserData> Drop for NodeStream<TMuxer, TUserData>
 where
     TMuxer: muxing::StreamMuxer,
 {

@@ -60,6 +60,8 @@ where
         upgrade: TTrans::ListenerUpgrade,
         /// Address of the listener which received the connection.
         listen_addr: Multiaddr,
+        /// Address used to send back data to the incoming client.
+        send_back_addr: Multiaddr,
     },
 
     /// A listener has closed, either gracefully or with an error.
@@ -134,6 +136,46 @@ where
     pub fn listeners(&self) -> impl Iterator<Item = &Multiaddr> {
         self.listeners.iter().map(|l| &l.address)
     }
+
+    /// Provides an API similar to `Stream`, except that it cannot error.
+    pub fn poll(&mut self) -> Async<Option<ListenersEvent<TTrans>>> {
+        // We remove each element from `listeners` one by one and add them back.
+        for n in (0..self.listeners.len()).rev() {
+            let mut listener = self.listeners.swap_remove(n);
+            match listener.listener.poll() {
+                Ok(Async::NotReady) => {
+                    self.listeners.push(listener);
+                }
+                Ok(Async::Ready(Some((upgrade, send_back_addr)))) => {
+                    let listen_addr = listener.address.clone();
+                    self.listeners.push(listener);
+                    return Async::Ready(Some(ListenersEvent::Incoming {
+                        upgrade,
+                        listen_addr,
+                        send_back_addr,
+                    }));
+                }
+                Ok(Async::Ready(None)) => {
+                    return Async::Ready(Some(ListenersEvent::Closed {
+                        listen_addr: listener.address,
+                        listener: listener.listener,
+                        result: Ok(()),
+                    }));
+                }
+                Err(err) => {
+                    return Async::Ready(Some(ListenersEvent::Closed {
+                        listen_addr: listener.address,
+                        listener: listener.listener,
+                        result: Err(err),
+                    }));
+                }
+            }
+        }
+
+        // We register the current task to be waken up if a new listener is added.
+        self.to_notify = Some(task::current());
+        Async::NotReady
+    }
 }
 
 impl<TTrans> Stream for ListenersStream<TTrans>
@@ -143,42 +185,9 @@ where
     type Item = ListenersEvent<TTrans>;
     type Error = Void; // TODO: use ! once stable
 
+    #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        // We remove each element from `listeners` one by one and add them back.
-        for n in (0..self.listeners.len()).rev() {
-            let mut listener = self.listeners.swap_remove(n);
-            match listener.listener.poll() {
-                Ok(Async::NotReady) => {
-                    self.listeners.push(listener);
-                }
-                Ok(Async::Ready(Some(upgrade))) => {
-                    let listen_addr = listener.address.clone();
-                    self.listeners.push(listener);
-                    return Ok(Async::Ready(Some(ListenersEvent::Incoming {
-                        upgrade,
-                        listen_addr,
-                    })));
-                }
-                Ok(Async::Ready(None)) => {
-                    return Ok(Async::Ready(Some(ListenersEvent::Closed {
-                        listen_addr: listener.address,
-                        listener: listener.listener,
-                        result: Ok(()),
-                    })));
-                }
-                Err(err) => {
-                    return Ok(Async::Ready(Some(ListenersEvent::Closed {
-                        listen_addr: listener.address,
-                        listener: listener.listener,
-                        result: Err(err),
-                    })));
-                }
-            }
-        }
-
-        // We register the current task to be waken up if a new listener is added.
-        self.to_notify = Some(task::current());
-        Ok(Async::NotReady)
+        Ok(self.poll())
     }
 }
 
@@ -241,8 +250,9 @@ mod tests {
             .map_err(|(err, _)| err)
             .and_then(|(event, _)| {
                 match event {
-                    Some(ListenersEvent::Incoming { listen_addr, upgrade }) => {
+                    Some(ListenersEvent::Incoming { listen_addr, upgrade, send_back_addr }) => {
                         assert_eq!(listen_addr, "/memory".parse().unwrap());
+                        assert_eq!(send_back_addr, "/memory".parse().unwrap());
                         upgrade.map(|_| ()).map_err(|_| panic!())
                     },
                     _ => panic!()

@@ -85,7 +85,6 @@ where
     InnerTrans: Transport,
 {
     type Output = InnerTrans::Output;
-    type MultiaddrFuture = InnerTrans::MultiaddrFuture;
     type Listener = TimeoutListener<InnerTrans::Listener>;
     type ListenerUpgrade = TokioTimerMapErr<Timeout<InnerTrans::ListenerUpgrade>>;
     type Dial = TokioTimerMapErr<Timeout<InnerTrans::Dial>>;
@@ -158,20 +157,20 @@ pub struct TimeoutListener<InnerStream> {
     timeout: Duration,
 }
 
-impl<InnerStream> Stream for TimeoutListener<InnerStream>
+impl<InnerStream, O> Stream for TimeoutListener<InnerStream>
 where
-    InnerStream: Stream,
+    InnerStream: Stream<Item = (O, Multiaddr)>,
 {
-    type Item = TokioTimerMapErr<Timeout<InnerStream::Item>>;
+    type Item = (TokioTimerMapErr<Timeout<O>>, Multiaddr);
     type Error = InnerStream::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let inner_fut = try_ready!(self.inner.poll());
-        if let Some(inner_fut) = inner_fut {
+        let poll_out = try_ready!(self.inner.poll());
+        if let Some((inner_fut, addr)) = poll_out {
             let fut = TokioTimerMapErr {
                 inner: Timeout::new(inner_fut, self.timeout),
             };
-            Ok(Async::Ready(Some(fut)))
+            Ok(Async::Ready(Some((fut, addr))))
         } else {
             Ok(Async::Ready(None))
         }
@@ -186,19 +185,19 @@ pub struct TimeoutIncoming<InnerFut> {
     timeout: Duration,
 }
 
-impl<InnerFut> Future for TimeoutIncoming<InnerFut>
+impl<InnerFut, O> Future for TimeoutIncoming<InnerFut>
 where
-    InnerFut: Future,
+    InnerFut: Future<Item = (O, Multiaddr)>,
 {
-    type Item = TokioTimerMapErr<Timeout<InnerFut::Item>>;
+    type Item = (TokioTimerMapErr<Timeout<O>>, Multiaddr);
     type Error = InnerFut::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let inner_fut = try_ready!(self.inner.poll());
+        let (inner_fut, addr) = try_ready!(self.inner.poll());
         let fut = TokioTimerMapErr {
             inner: Timeout::new(inner_fut, self.timeout),
         };
-        Ok(Async::Ready(fut))
+        Ok(Async::Ready((fut, addr)))
     }
 }
 

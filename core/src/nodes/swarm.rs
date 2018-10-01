@@ -22,7 +22,7 @@ use fnv::FnvHashMap;
 use futures::{prelude::*, future};
 use muxing::StreamMuxer;
 use nodes::collection::{
-    CollectionEvent, CollectionStream, PeerMut as CollecPeerMut, ReachAttemptId,
+    CollectionEvent, CollectionNodeAccept, CollectionReachEvent, CollectionStream, PeerMut as CollecPeerMut, ReachAttemptId,
 };
 use nodes::handled_node::NodeHandler;
 use nodes::listeners::{ListenersEvent, ListenersStream};
@@ -30,7 +30,7 @@ use nodes::node::Substream;
 use std::collections::hash_map::{Entry, OccupiedEntry};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use void::Void;
-use {Endpoint, Multiaddr, PeerId, Transport};
+use {ConnectedPoint, Multiaddr, PeerId, Transport};
 
 /// Implementation of `Stream` that handles the nodes.
 pub struct Swarm<TTrans, TInEvent, TOutEvent, THandlerBuild>
@@ -43,6 +43,15 @@ where
     /// The nodes currently active.
     active_nodes: CollectionStream<TInEvent, TOutEvent>,
 
+    /// The reach attempts of the swarm.
+    /// This needs to be a separate struct in order to handle multiple mutable borrows issues.
+    reach_attempts: ReachAttempts,
+
+    /// Object that builds new handlers.
+    handler_build: THandlerBuild,
+}
+
+struct ReachAttempts {
     /// Attempts to reach a peer.
     out_reach_attempts: FnvHashMap<PeerId, OutReachAttempt>,
 
@@ -50,11 +59,8 @@ where
     /// the peer ID.
     other_reach_attempts: Vec<(ReachAttemptId, ConnectedPoint)>,
 
-    /// For each peer ID we're connected to, contains the multiaddress we're connected to.
-    connected_multiaddresses: FnvHashMap<PeerId, Multiaddr>,
-
-    /// Object that builds new handlers.
-    handler_build: THandlerBuild,
+    /// For each peer ID we're connected to, contains the endpoint we're connected to.
+    connected_endpoints: FnvHashMap<PeerId, ConnectedPoint>,
 }
 
 /// Attempt to reach a peer.
@@ -87,12 +93,16 @@ where
     IncomingConnection {
         /// Address of the listener which received the connection.
         listen_addr: Multiaddr,
+        /// Address used to send back data to the incoming connection.
+        send_back_addr: Multiaddr,
     },
 
     /// An error happened when negotiating a new connection.
     IncomingConnectionError {
         /// Address of the listener which received the connection.
         listen_addr: Multiaddr,
+        /// Address used to send back data to the incoming connection.
+        send_back_addr: Multiaddr,
         /// The error that happened.
         error: IoError,
     },
@@ -110,8 +120,8 @@ where
     Replaced {
         /// Id of the peer.
         peer_id: PeerId,
-        /// Multiaddr we were connected to, or `None` if it was unknown.
-        closed_multiaddr: Option<Multiaddr>,
+        /// Endpoint we used to be connected to.
+        closed_endpoint: ConnectedPoint,
         /// If `Listener`, then we received the connection. If `Dial`, then it's a connection that
         /// we opened.
         endpoint: ConnectedPoint,
@@ -124,16 +134,16 @@ where
     NodeClosed {
         /// Identifier of the node.
         peer_id: PeerId,
-        /// Address we were connected to. `None` if not known.
-        address: Option<Multiaddr>,
+        /// Endpoint we were connected to.
+        endpoint: ConnectedPoint,
     },
 
     /// The muxer of a node has produced an error.
     NodeError {
         /// Identifier of the node.
         peer_id: PeerId,
-        /// Address we were connected to. `None` if not known.
-        address: Option<Multiaddr>,
+        /// Endpoint we were connected to.
+        endpoint: ConnectedPoint,
         /// The error that happened.
         error: IoError,
     },
@@ -190,66 +200,21 @@ where
     },
 }
 
-/// How we connected to a node.
-#[derive(Debug, Clone)]
-pub enum ConnectedPoint {
-    /// We dialed the node.
-    Dialer {
-        /// Multiaddress that was successfully dialed.
-        address: Multiaddr,
-    },
-    /// We received the node.
-    Listener {
-        /// Address of the listener that received the connection.
-        listen_addr: Multiaddr,
-    },
-}
-
-impl From<ConnectedPoint> for Endpoint {
-    #[inline]
-    fn from(endpoint: ConnectedPoint) -> Endpoint {
-        match endpoint {
-            ConnectedPoint::Dialer { .. } => Endpoint::Dialer,
-            ConnectedPoint::Listener { .. } => Endpoint::Listener,
-        }
-    }
-}
-
-impl ConnectedPoint {
-    /// Returns true if we are `Dialer`.
-    #[inline]
-    pub fn is_dialer(&self) -> bool {
-        match *self {
-            ConnectedPoint::Dialer { .. } => true,
-            ConnectedPoint::Listener { .. } => false,
-        }
-    }
-
-    /// Returns true if we are `Listener`.
-    #[inline]
-    pub fn is_listener(&self) -> bool {
-        match *self {
-            ConnectedPoint::Dialer { .. } => false,
-            ConnectedPoint::Listener { .. } => true,
-        }
-    }
-}
-
 /// Trait for structures that can create new factories.
 pub trait HandlerFactory {
     /// The generated handler.
     type Handler;
 
     /// Creates a new handler.
-    fn new_handler(&self) -> Self::Handler;
+    fn new_handler(&self, endpoint: ConnectedPoint) -> Self::Handler;
 }
 
-impl<T, THandler> HandlerFactory for T where T: Fn() -> THandler {
+impl<T, THandler> HandlerFactory for T where T: Fn(ConnectedPoint) -> THandler {
     type Handler = THandler;
 
     #[inline]
-    fn new_handler(&self) -> THandler {
-        (*self)()
+    fn new_handler(&self, endpoint: ConnectedPoint) -> THandler {
+        (*self)(endpoint)
     }
 }
 
@@ -264,17 +229,19 @@ where
 {
     /// Creates a new node events stream.
     #[inline]
-    pub fn new(transport: TTrans) -> Swarm<TTrans, TInEvent, TOutEvent, fn() -> THandler>
+    pub fn new(transport: TTrans) -> Swarm<TTrans, TInEvent, TOutEvent, fn(ConnectedPoint) -> THandler>
     where THandler: Default,
     {
         // TODO: with_capacity?
         Swarm {
             listeners: ListenersStream::new(transport),
             active_nodes: CollectionStream::new(),
-            out_reach_attempts: Default::default(),
-            other_reach_attempts: Vec::new(),
-            connected_multiaddresses: Default::default(),
-            handler_build: Default::default,
+            reach_attempts: ReachAttempts {
+                out_reach_attempts: Default::default(),
+                other_reach_attempts: Vec::new(),
+                connected_endpoints: Default::default(),
+            },
+            handler_build: |_| Default::default(),
         }
     }
 
@@ -285,9 +252,11 @@ where
         Swarm {
             listeners: ListenersStream::new(transport),
             active_nodes: CollectionStream::new(),
-            out_reach_attempts: Default::default(),
-            other_reach_attempts: Vec::new(),
-            connected_multiaddresses: Default::default(),
+            reach_attempts: ReachAttempts {
+                out_reach_attempts: Default::default(),
+                other_reach_attempts: Vec::new(),
+                connected_endpoints: Default::default(),
+            },
             handler_build,
         }
     }
@@ -334,7 +303,6 @@ where
     where
         TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
         TTrans::Dial: Send + 'static,
-        TTrans::MultiaddrFuture: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TMuxer::Substream: Send,
@@ -346,8 +314,10 @@ where
             Err((_, addr)) => return Err(addr),
         };
 
-        let reach_id = self.active_nodes.add_reach_attempt(future, self.handler_build.new_handler());
-        self.other_reach_attempts
+        let endpoint = ConnectedPoint::Dialer { address: addr.clone() };
+
+        let reach_id = self.active_nodes.add_reach_attempt(future, self.handler_build.new_handler(endpoint));
+        self.reach_attempts.other_reach_attempts
             .push((reach_id, ConnectedPoint::Dialer { address: addr }));
         Ok(())
     }
@@ -361,7 +331,7 @@ where
     // a lot of API changes
     #[inline]
     pub fn num_incoming_negotiated(&self) -> usize {
-        self.other_reach_attempts
+        self.reach_attempts.other_reach_attempts
             .iter()
             .filter(|&(_, endpoint)| endpoint.is_listener())
             .count()
@@ -382,21 +352,21 @@ where
         // the borrow checker yells at us.
 
         if self.active_nodes.peer_mut(&peer_id).is_some() {
-            debug_assert!(!self.out_reach_attempts.contains_key(&peer_id));
+            debug_assert!(!self.reach_attempts.out_reach_attempts.contains_key(&peer_id));
             return Peer::Connected(PeerConnected {
                 peer: self
                     .active_nodes
                     .peer_mut(&peer_id)
                     .expect("we checked for Some just above"),
                 peer_id,
-                connected_multiaddresses: &mut self.connected_multiaddresses,
+                connected_endpoints: &mut self.reach_attempts.connected_endpoints,
             });
         }
 
-        if self.out_reach_attempts.get_mut(&peer_id).is_some() {
-            debug_assert!(!self.connected_multiaddresses.contains_key(&peer_id));
+        if self.reach_attempts.out_reach_attempts.get_mut(&peer_id).is_some() {
+            debug_assert!(!self.reach_attempts.connected_endpoints.contains_key(&peer_id));
             return Peer::PendingConnect(PeerPendingConnect {
-                attempt: match self.out_reach_attempts.entry(peer_id.clone()) {
+                attempt: match self.reach_attempts.out_reach_attempts.entry(peer_id.clone()) {
                     Entry::Occupied(e) => e,
                     Entry::Vacant(_) => panic!("we checked for Some just above"),
                 },
@@ -404,244 +374,395 @@ where
             });
         }
 
-        debug_assert!(!self.connected_multiaddresses.contains_key(&peer_id));
+        debug_assert!(!self.reach_attempts.connected_endpoints.contains_key(&peer_id));
         Peer::NotConnected(PeerNotConnected {
             nodes: self,
             peer_id,
         })
     }
 
-    /// Handles a node reached event from the collection.
+    /// Starts dialing out a multiaddress. `rest` is the list of multiaddresses to attempt if
+    /// `first` fails.
     ///
-    /// Returns an event to return from the stream.
-    ///
-    /// > **Note**: The event **must** have been produced by the collection of nodes, otherwise
-    /// >           panics will likely happen.
-    fn handle_node_reached(
-        &mut self,
-        peer_id: PeerId,
-        reach_id: ReachAttemptId,
-        replaced: bool,
-    ) -> SwarmEvent<TTrans, TOutEvent>
+    /// It is a logic error to call this method if we already have an outgoing attempt to the
+    /// given peer.
+    fn start_dial_out(&mut self, peer_id: PeerId, first: Multiaddr, rest: Vec<Multiaddr>)
     where
         TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
         TTrans::Dial: Send + 'static,
-        TTrans::MultiaddrFuture: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TMuxer::Substream: Send,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
     {
-        // We first start looking in the incoming attempts. While this makes the code less optimal,
-        // it also makes the logic easier.
-        if let Some(in_pos) = self
-            .other_reach_attempts
-            .iter()
-            .position(|i| i.0 == reach_id)
-        {
-            let (_, endpoint) = self.other_reach_attempts.swap_remove(in_pos);
-
-            // Clear the known multiaddress for this peer.
-            let closed_multiaddr = self.connected_multiaddresses.remove(&peer_id);
-            // Cancel any outgoing attempt to this peer.
-            if let Some(attempt) = self.out_reach_attempts.remove(&peer_id) {
-                debug_assert_ne!(attempt.id, reach_id);
-                self.active_nodes
-                    .interrupt(attempt.id)
-                    .expect("We insert in out_reach_attempts only when we call \
-                             active_nodes.add_reach_attempt, and we remove only when we call \
-                             interrupt or when a reach attempt succeeds or errors. Therefore the \
-                             out_reach_attempts should always be in sync with the actual attempts");
-            }
-
-            if replaced {
-                return SwarmEvent::Replaced {
-                    peer_id,
-                    endpoint,
-                    closed_multiaddr,
-                };
-            } else {
-                return SwarmEvent::Connected { peer_id, endpoint };
-            }
-        }
-
-        // Otherwise, try for outgoing attempts.
-        let is_outgoing_and_ok = if let Some(attempt) = self.out_reach_attempts.get(&peer_id) {
-            attempt.id == reach_id
-        } else {
-            false
+        let endpoint = ConnectedPoint::Dialer { address: first.clone() };
+        let reach_id = match self.transport().clone().dial(first.clone()) {
+            Ok(fut) => {
+                self.active_nodes.add_reach_attempt(fut, self.handler_build.new_handler(endpoint))
+            },
+            Err((_, addr)) => {
+                let msg = format!("unsupported multiaddr {}", addr);
+                let fut = future::err(IoError::new(IoErrorKind::Other, msg));
+                self.active_nodes.add_reach_attempt(fut, self.handler_build.new_handler(endpoint))
+            },
         };
 
-        // We only remove the attempt from `out_reach_attempts` if it both matches the reach id
-        // and the expected peer id.
-        if is_outgoing_and_ok {
-            let attempt = self.out_reach_attempts.remove(&peer_id)
-                .expect("is_outgoing_and_ok is true only if self.out_reach_attempts.get(&peer_id) \
-                         returned Some");
+        let former = self.reach_attempts.out_reach_attempts.insert(
+            peer_id,
+            OutReachAttempt {
+                id: reach_id,
+                cur_attempted: first,
+                next_attempts: rest,
+            },
+        );
 
-            let closed_multiaddr = self.connected_multiaddresses
-                .insert(peer_id.clone(), attempt.cur_attempted.clone());
-            let endpoint = ConnectedPoint::Dialer {
-                address: attempt.cur_attempted,
-            };
-
-            if replaced {
-                return SwarmEvent::Replaced {
-                    peer_id,
-                    endpoint,
-                    closed_multiaddr,
-                };
-            } else {
-                return SwarmEvent::Connected { peer_id, endpoint };
-            }
-        }
-
-        // If in neither, check outgoing reach attempts again as we may have a public
-        // key mismatch.
-        let expected_peer_id = self
-            .out_reach_attempts
-            .iter()
-            .find(|(_, a)| a.id == reach_id)
-            .map(|(p, _)| p.clone());
-        if let Some(expected_peer_id) = expected_peer_id {
-            let attempt = self.out_reach_attempts.remove(&expected_peer_id)
-                .expect("expected_peer_id is a key that is grabbed from out_reach_attempts");
-
-            let num_remain = attempt.next_attempts.len();
-            let failed_addr = attempt.cur_attempted.clone();
-
-            // Since the `peer_id` (the unexpected peer id) is now successfully connected, we have
-            // to drop it from active_nodes.
-            // TODO: at the moment, a peer id mismatch can drop a legitimate connection, which is
-            // why we have to purge `connected_multiaddresses`.
-            // See https://github.com/libp2p/rust-libp2p/issues/502
-            self.connected_multiaddresses.remove(&peer_id);
-            self.active_nodes.peer_mut(&peer_id)
-                .expect("When we receive a NodeReached or NodeReplaced event from active_nodes, \
-                         it is guaranteed that the PeerId is valid and therefore that \
-                         active_nodes.peer_mut succeeds with this ID. handle_node_reached is \
-                         called only to handle these events.")
-                .close();
-
-            if !attempt.next_attempts.is_empty() {
-                let mut attempt = attempt;
-                attempt.cur_attempted = attempt.next_attempts.remove(0);
-                attempt.id = match self.transport().clone().dial(attempt.cur_attempted.clone()) {
-                    Ok(fut) => self.active_nodes.add_reach_attempt(fut, self.handler_build.new_handler()),
-                    Err((_, addr)) => {
-                        let msg = format!("unsupported multiaddr {}", addr);
-                        let fut = future::err(IoError::new(IoErrorKind::Other, msg));
-                        self.active_nodes.add_reach_attempt::<_, _, future::FutureResult<Multiaddr, IoError>, _>(fut, self.handler_build.new_handler())
-                    },
-                };
-
-                self.out_reach_attempts.insert(expected_peer_id.clone(), attempt);
-            }
-
-            return SwarmEvent::PublicKeyMismatch {
-                remain_addrs_attempt: num_remain,
-                expected_peer_id,
-                actual_peer_id: peer_id,
-                multiaddr: failed_addr,
-            };
-        }
-
-        // We didn't find any entry in neither the outgoing connections not ingoing connections.
-        panic!("The API of collection guarantees that the id sent back in NodeReached and \
-                NodeReplaced events (which is where we call handle_node_reached) is one that was \
-                passed to add_reach_attempt. Whenever we call add_reach_attempt, we also insert \
-                at the same time an entry either in out_reach_attempts or in \
-                other_reach_attempts. It is therefore guaranteed that we find back this ID in \
-                either of these two sets");
+        debug_assert!(former.is_none());
     }
 
-    /// Handles a reach error event from the collection.
-    ///
-    /// Optionally returns an event to return from the stream.
-    ///
-    /// > **Note**: The event **must** have been produced by the collection of nodes, otherwise
-    /// >           panics will likely happen.
-    fn handle_reach_error(
-        &mut self,
-        reach_id: ReachAttemptId,
-        error: IoError,
-    ) -> Option<SwarmEvent<TTrans, TOutEvent>>
+    /// Provides an API similar to `Stream`, except that it cannot error.
+    pub fn poll(&mut self) -> Async<Option<SwarmEvent<TTrans, TOutEvent>>>
     where
         TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
         TTrans::Dial: Send + 'static,
-        TTrans::MultiaddrFuture: Send + 'static,
+        TTrans::ListenerUpgrade: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TMuxer::Substream: Send,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
+        THandlerBuild: HandlerFactory<Handler = THandler>,
+        THandler: NodeHandler<Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
+        THandler::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
     {
-        // Search for the attempt in `out_reach_attempts`.
-        // TODO: could be more optimal than iterating over everything
-        let out_reach_peer_id = self
-            .out_reach_attempts
-            .iter()
-            .find(|(_, a)| a.id == reach_id)
-            .map(|(p, _)| p.clone());
-        if let Some(peer_id) = out_reach_peer_id {
-            let mut attempt = self.out_reach_attempts.remove(&peer_id)
-                .expect("out_reach_peer_id is a key that is grabbed from out_reach_attempts");
-
-            let num_remain = attempt.next_attempts.len();
-            let failed_addr = attempt.cur_attempted.clone();
-
-            if !attempt.next_attempts.is_empty() {
-                let mut attempt = attempt;
-                attempt.cur_attempted = attempt.next_attempts.remove(0);
-                attempt.id = match self.transport().clone().dial(attempt.cur_attempted.clone()) {
-                    Ok(fut) => self.active_nodes.add_reach_attempt(fut, self.handler_build.new_handler()),
-                    Err((_, addr)) => {
-                        let msg = format!("unsupported multiaddr {}", addr);
-                        let fut = future::err(IoError::new(IoErrorKind::Other, msg));
-                        self.active_nodes.add_reach_attempt::<_, _, future::FutureResult<Multiaddr, IoError>, _>(fut, self.handler_build.new_handler())
-                    },
+        // Start by polling the listeners for events.
+        match self.listeners.poll() {
+            Async::NotReady => (),
+            Async::Ready(Some(ListenersEvent::Incoming {
+                upgrade,
+                listen_addr,
+                send_back_addr,
+            })) => {
+                let endpoint = ConnectedPoint::Listener {
+                    listen_addr: listen_addr.clone(),
+                    send_back_addr: send_back_addr.clone(),
                 };
 
-                self.out_reach_attempts.insert(peer_id.clone(), attempt);
+                let id = self.active_nodes.add_reach_attempt(upgrade, self.handler_build.new_handler(endpoint));
+                self.reach_attempts.other_reach_attempts.push((
+                    id,
+                    ConnectedPoint::Listener {
+                        listen_addr: listen_addr.clone(),
+                        send_back_addr: send_back_addr.clone(),
+                    },
+                ));
+                return Async::Ready(Some(SwarmEvent::IncomingConnection {
+                    listen_addr,
+                    send_back_addr,
+                }));
             }
-
-            return Some(SwarmEvent::DialError {
-                remain_addrs_attempt: num_remain,
-                peer_id,
-                multiaddr: failed_addr,
-                error,
-            });
+            Async::Ready(Some(ListenersEvent::Closed {
+                listen_addr,
+                listener,
+                result,
+            })) => {
+                return Async::Ready(Some(SwarmEvent::ListenerClosed {
+                    listen_addr,
+                    listener,
+                    result,
+                }));
+            }
+            Async::Ready(None) => unreachable!("The listeners stream never finishes"),
         }
 
-        // If this is not an outgoing reach attempt, check the incoming reach attempts.
-        if let Some(in_pos) = self
-            .other_reach_attempts
-            .iter()
-            .position(|i| i.0 == reach_id)
-        {
-            let (_, endpoint) = self.other_reach_attempts.swap_remove(in_pos);
-            match endpoint {
-                ConnectedPoint::Dialer { address } => {
-                    return Some(SwarmEvent::UnknownPeerDialError {
-                        multiaddr: address,
+        // Poll the existing nodes.
+        loop {
+            let (action, out_event);
+            match self.active_nodes.poll() {
+                Async::NotReady => break,
+                Async::Ready(Some(CollectionEvent::NodeReached(reach_event))) => {
+                    let (a, e) = handle_node_reached(&mut self.reach_attempts, reach_event);
+                    action = a;
+                    out_event = e;
+                }
+                Async::Ready(Some(CollectionEvent::ReachError { id, error })) => {
+                    let (a, e) = handle_reach_error(&mut self.reach_attempts, id, error);
+                    action = a;
+                    out_event = e;
+                }
+                Async::Ready(Some(CollectionEvent::NodeError {
+                    peer_id,
+                    error,
+                })) => {
+                    let endpoint = self.reach_attempts.connected_endpoints.remove(&peer_id)
+                        .expect("we insert in connected_endpoints whenever we receive a \
+                                 connection ; NodeError is only ever received for nodes that \
+                                 are connected ; therefore we always have an entry for this peer \
+                                 ; qed");
+                    debug_assert!(!self.reach_attempts.out_reach_attempts.contains_key(&peer_id));
+                    action = Default::default();
+                    out_event = SwarmEvent::NodeError {
+                        peer_id,
+                        endpoint,
                         error,
-                    });
+                    };
                 }
-                ConnectedPoint::Listener { listen_addr } => {
-                    return Some(SwarmEvent::IncomingConnectionError { listen_addr, error });
+                Async::Ready(Some(CollectionEvent::NodeClosed { peer_id })) => {
+                    let endpoint = self.reach_attempts.connected_endpoints.remove(&peer_id)
+                        .expect("we insert in connected_endpoints whenever we receive a \
+                                 connection ; NodeClosed is only ever received for nodes that \
+                                 are connected ; therefore we always have an entry for this peer \
+                                 ; qed");
+                    debug_assert!(!self.reach_attempts.out_reach_attempts.contains_key(&peer_id));
+                    action = Default::default();
+                    out_event = SwarmEvent::NodeClosed { peer_id, endpoint };
                 }
+                Async::Ready(Some(CollectionEvent::NodeEvent { peer_id, event })) => {
+                    action = Default::default();
+                    out_event = SwarmEvent::NodeEvent { peer_id, event };
+                }
+                Async::Ready(None) => unreachable!("CollectionStream never ends"),
+            };
+
+            if let Some((peer_id, first, rest)) = action.start_dial_out {
+                self.start_dial_out(peer_id, first, rest);
             }
+
+            if let Some(interrupt) = action.interrupt {
+                // TODO: improve proof or remove ; this is too complicated right now
+                self.active_nodes
+                    .interrupt(interrupt)
+                    .expect("interrupt is guaranteed to be gathered from `out_reach_attempts` ;
+                             we insert in out_reach_attempts only when we call \
+                             active_nodes.add_reach_attempt, and we remove only when we call \
+                             interrupt or when a reach attempt succeeds or errors ; therefore the \
+                             out_reach_attempts should always be in sync with the actual \
+                             attempts ; qed");
+            }
+
+            return Async::Ready(Some(out_event));
         }
 
-        // The id was neither in the outbound list nor the inbound list.
-        panic!("The API of collection guarantees that the id sent back in ReachError events \
-                (which is where we call handle_reach_error) is one that was passed to \
-                add_reach_attempt. Whenever we call add_reach_attempt, we also insert \
-                at the same time an entry either in out_reach_attempts or in \
-                other_reach_attempts. It is therefore guaranteed that we find back this ID in \
-                either of these two sets");
+        Async::NotReady
     }
+}
+
+/// Internal struct indicating an action to perform of the swarm.
+#[derive(Debug, Default)]
+#[must_use]
+struct ActionItem {
+    start_dial_out: Option<(PeerId, Multiaddr, Vec<Multiaddr>)>,
+    interrupt: Option<ReachAttemptId>,
+}
+
+/// Handles a node reached event from the collection.
+///
+/// Returns an event to return from the stream.
+///
+/// > **Note**: The event **must** have been produced by the collection of nodes, otherwise
+/// >           panics will likely happen.
+fn handle_node_reached<TTrans, TMuxer, TInEvent, TOutEvent>(
+    reach_attempts: &mut ReachAttempts,
+    event: CollectionReachEvent<TInEvent, TOutEvent>
+) -> (ActionItem, SwarmEvent<TTrans, TOutEvent>)
+where
+    TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
+    TTrans::Dial: Send + 'static,
+    TMuxer: StreamMuxer + Send + Sync + 'static,
+    TMuxer::OutboundSubstream: Send,
+    TMuxer::Substream: Send,
+    TInEvent: Send + 'static,
+    TOutEvent: Send + 'static,
+{
+    // We first start looking in the incoming attempts. While this makes the code less optimal,
+    // it also makes the logic easier.
+    if let Some(in_pos) = reach_attempts
+        .other_reach_attempts
+        .iter()
+        .position(|i| i.0 == event.reach_attempt_id())
+    {
+        let (_, endpoint) = reach_attempts.other_reach_attempts.swap_remove(in_pos);
+
+        // Clear the known multiaddress for this peer.
+        let closed_endpoint = reach_attempts.connected_endpoints.insert(event.peer_id().clone(), endpoint.clone());
+        // Cancel any outgoing attempt to this peer.
+        let action = if let Some(attempt) = reach_attempts.out_reach_attempts.remove(&event.peer_id()) {
+            debug_assert_ne!(attempt.id, event.reach_attempt_id());
+            ActionItem {
+                interrupt: Some(attempt.id),
+                .. Default::default()
+            }
+        } else {
+            ActionItem::default()
+        };
+
+        let (outcome, peer_id) = event.accept();
+        if let Some(closed_endpoint) = closed_endpoint {
+            debug_assert_eq!(outcome, CollectionNodeAccept::ReplacedExisting);
+            return (action, SwarmEvent::Replaced {
+                peer_id,
+                endpoint,
+                closed_endpoint,
+            });
+        } else {
+            debug_assert_eq!(outcome, CollectionNodeAccept::NewEntry);
+            return (action, SwarmEvent::Connected { peer_id, endpoint });
+        }
+    }
+
+    // Otherwise, try for outgoing attempts.
+    let is_outgoing_and_ok = if let Some(attempt) = reach_attempts.out_reach_attempts.get(event.peer_id()) {
+        attempt.id == event.reach_attempt_id()
+    } else {
+        false
+    };
+
+    // We only remove the attempt from `out_reach_attempts` if it both matches the reach id
+    // and the expected peer id.
+    if is_outgoing_and_ok {
+        let attempt = reach_attempts.out_reach_attempts.remove(event.peer_id())
+            .expect("is_outgoing_and_ok is true only if reach_attempts.out_reach_attempts.get(event.peer_id()) \
+                        returned Some");
+
+        let endpoint = ConnectedPoint::Dialer {
+            address: attempt.cur_attempted,
+        };
+        let closed_endpoint = reach_attempts.connected_endpoints
+            .insert(event.peer_id().clone(), endpoint.clone());
+
+        let (outcome, peer_id) = event.accept();
+        if let Some(closed_endpoint) = closed_endpoint {
+            debug_assert_eq!(outcome, CollectionNodeAccept::ReplacedExisting);
+            return (Default::default(), SwarmEvent::Replaced {
+                peer_id,
+                endpoint,
+                closed_endpoint,
+            });
+        } else {
+            debug_assert_eq!(outcome, CollectionNodeAccept::NewEntry);
+            return (Default::default(), SwarmEvent::Connected { peer_id, endpoint });
+        }
+    }
+
+    // If in neither, check outgoing reach attempts again as we may have a public
+    // key mismatch.
+    let expected_peer_id = reach_attempts
+        .out_reach_attempts
+        .iter()
+        .find(|(_, a)| a.id == event.reach_attempt_id())
+        .map(|(p, _)| p.clone());
+    if let Some(expected_peer_id) = expected_peer_id {
+        debug_assert_ne!(&expected_peer_id, event.peer_id());
+        let attempt = reach_attempts.out_reach_attempts.remove(&expected_peer_id)
+            .expect("expected_peer_id is a key that is grabbed from out_reach_attempts");
+
+        let num_remain = attempt.next_attempts.len();
+        let failed_addr = attempt.cur_attempted.clone();
+
+        let peer_id = event.deny();
+
+        let action = if !attempt.next_attempts.is_empty() {
+            let mut attempt = attempt;
+            let next = attempt.next_attempts.remove(0);
+            ActionItem {
+                start_dial_out: Some((expected_peer_id.clone(), next, attempt.next_attempts)),
+                .. Default::default()
+            }
+        } else {
+            Default::default()
+        };
+
+        return (action, SwarmEvent::PublicKeyMismatch {
+            remain_addrs_attempt: num_remain,
+            expected_peer_id,
+            actual_peer_id: peer_id,
+            multiaddr: failed_addr,
+        });
+    }
+
+    // We didn't find any entry in neither the outgoing connections not ingoing connections.
+    // TODO: improve proof or remove ; this is too complicated right now
+    panic!("The API of collection guarantees that the id sent back in NodeReached (which is where \
+            we call handle_node_reached) is one that was passed to add_reach_attempt. Whenever we \
+            call add_reach_attempt, we also insert at the same time an entry either in \
+            out_reach_attempts or in other_reach_attempts. It is therefore guaranteed that we \
+            find back this ID in either of these two sets");
+}
+
+/// Handles a reach error event from the collection.
+///
+/// Optionally returns an event to return from the stream.
+///
+/// > **Note**: The event **must** have been produced by the collection of nodes, otherwise
+/// >           panics will likely happen.
+fn handle_reach_error<TTrans, TOutEvent>(
+    reach_attempts: &mut ReachAttempts,
+    reach_id: ReachAttemptId,
+    error: IoError,
+) -> (ActionItem, SwarmEvent<TTrans, TOutEvent>)
+where TTrans: Transport
+{
+    // Search for the attempt in `out_reach_attempts`.
+    // TODO: could be more optimal than iterating over everything
+    let out_reach_peer_id = reach_attempts
+        .out_reach_attempts
+        .iter()
+        .find(|(_, a)| a.id == reach_id)
+        .map(|(p, _)| p.clone());
+    if let Some(peer_id) = out_reach_peer_id {
+        let mut attempt = reach_attempts.out_reach_attempts.remove(&peer_id)
+            .expect("out_reach_peer_id is a key that is grabbed from out_reach_attempts");
+
+        let num_remain = attempt.next_attempts.len();
+        let failed_addr = attempt.cur_attempted.clone();
+
+        let action = if !attempt.next_attempts.is_empty() {
+            let mut attempt = attempt;
+            let next_attempt = attempt.next_attempts.remove(0);
+            ActionItem {
+                start_dial_out: Some((peer_id.clone(), next_attempt, attempt.next_attempts)),
+                .. Default::default()
+            }
+        } else {
+            Default::default()
+        };
+
+        return (action, SwarmEvent::DialError {
+            remain_addrs_attempt: num_remain,
+            peer_id,
+            multiaddr: failed_addr,
+            error,
+        });
+    }
+
+    // If this is not an outgoing reach attempt, check the incoming reach attempts.
+    if let Some(in_pos) = reach_attempts
+        .other_reach_attempts
+        .iter()
+        .position(|i| i.0 == reach_id)
+    {
+        let (_, endpoint) = reach_attempts.other_reach_attempts.swap_remove(in_pos);
+        match endpoint {
+            ConnectedPoint::Dialer { address } => {
+                return (Default::default(), SwarmEvent::UnknownPeerDialError {
+                    multiaddr: address,
+                    error,
+                });
+            }
+            ConnectedPoint::Listener { listen_addr, send_back_addr } => {
+                return (Default::default(), SwarmEvent::IncomingConnectionError { listen_addr, send_back_addr, error });
+            }
+        }
+    }
+
+    // The id was neither in the outbound list nor the inbound list.
+    // TODO: improve proof or remove ; this is too complicated right now
+    panic!("The API of collection guarantees that the id sent back in ReachError events \
+            (which is where we call handle_reach_error) is one that was passed to \
+            add_reach_attempt. Whenever we call add_reach_attempt, we also insert \
+            at the same time an entry either in out_reach_attempts or in \
+            other_reach_attempts. It is therefore guaranteed that we find back this ID in \
+            either of these two sets");
 }
 
 /// State of a peer in the system.
@@ -708,7 +829,6 @@ where
     where
         TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
         TTrans::Dial: Send + 'static,
-        TTrans::MultiaddrFuture: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TMuxer::Substream: Send,
@@ -729,7 +849,6 @@ where
         TFn: FnOnce(&PeerId) -> Multiaddr,
         TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
         TTrans::Dial: Send + 'static,
-        TTrans::MultiaddrFuture: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TMuxer::Substream: Send,
@@ -795,8 +914,8 @@ impl<'a, TInEvent, TOutEvent> PeerPotentialConnect<'a, TInEvent, TOutEvent> {
 /// Access to a peer we are connected to.
 pub struct PeerConnected<'a, TInEvent: 'a> {
     peer: CollecPeerMut<'a, TInEvent>,
-    /// Reference to the `connected_multiaddresses` field of the parent.
-    connected_multiaddresses: &'a mut FnvHashMap<PeerId, Multiaddr>,
+    /// Reference to the `connected_endpoints` field of the parent.
+    connected_endpoints: &'a mut FnvHashMap<PeerId, ConnectedPoint>,
     peer_id: PeerId,
 }
 
@@ -807,14 +926,17 @@ impl<'a, TInEvent> PeerConnected<'a, TInEvent> {
     // TODO: consider returning a `PeerNotConnected` ; however this makes all the borrows things
     // much more annoying to deal with
     pub fn close(self) {
-        self.connected_multiaddresses.remove(&self.peer_id);
+        self.connected_endpoints.remove(&self.peer_id);
         self.peer.close()
     }
 
-    /// Returns the outcome of the future that resolves the multiaddress of the peer.
+    /// Returns the endpoint we are connected to the remote through.
     #[inline]
-    pub fn multiaddr(&self) -> Option<&Multiaddr> {
-        self.connected_multiaddresses.get(&self.peer_id)
+    pub fn endpoint(&self) -> &ConnectedPoint {
+        self.connected_endpoints.get(&self.peer_id)
+            .expect("we insert in connected_endpoints whenever we receive a connection ; \
+                     a PeerConnected can only ever be created for nodes that are connected ; \
+                     therefore we always have an entry for this peer ; qed")
     }
 
     /// Sends an event to the node.
@@ -838,6 +960,7 @@ impl<'a, TInEvent, TOutEvent> PeerPendingConnect<'a, TInEvent, TOutEvent> {
     pub fn interrupt(self) {
         let attempt = self.attempt.remove();
         if let Err(_) = self.active_nodes.interrupt(attempt.id) {
+            // TODO: improve proof or remove ; this is too complicated right now
             panic!("We retreived this attempt.id from out_reach_attempts. We insert in \
                     out_reach_attempts only at the same time as we call add_reach_attempt. \
                     Whenever we receive a NodeReached, NodeReplaced or ReachError event, which \
@@ -894,7 +1017,6 @@ where
     where
         TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
         TTrans::Dial: Send + 'static,
-        TTrans::MultiaddrFuture: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TMuxer::Substream: Send,
@@ -918,7 +1040,6 @@ where
         TIter: IntoIterator<Item = Multiaddr>,
         TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
         TTrans::Dial: Send + 'static,
-        TTrans::MultiaddrFuture: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TMuxer::Substream: Send,
@@ -940,32 +1061,16 @@ where
     where
         TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
         TTrans::Dial: Send + 'static,
-        TTrans::MultiaddrFuture: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TMuxer::Substream: Send,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
     {
-        let future = match self.nodes.transport().clone().dial(first.clone()) {
-            Ok(fut) => fut,
-            Err(_) => return Err(self),
-        };
-
-        let reach_id = self.nodes.active_nodes.add_reach_attempt(future, self.nodes.handler_build.new_handler());
-
-        let former = self.nodes.out_reach_attempts.insert(
-            self.peer_id.clone(),
-            OutReachAttempt {
-                id: reach_id,
-                cur_attempted: first,
-                next_attempts: rest,
-            },
-        );
-        debug_assert!(former.is_none());
+        self.nodes.start_dial_out(self.peer_id.clone(), first, rest);
 
         Ok(PeerPendingConnect {
-            attempt: match self.nodes.out_reach_attempts.entry(self.peer_id) {
+            attempt: match self.nodes.reach_attempts.out_reach_attempts.entry(self.peer_id) {
                 Entry::Occupied(e) => e,
                 Entry::Vacant(_) => {
                     panic!("We called out_reach_attempts.insert with this peer id just above")
@@ -981,7 +1086,6 @@ impl<TTrans, TMuxer, TInEvent, TOutEvent, THandler, THandlerBuild> Stream for
 where
     TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
     TTrans::Dial: Send + 'static,
-    TTrans::MultiaddrFuture: Future<Item = Multiaddr, Error = IoError> + Send + 'static,
     TTrans::ListenerUpgrade: Send + 'static,
     TMuxer: StreamMuxer + Send + Sync + 'static,
     TMuxer::OutboundSubstream: Send,
@@ -995,85 +1099,8 @@ where
     type Item = SwarmEvent<TTrans, TOutEvent>;
     type Error = Void; // TODO: use `!` once stable
 
+    #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        // Start by polling the listeners for events.
-        match self.listeners.poll() {
-            Ok(Async::NotReady) => (),
-            Ok(Async::Ready(Some(ListenersEvent::Incoming {
-                upgrade,
-                listen_addr,
-            }))) => {
-                let id = self.active_nodes.add_reach_attempt(upgrade, self.handler_build.new_handler());
-                self.other_reach_attempts.push((
-                    id,
-                    ConnectedPoint::Listener {
-                        listen_addr: listen_addr.clone(),
-                    },
-                ));
-                return Ok(Async::Ready(Some(SwarmEvent::IncomingConnection {
-                    listen_addr,
-                })));
-            }
-            Ok(Async::Ready(Some(ListenersEvent::Closed {
-                listen_addr,
-                listener,
-                result,
-            }))) => {
-                return Ok(Async::Ready(Some(SwarmEvent::ListenerClosed {
-                    listen_addr,
-                    listener,
-                    result,
-                })));
-            }
-            Ok(Async::Ready(None)) => unreachable!("The listeners stream never finishes"),
-            Err(_) => unreachable!("The listeners stream never errors"), // TODO: remove variant
-        }
-
-        // Poll the existing nodes.
-        loop {
-            match self.active_nodes.poll() {
-                Ok(Async::NotReady) => break,
-                Ok(Async::Ready(Some(CollectionEvent::NodeReached { peer_id, id }))) => {
-                    let event = self.handle_node_reached(peer_id, id, false);
-                    return Ok(Async::Ready(Some(event)));
-                }
-                Ok(Async::Ready(Some(CollectionEvent::NodeReplaced {
-                    peer_id,
-                    id,
-                }))) => {
-                    let event = self.handle_node_reached(peer_id, id, true);
-                    return Ok(Async::Ready(Some(event)));
-                }
-                Ok(Async::Ready(Some(CollectionEvent::ReachError { id, error }))) => {
-                    if let Some(event) = self.handle_reach_error(id, error) {
-                        return Ok(Async::Ready(Some(event)));
-                    }
-                }
-                Ok(Async::Ready(Some(CollectionEvent::NodeError {
-                    peer_id,
-                    error,
-                }))) => {
-                    let address = self.connected_multiaddresses.remove(&peer_id);
-                    debug_assert!(!self.out_reach_attempts.contains_key(&peer_id));
-                    return Ok(Async::Ready(Some(SwarmEvent::NodeError {
-                        peer_id,
-                        address,
-                        error,
-                    })));
-                }
-                Ok(Async::Ready(Some(CollectionEvent::NodeClosed { peer_id }))) => {
-                    let address = self.connected_multiaddresses.remove(&peer_id);
-                    debug_assert!(!self.out_reach_attempts.contains_key(&peer_id));
-                    return Ok(Async::Ready(Some(SwarmEvent::NodeClosed { peer_id, address })));
-                }
-                Ok(Async::Ready(Some(CollectionEvent::NodeEvent { peer_id, event }))) => {
-                    return Ok(Async::Ready(Some(SwarmEvent::NodeEvent { peer_id, event })));
-                }
-                Ok(Async::Ready(None)) => unreachable!("CollectionStream never ends"),
-                Err(_) => unreachable!("CollectionStream never errors"),
-            }
-        }
-
-        Ok(Async::NotReady)
+        Ok(self.poll())
     }
 }

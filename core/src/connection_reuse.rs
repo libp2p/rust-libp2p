@@ -129,7 +129,9 @@ enum PeerState<D, M> where M: StreamMuxer {
     // TODO: stronger Future type
     Pending {
         /// Future that produces the muxer.
-        future: Box<Future<Item = ((D, M), Multiaddr), Error = IoError> + Send>,
+        future: Box<Future<Item = (D, M), Error = IoError> + Send>,
+        /// Address of the remote.
+        address: Multiaddr,
         /// All the tasks to notify when `future` resolves.
         notify: FnvHashMap<usize, task::Task>,
     },
@@ -166,7 +168,6 @@ impl<T, D, M> Transport for ConnectionReuse<T, D, M>
 where
     T: Transport + Send + 'static, // TODO: 'static :(
     T::Dial: Send,
-    T::MultiaddrFuture: Send,
     T::Listener: Send,
     T::ListenerUpgrade: Send,
     T: Transport<Output = (D, M)> + Clone + 'static, // TODO: 'static :(
@@ -175,9 +176,8 @@ where
     T: Clone,
 {
     type Output = (D, ConnectionReuseSubstream<T, D, M>);
-    type MultiaddrFuture = future::FutureResult<Multiaddr, IoError>;
-    type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError> + Send>;
-    type ListenerUpgrade = FutureResult<(Self::Output, Self::MultiaddrFuture), IoError>;
+    type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError> + Send>;
+    type ListenerUpgrade = FutureResult<Self::Output, IoError>;
     type Dial = ConnectionReuseDial<T, D, M>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -195,15 +195,7 @@ where
             }
         };
 
-        let listener = listener
-            .map(|upgr| {
-                upgr.and_then(|(out, addr)| {
-                    trace!("Waiting for remote's address as listener");
-                    addr.map(move |addr| (out, addr))
-                })
-            })
-            .fuse();
-
+        let listener = listener.fuse();
         let listener_id = shared.next_listener_id;
         shared.next_listener_id += 1;
 
@@ -251,7 +243,6 @@ impl<T, D, M> MuxedTransport for ConnectionReuse<T, D, M>
 where
     T: Transport + Send + 'static, // TODO: 'static :(
     T::Dial: Send,
-    T::MultiaddrFuture: Send,
     T::Listener: Send,
     T::ListenerUpgrade: Send,
     T: Transport<Output = (D, M)> + Clone + 'static, // TODO: 'static :(
@@ -260,8 +251,7 @@ where
     T: Clone,
 {
     type Incoming = ConnectionReuseIncoming<T, D, M>;
-    type IncomingUpgrade =
-        future::FutureResult<((D, ConnectionReuseSubstream<T, D, M>), Self::MultiaddrFuture), IoError>;
+    type IncomingUpgrade = future::FutureResult<(D, ConnectionReuseSubstream<T, D, M>), IoError>;
 
     #[inline]
     fn next_incoming(self) -> Self::Incoming {
@@ -316,9 +306,8 @@ where
     M: Send + StreamMuxer + 'static,
     D: Send + Clone + 'static,
     <T as Transport>::Dial: Send + 'static,
-    <T as Transport>::MultiaddrFuture: Send + 'static,
 {
-    type Item = ((D, ConnectionReuseSubstream<T, D, M>), FutureResult<Multiaddr, IoError>);
+    type Item = (D, ConnectionReuseSubstream<T, D, M>);
     type Error = IoError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -334,7 +323,7 @@ where
                             inner,
                             addr: outbound.client_addr.clone(),
                         };
-                        return Ok(Async::Ready(((outbound.custom_data, substream), future::ok(outbound.client_addr))));
+                        return Ok(Async::Ready((outbound.custom_data, substream)));
                     },
                     Ok(Async::NotReady) => {
                         self.outbound = Some(outbound);
@@ -375,9 +364,8 @@ where
                     let state = match shared.transport.clone().dial(self.addr.clone()) {
                         Ok(future) => {
                             trace!("Opened new connection to {:?}", self.addr);
-                            let future = future.and_then(|(out, addr)| addr.map(move |a| (out, a)));
                             let future = Box::new(future);
-                            PeerState::Pending { future, notify: Default::default() }
+                            PeerState::Pending { future, address: self.addr.clone(), notify: Default::default() }
                         },
                         Err(_) => {
                             trace!("Failed to open connection to {:?}, multiaddr not supported", self.addr);
@@ -407,10 +395,10 @@ where
                         client_addr,
                     });
                 },
-                PeerState::Pending { mut future, mut notify } => {
+                PeerState::Pending { mut future, address, mut notify } => {
                     match future.poll() {
-                        Ok(Async::Ready(((custom_data, muxer), client_addr))) => {
-                            trace!("Successful new connection to {} ({})", self.addr, client_addr);
+                        Ok(Async::Ready((custom_data, muxer))) => {
+                            trace!("Successful new connection to {} ({})", self.addr, address);
                             for task in notify {
                                 task.1.notify();
                             }
@@ -418,17 +406,17 @@ where
                             let first_outbound = muxing::outbound_from_ref_and_wrap(muxer.clone());
                             let connection_id = shared.next_connection_id;
                             shared.next_connection_id += 1;
-                            *connec = PeerState::Active { muxer, custom_data: custom_data.clone(), connection_id, num_substreams: 1, listener_id: None, client_addr: client_addr.clone() };
+                            *connec = PeerState::Active { muxer, custom_data: custom_data.clone(), connection_id, num_substreams: 1, listener_id: None, client_addr: address.clone() };
                             self.outbound = Some(ConnectionReuseDialOut {
                                 custom_data,
                                 stream: first_outbound,
                                 connection_id,
-                                client_addr,
+                                client_addr: address,
                             });
                         },
                         Ok(Async::NotReady) => {
                             notify.insert(TASK_ID.with(|&t| t), task::current());
-                            *connec = PeerState::Pending { future, notify };
+                            *connec = PeerState::Pending { future, address, notify };
                             return Ok(Async::NotReady);
                         },
                         Err(err) => {
@@ -491,10 +479,10 @@ where
     T: Transport<Output = (D, M)>,
     M: StreamMuxer,
     D: Clone,
-    L: Stream<Item = Lu, Error = IoError>,
-    Lu: Future<Item = (T::Output, Multiaddr), Error = IoError> + Send + 'static,
+    L: Stream<Item = (Lu, Multiaddr), Error = IoError>,
+    Lu: Future<Item = T::Output, Error = IoError> + Send + 'static,
 {
-    type Item = FutureResult<((D, ConnectionReuseSubstream<T, D, M>), FutureResult<Multiaddr, IoError>), IoError>;
+    type Item = (FutureResult<(D, ConnectionReuseSubstream<T, D, M>), IoError>, Multiaddr);
     type Error = IoError;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
@@ -503,9 +491,9 @@ where
         // after it is finished or after it error'ed.
         loop {
             match self.listener.poll() {
-                Ok(Async::Ready(Some(upgrade))) => {
+                Ok(Async::Ready(Some((upgrade, addr)))) => {
                     trace!("New incoming connection");
-                    self.current_upgrades.push(Box::new(upgrade));
+                    self.current_upgrades.push(Box::new(upgrade.map(move |u| (u, addr))));
                 }
                 Ok(Async::NotReady) => break,
                 Ok(Async::Ready(None)) => {
@@ -541,7 +529,8 @@ where
                 Err(err) => {
                     // Insert the rest of the pending upgrades, but not the current one.
                     debug!("Error while upgrading listener connection: {:?}", err);
-                    return Ok(Async::Ready(Some(future::err(err))));
+                    let client_addr = "/memory".parse().unwrap();       // TODO: wrong
+                    return Ok(Async::Ready(Some((future::err(err), client_addr))));
                 }
             }
         }
@@ -563,7 +552,8 @@ where
                 Ok(Async::NotReady)
             }
             Err(err) => {
-                Ok(Async::Ready(Some(future::err(err))))
+                let client_addr = "/memory".parse().unwrap();       // TODO: wrong
+                Ok(Async::Ready(Some((future::err(err), client_addr))))
             }
         }
     }
@@ -588,7 +578,7 @@ where
     M: StreamMuxer,
     D: Clone,
 {
-    type Item = future::FutureResult<((D, ConnectionReuseSubstream<T, D, M>), future::FutureResult<Multiaddr, IoError>), IoError>;
+    type Item = (future::FutureResult<(D, ConnectionReuseSubstream<T, D, M>), IoError>, Multiaddr);
     type Error = IoError;
 
     #[inline]
@@ -613,7 +603,7 @@ where
 /// Returns `Ready(None)` if no connection is matching the `listener`. Returns `NotReady` if
 /// one or more connections are matching the `listener` but they are not ready.
 fn poll_incoming<T, D, M>(shared_arc: &Arc<Mutex<Shared<T, D, M>>>, shared: &mut Shared<T, D, M>, listener: Option<u64>)
-    -> Poll<Option<FutureResult<((D, ConnectionReuseSubstream<T, D, M>), FutureResult<Multiaddr, IoError>), IoError>>, IoError>
+    -> Poll<Option<(FutureResult<(D, ConnectionReuseSubstream<T, D, M>), IoError>, Multiaddr)>, IoError>
 where
     T: Transport,
     T: Transport<Output = (D, M)>,
@@ -644,7 +634,7 @@ where
                             connection_id,
                             addr: client_addr.clone(),
                         };
-                        ret_value = Some(Ok(((custom_data.clone(), substream), future::ok(client_addr.clone()))));
+                        ret_value = Some(Ok(((custom_data.clone(), substream), client_addr.clone())));
                         break;
                     },
                     Ok(Async::Ready(None)) => {
@@ -679,7 +669,7 @@ where
     }
 
     match ret_value {
-        Some(Ok(val)) => Ok(Async::Ready(Some(future::ok(val)))),
+        Some(Ok((val, addr))) => Ok(Async::Ready(Some((future::ok(val), addr)))),
         Some(Err(err)) => Err(err),
         None => {
             if found_one {

@@ -52,7 +52,6 @@ extern crate futures;
 extern crate libp2p;
 extern crate libp2p_yamux;
 extern crate rand;
-#[macro_use]
 extern crate structopt;
 extern crate tokio_codec;
 extern crate tokio_current_thread;
@@ -174,14 +173,14 @@ fn run_listener(opts: ListenerOpts) -> Result<(), Box<Error>> {
     });
 
     let upgraded = transport.with_upgrade(relay)
-        .and_then(|out, endpoint, addr| {
+        .and_then(|out, endpoint| {
             match out {
                 libp2p::relay::Output::Sealed(future) => {
-                    Either::A(future.map(|out| (Either::A(out), Either::A(addr))))
+                    Either::A(future.map(|out| Either::A(out)))
                 }
                 libp2p::relay::Output::Stream(socket) => {
-                    Either::B(upgrade::apply(socket, echo, endpoint, addr)
-                        .map(|(out, addr)| (Either::B(out), Either::B(addr))))
+                    Either::B(upgrade::apply(socket, echo, endpoint)
+                        .map(|out| Either::B(out)))
                 }
             }
         });

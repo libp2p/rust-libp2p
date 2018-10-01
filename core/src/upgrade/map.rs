@@ -21,7 +21,7 @@
 use std::io::Error as IoError;
 use futures::prelude::*;
 use tokio_io::{AsyncRead, AsyncWrite};
-use upgrade::{ConnectionUpgrade, Endpoint};
+use upgrade::{ConnectionUpgrade, ConnectedPoint};
 
 /// Applies a closure on the output of a connection upgrade.
 #[inline]
@@ -36,9 +36,9 @@ pub struct Map<U, F> {
     map: F,
 }
 
-impl<C, U, F, O, Maf> ConnectionUpgrade<C, Maf> for Map<U, F>
+impl<C, U, F, O> ConnectionUpgrade<C> for Map<U, F>
 where
-    U: ConnectionUpgrade<C, Maf>,
+    U: ConnectionUpgrade<C>,
     U::Future: Send + 'static,     // TODO: 'static :(
     C: AsyncRead + AsyncWrite,
     F: FnOnce(U::Output) -> O + Send + 'static,     // TODO: 'static :(
@@ -51,20 +51,18 @@ where
     }
 
     type Output = O;
-    type MultiaddrFuture = U::MultiaddrFuture;
-    type Future = Box<Future<Item = (O, Self::MultiaddrFuture), Error = IoError> + Send>;
+    type Future = Box<Future<Item = O, Error = IoError> + Send>;
 
     fn upgrade(
         self,
         socket: C,
         id: Self::UpgradeIdentifier,
-        ty: Endpoint,
-        remote_addr: Maf,
+        endpoint: ConnectedPoint,
     ) -> Self::Future {
         let map = self.map;
         let fut = self.upgrade
-            .upgrade(socket, id, ty, remote_addr)
-            .map(move |(out, maf)| (map(out), maf));
+            .upgrade(socket, id, endpoint)
+            .map(map);
         Box::new(fut) as Box<_>
     }
 }

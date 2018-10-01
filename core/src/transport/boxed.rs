@@ -33,7 +33,6 @@ where
     T::Dial: Send + 'static,
     T::Listener: Send + 'static,
     T::ListenerUpgrade: Send + 'static,
-    T::MultiaddrFuture: Send + 'static,
 {
     Boxed {
         inner: Arc::new(transport) as Arc<_>,
@@ -47,7 +46,6 @@ where
     T::Dial: Send + 'static,
     T::Listener: Send + 'static,
     T::ListenerUpgrade: Send + 'static,
-    T::MultiaddrFuture: Send + 'static,
     T::Incoming: Send + 'static,
     T::IncomingUpgrade: Send + 'static,
 {
@@ -56,12 +54,11 @@ where
     }
 }
 
-pub type MultiaddrFuture = Box<Future<Item = Multiaddr, Error = IoError> + Send>;
-pub type Dial<O> = Box<Future<Item = (O, MultiaddrFuture), Error = IoError> + Send>;
-pub type Listener<O> = Box<Stream<Item = ListenerUpgrade<O>, Error = IoError> + Send>;
-pub type ListenerUpgrade<O> = Box<Future<Item = (O, MultiaddrFuture), Error = IoError> + Send>;
-pub type Incoming<O> = Box<Future<Item = IncomingUpgrade<O>, Error = IoError> + Send>;
-pub type IncomingUpgrade<O> = Box<Future<Item = (O, MultiaddrFuture), Error = IoError> + Send>;
+pub type Dial<O> = Box<Future<Item = O, Error = IoError> + Send>;
+pub type Listener<O> = Box<Stream<Item = (ListenerUpgrade<O>, Multiaddr), Error = IoError> + Send>;
+pub type ListenerUpgrade<O> = Box<Future<Item = O, Error = IoError> + Send>;
+pub type Incoming<O> = Box<Future<Item = (IncomingUpgrade<O>, Multiaddr), Error = IoError> + Send>;
+pub type IncomingUpgrade<O> = Box<Future<Item = O, Error = IoError> + Send>;
 
 trait Abstract<O> {
     fn listen_on(&self, addr: Multiaddr) -> Result<(Listener<O>, Multiaddr), Multiaddr>;
@@ -75,22 +72,19 @@ where
     T::Dial: Send + 'static,
     T::Listener: Send + 'static,
     T::ListenerUpgrade: Send + 'static,
-    T::MultiaddrFuture: Send + 'static,
 {
     fn listen_on(&self, addr: Multiaddr) -> Result<(Listener<O>, Multiaddr), Multiaddr> {
         let (listener, new_addr) =
             Transport::listen_on(self.clone(), addr).map_err(|(_, addr)| addr)?;
-        let fut = listener.map(|upgrade| {
-            let fut = upgrade.map(|(out, addr)| (out, Box::new(addr) as MultiaddrFuture));
-            Box::new(fut) as ListenerUpgrade<O>
+        let fut = listener.map(|(upgrade, addr)| {
+            (Box::new(upgrade) as ListenerUpgrade<O>, addr)
         });
         Ok((Box::new(fut) as Box<_>, new_addr))
     }
 
     fn dial(&self, addr: Multiaddr) -> Result<Dial<O>, Multiaddr> {
         let fut = Transport::dial(self.clone(), addr)
-            .map_err(|(_, addr)| addr)?
-            .map(|(out, addr)| (out, Box::new(addr) as MultiaddrFuture));
+            .map_err(|(_, addr)| addr)?;
         Ok(Box::new(fut) as Box<_>)
     }
 
@@ -110,14 +104,12 @@ where
     T::Dial: Send + 'static,
     T::Listener: Send + 'static,
     T::ListenerUpgrade: Send + 'static,
-    T::MultiaddrFuture: Send + 'static,
     T::Incoming: Send + 'static,
     T::IncomingUpgrade: Send + 'static,
 {
     fn next_incoming(&self) -> Incoming<O> {
-        let fut = MuxedTransport::next_incoming(self.clone()).map(|upgrade| {
-            let fut = upgrade.map(|(out, addr)| (out, Box::new(addr) as MultiaddrFuture));
-            Box::new(fut) as IncomingUpgrade<O>
+        let fut = MuxedTransport::next_incoming(self.clone()).map(|(upgrade, addr)| {
+            (Box::new(upgrade) as IncomingUpgrade<O>, addr)
         });
         Box::new(fut) as Box<_>
     }
@@ -145,7 +137,6 @@ impl<O> Clone for Boxed<O> {
 
 impl<O> Transport for Boxed<O> {
     type Output = O;
-    type MultiaddrFuture = MultiaddrFuture;
     type Listener = Listener<O>;
     type ListenerUpgrade = ListenerUpgrade<O>;
     type Dial = Dial<O>;
@@ -194,7 +185,6 @@ impl<O> Clone for BoxedMuxed<O> {
 
 impl<O> Transport for BoxedMuxed<O> {
     type Output = O;
-    type MultiaddrFuture = MultiaddrFuture;
     type Listener = Listener<O>;
     type ListenerUpgrade = ListenerUpgrade<O>;
     type Dial = Dial<O>;

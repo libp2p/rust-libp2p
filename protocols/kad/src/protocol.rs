@@ -27,7 +27,7 @@
 
 use bytes::{Bytes, BytesMut};
 use futures::{future, sink, Sink, stream, Stream};
-use libp2p_core::{ConnectionUpgrade, Endpoint, Multiaddr, PeerId};
+use libp2p_core::{ConnectionUpgrade, ConnectedPoint, Multiaddr, PeerId};
 use protobuf::{self, Message};
 use protobuf_structs;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -127,13 +127,12 @@ impl Into<protobuf_structs::dht::Message_Peer> for KadPeer {
 #[derive(Debug, Default, Copy, Clone)]
 pub struct KademliaProtocolConfig;
 
-impl<C, Maf> ConnectionUpgrade<C, Maf> for KademliaProtocolConfig
+impl<C> ConnectionUpgrade<C> for KademliaProtocolConfig
 where
     C: AsyncRead + AsyncWrite + 'static, // TODO: 'static :-/
 {
     type Output = KadStreamSink<C>;
-    type MultiaddrFuture = Maf;
-    type Future = future::FutureResult<(Self::Output, Self::MultiaddrFuture), IoError>;
+    type Future = future::FutureResult<Self::Output, IoError>;
     type NamesIter = iter::Once<(Bytes, ())>;
     type UpgradeIdentifier = ();
 
@@ -143,8 +142,8 @@ where
     }
 
     #[inline]
-    fn upgrade(self, incoming: C, _: (), _: Endpoint, addr: Maf) -> Self::Future {
-        future::ok((kademlia_protocol(incoming), addr))
+    fn upgrade(self, incoming: C, _: (), _: ConnectedPoint) -> Self::Future {
+        future::ok(kademlia_protocol(incoming))
     }
 }
 
@@ -356,7 +355,7 @@ mod tests {
                 let future = listener
                     .into_future()
                     .map_err(|(err, _)| err)
-                    .and_then(|(client, _)| client.unwrap().map(|v| v.0))
+                    .and_then(|(client, _)| client.unwrap().0)
                     .and_then(|proto| proto.into_future().map_err(|(err, _)| err).map(|(v, _)| v))
                     .map(|recv_msg| {
                         assert_eq!(recv_msg.unwrap(), msg_server);
@@ -371,7 +370,7 @@ mod tests {
             let future = transport
                 .dial(rx.recv().unwrap())
                 .unwrap_or_else(|_| panic!())
-                .and_then(|proto| proto.0.send(msg_client))
+                .and_then(|proto| proto.send(msg_client))
                 .map(|_| ());
 
             let _ = tokio_current_thread::block_on_all(future).unwrap();

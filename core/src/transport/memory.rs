@@ -12,7 +12,7 @@
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
 // OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// FITNESS FOR A PARTICULAR PURPOS<E AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
@@ -52,10 +52,9 @@ impl<T> Clone for Dialer<T> {
 
 impl<T: IntoBuf + Send + 'static> Transport for Dialer<T> {
     type Output = Channel<T>;
-    type Listener = Box<Stream<Item=Self::ListenerUpgrade, Error=io::Error> + Send>;
-    type ListenerUpgrade = FutureResult<(Self::Output, Self::MultiaddrFuture), io::Error>;
-    type MultiaddrFuture = FutureResult<Multiaddr, io::Error>;
-    type Dial = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error> + Send>;
+    type Listener = Box<Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=io::Error> + Send>;
+    type ListenerUpgrade = FutureResult<Self::Output, io::Error>;
+    type Dial = Box<Future<Item=Self::Output, Error=io::Error> + Send>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         Err((self, addr))
@@ -70,7 +69,7 @@ impl<T: IntoBuf + Send + 'static> Transport for Dialer<T> {
         let a = Chan { incoming: a_rx, outgoing: b_tx };
         let b = Chan { incoming: b_rx, outgoing: a_tx };
         let future = self.0.send(b)
-            .map(move |_| (a.into(), future::ok(addr)))
+            .map(move |_| a.into())
             .map_err(|_| io::ErrorKind::ConnectionRefused.into());
         Ok(Box::new(future))
     }
@@ -95,10 +94,9 @@ impl<T> Clone for Listener<T> {
 
 impl<T: IntoBuf + Send + 'static> Transport for Listener<T> {
     type Output = Channel<T>;
-    type Listener = Box<Stream<Item=Self::ListenerUpgrade, Error=io::Error> + Send>;
-    type ListenerUpgrade = FutureResult<(Self::Output, Self::MultiaddrFuture), io::Error>;
-    type MultiaddrFuture = FutureResult<Multiaddr, io::Error>;
-    type Dial = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error> + Send>;
+    type Listener = Box<Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=io::Error> + Send>;
+    type ListenerUpgrade = FutureResult<Self::Output, io::Error>;
+    type Dial = Box<Future<Item=Self::Output, Error=io::Error> + Send>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         if !is_memory_addr(&addr) {
@@ -108,7 +106,7 @@ impl<T: IntoBuf + Send + 'static> Transport for Listener<T> {
         let receiver = self.0.clone();
         let stream = stream::poll_fn(move || receiver.lock().poll())
             .map(move |channel| {
-                future::ok((channel.into(), future::ok(addr.clone())))
+                (future::ok(channel.into()), addr.clone())
             })
             .map_err(|()| unreachable!());
         Ok((Box::new(stream), addr2))
@@ -196,7 +194,7 @@ mod tests {
     use bytes::Bytes;
     use futures::{future::{self, Either, Loop}, prelude::*, sync::mpsc};
     use std::{io, iter};
-    use {transport::memory, swarm, ConnectionUpgrade, Endpoint, Transport};
+    use {transport::memory, swarm, ConnectionUpgrade, ConnectedPoint, Transport};
     use tokio_codec::{BytesCodec, Framed};
     use tokio_current_thread;
 
@@ -205,21 +203,20 @@ mod tests {
         #[derive(Clone)]
         struct Echo(mpsc::UnboundedSender<()>);
 
-        impl<Maf: Send + 'static> ConnectionUpgrade<memory::Channel<Bytes>, Maf> for Echo {
+        impl ConnectionUpgrade<memory::Channel<Bytes>> for Echo {
             type NamesIter = iter::Once<(Bytes, ())>;
             type UpgradeIdentifier = ();
             type Output = ();
-            type MultiaddrFuture = Maf;
-            type Future = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error> + Send>;
+            type Future = Box<Future<Item=Self::Output, Error=io::Error> + Send>;
 
             fn protocol_names(&self) -> Self::NamesIter {
                 iter::once(("/echo/1.0.0".into(), ()))
             }
 
-            fn upgrade(self, chan: memory::Channel<Bytes>, _: (), e: Endpoint, maf: Maf) -> Self::Future {
+            fn upgrade(self, chan: memory::Channel<Bytes>, _: (), e: ConnectedPoint) -> Self::Future {
                 let chan = Framed::new(chan, BytesCodec::new());
                 match e {
-                    Endpoint::Listener => {
+                    ConnectedPoint::Listener { .. } => {
                         let future = future::loop_fn(chan, move |chan| {
                             chan.into_future()
                                 .map_err(|(e, _)| e)
@@ -233,9 +230,9 @@ mod tests {
                                     }
                                 })
                         });
-                        Box::new(future.map(move |()| ((), maf))) as Box<_>
+                        Box::new(future) as Box<_>
                     }
-                    Endpoint::Dialer => {
+                    ConnectedPoint::Dialer { .. } => {
                         let future = chan.send("hello world".into())
                             .and_then(|chan| {
                                 chan.into_future().map_err(|(e, _)| e).map(|(n,_ )| n)
@@ -246,7 +243,7 @@ mod tests {
                                     .map(|_| ())
                                     .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
                             });
-                        Box::new(future.map(move |()| ((), maf))) as Box<_>
+                        Box::new(future) as Box<_>
                     }
                 }
             }

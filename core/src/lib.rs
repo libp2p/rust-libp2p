@@ -142,7 +142,7 @@
 //!     // TODO: right now the only available protocol is ping, but we want to replace it with
 //!     //       something that is more simple to use
 //!     .dial("127.0.0.1:12345".parse::<libp2p_core::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())
-//!     .and_then(|(out, _)| {
+//!     .and_then(|out| {
 //!         match out {
 //!             PingOutput::Ponger(processing) => Box::new(processing) as Box<Future<Item = _, Error = _>>,
 //!             PingOutput::Pinger(mut pinger) => {
@@ -260,4 +260,4 @@ pub use self::public_key::PublicKey;
 pub use self::swarm::{swarm, SwarmController, SwarmEvents};
 pub use self::transport::{MuxedTransport, Transport};
 pub use self::unique::{UniqueConnec, UniqueConnecFuture, UniqueConnecState};
-pub use self::upgrade::{ConnectionUpgrade, Endpoint};
+pub use self::upgrade::{ConnectedPoint, ConnectionUpgrade, Endpoint};

@@ -22,12 +22,14 @@ use muxing::StreamMuxer;
 use nodes::node::{NodeEvent, NodeStream, Substream};
 use futures::prelude::*;
 use std::io::Error as IoError;
-use Multiaddr;
 
 /// Handler for the substreams of a node.
 ///
 /// > Note: When implementing the various methods, don't forget that you have to register the
 /// > task that was the latest to poll and notify it.
+// TODO: right now it is possible for a node handler to be built, then shut down right after if we
+//       realize we dialed the wrong peer for example ; this could be surprising and should either
+//       be documented or changed (favouring the "documented" right now)
 pub trait NodeHandler<TSubstream> {
     /// Custom event that can be received from the outside.
     type InEvent;
@@ -49,9 +51,6 @@ pub trait NodeHandler<TSubstream> {
     /// Indicates the handler that an outbound substream failed to open because the outbound
     /// part of the muxer has been closed.
     fn inject_outbound_closed(&mut self, user_data: Self::OutboundOpenInfo);
-
-    /// Indicates the handler that the multiaddr future has resolved.
-    fn inject_multiaddr(&mut self, multiaddr: Result<Multiaddr, IoError>);
 
     /// Injects an event coming from the outside in the handler.
     fn inject_event(&mut self, event: Self::InEvent);
@@ -116,28 +115,27 @@ impl<TOutboundOpenInfo, TCustom> NodeHandlerEvent<TOutboundOpenInfo, TCustom> {
 
 /// A node combined with an implementation of `NodeHandler`.
 // TODO: impl Debug
-pub struct HandledNode<TMuxer, TAddrFut, THandler>
+pub struct HandledNode<TMuxer, THandler>
 where
     TMuxer: StreamMuxer,
     THandler: NodeHandler<Substream<TMuxer>>,
 {
     /// Node that handles the muxing. Can be `None` if the handled node is shutting down.
-    node: Option<NodeStream<TMuxer, TAddrFut, THandler::OutboundOpenInfo>>,
+    node: Option<NodeStream<TMuxer, THandler::OutboundOpenInfo>>,
     /// Handler that processes substreams.
     handler: THandler,
 }
 
-impl<TMuxer, TAddrFut, THandler> HandledNode<TMuxer, TAddrFut, THandler>
+impl<TMuxer, THandler> HandledNode<TMuxer, THandler>
 where
     TMuxer: StreamMuxer,
     THandler: NodeHandler<Substream<TMuxer>>,
-    TAddrFut: Future<Item = Multiaddr, Error = IoError>,
 {
     /// Builds a new `HandledNode`.
     #[inline]
-    pub fn new(muxer: TMuxer, multiaddr_future: TAddrFut, handler: THandler) -> Self {
+    pub fn new(muxer: TMuxer, handler: THandler) -> Self {
         HandledNode {
-            node: Some(NodeStream::new(muxer, multiaddr_future)),
+            node: Some(NodeStream::new(muxer)),
             handler,
         }
     }
@@ -185,11 +183,10 @@ where
     }
 }
 
-impl<TMuxer, TAddrFut, THandler> Stream for HandledNode<TMuxer, TAddrFut, THandler>
+impl<TMuxer, THandler> Stream for HandledNode<TMuxer, THandler>
 where
     TMuxer: StreamMuxer,
     THandler: NodeHandler<Substream<TMuxer>>,
-    TAddrFut: Future<Item = Multiaddr, Error = IoError>,
 {
     type Item = THandler::OutEvent;
     type Error = IoError;
@@ -212,10 +209,8 @@ where
                     },
                     Ok(Async::Ready(None)) => {
                         // Breaking from the loop without putting back the node.
+                        self.handler.shutdown();
                         break;
-                    },
-                    Ok(Async::Ready(Some(NodeEvent::Multiaddr(result)))) => {
-                        self.handler.inject_multiaddr(result);
                     },
                     Ok(Async::Ready(Some(NodeEvent::OutboundClosed { user_data }))) => {
                         self.handler.inject_outbound_closed(user_data);
@@ -257,5 +252,92 @@ where
         }
 
         Ok(Async::NotReady)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use futures::task;
+    use muxing::StreamMuxer;
+    use tokio::runtime::current_thread;
+
+    // TODO: move somewhere? this could be useful as a dummy
+    struct InstaCloseMuxer;
+    impl StreamMuxer for InstaCloseMuxer {
+        type Substream = ();
+        type OutboundSubstream = ();
+        fn poll_inbound(&self) -> Poll<Option<Self::Substream>, IoError> { Ok(Async::Ready(None)) }
+        fn open_outbound(&self) -> Self::OutboundSubstream { () }
+        fn poll_outbound(&self, _: &mut Self::OutboundSubstream) -> Poll<Option<Self::Substream>, IoError> { Ok(Async::Ready(None)) }
+        fn destroy_outbound(&self, _: Self::OutboundSubstream) {}
+        fn read_substream(&self, _: &mut Self::Substream, _: &mut [u8]) -> Result<usize, IoError> { panic!() }
+        fn write_substream(&self, _: &mut Self::Substream, _: &[u8]) -> Result<usize, IoError> { panic!() }
+        fn flush_substream(&self, _: &mut Self::Substream) -> Result<(), IoError> { panic!() }
+        fn shutdown_substream(&self, _: &mut Self::Substream) -> Poll<(), IoError> { panic!() }
+        fn destroy_substream(&self, _: Self::Substream) { panic!() }
+        fn close_inbound(&self) {}
+        fn close_outbound(&self) {}
+    }
+
+    #[test]
+    fn proper_shutdown() {
+        // Test that `shutdown()` is properly called on the handler once a node stops.
+        struct Handler {
+            did_substream_attempt: bool,
+            inbound_closed: bool,
+            substream_attempt_cancelled: bool,
+            shutdown_called: bool,
+            to_notify: Option<task::Task>
+        };
+        impl<T> NodeHandler<T> for Handler {
+            type InEvent = ();
+            type OutEvent = ();
+            type OutboundOpenInfo = ();
+            fn inject_substream(&mut self, _: T, _: NodeHandlerEndpoint<()>) { panic!() }
+            fn inject_inbound_closed(&mut self) {
+                assert!(!self.inbound_closed);
+                self.inbound_closed = true;
+            }
+            fn inject_outbound_closed(&mut self, _: ()) {
+                assert!(!self.substream_attempt_cancelled);
+                self.substream_attempt_cancelled = true;
+            }
+            fn inject_event(&mut self, _: Self::InEvent) { panic!() }
+            fn shutdown(&mut self) {
+                assert!(self.inbound_closed);
+                assert!(self.substream_attempt_cancelled);
+                self.shutdown_called = true;
+                if let Some(task) = self.to_notify.take() {
+                    task.notify();
+                }
+            }
+            fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<(), ()>>, IoError> {
+                if self.shutdown_called {
+                    Ok(Async::Ready(None))
+                } else if !self.did_substream_attempt {
+                    self.did_substream_attempt = true;
+                    Ok(Async::Ready(Some(NodeHandlerEvent::OutboundSubstreamRequest(()))))
+                } else {
+                    self.to_notify = Some(task::current());
+                    Ok(Async::NotReady)
+                }
+            }
+        }
+        impl Drop for Handler {
+            fn drop(&mut self) {
+                assert!(self.shutdown_called);
+            }
+        }
+
+        let handled = HandledNode::new(InstaCloseMuxer, Handler {
+            did_substream_attempt: false,
+            inbound_closed: false,
+            substream_attempt_cancelled: false,
+            shutdown_called: false,
+            to_notify: None,
+        });
+
+        current_thread::Runtime::new().unwrap().block_on(handled.for_each(|_| Ok(()))).unwrap();
     }
 }

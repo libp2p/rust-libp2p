@@ -36,7 +36,7 @@ use std::{cmp, iter, mem};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::sync::{atomic::AtomicUsize, atomic::Ordering, Arc};
 use bytes::Bytes;
-use core::{ConnectionUpgrade, Endpoint, StreamMuxer};
+use core::{ConnectionUpgrade, ConnectedPoint, Endpoint, StreamMuxer};
 use parking_lot::Mutex;
 use fnv::{FnvHashMap, FnvHashSet};
 use futures::prelude::*;
@@ -117,19 +117,19 @@ pub enum MaxBufferBehaviour {
     Block,
 }
 
-impl<C, Maf> ConnectionUpgrade<C, Maf> for MplexConfig
+impl<C> ConnectionUpgrade<C> for MplexConfig
 where
     C: AsyncRead + AsyncWrite,
 {
     type Output = Multiplex<C>;
-    type MultiaddrFuture = Maf;
-    type Future = future::FutureResult<(Self::Output, Self::MultiaddrFuture), IoError>;
+    type Future = future::FutureResult<Self::Output, IoError>;
     type UpgradeIdentifier = ();
     type NamesIter = iter::Once<(Bytes, ())>;
 
     #[inline]
-    fn upgrade(self, i: C, _: (), endpoint: Endpoint, remote_addr: Maf) -> Self::Future {
+    fn upgrade(self, i: C, _: (), endpoint: ConnectedPoint) -> Self::Future {
         let max_buffer_len = self.max_buffer_len;
+        let endpoint = Endpoint::from(endpoint);
 
         let out = Multiplex {
             inner: Mutex::new(MultiplexInner {
@@ -148,7 +148,7 @@ where
             })
         };
 
-        future::ok((out, remote_addr))
+        future::ok(out)
     }
 
     #[inline]

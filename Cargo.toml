@@ -59,10 +59,6 @@ name = "floodsub"
 required-features = ["libp2p-secio"]
 
 [[example]]
-name = "kademlia"
-required-features = ["libp2p-secio"]
-
-[[example]]
 name = "ping-client"
 required-features = ["libp2p-secio"]
 
