@@ -24,7 +24,6 @@ use std::{io::Error as IoError, ops::Not};
 use Multiaddr;
 
 /// Type of connection for the upgrade.
-// TODO: consider deprecating?
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Endpoint {
     /// The socket comes from a dialer.
@@ -44,52 +43,6 @@ impl Not for Endpoint {
     }
 }
 
-/// How we connected to a node.
-#[derive(Debug, Clone)]
-pub enum ConnectedPoint {
-    /// We dialed the node.
-    Dialer {
-        /// Multiaddress that was successfully dialed.
-        address: Multiaddr,
-    },
-    /// We received the node.
-    Listener {
-        /// Address of the listener that received the connection.
-        listen_addr: Multiaddr,
-        /// Address to send back data to the remote.
-        send_back_addr: Multiaddr,
-    },
-}
-
-impl From<ConnectedPoint> for Endpoint {
-    #[inline]
-    fn from(endpoint: ConnectedPoint) -> Endpoint {
-        match endpoint {
-            ConnectedPoint::Dialer { .. } => Endpoint::Dialer,
-            ConnectedPoint::Listener { .. } => Endpoint::Listener,
-        }
-    }
-}
-
-impl ConnectedPoint {
-    /// Returns true if we are `Dialer`.
-    #[inline]
-    pub fn is_dialer(&self) -> bool {
-        match *self {
-            ConnectedPoint::Dialer { .. } => true,
-            ConnectedPoint::Listener { .. } => false,
-        }
-    }
-
-    /// Returns true if we are `Listener`.
-    #[inline]
-    pub fn is_listener(&self) -> bool {
-        match *self {
-            ConnectedPoint::Dialer { .. } => false,
-            ConnectedPoint::Listener { .. } => true,
-        }
-    }
-}
 
 /// Implemented on structs that describe a possible upgrade to a connection between two peers.
 ///
@@ -127,6 +80,7 @@ pub trait ConnectionUpgrade<C> {
         self,
         socket: C,
         id: Self::UpgradeIdentifier,
-        endpoint: ConnectedPoint,
+        ty: Endpoint,
+        remote_addr: &Multiaddr,
     ) -> Self::Future;
 }

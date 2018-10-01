@@ -12,7 +12,7 @@
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
 // OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOS<E AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
@@ -194,7 +194,7 @@ mod tests {
     use bytes::Bytes;
     use futures::{future::{self, Either, Loop}, prelude::*, sync::mpsc};
     use std::{io, iter};
-    use {transport::memory, swarm, ConnectionUpgrade, ConnectedPoint, Transport};
+    use {transport::memory, swarm, ConnectionUpgrade, Endpoint, Multiaddr, Transport};
     use tokio_codec::{BytesCodec, Framed};
     use tokio_current_thread;
 
@@ -213,10 +213,10 @@ mod tests {
                 iter::once(("/echo/1.0.0".into(), ()))
             }
 
-            fn upgrade(self, chan: memory::Channel<Bytes>, _: (), e: ConnectedPoint) -> Self::Future {
+            fn upgrade(self, chan: memory::Channel<Bytes>, _: (), e: Endpoint, _: &Multiaddr) -> Self::Future {
                 let chan = Framed::new(chan, BytesCodec::new());
                 match e {
-                    ConnectedPoint::Listener { .. } => {
+                    Endpoint::Listener => {
                         let future = future::loop_fn(chan, move |chan| {
                             chan.into_future()
                                 .map_err(|(e, _)| e)
@@ -232,7 +232,7 @@ mod tests {
                         });
                         Box::new(future) as Box<_>
                     }
-                    ConnectedPoint::Dialer { .. } => {
+                    Endpoint::Dialer => {
                         let future = chan.send("hello world".into())
                             .and_then(|chan| {
                                 chan.into_future().map_err(|(e, _)| e).map(|(n,_ )| n)

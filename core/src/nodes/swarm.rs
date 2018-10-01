@@ -30,7 +30,7 @@ use nodes::node::Substream;
 use std::collections::hash_map::{Entry, OccupiedEntry};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use void::Void;
-use {ConnectedPoint, Multiaddr, PeerId, Transport};
+use {Endpoint, Multiaddr, PeerId, Transport};
 
 /// Implementation of `Stream` that handles the nodes.
 pub struct Swarm<TTrans, TInEvent, TOutEvent, THandlerBuild>
@@ -198,6 +198,53 @@ where
         /// Event that was produced by the node.
         event: TOutEvent,
     },
+}
+
+/// How we connected to a node.
+#[derive(Debug, Clone)]
+pub enum ConnectedPoint {
+    /// We dialed the node.
+    Dialer {
+        /// Multiaddress that was successfully dialed.
+        address: Multiaddr,
+    },
+    /// We received the node.
+    Listener {
+        /// Address of the listener that received the connection.
+        listen_addr: Multiaddr,
+        /// Address to send back data to the remote.
+        send_back_addr: Multiaddr,
+    },
+}
+
+impl From<ConnectedPoint> for Endpoint {
+    #[inline]
+    fn from(endpoint: ConnectedPoint) -> Endpoint {
+        match endpoint {
+            ConnectedPoint::Dialer { .. } => Endpoint::Dialer,
+            ConnectedPoint::Listener { .. } => Endpoint::Listener,
+        }
+    }
+}
+
+impl ConnectedPoint {
+    /// Returns true if we are `Dialer`.
+    #[inline]
+    pub fn is_dialer(&self) -> bool {
+        match *self {
+            ConnectedPoint::Dialer { .. } => true,
+            ConnectedPoint::Listener { .. } => false,
+        }
+    }
+
+    /// Returns true if we are `Listener`.
+    #[inline]
+    pub fn is_listener(&self) -> bool {
+        match *self {
+            ConnectedPoint::Dialer { .. } => false,
+            ConnectedPoint::Listener { .. } => true,
+        }
+    }
 }
 
 /// Trait for structures that can create new factories.

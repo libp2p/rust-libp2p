@@ -106,7 +106,7 @@ use asn1_der::{traits::FromDerEncoded, traits::FromDerObject, DerObject};
 use bytes::{Bytes, BytesMut};
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
-use libp2p_core::{PeerId, PublicKey};
+use libp2p_core::{Multiaddr, PeerId, PublicKey};
 use ring::rand::SystemRandom;
 use ring::signature::{Ed25519KeyPair, RSAKeyPair};
 use rw_stream_sink::RwStreamSink;
@@ -362,7 +362,8 @@ where
         self,
         incoming: S,
         _: (),
-        _: libp2p_core::ConnectedPoint,
+        _: libp2p_core::Endpoint,
+        _: &Multiaddr,
     ) -> Self::Future {
         debug!("Starting secio upgrade");
 

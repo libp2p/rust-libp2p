@@ -23,7 +23,7 @@ use multiaddr::Multiaddr;
 use std::io::Error as IoError;
 use tokio_io::{AsyncRead, AsyncWrite};
 use transport::{MuxedTransport, Transport};
-use upgrade::{apply, ConnectionUpgrade, ConnectedPoint};
+use upgrade::{apply, ConnectionUpgrade, Endpoint};
 
 /// Implements the `Transport` trait. Dials or listens, then upgrades any dialed or received
 /// connection.
@@ -92,7 +92,7 @@ where
         let future = dialed_fut
             // Try to negotiate the protocol.
             .and_then(move |connection| {
-                apply(connection, upgrade, ConnectedPoint::Dialer { address: addr })
+                apply(connection, upgrade, Endpoint::Dialer, &addr)
             });
 
         Ok(Box::new(future))
@@ -123,12 +123,9 @@ where
 
         let future = self.transports.next_incoming().map(|(future, client_addr)| {
             // Try to negotiate the protocol.
-            let endpoint = ConnectedPoint::Listener {
-                listen_addr: panic!(),      // FIXME: ????
-                send_back_addr: client_addr.clone(),
-            };
+            let addr = client_addr.clone();
             let future = future.and_then(move |connection| {
-                apply(connection, upgrade, endpoint)
+                apply(connection, upgrade, Endpoint::Listener, &addr)
             });
 
             (Box::new(future) as Box<Future<Item = _, Error = _> + Send>, client_addr)
@@ -182,17 +179,13 @@ where
         // Note that failing to negotiate a protocol will never produce a future with an error.
         // Instead the `stream` will produce `Ok(Err(...))`.
         // `stream` can only produce an `Err` if `listening_stream` produces an `Err`.
-        let new_addr2 = new_addr.clone();
         let stream = listening_stream.map(move |(connection, client_addr)| {
             let upgrade = upgrade.clone();
-            let endpoint = ConnectedPoint::Listener {
-                listen_addr: new_addr2.clone(),
-                send_back_addr: client_addr.clone(),
-            };
+            let addr = client_addr.clone();
             let connection = connection
                 // Try to negotiate the protocol.
                 .and_then(move |connection| {
-                    apply(connection, upgrade, endpoint)
+                    apply(connection, upgrade, Endpoint::Listener, &addr)
                 });
 
             (Box::new(connection) as Box<_>, client_addr)

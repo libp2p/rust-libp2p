@@ -20,9 +20,10 @@
 
 use bytes::Bytes;
 use futures::prelude::*;
+use multiaddr::Multiaddr;
 use std::{io, iter};
 use tokio_io::{AsyncRead, AsyncWrite};
-use upgrade::{ConnectionUpgrade, ConnectedPoint};
+use upgrade::{ConnectionUpgrade, Endpoint};
 
 /// Implementation of `ConnectionUpgrade` that always fails to negotiate.
 #[derive(Debug, Copy, Clone)]
@@ -43,7 +44,7 @@ where
     }
 
     #[inline]
-    fn upgrade(self, _: C, _: Self::UpgradeIdentifier, _: ConnectedPoint) -> Self::Future {
+    fn upgrade(self, _: C, _: Self::UpgradeIdentifier, _: Endpoint, _: &Multiaddr) -> Self::Future {
         unreachable!("the denied connection upgrade always fails to negotiate")
     }
 }

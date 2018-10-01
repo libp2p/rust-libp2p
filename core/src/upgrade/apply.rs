@@ -23,25 +23,25 @@ use futures::{prelude::*, future::Either};
 use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
 use std::{io::{Error as IoError, ErrorKind as IoErrorKind}, mem};
 use tokio_io::{AsyncRead, AsyncWrite};
-use upgrade::{ConnectionUpgrade, ConnectedPoint};
+use upgrade::{ConnectionUpgrade, Endpoint};
+use Multiaddr;
 
 /// Applies a connection upgrade on a socket.
 ///
 /// Returns a `Future` that returns the outcome of the connection upgrade.
 #[inline]
-pub fn apply<C, U>(conn: C, upgrade: U, endpoint: ConnectedPoint) -> UpgradeApplyFuture<C, U>
+pub fn apply<C, U>(conn: C, upgrade: U, e: Endpoint, remote: &Multiaddr) -> UpgradeApplyFuture<C, U>
 where
     U: ConnectionUpgrade<C>,
     U::NamesIter: Clone, // TODO: not elegant
     C: AsyncRead + AsyncWrite,
 {
-    let future = negotiate(conn, &upgrade, &endpoint);
-
     UpgradeApplyFuture {
         inner: UpgradeApplyState::Init {
-            future,
+            future: negotiate(conn, &upgrade, e),
             upgrade,
-            endpoint,
+            endpoint: e,
+            remote: remote.clone()
         }
     }
 }
@@ -63,7 +63,8 @@ where
     Init {
         future: NegotiationFuture<C, ProtocolNames<U::NamesIter>, U::UpgradeIdentifier>,
         upgrade: U,
-        endpoint: ConnectedPoint
+        endpoint: Endpoint,
+        remote: Multiaddr
     },
     Upgrade {
         future: U::Future
@@ -83,16 +84,16 @@ where
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
             match mem::replace(&mut self.inner, UpgradeApplyState::Undefined) {
-                UpgradeApplyState::Init { mut future, upgrade, endpoint } => {
+                UpgradeApplyState::Init { mut future, upgrade, endpoint, remote } => {
                     let (upgrade_id, connection) = match future.poll()? {
                         Async::Ready(x) => x,
                         Async::NotReady => {
-                            self.inner = UpgradeApplyState::Init { future, upgrade, endpoint };
+                            self.inner = UpgradeApplyState::Init { future, upgrade, endpoint, remote };
                             return Ok(Async::NotReady)
                         }
                     };
                     self.inner = UpgradeApplyState::Upgrade {
-                        future: upgrade.upgrade(connection, upgrade_id, endpoint)
+                        future: upgrade.upgrade(connection, upgrade_id, endpoint, &remote)
                     };
                 }
                 UpgradeApplyState::Upgrade { mut future } => {
@@ -126,7 +127,7 @@ where
 pub fn negotiate<C, I, U>(
     connection: C,
     upgrade: &U,
-    endpoint: &ConnectedPoint
+    endpoint: Endpoint,
 ) -> NegotiationFuture<C, ProtocolNames<U::NamesIter>, U::UpgradeIdentifier>
 where
     U: ConnectionUpgrade<I>,
@@ -136,9 +137,9 @@ where
     debug!("Starting protocol negotiation");
     let iter = ProtocolNames(upgrade.protocol_names());
     NegotiationFuture {
-        inner: match *endpoint {
-            ConnectedPoint::Listener { .. } => Either::A(multistream_select::listener_select_proto(connection, iter)),
-            ConnectedPoint::Dialer { .. } => Either::B(multistream_select::dialer_select_proto(connection, iter)),
+        inner: match endpoint {
+            Endpoint::Listener => Either::A(multistream_select::listener_select_proto(connection, iter)),
+            Endpoint::Dialer => Either::B(multistream_select::dialer_select_proto(connection, iter)),
         }
     }
 }

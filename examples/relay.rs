@@ -173,13 +173,13 @@ fn run_listener(opts: ListenerOpts) -> Result<(), Box<Error>> {
     });
 
     let upgraded = transport.with_upgrade(relay)
-        .and_then(|out, endpoint| {
+        .and_then(|out, endpoint, addr| {
             match out {
                 libp2p::relay::Output::Sealed(future) => {
                     Either::A(future.map(|out| Either::A(out)))
                 }
                 libp2p::relay::Output::Stream(socket) => {
-                    Either::B(upgrade::apply(socket, echo, endpoint)
+                    Either::B(upgrade::apply(socket, echo, endpoint, addr)
                         .map(|out| Either::B(out)))
                 }
             }
