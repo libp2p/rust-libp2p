@@ -22,7 +22,6 @@ use futures::future;
 use std::io::Error as IoError;
 use tokio_io::{AsyncRead, AsyncWrite};
 use upgrade::{ConnectionUpgrade, Endpoint};
-use Multiaddr;
 
 /// Wraps around a `ConnectionUpgrade` and makes it possible to enable or disable an upgrade.
 #[inline]
@@ -91,10 +90,9 @@ where
         socket: C,
         id: Self::UpgradeIdentifier,
         ty: Endpoint,
-        remote_addr: &Multiaddr,
     ) -> Self::Future {
         if self.enabled {
-            future::Either::B(self.inner.upgrade(socket, id, ty, remote_addr))
+            future::Either::B(self.inner.upgrade(socket, id, ty))
         } else {
             future::Either::A(future::empty())
         }

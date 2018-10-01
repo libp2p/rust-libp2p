@@ -22,7 +22,6 @@ use futures::{future, future::Loop as FutLoop, prelude::*};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use tokio_io::{AsyncRead, AsyncWrite};
 use upgrade::{negotiate, ConnectionUpgrade, Endpoint};
-use Multiaddr;
 
 /// Looping connection upgrade.
 ///
@@ -93,10 +92,8 @@ where
         (state, socket): (State, Socket),
         id: Self::UpgradeIdentifier,
         endpoint: Endpoint,
-        remote_addr: &Multiaddr,
     ) -> Self::Future {
         let inner = self.inner;
-        let remote_addr = remote_addr.clone();
 
         let fut = future::loop_fn(
             (state, socket, id, MAX_LOOPS),
@@ -107,7 +104,7 @@ where
                 let inner = inner.clone();
                 inner
                     .clone()
-                    .upgrade((state, socket), id, endpoint, &remote_addr)
+                    .upgrade((state, socket), id, endpoint)
                     .and_then(move |loop_out| match loop_out {
                         Loop::Continue(state, socket) => {
                             // Produce an error if we reached the recursion limit.

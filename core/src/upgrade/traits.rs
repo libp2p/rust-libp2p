@@ -21,7 +21,6 @@
 use bytes::Bytes;
 use futures::future::Future;
 use std::{io::Error as IoError, ops::Not};
-use Multiaddr;
 
 /// Type of connection for the upgrade.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -81,6 +80,5 @@ pub trait ConnectionUpgrade<C> {
         socket: C,
         id: Self::UpgradeIdentifier,
         ty: Endpoint,
-        remote_addr: &Multiaddr,
     ) -> Self::Future;
 }

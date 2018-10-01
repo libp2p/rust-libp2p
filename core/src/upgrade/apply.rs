@@ -24,13 +24,12 @@ use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
 use std::{io::{Error as IoError, ErrorKind as IoErrorKind}, mem};
 use tokio_io::{AsyncRead, AsyncWrite};
 use upgrade::{ConnectionUpgrade, Endpoint};
-use Multiaddr;
 
 /// Applies a connection upgrade on a socket.
 ///
 /// Returns a `Future` that returns the outcome of the connection upgrade.
 #[inline]
-pub fn apply<C, U>(conn: C, upgrade: U, e: Endpoint, remote: &Multiaddr) -> UpgradeApplyFuture<C, U>
+pub fn apply<C, U>(conn: C, upgrade: U, e: Endpoint) -> UpgradeApplyFuture<C, U>
 where
     U: ConnectionUpgrade<C>,
     U::NamesIter: Clone, // TODO: not elegant
@@ -41,7 +40,6 @@ where
             future: negotiate(conn, &upgrade, e),
             upgrade,
             endpoint: e,
-            remote: remote.clone()
         }
     }
 }
@@ -63,8 +61,7 @@ where
     Init {
         future: NegotiationFuture<C, ProtocolNames<U::NamesIter>, U::UpgradeIdentifier>,
         upgrade: U,
-        endpoint: Endpoint,
-        remote: Multiaddr
+        endpoint: Endpoint
     },
     Upgrade {
         future: U::Future
@@ -84,16 +81,16 @@ where
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
             match mem::replace(&mut self.inner, UpgradeApplyState::Undefined) {
-                UpgradeApplyState::Init { mut future, upgrade, endpoint, remote } => {
+                UpgradeApplyState::Init { mut future, upgrade, endpoint } => {
                     let (upgrade_id, connection) = match future.poll()? {
                         Async::Ready(x) => x,
                         Async::NotReady => {
-                            self.inner = UpgradeApplyState::Init { future, upgrade, endpoint, remote };
+                            self.inner = UpgradeApplyState::Init { future, upgrade, endpoint };
                             return Ok(Async::NotReady)
                         }
                     };
                     self.inner = UpgradeApplyState::Upgrade {
-                        future: upgrade.upgrade(connection, upgrade_id, endpoint, &remote)
+                        future: upgrade.upgrade(connection, upgrade_id, endpoint)
                     };
                 }
                 UpgradeApplyState::Upgrade { mut future } => {

@@ -92,7 +92,7 @@ where
         let future = dialed_fut
             // Try to negotiate the protocol.
             .and_then(move |connection| {
-                apply(connection, upgrade, Endpoint::Dialer, &addr)
+                apply(connection, upgrade, Endpoint::Dialer)
             });
 
         Ok(Box::new(future))
@@ -123,9 +123,8 @@ where
 
         let future = self.transports.next_incoming().map(|(future, client_addr)| {
             // Try to negotiate the protocol.
-            let addr = client_addr.clone();
             let future = future.and_then(move |connection| {
-                apply(connection, upgrade, Endpoint::Listener, &addr)
+                apply(connection, upgrade, Endpoint::Listener)
             });
 
             (Box::new(future) as Box<Future<Item = _, Error = _> + Send>, client_addr)
@@ -181,11 +180,10 @@ where
         // `stream` can only produce an `Err` if `listening_stream` produces an `Err`.
         let stream = listening_stream.map(move |(connection, client_addr)| {
             let upgrade = upgrade.clone();
-            let addr = client_addr.clone();
             let connection = connection
                 // Try to negotiate the protocol.
                 .and_then(move |connection| {
-                    apply(connection, upgrade, Endpoint::Listener, &addr)
+                    apply(connection, upgrade, Endpoint::Listener)
                 });
 
             (Box::new(connection) as Box<_>, client_addr)

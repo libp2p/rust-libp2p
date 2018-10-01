@@ -124,7 +124,7 @@ where
         iter::once((Bytes::from("/ipfs/id/1.0.0"), ()))
     }
 
-    fn upgrade(self, socket: C, _: (), ty: Endpoint, _: &Multiaddr) -> Self::Future {
+    fn upgrade(self, socket: C, _: (), ty: Endpoint) -> Self::Future {
         trace!("Upgrading connection as {:?}", ty);
 
         let socket = Framed::new(socket, codec::UviBytes::default());

@@ -20,7 +20,7 @@
 
 use bytes::Bytes;
 use copy;
-use core::{ConnectionUpgrade, Endpoint, Multiaddr, Transport};
+use core::{ConnectionUpgrade, Endpoint, Transport};
 use futures::{stream, future::{self, Either::{A, B}, FutureResult}, prelude::*};
 use message::{CircuitRelay, CircuitRelay_Peer, CircuitRelay_Status, CircuitRelay_Type};
 use peerstore::{PeerAccess, PeerId, Peerstore};
@@ -71,7 +71,7 @@ where
     type Output = Output<C>;
     type Future = Box<Future<Item=Self::Output, Error=io::Error> + Send>;
 
-    fn upgrade(self, conn: C, _: (), _: Endpoint, _: &Multiaddr) -> Self::Future {
+    fn upgrade(self, conn: C, _: (), _: Endpoint) -> Self::Future {
         let future = Io::new(conn).recv().and_then(move |(message, io)| {
             let msg = if let Some(m) = message {
                 m
@@ -261,7 +261,7 @@ where
     type Output = C;
     type Future = FutureResult<Self::Output, io::Error>;
 
-    fn upgrade(self, conn: C, _: (), _: Endpoint, _: &Multiaddr) -> Self::Future {
+    fn upgrade(self, conn: C, _: (), _: Endpoint) -> Self::Future {
         future::ok(conn)
     }
 }
@@ -283,7 +283,7 @@ where
     type Output = C;
     type Future = Box<Future<Item=Self::Output, Error=io::Error> + Send>;
 
-    fn upgrade(self, conn: C, _: (), _: Endpoint, _: &Multiaddr) -> Self::Future {
+    fn upgrade(self, conn: C, _: (), _: Endpoint) -> Self::Future {
         let future = Io::new(conn)
             .send(self.0)
             .and_then(Io::recv)

@@ -110,12 +110,12 @@ where
         socket: C,
         _: Self::UpgradeIdentifier,
         _: Endpoint,
-        remote_addr: &Multiaddr,
     ) -> Self::Future {
         debug!("Upgrading connection as floodsub");
 
         let future = {
-            let remote_addr = remote_addr.clone();
+            // FIXME: WRONG
+            let remote_addr: Multiaddr = "/ip4/127.0.0.1/tcp/5000".parse().unwrap();
 
             // Whenever a new node connects, we send to it a message containing the topics we are
             // already subscribed to.

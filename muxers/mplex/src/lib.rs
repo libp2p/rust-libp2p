@@ -36,7 +36,7 @@ use std::{cmp, iter, mem};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::sync::{atomic::AtomicUsize, atomic::Ordering, Arc};
 use bytes::Bytes;
-use core::{ConnectionUpgrade, Endpoint, Multiaddr, StreamMuxer};
+use core::{ConnectionUpgrade, Endpoint, StreamMuxer};
 use parking_lot::Mutex;
 use fnv::{FnvHashMap, FnvHashSet};
 use futures::prelude::*;
@@ -127,7 +127,7 @@ where
     type NamesIter = iter::Once<(Bytes, ())>;
 
     #[inline]
-    fn upgrade(self, i: C, _: (), endpoint: Endpoint, _: &Multiaddr) -> Self::Future {
+    fn upgrade(self, i: C, _: (), endpoint: Endpoint) -> Self::Future {
         let max_buffer_len = self.max_buffer_len;
 
         let out = Multiplex {

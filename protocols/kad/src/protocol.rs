@@ -142,7 +142,7 @@ where
     }
 
     #[inline]
-    fn upgrade(self, incoming: C, _: (), _: Endpoint, _: &Multiaddr) -> Self::Future {
+    fn upgrade(self, incoming: C, _: (), _: Endpoint) -> Self::Future {
         future::ok(kademlia_protocol(incoming))
     }
 }

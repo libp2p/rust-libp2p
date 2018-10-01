@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::Bytes;
-use core::Multiaddr;
 use core::upgrade::{ConnectionUpgrade, Endpoint};
 use futures::prelude::*;
 use std::{iter, io::Error as IoError, sync::Arc};
@@ -77,7 +76,7 @@ where
     type Future = Box<Future<Item = O::Item, Error = IoError> + Send>;
 
     #[inline]
-    fn upgrade(self, socket: C, _: (), _: Endpoint, _: &Multiaddr) -> Self::Future {
+    fn upgrade(self, socket: C, _: (), _: Endpoint) -> Self::Future {
         let upgrade = &self.upgrade;
         let fut = upgrade(socket).into_future().from_err();
         Box::new(fut) as Box<_>
