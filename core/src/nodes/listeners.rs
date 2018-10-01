@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{prelude::*, task};
+use futures::prelude::*;
 use std::fmt;
 use void::Void;
 use {Multiaddr, Transport};
@@ -34,8 +34,6 @@ where
     transport: TTrans,
     /// All the active listeners.
     listeners: Vec<Listener<TTrans>>,
-    /// Task to notify when we add a new listener to `listeners`, so that we start polling.
-    to_notify: Option<task::Task>,
 }
 
 /// A single active listener.
@@ -83,7 +81,6 @@ where
         ListenersStream {
             transport,
             listeners: Vec::new(),
-            to_notify: None,
         }
     }
 
@@ -94,7 +91,6 @@ where
         ListenersStream {
             transport,
             listeners: Vec::with_capacity(capacity),
-            to_notify: None,
         }
     }
 
@@ -115,10 +111,6 @@ where
             listener,
             address: new_addr.clone(),
         });
-
-        if let Some(task) = self.to_notify.take() {
-            task.notify();
-        }
 
         Ok(new_addr)
     }
@@ -177,7 +169,6 @@ where
         }
 
         // We register the current task to be waken up if a new listener is added.
-        self.to_notify = Some(task::current());
         Ok(Async::NotReady)
     }
 }
