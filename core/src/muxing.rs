@@ -60,14 +60,11 @@ pub trait StreamMuxer {
     ///
     /// May panic or produce an undefined result if an earlier polling of the same substream
     /// returned `Ready` or `Err`.
-    fn poll_outbound(
-        &self,
-        substream: &mut Self::OutboundSubstream,
-    ) -> Poll<Option<Self::Substream>, IoError>;
+    fn poll_outbound(&self, s: &mut Self::OutboundSubstream) -> Poll<Option<Self::Substream>, IoError>;
 
     /// Destroys an outbound substream. Use this after the outbound substream has finished, or if
     /// you want to interrupt it.
-    fn destroy_outbound(&self, substream: Self::OutboundSubstream);
+    fn destroy_outbound(&self, s: Self::OutboundSubstream);
 
     /// Reads data from a substream. The behaviour is the same as `std::io::Read::read`.
     ///
@@ -75,11 +72,7 @@ pub trait StreamMuxer {
     /// is ready to be read, similar to the API of `AsyncRead`.
     /// However, for each individual substream, only the latest task that was used to call this
     /// method may be notified.
-    fn read_substream(
-        &self,
-        substream: &mut Self::Substream,
-        buf: &mut [u8],
-    ) -> Result<usize, IoError>;
+    fn read_substream(&self, s: &mut Self::Substream, buf: &mut [u8]) -> Result<usize, IoError>;
 
     /// Write data to a substream. The behaviour is the same as `std::io::Write::write`.
     ///
@@ -87,11 +80,7 @@ pub trait StreamMuxer {
     /// is ready to be written, similar to the API of `AsyncWrite`.
     /// However, for each individual substream, only the latest task that was used to call this
     /// method may be notified.
-    fn write_substream(
-        &self,
-        substream: &mut Self::Substream,
-        buf: &[u8],
-    ) -> Result<usize, IoError>;
+    fn write_substream(&self, s: &mut Self::Substream, buf: &[u8]) -> Result<usize, IoError>;
 
     /// Flushes a substream. The behaviour is the same as `std::io::Write::flush`.
     ///
@@ -99,7 +88,7 @@ pub trait StreamMuxer {
     /// is ready to be flushed, similar to the API of `AsyncWrite`.
     /// However, for each individual substream, only the latest task that was used to call this
     /// method may be notified.
-    fn flush_substream(&self, substream: &mut Self::Substream) -> Result<(), IoError>;
+    fn flush_substream(&self, s: &mut Self::Substream) -> Result<(), IoError>;
 
     /// Attempts to shut down a substream. The behaviour is the same as
     /// `tokio_io::AsyncWrite::shutdown`.
@@ -108,10 +97,10 @@ pub trait StreamMuxer {
     /// is ready to be shut down, similar to the API of `AsyncWrite::shutdown()`.
     /// However, for each individual substream, only the latest task that was used to call this
     /// method may be notified.
-    fn shutdown_substream(&self, substream: &mut Self::Substream) -> Poll<(), IoError>;
+    fn shutdown_substream(&self, s: &mut Self::Substream) -> Poll<(), IoError>;
 
     /// Destroys a substream.
-    fn destroy_substream(&self, substream: Self::Substream);
+    fn destroy_substream(&self, Self::Substream);
 
     /// If supported, sends a hint to the remote that we may no longer accept any further inbound
     /// substream. Calling `poll_inbound` afterwards may or may not produce `None`.
@@ -120,6 +109,9 @@ pub trait StreamMuxer {
     /// If supported, sends a hint to the remote that we may no longer open any further outbound
     /// substream. Calling `poll_outbound` afterwards may or may not produce `None`.
     fn close_outbound(&self);
+
+    /// Flush this `StreamMuxer`.
+    fn flush(&self) -> Poll<(), IoError>;
 }
 
 /// Polls for an inbound from the muxer but wraps the output in an object that
@@ -415,6 +407,11 @@ impl StreamMuxer for StreamMuxerBox {
     fn close_outbound(&self) {
         self.inner.close_outbound()
     }
+
+    #[inline]
+    fn flush(&self) -> Poll<(), IoError> {
+        self.inner.flush()
+    }
 }
 
 struct Wrap<T> where T: StreamMuxer {
@@ -518,5 +515,10 @@ impl<T> StreamMuxer for Wrap<T> where T: StreamMuxer {
     #[inline]
     fn close_outbound(&self) {
         self.inner.close_outbound()
+    }
+
+    #[inline]
+    fn flush(&self) -> Poll<(), IoError> {
+        self.inner.flush()
     }
 }

@@ -113,6 +113,11 @@ where
     #[inline]
     fn close_outbound(&self) {
     }
+
+    #[inline]
+    fn flush(&self) -> Poll<(), IoError> {
+        self.0.lock().flush()
+    }
 }
 
 

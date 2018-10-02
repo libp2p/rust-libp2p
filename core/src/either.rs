@@ -224,6 +224,13 @@ where
             EitherOutput::Second(ref inner) => inner.close_outbound(),
         }
     }
+
+    fn flush(&self) -> Poll<(), IoError> {
+        match *self {
+            EitherOutput::First(ref inner) => inner.flush(),
+            EitherOutput::Second(ref inner) => inner.flush()
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone)]

@@ -285,6 +285,7 @@ mod tests {
         fn destroy_substream(&self, _: Self::Substream) { panic!() }
         fn close_inbound(&self) {}
         fn close_outbound(&self) {}
+        fn flush(&self) -> Poll<(), IoError> { Ok(Async::Ready(())) }
     }
 
     #[test]

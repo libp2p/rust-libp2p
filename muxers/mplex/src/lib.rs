@@ -520,6 +520,12 @@ where C: AsyncRead + AsyncWrite
     #[inline]
     fn close_outbound(&self) {
     }
+
+    #[inline]
+    fn flush(&self) -> Poll<(), IoError> {
+        let inner = &mut *self.inner.lock();
+        inner.inner.poll_flush_notify(&inner.notifier_write, 0)
+    }
 }
 
 /// Active attempt to open an outbound substream.
