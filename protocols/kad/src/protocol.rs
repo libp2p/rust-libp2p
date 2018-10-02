@@ -28,6 +28,7 @@
 use bytes::{Bytes, BytesMut};
 use futures::{future, sink, Sink, stream, Stream};
 use libp2p_core::{ConnectionUpgrade, Endpoint, Multiaddr, PeerId};
+use multihash::Multihash;
 use protobuf::{self, Message};
 use protobuf_structs;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -175,33 +176,61 @@ where
 pub enum KadMsg {
     /// Ping request or response.
     Ping,
+
     /// Target must save the given record, can be queried later with `GetValueReq`.
     PutValue {
         /// Identifier of the record.
-        key: Vec<u8>,
+        key: Multihash,
         /// The record itself.
         record: (), //record: protobuf_structs::record::Record, // TODO: no
     },
+
     GetValueReq {
         /// Identifier of the record.
-        key: Vec<u8>,
+        key: Multihash,
     },
+
     GetValueRes {
         /// Identifier of the returned record.
-        key: Vec<u8>,
+        key: Multihash,
         record: (), //record: Option<protobuf_structs::record::Record>, // TODO: no
         closer_peers: Vec<KadPeer>,
     },
+
     /// Request for the list of nodes whose IDs are the closest to `key`. The number of nodes
     /// returned is not specified, but should be around 20.
     FindNodeReq {
         /// Identifier of the node.
-        key: Vec<u8>,
+        key: PeerId,
     },
+
     /// Response to a `FindNodeReq`.
     FindNodeRes {
         /// Results of the request.
         closer_peers: Vec<KadPeer>,
+    },
+
+    /// Same as `FindNodeReq`, but should also return the entries of the local providers list for
+    /// this key.
+    GetProvidersReq {
+        /// Identifier being searched.
+        key: Multihash,
+    },
+
+    /// Response to a `FindNodeReq`.
+    GetProvidersRes {
+        /// Nodes closest to the key.
+        closer_peers: Vec<KadPeer>,
+        /// Known providers for this key.
+        provider_peers: Vec<KadPeer>,
+    },
+
+    /// Indicates that this list of providers is known for this key.
+    AddProvider {
+        /// Key for which we should add providers.
+        key: Multihash,
+        /// Known provider for this key.
+        provider_peer: KadPeer,
     },
 }
 
@@ -216,14 +245,14 @@ fn msg_to_proto(kad_msg: KadMsg) -> protobuf_structs::dht::Message {
         KadMsg::PutValue { key, .. } => {
             let mut msg = protobuf_structs::dht::Message::new();
             msg.set_field_type(protobuf_structs::dht::Message_MessageType::PUT_VALUE);
-            msg.set_key(key);
+            msg.set_key(key.into_bytes());
             //msg.set_record(record);		// TODO:
             msg
         }
         KadMsg::GetValueReq { key } => {
             let mut msg = protobuf_structs::dht::Message::new();
             msg.set_field_type(protobuf_structs::dht::Message_MessageType::GET_VALUE);
-            msg.set_key(key);
+            msg.set_key(key.into_bytes());
             msg.set_clusterLevelRaw(10);
             msg
         }
@@ -231,7 +260,7 @@ fn msg_to_proto(kad_msg: KadMsg) -> protobuf_structs::dht::Message {
         KadMsg::FindNodeReq { key } => {
             let mut msg = protobuf_structs::dht::Message::new();
             msg.set_field_type(protobuf_structs::dht::Message_MessageType::FIND_NODE);
-            msg.set_key(key);
+            msg.set_key(key.into_bytes());
             msg.set_clusterLevelRaw(10);
             msg
         }
@@ -247,6 +276,36 @@ fn msg_to_proto(kad_msg: KadMsg) -> protobuf_structs::dht::Message {
             }
             msg
         }
+        KadMsg::GetProvidersReq { key } => {
+            let mut msg = protobuf_structs::dht::Message::new();
+            msg.set_field_type(protobuf_structs::dht::Message_MessageType::GET_PROVIDERS);
+            msg.set_key(key.into_bytes());
+            msg.set_clusterLevelRaw(10);
+            msg
+        }
+        KadMsg::GetProvidersRes { closer_peers, provider_peers } => {
+            // TODO: if empty, the remote will think it's a request
+            // TODO: not good, possibly exposed in the API
+            assert!(!closer_peers.is_empty());
+            let mut msg = protobuf_structs::dht::Message::new();
+            msg.set_field_type(protobuf_structs::dht::Message_MessageType::GET_PROVIDERS);
+            msg.set_clusterLevelRaw(9);
+            for peer in closer_peers {
+                msg.mut_closerPeers().push(peer.into());
+            }
+            for peer in provider_peers {
+                msg.mut_providerPeers().push(peer.into());
+            }
+            msg
+        }
+        KadMsg::AddProvider { key, provider_peer } => {
+            let mut msg = protobuf_structs::dht::Message::new();
+            msg.set_field_type(protobuf_structs::dht::Message_MessageType::ADD_PROVIDER);
+            msg.set_clusterLevelRaw(10);
+            msg.set_key(key.into_bytes());
+            msg.mut_providerPeers().push(provider_peer.into());
+            msg
+        }
     }
 }
 
@@ -256,7 +315,8 @@ fn proto_to_msg(mut message: protobuf_structs::dht::Message) -> Result<KadMsg, I
         protobuf_structs::dht::Message_MessageType::PING => Ok(KadMsg::Ping),
 
         protobuf_structs::dht::Message_MessageType::PUT_VALUE => {
-            let key = message.take_key();
+            let key = Multihash::from_bytes(message.take_key())
+                .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))?;
             let _record = message.take_record();
             Ok(KadMsg::PutValue {
                 key: key,
@@ -265,14 +325,17 @@ fn proto_to_msg(mut message: protobuf_structs::dht::Message) -> Result<KadMsg, I
         }
 
         protobuf_structs::dht::Message_MessageType::GET_VALUE => {
-            let key = message.take_key();
+            let key = Multihash::from_bytes(message.take_key())
+                .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))?;
             Ok(KadMsg::GetValueReq { key: key })
         }
 
         protobuf_structs::dht::Message_MessageType::FIND_NODE => {
             if message.get_closerPeers().is_empty() {
+                let key = PeerId::from_bytes(message.take_key())
+                    .map_err(|_| IoError::new(IoErrorKind::InvalidData, "invalid peer id in FIND_NODE"))?;
                 Ok(KadMsg::FindNodeReq {
-                    key: message.take_key(),
+                    key,
                 })
 
             } else {
@@ -290,14 +353,56 @@ fn proto_to_msg(mut message: protobuf_structs::dht::Message) -> Result<KadMsg, I
             }
         }
 
-        protobuf_structs::dht::Message_MessageType::GET_PROVIDERS
-        | protobuf_structs::dht::Message_MessageType::ADD_PROVIDER => {
-            // These messages don't seem to be used in the protocol in practice, so if we receive
-            // them we suppose that it's a mistake in the protocol usage.
-            Err(IoError::new(
-                IoErrorKind::InvalidData,
-                "received an unsupported kad message type",
-            ))
+        protobuf_structs::dht::Message_MessageType::GET_PROVIDERS => {
+            if message.get_closerPeers().is_empty() {
+                let key = Multihash::from_bytes(message.take_key())
+                    .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))?;
+                Ok(KadMsg::GetProvidersReq {
+                    key,
+                })
+
+            } else {
+                // TODO: for now we don't parse the peer properly, so it is possible that we get
+                //       parsing errors for peers even when they are valid ; we ignore these
+                //       errors for now, but ultimately we should just error altogether
+                let closer_peers = message.mut_closerPeers()
+                    .iter_mut()
+                    .filter_map(|peer| KadPeer::from_peer(peer).ok())
+                    .collect::<Vec<_>>();
+                let provider_peers = message.mut_providerPeers()
+                    .iter_mut()
+                    .filter_map(|peer| KadPeer::from_peer(peer).ok())
+                    .collect::<Vec<_>>();
+
+                Ok(KadMsg::GetProvidersRes {
+                    closer_peers,
+                    provider_peers,
+                })
+            }
+        }
+
+        protobuf_structs::dht::Message_MessageType::ADD_PROVIDER => {
+            // TODO: for now we don't parse the peer properly, so it is possible that we get
+            //       parsing errors for peers even when they are valid ; we ignore these
+            //       errors for now, but ultimately we should just error altogether
+            let provider_peer = message.mut_providerPeers()
+                .iter_mut()
+                .filter_map(|peer| KadPeer::from_peer(peer).ok())
+                .next();
+
+            if let Some(provider_peer) = provider_peer {
+                let key = Multihash::from_bytes(message.take_key())
+                    .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))?;
+                Ok(KadMsg::AddProvider {
+                    key,
+                    provider_peer,
+                })
+            } else {
+                Err(IoError::new(
+                    IoErrorKind::InvalidData,
+                    "received an ADD_PROVIDER message with no valid peer",
+                ))
+            }
         }
     }
 }
@@ -310,6 +415,7 @@ mod tests {
     use self::libp2p_tcp_transport::TcpConfig;
     use futures::{Future, Sink, Stream};
     use libp2p_core::{Transport, PeerId, PublicKey};
+    use multihash::{encode, Hash};
     use protocol::{KadConnectionType, KadMsg, KademliaProtocolConfig, KadPeer};
     use std::sync::mpsc;
     use std::thread;
@@ -321,14 +427,14 @@ mod tests {
 
         test_one(KadMsg::Ping);
         test_one(KadMsg::PutValue {
-            key: vec![1, 2, 3, 4],
+            key: encode(Hash::SHA2256, &[1, 2, 3, 4]).unwrap(),
             record: (),
         });
         test_one(KadMsg::GetValueReq {
-            key: vec![10, 11, 12],
+            key: encode(Hash::SHA2256, &[10, 11, 12]).unwrap(),
         });
         test_one(KadMsg::FindNodeReq {
-            key: vec![9, 12, 0, 245, 245, 201, 28, 95],
+            key: PeerId::from_public_key(PublicKey::Rsa(vec![9, 12, 0, 245, 245, 201, 28, 95]))
         });
         test_one(KadMsg::FindNodeRes {
             closer_peers: vec![
@@ -338,6 +444,33 @@ mod tests {
                     connection_ty: KadConnectionType::Connected,
                 },
             ],
+        });
+        test_one(KadMsg::GetProvidersReq {
+            key: encode(Hash::SHA2256, &[9, 12, 0, 245, 245, 201, 28, 95]).unwrap(),
+        });
+        test_one(KadMsg::GetProvidersRes {
+            closer_peers: vec![
+                KadPeer {
+                    node_id: PeerId::from_public_key(PublicKey::Rsa(vec![93, 80, 12, 250])),
+                    multiaddrs: vec!["/ip4/100.101.102.103/tcp/20105".parse().unwrap()],
+                    connection_ty: KadConnectionType::Connected,
+                },
+            ],
+            provider_peers: vec![
+                KadPeer {
+                    node_id: PeerId::from_public_key(PublicKey::Rsa(vec![12, 90, 1, 28])),
+                    multiaddrs: vec!["/ip4/200.201.202.203/tcp/1999".parse().unwrap()],
+                    connection_ty: KadConnectionType::NotConnected,
+                },
+            ],
+        });
+        test_one(KadMsg::AddProvider {
+            key: encode(Hash::SHA2256, &[9, 12, 0, 245, 245, 201, 28, 95]).unwrap(),
+            provider_peer: KadPeer {
+                node_id: PeerId::from_public_key(PublicKey::Rsa(vec![5, 6, 7, 8])),
+                multiaddrs: vec!["/ip4/9.1.2.3/udp/23".parse().unwrap()],
+                connection_ty: KadConnectionType::Connected,
+            },
         });
         // TODO: all messages
 

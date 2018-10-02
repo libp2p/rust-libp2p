@@ -37,6 +37,7 @@ use bytes::Bytes;
 use futures::sync::{mpsc, oneshot};
 use futures::{future, Future, Sink, stream, Stream};
 use libp2p_core::{ConnectionUpgrade, Endpoint, PeerId};
+use multihash::Multihash;
 use protocol::{self, KadMsg, KademliaProtocolConfig, KadPeer};
 use std::collections::VecDeque;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -109,7 +110,7 @@ impl KadConnecController {
         searched_key: &PeerId,
     ) -> impl Future<Item = Vec<KadPeer>, Error = IoError> {
         let message = protocol::KadMsg::FindNodeReq {
-            key: searched_key.clone().into_bytes(),
+            key: searched_key.clone().into(),
         };
 
         let (tx, rx) = oneshot::channel();
@@ -142,6 +143,63 @@ impl KadConnecController {
         future::Either::A(future)
     }
 
+    /// Sends a `GET_PROVIDERS` query to the node and provides a future that will contain the response.
+    // TODO: future item could be `impl Iterator` instead
+    pub fn get_providers(
+        &self,
+        searched_key: &Multihash,
+    ) -> impl Future<Item = (Vec<KadPeer>, Vec<KadPeer>), Error = IoError> {
+        let message = protocol::KadMsg::GetProvidersReq {
+            key: searched_key.clone(),
+        };
+
+        let (tx, rx) = oneshot::channel();
+
+        match self.inner.unbounded_send((message, tx)) {
+            Ok(()) => (),
+            Err(_) => {
+                let fut = future::err(IoError::new(
+                    IoErrorKind::ConnectionAborted,
+                    "connection to remote has aborted",
+                ));
+
+                return future::Either::B(fut);
+            }
+        };
+
+        let future = rx.map_err(|_| {
+            IoError::new(
+                IoErrorKind::ConnectionAborted,
+                "connection to remote has aborted",
+            )
+        }).and_then(|msg| match msg {
+            KadMsg::GetProvidersRes { closer_peers, provider_peers } => Ok((closer_peers, provider_peers)),
+            _ => Err(IoError::new(
+                IoErrorKind::InvalidData,
+                "invalid response type received from the remote",
+            )),
+        });
+
+        future::Either::A(future)
+    }
+
+    /// Sends an `ADD_PROVIDER` message to the node.
+    pub fn add_provider(&self, key: Multihash, provider_peer: KadPeer) -> Result<(), IoError> {
+        // Dummy channel, as the `tx` is going to be dropped anyway.
+        let (tx, _rx) = oneshot::channel();
+        let message = protocol::KadMsg::AddProvider {
+            key,
+            provider_peer,
+        };
+        match self.inner.unbounded_send((message, tx)) {
+            Ok(()) => Ok(()),
+            Err(_) => Err(IoError::new(
+                IoErrorKind::ConnectionAborted,
+                "connection to remote has aborted",
+            )),
+        }
+    }
+
     /// Sends a `PING` query to the node. Because of the way the protocol is designed, there is
     /// no way to differentiate between a ping and a pong. Therefore this function doesn't return a
     /// future, and the only way to be notified of the result is through the stream.
@@ -168,10 +226,29 @@ pub enum KadIncomingRequest {
         responder: KadFindNodeRespond,
     },
 
-    // TODO: PutValue and FindValue
+    /// Find the nodes closest to `searched` and return the known providers for `searched`.
+    GetProviders {
+        /// The value being searched.
+        searched: Multihash,
+        /// Object to use to respond to the request.
+        responder: KadGetProvidersRespond,
+    },
+
+    /// Registers a provider for the given key.
+    ///
+    /// The local node is supposed to remember this and return the provider on a `GetProviders`
+    /// request for the given key.
+    AddProvider {
+        /// The key of the provider.
+        key: Multihash,
+        /// The provider to register.
+        provider_peer: KadPeer,
+    },
 
     /// Received either a ping or a pong.
     PingPong,
+
+    // TODO: PutValue and FindValue
 }
 
 /// Object used to respond to `FindNode` queries from remotes.
@@ -186,6 +263,24 @@ impl KadFindNodeRespond {
     {
         let _ = self.inner.send(KadMsg::FindNodeRes {
             closer_peers: peers.into_iter().collect()
+        });
+    }
+}
+
+/// Object used to respond to `GetProviders` queries from remotes.
+pub struct KadGetProvidersRespond {
+    inner: oneshot::Sender<KadMsg>,
+}
+
+impl KadGetProvidersRespond {
+    /// Respond to the `GetProviders` request.
+    pub fn respond<Ic, Ip>(self, closest_peers: Ic, providers: Ip)
+        where Ic: IntoIterator<Item = protocol::KadPeer>,
+              Ip: IntoIterator<Item = protocol::KadPeer>,
+    {
+        let _ = self.inner.send(KadMsg::GetProvidersRes {
+            closer_peers: closest_peers.into_iter().collect(),
+            provider_peers: providers.into_iter().collect(),
         });
     }
 }
@@ -281,9 +376,11 @@ where
                                 });
                             Box::new(future)
                         },
-                        Some(EventSource::LocalRequest(message @ KadMsg::PutValue { .. }, _)) => {
-                            // A `PutValue` request. Contrary to other types of messages, this one
-                            // doesn't expect any answer and therefore we ignore the sender.
+                        Some(EventSource::LocalRequest(message @ KadMsg::PutValue { .. }, _)) |
+                        Some(EventSource::LocalRequest(message @ KadMsg::AddProvider { .. }, _)) => {
+                            // A `PutValue` or `AddProvider` request. Contrary to other types of
+                            // messages, these ones don't expect any answer and therefore we ignore
+                            // the sender.
                             let future = kad_sink
                                 .send(message)
                                 .map(move |kad_sink| {
@@ -340,8 +437,9 @@ where
                             }
                         }
                         Some(EventSource::Remote(message @ KadMsg::FindNodeRes { .. }))
-                        | Some(EventSource::Remote(message @ KadMsg::GetValueRes { .. })) => {
-                            // `FindNodeRes` or `GetValueRes` received on the socket.
+                        | Some(EventSource::Remote(message @ KadMsg::GetValueRes { .. }))
+                        | Some(EventSource::Remote(message @ KadMsg::GetProvidersRes { .. })) => {
+                            // `FindNodeRes`, `GetValueRes` or `GetProvidersRes` received on the socket.
                             // Send it back through `send_back_queue`.
                             if let Some(send_back) = send_back_queue.pop_front() {
                                 let _ = send_back.send(message);
@@ -356,22 +454,13 @@ where
                                 Box::new(future)
                             }
                         }
-                        Some(EventSource::Remote(KadMsg::FindNodeReq { key, .. })) => {
-                            let peer_id = match PeerId::from_bytes(key) {
-                                Ok(id) => id,
-                                Err(key) => {
-                                    debug!("Ignoring FIND_NODE request with invalid key: {:?}", key);
-                                    let future = future::err(IoError::new(IoErrorKind::InvalidData, "invalid key in FIND_NODE"));
-                                    return Box::new(future);
-                                }
-                            };
-
+                        Some(EventSource::Remote(KadMsg::FindNodeReq { key })) => {
                             let (tx, rx) = oneshot::channel();
                             let _ = responders_tx.unbounded_send(rx);
                             let future = future::ok({
                                 let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, finished);
                                 let rq = KadIncomingRequest::FindNode {
-                                    searched: peer_id,
+                                    searched: key,
                                     responder: KadFindNodeRespond {
                                         inner: tx
                                     }
@@ -380,6 +469,30 @@ where
                             });
 
                             Box::new(future)
+                        }
+                        Some(EventSource::Remote(KadMsg::GetProvidersReq { key })) => {
+                            let (tx, rx) = oneshot::channel();
+                            let _ = responders_tx.unbounded_send(rx);
+                            let future = future::ok({
+                                let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, finished);
+                                let rq = KadIncomingRequest::GetProviders {
+                                    searched: key,
+                                    responder: KadGetProvidersRespond {
+                                        inner: tx
+                                    }
+                                };
+                                (Some(rq), state)
+                            });
+
+                            Box::new(future)
+                        }
+                        Some(EventSource::Remote(KadMsg::AddProvider { key, provider_peer })) => {
+                            let future = future::ok({
+                                let state = (events, kad_sink, responders_tx, send_back_queue, expected_pongs, finished);
+                                let rq = KadIncomingRequest::AddProvider { key, provider_peer };
+                                (Some(rq), state)
+                            });
+                            Box::new(future) as Box<_>
                         }
                         Some(EventSource::Remote(KadMsg::GetValueReq { .. })) => {
                             warn!("GET_VALUE requests are not implemented yet");
