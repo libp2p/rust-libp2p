@@ -38,8 +38,7 @@ use Transport;
 /// use std::time::Duration;
 ///
 /// let _transport = TcpConfig::new()
-///     .with_timeout(Duration::from_secs(20))
-///     .with_rate_limit(5 * 1024, 2 * 1024);
+///     .with_timeout(Duration::from_secs(20));
 /// ```
 ///
 pub trait TransportExt: Transport {
