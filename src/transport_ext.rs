@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! Provides the `TransportExt` trait.
+
 use ratelimit::RateLimited;
 use std::io;
 use std::time::Duration;
@@ -27,6 +29,19 @@ use Transport;
 
 /// Trait automatically implemented on all objects that implement `Transport`. Provides some
 /// additional utilities.
+///
+/// # Example
+///
+/// ```
+/// use libp2p::TransportExt;
+/// use libp2p::tcp::TcpConfig;
+/// use std::time::Duration;
+///
+/// let _transport = TcpConfig::new()
+///     .with_timeout(Duration::from_secs(20))
+///     .with_rate_limit(5 * 1024, 2 * 1024);
+/// ```
+///
 pub trait TransportExt: Transport {
     /// Adds a timeout to all the sockets created by the transport.
     #[inline]
@@ -46,7 +61,7 @@ pub trait TransportExt: Transport {
         TransportTimeout::with_outgoing_timeout(self, timeout)
     }
 
-    /// Adds a timeout to all the ingoing sockets created by the transport.
+    /// Adds a timeout to all the incoming sockets created by the transport.
     #[inline]
     fn with_ingoing_timeout(self, timeout: Duration) -> TransportTimeout<Self>
     where
