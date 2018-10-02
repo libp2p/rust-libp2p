@@ -70,7 +70,9 @@ pub trait TransportExt: Transport {
         TransportTimeout::with_ingoing_timeout(self, timeout)
     }
 
-    /// Adds a maximum transfert rate to the sockets created with the transport.
+    // TODO: this method causes an ICE in Rust 1.29 but works in Rust 1.30 ; restore it when
+    //       1.30 is released
+    /*/// Adds a maximum transfert rate to the sockets created with the transport.
     #[inline]
     fn with_rate_limit(
         self,
@@ -86,7 +88,7 @@ pub trait TransportExt: Transport {
             max_read_per_sec,
             max_write_per_sec,
         )
-    }
+    }*/
 
     // TODO: add methods to easily upgrade for secio/mplex/yamux
 }
