@@ -83,7 +83,16 @@ enum Addr<TAddrFut> {
 /// A successfully opened substream.
 pub type Substream<TMuxer> = muxing::SubstreamRef<Arc<TMuxer>>;
 
+impl<TMuxer> fmt::Debug for Substream<TMuxer>
+where TMuxer: muxing::StreamMuxer
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "Substream({:?})", self)
+    }
+}
+
 /// Event that can happen on the `NodeStream`.
+#[derive(Debug)]
 pub enum NodeEvent<TMuxer, TUserData>
 where
     TMuxer: muxing::StreamMuxer,
@@ -344,3 +353,118 @@ where TTrans: Transport,
         }
     }
 }*/
+
+#[cfg(test)]
+mod node_stream {
+    use multiaddr::Multiaddr;
+    use super::NodeStream;
+    use futures::{future::self, prelude::*, Future};
+    use super::NodeEvent;
+    use dummy_muxer::{DummyMuxer, DummyConnectionState};
+    use std::io::Error as IoError;
+
+
+    fn build_node_stream() -> NodeStream<DummyMuxer, impl Future<Item=Multiaddr, Error=IoError>, Vec<u8>> {
+        let addr = future::ok("/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad maddr"));
+        let muxer = DummyMuxer::new();
+        NodeStream::<_, _, Vec<u8>>::new(muxer, addr)
+    }
+
+    #[test]
+    fn multiaddr_is_available_once_polled() {
+        let mut node_stream = build_node_stream();
+        assert!(node_stream.multiaddr().is_none());
+        match node_stream.poll() {
+            Ok(Async::Ready(Some(NodeEvent::Multiaddr(Ok(addr))))) => {
+                assert_eq!(addr.to_string(), "/ip4/127.0.0.1/tcp/1234")
+            }
+            _ => panic!("unexpected poll return value" )
+        }
+        assert!(node_stream.multiaddr().is_some());
+    }
+
+    #[test]
+    fn can_open_outbound_substreams_until_an_outbound_channel_is_closed() {
+        let addr = future::ok("/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad maddr"));
+        let mut muxer = DummyMuxer::new();
+        muxer.set_outbound_connection_state(DummyConnectionState::Closed);
+        let mut ns = NodeStream::<_, _, Vec<u8>>::new(muxer, addr);
+
+        // open first substream works
+        assert!(ns.open_substream(vec![1,2,3]).is_ok());
+
+        // Given the state we set on the DummyMuxer, once we poll() we'll get an
+        // `OutboundClosed` which will make subsequent calls to `open_substream` fail
+        let out = ns.poll();
+        assert_matches!(out, Ok(Async::Ready(Some(node_event))) => {
+            assert_matches!(node_event, NodeEvent::OutboundClosed{user_data} => {
+                assert_eq!(user_data, vec![1,2,3])
+            })
+        });
+
+        // Opening a second substream fails because `outbound_finished` is now true
+        assert_matches!(ns.open_substream(vec![22]), Err(user_data) => {
+            assert_eq!(user_data, vec![22]);
+        });
+    }
+
+    #[test]
+    #[ignore]
+    fn opening_substream_notifies_task() {
+        unimplemented!();
+    }
+
+    #[test]
+    fn query_inbound_outbound_state() {
+        let ns = build_node_stream();
+        assert_eq!(ns.is_inbound_closed(), false);
+        assert_eq!(ns.is_outbound_closed(), false);
+    }
+
+    #[test]
+    fn query_inbound_state() {
+        let addr = future::ok("/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad maddr"));
+        let mut muxer = DummyMuxer::new();
+        muxer.set_inbound_connection_state(DummyConnectionState::Closed);
+        let mut ns = NodeStream::<_, _, Vec<u8>>::new(muxer, addr);
+
+        assert_matches!(ns.poll(), Ok(Async::Ready(Some(node_event))) => {
+            assert_matches!(node_event, NodeEvent::InboundClosed)
+        });
+
+        assert_eq!(ns.is_inbound_closed(), true);
+    }
+
+    #[test]
+    fn query_outbound_state() {
+        let addr = future::ok("/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr"));
+        let mut muxer = DummyMuxer::new();
+        muxer.set_outbound_connection_state(DummyConnectionState::Closed);
+        let mut ns = NodeStream::<_, _, Vec<u8>>::new(muxer, addr);
+
+        assert_eq!(ns.is_outbound_closed(), false);
+
+        ns.open_substream(vec![1]).unwrap();
+        let poll_result = ns.poll();
+
+        assert_matches!(poll_result, Ok(Async::Ready(Some(node_event))) => {
+            assert_matches!(node_event, NodeEvent::OutboundClosed{user_data} => {
+                assert_eq!(user_data, vec![1])
+            })
+        });
+
+        assert_eq!(ns.is_outbound_closed(), true, "outbound connection should be closed after polling");
+    }
+
+    #[test]
+    fn closing_a_node_stream_destroys_substreams_and_returns_submitted_user_data() {
+        let mut ns = build_node_stream();
+        ns.open_substream(vec![2]).unwrap();
+        ns.open_substream(vec![3]).unwrap();
+        ns.open_substream(vec![5]).unwrap();
+        let user_data_submitted = ns.close();
+        assert_eq!(user_data_submitted, vec![
+            vec![2], vec![3], vec![5]
+        ]);
+    }
+}
