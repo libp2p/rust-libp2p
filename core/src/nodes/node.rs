@@ -360,6 +360,7 @@ mod node_stream {
     use multiaddr::Multiaddr;
     use super::NodeStream;
     use futures::{future::self, prelude::*, Future};
+    use tokio_mock_task::MockTask;
     use super::NodeEvent;
     use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
     use std::io::Error as IoError;
@@ -461,5 +462,23 @@ mod node_stream {
         assert_eq!(user_data_submitted, vec![
             vec![2], vec![3], vec![5]
         ]);
+    }
+
+    #[test]
+    fn poll_returns_not_ready_when_there_is_nothing_to_do() {
+        let mut task = MockTask::new();
+        task.enter(|| {
+            // ensure the address never resolves
+            let addr = future::empty();
+            let mut muxer = DummyMuxer::new();
+            // ensure muxer.poll_inbound() returns Async::NotReady
+            muxer.set_inbound_connection_state(DummyConnectionState::Pending);
+            // ensure muxer.poll_outbound() returns Async::NotReady
+            muxer.set_outbound_connection_state(DummyConnectionState::Pending);
+            let mut ns = NodeStream::<_, _, Vec<u8>>::new(muxer, addr);
+            ns.open_substream(vec![1]).unwrap();
+
+            assert_matches!(ns.poll(), Ok(Async::NotReady));
+        });
     }
 }

@@ -238,7 +238,8 @@ extern crate tokio_timer;
 #[cfg(test)]
 #[macro_use]
 extern crate assert_matches;
-
+#[cfg(test)]
+extern crate tokio_mock_task;
 
 /// Multi-address re-export.
 pub extern crate multiaddr;
