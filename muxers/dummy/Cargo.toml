@@ -1,0 +1,10 @@
+[package]
+name = "libp2p-dummy-muxer"
+description = "Dummy impl of StreamMuxer"
+version = "0.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
+
+[dependencies]
+libp2p-core = { path = "../../core" }
+futures = { version = "0.1", features = ["use_std"] }

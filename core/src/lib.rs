@@ -239,6 +239,8 @@ extern crate tokio_timer;
 #[macro_use]
 extern crate assert_matches;
 
+#[cfg(test)]
+extern crate libp2p_dummy_muxer as dummy_muxer;
 
 /// Multi-address re-export.
 pub extern crate multiaddr;
@@ -248,9 +250,6 @@ mod keys_proto;
 mod peer_id;
 mod public_key;
 mod unique;
-#[cfg(test)]
-// TODO: [dp] want this in its own crate
-mod dummy_muxer;
 
 pub mod either;
 pub mod muxing;

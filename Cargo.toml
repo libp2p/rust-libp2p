@@ -87,6 +87,7 @@ members = [
     "protocols/ping",
     "transports/relay",
     "protocols/secio",
+    "muxers/dummy",
     "muxers/mplex",
     "muxers/yamux",
     "stores/peerstore",

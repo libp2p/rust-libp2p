@@ -26,6 +26,7 @@ void = "1"
 libp2p-ping = { path = "../protocols/ping" }
 libp2p-tcp-transport = { path = "../transports/tcp" }
 libp2p-mplex = { path = "../muxers/mplex" }
+libp2p-dummy-muxer = { path = "../muxers/dummy" }
 rand = "0.5"
 tokio = "0.1"
 tokio-codec = "0.1"
