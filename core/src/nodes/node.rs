@@ -86,14 +86,6 @@ enum Addr<TAddrFut> {
 /// A successfully opened substream.
 pub type Substream<TMuxer> = muxing::SubstreamRef<Arc<TMuxer>>;
 
-impl<TMuxer> fmt::Debug for Substream<TMuxer>
-where TMuxer: muxing::StreamMuxer
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "Substream({:?})", self)
-    }
-}
-
 /// Event that can happen on the `NodeStream`.
 #[derive(Debug)]
 pub enum NodeEvent<TMuxer, TUserData>
