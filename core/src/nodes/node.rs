@@ -476,7 +476,6 @@ mod node_stream {
             // ensure muxer.poll_outbound() returns Async::NotReady
             muxer.set_outbound_connection_state(DummyConnectionState::Pending);
             let mut ns = NodeStream::<_, _, Vec<u8>>::new(muxer, addr);
-            ns.open_substream(vec![1]).unwrap();
 
             assert_matches!(ns.poll(), Ok(Async::NotReady));
         });
