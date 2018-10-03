@@ -418,12 +418,6 @@ mod node_stream {
     }
 
     #[test]
-    #[ignore]
-    fn opening_substream_notifies_task() {
-        unimplemented!();
-    }
-
-    #[test]
     fn query_inbound_outbound_state() {
         let ns = build_node_stream();
         assert_eq!(ns.is_inbound_closed(), false);
