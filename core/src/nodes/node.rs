@@ -369,7 +369,7 @@ mod node_stream {
     use super::NodeStream;
     use futures::{future::self, prelude::*, Future};
     use super::NodeEvent;
-    use ::dummy_muxer::{DummyMuxer, DummyConnectionState}; // TODO: [dp] tried to put this with in `../muxers/dummy_muxer` but failed to get to compile: rust complains about `StreamMuxer` not being satisfied, which is odd. When the same code is local to the `core` crate it works. :/
+    use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
     use std::io::Error as IoError;
 
 

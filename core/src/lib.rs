@@ -248,9 +248,9 @@ mod keys_proto;
 mod peer_id;
 mod public_key;
 mod unique;
+
 #[cfg(test)]
-// TODO: [dp] want this in its own crate
-mod dummy_muxer;
+mod tests;
 
 pub mod either;
 pub mod muxing;

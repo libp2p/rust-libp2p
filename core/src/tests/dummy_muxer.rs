@@ -1,7 +1,7 @@
 extern crate futures;
 
 use std::io::Error as IoError;
-use super::muxing::StreamMuxer;
+use ::muxing::StreamMuxer;
 use futures::prelude::*;
 
 pub struct DummySubstream {}
