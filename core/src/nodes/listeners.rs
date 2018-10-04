@@ -37,6 +37,7 @@ where
 }
 
 /// A single active listener.
+#[derive(Debug)]
 struct Listener<TTrans>
 where
     TTrans: Transport,
@@ -220,9 +221,44 @@ where
 #[cfg(test)]
 mod tests {
     extern crate libp2p_tcp_transport;
+
     use super::*;
     use transport;
     use tokio::runtime::current_thread::Runtime;
+    use std::io;
+    use futures::{future::{self, FutureResult}, stream};
+
+    #[derive(Debug, PartialEq, Clone, Copy)]
+    struct DummyTransport;
+    impl Transport for DummyTransport {
+        type Output = usize;
+        type Listener = Box<Stream<Item=Self::ListenerUpgrade, Error=io::Error> + Send>;
+        type ListenerUpgrade = FutureResult<(Self::Output, Self::MultiaddrFuture), io::Error>;
+        type MultiaddrFuture = FutureResult<Multiaddr, io::Error>;
+        type Dial = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error> + Send>;
+
+        fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)>
+        where
+            Self: Sized
+        {
+            let addr2 = addr.clone();
+            let stream = stream::poll_fn(|| future::ok(Some(1usize)).poll() )
+                .map(move |x| future::ok((x, future::ok(addr.clone()))));
+
+            Ok( (Box::new(stream), addr2) )
+         }
+
+        fn dial(self, _addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)>
+        where
+            Self: Sized
+        {
+            unimplemented!();
+        }
+
+        fn nat_traversal(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
+            unimplemented!();
+        }
+    }
 
     #[test]
     fn incoming_event() {
@@ -250,5 +286,28 @@ mod tests {
 
         let mut runtime = Runtime::new().unwrap();
         runtime.block_on(future).unwrap();
+    }
+
+    #[test]
+    fn listener_stream_returns_transport() {
+        let t = DummyTransport{};
+        let ls = ListenersStream::new(t);
+        assert_eq!(ls.transport(), &t);
+    }
+
+    #[test]
+    fn listener_stream_can_iterate_over_listeners() {
+        let t = DummyTransport{};
+        let addr1 = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
+        let addr2 = "/ip4/127.0.0.1/tcp/4321".parse::<Multiaddr>().expect("bad multiaddr");
+        let expected_addrs = vec![addr1.to_string(), addr2.to_string()];
+
+        let mut ls = ListenersStream::new(t);
+        ls.listen_on(addr1).expect("listen_on failed");
+        ls.listen_on(addr2).expect("listen_on failed");
+
+        let listener_addrs = ls.listeners().map(|ma| ma.to_string() ).collect::<Vec<String>>();
+        assert_eq!(listener_addrs, expected_addrs);
+
     }
 }
