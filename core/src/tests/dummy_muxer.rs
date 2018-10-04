@@ -40,6 +40,7 @@ pub struct DummyOutboundSubstream {}
 pub enum DummyConnectionState {
     Pending, // use this to trigger the Async::NotReady code path
     Closed, // use this to trigger the Async::Ready(None) code path
+    Opened, // use this to trigger the Async::Ready(Some(_)) code path
 }
 #[derive(Debug)]
 struct DummyConnection {
@@ -79,6 +80,7 @@ impl StreamMuxer for DummyMuxer {
         match self.in_connection.state {
             DummyConnectionState::Pending => Ok(Async::NotReady),
             DummyConnectionState::Closed => Ok(Async::Ready(None)),
+            DummyConnectionState::Opened => Ok(Async::Ready(Some(Self::Substream{}))),
         }
     }
     fn open_outbound(&self) -> Self::OutboundSubstream { Self::OutboundSubstream{} }
@@ -86,6 +88,7 @@ impl StreamMuxer for DummyMuxer {
         match self.out_connection.state {
             DummyConnectionState::Pending => Ok(Async::NotReady),
             DummyConnectionState::Closed => Ok(Async::Ready(None)),
+            DummyConnectionState::Opened => Ok(Async::Ready(Some(Self::Substream{}))),
         }
     }
     fn destroy_outbound(&self, _substream: Self::OutboundSubstream) {}
