@@ -24,9 +24,11 @@
 //! helps you with.
 
 use error::SecioError;
-use ring::{agreement, digest};
+#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+use ring::digest;
 use std::cmp::Ordering;
 use stream_cipher::Cipher;
+use KeyAgreement;
 
 const ECDH_P256: &str = "P-256";
 const ECDH_P384: &str = "P-384";
@@ -42,14 +44,6 @@ const SHA_512: &str = "SHA512";
 pub(crate) const DEFAULT_AGREEMENTS_PROPOSITION: &str = "P-256,P-384";
 pub(crate) const DEFAULT_CIPHERS_PROPOSITION: &str = "AES-128,AES-256,TwofishCTR";
 pub(crate) const DEFAULT_DIGESTS_PROPOSITION: &str = "SHA256,SHA512";
-
-
-/// Possible key agreement algorithms.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum KeyAgreement {
-    EcdhP256,
-    EcdhP384
-}
 
 /// Return a proposition string from the given sequence of `KeyAgreement` values.
 pub fn key_agreements_proposition<'a, I>(xchgs: I) -> String
@@ -77,7 +71,7 @@ where
 ///
 /// The `Ordering` parameter determines which argument is preferred. If `Less` or `Equal` we
 /// try for each of `theirs` every one of `ours`, for `Greater` it's the other way around.
-pub fn select_agreement<'a>(r: Ordering, ours: &str, theirs: &str) -> Result<&'a agreement::Algorithm, SecioError> {
+pub fn select_agreement(r: Ordering, ours: &str, theirs: &str) -> Result<KeyAgreement, SecioError> {
     let (a, b) = match r {
         Ordering::Less | Ordering::Equal => (theirs, ours),
         Ordering::Greater =>  (ours, theirs)
@@ -85,8 +79,8 @@ pub fn select_agreement<'a>(r: Ordering, ours: &str, theirs: &str) -> Result<&'a
     for x in a.split(',') {
         if b.split(',').any(|y| x == y) {
             match x {
-                ECDH_P256 => return Ok(&agreement::ECDH_P256),
-                ECDH_P384 => return Ok(&agreement::ECDH_P384),
+                ECDH_P256 => return Ok(KeyAgreement::EcdhP256),
+                ECDH_P384 => return Ok(KeyAgreement::EcdhP384),
                 _ => continue
             }
         }
@@ -156,6 +150,17 @@ pub enum Digest {
     Sha512
 }
 
+impl Digest {
+    /// Returns the size in bytes of a digest of this kind.
+    #[inline]
+    pub fn num_bytes(&self) -> usize {
+        match *self {
+            Digest::Sha256 => 256 / 8,
+            Digest::Sha512 => 512 / 8,
+        }
+    }
+}
+
 /// Return a proposition string from the given sequence of `Digest` values.
 pub fn digests_proposition<'a, I>(digests: I) -> String
 where
@@ -182,7 +187,7 @@ where
 ///
 /// The `Ordering` parameter determines which argument is preferred. If `Less` or `Equal` we
 /// try for each of `theirs` every one of `ours`, for `Greater` it's the other way around.
-pub fn select_digest<'a>(r: Ordering, ours: &str, theirs: &str) -> Result<&'a digest::Algorithm, SecioError> {
+pub fn select_digest(r: Ordering, ours: &str, theirs: &str) -> Result<Digest, SecioError> {
     let (a, b) = match r {
         Ordering::Less | Ordering::Equal => (theirs, ours),
         Ordering::Greater =>  (ours, theirs)
@@ -190,8 +195,8 @@ pub fn select_digest<'a>(r: Ordering, ours: &str, theirs: &str) -> Result<&'a di
     for x in a.split(',') {
         if b.split(',').any(|y| x == y) {
             match x {
-                SHA_256 => return Ok(&digest::SHA256),
-                SHA_512 => return Ok(&digest::SHA512),
+                SHA_256 => return Ok(Digest::Sha256),
+                SHA_512 => return Ok(Digest::Sha512),
                 _ => continue
             }
         }
@@ -199,3 +204,13 @@ pub fn select_digest<'a>(r: Ordering, ours: &str, theirs: &str) -> Result<&'a di
     Err(SecioError::NoSupportIntersection)
 }
 
+#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+impl Into<&'static digest::Algorithm> for Digest {
+    #[inline]
+    fn into(self) -> &'static digest::Algorithm {
+        match self {
+            Digest::Sha256 => &digest::SHA256,
+            Digest::Sha512 => &digest::SHA512,
+        }
+    }
+}

@@ -17,10 +17,11 @@ libp2p-ping = { path = "../../protocols/ping" }
 libp2p-core = { path = "../../core" }
 log = "0.4"
 multiaddr = { path = "../../misc/multiaddr" }
+multihash = { path = "../../misc/multihash" }
 parking_lot = "0.6"
 protobuf = "2.0.2"
 rand = "0.4.2"
-smallvec = "0.5"
+smallvec = "0.6"
 tokio-codec = "0.1"
 tokio-io = "0.1"
 tokio-timer = "0.2.6"
