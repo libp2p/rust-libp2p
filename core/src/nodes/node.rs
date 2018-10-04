@@ -87,7 +87,6 @@ enum Addr<TAddrFut> {
 pub type Substream<TMuxer> = muxing::SubstreamRef<Arc<TMuxer>>;
 
 /// Event that can happen on the `NodeStream`.
-#[derive(Debug)]
 pub enum NodeEvent<TMuxer, TUserData>
 where
     TMuxer: muxing::StreamMuxer,
@@ -328,32 +327,39 @@ where
     }
 }
 
-// TODO:
-/*impl<TTrans> fmt::Debug for NodeEvent<TTrans>
-where TTrans: Transport,
-      <TTrans::Listener as Stream>::Error: fmt::Debug,
+impl<TMuxer, TUserData> fmt::Debug for NodeEvent<TMuxer, TUserData>
+where
+    TMuxer: muxing::StreamMuxer,
+    TUserData: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
-            NodeEvent::Incoming { ref listen_addr, .. } => {
-                f.debug_struct("NodeEvent::Incoming")
-                    .field("listen_addr", listen_addr)
+            NodeEvent::Multiaddr(result) => {
+                write!(f, "{:?}", result)
+            },
+            NodeEvent::InboundSubstream { ref substream } => {
+                f.debug_struct("NodeEvent::InboundSubstream")
+                    .field("substream", substream)
                     .finish()
             },
-            NodeEvent::Closed { ref listen_addr, .. } => {
-                f.debug_struct("NodeEvent::Closed")
-                    .field("listen_addr", listen_addr)
+            NodeEvent::InboundClosed => {
+                f.debug_struct("NodeEvent::InboundClosed")
                     .finish()
             },
-            NodeEvent::Error { ref listen_addr, ref error, .. } => {
-                f.debug_struct("NodeEvent::Error")
-                    .field("listen_addr", listen_addr)
-                    .field("error", error)
+            NodeEvent::OutboundSubstream { ref user_data, ref substream } => {
+                f.debug_struct("NodeEvent::OutboundSubstream")
+                    .field("user_data", user_data)
+                    .field("substream", substream)
+                    .finish()
+            },
+            NodeEvent::OutboundClosed { ref user_data } => {
+                f.debug_struct("NodeEvent::OutboundClosed")
+                    .field("user_data", user_data)
                     .finish()
             },
         }
     }
-}*/
+}
 
 #[cfg(test)]
 mod node_stream {
@@ -465,10 +471,20 @@ mod node_stream {
     }
 
     #[test]
-    fn prints_pretty_debug_info() {
+    fn prints_pretty_node_stream_debug_info() {
         let mut ns = build_node_stream();
         ns.open_substream(b"ba be".to_vec()).unwrap();
         assert_eq!(format!("{:?}", ns), "NodeStream { address: None, inbound_finished: false, outbound_finished: false, outbound_substreams: 1 }");
+    }
+
+    #[test]
+    fn prints_pretty_node_event_debug_info() {
+        let mut ns = build_node_stream();
+        ns.open_substream(vec![2,3,5]).unwrap();
+        let node_event = ns.poll().unwrap();
+        assert_matches!(node_event, Async::Ready(Some(node_event)) => {
+            assert_eq!(format!("{:?}", node_event), "NodeEvent::OutboundClosed { user_data: [2, 3, 5] }");
+        })
     }
 
     #[test]
