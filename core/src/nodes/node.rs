@@ -456,13 +456,6 @@ mod node_stream {
     }
 
     #[test]
-    fn prints_pretty_debug_info() {
-        let mut ns = build_node_stream();
-        ns.open_substream(b"ba be".to_vec()).unwrap();
-        assert_eq!(format!("{:?}", ns), "NodeStream { address: None, inbound_finished: false, outbound_finished: false, outbound_substreams: 1 }");
-    }
-
-    #[test]
     fn poll_returns_not_ready_when_there_is_nothing_to_do() {
         let mut task = MockTask::new();
         task.enter(|| {
