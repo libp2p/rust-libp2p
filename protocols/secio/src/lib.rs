@@ -77,23 +77,33 @@
 //! `SecioMiddleware` that implements `Sink` and `Stream` and can be used to send packets of data.
 //!
 
+#![recursion_limit = "128"]
+
 extern crate aes_ctr;
 #[cfg(feature = "secp256k1")]
 extern crate asn1_der;
 extern crate bytes;
 extern crate ctr;
+extern crate ed25519_dalek;
 extern crate futures;
+extern crate hmac;
 extern crate libp2p_core;
 #[macro_use]
 extern crate log;
 extern crate protobuf;
 extern crate rand;
+#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
 extern crate ring;
 extern crate rw_stream_sink;
 #[cfg(feature = "secp256k1")]
 extern crate secp256k1;
+extern crate sha2;
+#[cfg(target_os = "emscripten")]
+#[macro_use]
+extern crate stdweb;
 extern crate tokio_io;
 extern crate twofish;
+#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
 extern crate untrusted;
 
 #[cfg(feature = "aes-all")]
@@ -104,27 +114,31 @@ pub use self::error::SecioError;
 #[cfg(feature = "secp256k1")]
 use asn1_der::{traits::FromDerEncoded, traits::FromDerObject, DerObject};
 use bytes::{Bytes, BytesMut};
+use ed25519_dalek::Keypair as Ed25519KeyPair;
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
 use libp2p_core::{PeerId, PublicKey};
-use ring::rand::SystemRandom;
-use ring::signature::{Ed25519KeyPair, RSAKeyPair};
+#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+use ring::signature::RSAKeyPair;
 use rw_stream_sink::RwStreamSink;
 use std::error::Error;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use std::sync::Arc;
 use tokio_io::{AsyncRead, AsyncWrite};
+#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
 use untrusted::Input;
 
 mod algo_support;
 mod codec;
 mod error;
+mod exchange;
 mod handshake;
 mod structs_proto;
 mod stream_cipher;
 
-pub use algo_support::{Digest, KeyAgreement};
+pub use algo_support::Digest;
+pub use exchange::KeyAgreement;
 pub use stream_cipher::Cipher;
 
 /// Implementation of the `ConnectionUpgrade` trait of `libp2p_core`. Automatically applies
@@ -206,6 +220,7 @@ pub struct SecioKeyPair {
 
 impl SecioKeyPair {
     /// Builds a `SecioKeyPair` from a PKCS8 private key and public key.
+    #[cfg(all(feature = "ring", not(target_os = "emscripten")))]
     pub fn rsa_from_pkcs8<P>(
         private: &[u8],
         public: P,
@@ -223,33 +238,22 @@ impl SecioKeyPair {
         })
     }
 
-    /// Builds a `SecioKeyPair` from a PKCS8 ED25519 private key.
-    pub fn ed25519_from_pkcs8<K>(key: K) -> Result<SecioKeyPair, Box<Error + Send + Sync>>
-    where
-        K: AsRef<[u8]>,
-    {
-        let key_pair = Ed25519KeyPair::from_pkcs8(Input::from(key.as_ref())).map_err(Box::new)?;
-
-        Ok(SecioKeyPair {
-            inner: SecioKeyPairInner::Ed25519 {
-                key_pair: Arc::new(key_pair),
-            },
-        })
-    }
-
     /// Generates a new Ed25519 key pair and uses it.
     pub fn ed25519_generated() -> Result<SecioKeyPair, Box<Error + Send + Sync>> {
-        let rng = SystemRandom::new();
-        let gen = Ed25519KeyPair::generate_pkcs8(&rng).map_err(Box::new)?;
-        Ok(SecioKeyPair::ed25519_from_pkcs8(&gen[..])
-            .expect("failed to parse generated Ed25519 key"))
+        let mut csprng = rand::OsRng::new()?;
+        let keypair: Ed25519KeyPair = Ed25519KeyPair::generate::<sha2::Sha512, _>(&mut csprng);
+        Ok(SecioKeyPair {
+            inner: SecioKeyPairInner::Ed25519 {
+                key_pair: Arc::new(keypair),
+            }
+        })
     }
 
     /// Generates a new random sec256k1 key pair.
     #[cfg(feature = "secp256k1")]
     pub fn secp256k1_generated() -> Result<SecioKeyPair, Box<Error + Send + Sync>> {
         let secp = secp256k1::Secp256k1::with_caps(secp256k1::ContextFlag::Full);
-        let (private, _) = secp.generate_keypair(&mut ::rand::thread_rng())
+        let (private, _) = secp.generate_keypair(&mut secp256k1::rand::thread_rng())
             .expect("failed to generate secp256k1 key");
 
         Ok(SecioKeyPair {
@@ -291,9 +295,10 @@ impl SecioKeyPair {
     /// Returns the public key corresponding to this key pair.
     pub fn to_public_key(&self) -> PublicKey {
         match self.inner {
+            #[cfg(all(feature = "ring", not(target_os = "emscripten")))]
             SecioKeyPairInner::Rsa { ref public, .. } => PublicKey::Rsa(public.clone()),
             SecioKeyPairInner::Ed25519 { ref key_pair } => {
-                PublicKey::Ed25519(key_pair.public_key_bytes().to_vec())
+                PublicKey::Ed25519(key_pair.public.as_bytes().to_vec())
             }
             #[cfg(feature = "secp256k1")]
             SecioKeyPairInner::Secp256k1 { ref private } => {
@@ -317,6 +322,7 @@ impl SecioKeyPair {
 // Inner content of `SecioKeyPair`.
 #[derive(Clone)]
 enum SecioKeyPairInner {
+    #[cfg(all(feature = "ring", not(target_os = "emscripten")))]
     Rsa {
         public: Vec<u8>,
         // We use an `Arc` so that we can clone the enum.

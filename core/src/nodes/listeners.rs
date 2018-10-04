@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{prelude::*, task};
+use futures::prelude::*;
 use std::fmt;
 use void::Void;
 use {Multiaddr, Transport};
@@ -34,8 +34,6 @@ where
     transport: TTrans,
     /// All the active listeners.
     listeners: Vec<Listener<TTrans>>,
-    /// Task to notify when we add a new listener to `listeners`, so that we start polling.
-    to_notify: Option<task::Task>,
 }
 
 /// A single active listener.
@@ -83,7 +81,6 @@ where
         ListenersStream {
             transport,
             listeners: Vec::new(),
-            to_notify: None,
         }
     }
 
@@ -94,7 +91,6 @@ where
         ListenersStream {
             transport,
             listeners: Vec::with_capacity(capacity),
-            to_notify: None,
         }
     }
 
@@ -116,10 +112,6 @@ where
             address: new_addr.clone(),
         });
 
-        if let Some(task) = self.to_notify.take() {
-            task.notify();
-        }
-
         Ok(new_addr)
     }
 
@@ -134,16 +126,9 @@ where
     pub fn listeners(&self) -> impl Iterator<Item = &Multiaddr> {
         self.listeners.iter().map(|l| &l.address)
     }
-}
 
-impl<TTrans> Stream for ListenersStream<TTrans>
-where
-    TTrans: Transport,
-{
-    type Item = ListenersEvent<TTrans>;
-    type Error = Void; // TODO: use ! once stable
-
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+    /// Provides an API similar to `Stream`, except that it cannot error.
+    pub fn poll(&mut self) -> Async<Option<ListenersEvent<TTrans>>> {
         // We remove each element from `listeners` one by one and add them back.
         for n in (0..self.listeners.len()).rev() {
             let mut listener = self.listeners.swap_remove(n);
@@ -154,31 +139,43 @@ where
                 Ok(Async::Ready(Some(upgrade))) => {
                     let listen_addr = listener.address.clone();
                     self.listeners.push(listener);
-                    return Ok(Async::Ready(Some(ListenersEvent::Incoming {
+                    return Async::Ready(Some(ListenersEvent::Incoming {
                         upgrade,
                         listen_addr,
-                    })));
+                    }));
                 }
                 Ok(Async::Ready(None)) => {
-                    return Ok(Async::Ready(Some(ListenersEvent::Closed {
+                    return Async::Ready(Some(ListenersEvent::Closed {
                         listen_addr: listener.address,
                         listener: listener.listener,
                         result: Ok(()),
-                    })));
+                    }));
                 }
                 Err(err) => {
-                    return Ok(Async::Ready(Some(ListenersEvent::Closed {
+                    return Async::Ready(Some(ListenersEvent::Closed {
                         listen_addr: listener.address,
                         listener: listener.listener,
                         result: Err(err),
-                    })));
+                    }));
                 }
             }
         }
 
         // We register the current task to be waken up if a new listener is added.
-        self.to_notify = Some(task::current());
-        Ok(Async::NotReady)
+        Async::NotReady
+    }
+}
+
+impl<TTrans> Stream for ListenersStream<TTrans>
+where
+    TTrans: Transport,
+{
+    type Item = ListenersEvent<TTrans>;
+    type Error = Void; // TODO: use ! once stable
+
+    #[inline]
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        Ok(self.poll())
     }
 }
 
