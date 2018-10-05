@@ -23,6 +23,7 @@ use futures::{future, prelude::*};
 use parking_lot::Mutex;
 use std::io::{Error as IoError, Read, Write};
 use std::ops::Deref;
+use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -256,6 +257,17 @@ where
     muxer: P,
     substream: Option<<P::Target as StreamMuxer>::Substream>,
 }
+
+impl<P> fmt::Debug for SubstreamRef<P>
+where
+    P: Deref,
+    P::Target: StreamMuxer,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "Substream({:?})", self)
+    }
+}
+
 
 impl<P> Read for SubstreamRef<P>
 where
