@@ -393,6 +393,9 @@ impl<'a> From<Ipv6Addr> for Protocol<'a> {
     }
 }
 
+// Parse a version 2 onion address and return its binary representation.
+//
+// Format: <base-32 address> ":" <port number>
 fn read_onion(s: &str) -> Result<[u8; 12]> {
     let mut parts = s.split(':');
 
