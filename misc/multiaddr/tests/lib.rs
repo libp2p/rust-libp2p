@@ -84,9 +84,9 @@ impl Arbitrary for Proto {
             20 => Proto(Ws),
             21 => Proto(Wss),
             22 => {
-                let mut a = [0; 12];
+                let mut a = [0; 10];
                 g.fill(&mut a);
-                Proto(Onion(Cow::Owned(a)))
+                Proto(Onion(Cow::Owned(a), g.gen()))
             }
              _ => panic!("outside range")
         }
