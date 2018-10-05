@@ -21,9 +21,8 @@
 //! Individual messages encoding.
 
 use bytes::BytesMut;
-use super::StreamCipher;
+use super::{Hmac, StreamCipher};
 use futures::prelude::*;
-use ring::hmac;
 
 /// Wraps around a `Sink`. Encodes the buffers passed to it and passes it to the underlying sink.
 ///
@@ -34,16 +33,16 @@ use ring::hmac;
 /// Also implements `Stream` for convenience.
 pub struct EncoderMiddleware<S> {
     cipher_state: StreamCipher,
-    hmac_key: hmac::SigningKey,
+    hmac: Hmac,
     raw_sink: S,
     pending: Option<BytesMut> // buffer encrypted data which can not be sent right away
 }
 
 impl<S> EncoderMiddleware<S> {
-    pub fn new(raw: S, cipher: StreamCipher, key: hmac::SigningKey) -> EncoderMiddleware<S> {
+    pub fn new(raw: S, cipher: StreamCipher, hmac: Hmac) -> EncoderMiddleware<S> {
         EncoderMiddleware {
             cipher_state: cipher,
-            hmac_key: key,
+            hmac,
             raw_sink: raw,
             pending: None
         }
@@ -67,7 +66,7 @@ where
         debug_assert!(self.pending.is_none());
         // TODO if SinkError gets refactor to SecioError, then use try_apply_keystream
         self.cipher_state.apply_keystream(&mut data_buf[..]);
-        let signature = hmac::sign(&self.hmac_key, &data_buf[..]);
+        let signature = self.hmac.sign(&data_buf[..]);
         data_buf.extend_from_slice(signature.as_ref());
         if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data_buf)? {
             self.pending = Some(data)

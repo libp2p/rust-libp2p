@@ -25,7 +25,9 @@ use self::decode::DecoderMiddleware;
 use self::encode::EncoderMiddleware;
 
 use aes_ctr::stream_cipher::StreamCipherCore;
-use ring::hmac;
+use algo_support::Digest;
+use hmac::{self, Mac};
+use sha2::{Sha256, Sha512};
 use tokio_io::codec::length_delimited;
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -37,6 +39,64 @@ pub type FullCodec<S> = DecoderMiddleware<EncoderMiddleware<length_delimited::Fr
 
 pub type StreamCipher = Box<dyn StreamCipherCore + Send>;
 
+#[derive(Debug, Clone)]
+pub enum Hmac {
+    Sha256(hmac::Hmac<Sha256>),
+    Sha512(hmac::Hmac<Sha512>),
+}
+
+impl Hmac {
+    /// Returns the size of the hash in bytes.
+    #[inline]
+    pub fn num_bytes(&self) -> usize {
+        match *self {
+            Hmac::Sha256(_) => 32,
+            Hmac::Sha512(_) => 64,
+        }
+    }
+
+    /// Builds a `Hmac` from an algorithm and key.
+    pub fn from_key(algorithm: Digest, key: &[u8]) -> Self {
+        // TODO: it would be nice to tweak the hmac crate to add an equivalent to new_varkey that
+        //       never errors
+        match algorithm {
+            Digest::Sha256 => Hmac::Sha256(Mac::new_varkey(key)
+                .expect("Hmac::new_varkey accepts any key length")),
+            Digest::Sha512 => Hmac::Sha512(Mac::new_varkey(key)
+                .expect("Hmac::new_varkey accepts any key length")),
+        }
+    }
+
+    /// Signs the data.
+    // TODO: better return type?
+    pub fn sign(&mut self, crypted_data: &[u8]) -> Vec<u8> {
+        match *self {
+            Hmac::Sha256(ref mut hmac) => {
+                hmac.input(crypted_data);
+                hmac.result().code().to_vec()
+            },
+            Hmac::Sha512(ref mut hmac) => {
+                hmac.input(crypted_data);
+                hmac.result().code().to_vec()
+            },
+        }
+    }
+
+    /// Verifies that the data matches the expected hash.
+    // TODO: better error?
+    pub fn verify(&mut self, crypted_data: &[u8], expected_hash: &[u8]) -> Result<(), ()> {
+        match *self {
+            Hmac::Sha256(ref mut hmac) => {
+                hmac.input(crypted_data);
+                hmac.verify(expected_hash).map_err(|_| ())
+            },
+            Hmac::Sha512(ref mut hmac) => {
+                hmac.input(crypted_data);
+                hmac.verify(expected_hash).map_err(|_| ())
+            },
+        }
+    }
+}
 
 /// Takes control of `socket`. Returns an object that implements `future::Sink` and
 /// `future::Stream`. The `Stream` and `Sink` produce and accept `BytesMut` objects.
@@ -46,16 +106,15 @@ pub type StreamCipher = Box<dyn StreamCipherCore + Send>;
 pub fn full_codec<S>(
     socket: length_delimited::Framed<S>,
     cipher_encoding: StreamCipher,
-    encoding_hmac: hmac::SigningKey,
+    encoding_hmac: Hmac,
     cipher_decoder: StreamCipher,
-    decoding_hmac: hmac::VerificationKey,
+    decoding_hmac: Hmac,
 ) -> FullCodec<S>
 where
     S: AsyncRead + AsyncWrite,
 {
-    let hmac_num_bytes = encoding_hmac.digest_algorithm().output_len;
     let encoder = EncoderMiddleware::new(socket, cipher_encoding, encoding_hmac);
-    DecoderMiddleware::new(encoder, cipher_decoder, decoding_hmac, hmac_num_bytes)
+    DecoderMiddleware::new(encoder, cipher_decoder, decoding_hmac)
 }
 
 #[cfg(test)]
@@ -68,14 +127,13 @@ mod tests {
     use super::full_codec;
     use super::DecoderMiddleware;
     use super::EncoderMiddleware;
+    use super::Hmac;
+    use algo_support::Digest;
     use bytes::BytesMut;
     use error::SecioError;
     use futures::sync::mpsc::channel;
     use futures::{Future, Sink, Stream};
     use rand;
-    use ring::digest::SHA256;
-    use ring::hmac::SigningKey;
-    use ring::hmac::VerificationKey;
     use std::io::Error as IoError;
     use tokio_io::codec::length_delimited::Framed;
 
@@ -94,13 +152,12 @@ mod tests {
         let encoder = EncoderMiddleware::new(
             data_tx,
             ctr(Cipher::Aes256, &cipher_key, &NULL_IV[..]),
-            SigningKey::new(&SHA256, &hmac_key),
+            Hmac::from_key(Digest::Sha256, &hmac_key),
         );
         let decoder = DecoderMiddleware::new(
             data_rx,
             ctr(Cipher::Aes256, &cipher_key, &NULL_IV[..]),
-            VerificationKey::new(&SHA256, &hmac_key),
-            32,
+            Hmac::from_key(Digest::Sha256, &hmac_key),
         );
 
         let data = b"hello world";
@@ -133,9 +190,9 @@ mod tests {
                 full_codec(
                     connec,
                     ctr(cipher, &cipher_key[..key_size], &NULL_IV[..]),
-                    SigningKey::new(&SHA256, &hmac_key),
+                    Hmac::from_key(Digest::Sha256, &hmac_key),
                     ctr(cipher, &cipher_key[..key_size], &NULL_IV[..]),
-                    VerificationKey::new(&SHA256, &hmac_key),
+                    Hmac::from_key(Digest::Sha256, &hmac_key),
                 )
             },
         );
@@ -148,9 +205,9 @@ mod tests {
                 full_codec(
                     stream,
                     ctr(cipher, &cipher_key_clone[..key_size], &NULL_IV[..]),
-                    SigningKey::new(&SHA256, &hmac_key_clone),
+                    Hmac::from_key(Digest::Sha256, &hmac_key_clone),
                     ctr(cipher, &cipher_key_clone[..key_size], &NULL_IV[..]),
-                    VerificationKey::new(&SHA256, &hmac_key_clone),
+                    Hmac::from_key(Digest::Sha256, &hmac_key_clone),
                 )
             });
 

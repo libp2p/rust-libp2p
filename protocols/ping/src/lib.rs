@@ -167,7 +167,6 @@ where TSocket: AsyncRead + AsyncWrite,
         sent_pings: VecDeque::with_capacity(4),
         rng: EntropyRng::default(),
         pings_to_send: VecDeque::with_capacity(4),
-        to_notify: None,
     };
 
     PingOutput::Pinger(dialer)
@@ -201,8 +200,6 @@ pub struct PingDialer<TSocket, TUserData> {
     rng: EntropyRng,
     /// List of pings to send to the remote.
     pings_to_send: VecDeque<(Bytes, TUserData)>,
-    /// Task to notify when we add an element to `pings_to_send`.
-    to_notify: Option<task::Task>,
 }
 
 impl<TSocket, TUserData> PingDialer<TSocket, TUserData> {
@@ -213,9 +210,6 @@ impl<TSocket, TUserData> PingDialer<TSocket, TUserData> {
         let payload: [u8; 32] = self.rng.sample(Standard);
         debug!("Preparing for ping with payload {:?}", payload);
         self.pings_to_send.push_back((Bytes::from(payload.to_vec()), user_data));
-        if let Some(to_notify) = self.to_notify.take() {
-            to_notify.notify();
-        }
     }
 }
 
@@ -233,8 +227,6 @@ where TSocket: AsyncRead + AsyncWrite,
                 Err(err) => return Err(err),
             }
         }
-
-        self.to_notify = Some(task::current());
 
         while let Some((ping, user_data)) = self.pings_to_send.pop_front() {
             match self.inner.start_send(ping.clone()) {

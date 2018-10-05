@@ -19,14 +19,14 @@
 // DEALINGS IN THE SOFTWARE.
 
 use fnv::FnvHashMap;
-use futures::{prelude::*, stream, sync::mpsc, task};
+use futures::{prelude::*, stream, sync::mpsc};
 use muxing::StreamMuxer;
 use nodes::node::Substream;
 use nodes::handled_node::{HandledNode, NodeHandler};
 use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, OccupiedEntry};
 use std::io::Error as IoError;
-use std::mem;
+use std::{fmt, mem};
 use tokio_executor;
 use void::Void;
 use {Multiaddr, PeerId};
@@ -62,13 +62,19 @@ pub struct HandledNodesTasks<TInEvent, TOutEvent> {
     /// List of node tasks to spawn.
     // TODO: stronger typing?
     to_spawn: SmallVec<[Box<Future<Item = (), Error = ()> + Send>; 8]>,
-    /// Task to notify when an element is added to `to_spawn`.
-    to_notify: Option<task::Task>,
 
     /// Sender to emit events to the outside. Meant to be cloned and sent to tasks.
     events_tx: mpsc::UnboundedSender<(InToExtMessage<TOutEvent>, TaskId)>,
     /// Receiver side for the events.
     events_rx: mpsc::UnboundedReceiver<(InToExtMessage<TOutEvent>, TaskId)>,
+}
+
+impl<TInEvent, TOutEvent> fmt::Debug for HandledNodesTasks<TInEvent, TOutEvent> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        f.debug_list()
+            .entries(self.tasks.keys().cloned())
+            .finish()
+    }
 }
 
 /// Event that can happen on the `HandledNodesTasks`.
@@ -115,7 +121,6 @@ impl<TInEvent, TOutEvent> HandledNodesTasks<TInEvent, TOutEvent> {
             tasks: Default::default(),
             next_task_id: TaskId(0),
             to_spawn: SmallVec::new(),
-            to_notify: None,
             events_tx,
             events_rx,
         }
@@ -155,12 +160,6 @@ impl<TInEvent, TOutEvent> HandledNodesTasks<TInEvent, TOutEvent> {
         });
 
         self.to_spawn.push(task);
-
-        // We notify the polling task so that `to_spawn` gets flushed.
-        if let Some(task) = self.to_notify.take() {
-            task.notify();
-        }
-
         task_id
     }
 
@@ -191,6 +190,55 @@ impl<TInEvent, TOutEvent> HandledNodesTasks<TInEvent, TOutEvent> {
     #[inline]
     pub fn tasks<'a>(&'a self) -> impl Iterator<Item = TaskId> + 'a {
         self.tasks.keys().cloned()
+    }
+
+    /// Provides an API similar to `Stream`, except that it cannot error.
+    pub fn poll(&mut self) -> Async<Option<HandledNodesEvent<TOutEvent>>> {
+        for to_spawn in self.to_spawn.drain() {
+            tokio_executor::spawn(to_spawn);
+        }
+
+        loop {
+            match self.events_rx.poll() {
+                Ok(Async::Ready(Some((message, task_id)))) => {
+                    // If the task id is no longer in `self.tasks`, that means that the user called
+                    // `close()` on this task earlier. Therefore no new event should be generated
+                    // for this task.
+                    if !self.tasks.contains_key(&task_id) {
+                        continue;
+                    };
+
+                    match message {
+                        InToExtMessage::NodeEvent(event) => {
+                            break Async::Ready(Some(HandledNodesEvent::NodeEvent {
+                                id: task_id,
+                                event,
+                            }));
+                        },
+                        InToExtMessage::NodeReached(peer_id) => {
+                            break Async::Ready(Some(HandledNodesEvent::NodeReached {
+                                id: task_id,
+                                peer_id,
+                            }));
+                        },
+                        InToExtMessage::TaskClosed(result) => {
+                            let _ = self.tasks.remove(&task_id);
+                            break Async::Ready(Some(HandledNodesEvent::TaskClosed {
+                                id: task_id, result
+                            }));
+                        },
+                    }
+                }
+                Ok(Async::NotReady) => {
+                    break Async::NotReady;
+                }
+                Ok(Async::Ready(None)) => {
+                    unreachable!("The sender is in self as well, therefore the receiver never \
+                                  closes.")
+                },
+                Err(()) => unreachable!("An unbounded receiver never errors"),
+            }
+        }
     }
 }
 
@@ -223,61 +271,26 @@ impl<'a, TInEvent> Task<'a, TInEvent> {
     }
 }
 
+impl<'a, TInEvent> fmt::Debug for Task<'a, TInEvent> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        f.debug_tuple("Task")
+            .field(&self.id())
+            .finish()
+    }
+}
+
 impl<TInEvent, TOutEvent> Stream for HandledNodesTasks<TInEvent, TOutEvent> {
     type Item = HandledNodesEvent<TOutEvent>;
     type Error = Void; // TODO: use ! once stable
 
+    #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        for to_spawn in self.to_spawn.drain() {
-            tokio_executor::spawn(to_spawn);
-        }
-
-        loop {
-            match self.events_rx.poll() {
-                Ok(Async::Ready(Some((message, task_id)))) => {
-                    // If the task id is no longer in `self.tasks`, that means that the user called
-                    // `close()` on this task earlier. Therefore no new event should be generated
-                    // for this task.
-                    if !self.tasks.contains_key(&task_id) {
-                        continue;
-                    };
-
-                    match message {
-                        InToExtMessage::NodeEvent(event) => {
-                            break Ok(Async::Ready(Some(HandledNodesEvent::NodeEvent {
-                                id: task_id,
-                                event,
-                            })));
-                        },
-                        InToExtMessage::NodeReached(peer_id) => {
-                            break Ok(Async::Ready(Some(HandledNodesEvent::NodeReached {
-                                id: task_id,
-                                peer_id,
-                            })));
-                        },
-                        InToExtMessage::TaskClosed(result) => {
-                            let _ = self.tasks.remove(&task_id);
-                            break Ok(Async::Ready(Some(HandledNodesEvent::TaskClosed {
-                                id: task_id, result
-                            })));
-                        },
-                    }
-                }
-                Ok(Async::NotReady) => {
-                    self.to_notify = Some(task::current());
-                    break Ok(Async::NotReady);
-                }
-                Ok(Async::Ready(None)) => {
-                    unreachable!("The sender is in self as well, therefore the receiver never \
-                                  closes.")
-                },
-                Err(()) => unreachable!("An unbounded receiver never errors"),
-            }
-        }
+        Ok(self.poll())
     }
 }
 
 /// Message to transmit from a task to the public API.
+#[derive(Debug)]
 enum InToExtMessage<TOutEvent> {
     /// A connection to a node has succeeded.
     NodeReached(PeerId),

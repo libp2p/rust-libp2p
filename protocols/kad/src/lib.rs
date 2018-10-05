@@ -69,6 +69,7 @@ extern crate libp2p_core;
 #[macro_use]
 extern crate log;
 extern crate multiaddr;
+extern crate multihash;
 extern crate parking_lot;
 extern crate protobuf;
 extern crate rand;
