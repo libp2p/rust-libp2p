@@ -229,6 +229,8 @@ mod tests {
     use futures::{future::{self}, stream};
     use tests::dummy_transport::{DummyTransport, ListenerState};
 
+    // Test helper that lets us poke in innards of individual `Listener`s and
+    // set things up for the tests.
     impl ListenersStream<DummyTransport> {
         fn set_listener_state(&mut self, idx: usize, state: ListenerState) {
             let mut l = self.listeners.remove(idx);
@@ -399,5 +401,51 @@ mod tests {
             assert_matches!(listeners_event, ListenersEvent::Closed{..})
         });
         assert_eq!(ls.listeners.len(), 0); // it's gone
+    }
+
+    #[test]
+    fn listener_stream_poll_chatty_listeners_may_drown_others() {
+        let mut t = DummyTransport::new();
+        t.set_initial_listener_state(ListenerState::Ok(Async::Ready(Some(1))));
+        let mut ls = ListenersStream::new(t);
+        for n in 0..4 {
+            let addr = format!("/ip4/127.0.0.{}/tcp/123{}", n, n).parse::<Multiaddr>().expect("bad multiaddr");
+            ls.listen_on(addr).expect("listen_on failed");
+        }
+
+        // polling processes listeners in reverse order
+        // Only the last listener ever gets processed
+        for _n in 0..10 {
+            assert_matches!(ls.poll(), Async::Ready(Some(ListenersEvent::Incoming{listen_addr, ..})) => {
+                assert_eq!(listen_addr.to_string(), "/ip4/127.0.0.3/tcp/1233")
+            })
+        }
+        // Make last listener NotReady so now only the third listener is processed
+        ls.set_listener_state(3, ListenerState::Ok(Async::NotReady));
+        for _n in 0..10 {
+            assert_matches!(ls.poll(), Async::Ready(Some(ListenersEvent::Incoming{listen_addr, ..})) => {
+                assert_eq!(listen_addr.to_string(), "/ip4/127.0.0.2/tcp/1232")
+            })
+        }
+    }
+
+    #[test]
+    fn listener_stream_poll_processes_listeners_as_expected_if_they_are_not_yielding_continuously() {
+        let mut t = DummyTransport::new();
+        t.set_initial_listener_state(ListenerState::Ok(Async::Ready(Some(1))));
+        let mut ls = ListenersStream::new(t);
+        for n in 0..4 {
+            let addr = format!("/ip4/127.0.0.{}/tcp/123{}", n, n).parse::<Multiaddr>().expect("bad multiaddr");
+            ls.listen_on(addr).expect("listen_on failed");
+        }
+        // If the listeners do not yield items continuously (the normal case) we
+        // process them in the expected, reverse, order.
+        for n in (0..4).rev() {
+            assert_matches!(ls.poll(), Async::Ready(Some(ListenersEvent::Incoming{listen_addr, ..})) => {
+                assert_eq!(listen_addr.to_string(), format!("/ip4/127.0.0.{}/tcp/123{}", n, n));
+            });
+            // kick the last listener (current) to NotReady state
+            ls.set_listener_state(3, ListenerState::Ok(Async::NotReady));
+        }
     }
 }
