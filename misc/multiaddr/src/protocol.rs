@@ -1,5 +1,6 @@
 use bs58;
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::{BigEndian, ByteOrder, ReadBytesExt, WriteBytesExt};
+use data_encoding::BASE32;
 use multihash::Multihash;
 use std::{
     borrow::Cow,
@@ -50,7 +51,7 @@ pub enum Protocol<'a> {
     P2pWebRtcStar,
     P2pWebSocketStar,
     Memory,
-    Onion(Cow<'a, [u8]>),
+    Onion(Cow<'a, [u8; 12]>),
     P2p(Multihash),
     P2pCircuit,
     Quic,
@@ -121,7 +122,11 @@ impl<'a> Protocol<'a> {
             }
             "http" => Ok(Protocol::Http),
             "https" => Ok(Protocol::Https),
-            "onion" => unimplemented!(), // FIXME
+            "onion" =>
+                iter.next()
+                    .ok_or(Error::InvalidProtocolString)
+                    .and_then(|s| read_onion(&s.to_uppercase()))
+                    .map(|o| Protocol::Onion(Cow::Owned(o))),
             "quic" => Ok(Protocol::Quic),
             "ws" => Ok(Protocol::Ws),
             "wss" => Ok(Protocol::Wss),
@@ -191,7 +196,10 @@ impl<'a> Protocol<'a> {
             P2P_WEBRTC_STAR => Ok((Protocol::P2pWebRtcStar, input)),
             P2P_WEBSOCKET_STAR => Ok((Protocol::P2pWebSocketStar, input)),
             MEMORY => Ok((Protocol::Memory, input)),
-            ONION => unimplemented!(), // FIXME
+            ONION => {
+                let (data, rest) = split_at(12, input)?;
+                Ok((Protocol::Onion(Cow::Borrowed(array_ref!(data, 0, 12))), rest))
+            }
             P2P => {
                 let (n, input) = decode::usize(input)?;
                 let (data, rest) = split_at(n, input)?;
@@ -285,7 +293,10 @@ impl<'a> Protocol<'a> {
                 w.write_all(encode::usize(bytes.len(), &mut encode::usize_buffer()))?;
                 w.write_all(&bytes)?
             }
-            Protocol::Onion(_) => unimplemented!(), // FIXME
+            Protocol::Onion(bytes) => {
+                w.write_all(encode::u32(ONION, &mut buf))?;
+                w.write_all(bytes.as_ref())?
+            }
             Protocol::Quic => w.write_all(encode::u32(QUIC, &mut buf))?,
             Protocol::Utp => w.write_all(encode::u32(UTP, &mut buf))?,
             Protocol::Udt => w.write_all(encode::u32(UDT, &mut buf))?,
@@ -348,7 +359,11 @@ impl<'a> fmt::Display for Protocol<'a> {
             P2pWebRtcStar => f.write_str("/p2p-webrtc-star"),
             P2pWebSocketStar => f.write_str("/p2p-websocket-star"),
             Memory => f.write_str("/memory"),
-            Onion(_) => unimplemented!(), // FIXME!
+            Onion(bytes) => {
+                let a = BASE32.encode(&bytes[.. 10]);
+                let p = BigEndian::read_u16(&bytes[10 ..]);
+                write!(f, "/onion/{}:{}", a.to_lowercase(), p)
+            }
             P2p(c) => write!(f, "/p2p/{}", bs58::encode(c.as_bytes()).into_string()),
             P2pCircuit => f.write_str("/p2p-circuit"),
             Quic => f.write_str("/quic"),
@@ -376,5 +391,35 @@ impl<'a> From<Ipv6Addr> for Protocol<'a> {
     fn from(addr: Ipv6Addr) -> Self {
         Protocol::Ip6(addr)
     }
+}
+
+fn read_onion(s: &str) -> Result<[u8; 12]> {
+    let mut parts = s.split(':');
+
+    // address part (without ".onion")
+    let b32 = parts.next().ok_or(Error::InvalidMultiaddr)?;
+    if b32.len() != 16 {
+        return Err(Error::InvalidMultiaddr)
+    }
+
+    // port number
+    let port = parts.next()
+        .ok_or(Error::InvalidMultiaddr)
+        .and_then(|p| str::parse(p).map_err(From::from))?;
+
+    // nothing else expected
+    if parts.next().is_some() {
+        return Err(Error::InvalidMultiaddr)
+    }
+
+    if 10 != BASE32.decode_len(b32.len()).map_err(|_| Error::InvalidMultiaddr)? {
+        return Err(Error::InvalidMultiaddr)
+    }
+
+    let mut buf = [0u8; 12];
+    BASE32.decode_mut(b32.as_bytes(), &mut buf[.. 10]).map_err(|_| Error::InvalidMultiaddr)?;
+    BigEndian::write_u16(&mut buf[10 ..], port);
+
+    Ok(buf)
 }
 
