@@ -59,6 +59,9 @@ pub enum Protocol<'a> {
     Tcp(u16),
     Udp(u16),
     Udt,
+    /// For `Unix` we use `&str` instead of `Path` to allow cross-platform usage of
+    /// `Protocol` since encoding `Paths` to bytes is platform-specific.
+    /// This means that the actual validation of paths needs to happen separately.
     Unix(Cow<'a, str>),
     Utp,
     Ws,
