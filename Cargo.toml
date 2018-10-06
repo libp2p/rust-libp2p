@@ -18,6 +18,7 @@ bytes = "0.4"
 futures = "0.1"
 multiaddr = { package = "parity-multiaddr", version = "0.1.0", path = "./misc/multiaddr" }
 multihash = { package = "parity-multihash", version = "0.1.0", path = "./misc/multihash" }
+libp2p-brahms = { version = "0.1.0", path = "./protocols/brahms" }
 libp2p-mplex = { version = "0.2.0", path = "./muxers/mplex" }
 libp2p-identify = { version = "0.2.0", path = "./protocols/identify" }
 libp2p-kad = { version = "0.2.0", path = "./protocols/kad" }
@@ -62,6 +63,7 @@ members = [
     "misc/rw-stream-sink",
     "muxers/mplex",
     "muxers/yamux",
+    "protocols/brahms",
     "protocols/floodsub",
     "protocols/identify",
     "protocols/kad",

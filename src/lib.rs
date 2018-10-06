@@ -139,6 +139,7 @@ pub extern crate tokio_codec;
 extern crate libp2p_core_derive;
 extern crate tokio_executor;
 
+pub extern crate libp2p_brahms as brahms;
 pub extern crate libp2p_core as core;
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 pub extern crate libp2p_dns as dns;
