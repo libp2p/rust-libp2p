@@ -112,6 +112,10 @@
 //! # }
 //! ```
 
+// For tokio_io::codec::length_delimited::{Builder, FramedWrite}, used in protocol/dialer.rs
+
+#![allow(deprecated)]
+
 extern crate bytes;
 #[macro_use]
 extern crate futures;

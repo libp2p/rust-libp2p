@@ -27,6 +27,9 @@ use protocol::DialerToListenerMessage;
 use protocol::ListenerToDialerMessage;
 use protocol::MultistreamSelectError;
 use protocol::MULTISTREAM_PROTOCOL_WITH_LF;
+// TODO use tokio::codec::length_delimited::Builder. FramedWrite can't be used
+// directly in that crate, FMI see
+// https://docs.rs/tokio/0.1.10/tokio/codec/struct.FramedWrite.html
 use tokio_io::codec::length_delimited::Builder as LengthDelimitedBuilder;
 use tokio_io::codec::length_delimited::FramedWrite as LengthDelimitedFramedWrite;
 use tokio_io::{AsyncRead, AsyncWrite};

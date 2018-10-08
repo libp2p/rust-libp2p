@@ -48,19 +48,11 @@
 // DEALINGS IN THE SOFTWARE.
 // ----------------
 
-//! # gossipsub: An extensible baseline pubsub protocol
-//! 
+//! # PubSub: a Publish-Subscribe p2p messaging family of protocols
+
 //! Contains floodsub and gossipsub in one crate.
 //! For a specification of each, refer to 
 //! https://github.com/libp2p/specs/tree/master/pubsub.
-//! 
-//! Importing floodsub isn't sufficient as there is a lot of private stuff.
-//! It seems like you need to copy and paste pretty much everything in floodsub,
-//! as public parts contain private parts.
-//! 
-//! Going forward, the floodsub crate could also be maintained in this crate,
-//! to avoid duplication of maintaining floodsub in this crate and in the
-//! floodsub crate
 
 extern crate bs58;
 extern crate byteorder;
@@ -809,10 +801,61 @@ impl GossipSubController {
 
         // self.broadcast(proto, |_| true);
     }
+
+    pub fn i_have -> Vec<Message> {
+
+    }
 }
 
 /// Implementation of `Stream` that provides messages for the subscribed topics
 /// you subscribed to.
 pub struct GossipSubReceiver {
     inner: mpsc::UnboundedReceiver<Message>,
+}
+
+// (Message and Control* are used instead of rpc_proto::Message for
+// compatibility with using an alternative to protobuf.)
+
+/// A message received by the floodsub system.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Message {
+    /// Remote that sent the message.
+    pub source: Multiaddr,
+
+    /// Content of the message. Its meaning is out of scope of this library.
+    pub data: Vec<u8>,
+
+    /// List of topics of this message.
+    ///
+    /// Each message can belong to multiple topics at once.
+    pub topics: Vec<TopicHash>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ControlMessage {
+    pub ihave: Vec<ControlIHave>,
+    pub iwant: Vec<ControlIWant>,
+    pub graft: Vec<ControlGraft>,
+    pub prune: Vec<ControlPrune>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ControlIHave {
+    topicID: Vec<String>,
+    messageIDs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ControlIWant {
+    messageIDs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ControlGraft {
+    topicID: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ControlPrune {
+    topicID: Vec<String>,
 }
