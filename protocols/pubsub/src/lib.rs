@@ -158,8 +158,8 @@ where
         debug!("Upgrading connection as floodsub");
 
         let future = remote_addr.and_then(move |remote_addr| {
-            // Whenever a new node connects, we send to it a message containing
-            // the topics we are already subscribed to.
+            // Whenever a new node connects, we send to it a message 
+            // containing the topics we are already subscribed to.
             let init_msg: Vec<u8> = {
                 let subscribed_topics = self.inner.subscribed_topics.read();
                 let mut proto = rpc_proto::RPC::new();
@@ -167,20 +167,22 @@ where
                 for topic in subscribed_topics.iter() {
                     let mut subscription = rpc_proto::RPC_SubOpts::new();
                     subscription.set_subscribe(true);
-                    subscription.set_topicid(topic.hash().clone().into_string());
+                    subscription.set_topicid(topic.hash().clone()
+                        .into_string());
                     proto.mut_subscriptions().push(subscription);
                 }
 
                 proto
                     .write_to_bytes()
-                    .expect("programmer error: the protobuf message should always
-                         be valid")
+                    .expect("programmer error: the protobuf message should
+                         always be valid")
             };
 
             // Split the socket into writing and reading parts.
             let (floodsub_sink, floodsub_stream) = Framed::new(socket, 
                 codec::UviBytes::default())
-                .sink_map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
+                .sink_map_err(|err| IoError::new(IoErrorKind::InvalidData,
+                    err))
                 .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))
                 .split();
 
@@ -198,13 +200,14 @@ where
                 },
             );
 
-            // Combine the socket read and the outgoing messages input, so that
-            // we can wake up when either happens.
+            // Combine the socket read and the outgoing messages input, so
+            // that we can wake up when either happens.
             let messages = input_rx
                 .map(|m| (m, MessageSource::FromChannel))
-                .map_err(|_| unreachable!("channel streams should never produce
-                 an error"))
-                .select(floodsub_stream.map(|m| (m, MessageSource::FromSocket)));
+                .map_err(|_| unreachable!("channel streams should never
+                 produce an error"))
+                .select(floodsub_stream.map(|m| (m,
+                    MessageSource::FromSocket)));
 
             #[derive(Debug)]
             enum MessageSource {
@@ -227,11 +230,12 @@ where
                             match input {
                                 Some((bytes, MessageSource::FromSocket)) => {
                                     // Received a packet from the remote.
-                                    let fut = match handle_packet_received(bytes,
-                                     inner, &remote_addr) {
+                                    let fut = match handle_packet_received(
+                                    bytes, inner, &remote_addr) {
                                         Ok(()) => {
-                                            future::ok(future::Loop::Continue((
-                                                floodsub_sink, rest)))
+                                            future::ok(future::Loop
+                                                ::Continue((floodsub_sink,
+                                                rest)))
                                         }
                                         Err(err) => future::err(err),
                                     };
@@ -243,8 +247,8 @@ where
                                     // Need to send a message to remote.
                                     trace!("Effectively sending message to 
                                     remote");
-                                    let future = floodsub_sink.send(bytes).map(
-                                        |floodsub_sink| {
+                                    let future = floodsub_sink.send(bytes)
+                                        .map(|floodsub_sink| {
                                         future::Loop::Continue((floodsub_sink, 
                                         rest))
                                     });
@@ -259,8 +263,8 @@ where
                                     // TODO: what if multiple connections?
                                     inner.remote_connections.write().remove(
                                         &remote_addr);
-                                    let future = future::ok(future::Loop::Break(
-                                        ()));
+                                    let future = future::ok(future::Loop
+                                        ::Break(()));
                                     Box::new(future) as Box<Future<Item = _,
                                         Error = _> + Send>
                                 }
@@ -288,11 +292,12 @@ struct Inner {
     // Our local peer ID multihash, to pass as the source.
     peer_id: Vec<u8>,
 
-    // Channel where to send the messages that should be dispatched to the user.
+    // Channel where to send the messages that should be dispatched to the
+    // user.
     output_tx: mpsc::UnboundedSender<Message>,
 
     // Active connections with a remote.
-    remote_connections: RwLock<FnvHashMap<Multiaddr, RemoteInfo>>,
+    remote_connections: RemoteConnections,
 
     // List of topics we're subscribed to. Necessary in order to filter out 
     // messages that we erroneously receive.
@@ -303,8 +308,8 @@ struct Inner {
     seq_no: AtomicUsize,
 
     // We keep track of the messages we received (in the format `(remote ID, 
-    // seq_no)`) so that we don't dispatch the same message twice if we receive
-    // it twice on the network.
+    // seq_no)`) so that we don't dispatch the same message twice if we
+    // receive it twice on the network.
     // TODO: the `HashSet` will keep growing indefinitely :-/
     received: Mutex<FnvHashSet<u64>>,
 }
@@ -363,7 +368,8 @@ impl FloodSubController {
         I::IntoIter: Clone,
     {
         // This function exists for convenience.
-        self.sub_unsub_multi(topics.into_iter().map::<_, fn(_) -> _>(|t| (t, true)))
+        self.sub_unsub_multi(topics.into_iter()
+            .map::<_, fn(_) ->_>(|t| (t, true)))
     }
 
     /// Unsubscribe from a topic. We will no longer receive any message for
@@ -389,7 +395,8 @@ impl FloodSubController {
         I::IntoIter: Clone,
     {
         // This function exists for convenience.
-        self.sub_unsub_multi(topics.into_iter().map::<_, fn(_) -> _>(|t| (t, false)));
+        self.sub_unsub_multi(topics.into_iter()
+            .map::<_, fn(_) -> _>(|t| (t, false)));
     }
 
     // Inner implementation. The iterator should produce a boolean that is
@@ -452,7 +459,8 @@ impl FloodSubController {
                 topics.iter().map(|t| t.hash().clone().into_string()).collect::
                 <Vec<_>>(),data.len());
 
-        // Build the `Vec<u8>` containing our sequence number for this message.
+        // Build the `Vec<u8>` containing our sequence number for this
+        // message.
         let seq_no_bytes = {
             let mut seqno_bytes = Vec::new();
             let seqn = self.inner.seq_no.fetch_add(1, Ordering::Relaxed);
@@ -500,7 +508,8 @@ impl FloodSubController {
             .write_to_bytes()
             .expect("protobuf message is always valid");
 
-        let remote_connections = self.inner.remote_connections.upgradable_read();
+        let remote_connections = self.inner.remote_connections
+            .upgradable_read();
 
         // Number of remotes we dispatched to, for logging purposes.
         let mut num_dispatched = 0;
@@ -518,8 +527,8 @@ impl FloodSubController {
             match remote.sender.unbounded_send(bytes.clone().into()) {
                 Ok(_) => (),
                 Err(_) => {
-                    trace!("Failed to dispatch message to {} because channel was 
-                        closed", remote_addr);
+                    trace!("Failed to dispatch message to {} because channel
+                         was closed", remote_addr);
                     failed_to_send.push(remote_addr.clone());
                 }
             }
@@ -527,8 +536,8 @@ impl FloodSubController {
 
         // Remove the remotes which we failed to send a message to.
         if !failed_to_send.is_empty() {
-            // If we fail to upgrade the read lock to a write lock, just ignore
-            // `failed_to_send`.
+            // If we fail to upgrade the read lock to a write lock, just
+            // ignore`failed_to_send`.
             if let Ok(mut remote_connections) = RwLockUpgradableReadGuard::
                 try_upgrade(remote_connections) {
                 for failed_to_send in failed_to_send {
@@ -541,7 +550,7 @@ impl FloodSubController {
     }
 }
 
-/// Implementation of `Stream` that provides messages for the subscribed topics you subscribed to.
+/// Implementation of `Stream` that provides messages for subscribed topics.
 pub struct FloodSubReceiver {
     inner: mpsc::UnboundedReceiver<Message>,
 }
@@ -636,7 +645,8 @@ fn handle_packet_received(
                 trace!("Remote {} subscribed to {:?}", remote_addr, topic);
                 topics.insert(topic);
             } else {
-                trace!("Remote {} unsubscribed from {:?}", remote_addr, topic);
+                trace!("Remote {} unsubscribed from {:?}", remote_addr,
+                    topic);
                 topics.remove(&topic);
             }
         }
@@ -712,8 +722,8 @@ fn handle_packet_received(
                 topics: topics,
             });
         } else {
-            trace!("Message not dispatched locally as we are not subscribed to
-             any of the topics");
+            trace!("Message not dispatched locally as we are not subscribed 
+             to any of the topics");
         }
     }
 
@@ -736,11 +746,11 @@ pub struct GossipSubUpgrade {
     gs_inner: Arc<GInner>,
 }
 
-// type RemoteConnections = RwLock<FnvHashMap<Multiaddr, RemoteInfo>>;
+type RemoteConnections = RwLock<FnvHashMap<Multiaddr, RemoteInfo>>;
 
 #[derive(Debug, Clone)]
 pub struct GInner {
-    // g_remote_connections: RemoteConnections,
+    g_remote_connections: RemoteConnections, // Peers
     mesh: Map<TopicHash, Vec<PeerId>>,
     fanout: Map<TopicHash, Vec<PeerId>>,
     mcache: Vec<Message>,
@@ -776,7 +786,8 @@ impl GossipSubController {
         let topics = topics.into_iter();
 
         if log_enabled!(Level::Debug) {
-            debug!("Queuing graft/prune message ; graft = {:?} ; prune = {:?}",
+            debug!("Queuing graft/prune message ; graft = {:?} ; 
+                prune = {:?}",
                 topics.clone().filter(|t| t.1)
                         .map(|t| t.0.hash().clone().into_string())
                         .collect::<Vec<_>>(),
@@ -785,7 +796,7 @@ impl GossipSubController {
                         .collect::<Vec<_>>());
         }
 
-        let mut subscribed_topics = self.fs_ctrl.inner.subscribed_topics.write();
+        let mut grafted_topics = self.gs_inner.subscribed_topics.write();
         for (topic, subscribe) in topics {
             let mut subscription = rpc_proto::RPC_SubOpts::new();
             subscription.set_subscribe(subscribe);
@@ -807,8 +818,7 @@ impl GossipSubController {
     }
 }
 
-/// Implementation of `Stream` that provides messages for the subscribed topics
-/// you subscribed to.
+/// Implementation of `Stream` that provides messages for subscribed topics.
 pub struct GossipSubReceiver {
     inner: mpsc::UnboundedReceiver<Message>,
 }
