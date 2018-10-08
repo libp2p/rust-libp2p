@@ -84,6 +84,7 @@ enum Addr<TAddrFut> {
 pub type Substream<TMuxer> = muxing::SubstreamRef<Arc<TMuxer>>;
 
 /// Event that can happen on the `NodeStream`.
+#[derive(Debug)]
 pub enum NodeEvent<TMuxer, TUserData>
 where
     TMuxer: muxing::StreamMuxer,
@@ -344,3 +345,219 @@ where TTrans: Transport,
         }
     }
 }*/
+
+#[cfg(test)]
+mod node_stream {
+    use multiaddr::Multiaddr;
+    use super::NodeStream;
+    use futures::{future::self, prelude::*, Future};
+    use tokio_mock_task::MockTask;
+    use super::NodeEvent;
+    use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
+    use std::io::Error as IoError;
+
+
+    fn build_node_stream() -> NodeStream<DummyMuxer, impl Future<Item=Multiaddr, Error=IoError>, Vec<u8>> {
+        let addr = future::ok("/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad maddr"));
+        let muxer = DummyMuxer::new();
+        NodeStream::<_, _, Vec<u8>>::new(muxer, addr)
+    }
+
+    #[test]
+    fn multiaddr_is_available_once_polled() {
+        let mut node_stream = build_node_stream();
+        assert!(node_stream.multiaddr().is_none());
+        match node_stream.poll() {
+            Ok(Async::Ready(Some(NodeEvent::Multiaddr(Ok(addr))))) => {
+                assert_eq!(addr.to_string(), "/ip4/127.0.0.1/tcp/1234")
+            }
+            _ => panic!("unexpected poll return value" )
+        }
+        assert!(node_stream.multiaddr().is_some());
+    }
+
+    #[test]
+    fn can_open_outbound_substreams_until_an_outbound_channel_is_closed() {
+        let addr = future::ok("/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad maddr"));
+        let mut muxer = DummyMuxer::new();
+        muxer.set_outbound_connection_state(DummyConnectionState::Closed);
+        let mut ns = NodeStream::<_, _, Vec<u8>>::new(muxer, addr);
+
+        // open first substream works
+        assert!(ns.open_substream(vec![1,2,3]).is_ok());
+
+        // Given the state we set on the DummyMuxer, once we poll() we'll get an
+        // `OutboundClosed` which will make subsequent calls to `open_substream` fail
+        let out = ns.poll();
+        assert_matches!(out, Ok(Async::Ready(Some(node_event))) => {
+            assert_matches!(node_event, NodeEvent::OutboundClosed{user_data} => {
+                assert_eq!(user_data, vec![1,2,3])
+            })
+        });
+
+        // Opening a second substream fails because `outbound_finished` is now true
+        assert_matches!(ns.open_substream(vec![22]), Err(user_data) => {
+            assert_eq!(user_data, vec![22]);
+        });
+    }
+
+    #[test]
+    fn query_inbound_outbound_state() {
+        let ns = build_node_stream();
+        assert_eq!(ns.is_inbound_closed(), false);
+        assert_eq!(ns.is_outbound_closed(), false);
+    }
+
+    #[test]
+    fn query_inbound_state() {
+        let addr = future::ok("/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad maddr"));
+        let mut muxer = DummyMuxer::new();
+        muxer.set_inbound_connection_state(DummyConnectionState::Closed);
+        let mut ns = NodeStream::<_, _, Vec<u8>>::new(muxer, addr);
+
+        assert_matches!(ns.poll(), Ok(Async::Ready(Some(node_event))) => {
+            assert_matches!(node_event, NodeEvent::InboundClosed)
+        });
+
+        assert_eq!(ns.is_inbound_closed(), true);
+    }
+
+    #[test]
+    fn query_outbound_state() {
+        let addr = future::ok("/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr"));
+        let mut muxer = DummyMuxer::new();
+        muxer.set_outbound_connection_state(DummyConnectionState::Closed);
+        let mut ns = NodeStream::<_, _, Vec<u8>>::new(muxer, addr);
+
+        assert_eq!(ns.is_outbound_closed(), false);
+
+        ns.open_substream(vec![1]).unwrap();
+        let poll_result = ns.poll();
+
+        assert_matches!(poll_result, Ok(Async::Ready(Some(node_event))) => {
+            assert_matches!(node_event, NodeEvent::OutboundClosed{user_data} => {
+                assert_eq!(user_data, vec![1])
+            })
+        });
+
+        assert_eq!(ns.is_outbound_closed(), true, "outbound connection should be closed after polling");
+    }
+
+    #[test]
+    fn closing_a_node_stream_destroys_substreams_and_returns_submitted_user_data() {
+        let mut ns = build_node_stream();
+        ns.open_substream(vec![2]).unwrap();
+        ns.open_substream(vec![3]).unwrap();
+        ns.open_substream(vec![5]).unwrap();
+        let user_data_submitted = ns.close();
+        assert_eq!(user_data_submitted, vec![
+            vec![2], vec![3], vec![5]
+        ]);
+    }
+
+    #[test]
+    fn poll_returns_not_ready_when_there_is_nothing_to_do() {
+        let mut task = MockTask::new();
+        task.enter(|| {
+            // ensure the address never resolves
+            let addr = future::empty();
+            let mut muxer = DummyMuxer::new();
+            // ensure muxer.poll_inbound() returns Async::NotReady
+            muxer.set_inbound_connection_state(DummyConnectionState::Pending);
+            // ensure muxer.poll_outbound() returns Async::NotReady
+            muxer.set_outbound_connection_state(DummyConnectionState::Pending);
+            let mut ns = NodeStream::<_, _, Vec<u8>>::new(muxer, addr);
+
+            assert_matches!(ns.poll(), Ok(Async::NotReady));
+        });
+    }
+
+    #[test]
+    fn poll_closes_the_node_stream_when_no_more_work_can_be_done() {
+        let addr = future::ok("/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr"));
+        let mut muxer = DummyMuxer::new();
+        // ensure muxer.poll_inbound() returns Async::Ready(None)
+        muxer.set_inbound_connection_state(DummyConnectionState::Closed);
+        // ensure muxer.poll_outbound() returns Async::Ready(None)
+        muxer.set_outbound_connection_state(DummyConnectionState::Closed);
+        let mut ns = NodeStream::<_, _, Vec<u8>>::new(muxer, addr);
+        ns.open_substream(vec![]).unwrap();
+        ns.poll().unwrap(); // poll_inbound()
+        ns.poll().unwrap(); // poll_outbound()
+        ns.poll().unwrap(); // resolve the address
+        // Nothing more to do, the NodeStream should be closed
+        assert_matches!(ns.poll(), Ok(Async::Ready(None)));
+    }
+
+    #[test]
+    fn poll_resolves_the_address() {
+        let addr = future::ok("/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr"));
+        let mut muxer = DummyMuxer::new();
+        // ensure muxer.poll_inbound() returns Async::Ready(None)
+        muxer.set_inbound_connection_state(DummyConnectionState::Closed);
+        // ensure muxer.poll_outbound() returns Async::Ready(None)
+        muxer.set_outbound_connection_state(DummyConnectionState::Closed);
+        let mut ns = NodeStream::<_, _, Vec<u8>>::new(muxer, addr);
+        ns.open_substream(vec![]).unwrap();
+        ns.poll().unwrap(); // poll_inbound()
+        ns.poll().unwrap(); // poll_outbound()
+        assert_matches!(ns.poll(), Ok(Async::Ready(Some(node_event))) => {
+            assert_matches!(node_event, NodeEvent::Multiaddr(Ok(_)))
+        });
+    }
+
+    #[test]
+    fn poll_sets_up_substreams_yielding_them_in_reverse_order() {
+        let addr = future::ok("/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr"));
+        let mut muxer = DummyMuxer::new();
+        // ensure muxer.poll_inbound() returns Async::Ready(None)
+        muxer.set_inbound_connection_state(DummyConnectionState::Closed);
+        // ensure muxer.poll_outbound() returns Async::Ready(Some(substream))
+        muxer.set_outbound_connection_state(DummyConnectionState::Opened);
+        let mut ns = NodeStream::<_, _, Vec<u8>>::new(muxer, addr);
+        ns.open_substream(vec![1]).unwrap();
+        ns.open_substream(vec![2]).unwrap();
+        ns.poll().unwrap(); // poll_inbound()
+
+        // poll() sets up second outbound substream
+        assert_matches!(ns.poll(), Ok(Async::Ready(Some(node_event))) => {
+            assert_matches!(node_event, NodeEvent::OutboundSubstream{ user_data, substream:_ } => {
+                assert_eq!(user_data, vec![2]);
+            })
+        });
+        // Next poll() sets up first outbound substream
+        assert_matches!(ns.poll(), Ok(Async::Ready(Some(node_event))) => {
+            assert_matches!(node_event, NodeEvent::OutboundSubstream{ user_data, substream: _ } => {
+                assert_eq!(user_data, vec![1]);
+            })
+        });
+    }
+
+    #[test]
+    fn poll_keeps_outbound_substreams_when_the_outgoing_connection_is_not_ready() {
+        let addr = future::ok("/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr"));
+        let mut muxer = DummyMuxer::new();
+        // ensure muxer.poll_inbound() returns Async::Ready(None)
+        muxer.set_inbound_connection_state(DummyConnectionState::Closed);
+        // ensure muxer.poll_outbound() returns Async::NotReady
+        muxer.set_outbound_connection_state(DummyConnectionState::Pending);
+        let mut ns = NodeStream::<_, _, Vec<u8>>::new(muxer, addr);
+        ns.open_substream(vec![1]).unwrap();
+        ns.poll().unwrap(); // poll past inbound
+        ns.poll().unwrap(); // poll outbound
+        assert_eq!(ns.is_outbound_closed(), false);
+        assert!(format!("{:?}", ns).contains("outbound_substreams: 1"));
+    }
+
+    #[test]
+    fn poll_returns_incoming_substream() {
+        let addr = future::ok("/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr"));
+        let mut muxer = DummyMuxer::new();
+        // ensure muxer.poll_inbound() returns Async::Ready(Some(subs))
+        muxer.set_inbound_connection_state(DummyConnectionState::Opened);
+        let mut ns = NodeStream::<_, _, Vec<u8>>::new(muxer, addr);
+        assert_matches!(ns.poll(), Ok(Async::Ready(Some(node_event))) => {
+            assert_matches!(node_event, NodeEvent::InboundSubstream{ substream: _ });
+        });
+    }
+}
