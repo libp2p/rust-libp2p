@@ -746,11 +746,21 @@ pub struct GossipSubUpgrade {
     gs_inner: Arc<GInner>,
 }
 
+// Peers
 type RemoteConnections = RwLock<FnvHashMap<Multiaddr, RemoteInfo>>;
 
 #[derive(Debug, Clone)]
 pub struct GInner {
-    g_remote_connections: RemoteConnections, // Peers
+    // Our local peer ID multihash, to pass as the source. Distinguished from
+    // FloodSubController.inner.peer_id deliberately, it follows a different
+    // protocol. While this and the peers field are duplicated, the other
+    // fields in the former could be reused, however it may be best to
+    // also duplicate them, except for output_tx.
+    peer_id: Vec<u8>,
+    peers: RemoteConnections,
+    subscribed_topics: RwLock<Vec<Topic>>,
+    received: Mutex<FnvHashSet<u64>>,
+    seq_no: AtomicUsize,
     mesh: Map<TopicHash, Vec<PeerId>>,
     fanout: Map<TopicHash, Vec<PeerId>>,
     mcache: Vec<Message>,
