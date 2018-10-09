@@ -42,13 +42,261 @@ use secp256k1;
 use sha2::{Digest as ShaDigestTrait, Sha256, Sha512};
 use std::cmp::{self, Ordering};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use std::mem;
 use structs_proto::{Exchange, Propose};
 use tokio_io::codec::length_delimited;
 use tokio_io::{AsyncRead, AsyncWrite};
 #[cfg(all(feature = "ring", not(target_os = "emscripten")))]
 use untrusted::Input as UntrustedInput;
 use {KeyAgreement, SecioConfig, SecioKeyPairInner};
+
+// This struct contains the whole context of a handshake, and is filled progressively
+// throughout the various parts of the handshake.
+struct HandshakeContext<T> {
+    config: SecioConfig,
+    state: T
+}
+
+// HandshakeContext<()> --with_local-> HandshakeContext<Local>
+struct Local {
+    // Locally-generated random number. The array size can be changed without any repercussion.
+    nonce: [u8; 16],
+    // Our local public key protobuf structure encoded in bytes:
+    public_key_in_protobuf_bytes: Vec<u8>,
+    // Our local proposition's raw bytes:
+    proposition_bytes: Vec<u8>
+}
+
+// HandshakeContext<Local> --with_remote-> HandshakeContext<Remote>
+struct Remote {
+    local: Local,
+    // The remote's proposition's raw bytes:
+    proposition_bytes: BytesMut,
+    // The remote's public key:
+    public_key: PublicKey,
+    // The remote's `nonce`.
+    // If the NONCE size is actually part of the protocol, we can change this to a fixed-size
+    // array instead of a `Vec`.
+    nonce: Vec<u8>,
+    // Set to `ordering(
+    //             hash(concat(remote-pubkey, local-none)),
+    //             hash(concat(local-pubkey, remote-none))
+    //         )`.
+    // `Ordering::Equal` is an invalid value (as it would mean we're talking to ourselves).
+    //
+    // Since everything is symmetrical, this value is used to determine what should be ours
+    // and what should be the remote's.
+    hashes_ordering: Ordering,
+    // Crypto algorithms chosen for the communication:
+    chosen_exchange: KeyAgreement,
+    chosen_cipher: Cipher,
+    chosen_hash: algo_support::Digest,
+}
+
+// HandshakeContext<Remote> --with_ephemeral-> HandshakeContext<Ephemeral>
+struct Ephemeral {
+    remote: Remote,
+    // Ephemeral keypair generated for the handshake:
+    local_tmp_priv_key: exchange::AgreementPrivateKey,
+    local_tmp_pub_key: Vec<u8>
+}
+
+// HandshakeContext<Ephemeral> --take_private_key-> HandshakeContext<PubEphemeral>
+struct PubEphemeral {
+    remote: Remote,
+    local_tmp_pub_key: Vec<u8>
+}
+
+impl HandshakeContext<()> {
+    fn new(config: SecioConfig) -> Self {
+        HandshakeContext {
+            config,
+            state: ()
+        }
+    }
+
+    // Setup local proposition.
+    fn with_local(self) -> Result<HandshakeContext<Local>, SecioError> {
+        let mut nonce = [0; 16];
+        rand::thread_rng()
+            .try_fill_bytes(&mut nonce)
+            .map_err(|_| SecioError::NonceGenerationFailed)?;
+
+        let public_key_in_protobuf_bytes =
+            self.config.key.to_public_key().into_protobuf_encoding();
+
+        // Send our proposition with our nonce, public key and supported protocols.
+        let mut proposition = Propose::new();
+        proposition.set_rand(nonce.to_vec());
+        proposition.set_pubkey(public_key_in_protobuf_bytes.clone());
+
+        if let Some(ref p) = self.config.agreements_prop {
+            trace!("agreements proposition: {}", p);
+            proposition.set_exchanges(p.clone())
+        } else {
+            trace!("agreements proposition: {}", algo_support::DEFAULT_AGREEMENTS_PROPOSITION);
+            proposition.set_exchanges(algo_support::DEFAULT_AGREEMENTS_PROPOSITION.into())
+        }
+
+        if let Some(ref p) = self.config.ciphers_prop {
+            trace!("ciphers proposition: {}", p);
+            proposition.set_ciphers(p.clone())
+        } else {
+            trace!("ciphers proposition: {}", algo_support::DEFAULT_CIPHERS_PROPOSITION);
+            proposition.set_ciphers(algo_support::DEFAULT_CIPHERS_PROPOSITION.into())
+        }
+
+        if let Some(ref p) = self.config.digests_prop {
+            trace!("digests proposition: {}", p);
+            proposition.set_hashes(p.clone())
+        } else {
+            trace!("digests proposition: {}", algo_support::DEFAULT_DIGESTS_PROPOSITION);
+            proposition.set_hashes(algo_support::DEFAULT_DIGESTS_PROPOSITION.into())
+        }
+
+        let proposition_bytes = proposition.write_to_bytes()?;
+
+        Ok(HandshakeContext {
+            config: self.config,
+            state: Local {
+                nonce,
+                public_key_in_protobuf_bytes,
+                proposition_bytes
+            }
+        })
+    }
+}
+
+impl HandshakeContext<Local> {
+    // Process remote proposition.
+    fn with_remote(self, b: BytesMut) -> Result<HandshakeContext<Remote>, SecioError> {
+        let mut prop = match protobuf_parse_from_bytes::<Propose>(&b) {
+            Ok(prop) => prop,
+            Err(_) => {
+                debug!("failed to parse remote's proposition protobuf message");
+                return Err(SecioError::HandshakeParsingFailure);
+            }
+        };
+
+        let public_key_in_protobuf_bytes = prop.take_pubkey();
+        let nonce = prop.take_rand();
+
+        let pubkey = match PublicKey::from_protobuf_encoding(&public_key_in_protobuf_bytes) {
+            Ok(p) => p,
+            Err(_) => {
+                debug!("failed to parse remote's proposition's pubkey protobuf");
+                return Err(SecioError::HandshakeParsingFailure);
+            },
+        };
+
+        // In order to determine which protocols to use, we compute two hashes and choose
+        // based on which hash is larger.
+        let hashes_ordering = {
+            let oh1 = {
+                let mut ctx = Sha256::new();
+                ctx.input(&public_key_in_protobuf_bytes);
+                ctx.input(&self.state.nonce);
+                ctx.result()
+            };
+
+            let oh2 = {
+                let mut ctx = Sha256::new();
+                ctx.input(&self.state.public_key_in_protobuf_bytes);
+                ctx.input(&nonce);
+                ctx.result()
+            };
+
+            oh1.as_ref().cmp(&oh2.as_ref())
+        };
+
+        let chosen_exchange = {
+            let ours = self.config.agreements_prop.as_ref()
+                .map(|s| s.as_ref())
+                .unwrap_or(algo_support::DEFAULT_AGREEMENTS_PROPOSITION);
+            let theirs = &prop.get_exchanges();
+            match algo_support::select_agreement(hashes_ordering, ours, theirs) {
+                Ok(a) => a,
+                Err(err) => {
+                    debug!("failed to select an exchange protocol");
+                    return Err(err);
+                }
+            }
+        };
+
+        let chosen_cipher = {
+            let ours = self.config.ciphers_prop.as_ref()
+                .map(|s| s.as_ref())
+                .unwrap_or(algo_support::DEFAULT_CIPHERS_PROPOSITION);
+            let theirs = &prop.get_ciphers();
+            match algo_support::select_cipher(hashes_ordering, ours, theirs) {
+                Ok(a) => {
+                    debug!("selected cipher: {:?}", a);
+                    a
+                }
+                Err(err) => {
+                    debug!("failed to select a cipher protocol");
+                    return Err(err);
+                }
+            }
+        };
+
+        let chosen_hash = {
+            let ours = self.config.digests_prop.as_ref()
+                .map(|s| s.as_ref())
+                .unwrap_or(algo_support::DEFAULT_DIGESTS_PROPOSITION);
+            let theirs = &prop.get_hashes();
+            match algo_support::select_digest(hashes_ordering, ours, theirs) {
+                Ok(a) => {
+                    debug!("selected hash: {:?}", a);
+                    a
+                }
+                Err(err) => {
+                    debug!("failed to select a hash protocol");
+                    return Err(err);
+                }
+            }
+        };
+
+        Ok(HandshakeContext {
+            config: self.config,
+            state: Remote {
+                local: self.state,
+                proposition_bytes: b,
+                public_key: pubkey,
+                nonce,
+                hashes_ordering,
+                chosen_exchange,
+                chosen_cipher,
+                chosen_hash
+            }
+        })
+    }
+}
+
+impl HandshakeContext<Remote> {
+    fn with_ephemeral(self, sk: exchange::AgreementPrivateKey, pk: Vec<u8>) -> HandshakeContext<Ephemeral> {
+        HandshakeContext {
+            config: self.config,
+            state: Ephemeral {
+                remote: self.state,
+                local_tmp_priv_key: sk,
+                local_tmp_pub_key: pk
+            }
+        }
+    }
+}
+
+impl HandshakeContext<Ephemeral> {
+    fn take_private_key(self) -> (HandshakeContext<PubEphemeral>, exchange::AgreementPrivateKey) {
+        let context = HandshakeContext {
+            config: self.config,
+            state: PubEphemeral {
+                remote: self.state.remote,
+                local_tmp_pub_key: self.state.local_tmp_pub_key
+            }
+        };
+        (context, self.state.local_tmp_priv_key)
+    }
+}
 
 /// Performs a handshake on the given socket.
 ///
@@ -66,256 +314,55 @@ pub fn handshake<'a, S: 'a>(
 where
     S: AsyncRead + AsyncWrite + Send,
 {
-    // TODO: could be rewritten as a coroutine once coroutines land in stable Rust
-
-    // This struct contains the whole context of a handshake, and is filled progressively
-    // throughout the various parts of the handshake.
-    struct HandshakeContext {
-        // Filled with this function's parameter.
-        config: SecioConfig,
-
-        // Locally-generated random number. The array size can be changed without any repercussion.
-        local_nonce: [u8; 16],
-
-        // Our local proposition's raw bytes.
-        local_public_key_in_protobuf_bytes: Vec<u8>,
-        local_proposition_bytes: Vec<u8>,
-
-        // The remote proposition's raw bytes.
-        remote_proposition_bytes: BytesMut,
-        remote_public_key_in_protobuf_bytes: Vec<u8>,
-        remote_public_key: Option<PublicKey>,
-
-        // The remote peer's version of `local_nonce`.
-        // If the NONCE size is actually part of the protocol, we can change this to a fixed-size
-        // array instead of a `Vec`.
-        remote_nonce: Vec<u8>,
-
-        // Set to `ordering(
-        //             hash(concat(remote-pubkey, local-none)),
-        //             hash(concat(local-pubkey, remote-none))
-        //         )`.
-        // `Ordering::Equal` is an invalid value (as it would mean we're talking to ourselves).
-        //
-        // Since everything is symmetrical, this value is used to determine what should be ours
-        // and what should be the remote's.
-        hashes_ordering: Ordering,
-
-        // Crypto algorithms chosen for the communication.
-        chosen_exchange: Option<KeyAgreement>,
-        // We only support AES for now, so store just a key size.
-        chosen_cipher: Option<Cipher>,
-        chosen_hash: Option<algo_support::Digest>,
-
-        // Ephemeral key generated for the handshake and then thrown away.
-        local_tmp_priv_key: Option<exchange::AgreementPrivateKey>,
-        local_tmp_pub_key: Vec<u8>,
-    }
-
-    let context = HandshakeContext {
-        config,
-        local_nonce: Default::default(),
-        local_public_key_in_protobuf_bytes: Vec::new(),
-        local_proposition_bytes: Vec::new(),
-        remote_proposition_bytes: BytesMut::new(),
-        remote_public_key_in_protobuf_bytes: Vec::new(),
-        remote_public_key: None,
-        remote_nonce: Vec::new(),
-        hashes_ordering: Ordering::Equal,
-        chosen_exchange: None,
-        chosen_cipher: None,
-        chosen_hash: None,
-        local_tmp_priv_key: None,
-        local_tmp_pub_key: Vec::new(),
-    };
-
     // The handshake messages all start with a 4-bytes message length prefix.
     let socket = length_delimited::Builder::new()
         .big_endian()
         .length_field_length(4)
         .new_framed(socket);
 
-    let future = future::ok::<_, SecioError>(context)
-        // Generate our nonce.
-        .and_then(|mut context| {
-            rand::thread_rng().try_fill_bytes(&mut context.local_nonce)
-                .map_err(|_| SecioError::NonceGenerationFailed)?;
-            trace!("starting handshake ; local nonce = {:?}", context.local_nonce);
+    let future = future::ok::<_, SecioError>(HandshakeContext::new(config))
+        .and_then(|context| {
+            // Generate our nonce.
+            let context = context.with_local()?;
+            trace!("starting handshake ; local nonce = {:?}", context.state.nonce);
             Ok(context)
         })
-
-        // Send our proposition with our nonce, public key and supported protocols.
-        .and_then(|mut context| {
-            context.local_public_key_in_protobuf_bytes = context.config.key.to_public_key().into_protobuf_encoding();
-
-            let mut proposition = Propose::new();
-            proposition.set_rand(context.local_nonce.to_vec());
-            proposition.set_pubkey(context.local_public_key_in_protobuf_bytes.clone());
-
-            if let Some(ref p) = context.config.agreements_prop {
-                trace!("agreements proposition: {}", p);
-                proposition.set_exchanges(p.clone())
-            } else {
-                trace!("agreements proposition: {}", algo_support::DEFAULT_AGREEMENTS_PROPOSITION);
-                proposition.set_exchanges(algo_support::DEFAULT_AGREEMENTS_PROPOSITION.into())
-            }
-
-            if let Some(ref p) = context.config.ciphers_prop {
-                trace!("ciphers proposition: {}", p);
-                proposition.set_ciphers(p.clone())
-            } else {
-                trace!("ciphers proposition: {}", algo_support::DEFAULT_CIPHERS_PROPOSITION);
-                proposition.set_ciphers(algo_support::DEFAULT_CIPHERS_PROPOSITION.into())
-            }
-
-            if let Some(ref p) = context.config.digests_prop {
-                trace!("digests proposition: {}", p);
-                proposition.set_hashes(p.clone())
-            } else {
-                trace!("digests proposition: {}", algo_support::DEFAULT_DIGESTS_PROPOSITION);
-                proposition.set_hashes(algo_support::DEFAULT_DIGESTS_PROPOSITION.into())
-            }
-
-            let proposition_bytes = proposition.write_to_bytes()
-                .expect("we fill all the elements of proposition, therefore writing can never \
-                         fail ; qed");
-            context.local_proposition_bytes = proposition_bytes.clone();
-
+        .and_then(|context| {
             trace!("sending proposition to remote");
-
-            socket.send(BytesMut::from(proposition_bytes.clone()))
+            socket.send(BytesMut::from(context.state.proposition_bytes.clone()))
                 .from_err()
                 .map(|s| (s, context))
         })
-
         // Receive the remote's proposition.
-        .and_then(move |(socket, mut context)| {
+        .and_then(move |(socket, context)| {
             socket.into_future()
                 .map_err(|(e, _)| e.into())
                 .and_then(move |(prop_raw, socket)| {
-                    match prop_raw {
-                        Some(p) => context.remote_proposition_bytes = p,
+                    let context = match prop_raw {
+                        Some(p) => context.with_remote(p)?,
                         None => {
                             let err = IoError::new(IoErrorKind::BrokenPipe, "unexpected eof");
                             debug!("unexpected eof while waiting for remote's proposition");
                             return Err(err.into())
                         },
                     };
-
-                    let mut prop = match protobuf_parse_from_bytes::<Propose>(
-                        &context.remote_proposition_bytes
-                    ) {
-                        Ok(prop) => prop,
-                        Err(_) => {
-                            debug!("failed to parse remote's proposition protobuf message");
-                            return Err(SecioError::HandshakeParsingFailure);
-                        }
-                    };
-                    context.remote_public_key_in_protobuf_bytes = prop.take_pubkey();
-                    let pubkey = match PublicKey::from_protobuf_encoding(&context.remote_public_key_in_protobuf_bytes) {
-                        Ok(p) => p,
-                        Err(_) => {
-                            debug!("failed to parse remote's proposition's pubkey protobuf");
-                            return Err(SecioError::HandshakeParsingFailure);
-                        },
-                    };
-
-                    context.remote_nonce = prop.take_rand();
-                    context.remote_public_key = Some(pubkey);
                     trace!("received proposition from remote ; pubkey = {:?} ; nonce = {:?}",
-                           context.remote_public_key, context.remote_nonce);
-                    Ok((prop, socket, context))
+                           context.state.public_key, context.state.nonce);
+                    Ok((socket, context))
                 })
         })
-
-        // Decide which algorithms to use (thanks to the remote's proposition).
-        .and_then(move |(remote_prop, socket, mut context)| {
-            // In order to determine which protocols to use, we compute two hashes and choose
-            // based on which hash is larger.
-            context.hashes_ordering = {
-                let oh1 = {
-                    let mut ctx = Sha256::new();
-                    ctx.input(&context.remote_public_key_in_protobuf_bytes);
-                    ctx.input(&context.local_nonce);
-                    ctx.result()
-                };
-
-                let oh2 = {
-                    let mut ctx = Sha256::new();
-                    ctx.input(&context.local_public_key_in_protobuf_bytes);
-                    ctx.input(&context.remote_nonce);
-                    ctx.result()
-                };
-
-                oh1.as_ref().cmp(&oh2.as_ref())
-            };
-
-            context.chosen_exchange = {
-                let ours = context.config.agreements_prop.as_ref()
-                    .map(|s| s.as_ref())
-                    .unwrap_or(algo_support::DEFAULT_AGREEMENTS_PROPOSITION);
-                let theirs = &remote_prop.get_exchanges();
-                Some(match algo_support::select_agreement(context.hashes_ordering, ours, theirs) {
-                    Ok(a) => a,
-                    Err(err) => {
-                        debug!("failed to select an exchange protocol");
-                        return Err(err);
-                    }
-                })
-            };
-            context.chosen_cipher = {
-                let ours = context.config.ciphers_prop.as_ref()
-                    .map(|s| s.as_ref())
-                    .unwrap_or(algo_support::DEFAULT_CIPHERS_PROPOSITION);
-                let theirs = &remote_prop.get_ciphers();
-                Some(match algo_support::select_cipher(context.hashes_ordering, ours, theirs) {
-                    Ok(a) => {
-                        debug!("selected cipher: {:?}", a);
-                        a
-                    }
-                    Err(err) => {
-                        debug!("failed to select a cipher protocol");
-                        return Err(err);
-                    }
-                })
-            };
-            context.chosen_hash = {
-                let ours = context.config.digests_prop.as_ref()
-                    .map(|s| s.as_ref())
-                    .unwrap_or(algo_support::DEFAULT_DIGESTS_PROPOSITION);
-                let theirs = &remote_prop.get_hashes();
-                Some(match algo_support::select_digest(context.hashes_ordering, ours, theirs) {
-                    Ok(a) => {
-                        debug!("selected hash: {:?}", a);
-                        a
-                    }
-                    Err(err) => {
-                        debug!("failed to select a hash protocol");
-                        return Err(err);
-                    }
-                })
-            };
-
-            Ok((socket, context))
-        })
-
         // Generate an ephemeral key for the negotiation.
         .and_then(|(socket, context)| {
-            let exchange = context.chosen_exchange
-                .expect("chosen_exchange is set to Some earlier then never touched again ; qed");
-            exchange::generate_agreement(exchange)
+            exchange::generate_agreement(context.state.chosen_exchange)
                 .map(move |(tmp_priv_key, tmp_pub_key)| (socket, context, tmp_priv_key, tmp_pub_key))
         })
-
         // Send the ephemeral pub key to the remote in an `Exchange` struct. The `Exchange` also
         // contains a signature of the two propositions encoded with our static public key.
-        .and_then(|(socket, mut context, tmp_priv, tmp_pub_key)| {
+        .and_then(|(socket, context, tmp_priv, tmp_pub_key)| {
+            let context = context.with_ephemeral(tmp_priv, tmp_pub_key.clone());
             let exchange = {
-                context.local_tmp_priv_key = Some(tmp_priv);
-                context.local_tmp_pub_key = tmp_pub_key.clone();
-
-                let mut data_to_sign = context.local_proposition_bytes.clone();
-                data_to_sign.extend_from_slice(&context.remote_proposition_bytes);
+                let mut data_to_sign = context.state.remote.local.proposition_bytes.clone();
+                data_to_sign.extend_from_slice(&context.state.remote.proposition_bytes);
                 data_to_sign.extend_from_slice(&tmp_pub_key);
 
                 let mut exchange = Exchange::new();
@@ -362,13 +409,9 @@ where
                 });
                 exchange
             };
-
-            let local_exch = exchange.write_to_bytes()
-                .expect("can only fail if the protobuf msg is malformed, which can't happen for \
-                         this message in particular");
+            let local_exch = exchange.write_to_bytes()?;
             Ok((BytesMut::from(local_exch), socket, context))
         })
-
         // Send our local `Exchange`.
         .and_then(|(local_exch, socket, context)| {
             trace!("sending exchange to remote");
@@ -376,7 +419,6 @@ where
                 .from_err()
                 .map(|s| (s, context))
         })
-
         // Receive the remote's `Exchange`.
         .and_then(move |(socket, context)| {
             socket.into_future()
@@ -403,18 +445,17 @@ where
                     Ok((remote_exch, socket, context))
                 })
         })
-
         // Check the validity of the remote's `Exchange`. This verifies that the remote was really
         // the sender of its proposition, and that it is the owner of both its global and ephemeral
         // keys.
         .and_then(|(remote_exch, socket, context)| {
-            let mut data_to_verify = context.remote_proposition_bytes.clone();
-            data_to_verify.extend_from_slice(&context.local_proposition_bytes);
+            let mut data_to_verify = context.state.remote.proposition_bytes.clone();
+            data_to_verify.extend_from_slice(&context.state.remote.local.proposition_bytes);
             data_to_verify.extend_from_slice(remote_exch.get_epubkey());
 
-            match context.remote_public_key {
+            match context.state.remote.public_key {
                 #[cfg(all(feature = "ring", not(target_os = "emscripten")))]
-                Some(PublicKey::Rsa(ref remote_public_key)) => {
+                PublicKey::Rsa(ref remote_public_key) => {
                     // TODO: The ring library doesn't like some stuff in our DER public key,
                     //       therefore we scrap the first 24 bytes of the key. A proper fix would
                     //       be to write a DER parser, but that's not trivial.
@@ -430,7 +471,7 @@ where
                         },
                     }
                 },
-                Some(PublicKey::Ed25519(ref remote_public_key)) => {
+                PublicKey::Ed25519(ref remote_public_key) => {
                     let signature = Ed25519Signature::from_bytes(remote_exch.get_signature());
                     let pubkey = Ed25519PublicKey::from_bytes(remote_public_key);
 
@@ -448,7 +489,7 @@ where
                     }
                 },
                 #[cfg(feature = "secp256k1")]
-                Some(PublicKey::Secp256k1(ref remote_public_key)) => {
+                PublicKey::Secp256k1(ref remote_public_key) => {
                     let data_to_verify = Sha256::digest(&data_to_verify);
                     let message = secp256k1::Message::from_slice(data_to_verify.as_ref())
                         .expect("digest output length doesn't match secp256k1 input length");
@@ -469,52 +510,42 @@ where
                     }
                 },
                 #[cfg(not(all(feature = "ring", not(target_os = "emscripten"))))]
-                Some(PublicKey::Rsa(_)) => {
+                PublicKey::Rsa(_) => {
                     debug!("support for RSA was disabled at compile-time");
                     return Err(SecioError::SignatureVerificationFailed);
                 },
                 #[cfg(not(feature = "secp256k1"))]
-                Some(PublicKey::Secp256k1(_)) => {
+                PublicKey::Secp256k1(_) => {
                     debug!("support for secp256k1 was disabled at compile-time");
                     return Err(SecioError::SignatureVerificationFailed);
-                },
-                None => unreachable!("we store a Some in the remote public key before reaching \
-                                      this point")
+                }
             };
 
             trace!("successfully verified the remote's signature");
             Ok((remote_exch, socket, context))
         })
-
         // Generate a key from the local ephemeral private key and the remote ephemeral public key,
         // derive from it a ciper key, an iv, and a hmac key, and build the encoder/decoder.
-        .and_then(|(remote_exch, socket, mut context)| {
-            let local_priv_key = context.local_tmp_priv_key.take()
-                .expect("we filled this Option earlier, and extract it now");
-            let key_size = context.chosen_hash.as_ref()
-                .expect("chosen_hash is set to Some earlier never modified again ; qed")
-                .num_bytes();
-            exchange::agree(context.chosen_exchange.unwrap(), local_priv_key, remote_exch.get_epubkey(), key_size)
+        .and_then(|(remote_exch, socket, context)| {
+            let (context, local_priv_key) = context.take_private_key();
+            let key_size = context.state.remote.chosen_hash.num_bytes();
+            exchange::agree(context.state.remote.chosen_exchange, local_priv_key, remote_exch.get_epubkey(), key_size)
                 .map(move |key_material| (socket, context, key_material))
         })
-
         // Generate a key from the local ephemeral private key and the remote ephemeral public key,
         // derive from it a ciper key, an iv, and a hmac key, and build the encoder/decoder.
         .and_then(|(socket, context, key_material)| {
-            let chosen_cipher = context.chosen_cipher
-                .expect("chosen_cipher is set to Some earlier never modified again ; qed");
+            let chosen_cipher = context.state.remote.chosen_cipher;
             let cipher_key_size = chosen_cipher.key_size();
             let iv_size = chosen_cipher.iv_size();
 
-            let chosen_hash = context.chosen_hash
-                .expect("chosen_hash is set to Some earlier never modified again ; qed");
-            let key = Hmac::from_key(chosen_hash, &key_material);
+            let key = Hmac::from_key(context.state.remote.chosen_hash, &key_material);
             let mut longer_key = vec![0u8; 2 * (iv_size + cipher_key_size + 20)];
             stretch_key(key, &mut longer_key);
 
             let (local_infos, remote_infos) = {
                 let (first_half, second_half) = longer_key.split_at(longer_key.len() / 2);
-                match context.hashes_ordering {
+                match context.state.remote.hashes_ordering {
                     Ordering::Equal => {
                         let msg = "equal digest of public key and nonce for local and remote";
                         return Err(SecioError::InvalidProposition(msg))
@@ -527,7 +558,7 @@ where
             let (encoding_cipher, encoding_hmac) = {
                 let (iv, rest) = local_infos.split_at(iv_size);
                 let (cipher_key, mac_key) = rest.split_at(cipher_key_size);
-                let hmac = Hmac::from_key(chosen_hash.into(), mac_key);
+                let hmac = Hmac::from_key(context.state.remote.chosen_hash.into(), mac_key);
                 let cipher = ctr(chosen_cipher, cipher_key, iv);
                 (cipher, hmac)
             };
@@ -535,7 +566,7 @@ where
             let (decoding_cipher, decoding_hmac) = {
                 let (iv, rest) = remote_infos.split_at(iv_size);
                 let (cipher_key, mac_key) = rest.split_at(cipher_key_size);
-                let hmac = Hmac::from_key(chosen_hash.into(), mac_key);
+                let hmac = Hmac::from_key(context.state.remote.chosen_hash.into(), mac_key);
                 let cipher = ctr(chosen_cipher, cipher_key, iv);
                 (cipher, hmac)
             };
@@ -543,25 +574,23 @@ where
             let codec = full_codec(socket, encoding_cipher, encoding_hmac, decoding_cipher, decoding_hmac);
             Ok((codec, context))
         })
-
         // We send back their nonce to check if the connection works.
-        .and_then(|(codec, mut context)| {
-            let remote_nonce = mem::replace(&mut context.remote_nonce, Vec::new());
+        .and_then(|(codec, context)| {
+            let remote_nonce = context.state.remote.nonce.clone();
             trace!("checking encryption by sending back remote's nonce");
             codec.send(BytesMut::from(remote_nonce))
                 .map(|s| (s, context))
                 .from_err()
         })
-
         // Check that the received nonce is correct.
         .and_then(|(codec, context)| {
             codec.into_future()
                 .map_err(|(e, _)| e)
                 .and_then(move |(nonce, rest)| {
                     match nonce {
-                        Some(ref n) if n == &context.local_nonce => {
+                        Some(ref n) if n == &context.state.remote.local.nonce => {
                             trace!("secio handshake success");
-                            Ok((rest, context.remote_public_key.expect("we stored a Some earlier"), context.local_tmp_pub_key))
+                            Ok((rest, context.state.remote.public_key, context.state.local_tmp_pub_key))
                         },
                         None => {
                             debug!("unexpected eof during nonce check");
