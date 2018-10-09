@@ -30,6 +30,8 @@ use std::io;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub(crate) enum ListenerState {
+	// `usize` does not really carry any significance here, it's just "some
+	// non-void output value".
 	Ok(Async<Option<usize>>),
 	Error
 }
@@ -61,25 +63,22 @@ impl Transport for DummyTransport {
 				let tupelize = move |stream| future::ok( (stream, future::ok(addr.clone())) );
 				Ok(match async {
 					Async::NotReady => {
-						let stream = stream::poll_fn(|| future::empty().poll() )
-							.map(tupelize);
+						let stream = stream::poll_fn(|| Ok(Async::NotReady)).map(tupelize);
 						(Box::new(stream), addr2)
 					},
-					Async::Ready(Some(_)) => {
-						let stream = stream::poll_fn(|| future::ok(Some(1usize)).poll() )
-							.map(tupelize);
+					Async::Ready(Some(n)) => {
+						let stream = stream::iter_ok(n..).map(tupelize);
 						(Box::new(stream), addr2)
 					},
 					Async::Ready(None) => {
-						let stream = stream::poll_fn(|| future::ok(None).poll() )
-							.map(tupelize);
+						let stream = stream::empty();
 						(Box::new(stream), addr2)
 					},
 				})
 			}
 			ListenerState::Error => Err( (self, addr2) )
 		}
-		}
+	}
 
 	fn dial(self, _addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)>
 	where
