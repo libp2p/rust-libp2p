@@ -3,8 +3,11 @@
 ///! Implementation of [multiaddr](https://github.com/jbenet/multiaddr)
 ///! in Rust.
 
+#[macro_use]
+extern crate arrayref;
 extern crate bs58;
 extern crate byteorder;
+extern crate data_encoding;
 extern crate serde;
 extern crate unsigned_varint;
 pub extern crate multihash;

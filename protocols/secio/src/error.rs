@@ -21,6 +21,7 @@
 //! Defines the `SecioError` enum that groups all possible errors in SECIO.
 
 use aes_ctr::stream_cipher::LoopError;
+use protobuf::error::ProtobufError;
 use std::error;
 use std::fmt;
 use std::io::Error as IoError;
@@ -30,6 +31,9 @@ use std::io::Error as IoError;
 pub enum SecioError {
     /// I/O error.
     IoError(IoError),
+
+    /// Protocol buffer error.
+    Protobuf(ProtobufError),
 
     /// Failed to parse one of the handshake protobuf messages.
     HandshakeParsingFailure,
@@ -66,12 +70,16 @@ pub enum SecioError {
 
     /// We received an invalid proposition from remote.
     InvalidProposition(&'static str),
+
+    #[doc(hidden)]
+    __Nonexhaustive
 }
 
 impl error::Error for SecioError {
     fn cause(&self) -> Option<&error::Error> {
         match *self {
             SecioError::IoError(ref err) => Some(err),
+            SecioError::Protobuf(ref err) => Some(err),
             // TODO: The type doesn't implement `Error`
             /*SecioError::CipherError(ref err) => {
                 Some(err)
@@ -87,6 +95,8 @@ impl fmt::Display for SecioError {
         match self {
             SecioError::IoError(e) =>
                 write!(f, "I/O error: {}", e),
+            SecioError::Protobuf(e) =>
+                write!(f, "protobuf error: {}", e),
             SecioError::HandshakeParsingFailure =>
                 f.write_str("Failed to parse one of the handshake protobuf messages"),
             SecioError::NoSupportIntersection =>
@@ -110,7 +120,9 @@ impl fmt::Display for SecioError {
             SecioError::HmacNotMatching =>
                 f.write_str("The hashes of the message didn't match"),
             SecioError::InvalidProposition(msg) =>
-                write!(f, "invalid proposition: {}", msg)
+                write!(f, "invalid proposition: {}", msg),
+            SecioError::__Nonexhaustive =>
+                f.write_str("__Nonexhaustive")
         }
     }
 }
@@ -126,5 +138,12 @@ impl From<IoError> for SecioError {
     #[inline]
     fn from(err: IoError) -> SecioError {
         SecioError::IoError(err)
+    }
+}
+
+impl From<ProtobufError> for SecioError {
+    #[inline]
+    fn from(err: ProtobufError) -> SecioError {
+        SecioError::Protobuf(err)
     }
 }

@@ -235,6 +235,11 @@ extern crate tokio_codec;
 extern crate tokio_current_thread;
 #[cfg(test)]
 extern crate tokio_timer;
+#[cfg(test)]
+#[macro_use]
+extern crate assert_matches;
+#[cfg(test)]
+extern crate tokio_mock_task;
 
 /// Multi-address re-export.
 pub extern crate multiaddr;
@@ -244,6 +249,9 @@ mod keys_proto;
 mod peer_id;
 mod public_key;
 mod unique;
+
+#[cfg(test)]
+mod tests;
 
 pub mod either;
 pub mod muxing;
