@@ -21,20 +21,20 @@ ctr = "0.1"
 lazy_static = { version = "0.2.11", optional = true }
 rw-stream-sink = { path = "../../misc/rw-stream-sink" }
 tokio-io = "0.1.0"
-untrusted = { version = "0.5", optional = true }
 sha2 = "0.7.1"
 ed25519-dalek = "0.8.0"
 hmac = "0.6.3"
 
 [target.'cfg(not(target_os = "emscripten"))'.dependencies]
-ring = { version = "0.12", default-features = false, optional = true }
+ring = { version = "0.12", default-features = false }
+untrusted = { version = "0.5" }
 
 [target.'cfg(target_os = "emscripten")'.dependencies]
 stdweb = { version = "0.4.8", default-features = false }
 
 [features]
 default = ["rsa", "secp256k1"]
-rsa = ["ring/rsa_signing", "untrusted"]
+rsa = ["ring/rsa_signing"]
 secp256k1 = ["eth-secp256k1"]
 aes-all = ["aesni", "lazy_static"]
 
