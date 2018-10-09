@@ -25,7 +25,7 @@
 extern crate futures;
 
 use std::io::Error as IoError;
-use muxing::StreamMuxer;
+use muxing::{StreamMuxer, Shutdown};
 use futures::prelude::*;
 
 /// Substream type
@@ -91,12 +91,12 @@ impl StreamMuxer for DummyMuxer {
             DummyConnectionState::Opened => Ok(Async::Ready(Some(Self::Substream{}))),
         }
     }
-    fn destroy_outbound(&self, _substream: Self::OutboundSubstream) {}
-    fn read_substream(&self, _substream: &mut Self::Substream, _buf: &mut [u8]) -> Result<usize, IoError> { unreachable!() }
-    fn write_substream(&self, _substream: &mut Self::Substream, _buf: &[u8]) -> Result<usize, IoError> { unreachable!() }
-    fn flush_substream(&self, _substream: &mut Self::Substream) -> Result<(), IoError> { unreachable!() }
-    fn shutdown_substream(&self, _substream: &mut Self::Substream) -> Poll<(), IoError> { unreachable!() }
-    fn destroy_substream(&self, _substream: Self::Substream) {}
-    fn close_inbound(&self) {}
-    fn close_outbound(&self) {}
+    fn destroy_outbound(&self, _: Self::OutboundSubstream) {}
+    fn read_substream(&self, _: &mut Self::Substream, _buf: &mut [u8]) -> Poll<usize, IoError> { unreachable!() }
+    fn write_substream(&self, _: &mut Self::Substream, _buf: &[u8]) -> Poll<usize, IoError> { unreachable!() }
+    fn flush_substream(&self, _: &mut Self::Substream) -> Poll<(), IoError> { unreachable!() }
+    fn shutdown_substream(&self, _: &mut Self::Substream, _: Shutdown) -> Poll<(), IoError> { unreachable!() }
+    fn destroy_substream(&self, _: Self::Substream) {}
+    fn shutdown(&self, _: Shutdown) -> Poll<(), IoError> { Ok(Async::Ready(())) }
+    fn flush_all(&self) -> Poll<(), IoError> { Ok(Async::Ready(())) }
 }
