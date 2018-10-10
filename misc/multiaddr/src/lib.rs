@@ -34,7 +34,7 @@ pub use errors::{Result, Error};
 pub use protocol::Protocol;
 
 /// Representation of a Multiaddr.
-#[derive(PartialEq, Eq, Clone, Default, Hash)]
+#[derive(PartialEq, Eq, Clone, Hash)]
 pub struct Multiaddr { bytes: Vec<u8> }
 
 impl Serialize for Multiaddr {
@@ -120,6 +120,11 @@ impl fmt::Display for Multiaddr {
 }
 
 impl Multiaddr {
+    /// Create a new, empty multiaddress.
+    pub fn empty() -> Multiaddr {
+        Multiaddr { bytes: Vec::new() }
+    }
+
     /// Returns the raw bytes representation of the multiaddr.
     #[inline]
     pub fn into_bytes(self) -> Vec<u8> {

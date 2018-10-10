@@ -209,7 +209,7 @@ impl Transport for BrowserWsConfig {
     }
 
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        let mut address = Multiaddr::default();
+        let mut address = Multiaddr::empty();
 
         let mut iter = server.iter().zip(observed.iter());
 
@@ -220,10 +220,9 @@ impl Transport for BrowserWsConfig {
             _ => return None
         }
 
-        // Check for TCP but retain the server port.
-        match iter.next() {
-            Some((x@Protocol::Tcp(_), Protocol::Tcp(_))) => address.append(x),
-            _ => return None
+        // Skip over next protocol (assumed to contain port information).
+        if iter.next().is_none() {
+            return None
         }
 
         // Check for WS/WSS.
