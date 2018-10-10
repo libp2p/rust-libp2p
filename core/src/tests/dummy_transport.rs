@@ -30,65 +30,63 @@ use std::io;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub(crate) enum ListenerState {
-	Ok(Async<Option<usize>>),
-	Error
+    /// The `usize` indexes items produced by the listener
+    Ok(Async<Option<usize>>),
+    Error
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub(crate) struct DummyTransport {
-	listener_state: ListenerState,
+    listener_state: ListenerState,
 }
 impl DummyTransport {
-	pub(crate) fn new() -> Self { DummyTransport{ listener_state: ListenerState::Ok(Async::NotReady) }}
-	pub(crate) fn set_initial_listener_state(&mut self, state: ListenerState) {
-		self.listener_state = state;
-	}
+    pub(crate) fn new() -> Self { DummyTransport{ listener_state: ListenerState::Ok(Async::NotReady) }}
+    pub(crate) fn set_initial_listener_state(&mut self, state: ListenerState) {
+        self.listener_state = state;
+    }
 }
 impl Transport for DummyTransport {
-	type Output = usize;
-	type Listener = Box<Stream<Item=Self::ListenerUpgrade, Error=io::Error> + Send>;
-	type ListenerUpgrade = FutureResult<(Self::Output, Self::MultiaddrFuture), io::Error>;
-	type MultiaddrFuture = FutureResult<Multiaddr, io::Error>;
-	type Dial = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error> + Send>;
+    type Output = usize;
+    type Listener = Box<Stream<Item=Self::ListenerUpgrade, Error=io::Error> + Send>;
+    type ListenerUpgrade = FutureResult<(Self::Output, Self::MultiaddrFuture), io::Error>;
+    type MultiaddrFuture = FutureResult<Multiaddr, io::Error>;
+    type Dial = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error> + Send>;
 
-	fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)>
-	where
-		Self: Sized
-	{
-		let addr2 = addr.clone();
-		match self.listener_state {
-			ListenerState::Ok(async) => {
-				let tupelize = move |stream| future::ok( (stream, future::ok(addr.clone())) );
-				Ok(match async {
-					Async::NotReady => {
-						let stream = stream::poll_fn(|| future::empty().poll() )
-							.map(tupelize);
-						(Box::new(stream), addr2)
-					},
-					Async::Ready(Some(_)) => {
-						let stream = stream::poll_fn(|| future::ok(Some(1usize)).poll() )
-							.map(tupelize);
-						(Box::new(stream), addr2)
-					},
-					Async::Ready(None) => {
-						let stream = stream::poll_fn(|| future::ok(None).poll() )
-							.map(tupelize);
-						(Box::new(stream), addr2)
-					},
-				})
-			}
-			ListenerState::Error => Err( (self, addr2) )
-		}
-		}
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)>
+    where
+        Self: Sized
+    {
+        let addr2 = addr.clone();
+        match self.listener_state {
+            ListenerState::Ok(async) => {
+                let tupelize = move |stream| future::ok( (stream, future::ok(addr.clone())) );
+                Ok(match async {
+                    Async::NotReady => {
+                        let stream = stream::poll_fn(|| Ok(Async::NotReady)).map(tupelize);
+                        (Box::new(stream), addr2)
+                    },
+                    Async::Ready(Some(n)) => {
+                        let stream = stream::iter_ok(n..).map(tupelize);
+                        (Box::new(stream), addr2)
+                    },
+                    Async::Ready(None) => {
+                        let stream = stream::empty();
+                        (Box::new(stream), addr2)
+                    },
+                })
+            }
+            ListenerState::Error => Err( (self, addr2) )
+        }
+    }
 
-	fn dial(self, _addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)>
-	where
-		Self: Sized
-	{
-		unimplemented!();
-	}
+    fn dial(self, _addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)>
+    where
+        Self: Sized
+    {
+        unimplemented!();
+    }
 
-	fn nat_traversal(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
-		unimplemented!();
-	}
+    fn nat_traversal(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
+        unimplemented!();
+    }
 }

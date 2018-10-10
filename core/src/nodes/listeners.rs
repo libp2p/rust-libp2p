@@ -229,40 +229,34 @@ mod tests {
     use futures::{future::{self}, stream};
     use tests::dummy_transport::{DummyTransport, ListenerState};
 
-    // Test helper that lets us poke in innards of individual `Listener`s and
-    // set things up for the tests.
-    impl ListenersStream<DummyTransport> {
-        fn set_listener_state(&mut self, idx: usize, state: ListenerState) {
-            let mut l = self.listeners.remove(idx);
-            l.listener =
-                match state {
-                    ListenerState::Error => {
-                        let stream = stream::poll_fn(|| future::err(io::Error::new(io::ErrorKind::Other, "oh noes")).poll() );
-                        Box::new(stream)
-                    }
-                    ListenerState::Ok(async) => {
-                        match async {
-                            Async::NotReady => {
-                                let stream = stream::poll_fn(|| future::empty().poll() );
-                                Box::new(stream)
-                            }
-                            Async::Ready(Some(_)) => {
-                                let addr = l.address.clone();
-                                let stream = stream::poll_fn(|| future::ok(Some(1)).poll() )
-                                    .map(move |stream| future::ok( (stream, future::ok(addr.clone())) ));
-                                Box::new(stream)
-
-                            }
-                            Async::Ready(None) => {
-                                let stream = stream::poll_fn(|| future::ok(None).poll() );
-                                Box::new(stream)
-                            }
-                        }
-                    }
-                };
-            self.listeners.insert(idx, l);
-        }
-    }
+	fn set_listener_state(ls: &mut ListenersStream<DummyTransport>, idx: usize, state: ListenerState) {
+		let l = &mut ls.listeners[idx];
+		l.listener =
+			match state {
+				ListenerState::Error => {
+					let stream = stream::poll_fn(|| future::err(io::Error::new(io::ErrorKind::Other, "oh noes")).poll() );
+					Box::new(stream)
+				}
+				ListenerState::Ok(async) => {
+					match async {
+						Async::NotReady => {
+							let stream = stream::poll_fn(|| Ok(Async::NotReady));
+							Box::new(stream)
+						}
+						Async::Ready(Some(n)) => {
+							let addr = l.address.clone();
+							let stream = stream::iter_ok(n..)
+								.map(move |stream| future::ok( (stream, future::ok(addr.clone())) ));
+							Box::new(stream)
+						}
+						Async::Ready(None) => {
+							let stream = stream::empty();
+							Box::new(stream)
+						}
+					}
+				}
+			};
+	}
 
     #[test]
     fn incoming_event() {
@@ -327,7 +321,7 @@ mod tests {
         let addr = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
         let mut ls = ListenersStream::new(t);
         ls.listen_on(addr).expect("listen_on failed");
-        ls.set_listener_state(0, ListenerState::Ok(Async::NotReady));
+        set_listener_state(&mut ls, 0, ListenerState::Ok(Async::NotReady));
         assert_matches!(ls.poll(), Async::NotReady);
         assert_eq!(ls.listeners.len(), 1); // listener is still there
     }
@@ -364,7 +358,7 @@ mod tests {
         // a few unneeded poll calls.
 
         // Make the second listener return NotReady so we get the first listener next poll()
-        ls.set_listener_state(1, ListenerState::Ok(Async::NotReady));
+        set_listener_state(&mut ls, 1, ListenerState::Ok(Async::NotReady));
         assert_matches!(ls.poll(), Async::Ready(Some(listeners_event)) => {
             assert_matches!(listeners_event, ListenersEvent::Incoming{mut upgrade, listen_addr} => {
                 assert_eq!(listen_addr.to_string(), "/ip4/127.0.0.1/tcp/1234");
@@ -382,7 +376,7 @@ mod tests {
         let addr = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
         let mut ls = ListenersStream::new(t);
         ls.listen_on(addr).expect("listen_on failed");
-        ls.set_listener_state(0, ListenerState::Ok(Async::Ready(None)));
+        set_listener_state(&mut ls, 0, ListenerState::Ok(Async::Ready(None)));
         assert_matches!(ls.poll(), Async::Ready(Some(listeners_event)) => {
             assert_matches!(listeners_event, ListenersEvent::Closed{..})
         });
@@ -396,7 +390,7 @@ mod tests {
         let addr = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
         let mut ls = ListenersStream::new(t);
         ls.listen_on(addr).expect("listen_on failed");
-        ls.set_listener_state(0, ListenerState::Error); // simulate an error on the socket
+        set_listener_state(&mut ls, 0, ListenerState::Error); // simulate an error on the socket
         assert_matches!(ls.poll(), Async::Ready(Some(listeners_event)) => {
             assert_matches!(listeners_event, ListenersEvent::Closed{..})
         });
@@ -421,7 +415,7 @@ mod tests {
             })
         }
         // Make last listener NotReady so now only the third listener is processed
-        ls.set_listener_state(3, ListenerState::Ok(Async::NotReady));
+        set_listener_state(&mut ls, 3, ListenerState::Ok(Async::NotReady));
         for _n in 0..10 {
             assert_matches!(ls.poll(), Async::Ready(Some(ListenersEvent::Incoming{listen_addr, ..})) => {
                 assert_eq!(listen_addr.to_string(), "/ip4/127.0.0.2/tcp/1232")
@@ -445,7 +439,7 @@ mod tests {
                 assert_eq!(listen_addr.to_string(), format!("/ip4/127.0.0.{}/tcp/123{}", n, n));
             });
             // kick the last listener (current) to NotReady state
-            ls.set_listener_state(3, ListenerState::Ok(Async::NotReady));
+            set_listener_state(&mut ls, 3, ListenerState::Ok(Async::NotReady));
         }
     }
 }
