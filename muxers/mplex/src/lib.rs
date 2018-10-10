@@ -504,10 +504,9 @@ where C: AsyncRead + AsyncWrite
         poll_send(&mut inner, elem)
     }
 
-    fn destroy_substream(&self, mut substream: Self::Substream) {
-        let _ = self.shutdown_substream(&mut substream, Shutdown::All);        // TODO: this doesn't necessarily send the close message
+    fn destroy_substream(&self, sub: Self::Substream) {
         self.inner.lock().buffer.retain(|elem| {
-            elem.substream_id() != substream.num || elem.endpoint() == Some(substream.endpoint)
+            elem.substream_id() != sub.num || elem.endpoint() == Some(sub.endpoint)
         })
     }
 

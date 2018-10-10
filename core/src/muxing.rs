@@ -115,7 +115,7 @@ pub trait StreamMuxer {
     /// or inbound substream. Calling `poll_outbound` or `poll_inbound` afterwards may or may not
     /// produce `None`.
     ///
-    /// Shutting dow the muxer does not imply `flush_all`. If you want to make sure that the
+    /// Shutting down the muxer does not imply `flush_all`. If you want to make sure that the
     /// remote is immediately informed about the shutdown, use `flush_all`.
     fn shutdown(&self, kind: Shutdown) -> Poll<(), IoError>;
 
