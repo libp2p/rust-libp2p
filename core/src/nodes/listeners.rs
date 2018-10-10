@@ -37,6 +37,7 @@ where
 }
 
 /// A single active listener.
+#[derive(Debug)]
 struct Listener<TTrans>
 where
     TTrans: Transport,
@@ -161,7 +162,7 @@ where
             }
         }
 
-        // We register the current task to be waken up if a new listener is added.
+        // We register the current task to be woken up if a new listener is added.
         Async::NotReady
     }
 }
@@ -220,9 +221,42 @@ where
 #[cfg(test)]
 mod tests {
     extern crate libp2p_tcp_transport;
+
     use super::*;
     use transport;
     use tokio::runtime::current_thread::Runtime;
+    use std::io;
+    use futures::{future::{self}, stream};
+    use tests::dummy_transport::{DummyTransport, ListenerState};
+
+	fn set_listener_state(ls: &mut ListenersStream<DummyTransport>, idx: usize, state: ListenerState) {
+		let l = &mut ls.listeners[idx];
+		l.listener =
+			match state {
+				ListenerState::Error => {
+					let stream = stream::poll_fn(|| future::err(io::Error::new(io::ErrorKind::Other, "oh noes")).poll() );
+					Box::new(stream)
+				}
+				ListenerState::Ok(async) => {
+					match async {
+						Async::NotReady => {
+							let stream = stream::poll_fn(|| Ok(Async::NotReady));
+							Box::new(stream)
+						}
+						Async::Ready(Some(n)) => {
+							let addr = l.address.clone();
+							let stream = stream::iter_ok(n..)
+								.map(move |stream| future::ok( (stream, future::ok(addr.clone())) ));
+							Box::new(stream)
+						}
+						Async::Ready(None) => {
+							let stream = stream::empty();
+							Box::new(stream)
+						}
+					}
+				}
+			};
+	}
 
     #[test]
     fn incoming_event() {
@@ -250,5 +284,162 @@ mod tests {
 
         let mut runtime = Runtime::new().unwrap();
         runtime.block_on(future).unwrap();
+    }
+
+    #[test]
+    fn listener_stream_returns_transport() {
+        let t = DummyTransport::new();
+        let ls = ListenersStream::new(t);
+        assert_eq!(ls.transport(), &t);
+    }
+
+    #[test]
+    fn listener_stream_can_iterate_over_listeners() {
+        let t = DummyTransport::new();
+        let addr1 = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
+        let addr2 = "/ip4/127.0.0.1/tcp/4321".parse::<Multiaddr>().expect("bad multiaddr");
+        let expected_addrs = vec![addr1.to_string(), addr2.to_string()];
+
+        let mut ls = ListenersStream::new(t);
+        ls.listen_on(addr1).expect("listen_on failed");
+        ls.listen_on(addr2).expect("listen_on failed");
+
+        let listener_addrs = ls.listeners().map(|ma| ma.to_string() ).collect::<Vec<String>>();
+        assert_eq!(listener_addrs, expected_addrs);
+    }
+
+    #[test]
+    fn listener_stream_poll_without_listeners_is_not_ready() {
+        let t = DummyTransport::new();
+        let mut ls = ListenersStream::new(t);
+        assert_matches!(ls.poll(), Async::NotReady);
+    }
+
+    #[test]
+    fn listener_stream_poll_with_listeners_that_arent_ready_is_not_ready() {
+        let t = DummyTransport::new();
+        let addr = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
+        let mut ls = ListenersStream::new(t);
+        ls.listen_on(addr).expect("listen_on failed");
+        set_listener_state(&mut ls, 0, ListenerState::Ok(Async::NotReady));
+        assert_matches!(ls.poll(), Async::NotReady);
+        assert_eq!(ls.listeners.len(), 1); // listener is still there
+    }
+
+    #[test]
+    fn listener_stream_poll_with_ready_listeners_is_ready() {
+        let mut t = DummyTransport::new();
+        t.set_initial_listener_state(ListenerState::Ok(Async::Ready(Some(1))));
+        let addr1 = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
+        let addr2 = "/ip4/127.0.0.2/tcp/4321".parse::<Multiaddr>().expect("bad multiaddr");
+        let mut ls = ListenersStream::new(t);
+        ls.listen_on(addr1).expect("listen_on failed");
+        ls.listen_on(addr2).expect("listen_on failed");
+
+        assert_matches!(ls.poll(), Async::Ready(Some(listeners_event)) => {
+            assert_matches!(listeners_event, ListenersEvent::Incoming{mut upgrade, listen_addr} => {
+                assert_eq!(listen_addr.to_string(), "/ip4/127.0.0.2/tcp/4321");
+                assert_matches!(upgrade.poll().unwrap(), Async::Ready(tup) => {
+                    assert_matches!(tup, (1, _))
+                });
+            })
+        });
+        // TODO: When several listeners are continuously Async::Ready –
+        // admittetdly a corner case – the last one is processed first and then
+        // put back *last* on the pile. This means that at the next poll() it
+        // will get polled again and if it always has data to yield, it will
+        // effectively block all other listeners from being "heard". One way
+        // around this is to switch to using a `VecDeque` to keep the listeners
+        // collection, and instead of pushing the processed item to the end of
+        // the list, stick it on top so that it'll be processed *last* instead
+        // during the next poll. This might also get us a performance win as
+        // even in the normal case, the most recently polled listener is more
+        // unlikely to have anything to yield than the others so we might avoid
+        // a few unneeded poll calls.
+
+        // Make the second listener return NotReady so we get the first listener next poll()
+        set_listener_state(&mut ls, 1, ListenerState::Ok(Async::NotReady));
+        assert_matches!(ls.poll(), Async::Ready(Some(listeners_event)) => {
+            assert_matches!(listeners_event, ListenersEvent::Incoming{mut upgrade, listen_addr} => {
+                assert_eq!(listen_addr.to_string(), "/ip4/127.0.0.1/tcp/1234");
+                assert_matches!(upgrade.poll().unwrap(), Async::Ready(tup) => {
+                    assert_matches!(tup, (1, _))
+                });
+            })
+        });
+        assert_eq!(ls.listeners.len(), 2);
+    }
+
+    #[test]
+    fn listener_stream_poll_with_closed_listener_emits_closed_event() {
+        let t = DummyTransport::new();
+        let addr = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
+        let mut ls = ListenersStream::new(t);
+        ls.listen_on(addr).expect("listen_on failed");
+        set_listener_state(&mut ls, 0, ListenerState::Ok(Async::Ready(None)));
+        assert_matches!(ls.poll(), Async::Ready(Some(listeners_event)) => {
+            assert_matches!(listeners_event, ListenersEvent::Closed{..})
+        });
+        assert_eq!(ls.listeners.len(), 0); // it's gone
+    }
+
+    #[test]
+    fn listener_stream_poll_with_erroring_listener_emits_closed_event() {
+        let mut t = DummyTransport::new();
+        t.set_initial_listener_state(ListenerState::Ok(Async::Ready(Some(1))));
+        let addr = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
+        let mut ls = ListenersStream::new(t);
+        ls.listen_on(addr).expect("listen_on failed");
+        set_listener_state(&mut ls, 0, ListenerState::Error); // simulate an error on the socket
+        assert_matches!(ls.poll(), Async::Ready(Some(listeners_event)) => {
+            assert_matches!(listeners_event, ListenersEvent::Closed{..})
+        });
+        assert_eq!(ls.listeners.len(), 0); // it's gone
+    }
+
+    #[test]
+    fn listener_stream_poll_chatty_listeners_may_drown_others() {
+        let mut t = DummyTransport::new();
+        t.set_initial_listener_state(ListenerState::Ok(Async::Ready(Some(1))));
+        let mut ls = ListenersStream::new(t);
+        for n in 0..4 {
+            let addr = format!("/ip4/127.0.0.{}/tcp/123{}", n, n).parse::<Multiaddr>().expect("bad multiaddr");
+            ls.listen_on(addr).expect("listen_on failed");
+        }
+
+        // polling processes listeners in reverse order
+        // Only the last listener ever gets processed
+        for _n in 0..10 {
+            assert_matches!(ls.poll(), Async::Ready(Some(ListenersEvent::Incoming{listen_addr, ..})) => {
+                assert_eq!(listen_addr.to_string(), "/ip4/127.0.0.3/tcp/1233")
+            })
+        }
+        // Make last listener NotReady so now only the third listener is processed
+        set_listener_state(&mut ls, 3, ListenerState::Ok(Async::NotReady));
+        for _n in 0..10 {
+            assert_matches!(ls.poll(), Async::Ready(Some(ListenersEvent::Incoming{listen_addr, ..})) => {
+                assert_eq!(listen_addr.to_string(), "/ip4/127.0.0.2/tcp/1232")
+            })
+        }
+    }
+
+    #[test]
+    fn listener_stream_poll_processes_listeners_as_expected_if_they_are_not_yielding_continuously() {
+        let mut t = DummyTransport::new();
+        t.set_initial_listener_state(ListenerState::Ok(Async::Ready(Some(1))));
+        let mut ls = ListenersStream::new(t);
+        for n in 0..4 {
+            let addr = format!("/ip4/127.0.0.{}/tcp/123{}", n, n).parse::<Multiaddr>().expect("bad multiaddr");
+            ls.listen_on(addr).expect("listen_on failed");
+        }
+        // If the listeners do not yield items continuously (the normal case) we
+        // process them in the expected, reverse, order.
+        for n in (0..4).rev() {
+            assert_matches!(ls.poll(), Async::Ready(Some(ListenersEvent::Incoming{listen_addr, ..})) => {
+                assert_eq!(listen_addr.to_string(), format!("/ip4/127.0.0.{}/tcp/123{}", n, n));
+            });
+            // kick the last listener (current) to NotReady state
+            set_listener_state(&mut ls, 3, ListenerState::Ok(Async::NotReady));
+        }
     }
 }
