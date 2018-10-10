@@ -411,7 +411,7 @@ impl FloodSubController {
         let topics = topics.into_iter();
 
         if log_enabled!(Level::Debug) {
-            debug!("Queuing sub/unsub message ; sub = {:?} ; unsub = {:?}",
+            debug!("Queuing sub/unsub message; sub = {:?}\n unsub = {:?}",
                 topics.clone().filter(|t| t.1)
                         .map(|t| t.0.hash().clone().into_string())
                         .collect::<Vec<_>>(),
@@ -455,7 +455,7 @@ impl FloodSubController {
     {
         let topics = topics.into_iter().collect::<Vec<_>>();
 
-        debug!("Queueing publish message ; topics = {:?} ; data_len = {:?}",
+        debug!("Queueing publish message; topics = {:?}\n data_len = {:?}",
                 topics.iter().map(|t| t.hash().clone().into_string()).collect::
                 <Vec<_>>(),data.len());
 
@@ -627,7 +627,7 @@ fn handle_packet_received(
     {
         Ok(msg) => msg,
         Err(err) => {
-            debug!("Failed to parse protobuf message ; err = {:?}", err);
+            debug!("Failed to parse protobuf message; err = {:?}", err);
             return Err(err.into());
         }
     };
@@ -663,7 +663,7 @@ fn handle_packet_received(
             .lock()
             .insert(hash((from.clone(), publish.take_seqno())))
         {
-            trace!("Skipping message because we had already received it ;
+            trace!("Skipping message because we had already received it;
              payload = {} bytes",
                    publish.get_data().len());
             continue;
@@ -685,7 +685,7 @@ fn handle_packet_received(
             .map(|h| TopicHash::from_raw(h))
             .collect::<Vec<_>>();
 
-        trace!("Processing message for topics {:?} ; payload = {} bytes",
+        trace!("Processing message for topics {:?}; payload = {} bytes",
                topics,
                publish.get_data().len());
 
@@ -774,6 +774,34 @@ pub struct GossipSubController {
 }
 
 impl GossipSubController {
+    pub fn join(&self, topic: &Topic) {
+
+    }
+
+    pub fn join_many<'a, I>(&self, topics: I) {
+        
+    }
+
+    pub fn leave(&self, topic: &Topic) {
+        
+    }
+
+    pub fn leave_many<'a, I>(&self, topics: I) {
+        
+    }
+
+    fn join_leave_multi<'a, I>(&self, topics: I)
+    where
+        I: IntoIterator<Item = (&'a Topic, bool)>,
+        I::IntoIter: Clone,
+    {
+
+    }
+
+    pub fn graft(&self, topic: &Topic) {
+
+    }
+
     pub fn graft_many<'a, I>(&self, topics: I)
     where
         I: IntoIterator<Item = &'a Topic>,
@@ -784,9 +812,22 @@ impl GossipSubController {
             (t, false)));
     }
 
+    pub fn prune(&self, topic: &Topic) {
+
+    }
+
+    pub fn prune_many<'a, I>(&self, topics: I)
+    where
+        I: IntoIterator<Item = &'a Topic>,
+        I::IntoIter: Clone,
+    {
+        
+    }
+    
     // Inner implementation. The iterator should produce a boolean that is
-    // true if we graft and false if we prune. 
-    fn graft_prune_multi<'a, I>(&self, topics: I)
+    // true if we graft and false if we prune. (Returns nothing if successful,
+    // otherwise returns an error.)
+    fn graft_prune_multi<'a, I>(&self, topics: I) -> Result<(), Error>
     where
         I: IntoIterator<Item = (&'a Topic, bool)>,
         I::IntoIter: Clone,
@@ -796,7 +837,7 @@ impl GossipSubController {
         let topics = topics.into_iter();
 
         if log_enabled!(Level::Debug) {
-            debug!("Queuing graft/prune message ; graft = {:?} ; 
+            debug!("Queuing graft/prune message; graft = {:?}\n 
                 prune = {:?}",
                 topics.clone().filter(|t| t.1)
                         .map(|t| t.0.hash().clone().into_string())
