@@ -233,7 +233,7 @@ mod tests {
     // set things up for the tests.
     impl ListenersStream<DummyTransport> {
         fn set_listener_state(&mut self, idx: usize, state: ListenerState) {
-            let mut l = self.listeners.remove(idx);
+            let l = &mut self.listeners[idx];
             l.listener =
                 match state {
                     ListenerState::Error => {
@@ -243,24 +243,22 @@ mod tests {
                     ListenerState::Ok(async) => {
                         match async {
                             Async::NotReady => {
-                                let stream = stream::poll_fn(|| future::empty().poll() );
+                                let stream = stream::poll_fn(|| Ok(Async::NotReady));
                                 Box::new(stream)
                             }
-                            Async::Ready(Some(_)) => {
+                            Async::Ready(Some(n)) => {
                                 let addr = l.address.clone();
-                                let stream = stream::poll_fn(|| future::ok(Some(1)).poll() )
+                                let stream = stream::iter_ok(n..)
                                     .map(move |stream| future::ok( (stream, future::ok(addr.clone())) ));
                                 Box::new(stream)
-
                             }
                             Async::Ready(None) => {
-                                let stream = stream::poll_fn(|| future::ok(None).poll() );
+                                let stream = stream::empty();
                                 Box::new(stream)
                             }
                         }
                     }
                 };
-            self.listeners.insert(idx, l);
         }
     }
 
