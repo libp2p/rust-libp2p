@@ -5,6 +5,7 @@ authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 
 [dependencies]
+env_logger = "0.5"
 futures = "0.1"
 netsim = "0.2"
 rand = "0.5"

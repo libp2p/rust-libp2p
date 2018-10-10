@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+extern crate env_logger;
+
 use std::io;
 use futures::prelude::*;
 use libp2p::Multiaddr;
@@ -115,6 +117,8 @@ where TSubstream: AsyncRead + AsyncWrite + Send + 'static,
 
 #[test]
 fn basic_flood() {
+    env_logger::init();
+
     let mut network = network::Network::default();
 
     let mut node_ids = Vec::new();
