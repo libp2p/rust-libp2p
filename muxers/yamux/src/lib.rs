@@ -108,7 +108,7 @@ where
 
     #[inline]
     fn shutdown(&self, _: Shutdown) -> Poll<(), IoError> {
-        Ok(Async::Ready(()))
+        Ok(Async::Ready(())) // TODO
     }
 
     #[inline]

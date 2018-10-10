@@ -512,7 +512,8 @@ where C: AsyncRead + AsyncWrite
 
     #[inline]
     fn shutdown(&self, _: Shutdown) -> Poll<(), IoError> {
-        Ok(Async::Ready(()))
+        let inner = &mut *self.inner.lock();
+        inner.inner.close_notify(&inner.notifier_write, 0)
     }
 
     #[inline]
