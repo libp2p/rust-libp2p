@@ -20,16 +20,14 @@
 
 //! Contains the `Listener` wrapper, which allows raw communications with a dialer.
 
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use futures::{Async, AsyncSink, prelude::*, sink, stream::StreamFuture};
-use length_delimited::LengthDelimitedFramedRead;
+use length_delimited::LengthDelimited;
 use protocol::DialerToListenerMessage;
 use protocol::ListenerToDialerMessage;
 use protocol::MultistreamSelectError;
 use protocol::MULTISTREAM_PROTOCOL_WITH_LF;
 use std::mem;
-use tokio_io::codec::length_delimited::Builder as LengthDelimitedBuilder;
-use tokio_io::codec::length_delimited::FramedWrite as LengthDelimitedFramedWrite;
 use tokio_io::{AsyncRead, AsyncWrite};
 use unsigned_varint::encode;
 
@@ -37,7 +35,7 @@ use unsigned_varint::encode;
 /// Wraps around a `AsyncRead+AsyncWrite`. Assumes that we're on the listener's side. Produces and
 /// accepts messages.
 pub struct Listener<R> {
-    inner: LengthDelimitedFramedRead<Bytes, LengthDelimitedFramedWrite<R, BytesMut>>,
+    inner: LengthDelimited<Bytes, R>
 }
 
 impl<R> Listener<R>
@@ -47,10 +45,7 @@ where
     /// Takes ownership of a socket and starts the handshake. If the handshake succeeds, the
     /// future returns a `Listener`.
     pub fn new(inner: R) -> ListenerFuture<R> {
-        let write = LengthDelimitedBuilder::new()
-            .length_field_length(1)
-            .new_write(inner);
-        let inner = LengthDelimitedFramedRead::<Bytes, _>::new(write);
+        let inner = LengthDelimited::new(inner);
         ListenerFuture {
             inner: ListenerFutureState::Await { inner: inner.into_future() }
         }
@@ -60,7 +55,7 @@ where
     /// `ProtocolAck` has been sent back.
     #[inline]
     pub fn into_inner(self) -> R {
-        self.inner.into_inner().into_inner()
+        self.inner.into_inner()
     }
 }
 
@@ -79,14 +74,13 @@ where
                     debug!("invalid protocol name {:?}", name);
                     return Err(MultistreamSelectError::WrongProtocolName);
                 }
-                let mut protocol = BytesMut::from(name);
+                let mut protocol = Bytes::from(name);
                 protocol.extend_from_slice(&[b'\n']);
                 match self.inner.start_send(protocol) {
                     Ok(AsyncSink::Ready) => Ok(AsyncSink::Ready),
                     Ok(AsyncSink::NotReady(mut protocol)) => {
                         let protocol_len = protocol.len();
                         protocol.truncate(protocol_len - 1);
-                        let protocol = protocol.freeze();
                         Ok(AsyncSink::NotReady(ListenerToDialerMessage::ProtocolAck {
                             name: protocol,
                         }))
@@ -96,7 +90,7 @@ where
             }
 
             ListenerToDialerMessage::NotAvailable => {
-                match self.inner.start_send(BytesMut::from(&b"na\n"[..])) {
+                match self.inner.start_send(Bytes::from(&b"na\n"[..])) {
                     Ok(AsyncSink::Ready) => Ok(AsyncSink::Ready),
                     Ok(AsyncSink::NotReady(_)) => {
                         Ok(AsyncSink::NotReady(ListenerToDialerMessage::NotAvailable))
@@ -116,7 +110,7 @@ where
                     out_msg.extend(iter::once(b'\n'));
                 }
 
-                match self.inner.start_send(BytesMut::from(out_msg)) {
+                match self.inner.start_send(Bytes::from(out_msg)) {
                     Ok(AsyncSink::Ready) => Ok(AsyncSink::Ready),
                     Ok(AsyncSink::NotReady(_)) => {
                         let m = ListenerToDialerMessage::ProtocolsListResponse { list };
@@ -179,10 +173,10 @@ pub struct ListenerFuture<T: AsyncRead + AsyncWrite> {
 
 enum ListenerFutureState<T: AsyncRead + AsyncWrite> {
     Await {
-        inner: StreamFuture<LengthDelimitedFramedRead<Bytes, LengthDelimitedFramedWrite<T, BytesMut>>>
+        inner: StreamFuture<LengthDelimited<Bytes, T>>
     },
     Reply {
-        sender: sink::Send<LengthDelimitedFramedRead<Bytes, LengthDelimitedFramedWrite<T, BytesMut>>>
+        sender: sink::Send<LengthDelimited<Bytes, T>>
     },
     Undefined
 }
@@ -209,7 +203,7 @@ impl<T: AsyncRead + AsyncWrite> Future for ListenerFuture<T> {
                         return Err(MultistreamSelectError::FailedHandshake)
                     }
                     trace!("sending back /multistream/<version> to finish the handshake");
-                    let sender = socket.send(BytesMut::from(MULTISTREAM_PROTOCOL_WITH_LF));
+                    let sender = socket.send(Bytes::from(MULTISTREAM_PROTOCOL_WITH_LF));
                     self.inner = ListenerFutureState::Reply { sender }
                 }
                 ListenerFutureState::Reply { mut sender } => {
