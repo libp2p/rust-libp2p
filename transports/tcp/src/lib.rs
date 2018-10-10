@@ -54,7 +54,6 @@ use futures::{future, future::FutureResult, prelude::*, Async, Poll};
 use multiaddr::{Protocol, Multiaddr, ToMultiaddr};
 use std::fmt;
 use std::io::{Error as IoError, Read, Write};
-use std::iter;
 use std::net::SocketAddr;
 use std::time::Duration;
 use swarm::Transport;
@@ -194,40 +193,30 @@ impl Transport for TcpConfig {
     }
 
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        // Check that `server` only has two components and retreive them.
-        let mut server_protocols_iter = server.iter();
-        let server_proto1 = server_protocols_iter.next()?;
-        let server_proto2 = server_protocols_iter.next()?;
-        if server_protocols_iter.next().is_some() {
-            return None;
+        let mut address = Multiaddr::default();
+
+        let mut server_iter = server.iter();
+        let mut observed_iter = observed.iter();
+
+        // Use the observed IP address.
+        match (server_iter.next(), observed_iter.next()) {
+            (Some(Protocol::Ip4(_)), Some(x@Protocol::Ip4(_))) => address.append(x),
+            (Some(Protocol::Ip6(_)), Some(x@Protocol::Ip6(_))) => address.append(x),
+            _ => return None
         }
 
-        // Check that `observed` only has two components and retreive them.
-        let mut observed_protocols_iter = observed.iter();
-        let observed_proto1 = observed_protocols_iter.next()?;
-        let observed_proto2 = observed_protocols_iter.next()?;
-        if observed_protocols_iter.next().is_some() {
-            return None;
+        // Check for TCP but retain the server port.
+        match (server_iter.next(), observed_iter.next()) {
+            (Some(x@Protocol::Tcp(_)), Some(Protocol::Tcp(_))) => address.append(x),
+            _ => return None
         }
 
-        // Check that `server` is a valid TCP/IP address.
-        match (&server_proto1, &server_proto2) {
-            (&Protocol::Ip4(_), &Protocol::Tcp(_))
-            | (&Protocol::Ip6(_), &Protocol::Tcp(_)) => {}
-            _ => return None,
+        // Carry over everything else from the server address.
+        for proto in server.iter().skip(2) {
+            address.append(proto)
         }
 
-        // Check that `observed` is a valid TCP/IP address.
-        match (&observed_proto1, &observed_proto2) {
-            (&Protocol::Ip4(_), &Protocol::Tcp(_))
-            | (&Protocol::Ip6(_), &Protocol::Tcp(_)) => {}
-            _ => return None,
-        }
-
-        let result = iter::once(observed_proto1.clone())
-            .chain(iter::once(server_proto2.clone()))
-            .collect();
-        Some(result)
+        Some(address)
     }
 }
 

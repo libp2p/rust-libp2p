@@ -34,7 +34,7 @@ pub use errors::{Result, Error};
 pub use protocol::Protocol;
 
 /// Representation of a Multiaddr.
-#[derive(PartialEq, Eq, Clone, Hash)]
+#[derive(PartialEq, Eq, Clone, Default, Hash)]
 pub struct Multiaddr { bytes: Vec<u8> }
 
 impl Serialize for Multiaddr {
