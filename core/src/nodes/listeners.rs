@@ -29,8 +29,7 @@ use {Multiaddr, Transport};
 /// `Transport`. This `Transport` will be used to start listening, therefore you want to pass
 /// a `Transport` that supports the protocols you wish you listen on.
 ///
-/// Then, call `ListenerStream::listen_on` as many times as you want to start the actual act of
-/// listening.
+/// Then, call `ListenerStream::listen_on` for all addresses you want to start listening on.
 ///
 /// The `ListenersStream` never ends and never produces errors. If a listener errors or closes,
 /// an event is generated on the stream and the listener is then dropped, but the `ListenersStream`
