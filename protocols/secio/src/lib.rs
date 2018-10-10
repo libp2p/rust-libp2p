@@ -92,7 +92,7 @@ extern crate libp2p_core;
 extern crate log;
 extern crate protobuf;
 extern crate rand;
-#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+#[cfg(not(target_os = "emscripten"))]
 extern crate ring;
 extern crate rw_stream_sink;
 #[cfg(feature = "secp256k1")]
@@ -103,7 +103,7 @@ extern crate sha2;
 extern crate stdweb;
 extern crate tokio_io;
 extern crate twofish;
-#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+#[cfg(not(target_os = "emscripten"))]
 extern crate untrusted;
 
 #[cfg(feature = "aes-all")]
@@ -118,7 +118,7 @@ use ed25519_dalek::Keypair as Ed25519KeyPair;
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
 use libp2p_core::{PeerId, PublicKey};
-#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+#[cfg(all(feature = "rsa", not(target_os = "emscripten")))]
 use ring::signature::RSAKeyPair;
 use rw_stream_sink::RwStreamSink;
 use std::error::Error;
@@ -126,7 +126,7 @@ use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use std::sync::Arc;
 use tokio_io::{AsyncRead, AsyncWrite};
-#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+#[cfg(all(feature = "rsa", not(target_os = "emscripten")))]
 use untrusted::Input;
 
 mod algo_support;

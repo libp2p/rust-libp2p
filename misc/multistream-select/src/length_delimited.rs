@@ -18,28 +18,21 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Alternative implementation for `tokio_io::codec::length_delimited::FramedRead` with an
-//! additional property: the `into_inner()` method is guarateed not to drop any data.
-//!
-//! Also has the length field length hardcoded.
-//!
-//! We purposely only support a frame length of under 64kiB. Frames most consist in a short
-//! protocol name, which is highly unlikely to be more than 64kiB long.
-
 use futures::{Async, Poll, Sink, StartSend, Stream};
 use smallvec::SmallVec;
-use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use std::marker::PhantomData;
-use tokio_io::AsyncRead;
+use std::{io::{Error as IoError, ErrorKind as IoErrorKind}, marker::PhantomData, u16};
+use tokio_codec::FramedWrite;
+use tokio_io::{AsyncRead, AsyncWrite};
+use unsigned_varint::codec::UviBytes;
 
-/// Wraps around a `AsyncRead` and implements `Stream`.
+/// `Stream` and `Sink` wrapping some `AsyncRead + AsyncWrite` object to read
+/// and write unsigned-varint prefixed frames.
 ///
-/// Also implements `Sink` if the inner object implements `Sink`, for convenience.
-///
-/// The `I` generic indicates the type of data that needs to be produced by the `Stream`.
-pub struct LengthDelimitedFramedRead<I, S> {
+/// We purposely only support a frame length of under 64kiB. Frames mostly consist
+/// in a short protocol name, which is highly unlikely to be more than 64kiB long.
+pub struct LengthDelimited<I, S> {
     // The inner socket where data is pulled from.
-    inner: S,
+    inner: FramedWrite<S, UviBytes>,
     // Intermediary buffer where we put either the length of the next frame of data, or the frame
     // of data itself before it is returned.
     // Must always contain enough space to read data from `inner`.
@@ -59,10 +52,16 @@ enum State {
     ReadingData { frame_len: u16 },
 }
 
-impl<I, S> LengthDelimitedFramedRead<I, S> {
-    pub fn new(inner: S) -> LengthDelimitedFramedRead<I, S> {
-        LengthDelimitedFramedRead {
-            inner,
+impl<I, S> LengthDelimited<I, S>
+where
+    S: AsyncWrite
+{
+    pub fn new(inner: S) -> LengthDelimited<I, S> {
+        let mut encoder = UviBytes::default();
+        encoder.set_max_len(usize::from(u16::MAX));
+
+        LengthDelimited {
+            inner: FramedWrite::new(inner, encoder),
             internal_buffer: {
                 let mut v = SmallVec::new();
                 v.push(0);
@@ -74,7 +73,7 @@ impl<I, S> LengthDelimitedFramedRead<I, S> {
         }
     }
 
-    /// Destroys the `LengthDelimitedFramedRead` and returns the underlying socket.
+    /// Destroys the `LengthDelimited` and returns the underlying socket.
     ///
     /// Contrary to its equivalent `tokio_io::codec::length_delimited::FramedRead`, this method is
     /// guaranteed not to skip any data from the socket.
@@ -89,11 +88,11 @@ impl<I, S> LengthDelimitedFramedRead<I, S> {
     pub fn into_inner(self) -> S {
         assert_eq!(self.state, State::ReadingLength);
         assert_eq!(self.internal_buffer_pos, 0);
-        self.inner
+        self.inner.into_inner()
     }
 }
 
-impl<I, S> Stream for LengthDelimitedFramedRead<I, S>
+impl<I, S> Stream for LengthDelimited<I, S>
 where
     S: AsyncRead,
     I: for<'r> From<&'r [u8]>,
@@ -109,6 +108,7 @@ where
             match self.state {
                 State::ReadingLength => {
                     match self.inner
+                        .get_mut()
                         .read(&mut self.internal_buffer[self.internal_buffer_pos..])
                     {
                         Ok(0) => {
@@ -166,6 +166,7 @@ where
 
                 State::ReadingData { frame_len } => {
                     match self.inner
+                        .get_mut()
                         .read(&mut self.internal_buffer[self.internal_buffer_pos..])
                     {
                         Ok(0) => {
@@ -195,12 +196,12 @@ where
     }
 }
 
-impl<I, S> Sink for LengthDelimitedFramedRead<I, S>
+impl<I, S> Sink for LengthDelimited<I, S>
 where
-    S: Sink,
+    S: AsyncWrite
 {
-    type SinkItem = S::SinkItem;
-    type SinkError = S::SinkError;
+    type SinkItem = <FramedWrite<S, UviBytes> as Sink>::SinkItem;
+    type SinkError = <FramedWrite<S, UviBytes> as Sink>::SinkError;
 
     #[inline]
     fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
@@ -236,14 +237,14 @@ fn decode_length_prefix(buf: &[u8]) -> u16 {
 #[cfg(test)]
 mod tests {
     use futures::{Future, Stream};
-    use length_delimited::LengthDelimitedFramedRead;
+    use length_delimited::LengthDelimited;
     use std::io::Cursor;
     use std::io::ErrorKind;
 
     #[test]
     fn basic_read() {
         let data = vec![6, 9, 8, 7, 6, 5, 4];
-        let framed = LengthDelimitedFramedRead::<Vec<u8>, _>::new(Cursor::new(data));
+        let framed = LengthDelimited::<Vec<u8>, _>::new(Cursor::new(data));
 
         let recved = framed.collect().wait().unwrap();
         assert_eq!(recved, vec![vec![9, 8, 7, 6, 5, 4]]);
@@ -252,7 +253,7 @@ mod tests {
     #[test]
     fn basic_read_two() {
         let data = vec![6, 9, 8, 7, 6, 5, 4, 3, 9, 8, 7];
-        let framed = LengthDelimitedFramedRead::<Vec<u8>, _>::new(Cursor::new(data));
+        let framed = LengthDelimited::<Vec<u8>, _>::new(Cursor::new(data));
 
         let recved = framed.collect().wait().unwrap();
         assert_eq!(recved, vec![vec![9, 8, 7, 6, 5, 4], vec![9, 8, 7]]);
@@ -265,7 +266,7 @@ mod tests {
         let frame = (0..len).map(|n| (n & 0xff) as u8).collect::<Vec<_>>();
         let mut data = vec![(len & 0x7f) as u8 | 0x80, (len >> 7) as u8];
         data.extend(frame.clone().into_iter());
-        let framed = LengthDelimitedFramedRead::<Vec<u8>, _>::new(Cursor::new(data));
+        let framed = LengthDelimited::<Vec<u8>, _>::new(Cursor::new(data));
 
         let recved = framed
             .into_future()
@@ -280,7 +281,7 @@ mod tests {
     fn packet_len_too_long() {
         let mut data = vec![0x81, 0x81, 0x1];
         data.extend((0..16513).map(|_| 0));
-        let framed = LengthDelimitedFramedRead::<Vec<u8>, _>::new(Cursor::new(data));
+        let framed = LengthDelimited::<Vec<u8>, _>::new(Cursor::new(data));
 
         let recved = framed
             .into_future()
@@ -296,7 +297,7 @@ mod tests {
     #[test]
     fn empty_frames() {
         let data = vec![0, 0, 6, 9, 8, 7, 6, 5, 4, 0, 3, 9, 8, 7];
-        let framed = LengthDelimitedFramedRead::<Vec<u8>, _>::new(Cursor::new(data));
+        let framed = LengthDelimited::<Vec<u8>, _>::new(Cursor::new(data));
 
         let recved = framed.collect().wait().unwrap();
         assert_eq!(
@@ -314,7 +315,7 @@ mod tests {
     #[test]
     fn unexpected_eof_in_len() {
         let data = vec![0x89];
-        let framed = LengthDelimitedFramedRead::<Vec<u8>, _>::new(Cursor::new(data));
+        let framed = LengthDelimited::<Vec<u8>, _>::new(Cursor::new(data));
 
         let recved = framed.collect().wait();
         match recved {
@@ -326,7 +327,7 @@ mod tests {
     #[test]
     fn unexpected_eof_in_data() {
         let data = vec![5];
-        let framed = LengthDelimitedFramedRead::<Vec<u8>, _>::new(Cursor::new(data));
+        let framed = LengthDelimited::<Vec<u8>, _>::new(Cursor::new(data));
 
         let recved = framed.collect().wait();
         match recved {
@@ -338,7 +339,7 @@ mod tests {
     #[test]
     fn unexpected_eof_in_data2() {
         let data = vec![5, 9, 8, 7];
-        let framed = LengthDelimitedFramedRead::<Vec<u8>, _>::new(Cursor::new(data));
+        let framed = LengthDelimited::<Vec<u8>, _>::new(Cursor::new(data));
 
         let recved = framed.collect().wait();
         match recved {
@@ -347,3 +348,4 @@ mod tests {
         }
     }
 }
+
