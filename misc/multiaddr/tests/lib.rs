@@ -283,3 +283,16 @@ fn ser_and_deser_bincode() {
     let deserialized: Multiaddr = bincode::deserialize(&serialized).unwrap();
     assert_eq!(addr, deserialized);
 }
+
+#[test]
+fn append() {
+    let mut a: Multiaddr = Protocol::Ip4(Ipv4Addr::new(1, 2, 3, 4)).into();
+    a.append(Protocol::Tcp(80));
+    a.append(Protocol::Http);
+
+    let mut i = a.iter();
+    assert_eq!(Some(Protocol::Ip4(Ipv4Addr::new(1, 2, 3, 4))), i.next());
+    assert_eq!(Some(Protocol::Tcp(80)), i.next());
+    assert_eq!(Some(Protocol::Http), i.next());
+    assert_eq!(None, i.next())
+}
