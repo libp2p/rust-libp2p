@@ -211,19 +211,18 @@ impl Transport for BrowserWsConfig {
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         let mut address = Multiaddr::default();
 
-        let mut server_iter = server.iter();
-        let mut observed_iter = observed.iter();
+        let mut iter = server.iter().zip(observed.iter());
 
         // Use the observed IP address.
-        match (server_iter.next(), observed_iter.next()) {
-            (Some(Protocol::Ip4(_)), Some(x@Protocol::Ip4(_))) => address.append(x),
-            (Some(Protocol::Ip6(_)), Some(x@Protocol::Ip6(_))) => address.append(x),
+        match iter.next() {
+            Some((Protocol::Ip4(_), x@Protocol::Ip4(_))) => address.append(x),
+            Some((Protocol::Ip6(_), x@Protocol::Ip6(_))) => address.append(x),
             _ => return None
         }
 
         // Check for TCP but retain the server port.
-        match (server_iter.next(), observed_iter.next()) {
-            (Some(x@Protocol::Tcp(_)), Some(Protocol::Tcp(_))) => address.append(x),
+        match iter.next() {
+            Some((x@Protocol::Tcp(_), Protocol::Tcp(_))) => address.append(x),
             _ => return None
         }
 
@@ -231,11 +230,11 @@ impl Transport for BrowserWsConfig {
         //
         // Note that it will still work if the server uses WSS while the client uses
         // WS, or vice-versa.
-        match (server_iter.next(), observed_iter.next()) {
-            (Some(x@Protocol::Ws), Some(Protocol::Ws)) => address.append(x),
-            (Some(x@Protocol::Ws), Some(Protocol::Wss)) => address.append(x),
-            (Some(x@Protocol::Wss), Some(Protocol::Ws)) => address.append(x),
-            (Some(x@Protocol::Wss), Some(Protocol::Wss)) => address.append(x),
+        match iter.next() {
+            Some((x@Protocol::Ws, Protocol::Ws)) => address.append(x),
+            Some((x@Protocol::Ws, Protocol::Wss)) => address.append(x),
+            Some((x@Protocol::Wss, Protocol::Ws)) => address.append(x),
+            Some((x@Protocol::Wss, Protocol::Wss)) => address.append(x),
             _ => return None
         }
 
