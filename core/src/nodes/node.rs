@@ -84,7 +84,6 @@ enum Addr<TAddrFut> {
 pub type Substream<TMuxer> = muxing::SubstreamRef<Arc<TMuxer>>;
 
 /// Event that can happen on the `NodeStream`.
-#[derive(Debug)]
 pub enum NodeEvent<TMuxer, TUserData>
 where
     TMuxer: muxing::StreamMuxer,
@@ -467,23 +466,6 @@ mod node_stream {
         assert_eq!(user_data_submitted, vec![
             vec![2], vec![3], vec![5]
         ]);
-    }
-
-    #[test]
-    fn prints_pretty_node_stream_debug_info() {
-        let mut ns = build_node_stream();
-        ns.open_substream(b"ba be".to_vec()).unwrap();
-        assert_eq!(format!("{:?}", ns), "NodeStream { address: None, inbound_finished: false, outbound_finished: false, outbound_substreams: 1 }");
-    }
-
-    #[test]
-    fn prints_pretty_node_event_debug_info() {
-        let mut ns = build_node_stream();
-        ns.open_substream(vec![2,3,5]).unwrap();
-        let node_event = ns.poll().unwrap();
-        assert_matches!(node_event, Async::Ready(Some(node_event)) => {
-            assert_eq!(format!("{:?}", node_event), "NodeEvent::OutboundClosed { user_data: [2, 3, 5] }");
-        })
     }
 
     #[test]
