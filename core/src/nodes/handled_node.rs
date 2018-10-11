@@ -253,10 +253,12 @@ where
                         match node.open_substream(user_data) {
                             Ok(()) => {
                                 println!("[HandledNode, poll]     opened substream");
-                                ()},
+                                ()
+							},
                             Err(user_data) => {
                                 println!("[HandledNode, poll]     open_substream failed");
-                                self.handler.inject_outbound_closed(user_data)},
+                                self.handler.inject_outbound_closed(user_data)
+							},
                         }
                     } else {
                         println!("[HandledNode, poll]     self.node is None");
@@ -332,7 +334,6 @@ mod tests {
         type OutEvent = Event;
         type OutboundOpenInfo = usize;
         fn inject_substream(&mut self, _: T, endpoint: NodeHandlerEndpoint<usize>) {
-            println!("[HandledNode, inject_substream] endpoint={:?}", endpoint);
             let user_data = match endpoint {
                 NodeHandlerEndpoint::Dialer(user_data) => Some(user_data),
                 NodeHandlerEndpoint::Listener => None
@@ -352,7 +353,7 @@ mod tests {
             self.events.push(Event::Multiaddr);
         }
         fn inject_event(&mut self, inevent: Self::InEvent) {
-            self.events.push(inevent) // TODO: not sure I need this anymore
+            self.events.push(inevent)
          }
         fn shutdown(&mut self) {}
         fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<usize, Event>>, IoError> {
@@ -435,13 +436,13 @@ mod tests {
 
     #[test]
     fn proper_shutdown() {
-        struct MyHandler {
+        struct ShutdownHandler {
             did_substream_attempt: bool,
             inbound_closed: bool,
             substream_attempt_cancelled: bool,
             shutdown_called: bool,
         }
-        impl<T> NodeHandler<T> for MyHandler {
+        impl<T> NodeHandler<T> for ShutdownHandler {
             type InEvent = ();
             type OutEvent = ();
             type OutboundOpenInfo = ();
@@ -455,7 +456,7 @@ mod tests {
                 self.substream_attempt_cancelled = true;
             }
             fn inject_multiaddr(&mut self, _: Result<Multiaddr, IoError>) {}
-            fn inject_event(&mut self, _inevent: Self::InEvent) { }
+            fn inject_event(&mut self, _: Self::InEvent) { panic!() }
             fn shutdown(&mut self) {
                 assert!(self.inbound_closed);
                 assert!(self.substream_attempt_cancelled);
@@ -473,7 +474,7 @@ mod tests {
             }
         }
 
-        impl Drop for MyHandler {
+        impl Drop for ShutdownHandler {
             fn drop(&mut self) {
                 if self.did_substream_attempt {
                     assert!(self.shutdown_called);
@@ -485,7 +486,7 @@ mod tests {
         let mut muxer = DummyMuxer::new();
         muxer.set_inbound_connection_state(DummyConnectionState::Closed);
         muxer.set_outbound_connection_state(DummyConnectionState::Closed);
-        let handled = HandledNode::new(muxer, future::empty(), MyHandler {
+        let handled = HandledNode::new(muxer, future::empty(), ShutdownHandler {
             did_substream_attempt: false,
             inbound_closed: false,
             substream_attempt_cancelled: false,
