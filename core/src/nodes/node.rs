@@ -266,7 +266,7 @@ where
                 Addr::Future(ref mut fut) => Some(fut.poll()),
                 Addr::Resolved(_) | Addr::Errored => None,
             };
-
+			println!("[Node, poll, poll addr] poll result={:?}", poll);
             match poll {
                 Some(Ok(Async::NotReady)) | None => {}
                 Some(Ok(Async::Ready(addr))) => {
