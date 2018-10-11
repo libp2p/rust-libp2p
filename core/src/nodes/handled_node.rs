@@ -205,8 +205,6 @@ where
             match self.node.as_mut().map(|n| n.poll()) {
                 Some(Ok(Async::NotReady)) | None => {},
                 Some(Ok(Async::Ready(Some(NodeEvent::InboundSubstream { substream })))) => {
-                    println!("[HandledNode, poll]   node yielded InboundSusbstream");
-
                     self.handler.inject_substream(substream, NodeHandlerEndpoint::Listener);
                 },
                 Some(Ok(Async::Ready(Some(NodeEvent::OutboundSubstream { user_data, substream })))) => {
@@ -297,10 +295,10 @@ mod tests {
     type TestHandledNode = HandledNode<DummyMuxer, FutureResult<Multiaddr, IoError>, Handler>;
 
     #[derive(Debug, PartialEq, Clone)]
-    // TODO figure out if this is needed and in any case rename it to something sensible
+
     enum Event {
         Custom(&'static str),
-        Substream,
+        Substream(Option<usize>),
         OutboundClosed,
         InboundClosed,
         Multiaddr,
@@ -308,9 +306,10 @@ mod tests {
     #[derive(Debug, PartialEq, Clone)]
     enum HandlerState {
         NotReady,
-        Ready(Option<NodeHandlerEvent<(), Event>>),
+        Ready(Option<NodeHandlerEvent<usize, Event>>),
         Err,
     }
+
     #[derive(Debug, PartialEq, Clone)]
     struct Handler {
         events: Vec<Event>,
@@ -331,18 +330,19 @@ mod tests {
     impl<T> NodeHandler<T> for Handler {
         type InEvent = Event;
         type OutEvent = Event;
-        type OutboundOpenInfo = ();
-        fn inject_substream(&mut self, substream: T, endpoint: NodeHandlerEndpoint<()>) {
+        type OutboundOpenInfo = usize;
+        fn inject_substream(&mut self, _: T, endpoint: NodeHandlerEndpoint<usize>) {
             println!("[HandledNode, inject_substream] endpoint={:?}", endpoint);
-            self.events.push(Event::Substream);
-            // need to tell the muxer that we want this closed?
-            self.state = Some(HandlerState::Err);
+            let user_data = match endpoint {
+                NodeHandlerEndpoint::Dialer(user_data) => Some(user_data),
+                NodeHandlerEndpoint::Listener => None
+            };
+            self.events.push(Event::Substream(user_data));
         }
         fn inject_inbound_closed(&mut self) {
             self.events.push(Event::InboundClosed);
         }
-        fn inject_outbound_closed(&mut self, _: ()) {
-            println!("[Handler, inject_outbound_closed]");
+        fn inject_outbound_closed(&mut self, _: usize) {
             self.events.push(Event::OutboundClosed);
             if let Some(ref state) = self.next_outbound_state {
                 self.state = Some(state.clone());
@@ -355,7 +355,7 @@ mod tests {
             self.events.push(inevent) // TODO: not sure I need this anymore
          }
         fn shutdown(&mut self) {}
-        fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<(), Event>>, IoError> {
+        fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<usize, Event>>, IoError> {
             match self.state {
                 Some(ref state) => match state {
                     HandlerState::NotReady => Ok(Async::NotReady),
@@ -373,6 +373,7 @@ mod tests {
         muxer: DummyMuxer,
         handler: Handler,
         want_open_substream: bool,
+        substream_user_data: usize,
     }
 
     impl TestBuilder {
@@ -382,6 +383,7 @@ mod tests {
                 muxer: DummyMuxer::new(),
                 handler: Handler::default(),
                 want_open_substream: false,
+                substream_user_data: 0,
             }
         }
 
@@ -400,8 +402,9 @@ mod tests {
             self
         }
 
-        fn with_open_substream(&mut self) -> &mut Self {
+        fn with_open_substream(&mut self, user_data: usize) -> &mut Self {
             self.want_open_substream = true;
+            self.substream_user_data = user_data;
             self
         }
 
@@ -409,7 +412,7 @@ mod tests {
         fn handled_node(&mut self) -> TestHandledNode {
             let mut h = HandledNode::new(self.muxer.clone(), future::ok(self.addr.clone()), self.handler.clone());
             if self.want_open_substream {
-                h.node.as_mut().map(|ns| ns. open_substream(()));
+                h.node.as_mut().map(|ns| ns. open_substream(self.substream_user_data));
             }
             h
         }
@@ -528,8 +531,9 @@ mod tests {
             .with_muxer_inbound_state(DummyConnectionState::Pending)
             .with_muxer_outbound_state(DummyConnectionState::Closed)
             .with_handler_state(HandlerState::Ready(None)) // or we get into an infinite loop
+            .with_open_substream(987) // without at least one substream we do not poll_outbound so we never get the event
             .handled_node();
-        handled.node.as_mut().map(|ns| ns.open_substream(())); // without at least one substream we do not poll_outbound so we never get the event
+
         handled.poll().expect("poll failed");
         assert!(handled.is_outbound_closed());
     }
@@ -540,10 +544,10 @@ mod tests {
         let mut handled = TestBuilder::new()
             .with_muxer_inbound_state(DummyConnectionState::Closed)
             .with_muxer_outbound_state(DummyConnectionState::Closed)
+            .with_open_substream(123)
             .handled_node();
 
         // without an outbound substream we never `poll_outbound()`
-        handled.node.as_mut().map(|ns| ns.open_substream(()));
         handled.poll().expect("poll failed");
         assert!(handled.is_shutting_down());
 
@@ -591,7 +595,7 @@ mod tests {
 
     #[test]
     fn poll_with_unready_node_stream_and_handler_emits_outbound() {
-        let expected_event = Some(NodeHandlerEvent::OutboundSubstreamRequest(()));
+        let expected_event = Some(NodeHandlerEvent::OutboundSubstreamRequest(456));
         let mut handled = TestBuilder::new()
             // make NodeStream return NotReady for both in and out bound traffic
             .with_muxer_inbound_state(DummyConnectionState::Pending)
@@ -621,7 +625,7 @@ mod tests {
         let mut handled = TestBuilder::new()
             .with_muxer_inbound_state(DummyConnectionState::Closed)
             .with_muxer_outbound_state(DummyConnectionState::Closed)
-            .with_open_substream()
+            .with_open_substream(12)
             .with_handler_state(HandlerState::NotReady)
             .handled_node();
 
@@ -675,7 +679,7 @@ mod tests {
     fn poll_yields_outbound_closed_event() {
         let mut h = TestBuilder::new()
             .with_muxer_inbound_state(DummyConnectionState::Pending)
-            .with_open_substream()
+            .with_open_substream(32)
             .with_muxer_outbound_state(DummyConnectionState::Closed)
             .with_handler_state(HandlerState::Err) // stop the loop
             .handled_node();
@@ -702,12 +706,25 @@ mod tests {
         let mut h = TestBuilder::new()
             .with_muxer_inbound_state(DummyConnectionState::Pending)
             .with_muxer_outbound_state(DummyConnectionState::Opened)
-            .with_open_substream()
+            .with_open_substream(1)
             .with_handler_state(HandlerState::Err) // stop the loop
             .handled_node();
 
         assert_eq!(h.handler.events, vec![]);
         let _ = h.poll();
-        assert_eq!(h.handler.events, vec![Event::Substream]);
+        assert_eq!(h.handler.events, vec![Event::Substream(Some(1))]);
+    }
+
+    #[test]
+    fn poll_yields_inbound_substream() {
+        let mut h = TestBuilder::new()
+            .with_muxer_inbound_state(DummyConnectionState::Opened)
+            .with_muxer_outbound_state(DummyConnectionState::Pending)
+            .with_handler_state(HandlerState::Err) // stop the loop
+            .handled_node();
+
+        assert_eq!(h.handler.events, vec![]);
+        let _ = h.poll();
+        assert_eq!(h.handler.events, vec![Event::Substream(None)]);
     }
 }
