@@ -45,21 +45,21 @@ pub trait NodeHandler<TSubstream> {
     /// The handler is responsible for upgrading the substream to whatever protocol it wants.
     fn inject_substream(&mut self, substream: TSubstream, endpoint: NodeHandlerEndpoint<Self::OutboundOpenInfo>);
 
-    /// Indicates the handler that the inbound part of the muxer has been closed, and that
+    /// Indicates to the handler that the inbound part of the muxer has been closed, and that
     /// therefore no more inbound substream will be produced.
     fn inject_inbound_closed(&mut self);
 
-    /// Indicates the handler that an outbound substream failed to open because the outbound
+    /// Indicates to the handler that an outbound substream failed to open because the outbound
     /// part of the muxer has been closed.
     fn inject_outbound_closed(&mut self, user_data: Self::OutboundOpenInfo);
 
-    /// Indicates the handler that the multiaddr future has resolved.
+    /// Indicates to the handler that the multiaddr future has resolved.
     fn inject_multiaddr(&mut self, multiaddr: Result<Multiaddr, IoError>);
 
-    /// Injects an event coming from the outside in the handler.
+    /// Injects an event coming from the outside into the handler.
     fn inject_event(&mut self, event: Self::InEvent);
 
-    /// Indicates the node that it should shut down. After that, it is expected that `poll()`
+    /// Indicates that the node that it should shut down. After that, it is expected that `poll()`
     /// returns `Ready(None)` as soon as possible.
     ///
     /// This method allows an implementation to perform a graceful shutdown of the substreams, and
@@ -78,7 +78,7 @@ pub enum NodeHandlerEndpoint<TOutboundOpenInfo> {
     Listener,
 }
 
-/// Event produces by a handler.
+/// Event produced by a handler.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum NodeHandlerEvent<TOutboundOpenInfo, TCustom> {
     /// Require a new outbound substream to be opened with the remote.
@@ -88,7 +88,7 @@ pub enum NodeHandlerEvent<TOutboundOpenInfo, TCustom> {
     Custom(TCustom),
 }
 
-/// Event produces by a handler.
+/// Event produced by a handler.
 impl<TOutboundOpenInfo, TCustom> NodeHandlerEvent<TOutboundOpenInfo, TCustom> {
     /// If this is `OutboundSubstreamRequest`, maps the content to something else.
     #[inline]
@@ -173,7 +173,7 @@ where
         self.node.is_none()
     }
 
-    /// Indicates the handled node that it should shut down. After calling this method, the
+    /// Indicates to the handled node that it should shut down. After calling this method, the
     /// `Stream` will end in the not-so-distant future.
     ///
     /// After this method returns, `is_shutting_down()` should return true.
@@ -266,7 +266,7 @@ where
 mod tests {
     use super::*;
     use futures::future;
-    use muxing::StreamMuxer;
+    use muxing::{StreamMuxer, Shutdown};
     use tokio::runtime::current_thread;
 
     // TODO: move somewhere? this could be useful as a dummy
@@ -278,13 +278,13 @@ mod tests {
         fn open_outbound(&self) -> Self::OutboundSubstream { () }
         fn poll_outbound(&self, _: &mut Self::OutboundSubstream) -> Poll<Option<Self::Substream>, IoError> { Ok(Async::Ready(None)) }
         fn destroy_outbound(&self, _: Self::OutboundSubstream) {}
-        fn read_substream(&self, _: &mut Self::Substream, _: &mut [u8]) -> Result<usize, IoError> { panic!() }
-        fn write_substream(&self, _: &mut Self::Substream, _: &[u8]) -> Result<usize, IoError> { panic!() }
-        fn flush_substream(&self, _: &mut Self::Substream) -> Result<(), IoError> { panic!() }
-        fn shutdown_substream(&self, _: &mut Self::Substream) -> Poll<(), IoError> { panic!() }
+        fn read_substream(&self, _: &mut Self::Substream, _: &mut [u8]) -> Poll<usize, IoError> { panic!() }
+        fn write_substream(&self, _: &mut Self::Substream, _: &[u8]) -> Poll<usize, IoError> { panic!() }
+        fn flush_substream(&self, _: &mut Self::Substream) -> Poll<(), IoError> { panic!() }
+        fn shutdown_substream(&self, _: &mut Self::Substream, _: Shutdown) -> Poll<(), IoError> { panic!() }
         fn destroy_substream(&self, _: Self::Substream) { panic!() }
-        fn close_inbound(&self) {}
-        fn close_outbound(&self) {}
+        fn shutdown(&self, _: Shutdown) -> Poll<(), IoError> { Ok(Async::Ready(())) }
+        fn flush_all(&self) -> Poll<(), IoError> { Ok(Async::Ready(())) }
     }
 
     #[test]

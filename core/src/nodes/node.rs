@@ -310,11 +310,18 @@ where
         for (_, outbound) in self.outbound_substreams.drain() {
             self.muxer.destroy_outbound(outbound);
         }
-        if !self.inbound_finished {
-            self.muxer.close_inbound();
-        }
-        if !self.outbound_finished {
-            self.muxer.close_outbound();
+        // TODO: Maybe the shutdown logic should not be part of the destructor?
+        match (self.inbound_finished, self.outbound_finished) {
+            (true, true) => {}
+            (true, false) => {
+                let _ = self.muxer.shutdown(muxing::Shutdown::Outbound);
+            }
+            (false, true) => {
+                let _ = self.muxer.shutdown(muxing::Shutdown::Inbound);
+            }
+            (false, false) => {
+                let _ = self.muxer.shutdown(muxing::Shutdown::All);
+            }
         }
     }
 }

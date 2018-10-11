@@ -138,6 +138,10 @@ impl Transport for UdsConfig {
     }
 }
 
+/// Turns a `Multiaddr` containing a single `Unix` component into a path.
+///
+/// Also returns an error if the path is not absolute, as we don't want to dial/listen on relative
+/// paths.
 // This type of logic should probably be moved into the multiaddr package
 fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
     let mut iter = addr.iter();
@@ -147,10 +151,16 @@ fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
         return Err(());
     }
 
-    match path {
-        Some(Protocol::Unix(ref path)) => Ok(path.as_ref().into()),
-        _ => Err(())
+    let out: PathBuf = match path {
+        Some(Protocol::Unix(ref path)) => path.as_ref().into(),
+        _ => return Err(())
+    };
+
+    if !out.is_absolute() {
+        return Err(());
     }
+
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -233,5 +243,11 @@ mod tests {
             .parse::<Multiaddr>()
             .unwrap();
         assert!(tcp.listen_on(addr).is_err());
+    }
+
+    #[test]
+    #[ignore]       // TODO: for the moment unix addresses fail to parse
+    fn relative_addr_denied() {
+        assert!("/ip4/127.0.0.1/tcp/12345/unix/./foo/bar".parse::<Multiaddr>().is_err());
     }
 }
