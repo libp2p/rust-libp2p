@@ -36,7 +36,7 @@ use std::{cmp, iter, mem};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::sync::{atomic::AtomicUsize, atomic::Ordering, Arc};
 use bytes::Bytes;
-use core::{ConnectionUpgrade, Endpoint, StreamMuxer};
+use core::{ConnectionUpgrade, Endpoint, StreamMuxer, muxing::Shutdown};
 use parking_lot::Mutex;
 use fnv::{FnvHashMap, FnvHashSet};
 use futures::prelude::*;
@@ -423,13 +423,13 @@ where C: AsyncRead + AsyncWrite
         // Nothing to do.
     }
 
-    fn read_substream(&self, substream: &mut Self::Substream, buf: &mut [u8]) -> Result<usize, IoError> {
+    fn read_substream(&self, substream: &mut Self::Substream, buf: &mut [u8]) -> Poll<usize, IoError> {
         loop {
             // First, transfer from `current_data`.
             if substream.current_data.len() != 0 {
                 let len = cmp::min(substream.current_data.len(), buf.len());
                 buf[..len].copy_from_slice(&substream.current_data.split_to(len));
-                return Ok(len);
+                return Ok(Async::Ready(len));
             }
 
             // Try to find a packet of data in the buffer.
@@ -449,22 +449,22 @@ where C: AsyncRead + AsyncWrite
             // just read and wait for the next iteration.
             match next_data_poll {
                 Ok(Async::Ready(Some(data))) => substream.current_data = data,
-                Ok(Async::Ready(None)) => return Ok(0),
+                Ok(Async::Ready(None)) => return Ok(Async::Ready(0)),
                 Ok(Async::NotReady) => {
                     // There was no data packet in the buffer about this substream ; maybe it's
                     // because it has been closed.
                     if inner.opened_substreams.contains(&(substream.num, substream.endpoint)) {
-                        return Err(IoErrorKind::WouldBlock.into());
+                        return Ok(Async::NotReady)
                     } else {
-                        return Ok(0);
+                        return Ok(Async::Ready(0))
                     }
                 },
-                Err(err) => return Err(err),
+                Err(err) => return Err(err)
             }
         }
     }
 
-    fn write_substream(&self, substream: &mut Self::Substream, buf: &[u8]) -> Result<usize, IoError> {
+    fn write_substream(&self, substream: &mut Self::Substream, buf: &[u8]) -> Poll<usize, IoError> {
         let mut inner = self.inner.lock();
 
         let to_write = cmp::min(buf.len(), inner.config.split_send_size);
@@ -475,50 +475,51 @@ where C: AsyncRead + AsyncWrite
             endpoint: substream.endpoint,
         };
 
-        match poll_send(&mut inner, elem) {
-            Ok(Async::Ready(())) => Ok(to_write),
-            Ok(Async::NotReady) => Err(IoErrorKind::WouldBlock.into()),
-            Err(err) => Err(err),
+        match poll_send(&mut inner, elem)? {
+            Async::Ready(()) => Ok(Async::Ready(to_write)),
+            Async::NotReady => Ok(Async::NotReady)
         }
     }
 
-    fn flush_substream(&self, _substream: &mut Self::Substream) -> Result<(), IoError> {
+    fn flush_substream(&self, _substream: &mut Self::Substream) -> Poll<(), IoError> {
         let mut inner = self.inner.lock();
         let inner = &mut *inner; // Avoids borrow errors
 
-        match inner.inner.poll_flush_notify(&inner.notifier_write, 0) {
-            Ok(Async::Ready(())) => Ok(()),
-            Ok(Async::NotReady) => {
+        match inner.inner.poll_flush_notify(&inner.notifier_write, 0)? {
+            Async::Ready(()) => Ok(Async::Ready(())),
+            Async::NotReady => {
                 inner.notifier_write.to_notify.lock().insert(TASK_ID.with(|&t| t), task::current());
-                Err(IoErrorKind::WouldBlock.into())
-            },
-            Err(err) => Err(err),
+                Ok(Async::NotReady)
+            }
         }
     }
 
-    fn shutdown_substream(&self, substream: &mut Self::Substream) -> Poll<(), IoError> {
+    fn shutdown_substream(&self, sub: &mut Self::Substream, _: Shutdown) -> Poll<(), IoError> {
         let elem = codec::Elem::Reset {
-            substream_id: substream.num,
-            endpoint: substream.endpoint,
+            substream_id: sub.num,
+            endpoint: sub.endpoint,
         };
 
         let mut inner = self.inner.lock();
         poll_send(&mut inner, elem)
     }
 
-    fn destroy_substream(&self, mut substream: Self::Substream) {
-        let _ = self.shutdown_substream(&mut substream);        // TODO: this doesn't necessarily send the close message
+    fn destroy_substream(&self, sub: Self::Substream) {
         self.inner.lock().buffer.retain(|elem| {
-            elem.substream_id() != substream.num || elem.endpoint() == Some(substream.endpoint)
+            elem.substream_id() != sub.num || elem.endpoint() == Some(sub.endpoint)
         })
     }
 
     #[inline]
-    fn close_inbound(&self) {
+    fn shutdown(&self, _: Shutdown) -> Poll<(), IoError> {
+        let inner = &mut *self.inner.lock();
+        inner.inner.close_notify(&inner.notifier_write, 0)
     }
 
     #[inline]
-    fn close_outbound(&self) {
+    fn flush_all(&self) -> Poll<(), IoError> {
+        let inner = &mut *self.inner.lock();
+        inner.inner.poll_flush_notify(&inner.notifier_write, 0)
     }
 }
 

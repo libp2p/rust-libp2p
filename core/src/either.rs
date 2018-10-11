@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{prelude::*, future};
-use muxing::StreamMuxer;
+use muxing::{Shutdown, StreamMuxer};
 use std::io::{Error as IoError, Read, Write};
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -146,49 +146,49 @@ where
         }
     }
 
-    fn read_substream(&self, substream: &mut Self::Substream, buf: &mut [u8]) -> Result<usize, IoError> {
-        match (self, substream) {
-            (EitherOutput::First(ref inner), EitherOutput::First(ref mut substream)) => {
-                inner.read_substream(substream, buf)
+    fn read_substream(&self, sub: &mut Self::Substream, buf: &mut [u8]) -> Poll<usize, IoError> {
+        match (self, sub) {
+            (EitherOutput::First(ref inner), EitherOutput::First(ref mut sub)) => {
+                inner.read_substream(sub, buf)
             },
-            (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut substream)) => {
-                inner.read_substream(substream, buf)
-            },
-            _ => panic!("Wrong API usage")
-        }
-    }
-
-    fn write_substream(&self, substream: &mut Self::Substream, buf: &[u8]) -> Result<usize, IoError> {
-        match (self, substream) {
-            (EitherOutput::First(ref inner), EitherOutput::First(ref mut substream)) => {
-                inner.write_substream(substream, buf)
-            },
-            (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut substream)) => {
-                inner.write_substream(substream, buf)
+            (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut sub)) => {
+                inner.read_substream(sub, buf)
             },
             _ => panic!("Wrong API usage")
         }
     }
 
-    fn flush_substream(&self, substream: &mut Self::Substream) -> Result<(), IoError> {
-        match (self, substream) {
-            (EitherOutput::First(ref inner), EitherOutput::First(ref mut substream)) => {
-                inner.flush_substream(substream)
+    fn write_substream(&self, sub: &mut Self::Substream, buf: &[u8]) -> Poll<usize, IoError> {
+        match (self, sub) {
+            (EitherOutput::First(ref inner), EitherOutput::First(ref mut sub)) => {
+                inner.write_substream(sub, buf)
             },
-            (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut substream)) => {
-                inner.flush_substream(substream)
+            (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut sub)) => {
+                inner.write_substream(sub, buf)
             },
             _ => panic!("Wrong API usage")
         }
     }
 
-    fn shutdown_substream(&self, substream: &mut Self::Substream) -> Poll<(), IoError> {
-        match (self, substream) {
-            (EitherOutput::First(ref inner), EitherOutput::First(ref mut substream)) => {
-                inner.shutdown_substream(substream)
+    fn flush_substream(&self, sub: &mut Self::Substream) -> Poll<(), IoError> {
+        match (self, sub) {
+            (EitherOutput::First(ref inner), EitherOutput::First(ref mut sub)) => {
+                inner.flush_substream(sub)
             },
-            (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut substream)) => {
-                inner.shutdown_substream(substream)
+            (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut sub)) => {
+                inner.flush_substream(sub)
+            },
+            _ => panic!("Wrong API usage")
+        }
+    }
+
+    fn shutdown_substream(&self, sub: &mut Self::Substream, kind: Shutdown) -> Poll<(), IoError> {
+        match (self, sub) {
+            (EitherOutput::First(ref inner), EitherOutput::First(ref mut sub)) => {
+                inner.shutdown_substream(sub, kind)
+            },
+            (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut sub)) => {
+                inner.shutdown_substream(sub, kind)
             },
             _ => panic!("Wrong API usage")
         }
@@ -211,17 +211,17 @@ where
         }
     }
 
-    fn close_inbound(&self) {
+    fn shutdown(&self, kind: Shutdown) -> Poll<(), IoError> {
         match *self {
-            EitherOutput::First(ref inner) => inner.close_inbound(),
-            EitherOutput::Second(ref inner) => inner.close_inbound(),
+            EitherOutput::First(ref inner) => inner.shutdown(kind),
+            EitherOutput::Second(ref inner) => inner.shutdown(kind)
         }
     }
 
-    fn close_outbound(&self) {
+    fn flush_all(&self) -> Poll<(), IoError> {
         match *self {
-            EitherOutput::First(ref inner) => inner.close_outbound(),
-            EitherOutput::Second(ref inner) => inner.close_outbound(),
+            EitherOutput::First(ref inner) => inner.flush_all(),
+            EitherOutput::Second(ref inner) => inner.flush_all()
         }
     }
 }

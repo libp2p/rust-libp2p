@@ -266,7 +266,7 @@ where
 mod tests {
     use super::*;
     use futures::future;
-    use muxing::StreamMuxer;
+    use muxing::{StreamMuxer, Shutdown};
     use tokio::runtime::current_thread;
 
     // TODO: move somewhere? this could be useful as a dummy
@@ -278,13 +278,13 @@ mod tests {
         fn open_outbound(&self) -> Self::OutboundSubstream { () }
         fn poll_outbound(&self, _: &mut Self::OutboundSubstream) -> Poll<Option<Self::Substream>, IoError> { Ok(Async::Ready(None)) }
         fn destroy_outbound(&self, _: Self::OutboundSubstream) {}
-        fn read_substream(&self, _: &mut Self::Substream, _: &mut [u8]) -> Result<usize, IoError> { panic!() }
-        fn write_substream(&self, _: &mut Self::Substream, _: &[u8]) -> Result<usize, IoError> { panic!() }
-        fn flush_substream(&self, _: &mut Self::Substream) -> Result<(), IoError> { panic!() }
-        fn shutdown_substream(&self, _: &mut Self::Substream) -> Poll<(), IoError> { panic!() }
+        fn read_substream(&self, _: &mut Self::Substream, _: &mut [u8]) -> Poll<usize, IoError> { panic!() }
+        fn write_substream(&self, _: &mut Self::Substream, _: &[u8]) -> Poll<usize, IoError> { panic!() }
+        fn flush_substream(&self, _: &mut Self::Substream) -> Poll<(), IoError> { panic!() }
+        fn shutdown_substream(&self, _: &mut Self::Substream, _: Shutdown) -> Poll<(), IoError> { panic!() }
         fn destroy_substream(&self, _: Self::Substream) { panic!() }
-        fn close_inbound(&self) {}
-        fn close_outbound(&self) {}
+        fn shutdown(&self, _: Shutdown) -> Poll<(), IoError> { Ok(Async::Ready(())) }
+        fn flush_all(&self) -> Poll<(), IoError> { Ok(Async::Ready(())) }
     }
 
     #[test]
