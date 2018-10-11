@@ -244,7 +244,7 @@ where
             println!("[HandledNode, poll] polling handler");
             match self.handler.poll() {
                 Ok(Async::NotReady) => {
-					println!("[HandledNode, poll]   handler NotReady");
+                    println!("[HandledNode, poll]   handler NotReady");
                     if node_not_ready {
                         break;
                     }
@@ -266,20 +266,20 @@ where
                     }
                 },
                 Ok(Async::Ready(Some(NodeHandlerEvent::Custom(event)))) => {
-					println!("[HandledNode, poll]   handler Ready(Some…) – yielded a Custom event");
+                    println!("[HandledNode, poll]   handler Ready(Some…) – yielded a Custom event");
                     return Ok(Async::Ready(Some(event)));
                 },
                 Ok(Async::Ready(None)) => {
-					println!("[HandledNode, poll]   handler Ready(None)");
+                    println!("[HandledNode, poll]   handler Ready(None)");
                     return Ok(Async::Ready(None));
                 },
                 Err(err) => {
-					println!("[HandledNode, poll]   handler Err");
+                    println!("[HandledNode, poll]   handler Err");
                     return Err(err);
                 },
             }
         }
-		println!("[HandledNode, poll] NotReady");
+        println!("[HandledNode, poll] NotReady");
         Ok(Async::NotReady)
     }
 }
@@ -292,13 +292,19 @@ mod tests {
     use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
     use std::io;
 
-    #[derive(Debug, PartialEq, Copy, Clone)]
+    // Concrete `HandledNode`
+    type TestHandledNode = HandledNode<DummyMuxer, FutureResult<Multiaddr, IoError>, Handler>;
+
+    #[derive(Debug, PartialEq, Clone)]
     // TODO figure out if this is needed and in any case rename it to something sensible
     enum Event {
-        Custom,
-        Accept
+        Custom(&'static str),
+        Substream,
+        OutboundClosed,
+        InboundClosed,
+        Multiaddr,
     }
-    #[derive(Debug, PartialEq, Clone, Copy)]
+    #[derive(Debug, PartialEq, Clone)]
     enum HandlerState {
         NotReady,
         Ready(Option<NodeHandlerEvent<(), Event>>),
@@ -321,50 +327,39 @@ mod tests {
         }
     }
 
-	type TestHandledNode = HandledNode<DummyMuxer, FutureResult<Multiaddr, IoError>, Handler>;
-
-    // Some tests require controlling the flow carefully and this function
-    // lets you remove the NodeStream which helps triggering certain code paths.
-    fn set_node_to_none(handled_node: &mut TestHandledNode) {
-        handled_node.node = None;
-    }
-
-    fn did_see_event(handled_node: &mut TestHandledNode, event: &Event) -> bool {
-        handled_node.handler.events.contains(event)
-    }
-
-	// Set the state of the `Handler` after `inject_outbound_closed` is called
-    fn set_next_handler_outbound_state( handled_node: &mut TestHandledNode, next_state: HandlerState) {
-        handled_node.handler.next_outbound_state = Some(next_state);
-    }
-
     impl<T> NodeHandler<T> for Handler {
         type InEvent = Event;
         type OutEvent = Event;
         type OutboundOpenInfo = ();
         fn inject_substream(&mut self, _: T, _: NodeHandlerEndpoint<()>) {
             println!("[HandledNode, inject_substream]");
+            self.events.push(Event::Substream);
             // need to tell the muxer that we want this closed?
             self.state = Some(HandlerState::Err);
         }
-        fn inject_inbound_closed(&mut self) { }
+        fn inject_inbound_closed(&mut self) {
+            self.events.push(Event::InboundClosed);
+        }
         fn inject_outbound_closed(&mut self, _: ()) {
             println!("[Handler, inject_outbound_closed]");
-            if let Some(state) = self.next_outbound_state {
-				self.state = Some(state);
+            self.events.push(Event::OutboundClosed);
+            if let Some(ref state) = self.next_outbound_state {
+                self.state = Some(state.clone());
             }
         }
-        fn inject_multiaddr(&mut self, _: Result<Multiaddr, IoError>) {}
+        fn inject_multiaddr(&mut self, _: Result<Multiaddr, IoError>) {
+            self.events.push(Event::Multiaddr);
+        }
         fn inject_event(&mut self, inevent: Self::InEvent) {
             self.events.push(inevent) // TODO: not sure I need this anymore
          }
         fn shutdown(&mut self) {}
         fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<(), Event>>, IoError> {
             match self.state {
-                Some(state) => match state {
+                Some(ref state) => match state {
                     HandlerState::NotReady => Ok(Async::NotReady),
                     HandlerState::Ready(None) => Ok(Async::Ready(None)),
-                    HandlerState::Ready(Some(event)) => Ok(Async::Ready(Some(event))),
+                    HandlerState::Ready(Some(event)) => Ok(Async::Ready(Some(event.clone()))),
                     HandlerState::Err => {Err(io::Error::new(io::ErrorKind::Other, "oh noes"))},
                 },
                 None => Ok(Async::NotReady)
@@ -376,7 +371,7 @@ mod tests {
         addr: Multiaddr,
         muxer: DummyMuxer,
         handler: Handler,
-		want_open_substream: bool,
+        want_open_substream: bool,
     }
 
     use futures::future::FutureResult;
@@ -386,7 +381,7 @@ mod tests {
                 addr: "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr"),
                 muxer: DummyMuxer::new(),
                 handler: Handler::default(),
-				want_open_substream: false,
+                want_open_substream: false,
             }
         }
 
@@ -405,19 +400,34 @@ mod tests {
             self
         }
 
-		fn with_open_substream(&mut self) -> &mut Self {
-			self.want_open_substream = true;
-			self
-		}
+        fn with_open_substream(&mut self) -> &mut Self {
+            self.want_open_substream = true;
+            self
+        }
 
         // TODO: Is there a way to consume `self` here and get rid of the clones?
         fn handled_node(&mut self) -> TestHandledNode {
             let mut h = HandledNode::new(self.muxer.clone(), future::ok(self.addr.clone()), self.handler.clone());
-			if self.want_open_substream {
-				h.node.as_mut().map(|ns| ns. open_substream(()));
-			}
+            if self.want_open_substream {
+                h.node.as_mut().map(|ns| ns. open_substream(()));
+            }
             h
         }
+    }
+
+    // Some tests require controlling the flow carefully and this function
+    // lets you remove the NodeStream which helps triggering certain code paths.
+    fn set_node_to_none(handled_node: &mut TestHandledNode) {
+        handled_node.node = None;
+    }
+
+    fn did_see_event(handled_node: &mut TestHandledNode, event: &Event) -> bool {
+        handled_node.handler.events.contains(event)
+    }
+
+    // Set the state of the `Handler` after `inject_outbound_closed` is called
+    fn set_next_handler_outbound_state( handled_node: &mut TestHandledNode, next_state: HandlerState) {
+        handled_node.handler.next_outbound_state = Some(next_state);
     }
 
     #[test]
@@ -497,8 +507,8 @@ mod tests {
             .with_muxer_inbound_state(DummyConnectionState::Closed)
             .handled_node();
 
-        let event = Event::Accept;
-        handled.inject_event(event);
+        let event = Event::Custom("banana");
+        handled.inject_event(event.clone());
         assert!(did_see_event(&mut handled, &event));
     }
 
@@ -519,7 +529,7 @@ mod tests {
             .with_muxer_outbound_state(DummyConnectionState::Closed)
             .with_handler_state(HandlerState::Ready(None)) // or we get into an infinite loop
             .handled_node();
-		handled.node.as_mut().map(|ns| ns.open_substream(())); // without at least one substream we do not poll_outbound so we never get the event
+        handled.node.as_mut().map(|ns| ns.open_substream(())); // without at least one substream we do not poll_outbound so we never get the event
         handled.poll().expect("poll failed");
         assert!(handled.is_outbound_closed());
     }
@@ -532,7 +542,7 @@ mod tests {
             .with_muxer_outbound_state(DummyConnectionState::Closed)
             .handled_node();
 
-		// without an outbound substream we never `poll_outbound()`
+        // without an outbound substream we never `poll_outbound()`
         handled.node.as_mut().map(|ns| ns.open_substream(()));
         handled.poll().expect("poll failed");
         assert!(handled.is_shutting_down());
@@ -564,7 +574,7 @@ mod tests {
 
     #[test]
     fn poll_with_unready_node_stream_and_handler_emits_custom_event() {
-        let expected_event = Some(NodeHandlerEvent::Custom(Event::Custom));
+        let expected_event = Some(NodeHandlerEvent::Custom(Event::Custom("pineapple")));
         let mut handled = TestBuilder::new()
             // make NodeStream return NotReady
             .with_muxer_inbound_state(DummyConnectionState::Pending)
@@ -573,7 +583,7 @@ mod tests {
             .handled_node();
 
         assert_matches!(handled.poll(), Ok(Async::Ready(Some(event))) => {
-            assert_matches!(event, Event::Custom)
+            assert_matches!(event, Event::Custom("pineapple"))
         });
     }
 
@@ -594,49 +604,52 @@ mod tests {
         // `handler.inject_outbound_closed()` which then will tweak the state so
         // that `poll()` exits the loop and we can assert.
         set_node_to_none(&mut handled);
-		set_next_handler_outbound_state(&mut handled, HandlerState::Ready(Some(NodeHandlerEvent::Custom(Event::Custom))));
+        set_next_handler_outbound_state(
+            &mut handled,
+            HandlerState::Ready(Some(NodeHandlerEvent::Custom(Event::Custom("pear"))))
+        );
         assert_matches!(handled.poll(), Ok(Async::Ready(Some(event))) => {
-            assert_matches!(event, Event::Custom)
+            assert_matches!(event, Event::Custom("pear"))
         });
     }
 
-	#[test]
-	fn poll_returns_not_ready_when_node_stream_and_handler_is_not_ready() {
-		let mut handled = TestBuilder::new()
-			.with_muxer_inbound_state(DummyConnectionState::Closed)
-			.with_muxer_outbound_state(DummyConnectionState::Closed)
-			.with_open_substream()
-			.with_handler_state(HandlerState::NotReady)
-			.handled_node();
-		let poll_result = handled.poll(); // Reach node.poll_inbound() so inbound_finished gets set
-		// now we get a Ready(NodeEvent::InbouindClosed)
-		// which calls inject_inbound_closed
-		// and then calls handler.poll()
-		// which does nothing because HandlerState is NotReady: loop continues
-		// polls the node which now skips the inbound
-		// and polls outbound which returns Ready(None) and sets outbound_finished
-		// …calls destroy_outbound and yields Ready(OutboundClosed)
-		// …so the HandledNode calls inject_outbound_closed.
-		// Now we have inbound_finished and outbound_finished set (and no more outbound substreams).
-		// Next we poll the handler again which does nothing because HandlerState is NotReady (and the node is still there)
-		// Polls the node again; now we will hit the address resolution
-		// address resolves and yields Multiaddr event and we resume the loop
-		// HandledNode polls the node again: we skip inbound and there are no more outbound substreams so we skip that too; the addr is now Resolved so that part is skipped too
-		// We reach the last section and yield Async::Ready(None)
-		// Back in the HandledNode, the Handler still yields NotReady, but now `node_not_ready` is true
-		// …so we break the loop and yield Async::NotReady
-		assert_matches!(poll_result, Ok(Async::NotReady));
+    #[test]
+    fn poll_returns_not_ready_when_node_stream_and_handler_is_not_ready() {
+        let mut handled = TestBuilder::new()
+            .with_muxer_inbound_state(DummyConnectionState::Closed)
+            .with_muxer_outbound_state(DummyConnectionState::Closed)
+            .with_open_substream()
+            .with_handler_state(HandlerState::NotReady)
+            .handled_node();
 
-
-
-
-
-
-
-
-
-
-		// Need NodeStream to return Async::Ready(None) so that node_not_ready gets set
-
-	}
+        // Under the hood, this is what happens when calling `poll()`:
+        // - we reach `node.poll_inbound()` and because the connection is
+        //   closed, `inbound_finished` is set to true.
+        // - an Async::Ready(NodeEvent::InboundClosed) is yielded (also calls
+        //   `inject_inbound_close`, but that's irrelevant here)
+        // - back in `poll()` we cal `handler.poll()` which does nothing because
+        //   `HandlerState` is `NotReady`: loop continues
+        // - polls the node again which now skips the inbound block because
+        //   `inbound_finished` is true.
+        // - Now `poll_outbound()` is called which returns `Async::Ready(None)`
+        //   and sets `outbound_finished` to true. …calls destroy_outbound and
+        //   yields Ready(OutboundClosed) …so the HandledNode calls
+        //   `inject_outbound_closed`.
+        // - Now we have `inbound_finished` and `outbound_finished` set (and no
+        //   more outbound substreams).
+        // - Next we poll the handler again which again does nothing because
+        //   HandlerState is NotReady (and the node is still there)
+        // - Polls the node again; now we will hit the address resolution
+        // - Address resolves and yields a `Multiaddr` event and we resume the
+        //   loop
+        // - HandledNode polls the node again: we skip inbound and there are no
+        //   more outbound substreams so we skip that too; the addr is now
+        //   Resolved so that part is skipped too
+        // - We reach the last section and yield Async::Ready(None)
+        // - Back in the HandledNode, the Handler still yields NotReady, but now
+        //   `node_not_ready` is true
+        // - …so we break the loop and yield Async::NotReady
+        let poll_result = handled.poll();
+        assert_matches!(poll_result, Ok(Async::NotReady));
+    }
 }
