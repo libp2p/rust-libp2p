@@ -570,6 +570,7 @@ mod tests {
             .handled_node();
 
         assert_matches!(handled.poll(), Ok(Async::Ready(None)));
+        assert_eq!(handled.handler.events, vec![Event::Multiaddr]);
     }
 
     #[test]
@@ -585,6 +586,7 @@ mod tests {
         assert_matches!(handled.poll(), Ok(Async::Ready(Some(event))) => {
             assert_matches!(event, Event::Custom("pineapple"))
         });
+        assert_eq!(handled.handler.events, vec![Event::Multiaddr]);
     }
 
     #[test]
@@ -611,6 +613,7 @@ mod tests {
         assert_matches!(handled.poll(), Ok(Async::Ready(Some(event))) => {
             assert_matches!(event, Event::Custom("pear"))
         });
+        assert_eq!(handled.handler.events, vec![Event::OutboundClosed]);
     }
 
     #[test]
@@ -651,5 +654,8 @@ mod tests {
         // - …so we break the loop and yield Async::NotReady
         let poll_result = handled.poll();
         assert_matches!(poll_result, Ok(Async::NotReady));
+        assert_eq!(handled.handler.events, vec![
+            Event::InboundClosed, Event::OutboundClosed, Event::Multiaddr
+        ]);
     }
 }
