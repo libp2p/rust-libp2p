@@ -210,6 +210,7 @@ where
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         // Polling inbound substream.
         if !self.inbound_finished {
+			println!("[Node, poll, poll_inbound]");
             match self.muxer.poll_inbound() {
                 Ok(Async::Ready(Some(substream))) => {
                     let substream = muxing::substream_from_ref(self.muxer.clone(), substream);
@@ -229,9 +230,11 @@ where
         // Polling outbound substreams.
         // We remove each element from `outbound_substreams` one by one and add them back.
         for n in (0..self.outbound_substreams.len()).rev() {
+			println!("[Node, poll, poll_outbound]");
             let (user_data, mut outbound) = self.outbound_substreams.swap_remove(n);
             match self.muxer.poll_outbound(&mut outbound) {
                 Ok(Async::Ready(Some(substream))) => {
+					println!("[Node, poll, poll_outbound] AsyncReady(Some), yielding OutboundSubstream");
                     let substream = muxing::substream_from_ref(self.muxer.clone(), substream);
                     self.muxer.destroy_outbound(outbound);
                     return Ok(Async::Ready(Some(NodeEvent::OutboundSubstream {
@@ -240,14 +243,17 @@ where
                     })));
                 }
                 Ok(Async::Ready(None)) => {
+					println!("[Node, poll, poll_outbound] AsyncReady(None), yielding OutboundClosed");
                     self.outbound_finished = true;
                     self.muxer.destroy_outbound(outbound);
                     return Ok(Async::Ready(Some(NodeEvent::OutboundClosed { user_data })));
                 }
                 Ok(Async::NotReady) => {
+					println!("[Node, poll, poll_outbound] Async::NotReady), yielding putting back");
                     self.outbound_substreams.push((user_data, outbound));
                 }
                 Err(err) => {
+					println!("[Node, poll, poll_outbound] Err, yielding Err");
                     self.muxer.destroy_outbound(outbound);
                     return Err(err);
                 }
@@ -273,7 +279,7 @@ where
                 }
             }
         }
-
+		println!("[Node, poll] inbound_finished={}, outbound_finished={}, outbound_substreams={:?}", self.inbound_finished, self.outbound_finished, self.outbound_substreams.len());
         // Closing the node if there's no way we can do anything more.
         if self.inbound_finished && self.outbound_finished && self.outbound_substreams.is_empty() {
             return Ok(Async::Ready(None));
