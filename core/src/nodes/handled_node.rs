@@ -288,6 +288,7 @@ where
 mod tests {
     use super::*;
     use futures::future;
+    use futures::future::FutureResult;
     use tokio::runtime::current_thread;
     use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
     use std::io;
@@ -331,8 +332,8 @@ mod tests {
         type InEvent = Event;
         type OutEvent = Event;
         type OutboundOpenInfo = ();
-        fn inject_substream(&mut self, _: T, _: NodeHandlerEndpoint<()>) {
-            println!("[HandledNode, inject_substream]");
+        fn inject_substream(&mut self, substream: T, endpoint: NodeHandlerEndpoint<()>) {
+            println!("[HandledNode, inject_substream] endpoint={:?}", endpoint);
             self.events.push(Event::Substream);
             // need to tell the muxer that we want this closed?
             self.state = Some(HandlerState::Err);
@@ -374,7 +375,6 @@ mod tests {
         want_open_substream: bool,
     }
 
-    use futures::future::FutureResult;
     impl TestBuilder {
         fn new() -> Self {
             TestBuilder {
@@ -652,10 +652,62 @@ mod tests {
         // - Back in the HandledNode, the Handler still yields NotReady, but now
         //   `node_not_ready` is true
         // - …so we break the loop and yield Async::NotReady
-        let poll_result = handled.poll();
-        assert_matches!(poll_result, Ok(Async::NotReady));
+
+        assert_matches!(handled.poll(), Ok(Async::NotReady));
         assert_eq!(handled.handler.events, vec![
             Event::InboundClosed, Event::OutboundClosed, Event::Multiaddr
         ]);
+    }
+
+    #[test]
+    fn poll_yields_inbound_closed_event() {
+        let mut h = TestBuilder::new()
+            .with_muxer_inbound_state(DummyConnectionState::Closed)
+            .with_handler_state(HandlerState::Err) // stop the loop
+            .handled_node();
+
+        assert_eq!(h.handler.events, vec![]);
+        let _ = h.poll();
+        assert_eq!(h.handler.events, vec![Event::InboundClosed]);
+    }
+
+    #[test]
+    fn poll_yields_outbound_closed_event() {
+        let mut h = TestBuilder::new()
+            .with_muxer_inbound_state(DummyConnectionState::Pending)
+            .with_open_substream()
+            .with_muxer_outbound_state(DummyConnectionState::Closed)
+            .with_handler_state(HandlerState::Err) // stop the loop
+            .handled_node();
+
+        assert_eq!(h.handler.events, vec![]);
+        let _ = h.poll();
+        assert_eq!(h.handler.events, vec![Event::OutboundClosed]);
+    }
+
+    #[test]
+    fn poll_yields_multiaddr_event() {
+        let mut h = TestBuilder::new()
+            .with_muxer_inbound_state(DummyConnectionState::Pending)
+            .with_handler_state(HandlerState::Err) // stop the loop
+            .handled_node();
+
+        assert_eq!(h.handler.events, vec![]);
+        let _ = h.poll();
+        assert_eq!(h.handler.events, vec![Event::Multiaddr]);
+    }
+
+    #[test]
+    fn poll_yields_outbound_substream() {
+        let mut h = TestBuilder::new()
+            .with_muxer_inbound_state(DummyConnectionState::Pending)
+            .with_muxer_outbound_state(DummyConnectionState::Opened)
+            .with_open_substream()
+            .with_handler_state(HandlerState::Err) // stop the loop
+            .handled_node();
+
+        assert_eq!(h.handler.events, vec![]);
+        let _ = h.poll();
+        assert_eq!(h.handler.events, vec![Event::Substream]);
     }
 }
