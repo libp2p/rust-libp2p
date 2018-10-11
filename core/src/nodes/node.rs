@@ -88,6 +88,7 @@ pub type Substream<TMuxer> = muxing::SubstreamRef<Arc<TMuxer>>;
 pub enum NodeEvent<TMuxer, TUserData>
 where
     TMuxer: muxing::StreamMuxer,
+    TMuxer::Substream: fmt::Debug,
 {
     /// The multiaddress future of the node has been resolved.
     ///
@@ -202,6 +203,7 @@ where
 impl<TMuxer, TAddrFut, TUserData> Stream for NodeStream<TMuxer, TAddrFut, TUserData>
 where
     TMuxer: muxing::StreamMuxer,
+    TMuxer::Substream: fmt::Debug,
     TAddrFut: Future<Item = Multiaddr, Error = IoError>,
 {
     type Item = NodeEvent<TMuxer, TUserData>;

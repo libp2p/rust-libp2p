@@ -21,6 +21,7 @@
 use muxing::StreamMuxer;
 use nodes::node::{NodeEvent, NodeStream, Substream};
 use futures::prelude::*;
+use std::fmt;
 use std::io::Error as IoError;
 use Multiaddr;
 
@@ -191,6 +192,7 @@ where
 impl<TMuxer, TAddrFut, THandler> Stream for HandledNode<TMuxer, TAddrFut, THandler>
 where
     TMuxer: StreamMuxer,
+    TMuxer::Substream: fmt::Debug,
     THandler: NodeHandler<Substream<TMuxer>>,
     TAddrFut: Future<Item = Multiaddr, Error = IoError>,
 {

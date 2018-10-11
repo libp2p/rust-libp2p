@@ -267,9 +267,10 @@ impl<P> fmt::Debug for SubstreamRef<P>
 where
     P: Deref,
     P::Target: StreamMuxer,
+    <P::Target as StreamMuxer>::Substream: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "Substream({:?})", self)
+        write!(f, "Substream({:?})", self.substream)
     }
 }
 
@@ -540,5 +541,22 @@ impl<T> StreamMuxer for Wrap<T> where T: StreamMuxer {
     #[inline]
     fn flush_all(&self) -> Poll<(), IoError> {
         self.inner.flush_all()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tests::dummy_muxer::{DummyMuxer, DummySubstream};
+
+    #[test]
+    fn test_substream_ref_debug_works() {
+        let muxer = DummyMuxer::new();
+        let substream = {
+            let s = DummySubstream{};
+            substream_from_ref(&muxer, s)
+        };
+
+        println!("{:?}", substream);
     }
 }

@@ -29,6 +29,7 @@ use nodes::listeners::{ListenersEvent, ListenersStream};
 use nodes::node::Substream;
 use std::collections::hash_map::{Entry, OccupiedEntry};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
+use std::fmt;
 use void::Void;
 use {Endpoint, Multiaddr, PeerId, Transport};
 
@@ -347,7 +348,7 @@ where
         TTrans::MultiaddrFuture: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
-        TMuxer::Substream: Send,
+        TMuxer::Substream: Send + fmt::Debug,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
     {
@@ -433,7 +434,7 @@ where
         TTrans::MultiaddrFuture: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
-        TMuxer::Substream: Send,
+        TMuxer::Substream: Send + fmt::Debug,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
     {
@@ -467,7 +468,7 @@ where
         TTrans::ListenerUpgrade: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
-        TMuxer::Substream: Send,
+        TMuxer::Substream: Send + fmt::Debug,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
         THandlerBuild: HandlerFactory<Handler = THandler>,
@@ -809,6 +810,7 @@ impl<'a, TTrans, TMuxer, TInEvent, TOutEvent, THandler, THandlerBuild>
 where
     TTrans: Transport<Output = (PeerId, TMuxer)>,
     TMuxer: StreamMuxer,
+    TMuxer::Substream: fmt::Debug,
     THandlerBuild: HandlerFactory<Handler = THandler>,
     THandler: NodeHandler<Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
     THandler::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
@@ -1026,6 +1028,7 @@ impl<'a, TTrans, TInEvent, TOutEvent, TMuxer, THandler, THandlerBuild>
 where
     TTrans: Transport<Output = (PeerId, TMuxer)>,
     TMuxer: StreamMuxer,
+    TMuxer::Substream: fmt::Debug,
     THandlerBuild: HandlerFactory<Handler = THandler>,
     THandler: NodeHandler<Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
     THandler::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
@@ -1112,7 +1115,7 @@ where
     TTrans::ListenerUpgrade: Send + 'static,
     TMuxer: StreamMuxer + Send + Sync + 'static,
     TMuxer::OutboundSubstream: Send,
-    TMuxer::Substream: Send,
+    TMuxer::Substream: Send + fmt::Debug,
     TInEvent: Send + 'static,
     TOutEvent: Send + 'static,
     THandlerBuild: HandlerFactory<Handler = THandler>,
