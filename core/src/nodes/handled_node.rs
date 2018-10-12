@@ -291,8 +291,7 @@ mod tests {
     use futures::future::FutureResult;
     use tokio::runtime::current_thread;
     use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
-    use tests::dummy_handler::{Handler, HandlerState, Event};
-    use std::io;
+    use tests::dummy_handler::{Handler, HandlerState, InEvent, OutEvent};
 
     // Concrete `HandledNode`
     type TestHandledNode = HandledNode<DummyMuxer, FutureResult<Multiaddr, IoError>, Handler>;
@@ -353,7 +352,7 @@ mod tests {
         handled_node.node = None;
     }
 
-    fn did_see_event(handled_node: &mut TestHandledNode, event: &Event) -> bool {
+    fn did_see_event(handled_node: &mut TestHandledNode, event: &InEvent) -> bool {
         handled_node.handler.events.contains(event)
     }
 
@@ -439,7 +438,7 @@ mod tests {
             .with_muxer_inbound_state(DummyConnectionState::Closed)
             .handled_node();
 
-        let event = Event::Custom("banana");
+        let event = InEvent::Custom("banana");
         handled.inject_event(event.clone());
         assert!(did_see_event(&mut handled, &event));
     }
@@ -503,12 +502,12 @@ mod tests {
             .handled_node();
 
         assert_matches!(handled.poll(), Ok(Async::Ready(None)));
-        assert_eq!(handled.handler.events, vec![Event::Multiaddr]);
+        assert_eq!(handled.handler.events, vec![InEvent::Multiaddr]);
     }
 
     #[test]
     fn poll_with_unready_node_stream_and_handler_emits_custom_event() {
-        let expected_event = Some(NodeHandlerEvent::Custom(Event::Custom("pineapple")));
+        let expected_event = Some(NodeHandlerEvent::Custom(OutEvent::Custom("pineapple")));
         let mut handled = TestBuilder::new()
             // make NodeStream return NotReady
             .with_muxer_inbound_state(DummyConnectionState::Pending)
@@ -517,9 +516,9 @@ mod tests {
             .handled_node();
 
         assert_matches!(handled.poll(), Ok(Async::Ready(Some(event))) => {
-            assert_matches!(event, Event::Custom("pineapple"))
+            assert_matches!(event, OutEvent::Custom("pineapple"))
         });
-        assert_eq!(handled.handler.events, vec![Event::Multiaddr]);
+        assert_eq!(handled.handler.events, vec![InEvent::Multiaddr]);
     }
 
     #[test]
@@ -541,12 +540,12 @@ mod tests {
         set_node_to_none(&mut handled);
         set_next_handler_outbound_state(
             &mut handled,
-            HandlerState::Ready(Some(NodeHandlerEvent::Custom(Event::Custom("pear"))))
+            HandlerState::Ready(Some(NodeHandlerEvent::Custom(OutEvent::Custom("pear"))))
         );
         assert_matches!(handled.poll(), Ok(Async::Ready(Some(event))) => {
-            assert_matches!(event, Event::Custom("pear"))
+            assert_matches!(event, OutEvent::Custom("pear"))
         });
-        assert_eq!(handled.handler.events, vec![Event::OutboundClosed]);
+        assert_eq!(handled.handler.events, vec![InEvent::OutboundClosed]);
     }
 
     #[test]
@@ -588,7 +587,7 @@ mod tests {
 
         assert_matches!(handled.poll(), Ok(Async::NotReady));
         assert_eq!(handled.handler.events, vec![
-            Event::InboundClosed, Event::OutboundClosed, Event::Multiaddr
+            InEvent::InboundClosed, InEvent::OutboundClosed, InEvent::Multiaddr
         ]);
     }
 
@@ -601,7 +600,7 @@ mod tests {
 
         assert_eq!(h.handler.events, vec![]);
         let _ = h.poll();
-        assert_eq!(h.handler.events, vec![Event::InboundClosed]);
+        assert_eq!(h.handler.events, vec![InEvent::InboundClosed]);
     }
 
     #[test]
@@ -615,7 +614,7 @@ mod tests {
 
         assert_eq!(h.handler.events, vec![]);
         let _ = h.poll();
-        assert_eq!(h.handler.events, vec![Event::OutboundClosed]);
+        assert_eq!(h.handler.events, vec![InEvent::OutboundClosed]);
     }
 
     #[test]
@@ -627,7 +626,7 @@ mod tests {
 
         assert_eq!(h.handler.events, vec![]);
         let _ = h.poll();
-        assert_eq!(h.handler.events, vec![Event::Multiaddr]);
+        assert_eq!(h.handler.events, vec![InEvent::Multiaddr]);
     }
 
     #[test]
@@ -641,7 +640,7 @@ mod tests {
 
         assert_eq!(h.handler.events, vec![]);
         let _ = h.poll();
-        assert_eq!(h.handler.events, vec![Event::Substream(Some(1))]);
+        assert_eq!(h.handler.events, vec![InEvent::Substream(Some(1))]);
     }
 
     #[test]
@@ -654,6 +653,6 @@ mod tests {
 
         assert_eq!(h.handler.events, vec![]);
         let _ = h.poll();
-        assert_eq!(h.handler.events, vec![Event::Substream(None)]);
+        assert_eq!(h.handler.events, vec![InEvent::Substream(None)]);
     }
 }

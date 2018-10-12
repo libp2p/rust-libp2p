@@ -28,7 +28,7 @@ use nodes::handled_node::{NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent};
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) struct Handler {
-	pub events: Vec<Event>,
+	pub events: Vec<InEvent>,
 	pub state: Option<HandlerState>,
 	pub next_outbound_state: Option<HandlerState>,
 }
@@ -46,12 +46,12 @@ impl Default for Handler {
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) enum HandlerState {
 	NotReady,
-	Ready(Option<NodeHandlerEvent<usize, Event>>),
+	Ready(Option<NodeHandlerEvent<usize, OutEvent>>),
 	Err,
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub(crate) enum Event {
+pub(crate) enum InEvent {
 	Custom(&'static str),
 	Substream(Option<usize>),
 	OutboundClosed,
@@ -59,35 +59,43 @@ pub(crate) enum Event {
 	Multiaddr,
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub(crate) enum OutEvent {
+	Banana,
+	Custom(&'static str),
+	Substream(Option<usize>), // TODO: used?
+	Err,
+}
+
 
 impl<T> NodeHandler<T> for Handler {
-	type InEvent = Event;
-	type OutEvent = Event;
+	type InEvent = InEvent;
+	type OutEvent = OutEvent;
 	type OutboundOpenInfo = usize;
 	fn inject_substream(&mut self, _: T, endpoint: NodeHandlerEndpoint<usize>) {
 		let user_data = match endpoint {
 			NodeHandlerEndpoint::Dialer(user_data) => Some(user_data),
 			NodeHandlerEndpoint::Listener => None
 		};
-		self.events.push(Event::Substream(user_data));
+		self.events.push(InEvent::Substream(user_data));
 	}
 	fn inject_inbound_closed(&mut self) {
-		self.events.push(Event::InboundClosed);
+		self.events.push(InEvent::InboundClosed);
 	}
 	fn inject_outbound_closed(&mut self, _: usize) {
-		self.events.push(Event::OutboundClosed);
+		self.events.push(InEvent::OutboundClosed);
 		if let Some(ref state) = self.next_outbound_state {
 			self.state = Some(state.clone());
 		}
 	}
 	fn inject_multiaddr(&mut self, _: Result<Multiaddr, IoError>) {
-		self.events.push(Event::Multiaddr);
+		self.events.push(InEvent::Multiaddr);
 	}
 	fn inject_event(&mut self, inevent: Self::InEvent) {
 		self.events.push(inevent)
-		}
+	}
 	fn shutdown(&mut self) {}
-	fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<usize, Event>>, IoError> {
+	fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<usize, OutEvent>>, IoError> {
 		match self.state {
 			Some(ref state) => match state {
 				HandlerState::NotReady => Ok(Async::NotReady),

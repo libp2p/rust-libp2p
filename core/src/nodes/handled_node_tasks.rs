@@ -454,7 +454,6 @@ mod tests {
     mod task {
         use super::super::*;
         use std::collections::{HashMap, hash_map::Entry};
-        // use futures::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
         #[derive(Debug)]
         enum InEvent{Banana}
@@ -503,41 +502,63 @@ mod tests {
             task.close();
             // REVIEW: this doesn't work because the value is moved. I'd argue
             // this doesn't need to be tested as it's enforced at compile time.
-            assert!(!dict.contains_key(&id));
+            // assert!(!dict.contains_key(&id));
         }
     }
 
-    // mod node_task {
-    //     use super::super::*;
-    //     use futures::future;
-    //     use futures::sync;
-    //     use futures::sync::mpsc::{UnboundedReceiver, UnboundedSender};
-    //     use tests::dummy_muxer::DummyMuxer;
-    //     use tests::handler::Handler;
+    mod node_task {
+        use super::*;
+        use super::super::*;
+        use futures::future::{self, FutureResult};
+        use futures::sync;
+        use futures::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+        use tests::dummy_muxer::DummyMuxer;
+        use tests::dummy_handler::{Handler, InEvent, OutEvent};
+        use rand::random;
+        use {PeerId, PublicKey};
 
-    //     fn build_node_task() -> (NodeTask, UnboundedSender, UnboundedReceiver) {
-    //         let id = TaskId(123);
-    //         let (tx, rx) = mpsc::unbounded();
-    //         let handler =
-    //         let node_task = NodeTask {
-    //             inner: NodeTaskInner::Future {
-    //                 future: future::empty(),
-    //                 handler: handler,
-    //                 events_buffer: Vec::new(),
-    //             },
-    //             events_tx: tx.clone(),
-    //             in_events_rx: rx.fuse(),
-    //             id
-    //         };
-    //         (node_task, tx, rx)
-    //     }
+        type TestNodeTask = NodeTask<
+            FutureResult<((PeerId, DummyMuxer), FutureResult<Multiaddr, IoError>), IoError>,
+            DummyMuxer,
+            FutureResult<Multiaddr, IoError>,
+            Handler,
+            InEvent,
+            OutEvent,
+        >;
+        fn build_node_task() -> (
+            TestNodeTask,
+            UnboundedSender<InEvent>,
+            UnboundedReceiver<(InToExtMessage<OutEvent>, TaskId)>,
+        )
+        {
+            let id = TaskId(123);
+            let (events_from_node_task_tx, events_from_node_task_rx) = mpsc::unbounded::<(InToExtMessage<OutEvent>, TaskId)>();
+            let (events_to_node_task_tx, events_to_node_task_rx) = mpsc::unbounded::<InEvent>();
+            let handler = Handler::default();
+            let peer_id = PublicKey::Rsa((0 .. 2048).map(|_| -> u8 { random() }).collect()).into_peer_id();
+            let addr = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
+            let addr_fut = future::ok(addr);
+            let fut = future::ok(((peer_id, DummyMuxer::new()), addr_fut));
+            let node_task = NodeTask {
+                inner: NodeTaskInner::Future {
+                    future: fut,
+                    handler: handler,
+                    events_buffer: Vec::new(),
+                },
+                events_tx: events_from_node_task_tx.clone(), // events TO the outside
+                in_events_rx: events_to_node_task_rx.fuse(), // events FROM the outside
+                id
+            };
+            // (node_task, tx, rx)
+            (node_task, events_to_node_task_tx, events_from_node_task_rx)
+        }
 
-    //     #[test]
-    //     fn poll() {
-    //         let (node_task, tx, rx) = build_node_task();
-
-    //     }
-    // }
+        #[test]
+        fn poll() {
+            let (node_task, tx, rx) = build_node_task();
+            // tokio_executor::spawn(node_task); // TODO: use dummy_handler events
+        }
+    }
 
     mod handled_node_tasks {
 
