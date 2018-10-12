@@ -333,7 +333,7 @@ where
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
             NodeEvent::Multiaddr(result) => {
-                write!(f, "{:?}", result)
+                write!(f, "NodeEvent::MultiAddr({:?})", result)
             },
             NodeEvent::InboundSubstream { ref substream } => {
                 f.debug_struct("NodeEvent::InboundSubstream")
@@ -368,7 +368,6 @@ mod node_stream {
     use super::NodeEvent;
     use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
     use std::io::Error as IoError;
-
 
     fn build_node_stream() -> NodeStream<DummyMuxer, impl Future<Item=Multiaddr, Error=IoError>, Vec<u8>> {
         let addr = future::ok("/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad maddr"));
