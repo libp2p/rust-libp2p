@@ -556,7 +556,7 @@ mod tests {
             let s = DummySubstream{};
             substream_from_ref(&muxer, s)
         };
-
-        println!("{:?}", substream);
+        let s = format!("{:?}", substream).to_string();
+        assert_eq!(s, "Substream(Some(DummySubstream))");
     }
 }
