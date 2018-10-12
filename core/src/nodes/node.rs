@@ -202,7 +202,12 @@ where
     }
 
     /// Destroys the node stream and returns all the pending outbound substreams.
-    pub fn close(&mut self) -> Vec<TUserData> {
+    pub fn close(mut self) -> Vec<TUserData> {
+        self.cancel_outgoing()
+    }
+
+    /// Destroys all outbound streams and returns the corresponding user data.
+    pub fn cancel_outgoing(&mut self) -> Vec<TUserData> {
         let mut out = Vec::with_capacity(self.outbound_substreams.len());
         for (user_data, outbound) in self.outbound_substreams.drain() {
             out.push(user_data);
@@ -212,6 +217,9 @@ where
     }
 
     /// Trigger node shutdown.
+    ///
+    /// After this, `NodeStream::poll` will eventually produce `None`, when both endpoints are
+    /// closed.
     pub fn shutdown_all(&mut self) {
         if self.inbound_state == StreamState::Open {
             self.inbound_state = StreamState::Shutdown
@@ -288,7 +296,9 @@ where
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         // Drive the shutdown process, if any.
-        try_ready!(self.poll_shutdown());
+        if self.poll_shutdown()?.is_not_ready() {
+            return Ok(Async::NotReady)
+        }
 
         // Polling inbound substream.
         if self.inbound_state == StreamState::Open {
@@ -482,8 +492,8 @@ mod node_stream {
     #[test]
     fn query_inbound_outbound_state() {
         let ns = build_node_stream();
-        assert_eq!(ns.is_inbound_open(), true);
-        assert_eq!(ns.is_outbound_open(), true);
+        assert!(ns.is_inbound_open());
+        assert!(ns.is_outbound_open());
     }
 
     #[test]
@@ -497,7 +507,7 @@ mod node_stream {
             assert_matches!(node_event, NodeEvent::InboundClosed)
         });
 
-        assert_eq!(ns.is_inbound_open(), false);
+        assert!(!ns.is_inbound_open());
     }
 
     #[test]
@@ -507,7 +517,7 @@ mod node_stream {
         muxer.set_outbound_connection_state(DummyConnectionState::Closed);
         let mut ns = NodeStream::<_, _, Vec<u8>>::new(muxer, addr);
 
-        assert_eq!(ns.is_outbound_open(), true);
+        assert!(ns.is_outbound_open());
 
         ns.open_substream(vec![1]).unwrap();
         let poll_result = ns.poll();
@@ -518,7 +528,7 @@ mod node_stream {
             })
         });
 
-        assert_eq!(ns.is_outbound_open(), false, "outbound connection should be closed after polling");
+        assert!(!ns.is_outbound_open(), "outbound connection should be closed after polling");
     }
 
     #[test]
@@ -623,7 +633,7 @@ mod node_stream {
         ns.open_substream(vec![1]).unwrap();
         ns.poll().unwrap(); // poll past inbound
         ns.poll().unwrap(); // poll outbound
-        assert_eq!(ns.is_outbound_open(), true);
+        assert!(ns.is_outbound_open());
         assert!(format!("{:?}", ns).contains("outbound_substreams: 1"));
     }
 

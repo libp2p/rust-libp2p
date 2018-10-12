@@ -20,7 +20,7 @@
 
 use muxing::StreamMuxer;
 use nodes::node::{NodeEvent, NodeStream, Substream};
-use futures::prelude::*;
+use futures::{prelude::*, stream::Fuse};
 use std::io::Error as IoError;
 use Multiaddr;
 
@@ -125,11 +125,11 @@ where
     THandler: NodeHandler<Substream<TMuxer>>,
 {
     /// Node that handles the muxing.
-    node: NodeStream<TMuxer, TAddrFut, THandler::OutboundOpenInfo>,
+    node: Fuse<NodeStream<TMuxer, TAddrFut, THandler::OutboundOpenInfo>>,
     /// Handler that processes substreams.
     handler: THandler,
-
-    is_shutdown: bool
+    // True, if the node is shutting down.
+    is_shutting_down: bool
 }
 
 impl<TMuxer, TAddrFut, THandler> HandledNode<TMuxer, TAddrFut, THandler>
@@ -142,9 +142,9 @@ where
     #[inline]
     pub fn new(muxer: TMuxer, multiaddr_future: TAddrFut, handler: THandler) -> Self {
         HandledNode {
-            node: NodeStream::new(muxer, multiaddr_future),
+            node: NodeStream::new(muxer, multiaddr_future).fuse(),
             handler,
-            is_shutdown: false
+            is_shutting_down: false
         }
     }
 
@@ -159,7 +159,7 @@ where
     /// If `true` is returned, more inbound substream will be received.
     #[inline]
     pub fn is_inbound_open(&self) -> bool {
-        self.node.is_inbound_open()
+        self.node.get_ref().is_inbound_open()
     }
 
     /// Returns true if the outbound channel of the muxer is open.
@@ -167,13 +167,13 @@ where
     /// If `true` is returned, more outbound substream will be opened.
     #[inline]
     pub fn is_outbound_open(&self) -> bool {
-        self.node.is_outbound_open()
+        self.node.get_ref().is_outbound_open()
     }
 
     /// Returns true if the handled node is in the process of shutting down.
     #[inline]
     pub fn is_shutting_down(&self) -> bool {
-        self.is_shutdown
+        self.is_shutting_down
     }
 
     /// Indicates to the handled node that it should shut down. After calling this method, the
@@ -181,10 +181,10 @@ where
     ///
     /// After this method returns, `is_shutting_down()` should return true.
     pub fn shutdown(&mut self) {
-        self.node.shutdown_all();
-        self.is_shutdown = true;
+        self.node.get_mut().shutdown_all();
+        self.is_shutting_down = true;
 
-        for user_data in self.node.close() {
+        for user_data in self.node.get_mut().cancel_outgoing() {
             self.handler.inject_outbound_closed(user_data);
         }
 
@@ -216,7 +216,7 @@ where
                 }
                 Async::Ready(None) => {
                     node_not_ready = true;
-                    if !self.is_shutdown {
+                    if !self.is_shutting_down {
                         self.handler.shutdown()
                     }
                 }
@@ -238,8 +238,8 @@ where
                     }
                 }
                 Async::Ready(Some(NodeHandlerEvent::OutboundSubstreamRequest(user_data))) => {
-                    if self.node.is_outbound_open() {
-                        match self.node.open_substream(user_data) {
+                    if self.node.get_ref().is_outbound_open() {
+                        match self.node.get_mut().open_substream(user_data) {
                             Ok(()) => (),
                             Err(user_data) => self.handler.inject_outbound_closed(user_data),
                         }
