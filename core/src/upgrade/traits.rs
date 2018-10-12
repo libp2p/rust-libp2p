@@ -75,10 +75,5 @@ pub trait ConnectionUpgrade<C> {
     ///
     /// Because performing the upgrade may not be instantaneous (eg. it may require a handshake),
     /// this function returns a future instead of the direct output.
-    fn upgrade(
-        self,
-        socket: C,
-        id: Self::UpgradeIdentifier,
-        ty: Endpoint,
-    ) -> Self::Future;
+    fn upgrade(self, socket: C, id: Self::UpgradeIdentifier, ty: Endpoint) -> Self::Future;
 }
