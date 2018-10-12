@@ -39,8 +39,8 @@ use {Multiaddr, PeerId};
 // This collection of nodes spawns a task for each individual node to process. This means that
 // events happen on the background at the same time as the `HandledNodesTasks` is being polled.
 //
-// In order to make the API non-racy and avoid issues, we totally separate the state in the
-// `HandledNodesTasks` and the states that the task nodes can access. They are only allowed to
+// In order to make the API non-racy and avoid issues, we completely separate the state in the
+// `HandledNodesTasks` from the states that the task nodes can access. They are only allowed to
 // exchange messages. The state in the `HandledNodesTasks` is therefore delayed compared to the
 // tasks, and is updated only when `poll()` is called.
 //
@@ -50,12 +50,12 @@ use {Multiaddr, PeerId};
 // conditions in the user's code. See similar comments in the documentation of `NodeStream`.
 
 /// Implementation of `Stream` that handles a collection of nodes.
-// TODO: implement Debug
 pub struct HandledNodesTasks<TInEvent, TOutEvent> {
     /// For each active task, a sender allowing to transmit messages. Closing the sender interrupts
     /// the task. It is possible that we receive messages from tasks that used to be in this list
     /// but no longer are, in which case we should ignore them.
     tasks: FnvHashMap<TaskId, mpsc::UnboundedSender<TInEvent>>,
+
     /// Identifier for the next task to spawn.
     next_task_id: TaskId,
 
@@ -65,6 +65,7 @@ pub struct HandledNodesTasks<TInEvent, TOutEvent> {
 
     /// Sender to emit events to the outside. Meant to be cloned and sent to tasks.
     events_tx: mpsc::UnboundedSender<(InToExtMessage<TOutEvent>, TaskId)>,
+
     /// Receiver side for the events.
     events_rx: mpsc::UnboundedReceiver<(InToExtMessage<TOutEvent>, TaskId)>,
 }
