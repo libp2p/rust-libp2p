@@ -22,8 +22,6 @@
 //! version of the trait along with a way to setup the muxer to behave in the
 //! desired way when testing other components.
 
-extern crate futures;
-
 use std::io::Error as IoError;
 use muxing::{StreamMuxer, Shutdown};
 use futures::prelude::*;
