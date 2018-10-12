@@ -291,83 +291,11 @@ mod tests {
     use futures::future::FutureResult;
     use tokio::runtime::current_thread;
     use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
+    use tests::dummy_handler::{Handler, HandlerState, Event};
     use std::io;
 
     // Concrete `HandledNode`
     type TestHandledNode = HandledNode<DummyMuxer, FutureResult<Multiaddr, IoError>, Handler>;
-
-    #[derive(Debug, PartialEq, Clone)]
-
-    enum Event {
-        Custom(&'static str),
-        Substream(Option<usize>),
-        OutboundClosed,
-        InboundClosed,
-        Multiaddr,
-    }
-    #[derive(Debug, PartialEq, Clone)]
-    enum HandlerState {
-        NotReady,
-        Ready(Option<NodeHandlerEvent<usize, Event>>),
-        Err,
-    }
-
-    #[derive(Debug, PartialEq, Clone)]
-    struct Handler {
-        events: Vec<Event>,
-        state: Option<HandlerState>,
-        next_outbound_state: Option<HandlerState>,
-    }
-
-    impl Default for Handler {
-        fn default() -> Self {
-            Handler {
-                events: Vec::new(),
-                state: None,
-                next_outbound_state: None,
-            }
-        }
-    }
-
-    impl<T> NodeHandler<T> for Handler {
-        type InEvent = Event;
-        type OutEvent = Event;
-        type OutboundOpenInfo = usize;
-        fn inject_substream(&mut self, _: T, endpoint: NodeHandlerEndpoint<usize>) {
-            let user_data = match endpoint {
-                NodeHandlerEndpoint::Dialer(user_data) => Some(user_data),
-                NodeHandlerEndpoint::Listener => None
-            };
-            self.events.push(Event::Substream(user_data));
-        }
-        fn inject_inbound_closed(&mut self) {
-            self.events.push(Event::InboundClosed);
-        }
-        fn inject_outbound_closed(&mut self, _: usize) {
-            self.events.push(Event::OutboundClosed);
-            if let Some(ref state) = self.next_outbound_state {
-                self.state = Some(state.clone());
-            }
-        }
-        fn inject_multiaddr(&mut self, _: Result<Multiaddr, IoError>) {
-            self.events.push(Event::Multiaddr);
-        }
-        fn inject_event(&mut self, inevent: Self::InEvent) {
-            self.events.push(inevent)
-         }
-        fn shutdown(&mut self) {}
-        fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<usize, Event>>, IoError> {
-            match self.state {
-                Some(ref state) => match state {
-                    HandlerState::NotReady => Ok(Async::NotReady),
-                    HandlerState::Ready(None) => Ok(Async::Ready(None)),
-                    HandlerState::Ready(Some(event)) => Ok(Async::Ready(Some(event.clone()))),
-                    HandlerState::Err => {Err(io::Error::new(io::ErrorKind::Other, "oh noes"))},
-                },
-                None => Ok(Async::NotReady)
-            }
-        }
-    }
 
     struct TestBuilder {
         addr: Multiaddr,
