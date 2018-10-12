@@ -448,3 +448,73 @@ where
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    mod task {
+        use super::super::*;
+        use std::collections::{HashMap, hash_map::Entry};
+        use futures::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+
+        #[derive(Debug)]
+        enum InEvent{Banana}
+
+        #[test]
+        fn send_event() {
+            let mut dict = HashMap::new();
+            let (tx, mut rx) = mpsc::unbounded::<InEvent>();
+            let id = TaskId(123);
+            dict.insert(id, tx);
+            let mut task = match dict.entry(id) {
+                Entry::Occupied(inner) => Task{inner},
+                _ => unreachable!()
+            };
+
+            task.send_event(InEvent::Banana);
+            assert_matches!(rx.poll(), Ok(Async::Ready(Some(InEvent::Banana))));
+        }
+
+        #[test]
+        fn id() {
+            let mut dict = HashMap::new();
+            let (tx, _) = mpsc::unbounded::<InEvent>();
+            let id = TaskId(123);
+            dict.insert(id, tx);
+            let task = match dict.entry(id) {
+                Entry::Occupied(inner) => Task{inner},
+                _ => unreachable!()
+            };
+
+            assert_eq!(id, task.id())
+        }
+
+        #[test]
+        #[ignore]
+        fn close() {
+            let mut dict = HashMap::new();
+            let (tx, _) = mpsc::unbounded::<InEvent>();
+            let id = TaskId(123);
+            dict.insert(id, tx);
+            let task = match dict.entry(id) {
+                Entry::Occupied(inner) => Task{inner},
+                _ => unreachable!()
+            };
+
+            task.close();
+            // REVIEW: this doesn't work because the value is moved. I'd argue
+            // this doesn't need to be tested as it's enforced at compile time.
+            assert!(!dict.contains_key(&id));
+        }
+    }
+
+    mod node_task {
+        #[test]
+        fn poll() {
+            unimplemented!();
+        }
+    }
+
+    mod handled_node_tasks {
+
+    }
+}
