@@ -158,3 +158,4 @@ where
         future::ok((Yamux::new(i, self.0, mode), remote))
     }
 }
+

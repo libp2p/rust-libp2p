@@ -280,7 +280,6 @@ impl<TInEvent, TOutEvent> CollectionStream<TInEvent, TOutEvent> {
         TOutEvent: Send + 'static,
         THandler::OutboundOpenInfo: Send + 'static,     // TODO: shouldn't be required?
         TMuxer: StreamMuxer + Send + Sync + 'static,  // TODO: Send + Sync + 'static shouldn't be required
-        TMuxer::Substream: fmt::Debug,
         TMuxer::OutboundSubstream: Send + 'static,  // TODO: shouldn't be required
     {
         let id = self.inner.add_reach_attempt(future, handler);

@@ -267,10 +267,9 @@ impl<P> fmt::Debug for SubstreamRef<P>
 where
     P: Deref,
     P::Target: StreamMuxer,
-    <P::Target as StreamMuxer>::Substream: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "Substream({:?})", self.substream)
+        f.write_str("SubstreamRef")
     }
 }
 
@@ -557,6 +556,6 @@ mod tests {
             substream_from_ref(&muxer, s)
         };
         let s = format!("{:?}", substream).to_string();
-        assert_eq!(s, "Substream(Some(DummySubstream))");
+        assert_eq!(s, "SubstreamRef");
     }
 }
