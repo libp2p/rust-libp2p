@@ -454,7 +454,7 @@ mod tests {
     mod task {
         use super::super::*;
         use std::collections::{HashMap, hash_map::Entry};
-        use futures::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+        // use futures::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
         #[derive(Debug)]
         enum InEvent{Banana}
@@ -507,12 +507,37 @@ mod tests {
         }
     }
 
-    mod node_task {
-        #[test]
-        fn poll() {
-            unimplemented!();
-        }
-    }
+    // mod node_task {
+    //     use super::super::*;
+    //     use futures::future;
+    //     use futures::sync;
+    //     use futures::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+    //     use tests::dummy_muxer::DummyMuxer;
+    //     use tests::handler::Handler;
+
+    //     fn build_node_task() -> (NodeTask, UnboundedSender, UnboundedReceiver) {
+    //         let id = TaskId(123);
+    //         let (tx, rx) = mpsc::unbounded();
+    //         let handler =
+    //         let node_task = NodeTask {
+    //             inner: NodeTaskInner::Future {
+    //                 future: future::empty(),
+    //                 handler: handler,
+    //                 events_buffer: Vec::new(),
+    //             },
+    //             events_tx: tx.clone(),
+    //             in_events_rx: rx.fuse(),
+    //             id
+    //         };
+    //         (node_task, tx, rx)
+    //     }
+
+    //     #[test]
+    //     fn poll() {
+    //         let (node_task, tx, rx) = build_node_task();
+
+    //     }
+    // }
 
     mod handled_node_tasks {
 
