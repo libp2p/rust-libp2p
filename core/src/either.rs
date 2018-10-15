@@ -18,10 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{prelude::*, future};
+use futures::prelude::*;
 use muxing::{Shutdown, StreamMuxer};
 use std::io::{Error as IoError, Read, Write};
 use tokio_io::{AsyncRead, AsyncWrite};
+use Multiaddr;
 
 /// Implements `AsyncRead` and `AsyncWrite` and dispatches all method calls to
 /// either `First` or `Second`.
@@ -243,52 +244,44 @@ pub enum EitherListenStream<A, B> {
 
 impl<AStream, BStream, AInner, BInner> Stream for EitherListenStream<AStream, BStream>
 where
-    AStream: Stream<Item = AInner, Error = IoError>,
-    BStream: Stream<Item = BInner, Error = IoError>,
+    AStream: Stream<Item = (AInner, Multiaddr), Error = IoError>,
+    BStream: Stream<Item = (BInner, Multiaddr), Error = IoError>,
 {
-    type Item = EitherListenUpgrade<AInner, BInner>;
+    type Item = (EitherFuture<AInner, BInner>, Multiaddr);
     type Error = IoError;
 
     #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         match self {
             &mut EitherListenStream::First(ref mut a) => a.poll()
-                .map(|i| i.map(|v| v.map(EitherListenUpgrade::First))),
+                .map(|i| (i.map(|v| (v.map(|(o, addr)| (EitherFuture::First(o), addr)))))),
             &mut EitherListenStream::Second(ref mut a) => a.poll()
-                .map(|i| i.map(|v| v.map(EitherListenUpgrade::Second))),
+                .map(|i| (i.map(|v| (v.map(|(o, addr)| (EitherFuture::Second(o), addr)))))),
         }
     }
 }
 
-// TODO: This type is needed because of the lack of `impl Trait` in stable Rust.
-//         If Rust had impl Trait we could use the Either enum from the futures crate and add some
-//         modifiers to it. This custom enum is a combination of Either and these modifiers.
+/// Implements `Future` and dispatches all method calls to either `First` or `Second`.
 #[derive(Debug, Copy, Clone)]
 #[must_use = "futures do nothing unless polled"]
-pub enum EitherListenUpgrade<A, B> {
+pub enum EitherFuture<A, B> {
     First(A),
     Second(B),
 }
 
-impl<A, B, Ao, Bo, Af, Bf> Future for EitherListenUpgrade<A, B>
+impl<AFuture, BFuture, AInner, BInner> Future for EitherFuture<AFuture, BFuture>
 where
-    A: Future<Item = (Ao, Af), Error = IoError>,
-    B: Future<Item = (Bo, Bf), Error = IoError>,
+    AFuture: Future<Item = AInner, Error = IoError>,
+    BFuture: Future<Item = BInner, Error = IoError>,
 {
-    type Item = (EitherOutput<Ao, Bo>, future::Either<Af, Bf>);
+    type Item = EitherOutput<AInner, BInner>;
     type Error = IoError;
 
     #[inline]
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self {
-            &mut EitherListenUpgrade::First(ref mut a) => {
-                let (item, addr) = try_ready!(a.poll());
-                Ok(Async::Ready((EitherOutput::First(item), future::Either::A(addr))))
-            }
-            &mut EitherListenUpgrade::Second(ref mut b) => {
-                let (item, addr) = try_ready!(b.poll());
-                Ok(Async::Ready((EitherOutput::Second(item), future::Either::B(addr))))
-            }
+            &mut EitherFuture::First(ref mut a) => a.poll().map(|v| v.map(EitherOutput::First)),
+            &mut EitherFuture::Second(ref mut a) => a.poll().map(|v| v.map(EitherOutput::Second)),
         }
     }
 }

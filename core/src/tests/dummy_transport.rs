@@ -47,10 +47,9 @@ impl DummyTransport {
 }
 impl Transport for DummyTransport {
     type Output = usize;
-    type Listener = Box<Stream<Item=Self::ListenerUpgrade, Error=io::Error> + Send>;
-    type ListenerUpgrade = FutureResult<(Self::Output, Self::MultiaddrFuture), io::Error>;
-    type MultiaddrFuture = FutureResult<Multiaddr, io::Error>;
-    type Dial = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error> + Send>;
+    type Listener = Box<Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=io::Error> + Send>;
+    type ListenerUpgrade = FutureResult<Self::Output, io::Error>;
+    type Dial = Box<Future<Item=Self::Output, Error=io::Error> + Send>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)>
     where
@@ -59,7 +58,7 @@ impl Transport for DummyTransport {
         let addr2 = addr.clone();
         match self.listener_state {
             ListenerState::Ok(async) => {
-                let tupelize = move |stream| future::ok( (stream, future::ok(addr.clone())) );
+                let tupelize = move |stream| (future::ok(stream), addr.clone());
                 Ok(match async {
                     Async::NotReady => {
                         let stream = stream::poll_fn(|| Ok(Async::NotReady)).map(tupelize);
