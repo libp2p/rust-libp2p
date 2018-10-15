@@ -116,8 +116,12 @@ pub trait Transport {
     /// a remote node observes for one of our dialers.
     ///
     /// For example, if `server` is `/ip4/0.0.0.0/tcp/3000` and `observed` is
-    /// `/ip4/80.81.82.83/tcp/29601`, then we should return `/ip4/80.81.82.83/tcp/3000`. Each
-    /// implementation of `Transport` is only responsible for handling the protocols it supports.
+    /// `/ip4/80.81.82.83/tcp/29601`, then we should return `/ip4/80.81.82.83/tcp/3000`.
+    ///
+    /// Each implementation of `Transport` is only responsible for handling the protocols it
+    /// supports and should only consider the prefix of `observed` necessary to perform the
+    /// address translation (e.g. `/ip4/80.81.82.83`) but should otherwise preserve `server`
+    /// as is.
     ///
     /// Returns `None` if nothing can be determined. This happens if this trait implementation
     /// doesn't recognize the protocols, or if `server` and `observed` are related.

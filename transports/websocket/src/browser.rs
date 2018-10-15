@@ -209,49 +209,40 @@ impl Transport for BrowserWsConfig {
     }
 
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        let mut server_protocols = server.iter();
-        let server_proto0 = server_protocols.next()?;
-        let server_proto1 = server_protocols.next()?;
-        let server_proto2 = server_protocols.next()?;
-        if server_protocols.next().is_some() {
-            return None;
+        let mut address = Multiaddr::empty();
+
+        let mut iter = server.iter().zip(observed.iter());
+
+        // Use the observed IP address.
+        match iter.next() {
+            Some((Protocol::Ip4(_), x@Protocol::Ip4(_))) => address.append(x),
+            Some((Protocol::Ip6(_), x@Protocol::Ip6(_))) => address.append(x),
+            _ => return None
         }
 
-        let mut observed_protocols = observed.iter();
-        let obs_proto0 = observed_protocols.next()?;
-        let obs_proto1 = observed_protocols.next()?;
-        let obs_proto2 = observed_protocols.next()?;
-        if observed_protocols.next().is_some() {
-            return None;
+        // Skip over next protocol (assumed to contain port information).
+        if iter.next().is_none() {
+            return None
         }
 
-        // Check that `server` is a valid TCP/IP address.
-        match (&server_proto0, &server_proto1, &server_proto2) {
-            (&Protocol::Ip4(_), &Protocol::Tcp(_), &Protocol::Ws)
-            | (&Protocol::Ip6(_), &Protocol::Tcp(_), &Protocol::Ws)
-            | (&Protocol::Ip4(_), &Protocol::Tcp(_), &Protocol::Wss)
-            | (&Protocol::Ip6(_), &Protocol::Tcp(_), &Protocol::Wss) => {}
-            _ => return None,
+        // Check for WS/WSS.
+        //
+        // Note that it will still work if the server uses WSS while the client uses
+        // WS, or vice-versa.
+        match iter.next() {
+            Some((x@Protocol::Ws, Protocol::Ws)) => address.append(x),
+            Some((x@Protocol::Ws, Protocol::Wss)) => address.append(x),
+            Some((x@Protocol::Wss, Protocol::Ws)) => address.append(x),
+            Some((x@Protocol::Wss, Protocol::Wss)) => address.append(x),
+            _ => return None
         }
 
-        // Check that `observed` is a valid TCP/IP address.
-        match (&obs_proto0, &obs_proto1, &obs_proto2) {
-            (&Protocol::Ip4(_), &Protocol::Tcp(_), &Protocol::Ws)
-            | (&Protocol::Ip6(_), &Protocol::Tcp(_), &Protocol::Ws)
-            | (&Protocol::Ip4(_), &Protocol::Tcp(_), &Protocol::Wss)
-            | (&Protocol::Ip6(_), &Protocol::Tcp(_), &Protocol::Wss) => {}
-            _ => return None,
+        // Carry over everything else from the server address.
+        for proto in server.iter().skip(3) {
+            address.append(proto)
         }
 
-        // Note that it will still work if the server uses WSS while the client uses WS,
-        // or vice-versa.
-
-        let result = iter::once(obs_proto0)
-            .chain(iter::once(server_proto1))
-            .chain(iter::once(server_proto2))
-            .collect();
-
-        Some(result)
+        Some(address)
     }
 }
 
