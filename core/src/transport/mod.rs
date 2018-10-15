@@ -120,7 +120,7 @@ pub trait Transport {
     ///
     /// Each implementation of `Transport` is only responsible for handling the protocols it
     /// supports and should only consider the prefix of `observed` necessary to perform the
-    /// address translation (e.g. `ip4/80.81.82.83`) but should otherwise preserve `server`
+    /// address translation (e.g. `/ip4/80.81.82.83`) but should otherwise preserve `server`
     /// as is.
     ///
     /// Returns `None` if nothing can be determined. This happens if this trait implementation
