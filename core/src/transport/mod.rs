@@ -29,10 +29,8 @@
 //! `UpgradedNode::or_upgrade` methods, you can combine multiple transports and/or upgrades
 //! together in a complex chain of protocols negotiation.
 
-use connection_reuse::ConnectionReuse;
 use futures::prelude::*;
 use multiaddr::Multiaddr;
-use muxing::StreamMuxer;
 use std::io::Error as IoError;
 use tokio_io::{AsyncRead, AsyncWrite};
 use upgrade::{ConnectionUpgrade, Endpoint};
@@ -241,17 +239,6 @@ pub trait Transport {
         Self: Sized,
     {
         DummyMuxing::new(self)
-    }
-
-    /// Turns this `Transport` into a `ConnectionReuse`. If the `Output` implements the
-    /// `StreamMuxer` trait, the returned object will implement `Transport` and `MuxedTransport`.
-    #[inline]
-    fn into_connection_reuse<D, M>(self) -> ConnectionReuse<Self, D, M>
-    where
-        Self: Sized + Transport<Output = (D, M)>,
-        M: StreamMuxer,
-    {
-        ConnectionReuse::new(self)
     }
 
     /// Wraps around the `Transport` and makes it interruptible.
