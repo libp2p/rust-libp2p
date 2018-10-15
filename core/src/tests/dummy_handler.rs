@@ -43,7 +43,7 @@ impl Default for Handler {
 	}
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone,)]
 pub(crate) enum HandlerState {
 	NotReady,
 	Ready(Option<NodeHandlerEvent<usize, OutEvent>>),
@@ -57,6 +57,7 @@ pub(crate) enum InEvent {
 	OutboundClosed,
 	InboundClosed,
 	Multiaddr,
+	Shutdown,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -92,7 +93,13 @@ impl<T> NodeHandler<T> for Handler {
 		self.events.push(InEvent::Multiaddr);
 	}
 	fn inject_event(&mut self, inevent: Self::InEvent) {
-		self.events.push(inevent)
+		println!("[NodeHandler, inject_event] inevent={:?}", inevent);
+		self.events.push(inevent.clone());
+		match inevent {
+			InEvent::Custom(s) => self.state = Some(HandlerState::Ready(Some(NodeHandlerEvent::Custom(OutEvent::Custom(s))))),
+			_ => {}
+		}
+
 	}
 	fn shutdown(&mut self) {}
 	fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<usize, OutEvent>>, IoError> {
