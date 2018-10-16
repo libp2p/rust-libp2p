@@ -775,7 +775,7 @@ pub struct GossipSubController {
 
 impl GossipSubController {
     pub fn join(&self, topic: &Topic) {
-
+        
     }
 
     pub fn join_many<'a, I>(&self, topics: I) {
@@ -799,7 +799,7 @@ impl GossipSubController {
     }
 
     pub fn graft(&self, topic: &Topic) {
-
+        
     }
 
     pub fn graft_many<'a, I>(&self, topics: I)
