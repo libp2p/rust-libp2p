@@ -71,7 +71,7 @@ struct OutReachAttempt {
 }
 
 /// Event that can happen on the `RawSwarm`.
-pub enum RawSwarmEvent<'a, TTrans, TInEvent, TOutEvent, THandler>
+pub enum RawSwarmEvent<'a, TTrans: 'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a>
 where
     TTrans: Transport,
 {
@@ -181,7 +181,7 @@ where
 }
 
 /// A new connection arrived on a listener.
-pub struct IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler>
+pub struct IncomingConnectionEvent<'a, TTrans: 'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a>
 where TTrans: Transport
 {
     /// The produced upgrade.
