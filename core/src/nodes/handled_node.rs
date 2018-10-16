@@ -562,8 +562,8 @@ mod tests {
         //   closed, `inbound_finished` is set to true.
         // - an Async::Ready(NodeEvent::InboundClosed) is yielded (also calls
         //   `inject_inbound_close`, but that's irrelevant here)
-        // - back in `poll()` we cal `handler.poll()` which does nothing because
-        //   `HandlerState` is `NotReady`: loop continues
+        // - back in `poll()` we call `handler.poll()` which does nothing
+        //   because `HandlerState` is `NotReady`: loop continues
         // - polls the node again which now skips the inbound block because
         //   `inbound_finished` is true.
         // - Now `poll_outbound()` is called which returns `Async::Ready(None)`
@@ -577,15 +577,19 @@ mod tests {
         // - Polls the node again; now we will hit the address resolution
         // - Address resolves and yields a `Multiaddr` event and we resume the
         //   loop
-        // - HandledNode polls the node again: we skip inbound and there are no
-        //   more outbound substreams so we skip that too; the addr is now
-        //   Resolved so that part is skipped too
-        // - We reach the last section and yield Async::Ready(None)
-        // - Back in the HandledNode, the Handler still yields NotReady, but now
-        //   `node_not_ready` is true
-        // - …so we break the loop and yield Async::NotReady
+        // - HandledNode polls the NodeStream again: we skip inbound and there
+        //   are no more outbound substreams so we skip that too; the addr is
+        //   now Resolved so that part is skipped too
+        // - We reach the last section of NodeStream poll() and yield
+        //   Async::Ready(None)
+        // - Back in the HandledNode, the Ready(None) will cause
+        //   `node_not_ready` to be set to true, the node to be unset and
+        //   Handler is shutdown()
+        // - Handler shutdown() sets the state to Async::Ready(None) so on the
+        //   next iteration in HandledNode we exit the loop with a, you guessed
+        //   it, Async::Ready(None)
 
-        assert_matches!(handled.poll(), Ok(Async::NotReady));
+        assert_matches!(handled.poll(), Ok(Async::Ready(None)));
         assert_eq!(handled.handler.events, vec![
             InEvent::InboundClosed, InEvent::OutboundClosed, InEvent::Multiaddr
         ]);

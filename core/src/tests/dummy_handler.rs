@@ -57,15 +57,11 @@ pub(crate) enum InEvent {
 	OutboundClosed,
 	InboundClosed,
 	Multiaddr,
-	Shutdown,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) enum OutEvent {
-	Banana,
 	Custom(&'static str),
-	Substream(Option<usize>), // TODO: used?
-	Err,
 }
 
 
@@ -101,8 +97,15 @@ impl<T> NodeHandler<T> for Handler {
 		}
 
 	}
-	fn shutdown(&mut self) {}
+	fn shutdown(&mut self) {
+		println!("[NodeHandler, shutdown] Handler shutting down");
+		self.state = Some(HandlerState::Ready(None));
+	}
 	fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<usize, OutEvent>>, IoError> {
+		println!("[NodeHandler, poll] current handler state: {:?}", self.state);
+		// Should ideally be `self.state.take()` but it is sometimes useful to
+		// make the state "stick" so it's returned many times (it's complicated
+		// to set the state from the outside once the task runs).
 		match self.state {
 			Some(ref state) => match state {
 				HandlerState::NotReady => Ok(Async::NotReady),

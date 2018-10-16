@@ -170,7 +170,7 @@ impl<TInEvent, TOutEvent> HandledNodesTasks<TInEvent, TOutEvent> {
     {
         for sender in self.tasks.values() {
             // Note: it is possible that sending an event fails if the background task has already
-            // finished, but the local state hasn't reflected that yet becaues it hasn't been
+            // finished, but the local state hasn't reflected that yet because it hasn't been
             // polled. This is not an error situation.
             let _ = sender.unbounded_send(event.clone());
         }
@@ -364,11 +364,11 @@ where
                     loop {
                         match self.in_events_rx.poll() {
                             Ok(Async::Ready(None)) => {
-                                println!("[NodeTask, poll]    NodeTaskInner::Future; in_events_rx: Async::Ready(None)");
+                                println!("[NodeTask, poll]    NodeTaskInner::Future; in_events_rx: Async::Ready(None) – done buffering up events");
                                 return Ok(Async::Ready(()))
                             },
                             Ok(Async::Ready(Some(event))) => {
-                                println!("[NodeTask, poll]    NodeTaskInner::Future; in_events_rx: Async::Ready(Some)");
+                                println!("[NodeTask, poll]    NodeTaskInner::Future; in_events_rx: Async::Ready(Some) – buffering up an event");
                                 events_buffer.push(event)
                             },
                             Ok(Async::NotReady) => {
@@ -382,10 +382,11 @@ where
                     // Check whether dialing succeeded.
                     match future.poll() {
                         Ok(Async::Ready(((peer_id, muxer), addr_fut))) => {
-                            println!("[NodeTask, poll]      NodeTaskInner::Future: AsyncReady(Some)");
+                            println!("[NodeTask, poll]      NodeTaskInner::Future: AsyncReady(Some) – setting up HandledNode");
                             let event = InToExtMessage::NodeReached(peer_id);
                             let mut node = HandledNode::new(muxer, addr_fut, handler);
                             for event in events_buffer {
+                                println!("[NodeTask, poll]      NodeTaskInner::Future: AsyncReady(Some) – injecting event");
                                 node.inject_event(event);
                             }
                             if let Err(_) = self.events_tx.unbounded_send((event, self.id)) {
@@ -394,7 +395,7 @@ where
                             self.inner = NodeTaskInner::Node(node);
                         }
                         Ok(Async::NotReady) => {
-                            println!("[NodeTask, poll]      NodeTaskInner::Future: Async::NotReady");
+                            println!("[NodeTask, poll]      NodeTaskInner::Future: Async::NotReady – creating a new NodeTaskInner and putting it back in the NodeTask");
                             self.inner = NodeTaskInner::Future { future, handler, events_buffer };
                             return Ok(Async::NotReady);
                         },
@@ -410,7 +411,7 @@ where
 
                 // Second possibility: we have a node.
                 NodeTaskInner::Node(mut node) => {
-                    println!("[NodeTask, poll]  NodeTaskInner::Node; connected");
+                    println!("[NodeTask, poll]  NodeTaskInner::Node; we have a HandledNode");
                     // Start by handling commands received from the outside of the task.
                     if !self.in_events_rx.is_done() {
                         println!("[NodeTask, poll]  NodeTaskInner::Node; incoming events chan is open");
@@ -421,11 +422,11 @@ where
                                     break
                                 },
                                 Ok(Async::Ready(Some(event))) => {
-                                    println!("[NodeTask, poll]      NodeTaskInner::Node; in_events_rx Async::Ready(Some)");
+                                    println!("[NodeTask, poll]      NodeTaskInner::Node; in_events_rx Async::Ready(Some) – there was an event sent from the outside, injecting");
                                     node.inject_event(event);
                                 },
                                 Ok(Async::Ready(None)) => {
-                                    println!("[NodeTask, poll]      NodeTaskInner::Node; in_events_rx Async::Ready(None), calling shutdown()");
+                                    println!("[NodeTask, poll]      NodeTaskInner::Node; in_events_rx Async::Ready(None) – calling shutdown()");
                                     // Node closed by the external API ; start shutdown process.
                                     node.shutdown();
                                     break;
@@ -440,27 +441,26 @@ where
                         println!("[NodeTask, poll]      NodeTaskInner::Node; polling node, top of loop");
                         match node.poll() {
                             Ok(Async::NotReady) => {
-                                println!("[NodeTask, poll]      NodeTaskInner::Node; polling node; Async::NotReady");
+                                println!("[NodeTask, poll]      NodeTaskInner::Node; polled node; Async::NotReady");
                                 self.inner = NodeTaskInner::Node(node);
                                 return Ok(Async::NotReady);
                             },
                             Ok(Async::Ready(Some(event))) => {
-                                println!("[NodeTask, poll]      NodeTaskInner::Node; polling node; Async::Ready(Some) xxx");
+                                println!("[NodeTask, poll]      NodeTaskInner::Node; polled node; Async::Ready(Some)");
                                 let event = InToExtMessage::NodeEvent(event);
                                 if let Err(_) = self.events_tx.unbounded_send((event, self.id)) {
-                                    println!("[NodeTask, poll]      NodeTaskInner::Node; polling node; Async::Ready(Some); error sending on events_tx channel. Shutting down the node.");
+                                    println!("[NodeTask, poll]      NodeTaskInner::Node; polled node; Async::Ready(Some); error sending on events_tx channel. Shutting down the node.");
                                     node.shutdown();
                                 }
-                                println!("[NodeTask, poll]      NodeTaskInner::Node; sent a message back");
                             }
                             Ok(Async::Ready(None)) => {
-                                println!("[NodeTask, poll]      NodeTaskInner::Node; polling node; Async::Ready(None)");
+                                println!("[NodeTask, poll]      NodeTaskInner::Node; polled node; Async::Ready(None)");
                                 let event = InToExtMessage::TaskClosed(Ok(()));
                                 let _ = self.events_tx.unbounded_send((event, self.id));
                                 return Ok(Async::Ready(())); // End the task.
                             }
                             Err(err) => {
-                                println!("[NodeTask, poll]      NodeTaskInner::Node; polling node; Err");
+                                println!("[NodeTask, poll]      NodeTaskInner::Node; polled node; Err");
                                 let event = InToExtMessage::TaskClosed(Err(err));
                                 let _ = self.events_tx.unbounded_send((event, self.id));
                                 return Ok(Async::Ready(())); // End the task.
@@ -543,6 +543,7 @@ mod tests {
         use rand::random;
         use {PeerId, PublicKey};
         use std::io;
+        use tokio::runtime::current_thread::Runtime;
 
         type TestNodeTask = NodeTask<
             FutureResult<((PeerId, DummyMuxer), FutureResult<Multiaddr, IoError>), IoError>,
@@ -552,137 +553,108 @@ mod tests {
             InEvent,
             OutEvent,
         >;
-        fn build_node_task() -> (
-            TestNodeTask,
-            UnboundedSender<InEvent>,
-            UnboundedReceiver<(InToExtMessage<OutEvent>, TaskId)>,
-        )
-        {
-            let id = TaskId(123);
-            let (events_from_node_task_tx, events_from_node_task_rx) = mpsc::unbounded::<(InToExtMessage<OutEvent>, TaskId)>();
-            let (events_to_node_task_tx, events_to_node_task_rx) = mpsc::unbounded::<InEvent>();
-            let handler = Handler::default();
-            let peer_id = PublicKey::Rsa((0 .. 2048).map(|_| -> u8 { random() }).collect()).into_peer_id();
-            let addr = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
-            let addr_fut = future::ok(addr);
-            let fut = future::ok(((peer_id, DummyMuxer::new()), addr_fut));
-            let node_task = NodeTask {
-                inner: NodeTaskInner::Future {
-                    future: fut,
-                    handler: handler,
-                    events_buffer: Vec::new(),
-                },
-                events_tx: events_from_node_task_tx.clone(), // events TO the outside
-                in_events_rx: events_to_node_task_rx.fuse(), // events FROM the outside
-                id
-            };
-            (node_task, events_to_node_task_tx, events_from_node_task_rx)
+
+        struct TestBuilder {
+           task_id: TaskId,
+           inner_fut: Option<FutureResult<((PeerId, DummyMuxer), FutureResult<Multiaddr, IoError>), IoError>>,
         }
-
-        // poll first checks if we're ready to do work
-        // if we're still connecting check the incoming events and queue them up for later execution
-        // then check the connection: still connecting? yes => return; no => send NodeReached event and keep working
-        // If we have reached the node, take care of incoming events we buffered up while waiting
-        // When the node is connected, take care of incoming events
-
-        // #[test]
-        // fn poll() {
-        //     use tokio::runtime::current_thread::Runtime;
-        //     let (mut node_task, to_node_tx, mut from_node_rx) = build_node_task();
-        //     let mut rt = Runtime::new().unwrap();
-        //     // rt.spawn(node_task);
-        //     to_node_tx.unbounded_send(InEvent::Custom("beef")).unwrap();
-        //     let mut events_seen = Vec::new();
-        //     {
-        //         let from_node_rx_fut = from_node_rx.take(2).for_each(|event| {
-        //             println!("––––> THE NODE SENT {:?}", event);
-        //             events_seen.push(event);
-        //             Ok(())
-        //         });
-        //         // rt.block_on(from_node_rx_fut);
-        //         let common_fut = from_node_rx_fut.select2(node_task);
-        //         rt.block_on(common_fut);
-        //     }
-
-        //     assert_matches!(events_seen[0], (InToExtMessage::NodeReached(_), TaskId(123)));
-        //     assert_matches!(events_seen[1], (InToExtMessage::NodeEvent(ref outevent), TaskId(123)) => {
-        //         assert_matches!(outevent, OutEvent::Custom(beef) => {
-        //             assert_eq!(beef, &"beef");
-        //         })
-        //     });
-        // }
+        impl TestBuilder {
+            fn new() -> Self {
+                TestBuilder {
+                    task_id: TaskId(123),
+                    inner_fut: None,
+                }
+            }
+            fn with_inner_fut(&mut self, fut: FutureResult<((PeerId, DummyMuxer), FutureResult<Multiaddr, IoError>), IoError>) -> &mut Self{
+                self.inner_fut = Some(fut);
+                self
+            }
+            fn with_task_id(&mut self, id: usize) -> &mut Self {
+                self.task_id = TaskId(id);
+                self
+            }
+            fn node_task(&mut self) -> (
+                TestNodeTask,
+                UnboundedSender<InEvent>,
+                UnboundedReceiver<(InToExtMessage<OutEvent>, TaskId)>,
+            ) {
+                let (events_from_node_task_tx, events_from_node_task_rx) = mpsc::unbounded::<(InToExtMessage<OutEvent>, TaskId)>();
+                let (events_to_node_task_tx, events_to_node_task_rx) = mpsc::unbounded::<InEvent>();
+                if self.inner_fut.is_none() {
+                    self.inner_fut = {
+                        let peer_id = PublicKey::Rsa((0 .. 2048).map(|_| -> u8 { random() }).collect()).into_peer_id();
+                        let addr = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
+                        let addr_fut = future::ok(addr);
+                        Some(future::ok(((peer_id, DummyMuxer::new()), addr_fut)))
+                    }
+                }
+                let node_task = NodeTask {
+                    inner: NodeTaskInner::Future {
+                        future: self.inner_fut.take().unwrap(),
+                        handler: Handler::default(),
+                        events_buffer: Vec::new(),
+                    },
+                    events_tx: events_from_node_task_tx.clone(), // events TO the outside
+                    in_events_rx: events_to_node_task_rx.fuse(), // events FROM the outside
+                    id: self.task_id,
+                };
+                (node_task, events_to_node_task_tx, events_from_node_task_rx)
+            }
+        }
 
         #[test]
-        fn poll() {
-            let (mut node_task, to_node_tx, mut from_node_rx) = build_node_task();
+        fn poll_works() {
+            let (node_task, tx, mut rx) = TestBuilder::new()
+                .with_task_id(890)
+                .node_task();
 
+            tx.unbounded_send(InEvent::Custom("beef")).expect("send to NodeTask should work");
             let node_thread = std::thread::spawn(move || {
-                to_node_tx.unbounded_send(InEvent::Custom("beef")).unwrap();
                 tokio::runtime::current_thread::block_on_all(node_task)
             });
+            let mut rt = Runtime::new().unwrap();
+            let events = rt.block_on(rx.by_ref().take(2).collect()).expect("reading on rx should work");
 
-            // Want to assert on the messages sent on `from_node_rx`
-            let mut events_seen = Vec::new();
-            {
-                let from_node_rx_fut = from_node_rx.take(2).for_each(|event| {
-                    println!("––––> THE NODE SENT {:?}", event);
-                    events_seen.push(event);
-                    Ok(())
-                });
-                tokio::runtime::current_thread::block_on_all(from_node_rx_fut);
-            }
-
-            assert_matches!(events_seen[0], (InToExtMessage::NodeReached(_), TaskId(123)));
-            assert_matches!(events_seen[1], (InToExtMessage::NodeEvent(ref outevent), TaskId(123)) => {
+            assert_matches!(events[0], (InToExtMessage::NodeReached(_), TaskId(890)));
+            assert_matches!(events[1], (InToExtMessage::NodeEvent(ref outevent), TaskId(890)) => {
                 assert_matches!(outevent, OutEvent::Custom(beef) => {
                     assert_eq!(beef, &"beef");
-                    // panic!("DONE. ALL GOOD");
+                    // Close the rx-end; when the NodeTask polls the
+                    // HandledNode, it will poll the Handler which, if set up to
+                    // do so, will return Async::Ready(Some(event)) which the
+                    // NodeTask will try to forward on the events_tx channel. If
+                    // the channel is closed the send will fail and make the
+                    // NodeTask call shutdown on the HandledNode. The Handled
+                    // node then sets a new state and at the next iteration
+                    // we'll get an Async::Ready(None) from the HandledNode
+                    // which will send a TaskClosed event (which will fail, but
+                    // there's no error handling so…) and exit the loop and
+                    // eventually exit the thread. Sadly we can't send an event
+                    // from the outside to cause the HandledNode to exit because
+                    // NodeTask.poll() does not read from the event channel once
+                    // it starts polling the node.
+                    rx.close();
                 })
             });
-
             node_thread.join().unwrap().unwrap();
+
         }
 
+        #[test]
+        fn task_exits_when_inner_task_errors() {
+            let mut rt = Runtime::new().unwrap();
+            let (node_task, _tx, rx) = TestBuilder::new()
+                .with_inner_fut(future::err(io::Error::new(io::ErrorKind::Other, "nah")))
+                .with_task_id(345)
+                .node_task();
 
-        // #[test]
-        // fn poll() {
-        //     // use tokio::runtime::current_thread::Runtime;
-        //     use std::thread;
-        //     let (mut node_task, to_node_tx, mut from_node_rx) = build_node_task();
-
-        //     let node_thread = thread::spawn(move || {
-        //         to_node_tx.unbounded_send(InEvent::Custom("beef")).unwrap();
-        //         tokio::runtime::current_thread::block_on_all(node_task)
-        //     });
-
-        //     // Want to assert on the message sent on `from_node_rx`
-        //     let mut events_seen = Vec::new();
-        //     {
-        //         let from_node_rx_fut = from_node_rx.take(2).for_each(|event| {
-        //             println!("––––> THE NODE SENT {:?}", event);
-        //             events_seen.push(event);
-        //             // Ok(event)
-        //             Ok(())
-        //             // event.into()
-        //             // assert_matches!(event, (InToExtMessage::NodeReached(_), TaskId(123)));
-        //             // assert_matches!(event, (InToExtMessage::NodeEvent(outevent), TaskId(123)) => {
-        //             //     println!("[test] matched");
-        //             //     // assert_matches(outevent, OutEvent::Custom(beef) => {
-        //             //     //     assert_eq!(beef, "beef")
-        //             //     // })
-        //             // } );
-        //             // Ok(())
-        //             // Err(())
-        //         });
-        //         tokio::runtime::current_thread::block_on_all(from_node_rx_fut);
-        //         from_node_rx.close();
-        //     }
-        //     println!("\nEVENTS READ FROM NODE = {:?}", &events_seen);
-        //     // to_node_tx.unbounded_send(InEvent::Shutdown);
-        //     node_thread.join().unwrap().unwrap();
-        // }
+            rt.spawn(node_task);
+            let events = rt.block_on(rx.collect()).expect("rx failed");
+            println!("[test] poll result events={:?}", events);
+            assert!(events.len() == 1);
+            assert_matches!(events[0], (InToExtMessage::TaskClosed{..}, TaskId(345)));
+        }
     }
-
     mod handled_node_tasks {
 
     }
