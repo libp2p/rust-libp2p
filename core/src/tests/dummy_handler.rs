@@ -86,7 +86,10 @@ impl<T> NodeHandler<T> for Handler {
 	fn inject_event(&mut self, inevent: Self::InEvent) {
 		self.events.push(inevent)
 		}
-	fn shutdown(&mut self) {}
+	fn shutdown(&mut self) {
+		println!("[NodeHandler, shutdown]");
+		self.state = Some(HandlerState::Ready(None));
+	}
 	fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<usize, Event>>, IoError> {
 		match self.state {
 			Some(ref state) => match state {

@@ -204,55 +204,73 @@ where
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         println!("[HandledNode, poll] START");
         loop {
+            println!("[HandledNode, poll] top of the loop");
             let mut node_not_ready = false;
 
+            println!("[HandledNode, poll] node");
             match self.node.poll()? {
-                Async::NotReady => (),
+                Async::NotReady => {
+                    println!("[HandledNode, poll]   node; Async::NotReady");
+                    ()
+                },
                 Async::Ready(Some(NodeEvent::InboundSubstream { substream })) => {
+                    println!("[HandledNode, poll]   node; Async::Ready(Some(InboundStream)");
                     self.handler.inject_substream(substream, NodeHandlerEndpoint::Listener)
                 }
                 Async::Ready(Some(NodeEvent::OutboundSubstream { user_data, substream })) => {
+                    println!("[HandledNode, poll]   node; Async::Ready(Some(OutboundStream)");
                     let endpoint = NodeHandlerEndpoint::Dialer(user_data);
                     self.handler.inject_substream(substream, endpoint)
                 }
                 Async::Ready(None) => {
+                    println!("[HandledNode, poll]   node; Async::Ready(None) – are we shutting down? {:?}", self.is_shutting_down);
                     node_not_ready = true;
                     if !self.is_shutting_down {
-                        self.handler.shutdown()
+                        println!("[HandledNode, poll]   node; Async::Ready(None) – are we shutting down? No. Starting shutdown.");
+                        self.shutdown() // <–– REVIEW: shouldn't we shut down the whole HandledNode here?
+                        // self.handler.shutdown()
                     }
                 }
                 Async::Ready(Some(NodeEvent::Multiaddr(result))) => {
+                    println!("[HandledNode, poll]   node; Async::Ready(Some(Multiaddr))");
                     self.handler.inject_multiaddr(result)
                 }
                 Async::Ready(Some(NodeEvent::OutboundClosed { user_data })) => {
+                    println!("[HandledNode, poll]   node; Async::Ready(Some(OutboundClosed))");
                     self.handler.inject_outbound_closed(user_data)
                 }
                 Async::Ready(Some(NodeEvent::InboundClosed)) => {
+                    println!("[HandledNode, poll]   node; Async::Ready(Some(InboundClosed))");
                     self.handler.inject_inbound_closed()
                 }
             }
-
+            println!("[HandledNode, poll] handler");
             match self.handler.poll()? {
                 Async::NotReady => {
+                    println!("[HandledNode, poll]   handler; Async::NotReady");
                     if node_not_ready {
                         break
                     }
                 }
                 Async::Ready(Some(NodeHandlerEvent::OutboundSubstreamRequest(user_data))) => {
+                    println!("[HandledNode, poll]   handler; Async::Ready(Some(OutboundSubstreamRequest))");
                     if self.node.get_ref().is_outbound_open() {
+                        println!("[HandledNode, poll]       handler; outbound is open");
                         match self.node.get_mut().open_substream(user_data) {
                             Ok(()) => (),
                             Err(user_data) => self.handler.inject_outbound_closed(user_data),
                         }
                     } else {
-                        println!("[HandledNode, poll]     self.node is None");
+                        println!("[HandledNode, poll]       handler; outbound is closed");
                         self.handler.inject_outbound_closed(user_data);
                     }
                 }
                 Async::Ready(Some(NodeHandlerEvent::Custom(event))) => {
+                    println!("[HandledNode, poll]     handler; Async::Ready(Some(Custom))");
                     return Ok(Async::Ready(Some(event)));
                 }
                 Async::Ready(None) => {
+                    println!("[HandledNode, poll]     handler; Async::Ready(None)");
                     return Ok(Async::Ready(None))
                 }
             }
@@ -267,11 +285,10 @@ mod tests {
     use super::*;
     use futures::future;
     use futures::future::FutureResult;
-    use muxing::{StreamMuxer, Shutdown};
+    // use muxing::StreamMuxer;
     use tokio::runtime::current_thread;
     use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
     use tests::dummy_handler::{Handler, HandlerState, Event};
-    use std::io;
 
     // Concrete `HandledNode`
     type TestHandledNode = HandledNode<DummyMuxer, FutureResult<Multiaddr, IoError>, Handler>;
@@ -320,16 +337,10 @@ mod tests {
         fn handled_node(&mut self) -> TestHandledNode {
             let mut h = HandledNode::new(self.muxer.clone(), future::ok(self.addr.clone()), self.handler.clone());
             if self.want_open_substream {
-                h.node.as_mut().map(|ns| ns. open_substream(self.substream_user_data));
+                h.node.get_mut().open_substream(self.substream_user_data).expect("open substream should work");
             }
             h
         }
-    }
-
-    // Some tests require controlling the flow carefully and this function
-    // lets you remove the NodeStream which helps triggering certain code paths.
-    fn set_node_to_none(handled_node: &mut TestHandledNode) {
-        handled_node.node = None;
     }
 
     fn did_see_event(handled_node: &mut TestHandledNode, event: &Event) -> bool {
@@ -404,15 +415,6 @@ mod tests {
     }
 
     #[test]
-    fn new_works() {
-        let addr_fut = future::ok("/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr"));
-        let muxer = DummyMuxer::new();
-        let handler = Handler::default();
-        let handled = HandledNode::new(muxer, addr_fut, handler);
-        assert!(handled.node.is_some());
-    }
-
-    #[test]
     fn can_inject_event() {
         let mut handled = TestBuilder::new()
             .with_muxer_inbound_state(DummyConnectionState::Closed)
@@ -430,7 +432,7 @@ mod tests {
             .with_handler_state(HandlerState::Ready(None)) // or we get into an infinite loop
             .handled_node();
         handled.poll().expect("poll failed");
-        assert!(handled.is_inbound_closed())
+        assert!(!handled.is_inbound_open())
     }
 
     #[test]
@@ -443,7 +445,7 @@ mod tests {
             .handled_node();
 
         handled.poll().expect("poll failed");
-        assert!(handled.is_outbound_closed());
+        assert!(!handled.is_outbound_open());
     }
 
     #[test]
@@ -502,22 +504,34 @@ mod tests {
     }
 
     #[test]
-    fn poll_with_unready_node_stream_and_handler_emits_outbound() {
+    #[ignore]
+    fn handler_emits_outbound_closed_when_opening_new_substream_on_closed_node() {
+        // TODO: The code path we want to test here is when the NodeStream is closed
+        // but the handler tries to open a substream using the
+        // OutboundSubstreamRequest event: the handlers inject_outbound_closed
+        // method should be called and we should see an OutboundClosed event in
+        // the handler.events collection:
+        // 1. set up with pending inbound and open outbound
+        // 2. open substream
+        // 3. shut down handled node
+        // 4. assert that OutboundClosed was emitted
+
+        // OLD TEST
         let expected_event = Some(NodeHandlerEvent::OutboundSubstreamRequest(456));
         let mut handled = TestBuilder::new()
             // make NodeStream return NotReady for both in and out bound traffic
             .with_muxer_inbound_state(DummyConnectionState::Pending)
             .with_muxer_outbound_state(DummyConnectionState::Pending)
-            // make Handler return return Ready(Some(…))
+            // make Handler return Ready(Some(…))
             .with_handler_state(HandlerState::Ready(expected_event))
             .handled_node();
 
         // Remove the NodeStream from the HandledNode so that the call to
         // `handler.poll()` can yield an `OpenSubstreamRequest` without taking
-        // ther `open_substream` path (avoids stasying in the loop) and instead call
+        // ther `open_substream` path (avoids staying in the loop) and instead call
         // `handler.inject_outbound_closed()` which then will tweak the state so
         // that `poll()` exits the loop and we can assert.
-        set_node_to_none(&mut handled);
+        // set_node_to_none(&mut handled); // <––THIS WAS KEY TO THE OLD TEST BUT CANNOT WORK NOW
         set_next_handler_outbound_state(
             &mut handled,
             HandlerState::Ready(Some(NodeHandlerEvent::Custom(Event::Custom("pear"))))
@@ -560,12 +574,11 @@ mod tests {
         // - HandledNode polls the node again: we skip inbound and there are no
         //   more outbound substreams so we skip that too; the addr is now
         //   Resolved so that part is skipped too
-        // - We reach the last section and yield Async::Ready(None)
-        // - Back in the HandledNode, the Handler still yields NotReady, but now
-        //   `node_not_ready` is true
-        // - …so we break the loop and yield Async::NotReady
-
-        assert_matches!(handled.poll(), Ok(Async::NotReady));
+        // - We reach the last section and the NodeStream yields Async::Ready(None)
+        // - Back in HandledNode the Async::Ready(None) triggers a shutdown
+        // – …and causes the Handler to yield Async::Ready(None)
+        // – which in turn makes the HandledNode to yield Async::Ready(None) as well
+        assert_matches!(handled.poll(), Ok(Async::Ready(None)));
         assert_eq!(handled.handler.events, vec![
             Event::InboundClosed, Event::OutboundClosed, Event::Multiaddr
         ]);
