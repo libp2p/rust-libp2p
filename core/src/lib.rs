@@ -164,47 +164,6 @@
 //! also implements the `ConnectionUpgrade` trait and will choose one of the protocols amongst the
 //! ones supported.
 //!
-//! # Swarm
-//!
-//! Once you have created an object that implements the `Transport` trait, you can put it in a
-//! *swarm*. This is done by calling the `swarm()` freestanding function with the transport
-//! alongside with a function or a closure that will turn the output of the upgrade (usually an
-//! actual protocol, as explained above) into a `Future` producing `()`.
-//!
-//! ```no_run
-//! extern crate futures;
-//! extern crate libp2p_ping;
-//! extern crate libp2p_core;
-//! extern crate libp2p_tcp_transport;
-//! extern crate tokio_current_thread;
-//!
-//! use futures::{Future, Stream};
-//! use libp2p_ping::{Ping, PingOutput};
-//! use libp2p_core::Transport;
-//!
-//! # fn main() {
-//! let transport = libp2p_tcp_transport::TcpConfig::new()
-//!     .with_dummy_muxing();
-//!
-//! let (swarm_controller, swarm_future) = libp2p_core::swarm(transport.with_upgrade(Ping::default()),
-//!     |out, client_addr| {
-//!         match out {
-//!             PingOutput::Ponger(processing) => Box::new(processing) as Box<Future<Item = _, Error = _>>,
-//!             PingOutput::Pinger(mut pinger) => {
-//!                 pinger.ping(());
-//!                 let f = pinger.into_future().map(|_| ()).map_err(|(err, _)| err);
-//!                 Box::new(f) as Box<Future<Item = _, Error = _>>
-//!             },
-//!         }
-//!     });
-//!
-//! // The `swarm_controller` can then be used to do some operations.
-//! swarm_controller.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap());
-//!
-//! // Runs until everything is finished.
-//! tokio_current_thread::block_on_all(swarm_future.for_each(|_| Ok(()))).unwrap();
-//! # }
-//! ```
 
 extern crate bs58;
 extern crate bytes;
@@ -244,11 +203,9 @@ extern crate tokio_mock_task;
 /// Multi-address re-export.
 pub extern crate multiaddr;
 
-mod connection_reuse;
 mod keys_proto;
 mod peer_id;
 mod public_key;
-mod unique;
 
 #[cfg(test)]
 mod tests;
@@ -256,16 +213,12 @@ mod tests;
 pub mod either;
 pub mod muxing;
 pub mod nodes;
-pub mod swarm;
 pub mod transport;
 pub mod upgrade;
 
-pub use self::connection_reuse::ConnectionReuse;
 pub use self::multiaddr::Multiaddr;
 pub use self::muxing::StreamMuxer;
 pub use self::peer_id::PeerId;
 pub use self::public_key::PublicKey;
-pub use self::swarm::{swarm, SwarmController, SwarmEvents};
 pub use self::transport::{MuxedTransport, Transport};
-pub use self::unique::{UniqueConnec, UniqueConnecFuture, UniqueConnecState};
 pub use self::upgrade::{ConnectionUpgrade, Endpoint};

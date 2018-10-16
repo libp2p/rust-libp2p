@@ -236,25 +236,7 @@ where
     }
 
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        let mut server = server.clone();
-        let last_proto = match server.pop() {
-            Some(v @ Protocol::Ws) | Some(v @ Protocol::Wss) => v,
-            _ => return None,
-        };
-
-        let mut observed = observed.clone();
-        match observed.pop() {
-            Some(Protocol::Ws) => false,
-            Some(Protocol::Wss) => true,
-            _ => return None,
-        };
-
-        self.transport
-            .nat_traversal(&server, &observed)
-            .map(move |mut result| {
-                result.append(last_proto);
-                result
-            })
+        self.transport.nat_traversal(server, observed)
     }
 }
 

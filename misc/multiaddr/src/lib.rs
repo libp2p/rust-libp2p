@@ -120,6 +120,11 @@ impl fmt::Display for Multiaddr {
 }
 
 impl Multiaddr {
+    /// Create a new, empty multiaddress.
+    pub fn empty() -> Multiaddr {
+        Multiaddr { bytes: Vec::new() }
+    }
+
     /// Returns the raw bytes representation of the multiaddr.
     #[inline]
     pub fn into_bytes(self) -> Vec<u8> {
