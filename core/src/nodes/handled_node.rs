@@ -227,8 +227,7 @@ where
                     node_not_ready = true;
                     if !self.is_shutting_down {
                         println!("[HandledNode, poll]   node; Async::Ready(None) – are we shutting down? No. Starting shutdown.");
-                        self.shutdown() // <–– REVIEW: shouldn't we shut down the whole HandledNode here?
-                        // self.handler.shutdown()
+                        self.handler.shutdown()
                     }
                 }
                 Async::Ready(Some(NodeEvent::Multiaddr(result))) => {
@@ -449,23 +448,34 @@ mod tests {
     }
 
     #[test]
-    fn is_shutting_down() {
-        // when in-/outbound NodeStreams are closed we shut down
+    fn is_shutting_down_is_true_when_called_shutdown_on_the_handled_node() {
+        let mut handled = TestBuilder::new()
+            .with_handler_state(HandlerState::Ready(None)) // Stop the loop towards the end of the first run
+            .handled_node();
+        assert!(!handled.is_shutting_down());
+        handled.poll().expect("poll should work");
+        handled.shutdown();
+        assert!(handled.is_shutting_down());
+    }
+
+    #[test]
+    fn is_shutting_down_is_false_even_when_in_and_outbounds_are_closed() {
         let mut handled = TestBuilder::new()
             .with_muxer_inbound_state(DummyConnectionState::Closed)
             .with_muxer_outbound_state(DummyConnectionState::Closed)
-            .with_open_substream(123)
+            .with_open_substream(123) // avoid infinite loop
             .handled_node();
 
-        // without an outbound substream we never `poll_outbound()`
         handled.poll().expect("poll failed");
-        assert!(handled.is_shutting_down());
+
+        // Not shutting down (but in- and outbound are closed, and the handler is shutdown)
+        assert!(!handled.is_shutting_down());
 
         // when in-/outbound NodeStreams are  open or Async::Ready(None) we reach the handler `poll()`
         let mut handled = TestBuilder::new()
             .with_muxer_inbound_state(DummyConnectionState::Pending)
             .with_muxer_outbound_state(DummyConnectionState::Pending)
-            .with_handler_state(HandlerState::Ready(None)) // or we end up in an infinite loop
+            .with_handler_state(HandlerState::Ready(None)) // avoid infinite loop
             .handled_node();
 
         handled.poll().expect("poll failed");
