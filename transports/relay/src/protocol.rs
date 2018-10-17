@@ -49,18 +49,16 @@ pub enum Output<C> {
     Sealed(Box<Future<Item=(), Error=io::Error> + Send>)
 }
 
-impl<C, T, P, S, Maf> ConnectionUpgrade<C, Maf> for RelayConfig<T, P>
+impl<C, T, P, S> ConnectionUpgrade<C> for RelayConfig<T, P>
 where
     C: AsyncRead + AsyncWrite + Send + 'static,
     T: Transport + Clone + Send + 'static,
     T::Dial: Send,
     T::Listener: Send,
     T::ListenerUpgrade: Send,
-    T::MultiaddrFuture: Send,
     T::Output: AsyncRead + AsyncWrite + Send,
     P: Deref<Target=S> + Clone + Send + 'static,
     S: 'static,
-    Maf: Send + 'static,
     for<'a> &'a S: Peerstore
 {
     type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
@@ -71,10 +69,9 @@ where
     }
 
     type Output = Output<C>;
-    type MultiaddrFuture = Maf;
-    type Future = Box<Future<Item=(Self::Output, Maf), Error=io::Error> + Send>;
+    type Future = Box<Future<Item=Self::Output, Error=io::Error> + Send>;
 
-    fn upgrade(self, conn: C, _: (), _: Endpoint, remote_addr: Maf) -> Self::Future {
+    fn upgrade(self, conn: C, _: (), _: Endpoint) -> Self::Future {
         let future = Io::new(conn).recv().and_then(move |(message, io)| {
             let msg = if let Some(m) = message {
                 m
@@ -95,7 +92,7 @@ where
                 }
             }
         });
-        Box::new(future.map(move |out| (out, remote_addr)))
+        Box::new(future)
     }
 }
 
@@ -105,7 +102,6 @@ where
     T::Dial: Send,      // TODO: remove
     T::Listener: Send,      // TODO: remove
     T::ListenerUpgrade: Send,      // TODO: remove
-    T::MultiaddrFuture: Send,      // TODO: remove
     T::Output: Send + AsyncRead + AsyncWrite,
     P: Deref<Target = S> + Clone + 'static,
     for<'a> &'a S: Peerstore,
@@ -158,7 +154,7 @@ where
             .into_future()
             .map_err(|(err, _stream)| err)
             .and_then(move |(ok, _stream)| {
-                if let Some((c, a)) = ok {
+                if let Some(c) = ok {
                     // send STOP message to destination and expect back a SUCCESS message
                     let future = Io::new(c).send(stop)
                         .and_then(Io::recv)
@@ -168,7 +164,7 @@ where
                                 None => return Err(io_err("no message from destination"))
                             };
                             if is_success(&rsp) {
-                                Ok((io.into(), a))
+                                Ok(io.into())
                             } else {
                                 Err(io_err("no success response from relay"))
                             }
@@ -181,7 +177,7 @@ where
             // signal success or failure to source
             .then(move |result| {
                 match result {
-                    Ok((c, _)) => {
+                    Ok(c) => {
                         let msg = status(CircuitRelay_Status::SUCCESS);
                         A(io.send(msg).map(|io| (io.into(), c)))
                     }
@@ -251,7 +247,7 @@ fn stop_message(from: &Peer, dest: &Peer) -> CircuitRelay {
 #[derive(Debug, Clone)]
 struct TrivialUpgrade;
 
-impl<C, Maf> ConnectionUpgrade<C, Maf> for TrivialUpgrade
+impl<C> ConnectionUpgrade<C> for TrivialUpgrade
 where
     C: AsyncRead + AsyncWrite + 'static
 {
@@ -263,21 +259,19 @@ where
     }
 
     type Output = C;
-    type MultiaddrFuture = Maf;
-    type Future = FutureResult<(Self::Output, Maf), io::Error>;
+    type Future = FutureResult<Self::Output, io::Error>;
 
-    fn upgrade(self, conn: C, _: (), _: Endpoint, remote_addr: Maf) -> Self::Future {
-        future::ok((conn, remote_addr))
+    fn upgrade(self, conn: C, _: (), _: Endpoint) -> Self::Future {
+        future::ok(conn)
     }
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct Source(pub(crate) CircuitRelay);
 
-impl<C, Maf> ConnectionUpgrade<C, Maf> for Source
+impl<C> ConnectionUpgrade<C> for Source
 where
     C: AsyncRead + AsyncWrite + Send + 'static,
-    Maf: Send + 'static,
 {
     type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
     type UpgradeIdentifier = ();
@@ -287,10 +281,9 @@ where
     }
 
     type Output = C;
-    type MultiaddrFuture = Maf;
-    type Future = Box<Future<Item=(Self::Output, Maf), Error=io::Error> + Send>;
+    type Future = Box<Future<Item=Self::Output, Error=io::Error> + Send>;
 
-    fn upgrade(self, conn: C, _: (), _: Endpoint, remote_addr: Maf) -> Self::Future {
+    fn upgrade(self, conn: C, _: (), _: Endpoint) -> Self::Future {
         let future = Io::new(conn)
             .send(self.0)
             .and_then(Io::recv)
@@ -305,7 +298,7 @@ where
                     Err(io_err("no success response from relay"))
                 }
             });
-        Box::new(future.map(move |out| (out, remote_addr)))
+        Box::new(future)
     }
 }
 

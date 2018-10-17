@@ -28,11 +28,11 @@ extern crate tokio_io;
 extern crate yamux;
 
 use bytes::Bytes;
-use core::Endpoint;
+use core::{Endpoint, muxing::Shutdown};
 use futures::{future::{self, FutureResult}, prelude::*};
 use parking_lot::Mutex;
 use std::{io, iter};
-use std::io::{Read, Write, Error as IoError};
+use std::io::{Error as IoError};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 
@@ -79,39 +79,41 @@ where
     }
 
     #[inline]
-    fn destroy_outbound(&self, _substream: Self::OutboundSubstream) {
+    fn destroy_outbound(&self, _: Self::OutboundSubstream) {
     }
 
     #[inline]
-    fn read_substream(&self, substream: &mut Self::Substream, buf: &mut [u8]) -> Result<usize, IoError> {
-        substream.read(buf)
+    fn read_substream(&self, sub: &mut Self::Substream, buf: &mut [u8]) -> Poll<usize, IoError> {
+        sub.poll_read(buf)
     }
 
     #[inline]
-    fn write_substream(&self, substream: &mut Self::Substream, buf: &[u8]) -> Result<usize, IoError> {
-        substream.write(buf)
+    fn write_substream(&self, sub: &mut Self::Substream, buf: &[u8]) -> Poll<usize, IoError> {
+        sub.poll_write(buf)
     }
 
     #[inline]
-    fn flush_substream(&self, substream: &mut Self::Substream) -> Result<(), IoError> {
-        substream.flush()
+    fn flush_substream(&self, sub: &mut Self::Substream) -> Poll<(), IoError> {
+        sub.poll_flush()
     }
 
     #[inline]
-    fn shutdown_substream(&self, substream: &mut Self::Substream) -> Poll<(), IoError> {
-        substream.shutdown()
+    fn shutdown_substream(&self, sub: &mut Self::Substream, _: Shutdown) -> Poll<(), IoError> {
+        sub.shutdown()
     }
 
     #[inline]
-    fn destroy_substream(&self, _substream: Self::Substream) {
+    fn destroy_substream(&self, _: Self::Substream) {
     }
 
     #[inline]
-    fn close_inbound(&self) {
+    fn shutdown(&self, _: Shutdown) -> Poll<(), IoError> {
+        self.0.lock().shutdown()
     }
 
     #[inline]
-    fn close_outbound(&self) {
+    fn flush_all(&self) -> Poll<(), IoError> {
+        self.0.lock().flush()
     }
 }
 
@@ -132,10 +134,9 @@ impl Default for Config {
     }
 }
 
-impl<C, M> core::ConnectionUpgrade<C, M> for Config
+impl<C> core::ConnectionUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + 'static,
-    M: 'static
 {
     type UpgradeIdentifier = ();
     type NamesIter = iter::Once<(Bytes, ())>;
@@ -145,15 +146,15 @@ where
     }
 
     type Output = Yamux<C>;
-    type MultiaddrFuture = M;
-    type Future = FutureResult<(Yamux<C>, M), io::Error>;
+    type Future = FutureResult<Yamux<C>, io::Error>;
 
-    fn upgrade(self, i: C, _: (), end: Endpoint, remote: M) -> Self::Future {
+    fn upgrade(self, i: C, _: (), end: Endpoint) -> Self::Future {
         let mode = match end {
             Endpoint::Dialer => yamux::Mode::Client,
             Endpoint::Listener => yamux::Mode::Server
         };
-        future::ok((Yamux::new(i, self.0, mode), remote))
+
+        future::ok(Yamux::new(i, self.0, mode))
     }
 }
 

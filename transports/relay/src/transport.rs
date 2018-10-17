@@ -43,17 +43,15 @@ where
     T::Dial: Send,
     T::Listener: Send,
     T::ListenerUpgrade: Send,
-    T::MultiaddrFuture: Send,
     T::Output: AsyncRead + AsyncWrite + Send,
     P: Deref<Target=S> + Clone + 'static,
     S: 'static,
     for<'a> &'a S: Peerstore
 {
     type Output = T::Output;
-    type MultiaddrFuture = T::MultiaddrFuture;
-    type Listener = Box<Stream<Item=Self::ListenerUpgrade, Error=io::Error> + Send>;
-    type ListenerUpgrade = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error> + Send>;
-    type Dial = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error> + Send>;
+    type Listener = Box<Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=io::Error> + Send>;
+    type ListenerUpgrade = Box<Future<Item=Self::Output, Error=io::Error> + Send>;
+    type Dial = Box<Future<Item=Self::Output, Error=io::Error> + Send>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         Err((self, addr))
@@ -92,7 +90,6 @@ where
     T::Dial: Send,
     T::Listener: Send,
     T::ListenerUpgrade: Send,
-    T::MultiaddrFuture: Send,
     T::Output: AsyncRead + AsyncWrite + Send,
     P: Deref<Target=S> + Clone + 'static,
     for<'a> &'a S: Peerstore
@@ -114,7 +111,7 @@ where
     }
 
     // Relay to destination over any available relay node.
-    fn relay_to(self, destination: &Peer) -> Result<impl Future<Item=(T::Output, T::MultiaddrFuture), Error=io::Error>, Self> {
+    fn relay_to(self, destination: &Peer) -> Result<impl Future<Item=T::Output, Error=io::Error>, Self> {
         trace!("relay_to {:?}", destination.id);
         let mut dials = Vec::new();
         for relay in &*self.relays {
@@ -152,7 +149,7 @@ where
     }
 
     // Relay to destination via the given peer.
-    fn relay_via(self, relay: &Peer, destination: &Peer) -> Result<impl Future<Item=(T::Output, T::MultiaddrFuture), Error=io::Error>, Self> {
+    fn relay_via(self, relay: &Peer, destination: &Peer) -> Result<impl Future<Item=T::Output, Error=io::Error>, Self> {
         trace!("relay_via {:?} to {:?}", relay.id, destination.id);
         let mut addresses = Vec::new();
 
@@ -183,9 +180,9 @@ where
             .into_future()
             .map_err(|(err, _stream)| err)
             .and_then(move |(ok, _stream)| match ok {
-                Some((out, addr)) => {
+                Some(out) => {
                     debug!("connected");
-                    Ok((out, addr))
+                    Ok(out)
                 }
                 None => {
                     info!("failed to dial to {:?}", relay.id);

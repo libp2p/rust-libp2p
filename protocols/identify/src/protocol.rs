@@ -20,8 +20,7 @@
 
 use bytes::{Bytes, BytesMut};
 use futures::{future, Future, Sink, Stream};
-use libp2p_core::{ConnectionUpgrade, Endpoint, PublicKey};
-use multiaddr::Multiaddr;
+use libp2p_core::{ConnectionUpgrade, Endpoint, Multiaddr, PublicKey};
 use protobuf::Message as ProtobufMessage;
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
 use protobuf::RepeatedField;
@@ -111,23 +110,21 @@ pub struct IdentifyInfo {
     pub protocols: Vec<String>,
 }
 
-impl<C, Maf> ConnectionUpgrade<C, Maf> for IdentifyProtocolConfig
+impl<C> ConnectionUpgrade<C> for IdentifyProtocolConfig
 where
     C: AsyncRead + AsyncWrite + Send + 'static,
-    Maf: Future<Item = Multiaddr, Error = IoError> + Send + 'static,
 {
     type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
     type UpgradeIdentifier = ();
     type Output = IdentifyOutput<C>;
-    type MultiaddrFuture = future::Either<future::FutureResult<Multiaddr, IoError>, Maf>;
-    type Future = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
+    type Future = Box<Future<Item = Self::Output, Error = IoError> + Send>;
 
     #[inline]
     fn protocol_names(&self) -> Self::NamesIter {
         iter::once((Bytes::from("/ipfs/id/1.0.0"), ()))
     }
 
-    fn upgrade(self, socket: C, _: (), ty: Endpoint, remote_addr: Maf) -> Self::Future {
+    fn upgrade(self, socket: C, _: (), ty: Endpoint) -> Self::Future {
         trace!("Upgrading connection as {:?}", ty);
 
         let socket = Framed::new(socket, codec::UviBytes::default());
@@ -153,12 +150,10 @@ where
                             trace!("Remote observes us as {:?}", observed_addr);
                             trace!("Information received: {:?}", info);
 
-                            let out = IdentifyOutput::RemoteInfo {
+                            Ok(IdentifyOutput::RemoteInfo {
                                 info,
                                 observed_addr: observed_addr.clone(),
-                            };
-
-                            Ok((out, future::Either::A(future::ok(observed_addr))))
+                            })
                         } else {
                             debug!("Identify protocol stream closed before receiving info");
                             Err(IoErrorKind::InvalidData.into())
@@ -170,15 +165,7 @@ where
 
             Endpoint::Listener => {
                 let sender = IdentifySender { inner: socket };
-
-                let future = future::ok({
-                    let io = IdentifyOutput::Sender {
-                        sender,
-                    };
-
-                    (io, future::Either::B(remote_addr))
-                });
-
+                let future = future::ok(IdentifyOutput::Sender { sender });
                 Box::new(future) as Box<_>
             }
         }
@@ -251,7 +238,7 @@ mod tests {
             let future = listener
                 .into_future()
                 .map_err(|(err, _)| err)
-                .and_then(|(client, _)| client.unwrap().map(|v| v.0))
+                .and_then(|(client, _)| client.unwrap().0)
                 .and_then(|identify| match identify {
                     IdentifyOutput::Sender { sender, .. } => sender.send(
                         IdentifyInfo {
@@ -277,7 +264,7 @@ mod tests {
         let future = transport
             .dial(rx.recv().unwrap())
             .unwrap_or_else(|_| panic!())
-            .and_then(|(identify, _)| match identify {
+            .and_then(|identify| match identify {
                 IdentifyOutput::RemoteInfo {
                     info,
                     observed_addr,

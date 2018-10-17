@@ -18,10 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-mod handled_node_tasks;
-
 pub mod collection;
 pub mod handled_node;
+pub mod handled_node_tasks;
 pub mod listeners;
 pub mod node;
-pub mod swarm;
+pub mod raw_swarm;
+
+pub use self::node::Substream;
+pub use self::handled_node::{NodeHandlerEvent, NodeHandlerEndpoint};
+pub use self::raw_swarm::{ConnectedPoint, Peer, RawSwarm, RawSwarmEvent};

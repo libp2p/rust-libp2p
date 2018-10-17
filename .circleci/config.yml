@@ -105,10 +105,6 @@ jobs:
       - checkout
       - restore_cache:
           key: integration-test-cache
-      - run:
-          command: cargo run --example ping-client -- /ip4/127.0.0.1/tcp/4001
-      - run:
-          command: cargo run --example echo-dialer -- /ip4/127.0.0.1/tcp/10333
       - save_cache:
           key: integration-test-cache
           paths:

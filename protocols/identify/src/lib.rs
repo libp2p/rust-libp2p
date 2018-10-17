@@ -77,14 +77,12 @@ extern crate parking_lot;
 extern crate protobuf;
 extern crate tokio_codec;
 extern crate tokio_io;
+extern crate tokio_timer;
 extern crate unsigned_varint;
+extern crate void;
 
-pub use self::identify_transport::IdentifyTransportOutcome;
-pub use self::peer_id_transport::{PeerIdTransport, PeerIdTransportOutput};
 pub use self::protocol::{IdentifyInfo, IdentifyOutput};
 pub use self::protocol::{IdentifyProtocolConfig, IdentifySender};
 
-mod identify_transport;
-mod peer_id_transport;
 mod protocol;
 mod structs_proto;
