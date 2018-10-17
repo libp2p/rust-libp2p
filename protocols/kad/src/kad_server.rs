@@ -64,7 +64,7 @@ impl KadConnecConfig {
     }
 }
 
-impl<C, Maf> ConnectionUpgrade<C, Maf> for KadConnecConfig
+impl<C> ConnectionUpgrade<C> for KadConnecConfig
 where
     C: AsyncRead + AsyncWrite + Send + 'static, // TODO: 'static :-/
 {
@@ -72,22 +72,21 @@ where
         KadConnecController,
         Box<Stream<Item = KadIncomingRequest, Error = IoError> + Send>,
     );
-    type MultiaddrFuture = Maf;
-    type Future = future::Map<<KademliaProtocolConfig as ConnectionUpgrade<C, Maf>>::Future, fn((<KademliaProtocolConfig as ConnectionUpgrade<C, Maf>>::Output, Maf)) -> (Self::Output, Maf)>;
+    type Future = future::Map<<KademliaProtocolConfig as ConnectionUpgrade<C>>::Future, fn(<KademliaProtocolConfig as ConnectionUpgrade<C>>::Output) -> Self::Output>;
     type NamesIter = iter::Once<(Bytes, ())>;
     type UpgradeIdentifier = ();
 
     #[inline]
     fn protocol_names(&self) -> Self::NamesIter {
-        ConnectionUpgrade::<C, Maf>::protocol_names(&self.raw_proto)
+        ConnectionUpgrade::<C>::protocol_names(&self.raw_proto)
     }
 
     #[inline]
-    fn upgrade(self, incoming: C, id: (), endpoint: Endpoint, addr: Maf) -> Self::Future {
+    fn upgrade(self, incoming: C, id: (), endpoint: Endpoint) -> Self::Future {
         self.raw_proto
-            .upgrade(incoming, id, endpoint, addr)
-            .map::<fn(_) -> _, _>(move |(connec, addr)| {
-                (build_from_sink_stream(connec), addr)
+            .upgrade(incoming, id, endpoint)
+            .map::<fn(_) -> _, _>(move |connec| {
+                build_from_sink_stream(connec)
             })
     }
 }

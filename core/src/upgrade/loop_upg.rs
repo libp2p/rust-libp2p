@@ -61,23 +61,20 @@ pub struct LoopUpg<Inner> {
 }
 
 // TODO: 'static :-/
-impl<State, Socket, Inner, Out, AddrFut> ConnectionUpgrade<(State, Socket), AddrFut>
+impl<State, Socket, Inner, Out> ConnectionUpgrade<(State, Socket)>
     for LoopUpg<Inner>
 where
     State: Send + 'static,
     Socket: AsyncRead + AsyncWrite + Send + 'static,
     Inner: ConnectionUpgrade<
             (State, Socket),
-            AddrFut,
             Output = Loop<State, Socket, Out>,
-            MultiaddrFuture = AddrFut,
         > + Clone
         + Send
         + 'static,
     Inner::NamesIter: Clone + Send + 'static,
     Inner::UpgradeIdentifier: Send,
     Inner::Future: Send,
-    AddrFut: Send + 'static,
     Out: Send + 'static,
 {
     type NamesIter = Inner::NamesIter;
@@ -88,29 +85,27 @@ where
     }
 
     type Output = Out;
-    type MultiaddrFuture = AddrFut;
-    type Future = Box<Future<Item = (Out, Self::MultiaddrFuture), Error = IoError> + Send>;
+    type Future = Box<Future<Item = Out, Error = IoError> + Send>;
 
     fn upgrade(
         self,
         (state, socket): (State, Socket),
         id: Self::UpgradeIdentifier,
         endpoint: Endpoint,
-        remote_addr: AddrFut,
     ) -> Self::Future {
         let inner = self.inner;
 
         let fut = future::loop_fn(
-            (state, socket, id, remote_addr, MAX_LOOPS),
-            move |(state, socket, id, remote_addr, loops_remaining)| {
+            (state, socket, id, MAX_LOOPS),
+            move |(state, socket, id, loops_remaining)| {
                 // When we enter a recursion of the `loop_fn`, a protocol has already been
                 // negotiated. So what we have to do is upgrade then negotiate the next protocol
                 // (if necessary), and then only continue iteration in the `future::loop_fn`.
                 let inner = inner.clone();
                 inner
                     .clone()
-                    .upgrade((state, socket), id, endpoint, remote_addr)
-                    .and_then(move |(loop_out, remote_addr)| match loop_out {
+                    .upgrade((state, socket), id, endpoint)
+                    .and_then(move |loop_out| match loop_out {
                         Loop::Continue(state, socket) => {
                             // Produce an error if we reached the recursion limit.
                             if loops_remaining == 0 {
@@ -126,14 +121,13 @@ where
                                     state,
                                     socket,
                                     id,
-                                    remote_addr,
                                     loops_remaining - 1,
                                 ))
                             });
                             future::Either::A(fut)
                         }
                         Loop::Break(fin) => {
-                            future::Either::B(future::ok(FutLoop::Break((fin, remote_addr))))
+                            future::Either::B(future::ok(FutLoop::Break(fin)))
                         }
                     })
             },
