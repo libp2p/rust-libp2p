@@ -89,10 +89,9 @@ impl FloodSubUpgrade {
     }
 }
 
-impl<C, Maf> ConnectionUpgrade<C, Maf> for FloodSubUpgrade
+impl<C> ConnectionUpgrade<C> for FloodSubUpgrade
 where
     C: AsyncRead + AsyncWrite + Send + 'static,
-    Maf: Future<Item = Multiaddr, Error = IoError> + Send + 'static,
 {
     type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
     type UpgradeIdentifier = ();
@@ -103,8 +102,7 @@ where
     }
 
     type Output = FloodSubFuture;
-    type MultiaddrFuture = future::FutureResult<Multiaddr, IoError>;
-    type Future = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
+    type Future = Box<Future<Item = Self::Output, Error = IoError> + Send>;
 
     #[inline]
     fn upgrade(
@@ -112,11 +110,13 @@ where
         socket: C,
         _: Self::UpgradeIdentifier,
         _: Endpoint,
-        remote_addr: Maf,
     ) -> Self::Future {
         debug!("Upgrading connection as floodsub");
 
-        let future = remote_addr.and_then(move |remote_addr| {
+        let future = {
+            // FIXME: WRONG
+            let remote_addr: Multiaddr = "/ip4/127.0.0.1/tcp/5000".parse().unwrap();
+
             // Whenever a new node connects, we send to it a message containing the topics we are
             // already subscribed to.
             let init_msg: Vec<u8> = {
@@ -168,7 +168,6 @@ where
             }
 
             let inner = self.inner.clone();
-            let remote_addr_ret = future::ok(remote_addr.clone());
             let future = future::loop_fn(
                 (floodsub_sink, messages),
                 move |(floodsub_sink, messages)| {
@@ -215,10 +214,10 @@ where
                 },
             );
 
-            future::ok((FloodSubFuture {
+            future::ok(FloodSubFuture {
                 inner: Box::new(future) as Box<_>,
-            }, remote_addr_ret))
-        });
+            })
+        };
 
         Box::new(future) as Box<_>
     }

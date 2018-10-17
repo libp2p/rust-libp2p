@@ -52,10 +52,9 @@ impl<T> Clone for Dialer<T> {
 
 impl<T: IntoBuf + Send + 'static> Transport for Dialer<T> {
     type Output = Channel<T>;
-    type Listener = Box<Stream<Item=Self::ListenerUpgrade, Error=io::Error> + Send>;
-    type ListenerUpgrade = FutureResult<(Self::Output, Self::MultiaddrFuture), io::Error>;
-    type MultiaddrFuture = FutureResult<Multiaddr, io::Error>;
-    type Dial = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error> + Send>;
+    type Listener = Box<Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=io::Error> + Send>;
+    type ListenerUpgrade = FutureResult<Self::Output, io::Error>;
+    type Dial = Box<Future<Item=Self::Output, Error=io::Error> + Send>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         Err((self, addr))
@@ -70,7 +69,7 @@ impl<T: IntoBuf + Send + 'static> Transport for Dialer<T> {
         let a = Chan { incoming: a_rx, outgoing: b_tx };
         let b = Chan { incoming: b_rx, outgoing: a_tx };
         let future = self.0.send(b)
-            .map(move |_| (a.into(), future::ok(addr)))
+            .map(move |_| a.into())
             .map_err(|_| io::ErrorKind::ConnectionRefused.into());
         Ok(Box::new(future))
     }
@@ -95,10 +94,9 @@ impl<T> Clone for Listener<T> {
 
 impl<T: IntoBuf + Send + 'static> Transport for Listener<T> {
     type Output = Channel<T>;
-    type Listener = Box<Stream<Item=Self::ListenerUpgrade, Error=io::Error> + Send>;
-    type ListenerUpgrade = FutureResult<(Self::Output, Self::MultiaddrFuture), io::Error>;
-    type MultiaddrFuture = FutureResult<Multiaddr, io::Error>;
-    type Dial = Box<Future<Item=(Self::Output, Self::MultiaddrFuture), Error=io::Error> + Send>;
+    type Listener = Box<Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=io::Error> + Send>;
+    type ListenerUpgrade = FutureResult<Self::Output, io::Error>;
+    type Dial = Box<Future<Item=Self::Output, Error=io::Error> + Send>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         if !is_memory_addr(&addr) {
@@ -108,7 +106,7 @@ impl<T: IntoBuf + Send + 'static> Transport for Listener<T> {
         let receiver = self.0.clone();
         let stream = stream::poll_fn(move || receiver.lock().poll())
             .map(move |channel| {
-                future::ok((channel.into(), future::ok(addr.clone())))
+                (future::ok(channel.into()), addr.clone())
             })
             .map_err(|()| unreachable!());
         Ok((Box::new(stream), addr2))

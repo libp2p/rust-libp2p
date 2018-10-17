@@ -86,10 +86,9 @@ impl UdsConfig {
 
 impl Transport for UdsConfig {
     type Output = UnixStream;
-    type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError> + Send + Sync>;
-    type ListenerUpgrade = FutureResult<(Self::Output, Self::MultiaddrFuture), IoError>;
-    type MultiaddrFuture = FutureResult<Multiaddr, IoError>;
-    type Dial = Box<Future<Item = (UnixStream, Self::MultiaddrFuture), Error = IoError> + Send + Sync>;
+    type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError> + Send + Sync>;
+    type ListenerUpgrade = FutureResult<Self::Output, IoError>;
+    type Dial = Box<Future<Item = UnixStream, Error = IoError> + Send + Sync>;  // TODO: name this type
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         if let Ok(path) = multiaddr_to_path(&addr) {
@@ -109,7 +108,7 @@ impl Transport for UdsConfig {
                     // Pull out a stream of sockets for incoming connections
                     listener.incoming().map(move |sock| {
                         debug!("Incoming connection on {}", addr);
-                        future::ok((sock, future::ok(addr.clone())))
+                        (future::ok(sock), addr.clone())
                     })
                 })
                 .flatten_stream();
@@ -122,7 +121,7 @@ impl Transport for UdsConfig {
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
         if let Ok(path) = multiaddr_to_path(&addr) {
             debug!("Dialing {}", addr);
-            let fut = UnixStream::connect(&path).map(|t| (t, future::ok(addr)));
+            let fut = UnixStream::connect(&path);
             Ok(Box::new(fut) as Box<_>)
         } else {
             Err((self, addr))
@@ -203,8 +202,8 @@ mod tests {
 
         std::thread::spawn(move || {
             let tcp = UdsConfig::new();
-            let listener = tcp.listen_on(addr2).unwrap().0.for_each(|sock| {
-                sock.and_then(|(sock, _)| {
+            let listener = tcp.listen_on(addr2).unwrap().0.for_each(|(sock, _)| {
+                sock.and_then(|sock| {
                     // Define what to do with the socket that just connected to us
                     // Which in this case is read 3 bytes
                     let handle_conn = tokio_io::io::read_exact(sock, [0; 3])
@@ -226,7 +225,7 @@ mod tests {
         let socket = tcp.dial(addr.clone()).unwrap();
         // Define what to do with the socket once it's obtained
         let action = socket.then(|sock| -> Result<(), ()> {
-            sock.unwrap().0.write(&[0x1, 0x2, 0x3]).unwrap();
+            sock.unwrap().write(&[0x1, 0x2, 0x3]).unwrap();
             Ok(())
         });
         // Execute the future in our event loop
