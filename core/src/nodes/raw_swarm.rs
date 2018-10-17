@@ -672,7 +672,7 @@ where
 
         // Set the endpoint for this peer.
         let closed_endpoint = reach_attempts.connected_points.insert(event.peer_id().clone(), opened_endpoint.clone());
-                     
+
         // Cancel any outgoing attempt to this peer.
         let action = if let Some(attempt) = reach_attempts.out_reach_attempts.remove(&event.peer_id()) {
             debug_assert_ne!(attempt.id, event.reach_attempt_id());
@@ -1012,8 +1012,7 @@ impl<'a, TInEvent> PeerConnected<'a, TInEvent> {
             .expect("We insert into connected_points whenever a connection is opened and remove \
                      only when a connection is closed ; the underlying API is guaranteed to always \
                      deliver a connection closed message after it has been opened, and no two \
-                     closed messages ; qed")
-        
+                     closed messages ; qed")        
     }
 
     /// Sends an event to the node.

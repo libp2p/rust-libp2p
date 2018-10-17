@@ -79,7 +79,7 @@ where
                 listen_addr: listen_addr.clone(),
                 send_back_addr: client_addr.clone(),
             };
-            
+
             let future = connection.and_then(move |stream| {
                 upgrade(stream, connected_point)
             });
