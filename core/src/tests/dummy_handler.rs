@@ -23,7 +23,7 @@
 use std::io::{self, Error as IoError};
 
 use futures::prelude::*;
-use nodes::handled_node::{NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent};
+use nodes::handled_node::{NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent, HandledNode};
 use super::dummy_muxer::DummyMuxer;
 use muxing::SubstreamRef;
 use std::sync::Arc;

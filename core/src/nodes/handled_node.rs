@@ -306,7 +306,7 @@ mod tests {
     use super::*;
     use tokio::runtime::current_thread;
     use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
-    use tests::dummy_handler::{Handler, HandlerState, Event};
+    use tests::dummy_handler::{Handler, HandlerState, InEvent, OutEvent};
     use std::marker::PhantomData;
 
     // Concrete `HandledNode`

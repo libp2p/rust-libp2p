@@ -550,9 +550,8 @@ mod tests {
         use tokio::runtime::current_thread::Runtime;
 
         type TestNodeTask = NodeTask<
-            FutureResult<((PeerId, DummyMuxer), FutureResult<Multiaddr, IoError>), IoError>,
+            FutureResult<(PeerId, DummyMuxer), IoError>,
             DummyMuxer,
-            FutureResult<Multiaddr, IoError>,
             Handler,
             InEvent,
             OutEvent,
@@ -561,7 +560,7 @@ mod tests {
         struct TestBuilder {
            task_id: TaskId,
            inner_node: Option<TestHandledNode>,
-           inner_fut: Option<FutureResult<((PeerId, DummyMuxer), FutureResult<Multiaddr, IoError>), IoError>>,
+           inner_fut: Option<FutureResult<(PeerId, DummyMuxer), IoError>>,
         }
         impl TestBuilder {
             fn new() -> Self {
@@ -570,14 +569,12 @@ mod tests {
                     inner_node: None,
                     inner_fut: {
                         let peer_id = PublicKey::Rsa((0 .. 2048).map(|_| -> u8 { random() }).collect()).into_peer_id();
-                        let addr = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
-                        let addr_fut = future::ok(addr);
-                        Some(future::ok(((peer_id, DummyMuxer::new()), addr_fut)))
+                        Some(future::ok((peer_id, DummyMuxer::new())))
                     },
                 }
             }
 
-            fn with_inner_fut(&mut self, fut: FutureResult<((PeerId, DummyMuxer), FutureResult<Multiaddr, IoError>), IoError>) -> &mut Self{
+            fn with_inner_fut(&mut self, fut: FutureResult<(PeerId, DummyMuxer), IoError>) -> &mut Self{
                 self.inner_fut = Some(fut);
                 self
             }
@@ -595,9 +592,9 @@ mod tests {
             fn node_task(&mut self) -> (
                 TestNodeTask,
                 UnboundedSender<InEvent>,
-                UnboundedReceiver<(InToExtMessage<OutEvent>, TaskId)>,
+                UnboundedReceiver<(InToExtMessage<OutEvent, Handler>, TaskId)>,
             ) {
-                let (events_from_node_task_tx, events_from_node_task_rx) = mpsc::unbounded::<(InToExtMessage<OutEvent>, TaskId)>();
+                let (events_from_node_task_tx, events_from_node_task_rx) = mpsc::unbounded::<(InToExtMessage<OutEvent, Handler>, TaskId)>();
                 let (events_to_node_task_tx, events_to_node_task_rx) = mpsc::unbounded::<InEvent>();
                 let inner = if self.inner_node.is_some() {
                     NodeTaskInner::Node(self.inner_node.take().unwrap())
@@ -676,12 +673,10 @@ mod tests {
             let mut rt = Runtime::new().unwrap();
             let fut = {
                 let peer_id = PublicKey::Rsa((0 .. 2048).map(|_| -> u8 { random() }).collect()).into_peer_id();
-                let addr = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
-                let addr_fut = future::ok(addr);
                 let mut muxer = DummyMuxer::new();
                 muxer.set_inbound_connection_state(DummyConnectionState::Closed);
                 muxer.set_outbound_connection_state(DummyConnectionState::Closed);
-                future::ok(((peer_id, muxer), addr_fut))
+                future::ok((peer_id, muxer))
             };
             let (node_task, tx, rx) = TestBuilder::new()
                 .with_inner_fut(fut)
@@ -704,14 +699,13 @@ mod tests {
             // (because we set up the muxer state so) and thus yield
             // Async::Ready(None) which in turn makes the NodeStream yield an
             // Async::Ready(OutboundClosed) to the HandledNode.
-            // On the next iteration we'll poll and resolve the address. Now
-            // we're at the point where poll_inbound, poll_outbound and address
-            // are all skipped and there is nothing left to do: we yield
-            // Async::Ready(None) from the NodeStream.
-            // In the HandledNode, Async::Ready(None) triggers a shutdown of the
-            // Handler so that it also yields Async::Ready(None). Finally, the
-            // NodeTask gets a Async::Ready(None) and sends a TaskClosed and
-            // returns Async::Ready(()). Qed.
+            // Now we're at the point where poll_inbound, poll_outbound and
+            // address are all skipped and there is nothing left to do: we yield
+            // Async::Ready(None) from the NodeStream. In the HandledNode,
+            // Async::Ready(None) triggers a shutdown of the Handler so that it
+            // also yields Async::Ready(None). Finally, the NodeTask gets a
+            // Async::Ready(None) and sends a TaskClosed and returns
+            // Async::Ready(()). Qed.
 
             let create_outbound_substream_event = InEvent::Substream(Some(135));
             tx.unbounded_send(create_outbound_substream_event).expect("send msg works");
@@ -720,7 +714,7 @@ mod tests {
 
             assert_eq!(events.len(), 2);
             assert_matches!(events[0].0, InToExtMessage::NodeReached(PeerId{..}));
-            assert_matches!(events[1].0, InToExtMessage::TaskClosed(Ok(())));
+            assert_matches!(events[1].0, InToExtMessage::TaskClosed(Ok(()), _));
         }
     }
     mod handled_node_tasks {
