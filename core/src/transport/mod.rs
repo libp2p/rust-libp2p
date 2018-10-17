@@ -29,10 +29,8 @@
 //! `UpgradedNode::or_upgrade` methods, you can combine multiple transports and/or upgrades
 //! together in a complex chain of protocols negotiation.
 
-use connection_reuse::ConnectionReuse;
 use futures::prelude::*;
 use multiaddr::Multiaddr;
-use muxing::StreamMuxer;
 use std::io::Error as IoError;
 use tokio_io::{AsyncRead, AsyncWrite};
 use upgrade::{ConnectionUpgrade, Endpoint};
@@ -116,8 +114,12 @@ pub trait Transport {
     /// a remote node observes for one of our dialers.
     ///
     /// For example, if `server` is `/ip4/0.0.0.0/tcp/3000` and `observed` is
-    /// `/ip4/80.81.82.83/tcp/29601`, then we should return `/ip4/80.81.82.83/tcp/3000`. Each
-    /// implementation of `Transport` is only responsible for handling the protocols it supports.
+    /// `/ip4/80.81.82.83/tcp/29601`, then we should return `/ip4/80.81.82.83/tcp/3000`.
+    ///
+    /// Each implementation of `Transport` is only responsible for handling the protocols it
+    /// supports and should only consider the prefix of `observed` necessary to perform the
+    /// address translation (e.g. `/ip4/80.81.82.83`) but should otherwise preserve `server`
+    /// as is.
     ///
     /// Returns `None` if nothing can be determined. This happens if this trait implementation
     /// doesn't recognize the protocols, or if `server` and `observed` are related.
@@ -237,17 +239,6 @@ pub trait Transport {
         Self: Sized,
     {
         DummyMuxing::new(self)
-    }
-
-    /// Turns this `Transport` into a `ConnectionReuse`. If the `Output` implements the
-    /// `StreamMuxer` trait, the returned object will implement `Transport` and `MuxedTransport`.
-    #[inline]
-    fn into_connection_reuse<D, M>(self) -> ConnectionReuse<Self, D, M>
-    where
-        Self: Sized + Transport<Output = (D, M)>,
-        M: StreamMuxer,
-    {
-        ConnectionReuse::new(self)
     }
 
     /// Wraps around the `Transport` and makes it interruptible.

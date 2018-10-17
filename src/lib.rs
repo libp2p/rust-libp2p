@@ -159,7 +159,7 @@ pub extern crate libp2p_yamux as yamux;
 
 pub mod simple;
 
-pub use self::core::{Transport, ConnectionUpgrade, PeerId, swarm};
+pub use self::core::{Transport, ConnectionUpgrade, PeerId};
 pub use self::multiaddr::Multiaddr;
 pub use self::simple::SimpleProtocol;
 pub use self::transport_timeout::TransportTimeout;

@@ -43,7 +43,7 @@ impl Default for Handler {
 	}
 }
 
-#[derive(Debug, PartialEq, Clone,)]
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) enum HandlerState {
 	NotReady,
 	Ready(Option<NodeHandlerEvent<usize, OutEvent>>),

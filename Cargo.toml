@@ -47,28 +47,6 @@ tokio-current-thread = "0.1"
 tokio-io = "0.1"
 tokio-stdin = "0.1"
 
-[[example]]
-name = "echo-dialer"
-
-[[example]]
-name = "echo-server"
-
-[[example]]
-name = "floodsub"
-
-[[example]]
-name = "kademlia"
-
-[[example]]
-name = "ping-client"
-
-[[example]]
-name = "random_peerid"
-
-[[example]]
-name = "relay"
-
-
 [workspace]
 members = [
     "core",

@@ -23,9 +23,57 @@ use std::fmt;
 use void::Void;
 use {Multiaddr, Transport};
 
-/// Implementation of `Stream` that handles listeners.
+/// Implementation of `futures::Stream` that allows listening on multiaddresses.
 ///
-/// The stream cannot produce errors.
+/// To start using a `ListenersStream`, create one with `new` by passing an implementation of
+/// `Transport`. This `Transport` will be used to start listening, therefore you want to pass
+/// a `Transport` that supports the protocols you wish you listen on.
+///
+/// Then, call `ListenerStream::listen_on` for all addresses you want to start listening on.
+///
+/// The `ListenersStream` never ends and never produces errors. If a listener errors or closes,
+/// an event is generated on the stream and the listener is then dropped, but the `ListenersStream`
+/// itself continues.
+///
+/// # Example
+///
+/// ```no_run
+/// # extern crate futures;
+/// # extern crate libp2p_core;
+/// # extern crate libp2p_tcp_transport;
+/// # extern crate tokio;
+/// # fn main() {
+/// use futures::prelude::*;
+/// use libp2p_core::nodes::listeners::{ListenersEvent, ListenersStream};
+///
+/// let mut listeners = ListenersStream::new(libp2p_tcp_transport::TcpConfig::new());
+///
+/// // Ask the `listeners` to start listening on the given multiaddress.
+/// listeners.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
+///
+/// // You can retreive the list of active listeners with `listeners()`.
+/// println!("Listening on: {:?}", listeners.listeners().collect::<Vec<_>>());
+///
+/// // The `listeners` will now generate events when polled.
+/// let future = listeners.for_each(move |event| {
+///     match event {
+///         ListenersEvent::Closed { listen_addr, listener, result } => {
+///             println!("Listener {} has been closed: {:?}", listen_addr, result);
+///         },
+///         ListenersEvent::Incoming { upgrade, listen_addr } => {
+///             println!("A connection has arrived on {}", listen_addr);
+///             // We don't do anything with the newly-opened connection, but in a real-life
+///             // program you probably want to use it!
+///             drop(upgrade);
+///         },
+///     };
+///
+///     Ok(())
+/// });
+///
+/// tokio::run(future.map_err(|_| ()));
+/// # }
+/// ```
 pub struct ListenersStream<TTrans>
 where
     TTrans: Transport,

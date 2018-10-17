@@ -145,6 +145,7 @@ where
                 notifier_write: Arc::new(Notifier {
                     to_notify: Mutex::new(Default::default()),
                 }),
+                is_shutdown: false
             })
         };
 
@@ -183,6 +184,9 @@ struct MultiplexInner<C> {
     notifier_read: Arc<Notifier>,
     /// List of tasks to notify when a write event happens on the underlying stream.
     notifier_write: Arc<Notifier>,
+    /// If true, the connection has been shut down. We need to be careful not to accidentally
+    /// call `Sink::poll_complete` or `Sink::start_send` after `Sink::close`.
+    is_shutdown: bool
 }
 
 struct Notifier {
@@ -301,6 +305,9 @@ where C: AsyncRead + AsyncWrite,
 fn poll_send<C>(inner: &mut MultiplexInner<C>, elem: codec::Elem) -> Poll<(), IoError>
 where C: AsyncRead + AsyncWrite
 {
+    if inner.is_shutdown {
+        return Err(IoError::new(IoErrorKind::Other, "connection is shut down"))
+    }
     match inner.inner.start_send_notify(elem, &inner.notifier_write, 0) {
         Ok(AsyncSink::Ready) => {
             Ok(Async::Ready(()))
@@ -374,6 +381,9 @@ where C: AsyncRead + AsyncWrite
                     poll_send(&mut inner, elem.clone())
                 },
                 OutboundSubstreamState::Flush => {
+                    if inner.is_shutdown {
+                        return Err(IoError::new(IoErrorKind::Other, "connection is shut down"))
+                    }
                     let inner = &mut *inner; // Avoids borrow errors
                     inner.inner.poll_flush_notify(&inner.notifier_write, 0)
                 },
@@ -483,8 +493,11 @@ where C: AsyncRead + AsyncWrite
 
     fn flush_substream(&self, _substream: &mut Self::Substream) -> Poll<(), IoError> {
         let mut inner = self.inner.lock();
-        let inner = &mut *inner; // Avoids borrow errors
+        if inner.is_shutdown {
+            return Err(IoError::new(IoErrorKind::Other, "connection is shut down"))
+        }
 
+        let inner = &mut *inner; // Avoids borrow errors
         match inner.inner.poll_flush_notify(&inner.notifier_write, 0)? {
             Async::Ready(()) => Ok(Async::Ready(())),
             Async::NotReady => {
@@ -513,12 +526,17 @@ where C: AsyncRead + AsyncWrite
     #[inline]
     fn shutdown(&self, _: Shutdown) -> Poll<(), IoError> {
         let inner = &mut *self.inner.lock();
-        inner.inner.close_notify(&inner.notifier_write, 0)
+        let () = try_ready!(inner.inner.close_notify(&inner.notifier_write, 0));
+        inner.is_shutdown = true;
+        Ok(Async::Ready(()))
     }
 
     #[inline]
     fn flush_all(&self) -> Poll<(), IoError> {
         let inner = &mut *self.inner.lock();
+        if inner.is_shutdown {
+            return Ok(Async::Ready(()))
+        }
         inner.inner.poll_flush_notify(&inner.notifier_write, 0)
     }
 }
