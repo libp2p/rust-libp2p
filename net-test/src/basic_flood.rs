@@ -20,37 +20,39 @@
 
 extern crate env_logger;
 
-use std::io;
+use std::{io, marker::PhantomData};
 use futures::prelude::*;
-use libp2p::Multiaddr;
 use libp2p::core::nodes::handled_node::{NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent};
 use libp2p::tokio_io::{AsyncRead, AsyncWrite};
 use network;
 use tokio_codec::{Framed, LinesCodec};
 
-struct Handler {
+struct Handler<TSubstream> {
     substreams: Vec<Box<Future<Item = (), Error = io::Error> + Send>>,
     substreams_to_request: usize,
     substreams_being_opened: usize,
+    marker: PhantomData<TSubstream>,
 }
 
-impl Default for Handler {
+impl<TSubstream> Default for Handler<TSubstream> {
     #[inline]
     fn default() -> Self {
         Handler {
             substreams: Vec::new(),
             substreams_to_request: 10,
             substreams_being_opened: 0,
+            marker: PhantomData,
         }
     }
 }
 
-impl<TSubstream> NodeHandler<TSubstream> for Handler
+impl<TSubstream> NodeHandler for Handler<TSubstream>
 where TSubstream: AsyncRead + AsyncWrite + Send + 'static,
 {
     type InEvent = ();
     type OutEvent = ();
     type OutboundOpenInfo = ();
+    type Substream = TSubstream;
 
     fn inject_substream(&mut self, substream: TSubstream, endpoint: NodeHandlerEndpoint<Self::OutboundOpenInfo>) {
         const DATA: &'static str = "hello world";
@@ -75,9 +77,6 @@ where TSubstream: AsyncRead + AsyncWrite + Send + 'static,
 
     fn inject_outbound_closed(&mut self, _: Self::OutboundOpenInfo) {
         panic!()
-    }
-
-    fn inject_multiaddr(&mut self, _: Result<Multiaddr, io::Error>) {
     }
 
     fn inject_event(&mut self, _: Self::InEvent) {

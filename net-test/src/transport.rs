@@ -30,14 +30,14 @@ pub fn build_transport(
 ) -> Boxed<(PeerId, StreamMuxerBox)> {
 	let base = libp2p::CommonTransport::new()
 		.with_upgrade(secio::SecioConfig::new(local_private_key))
-		.and_then(move |out, endpoint, client_addr| {
+		.and_then(move |out, endpoint| {
 			let upgrade = upgrade::or(
 				upgrade::map(mplex::MplexConfig::new(), either::EitherOutput::First),
 				upgrade::map(yamux::Config::default(), either::EitherOutput::Second),
 			);
 			let peer_id = out.remote_key.into_peer_id();
 			let upgrade = upgrade::map(upgrade, move |muxer| (peer_id, muxer));
-			upgrade::apply(out.stream, upgrade, endpoint, client_addr)
+			upgrade::apply(out.stream, upgrade, endpoint.into())
 		})
 		.map(|(id, muxer), _| (id, StreamMuxerBox::new(muxer)));
 

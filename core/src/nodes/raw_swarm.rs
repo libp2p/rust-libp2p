@@ -418,7 +418,7 @@ where
     pub fn has_connections_or_pending(&self) -> bool {
         !self.reach_attempts.out_reach_attempts.is_empty() ||
             !self.reach_attempts.other_reach_attempts.is_empty() ||
-            !self.reach_attempts.connected_multiaddresses.is_empty()
+            !self.reach_attempts.connected_points.is_empty()
     }
 
     /// Sends an event to all nodes.

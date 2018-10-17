@@ -32,7 +32,7 @@ use libp2p::secio::SecioKeyPair;
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::nodes::handled_node::NodeHandler;
 use libp2p::core::nodes::node::Substream;
-use libp2p::core::nodes::swarm::{Swarm, SwarmEvent};
+use libp2p::core::nodes::raw_swarm::{RawSwarm, RawSwarmEvent};
 use rand;
 use tokio_core::reactor::Core;
 use tokio::runtime::Runtime;
@@ -93,7 +93,7 @@ impl Network {
     pub fn node<THandler, TName, TBuilder>(&mut self, id: TName, handler: TBuilder) -> NodeId
     where TName: Into<String>,
           TBuilder: Fn() -> THandler + Send + 'static,
-          THandler: NodeHandler<Substream<StreamMuxerBox>, InEvent = (), OutEvent = ()> + Send + 'static,
+          THandler: NodeHandler<Substream = Substream<StreamMuxerBox>, InEvent = (), OutEvent = ()> + Send + 'static,
           THandler::OutboundOpenInfo: Send + 'static,
     {
         let id = NodeId(id.into());
@@ -103,58 +103,60 @@ impl Network {
         let transport_timeout = self.transport_timeout;
         let node = move |listen_addr, init_tx: sync_mpsc::Sender<Multiaddr>, conn_rx: mpsc::UnboundedReceiver<Multiaddr>| {
             let key = SecioKeyPair::ed25519_generated().unwrap();
-            let mut swarm = Swarm::with_handler_builder(
-                transport::build_transport(key.clone(), transport_timeout),
-                handler
-            );
+            let mut raw_swarm = RawSwarm::new(transport::build_transport(key.clone(), transport_timeout));
 
-            let new_addr = swarm.listen_on(listen_addr).unwrap();
+            let new_addr = raw_swarm.listen_on(listen_addr).unwrap();
             init_tx.send(new_addr).expect("Network not running");
 
             let mut conn_rx = conn_rx.fuse();
             let future = stream::poll_fn(move || -> Poll<_, io::Error> {
                 loop {
                     match conn_rx.poll() {
-                        Ok(Async::Ready(Some(dial_addr))) => swarm.dial(dial_addr).unwrap(),
+                        Ok(Async::Ready(Some(dial_addr))) => raw_swarm.dial(dial_addr, handler()).unwrap(),
                         Ok(Async::NotReady) => break,
                         Ok(Async::Ready(None)) | Err(_) => return Ok(Async::Ready(None)),
                     }
                 }
 
                 loop {
-                    match swarm.poll() {
+                    let mut node_closed = false;
+
+                    match raw_swarm.poll() {
                         Async::NotReady => return Ok(Async::NotReady),
-                        Async::Ready(None) => return Ok(Async::Ready(None)),
-                        Async::Ready(Some(ev)) => match ev {
-                            SwarmEvent::IncomingConnection { .. } => {},
-                            SwarmEvent::IncomingConnectionError { error, .. } => {
+                        Async::Ready(ev) => match ev {
+                            RawSwarmEvent::IncomingConnection(incoming) => {
+                                incoming.accept(handler());
+                            },
+                            RawSwarmEvent::IncomingConnectionError { error, .. } => {
                                 panic!("Incoming connection error: {:?}", error);
                             },
-                            SwarmEvent::Connected { .. } => {},
-                            SwarmEvent::ListenerClosed { result, .. } => {
+                            RawSwarmEvent::Connected { .. } => {},
+                            RawSwarmEvent::ListenerClosed { result, .. } => {
                                 panic!("Listener closed: {:?}", result);
                             },
-                            SwarmEvent::Replaced { .. } => {},
-                            SwarmEvent::NodeClosed { .. } => {
-                                if !swarm.has_connections_or_pending() {
-                                    // We send all the dial requests before starting to poll this
-                                    // future, therefore the swarm will be empty only when all
-                                    // nodes are done.
-                                    return Ok(Async::Ready(None));
-                                }
+                            RawSwarmEvent::Replaced { .. } => {},
+                            RawSwarmEvent::NodeClosed { .. } => {
+                                node_closed = true;
                             },
-                            SwarmEvent::NodeError { peer_id, error, .. } => {
+                            RawSwarmEvent::NodeError { peer_id, error, .. } => {
                                 panic!("{:?} NodeError: {:?}", peer_id, error);
                             },
-                            SwarmEvent::DialError { peer_id, error, .. } => {
+                            RawSwarmEvent::DialError { peer_id, error, .. } => {
                                 panic!("{:?} DialError: {:?}", peer_id, error);
                             },
-                            SwarmEvent::UnknownPeerDialError { error, .. } => {
+                            RawSwarmEvent::UnknownPeerDialError { error, .. } => {
                                 panic!("UnknownPeerDialError: {:?}", error);
                             },
                             _ => {
                             },
                         }
+                    }
+
+                    if node_closed && !raw_swarm.has_connections_or_pending() {
+                        // We send all the dial requests before starting to poll this
+                        // future, therefore the RawSwarm will be empty only when all
+                        // nodes are done.
+                        return Ok(Async::Ready(None));
                     }
                 }
             }).for_each(|_: Option<()>| Ok(()));
@@ -243,7 +245,8 @@ impl Network {
         for (a, b) in self.connections {
             match (connect_to.get(&a), addr.get(&b)) {
                 (Some(tx), Some(addr)) => {
-                    tx.unbounded_send(addr.clone()).expect("Node should be listening for connections.");
+                    tx.unbounded_send(addr.clone())
+                        .expect("Node should be listening for connections.");
                 },
                 _ => {},
             }
