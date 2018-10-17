@@ -81,8 +81,10 @@ extern crate tokio_timer;
 extern crate unsigned_varint;
 extern crate void;
 
+pub use self::id_transport::IdentifyTransport;
 pub use self::protocol::{IdentifyInfo, IdentifyOutput};
 pub use self::protocol::{IdentifyProtocolConfig, IdentifySender};
 
+mod id_transport;
 mod protocol;
 mod structs_proto;
