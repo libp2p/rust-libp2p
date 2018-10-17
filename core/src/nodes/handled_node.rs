@@ -514,42 +514,20 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn handler_emits_outbound_closed_when_opening_new_substream_on_closed_node() {
-        // TODO: The code path we want to test here is when the NodeStream is closed
-        // but the handler tries to open a substream using the
-        // OutboundSubstreamRequest event: the handlers inject_outbound_closed
-        // method should be called and we should see an OutboundClosed event in
-        // the handler.events collection:
-        // 1. set up with pending inbound and open outbound
-        // 2. open substream
-        // 3. shut down handled node
-        // 4. assert that OutboundClosed was emitted
-
-        // OLD TEST
-        let expected_event = Some(NodeHandlerEvent::OutboundSubstreamRequest(456));
+        let open_event = Some(NodeHandlerEvent::OutboundSubstreamRequest(456));
         let mut handled = TestBuilder::new()
-            // make NodeStream return NotReady for both in and out bound traffic
             .with_muxer_inbound_state(DummyConnectionState::Pending)
-            .with_muxer_outbound_state(DummyConnectionState::Pending)
-            // make Handler return Ready(Some(…))
-            .with_handler_state(HandlerState::Ready(expected_event))
+            .with_muxer_outbound_state(DummyConnectionState::Closed)
+            .with_handler_state(HandlerState::Ready(open_event))
             .handled_node();
 
-        // Remove the NodeStream from the HandledNode so that the call to
-        // `handler.poll()` can yield an `OpenSubstreamRequest` without taking
-        // ther `open_substream` path (avoids staying in the loop) and instead call
-        // `handler.inject_outbound_closed()` which then will tweak the state so
-        // that `poll()` exits the loop and we can assert.
-        // set_node_to_none(&mut handled); // <––THIS WAS KEY TO THE OLD TEST BUT CANNOT WORK NOW
         set_next_handler_outbound_state(
             &mut handled,
             HandlerState::Ready(Some(NodeHandlerEvent::Custom(Event::Custom("pear"))))
         );
-        assert_matches!(handled.poll(), Ok(Async::Ready(Some(event))) => {
-            assert_matches!(event, Event::Custom("pear"))
-        });
-        assert_eq!(handled.handler.events, vec![Event::OutboundClosed]);
+        handled.poll();
+        assert_eq!(handled.handler.events, vec![Event::Multiaddr, Event::OutboundClosed]);
     }
 
     #[test]
