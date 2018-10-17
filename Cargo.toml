@@ -19,6 +19,7 @@ libp2p-kad = { path = "./protocols/kad" }
 libp2p-floodsub = { path = "./protocols/floodsub" }
 libp2p-peerstore = { path = "./stores/peerstore" }
 libp2p-ping = { path = "./protocols/ping" }
+libp2p-quic = { path = "./transports/quic" }
 libp2p-ratelimit = { path = "./transports/ratelimit" }
 libp2p-relay = { path = "./transports/relay" }
 libp2p-core = { path = "./core" }
@@ -68,6 +69,7 @@ members = [
     "transports/tcp",
     "transports/uds",
     "transports/websocket",
+    "transports/quic",
     "transports/timeout",
     "transports/ratelimit",
 ]

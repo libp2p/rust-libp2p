@@ -1,0 +1,19 @@
+[package]
+name = "libp2p-quic"
+version = "0.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
+edition = "2018"
+
+[dependencies]
+bytes = "0.4.9"
+libp2p-core = { path = "../../core" }
+log = "0.4.1"
+fnv = "1.0"
+futures = "0.1"
+multiaddr = { path = "../../misc/multiaddr" }
+openssl = "^0.10.6"
+parking_lot = "0.5"
+picoquic = { git = "https://github.com/bkchr/picoquic-rs", rev = "b27be6e9597ec9478c64722c9848522540bc8a38" }
+tokio-core = "0.1"      # TODO: remove once picoquic no longer needs it
+tokio-io = "0.1"
