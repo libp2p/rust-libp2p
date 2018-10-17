@@ -60,7 +60,7 @@ use {Multiaddr, Transport};
 ///         ListenersEvent::Closed { listen_addr, listener, result } => {
 ///             println!("Listener {} has been closed: {:?}", listen_addr, result);
 ///         },
-///         ListenersEvent::Incoming { upgrade, listen_addr } => {
+///         ListenersEvent::Incoming { upgrade, listen_addr, .. } => {
 ///             println!("A connection has arrived on {}", listen_addr);
 ///             // We don't do anything with the newly-opened connection, but in a real-life
 ///             // program you probably want to use it!
@@ -107,6 +107,8 @@ where
         upgrade: TTrans::ListenerUpgrade,
         /// Address of the listener which received the connection.
         listen_addr: Multiaddr,
+        /// Address used to send back data to the incoming client.
+        send_back_addr: Multiaddr,
     },
 
     /// A listener has closed, either gracefully or with an error.
@@ -177,7 +179,7 @@ where
     }
 
     /// Provides an API similar to `Stream`, except that it cannot error.
-    pub fn poll(&mut self) -> Async<Option<ListenersEvent<TTrans>>> {
+    pub fn poll(&mut self) -> Async<ListenersEvent<TTrans>> {
         // We remove each element from `listeners` one by one and add them back.
         for n in (0..self.listeners.len()).rev() {
             let mut listener = self.listeners.swap_remove(n);
@@ -185,27 +187,28 @@ where
                 Ok(Async::NotReady) => {
                     self.listeners.push(listener);
                 }
-                Ok(Async::Ready(Some(upgrade))) => {
+                Ok(Async::Ready(Some((upgrade, send_back_addr)))) => {
                     let listen_addr = listener.address.clone();
                     self.listeners.push(listener);
-                    return Async::Ready(Some(ListenersEvent::Incoming {
+                    return Async::Ready(ListenersEvent::Incoming {
                         upgrade,
                         listen_addr,
-                    }));
+                        send_back_addr,
+                    });
                 }
                 Ok(Async::Ready(None)) => {
-                    return Async::Ready(Some(ListenersEvent::Closed {
+                    return Async::Ready(ListenersEvent::Closed {
                         listen_addr: listener.address,
                         listener: listener.listener,
                         result: Ok(()),
-                    }));
+                    });
                 }
                 Err(err) => {
-                    return Async::Ready(Some(ListenersEvent::Closed {
+                    return Async::Ready(ListenersEvent::Closed {
                         listen_addr: listener.address,
                         listener: listener.listener,
                         result: Err(err),
-                    }));
+                    });
                 }
             }
         }
@@ -224,7 +227,7 @@ where
 
     #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        Ok(self.poll())
+        Ok(self.poll().map(Option::Some))
     }
 }
 
@@ -294,7 +297,7 @@ mod tests {
 						Async::Ready(Some(n)) => {
 							let addr = l.address.clone();
 							let stream = stream::iter_ok(n..)
-								.map(move |stream| future::ok( (stream, future::ok(addr.clone())) ));
+								.map(move |stream| (future::ok(stream), addr.clone()));
 							Box::new(stream)
 						}
 						Async::Ready(None) => {
@@ -320,8 +323,9 @@ mod tests {
             .map_err(|(err, _)| err)
             .and_then(|(event, _)| {
                 match event {
-                    Some(ListenersEvent::Incoming { listen_addr, upgrade }) => {
+                    Some(ListenersEvent::Incoming { listen_addr, upgrade, send_back_addr }) => {
                         assert_eq!(listen_addr, "/memory".parse().unwrap());
+                        assert_eq!(send_back_addr, "/memory".parse().unwrap());
                         upgrade.map(|_| ()).map_err(|_| panic!())
                     },
                     _ => panic!()
@@ -384,11 +388,11 @@ mod tests {
         ls.listen_on(addr1).expect("listen_on failed");
         ls.listen_on(addr2).expect("listen_on failed");
 
-        assert_matches!(ls.poll(), Async::Ready(Some(listeners_event)) => {
-            assert_matches!(listeners_event, ListenersEvent::Incoming{mut upgrade, listen_addr} => {
+        assert_matches!(ls.poll(), Async::Ready(listeners_event) => {
+            assert_matches!(listeners_event, ListenersEvent::Incoming{mut upgrade, listen_addr, ..} => {
                 assert_eq!(listen_addr.to_string(), "/ip4/127.0.0.2/tcp/4321");
                 assert_matches!(upgrade.poll().unwrap(), Async::Ready(tup) => {
-                    assert_matches!(tup, (1, _))
+                    assert_eq!(tup, 1)
                 });
             })
         });
@@ -407,11 +411,11 @@ mod tests {
 
         // Make the second listener return NotReady so we get the first listener next poll()
         set_listener_state(&mut ls, 1, ListenerState::Ok(Async::NotReady));
-        assert_matches!(ls.poll(), Async::Ready(Some(listeners_event)) => {
-            assert_matches!(listeners_event, ListenersEvent::Incoming{mut upgrade, listen_addr} => {
+        assert_matches!(ls.poll(), Async::Ready(listeners_event) => {
+            assert_matches!(listeners_event, ListenersEvent::Incoming{mut upgrade, listen_addr, ..} => {
                 assert_eq!(listen_addr.to_string(), "/ip4/127.0.0.1/tcp/1234");
                 assert_matches!(upgrade.poll().unwrap(), Async::Ready(tup) => {
-                    assert_matches!(tup, (1, _))
+                    assert_eq!(tup, 1)
                 });
             })
         });
@@ -425,7 +429,7 @@ mod tests {
         let mut ls = ListenersStream::new(t);
         ls.listen_on(addr).expect("listen_on failed");
         set_listener_state(&mut ls, 0, ListenerState::Ok(Async::Ready(None)));
-        assert_matches!(ls.poll(), Async::Ready(Some(listeners_event)) => {
+        assert_matches!(ls.poll(), Async::Ready(listeners_event) => {
             assert_matches!(listeners_event, ListenersEvent::Closed{..})
         });
         assert_eq!(ls.listeners.len(), 0); // it's gone
@@ -439,7 +443,7 @@ mod tests {
         let mut ls = ListenersStream::new(t);
         ls.listen_on(addr).expect("listen_on failed");
         set_listener_state(&mut ls, 0, ListenerState::Error); // simulate an error on the socket
-        assert_matches!(ls.poll(), Async::Ready(Some(listeners_event)) => {
+        assert_matches!(ls.poll(), Async::Ready(listeners_event) => {
             assert_matches!(listeners_event, ListenersEvent::Closed{..})
         });
         assert_eq!(ls.listeners.len(), 0); // it's gone
@@ -458,14 +462,14 @@ mod tests {
         // polling processes listeners in reverse order
         // Only the last listener ever gets processed
         for _n in 0..10 {
-            assert_matches!(ls.poll(), Async::Ready(Some(ListenersEvent::Incoming{listen_addr, ..})) => {
+            assert_matches!(ls.poll(), Async::Ready(ListenersEvent::Incoming{listen_addr, ..}) => {
                 assert_eq!(listen_addr.to_string(), "/ip4/127.0.0.3/tcp/1233")
             })
         }
         // Make last listener NotReady so now only the third listener is processed
         set_listener_state(&mut ls, 3, ListenerState::Ok(Async::NotReady));
         for _n in 0..10 {
-            assert_matches!(ls.poll(), Async::Ready(Some(ListenersEvent::Incoming{listen_addr, ..})) => {
+            assert_matches!(ls.poll(), Async::Ready(ListenersEvent::Incoming{listen_addr, ..}) => {
                 assert_eq!(listen_addr.to_string(), "/ip4/127.0.0.2/tcp/1232")
             })
         }
@@ -483,7 +487,7 @@ mod tests {
         // If the listeners do not yield items continuously (the normal case) we
         // process them in the expected, reverse, order.
         for n in (0..4).rev() {
-            assert_matches!(ls.poll(), Async::Ready(Some(ListenersEvent::Incoming{listen_addr, ..})) => {
+            assert_matches!(ls.poll(), Async::Ready(ListenersEvent::Incoming{listen_addr, ..}) => {
                 assert_eq!(listen_addr.to_string(), format!("/ip4/127.0.0.{}/tcp/123{}", n, n));
             });
             // kick the last listener (current) to NotReady state

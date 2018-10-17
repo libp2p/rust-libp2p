@@ -23,10 +23,10 @@
 use std::io::{self, Error as IoError};
 
 use futures::prelude::*;
-use futures::future::FutureResult;
-use Multiaddr;
+use nodes::handled_node::{NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent};
 use super::dummy_muxer::DummyMuxer;
-use nodes::handled_node::{HandledNode, NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent};
+use muxing::SubstreamRef;
+use std::sync::Arc;
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) struct Handler {
@@ -58,7 +58,6 @@ pub(crate) enum InEvent {
 	Substream(Option<usize>),
 	OutboundClosed,
 	InboundClosed,
-	Multiaddr,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -67,13 +66,14 @@ pub(crate) enum OutEvent {
 }
 
 // Concrete `HandledNode`
-pub(crate) type TestHandledNode = HandledNode<DummyMuxer, FutureResult<Multiaddr, IoError>, Handler>;
+pub(crate) type TestHandledNode = HandledNode<DummyMuxer, Handler>;
 
-impl<T> NodeHandler<T> for Handler {
+impl NodeHandler for Handler {
 	type InEvent = InEvent;
 	type OutEvent = OutEvent;
 	type OutboundOpenInfo = usize;
-	fn inject_substream(&mut self, _: T, endpoint: NodeHandlerEndpoint<usize>) {
+	type Substream = SubstreamRef<Arc<DummyMuxer>>;
+	fn inject_substream(&mut self, _: Self::Substream, endpoint: NodeHandlerEndpoint<Self::OutboundOpenInfo>) {
 		let user_data = match endpoint {
 			NodeHandlerEndpoint::Dialer(user_data) => Some(user_data),
 			NodeHandlerEndpoint::Listener => None
@@ -88,9 +88,6 @@ impl<T> NodeHandler<T> for Handler {
 		if let Some(ref state) = self.next_outbound_state {
 			self.state = Some(state.clone());
 		}
-	}
-	fn inject_multiaddr(&mut self, _: Result<Multiaddr, IoError>) {
-		self.events.push(InEvent::Multiaddr);
 	}
 	fn inject_event(&mut self, inevent: Self::InEvent) {
 		println!("[NodeHandler, inject_event] inevent={:?}", inevent);

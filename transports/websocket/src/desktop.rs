@@ -60,19 +60,16 @@ where
     // TODO: this 'static is pretty arbitrary and is necessary because of the websocket library
     T: Transport + 'static,
     T::Dial: Send,
-    T::MultiaddrFuture: Send,
     T::Listener: Send,
     T::ListenerUpgrade: Send,
     // TODO: this Send is pretty arbitrary and is necessary because of the websocket library
     T::Output: AsyncRead + AsyncWrite + Send,
 {
     type Output = Box<AsyncStream + Send>;
-    type MultiaddrFuture = Box<Future<Item = Multiaddr, Error = IoError> + Send>;
     type Listener =
-        stream::Map<T::Listener, fn(<T as Transport>::ListenerUpgrade) -> Self::ListenerUpgrade>;
-    type ListenerUpgrade =
-        Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
-    type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
+        stream::Map<T::Listener, fn((<T as Transport>::ListenerUpgrade, Multiaddr)) -> (Self::ListenerUpgrade, Multiaddr)>;
+    type ListenerUpgrade = Box<Future<Item = Self::Output, Error = IoError> + Send>;
+    type Dial = Box<Future<Item = Self::Output, Error = IoError> + Send>;
 
     fn listen_on(
         self,
@@ -102,14 +99,12 @@ where
 
         debug!("Listening on {}", new_addr);
 
-        let listen = inner_listen.map::<_, fn(_) -> _>(|stream| {
+        let listen = inner_listen.map::<_, fn(_) -> _>(|(stream, mut client_addr)| {
+            // Need to suffix `/ws` to each client address.
+            client_addr.append(Protocol::Ws);
+
             // Upgrade the listener to websockets like the websockets library requires us to do.
-            let upgraded = stream.and_then(|(stream, client_addr)| {
-                // Need to suffix `/ws` to each client address.
-                let client_addr = client_addr.map(|mut addr| {
-                    addr.append(Protocol::Ws);
-                    addr
-                });
+            let upgraded = stream.and_then(move |stream| {
                 debug!("Incoming connection");
 
                 stream
@@ -149,10 +144,9 @@ where
                     .map(|s| Box::new(Ok(s).into_future()) as Box<Future<Item = _, Error = _> + Send>)
                     .into_future()
                     .flatten()
-                    .map(move |v| (v, Box::new(client_addr) as Box<Future<Item = _, Error = _> + Send>))
             });
 
-            Box::new(upgraded) as Box<Future<Item = _, Error = _> + Send>
+            (Box::new(upgraded) as Box<Future<Item = _, Error = _> + Send>, client_addr)
         });
 
         Ok((listen, new_addr))
@@ -194,16 +188,7 @@ where
 
         let dial = inner_dial
             .into_future()
-            .and_then(move |(connec, client_addr)| {
-                let client_addr = Box::new(client_addr.map(move |mut addr| {
-                    if is_wss {
-                        addr.append(Protocol::Wss);
-                    } else {
-                        addr.append(Protocol::Ws);
-                    };
-                    addr
-                })) as Box<Future<Item = _, Error = _> + Send>;
-
+            .and_then(move |connec| {
                 ClientBuilder::new(&ws_addr)
                     .expect("generated ws address is always valid")
                     .async_connect_on(connec)
@@ -229,7 +214,6 @@ where
                         let read_write = RwStreamSink::new(framed_data);
                         Box::new(read_write) as Box<AsyncStream + Send>
                     })
-                    .map(move |c| (c, client_addr))
             });
 
         Ok(Box::new(dial) as Box<_>)
@@ -294,8 +278,8 @@ mod tests {
         let listener = listener
             .into_future()
             .map_err(|(e, _)| e)
-            .and_then(|(c, _)| c.unwrap().map(|v| v.0));
-        let dialer = ws_config.clone().dial(addr).unwrap().map(|v| v.0);
+            .and_then(|(c, _)| c.unwrap().0);
+        let dialer = ws_config.clone().dial(addr).unwrap();
 
         let future = listener
             .select(dialer)
@@ -317,8 +301,8 @@ mod tests {
         let listener = listener
             .into_future()
             .map_err(|(e, _)| e)
-            .and_then(|(c, _)| c.unwrap().map(|v| v.0));
-        let dialer = ws_config.clone().dial(addr).unwrap().map(|v| v.0);
+            .and_then(|(c, _)| c.unwrap().0);
+        let dialer = ws_config.clone().dial(addr).unwrap();
 
         let future = listener
             .select(dialer)

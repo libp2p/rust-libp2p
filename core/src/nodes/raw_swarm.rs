@@ -29,11 +29,10 @@ use nodes::listeners::{ListenersEvent, ListenersStream};
 use nodes::node::Substream;
 use std::collections::hash_map::{Entry, OccupiedEntry};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use void::Void;
 use {Endpoint, Multiaddr, PeerId, Transport};
 
 /// Implementation of `Stream` that handles the nodes.
-pub struct Swarm<TTrans, TInEvent, TOutEvent, THandlerBuild>
+pub struct RawSwarm<TTrans, TInEvent, TOutEvent, THandler>
 where
     TTrans: Transport,
 {
@@ -41,14 +40,11 @@ where
     listeners: ListenersStream<TTrans>,
 
     /// The nodes currently active.
-    active_nodes: CollectionStream<TInEvent, TOutEvent>,
+    active_nodes: CollectionStream<TInEvent, TOutEvent, THandler>,
 
     /// The reach attempts of the swarm.
     /// This needs to be a separate struct in order to handle multiple mutable borrows issues.
     reach_attempts: ReachAttempts,
-
-    /// Object that builds new handlers.
-    handler_build: THandlerBuild,
 }
 
 struct ReachAttempts {
@@ -59,8 +55,8 @@ struct ReachAttempts {
     /// the peer ID.
     other_reach_attempts: Vec<(ReachAttemptId, ConnectedPoint)>,
 
-    /// For each peer ID we're connected to, contains the multiaddress we're connected to.
-    connected_multiaddresses: FnvHashMap<PeerId, Multiaddr>,
+    /// For each peer ID we're connected to, contains the endpoint we're connected to.
+    connected_points: FnvHashMap<PeerId, ConnectedPoint>,
 }
 
 /// Attempt to reach a peer.
@@ -74,8 +70,8 @@ struct OutReachAttempt {
     next_attempts: Vec<Multiaddr>,
 }
 
-/// Event that can happen on the `Swarm`.
-pub enum SwarmEvent<TTrans, TOutEvent>
+/// Event that can happen on the `RawSwarm`.
+pub enum RawSwarmEvent<'a, TTrans: 'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a>
 where
     TTrans: Transport,
 {
@@ -90,15 +86,17 @@ where
     },
 
     /// A new connection arrived on a listener.
-    IncomingConnection {
-        /// Address of the listener which received the connection.
-        listen_addr: Multiaddr,
-    },
+    IncomingConnection(IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler>),
 
-    /// An error happened when negotiating a new connection.
+    /// A new connection was arriving on a listener, but an error happened when negotiating it.
+    ///
+    /// This can include, for example, an error during the handshake of the encryption layer, or
+    /// the connection unexpectedly closed.
     IncomingConnectionError {
         /// Address of the listener which received the connection.
         listen_addr: Multiaddr,
+        /// Address used to send back data to the remote.
+        send_back_addr: Multiaddr,
         /// The error that happened.
         error: IoError,
     },
@@ -116,8 +114,8 @@ where
     Replaced {
         /// Id of the peer.
         peer_id: PeerId,
-        /// Multiaddr we were connected to, or `None` if it was unknown.
-        closed_multiaddr: Option<Multiaddr>,
+        /// Endpoint we were connected to.
+        closed_endpoint: ConnectedPoint,
         /// If `Listener`, then we received the connection. If `Dial`, then it's a connection that
         /// we opened.
         endpoint: ConnectedPoint,
@@ -130,16 +128,16 @@ where
     NodeClosed {
         /// Identifier of the node.
         peer_id: PeerId,
-        /// Address we were connected to. `None` if not known.
-        address: Option<Multiaddr>,
+        /// Endpoint we were connected to.
+        endpoint: ConnectedPoint,
     },
 
     /// The muxer of a node has produced an error.
     NodeError {
         /// Identifier of the node.
         peer_id: PeerId,
-        /// Address we were connected to. `None` if not known.
-        address: Option<Multiaddr>,
+        /// Endpoint we were connected to.
+        endpoint: ConnectedPoint,
         /// The error that happened.
         error: IoError,
     },
@@ -165,26 +163,12 @@ where
     UnknownPeerDialError {
         /// The multiaddr we failed to reach.
         multiaddr: Multiaddr,
+
         /// The error that happened.
         error: IoError,
-    },
 
-    /// When dialing a peer, we successfully connected to a remote whose peer id doesn't match
-    /// what we expected.
-    PublicKeyMismatch {
-        /// Id of the peer we were expecting.
-        expected_peer_id: PeerId,
-
-        /// Id of the peer we actually obtained.
-        actual_peer_id: PeerId,
-
-        /// The multiaddr we failed to reach.
-        multiaddr: Multiaddr,
-
-        /// Returns the number of multiaddresses that still need to be attempted in order to reach
-        /// `expected_peer_id`. If this is non-zero, then there's still a chance we can connect to
-        /// this node. If this is zero, then we have definitely failed.
-        remain_addrs_attempt: usize,
+        /// The handler that was passed to `dial()`.
+        handler: THandler,
     },
 
     /// A node produced a custom event.
@@ -196,7 +180,82 @@ where
     },
 }
 
+/// A new connection arrived on a listener.
+pub struct IncomingConnectionEvent<'a, TTrans: 'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a>
+where TTrans: Transport
+{
+    /// The produced upgrade.
+    upgrade: TTrans::ListenerUpgrade,
+    /// Address of the listener which received the connection.
+    listen_addr: Multiaddr,
+    /// Address used to send back data to the remote.
+    send_back_addr: Multiaddr,
+    /// Reference to the `active_nodes` field of the swarm.
+    active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent, THandler>,
+    /// Reference to the `other_reach_attempts` field of the swarm.
+    other_reach_attempts: &'a mut Vec<(ReachAttemptId, ConnectedPoint)>,
+}
+
+impl<'a, TTrans, TInEvent, TOutEvent, TMuxer, THandler> IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler>
+where
+    TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
+    TTrans::Dial: Send + 'static,
+    TTrans::ListenerUpgrade: Send + 'static,
+    THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
+    THandler::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
+    TMuxer: StreamMuxer + Send + Sync + 'static,
+    TMuxer::OutboundSubstream: Send,
+    TMuxer::Substream: Send,
+    TInEvent: Send + 'static,
+    TOutEvent: Send + 'static,
+{
+    /// Starts processing the incoming connection and sets the handler to use for it.
+    #[inline]
+    pub fn accept(self, handler: THandler) {
+        self.accept_with_builder(|_| handler)
+    }
+
+    /// Same as `accept`, but accepts a closure that turns a `ConnectedPoint` into a handler.
+    pub fn accept_with_builder<TBuilder>(self, builder: TBuilder)
+    where TBuilder: FnOnce(&ConnectedPoint) -> THandler
+    {
+        let connected_point = self.to_connected_point();
+        let handler = builder(&connected_point);
+        let id = self.active_nodes.add_reach_attempt(self.upgrade, handler);
+        self.other_reach_attempts.push((
+            id,
+            connected_point,
+        ));
+    }
+}
+
+impl<'a, TTrans, TInEvent, TOutEvent, THandler> IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler>
+where TTrans: Transport
+{
+    /// Address of the listener that received the connection.
+    #[inline]
+    pub fn listen_addr(&self) -> &Multiaddr {
+        &self.listen_addr
+    }
+
+    /// Address used to send back data to the dialer.
+    #[inline]
+    pub fn send_back_addr(&self) -> &Multiaddr {
+        &self.send_back_addr
+    }
+
+    /// Builds the `ConnectedPoint` corresponding to the incoming connection.
+    #[inline]
+    pub fn to_connected_point(&self) -> ConnectedPoint {
+        ConnectedPoint::Listener {
+            listen_addr: self.listen_addr.clone(),
+            send_back_addr: self.send_back_addr.clone(),
+        }
+    }
+}
+
 /// How we connected to a node.
+// TODO: move definition
 #[derive(Debug, Clone)]
 pub enum ConnectedPoint {
     /// We dialed the node.
@@ -208,20 +267,35 @@ pub enum ConnectedPoint {
     Listener {
         /// Address of the listener that received the connection.
         listen_addr: Multiaddr,
+        /// Stack of protocols used to send back data to the remote.
+        send_back_addr: Multiaddr,
     },
+}
+
+impl<'a> From<&'a ConnectedPoint> for Endpoint {
+    #[inline]
+    fn from(endpoint: &'a ConnectedPoint) -> Endpoint {
+        endpoint.to_endpoint()
+    }
 }
 
 impl From<ConnectedPoint> for Endpoint {
     #[inline]
     fn from(endpoint: ConnectedPoint) -> Endpoint {
-        match endpoint {
-            ConnectedPoint::Dialer { .. } => Endpoint::Dialer,
-            ConnectedPoint::Listener { .. } => Endpoint::Listener,
-        }
+        endpoint.to_endpoint()
     }
 }
 
 impl ConnectedPoint {
+    /// Turns the `ConnectedPoint` into the corresponding `Endpoint`.
+    #[inline]
+    pub fn to_endpoint(&self) -> Endpoint {
+        match *self {
+            ConnectedPoint::Dialer { .. } => Endpoint::Dialer,
+            ConnectedPoint::Listener { .. } => Endpoint::Listener,
+        }
+    }
+
     /// Returns true if we are `Dialer`.
     #[inline]
     pub fn is_dialer(&self) -> bool {
@@ -241,64 +315,26 @@ impl ConnectedPoint {
     }
 }
 
-/// Trait for structures that can create new factories.
-pub trait HandlerFactory {
-    /// The generated handler.
-    type Handler;
-
-    /// Creates a new handler.
-    fn new_handler(&self) -> Self::Handler;
-}
-
-impl<T, THandler> HandlerFactory for T where T: Fn() -> THandler {
-    type Handler = THandler;
-
-    #[inline]
-    fn new_handler(&self) -> THandler {
-        (*self)()
-    }
-}
-
-impl<TTrans, TInEvent, TOutEvent, TMuxer, THandler, THandlerBuild>
-    Swarm<TTrans, TInEvent, TOutEvent, THandlerBuild>
+impl<TTrans, TInEvent, TOutEvent, TMuxer, THandler>
+    RawSwarm<TTrans, TInEvent, TOutEvent, THandler>
 where
     TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
     TMuxer: StreamMuxer,
-    THandlerBuild: HandlerFactory<Handler = THandler>,
-    THandler: NodeHandler<Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
+    THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
     THandler::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
 {
     /// Creates a new node events stream.
     #[inline]
-    pub fn new(transport: TTrans) -> Swarm<TTrans, TInEvent, TOutEvent, fn() -> THandler>
-    where THandler: Default,
-    {
+    pub fn new(transport: TTrans) -> Self {
         // TODO: with_capacity?
-        Swarm {
+        RawSwarm {
             listeners: ListenersStream::new(transport),
             active_nodes: CollectionStream::new(),
             reach_attempts: ReachAttempts {
                 out_reach_attempts: Default::default(),
                 other_reach_attempts: Vec::new(),
-                connected_multiaddresses: Default::default(),
+                connected_points: Default::default(),
             },
-            handler_build: Default::default,
-        }
-    }
-
-    /// Same as `new`, but lets you specify a way to build a node handler.
-    #[inline]
-    pub fn with_handler_builder(transport: TTrans, handler_build: THandlerBuild) -> Self {
-        // TODO: with_capacity?
-        Swarm {
-            listeners: ListenersStream::new(transport),
-            active_nodes: CollectionStream::new(),
-            reach_attempts: ReachAttempts {
-                out_reach_attempts: Default::default(),
-                other_reach_attempts: Vec::new(),
-                connected_multiaddresses: Default::default(),
-            },
-            handler_build,
         }
     }
 
@@ -340,11 +376,12 @@ where
     }
 
     /// Dials a multiaddress without knowing the peer ID we're going to obtain.
-    pub fn dial(&mut self, addr: Multiaddr) -> Result<(), Multiaddr>
+    ///
+    /// The second parameter is the handler to use if we manage to reach a node.
+    pub fn dial(&mut self, addr: Multiaddr, handler: THandler) -> Result<(), Multiaddr>
     where
         TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
         TTrans::Dial: Send + 'static,
-        TTrans::MultiaddrFuture: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TMuxer::Substream: Send,
@@ -356,9 +393,9 @@ where
             Err((_, addr)) => return Err(addr),
         };
 
-        let reach_id = self.active_nodes.add_reach_attempt(future, self.handler_build.new_handler());
-        self.reach_attempts.other_reach_attempts
-            .push((reach_id, ConnectedPoint::Dialer { address: addr }));
+        let connected_point = ConnectedPoint::Dialer { address: addr };
+        let reach_id = self.active_nodes.add_reach_attempt(future, handler);
+        self.reach_attempts.other_reach_attempts.push((reach_id, connected_point));
         Ok(())
     }
 
@@ -387,7 +424,7 @@ where
 
     /// Grants access to a struct that represents a peer.
     #[inline]
-    pub fn peer(&mut self, peer_id: PeerId) -> Peer<TTrans, TInEvent, TOutEvent, THandlerBuild> {
+    pub fn peer(&mut self, peer_id: PeerId) -> Peer<TTrans, TInEvent, TOutEvent, THandler> {
         // TODO: we do `peer_mut(...).is_some()` followed with `peer_mut(...).unwrap()`, otherwise
         // the borrow checker yells at us.
 
@@ -399,12 +436,12 @@ where
                     .peer_mut(&peer_id)
                     .expect("we checked for Some just above"),
                 peer_id,
-                connected_multiaddresses: &mut self.reach_attempts.connected_multiaddresses,
+                connected_points: &mut self.reach_attempts.connected_points,
             });
         }
 
         if self.reach_attempts.out_reach_attempts.get_mut(&peer_id).is_some() {
-            debug_assert!(!self.reach_attempts.connected_multiaddresses.contains_key(&peer_id));
+            debug_assert!(!self.reach_attempts.connected_points.contains_key(&peer_id));
             return Peer::PendingConnect(PeerPendingConnect {
                 attempt: match self.reach_attempts.out_reach_attempts.entry(peer_id.clone()) {
                     Entry::Occupied(e) => e,
@@ -414,7 +451,7 @@ where
             });
         }
 
-        debug_assert!(!self.reach_attempts.connected_multiaddresses.contains_key(&peer_id));
+        debug_assert!(!self.reach_attempts.connected_points.contains_key(&peer_id));
         Peer::NotConnected(PeerNotConnected {
             nodes: self,
             peer_id,
@@ -426,11 +463,11 @@ where
     ///
     /// It is a logic error to call this method if we already have an outgoing attempt to the
     /// given peer.
-    fn start_dial_out(&mut self, peer_id: PeerId, first: Multiaddr, rest: Vec<Multiaddr>)
+    fn start_dial_out(&mut self, peer_id: PeerId, handler: THandler, first: Multiaddr,
+                      rest: Vec<Multiaddr>)
     where
         TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
         TTrans::Dial: Send + 'static,
-        TTrans::MultiaddrFuture: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TMuxer::Substream: Send,
@@ -438,11 +475,23 @@ where
         TOutEvent: Send + 'static,
     {
         let reach_id = match self.transport().clone().dial(first.clone()) {
-            Ok(fut) => self.active_nodes.add_reach_attempt(fut, self.handler_build.new_handler()),
+            Ok(fut) => {
+                let expected_peer_id = peer_id.clone();
+                let fut = fut.and_then(move |(actual_peer_id, muxer)| {
+                    if actual_peer_id == expected_peer_id {
+                        Ok((actual_peer_id, muxer))
+                    } else {
+                        let msg = format!("public key mismatch ; expected = {:?} ; obtained = {:?}",
+                                          expected_peer_id, actual_peer_id);
+                        Err(IoError::new(IoErrorKind::Other, msg))
+                    }
+                });
+                self.active_nodes.add_reach_attempt(fut, handler)
+            },
             Err((_, addr)) => {
                 let msg = format!("unsupported multiaddr {}", addr);
                 let fut = future::err(IoError::new(IoErrorKind::Other, msg));
-                self.active_nodes.add_reach_attempt::<_, _, future::FutureResult<Multiaddr, IoError>, _>(fut, self.handler_build.new_handler())
+                self.active_nodes.add_reach_attempt(fut, handler)
             },
         };
 
@@ -459,51 +508,48 @@ where
     }
 
     /// Provides an API similar to `Stream`, except that it cannot error.
-    pub fn poll(&mut self) -> Async<Option<SwarmEvent<TTrans, TOutEvent>>>
+    pub fn poll(&mut self) -> Async<RawSwarmEvent<TTrans, TInEvent, TOutEvent, THandler>>
     where
         TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
         TTrans::Dial: Send + 'static,
-        TTrans::MultiaddrFuture: Future<Item = Multiaddr, Error = IoError> + Send + 'static,
         TTrans::ListenerUpgrade: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TMuxer::Substream: Send,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
-        THandlerBuild: HandlerFactory<Handler = THandler>,
-        THandler: NodeHandler<Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
+        THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
         THandler::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
     {
         // Start by polling the listeners for events.
         match self.listeners.poll() {
             Async::NotReady => (),
-            Async::Ready(Some(ListenersEvent::Incoming {
+            Async::Ready(ListenersEvent::Incoming {
                 upgrade,
                 listen_addr,
-            })) => {
-                let id = self.active_nodes.add_reach_attempt(upgrade, self.handler_build.new_handler());
-                self.reach_attempts.other_reach_attempts.push((
-                    id,
-                    ConnectedPoint::Listener {
-                        listen_addr: listen_addr.clone(),
-                    },
-                ));
-                return Async::Ready(Some(SwarmEvent::IncomingConnection {
+                send_back_addr,
+            }) => {
+                let event = IncomingConnectionEvent {
+                    upgrade,
                     listen_addr,
-                }));
+                    send_back_addr,
+                    active_nodes: &mut self.active_nodes,
+                    other_reach_attempts: &mut self.reach_attempts.other_reach_attempts,
+                };
+
+                return Async::Ready(RawSwarmEvent::IncomingConnection(event));
             }
-            Async::Ready(Some(ListenersEvent::Closed {
+            Async::Ready(ListenersEvent::Closed {
                 listen_addr,
                 listener,
                 result,
-            })) => {
-                return Async::Ready(Some(SwarmEvent::ListenerClosed {
+            }) => {
+                return Async::Ready(RawSwarmEvent::ListenerClosed {
                     listen_addr,
                     listener,
                     result,
-                }));
+                });
             }
-            Async::Ready(None) => unreachable!("The listeners stream never finishes"),
         }
 
         // Poll the existing nodes.
@@ -511,44 +557,53 @@ where
             let (action, out_event);
             match self.active_nodes.poll() {
                 Async::NotReady => break,
-                Async::Ready(Some(CollectionEvent::NodeReached(reach_event))) => {
+                Async::Ready(CollectionEvent::NodeReached(reach_event)) => {
                     let (a, e) = handle_node_reached(&mut self.reach_attempts, reach_event);
                     action = a;
                     out_event = e;
                 }
-                Async::Ready(Some(CollectionEvent::ReachError { id, error })) => {
-                    let (a, e) = handle_reach_error(&mut self.reach_attempts, id, error);
+                Async::Ready(CollectionEvent::ReachError { id, error, handler }) => {
+                    let (a, e) = handle_reach_error(&mut self.reach_attempts, id, error, handler);
                     action = a;
                     out_event = e;
                 }
-                Async::Ready(Some(CollectionEvent::NodeError {
+                Async::Ready(CollectionEvent::NodeError {
                     peer_id,
                     error,
-                })) => {
-                    let address = self.reach_attempts.connected_multiaddresses.remove(&peer_id);
+                }) => {
+                    let endpoint = self.reach_attempts.connected_points.remove(&peer_id)
+                        .expect("We insert into connected_points whenever a connection is \
+                                 opened and remove only when a connection is closed ; the \
+                                 underlying API is guaranteed to always deliver a connection \
+                                 closed message after it has been opened, and no two closed \
+                                 messages ; qed");
                     debug_assert!(!self.reach_attempts.out_reach_attempts.contains_key(&peer_id));
                     action = Default::default();
-                    out_event = SwarmEvent::NodeError {
+                    out_event = RawSwarmEvent::NodeError {
                         peer_id,
-                        address,
+                        endpoint,
                         error,
                     };
                 }
-                Async::Ready(Some(CollectionEvent::NodeClosed { peer_id })) => {
-                    let address = self.reach_attempts.connected_multiaddresses.remove(&peer_id);
+                Async::Ready(CollectionEvent::NodeClosed { peer_id }) => {
+                    let endpoint = self.reach_attempts.connected_points.remove(&peer_id)
+                        .expect("We insert into connected_points whenever a connection is \
+                                 opened and remove only when a connection is closed ; the \
+                                 underlying API is guaranteed to always deliver a connection \
+                                 closed message after it has been opened, and no two closed \
+                                 messages ; qed");
                     debug_assert!(!self.reach_attempts.out_reach_attempts.contains_key(&peer_id));
                     action = Default::default();
-                    out_event = SwarmEvent::NodeClosed { peer_id, address };
+                    out_event = RawSwarmEvent::NodeClosed { peer_id, endpoint };
                 }
-                Async::Ready(Some(CollectionEvent::NodeEvent { peer_id, event })) => {
+                Async::Ready(CollectionEvent::NodeEvent { peer_id, event }) => {
                     action = Default::default();
-                    out_event = SwarmEvent::NodeEvent { peer_id, event };
+                    out_event = RawSwarmEvent::NodeEvent { peer_id, event };
                 }
-                Async::Ready(None) => unreachable!("CollectionStream never ends"),
             };
 
-            if let Some((peer_id, first, rest)) = action.start_dial_out {
-                self.start_dial_out(peer_id, first, rest);
+            if let Some((peer_id, handler, first, rest)) = action.start_dial_out {
+                self.start_dial_out(peer_id, handler, first, rest);
             }
 
             if let Some(interrupt) = action.interrupt {
@@ -563,7 +618,7 @@ where
                              attempts ; qed");
             }
 
-            return Async::Ready(Some(out_event));
+            return Async::Ready(out_event);
         }
 
         Async::NotReady
@@ -571,11 +626,20 @@ where
 }
 
 /// Internal struct indicating an action to perform of the swarm.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 #[must_use]
-struct ActionItem {
-    start_dial_out: Option<(PeerId, Multiaddr, Vec<Multiaddr>)>,
+struct ActionItem<THandler> {
+    start_dial_out: Option<(PeerId, THandler, Multiaddr, Vec<Multiaddr>)>,
     interrupt: Option<ReachAttemptId>,
+}
+
+impl<THandler> Default for ActionItem<THandler> {
+    fn default() -> Self {
+        ActionItem {
+            start_dial_out: None,
+            interrupt: None,
+        }
+    }
 }
 
 /// Handles a node reached event from the collection.
@@ -584,14 +648,13 @@ struct ActionItem {
 ///
 /// > **Note**: The event **must** have been produced by the collection of nodes, otherwise
 /// >           panics will likely happen.
-fn handle_node_reached<TTrans, TMuxer, TInEvent, TOutEvent>(
+fn handle_node_reached<'a, TTrans, TMuxer, TInEvent, TOutEvent, THandler>(
     reach_attempts: &mut ReachAttempts,
-    event: CollectionReachEvent<TInEvent, TOutEvent>
-) -> (ActionItem, SwarmEvent<TTrans, TOutEvent>)
+    event: CollectionReachEvent<TInEvent, TOutEvent, THandler>
+) -> (ActionItem<THandler>, RawSwarmEvent<'a, TTrans, TInEvent, TOutEvent, THandler>)
 where
     TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
     TTrans::Dial: Send + 'static,
-    TTrans::MultiaddrFuture: Send + 'static,
     TMuxer: StreamMuxer + Send + Sync + 'static,
     TMuxer::OutboundSubstream: Send,
     TMuxer::Substream: Send,
@@ -605,10 +668,11 @@ where
         .iter()
         .position(|i| i.0 == event.reach_attempt_id())
     {
-        let (_, endpoint) = reach_attempts.other_reach_attempts.swap_remove(in_pos);
+        let (_, opened_endpoint) = reach_attempts.other_reach_attempts.swap_remove(in_pos);
 
-        // Clear the known multiaddress for this peer.
-        let closed_multiaddr = reach_attempts.connected_multiaddresses.remove(&event.peer_id());
+        // Set the endpoint for this peer.
+        let closed_endpoint = reach_attempts.connected_points.insert(event.peer_id().clone(), opened_endpoint.clone());
+
         // Cancel any outgoing attempt to this peer.
         let action = if let Some(attempt) = reach_attempts.out_reach_attempts.remove(&event.peer_id()) {
             debug_assert_ne!(attempt.id, event.reach_attempt_id());
@@ -622,13 +686,18 @@ where
 
         let (outcome, peer_id) = event.accept();
         if outcome == CollectionNodeAccept::ReplacedExisting {
-            return (action, SwarmEvent::Replaced {
+            let closed_endpoint = closed_endpoint
+                .expect("We insert into connected_points whenever a connection is opened and \
+                         remove only when a connection is closed ; the underlying API is \
+                         guaranteed to always deliver a connection closed message after it has \
+                         been opened, and no two closed messages ; qed");
+            return (action, RawSwarmEvent::Replaced {
                 peer_id,
-                endpoint,
-                closed_multiaddr,
+                endpoint: opened_endpoint,
+                closed_endpoint,
             });
         } else {
-            return (action, SwarmEvent::Connected { peer_id, endpoint });
+            return (action, RawSwarmEvent::Connected { peer_id, endpoint: opened_endpoint });
         }
     }
 
@@ -646,58 +715,27 @@ where
             .expect("is_outgoing_and_ok is true only if reach_attempts.out_reach_attempts.get(event.peer_id()) \
                         returned Some");
 
-        let closed_multiaddr = reach_attempts.connected_multiaddresses
-            .insert(event.peer_id().clone(), attempt.cur_attempted.clone());
-        let endpoint = ConnectedPoint::Dialer {
+        let opened_endpoint = ConnectedPoint::Dialer {
             address: attempt.cur_attempted,
         };
 
+        let closed_endpoint = reach_attempts.connected_points
+            .insert(event.peer_id().clone(), opened_endpoint.clone())
+            .expect("We insert into connected_points whenever a connection is opened and remove \
+                     only when a connection is closed ; the underlying API is guaranteed to always \
+                     deliver a connection closed message after it has been opened, and no two \
+                     closed messages ; qed");
+
         let (outcome, peer_id) = event.accept();
         if outcome == CollectionNodeAccept::ReplacedExisting {
-            return (Default::default(), SwarmEvent::Replaced {
+            return (Default::default(), RawSwarmEvent::Replaced {
                 peer_id,
-                endpoint,
-                closed_multiaddr,
+                endpoint: opened_endpoint,
+                closed_endpoint,
             });
         } else {
-            return (Default::default(), SwarmEvent::Connected { peer_id, endpoint });
+            return (Default::default(), RawSwarmEvent::Connected { peer_id, endpoint: opened_endpoint });
         }
-    }
-
-    // If in neither, check outgoing reach attempts again as we may have a public
-    // key mismatch.
-    let expected_peer_id = reach_attempts
-        .out_reach_attempts
-        .iter()
-        .find(|(_, a)| a.id == event.reach_attempt_id())
-        .map(|(p, _)| p.clone());
-    if let Some(expected_peer_id) = expected_peer_id {
-        debug_assert_ne!(&expected_peer_id, event.peer_id());
-        let attempt = reach_attempts.out_reach_attempts.remove(&expected_peer_id)
-            .expect("expected_peer_id is a key that is grabbed from out_reach_attempts");
-
-        let num_remain = attempt.next_attempts.len();
-        let failed_addr = attempt.cur_attempted.clone();
-
-        let peer_id = event.deny();
-
-        let action = if !attempt.next_attempts.is_empty() {
-            let mut attempt = attempt;
-            let next = attempt.next_attempts.remove(0);
-            ActionItem {
-                start_dial_out: Some((expected_peer_id.clone(), next, attempt.next_attempts)),
-                .. Default::default()
-            }
-        } else {
-            Default::default()
-        };
-
-        return (action, SwarmEvent::PublicKeyMismatch {
-            remain_addrs_attempt: num_remain,
-            expected_peer_id,
-            actual_peer_id: peer_id,
-            multiaddr: failed_addr,
-        });
     }
 
     // We didn't find any entry in neither the outgoing connections not ingoing connections.
@@ -715,11 +753,12 @@ where
 ///
 /// > **Note**: The event **must** have been produced by the collection of nodes, otherwise
 /// >           panics will likely happen.
-fn handle_reach_error<TTrans, TOutEvent>(
+fn handle_reach_error<'a, TTrans, TInEvent, TOutEvent, THandler>(
     reach_attempts: &mut ReachAttempts,
     reach_id: ReachAttemptId,
     error: IoError,
-) -> (ActionItem, SwarmEvent<TTrans, TOutEvent>)
+    handler: THandler,
+) -> (ActionItem<THandler>, RawSwarmEvent<'a, TTrans, TInEvent, TOutEvent, THandler>)
 where TTrans: Transport
 {
     // Search for the attempt in `out_reach_attempts`.
@@ -740,14 +779,14 @@ where TTrans: Transport
             let mut attempt = attempt;
             let next_attempt = attempt.next_attempts.remove(0);
             ActionItem {
-                start_dial_out: Some((peer_id.clone(), next_attempt, attempt.next_attempts)),
+                start_dial_out: Some((peer_id.clone(), handler, next_attempt, attempt.next_attempts)),
                 .. Default::default()
             }
         } else {
             Default::default()
         };
 
-        return (action, SwarmEvent::DialError {
+        return (action, RawSwarmEvent::DialError {
             remain_addrs_attempt: num_remain,
             peer_id,
             multiaddr: failed_addr,
@@ -764,13 +803,14 @@ where TTrans: Transport
         let (_, endpoint) = reach_attempts.other_reach_attempts.swap_remove(in_pos);
         match endpoint {
             ConnectedPoint::Dialer { address } => {
-                return (Default::default(), SwarmEvent::UnknownPeerDialError {
+                return (Default::default(), RawSwarmEvent::UnknownPeerDialError {
                     multiaddr: address,
                     error,
+                    handler,
                 });
             }
-            ConnectedPoint::Listener { listen_addr } => {
-                return (Default::default(), SwarmEvent::IncomingConnectionError { listen_addr, error });
+            ConnectedPoint::Listener { listen_addr, send_back_addr } => {
+                return (Default::default(), RawSwarmEvent::IncomingConnectionError { listen_addr, send_back_addr, error });
             }
         }
     }
@@ -786,7 +826,7 @@ where TTrans: Transport
 }
 
 /// State of a peer in the system.
-pub enum Peer<'a, TTrans: 'a, TInEvent: 'a, TOutEvent: 'a, THandlerBuild: 'a>
+pub enum Peer<'a, TTrans: 'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a>
 where
     TTrans: Transport,
 {
@@ -794,23 +834,22 @@ where
     Connected(PeerConnected<'a, TInEvent>),
 
     /// We are currently attempting to connect to this peer.
-    PendingConnect(PeerPendingConnect<'a, TInEvent, TOutEvent>),
+    PendingConnect(PeerPendingConnect<'a, TInEvent, TOutEvent, THandler>),
 
     /// We are not connected to this peer at all.
     ///
     /// > **Note**: It is however possible that a pending incoming connection is being negotiated
     /// > and will connect to this peer, but we don't know it yet.
-    NotConnected(PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandlerBuild>),
+    NotConnected(PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandler>),
 }
 
 // TODO: add other similar methods that wrap to the ones of `PeerNotConnected`
-impl<'a, TTrans, TMuxer, TInEvent, TOutEvent, THandler, THandlerBuild>
-    Peer<'a, TTrans, TInEvent, TOutEvent, THandlerBuild>
+impl<'a, TTrans, TMuxer, TInEvent, TOutEvent, THandler>
+    Peer<'a, TTrans, TInEvent, TOutEvent, THandler>
 where
     TTrans: Transport<Output = (PeerId, TMuxer)>,
     TMuxer: StreamMuxer,
-    THandlerBuild: HandlerFactory<Handler = THandler>,
-    THandler: NodeHandler<Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
+    THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
     THandler::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
 {
     /// If we are connected, returns the `PeerConnected`.
@@ -824,7 +863,7 @@ where
 
     /// If a connection is pending, returns the `PeerPendingConnect`.
     #[inline]
-    pub fn as_pending_connect(self) -> Option<PeerPendingConnect<'a, TInEvent, TOutEvent>> {
+    pub fn as_pending_connect(self) -> Option<PeerPendingConnect<'a, TInEvent, TOutEvent, THandler>> {
         match self {
             Peer::PendingConnect(peer) => Some(peer),
             _ => None,
@@ -833,7 +872,7 @@ where
 
     /// If we are not connected, returns the `PeerNotConnected`.
     #[inline]
-    pub fn as_not_connected(self) -> Option<PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandlerBuild>> {
+    pub fn as_not_connected(self) -> Option<PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandler>> {
         match self {
             Peer::NotConnected(peer) => Some(peer),
             _ => None,
@@ -841,36 +880,50 @@ where
     }
 
     /// If we're not connected, opens a new connection to this peer using the given multiaddr.
+    ///
+    /// If we reach a peer but the `PeerId` doesn't correspond to the one we're expecting, then
+    /// the whole connection is immediately closed.
+    ///
+    /// > **Note**: It is possible that the attempt reaches a node that doesn't have the peer id
+    /// >           that we are expecting, in which case the handler will be used for this "wrong"
+    /// >           node.
     #[inline]
     pub fn or_connect(
         self,
         addr: Multiaddr,
-    ) -> Result<PeerPotentialConnect<'a, TInEvent, TOutEvent>, Self>
+        handler: THandler,
+    ) -> Result<PeerPotentialConnect<'a, TInEvent, TOutEvent, THandler>, Self>
     where
         TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
         TTrans::Dial: Send + 'static,
-        TTrans::MultiaddrFuture: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TMuxer::Substream: Send,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
     {
-        self.or_connect_with(move |_| addr)
+        self.or_connect_with(move |_| addr, handler)
     }
 
     /// If we're not connected, calls the function passed as parameter and opens a new connection
     /// using the returned address.
+    ///
+    /// If we reach a peer but the `PeerId` doesn't correspond to the one we're expecting, then
+    /// the whole connection is immediately closed.
+    ///
+    /// > **Note**: It is possible that the attempt reaches a node that doesn't have the peer id
+    /// >           that we are expecting, in which case the handler will be used for this "wrong"
+    /// >           node.
     #[inline]
     pub fn or_connect_with<TFn>(
         self,
         addr: TFn,
-    ) -> Result<PeerPotentialConnect<'a, TInEvent, TOutEvent>, Self>
+        handler: THandler,
+    ) -> Result<PeerPotentialConnect<'a, TInEvent, TOutEvent, THandler>, Self>
     where
         TFn: FnOnce(&PeerId) -> Multiaddr,
         TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
         TTrans::Dial: Send + 'static,
-        TTrans::MultiaddrFuture: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TMuxer::Substream: Send,
@@ -882,7 +935,7 @@ where
             Peer::PendingConnect(peer) => Ok(PeerPotentialConnect::PendingConnect(peer)),
             Peer::NotConnected(peer) => {
                 let addr = addr(&peer.peer_id);
-                match peer.connect(addr) {
+                match peer.connect(addr, handler) {
                     Ok(peer) => Ok(PeerPotentialConnect::PendingConnect(peer)),
                     Err(peer) => Err(Peer::NotConnected(peer)),
                 }
@@ -892,15 +945,15 @@ where
 }
 
 /// Peer we are potentially going to connect to.
-pub enum PeerPotentialConnect<'a, TInEvent: 'a, TOutEvent: 'a> {
+pub enum PeerPotentialConnect<'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a> {
     /// We are connected to this peer.
     Connected(PeerConnected<'a, TInEvent>),
 
     /// We are currently attempting to connect to this peer.
-    PendingConnect(PeerPendingConnect<'a, TInEvent, TOutEvent>),
+    PendingConnect(PeerPendingConnect<'a, TInEvent, TOutEvent, THandler>),
 }
 
-impl<'a, TInEvent, TOutEvent> PeerPotentialConnect<'a, TInEvent, TOutEvent> {
+impl<'a, TInEvent, TOutEvent, THandler> PeerPotentialConnect<'a, TInEvent, TOutEvent, THandler> {
     /// Closes the connection or the connection attempt.
     ///
     /// If the connection was active, returns the list of outbound substream openings that were
@@ -925,7 +978,7 @@ impl<'a, TInEvent, TOutEvent> PeerPotentialConnect<'a, TInEvent, TOutEvent> {
 
     /// If a connection is pending, returns the `PeerPendingConnect`.
     #[inline]
-    pub fn as_pending_connect(self) -> Option<PeerPendingConnect<'a, TInEvent, TOutEvent>> {
+    pub fn as_pending_connect(self) -> Option<PeerPendingConnect<'a, TInEvent, TOutEvent, THandler>> {
         match self {
             PeerPotentialConnect::PendingConnect(peer) => Some(peer),
             _ => None,
@@ -936,8 +989,8 @@ impl<'a, TInEvent, TOutEvent> PeerPotentialConnect<'a, TInEvent, TOutEvent> {
 /// Access to a peer we are connected to.
 pub struct PeerConnected<'a, TInEvent: 'a> {
     peer: CollecPeerMut<'a, TInEvent>,
-    /// Reference to the `connected_multiaddresses` field of the parent.
-    connected_multiaddresses: &'a mut FnvHashMap<PeerId, Multiaddr>,
+    /// Reference to the `connected_points` field of the parent.
+    connected_points: &'a mut FnvHashMap<PeerId, ConnectedPoint>,
     peer_id: PeerId,
 }
 
@@ -948,14 +1001,18 @@ impl<'a, TInEvent> PeerConnected<'a, TInEvent> {
     // TODO: consider returning a `PeerNotConnected` ; however this makes all the borrows things
     // much more annoying to deal with
     pub fn close(self) {
-        self.connected_multiaddresses.remove(&self.peer_id);
+        self.connected_points.remove(&self.peer_id);
         self.peer.close()
     }
 
-    /// Returns the outcome of the future that resolves the multiaddress of the peer.
+    /// Returns the endpoint we're connected to.
     #[inline]
-    pub fn multiaddr(&self) -> Option<&Multiaddr> {
-        self.connected_multiaddresses.get(&self.peer_id)
+    pub fn endpoint(&self) -> &ConnectedPoint {
+        self.connected_points.get(&self.peer_id)
+            .expect("We insert into connected_points whenever a connection is opened and remove \
+                     only when a connection is closed ; the underlying API is guaranteed to always \
+                     deliver a connection closed message after it has been opened, and no two \
+                     closed messages ; qed")        
     }
 
     /// Sends an event to the node.
@@ -966,12 +1023,12 @@ impl<'a, TInEvent> PeerConnected<'a, TInEvent> {
 }
 
 /// Access to a peer we are attempting to connect to.
-pub struct PeerPendingConnect<'a, TInEvent: 'a, TOutEvent: 'a> {
+pub struct PeerPendingConnect<'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a> {
     attempt: OccupiedEntry<'a, PeerId, OutReachAttempt>,
-    active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent>,
+    active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent, THandler>,
 }
 
-impl<'a, TInEvent, TOutEvent> PeerPendingConnect<'a, TInEvent, TOutEvent> {
+impl<'a, TInEvent, TOutEvent, THandler> PeerPendingConnect<'a, TInEvent, TOutEvent, THandler> {
     /// Interrupt this connection attempt.
     // TODO: consider returning a PeerNotConnected ; however that is really pain in terms of
     // borrows
@@ -1013,54 +1070,58 @@ impl<'a, TInEvent, TOutEvent> PeerPendingConnect<'a, TInEvent, TOutEvent> {
 }
 
 /// Access to a peer we're not connected to.
-pub struct PeerNotConnected<'a, TTrans: 'a, TInEvent: 'a, TOutEvent: 'a, THandlerBuild: 'a>
+pub struct PeerNotConnected<'a, TTrans: 'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a>
 where
     TTrans: Transport,
 {
     peer_id: PeerId,
-    nodes: &'a mut Swarm<TTrans, TInEvent, TOutEvent, THandlerBuild>,
+    nodes: &'a mut RawSwarm<TTrans, TInEvent, TOutEvent, THandler>,
 }
 
-impl<'a, TTrans, TInEvent, TOutEvent, TMuxer, THandler, THandlerBuild>
-    PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandlerBuild>
+impl<'a, TTrans, TInEvent, TOutEvent, TMuxer, THandler>
+    PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandler>
 where
     TTrans: Transport<Output = (PeerId, TMuxer)>,
     TMuxer: StreamMuxer,
-    THandlerBuild: HandlerFactory<Handler = THandler>,
-    THandler: NodeHandler<Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
+    THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
     THandler::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
 {
     /// Attempts a new connection to this node using the given multiaddress.
+    ///
+    /// If we reach a peer but the `PeerId` doesn't correspond to the one we're expecting, then
+    /// the whole connection is immediately closed.
     #[inline]
-    pub fn connect(self, addr: Multiaddr) -> Result<PeerPendingConnect<'a, TInEvent, TOutEvent>, Self>
+    pub fn connect(self, addr: Multiaddr, handler: THandler) -> Result<PeerPendingConnect<'a, TInEvent, TOutEvent, THandler>, Self>
     where
         TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
         TTrans::Dial: Send + 'static,
-        TTrans::MultiaddrFuture: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TMuxer::Substream: Send,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
     {
-        self.connect_inner(addr, Vec::new())
+        self.connect_inner(handler, addr, Vec::new())
     }
 
     /// Attempts a new connection to this node using the given multiaddresses.
     ///
-    /// The multiaddresses passes as parameter will be tried one by one.
+    /// The multiaddresses passed as parameter will be tried one by one.
     ///
     /// If the iterator is empty, TODO: what to do? at the moment we unwrap
+    ///
+    /// If we reach a peer but the `PeerId` doesn't correspond to the one we're expecting, then
+    /// the whole connection is immediately closed.
     #[inline]
     pub fn connect_iter<TIter>(
         self,
         addrs: TIter,
-    ) -> Result<PeerPendingConnect<'a, TInEvent, TOutEvent>, Self>
+        handler: THandler,
+    ) -> Result<PeerPendingConnect<'a, TInEvent, TOutEvent, THandler>, Self>
     where
         TIter: IntoIterator<Item = Multiaddr>,
         TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
         TTrans::Dial: Send + 'static,
-        TTrans::MultiaddrFuture: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TMuxer::Substream: Send,
@@ -1070,26 +1131,26 @@ where
         let mut addrs = addrs.into_iter();
         let first = addrs.next().unwrap(); // TODO: bad
         let rest = addrs.collect();
-        self.connect_inner(first, rest)
+        self.connect_inner(handler, first, rest)
     }
 
     /// Inner implementation of `connect`.
     fn connect_inner(
         self,
+        handler: THandler,
         first: Multiaddr,
         rest: Vec<Multiaddr>,
-    ) -> Result<PeerPendingConnect<'a, TInEvent, TOutEvent>, Self>
+    ) -> Result<PeerPendingConnect<'a, TInEvent, TOutEvent, THandler>, Self>
     where
         TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
         TTrans::Dial: Send + 'static,
-        TTrans::MultiaddrFuture: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
         TMuxer::Substream: Send,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
     {
-        self.nodes.start_dial_out(self.peer_id.clone(), first, rest);
+        self.nodes.start_dial_out(self.peer_id.clone(), handler, first, rest);
 
         Ok(PeerPendingConnect {
             attempt: match self.nodes.reach_attempts.out_reach_attempts.entry(self.peer_id) {
@@ -1100,30 +1161,5 @@ where
             },
             active_nodes: &mut self.nodes.active_nodes,
         })
-    }
-}
-
-impl<TTrans, TMuxer, TInEvent, TOutEvent, THandler, THandlerBuild> Stream for
-    Swarm<TTrans, TInEvent, TOutEvent, THandlerBuild>
-where
-    TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
-    TTrans::Dial: Send + 'static,
-    TTrans::MultiaddrFuture: Future<Item = Multiaddr, Error = IoError> + Send + 'static,
-    TTrans::ListenerUpgrade: Send + 'static,
-    TMuxer: StreamMuxer + Send + Sync + 'static,
-    TMuxer::OutboundSubstream: Send,
-    TMuxer::Substream: Send,
-    TInEvent: Send + 'static,
-    TOutEvent: Send + 'static,
-    THandlerBuild: HandlerFactory<Handler = THandler>,
-    THandler: NodeHandler<Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
-    THandler::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
-{
-    type Item = SwarmEvent<TTrans, TOutEvent>;
-    type Error = Void; // TODO: use `!` once stable
-
-    #[inline]
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        Ok(self.poll())
     }
 }

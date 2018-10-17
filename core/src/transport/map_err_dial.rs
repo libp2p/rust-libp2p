@@ -21,7 +21,7 @@
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::io::Error as IoError;
-use transport::{MuxedTransport, Transport};
+use transport::Transport;
 
 /// See `Transport::map_err_dial`.
 #[derive(Debug, Copy, Clone)]
@@ -45,10 +45,9 @@ where
     F: FnOnce(IoError, Multiaddr) -> IoError + Clone + Send + 'static, // TODO: 'static :-/
 {
     type Output = T::Output;
-    type MultiaddrFuture = T::MultiaddrFuture;
     type Listener = T::Listener;
     type ListenerUpgrade = T::ListenerUpgrade;
-    type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
+    type Dial = Box<Future<Item = Self::Output, Error = IoError> + Send>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         match self.transport.listen_on(addr) {
@@ -72,20 +71,5 @@ where
     #[inline]
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         self.transport.nat_traversal(server, observed)
-    }
-}
-
-impl<T, F> MuxedTransport for MapErrDial<T, F>
-where
-    T: MuxedTransport + 'static,                     // TODO: 'static :-/
-    T::Dial: Send,
-    F: FnOnce(IoError, Multiaddr) -> IoError + Clone + Send + 'static, // TODO: 'static :-/
-{
-    type Incoming = T::Incoming;
-    type IncomingUpgrade = T::IncomingUpgrade;
-
-    #[inline]
-    fn next_incoming(self) -> Self::Incoming {
-        self.transport.next_incoming()
     }
 }

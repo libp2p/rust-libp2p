@@ -31,6 +31,7 @@
 
 use futures::prelude::*;
 use multiaddr::Multiaddr;
+use nodes::raw_swarm::ConnectedPoint;
 use std::io::Error as IoError;
 use tokio_io::{AsyncRead, AsyncWrite};
 use upgrade::{ConnectionUpgrade, Endpoint};
@@ -39,21 +40,16 @@ pub mod and_then;
 pub mod boxed;
 pub mod choice;
 pub mod denied;
-pub mod dummy;
 pub mod interruptible;
 pub mod map;
 pub mod map_err;
 pub mod map_err_dial;
 pub mod memory;
-pub mod muxed;
 pub mod upgrade;
 
-pub use self::boxed::BoxedMuxed;
 pub use self::choice::OrTransport;
 pub use self::denied::DeniedTransport;
-pub use self::dummy::DummyMuxing;
 pub use self::memory::connector;
-pub use self::muxed::MuxedTransport;
 pub use self::upgrade::UpgradedNode;
 
 /// A transport is an object that can be used to produce connections by listening or dialing a
@@ -75,19 +71,15 @@ pub trait Transport {
     /// An item should be produced whenever a connection is received at the lowest level of the
     /// transport stack. The item is a `Future` that is signalled once some pre-processing has
     /// taken place, and that connection has been upgraded to the wanted protocols.
-    type Listener: Stream<Item = Self::ListenerUpgrade, Error = IoError>;
-
-    /// Future that produces the multiaddress of the remote.
-    type MultiaddrFuture: Future<Item = Multiaddr, Error = IoError>;
+    type Listener: Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>;
 
     /// After a connection has been received, we may need to do some asynchronous pre-processing
     /// on it (eg. an intermediary protocol negotiation). While this pre-processing takes place, we
     /// want to be able to continue polling on the listener.
-    // TODO: we could move the `MultiaddrFuture` to the `Listener` trait
-    type ListenerUpgrade: Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>;
+    type ListenerUpgrade: Future<Item = Self::Output, Error = IoError>;
 
     /// A future which indicates that we are currently dialing to a peer.
-    type Dial: Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>;
+    type Dial: Future<Item = Self::Output, Error = IoError>;
 
     /// Listen on the given multiaddr. Returns a stream of incoming connections, plus a modified
     /// version of the `Multiaddr`. This new `Multiaddr` is the one that that should be advertised
@@ -132,25 +124,8 @@ pub trait Transport {
           Self::Dial: Send + 'static,
           Self::Listener: Send + 'static,
           Self::ListenerUpgrade: Send + 'static,
-          Self::MultiaddrFuture: Send + 'static,
     {
         boxed::boxed(self)
-    }
-
-    /// Turns this `Transport` into an abstract boxed transport.
-    ///
-    /// This is the version if the transport supports muxing.
-    #[inline]
-    fn boxed_muxed(self) -> boxed::BoxedMuxed<Self::Output>
-    where Self: Sized + MuxedTransport + Clone + Send + Sync + 'static,
-          Self::Dial: Send + 'static,
-          Self::Listener: Send + 'static,
-          Self::ListenerUpgrade: Send + 'static,
-          Self::MultiaddrFuture: Send + 'static,
-          Self::Incoming: Send + 'static,
-          Self::IncomingUpgrade: Send + 'static,
-    {
-        boxed::boxed_muxed(self)
     }
 
     /// Applies a function on the output of the `Transport`.
@@ -207,7 +182,7 @@ pub trait Transport {
     where
         Self: Sized,
         Self::Output: AsyncRead + AsyncWrite,
-        U: ConnectionUpgrade<Self::Output, Self::MultiaddrFuture>,
+        U: ConnectionUpgrade<Self::Output>,
     {
         UpgradedNode::new(self, upgrade)
     }
@@ -218,27 +193,13 @@ pub trait Transport {
     /// > **Note**: The concept of an *upgrade* for example includes middlewares such *secio*
     /// >           (communication encryption), *multiplex*, but also a protocol handler.
     #[inline]
-    fn and_then<C, F, O, Maf>(self, upgrade: C) -> and_then::AndThen<Self, C>
+    fn and_then<C, F, O>(self, upgrade: C) -> and_then::AndThen<Self, C>
     where
         Self: Sized,
-        C: FnOnce(Self::Output, Endpoint, Self::MultiaddrFuture) -> F + Clone + 'static,
-        F: Future<Item = (O, Maf), Error = IoError> + 'static,
-        Maf: Future<Item = Multiaddr, Error = IoError> + 'static,
+        C: FnOnce(Self::Output, ConnectedPoint) -> F + Clone + 'static,
+        F: Future<Item = O, Error = IoError> + 'static,
     {
         and_then::and_then(self, upgrade)
-    }
-
-    /// Builds a dummy implementation of `MuxedTransport` that uses this transport.
-    ///
-    /// The resulting object will not actually use muxing. This means that dialing the same node
-    /// twice will result in two different connections instead of two substreams on the same
-    /// connection.
-    #[inline]
-    fn with_dummy_muxing(self) -> DummyMuxing<Self>
-    where
-        Self: Sized,
-    {
-        DummyMuxing::new(self)
     }
 
     /// Wraps around the `Transport` and makes it interruptible.
