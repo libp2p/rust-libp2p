@@ -207,7 +207,7 @@ where
             println!("[HandledNode, poll] top of the loop");
             let mut node_not_ready = false;
 
-            println!("[HandledNode, poll] node");
+            println!("[HandledNode, poll]   node");
             match self.node.poll()? {
                 Async::NotReady => {
                     println!("[HandledNode, poll]   node; Async::NotReady");
@@ -256,8 +256,14 @@ where
                     if self.node.get_ref().is_outbound_open() {
                         println!("[HandledNode, poll]       handler; outbound is open");
                         match self.node.get_mut().open_substream(user_data) {
-                            Ok(()) => (),
-                            Err(user_data) => self.handler.inject_outbound_closed(user_data),
+                            Ok(()) => {
+                                println!("[HandledNode, poll]           handler; open_substream ok");
+                                ()
+                            },
+                            Err(user_data) => {
+                                println!("[HandledNode, poll]           handler; open_substream failed");
+                                self.handler.inject_outbound_closed(user_data)
+                            },
                         }
                     } else {
                         println!("[HandledNode, poll]       handler; outbound is closed");

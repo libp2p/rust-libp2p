@@ -93,6 +93,10 @@ impl<T> NodeHandler<T> for Handler {
 		self.events.push(inevent.clone());
 		match inevent {
 			InEvent::Custom(s) => self.state = Some(HandlerState::Ready(Some(NodeHandlerEvent::Custom(OutEvent::Custom(s))))),
+			InEvent::Substream(Some(user_data)) => {
+				println!("[NodeHandler, inject_event] opening a substream with user_data={:?}", user_data);
+				self.state = Some(HandlerState::Ready(Some(NodeHandlerEvent::OutboundSubstreamRequest(user_data))))
+			}
 			_ => {}
 		}
 
