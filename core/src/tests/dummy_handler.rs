@@ -23,8 +23,10 @@
 use std::io::{self, Error as IoError};
 
 use futures::prelude::*;
+use futures::future::FutureResult;
 use Multiaddr;
-use nodes::handled_node::{NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent};
+use super::dummy_muxer::DummyMuxer;
+use nodes::handled_node::{HandledNode, NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent};
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) struct Handler {
@@ -64,6 +66,8 @@ pub(crate) enum OutEvent {
 	Custom(&'static str),
 }
 
+// Concrete `HandledNode`
+pub(crate) type TestHandledNode = HandledNode<DummyMuxer, FutureResult<Multiaddr, IoError>, Handler>;
 
 impl<T> NodeHandler<T> for Handler {
 	type InEvent = InEvent;

@@ -281,6 +281,13 @@ where
             }
         }
         println!("[HandledNode, poll] NotReady");
+        // REVIEW: I don't think this can ever happen. The only way to break out
+        // of the loop without returning is if node_not_ready is true and the
+        // Handler is NotReady, but node_not_ready is only ever set if the
+        // node.poll() returns Async::Ready(None) which in turn triggers a
+        // shutdown, which will make the Handler yield Async::Ready(None), which
+        // will return Async::Ready(None). So no way we can return
+        // Async::NotReady.
         Ok(Async::NotReady)
     }
 }
@@ -289,13 +296,9 @@ where
 mod tests {
     use super::*;
     use futures::future;
-    use futures::future::FutureResult;
     use tokio::runtime::current_thread;
     use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
-    use tests::dummy_handler::{Handler, HandlerState, InEvent, OutEvent};
-
-    // Concrete `HandledNode`
-    type TestHandledNode = HandledNode<DummyMuxer, FutureResult<Multiaddr, IoError>, Handler>;
+    use tests::dummy_handler::{Handler, HandlerState, InEvent, OutEvent, TestHandledNode};
 
     struct TestBuilder {
         addr: Multiaddr,
@@ -531,7 +534,7 @@ mod tests {
             &mut handled,
             HandlerState::Ready(Some(NodeHandlerEvent::Custom(OutEvent::Custom("pear"))))
         );
-        handled.poll();
+        handled.poll().expect("polling works");
         assert_eq!(handled.handler.events, vec![InEvent::Multiaddr, InEvent::OutboundClosed]);
     }
 

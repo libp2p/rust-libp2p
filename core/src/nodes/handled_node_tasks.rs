@@ -440,6 +440,7 @@ where
                     loop {
                         println!("[NodeTask, poll]      NodeTaskInner::Node; polling node, top of loop");
                         match node.poll() {
+                            // REVIEW: I don't think this can happen, see comment in handled_node.rs
                             Ok(Async::NotReady) => {
                                 println!("[NodeTask, poll]      NodeTaskInner::Node; polled node; Async::NotReady");
                                 self.inner = NodeTaskInner::Node(node);
@@ -539,7 +540,7 @@ mod tests {
         use futures::future::{self, FutureResult};
         use futures::sync::mpsc::{UnboundedReceiver, UnboundedSender};
         use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
-        use tests::dummy_handler::{Handler, InEvent, OutEvent};
+        use tests::dummy_handler::{Handler, InEvent, OutEvent, TestHandledNode};
         use rand::random;
         use {PeerId, PublicKey};
         use std::io;
@@ -556,14 +557,14 @@ mod tests {
 
         struct TestBuilder {
            task_id: TaskId,
-           handler: Handler,
+           inner_node: Option<TestHandledNode>,
            inner_fut: Option<FutureResult<((PeerId, DummyMuxer), FutureResult<Multiaddr, IoError>), IoError>>,
         }
         impl TestBuilder {
             fn new() -> Self {
                 TestBuilder {
                     task_id: TaskId(123),
-                    handler: Handler::default(),
+                    inner_node: None,
                     inner_fut: {
                         let peer_id = PublicKey::Rsa((0 .. 2048).map(|_| -> u8 { random() }).collect()).into_peer_id();
                         let addr = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
@@ -575,6 +576,11 @@ mod tests {
 
             fn with_inner_fut(&mut self, fut: FutureResult<((PeerId, DummyMuxer), FutureResult<Multiaddr, IoError>), IoError>) -> &mut Self{
                 self.inner_fut = Some(fut);
+                self
+            }
+
+            fn with_inner_node(&mut self, node: TestHandledNode) -> &mut Self {
+                self.inner_node = Some(node);
                 self
             }
 
@@ -590,13 +596,17 @@ mod tests {
             ) {
                 let (events_from_node_task_tx, events_from_node_task_rx) = mpsc::unbounded::<(InToExtMessage<OutEvent>, TaskId)>();
                 let (events_to_node_task_tx, events_to_node_task_rx) = mpsc::unbounded::<InEvent>();
-
-                let node_task = NodeTask {
-                    inner: NodeTaskInner::Future {
+                let inner = if self.inner_node.is_some() {
+                    NodeTaskInner::Node(self.inner_node.take().unwrap())
+                } else {
+                    NodeTaskInner::Future {
                         future: self.inner_fut.take().unwrap(),
-                        handler: self.handler.clone(),
+                        handler: Handler::default(),
                         events_buffer: Vec::new(),
-                    },
+                    }
+                };
+                let node_task = NodeTask {
+                    inner: inner,
                     events_tx: events_from_node_task_tx.clone(), // events TO the outside
                     in_events_rx: events_to_node_task_rx.fuse(), // events FROM the outside
                     id: self.task_id,
@@ -606,7 +616,7 @@ mod tests {
         }
 
         #[test]
-        fn poll_works() {
+        fn task_emits_event_when_things_happen_in_the_node() {
             let (node_task, tx, mut rx) = TestBuilder::new()
                 .with_task_id(890)
                 .node_task();
@@ -701,7 +711,7 @@ mod tests {
             // returns Async::Ready(()). Qed.
 
             let create_outbound_substream_event = InEvent::Substream(Some(135));
-            tx.unbounded_send(create_outbound_substream_event);
+            tx.unbounded_send(create_outbound_substream_event).expect("send msg works");
             rt.spawn(node_task);
             let events = rt.block_on(rx.collect()).expect("rx failed");
 
