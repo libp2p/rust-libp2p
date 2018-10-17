@@ -291,18 +291,15 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::future;
-    use futures::future::FutureResult;
-    // use muxing::StreamMuxer;
     use tokio::runtime::current_thread;
     use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
     use tests::dummy_handler::{Handler, HandlerState, Event};
+    use std::marker::PhantomData;
 
     // Concrete `HandledNode`
-    type TestHandledNode = HandledNode<DummyMuxer, FutureResult<Multiaddr, IoError>, Handler>;
+    type TestHandledNode = HandledNode<DummyMuxer, Handler>;
 
     struct TestBuilder {
-        addr: Multiaddr,
         muxer: DummyMuxer,
         handler: Handler,
         want_open_substream: bool,
@@ -312,7 +309,6 @@ mod tests {
     impl TestBuilder {
         fn new() -> Self {
             TestBuilder {
-                addr: "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr"),
                 muxer: DummyMuxer::new(),
                 handler: Handler::default(),
                 want_open_substream: false,
@@ -341,9 +337,8 @@ mod tests {
             self
         }
 
-        // TODO: Is there a way to consume `self` here and get rid of the clones?
         fn handled_node(&mut self) -> TestHandledNode {
-            let mut h = HandledNode::new(self.muxer.clone(), future::ok(self.addr.clone()), self.handler.clone());
+            let mut h = HandledNode::new(self.muxer.clone(), self.handler.clone());
             if self.want_open_substream {
                 h.node.get_mut().open_substream(self.substream_user_data).expect("open substream should work");
             }
@@ -362,18 +357,19 @@ mod tests {
 
     #[test]
     fn proper_shutdown() {
-        struct ShutdownHandler {
+        struct ShutdownHandler<T> {
             did_substream_attempt: bool,
             inbound_closed: bool,
             substream_attempt_cancelled: bool,
             shutdown_called: bool,
+            marker: PhantomData<T>
         }
-        impl<T> NodeHandler<T> for ShutdownHandler {
+        impl<T> NodeHandler for ShutdownHandler<T> {
             type InEvent = ();
             type OutEvent = ();
             type Substream = T;
             type OutboundOpenInfo = ();
-            fn inject_substream(&mut self, _: T, _: NodeHandlerEndpoint<()>) { panic!() }
+            fn inject_substream(&mut self, _: Self::Substream, _: NodeHandlerEndpoint<Self::OutboundOpenInfo>) { panic!() }
             fn inject_inbound_closed(&mut self) {
                 assert!(!self.inbound_closed);
                 self.inbound_closed = true;
@@ -400,7 +396,7 @@ mod tests {
             }
         }
 
-        impl Drop for ShutdownHandler {
+        impl<T> Drop for ShutdownHandler<T> {
             fn drop(&mut self) {
                 if self.did_substream_attempt {
                     assert!(self.shutdown_called);
@@ -412,11 +408,12 @@ mod tests {
         let mut muxer = DummyMuxer::new();
         muxer.set_inbound_connection_state(DummyConnectionState::Closed);
         muxer.set_outbound_connection_state(DummyConnectionState::Closed);
-        let handled = HandledNode::new(muxer, future::empty(), ShutdownHandler {
+        let handled = HandledNode::new(muxer, ShutdownHandler {
             did_substream_attempt: false,
             inbound_closed: false,
             substream_attempt_cancelled: false,
             shutdown_called: false,
+            marker: PhantomData,
         });
 
         current_thread::Runtime::new().unwrap().block_on(handled.for_each(|_| Ok(()))).unwrap();
@@ -503,7 +500,6 @@ mod tests {
             .handled_node();
 
         assert_matches!(handled.poll(), Ok(Async::Ready(None)));
-        assert_eq!(handled.handler.events, vec![Event::Multiaddr]);
     }
 
     #[test]
@@ -519,7 +515,6 @@ mod tests {
         assert_matches!(handled.poll(), Ok(Async::Ready(Some(event))) => {
             assert_matches!(event, Event::Custom("pineapple"))
         });
-        assert_eq!(handled.handler.events, vec![Event::Multiaddr]);
     }
 
     #[test]
@@ -535,8 +530,8 @@ mod tests {
             &mut handled,
             HandlerState::Ready(Some(NodeHandlerEvent::Custom(Event::Custom("pear"))))
         );
-        handled.poll();
-        assert_eq!(handled.handler.events, vec![Event::Multiaddr, Event::OutboundClosed]);
+        handled.poll().expect("poll works");
+        assert_eq!(handled.handler.events, vec![Event::OutboundClosed]);
     }
 
     #[test]
@@ -565,9 +560,6 @@ mod tests {
         //   more outbound substreams).
         // - Next we poll the handler again which again does nothing because
         //   HandlerState is NotReady (and the node is still there)
-        // - Polls the node again; now we will hit the address resolution
-        // - Address resolves and yields a `Multiaddr` event and we resume the
-        //   loop
         // - HandledNode polls the node again: we skip inbound and there are no
         //   more outbound substreams so we skip that too; the addr is now
         //   Resolved so that part is skipped too
@@ -577,7 +569,7 @@ mod tests {
         // – which in turn makes the HandledNode to yield Async::Ready(None) as well
         assert_matches!(handled.poll(), Ok(Async::Ready(None)));
         assert_eq!(handled.handler.events, vec![
-            Event::InboundClosed, Event::OutboundClosed, Event::Multiaddr
+            Event::InboundClosed, Event::OutboundClosed
         ]);
     }
 
@@ -605,18 +597,6 @@ mod tests {
         assert_eq!(h.handler.events, vec![]);
         let _ = h.poll();
         assert_eq!(h.handler.events, vec![Event::OutboundClosed]);
-    }
-
-    #[test]
-    fn poll_yields_multiaddr_event() {
-        let mut h = TestBuilder::new()
-            .with_muxer_inbound_state(DummyConnectionState::Pending)
-            .with_handler_state(HandlerState::Err) // stop the loop
-            .handled_node();
-
-        assert_eq!(h.handler.events, vec![]);
-        let _ = h.poll();
-        assert_eq!(h.handler.events, vec![Event::Multiaddr]);
     }
 
     #[test]

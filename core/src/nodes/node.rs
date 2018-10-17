@@ -381,11 +381,10 @@ where TTrans: Transport,
 #[cfg(test)]
 mod node_stream {
     use super::NodeStream;
-    use futures::{future::self, prelude::*, Future};
+    use futures::prelude::*;
     use tokio_mock_task::MockTask;
     use super::NodeEvent;
     use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
-    use std::io::Error as IoError;
 
     fn build_node_stream() -> NodeStream<DummyMuxer, Vec<u8>> {
         let muxer = DummyMuxer::new();
