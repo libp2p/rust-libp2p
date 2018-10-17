@@ -98,10 +98,9 @@ where
     T::Dial: Send,
 {
     type Output = T::Output;
-    type MultiaddrFuture = T::MultiaddrFuture;
     type Listener = T::Listener;
     type ListenerUpgrade = T::ListenerUpgrade;
-    type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
+    type Dial = Box<Future<Item = Self::Output, Error = IoError> + Send>;
 
     #[inline]
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -227,9 +226,9 @@ mod tests {
     extern crate libp2p_tcp_transport;
     use self::libp2p_tcp_transport::TcpConfig;
     use futures::future;
+    use swarm::Transport;
     use multiaddr::{Protocol, Multiaddr};
     use std::io::Error as IoError;
-    use swarm::Transport;
     use DnsConfig;
 
     #[test]
@@ -238,10 +237,9 @@ mod tests {
         struct CustomTransport;
         impl Transport for CustomTransport {
             type Output = <TcpConfig as Transport>::Output;
-            type MultiaddrFuture = <TcpConfig as Transport>::MultiaddrFuture;
             type Listener = <TcpConfig as Transport>::Listener;
             type ListenerUpgrade = <TcpConfig as Transport>::ListenerUpgrade;
-            type Dial = future::Empty<(Self::Output, Self::MultiaddrFuture), IoError>;
+            type Dial = future::Empty<Self::Output, IoError>;
 
             #[inline]
             fn listen_on(
