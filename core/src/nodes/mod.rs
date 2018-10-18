@@ -23,6 +23,7 @@ pub mod handled_node;
 pub mod handled_node_tasks;
 pub mod listeners;
 pub mod node;
+pub mod protocols_handler;
 pub mod raw_swarm;
 
 pub use self::node::Substream;
