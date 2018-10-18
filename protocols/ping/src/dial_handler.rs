@@ -48,6 +48,10 @@ pub struct PeriodicPingHandler<TSubstream> {
 
     /// After a ping succeeded, wait this long before the next ping.
     delay_to_next_ping: Duration,
+
+    /// If true, we switch to the `Disabled` state if the remote doesn't support the ping protocol.
+    /// If false, we close the connection.
+    tolerate_unsupported: bool,
 }
 
 /// State of the outgoing ping substream.
@@ -93,6 +97,9 @@ enum OutState<TSubstream> {
         next_ping: Delay,
     },
 
+    /// The ping dialer is disabled. Don't do anything.
+    Disabled,
+
     /// The dialer has been closed.
     Shutdown,
 
@@ -125,6 +132,7 @@ impl<TSubstream> PeriodicPingHandler<TSubstream> {
             },
             ping_timeout,
             delay_to_next_ping: Duration::from_secs(15),
+            tolerate_unsupported: false,
         }
     }
 }
@@ -183,7 +191,13 @@ where
     #[inline]
     fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: io::Error) {
         // In case of error while upgrading, there's not much we can do except shut down.
-        self.out_state = OutState::Shutdown;
+        // TODO: we assume that the error is about ping not being supported, which is not
+        //       necessarily the case
+        if self.tolerate_unsupported {
+            self.out_state = OutState::Disabled;
+        } else {
+            self.out_state = OutState::Shutdown;
+        }
     }
 
     fn shutdown(&mut self) {
@@ -226,6 +240,10 @@ where
                 OutState::Shutdown | OutState::Poisoned => {
                     // This shuts down the whole connection with the remote.
                     return Ok(Async::Ready(None));
+                },
+
+                OutState::Disabled => {
+                    return Ok(Async::NotReady);
                 }
 
                 // Need to open an outgoing substream.
