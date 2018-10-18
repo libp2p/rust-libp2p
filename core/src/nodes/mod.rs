@@ -28,4 +28,5 @@ pub mod raw_swarm;
 
 pub use self::node::Substream;
 pub use self::handled_node::{NodeHandlerEvent, NodeHandlerEndpoint};
+pub use self::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent};
 pub use self::raw_swarm::{ConnectedPoint, Peer, RawSwarm, RawSwarmEvent};
