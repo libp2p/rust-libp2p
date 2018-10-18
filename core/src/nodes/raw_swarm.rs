@@ -720,14 +720,15 @@ where
         };
 
         let closed_endpoint = reach_attempts.connected_points
-            .insert(event.peer_id().clone(), opened_endpoint.clone())
-            .expect("We insert into connected_points whenever a connection is opened and remove \
-                     only when a connection is closed ; the underlying API is guaranteed to always \
-                     deliver a connection closed message after it has been opened, and no two \
-                     closed messages ; qed");
+            .insert(event.peer_id().clone(), opened_endpoint.clone());
 
         let (outcome, peer_id) = event.accept();
         if outcome == CollectionNodeAccept::ReplacedExisting {
+            let closed_endpoint = closed_endpoint
+                .expect("We insert into connected_points whenever a connection is opened and \
+                        remove only when a connection is closed ; the underlying API is guaranteed \
+                        to always deliver a connection closed message after it has been opened, \
+                        and no two closed messages ; qed");
             return (Default::default(), RawSwarmEvent::Replaced {
                 peer_id,
                 endpoint: opened_endpoint,
