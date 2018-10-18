@@ -201,31 +201,36 @@ impl<TInEvent, TOutEvent, THandler> HandledNodesTasks<TInEvent, TOutEvent, THand
         for to_spawn in self.to_spawn.drain() {
             tokio_executor::spawn(to_spawn);
         }
-
+        println!("[HandledNodesTasks, poll] events_rx");
         loop {
             match self.events_rx.poll() {
                 Ok(Async::Ready(Some((message, task_id)))) => {
+                    println!("[HandledNodesTasks, poll] events_rx – Async::Ready(Some() – message, task_id={:?}", task_id);
                     // If the task id is no longer in `self.tasks`, that means that the user called
                     // `close()` on this task earlier. Therefore no new event should be generated
                     // for this task.
                     if !self.tasks.contains_key(&task_id) {
+                        println!("[HandledNodesTasks, poll] events_rx – Async::Ready(Some() – message=, task_id={:?} – NO SUCH TASK", task_id);
                         continue;
                     };
 
                     match message {
                         InToExtMessage::NodeEvent(event) => {
+                            println!("[HandledNodesTasks, poll] events_rx – Async::Ready(Some(NodeEvent(event))) – task_id={:?}", task_id);
                             break Async::Ready(HandledNodesEvent::NodeEvent {
                                 id: task_id,
                                 event,
                             });
                         },
                         InToExtMessage::NodeReached(peer_id) => {
+                            println!("[HandledNodesTasks, poll] events_rx – Async::Ready(Some(NodeReached(peer_id))) – task_id={:?}", task_id);
                             break Async::Ready(HandledNodesEvent::NodeReached {
                                 id: task_id,
                                 peer_id,
                             });
                         },
                         InToExtMessage::TaskClosed(result, handler) => {
+                            println!("[HandledNodesTasks, poll] events_rx – Async::Ready(Some(TaskClosed(result))) – task_id={:?}", task_id);
                             let _ = self.tasks.remove(&task_id);
                             break Async::Ready(HandledNodesEvent::TaskClosed {
                                 id: task_id, result, handler
@@ -234,6 +239,7 @@ impl<TInEvent, TOutEvent, THandler> HandledNodesTasks<TInEvent, TOutEvent, THand
                     }
                 }
                 Ok(Async::NotReady) => {
+                    println!("[HandledNodesTasks, poll] events_rx – Async::NotReady");
                     break Async::NotReady;
                 }
                 Ok(Async::Ready(None)) => {
@@ -718,6 +724,82 @@ mod tests {
         }
     }
     mod handled_node_tasks {
+        use super::super::*;
+        use futures::future::{self};
+        use tests::dummy_muxer::DummyMuxer;
+        use tests::dummy_handler::{Handler, InEvent, OutEvent};
+        use rand::random;
+        use PublicKey;
+        use tokio::runtime::current_thread::Runtime;
+
+        type TestHandledNodesTasks = HandledNodesTasks<InEvent, OutEvent, Handler>;
+        struct TestBuilder{
+            muxer: DummyMuxer,
+            handler: Handler,
+            task_count: usize,
+        }
+        impl TestBuilder {
+            fn new() -> Self {
+                TestBuilder {
+                    muxer: DummyMuxer::new(),
+                    handler: Handler::default(),
+                    task_count: 0,
+                }
+            }
+
+            fn with_tasks(&mut self, amt: usize) -> &mut Self {
+                self.task_count = amt;
+                self
+            }
+            // maybe fn with_muxer_inbound_state
+            // maybe fn with_muxer_outbound_state
+
+            fn handled_node_tasks(&mut self) -> (TestHandledNodesTasks, Vec<TaskId>) {
+                let mut handled_nodes = HandledNodesTasks::new();
+                let peer_id = PublicKey::Rsa((0 .. 2048).map(|_| -> u8 { random() }).collect()).into_peer_id();
+                let mut task_ids = Vec::new();
+                for _i in 0..self.task_count {
+                    let fut = future::ok((peer_id.clone(), self.muxer.clone()));
+                    task_ids.push(
+                        handled_nodes.add_reach_attempt(fut, self.handler.clone()) // returns task ids, do we care?
+                    );
+                }
+                (handled_nodes, task_ids)
+            }
+        }
+        #[test]
+        fn query_for_tasks() {
+            let (mut handled_nodes, task_ids) = TestBuilder::new()
+                .with_tasks(3)
+                .handled_node_tasks();
+
+            assert_eq!(task_ids.len(), 3);
+            assert_eq!(handled_nodes.task(TaskId(2)).unwrap().id(), task_ids[2]);
+            assert!(handled_nodes.task(TaskId(545534)).is_none());
+        }
+        #[test]
+        fn iterate_over_all_tasks() {
+            let (handled_nodes, task_ids) = TestBuilder::new()
+                .with_tasks(3)
+                .handled_node_tasks();
+
+            let mut tasks: Vec<TaskId> = handled_nodes.tasks().collect();
+            assert!(tasks.len() == 3);
+            tasks.sort_by_key(|t| t.0 );
+            assert_eq!(tasks, task_ids);
+        }
+
+        #[test]
+        fn add_reach_attempt_prepares_a_new_task() {
+            let mut handled_nodes = HandledNodesTasks::new();
+            assert_eq!(handled_nodes.tasks().count(), 0);
+            assert_eq!(handled_nodes.to_spawn.len(), 0);
+
+            handled_nodes.add_reach_attempt( future::empty(), Handler::default() );
+
+            assert_eq!(handled_nodes.tasks().count(), 1);
+            assert_eq!(handled_nodes.to_spawn.len(), 1);
+        }
 
     }
 }
