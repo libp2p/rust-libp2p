@@ -121,7 +121,10 @@ pub trait ProtocolsHandler {
 
     /// Should behave like `Stream::poll()`. Should close if no more event can be produced and the
     /// node should be closed.
-    // TODO: should not return a `NodeHandlerEvent` but a different enum
+    ///
+    /// > **Note**: If this handler is combined with other handlers, as soon as `poll()` returns
+    /// >           `Ok(Async::Ready(None))`, all the other handlers will receive a call to
+    /// >           `shutdown()` and will eventually be closed and destroyed.
     fn poll(
         &mut self,
     ) -> Poll<
