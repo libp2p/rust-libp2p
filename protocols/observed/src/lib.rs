@@ -52,8 +52,8 @@ pub struct Sender<C> {
 
 impl<C: AsyncWrite> Sender<C> {
     /// Send address `a` to remote as the observed address.
-    pub fn send_address(self, a: &Multiaddr) -> impl Future<Item=C, Error=io::Error> {
-        self.io.send(Bytes::from(a.to_bytes())).map(|io| io.into_inner())
+    pub fn send_address(self, a: Multiaddr) -> impl Future<Item=(), Error=io::Error> {
+        self.io.send(Bytes::from(a.into_bytes())).map(|_io| ())
     }
 }
 
@@ -106,12 +106,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio_current_thread;
-    extern crate tokio_tcp;
+    extern crate tokio;
 
     use libp2p_core::{ConnectionUpgrade, Endpoint, Multiaddr};
-    use self::tokio_current_thread::spawn;
-    use self::tokio_tcp::{TcpListener, TcpStream};
+    use self::tokio::runtime::current_thread;
+    use self::tokio::net::{TcpListener, TcpStream};
     use super::*;
 
     #[test]
@@ -130,7 +129,7 @@ mod tests {
             })
             .and_then(move |output| {
                 match output {
-                    Output::Sender(s) => s.send_address(&observed_addr1),
+                    Output::Sender(s) => s.send_address(observed_addr1),
                     Output::Address(_) => unreachable!()
                 }
             });
@@ -150,8 +149,8 @@ mod tests {
                 }
             });
 
-        tokio_current_thread::block_on_all(future::lazy(move || {
-            spawn(server.map_err(|e| panic!("server error: {}", e)).map(|_| ()));
+        current_thread::block_on_all(future::lazy(move || {
+            current_thread::spawn(server.map_err(|e| panic!("server error: {}", e)).map(|_| ()));
             client.map_err(|e| panic!("client error: {}", e))
         }))
         .unwrap();
