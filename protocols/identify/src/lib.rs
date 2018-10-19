@@ -81,8 +81,10 @@ extern crate tokio_timer;
 extern crate unsigned_varint;
 extern crate void;
 
+pub use self::periodic_id_handler::{PeriodicIdentification, PeriodicIdentificationEvent};
 pub use self::protocol::{IdentifyInfo, IdentifyOutput};
 pub use self::protocol::{IdentifyProtocolConfig, IdentifySender};
 
+mod periodic_id_handler;
 mod protocol;
 mod structs_proto;
