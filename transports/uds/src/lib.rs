@@ -55,9 +55,10 @@ extern crate tokio_uds;
 
 #[cfg(test)]
 extern crate tempfile;
-
 #[cfg(test)]
 extern crate tokio_io;
+#[cfg(test)]
+extern crate tokio;
 
 use futures::future::{self, Future, FutureResult};
 use futures::stream::Stream;
@@ -163,8 +164,7 @@ fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio;
-    use self::tokio::runtime::current_thread::Runtime;
+    use tokio::runtime::current_thread::Runtime;
     use super::{multiaddr_to_path, UdsConfig};
     use futures::stream::Stream;
     use futures::Future;
@@ -202,6 +202,8 @@ mod tests {
         std::thread::spawn(move || {
             let tcp = UdsConfig::new();
 
+            let mut rt = Runtime::new().unwrap();
+            let handle = rt.handle();
             let listener = tcp.listen_on(addr2).unwrap().0.for_each(|(sock, _)| {
                 sock.and_then(|sock| {
                     // Define what to do with the socket that just connected to us
@@ -211,15 +213,13 @@ mod tests {
                         .map_err(|err| panic!("IO error {:?}", err));
 
                     // Spawn the future as a concurrent task
-                    let mut rt = Runtime::new().unwrap();
-                    let _ = rt.spawn(handle_conn);
-                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    handle.spawn(handle_conn).unwrap();
                     Ok(())
                 })
             });
 
-            let mut rt = Runtime::new().unwrap();
-            let _ = rt.block_on(listener).unwrap();
+            rt.block_on(listener).unwrap();
+            rt.run().unwrap();
         });
         std::thread::sleep(std::time::Duration::from_millis(100));
         let tcp = UdsConfig::new();

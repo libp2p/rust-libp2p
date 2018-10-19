@@ -458,6 +458,8 @@ mod tests {
         std::thread::spawn(move || {
             let addr = "/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap();
             let tcp = TcpConfig::new();
+            let mut rt = Runtime::new().unwrap();
+            let handle = rt.handle();
             let listener = tcp.listen_on(addr).unwrap().0.for_each(|(sock, _)| {
                 sock.and_then(|sock| {
                     // Define what to do with the socket that just connected to us
@@ -467,15 +469,14 @@ mod tests {
                         .map_err(|err| panic!("IO error {:?}", err));
 
                     // Spawn the future as a concurrent task
-                    let mut rt = Runtime::new().unwrap();
-                    let _ = rt.spawn(handle_conn);
+                    handle.spawn(handle_conn).unwrap();
 
                     Ok(())
                 })
             });
 
-            let mut rt = Runtime::new().unwrap();
             rt.block_on(listener).unwrap();
+            rt.run().unwrap();
         });
         std::thread::sleep(std::time::Duration::from_millis(100));
         let addr = "/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap();
