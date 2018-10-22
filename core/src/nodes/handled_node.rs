@@ -143,6 +143,8 @@ where
     node: Fuse<NodeStream<TMuxer, THandler::OutboundOpenInfo>>,
     /// Handler that processes substreams.
     handler: THandler,
+    /// If true, `handler` has returned `Ready(None)` and therefore shouldn't be polled again.
+    handler_is_done: bool,
     // True, if the node is shutting down.
     is_shutting_down: bool
 }
@@ -158,6 +160,7 @@ where
         HandledNode {
             node: NodeStream::new(muxer).fuse(),
             handler,
+            handler_is_done: false,
             is_shutting_down: false
         }
     }
@@ -196,13 +199,11 @@ where
     /// After this method returns, `is_shutting_down()` should return true.
     pub fn shutdown(&mut self) {
         self.node.get_mut().shutdown_all();
-        self.is_shutting_down = true;
-
         for user_data in self.node.get_mut().cancel_outgoing() {
             self.handler.inject_outbound_closed(user_data);
         }
-
-        self.handler.shutdown()
+        self.handler.shutdown();
+        self.is_shutting_down = true;
     }
 }
 
@@ -218,14 +219,15 @@ where
         println!("[HandledNode, poll] START");
         loop {
             println!("[HandledNode, poll] top of the loop");
+            if self.node.is_done() && self.handler_is_done {
+                return Ok(Async::Ready(None));
+            }
+
             let mut node_not_ready = false;
 
             println!("[HandledNode, poll]   node");
             match self.node.poll()? {
-                Async::NotReady => {
-                    println!("[HandledNode, poll]   node; Async::NotReady");
-                    ()
-                },
+                Async::NotReady => node_not_ready = true,
                 Async::Ready(Some(NodeEvent::InboundSubstream { substream })) => {
                     println!("[HandledNode, poll]   node; Async::Ready(Some(InboundStream)");
                     self.handler.inject_substream(substream, NodeHandlerEndpoint::Listener)
@@ -237,9 +239,9 @@ where
                 }
                 Async::Ready(None) => {
                     println!("[HandledNode, poll]   node; Async::Ready(None) – are we shutting down? {:?}", self.is_shutting_down);
-                    node_not_ready = true;
                     if !self.is_shutting_down {
                         println!("[HandledNode, poll]   node; Async::Ready(None) – are we shutting down? No. Starting shutdown.");
+                        self.is_shutting_down = true;
                         self.handler.shutdown()
                     }
                 }
@@ -252,8 +254,8 @@ where
                     self.handler.inject_inbound_closed()
                 }
             }
-            println!("[HandledNode, poll] handler");
-            match self.handler.poll()? {
+
+            match if self.handler_is_done { println!("[HandledNode, poll]   handler; Async::Ready(None)"); Async::Ready(None) } else { self.handler.poll()? } {
                 Async::NotReady => {
                     println!("[HandledNode, poll]   handler; Async::NotReady");
                     if node_not_ready {
@@ -284,8 +286,13 @@ where
                     return Ok(Async::Ready(Some(event)));
                 }
                 Async::Ready(None) => {
-                    println!("[HandledNode, poll]     handler; Async::Ready(None)");
-                    return Ok(Async::Ready(None))
+                    println!("[HandledNode, poll]     handler; Async::Ready(None) – setting handler_is_done, shutting down node and starting shutdown for HandledNode");
+                    self.handler_is_done = true;
+                    if !self.is_shutting_down {
+                        self.is_shutting_down = true;
+                        self.node.get_mut().cancel_outgoing();
+                        self.node.get_mut().shutdown_all();
+                    }
                 }
             }
         }
@@ -478,29 +485,45 @@ mod tests {
     }
 
     #[test]
-    fn is_shutting_down_is_false_even_when_in_and_outbounds_are_closed() {
+    fn is_shutting_down_is_true_when_in_and_outbounds_are_closed() {
         let mut handled = TestBuilder::new()
             .with_muxer_inbound_state(DummyConnectionState::Closed)
             .with_muxer_outbound_state(DummyConnectionState::Closed)
             .with_open_substream(123) // avoid infinite loop
             .handled_node();
 
-        handled.poll().expect("poll failed");
+        handled.poll().expect("poll should work");
 
-        // Not shutting down (but in- and outbound are closed, and the handler is shutdown)
-        assert!(!handled.is_shutting_down());
+        // Shutting down (in- and outbound are closed, and the handler is shutdown)
+        assert!(handled.is_shutting_down());
+    }
 
-        // when in-/outbound NodeStreams are  open or Async::Ready(None) we reach the handler `poll()`
+    #[test]
+    fn is_shutting_down_is_true_when_handler_is_gone() {
+        // when in-/outbound NodeStreams are  open or Async::Ready(None) we reach the handlers `poll()` and initiate shutdown.
         let mut handled = TestBuilder::new()
             .with_muxer_inbound_state(DummyConnectionState::Pending)
             .with_muxer_outbound_state(DummyConnectionState::Pending)
             .with_handler_state(HandlerState::Ready(None)) // avoid infinite loop
             .handled_node();
 
-        handled.poll().expect("poll failed");
+        handled.poll().expect("poll should work");
 
-        // still open for business
-        assert!(!handled.is_shutting_down());
+        assert!(handled.is_shutting_down());
+    }
+
+    #[test]
+    fn is_shutting_down_is_true_when_handler_is_gone_even_if_in_and_outbounds_are_open() {
+        let mut handled = TestBuilder::new()
+            .with_muxer_inbound_state(DummyConnectionState::Opened)
+            .with_muxer_outbound_state(DummyConnectionState::Opened)
+            .with_open_substream(123)
+            .with_handler_state(HandlerState::Ready(None))
+            .handled_node();
+
+        handled.poll().expect("poll should work");
+
+        assert!(handled.is_shutting_down());
     }
 
     #[test]
