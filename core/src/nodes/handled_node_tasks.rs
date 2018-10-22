@@ -734,7 +734,7 @@ mod tests {
         use tests::dummy_handler::{Handler, HandlerState, InEvent, OutEvent};
         use rand::random;
         use PublicKey;
-        use tokio::runtime::Builder;
+        use tokio::runtime::current_thread::Runtime;
 
         type TestHandledNodesTasks = HandledNodesTasks<InEvent, OutEvent, Handler>;
         struct TestBuilder {
@@ -816,25 +816,28 @@ mod tests {
 
         #[test]
         fn running_handled_tasks_reaches_the_nodes() {
-            let (handled_nodes_tasks, _) = TestBuilder::new()
+            let (mut handled_nodes_tasks, _) = TestBuilder::new()
                 .with_tasks(5)
                 .with_muxer_inbound_state(DummyConnectionState::Closed)
                 .with_muxer_outbound_state(DummyConnectionState::Closed)
                 .with_handler_state(HandlerState::Err) // stop the loop
                 .handled_node_tasks();
 
-            let rt = Builder::new().core_threads(2).build().unwrap();
-            let events = rt.block_on_all(handled_nodes_tasks.into_future());
-            assert_matches!(events, Ok( (Some(HandledNodesEvent::NodeReached{..}), handled_node_tasks)) => {
-                assert_matches!(handled_node_tasks, HandledNodesTasks{..});
-                assert_eq!(handled_node_tasks.tasks().count(), 5);
-            });
-        }
-
-        #[test]
-        #[ignore]
-        fn broadcast_event_sends_an_event_to_all_node_tasks() {
-            // TODO: Set up a HandledNodesTask, broadcast event, assert all tasks got the event
+            let mut rt = Runtime::new().unwrap();
+            let mut events: (Option<HandledNodesEvent<_,_>>, TestHandledNodesTasks);
+            // we're running on a single thread so events are sequential: first
+            // we get a NodeReached, then a TaskClosed
+            for i in 0..5 {
+                events = rt.block_on(handled_nodes_tasks.into_future()).unwrap();
+                assert_matches!(events, (Some(HandledNodesEvent::NodeReached{..}), ref hnt) => {
+                    assert_matches!(hnt, HandledNodesTasks{..});
+                    assert_eq!(hnt.tasks().count(), 5 - i);
+                });
+                handled_nodes_tasks = events.1;
+                events = rt.block_on(handled_nodes_tasks.into_future()).unwrap();
+                assert_matches!(events, (Some(HandledNodesEvent::TaskClosed{..}), _));
+                handled_nodes_tasks = events.1;
+            }
         }
     }
 }
