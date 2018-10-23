@@ -549,7 +549,9 @@ mod tests {
             .handled_node();
 
         assert_matches!(handled.poll(), Ok(Async::Ready(Some(event))) => {
-            assert_matches!(event, OutEvent::Custom("pineapple"))
+            assert_matches!(event, OutEvent::Custom(s) => {
+                assert_eq!(s, "pineapple");
+            });
         });
     }
 

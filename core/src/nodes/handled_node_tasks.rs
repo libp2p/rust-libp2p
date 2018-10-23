@@ -632,35 +632,16 @@ mod tests {
                 .node_task();
 
             tx.unbounded_send(InEvent::Custom("beef")).expect("send to NodeTask should work");
-            let node_thread = std::thread::spawn(move || {
-                tokio::runtime::current_thread::block_on_all(node_task)
-            });
             let mut rt = Runtime::new().unwrap();
+            rt.spawn(node_task);
             let events = rt.block_on(rx.by_ref().take(2).collect()).expect("reading on rx should work");
 
             assert_matches!(events[0], (InToExtMessage::NodeReached(_), TaskId(890)));
             assert_matches!(events[1], (InToExtMessage::NodeEvent(ref outevent), TaskId(890)) => {
                 assert_matches!(outevent, OutEvent::Custom(beef) => {
                     assert_eq!(beef, &"beef");
-                    // Close the rx-end; when the NodeTask polls the
-                    // HandledNode, it will poll the Handler which, if set up to
-                    // do so, will return Async::Ready(Some(event)) which the
-                    // NodeTask will try to forward on the events_tx channel. If
-                    // the channel is closed the send will fail and make the
-                    // NodeTask call shutdown on the HandledNode. The Handled
-                    // node then sets a new state and at the next iteration
-                    // we'll get an Async::Ready(None) from the HandledNode
-                    // which will send a TaskClosed event (which will fail, but
-                    // there's no error handling so…) and exit the loop and
-                    // eventually exit the thread. Sadly we can't send an event
-                    // from the outside to cause the HandledNode to exit because
-                    // NodeTask.poll() does not read from the event channel once
-                    // it starts polling the node.
-                    rx.close();
                 })
             });
-            node_thread.join().unwrap().unwrap();
-
         }
 
         #[test]
@@ -734,7 +715,9 @@ mod tests {
         use tests::dummy_handler::{Handler, HandlerState, InEvent, OutEvent};
         use rand::random;
         use PublicKey;
+        use tokio::runtime::Builder;
         use tokio::runtime::current_thread::Runtime;
+        use nodes::handled_node::NodeHandlerEvent;
 
         type TestHandledNodesTasks = HandledNodesTasks<InEvent, OutEvent, Handler>;
         struct TestBuilder {
@@ -767,14 +750,18 @@ mod tests {
                 self.handler.state = Some(state);
                 self
             }
-            fn handled_node_tasks(&mut self) -> (TestHandledNodesTasks, Vec<TaskId>) {
+            fn with_handler_states(&mut self, states: Vec<HandlerState>) -> &mut Self {
+                self.handler.next_states = states;
+                self
+            }
+            fn handled_nodes_tasks(&mut self) -> (TestHandledNodesTasks, Vec<TaskId>) {
                 let mut handled_nodes = HandledNodesTasks::new();
                 let peer_id = PublicKey::Rsa((0 .. 2048).map(|_| -> u8 { random() }).collect()).into_peer_id();
                 let mut task_ids = Vec::new();
                 for _i in 0..self.task_count {
                     let fut = future::ok((peer_id.clone(), self.muxer.clone()));
                     task_ids.push(
-                        handled_nodes.add_reach_attempt(fut, self.handler.clone()) // returns task ids, do we care?
+                        handled_nodes.add_reach_attempt(fut, self.handler.clone())
                     );
                 }
                 (handled_nodes, task_ids)
@@ -784,7 +771,7 @@ mod tests {
         fn query_for_tasks() {
             let (mut handled_nodes, task_ids) = TestBuilder::new()
                 .with_tasks(3)
-                .handled_node_tasks();
+                .handled_nodes_tasks();
 
             assert_eq!(task_ids.len(), 3);
             assert_eq!(handled_nodes.task(TaskId(2)).unwrap().id(), task_ids[2]);
@@ -794,7 +781,7 @@ mod tests {
         fn iterate_over_all_tasks() {
             let (handled_nodes, task_ids) = TestBuilder::new()
                 .with_tasks(3)
-                .handled_node_tasks();
+                .handled_nodes_tasks();
 
             let mut tasks: Vec<TaskId> = handled_nodes.tasks().collect();
             assert!(tasks.len() == 3);
@@ -821,7 +808,7 @@ mod tests {
                 .with_muxer_inbound_state(DummyConnectionState::Closed)
                 .with_muxer_outbound_state(DummyConnectionState::Closed)
                 .with_handler_state(HandlerState::Err) // stop the loop
-                .handled_node_tasks();
+                .handled_nodes_tasks();
 
             let mut rt = Runtime::new().unwrap();
             let mut events: (Option<HandledNodesEvent<_,_>>, TestHandledNodesTasks);
@@ -838,6 +825,51 @@ mod tests {
                 assert_matches!(events, (Some(HandledNodesEvent::TaskClosed{..}), _));
                 handled_nodes_tasks = events.1;
             }
+        }
+
+        #[test]
+        fn events_in_tasks_are_emitted() {
+            // States are pop()'d so they are set in reverse order by the Handler
+            let handler_states = vec![
+                HandlerState::Err,
+                HandlerState::Ready(Some(NodeHandlerEvent::Custom(OutEvent::Custom("from handler2") ))),
+                HandlerState::Ready(Some(NodeHandlerEvent::Custom(OutEvent::Custom("from handler") ))),
+            ];
+
+            let (mut handled_nodes_tasks, _) = TestBuilder::new()
+                .with_tasks(1)
+                .with_muxer_inbound_state(DummyConnectionState::Pending)
+                .with_muxer_outbound_state(DummyConnectionState::Opened)
+                .with_handler_states(handler_states)
+                .handled_nodes_tasks();
+
+            let tx = {
+                let mut task0 = handled_nodes_tasks.task(TaskId(0)).unwrap();
+                let tx = task0.inner.get_mut();
+                tx.clone()
+            };
+
+            let mut rt = Builder::new().core_threads(4).build().unwrap();
+            let mut events = rt.block_on(handled_nodes_tasks.into_future()).unwrap();
+            assert_matches!(events.0.unwrap(), HandledNodesEvent::NodeReached{..});
+
+            tx.unbounded_send(InEvent::NextState).expect("send works");
+            events = rt.block_on(events.1.into_future()).unwrap();
+            assert_matches!(events.0.unwrap(), HandledNodesEvent::NodeEvent{id: _, event} => {
+                assert_matches!(event, OutEvent::Custom("from handler"));
+            });
+
+            tx.unbounded_send(InEvent::NextState).expect("send works");
+            events = rt.block_on(events.1.into_future()).unwrap();
+            assert_matches!(events.0.unwrap(), HandledNodesEvent::NodeEvent{id: _, event} => {
+                assert_matches!(event, OutEvent::Custom("from handler2"));
+            });
+
+            tx.unbounded_send(InEvent::NextState).expect("send works");
+            events = rt.block_on(events.1.into_future()).unwrap();
+            assert_matches!(events.0.unwrap(), HandledNodesEvent::TaskClosed{id: _, result, handler: _} => {
+                assert_matches!(result, Err(_));
+            });
         }
     }
 }
