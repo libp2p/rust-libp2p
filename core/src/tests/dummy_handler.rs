@@ -86,7 +86,8 @@ impl NodeHandler for Handler {
 	type OutEvent = OutEvent;
 	type OutboundOpenInfo = usize;
 	type Substream = SubstreamRef<Arc<DummyMuxer>>;
-	fn inject_substream(&mut self, _: Self::Substream, endpoint: NodeHandlerEndpoint<Self::OutboundOpenInfo>) {
+	fn inject_substream(&mut self, _subs: Self::Substream, endpoint: NodeHandlerEndpoint<Self::OutboundOpenInfo>) {
+		println!("[NodeHandler, inject_substream] substream=, endpoint={:?}", endpoint);
 		let user_data = match endpoint {
 			NodeHandlerEndpoint::Dialer(user_data) => Some(user_data),
 			NodeHandlerEndpoint::Listener => None

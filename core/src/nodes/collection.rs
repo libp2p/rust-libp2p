@@ -44,6 +44,7 @@ pub struct CollectionStream<TInEvent, TOutEvent, THandler> {
 
 impl<TInEvent, TOutEvent, THandler> fmt::Debug for CollectionStream<TInEvent, TOutEvent, THandler> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        f.debug_struct("CollectionStream").finish()?;
         let mut list = f.debug_list();
         for (id, task) in &self.tasks {
             match *task {
@@ -329,7 +330,7 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
     /// Returns `None` if we don't have a connection to this peer.
     #[inline]
     pub fn peer_mut(&mut self, id: &PeerId) -> Option<PeerMut<TInEvent>> {
-        println!("[peer_mut] id={:?}", id);
+        println!("[peer_mut] id={:?}, self.nodes={:?}, self.tasks={:?}", id, self.nodes, self.tasks);
         let task = match self.nodes.get(id) {
             Some(&task) => task,
             None => return None,
@@ -483,9 +484,10 @@ mod tests {
     use super::*;
     use futures::future::{self};
     use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
-    use tests::dummy_handler::{Handler, InEvent, OutEvent};
+    use tests::dummy_handler::{Handler, InEvent, OutEvent, HandlerState};
     use PublicKey;
     use tokio::runtime::current_thread::Runtime;
+    use tokio::runtime::Builder;
 
     type TestCollectionStream = CollectionStream<InEvent, OutEvent, Handler>;
 
@@ -557,5 +559,41 @@ mod tests {
             Ok(Async::NotReady)
         });
         rt.block_on(fut).unwrap();
+    }
+
+    #[test]
+    fn accepting_a_node_yields_new_entry() {
+        let mut cs = TestCollectionStream::new();
+        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        let fut = future::ok((peer_id.clone(), DummyMuxer::new()));
+        cs.add_reach_attempt(fut, Handler::default());
+
+        let mut rt = Runtime::new().unwrap();
+        let mut poll_count = 0;
+        let fut = future::poll_fn(move || -> Poll<(), ()> {
+            poll_count += 1;
+            {
+                let event = cs.poll();
+                match poll_count {
+                    1 => {
+                        assert_matches!(event, Async::NotReady);
+                        return Ok(Async::NotReady)
+                    }
+                    2 => {
+                        assert_matches!(event, Async::Ready(CollectionEvent::NodeReached(reach_ev)) => {
+                            assert_matches!(reach_ev.parent, CollectionStream{..});
+                            let (accept_ev, accepted_peer_id) = reach_ev.accept();
+                            assert_eq!(accepted_peer_id, peer_id);
+                            assert_matches!(accept_ev, CollectionNodeAccept::NewEntry);
+                        });
+                    }
+                    _ => unreachable!()
+                }
+            }
+            assert!(cs.peer_mut(&peer_id).is_some(), "peer is not in the list");
+            assert!(cs.has_connection(&peer_id), "peer is not connected");
+            Ok(Async::Ready(()))
+        });
+        rt.block_on(fut).expect("running the future works");
     }
 }

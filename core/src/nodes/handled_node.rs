@@ -229,7 +229,7 @@ where
             match self.node.poll()? {
                 Async::NotReady => node_not_ready = true,
                 Async::Ready(Some(NodeEvent::InboundSubstream { substream })) => {
-                    println!("[HandledNode, poll]   node; Async::Ready(Some(InboundStream)");
+                    println!("[HandledNode, poll]   node; Async::Ready(Some(InboundStream) – calling handler inject_substream");
                     self.handler.inject_substream(substream, NodeHandlerEndpoint::Listener)
                 }
                 Async::Ready(Some(NodeEvent::OutboundSubstream { user_data, substream })) => {
