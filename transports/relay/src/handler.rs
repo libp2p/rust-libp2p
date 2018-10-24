@@ -37,7 +37,7 @@ pub struct RelayHandler<TSubstream, TTrans> {
     shutdown: bool,
 
     /// List of futures that process relaying data from the remote node to a destination.
-    active_relays: Vec<Box<Future<Item = (), Error = io::Error>>>,
+    active_relays: Vec<Box<Future<Item = (), Error = io::Error> + Send>>,
 
     /// Queue of events to return when polled.
     queued_events: Vec<RelayHandlerEvent<TSubstream>>,
