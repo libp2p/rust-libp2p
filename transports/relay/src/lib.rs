@@ -30,12 +30,15 @@ extern crate rand;
 extern crate tokio_codec;
 extern crate tokio_io;
 extern crate unsigned_varint;
+extern crate void;
 
 mod copy;
+mod handler;
 mod message;
 mod protocol;
 mod transport;
 mod utility;
 
+pub use handler::{RelayHandler, RelayHandlerEvent};
 pub use protocol::{RelayOutput, RelayConfig};
 pub use transport::RelayTransport;
