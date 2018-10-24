@@ -213,6 +213,26 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
         }
     }
 
+    /// If this is `OutboundSubstreamRequest`, maps the protocol to another.
+    #[inline]
+    pub fn map_protocol<F, I>(
+        self,
+        map: F,
+    ) -> ProtocolsHandlerEvent<I, TOutboundOpenInfo, TCustom>
+    where
+        F: FnOnce(TConnectionUpgrade) -> I,
+    {
+        match self {
+            ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info } => {
+                ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                    upgrade: map(upgrade),
+                    info,
+                }
+            }
+            ProtocolsHandlerEvent::Custom(val) => ProtocolsHandlerEvent::Custom(val),
+        }
+    }
+
     /// If this is `Custom`, maps the content to something else.
     #[inline]
     pub fn map_custom<F, I>(
