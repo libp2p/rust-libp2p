@@ -18,10 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use core::PeerId;
 use futures::{future::{self, Either}, prelude::*};
 use message::{CircuitRelay, CircuitRelay_Peer, CircuitRelay_Status, CircuitRelay_Type};
 use multiaddr::{Protocol, Multiaddr};
-use peerstore::PeerId;
 use protobuf::{self, Message};
 use std::{io, error::Error, iter::FromIterator};
 use tokio_codec::Framed;
@@ -93,7 +93,7 @@ where
 }
 
 pub(crate) enum RelayAddr {
-    Address { relay: Option<Peer>, dest: Peer },
+    Address { relay: Peer, dest: Peer },
     Malformed,
     Multihop, // Unsupported
 }
@@ -101,15 +101,13 @@ pub(crate) enum RelayAddr {
 impl RelayAddr {
     // Address format: [<relay>]/p2p-circuit/<destination>
     pub(crate) fn parse(addr: &Multiaddr) -> RelayAddr {
-        let mut iter = addr.iter().peekable();
+        let mut iter = addr.iter();
 
-        let relay = if let Some(&Protocol::P2pCircuit) = iter.peek() {
-            None // Address begins with "p2p-circuit", i.e. no relay is specified.
-        } else {
+        let relay = {
             let prefix = iter.by_ref().take_while(|p| *p != Protocol::P2pCircuit);
             match Peer::from(Multiaddr::from_iter(prefix)) {
                 None => return RelayAddr::Malformed,
-                peer => peer,
+                Some(peer) => peer,
             }
         };
 

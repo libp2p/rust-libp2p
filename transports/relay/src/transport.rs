@@ -18,14 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use core::Transport;
+use core::{PeerId, Transport};
 use futures::{stream, prelude::*};
 use message::{CircuitRelay, CircuitRelay_Peer, CircuitRelay_Type};
 use multiaddr::Multiaddr;
-use peerstore::{PeerAccess, PeerId, Peerstore};
 use protocol;
-use rand::{self, Rng};
-use std::{io, iter::FromIterator, ops::Deref, sync::Arc};
+use std::io;
 use tokio_io::{AsyncRead, AsyncWrite};
 use utility::{io_err, Peer, RelayAddr};
 
@@ -35,28 +33,20 @@ use utility::{io_err, Peer, RelayAddr};
 /// `<addr1>` is the address of a node that should act as a relay, and `<addr2>` is the address
 /// of the destination, that the relay should dial.
 #[derive(Debug, Clone)]
-pub struct RelayTransport<T, P> {
+pub struct RelayTransport<T> {
     /// Id of the local node.
     my_id: PeerId,
     /// Transport to use to.
     transport: T,
-    /// Reference to a peerstore that associates the elements in `self.relays` to their
-    /// multiaddresses.
-    peers: P,
-    /// List of known IDs of peers.
-    relays: Arc<Vec<PeerId>>,
 }
 
-impl<T, P, S> Transport for RelayTransport<T, P>
+impl<T> Transport for RelayTransport<T>
 where
     T: Transport + Send + Clone + 'static,
     T::Dial: Send,
     T::Listener: Send,
     T::ListenerUpgrade: Send,
     T::Output: AsyncRead + AsyncWrite + Send,
-    P: Deref<Target=S> + Clone + 'static,
-    S: 'static,
-    for<'a> &'a S: Peerstore
 {
     type Output = T::Output;
     type Listener = Box<Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=io::Error> + Send>;
@@ -78,13 +68,8 @@ where
                 return Err((self, addr));
             }
             RelayAddr::Address { relay, dest } => {
-                if let Some(ref r) = relay {
-                    let f = self.relay_via(r, &dest).map_err(|this| (this, addr))?;
-                    Ok(Box::new(f))
-                } else {
-                    let f = self.relay_to(&dest).map_err(|this| (this, addr))?;
-                    Ok(Box::new(f))
-                }
+                let f = self.relay_via(&relay, &dest).map_err(|this| (this, addr))?;
+                Ok(Box::new(f))
             }
         }
     }
@@ -94,87 +79,31 @@ where
     }
 }
 
-impl<T, P, S> RelayTransport<T, P>
+impl<T> RelayTransport<T>
 where
     T: Transport + Clone + 'static,
     T::Dial: Send,
     T::Listener: Send,
     T::ListenerUpgrade: Send,
     T::Output: AsyncRead + AsyncWrite + Send,
-    P: Deref<Target=S> + Clone + 'static,
-    for<'a> &'a S: Peerstore
 {
     /// Create a new relay transport.
     ///
     /// This transport uses a static set of relays and will not attempt
     /// any relay discovery.
-    pub fn new<R>(my_id: PeerId, transport: T, peers: P, relays: R) -> Self
-    where
-        R: IntoIterator<Item = PeerId>,
-    {
+    pub fn new(my_id: PeerId, transport: T) -> Self {
         RelayTransport {
             my_id,
             transport,
-            peers,
-            relays: Arc::new(Vec::from_iter(relays)),
         }
-    }
-
-    // Relay to destination over any available relay node.
-    fn relay_to(self, destination: &Peer) -> Result<impl Future<Item=T::Output, Error=io::Error>, Self> {
-        trace!("relay_to {:?}", destination.id);
-        let mut dials = Vec::new();
-        for relay in &*self.relays {
-            let relay_peer = Peer {
-                id: relay.clone(),
-                addrs: Vec::new(),
-            };
-            if let Ok(dial) = self.clone().relay_via(&relay_peer, destination) {
-                dials.push(dial)
-            }
-        }
-
-        if dials.is_empty() {
-            info!("no relay available for {:?}", destination.id);
-            return Err(self);
-        }
-
-        // Try one relay after another and stick to the first working one.
-        rand::thread_rng().shuffle(&mut dials); // randomise to spread load
-        let dest_peer = destination.id.clone();
-        let future = stream::iter_ok(dials.into_iter())
-            .and_then(|dial| dial)
-            .then(|result| Ok(result.ok()))
-            .filter_map(|result| result)
-            .into_future()
-            .map_err(|(err, _stream)| err)
-            .and_then(move |(ok, _stream)| {
-                if let Some(out) = ok {
-                    Ok(out)
-                } else {
-                    Err(io_err(format!("no relay for {:?}", dest_peer)))
-                }
-            });
-        Ok(future)
     }
 
     // Relay to destination via the given peer.
     fn relay_via(self, relay: &Peer, destination: &Peer) -> Result<impl Future<Item=T::Output, Error=io::Error>, Self> {
         trace!("relay_via {:?} to {:?}", relay.id, destination.id);
-        let mut addresses = Vec::new();
-
-        if relay.addrs.is_empty() {
-            // try all known relay addresses
-            if let Some(peer) = self.peers.peer(&relay.id) {
-                addresses.extend(peer.addrs())
-            }
-        } else {
-            // use only specific relay addresses
-            addresses.extend(relay.addrs.iter().cloned())
-        }
 
         // no relay address => bail out
-        if addresses.is_empty() {
+        if relay.addrs.is_empty() {
             info!("no available address for relay: {:?}", relay.id);
             return Err(self);
         }
@@ -182,7 +111,7 @@ where
         let relay = relay.clone();
         let message = self.hop_message(destination);
         let transport = self.transport.with_upgrade(protocol::Source(message));
-        let future = stream::iter_ok(addresses.into_iter())
+        let future = stream::iter_ok(relay.addrs.clone().into_iter())
             .filter_map(move |addr| transport.clone().dial(addr).ok())
             .and_then(|dial| dial)
             .then(|result| Ok(result.ok()))
@@ -208,11 +137,7 @@ where
 
         let mut from = CircuitRelay_Peer::new();
         from.set_id(self.my_id.as_bytes().to_vec());
-        if let Some(me) = self.peers.peer(&self.my_id) {
-            for a in me.addrs() {
-                from.mut_addrs().push(a.to_bytes())
-            }
-        }
+        // TODO: fill from.mut_addrs()
         msg.set_srcPeer(from);
 
         let mut dest = CircuitRelay_Peer::new();

@@ -20,24 +20,20 @@
 
 use bytes::Bytes;
 use copy;
-use core::{ConnectionUpgrade, Endpoint, Transport};
+use core::{ConnectionUpgrade, Endpoint, PeerId, Transport};
 use futures::{stream, future::{self, Either::{A, B}, FutureResult}, prelude::*};
 use message::{CircuitRelay, CircuitRelay_Peer, CircuitRelay_Status, CircuitRelay_Type};
-use peerstore::{PeerAccess, PeerId, Peerstore};
-use std::{io, iter, ops::Deref};
+use std::{io, iter};
 use tokio_io::{AsyncRead, AsyncWrite};
 use utility::{io_err, is_success, status, Io, Peer};
 
 /// Configuration for a connection upgrade that handles the relay protocol.
 #[derive(Debug, Clone)]
-pub struct RelayConfig<T, P> {
+pub struct RelayConfig<T> {
     /// Peer id of the local node.
     my_id: PeerId,
     /// When asked to relay a connection, the transport to use to reach the requested node.
     transport: T,
-    /// Reference to a peerstore to load peers from when the target address is not specified in
-    /// the destination.
-    peers: P,
     /// If `allow_relays` is false this node can only be used as a destination but will not allow
     /// relaying streams to other destinations.
     allow_relays: bool
@@ -65,7 +61,7 @@ pub enum Output<TStream> {
     Sealed(Box<Future<Item=(), Error=io::Error> + Send>),
 }
 
-impl<C, T, P, S> ConnectionUpgrade<C> for RelayConfig<T, P>
+impl<C, T> ConnectionUpgrade<C> for RelayConfig<T>
 where
     C: AsyncRead + AsyncWrite + Send + 'static,
     T: Transport + Clone + Send + 'static,
@@ -73,9 +69,6 @@ where
     T::Listener: Send,
     T::ListenerUpgrade: Send,
     T::Output: AsyncRead + AsyncWrite + Send,
-    P: Deref<Target=S> + Clone + Send + 'static,
-    S: 'static,
-    for<'a> &'a S: Peerstore
 {
     type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
     type UpgradeIdentifier = ();
@@ -112,19 +105,17 @@ where
     }
 }
 
-impl<T, P, S> RelayConfig<T, P>
+impl<T> RelayConfig<T>
 where
     T: Transport + Clone + 'static,
     T::Dial: Send,      // TODO: remove
     T::Listener: Send,      // TODO: remove
     T::ListenerUpgrade: Send,      // TODO: remove
     T::Output: Send + AsyncRead + AsyncWrite,
-    P: Deref<Target = S> + Clone + 'static,
-    for<'a> &'a S: Peerstore,
 {
     /// Builds a new `RelayConfig` with default options.
-    pub fn new(my_id: PeerId, transport: T, peers: P) -> RelayConfig<T, P> {
-        RelayConfig { my_id, transport, peers, allow_relays: true }
+    pub fn new(my_id: PeerId, transport: T) -> RelayConfig<T> {
+        RelayConfig { my_id, transport, allow_relays: true }
     }
 
     /// Sets whether we will allow requests for relaying connections.
@@ -144,19 +135,12 @@ where
             return A(io.send(msg).and_then(|_| Err(io_err("invalid src address"))))
         };
 
-        let mut dest = if let Some(peer) = Peer::from_message(msg.take_dstPeer()) {
+        let dest = if let Some(peer) = Peer::from_message(msg.take_dstPeer()) {
             peer
         } else {
             let msg = status(CircuitRelay_Status::HOP_DST_MULTIADDR_INVALID);
             return B(A(io.send(msg).and_then(|_| Err(io_err("invalid dest address")))))
         };
-
-        if dest.addrs.is_empty() {
-            // Add locally know addresses of destination
-            if let Some(peer) = self.peers.peer(&dest.id) {
-                dest.addrs.extend(peer.addrs())
-            }
-        }
 
         let stop = stop_message(&from, &dest);
 
