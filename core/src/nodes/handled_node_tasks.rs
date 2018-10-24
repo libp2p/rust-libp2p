@@ -165,6 +165,7 @@ impl<TInEvent, TOutEvent, THandler> HandledNodesTasks<TInEvent, TOutEvent, THand
         });
 
         self.to_spawn.push(task);
+        println!("[HandledNodesTasks, add_reach_attempt] to_spawn len={}, task_id={:?}", self.to_spawn.len(), task_id);
         task_id
     }
 
@@ -172,10 +173,12 @@ impl<TInEvent, TOutEvent, THandler> HandledNodesTasks<TInEvent, TOutEvent, THand
     pub fn broadcast_event(&mut self, event: &TInEvent)
     where TInEvent: Clone,
     {
+        println!("[HandledNodesTasks, broadcast_event] sending {} events", self.tasks.len());
         for sender in self.tasks.values() {
             // Note: it is possible that sending an event fails if the background task has already
             // finished, but the local state hasn't reflected that yet because it hasn't been
             // polled. This is not an error situation.
+            println!("[HandledNodesTasks, broadcast_event]  sending event");
             let _ = sender.unbounded_send(event.clone());
         }
     }
@@ -384,7 +387,7 @@ where
                                 events_buffer.push(event)
                             },
                             Ok(Async::NotReady) => {
-                                println!("[NodeTask, poll]    NodeTaskInner::Future; in_events_rx: Async::NotReady – break");
+                                println!("[NodeTask, poll]    NodeTaskInner::Future; in_events_rx: Async::NotReady – break (todo: what does this mean? channel closed?)");
                                 break
                             },
                             Err(_) => unreachable!("An UnboundedReceiver never errors"),
@@ -553,7 +556,7 @@ mod tests {
         use futures::future::{self, FutureResult};
         use futures::sync::mpsc::{UnboundedReceiver, UnboundedSender};
         use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
-        use tests::dummy_handler::{Handler, InEvent, OutEvent, TestHandledNode};
+        use tests::dummy_handler::{Handler, InEvent, OutEvent};
         use rand::random;
         use {PeerId, PublicKey};
         use std::io;
@@ -569,14 +572,12 @@ mod tests {
 
         struct TestBuilder {
            task_id: TaskId,
-           inner_node: Option<TestHandledNode>,
            inner_fut: Option<FutureResult<(PeerId, DummyMuxer), IoError>>,
         }
         impl TestBuilder {
             fn new() -> Self {
                 TestBuilder {
                     task_id: TaskId(123),
-                    inner_node: None,
                     inner_fut: {
                         let peer_id = PublicKey::Rsa((0 .. 2048).map(|_| -> u8 { random() }).collect()).into_peer_id();
                         Some(future::ok((peer_id, DummyMuxer::new())))
@@ -586,11 +587,6 @@ mod tests {
 
             fn with_inner_fut(&mut self, fut: FutureResult<(PeerId, DummyMuxer), IoError>) -> &mut Self{
                 self.inner_fut = Some(fut);
-                self
-            }
-
-            fn with_inner_node(&mut self, node: TestHandledNode) -> &mut Self {
-                self.inner_node = Some(node);
                 self
             }
 
@@ -606,15 +602,11 @@ mod tests {
             ) {
                 let (events_from_node_task_tx, events_from_node_task_rx) = mpsc::unbounded::<(InToExtMessage<OutEvent, Handler>, TaskId)>();
                 let (events_to_node_task_tx, events_to_node_task_rx) = mpsc::unbounded::<InEvent>();
-                let inner = if self.inner_node.is_some() {
-                    NodeTaskInner::Node(self.inner_node.take().unwrap())
-                } else {
-                    NodeTaskInner::Future {
+                let inner = NodeTaskInner::Future {
                         future: self.inner_fut.take().unwrap(),
                         handler: Handler::default(),
                         events_buffer: Vec::new(),
-                    }
-                };
+                    };
                 let node_task = NodeTask {
                     inner: inner,
                     events_tx: events_from_node_task_tx.clone(), // events TO the outside

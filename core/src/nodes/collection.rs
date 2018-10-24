@@ -320,6 +320,7 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
     where TInEvent: Clone,
     {
         // TODO: remove the ones we're not connected to?
+        println!("[CollectionStream, broadcast_event] Sending NextState event to HandledNodesTasks");
         self.inner.broadcast_event(event)
     }
 
@@ -328,10 +329,12 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
     /// Returns `None` if we don't have a connection to this peer.
     #[inline]
     pub fn peer_mut(&mut self, id: &PeerId) -> Option<PeerMut<TInEvent>> {
+        println!("[peer_mut] id={:?}", id);
         let task = match self.nodes.get(id) {
             Some(&task) => task,
             None => return None,
         };
+        println!("[peer_mut] task={:?}", task);
 
         match self.inner.task(task) {
             Some(inner) => Some(PeerMut {
@@ -366,12 +369,19 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
     /// > borrowed if necessary.
     pub fn poll(&mut self) -> Async<CollectionEvent<TInEvent, TOutEvent, THandler>> {
         let item = match self.inner.poll() {
-            Async::Ready(item) => item,
-            Async::NotReady => return Async::NotReady,
+            Async::Ready(item) => {
+                println!("[CollectionStream, poll] polled the HandledNodesTask, got Async::Ready(item)");
+                item
+            },
+            Async::NotReady => {
+                println!("[CollectionStream, poll] polled the HandledNodesTask, got Async::NotReady – returning NotReady");
+                return Async::NotReady
+            },
         };
 
         match item {
             HandledNodesEvent::TaskClosed { id, result, handler } => {
+                println!("[CollectionStream, poll]  TaskClosed id={:?}, result={:?} – returning Async::Ready", id, result);
                 match (self.tasks.remove(&id), result, handler) {
                     (Some(TaskState::Pending), Err(err), Some(handler)) => {
                         Async::Ready(CollectionEvent::ReachError {
@@ -410,6 +420,7 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
                 }
             },
             HandledNodesEvent::NodeReached { id, peer_id } => {
+                println!("[CollectionStream, poll]  NodeReached id={:?}, peer_id={:?}", id, peer_id);
                 Async::Ready(CollectionEvent::NodeReached(CollectionReachEvent {
                     parent: self,
                     id,
@@ -417,6 +428,7 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
                 }))
             },
             HandledNodesEvent::NodeEvent { id, event } => {
+                println!("[CollectionStream, poll]  NodeEvent id={:?}", id);
                 let peer_id = match self.tasks.get(&id) {
                     Some(TaskState::Connected(peer_id)) => peer_id.clone(),
                     _ => panic!("we can only receive NodeEvent events from a task after we \
@@ -462,5 +474,88 @@ impl<'a, TInEvent> PeerMut<'a, TInEvent> {
         };
 
         self.inner.close();
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use futures::future::{self};
+    use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
+    use tests::dummy_handler::{Handler, InEvent, OutEvent};
+    use PublicKey;
+    use tokio::runtime::current_thread::Runtime;
+
+    type TestCollectionStream = CollectionStream<InEvent, OutEvent, Handler>;
+
+    #[test]
+    fn can_create_new() {
+        let cs = TestCollectionStream::new();
+        assert_matches!(cs.inner, HandledNodesTasks{..});
+        assert_matches!(cs.nodes, FnvHashMap{..});
+        assert_matches!(cs.tasks, FnvHashMap{..});
+    }
+
+    #[test]
+    fn has_connection_is_false_before_a_connection_has_been_made() {
+        let cs = TestCollectionStream::new();
+        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        assert!(!cs.has_connection(&peer_id));
+    }
+
+    #[test]
+    #[ignore]
+    fn has_connection_is_true_when_a_connection_has_been_made() { }
+
+    #[test]
+    fn connections_is_empty_before_connecting() {
+        let cs = TestCollectionStream::new();
+        assert!(cs.connections().next().is_none());
+    }
+
+    #[test]
+    #[ignore]
+    fn connections_is_a_list_of_the_connected_peers() { }
+
+    #[test]
+    fn retrieving_a_peer_is_none_if_peer_is_missing_or_not_connected() {
+        let mut cs = TestCollectionStream::new();
+        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        assert!(cs.peer_mut(&peer_id).is_none());
+
+        let handler = Handler::default();
+        let fut = future::ok((peer_id.clone(), DummyMuxer::new()));
+        cs.add_reach_attempt(fut, handler);
+        assert!(cs.peer_mut(&peer_id).is_none()); // task is pending
+    }
+
+    #[test]
+    fn collection_stream_reaches_the_nodes() {
+        let mut cs = TestCollectionStream::new();
+        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+
+        let mut muxer = DummyMuxer::new();
+        muxer.set_inbound_connection_state(DummyConnectionState::Pending);
+        muxer.set_outbound_connection_state(DummyConnectionState::Opened);
+
+        let fut = future::ok((peer_id, muxer));
+        cs.add_reach_attempt(fut, Handler::default());
+        let mut rt = Runtime::new().unwrap();
+        let mut poll_count = 0;
+        let fut = future::poll_fn(move || -> Poll<(), ()> {
+            poll_count += 1;
+            let event = cs.poll();
+            match poll_count {
+                1 => assert_matches!(event, Async::NotReady),
+                2 => {
+                    assert_matches!(event, Async::Ready(CollectionEvent::NodeReached(_)));
+                    return Ok(Async::Ready(())); // stop
+                }
+                _ => unreachable!()
+            }
+            Ok(Async::NotReady)
+        });
+        rt.block_on(fut).unwrap();
     }
 }

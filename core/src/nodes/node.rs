@@ -320,7 +320,7 @@ where
             && self.outbound_state == StreamState::Closed
             && self.outbound_substreams.is_empty()
         {
-            println!("[Node, poll] returning Async::Ready(None)");
+            println!("[Node, poll] returning Async::Ready(None) – in and out are closed; we have no substreams");
             return Ok(Async::Ready(None))
         }
 
