@@ -61,6 +61,7 @@ pub enum Output<TStream> {
 
     /// We have been asked to relay communications to another node. Polling the future until it's
     /// ready will process the proxying.
+    // TODO: provide more info for informative purposes for the user
     Sealed(Box<Future<Item=(), Error=io::Error> + Send>),
 }
 
