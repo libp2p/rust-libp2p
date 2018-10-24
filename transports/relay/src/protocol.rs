@@ -28,25 +28,35 @@ use std::{io, iter, ops::Deref};
 use tokio_io::{AsyncRead, AsyncWrite};
 use utility::{io_err, is_success, status, Io, Peer};
 
+/// Configuration for a connection upgrade that handles the relay protocol.
 #[derive(Debug, Clone)]
 pub struct RelayConfig<T, P> {
+    /// Peer id of the local node.
     my_id: PeerId,
+    /// When asked to relay a connection, the transport to use to reach the requested node.
     transport: T,
+    /// Reference to a peerstore to load peers from when the target address is not specified in
+    /// the destination.
     peers: P,
-    // If `allow_relays` is false this node can only be used as a
-    // destination but will not allow relaying streams to other
-    // destinations.
+    /// If `allow_relays` is false this node can only be used as a destination but will not allow
+    /// relaying streams to other destinations.
     allow_relays: bool
 }
 
-// The `RelayConfig` upgrade can serve as destination or relay. Each mode needs a different
-// output type. As destination we want the stream to continue to be usable, whereas as relay
-// we pipe data from source to destination and do not want to use the stream in any other way.
-// Therefore, in the latter case we simply return a future that can be driven to completion
-// but otherwise the stream is not programmatically accessible.
+/// The `RelayConfig` upgrade can serve as destination or relay. Each mode needs a different
+/// output type. As destination we want the stream to continue to be usable, whereas as relay
+/// we pipe data from source to destination and do not want to use the stream in any other way.
+/// Therefore, in the latter case we simply return a future that can be driven to completion
+/// but otherwise the stream is not programmatically accessible.
 pub enum Output<C> {
+    /// The source is a relay `R` that relays the communication from someone `A` to us. Keep in
+    /// mind that the multiaddress you have about this communication is the address of `R`.
+    // TODO: provide a way to get the address of `A`
     Stream(C),
-    Sealed(Box<Future<Item=(), Error=io::Error> + Send>)
+
+    /// We have been asked to relay communications to another node. Polling the future until it's
+    /// ready will process the proxying.
+    Sealed(Box<Future<Item=(), Error=io::Error> + Send>),
 }
 
 impl<C, T, P, S> ConnectionUpgrade<C> for RelayConfig<T, P>
@@ -106,15 +116,17 @@ where
     P: Deref<Target = S> + Clone + 'static,
     for<'a> &'a S: Peerstore,
 {
+    /// Builds a new `RelayConfig` with default options.
     pub fn new(my_id: PeerId, transport: T, peers: P) -> RelayConfig<T, P> {
         RelayConfig { my_id, transport, peers, allow_relays: true }
     }
 
+    /// Sets whether we will allow requests for relaying connections.
     pub fn allow_relays(&mut self, val: bool) {
         self.allow_relays = val
     }
 
-    // HOP message handling (relay mode).
+    /// HOP message handling (request to act as a relay).
     fn on_hop<C>(self, mut msg: CircuitRelay, io: Io<C>) -> impl Future<Item=impl Future<Item=(), Error=io::Error>, Error=io::Error>
     where
         C: AsyncRead + AsyncWrite + 'static,
@@ -202,7 +214,7 @@ where
         B(B(future))
     }
 
-    // STOP message handling (destination mode)
+    /// STOP message handling (we are a destination)
     fn on_stop<C>(self, mut msg: CircuitRelay, io: Io<C>) -> impl Future<Item=C, Error=io::Error>
     where
         C: AsyncRead + AsyncWrite + 'static,
@@ -244,6 +256,7 @@ fn stop_message(from: &Peer, dest: &Peer) -> CircuitRelay {
     msg
 }
 
+/// Dummy connection upgrade that negotiates the relay protocol and returns the socket.
 #[derive(Debug, Clone)]
 struct TrivialUpgrade;
 
@@ -266,6 +279,8 @@ where
     }
 }
 
+/// Connection upgrade that negotiates the relay protocol, then negotiates with the target for it
+/// to act as destination.
 #[derive(Debug, Clone)]
 pub(crate) struct Source(pub(crate) CircuitRelay);
 

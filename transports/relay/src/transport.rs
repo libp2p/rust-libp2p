@@ -29,12 +29,22 @@ use std::{io, iter::FromIterator, ops::Deref, sync::Arc};
 use tokio_io::{AsyncRead, AsyncWrite};
 use utility::{io_err, Peer, RelayAddr};
 
+/// Implementation of `Transport` that supports addresses of the form
+/// `<addr1>/p2p-circuit/<addr2>`.
+///
+/// `<addr1>` is the address of a node that should act as a relay, and `<addr2>` is the address
+/// of the destination, that the relay should dial.
 #[derive(Debug, Clone)]
 pub struct RelayTransport<T, P> {
+    /// Id of the local node.
     my_id: PeerId,
+    /// Transport to use to.
     transport: T,
+    /// Reference to a peerstore that associates the elements in `self.relays` to their
+    /// multiaddresses.
     peers: P,
-    relays: Arc<Vec<PeerId>>
+    /// List of known IDs of peers.
+    relays: Arc<Vec<PeerId>>,
 }
 
 impl<T, P, S> Transport for RelayTransport<T, P>
