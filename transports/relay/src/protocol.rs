@@ -44,7 +44,7 @@ pub struct RelayConfig<T> {
 /// we pipe data from source to destination and do not want to use the stream in any other way.
 /// Therefore, in the latter case we simply return a future that can be driven to completion
 /// but otherwise the stream is not programmatically accessible.
-pub enum Output<TStream> {
+pub enum RelayOutput<TStream> {
     /// The source is a relay `R` that relays the communication from someone `S` to us. Keep in
     /// mind that the multiaddress you have about this communication is the address of `R`.
     Stream {
@@ -77,7 +77,7 @@ where
         iter::once((Bytes::from("/libp2p/relay/circuit/0.1.0"), ()))
     }
 
-    type Output = Output<C>;
+    type Output = RelayOutput<C>;
     type Future = Box<Future<Item=Self::Output, Error=io::Error> + Send>;
 
     fn upgrade(self, conn: C, _: (), _: Endpoint) -> Self::Future {
@@ -89,7 +89,7 @@ where
             };
             match msg.get_field_type() {
                 CircuitRelay_Type::HOP if self.allow_relays => { // act as relay
-                    B(A(self.on_hop(msg, io).map(|fut| Output::Sealed(Box::new(fut)))))
+                    B(A(self.on_hop(msg, io).map(|fut| RelayOutput::Sealed(Box::new(fut)))))
                 }
                 CircuitRelay_Type::STOP => { // act as destination
                     B(B(self.on_stop(msg, io)))
@@ -205,7 +205,7 @@ where
     }
 
     /// STOP message handling (we are a destination)
-    fn on_stop<C>(self, mut msg: CircuitRelay, io: Io<C>) -> impl Future<Item = Output<C>, Error = io::Error>
+    fn on_stop<C>(self, mut msg: CircuitRelay, io: Io<C>) -> impl Future<Item = RelayOutput<C>, Error = io::Error>
     where
         C: AsyncRead + AsyncWrite + 'static,
     {
@@ -229,7 +229,7 @@ where
         }
 
         B(B(io.send(status(CircuitRelay_Status::SUCCESS)).map(move |stream| {
-            Output::Stream {
+            RelayOutput::Stream {
                 stream: stream.into(),
                 src_peer_id: from.id,
             }

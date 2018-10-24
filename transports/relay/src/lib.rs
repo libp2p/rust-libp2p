@@ -37,5 +37,5 @@ mod protocol;
 mod transport;
 mod utility;
 
-pub use protocol::{Output, RelayConfig};
+pub use protocol::{RelayOutput, RelayConfig};
 pub use transport::RelayTransport;
