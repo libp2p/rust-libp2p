@@ -48,11 +48,16 @@ pub struct RelayConfig<T, P> {
 /// we pipe data from source to destination and do not want to use the stream in any other way.
 /// Therefore, in the latter case we simply return a future that can be driven to completion
 /// but otherwise the stream is not programmatically accessible.
-pub enum Output<C> {
-    /// The source is a relay `R` that relays the communication from someone `A` to us. Keep in
+pub enum Output<TStream> {
+    /// The source is a relay `R` that relays the communication from someone `S` to us. Keep in
     /// mind that the multiaddress you have about this communication is the address of `R`.
-    // TODO: provide a way to get the address of `A`
-    Stream(C),
+    Stream {
+        /// Stream of data to the original source.
+        stream: TStream,
+        /// Identifier of the original source `S`.
+        src_peer_id: PeerId,
+        // TODO: also provide the addresses ; however the semantics of these addresses is uncertain
+    },
 
     /// We have been asked to relay communications to another node. Polling the future until it's
     /// ready will process the proxying.
@@ -93,7 +98,7 @@ where
                     B(A(self.on_hop(msg, io).map(|fut| Output::Sealed(Box::new(fut)))))
                 }
                 CircuitRelay_Type::STOP => { // act as destination
-                    B(B(self.on_stop(msg, io).map(Output::Stream)))
+                    B(B(self.on_stop(msg, io)))
                 }
                 other => {
                     debug!("invalid message type: {:?}", other);
@@ -215,15 +220,22 @@ where
     }
 
     /// STOP message handling (we are a destination)
-    fn on_stop<C>(self, mut msg: CircuitRelay, io: Io<C>) -> impl Future<Item=C, Error=io::Error>
+    fn on_stop<C>(self, mut msg: CircuitRelay, io: Io<C>) -> impl Future<Item = Output<C>, Error = io::Error>
     where
         C: AsyncRead + AsyncWrite + 'static,
     {
+        let from = if let Some(peer) = Peer::from_message(msg.take_srcPeer()) {
+            peer
+        } else {
+            let msg = status(CircuitRelay_Status::HOP_SRC_MULTIADDR_INVALID);
+            return A(A(io.send(msg).and_then(|_| Err(io_err("invalid src address")))))
+        };
+
         let dest = if let Some(peer) = Peer::from_message(msg.take_dstPeer()) {
             peer
         } else {
             let msg = status(CircuitRelay_Status::STOP_DST_MULTIADDR_INVALID);
-            return A(io.send(msg).and_then(|_| Err(io_err("invalid dest address"))))
+            return A(B(io.send(msg).and_then(|_| Err(io_err("invalid dest address")))))
         };
 
         if dest.id != self.my_id {
@@ -231,7 +243,12 @@ where
             return B(A(io.send(msg).and_then(|_| Err(io_err("destination id mismatch")))))
         }
 
-        B(B(io.send(status(CircuitRelay_Status::SUCCESS)).map(Io::into)))
+        B(B(io.send(status(CircuitRelay_Status::SUCCESS)).map(move |stream| {
+            Output::Stream {
+                stream: stream.into(),
+                src_peer_id: from.id,
+            }
+        })))
     }
 }
 
