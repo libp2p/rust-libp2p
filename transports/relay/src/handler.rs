@@ -155,6 +155,12 @@ where
             }
         }
 
+        // Shut down process.
+        if self.shutdown {
+            self.active_relays.clear();     // TODO: not a proper shutdown
+            return Ok(Async::Ready(None));
+        }
+
         Ok(Async::NotReady)
     }
 }
