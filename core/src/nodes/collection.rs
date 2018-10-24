@@ -507,18 +507,10 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
-    fn has_connection_is_true_when_a_connection_has_been_made() { }
-
-    #[test]
     fn connections_is_empty_before_connecting() {
         let cs = TestCollectionStream::new();
         assert!(cs.connections().next().is_none());
     }
-
-    #[test]
-    #[ignore]
-    fn connections_is_a_list_of_the_connected_peers() { }
 
     #[test]
     fn retrieving_a_peer_is_none_if_peer_is_missing_or_not_connected() {
@@ -592,6 +584,7 @@ mod tests {
             }
             assert!(cs.peer_mut(&peer_id).is_some(), "peer is not in the list");
             assert!(cs.has_connection(&peer_id), "peer is not connected");
+            assert_eq!(cs.connections().collect::<Vec<&PeerId>>(), vec![&peer_id]);
             Ok(Async::Ready(()))
         });
         rt.block_on(fut).expect("running the future works");
