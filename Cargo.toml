@@ -43,7 +43,7 @@ bigint = "4.2"
 env_logger = "0.5.4"
 rand = "0.4"
 structopt =  "0.2"
-tokio-current-thread = "0.1"
+tokio = "0.1"
 tokio-io = "0.1"
 tokio-stdin = "0.1"
 

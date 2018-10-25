@@ -646,8 +646,9 @@ where ::hmac::Hmac<D>: Clone {
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio_current_thread;
+    extern crate tokio;
     extern crate tokio_tcp;
+    use self::tokio::runtime::current_thread::Runtime;
     use self::tokio_tcp::TcpListener;
     use self::tokio_tcp::TcpStream;
     use super::handshake;
@@ -712,8 +713,8 @@ mod tests {
         let client = TcpStream::connect(&listener_addr)
             .map_err(|e| e.into())
             .and_then(move |stream| handshake(stream, key2));
-
-        tokio_current_thread::block_on_all(server.join(client)).unwrap();
+        let mut rt = Runtime::new().unwrap();
+        let _ = rt.block_on(server.join(client)).unwrap();
     }
 
     #[test]

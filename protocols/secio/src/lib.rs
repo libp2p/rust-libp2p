@@ -30,7 +30,7 @@
 //!
 //! ```no_run
 //! extern crate futures;
-//! extern crate tokio_current_thread;
+//! extern crate tokio;
 //! extern crate tokio_io;
 //! extern crate libp2p_core;
 //! extern crate libp2p_secio;
@@ -42,6 +42,7 @@
 //! use libp2p_core::{Multiaddr, Transport, upgrade};
 //! use libp2p_tcp_transport::TcpConfig;
 //! use tokio_io::io::write_all;
+//! use tokio::runtime::current_thread::Runtime;
 //!
 //! let transport = TcpConfig::new()
 //!     .with_upgrade({
@@ -63,7 +64,8 @@
 //!         write_all(connection, "hello world")
 //!     });
 //!
-//! tokio_current_thread::block_on_all(future).unwrap();
+//! let mut rt = Runtime::new().unwrap();
+//! let _ = rt.block_on(future).unwrap();
 //! # }
 //! ```
 //!

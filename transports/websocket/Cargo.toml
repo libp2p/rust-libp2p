@@ -22,4 +22,4 @@ stdweb = { version = "0.1.3", default-features = false }
 
 [target.'cfg(not(target_os = "emscripten"))'.dev-dependencies]
 libp2p-tcp-transport = { path = "../tcp" }
-tokio-current-thread = "0.1"
+tokio = "0.1"
