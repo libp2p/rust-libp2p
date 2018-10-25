@@ -38,11 +38,13 @@ use Transport;
 /// use std::time::Duration;
 ///
 /// let _transport = TcpConfig::new()
-///     .with_timeout(Duration::from_secs(20));
+///     .with_timeout(Duration::from_secs(20))
+///     .with_rate_limit(1024 * 1024, 1024 * 1024);
 /// ```
 ///
 pub trait TransportExt: Transport {
-    /// Adds a timeout to all the sockets created by the transport.
+    /// Adds a timeout to the connection and upgrade steps for all the sockets created by
+    /// the transport.
     #[inline]
     fn with_timeout(self, timeout: Duration) -> TransportTimeout<Self>
     where
@@ -51,32 +53,32 @@ pub trait TransportExt: Transport {
         TransportTimeout::new(self, timeout)
     }
 
-    /// Adds a timeout to all the outgoing sockets created by the transport.
+    /// Adds a timeout to the connection and upgrade steps for all the outgoing sockets created
+    /// by the transport.
     #[inline]
-    fn with_outgoing_timeout(self, timeout: Duration) -> TransportTimeout<Self>
+    fn with_outbound_timeout(self, timeout: Duration) -> TransportTimeout<Self>
     where
         Self: Sized,
     {
         TransportTimeout::with_outgoing_timeout(self, timeout)
     }
 
-    /// Adds a timeout to all the incoming sockets created by the transport.
+    /// Adds a timeout to the connection and upgrade steps for all the incoming sockets created
+    /// by the transport.
     #[inline]
-    fn with_ingoing_timeout(self, timeout: Duration) -> TransportTimeout<Self>
+    fn with_inbound_timeout(self, timeout: Duration) -> TransportTimeout<Self>
     where
         Self: Sized,
     {
         TransportTimeout::with_ingoing_timeout(self, timeout)
     }
 
-    // TODO: this method causes an ICE in Rust 1.29 but works in Rust 1.30 ; restore it when
-    //       1.30 is released
-    /*/// Adds a maximum transfert rate to the sockets created with the transport.
+    /// Adds a maximum transfer rate to the sockets created with the transport.
     #[inline]
     fn with_rate_limit(
         self,
-        max_read_per_sec: usize,
-        max_write_per_sec: usize,
+        max_read_bytes_per_sec: usize,
+        max_write_bytes_per_sec: usize,
     ) -> io::Result<RateLimited<Self>>
     where
         Self: Sized,
@@ -84,10 +86,10 @@ pub trait TransportExt: Transport {
         RateLimited::new(
             &mut DefaultExecutor::current(),
             self,
-            max_read_per_sec,
-            max_write_per_sec,
+            max_read_bytes_per_sec,
+            max_write_bytes_per_sec,
         )
-    }*/
+    }
 
     // TODO: add methods to easily upgrade for secio/mplex/yamux
 }
