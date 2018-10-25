@@ -20,7 +20,7 @@
 
 use futures::{future, prelude::*, sync::oneshot};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use transport::{MuxedTransport, Transport};
+use transport::Transport;
 use Multiaddr;
 
 /// See `Transport::interruptible`.
@@ -46,7 +46,6 @@ where
     T: Transport,
 {
     type Output = T::Output;
-    type MultiaddrFuture = T::MultiaddrFuture;
     type Listener = T::Listener;
     type ListenerUpgrade = T::ListenerUpgrade;
     type Dial = InterruptibleDial<T::Dial>;
@@ -75,19 +74,6 @@ where
     #[inline]
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         self.transport.nat_traversal(server, observed)
-    }
-}
-
-impl<T> MuxedTransport for Interruptible<T>
-where
-    T: MuxedTransport,
-{
-    type Incoming = T::Incoming;
-    type IncomingUpgrade = T::IncomingUpgrade;
-
-    #[inline]
-    fn next_incoming(self) -> Self::Incoming {
-        self.transport.next_incoming()
     }
 }
 

@@ -18,15 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-extern crate libp2p;
-extern crate rand;
-
-use libp2p::{PeerId, core::PublicKey};
-
-fn main() {
-    let pid = {
-        let key = (0..2048).map(|_| rand::random::<u8>()).collect::<Vec<_>>();
-        PeerId::from_public_key(PublicKey::Rsa(key))
-    };
-    println!("{}", pid.to_base58());
-}
+#[cfg(test)]
+pub(crate) mod dummy_muxer;
+#[cfg(test)]
+pub(crate) mod dummy_transport;

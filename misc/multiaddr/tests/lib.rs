@@ -59,7 +59,7 @@ struct Proto(Protocol<'static>);
 impl Arbitrary for Proto {
     fn arbitrary<G: Gen>(g: &mut G) -> Self {
         use Protocol::*;
-        match g.gen_range(0, 22) { // TODO: Add Protocol::Quic
+        match g.gen_range(0, 23) { // TODO: Add Protocol::Quic
              0 => Proto(Dccp(g.gen())),
              1 => Proto(Dns4(Cow::Owned(SubString::arbitrary(g).0))),
              2 => Proto(Dns6(Cow::Owned(SubString::arbitrary(g).0))),
@@ -83,6 +83,11 @@ impl Arbitrary for Proto {
             19 => Proto(Utp),
             20 => Proto(Ws),
             21 => Proto(Wss),
+            22 => {
+                let mut a = [0; 10];
+                g.fill(&mut a);
+                Proto(Onion(Cow::Owned(a), g.gen()))
+            }
              _ => panic!("outside range")
         }
     }
@@ -277,4 +282,17 @@ fn ser_and_deser_bincode() {
     assert_eq!(serialized, vec![8, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 6, 0, 0]);
     let deserialized: Multiaddr = bincode::deserialize(&serialized).unwrap();
     assert_eq!(addr, deserialized);
+}
+
+#[test]
+fn append() {
+    let mut a: Multiaddr = Protocol::Ip4(Ipv4Addr::new(1, 2, 3, 4)).into();
+    a.append(Protocol::Tcp(80));
+    a.append(Protocol::Http);
+
+    let mut i = a.iter();
+    assert_eq!(Some(Protocol::Ip4(Ipv4Addr::new(1, 2, 3, 4))), i.next());
+    assert_eq!(Some(Protocol::Tcp(80)), i.next());
+    assert_eq!(Some(Protocol::Http), i.next());
+    assert_eq!(None, i.next())
 }

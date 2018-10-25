@@ -3,8 +3,11 @@
 ///! Implementation of [multiaddr](https://github.com/jbenet/multiaddr)
 ///! in Rust.
 
+#[macro_use]
+extern crate arrayref;
 extern crate bs58;
 extern crate byteorder;
+extern crate data_encoding;
 extern crate serde;
 extern crate unsigned_varint;
 pub extern crate multihash;
@@ -21,6 +24,7 @@ use serde::{
 };
 use std::{
     fmt,
+    io,
     iter::FromIterator,
     net::{SocketAddr, SocketAddrV4, SocketAddrV6, IpAddr, Ipv4Addr, Ipv6Addr},
     result::Result as StdResult,
@@ -116,6 +120,11 @@ impl fmt::Display for Multiaddr {
 }
 
 impl Multiaddr {
+    /// Create a new, empty multiaddress.
+    pub fn empty() -> Multiaddr {
+        Multiaddr { bytes: Vec::new() }
+    }
+
     /// Returns the raw bytes representation of the multiaddr.
     #[inline]
     pub fn into_bytes(self) -> Vec<u8> {
@@ -177,9 +186,10 @@ impl Multiaddr {
     ///
     #[inline]
     pub fn append(&mut self, p: Protocol) {
-        let mut w = Vec::new();
-        p.write_bytes(&mut w).expect("writing to a Vec never fails");
-        self.bytes.extend_from_slice(&w);
+        let n = self.bytes.len();
+        let mut w = io::Cursor::new(&mut self.bytes);
+        w.set_position(n as u64);
+        p.write_bytes(&mut w).expect("writing to a Vec never fails")
     }
 
     /// Remove the outermost address.

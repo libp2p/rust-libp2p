@@ -53,17 +53,18 @@
 //! extern crate libp2p_ping;
 //! extern crate libp2p_core;
 //! extern crate libp2p_tcp_transport;
-//! extern crate tokio_current_thread;
+//! extern crate tokio;
 //!
 //! use futures::{Future, Stream};
 //! use libp2p_ping::{Ping, PingOutput};
 //! use libp2p_core::Transport;
+//! use tokio::runtime::current_thread::Runtime;
 //!
 //! # fn main() {
 //! let ping_finished_future = libp2p_tcp_transport::TcpConfig::new()
 //!     .with_upgrade(Ping::default())
 //!     .dial("127.0.0.1:12345".parse::<libp2p_core::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())
-//!     .and_then(|(out, _)| {
+//!     .and_then(|out| {
 //!         match out {
 //!             PingOutput::Ponger(processing) => Box::new(processing) as Box<Future<Item = _, Error = _> + Send>,
 //!             PingOutput::Pinger(mut pinger) => {
@@ -75,7 +76,8 @@
 //!     });
 //!
 //! // Runs until the ping arrives.
-//! tokio_current_thread::block_on_all(ping_finished_future).unwrap();
+//! let mut rt = Runtime::new().unwrap();
+//! let _ = rt.block_on(ping_finished_future).unwrap();
 //! # }
 //! ```
 //!
@@ -123,7 +125,7 @@ pub enum PingOutput<TSocket, TUserData> {
     Ponger(PingListener<TSocket>),
 }
 
-impl<TSocket, TUserData, Maf> ConnectionUpgrade<TSocket, Maf> for Ping<TUserData>
+impl<TSocket, TUserData> ConnectionUpgrade<TSocket> for Ping<TUserData>
 where
     TSocket: AsyncRead + AsyncWrite,
 {
@@ -136,8 +138,7 @@ where
     }
 
     type Output = PingOutput<TSocket, TUserData>;
-    type MultiaddrFuture = Maf;
-    type Future = FutureResult<(Self::Output, Self::MultiaddrFuture), IoError>;
+    type Future = FutureResult<Self::Output, IoError>;
 
     #[inline]
     fn upgrade(
@@ -145,14 +146,13 @@ where
         socket: TSocket,
         _: Self::UpgradeIdentifier,
         endpoint: Endpoint,
-        remote_addr: Maf,
     ) -> Self::Future {
         let out = match endpoint {
             Endpoint::Dialer => upgrade_as_dialer(socket),
             Endpoint::Listener => upgrade_as_listener(socket),
         };
 
-        Ok((out, remote_addr)).into_future()
+        Ok(out).into_future()
     }
 }
 
@@ -393,15 +393,15 @@ impl Encoder for Codec {
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio_current_thread;
+    extern crate tokio;
     extern crate tokio_tcp;
 
+    use self::tokio::runtime::current_thread::Runtime;
     use self::tokio_tcp::TcpListener;
     use self::tokio_tcp::TcpStream;
     use super::{Ping, PingOutput};
-    use futures::{future, Future, Stream};
-    use libp2p_core::{ConnectionUpgrade, Endpoint, Multiaddr};
-    use std::io::Error as IoError;
+    use futures::{Future, Stream};
+    use libp2p_core::{ConnectionUpgrade, Endpoint};
 
     // TODO: rewrite tests with the MemoryTransport
 
@@ -419,10 +419,9 @@ mod tests {
                     c.unwrap(),
                     (),
                     Endpoint::Listener,
-                    future::ok::<Multiaddr, IoError>("/ip4/127.0.0.1/tcp/10000".parse().unwrap()),
                 )
             })
-            .and_then(|(out, _)| match out {
+            .and_then(|out| match out {
                 PingOutput::Ponger(service) => service,
                 _ => unreachable!(),
             });
@@ -434,10 +433,9 @@ mod tests {
                     c,
                     (),
                     Endpoint::Dialer,
-                    future::ok::<Multiaddr, IoError>("/ip4/127.0.0.1/tcp/10000".parse().unwrap()),
                 )
             })
-            .and_then(|(out, _)| match out {
+            .and_then(|out| match out {
                 PingOutput::Pinger(mut pinger) => {
                     pinger.ping(());
                     pinger.into_future().map(|_| ()).map_err(|_| panic!())
@@ -445,8 +443,8 @@ mod tests {
                 _ => unreachable!(),
             })
             .map(|_| ());
-
-        tokio_current_thread::block_on_all(server.select(client).map_err(|_| panic!())).unwrap();
+        let mut rt = Runtime::new().unwrap();
+        let _ = rt.block_on(server.select(client).map_err(|_| panic!())).unwrap();
     }
 
     #[test]
@@ -464,10 +462,9 @@ mod tests {
                     c.unwrap(),
                     (),
                     Endpoint::Listener,
-                    future::ok::<Multiaddr, IoError>("/ip4/127.0.0.1/tcp/10000".parse().unwrap()),
                 )
             })
-            .and_then(|(out, _)| match out {
+            .and_then(|out| match out {
                 PingOutput::Ponger(service) => service,
                 _ => unreachable!(),
             });
@@ -479,10 +476,9 @@ mod tests {
                     c,
                     (),
                     Endpoint::Dialer,
-                    future::ok::<Multiaddr, IoError>("/ip4/127.0.0.1/tcp/10000".parse().unwrap()),
                 )
             })
-            .and_then(|(out, _)| match out {
+            .and_then(|out| match out {
                 PingOutput::Pinger(mut pinger) => {
                     for n in 0..20 {
                         pinger.ping(n);
@@ -496,7 +492,7 @@ mod tests {
                 },
                 _ => unreachable!(),
             });
-
-        tokio_current_thread::block_on_all(server.select(client)).unwrap_or_else(|_| panic!());
+        let mut rt = Runtime::new().unwrap();
+        let _ = rt.block_on(server.select(client)).unwrap_or_else(|_| panic!());
     }
 }

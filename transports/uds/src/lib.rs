@@ -56,9 +56,9 @@ extern crate tokio_uds;
 #[cfg(test)]
 extern crate tempfile;
 #[cfg(test)]
-extern crate tokio_current_thread;
-#[cfg(test)]
 extern crate tokio_io;
+#[cfg(test)]
+extern crate tokio;
 
 use futures::future::{self, Future, FutureResult};
 use futures::stream::Stream;
@@ -86,10 +86,9 @@ impl UdsConfig {
 
 impl Transport for UdsConfig {
     type Output = UnixStream;
-    type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError> + Send + Sync>;
-    type ListenerUpgrade = FutureResult<(Self::Output, Self::MultiaddrFuture), IoError>;
-    type MultiaddrFuture = FutureResult<Multiaddr, IoError>;
-    type Dial = Box<Future<Item = (UnixStream, Self::MultiaddrFuture), Error = IoError> + Send + Sync>;
+    type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError> + Send + Sync>;
+    type ListenerUpgrade = FutureResult<Self::Output, IoError>;
+    type Dial = Box<Future<Item = UnixStream, Error = IoError> + Send + Sync>;  // TODO: name this type
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         if let Ok(path) = multiaddr_to_path(&addr) {
@@ -109,7 +108,7 @@ impl Transport for UdsConfig {
                     // Pull out a stream of sockets for incoming connections
                     listener.incoming().map(move |sock| {
                         debug!("Incoming connection on {}", addr);
-                        future::ok((sock, future::ok(addr.clone())))
+                        (future::ok(sock), addr.clone())
                     })
                 })
                 .flatten_stream();
@@ -122,7 +121,7 @@ impl Transport for UdsConfig {
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
         if let Ok(path) = multiaddr_to_path(&addr) {
             debug!("Dialing {}", addr);
-            let fut = UnixStream::connect(&path).map(|t| (t, future::ok(addr)));
+            let fut = UnixStream::connect(&path);
             Ok(Box::new(fut) as Box<_>)
         } else {
             Err((self, addr))
@@ -138,6 +137,10 @@ impl Transport for UdsConfig {
     }
 }
 
+/// Turns a `Multiaddr` containing a single `Unix` component into a path.
+///
+/// Also returns an error if the path is not absolute, as we don't want to dial/listen on relative
+/// paths.
 // This type of logic should probably be moved into the multiaddr package
 fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
     let mut iter = addr.iter();
@@ -147,14 +150,21 @@ fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
         return Err(());
     }
 
-    match path {
-        Some(Protocol::Unix(ref path)) => Ok(path.as_ref().into()),
-        _ => Err(())
+    let out: PathBuf = match path {
+        Some(Protocol::Unix(ref path)) => path.as_ref().into(),
+        _ => return Err(())
+    };
+
+    if !out.is_absolute() {
+        return Err(());
     }
+
+    Ok(out)
 }
 
 #[cfg(test)]
 mod tests {
+    use tokio::runtime::current_thread::Runtime;
     use super::{multiaddr_to_path, UdsConfig};
     use futures::stream::Stream;
     use futures::Future;
@@ -162,7 +172,6 @@ mod tests {
     use std::{self, borrow::Cow, path::Path};
     use libp2p_core::Transport;
     use tempfile;
-    use tokio_current_thread;
     use tokio_io;
 
     #[test]
@@ -185,7 +194,6 @@ mod tests {
     #[test]
     fn communicating_between_dialer_and_listener() {
         use std::io::Write;
-
         let temp_dir = tempfile::tempdir().unwrap();
         let socket = temp_dir.path().join("socket");
         let addr = Multiaddr::from(Protocol::Unix(Cow::Owned(socket.to_string_lossy().into_owned())));
@@ -193,8 +201,11 @@ mod tests {
 
         std::thread::spawn(move || {
             let tcp = UdsConfig::new();
-            let listener = tcp.listen_on(addr2).unwrap().0.for_each(|sock| {
-                sock.and_then(|(sock, _)| {
+
+            let mut rt = Runtime::new().unwrap();
+            let handle = rt.handle();
+            let listener = tcp.listen_on(addr2).unwrap().0.for_each(|(sock, _)| {
+                sock.and_then(|sock| {
                     // Define what to do with the socket that just connected to us
                     // Which in this case is read 3 bytes
                     let handle_conn = tokio_io::io::read_exact(sock, [0; 3])
@@ -202,13 +213,13 @@ mod tests {
                         .map_err(|err| panic!("IO error {:?}", err));
 
                     // Spawn the future as a concurrent task
-                    tokio_current_thread::spawn(handle_conn);
-
+                    handle.spawn(handle_conn).unwrap();
                     Ok(())
                 })
             });
 
-            tokio_current_thread::block_on_all(listener).unwrap();
+            rt.block_on(listener).unwrap();
+            rt.run().unwrap();
         });
         std::thread::sleep(std::time::Duration::from_millis(100));
         let tcp = UdsConfig::new();
@@ -216,12 +227,12 @@ mod tests {
         let socket = tcp.dial(addr.clone()).unwrap();
         // Define what to do with the socket once it's obtained
         let action = socket.then(|sock| -> Result<(), ()> {
-            sock.unwrap().0.write(&[0x1, 0x2, 0x3]).unwrap();
+            sock.unwrap().write(&[0x1, 0x2, 0x3]).unwrap();
             Ok(())
         });
         // Execute the future in our event loop
-        tokio_current_thread::block_on_all(action).unwrap();
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        let mut rt = Runtime::new().unwrap();
+        let _ = rt.block_on(action).unwrap();
     }
 
     #[test]
@@ -233,5 +244,11 @@ mod tests {
             .parse::<Multiaddr>()
             .unwrap();
         assert!(tcp.listen_on(addr).is_err());
+    }
+
+    #[test]
+    #[ignore]       // TODO: for the moment unix addresses fail to parse
+    fn relative_addr_denied() {
+        assert!("/ip4/127.0.0.1/tcp/12345/unix/./foo/bar".parse::<Multiaddr>().is_err());
     }
 }

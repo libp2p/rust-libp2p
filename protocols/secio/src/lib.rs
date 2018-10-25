@@ -30,7 +30,7 @@
 //!
 //! ```no_run
 //! extern crate futures;
-//! extern crate tokio_current_thread;
+//! extern crate tokio;
 //! extern crate tokio_io;
 //! extern crate libp2p_core;
 //! extern crate libp2p_secio;
@@ -42,6 +42,7 @@
 //! use libp2p_core::{Multiaddr, Transport, upgrade};
 //! use libp2p_tcp_transport::TcpConfig;
 //! use tokio_io::io::write_all;
+//! use tokio::runtime::current_thread::Runtime;
 //!
 //! let transport = TcpConfig::new()
 //!     .with_upgrade({
@@ -58,12 +59,13 @@
 //!
 //! let future = transport.dial("/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap())
 //!        .unwrap_or_else(|_| panic!("Unable to dial node"))
-//!     .and_then(|(connection, _)| {
+//!     .and_then(|connection| {
 //!         // Sends "hello world" on the connection, will be encrypted.
 //!         write_all(connection, "hello world")
 //!     });
 //!
-//! tokio_current_thread::block_on_all(future).unwrap();
+//! let mut rt = Runtime::new().unwrap();
+//! let _ = rt.block_on(future).unwrap();
 //! # }
 //! ```
 //!
@@ -92,7 +94,7 @@ extern crate libp2p_core;
 extern crate log;
 extern crate protobuf;
 extern crate rand;
-#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+#[cfg(not(target_os = "emscripten"))]
 extern crate ring;
 extern crate rw_stream_sink;
 #[cfg(feature = "secp256k1")]
@@ -103,7 +105,7 @@ extern crate sha2;
 extern crate stdweb;
 extern crate tokio_io;
 extern crate twofish;
-#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+#[cfg(not(target_os = "emscripten"))]
 extern crate untrusted;
 
 #[cfg(feature = "aes-all")]
@@ -118,7 +120,7 @@ use ed25519_dalek::Keypair as Ed25519KeyPair;
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
 use libp2p_core::{PeerId, PublicKey};
-#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+#[cfg(all(feature = "rsa", not(target_os = "emscripten")))]
 use ring::signature::RSAKeyPair;
 use rw_stream_sink::RwStreamSink;
 use std::error::Error;
@@ -126,7 +128,7 @@ use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use std::sync::Arc;
 use tokio_io::{AsyncRead, AsyncWrite};
-#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+#[cfg(all(feature = "rsa", not(target_os = "emscripten")))]
 use untrusted::Input;
 
 mod algo_support;
@@ -349,14 +351,12 @@ where
     pub ephemeral_public_key: Vec<u8>,
 }
 
-impl<S, Maf> libp2p_core::ConnectionUpgrade<S, Maf> for SecioConfig
+impl<S> libp2p_core::ConnectionUpgrade<S> for SecioConfig
 where
     S: AsyncRead + AsyncWrite + Send + 'static, // TODO: 'static :(
-    Maf: Send + 'static,                        // TODO: 'static :(
 {
     type Output = SecioOutput<S>;
-    type MultiaddrFuture = Maf;
-    type Future = Box<Future<Item = (Self::Output, Maf), Error = IoError> + Send>;
+    type Future = Box<Future<Item = Self::Output, Error = IoError> + Send>;
     type NamesIter = iter::Once<(Bytes, ())>;
     type UpgradeIdentifier = ();
 
@@ -371,7 +371,6 @@ where
         incoming: S,
         _: (),
         _: libp2p_core::Endpoint,
-        remote_addr: Maf,
     ) -> Self::Future {
         debug!("Starting secio upgrade");
 
@@ -384,7 +383,7 @@ where
                 ephemeral_public_key: ephemeral,
             }
         }).map_err(map_err);
-        Box::new(wrapped.map(move |out| (out, remote_addr)))
+        Box::new(wrapped)
     }
 }
 

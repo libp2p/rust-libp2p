@@ -7,7 +7,7 @@ Right now everything including the crate organization is very much Work in Progr
 
 ## Documentation
 
-This repository includes a facade crate named `libp2p`, which reexports the rest of the repository.
+This repository includes a façade crate named `libp2p`, which reexports the rest of the repository.
 
 For documentation, you are encouraged to clone this repository or add `libp2p` as a dependency in
 your Cargo.toml and run `cargo doc`.

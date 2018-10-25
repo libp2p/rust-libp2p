@@ -163,7 +163,7 @@ mod transport_ext;
 
 pub mod simple;
 
-pub use self::core::{Transport, ConnectionUpgrade, PeerId, swarm};
+pub use self::core::{Transport, ConnectionUpgrade, PeerId};
 pub use self::multiaddr::Multiaddr;
 pub use self::simple::SimpleProtocol;
 pub use self::transport_ext::TransportExt;
@@ -217,7 +217,6 @@ impl CommonTransport {
 
 impl Transport for CommonTransport {
     type Output = <InnerImplementation as Transport>::Output;
-    type MultiaddrFuture = <InnerImplementation as Transport>::MultiaddrFuture;
     type Listener = <InnerImplementation as Transport>::Listener;
     type ListenerUpgrade = <InnerImplementation as Transport>::ListenerUpgrade;
     type Dial = <InnerImplementation as Transport>::Dial;
