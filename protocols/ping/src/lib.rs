@@ -53,11 +53,12 @@
 //! extern crate libp2p_ping;
 //! extern crate libp2p_core;
 //! extern crate libp2p_tcp_transport;
-//! extern crate tokio_current_thread;
+//! extern crate tokio;
 //!
 //! use futures::{Future, Stream};
 //! use libp2p_ping::{Ping, PingOutput};
 //! use libp2p_core::Transport;
+//! use tokio::runtime::current_thread::Runtime;
 //!
 //! # fn main() {
 //! let ping_finished_future = libp2p_tcp_transport::TcpConfig::new()
@@ -75,7 +76,8 @@
 //!     });
 //!
 //! // Runs until the ping arrives.
-//! tokio_current_thread::block_on_all(ping_finished_future).unwrap();
+//! let mut rt = Runtime::new().unwrap();
+//! let _ = rt.block_on(ping_finished_future).unwrap();
 //! # }
 //! ```
 //!
@@ -391,9 +393,10 @@ impl Encoder for Codec {
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio_current_thread;
+    extern crate tokio;
     extern crate tokio_tcp;
 
+    use self::tokio::runtime::current_thread::Runtime;
     use self::tokio_tcp::TcpListener;
     use self::tokio_tcp::TcpStream;
     use super::{Ping, PingOutput};
@@ -440,8 +443,8 @@ mod tests {
                 _ => unreachable!(),
             })
             .map(|_| ());
-
-        tokio_current_thread::block_on_all(server.select(client).map_err(|_| panic!())).unwrap();
+        let mut rt = Runtime::new().unwrap();
+        let _ = rt.block_on(server.select(client).map_err(|_| panic!())).unwrap();
     }
 
     #[test]
@@ -489,7 +492,7 @@ mod tests {
                 },
                 _ => unreachable!(),
             });
-
-        tokio_current_thread::block_on_all(server.select(client)).unwrap_or_else(|_| panic!());
+        let mut rt = Runtime::new().unwrap();
+        let _ = rt.block_on(server.select(client)).unwrap_or_else(|_| panic!());
     }
 }
