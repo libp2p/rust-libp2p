@@ -81,6 +81,12 @@ pub(crate) enum OutEvent {
 // Concrete `HandledNode` parametrised for the test helpers
 pub(crate) type TestHandledNode = HandledNode<DummyMuxer, Handler>;
 
+impl Drop for Handler {
+	fn drop(&mut self) {
+		println!("[TestHandledNode, drop]");
+	}
+}
+
 impl NodeHandler for Handler {
 	type InEvent = InEvent;
 	type OutEvent = OutEvent;

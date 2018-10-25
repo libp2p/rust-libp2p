@@ -233,7 +233,7 @@ where
                     self.handler.inject_substream(substream, NodeHandlerEndpoint::Listener)
                 }
                 Async::Ready(Some(NodeEvent::OutboundSubstream { user_data, substream })) => {
-                    println!("[HandledNode, poll]   node; Async::Ready(Some(OutboundStream)");
+                    println!("[HandledNode, poll]   node; Async::Ready(Some(OutboundStream))");
                     let endpoint = NodeHandlerEndpoint::Dialer(user_data);
                     self.handler.inject_substream(substream, endpoint)
                 }
@@ -282,7 +282,7 @@ where
                     }
                 }
                 Async::Ready(Some(NodeHandlerEvent::Custom(event))) => {
-                    println!("[HandledNode, poll]     handler; Async::Ready(Some(Custom))");
+                    println!("[HandledNode, poll]     handler; Async::Ready(Some(Custom)); returning the event up the stack <––––");
                     return Ok(Async::Ready(Some(event)));
                 }
                 Async::Ready(None) => {

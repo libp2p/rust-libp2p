@@ -200,8 +200,10 @@ impl<'a, TInEvent, TOutEvent, THandler> CollectionReachEvent<'a, TInEvent, TOutE
             debug_assert_eq!(_former_other_state, Some(TaskState::Connected(self.peer_id.clone())));
 
             // TODO: we unfortunately have to clone the peer id here
+            println!("[CollectionReachEvent, accept] ReplacedExisting");
             (CollectionNodeAccept::ReplacedExisting, self.peer_id.clone())
         } else {
+            println!("[CollectionReachEvent, accept] NewEntry");
             // TODO: we unfortunately have to clone the peer id here
             (CollectionNodeAccept::NewEntry, self.peer_id.clone())
         };
@@ -235,6 +237,7 @@ impl<'a, TInEvent, TOutEvent, THandler> fmt::Debug for CollectionReachEvent<'a, 
 
 impl<'a, TInEvent, TOutEvent, THandler> Drop for CollectionReachEvent<'a, TInEvent, TOutEvent, THandler> {
     fn drop(&mut self) {
+        println!("[CollectionReachEvent, drop]");
         let task_state = self.parent.tasks.remove(&self.id);
         debug_assert!(if let Some(TaskState::Pending) = task_state { true } else { false });
         self.parent.inner.task(self.id)
@@ -369,13 +372,14 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
     /// > remove the `Err` variant, but also because we want the `CollectionStream` to stay
     /// > borrowed if necessary.
     pub fn poll(&mut self) -> Async<CollectionEvent<TInEvent, TOutEvent, THandler>> {
+        println!("[CollectionStream, poll] START");
         let item = match self.inner.poll() {
             Async::Ready(item) => {
-                println!("[CollectionStream, poll] polled the HandledNodesTask, got Async::Ready(item)");
+                println!("[CollectionStream, poll]  polled the HandledNodesTask, got Async::Ready(item)");
                 item
             },
             Async::NotReady => {
-                println!("[CollectionStream, poll] polled the HandledNodesTask, got Async::NotReady – returning NotReady");
+                println!("[CollectionStream, poll]  polled the HandledNodesTask, got Async::NotReady – returning NotReady");
                 return Async::NotReady
             },
         };
@@ -385,6 +389,7 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
                 println!("[CollectionStream, poll]  TaskClosed id={:?}, result={:?} – returning Async::Ready", id, result);
                 match (self.tasks.remove(&id), result, handler) {
                     (Some(TaskState::Pending), Err(err), Some(handler)) => {
+                        println!("[CollectionStream, poll]      TaskState::Pending");
                         Async::Ready(CollectionEvent::ReachError {
                             id: ReachAttemptId(id),
                             error: err,
@@ -396,6 +401,7 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
                         panic!()
                     },
                     (Some(TaskState::Connected(peer_id)), Ok(()), _handler) => {
+                        println!("[CollectionStream, poll]      TaskState::Connected, OK(())");
                         debug_assert!(_handler.is_none());
                         let _node_task_id = self.nodes.remove(&peer_id);
                         debug_assert_eq!(_node_task_id, Some(id));
@@ -404,6 +410,7 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
                         })
                     },
                     (Some(TaskState::Connected(peer_id)), Err(err), _handler) => {
+                        println!("[CollectionStream, poll]      TaskState::Connected, Err({:?}", err);
                         debug_assert!(_handler.is_none());
                         let _node_task_id = self.nodes.remove(&peer_id);
                         debug_assert_eq!(_node_task_id, Some(id));
@@ -588,5 +595,81 @@ mod tests {
             Ok(Async::Ready(()))
         });
         rt.block_on(fut).expect("running the future works");
+    }
+
+    #[test]
+    fn events_in_a_node_reaches_the_collection_stream() {
+        use nodes::NodeHandlerEvent;
+        use std::sync::Arc;
+        use parking_lot::Mutex;
+
+        let cs = Arc::new(Mutex::new(TestCollectionStream::new()));
+        let task_peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+
+        let mut handler = Handler::default();
+        handler.state = Some(HandlerState::Ready(Some(NodeHandlerEvent::Custom(OutEvent::Custom("init")))));
+        let handler_states = vec![
+            HandlerState::Ready(Some(NodeHandlerEvent::Custom(OutEvent::Custom("from handler 3") ))),
+            HandlerState::Ready(Some(NodeHandlerEvent::Custom(OutEvent::Custom("from handler 2") ))),
+            HandlerState::Ready(Some(NodeHandlerEvent::Custom(OutEvent::Custom("from handler 1") ))),
+        ];
+        handler.next_states = handler_states;
+
+        let mut muxer = DummyMuxer::new();
+        muxer.set_inbound_connection_state(DummyConnectionState::Pending);
+        muxer.set_outbound_connection_state(DummyConnectionState::Opened);
+
+        let fut = future::ok((task_peer_id.clone(), muxer));
+        cs.lock().add_reach_attempt(fut, handler);
+
+        let mut rt = Builder::new().core_threads(2).build().unwrap();
+
+        let cs_fut = cs.clone();
+        rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
+            let mut cs = cs_fut.lock();
+            assert_matches!(cs.poll(), Async::NotReady);
+            Ok(Async::Ready(()))
+        })).expect("tokio works");
+
+        let cs_fut = cs.clone();
+        rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
+            let mut cs = cs_fut.lock();
+            cs.broadcast_event(&InEvent::NextState);
+            assert_matches!(cs.poll(), Async::Ready(CollectionEvent::NodeReached(reach_ev)) => {
+                reach_ev.accept();
+            });
+            Ok(Async::Ready(()))
+        })).expect("tokio works");
+
+        let cs_fut = cs.clone();
+        rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
+            let mut cs = cs_fut.lock();
+            cs.broadcast_event(&InEvent::NextState);
+            assert_matches!(cs.poll(), Async::Ready(CollectionEvent::NodeEvent{peer_id: _, event}) => {
+                assert_matches!(event, OutEvent::Custom("init"));
+            });
+            Ok(Async::Ready(()))
+        })).expect("tokio works");
+
+
+        let cs_fut = cs.clone();
+        rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
+            let mut cs = cs_fut.lock();
+            cs.broadcast_event(&InEvent::NextState);
+            assert_matches!(cs.poll(), Async::Ready(CollectionEvent::NodeEvent{peer_id: _, event}) => {
+                assert_matches!(event, OutEvent::Custom("from handler 1"));
+            });
+            Ok(Async::Ready(()))
+        })).expect("tokio works");
+
+        let cs_fut = cs.clone();
+        rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
+            let mut cs = cs_fut.lock();
+            cs.broadcast_event(&InEvent::NextState);
+            assert_matches!(cs.poll(), Async::Ready(CollectionEvent::NodeEvent{peer_id: _, event}) => {
+                assert_matches!(event, OutEvent::Custom("from handler 2"));
+            });
+            Ok(Async::Ready(()))
+        })).expect("tokio works");
     }
 }

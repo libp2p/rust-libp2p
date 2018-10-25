@@ -379,7 +379,7 @@ where
                     loop {
                         match self.in_events_rx.poll() {
                             Ok(Async::Ready(None)) => {
-                                println!("[NodeTask, poll]    NodeTaskInner::Future; in_events_rx: Async::Ready(None) – done buffering up events");
+                                println!("[NodeTask, poll]    NodeTaskInner::Future; in_events_rx: Async::Ready(None) – stream is 'finished'; shouldn't be polled again");
                                 return Ok(Async::Ready(()))
                             },
                             Ok(Async::Ready(Some(event))) => {
@@ -387,7 +387,7 @@ where
                                 events_buffer.push(event)
                             },
                             Ok(Async::NotReady) => {
-                                println!("[NodeTask, poll]    NodeTaskInner::Future; in_events_rx: Async::NotReady – break (todo: what does this mean? channel closed?)");
+                                println!("[NodeTask, poll]    NodeTaskInner::Future; in_events_rx: Async::NotReady – break, no more events to read off the channel");
                                 break
                             },
                             Err(_) => unreachable!("An UnboundedReceiver never errors"),
@@ -450,6 +450,8 @@ where
                                 Err(()) => unreachable!("An unbounded receiver never errors"),
                             }
                         }
+                    } else {
+                        println!("[NodeTask, poll]      NodeTaskInner::Node; incoming events chan is CLOSED");
                     }
 
                     // Process the node.
@@ -458,12 +460,13 @@ where
                         match node.poll() {
                             // REVIEW: I don't think this can happen, see comment in handled_node.rs
                             Ok(Async::NotReady) => {
-                                println!("[NodeTask, poll]      NodeTaskInner::Node; polled node; Async::NotReady");
+                                println!("[NodeTask, poll]      NodeTaskInner::Node; polled node; Async::NotReady – putting back the NodeTaskInner::Node and returning Async::NotReady");
                                 self.inner = NodeTaskInner::Node(node);
                                 return Ok(Async::NotReady);
                             },
                             Ok(Async::Ready(Some(event))) => {
-                                println!("[NodeTask, poll]      NodeTaskInner::Node; polled handled node; Async::Ready(Some) –– sending a NodeEvent on events_tx");
+                                // The only possible event here is a NodeHandlerEvent::Custom(event)
+                                println!("[NodeTask, poll]      NodeTaskInner::Node; polled handled node; Async::Ready(Some) –– sending a NodeEvent on events_tx and keep looping<––––");
                                 let event = InToExtMessage::NodeEvent(event);
                                 if let Err(e) = self.events_tx.unbounded_send((event, self.id)) {
                                     println!("[NodeTask, poll]          NodeTaskInner::Node; polled node; Async::Ready(Some); error sending on events_tx channel={:?}. Shutting down the node.", e);
@@ -624,6 +627,7 @@ mod tests {
                 .node_task();
 
             tx.unbounded_send(InEvent::Custom("beef")).expect("send to NodeTask should work");
+
             let mut rt = Runtime::new().unwrap();
             rt.spawn(node_task);
             let events = rt.block_on(rx.by_ref().take(2).collect()).expect("reading on rx should work");
