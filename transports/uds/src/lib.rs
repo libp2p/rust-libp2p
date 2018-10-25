@@ -56,9 +56,9 @@ extern crate tokio_uds;
 #[cfg(test)]
 extern crate tempfile;
 #[cfg(test)]
-extern crate tokio_current_thread;
-#[cfg(test)]
 extern crate tokio_io;
+#[cfg(test)]
+extern crate tokio;
 
 use futures::future::{self, Future, FutureResult};
 use futures::stream::Stream;
@@ -164,6 +164,7 @@ fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
 
 #[cfg(test)]
 mod tests {
+    use tokio::runtime::current_thread::Runtime;
     use super::{multiaddr_to_path, UdsConfig};
     use futures::stream::Stream;
     use futures::Future;
@@ -171,7 +172,6 @@ mod tests {
     use std::{self, borrow::Cow, path::Path};
     use libp2p_core::Transport;
     use tempfile;
-    use tokio_current_thread;
     use tokio_io;
 
     #[test]
@@ -194,7 +194,6 @@ mod tests {
     #[test]
     fn communicating_between_dialer_and_listener() {
         use std::io::Write;
-
         let temp_dir = tempfile::tempdir().unwrap();
         let socket = temp_dir.path().join("socket");
         let addr = Multiaddr::from(Protocol::Unix(Cow::Owned(socket.to_string_lossy().into_owned())));
@@ -202,6 +201,9 @@ mod tests {
 
         std::thread::spawn(move || {
             let tcp = UdsConfig::new();
+
+            let mut rt = Runtime::new().unwrap();
+            let handle = rt.handle();
             let listener = tcp.listen_on(addr2).unwrap().0.for_each(|(sock, _)| {
                 sock.and_then(|sock| {
                     // Define what to do with the socket that just connected to us
@@ -211,13 +213,13 @@ mod tests {
                         .map_err(|err| panic!("IO error {:?}", err));
 
                     // Spawn the future as a concurrent task
-                    tokio_current_thread::spawn(handle_conn);
-
+                    handle.spawn(handle_conn).unwrap();
                     Ok(())
                 })
             });
 
-            tokio_current_thread::block_on_all(listener).unwrap();
+            rt.block_on(listener).unwrap();
+            rt.run().unwrap();
         });
         std::thread::sleep(std::time::Duration::from_millis(100));
         let tcp = UdsConfig::new();
@@ -229,8 +231,8 @@ mod tests {
             Ok(())
         });
         // Execute the future in our event loop
-        tokio_current_thread::block_on_all(action).unwrap();
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        let mut rt = Runtime::new().unwrap();
+        let _ = rt.block_on(action).unwrap();
     }
 
     #[test]
