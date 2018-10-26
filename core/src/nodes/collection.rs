@@ -671,8 +671,6 @@ mod tests {
             });
             Ok(Async::Ready(()))
         })).expect("tokio works");
-
-        rt.shutdown_now().wait().unwrap();
     }
 
     #[test]
