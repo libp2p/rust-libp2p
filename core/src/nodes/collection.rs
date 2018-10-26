@@ -622,7 +622,7 @@ mod tests {
         let fut = future::ok((task_peer_id.clone(), muxer));
         cs.lock().add_reach_attempt(fut, handler);
 
-        let mut rt = Builder::new().core_threads(2).build().unwrap();
+        let mut rt = Builder::new().core_threads(1).build().unwrap();
 
         let cs_fut = cs.clone();
         rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
@@ -681,7 +681,7 @@ mod tests {
         let task_inner_fut = future::err(std::io::Error::new(std::io::ErrorKind::Other, "inner fut error"));
         let reach_attempt_id = cs.lock().add_reach_attempt(task_inner_fut, Handler::default());
 
-        let mut rt = Builder::new().core_threads(2).build().unwrap();
+        let mut rt = Builder::new().core_threads(1).build().unwrap();
         let cs_fut = cs.clone();
         rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
             let mut cs = cs_fut.lock();
@@ -714,7 +714,7 @@ mod tests {
         handler.next_states = vec![HandlerState::Err]; // triggered when sending a NextState event
 
         cs.lock().add_reach_attempt(task_inner_fut, handler);
-        let mut rt = Builder::new().core_threads(2).build().unwrap();
+        let mut rt = Builder::new().core_threads(1).build().unwrap();
 
         // Kick it off
         let cs_fut = cs.clone();
@@ -760,7 +760,7 @@ mod tests {
         handler.next_states = vec![HandlerState::Ready(None)]; // triggered when sending a NextState event
 
         cs.lock().add_reach_attempt(task_inner_fut, handler);
-        let mut rt = Builder::new().core_threads(2).build().unwrap();
+        let mut rt = Builder::new().core_threads(1).build().unwrap();
 
         // Kick it off
         let cs_fut = cs.clone();
@@ -838,7 +838,7 @@ mod tests {
         let handler = Handler::default();
 
         let reach_id = cs.lock().add_reach_attempt(task_inner_fut, handler);
-        let mut rt = Builder::new().core_threads(2).build().unwrap();
+        let mut rt = Builder::new().core_threads(1).build().unwrap();
 
         // Kick it off
         let cs_fut = cs.clone();
