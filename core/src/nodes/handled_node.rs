@@ -220,6 +220,7 @@ where
         loop {
             println!("[HandledNode, poll] top of the loop");
             if self.node.is_done() && self.handler_is_done {
+                println!("[HandledNode, poll]   node is done; handler is done => Async::Ready(None) <––––");
                 return Ok(Async::Ready(None));
             }
 

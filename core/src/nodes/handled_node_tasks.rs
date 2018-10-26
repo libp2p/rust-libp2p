@@ -456,31 +456,31 @@ where
 
                     // Process the node.
                     loop {
-                        println!("[NodeTask, poll]  NodeTaskInner::Node; polling node, top of loop");
+                        println!("[NodeTask, poll]  NodeTaskInner::Node; polling handled node, top of loop");
                         match node.poll() {
                             // REVIEW: I don't think this can happen, see comment in handled_node.rs
                             Ok(Async::NotReady) => {
-                                println!("[NodeTask, poll]      NodeTaskInner::Node; polled node; Async::NotReady – putting back the NodeTaskInner::Node and returning Async::NotReady");
+                                println!("[NodeTask, poll]      NodeTaskInner::Node; polled handled node; Async::NotReady – putting back the NodeTaskInner::Node and returning Async::NotReady");
                                 self.inner = NodeTaskInner::Node(node);
                                 return Ok(Async::NotReady);
                             },
                             Ok(Async::Ready(Some(event))) => {
                                 // The only possible event here is a NodeHandlerEvent::Custom(event)
-                                println!("[NodeTask, poll]      NodeTaskInner::Node; polled handled node; Async::Ready(Some) –– sending a NodeEvent on events_tx and keep looping<––––");
+                                println!("[NodeTask, poll]      NodeTaskInner::Node; polled handled node; Async::Ready(Some) –– sending a NodeEvent on events_tx and keep looping");
                                 let event = InToExtMessage::NodeEvent(event);
                                 if let Err(e) = self.events_tx.unbounded_send((event, self.id)) {
-                                    println!("[NodeTask, poll]          NodeTaskInner::Node; polled node; Async::Ready(Some); error sending on events_tx channel={:?}. Shutting down the node.", e);
+                                    println!("[NodeTask, poll]          NodeTaskInner::Node; polled handled node; Async::Ready(Some); error sending on events_tx channel={:?}. Shutting down the node.", e);
                                     node.shutdown();
                                 }
                             }
                             Ok(Async::Ready(None)) => {
-                                println!("[NodeTask, poll]      NodeTaskInner::Node; polled node; Async::Ready(None) – sending TaskClosed and returning Async::Ready(())");
+                                println!("[NodeTask, poll]      NodeTaskInner::Node; polled handled node; Async::Ready(None) – sending TaskClosed and returning Async::Ready(()) <–––");
                                 let event = InToExtMessage::TaskClosed(Ok(()), None);
                                 let _ = self.events_tx.unbounded_send((event, self.id));
                                 return Ok(Async::Ready(())); // End the task.
                             }
                             Err(err) => {
-                                println!("[NodeTask, poll]      NodeTaskInner::Node; polled node; Err");
+                                println!("[NodeTask, poll]      NodeTaskInner::Node; polled handled node; Err");
                                 let event = InToExtMessage::TaskClosed(Err(err), None);
                                 let _ = self.events_tx.unbounded_send((event, self.id));
                                 return Ok(Async::Ready(())); // End the task.
@@ -845,7 +845,7 @@ mod tests {
                 tx.clone()
             };
 
-            let mut rt = Builder::new().core_threads(4).build().unwrap();
+            let mut rt = Builder::new().core_threads(2).build().unwrap();
             let mut events = rt.block_on(handled_nodes_tasks.into_future()).unwrap();
             assert_matches!(events.0.unwrap(), HandledNodesEvent::NodeReached{..});
 
