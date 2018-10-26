@@ -51,6 +51,7 @@ impl<T: AsyncRead + AsyncWrite> Io<T> {
         }
     }
 
+    // TODO: does this work for sure? isn't there some issue with an out cache being dropped silently?
     pub(crate) fn into(self) -> T {
         self.codec.into_inner()
     }

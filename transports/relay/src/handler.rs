@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use core::{PeerId, Transport};
+use core::PeerId;
 use core::nodes::handled_node::NodeHandlerEndpoint;
 use core::nodes::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent};
 use core::ConnectionUpgrade;
@@ -29,9 +29,9 @@ use tokio_io::{AsyncRead, AsyncWrite};
 use void::Void;
 
 /// Protocol handler that identifies the remote at a regular period.
-pub struct RelayHandler<TSubstream, TTrans> {
+pub struct RelayHandler<TSubstream> {
     /// Configuration for the protocol.
-    config: RelayConfig<TTrans>,
+    config: RelayConfig,
 
     /// True if wanting to shut down.
     shutdown: bool,
@@ -56,18 +56,12 @@ pub enum RelayHandlerEvent<TSubstream> {
     },
 }
 
-impl<TSubstream, TTrans> RelayHandler<TSubstream, TTrans>
-where TTrans: Transport + Clone + 'static,
-      TTrans::Dial: Send,      // TODO: remove
-      TTrans::Listener: Send,      // TODO: remove
-      TTrans::ListenerUpgrade: Send,      // TODO: remove
-      TTrans::Output: Send + AsyncRead + AsyncWrite,
-{
+impl<TSubstream> RelayHandler<TSubstream> {
     /// Builds a new `RelayHandler`.
     #[inline]
-    pub fn new(my_id: PeerId, transport: TTrans) -> Self {
+    pub fn new() -> Self {
         RelayHandler {
-            config: RelayConfig::new(my_id, transport),
+            config: RelayConfig::new(),
             shutdown: false,
             active_relays: Vec::new(),
             queued_events: Vec::new(),
@@ -75,19 +69,14 @@ where TTrans: Transport + Clone + 'static,
     }
 }
 
-impl<TSubstream, TTrans> ProtocolsHandler for RelayHandler<TSubstream, TTrans>
+impl<TSubstream> ProtocolsHandler for RelayHandler<TSubstream>
 where
-    TTrans: Transport + Clone + Send + Sync + 'static,
-    TTrans::Dial: Send,
-    TTrans::Listener: Send,
-    TTrans::ListenerUpgrade: Send,
-    TTrans::Output: AsyncRead + AsyncWrite + Send,
     TSubstream: AsyncRead + AsyncWrite + Send + Sync + 'static, // TODO: remove useless bounds
 {
     type InEvent = Void;
     type OutEvent = RelayHandlerEvent<TSubstream>;
     type Substream = TSubstream;
-    type Protocol = RelayConfig<TTrans>;
+    type Protocol = RelayConfig;
     type OutboundOpenInfo = ();
 
     #[inline]
@@ -103,7 +92,7 @@ where
         debug_assert!(_endpoint.is_listener());
 
         match protocol {
-            RelayOutput::Sealed(relay) => self.active_relays.push(relay),
+            RelayOutput::HopRequest(request) => unimplemented!(),
             RelayOutput::Stream { stream, src_peer_id } => {
                 let ev = RelayHandlerEvent::Destination { stream, src_peer_id };
                 self.queued_events.push(ev);
