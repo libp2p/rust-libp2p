@@ -31,7 +31,10 @@ fn main() {
     let prefix = match env::args().nth(1) {
         Some(prefix) => prefix,
         None => {
-            println!("Usage: {} <prefix>", env::args().nth(0).unwrap());
+            println!(
+                "Usage: {} <prefix>",
+                env::current_exe().unwrap().file_name().unwrap().to_str().unwrap()
+            );
             return;
         }
     };
