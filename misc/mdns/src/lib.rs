@@ -157,7 +157,7 @@ impl MdnsService {
                 Ok(())
             }
             #[cfg(not(unix))]
-            fn platform_specific(_: &net2::UdpBuilder) -> io::Result<()> {}
+            fn platform_specific(_: &net2::UdpBuilder) -> io::Result<()> { Ok(()) }
             let builder = net2::UdpBuilder::new_v4()?;
             builder.reuse_address(true)?;
             platform_specific(&builder)?;
