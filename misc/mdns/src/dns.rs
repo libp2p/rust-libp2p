@@ -18,7 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use data_encoding;
 use libp2p_core::{Multiaddr, PeerId};
+use rand;
 use std::{cmp, error, fmt, str, time::Duration};
 use {META_QUERY_SERVICE, SERVICE_NAME};
 
