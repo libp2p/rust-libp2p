@@ -38,21 +38,64 @@ pub struct RelayConfig {
 /// Therefore, in the latter case we simply return a future that can be driven to completion
 /// but otherwise the stream is not programmatically accessible.
 pub enum RelayOutput<TStream> {
-    /// The source is a relay `R` that relays the communication from someone `S` to us. Keep in
-    /// mind that the multiaddress you have about this communication is the address of `R`.
-    Stream {
-        /// Stream of data to the original source.
-        stream: TStream,
-        /// Identifier of the original source `S`.
-        src_peer_id: PeerId,
-        // TODO: also provide the addresses ; however the semantics of these addresses is uncertain
-    },
-
+    /// We have been asked to become a destination.
+    DestinationRequest(RelayDestinationRequest<TStream>),
     /// We have been asked to relay communications to another node.
     HopRequest(RelayHopRequest<TStream>),
 }
 
+/// Request from a remote for us to become a destination.
+#[must_use = "A destination request should be either accepted or denied"]
+pub struct RelayDestinationRequest<TStream> {
+    /// The stream to the source.
+    stream: Io<TStream>,
+    /// Source of the request.
+    from: Peer,
+}
+
+impl<TStream> RelayDestinationRequest<TStream>
+where TStream: AsyncRead + AsyncWrite + 'static
+{
+    /// Peer id of the source that is being relayed.
+    pub fn source_id(&self) -> &PeerId {
+        &self.from.id
+    }
+
+    // TODO: addresses
+
+    /// Accepts the request.
+    pub fn accept(self) -> impl Future<Item = TStream, Error = io::Error> {
+        // send a SUCCESS message
+        self.stream
+            .send(status(CircuitRelay_Status::SUCCESS))
+            .and_then(Io::recv)
+            .and_then(|(response, io)| {
+                let rsp = match response {
+                    Some(m) => m,
+                    None => return Err(io_err("no message from destination"))
+                };
+
+                if is_success(&rsp) {
+                    Ok(io.into())
+                } else {
+                    Err(io_err("no success response from relay"))
+                }
+            })
+    }
+
+    /// Refuses the request.
+    ///
+    /// The returned `Future` gracefully shuts down the request.
+    #[inline]
+    pub fn deny(self) -> impl Future<Item = (), Error = io::Error> {
+        // TODO: correct status
+        let message = deny_message(CircuitRelay_Status::STOP_RELAY_REFUSED);
+        self.stream.send(message).map(|_| ())
+    }
+}
+
 /// Request from a remote for us to relay communications to another node.
+#[must_use = "A HOP request should be either accepted or denied"]
 pub struct RelayHopRequest<TStream> {
     /// The stream to the source.
     stream: Io<TStream>,
@@ -123,7 +166,7 @@ where TStream: AsyncRead + AsyncWrite + 'static
     #[inline]
     pub fn deny(self) -> impl Future<Item = (), Error = io::Error> {
         // TODO: correct status
-        let message = hop_deny_message(CircuitRelay_Status::HOP_CANT_RELAY_TO_SELF);
+        let message = deny_message(CircuitRelay_Status::HOP_CANT_RELAY_TO_SELF);
         self.stream.send(message).map(|_| ())
     }
 }
@@ -207,22 +250,13 @@ impl RelayConfig {
             peer
         } else {
             let msg = status(CircuitRelay_Status::HOP_SRC_MULTIADDR_INVALID);
-            return A(A(io.send(msg).and_then(|_| Err(io_err("invalid src address")))))
+            return B(io.send(msg).and_then(|_| Err(io_err("invalid src address"))));
         };
 
-        let dest = if let Some(peer) = Peer::from_message(msg.take_dstPeer()) {
-            peer
-        } else {
-            let msg = status(CircuitRelay_Status::STOP_DST_MULTIADDR_INVALID);
-            return A(B(io.send(msg).and_then(|_| Err(io_err("invalid dest address")))))
-        };
-
-        B(io.send(status(CircuitRelay_Status::SUCCESS)).map(move |stream| {
-            RelayOutput::Stream {
-                stream: stream.into(),
-                src_peer_id: from.id,
-            }
-        }))
+        A(future::ok(RelayOutput::DestinationRequest(RelayDestinationRequest {
+            stream: io,
+            from,
+        })))
     }
 }
 
@@ -248,7 +282,7 @@ fn stop_message(from: &Peer, dest: &Peer) -> CircuitRelay {
 }
 
 /// Builds a message that refuses a HOP request.
-fn hop_deny_message(status: CircuitRelay_Status) -> CircuitRelay {
+fn deny_message(status: CircuitRelay_Status) -> CircuitRelay {
     let mut msg = CircuitRelay::new();
     msg.set_field_type(CircuitRelay_Type::STATUS);  // TODO: is this correct?
     msg.set_code(status);

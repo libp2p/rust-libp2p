@@ -93,9 +93,10 @@ where
 
         match protocol {
             RelayOutput::HopRequest(request) => unimplemented!(),
-            RelayOutput::Stream { stream, src_peer_id } => {
-                let ev = RelayHandlerEvent::Destination { stream, src_peer_id };
-                self.queued_events.push(ev);
+            RelayOutput::DestinationRequest(destination) => {
+                unimplemented!()
+                /*let ev = RelayHandlerEvent::Destination { stream, src_peer_id };
+                self.queued_events.push(ev);*/
             },
         }
     }
