@@ -20,7 +20,7 @@
 
 use bytes::Bytes;
 use copy;
-use core::{upgrade, ConnectionUpgrade, Endpoint, PeerId};
+use core::{upgrade, ConnectionUpgrade, Endpoint, Multiaddr, PeerId};
 use futures::{future::{self, Either::{A, B}, FutureResult}, prelude::*};
 use message::{CircuitRelay, CircuitRelay_Peer, CircuitRelay_Status, CircuitRelay_Type};
 use std::{io, iter};
@@ -38,10 +38,50 @@ pub struct RelayConfig {
 /// Therefore, in the latter case we simply return a future that can be driven to completion
 /// but otherwise the stream is not programmatically accessible.
 pub enum RelayOutput<TStream> {
+    /// We are successfully connected as a dialer, and we can now request the remote to act as a
+    /// proxy.
+    WaitRequest(RelayWaitRequest<TStream>),
     /// We have been asked to become a destination.
     DestinationRequest(RelayDestinationRequest<TStream>),
     /// We have been asked to relay communications to another node.
     HopRequest(RelayHopRequest<TStream>),
+}
+
+/// We are successfully connected as a dialer, and we can now request the remote to act as a proxy.
+#[must_use = "There is no point in opening a request if you don't use"]
+pub struct RelayWaitRequest<TStream> {
+    /// The stream of the destination.
+    stream: Io<TStream>,
+}
+
+impl<TStream> RelayWaitRequest<TStream>
+where TStream: AsyncRead + AsyncWrite + 'static
+{
+    /// Request proxying to a destination.
+    pub fn request(self, dest_id: PeerId, dest_addresses: impl IntoIterator<Item = Multiaddr>)
+        -> impl Future<Item = TStream, Error = io::Error>
+    {
+        let msg = hop_message(&Peer {
+            id: dest_id,
+            addrs: dest_addresses.into_iter().collect(),
+        });
+
+        self.stream
+            .send(msg)
+            .and_then(Io::recv)
+            .and_then(|(response, io)| {
+                let rsp = match response {
+                    Some(m) => m,
+                    None => return Err(io_err("no message from relay")),
+                };
+
+                if is_success(&rsp) {
+                    Ok(io.into())
+                } else {
+                    Err(io_err("no success response from relay"))
+                }
+            })
+    }
 }
 
 /// Request from a remote for us to become a destination.
@@ -185,28 +225,35 @@ where
     type Output = RelayOutput<C>;
     type Future = Box<Future<Item=Self::Output, Error=io::Error> + Send>;
 
-    fn upgrade(self, conn: C, _: (), _: Endpoint) -> Self::Future {
-        let future = Io::new(conn).recv().and_then(move |(message, io)| {
-            let msg = if let Some(m) = message {
-                m
-            } else {
-                return A(A(future::err(io_err("no message received"))))
-            };
-            match msg.get_field_type() {
-                CircuitRelay_Type::HOP => { // act as relay
-                    B(A(self.on_hop(msg, io)))
+    fn upgrade(self, conn: C, _: (), endpoint: Endpoint) -> Self::Future {
+        if let Endpoint::Dialer = endpoint {
+            let future = future::ok(RelayOutput::WaitRequest(RelayWaitRequest {
+                stream: Io::new(conn),
+            }));
+            Box::new(future)
+        } else {
+            let future = Io::new(conn).recv().and_then(move |(message, io)| {
+                let msg = if let Some(m) = message {
+                    m
+                } else {
+                    return A(A(future::err(io_err("no message received"))))
+                };
+                match msg.get_field_type() {
+                    CircuitRelay_Type::HOP => { // act as relay
+                        B(A(self.on_hop(msg, io)))
+                    }
+                    CircuitRelay_Type::STOP => { // act as destination
+                        B(B(self.on_stop(msg, io)))
+                    }
+                    other => {
+                        debug!("invalid message type: {:?}", other);
+                        let resp = status(CircuitRelay_Status::MALFORMED_MESSAGE);
+                        A(B(io.send(resp).and_then(|_| Err(io_err("invalid message type")))))
+                    }
                 }
-                CircuitRelay_Type::STOP => { // act as destination
-                    B(B(self.on_stop(msg, io)))
-                }
-                other => {
-                    debug!("invalid message type: {:?}", other);
-                    let resp = status(CircuitRelay_Status::MALFORMED_MESSAGE);
-                    A(B(io.send(resp).and_then(|_| Err(io_err("invalid message type")))))
-                }
-            }
-        });
-        Box::new(future)
+            });
+            Box::new(future)
+        }
     }
 }
 
@@ -241,7 +288,7 @@ impl RelayConfig {
         })))
     }
 
-    /// STOP message handling (we are a destination)
+    /// STOP message handling (we are a destination).
     fn on_stop<C>(self, mut msg: CircuitRelay, io: Io<C>) -> impl Future<Item = RelayOutput<C>, Error = io::Error>
     where
         C: AsyncRead + AsyncWrite + 'static,
@@ -260,6 +307,22 @@ impl RelayConfig {
     }
 }
 
+/// Generates a message that requests proxying.
+fn hop_message(destination: &Peer) -> CircuitRelay {
+    let mut msg = CircuitRelay::new();
+    msg.set_field_type(CircuitRelay_Type::HOP);
+
+    let mut dest = CircuitRelay_Peer::new();
+    dest.set_id(destination.id.as_bytes().to_vec());
+    for a in &destination.addrs {
+        dest.mut_addrs().push(a.to_bytes())
+    }
+    msg.set_dstPeer(dest);
+
+    msg
+}
+
+/// Generates a STOP message to send to a destination.
 fn stop_message(from: &Peer, dest: &Peer) -> CircuitRelay {
     let mut msg = CircuitRelay::new();
     msg.set_field_type(CircuitRelay_Type::STOP);

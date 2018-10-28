@@ -98,6 +98,7 @@ where
                 /*let ev = RelayHandlerEvent::Destination { stream, src_peer_id };
                 self.queued_events.push(ev);*/
             },
+            RelayOutput::WaitRequest(_) => unimplemented!(),
         }
     }
 
