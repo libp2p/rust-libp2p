@@ -37,10 +37,11 @@ pub struct RelayConfig {
 /// we pipe data from source to destination and do not want to use the stream in any other way.
 /// Therefore, in the latter case we simply return a future that can be driven to completion
 /// but otherwise the stream is not programmatically accessible.
+// TODO: debug
 pub enum RelayOutput<TStream> {
     /// We are successfully connected as a dialer, and we can now request the remote to act as a
     /// proxy.
-    WaitRequest(RelayWaitRequest<TStream>),
+    ProxyRequest(RelayProxyRequest<TStream>),
     /// We have been asked to become a destination.
     DestinationRequest(RelayDestinationRequest<TStream>),
     /// We have been asked to relay communications to another node.
@@ -48,13 +49,14 @@ pub enum RelayOutput<TStream> {
 }
 
 /// We are successfully connected as a dialer, and we can now request the remote to act as a proxy.
+// TODO: debug
 #[must_use = "There is no point in opening a request if you don't use"]
-pub struct RelayWaitRequest<TStream> {
+pub struct RelayProxyRequest<TStream> {
     /// The stream of the destination.
     stream: Io<TStream>,
 }
 
-impl<TStream> RelayWaitRequest<TStream>
+impl<TStream> RelayProxyRequest<TStream>
 where TStream: AsyncRead + AsyncWrite + 'static
 {
     /// Request proxying to a destination.
@@ -85,6 +87,7 @@ where TStream: AsyncRead + AsyncWrite + 'static
 }
 
 /// Request from a remote for us to become a destination.
+// TODO: debug
 #[must_use = "A destination request should be either accepted or denied"]
 pub struct RelayDestinationRequest<TStream> {
     /// The stream to the source.
@@ -135,6 +138,7 @@ where TStream: AsyncRead + AsyncWrite + 'static
 }
 
 /// Request from a remote for us to relay communications to another node.
+// TODO: debug
 #[must_use = "A HOP request should be either accepted or denied"]
 pub struct RelayHopRequest<TStream> {
     /// The stream to the source.
@@ -227,7 +231,7 @@ where
 
     fn upgrade(self, conn: C, _: (), endpoint: Endpoint) -> Self::Future {
         if let Endpoint::Dialer = endpoint {
-            let future = future::ok(RelayOutput::WaitRequest(RelayWaitRequest {
+            let future = future::ok(RelayOutput::ProxyRequest(RelayProxyRequest {
                 stream: Io::new(conn),
             }));
             Box::new(future)
