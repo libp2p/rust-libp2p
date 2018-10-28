@@ -36,9 +36,7 @@ mod copy;
 mod handler;
 mod message;
 mod protocol;
-mod transport;
 mod utility;
 
 pub use handler::{RelayHandler, RelayHandlerEvent};
 pub use protocol::{RelayOutput, RelayConfig};
-pub use transport::RelayTransport;
