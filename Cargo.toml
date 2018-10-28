@@ -60,6 +60,7 @@ members = [
     "protocols/identify",
     "protocols/kad",
     "protocols/ping",
+    "protocols/observed",
     "transports/relay",
     "protocols/secio",
     "muxers/mplex",

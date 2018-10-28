@@ -1,0 +1,16 @@
+[package]
+name = "libp2p-observed-address"
+version = "0.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
+
+[dependencies]
+bytes = "0.4"
+futures = "0.1"
+libp2p-core = { path = "../../core" }
+tokio-codec = "0.1"
+tokio-io = "0.1"
+unsigned-varint = { version = "0.2.1", features = ["codec"] }
+
+[dev-dependencies]
+tokio = "0.1"
