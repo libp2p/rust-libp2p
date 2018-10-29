@@ -156,21 +156,29 @@ pub trait ProtocolsHandler {
         MapOutEvent { inner: self, map }
     }
 
+    /// Creates a builder that will allow creating a `NodeHandler` that handles this protocol
+    /// exclusively.
+    #[inline]
+    fn into_node_handler_builder(self) -> NodeHandlerWrapperBuilder<Self>
+    where
+        Self: Sized,
+    {
+        NodeHandlerWrapperBuilder {
+            handler: self,
+            in_timeout: Duration::from_secs(10),
+            out_timeout: Duration::from_secs(10),
+        }
+    }
+
     /// Builds an implementation of `NodeHandler` that handles this protocol exclusively.
+    ///
+    /// > **Note**: This is a shortcut for `self.into_node_handler_builder().build()`.
     #[inline]
     fn into_node_handler(self) -> NodeHandlerWrapper<Self>
     where
         Self: Sized,
     {
-        NodeHandlerWrapper {
-            handler: self,
-            negotiating_in: Vec::new(),
-            negotiating_out: Vec::new(),
-            in_timeout: Duration::from_secs(10),
-            out_timeout: Duration::from_secs(10),
-            queued_dial_upgrades: Vec::new(),
-            unique_dial_upgrade_id: 0,
-        }
+        self.into_node_handler_builder().build()
     }
 }
 
@@ -450,6 +458,52 @@ where
                 }
             })
         }))
+    }
+}
+
+/// Prototype for a `NodeHandlerWrapper`.
+pub struct NodeHandlerWrapperBuilder<TProtoHandler>
+where
+    TProtoHandler: ProtocolsHandler,
+{
+    /// The underlying handler.
+    handler: TProtoHandler,
+    /// Timeout for incoming substreams negotiation.
+    in_timeout: Duration,
+    /// Timeout for outgoing substreams negotiation.
+    out_timeout: Duration,
+}
+
+impl<TProtoHandler> NodeHandlerWrapperBuilder<TProtoHandler>
+where
+    TProtoHandler: ProtocolsHandler
+{
+    /// Sets the timeout to use when negotiating a protocol on an ingoing substream.
+    #[inline]
+    pub fn with_in_negotiation_timeout(mut self, timeout: Duration) -> Self {
+        self.in_timeout = timeout;
+        self
+    }
+
+    /// Sets the timeout to use when negotiating a protocol on an outgoing substream.
+    #[inline]
+    pub fn with_out_negotiation_timeout(mut self, timeout: Duration) -> Self {
+        self.out_timeout = timeout;
+        self
+    }
+
+    /// Builds the `NodeHandlerWrapper`.
+    #[inline]
+    pub fn build(self) -> NodeHandlerWrapper<TProtoHandler> {
+        NodeHandlerWrapper {
+            handler: self.handler,
+            negotiating_in: Vec::new(),
+            negotiating_out: Vec::new(),
+            in_timeout: self.in_timeout,
+            out_timeout: self.out_timeout,
+            queued_dial_upgrades: Vec::new(),
+            unique_dial_upgrade_id: 0,
+        }
     }
 }
 
