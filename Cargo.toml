@@ -29,6 +29,7 @@ libp2p-uds = { path = "./transports/uds" }
 libp2p-websocket = { path = "./transports/websocket" }
 libp2p-yamux = { path = "./muxers/yamux" }
 tokio-codec = "0.1"
+tokio-executor = "0.1"
 tokio-io = "0.1"
 
 [target.'cfg(not(target_os = "emscripten"))'.dependencies]
@@ -60,6 +61,7 @@ members = [
     "protocols/identify",
     "protocols/kad",
     "protocols/ping",
+    "protocols/observed",
     "transports/relay",
     "protocols/secio",
     "muxers/mplex",

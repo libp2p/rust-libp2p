@@ -139,6 +139,8 @@ pub extern crate multihash;
 pub extern crate tokio_io;
 pub extern crate tokio_codec;
 
+extern crate tokio_executor;
+
 pub extern crate libp2p_core as core;
 #[cfg(not(target_os = "emscripten"))]
 pub extern crate libp2p_dns as dns;
@@ -158,11 +160,14 @@ pub extern crate libp2p_uds as uds;
 pub extern crate libp2p_websocket as websocket;
 pub extern crate libp2p_yamux as yamux;
 
+mod transport_ext;
+
 pub mod simple;
 
 pub use self::core::{Transport, ConnectionUpgrade, PeerId};
 pub use self::multiaddr::Multiaddr;
 pub use self::simple::SimpleProtocol;
+pub use self::transport_ext::TransportExt;
 pub use self::transport_timeout::TransportTimeout;
 
 /// Implementation of `Transport` that supports the most common protocols.
