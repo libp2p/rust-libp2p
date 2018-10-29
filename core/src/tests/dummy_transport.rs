@@ -86,7 +86,11 @@ impl Transport for DummyTransport {
         unimplemented!();
     }
 
-    fn nat_traversal(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
-        unimplemented!();
+    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        if server == observed {
+            Some(observed.encapsulate("/udt").unwrap())
+        } else {
+            None
+        }
     }
 }

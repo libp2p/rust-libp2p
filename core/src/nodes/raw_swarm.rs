@@ -1013,7 +1013,7 @@ impl<'a, TInEvent> PeerConnected<'a, TInEvent> {
             .expect("We insert into connected_points whenever a connection is opened and remove \
                      only when a connection is closed ; the underlying API is guaranteed to always \
                      deliver a connection closed message after it has been opened, and no two \
-                     closed messages ; qed")        
+                     closed messages ; qed")
     }
 
     /// Sends an event to the node.
@@ -1163,4 +1163,65 @@ where
             active_nodes: &mut self.nodes.active_nodes,
         })
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tests::dummy_transport::DummyTransport;
+    use tests::dummy_handler::{Handler, InEvent, OutEvent};
+
+    #[test]
+    fn delete_me_can_create_new() {
+        let _raw_swarm = RawSwarm::<_, _, _, Handler>::new(DummyTransport::new());
+    }
+
+    #[test]
+    fn query_transport() {
+        let transport = DummyTransport::new();
+        let transport2 = transport.clone();
+        let raw_swarm = RawSwarm::<_, _, _, Handler>::new(transport);
+        assert_eq!(raw_swarm.transport(), &transport2);
+    }
+
+    #[test]
+    fn starts_listening() {
+        let mut raw_swarm = RawSwarm::<_, _, _, Handler>::new(DummyTransport::new());
+        let addr = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
+        let addr2 = addr.clone();
+        assert!(raw_swarm.listen_on(addr).is_ok());
+        let listeners = raw_swarm.listeners().collect::<Vec<&Multiaddr>>();
+        assert_eq!(listeners.len(), 1);
+        assert_eq!(listeners[0], &addr2);
+    }
+
+    #[test]
+    fn nat_traversal() {
+        let transport = DummyTransport::new();
+        let mut raw_swarm = RawSwarm::<_, _, _, Handler>::new(transport);
+        let addr1 = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
+        let outside_addr1 = "/ip4/10.1.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
+        let addr2 = "/ip4/127.0.0.2/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
+        let outside_addr2 = "/ip4/127.0.0.2/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
+        raw_swarm.listen_on(addr1).unwrap();
+        raw_swarm.listen_on(addr2).unwrap();
+
+        let natted = raw_swarm.nat_traversal(&outside_addr1).collect::<Vec<Multiaddr>>();
+        assert!(natted.is_empty());
+
+        let natted = raw_swarm.nat_traversal(&outside_addr2).collect::<Vec<Multiaddr>>();
+        assert_eq!(natted[0], "/ip4/127.0.0.2/tcp/1234/udt".parse::<Multiaddr>().expect("bad multiaddr"));
+    }
+
+    #[test]
+    fn dial() {
+        unimplemented!();
+    }
+
+    #[test]
+    fn num_incoming_negotiated() {
+        unimplemented!();
+    }
+
+
 }
