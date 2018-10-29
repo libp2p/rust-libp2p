@@ -311,7 +311,7 @@ where TSocket: AsyncRead + AsyncWrite
                 PingListenerState::Listening => {
                     match self.inner.poll() {
                         Ok(Async::Ready(Some(payload))) => {
-                            debug!("Received ping (payload={:?}) ; sending back", payload);
+                            debug!("Received ping (payload={:?}); sending back", payload);
                             self.state = PingListenerState::Sending(payload.freeze())
                         },
                         Ok(Async::Ready(None)) => self.state = PingListenerState::Closing,
