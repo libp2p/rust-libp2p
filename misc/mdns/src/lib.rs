@@ -290,7 +290,7 @@ impl MdnsService {
 pub enum MdnsPacket<'a> {
     /// A query made by a remote.
     Query(MdnsQuery<'a>),
-    /// A response received by a remote to one of our queries.
+    /// A response sent by a remote in response to one of our queries.
     Response(MdnsResponse<'a>),
     /// A request for service discovery.
     ServiceDiscovery(MdnsServiceDiscovery<'a>),
@@ -311,7 +311,7 @@ impl<'a> MdnsQuery<'a> {
     ///
     /// Pass the ID of the local peer, and the list o addresses we're listening on.
     ///
-    /// If there are more than 2^16-1 addresses, ignores the other.
+    /// If there are more than 2^16-1 addresses, ignores the others.
     ///
     /// > **Note**: Keep in mind that we will also receive this response in an `MdnsResponse`.
     #[inline]

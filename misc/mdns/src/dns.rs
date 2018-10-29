@@ -18,6 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! Contains methods that handle the DNS encoding and decoding capabilities not available in the
+//! `dns_parser` library.
+
 use data_encoding;
 use libp2p_core::{Multiaddr, PeerId};
 use rand;
@@ -67,8 +70,8 @@ pub fn build_query() -> Vec<u8> {
     append_qname(&mut out, SERVICE_NAME);
 
     // Flags.
-    append_u16(&mut out, 0xc);
-    append_u16(&mut out, 0x1);
+    append_u16(&mut out, 0x0c);
+    append_u16(&mut out, 0x01);
 
     // Since the output is constant, we reserve the right amount ahead of time.
     // If this assert fails, adjust the capacity of `out` in the source code.
@@ -109,7 +112,7 @@ pub fn build_query_response(
 
     // Flags.
     out.push(0x00);
-    out.push(0x0c);
+    out.push(0x0c);     // PTR record.
     out.push(0x80);
     out.push(0x01);
 
@@ -168,7 +171,7 @@ pub fn build_service_discovery_response(id: u16, ttl: Duration) -> Vec<u8> {
 
     // Flags.
     out.push(0x00);
-    out.push(0x0c);
+    out.push(0x0c);     // PTR record requested.
     out.push(0x80);
     out.push(0x01);
 
@@ -277,7 +280,7 @@ fn append_txt_record<'a>(
 
     // Flags.
     out.push(0x00);
-    out.push(0x10);
+    out.push(0x10);     // TXT record.
     out.push(0x80);
     out.push(0x01);
 
