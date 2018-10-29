@@ -259,7 +259,8 @@ fn client_addr_to_ws(client_addr: &Multiaddr, is_wss: bool) -> String {
 #[cfg(test)]
 mod tests {
     extern crate libp2p_tcp_transport as tcp;
-    extern crate tokio_current_thread;
+    extern crate tokio;
+    use self::tokio::runtime::current_thread::Runtime;
     use futures::{Future, Stream};
     use multiaddr::Multiaddr;
     use swarm::Transport;
@@ -285,7 +286,8 @@ mod tests {
             .select(dialer)
             .map_err(|(e, _)| e)
             .and_then(|(_, n)| n);
-        tokio_current_thread::block_on_all(future).unwrap();
+        let mut rt = Runtime::new().unwrap();
+        let _ = rt.block_on(future).unwrap();
     }
 
     #[test]
@@ -308,7 +310,9 @@ mod tests {
             .select(dialer)
             .map_err(|(e, _)| e)
             .and_then(|(_, n)| n);
-        tokio_current_thread::block_on_all(future).unwrap();
+
+        let mut rt = Runtime::new().unwrap();
+        let _ = rt.block_on(future).unwrap();
     }
 
     #[test]

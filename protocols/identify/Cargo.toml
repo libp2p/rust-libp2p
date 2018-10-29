@@ -22,4 +22,4 @@ void = "1.0"
 
 [dev-dependencies]
 libp2p-tcp-transport = { path = "../../transports/tcp" }
-tokio-current-thread = "0.1"
+tokio = "0.1"
