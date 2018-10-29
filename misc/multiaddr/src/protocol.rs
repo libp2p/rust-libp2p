@@ -180,7 +180,7 @@ impl<'a> Protocol<'a> {
                 let mut rdr = Cursor::new(data);
                 let mut seg = [0_u16; 8];
 
-                for x in seg.iter_mut() {
+                for x in se.g.iter_mut() {
                     *x = rdr.read_u16::<BigEndian>()?;
                 }
 

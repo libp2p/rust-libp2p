@@ -99,14 +99,14 @@ where
 pub struct IdentifyInfo {
     /// Public key of the node.
     pub public_key: PublicKey,
-    /// Version of the "global" protocol, eg. `ipfs/1.0.0` or `polkadot/1.0.0`.
+    /// Version of the "global" protocol, e.g. `ipfs/1.0.0` or `polkadot/1.0.0`.
     pub protocol_version: String,
     /// Name and version of the client. Can be thought as similar to the `User-Agent` header
     /// of HTTP.
     pub agent_version: String,
     /// Addresses that the node is listening on.
     pub listen_addrs: Vec<Multiaddr>,
-    /// Protocols supported by the node, eg. `/ipfs/ping/1.0.0`.
+    /// Protocols supported by the node, e.g. `/ipfs/ping/1.0.0`.
     pub protocols: Vec<String>,
 }
 
