@@ -24,18 +24,19 @@
 
 use futures::prelude::*;
 use futures::{future::{self, FutureResult}, stream};
-use {Multiaddr, Transport};
+use {Multiaddr, Transport, PeerId};
 use std::io;
+use tests::dummy_muxer::DummyMuxer;
 
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) enum ListenerState {
     /// The `usize` indexes items produced by the listener
-    Ok(Async<Option<usize>>),
+    Ok(Async<Option<(PeerId, DummyMuxer)>>),
     Error
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) struct DummyTransport {
     listener_state: ListenerState,
 }
@@ -46,7 +47,7 @@ impl DummyTransport {
     }
 }
 impl Transport for DummyTransport {
-    type Output = usize;
+    type Output = (PeerId, DummyMuxer);
     type Listener = Box<Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=io::Error> + Send>;
     type ListenerUpgrade = FutureResult<Self::Output, io::Error>;
     type Dial = Box<Future<Item=Self::Output, Error=io::Error> + Send>;
@@ -64,8 +65,8 @@ impl Transport for DummyTransport {
                         let stream = stream::poll_fn(|| Ok(Async::NotReady)).map(tupelize);
                         (Box::new(stream), addr2)
                     },
-                    Async::Ready(Some(n)) => {
-                        let stream = stream::iter_ok(n..).map(tupelize);
+                    Async::Ready(Some(tup)) => {
+                        let stream = stream::poll_fn(move || Ok( Async::Ready(Some(tup.clone()) ))).map(tupelize);
                         (Box::new(stream), addr2)
                     },
                     Async::Ready(None) => {

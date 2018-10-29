@@ -279,35 +279,37 @@ mod tests {
     use std::io;
     use futures::{future::{self}, stream};
     use tests::dummy_transport::{DummyTransport, ListenerState};
+    use tests::dummy_muxer::DummyMuxer;
+    use PublicKey;
 
-	fn set_listener_state(ls: &mut ListenersStream<DummyTransport>, idx: usize, state: ListenerState) {
-		let l = &mut ls.listeners[idx];
-		l.listener =
-			match state {
-				ListenerState::Error => {
-					let stream = stream::poll_fn(|| future::err(io::Error::new(io::ErrorKind::Other, "oh noes")).poll() );
-					Box::new(stream)
-				}
-				ListenerState::Ok(async) => {
-					match async {
-						Async::NotReady => {
-							let stream = stream::poll_fn(|| Ok(Async::NotReady));
-							Box::new(stream)
-						}
-						Async::Ready(Some(n)) => {
-							let addr = l.address.clone();
-							let stream = stream::iter_ok(n..)
-								.map(move |stream| (future::ok(stream), addr.clone()));
-							Box::new(stream)
-						}
-						Async::Ready(None) => {
-							let stream = stream::empty();
-							Box::new(stream)
-						}
-					}
-				}
-			};
-	}
+    fn set_listener_state(ls: &mut ListenersStream<DummyTransport>, idx: usize, state: ListenerState) {
+        let l = &mut ls.listeners[idx];
+        l.listener =
+            match state {
+                ListenerState::Error => {
+                    let stream = stream::poll_fn(|| future::err(io::Error::new(io::ErrorKind::Other, "oh noes")).poll() );
+                    Box::new(stream)
+                }
+                ListenerState::Ok(async) => {
+                    match async {
+                        Async::NotReady => {
+                            let stream = stream::poll_fn(|| Ok(Async::NotReady));
+                            Box::new(stream)
+                        }
+                        Async::Ready(Some(tup)) => {
+                            let addr = l.address.clone();
+                            let stream = stream::poll_fn(move || Ok( Async::Ready(Some(tup.clone())) ))
+                                .map(move |stream| (future::ok(stream), addr.clone()));
+                            Box::new(stream)
+                        }
+                        Async::Ready(None) => {
+                            let stream = stream::empty();
+                            Box::new(stream)
+                        }
+                    }
+                }
+            };
+    }
 
     #[test]
     fn incoming_event() {
@@ -341,8 +343,9 @@ mod tests {
     #[test]
     fn listener_stream_returns_transport() {
         let t = DummyTransport::new();
+        let t_clone = t.clone();
         let ls = ListenersStream::new(t);
-        assert_eq!(ls.transport(), &t);
+        assert_eq!(ls.transport(), &t_clone);
     }
 
     #[test]
@@ -381,7 +384,10 @@ mod tests {
     #[test]
     fn listener_stream_poll_with_ready_listeners_is_ready() {
         let mut t = DummyTransport::new();
-        t.set_initial_listener_state(ListenerState::Ok(Async::Ready(Some(1))));
+        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        let muxer = DummyMuxer::new();
+        let expected_output = (peer_id.clone(), muxer.clone());
+        t.set_initial_listener_state(ListenerState::Ok(Async::Ready(Some( (peer_id, muxer) ))));
         let addr1 = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
         let addr2 = "/ip4/127.0.0.2/tcp/4321".parse::<Multiaddr>().expect("bad multiaddr");
         let mut ls = ListenersStream::new(t);
@@ -392,7 +398,7 @@ mod tests {
             assert_matches!(listeners_event, ListenersEvent::Incoming{mut upgrade, listen_addr, ..} => {
                 assert_eq!(listen_addr.to_string(), "/ip4/127.0.0.2/tcp/4321");
                 assert_matches!(upgrade.poll().unwrap(), Async::Ready(tup) => {
-                    assert_eq!(tup, 1)
+                    assert_eq!(tup, expected_output)
                 });
             })
         });
@@ -415,7 +421,7 @@ mod tests {
             assert_matches!(listeners_event, ListenersEvent::Incoming{mut upgrade, listen_addr, ..} => {
                 assert_eq!(listen_addr.to_string(), "/ip4/127.0.0.1/tcp/1234");
                 assert_matches!(upgrade.poll().unwrap(), Async::Ready(tup) => {
-                    assert_eq!(tup, 1)
+                    assert_eq!(tup, expected_output)
                 });
             })
         });
@@ -438,7 +444,9 @@ mod tests {
     #[test]
     fn listener_stream_poll_with_erroring_listener_emits_closed_event() {
         let mut t = DummyTransport::new();
-        t.set_initial_listener_state(ListenerState::Ok(Async::Ready(Some(1))));
+        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        let muxer = DummyMuxer::new();
+        t.set_initial_listener_state(ListenerState::Ok(Async::Ready(Some( (peer_id, muxer) ))));
         let addr = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
         let mut ls = ListenersStream::new(t);
         ls.listen_on(addr).expect("listen_on failed");
@@ -452,7 +460,9 @@ mod tests {
     #[test]
     fn listener_stream_poll_chatty_listeners_may_drown_others() {
         let mut t = DummyTransport::new();
-        t.set_initial_listener_state(ListenerState::Ok(Async::Ready(Some(1))));
+        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        let muxer = DummyMuxer::new();
+        t.set_initial_listener_state(ListenerState::Ok(Async::Ready(Some( (peer_id, muxer) ))));
         let mut ls = ListenersStream::new(t);
         for n in 0..4 {
             let addr = format!("/ip4/127.0.0.{}/tcp/123{}", n, n).parse::<Multiaddr>().expect("bad multiaddr");
@@ -478,7 +488,9 @@ mod tests {
     #[test]
     fn listener_stream_poll_processes_listeners_as_expected_if_they_are_not_yielding_continuously() {
         let mut t = DummyTransport::new();
-        t.set_initial_listener_state(ListenerState::Ok(Async::Ready(Some(1))));
+        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        let muxer = DummyMuxer::new();
+        t.set_initial_listener_state(ListenerState::Ok(Async::Ready(Some( (peer_id, muxer) ))));
         let mut ls = ListenersStream::new(t);
         for n in 0..4 {
             let addr = format!("/ip4/127.0.0.{}/tcp/123{}", n, n).parse::<Multiaddr>().expect("bad multiaddr");
