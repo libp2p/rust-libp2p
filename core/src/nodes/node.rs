@@ -282,11 +282,9 @@ where
         // Polling outbound substreams.
         // We remove each element from `outbound_substreams` one by one and add them back.
         for n in (0..self.outbound_substreams.len()).rev() {
-            println!("[Node, poll, poll_outbound]");
             let (user_data, mut outbound) = self.outbound_substreams.swap_remove(n);
             match self.muxer.poll_outbound(&mut outbound) {
                 Ok(Async::Ready(Some(substream))) => {
-                    println!("[Node, poll, poll_outbound] AsyncReady(Some), yielding OutboundSubstream");
                     let substream = muxing::substream_from_ref(self.muxer.clone(), substream);
                     self.muxer.destroy_outbound(outbound);
                     return Ok(Async::Ready(Some(NodeEvent::OutboundSubstream {
@@ -300,17 +298,14 @@ where
                     return Ok(Async::Ready(Some(NodeEvent::OutboundClosed { user_data })));
                 }
                 Ok(Async::NotReady) => {
-                    println!("[Node, poll, poll_outbound] Async::NotReady, yielding and putting putting back the outbound stream");
                     self.outbound_substreams.push((user_data, outbound));
                 }
                 Err(err) => {
-                    println!("[Node, poll, poll_outbound] Err, yielding Err");
                     self.muxer.destroy_outbound(outbound);
                     return Err(err);
                 }
             }
         }
-        println!("[Node, poll] is inbound open={}, is outbound open={}, outbound_substreams={:?}", self.is_inbound_open(), self.is_outbound_open(), self.outbound_substreams.len());
         // Closing the node if there's no way we can do anything more.
         if self.inbound_state == StreamState::Closed
             && self.outbound_state == StreamState::Closed

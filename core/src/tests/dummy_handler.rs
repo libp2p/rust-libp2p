@@ -89,7 +89,6 @@ impl NodeHandler for Handler {
         self.events.push(inevent)
     }
     fn shutdown(&mut self) {
-        println!("[NodeHandler, shutdown]");
         self.state = Some(HandlerState::Ready(None));
     }
     fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<usize, Event>>, IoError> {
