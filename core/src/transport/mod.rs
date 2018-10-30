@@ -94,7 +94,7 @@ pub trait Transport {
     where
         Self: Sized;
 
-    /// Dial to the given multi-addr.
+    /// Dial the given multi-addr.
     ///
     /// Returns either a future which may resolve to a connection, or gives back the multiaddress.
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)>
@@ -114,7 +114,7 @@ pub trait Transport {
     /// as is.
     ///
     /// Returns `None` if nothing can be determined. This happens if this trait implementation
-    /// doesn't recognize the protocols, or if `server` and `observed` are related.
+    /// doesn't recognize the protocols, or if `server` and `observed` are not related.
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
 
     /// Turns this `Transport` into an abstract boxed transport.
