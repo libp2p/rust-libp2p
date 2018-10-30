@@ -165,6 +165,11 @@ where
         }
     }
 
+    /// Returns a reference to the `NodeHandler`
+    pub fn handler(&self) -> &THandler{
+        &self.handler
+    }
+
     /// Injects an event to the handler.
     #[inline]
     pub fn inject_event(&mut self, event: THandler::InEvent) {
@@ -353,10 +358,6 @@ mod tests {
         }
     }
 
-    fn did_see_event(handled_node: &mut TestHandledNode, event: &Event) -> bool {
-        handled_node.handler.events.contains(event)
-    }
-
     // Set the state of the `Handler` after `inject_outbound_closed` is called
     fn set_next_handler_outbound_state( handled_node: &mut TestHandledNode, next_state: HandlerState) {
         handled_node.handler.next_outbound_state = Some(next_state);
@@ -434,7 +435,7 @@ mod tests {
 
         let event = Event::Custom("banana");
         handled.inject_event(event.clone());
-        assert!(did_see_event(&mut handled, &event));
+        assert_eq!(handled.handler().events, vec![event]);
     }
 
     #[test]
@@ -554,7 +555,7 @@ mod tests {
             HandlerState::Ready(Some(NodeHandlerEvent::Custom(Event::Custom("pear"))))
         );
         handled.poll().expect("poll works");
-        assert_eq!(handled.handler.events, vec![Event::OutboundClosed]);
+        assert_eq!(handled.handler().events, vec![Event::OutboundClosed]);
     }
 
     #[test]
@@ -591,7 +592,7 @@ mod tests {
         // – …and causes the Handler to yield Async::Ready(None)
         // – which in turn makes the HandledNode to yield Async::Ready(None) as well
         assert_matches!(handled.poll(), Ok(Async::Ready(None)));
-        assert_eq!(handled.handler.events, vec![
+        assert_eq!(handled.handler().events, vec![
             Event::InboundClosed, Event::OutboundClosed
         ]);
     }
@@ -603,9 +604,9 @@ mod tests {
             .with_handler_state(HandlerState::Err) // stop the loop
             .handled_node();
 
-        assert_eq!(h.handler.events, vec![]);
+        assert_eq!(h.handler().events, vec![]);
         let _ = h.poll();
-        assert_eq!(h.handler.events, vec![Event::InboundClosed]);
+        assert_eq!(h.handler().events, vec![Event::InboundClosed]);
     }
 
     #[test]
@@ -617,9 +618,9 @@ mod tests {
             .with_handler_state(HandlerState::Err) // stop the loop
             .handled_node();
 
-        assert_eq!(h.handler.events, vec![]);
+        assert_eq!(h.handler().events, vec![]);
         let _ = h.poll();
-        assert_eq!(h.handler.events, vec![Event::OutboundClosed]);
+        assert_eq!(h.handler().events, vec![Event::OutboundClosed]);
     }
 
     #[test]
@@ -631,9 +632,9 @@ mod tests {
             .with_handler_state(HandlerState::Err) // stop the loop
             .handled_node();
 
-        assert_eq!(h.handler.events, vec![]);
+        assert_eq!(h.handler().events, vec![]);
         let _ = h.poll();
-        assert_eq!(h.handler.events, vec![Event::Substream(Some(1))]);
+        assert_eq!(h.handler().events, vec![Event::Substream(Some(1))]);
     }
 
     #[test]
@@ -644,8 +645,8 @@ mod tests {
             .with_handler_state(HandlerState::Err) // stop the loop
             .handled_node();
 
-        assert_eq!(h.handler.events, vec![]);
+        assert_eq!(h.handler().events, vec![]);
         let _ = h.poll();
-        assert_eq!(h.handler.events, vec![Event::Substream(None)]);
+        assert_eq!(h.handler().events, vec![Event::Substream(None)]);
     }
 }
