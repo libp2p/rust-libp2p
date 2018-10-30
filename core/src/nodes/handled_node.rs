@@ -170,6 +170,11 @@ where
         &self.handler
     }
 
+    /// Returns a mutable reference to the `NodeHandler`
+    pub fn handler_mut(&mut self) -> &mut THandler{
+        &mut self.handler
+    }
+
     /// Injects an event to the handler.
     #[inline]
     pub fn inject_event(&mut self, event: THandler::InEvent) {
