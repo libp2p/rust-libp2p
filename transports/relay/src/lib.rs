@@ -38,5 +38,5 @@ mod message;
 mod protocol;
 mod utility;
 
-pub use handler::{RelayHandler, RelayHandlerEvent};
+pub use handler::{RelayHandler, RelayHandlerEvent, RelayHandlerHopRequest, RelayHandlerDestRequest};
 pub use protocol::{RelayOutput, RelayConfig};

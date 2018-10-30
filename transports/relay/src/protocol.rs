@@ -150,6 +150,14 @@ pub struct RelayHopRequest<TStream> {
 impl<TStream> RelayHopRequest<TStream>
 where TStream: AsyncRead + AsyncWrite + 'static
 {
+    /// Peer id of the node we should relay communications to.
+    #[inline]
+    pub fn target_id(&self) -> &PeerId {
+        &self.dest.id
+    }
+
+    // TODO: addresses
+
     /// Accepts the request by providing a stream to the destination.
     ///
     /// The `dest_stream` should be a brand new dialing substream. This method will negotiate the
