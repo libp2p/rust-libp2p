@@ -22,10 +22,10 @@
 
 use std::io::{self, Error as IoError};
 
-use futures::prelude::*;
-use nodes::handled_node::{NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent};
 use super::dummy_muxer::DummyMuxer;
+use futures::prelude::*;
 use muxing::SubstreamRef;
+use nodes::handled_node::{NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent};
 use std::sync::Arc;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -65,10 +65,14 @@ impl NodeHandler for Handler {
     type OutEvent = Event;
     type OutboundOpenInfo = usize;
     type Substream = SubstreamRef<Arc<DummyMuxer>>;
-    fn inject_substream(&mut self, _: Self::Substream, endpoint: NodeHandlerEndpoint<Self::OutboundOpenInfo>) {
+    fn inject_substream(
+        &mut self,
+        _: Self::Substream,
+        endpoint: NodeHandlerEndpoint<Self::OutboundOpenInfo>,
+    ) {
         let user_data = match endpoint {
             NodeHandlerEndpoint::Dialer(user_data) => Some(user_data),
-            NodeHandlerEndpoint::Listener => None
+            NodeHandlerEndpoint::Listener => None,
         };
         self.events.push(Event::Substream(user_data));
     }
@@ -94,9 +98,9 @@ impl NodeHandler for Handler {
                 HandlerState::NotReady => Ok(Async::NotReady),
                 HandlerState::Ready(None) => Ok(Async::Ready(None)),
                 HandlerState::Ready(Some(event)) => Ok(Async::Ready(Some(event.clone()))),
-                HandlerState::Err => {Err(io::Error::new(io::ErrorKind::Other, "oh noes"))},
+                HandlerState::Err => Err(io::Error::new(io::ErrorKind::Other, "oh noes")),
             },
-            None => Ok(Async::NotReady)
+            None => Ok(Async::NotReady),
         }
     }
 }
