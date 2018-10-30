@@ -119,8 +119,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio_current_thread;
+    extern crate tokio;
     extern crate tokio_tcp;
+    use self::tokio::runtime::current_thread::Runtime;
     use self::tokio_tcp::TcpListener;
     use self::tokio_tcp::TcpStream;
     use stream_cipher::{ctr, Cipher};
@@ -164,8 +165,9 @@ mod tests {
 
         let data_sent = encoder.send(BytesMut::from(data.to_vec())).from_err();
         let data_received = decoder.into_future().map(|(n, _)| n).map_err(|(e, _)| e);
+        let mut rt = Runtime::new().unwrap();
 
-        let (_, decoded) = tokio_current_thread::block_on_all(data_sent.join(data_received))
+        let (_, decoded) = rt.block_on(data_sent.join(data_received))
             .map_err(|_| ())
             .unwrap();
         assert_eq!(&decoded.unwrap()[..], &data[..]);
@@ -223,7 +225,8 @@ mod tests {
             .and_then(|server| server.into_future().map_err(|(e, _)| e.into()))
             .map(|recved| recved.0.unwrap().to_vec());
 
-        let received = tokio_current_thread::block_on_all(fin).unwrap();
+        let mut rt = Runtime::new().unwrap();
+        let received = rt.block_on(fin).unwrap();
         assert_eq!(received, data);
     }
 
