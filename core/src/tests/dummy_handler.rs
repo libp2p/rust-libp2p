@@ -83,7 +83,7 @@ impl NodeHandler for Handler {
     }
     fn inject_event(&mut self, inevent: Self::InEvent) {
         self.events.push(inevent)
-        }
+    }
     fn shutdown(&mut self) {
         println!("[NodeHandler, shutdown]");
         self.state = Some(HandlerState::Ready(None));
