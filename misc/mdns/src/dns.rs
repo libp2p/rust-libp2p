@@ -141,6 +141,7 @@ pub fn build_query_response(
         append_txt_record(&mut out, &peer_id_bytes, ttl, Some(&txt_to_send_bytes[..]))?;
     }
 
+    // The DNS specs specify that the maximum allowed size is 9000 bytes.
     if out.len() > 9000 {
         return Err(MdnsResponseError::ResponseTooLong);
     }
