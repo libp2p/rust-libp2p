@@ -19,24 +19,20 @@
 // DEALINGS IN THE SOFTWARE.
 
 extern crate bs58;
-extern crate byteorder;
 extern crate bytes;
-extern crate fnv;
 extern crate futures;
 extern crate libp2p_core;
-#[macro_use]
-extern crate log;
-extern crate multiaddr;
-extern crate parking_lot;
 extern crate protobuf;
 extern crate smallvec;
 extern crate tokio_codec;
 extern crate tokio_io;
 extern crate unsigned_varint;
 
+mod handler;
 mod protocol;
 mod rpc_proto;
 mod topic;
 
-pub use self::protocol::*;      // TODO: exact reexports
+pub use self::handler::FloodsubHandler;
+pub use self::protocol::*; // TODO: exact reexports
 pub use self::topic::{Topic, TopicBuilder, TopicHash};

@@ -78,7 +78,8 @@ impl TopicBuilder {
 
     /// Turns the builder into an actual `Topic`.
     pub fn build(self) -> Topic {
-        let bytes = self.builder
+        let bytes = self
+            .builder
             .write_to_bytes()
             .expect("protobuf message is always valid");
         let hash = TopicHash {
