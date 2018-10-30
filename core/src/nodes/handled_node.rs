@@ -25,7 +25,7 @@ use std::io::Error as IoError;
 
 /// Handler for the substreams of a node.
 // TODO: right now it is possible for a node handler to be built, then shut down right after if we
-//       realize we dialed the wrong peer for example ; this could be surprising and should either
+//       realize we dialed the wrong peer for example; this could be surprising and should either
 //       be documented or changed (favouring the "documented" right now)
 pub trait NodeHandler {
     /// Custom event that can be received from the outside.

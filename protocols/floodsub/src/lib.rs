@@ -345,7 +345,7 @@ impl FloodSubController {
         let topics = topics.into_iter();
 
         if log_enabled!(Level::Debug) {
-            debug!("Queuing sub/unsub message ; sub = {:?} ; unsub = {:?}",
+            debug!("Queuing sub/unsub message; sub = {:?}; unsub = {:?}",
                 topics.clone().filter(|t| t.1)
                         .map(|t| t.0.hash().clone().into_string())
                         .collect::<Vec<_>>(),
@@ -389,7 +389,7 @@ impl FloodSubController {
     {
         let topics = topics.into_iter().collect::<Vec<_>>();
 
-        debug!("Queueing publish message ; topics = {:?} ; data_len = {:?}",
+        debug!("Queueing publish message; topics = {:?}; data_len = {:?}",
                topics.iter().map(|t| t.hash().clone().into_string()).collect::<Vec<_>>(),
                data.len());
 
@@ -554,7 +554,7 @@ fn handle_packet_received(
     let mut input = match protobuf::parse_from_bytes::<rpc_proto::RPC>(&bytes) {
         Ok(msg) => msg,
         Err(err) => {
-            debug!("Failed to parse protobuf message ; err = {:?}", err);
+            debug!("Failed to parse protobuf message; err = {:?}", err);
             return Err(err.into());
         }
     };
@@ -588,7 +588,7 @@ fn handle_packet_received(
             .lock()
             .insert(hash((from.clone(), publish.take_seqno())))
         {
-            trace!("Skipping message because we had already received it ; payload = {} bytes",
+            trace!("Skipping message because we had already received it; payload = {} bytes",
                    publish.get_data().len());
             continue;
         }
@@ -609,7 +609,7 @@ fn handle_packet_received(
             .map(|h| TopicHash::from_raw(h))
             .collect::<Vec<_>>();
 
-        trace!("Processing message for topics {:?} ; payload = {} bytes",
+        trace!("Processing message for topics {:?}; payload = {} bytes",
                topics,
                publish.get_data().len());
 

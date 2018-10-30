@@ -22,3 +22,4 @@ libp2p = { git = "https://github.com/libp2p/rust-libp2p" }
 (open a pull request if you want your project to be added here)
 
 - https://github.com/paritytech/polkadot
+- https://github.com/paritytech/substrate
