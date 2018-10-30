@@ -27,7 +27,7 @@ use futures::{future::{self, FutureResult}, stream};
 use {Multiaddr, Transport, PeerId};
 use std::io;
 use tests::dummy_muxer::DummyMuxer;
-
+use PublicKey;
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) enum ListenerState {
@@ -83,7 +83,8 @@ impl Transport for DummyTransport {
     where
         Self: Sized
     {
-        unimplemented!();
+        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        Ok(Box::new(future::ok((peer_id, DummyMuxer::new()))))
     }
 
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
