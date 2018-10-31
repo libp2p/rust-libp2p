@@ -12,8 +12,7 @@ libp2p-core = { path = "../../core" }
 log = "0.4.1"
 protobuf = "2.0.2"
 rand = "0.5"
-# TODO: use the paritytech repo after https://github.com/paritytech/rust-secp256k1/pull/14
-eth-secp256k1 = { git = "https://github.com/tomaka/rust-secp256k1", branch = "pub-rand", optional = true }
+eth-secp256k1 = { git = "https://github.com/paritytech/rust-secp256k1", optional = true }
 aes-ctr = "0.1.0"
 aesni = { version = "0.4.1", features = ["nocheck"], optional = true }
 twofish = "0.1.0"
