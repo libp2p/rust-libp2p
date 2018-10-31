@@ -505,7 +505,7 @@ where
     pub fn peer(&mut self, peer_id: PeerId) -> Peer<TTrans, TInEvent, TOutEvent, THandler> {
         // TODO: we do `peer_mut(...).is_some()` followed with `peer_mut(...).unwrap()`, otherwise
         // the borrow checker yells at us.
-
+        println!("[RawSwarm, peer] active_nodes={:?}, reach_attempts.out_reach_attempts={:?}", self.active_nodes, self. reach_attempts.out_reach_attempts);
         if self.active_nodes.peer_mut(&peer_id).is_some() {
             debug_assert!(!self.reach_attempts.out_reach_attempts.contains_key(&peer_id));
             return Peer::Connected(PeerConnected {
@@ -1291,14 +1291,15 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tests::dummy_transport::DummyTransport;
-    use tests::dummy_handler::{Handler, InEvent, OutEvent};
     use std::sync::Arc;
     use parking_lot::Mutex;
     use tokio::runtime::{Builder, Runtime};
-    use tests::dummy_transport::ListenerState;
-    use tests::dummy_muxer::DummyMuxer;
     use PublicKey;
+    use tests::dummy_transport::DummyTransport;
+    use tests::dummy_handler::{Handler, HandlerState, InEvent, OutEvent};
+    use tests::dummy_transport::ListenerState;
+    use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
+    use nodes::NodeHandlerEvent;
 
     #[test]
     fn query_transport() {
@@ -1404,5 +1405,60 @@ mod tests {
         let swarm = swarm.lock();
         // Now there's an incoming connection
         assert_eq!(swarm.num_incoming_negotiated(), 1);
+    }
+
+    #[test]
+    fn broadcasted_events_reach_active_nodes() {
+        let transport = DummyTransport::new();
+        let mut swarm = RawSwarm::<_, _, _, Handler>::new(transport);
+        let mut muxer = DummyMuxer::new();
+        muxer.set_inbound_connection_state(DummyConnectionState::Pending);
+        muxer.set_outbound_connection_state(DummyConnectionState::Opened);
+
+        let addr = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
+        let mut handler = Handler::default();
+        handler.next_states = vec![HandlerState::Ready(Some(NodeHandlerEvent::Custom(OutEvent::Custom("from handler 1") ))),];
+        let dial_result = swarm.dial(addr, handler);
+        assert!(dial_result.is_ok());
+
+        let swarm = Arc::new(Mutex::new(swarm));
+
+        let mut rt = Builder::new().core_threads(1).build().unwrap();
+
+        let swarm_fut = swarm.clone();
+        rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
+            let mut swarm = swarm_fut.lock();
+            assert_matches!(swarm.poll(), Async::NotReady);
+            // Signalling handler to send an event, bubbles back up at a later poll()
+            swarm.broadcast_event(&InEvent::NextState);
+            Ok(Async::Ready(()))
+        })).expect("tokio works");
+
+        let swarm_fut = swarm.clone();
+        rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
+            let mut swarm = swarm_fut.lock();
+            assert_matches!(swarm.poll(), Async::Ready(RawSwarmEvent::Connected { .. }));
+            Ok(Async::Ready(()))
+        })).expect("tokio works");
+
+        let swarm_fut = swarm.clone();
+        rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
+            let mut swarm = swarm_fut.lock();
+            assert_matches!(swarm.poll(), Async::Ready(RawSwarmEvent::NodeEvent { peer_id: _, event }) => {
+                // The even we sent reached the node and triggered sending the out event we told it to return
+                assert_matches!(event, OutEvent::Custom("from handler 1"));
+            });
+            Ok(Async::Ready(()))
+        })).expect("tokio works");
+    }
+
+    #[test]
+    fn querying_for_unknown_peer_returns_not_connected() {
+        let mut swarm = RawSwarm::<_, _, _, Handler>::new(DummyTransport::new());
+        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        let peer = swarm.peer(peer_id.clone());
+        assert_matches!(peer, Peer::NotConnected( PeerNotConnected { nodes: _, peer_id: node_peer_id }) => {
+            assert_eq!(node_peer_id, peer_id);
+        });
     }
 }

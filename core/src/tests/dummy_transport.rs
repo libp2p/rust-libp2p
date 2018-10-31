@@ -31,7 +31,6 @@ use PublicKey;
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) enum ListenerState {
-    /// The `usize` indexes items produced by the listener
     Ok(Async<Option<(PeerId, DummyMuxer)>>),
     Error
 }
@@ -39,11 +38,22 @@ pub(crate) enum ListenerState {
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) struct DummyTransport {
     listener_state: ListenerState,
+    // The next peer returned from dial()
+    next_peer_id: Option<PeerId>,
 }
 impl DummyTransport {
-    pub(crate) fn new() -> Self { DummyTransport{ listener_state: ListenerState::Ok(Async::NotReady) }}
+    pub(crate) fn new() -> Self {
+        DummyTransport {
+            listener_state: ListenerState::Ok(Async::NotReady),
+            next_peer_id: None,
+        }
+    }
     pub(crate) fn set_initial_listener_state(&mut self, state: ListenerState) {
         self.listener_state = state;
+    }
+
+    pub(crate) fn set_next_peer_id(&mut self, peer_id: &PeerId) {
+        self.next_peer_id = Some(peer_id.clone());
     }
 }
 impl Transport for DummyTransport {
@@ -83,7 +93,11 @@ impl Transport for DummyTransport {
     where
         Self: Sized
     {
-        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        let peer_id = if let Some(peer_id) = self.next_peer_id {
+            peer_id
+        } else {
+            PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id()
+        };
         Ok(Box::new(future::ok((peer_id, DummyMuxer::new()))))
     }
 
