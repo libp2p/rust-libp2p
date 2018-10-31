@@ -194,8 +194,6 @@ extern crate tokio;
 #[cfg(test)]
 extern crate tokio_codec;
 #[cfg(test)]
-extern crate tokio_timer;
-#[cfg(test)]
 #[macro_use]
 extern crate assert_matches;
 #[cfg(test)]
