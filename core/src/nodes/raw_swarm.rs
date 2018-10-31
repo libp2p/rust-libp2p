@@ -1295,7 +1295,10 @@ mod tests {
     use tests::dummy_handler::{Handler, InEvent, OutEvent};
     use std::sync::Arc;
     use parking_lot::Mutex;
-    use tokio::runtime::Builder;
+    use tokio::runtime::{Builder, Runtime};
+    use tests::dummy_transport::ListenerState;
+    use tests::dummy_muxer::DummyMuxer;
+    use PublicKey;
 
     #[test]
     fn query_transport() {
@@ -1373,23 +1376,33 @@ mod tests {
 
     #[test]
     fn num_incoming_negotiated() {
-        use transport;
-        let (tx, rx) = transport::connector();
-        // let swarm = RawSwarm::new(rx);
-        let swarm = RawSwarm {
-            listeners: ListenersStream::new(rx),
-            active_nodes: CollectionStream::new(),
-            reach_attempts: ReachAttempts {
-                out_reach_attempts: Default::default(),
-                other_reach_attempts: Vec::new(),
-                connected_points: Default::default(),
-            },
-        };
-        // let mut listeners = ListenersStream::new(rx);
-        // listeners.listen_on("/memory".parse().unwrap()).unwrap();
+        let mut transport = DummyTransport::new();
+        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        let muxer = DummyMuxer::new();
 
-        // let dial = tx.dial("/memory".parse().unwrap()).unwrap_or_else(|_| panic!());
+        // Set up listener to see an incoming connection
+        transport.set_initial_listener_state(ListenerState::Ok(Async::Ready(Some((peer_id, muxer)))));
+
+        let mut swarm = RawSwarm::<_, _, _, Handler>::new(transport);
+        swarm.listen_on("/memory".parse().unwrap()).unwrap();
+
+        // no incoming yet
+        assert_eq!(swarm.num_incoming_negotiated(), 0);
+
+        let mut rt = Runtime::new().unwrap();
+        let swarm = Arc::new(Mutex::new(swarm));
+        let swarm_fut = swarm.clone();
+        let fut = future::poll_fn(move || -> Poll<_, ()> {
+            let mut swarm_fut = swarm_fut.lock();
+            assert_matches!(swarm_fut.poll(), Async::Ready(RawSwarmEvent::IncomingConnection(incoming)) => {
+                incoming.accept(Handler::default());
+            });
+
+            Ok(Async::Ready(()))
+        });
+        rt.block_on(fut).expect("tokio works");
+        let swarm = swarm.lock();
+        // Now there's an incoming connection
+        assert_eq!(swarm.num_incoming_negotiated(), 1);
     }
-
-
 }
