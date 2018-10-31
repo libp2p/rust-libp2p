@@ -87,7 +87,7 @@ where
 
         let bytes = message
             .write_to_bytes()
-            .expect("writing protobuf failed ; should never happen");
+            .expect("writing protobuf failed; should never happen");
 
         let future = self.inner.send(bytes).map(|_| ());
         Box::new(future) as Box<_>
@@ -142,7 +142,7 @@ where
                             let (info, observed_addr) = match parse_proto_msg(msg) {
                                 Ok(v) => v,
                                 Err(err) => {
-                                    debug!("Failed to parse protobuf message ; error = {:?}", err);
+                                    debug!("Failed to parse protobuf message; error = {:?}", err);
                                     return Err(err.into());
                                 }
                             };

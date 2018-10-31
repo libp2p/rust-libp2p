@@ -306,7 +306,7 @@ impl SecioKeyPair {
             SecioKeyPairInner::Secp256k1 { ref private } => {
                 let secp = secp256k1::Secp256k1::with_caps(secp256k1::ContextFlag::SignOnly);
                 let pubkey = secp256k1::key::PublicKey::from_secret_key(&secp, private)
-                    .expect("wrong secp256k1 private key ; type safety violated");
+                    .expect("wrong secp256k1 private key; type safety violated");
                 PublicKey::Secp256k1(pubkey.serialize_vec(&secp, true).to_vec())
             }
         }
