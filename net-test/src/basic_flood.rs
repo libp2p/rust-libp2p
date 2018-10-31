@@ -30,7 +30,7 @@ use tokio_codec::{Framed, LinesCodec};
 struct Handler<TSubstream> {
     substreams: Vec<Box<Future<Item = (), Error = io::Error> + Send>>,
     substreams_to_request: usize,
-    substreams_being_opened: usize,
+    substreams_to_finish: usize,
     marker: PhantomData<TSubstream>,
 }
 
@@ -40,7 +40,7 @@ impl<TSubstream> Default for Handler<TSubstream> {
         Handler {
             substreams: Vec::new(),
             substreams_to_request: 10,
-            substreams_being_opened: 0,
+            substreams_to_finish: 20,
             marker: PhantomData,
         }
     }
@@ -58,8 +58,7 @@ where TSubstream: AsyncRead + AsyncWrite + Send + 'static,
         const DATA: &'static str = "hello world";
 
         if let NodeHandlerEndpoint::Dialer(_) = endpoint {
-            assert!(self.substreams_being_opened >= 1);
-            self.substreams_being_opened -= 1;
+            assert!(self.substreams_to_finish >= 1);
         }
 
         let future = Framed::new(substream, LinesCodec::new())
@@ -85,7 +84,7 @@ where TSubstream: AsyncRead + AsyncWrite + Send + 'static,
 
     fn shutdown(&mut self) {
         assert_eq!(self.substreams_to_request, 0);
-        assert_eq!(self.substreams_being_opened, 0);
+        assert_eq!(self.substreams_to_finish, 0);
 
         // TODO: not sure if shutdown() is supposed to be called
         //assert!(self.substreams.is_empty());
@@ -94,7 +93,6 @@ where TSubstream: AsyncRead + AsyncWrite + Send + 'static,
     fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>>, io::Error> {
         if self.substreams_to_request >= 1 {
             self.substreams_to_request -= 1;
-            self.substreams_being_opened += 1;
             return Ok(Async::Ready(Some(NodeHandlerEvent::OutboundSubstreamRequest(()))));
         }
 
@@ -102,11 +100,11 @@ where TSubstream: AsyncRead + AsyncWrite + Send + 'static,
             let mut substream = self.substreams.swap_remove(n);
             match substream.poll()? {
                 Async::NotReady => self.substreams.push(substream),
-                Async::Ready(()) => (),
+                Async::Ready(()) => self.substreams_to_finish -= 1,
             }
         }
 
-        if self.substreams_being_opened == 0 && self.substreams.is_empty() {
+        if self.substreams_to_finish == 0 && self.substreams.is_empty() {
             Ok(Async::Ready(None))
         } else {
             Ok(Async::NotReady)
