@@ -85,11 +85,11 @@
 //! extern crate libp2p_core;
 //! extern crate libp2p_tcp_transport;
 //!
-//! use libp2p_core::Transport;
+//! use libp2p_core::Dialer;
 //!
 //! # fn main() {
 //! let tcp_transport = libp2p_tcp_transport::TcpConfig::new();
-//! let upgraded = tcp_transport.with_upgrade(libp2p_core::upgrade::PlainTextConfig);
+//! let upgraded = tcp_transport.with_dialer_upgrade(libp2p_core::upgrade::DeniedUpgrade);
 //!
 //! // upgraded.dial(...)   // automatically applies the plain text protocol on the socket
 //! # }
@@ -133,30 +133,25 @@
 //!
 //! use futures::{Future, Stream};
 //! use libp2p_ping::{Ping, PingOutput};
-//! use libp2p_core::Transport;
+//! use libp2p_core::{Dialer, transport::Error};
 //! use tokio::runtime::current_thread::Runtime;
 //!
 //! # fn main() {
-//! let ping_finished_future = libp2p_tcp_transport::TcpConfig::new()
+//! let ping_dialer = libp2p_tcp_transport::TcpConfig::new()
 //!     // We have a `TcpConfig` struct that implements `Transport`, and apply a `Ping` upgrade on it.
-//!     .with_upgrade(Ping::default())
+//!     .with_dialer_upgrade(Ping::default())
 //!     // TODO: right now the only available protocol is ping, but we want to replace it with
 //!     //       something that is more simple to use
 //!     .dial("127.0.0.1:12345".parse::<libp2p_core::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())
-//!     .and_then(|out| {
-//!         match out {
-//!             PingOutput::Ponger(processing) => Box::new(processing) as Box<Future<Item = _, Error = _>>,
-//!             PingOutput::Pinger(mut pinger) => {
-//!                 pinger.ping(());
-//!                 let f = pinger.into_future().map(|_| ()).map_err(|(err, _)| err);
-//!                 Box::new(f) as Box<Future<Item = _, Error = _>>
-//!             },
-//!         }
+//!     .and_then(|mut pinger| {
+//!         pinger.ping(());
+//!         let f = pinger.into_future().map(|_| ()).map_err(|(err, _)| Error::Transport(err));
+//!         Box::new(f) as Box<Future<Item = _, Error = _>>
 //!     });
 //!
 //! // Runs until the ping arrives.
 //! let mut rt = Runtime::new().unwrap();
-//! let _ = rt.block_on(ping_finished_future).unwrap();
+//! let _ = rt.block_on(ping_dialer).unwrap();
 //! # }
 //! ```
 //!
@@ -219,5 +214,25 @@ pub use self::multiaddr::Multiaddr;
 pub use self::muxing::StreamMuxer;
 pub use self::peer_id::PeerId;
 pub use self::public_key::PublicKey;
-pub use self::transport::Transport;
-pub use self::upgrade::{ConnectionUpgrade, Endpoint};
+pub use self::transport::{Dialer, Listener, Transport};
+pub use self::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum Endpoint {
+    /// The socket comes from a dialer.
+    Dialer,
+    /// The socket comes from a listener.
+    Listener,
+}
+
+impl std::ops::Not for Endpoint {
+    type Output = Endpoint;
+
+    fn not(self) -> Self::Output {
+        match self {
+            Endpoint::Dialer => Endpoint::Listener,
+            Endpoint::Listener => Endpoint::Dialer
+        }
+    }
+}
+

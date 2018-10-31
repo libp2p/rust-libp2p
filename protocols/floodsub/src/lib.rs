@@ -24,7 +24,6 @@ extern crate bytes;
 extern crate fnv;
 extern crate futures;
 extern crate libp2p_core;
-#[macro_use]
 extern crate log;
 extern crate multiaddr;
 extern crate parking_lot;
@@ -44,8 +43,8 @@ use bytes::{Bytes, BytesMut};
 use fnv::{FnvHashMap, FnvHashSet, FnvHasher};
 use futures::sync::mpsc;
 use futures::{future, Future, Poll, Sink, Stream};
-use libp2p_core::{ConnectionUpgrade, Endpoint, PeerId};
-use log::Level;
+use libp2p_core::{PeerId, upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}};
+use log::{debug, Level, trace, log_enabled};
 use multiaddr::{Protocol, Multiaddr};
 use parking_lot::{Mutex, RwLock, RwLockUpgradableReadGuard};
 use protobuf::Message as ProtobufMessage;
@@ -87,30 +86,11 @@ impl FloodSubUpgrade {
 
         (upgrade, receiver)
     }
-}
 
-impl<C> ConnectionUpgrade<C> for FloodSubUpgrade
-where
-    C: AsyncRead + AsyncWrite + Send + 'static,
-{
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
-    type UpgradeIdentifier = ();
-
-    #[inline]
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once(("/floodsub/1.0.0".into(), ()))
-    }
-
-    type Output = FloodSubFuture;
-    type Future = Box<Future<Item = Self::Output, Error = IoError> + Send>;
-
-    #[inline]
-    fn upgrade(
-        self,
-        socket: C,
-        _: Self::UpgradeIdentifier,
-        _: Endpoint,
-    ) -> Self::Future {
+    fn upgrade<C>(self, socket: C, _: ()) -> impl Future<Item = FloodSubFuture, Error = IoError>
+    where
+        C: AsyncRead + AsyncWrite + Send + 'static
+    {
         debug!("Upgrading connection as floodsub");
 
         let future = {
@@ -220,6 +200,43 @@ where
         };
 
         Box::new(future) as Box<_>
+    }
+
+}
+
+impl UpgradeInfo for FloodSubUpgrade {
+    type UpgradeId = ();
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+
+    #[inline]
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once(("/floodsub/1.0.0".into(), ()))
+    }
+}
+
+impl<C> InboundUpgrade<C> for FloodSubUpgrade
+where
+    C: AsyncRead + AsyncWrite + Send + 'static,
+{
+    type Output = FloodSubFuture;
+    type Error = IoError;
+    type Future = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
+
+    fn upgrade_inbound(self, sock: C, id: Self::UpgradeId) -> Self::Future {
+        Box::new(self.upgrade(sock, id))
+    }
+}
+
+impl<C> OutboundUpgrade<C> for FloodSubUpgrade
+where
+    C: AsyncRead + AsyncWrite + Send + 'static,
+{
+    type Output = FloodSubFuture;
+    type Error = IoError;
+    type Future = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
+
+    fn upgrade_outbound(self, sock: C, id: Self::UpgradeId) -> Self::Future {
+        Box::new(self.upgrade(sock, id))
     }
 }
 

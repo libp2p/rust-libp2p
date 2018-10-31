@@ -20,14 +20,16 @@
 
 use crate::{Multiaddr, transport::{Dialer, Listener}};
 use futures::prelude::*;
-use void::Void;
 
 #[derive(Debug, Copy, Clone)]
-pub struct DeniedDialer;
+pub struct Refused<T>(pub T);
 
-impl Dialer for DeniedDialer {
-    type Output = Void;
-    type Error = Void;
+impl<T> Dialer for Refused<T>
+where
+    T: Listener
+{
+    type Output = T::Output;
+    type Error = T::Error;
     type Outbound = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> {
@@ -35,12 +37,12 @@ impl Dialer for DeniedDialer {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub struct DeniedListener;
-
-impl Listener for DeniedListener {
-    type Output = Void;
-    type Error = Void;
+impl<T> Listener for Refused<T>
+where
+    T: Dialer
+{
+    type Output = T::Output;
+    type Error = T::Error;
     type Inbound = Box<Stream<Item = (Self::Upgrade, Multiaddr), Error = std::io::Error> + Send>;
     type Upgrade = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
 

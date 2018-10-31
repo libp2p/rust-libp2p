@@ -23,58 +23,58 @@ use multiaddr::Multiaddr;
 use crate::transport::{Dialer, Listener};
 
 #[derive(Debug, Copy, Clone)]
-pub struct AndThenDialer<D, F> { dialer: D, fun: F }
+pub struct ThenDialer<D, F> { dialer: D, fun: F }
 
-impl<D, F> AndThenDialer<D, F> {
+impl<D, F> ThenDialer<D, F> {
     pub fn new(dialer: D, fun: F) -> Self {
-        AndThenDialer { dialer, fun }
+        ThenDialer { dialer, fun }
     }
 }
 
-impl<D, F, T> Dialer for AndThenDialer<D, F>
+impl<D, F, T> Dialer for ThenDialer<D, F>
 where
     D: Dialer + 'static,
     D::Outbound: Send,
-    F: FnOnce(D::Output, Multiaddr) -> T + Clone + Send + 'static,
-    T: IntoFuture<Error = D::Error> + Send + 'static,
+    F: FnOnce(Result<(D::Output, Multiaddr), D::Error>) -> T + Clone + Send + 'static,
+    T: IntoFuture + Send + 'static,
     T::Future: Send + 'static
 {
     type Output = T::Item;
-    type Error = D::Error;
+    type Error = T::Error;
     type Outbound = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> {
         let fun = self.fun;
         match self.dialer.dial(addr.clone()) {
             Ok(future) => {
-                let future = future.and_then(move |x| fun(x, addr).into_future());
+                let future = future.then(move |x| fun(x.map(|x| (x, addr))).into_future());
                 Ok(Box::new(future))
             }
-            Err((dialer, addr)) => Err((AndThenDialer::new(dialer, fun), addr))
+            Err((dialer, addr)) => Err((ThenDialer::new(dialer, fun), addr))
         }
     }
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct AndThenListener<L, F> { listener: L, fun: F }
+pub struct ThenListener<L, F> { listener: L, fun: F }
 
-impl<L, F> AndThenListener<L, F> {
+impl<L, F> ThenListener<L, F> {
     pub fn new(listener: L, fun: F) -> Self {
-        AndThenListener { listener, fun }
+        ThenListener { listener, fun }
     }
 }
 
-impl<L, F, T> Listener for AndThenListener<L, F>
+impl<L, F, T> Listener for ThenListener<L, F>
 where
     L: Listener + 'static,
     L::Inbound: Send,
     L::Upgrade: Send,
-    F: FnOnce(L::Output, Multiaddr) -> T + Clone + Send + 'static,
-    T: IntoFuture<Error = L::Error> + Send + 'static,
+    F: FnOnce(Result<(L::Output, Multiaddr), L::Error>) -> T + Clone + Send + 'static,
+    T: IntoFuture + Send + 'static,
     T::Future: Send + 'static
 {
     type Output = T::Item;
-    type Error = L::Error;
+    type Error = T::Error;
     type Inbound = Box<Stream<Item = (Self::Upgrade, Multiaddr), Error = std::io::Error> + Send>;
     type Upgrade = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
 
@@ -85,12 +85,12 @@ where
                 let stream = stream.map(move |(future, addr)| {
                     let f = fun.clone();
                     let a = addr.clone();
-                    let future = future.and_then(move |x| f(x, a).into_future());
+                    let future = future.then(move |x| f(x.map(|x| (x, a))).into_future());
                     (Box::new(future) as Box<_>, addr)
                 });
                 Ok((Box::new(stream), addr))
             }
-            Err((listener, addr)) => Err((AndThenListener::new(listener, fun), addr)),
+            Err((listener, addr)) => Err((ThenListener::new(listener, fun), addr)),
         }
     }
 

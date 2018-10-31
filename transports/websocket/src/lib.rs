@@ -56,7 +56,7 @@
 //! extern crate libp2p_tcp_transport;
 //! extern crate libp2p_websocket;
 //!
-//! use libp2p_core::{Multiaddr, Transport};
+//! use libp2p_core::{Multiaddr, transport::Dialer};
 //! use libp2p_tcp_transport::TcpConfig;
 //! use libp2p_websocket::WsConfig;
 //!
@@ -69,8 +69,7 @@
 //!
 
 extern crate futures;
-extern crate libp2p_core as swarm;
-#[macro_use]
+extern crate libp2p_core;
 extern crate log;
 extern crate multiaddr;
 extern crate rw_stream_sink;

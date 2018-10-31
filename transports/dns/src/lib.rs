@@ -34,20 +34,17 @@
 //!
 
 extern crate futures;
-extern crate libp2p_core as swarm;
-#[macro_use]
+extern crate libp2p_core;
 extern crate log;
 extern crate multiaddr;
 extern crate tokio_dns;
 extern crate tokio_io;
 
 use futures::future::{self, Future};
-use log::Level;
+use log::{Level, debug, log_enabled, trace};
 use multiaddr::{Protocol, Multiaddr};
-use std::fmt;
-use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use std::net::IpAddr;
-use swarm::Transport;
+use std::{fmt, io, net::IpAddr};
+use libp2p_core::transport;
 use tokio_dns::{CpuPoolResolver, Resolver};
 
 /// Represents the configuration for a DNS transport capability of libp2p.
@@ -92,31 +89,40 @@ where
     }
 }
 
-impl<T> Transport for DnsConfig<T>
+impl<T> transport::Listener for DnsConfig<T>
 where
-    T: Transport + Send + 'static, // TODO: 'static :-/
-    T::Dial: Send,
+    T: transport::Listener + Send + 'static
 {
     type Output = T::Output;
-    type Listener = T::Listener;
-    type ListenerUpgrade = T::ListenerUpgrade;
-    type Dial = Box<Future<Item = Self::Output, Error = IoError> + Send>;
+    type Error = T::Error;
+    type Inbound = T::Inbound;
+    type Upgrade = T::Upgrade;
 
-    #[inline]
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        match self.inner.listen_on(addr) {
-            Ok(r) => Ok(r),
-            Err((inner, addr)) => Err((
-                DnsConfig {
-                    inner,
-                    resolver: self.resolver,
-                },
-                addr,
-            )),
-        }
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Inbound, Multiaddr), (Self, Multiaddr)> {
+        let resolver = self.resolver;
+        self.inner
+            .listen_on(addr)
+            .map_err(move |(inner, addr)| (DnsConfig { inner, resolver }, addr))
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        // Since `listen_on` doesn't perform any resolution, we just pass through
+        // `nat_traversal` as well.
+        self.inner.nat_traversal(server, observed)
+    }
+}
+
+impl<T> transport::Dialer for DnsConfig<T>
+where
+    T: transport::Dialer + Send + 'static,
+    T::Outbound: Send + 'static,
+    T::Error: From<io::Error>
+{
+    type Output = T::Output;
+    type Error = T::Error;
+    type Outbound = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
+
+    fn dial(self, addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> {
         let contains_dns = addr.iter().any(|cmp| match cmp {
             Protocol::Dns4(_) => true,
             Protocol::Dns6(_) => true,
@@ -164,18 +170,11 @@ where
             .and_then(move |addr| {
                 inner
                     .dial(addr)
-                    .map_err(|_| IoError::new(IoErrorKind::Other, "multiaddr not supported"))
+                    .map_err(|_| io::Error::new(io::ErrorKind::Other, "multiaddr not supported"))
             })
             .flatten();
 
         Ok(Box::new(future) as Box<_>)
-    }
-
-    #[inline]
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        // Since `listen_on` doesn't perform any resolution, we just pass through `nat_traversal`
-        // as well.
-        self.inner.nat_traversal(server, observed)
     }
 }
 
@@ -187,11 +186,9 @@ enum ResolveTy {
 }
 
 // Resolve a DNS name and returns a future with the result.
-fn resolve_dns<'a>(
-    name: &str,
-    resolver: &CpuPoolResolver,
-    ty: ResolveTy,
-) -> impl Future<Item = Protocol<'a>, Error = IoError> {
+fn resolve_dns<'a>(name: &str, resolver: &CpuPoolResolver, ty: ResolveTy)
+    -> impl Future<Item = Protocol<'a>, Error = io::Error>
+{
     let debug_name = if log_enabled!(Level::Trace) {
         Some(name.to_owned())
     } else {
@@ -216,7 +213,7 @@ fn resolve_dns<'a>(
             })
             .next()
             .ok_or_else(|| {
-                IoError::new(IoErrorKind::Other, "couldn't find any relevant IP address")
+                io::Error::new(io::ErrorKind::Other, "couldn't find any relevant IP address")
             })
     })
 }
@@ -226,30 +223,21 @@ mod tests {
     extern crate libp2p_tcp_transport;
     use self::libp2p_tcp_transport::TcpConfig;
     use futures::future;
-    use swarm::Transport;
+    use libp2p_core::transport::Dialer;
     use multiaddr::{Protocol, Multiaddr};
-    use std::io::Error as IoError;
     use DnsConfig;
 
     #[test]
     fn basic_resolve() {
         #[derive(Clone)]
-        struct CustomTransport;
-        impl Transport for CustomTransport {
-            type Output = <TcpConfig as Transport>::Output;
-            type Listener = <TcpConfig as Transport>::Listener;
-            type ListenerUpgrade = <TcpConfig as Transport>::ListenerUpgrade;
-            type Dial = future::Empty<Self::Output, IoError>;
+        struct CustomDialer;
 
-            #[inline]
-            fn listen_on(
-                self,
-                _addr: Multiaddr,
-            ) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-                unreachable!()
-            }
+        impl Dialer for CustomDialer {
+            type Output = <TcpConfig as Dialer>::Output;
+            type Error = <TcpConfig as Dialer>::Error;
+            type Outbound = future::Empty<Self::Output, Self::Error>;
 
-            fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+            fn dial(self, addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> {
                 let addr = addr.iter().collect::<Vec<_>>();
                 assert_eq!(addr.len(), 2);
                 match addr[1] {
@@ -263,20 +251,16 @@ mod tests {
                 };
                 Ok(future::empty())
             }
-
-            #[inline]
-            fn nat_traversal(&self, _: &Multiaddr, _: &Multiaddr) -> Option<Multiaddr> {
-                panic!()
-            }
         }
 
-        let transport = DnsConfig::new(CustomTransport);
+        let dialer = DnsConfig::new(CustomDialer);
 
-        let _ = transport
+        let _ = dialer
             .clone()
             .dial("/dns4/example.com/tcp/20000".parse().unwrap())
             .unwrap_or_else(|_| panic!());
-        let _ = transport
+
+        let _ = dialer
             .dial("/dns6/example.com/tcp/20000".parse().unwrap())
             .unwrap_or_else(|_| panic!());
     }

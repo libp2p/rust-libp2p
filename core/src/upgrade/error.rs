@@ -1,4 +1,4 @@
-// Copyright 2017 Parity Technologies (UK) Ltd.
+// Copyright 2018 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,36 +18,46 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use bytes::Bytes;
-use futures::future::{self, FutureResult};
-use std::{iter, io::Error as IoError};
-use tokio_io::{AsyncRead, AsyncWrite};
-use upgrade::{ConnectionUpgrade, Endpoint};
+use multistream_select::ProtocolChoiceError;
+use std::fmt;
 
-/// Implementation of the `ConnectionUpgrade` that negotiates the `/plaintext/1.0.0` protocol and
-/// simply passes communications through without doing anything more.
-///
-/// > **Note**: Generally used as an alternative to `secio` if a security layer is not desirable.
-// TODO: move to a separate crate?
-#[derive(Debug, Copy, Clone)]
-pub struct PlainTextConfig;
+#[derive(Debug)]
+pub enum Error<E> {
+    Select(ProtocolChoiceError),
+    Apply(E),
+    #[doc(hidden)]
+    __Nonexhaustive
+}
 
-impl<C> ConnectionUpgrade<C> for PlainTextConfig
+impl<E> fmt::Display for Error<E>
 where
-    C: AsyncRead + AsyncWrite,
+    E: fmt::Display
 {
-    type Output = C;
-    type Future = FutureResult<C, IoError>;
-    type UpgradeIdentifier = ();
-    type NamesIter = iter::Once<(Bytes, ())>;
-
-    #[inline]
-    fn upgrade(self, i: C, _: (), _: Endpoint) -> Self::Future {
-        future::ok(i)
-    }
-
-    #[inline]
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once((Bytes::from("/plaintext/1.0.0"), ()))
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Error::Select(e) => write!(f, "select error: {}", e),
+            Error::Apply(e) => write!(f, "upgrade apply error: {}", e),
+            Error::__Nonexhaustive => f.write_str("__Nonexhaustive")
+        }
     }
 }
+
+impl<E> std::error::Error for Error<E>
+where
+    E: std::error::Error
+{
+    fn cause(&self) -> Option<&dyn std::error::Error> {
+        match self {
+            Error::Select(e) => Some(e),
+            Error::Apply(e) => Some(e),
+            Error::__Nonexhaustive => None
+        }
+    }
+}
+
+impl<E> From<ProtocolChoiceError> for Error<E> {
+    fn from(e: ProtocolChoiceError) -> Self {
+        Error::Select(e)
+    }
+}
+

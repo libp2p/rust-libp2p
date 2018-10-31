@@ -23,58 +23,58 @@ use multiaddr::Multiaddr;
 use crate::transport::{Dialer, Listener};
 
 #[derive(Debug, Copy, Clone)]
-pub struct AndThenDialer<D, F> { dialer: D, fun: F }
+pub struct OrElseDialer<D, F> { dialer: D, fun: F }
 
-impl<D, F> AndThenDialer<D, F> {
+impl<D, F> OrElseDialer<D, F> {
     pub fn new(dialer: D, fun: F) -> Self {
-        AndThenDialer { dialer, fun }
+        OrElseDialer { dialer, fun }
     }
 }
 
-impl<D, F, T> Dialer for AndThenDialer<D, F>
+impl<D, F, T> Dialer for OrElseDialer<D, F>
 where
     D: Dialer + 'static,
     D::Outbound: Send,
-    F: FnOnce(D::Output, Multiaddr) -> T + Clone + Send + 'static,
-    T: IntoFuture<Error = D::Error> + Send + 'static,
+    F: FnOnce(D::Error, Multiaddr) -> T + Clone + Send + 'static,
+    T: IntoFuture<Item = D::Output> + Send + 'static,
     T::Future: Send + 'static
 {
-    type Output = T::Item;
-    type Error = D::Error;
+    type Output = D::Output;
+    type Error = T::Error;
     type Outbound = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> {
         let fun = self.fun;
         match self.dialer.dial(addr.clone()) {
             Ok(future) => {
-                let future = future.and_then(move |x| fun(x, addr).into_future());
+                let future = future.or_else(move |x| fun(x, addr).into_future());
                 Ok(Box::new(future))
             }
-            Err((dialer, addr)) => Err((AndThenDialer::new(dialer, fun), addr))
+            Err((dialer, addr)) => Err((OrElseDialer::new(dialer, fun), addr))
         }
     }
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct AndThenListener<L, F> { listener: L, fun: F }
+pub struct OrElseListener<L, F> { listener: L, fun: F }
 
-impl<L, F> AndThenListener<L, F> {
+impl<L, F> OrElseListener<L, F> {
     pub fn new(listener: L, fun: F) -> Self {
-        AndThenListener { listener, fun }
+        OrElseListener { listener, fun }
     }
 }
 
-impl<L, F, T> Listener for AndThenListener<L, F>
+impl<L, F, T> Listener for OrElseListener<L, F>
 where
     L: Listener + 'static,
     L::Inbound: Send,
     L::Upgrade: Send,
-    F: FnOnce(L::Output, Multiaddr) -> T + Clone + Send + 'static,
-    T: IntoFuture<Error = L::Error> + Send + 'static,
+    F: FnOnce(L::Error, Multiaddr) -> T + Clone + Send + 'static,
+    T: IntoFuture<Item = L::Output> + Send + 'static,
     T::Future: Send + 'static
 {
-    type Output = T::Item;
-    type Error = L::Error;
+    type Output = L::Output;
+    type Error = T::Error;
     type Inbound = Box<Stream<Item = (Self::Upgrade, Multiaddr), Error = std::io::Error> + Send>;
     type Upgrade = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
 
@@ -85,12 +85,12 @@ where
                 let stream = stream.map(move |(future, addr)| {
                     let f = fun.clone();
                     let a = addr.clone();
-                    let future = future.and_then(move |x| f(x, a).into_future());
+                    let future = future.or_else(move |x| f(x, a).into_future());
                     (Box::new(future) as Box<_>, addr)
                 });
                 Ok((Box::new(stream), addr))
             }
-            Err((listener, addr)) => Err((AndThenListener::new(listener, fun), addr)),
+            Err((listener, addr)) => Err((OrElseListener::new(listener, fun), addr)),
         }
     }
 

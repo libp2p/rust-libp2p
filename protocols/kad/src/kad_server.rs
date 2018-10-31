@@ -36,7 +36,8 @@
 use bytes::Bytes;
 use futures::sync::{mpsc, oneshot};
 use futures::{future, Future, Sink, stream, Stream};
-use libp2p_core::{ConnectionUpgrade, Endpoint, PeerId};
+use libp2p_core::{PeerId, upgrade::{InboundUpgrade, UpgradeInfo}};
+use log::{debug, warn};
 use multihash::Multihash;
 use protocol::{self, KadMsg, KademliaProtocolConfig, KadPeer};
 use std::collections::VecDeque;
@@ -64,7 +65,17 @@ impl KadConnecConfig {
     }
 }
 
-impl<C> ConnectionUpgrade<C> for KadConnecConfig
+impl UpgradeInfo for KadConnecConfig {
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+    type UpgradeId = ();
+
+    #[inline]
+    fn protocol_names(&self) -> Self::NamesIter {
+        self.raw_proto.protocol_names()
+    }
+}
+
+impl<C> InboundUpgrade<C> for KadConnecConfig
 where
     C: AsyncRead + AsyncWrite + Send + 'static, // TODO: 'static :-/
 {
@@ -72,22 +83,14 @@ where
         KadConnecController,
         Box<Stream<Item = KadIncomingRequest, Error = IoError> + Send>,
     );
-    type Future = future::Map<<KademliaProtocolConfig as ConnectionUpgrade<C>>::Future, fn(<KademliaProtocolConfig as ConnectionUpgrade<C>>::Output) -> Self::Output>;
-    type NamesIter = iter::Once<(Bytes, ())>;
-    type UpgradeIdentifier = ();
+    type Error = IoError;
+    type Future = future::Map<<KademliaProtocolConfig as InboundUpgrade<C>>::Future, fn(<KademliaProtocolConfig as InboundUpgrade<C>>::Output) -> Self::Output>;
 
     #[inline]
-    fn protocol_names(&self) -> Self::NamesIter {
-        ConnectionUpgrade::<C>::protocol_names(&self.raw_proto)
-    }
-
-    #[inline]
-    fn upgrade(self, incoming: C, id: (), endpoint: Endpoint) -> Self::Future {
+    fn upgrade_inbound(self, incoming: C, id: Self::UpgradeId) -> Self::Future {
         self.raw_proto
-            .upgrade(incoming, id, endpoint)
-            .map::<fn(_) -> _, _>(move |connec| {
-                build_from_sink_stream(connec)
-            })
+            .upgrade_inbound(incoming, id)
+            .map(build_from_sink_stream)
     }
 }
 

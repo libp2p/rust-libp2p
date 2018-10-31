@@ -18,38 +18,46 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{Multiaddr, transport::{Dialer, Listener}};
-use futures::prelude::*;
+extern crate bytes;
+extern crate futures;
+extern crate libp2p_core;
+extern crate void;
+
+use bytes::Bytes;
+use futures::future::{self, FutureResult};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use std::iter;
 use void::Void;
 
 #[derive(Debug, Copy, Clone)]
-pub struct DeniedDialer;
+pub struct PlainTextConfig;
 
-impl Dialer for DeniedDialer {
-    type Output = Void;
-    type Error = Void;
-    type Outbound = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
+impl UpgradeInfo for PlainTextConfig {
+    type UpgradeId = ();
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> {
-        Err((self, addr))
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once((Bytes::from("/plaintext/1.0.0"), ()))
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub struct DeniedListener;
-
-impl Listener for DeniedListener {
-    type Output = Void;
+impl<C> InboundUpgrade<C> for PlainTextConfig {
+    type Output = C;
     type Error = Void;
-    type Inbound = Box<Stream<Item = (Self::Upgrade, Multiaddr), Error = std::io::Error> + Send>;
-    type Upgrade = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
+    type Future = FutureResult<C, Self::Error>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Inbound, Multiaddr), (Self, Multiaddr)> {
-        Err((self, addr))
+    fn upgrade_inbound(self, i: C, _: Self::UpgradeId) -> Self::Future {
+        future::ok(i)
     }
+}
 
-    fn nat_traversal(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
-        None
+impl<C> OutboundUpgrade<C> for PlainTextConfig {
+    type Output = C;
+    type Error = Void;
+    type Future = FutureResult<C, Self::Error>;
+
+    fn upgrade_outbound(self, i: C, _: Self::UpgradeId) -> Self::Future {
+        future::ok(i)
     }
 }
 

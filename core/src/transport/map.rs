@@ -1,4 +1,4 @@
-// Copyright 2017 Parity Technologies (UK) Ltd.
+// Copyright 2018 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -20,72 +20,152 @@
 
 use futures::prelude::*;
 use multiaddr::Multiaddr;
-use std::io::Error as IoError;
-use transport::Transport;
-use Endpoint;
+use crate::transport::{Dialer, Listener};
 
-/// See `Transport::map`.
 #[derive(Debug, Copy, Clone)]
-pub struct Map<T, F> {
-    transport: T,
-    map: F,
-}
+pub struct MapDialer<D, F> { dialer: D, fun: F }
 
-impl<T, F> Map<T, F> {
-    /// Internal function that builds a `Map`.
-    #[inline]
-    pub(crate) fn new(transport: T, map: F) -> Map<T, F> {
-        Map { transport, map }
+impl<D, F> MapDialer<D, F> {
+    pub fn new(dialer: D, fun: F) -> Self {
+        MapDialer { dialer, fun }
     }
 }
 
-impl<T, F, D> Transport for Map<T, F>
+impl<D, F, T> Dialer for MapDialer<D, F>
 where
-    T: Transport + 'static,                  // TODO: 'static :-/
-    T::Dial: Send,
-    T::Listener: Send,
-    T::ListenerUpgrade: Send,
-    F: FnOnce(T::Output, Endpoint) -> D + Clone + Send + 'static, // TODO: 'static :-/
+    D: Dialer + 'static,
+    D::Outbound: Send,
+    F: FnOnce(D::Output, Multiaddr) -> T + Clone + Send + 'static,
 {
-    type Output = D;
-    type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError> + Send>;
-    type ListenerUpgrade = Box<Future<Item = Self::Output, Error = IoError> + Send>;
-    type Dial = Box<Future<Item = Self::Output, Error = IoError> + Send>;
+    type Output = T;
+    type Error = D::Error;
+    type Outbound = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        let map = self.map;
-
-        match self.transport.listen_on(addr) {
-            Ok((stream, listen_addr)) => {
-                let stream = stream.map(move |(future, addr)| {
-                    let map = map.clone();
-                    let future = future
-                        .into_future()
-                        .map(move |output| map(output, Endpoint::Listener));
-                    (Box::new(future) as Box<_>, addr)
-                });
-                Ok((Box::new(stream), listen_addr))
-            }
-            Err((transport, addr)) => Err((Map { transport, map }, addr)),
-        }
-    }
-
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-        let map = self.map;
-
-        match self.transport.dial(addr) {
+    fn dial(self, addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> {
+        let fun = self.fun;
+        match self.dialer.dial(addr.clone()) {
             Ok(future) => {
-                let future = future
-                    .into_future()
-                    .map(move |output| map(output, Endpoint::Dialer));
+                let future = future.map(move |x| fun(x, addr));
                 Ok(Box::new(future))
             }
-            Err((transport, addr)) => Err((Map { transport, map }, addr)),
+            Err((dialer, addr)) => Err((MapDialer::new(dialer, fun), addr))
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct MapErrDialer<D, F> { dialer: D, fun: F }
+
+impl<D, F> MapErrDialer<D, F> {
+    pub fn new(dialer: D, fun: F) -> Self {
+        MapErrDialer { dialer, fun }
+    }
+}
+
+impl<D, F, E> Dialer for MapErrDialer<D, F>
+where
+    D: Dialer + 'static,
+    D::Outbound: Send,
+    F: FnOnce(D::Error, Multiaddr) -> E + Clone + Send + 'static
+{
+    type Output = D::Output;
+    type Error = E;
+    type Outbound = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
+
+    fn dial(self, addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> {
+        let fun = self.fun;
+        match self.dialer.dial(addr.clone()) {
+            Ok(future) => {
+                let future = future.map_err(move |e| fun(e, addr));
+                Ok(Box::new(future))
+            }
+            Err((dialer, addr)) => Err((MapErrDialer::new(dialer, fun), addr))
+        }
+    }
+}
+
+
+#[derive(Debug, Copy, Clone)]
+pub struct MapListener<L, F> { listener: L, fun: F }
+
+impl<L, F> MapListener<L, F> {
+    pub fn new(listener: L, fun: F) -> Self {
+        MapListener { listener, fun }
+    }
+}
+
+impl<L, F, T> Listener for MapListener<L, F>
+where
+    L: Listener + 'static,
+    L::Inbound: Send,
+    L::Upgrade: Send,
+    F: FnOnce(L::Output, Multiaddr) -> T + Clone + Send + 'static,
+{
+    type Output = T;
+    type Error = L::Error;
+    type Inbound = Box<Stream<Item = (Self::Upgrade, Multiaddr), Error = std::io::Error> + Send>;
+    type Upgrade = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
+
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Inbound, Multiaddr), (Self, Multiaddr)> {
+        let fun = self.fun;
+        match self.listener.listen_on(addr) {
+            Ok((stream, addr)) => {
+                let stream = stream.map(move |(future, addr)| {
+                    let f = fun.clone();
+                    let a = addr.clone();
+                    let future = future.map(move |x| f(x, a));
+                    (Box::new(future) as Box<_>, addr)
+                });
+                Ok((Box::new(stream), addr))
+            }
+            Err((listener, addr)) => Err((MapListener::new(listener, fun), addr)),
         }
     }
 
-    #[inline]
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.transport.nat_traversal(server, observed)
+        self.listener.nat_traversal(server, observed)
     }
 }
+
+#[derive(Debug, Copy, Clone)]
+pub struct MapErrListener<L, F> { listener: L, fun: F }
+
+impl<L, F> MapErrListener<L, F> {
+    pub fn new(listener: L, fun: F) -> Self {
+        MapErrListener { listener, fun }
+    }
+}
+
+impl<L, F, E> Listener for MapErrListener<L, F>
+where
+    L: Listener + 'static,
+    L::Inbound: Send,
+    L::Upgrade: Send,
+    F: FnOnce(L::Error, Multiaddr) -> E + Clone + Send + 'static
+{
+    type Output = L::Output;
+    type Error = E;
+    type Inbound = Box<Stream<Item = (Self::Upgrade, Multiaddr), Error = std::io::Error> + Send>;
+    type Upgrade = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
+
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Inbound, Multiaddr), (Self, Multiaddr)> {
+        let fun = self.fun;
+        match self.listener.listen_on(addr) {
+            Ok((stream, addr)) => {
+                let stream = stream.map(move |(future, addr)| {
+                    let f = fun.clone();
+                    let a = addr.clone();
+                    let future = future.map_err(move |e| f(e, a));
+                    (Box::new(future) as Box<_>, addr)
+                });
+                Ok((Box::new(stream), addr))
+            }
+            Err((listener, addr)) => Err((MapErrListener::new(listener, fun), addr)),
+        }
+    }
+
+    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        self.listener.nat_traversal(server, observed)
+    }
+}
+

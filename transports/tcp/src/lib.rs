@@ -39,8 +39,7 @@
 //! documentation of `swarm` and of libp2p in general to learn how to use the `Transport` trait.
 
 extern crate futures;
-extern crate libp2p_core as swarm;
-#[macro_use]
+extern crate libp2p_core;
 extern crate log;
 extern crate multiaddr;
 extern crate tk_listen;
@@ -48,12 +47,10 @@ extern crate tokio_io;
 extern crate tokio_tcp;
 
 use futures::{future, future::FutureResult, prelude::*, Async, Poll};
+use log::{debug, error};
 use multiaddr::{Protocol, Multiaddr, ToMultiaddr};
-use std::fmt;
-use std::io::{Error as IoError, Read, Write};
-use std::net::SocketAddr;
-use std::time::Duration;
-use swarm::Transport;
+use std::{fmt, io::{self, Read, Write}, net::SocketAddr, time::Duration};
+use libp2p_core::transport::{Dialer, Listener};
 use tk_listen::{ListenExt, SleepOnError};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_tcp::{ConnectFuture, Incoming, TcpListener, TcpStream};
@@ -128,13 +125,13 @@ impl TcpConfig {
     }
 }
 
-impl Transport for TcpConfig {
+impl Listener for TcpConfig {
     type Output = TcpTransStream;
-    type Listener = TcpListenStream;
-    type ListenerUpgrade = FutureResult<Self::Output, IoError>;
-    type Dial = TcpDialFut;
+    type Error = io::Error;
+    type Inbound = TcpListenStream;
+    type Upgrade = FutureResult<Self::Output, io::Error>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Inbound, Multiaddr), (Self, Multiaddr)> {
         if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
             let listener = TcpListener::bind(&socket_addr);
             // We need to build the `Multiaddr` to return from this function. If an error happened,
@@ -168,25 +165,6 @@ impl Transport for TcpConfig {
         }
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-        if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
-            // As an optimization, we check that the address is not of the form `0.0.0.0`.
-            // If so, we instantly refuse dialing instead of going through the kernel.
-            if socket_addr.port() != 0 && !socket_addr.ip().is_unspecified() {
-                debug!("Dialing {}", addr);
-                Ok(TcpDialFut {
-                    inner: TcpStream::connect(&socket_addr),
-                    config: self,
-                })
-            } else {
-                debug!("Instantly refusing dialing {}, as it is invalid", addr);
-                Err((self, addr))
-            }
-        } else {
-            Err((self, addr))
-        }
-    }
-
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         let mut address = Multiaddr::empty();
 
@@ -203,6 +181,31 @@ impl Transport for TcpConfig {
         }
 
         Some(address)
+    }
+}
+
+impl Dialer for TcpConfig {
+    type Output = TcpTransStream;
+    type Error = io::Error;
+    type Outbound = TcpDialFut;
+
+    fn dial(self, addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> {
+        if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
+            // As an optimization, we check that the address is not of the form `0.0.0.0`.
+            // If so, we instantly refuse dialing instead of going through the kernel.
+            if socket_addr.port() != 0 && !socket_addr.ip().is_unspecified() {
+                debug!("Dialing {}", addr);
+                Ok(TcpDialFut {
+                    inner: TcpStream::connect(&socket_addr),
+                    config: self,
+                })
+            } else {
+                debug!("Instantly refusing dialing {}, as it is invalid", addr);
+                Err((self, addr))
+            }
+        } else {
+            Err((self, addr))
+        }
     }
 }
 
@@ -224,7 +227,7 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
 }
 
 /// Applies the socket configuration parameters to a socket.
-fn apply_config(config: &TcpConfig, socket: &TcpStream) -> Result<(), IoError> {
+fn apply_config(config: &TcpConfig, socket: &TcpStream) -> Result<(), io::Error> {
     if let Some(recv_buffer_size) = config.recv_buffer_size {
         socket.set_recv_buffer_size(recv_buffer_size)?;
     }
@@ -259,9 +262,9 @@ pub struct TcpDialFut {
 
 impl Future for TcpDialFut {
     type Item = TcpTransStream;
-    type Error = IoError;
+    type Error = io::Error;
 
-    fn poll(&mut self) -> Poll<TcpTransStream, IoError> {
+    fn poll(&mut self) -> Poll<TcpTransStream, io::Error> {
         match self.inner.poll() {
             Ok(Async::Ready(stream)) => {
                 apply_config(&self.config, &stream)?;
@@ -278,20 +281,20 @@ impl Future for TcpDialFut {
 
 /// Stream that listens on an TCP/IP address.
 pub struct TcpListenStream {
-    inner: Result<SleepOnError<Incoming>, Option<IoError>>,
+    inner: Result<SleepOnError<Incoming>, Option<io::Error>>,
     /// Original configuration.
     config: TcpConfig,
 }
 
 impl Stream for TcpListenStream {
-    type Item = (FutureResult<TcpTransStream, IoError>, Multiaddr);
-    type Error = IoError;
+    type Item = (FutureResult<TcpTransStream, io::Error>, Multiaddr);
+    type Error = io::Error;
 
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<(FutureResult<TcpTransStream, IoError>, Multiaddr)>,
-        IoError,
+        Option<(FutureResult<TcpTransStream, io::Error>, Multiaddr)>,
+        io::Error,
     > {
         let inner = match self.inner {
             Ok(ref mut inc) => inc,
@@ -352,7 +355,7 @@ pub struct TcpTransStream {
 
 impl Read for TcpTransStream {
     #[inline]
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
         self.inner.read(buf)
     }
 }
@@ -361,19 +364,19 @@ impl AsyncRead for TcpTransStream {}
 
 impl Write for TcpTransStream {
     #[inline]
-    fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
         self.inner.write(buf)
     }
 
     #[inline]
-    fn flush(&mut self) -> Result<(), IoError> {
+    fn flush(&mut self) -> Result<(), io::Error> {
         self.inner.flush()
     }
 }
 
 impl AsyncWrite for TcpTransStream {
     #[inline]
-    fn shutdown(&mut self) -> Poll<(), IoError> {
+    fn shutdown(&mut self) -> Poll<(), io::Error> {
         AsyncWrite::shutdown(&mut self.inner)
     }
 }
@@ -399,7 +402,7 @@ mod tests {
     use multiaddr::Multiaddr;
     use std;
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-    use swarm::Transport;
+    use libp2p_core::transport::{Dialer, Listener};
     use tokio_io;
 
     #[test]

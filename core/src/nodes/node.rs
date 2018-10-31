@@ -18,12 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::muxing;
 use futures::prelude::*;
-use muxing;
 use smallvec::SmallVec;
-use std::fmt;
-use std::io::Error as IoError;
-use std::sync::Arc;
+use std::{fmt, io::Error as IoError, sync::Arc};
 
 // Implementor notes
 // =================

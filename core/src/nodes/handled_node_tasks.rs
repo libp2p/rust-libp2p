@@ -18,18 +18,25 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::{
+    PeerId,
+    muxing::StreamMuxer,
+    nodes::{
+        handled_node::{HandledNode, NodeHandler},
+        node::Substream
+    }
+};
 use fnv::FnvHashMap;
 use futures::{prelude::*, stream, sync::mpsc};
-use muxing::StreamMuxer;
-use nodes::node::Substream;
-use nodes::handled_node::{HandledNode, NodeHandler};
 use smallvec::SmallVec;
-use std::collections::hash_map::{Entry, OccupiedEntry};
-use std::io::Error as IoError;
-use std::{fmt, mem};
+use std::{
+    collections::hash_map::{Entry, OccupiedEntry},
+    fmt,
+    io::Error as IoError,
+    mem
+};
 use tokio_executor;
 use void::Void;
-use PeerId;
 
 // TODO: make generic over PeerId
 

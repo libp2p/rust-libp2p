@@ -27,7 +27,10 @@
 
 use bytes::{Bytes, BytesMut};
 use futures::{future, sink, Sink, stream, Stream};
-use libp2p_core::{ConnectionUpgrade, Endpoint, Multiaddr, PeerId};
+use libp2p_core::{
+    Multiaddr, PeerId,
+    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
+};
 use multihash::Multihash;
 use protobuf::{self, Message};
 use protobuf_structs;
@@ -128,22 +131,40 @@ impl Into<protobuf_structs::dht::Message_Peer> for KadPeer {
 #[derive(Debug, Default, Copy, Clone)]
 pub struct KademliaProtocolConfig;
 
-impl<C> ConnectionUpgrade<C> for KademliaProtocolConfig
-where
-    C: AsyncRead + AsyncWrite + 'static, // TODO: 'static :-/
-{
-    type Output = KadStreamSink<C>;
-    type Future = future::FutureResult<Self::Output, IoError>;
-    type NamesIter = iter::Once<(Bytes, ())>;
-    type UpgradeIdentifier = ();
+impl UpgradeInfo for KademliaProtocolConfig {
+    type UpgradeId = ();
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
 
     #[inline]
     fn protocol_names(&self) -> Self::NamesIter {
         iter::once(("/ipfs/kad/1.0.0".into(), ()))
     }
+}
+
+impl<C> InboundUpgrade<C> for KademliaProtocolConfig
+where
+    C: AsyncRead + AsyncWrite + 'static, // TODO: 'static :-/
+{
+    type Output = KadStreamSink<C>;
+    type Error = IoError;
+    type Future = future::FutureResult<Self::Output, Self::Error>;
 
     #[inline]
-    fn upgrade(self, incoming: C, _: (), _: Endpoint) -> Self::Future {
+    fn upgrade_inbound(self, incoming: C, _: Self::UpgradeId) -> Self::Future {
+        future::ok(kademlia_protocol(incoming))
+    }
+}
+
+impl<C> OutboundUpgrade<C> for KademliaProtocolConfig
+where
+    C: AsyncRead + AsyncWrite + 'static, // TODO: 'static :-/
+{
+    type Output = KadStreamSink<C>;
+    type Error = IoError;
+    type Future = future::FutureResult<Self::Output, Self::Error>;
+
+    #[inline]
+    fn upgrade_outbound(self, incoming: C, _: Self::UpgradeId) -> Self::Future {
         future::ok(kademlia_protocol(incoming))
     }
 }
@@ -151,9 +172,7 @@ where
 type KadStreamSink<S> = stream::AndThen<sink::With<stream::FromErr<Framed<S, codec::UviBytes<Vec<u8>>>, IoError>, KadMsg, fn(KadMsg) -> Result<Vec<u8>, IoError>, Result<Vec<u8>, IoError>>, fn(BytesMut) -> Result<KadMsg, IoError>, Result<KadMsg, IoError>>;
 
 // Upgrades a socket to use the Kademlia protocol.
-fn kademlia_protocol<S>(
-    socket: S,
-) -> KadStreamSink<S>
+fn kademlia_protocol<S>(socket: S) -> KadStreamSink<S>
 where
     S: AsyncRead + AsyncWrite,
 {
@@ -413,7 +432,7 @@ mod tests {
 
     use self::libp2p_tcp_transport::TcpConfig;
     use futures::{Future, Sink, Stream};
-    use libp2p_core::{Transport, PeerId, PublicKey};
+    use libp2p_core::{PeerId, PublicKey, transport::{self, Dialer, Listener}};
     use multihash::{encode, Hash};
     use protocol::{KadConnectionType, KadMsg, KademliaProtocolConfig, KadPeer};
     use std::sync::mpsc;
@@ -480,7 +499,7 @@ mod tests {
             let (tx, rx) = mpsc::channel();
 
             let bg_thread = thread::spawn(move || {
-                let transport = TcpConfig::new().with_upgrade(KademliaProtocolConfig);
+                let transport = TcpConfig::new().with_listener_upgrade(KademliaProtocolConfig);
 
                 let (listener, addr) = transport
                     .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -489,9 +508,13 @@ mod tests {
 
                 let future = listener
                     .into_future()
-                    .map_err(|(err, _)| err)
+                    .map_err(|(err, _)| transport::Error::Transport(err))
                     .and_then(|(client, _)| client.unwrap().0)
-                    .and_then(|proto| proto.into_future().map_err(|(err, _)| err).map(|(v, _)| v))
+                    .and_then(|proto| {
+                        proto.into_future()
+                            .map_err(|(err, _)| transport::Error::Transport(err))
+                            .map(|(v, _)| v)
+                    })
                     .map(|recv_msg| {
                         assert_eq!(recv_msg.unwrap(), msg_server);
                         ()
@@ -500,12 +523,12 @@ mod tests {
                 let _ = rt.block_on(future).unwrap();
             });
 
-            let transport = TcpConfig::new().with_upgrade(KademliaProtocolConfig);
+            let transport = TcpConfig::new().with_dialer_upgrade(KademliaProtocolConfig);
 
             let future = transport
                 .dial(rx.recv().unwrap())
                 .unwrap_or_else(|_| panic!())
-                .and_then(|proto| proto.send(msg_client))
+                .and_then(|proto| proto.send(msg_client).map_err(transport::Error::Transport))
                 .map(|_| ());
             let mut rt = Runtime::new().unwrap();
             let _ = rt.block_on(future).unwrap();

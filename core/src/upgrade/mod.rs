@@ -1,4 +1,4 @@
-// Copyright 2017 Parity Technologies (UK) Ltd.
+// Copyright 2018 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -19,19 +19,36 @@
 // DEALINGS IN THE SOFTWARE.
 
 pub mod apply;
-pub mod choice;
 pub mod denied;
-pub mod loop_upg;
-pub mod map;
-pub mod plaintext;
-pub mod toggleable;
-pub mod traits;
+pub mod error;
 
-pub use self::apply::{apply, negotiate};
-pub use self::choice::{or, OrUpgrade};
-pub use self::denied::DeniedConnectionUpgrade;
-pub use self::loop_upg::{loop_upg, Loop};
-pub use self::map::map;
-pub use self::plaintext::PlainTextConfig;
-pub use self::toggleable::toggleable;
-pub use self::traits::{ConnectionUpgrade, Endpoint};
+use bytes::Bytes;
+use futures::future::Future;
+
+pub use self::error::Error;
+pub use self::denied::DeniedUpgrade;
+pub use self::apply::{apply_inbound, apply_outbound};
+
+pub trait UpgradeInfo {
+    type UpgradeId;
+    type NamesIter: Iterator<Item = (Bytes, Self::UpgradeId)>;
+
+    fn protocol_names(&self) -> Self::NamesIter;
+}
+
+pub trait InboundUpgrade<C>: UpgradeInfo {
+    type Output;
+    type Error;
+    type Future: Future<Item = Self::Output, Error = Self::Error>;
+
+    fn upgrade_inbound(self, socket: C, id: Self::UpgradeId) -> Self::Future;
+}
+
+pub trait OutboundUpgrade<C>: UpgradeInfo {
+    type Output;
+    type Error;
+    type Future: Future<Item = Self::Output, Error = Self::Error>;
+
+    fn upgrade_outbound(self, socket: C, id: Self::UpgradeId) -> Self::Future;
+}
+

@@ -18,18 +18,20 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::stream::Then as StreamThen;
-use futures::sync::{mpsc, oneshot};
-use futures::{Async, Future, Poll, Stream};
+use futures::{
+    Async,
+    Future,
+    Poll,
+    Stream,
+    stream::Then as StreamThen,
+    sync::{mpsc, oneshot}
+};
+use libp2p_core::transport::Dialer;
+use log::debug;
 use multiaddr::{Protocol, Multiaddr};
 use rw_stream_sink::RwStreamSink;
-use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use std::io::{Read, Write};
-use std::iter;
-use std::sync::{Arc, Mutex};
-use stdweb::web::TypedArray;
-use stdweb::{self, Reference};
-use swarm::Transport;
+use std::{io::{Error as IoError, ErrorKind as IoErrorKind, Read, Write}, sync::{Arc, Mutex}};
+use stdweb::{self, Reference, web::TypedArray};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Represents the configuration for a websocket transport capability for libp2p.
@@ -51,19 +53,12 @@ impl BrowserWsConfig {
     }
 }
 
-impl Transport for BrowserWsConfig {
+impl Dialer for BrowserWsConfig {
     type Output = BrowserWsConn;
-    type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError> + Send>; // TODO: use `!`
-    type ListenerUpgrade = Box<Future<Item = Self::Output, Error = IoError> + Send>; // TODO: use `!`
-    type Dial = Box<Future<Item = Self::Output, Error = IoError> + Send>;
+    type Error = IoError;
+    type Outbound = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
 
-    #[inline]
-    fn listen_on(self, a: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        // Listening is never supported.
-        Err((self, a))
-    }
-
-    fn dial(self, original_addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+   fn dial(self, original_addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> {
         // Making sure we are initialized before we dial. Initialization is protected by a simple
         // boolean static variable, so it's not a problem to call it multiple times and the cost
         // is negligible.
@@ -204,43 +199,6 @@ impl Transport for BrowserWsConfig {
                 Err(_) => unreachable!("the sending side will only close when we drop the future"),
             }
         })) as Box<_>)
-    }
-
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        let mut address = Multiaddr::empty();
-
-        let mut iter = server.iter().zip(observed.iter());
-
-        // Use the observed IP address.
-        match iter.next() {
-            Some((Protocol::Ip4(_), x@Protocol::Ip4(_))) => address.append(x),
-            Some((Protocol::Ip6(_), x@Protocol::Ip6(_))) => address.append(x),
-            _ => return None
-        }
-
-        // Skip over next protocol (assumed to contain port information).
-        if iter.next().is_none() {
-            return None
-        }
-
-        // Check for WS/WSS.
-        //
-        // Note that it will still work if the server uses WSS while the client uses
-        // WS, or vice-versa.
-        match iter.next() {
-            Some((x@Protocol::Ws, Protocol::Ws)) => address.append(x),
-            Some((x@Protocol::Ws, Protocol::Wss)) => address.append(x),
-            Some((x@Protocol::Wss, Protocol::Ws)) => address.append(x),
-            Some((x@Protocol::Wss, Protocol::Wss)) => address.append(x),
-            _ => return None
-        }
-
-        // Carry over everything else from the server address.
-        for proto in server.iter().skip(3) {
-            address.append(proto)
-        }
-
-        Some(address)
     }
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2017 Parity Technologies (UK) Ltd.
+// Copyright 2018 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,196 +18,270 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Handles entering a connection with a peer.
-//!
-//! The two main elements of this module are the `Transport` and `ConnectionUpgrade` traits.
-//! `Transport` is implemented on objects that allow dialing and listening. `ConnectionUpgrade` is
-//! implemented on objects that make it possible to upgrade a connection (for example by adding an
-//! encryption middleware to the connection).
-//!
-//! Thanks to the `Transport::or_transport`, `Transport::with_upgrade` and
-//! `UpgradedNode::or_upgrade` methods, you can combine multiple transports and/or upgrades
-//! together in a complex chain of protocols negotiation.
-
-use futures::prelude::*;
-use multiaddr::Multiaddr;
-use nodes::raw_swarm::ConnectedPoint;
-use std::io::Error as IoError;
-use tokio_io::{AsyncRead, AsyncWrite};
-use upgrade::{ConnectionUpgrade, Endpoint};
-
 pub mod and_then;
-pub mod boxed;
-pub mod choice;
 pub mod denied;
-pub mod interruptible;
+pub mod error;
 pub mod map;
-pub mod map_err;
-pub mod map_err_dial;
 pub mod memory;
+pub mod or;
+pub mod or_else;
+pub mod refused;
+pub mod then;
 pub mod upgrade;
 
-pub use self::choice::OrTransport;
-pub use self::denied::DeniedTransport;
-pub use self::memory::connector;
-pub use self::upgrade::UpgradedNode;
+pub use self::error::Error;
+pub use self::or::{OrDialer, OrListener};
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade};
+use futures::prelude::*;
+use multiaddr::Multiaddr;
+use self::{
+    and_then::{AndThenDialer, AndThenListener},
+    denied::{DeniedDialer, DeniedListener},
+    map::{MapDialer, MapErrDialer, MapListener, MapErrListener},
+    or_else::{OrElseDialer, OrElseListener},
+    then::{ThenDialer, ThenListener},
+    upgrade::{DialerUpgrade, ListenerUpgrade}
+};
+use tokio_io::{AsyncRead, AsyncWrite};
 
-/// A transport is an object that can be used to produce connections by listening or dialing a
-/// peer.
-///
-/// This trait is implemented on concrete transports (eg. TCP, UDP, etc.), but also on wrappers
-/// around them.
-///
-/// > **Note**: The methods of this trait use `self` and not `&self` or `&mut self`. In other
-/// >           words, listening or dialing consumes the transport object. This has been designed
-/// >           so that you would implement this trait on `&Foo` or `&mut Foo` instead of directly
-/// >           on `Foo`.
-pub trait Transport {
-    /// The raw connection to a peer.
+pub trait Listener {
     type Output;
+    type Error;
+    type Inbound: Stream<Item = (Self::Upgrade, Multiaddr), Error = std::io::Error>;
+    type Upgrade: Future<Item = Self::Output, Error = Self::Error>;
 
-    /// The listener produces incoming connections.
-    ///
-    /// An item should be produced whenever a connection is received at the lowest level of the
-    /// transport stack. The item is a `Future` that is signalled once some pre-processing has
-    /// taken place, and that connection has been upgraded to the wanted protocols.
-    type Listener: Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>;
-
-    /// After a connection has been received, we may need to do some asynchronous pre-processing
-    /// on it (eg. an intermediary protocol negotiation). While this pre-processing takes place, we
-    /// want to be able to continue polling on the listener.
-    type ListenerUpgrade: Future<Item = Self::Output, Error = IoError>;
-
-    /// A future which indicates that we are currently dialing to a peer.
-    type Dial: Future<Item = Self::Output, Error = IoError>;
-
-    /// Listen on the given multiaddr. Returns a stream of incoming connections, plus a modified
-    /// version of the `Multiaddr`. This new `Multiaddr` is the one that that should be advertised
-    /// to other nodes, instead of the one passed as parameter.
-    ///
-    /// Returns the address back if it isn't supported.
-    ///
-    /// > **Note**: The reason why we need to change the `Multiaddr` on success is to handle
-    /// >             situations such as turning `/ip4/127.0.0.1/tcp/0` into
-    /// >             `/ip4/127.0.0.1/tcp/<actual port>`.
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)>
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Inbound, Multiaddr), (Self, Multiaddr)>
     where
         Self: Sized;
 
-    /// Dial to the given multi-addr.
-    ///
-    /// Returns either a future which may resolve to a connection, or gives back the multiaddress.
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)>
-    where
-        Self: Sized;
-
-    /// Takes a multiaddress we're listening on (`server`), and tries to convert it to an
-    /// externally-visible multiaddress. In order to do so, we pass an `observed` address which
-    /// a remote node observes for one of our dialers.
-    ///
-    /// For example, if `server` is `/ip4/0.0.0.0/tcp/3000` and `observed` is
-    /// `/ip4/80.81.82.83/tcp/29601`, then we should return `/ip4/80.81.82.83/tcp/3000`.
-    ///
-    /// Each implementation of `Transport` is only responsible for handling the protocols it
-    /// supports and should only consider the prefix of `observed` necessary to perform the
-    /// address translation (e.g. `/ip4/80.81.82.83`) but should otherwise preserve `server`
-    /// as is.
-    ///
-    /// Returns `None` if nothing can be determined. This happens if this trait implementation
-    /// doesn't recognize the protocols, or if `server` and `observed` are related.
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
 
-    /// Turns this `Transport` into an abstract boxed transport.
-    #[inline]
-    fn boxed(self) -> boxed::Boxed<Self::Output>
-    where Self: Sized + Clone + Send + Sync + 'static,
-          Self::Dial: Send + 'static,
-          Self::Listener: Send + 'static,
-          Self::ListenerUpgrade: Send + 'static,
+    fn or_listener<T>(self, other: T) -> OrListener<Self, T>
+    where
+        Self: Sized
     {
-        boxed::boxed(self)
+        OrListener::new(self, other)
     }
 
-    /// Applies a function on the output of the `Transport`.
-    #[inline]
-    fn map<F, O>(self, map: F) -> map::Map<Self, F>
+    fn map_listener_output<F, T>(self, f: F) -> MapListener<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Output, Endpoint) -> O + Clone + 'static,        // TODO: 'static :-/
+        F: FnOnce(Self::Output, Multiaddr) -> T + Clone + 'static
     {
-        map::Map::new(self, map)
+        MapListener::new(self, f)
     }
 
-    /// Applies a function on the errors generated by the futures of the `Transport`.
-    #[inline]
-    fn map_err<F>(self, map_err: F) -> map_err::MapErr<Self, F>
+    fn map_listener_error<F, E>(self, f: F) -> MapErrListener<Self, F>
     where
         Self: Sized,
-        F: FnOnce(IoError) -> IoError + Clone + 'static,        // TODO: 'static :-/
+        F: FnOnce(Self::Error, Multiaddr) -> E + Clone + 'static
     {
-        map_err::MapErr::new(self, map_err)
+        MapErrListener::new(self, f)
     }
 
-    /// Applies a function on the errors generated by the futures of the `Transport` when dialing.
-    ///
-    /// Contrary to `map_err`, this gives access to the `Multiaddr` that we tried to dial.
-    #[inline]
-    fn map_err_dial<F>(self, map_err: F) -> map_err_dial::MapErrDial<Self, F>
+    fn listener_and_then<F, T>(self, f: F) -> AndThenListener<Self, F>
     where
         Self: Sized,
-        F: FnOnce(IoError, Multiaddr) -> IoError + Clone + 'static,        // TODO: 'static :-/
+        F: FnOnce(Self::Output, Multiaddr) -> T + Clone + 'static,
+        T: IntoFuture<Error = Self::Error> + 'static,
+        T::Future: Send + 'static
     {
-        map_err_dial::MapErrDial::new(self, map_err)
+        AndThenListener::new(self, f)
     }
 
-    /// Builds a new struct that implements `Transport` that contains both `self` and `other`.
-    ///
-    /// The returned object will redirect its calls to `self`, except that if `listen_on` or `dial`
-    /// return an error then `other` will be tried.
-    #[inline]
-    fn or_transport<T>(self, other: T) -> OrTransport<Self, T>
+    fn listener_or_else<F, T>(self, f: F) -> OrElseListener<Self, F>
     where
         Self: Sized,
+        F: FnOnce(Self::Error, Multiaddr) -> T + Clone + 'static,
+        T: IntoFuture<Item = Self::Output> + 'static,
+        T::Future: Send + 'static
     {
-        OrTransport::new(self, other)
+        OrElseListener::new(self, f)
     }
 
-    /// Wraps this transport inside an upgrade. Whenever a connection that uses this transport
-    /// is established, it is wrapped inside the upgrade.
-    ///
-    /// > **Note**: The concept of an *upgrade* for example includes middlewares such *secio*
-    /// >           (communication encryption), *multiplex*, but also a protocol handler.
-    #[inline]
-    fn with_upgrade<U>(self, upgrade: U) -> UpgradedNode<Self, U>
+    fn listener_then<F, T>(self, f: F) -> ThenListener<Self, F>
     where
         Self: Sized,
-        Self::Output: AsyncRead + AsyncWrite,
-        U: ConnectionUpgrade<Self::Output>,
+        F: FnOnce(Result<(Self::Output, Multiaddr), Self::Error>) -> T + Clone + 'static,
+        T: IntoFuture + 'static,
+        T::Future: Send + 'static
     {
-        UpgradedNode::new(self, upgrade)
+        ThenListener::new(self, f)
     }
 
-    /// Wraps this transport inside an upgrade. Whenever a connection that uses this transport
-    /// is established, it is wrapped inside the upgrade.
-    ///
-    /// > **Note**: The concept of an *upgrade* for example includes middlewares such *secio*
-    /// >           (communication encryption), *multiplex*, but also a protocol handler.
-    #[inline]
-    fn and_then<C, F, O>(self, upgrade: C) -> and_then::AndThen<Self, C>
+    fn with_listener_upgrade<U>(self, upgrade: U) -> ListenerUpgrade<Self, U>
     where
         Self: Sized,
-        C: FnOnce(Self::Output, ConnectedPoint) -> F + Clone + 'static,
-        F: Future<Item = O, Error = IoError> + 'static,
+        Self::Inbound: Send,
+        Self::Upgrade: Send,
+        Self::Output: AsyncRead + AsyncWrite + Send,
+        U: InboundUpgrade<Self::Output> + Clone + Send + 'static,
+        U::NamesIter: Send + Clone,
+        U::UpgradeId: Send,
+        U::Future: Send
     {
-        and_then::and_then(self, upgrade)
+        ListenerUpgrade::new(self, upgrade)
+    }
+}
+
+pub trait Dialer {
+    type Output;
+    type Error;
+    type Outbound: Future<Item = Self::Output, Error = Self::Error>;
+
+    fn dial(self, addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)>
+    where
+        Self: Sized;
+
+    fn or_dialer<T>(self, other: T) -> OrDialer<Self, T>
+    where
+        Self: Sized
+    {
+        OrDialer::new(self, other)
     }
 
-    /// Wraps around the `Transport` and makes it interruptible.
-    #[inline]
-    fn interruptible(self) -> (interruptible::Interruptible<Self>, interruptible::Interrupt)
+    fn map_dialer_output<F, T>(self, f: F) -> MapDialer<Self, F>
     where
         Self: Sized,
+        F: FnOnce(Self::Output, Multiaddr) -> T + Clone + 'static
     {
-        interruptible::Interruptible::new(self)
+        MapDialer::new(self, f)
+    }
+
+    fn map_dialer_error<F, E>(self, f: F) -> MapErrDialer<Self, F>
+    where
+        Self: Sized,
+        F: FnOnce(Self::Error, Multiaddr) -> E + Clone + 'static
+    {
+        MapErrDialer::new(self, f)
+    }
+
+    fn dialer_and_then<F, T>(self, f: F) -> AndThenDialer<Self, F>
+    where
+        Self: Sized,
+        F: FnOnce(Self::Output, Multiaddr) -> T + Clone + 'static,
+        T: IntoFuture<Error = Self::Error> + 'static,
+        T::Future: Send + 'static
+    {
+        AndThenDialer::new(self, f)
+    }
+
+    fn dialer_or_else<F, T>(self, f: F) -> OrElseDialer<Self, F>
+    where
+        Self: Sized,
+        F: FnOnce(Self::Error, Multiaddr) -> T + Clone + 'static,
+        T: IntoFuture<Item = Self::Output> + 'static,
+        T::Future: Send + 'static
+    {
+        OrElseDialer::new(self, f)
+    }
+
+    fn dialer_then<F, T>(self, f: F) -> ThenDialer<Self, F>
+    where
+        Self: Sized,
+        F: FnOnce(Result<(Self::Output, Multiaddr), Self::Error>) -> T + Clone + 'static,
+        T: IntoFuture + 'static,
+        T::Future: Send + 'static
+    {
+        ThenDialer::new(self, f)
+    }
+
+    fn with_dialer_upgrade<U>(self, upgrade: U) -> DialerUpgrade<Self, U>
+    where
+        Self: Sized,
+        Self::Outbound: Send,
+        Self::Output: AsyncRead + AsyncWrite + Send,
+        U: OutboundUpgrade<Self::Output> + Clone + Send + 'static,
+        U::NamesIter: Send + Clone,
+        U::UpgradeId: Send,
+        U::Future: Send
+    {
+        DialerUpgrade::new(self, upgrade)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Transport<D, L> { dialer: D, listener: L }
+
+impl<D, L> Transport<D, L>
+where
+    D: Dialer,
+    L: Listener
+{
+    pub fn new(dialer: D, listener: L) -> Self {
+        Transport { dialer, listener }
+    }
+
+    pub fn into(self) -> (D, L) {
+        (self.dialer, self.listener)
+    }
+}
+
+impl<L> Transport<DeniedDialer, L>
+where
+    L: Listener
+{
+    pub fn listener(listener: L) -> Self {
+        Transport::new(DeniedDialer, listener)
+    }
+
+    pub fn with_dialer<D>(self, dialer: D) -> Transport<D, L>
+    where
+        D: Dialer
+    {
+        Transport { dialer, listener: self.listener }
+    }
+}
+
+impl<D> Transport<D, DeniedListener>
+where
+    D: Dialer
+{
+    pub fn dialer(dialer: D) -> Self {
+        Transport::new(dialer, DeniedListener)
+    }
+
+    pub fn with_listener<L>(self, listener: L) -> Transport<D, L>
+    where
+        L: Listener
+    {
+        Transport { dialer: self.dialer, listener }
+    }
+}
+
+impl<D, L> Dialer for Transport<D, L>
+where
+    D: Dialer
+{
+    type Output = D::Output;
+    type Error = D::Error;
+    type Outbound = D::Outbound;
+
+    fn dial(self, addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> {
+        let dialer = self.dialer;
+        let listener = self.listener;
+        dialer.dial(addr)
+            .map_err(move |(dialer, addr)| (Transport { dialer, listener }, addr))
+    }
+}
+
+impl<D, L> Listener for Transport<D, L>
+where
+    L: Listener
+{
+    type Output = L::Output;
+    type Error = L::Error;
+    type Inbound = L::Inbound;
+    type Upgrade = L::Upgrade;
+
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Inbound, Multiaddr), (Self, Multiaddr)> {
+        let dialer = self.dialer;
+        let listener = self.listener;
+        listener.listen_on(addr)
+            .map_err(move |(listener, addr)| (Transport { dialer, listener }, addr))
+    }
+
+    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        self.listener.nat_traversal(server, observed)
     }
 }

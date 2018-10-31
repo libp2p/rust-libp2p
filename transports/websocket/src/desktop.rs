@@ -19,15 +19,18 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{stream, Future, IntoFuture, Sink, Stream};
+use log::{debug, trace};
 use multiaddr::{Protocol, Multiaddr};
 use rw_stream_sink::RwStreamSink;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use swarm::Transport;
+use libp2p_core::transport::{Dialer, Listener};
 use tokio_io::{AsyncRead, AsyncWrite};
-use websocket::client::builder::ClientBuilder;
-use websocket::message::OwnedMessage;
-use websocket::server::upgrade::async::IntoWs;
-use websocket::stream::async::Stream as AsyncStream;
+use websocket::{
+    client::builder::ClientBuilder,
+    message::OwnedMessage,
+    server::upgrade::async::IntoWs,
+    stream::async::Stream as AsyncStream
+};
 
 /// Represents the configuration for a websocket transport capability for libp2p. Must be put on
 /// top of another `Transport`.
@@ -55,26 +58,23 @@ impl<T> WsConfig<T> {
     }
 }
 
-impl<T> Transport for WsConfig<T>
+impl<T> Listener for WsConfig<T>
 where
     // TODO: this 'static is pretty arbitrary and is necessary because of the websocket library
-    T: Transport + 'static,
-    T::Dial: Send,
-    T::Listener: Send,
-    T::ListenerUpgrade: Send,
+    T: Listener + 'static,
+    T::Inbound: Send,
+    T::Upgrade: Send,
     // TODO: this Send is pretty arbitrary and is necessary because of the websocket library
     T::Output: AsyncRead + AsyncWrite + Send,
+    T::Error: From<IoError> + Send
 {
     type Output = Box<AsyncStream + Send>;
-    type Listener =
-        stream::Map<T::Listener, fn((<T as Transport>::ListenerUpgrade, Multiaddr)) -> (Self::ListenerUpgrade, Multiaddr)>;
-    type ListenerUpgrade = Box<Future<Item = Self::Output, Error = IoError> + Send>;
-    type Dial = Box<Future<Item = Self::Output, Error = IoError> + Send>;
+    type Error = T::Error;
+    type Inbound =
+        stream::Map<T::Inbound, fn((<T as Listener>::Upgrade, Multiaddr)) -> (Self::Upgrade, Multiaddr)>;
+    type Upgrade = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
 
-    fn listen_on(
-        self,
-        original_addr: Multiaddr,
-    ) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+    fn listen_on(self, original_addr: Multiaddr) -> Result<(Self::Inbound, Multiaddr), (Self, Multiaddr)> {
         let mut inner_addr = original_addr.clone();
         match inner_addr.pop() {
             Some(Protocol::Ws) => {}
@@ -152,7 +152,23 @@ where
         Ok((listen, new_addr))
     }
 
-    fn dial(self, original_addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        self.transport.nat_traversal(server, observed)
+    }
+}
+
+impl<T> Dialer for WsConfig<T>
+where
+    T: Dialer + 'static,
+    T::Output: AsyncRead + AsyncWrite + Send,
+    T::Outbound: Send,
+    T::Error: From<IoError> + Send
+{
+    type Output = Box<AsyncStream + Send>;
+    type Error = T::Error;
+    type Outbound = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
+
+    fn dial(self, original_addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> {
         let mut inner_addr = original_addr.clone();
         let is_wss = match inner_addr.pop() {
             Some(Protocol::Ws) => false,
@@ -192,7 +208,7 @@ where
                 ClientBuilder::new(&ws_addr)
                     .expect("generated ws address is always valid")
                     .async_connect_on(connec)
-                    .map_err(|err| IoError::new(IoErrorKind::Other, err))
+                    .map_err(|err| IoError::new(IoErrorKind::Other, err).into())
                     .map(|(client, _)| {
                         debug!("Upgraded outgoing connection to websockets");
 
@@ -218,11 +234,8 @@ where
 
         Ok(Box::new(dial) as Box<_>)
     }
-
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.transport.nat_traversal(server, observed)
-    }
 }
+
 
 fn client_addr_to_ws(client_addr: &Multiaddr, is_wss: bool) -> String {
     let inner = {
@@ -263,7 +276,7 @@ mod tests {
     use self::tokio::runtime::current_thread::Runtime;
     use futures::{Future, Stream};
     use multiaddr::Multiaddr;
-    use swarm::Transport;
+    use libp2p_core::transport::{Dialer, Listener};
     use WsConfig;
 
     #[test]

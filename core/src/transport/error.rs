@@ -18,38 +18,42 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{Multiaddr, transport::{Dialer, Listener}};
-use futures::prelude::*;
-use void::Void;
+use crate::upgrade;
+use std::fmt;
 
-#[derive(Debug, Copy, Clone)]
-pub struct DeniedDialer;
+#[derive(Debug)]
+pub enum Error<T, U> {
+    Transport(T),
+    Upgrade(upgrade::Error<U>),
+    #[doc(hidden)]
+    __Nonexhaustive
+}
 
-impl Dialer for DeniedDialer {
-    type Output = Void;
-    type Error = Void;
-    type Outbound = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
-
-    fn dial(self, addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> {
-        Err((self, addr))
+impl<T, U> fmt::Display for Error<T, U>
+where
+    T: fmt::Display,
+    U: fmt::Display
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Error::Transport(e) => write!(f, "transport error: {}", e),
+            Error::Upgrade(e) => write!(f, "upgrade error: {}", e),
+            Error::__Nonexhaustive => f.write_str("__Nonexhaustive")
+        }
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub struct DeniedListener;
-
-impl Listener for DeniedListener {
-    type Output = Void;
-    type Error = Void;
-    type Inbound = Box<Stream<Item = (Self::Upgrade, Multiaddr), Error = std::io::Error> + Send>;
-    type Upgrade = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
-
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Inbound, Multiaddr), (Self, Multiaddr)> {
-        Err((self, addr))
-    }
-
-    fn nat_traversal(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
-        None
+impl<T, U> std::error::Error for Error<T, U>
+where
+    T: std::error::Error,
+    U: std::error::Error
+{
+    fn cause(&self) -> Option<&dyn std::error::Error> {
+        match self {
+            Error::Transport(e) => Some(e),
+            Error::Upgrade(e) => Some(e),
+            Error::__Nonexhaustive => None
+        }
     }
 }
 

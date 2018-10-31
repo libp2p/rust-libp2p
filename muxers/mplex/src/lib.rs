@@ -36,7 +36,12 @@ use std::{cmp, iter, mem};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::sync::{atomic::AtomicUsize, atomic::Ordering, Arc};
 use bytes::Bytes;
-use core::{ConnectionUpgrade, Endpoint, StreamMuxer, muxing::Shutdown};
+use core::{
+    Endpoint,
+    StreamMuxer,
+    muxing::Shutdown,
+    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
+};
 use parking_lot::Mutex;
 use fnv::{FnvHashMap, FnvHashSet};
 use futures::prelude::*;
@@ -91,6 +96,31 @@ impl MplexConfig {
         self.max_buffer_behaviour = behaviour;
         self
     }
+
+    #[inline]
+    fn upgrade<C>(self, i: C, endpoint: Endpoint) -> Multiplex<C>
+    where
+        C: AsyncRead + AsyncWrite
+    {
+        let max_buffer_len = self.max_buffer_len;
+        Multiplex {
+            inner: Mutex::new(MultiplexInner {
+                error: Ok(()),
+                inner: executor::spawn(Framed::new(i, codec::Codec::new()).fuse()),
+                config: self,
+                buffer: Vec::with_capacity(cmp::min(max_buffer_len, 512)),
+                opened_substreams: Default::default(),
+                next_outbound_stream_id: if endpoint == Endpoint::Dialer { 0 } else { 1 },
+                notifier_read: Arc::new(Notifier {
+                    to_notify: Mutex::new(Default::default()),
+                }),
+                notifier_write: Arc::new(Notifier {
+                    to_notify: Mutex::new(Default::default()),
+                }),
+                is_shutdown: false
+            })
+        }
+    }
 }
 
 impl Default for MplexConfig {
@@ -117,43 +147,39 @@ pub enum MaxBufferBehaviour {
     Block,
 }
 
-impl<C> ConnectionUpgrade<C> for MplexConfig
-where
-    C: AsyncRead + AsyncWrite,
-{
-    type Output = Multiplex<C>;
-    type Future = future::FutureResult<Self::Output, IoError>;
-    type UpgradeIdentifier = ();
-    type NamesIter = iter::Once<(Bytes, ())>;
-
-    #[inline]
-    fn upgrade(self, i: C, _: (), endpoint: Endpoint) -> Self::Future {
-        let max_buffer_len = self.max_buffer_len;
-
-        let out = Multiplex {
-            inner: Mutex::new(MultiplexInner {
-                error: Ok(()),
-                inner: executor::spawn(Framed::new(i, codec::Codec::new()).fuse()),
-                config: self,
-                buffer: Vec::with_capacity(cmp::min(max_buffer_len, 512)),
-                opened_substreams: Default::default(),
-                next_outbound_stream_id: if endpoint == Endpoint::Dialer { 0 } else { 1 },
-                notifier_read: Arc::new(Notifier {
-                    to_notify: Mutex::new(Default::default()),
-                }),
-                notifier_write: Arc::new(Notifier {
-                    to_notify: Mutex::new(Default::default()),
-                }),
-                is_shutdown: false
-            })
-        };
-
-        future::ok(out)
-    }
+impl UpgradeInfo for MplexConfig {
+    type UpgradeId = ();
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
 
     #[inline]
     fn protocol_names(&self) -> Self::NamesIter {
         iter::once((Bytes::from("/mplex/6.7.0"), ()))
+    }
+}
+
+impl<C> InboundUpgrade<C> for MplexConfig
+where
+    C: AsyncRead + AsyncWrite,
+{
+    type Output = Multiplex<C>;
+    type Error = IoError;
+    type Future = future::FutureResult<Self::Output, IoError>;
+
+    fn upgrade_inbound(self, socket: C, _: Self::UpgradeId) -> Self::Future {
+        future::ok(self.upgrade(socket, Endpoint::Listener))
+    }
+}
+
+impl<C> OutboundUpgrade<C> for MplexConfig
+where
+    C: AsyncRead + AsyncWrite,
+{
+    type Output = Multiplex<C>;
+    type Error = IoError;
+    type Future = future::FutureResult<Self::Output, IoError>;
+
+    fn upgrade_outbound(self, socket: C, _: Self::UpgradeId) -> Self::Future {
+        future::ok(self.upgrade(socket, Endpoint::Dialer))
     }
 }
 

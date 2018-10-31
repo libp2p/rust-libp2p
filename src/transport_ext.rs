@@ -20,12 +20,12 @@
 
 //! Provides the `TransportExt` trait.
 
+use crate::{Dialer, Listener, Transport};
 use ratelimit::RateLimited;
 use std::io;
 use std::time::Duration;
 use tokio_executor::DefaultExecutor;
 use transport_timeout::TransportTimeout;
-use Transport;
 
 /// Trait automatically implemented on all objects that implement `Transport`. Provides some
 /// additional utilities.
@@ -42,7 +42,7 @@ use Transport;
 ///     .with_rate_limit(1024 * 1024, 1024 * 1024);
 /// ```
 ///
-pub trait TransportExt: Transport {
+pub trait TransportExt: Dialer + Listener {
     /// Adds a timeout to the connection and upgrade steps for all the sockets created by
     /// the transport.
     #[inline]
@@ -94,4 +94,9 @@ pub trait TransportExt: Transport {
     // TODO: add methods to easily upgrade for secio/mplex/yamux
 }
 
-impl<TTransport> TransportExt for TTransport where TTransport: Transport {}
+impl<D, L> TransportExt for Transport<D, L>
+where
+    D: Dialer,
+    L: Listener
+{
+}

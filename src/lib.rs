@@ -45,7 +45,7 @@
 //! Example:
 //!
 //! ```rust
-//! use libp2p::{Multiaddr, Transport, tcp::TcpConfig};
+//! use libp2p::{Multiaddr, Dialer, tcp::TcpConfig};
 //! let tcp_transport = TcpConfig::new();
 //! let addr: Multiaddr = "/ip4/98.97.96.95/tcp/20500".parse().expect("invalid multiaddr");
 //! let _outgoing_connec = tcp_transport.dial(addr);
@@ -90,10 +90,10 @@
 //!
 //! ```rust
 //! # #[cfg(all(not(target_os = "emscripten"), feature = "libp2p-secio"))] {
-//! use libp2p::{Transport, tcp::TcpConfig, secio::{SecioConfig, SecioKeyPair}};
+//! use libp2p::{Dialer, tcp::TcpConfig, secio::{SecioConfig, SecioKeyPair}};
 //! let tcp_transport = TcpConfig::new();
 //! let secio_upgrade = SecioConfig::new(SecioKeyPair::ed25519_generated().unwrap());
-//! let with_security = tcp_transport.with_upgrade(secio_upgrade);
+//! let with_security = tcp_transport.with_dialer_upgrade(secio_upgrade);
 //! // let _ = with_security.dial(...);
 //! // `with_security` also implements the `Transport` trait, and all the connections opened
 //! // through it will automatically negotiate the `secio` protocol.
@@ -160,14 +160,14 @@ pub extern crate libp2p_uds as uds;
 pub extern crate libp2p_websocket as websocket;
 pub extern crate libp2p_yamux as yamux;
 
-mod transport_ext;
+//mod transport_ext;
 
 pub mod simple;
 
-pub use self::core::{Transport, ConnectionUpgrade, PeerId};
+pub use self::core::{Dialer, Listener, Transport, PeerId, transport};
 pub use self::multiaddr::Multiaddr;
 pub use self::simple::SimpleProtocol;
-pub use self::transport_ext::TransportExt;
+//pub use self::transport_ext::TransportExt;
 pub use self::transport_timeout::TransportTimeout;
 
 /// Implementation of `Transport` that supports the most common protocols.
@@ -181,7 +181,18 @@ pub struct CommonTransport {
 }
 
 #[cfg(not(target_os = "emscripten"))]
-pub type InnerImplementation = core::transport::OrTransport<dns::DnsConfig<tcp::TcpConfig>, websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>>;
+pub type InnerImplementation =
+    Transport<
+        transport::OrDialer<
+            dns::DnsConfig<tcp::TcpConfig>,
+            websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>
+        >,
+        transport::OrListener<
+            dns::DnsConfig<tcp::TcpConfig>,
+            websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>
+        >
+    >;
+
 #[cfg(target_os = "emscripten")]
 pub type InnerImplementation = websocket::BrowserWsConfig;
 
@@ -198,10 +209,11 @@ impl CommonTransport {
         let tcp = tcp::TcpConfig::new();
         let with_dns = dns::DnsConfig::new(tcp);
         let with_ws = websocket::WsConfig::new(with_dns.clone());
-        let inner = with_dns.or_transport(with_ws);
+        let dialer = with_dns.clone().or_dialer(with_ws.clone());
+        let listener = with_dns.or_listener(with_ws);
 
         CommonTransport {
-            inner: CommonTransportInner { inner }
+            inner: CommonTransportInner { inner: Transport::new(dialer, listener) }
         }
     }
 
@@ -216,35 +228,32 @@ impl CommonTransport {
     }
 }
 
-impl Transport for CommonTransport {
-    type Output = <InnerImplementation as Transport>::Output;
-    type Listener = <InnerImplementation as Transport>::Listener;
-    type ListenerUpgrade = <InnerImplementation as Transport>::ListenerUpgrade;
-    type Dial = <InnerImplementation as Transport>::Dial;
+impl Dialer for CommonTransport {
+    type Output = <InnerImplementation as Dialer>::Output;
+    type Error = <InnerImplementation as Dialer>::Error;
+    type Outbound = <InnerImplementation as Dialer>::Outbound;
 
-    #[inline]
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        match self.inner.inner.listen_on(addr) {
-            Ok(res) => Ok(res),
-            Err((inner, addr)) => {
-                let trans = CommonTransport { inner: CommonTransportInner { inner: inner } };
-                Err((trans, addr))
-            }
-        }
+    fn dial(self, addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> {
+        self.inner.inner.dial(addr).or_else(|(inner, addr)| {
+            let trans = CommonTransport { inner: CommonTransportInner { inner } };
+            Err((trans, addr))
+        })
+    }
+}
+
+impl Listener for CommonTransport {
+    type Output = <InnerImplementation as Listener>::Output;
+    type Error = <InnerImplementation as Listener>::Error;
+    type Inbound = <InnerImplementation as Listener>::Inbound;
+    type Upgrade = <InnerImplementation as Listener>::Upgrade;
+
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Inbound, Multiaddr), (Self, Multiaddr)> {
+        self.inner.inner.listen_on(addr).or_else(|(inner, addr)| {
+            let trans = CommonTransport { inner: CommonTransportInner { inner } };
+            Err((trans, addr))
+        })
     }
 
-    #[inline]
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-        match self.inner.inner.dial(addr) {
-            Ok(res) => Ok(res),
-            Err((inner, addr)) => {
-                let trans = CommonTransport { inner: CommonTransportInner { inner: inner } };
-                Err((trans, addr))
-            }
-        }
-    }
-
-    #[inline]
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         self.inner.inner.nat_traversal(server, observed)
     }

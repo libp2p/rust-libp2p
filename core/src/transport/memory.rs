@@ -19,15 +19,14 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::{Bytes, IntoBuf};
+use crate::transport;
 use futures::{future::{self, FutureResult}, prelude::*, stream, sync::mpsc};
 use multiaddr::{Protocol, Multiaddr};
 use parking_lot::Mutex;
 use rw_stream_sink::RwStreamSink;
 use std::{io, sync::Arc};
-use Transport;
 
 /// Builds a new pair of `Transport`s. The dialer can reach the listener by dialing `/memory`.
-#[inline]
 pub fn connector() -> (Dialer, Listener) {
     let (tx, rx) = mpsc::unbounded();
     (Dialer(tx), Listener(Arc::new(Mutex::new(rx))))
@@ -35,7 +34,6 @@ pub fn connector() -> (Dialer, Listener) {
 
 /// Same as `connector()`, but allows customizing the type used for transmitting packets between
 /// the two endpoints.
-#[inline]
 pub fn connector_custom_type<T>() -> (Dialer<T>, Listener<T>) {
     let (tx, rx) = mpsc::unbounded();
     (Dialer(tx), Listener(Arc::new(Mutex::new(rx))))
@@ -50,17 +48,12 @@ impl<T> Clone for Dialer<T> {
     }
 }
 
-impl<T: IntoBuf + Send + 'static> Transport for Dialer<T> {
+impl<T: IntoBuf + Send + 'static> transport::Dialer for Dialer<T> {
     type Output = Channel<T>;
-    type Listener = Box<Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=io::Error> + Send>;
-    type ListenerUpgrade = FutureResult<Self::Output, io::Error>;
-    type Dial = Box<Future<Item=Self::Output, Error=io::Error> + Send>;
+    type Error = io::Error;
+    type Outbound = Box<Future<Item=Self::Output, Error=Self::Error> + Send>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        Err((self, addr))
-    }
-
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+    fn dial(self, addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> {
         if !is_memory_addr(&addr) {
             return Err((self, addr))
         }
@@ -73,14 +66,6 @@ impl<T: IntoBuf + Send + 'static> Transport for Dialer<T> {
             .map_err(|_| io::ErrorKind::ConnectionRefused.into());
         Ok(Box::new(future))
     }
-
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        if server == observed {
-            Some(server.clone())
-        } else {
-            None
-        }
-    }
 }
 
 /// Receiving end of the memory transport.
@@ -92,13 +77,13 @@ impl<T> Clone for Listener<T> {
     }
 }
 
-impl<T: IntoBuf + Send + 'static> Transport for Listener<T> {
+impl<T: IntoBuf + Send + 'static> transport::Listener for Listener<T> {
     type Output = Channel<T>;
-    type Listener = Box<Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=io::Error> + Send>;
-    type ListenerUpgrade = FutureResult<Self::Output, io::Error>;
-    type Dial = Box<Future<Item=Self::Output, Error=io::Error> + Send>;
+    type Error = io::Error;
+    type Inbound = Box<Stream<Item=(Self::Upgrade, Multiaddr), Error=io::Error> + Send>;
+    type Upgrade = FutureResult<Self::Output, Self::Error>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Inbound, Multiaddr), (Self, Multiaddr)> {
         if !is_memory_addr(&addr) {
             return Err((self, addr))
         }
@@ -112,12 +97,6 @@ impl<T: IntoBuf + Send + 'static> Transport for Listener<T> {
         Ok((Box::new(stream), addr2))
     }
 
-    #[inline]
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-        Err((self, addr))
-    }
-
-    #[inline]
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         if server == observed {
             Some(server.clone())

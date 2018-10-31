@@ -23,37 +23,34 @@
 //! The timeout includes the upgrading process.
 // TODO: add example
 
-#[macro_use]
 extern crate futures;
 extern crate libp2p_core;
-#[macro_use]
 extern crate log;
 extern crate tokio_timer;
 
-use futures::{Async, Future, Poll, Stream};
-use libp2p_core::{Multiaddr, Transport};
-use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use std::time::Duration;
+use futures::{Async, Future, Poll, Stream, try_ready};
+use libp2p_core::{Multiaddr, transport::{Dialer, Listener}};
+use log::debug;
+use std::{fmt, io, time::Duration};
 use tokio_timer::Timeout;
-use tokio_timer::timeout::Error as TimeoutError;
 
 /// Wraps around a `Transport` and adds a timeout to all the incoming and outgoing connections.
 ///
 /// The timeout includes the upgrade. There is no timeout on the listener or on stream of incoming
 /// substreams.
 #[derive(Debug, Copy, Clone)]
-pub struct TransportTimeout<InnerTrans> {
-    inner: InnerTrans,
+pub struct TransportTimeout<T> {
+    transport: T,
     outgoing_timeout: Duration,
     incoming_timeout: Duration,
 }
 
-impl<InnerTrans> TransportTimeout<InnerTrans> {
+impl<T> TransportTimeout<T> {
     /// Wraps around a `Transport` to add timeouts to all the sockets created by it.
     #[inline]
-    pub fn new(trans: InnerTrans, timeout: Duration) -> Self {
+    pub fn new(trans: T, timeout: Duration) -> Self {
         TransportTimeout {
-            inner: trans,
+            transport: trans,
             outgoing_timeout: timeout,
             incoming_timeout: timeout,
         }
@@ -61,9 +58,9 @@ impl<InnerTrans> TransportTimeout<InnerTrans> {
 
     /// Wraps around a `Transport` to add timeouts to the outgoing connections.
     #[inline]
-    pub fn with_outgoing_timeout(trans: InnerTrans, timeout: Duration) -> Self {
+    pub fn with_outgoing_timeout(trans: T, timeout: Duration) -> Self {
         TransportTimeout {
-            inner: trans,
+            transport: trans,
             outgoing_timeout: timeout,
             incoming_timeout: Duration::from_secs(100 * 365 * 24 * 3600), // 100 years
         }
@@ -71,26 +68,59 @@ impl<InnerTrans> TransportTimeout<InnerTrans> {
 
     /// Wraps around a `Transport` to add timeouts to the ingoing connections.
     #[inline]
-    pub fn with_ingoing_timeout(trans: InnerTrans, timeout: Duration) -> Self {
+    pub fn with_ingoing_timeout(trans: T, timeout: Duration) -> Self {
         TransportTimeout {
-            inner: trans,
+            transport: trans,
             outgoing_timeout: Duration::from_secs(100 * 365 * 24 * 3600), // 100 years
             incoming_timeout: timeout,
         }
     }
 }
 
-impl<InnerTrans> Transport for TransportTimeout<InnerTrans>
-where
-    InnerTrans: Transport,
-{
-    type Output = InnerTrans::Output;
-    type Listener = TimeoutListener<InnerTrans::Listener>;
-    type ListenerUpgrade = TokioTimerMapErr<Timeout<InnerTrans::ListenerUpgrade>>;
-    type Dial = TokioTimerMapErr<Timeout<InnerTrans::Dial>>;
+#[derive(Debug)]
+pub enum Error<E> {
+    Transport(E),
+    Timeout,
+    Timer
+}
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        match self.inner.listen_on(addr) {
+impl<E> fmt::Display for Error<E>
+where
+    E: fmt::Display
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Error::Transport(e) => write!(f, "transport error: {}", e),
+            Error::Timeout => f.write_str("timeout"),
+            Error::Timer => f.write_str("timer error")
+        }
+    }
+}
+
+impl<E> std::error::Error for Error<E>
+where
+    E: std::error::Error
+{
+    fn cause(&self) -> Option<&dyn std::error::Error> {
+        match self {
+            Error::Transport(e) => Some(e),
+            Error::Timeout | Error::Timer => None
+        }
+    }
+}
+
+
+impl<T> Listener for TransportTimeout<T>
+where
+    T: Listener
+{
+    type Output = T::Output;
+    type Error = Error<T::Error>;
+    type Inbound = TimeoutListener<T::Inbound>;
+    type Upgrade = TokioTimerMapErr<T::Upgrade>;
+
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Inbound, Multiaddr), (Self, Multiaddr)> {
+        match self.transport.listen_on(addr) {
             Ok((listener, addr)) => {
                 let listener = TimeoutListener {
                     inner: listener,
@@ -99,9 +129,9 @@ where
 
                 Ok((listener, addr))
             }
-            Err((inner, addr)) => {
+            Err((transport, addr)) => {
                 let transport = TransportTimeout {
-                    inner,
+                    transport,
                     outgoing_timeout: self.outgoing_timeout,
                     incoming_timeout: self.incoming_timeout,
                 };
@@ -111,14 +141,27 @@ where
         }
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-        match self.inner.dial(addr) {
+    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        self.transport.nat_traversal(server, observed)
+    }
+}
+
+impl<T> Dialer for TransportTimeout<T>
+where
+    T: Dialer
+{
+    type Output = T::Output;
+    type Error = Error<T::Error>;
+    type Outbound = TokioTimerMapErr<T::Outbound>;
+
+    fn dial(self, addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> {
+        match self.transport.dial(addr) {
             Ok(dial) => Ok(TokioTimerMapErr {
                 inner: Timeout::new(dial, self.outgoing_timeout),
             }),
-            Err((inner, addr)) => {
+            Err((transport, addr)) => {
                 let transport = TransportTimeout {
-                    inner,
+                    transport,
                     outgoing_timeout: self.outgoing_timeout,
                     incoming_timeout: self.incoming_timeout,
                 };
@@ -126,27 +169,22 @@ where
                 Err((transport, addr))
             }
         }
-    }
-
-    #[inline]
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.inner.nat_traversal(server, observed)
     }
 }
 
 // TODO: can be removed and replaced with an `impl Stream` once impl Trait is fully stable
 //       in Rust (https://github.com/rust-lang/rust/issues/34511)
-pub struct TimeoutListener<InnerStream> {
-    inner: InnerStream,
-    timeout: Duration,
+pub struct TimeoutListener<T> {
+    inner: T,
+    timeout: Duration
 }
 
-impl<InnerStream, O> Stream for TimeoutListener<InnerStream>
+impl<T, Upgrade> Stream for TimeoutListener<T>
 where
-    InnerStream: Stream<Item = (O, Multiaddr)>,
+    T: Stream<Item = (Upgrade, Multiaddr), Error = io::Error>,
 {
-    type Item = (TokioTimerMapErr<Timeout<O>>, Multiaddr);
-    type Error = InnerStream::Error;
+    type Item = (TokioTimerMapErr<Upgrade>, Multiaddr);
+    type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         let poll_out = try_ready!(self.inner.poll());
@@ -165,29 +203,26 @@ where
 // TODO: can be replaced with `impl Future` once `impl Trait` are fully stable in Rust
 //       (https://github.com/rust-lang/rust/issues/34511)
 #[must_use = "futures do nothing unless polled"]
-pub struct TokioTimerMapErr<InnerFut> {
-    inner: InnerFut,
-}
+pub struct TokioTimerMapErr<T> { inner: Timeout<T> }
 
-impl<InnerFut> Future for TokioTimerMapErr<InnerFut>
+impl<T> Future for TokioTimerMapErr<T>
 where
-    InnerFut: Future<Error = TimeoutError<IoError>>,
+    T: Future
 {
-    type Item = InnerFut::Item;
-    type Error = IoError;
+    type Item = T::Item;
+    type Error = Error<T::Error>;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        self.inner.poll().map_err(|err: TimeoutError<IoError>| {
+        self.inner.poll().map_err(|err| {
             if err.is_inner() {
-                err.into_inner().expect("ensured by is_inner()")
+                Error::Transport(err.into_inner().expect("ensured by is_inner()"))
             } else if err.is_elapsed() {
                 debug!("timeout elapsed for connection");
-                IoErrorKind::TimedOut.into()
+                Error::Timeout
             } else {
                 assert!(err.is_timer());
                 debug!("tokio timer error in timeout wrapper");
-                let err = err.into_timer().expect("ensure by is_timer()");
-                IoError::new(IoErrorKind::Other, err)
+                Error::Timer
             }
         })
     }

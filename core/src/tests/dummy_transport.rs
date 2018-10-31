@@ -18,15 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! `DummyTransport` is a `Transport` used in tests. It implements a bare-bones
-//! version of the trait along with a way to setup the transport listeners with
-//! an initial state to facilitate testing.
-
-use futures::prelude::*;
-use futures::{future::{self, FutureResult}, stream};
-use {Multiaddr, Transport};
+use crate::{Multiaddr, transport::Listener};
+use futures::{future::{self, FutureResult}, prelude::*, stream};
 use std::io;
-
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub(crate) enum ListenerState {
@@ -36,27 +30,30 @@ pub(crate) enum ListenerState {
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub(crate) struct DummyTransport {
-    listener_state: ListenerState,
+pub(crate) struct DummyListener {
+    state: ListenerState,
 }
-impl DummyTransport {
-    pub(crate) fn new() -> Self { DummyTransport{ listener_state: ListenerState::Ok(Async::NotReady) }}
+impl DummyListener {
+    pub(crate) fn new() -> Self {
+        DummyListener {
+            state: ListenerState::Ok(Async::NotReady)
+        }
+    }
+
     pub(crate) fn set_initial_listener_state(&mut self, state: ListenerState) {
-        self.listener_state = state;
+        self.state = state;
     }
 }
-impl Transport for DummyTransport {
-    type Output = usize;
-    type Listener = Box<Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=io::Error> + Send>;
-    type ListenerUpgrade = FutureResult<Self::Output, io::Error>;
-    type Dial = Box<Future<Item=Self::Output, Error=io::Error> + Send>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)>
-    where
-        Self: Sized
-    {
+impl Listener for DummyListener {
+    type Output = usize;
+    type Error = io::Error;
+    type Inbound = Box<Stream<Item=(Self::Upgrade, Multiaddr), Error=Self::Error> + Send>;
+    type Upgrade = FutureResult<Self::Output, Self::Error>;
+
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Inbound, Multiaddr), (Self, Multiaddr)> {
         let addr2 = addr.clone();
-        match self.listener_state {
+        match self.state {
             ListenerState::Ok(async) => {
                 let tupelize = move |stream| (future::ok(stream), addr.clone());
                 Ok(match async {
@@ -76,13 +73,6 @@ impl Transport for DummyTransport {
             }
             ListenerState::Error => Err( (self, addr2) )
         }
-    }
-
-    fn dial(self, _addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)>
-    where
-        Self: Sized
-    {
-        unimplemented!();
     }
 
     fn nat_traversal(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {

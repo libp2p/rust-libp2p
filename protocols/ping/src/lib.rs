@@ -56,28 +56,25 @@
 //! extern crate tokio;
 //!
 //! use futures::{Future, Stream};
+//! use libp2p_core::transport::{self, Dialer};
 //! use libp2p_ping::{Ping, PingOutput};
-//! use libp2p_core::Transport;
 //! use tokio::runtime::current_thread::Runtime;
 //!
 //! # fn main() {
-//! let ping_finished_future = libp2p_tcp_transport::TcpConfig::new()
-//!     .with_upgrade(Ping::default())
+//! let ping_dialer = libp2p_tcp_transport::TcpConfig::new()
+//!     .with_dialer_upgrade(Ping::default())
 //!     .dial("127.0.0.1:12345".parse::<libp2p_core::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())
-//!     .and_then(|out| {
-//!         match out {
-//!             PingOutput::Ponger(processing) => Box::new(processing) as Box<Future<Item = _, Error = _> + Send>,
-//!             PingOutput::Pinger(mut pinger) => {
-//!                 pinger.ping(());
-//!                 let f = pinger.into_future().map(|_| ()).map_err(|(err, _)| err);
-//!                 Box::new(f) as Box<Future<Item = _, Error = _> + Send>
-//!             },
-//!         }
+//!     .and_then(|mut pinger| {
+//!         pinger.ping(());
+//!         let f = pinger.into_future()
+//!             .map(|_| println!("received pong"))
+//!             .map_err(|(e, _)| transport::Error::Transport(e));
+//!         Box::new(f) as Box<Future<Item = _, Error = _> + Send>
 //!     });
 //!
 //! // Runs until the ping arrives.
 //! let mut rt = Runtime::new().unwrap();
-//! let _ = rt.block_on(ping_finished_future).unwrap();
+//! let _ = rt.block_on(ping_dialer).unwrap();
 //! # }
 //! ```
 //!
@@ -85,7 +82,6 @@
 extern crate bytes;
 extern crate futures;
 extern crate libp2p_core;
-#[macro_use]
 extern crate log;
 extern crate multistream_select;
 extern crate parking_lot;
@@ -94,12 +90,17 @@ extern crate tokio_codec;
 extern crate tokio_io;
 
 use bytes::{BufMut, Bytes, BytesMut};
-use futures::{prelude::*, future::{FutureResult, IntoFuture}, task};
-use libp2p_core::{ConnectionUpgrade, Endpoint};
+use futures::{prelude::*, future::{self, FutureResult}, task};
+use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use log::debug;
 use rand::{distributions::Standard, prelude::*, rngs::EntropyRng};
-use std::collections::VecDeque;
-use std::io::Error as IoError;
-use std::{iter, marker::PhantomData, mem};
+use std::{
+    collections::VecDeque,
+    io::Error as IoError,
+    iter,
+    marker::PhantomData,
+    mem
+};
 use tokio_codec::{Decoder, Encoder, Framed};
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -125,63 +126,53 @@ pub enum PingOutput<TSocket, TUserData> {
     Ponger(PingListener<TSocket>),
 }
 
-impl<TSocket, TUserData> ConnectionUpgrade<TSocket> for Ping<TUserData>
-where
-    TSocket: AsyncRead + AsyncWrite,
-{
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
-    type UpgradeIdentifier = ();
+impl<TUserData> UpgradeInfo for Ping<TUserData> {
+    type UpgradeId = ();
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
 
-    #[inline]
     fn protocol_names(&self) -> Self::NamesIter {
         iter::once(("/ipfs/ping/1.0.0".into(), ()))
     }
+}
 
-    type Output = PingOutput<TSocket, TUserData>;
-    type Future = FutureResult<Self::Output, IoError>;
+impl<TSocket, TUserData> InboundUpgrade<TSocket> for Ping<TUserData>
+where
+    TSocket: AsyncRead + AsyncWrite,
+{
+    type Output = PingListener<TSocket>;
+    type Error = IoError;
+    type Future = FutureResult<Self::Output, Self::Error>;
 
     #[inline]
-    fn upgrade(
-        self,
-        socket: TSocket,
-        _: Self::UpgradeIdentifier,
-        endpoint: Endpoint,
-    ) -> Self::Future {
-        let out = match endpoint {
-            Endpoint::Dialer => upgrade_as_dialer(socket),
-            Endpoint::Listener => upgrade_as_listener(socket),
+    fn upgrade_inbound(self, socket: TSocket, _: Self::UpgradeId) -> Self::Future {
+        let listener = PingListener {
+            inner: Framed::new(socket, Codec),
+            state: PingListenerState::Listening,
         };
-
-        Ok(out).into_future()
+        future::ok(listener)
     }
 }
 
-/// Upgrades a connection from the dialer side.
-fn upgrade_as_dialer<TSocket, TUserData>(socket: TSocket) -> PingOutput<TSocket, TUserData>
-where TSocket: AsyncRead + AsyncWrite,
+impl<TSocket, TUserData> OutboundUpgrade<TSocket> for Ping<TUserData>
+where
+    TSocket: AsyncRead + AsyncWrite,
 {
-    let dialer = PingDialer {
-        inner: Framed::new(socket, Codec),
-        need_writer_flush: false,
-        needs_close: false,
-        sent_pings: VecDeque::with_capacity(4),
-        rng: EntropyRng::default(),
-        pings_to_send: VecDeque::with_capacity(4),
-    };
+    type Output = PingDialer<TSocket, TUserData>;
+    type Error = IoError;
+    type Future = FutureResult<Self::Output, Self::Error>;
 
-    PingOutput::Pinger(dialer)
-}
-
-/// Upgrades a connection from the listener side.
-fn upgrade_as_listener<TSocket, TUserData>(socket: TSocket) -> PingOutput<TSocket, TUserData>
-where TSocket: AsyncRead + AsyncWrite,
-{
-    let listener = PingListener {
-        inner: Framed::new(socket, Codec),
-        state: PingListenerState::Listening,
-    };
-
-    PingOutput::Ponger(listener)
+    #[inline]
+    fn upgrade_outbound(self, socket: TSocket, _: Self::UpgradeId) -> Self::Future {
+        let dialer = PingDialer {
+            inner: Framed::new(socket, Codec),
+            need_writer_flush: false,
+            needs_close: false,
+            sent_pings: VecDeque::with_capacity(4),
+            rng: EntropyRng::default(),
+            pings_to_send: VecDeque::with_capacity(4),
+        };
+        future::ok(dialer)
+    }
 }
 
 /// Sends pings and receives the pongs.
@@ -397,11 +388,10 @@ mod tests {
     extern crate tokio_tcp;
 
     use self::tokio::runtime::current_thread::Runtime;
-    use self::tokio_tcp::TcpListener;
-    use self::tokio_tcp::TcpStream;
-    use super::{Ping, PingOutput};
+    use self::tokio_tcp::{TcpListener, TcpStream};
+    use super::Ping;
     use futures::{Future, Stream};
-    use libp2p_core::{ConnectionUpgrade, Endpoint};
+    use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade};
 
     // TODO: rewrite tests with the MemoryTransport
 
@@ -415,34 +405,21 @@ mod tests {
             .into_future()
             .map_err(|(e, _)| e.into())
             .and_then(|(c, _)| {
-                Ping::<()>::default().upgrade(
-                    c.unwrap(),
-                    (),
-                    Endpoint::Listener,
-                )
+                Ping::<()>::default().upgrade_inbound(c.unwrap(), ())
             })
-            .and_then(|out| match out {
-                PingOutput::Ponger(service) => service,
-                _ => unreachable!(),
-            });
+            .flatten();
 
         let client = TcpStream::connect(&listener_addr)
             .map_err(|e| e.into())
             .and_then(|c| {
-                Ping::<()>::default().upgrade(
-                    c,
-                    (),
-                    Endpoint::Dialer,
-                )
+                Ping::<()>::default().upgrade_outbound(c, ())
             })
-            .and_then(|out| match out {
-                PingOutput::Pinger(mut pinger) => {
-                    pinger.ping(());
-                    pinger.into_future().map(|_| ()).map_err(|_| panic!())
-                },
-                _ => unreachable!(),
+            .and_then(|mut pinger| {
+                pinger.ping(());
+                pinger.into_future().map(|_| ()).map_err(|_| panic!())
             })
             .map(|_| ());
+
         let mut rt = Runtime::new().unwrap();
         let _ = rt.block_on(server.select(client).map_err(|_| panic!())).unwrap();
     }
@@ -458,40 +435,25 @@ mod tests {
             .into_future()
             .map_err(|(e, _)| e.into())
             .and_then(|(c, _)| {
-                Ping::<u32>::default().upgrade(
-                    c.unwrap(),
-                    (),
-                    Endpoint::Listener,
-                )
+                Ping::<u32>::default().upgrade_inbound(c.unwrap(), ())
             })
-            .and_then(|out| match out {
-                PingOutput::Ponger(service) => service,
-                _ => unreachable!(),
-            });
+            .flatten();
 
         let client = TcpStream::connect(&listener_addr)
             .map_err(|e| e.into())
             .and_then(|c| {
-                Ping::<u32>::default().upgrade(
-                    c,
-                    (),
-                    Endpoint::Dialer,
-                )
+                Ping::<u32>::default().upgrade_outbound(c, ())
             })
-            .and_then(|out| match out {
-                PingOutput::Pinger(mut pinger) => {
-                    for n in 0..20 {
-                        pinger.ping(n);
-                    }
-
-                    pinger
-                        .take(20)
-                        .collect()
-                        .map(|val| { assert_eq!(val, (0..20).collect::<Vec<_>>()); })
-                        .map_err(|_| panic!())
-                },
-                _ => unreachable!(),
+            .and_then(|mut pinger| {
+                for n in 0..20 {
+                    pinger.ping(n);
+                }
+                pinger.take(20)
+                    .collect()
+                    .map(|val| { assert_eq!(val, (0..20).collect::<Vec<_>>()); })
+                    .map_err(|_| panic!())
             });
+
         let mut rt = Runtime::new().unwrap();
         let _ = rt.block_on(server.select(client)).unwrap_or_else(|_| panic!());
     }

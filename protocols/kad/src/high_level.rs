@@ -23,6 +23,7 @@ use futures::{future, Future, IntoFuture, stream, Stream};
 use kad_server::KadConnecController;
 use kbucket::{KBucketsTable, KBucketsPeerId};
 use libp2p_core::PeerId;
+use log::{debug, trace};
 use protocol;
 use rand;
 use smallvec::SmallVec;

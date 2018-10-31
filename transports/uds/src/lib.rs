@@ -48,7 +48,6 @@
 
 extern crate futures;
 extern crate libp2p_core;
-#[macro_use]
 extern crate log;
 extern crate multiaddr;
 extern crate tokio_uds;
@@ -62,10 +61,11 @@ extern crate tokio;
 
 use futures::future::{self, Future, FutureResult};
 use futures::stream::Stream;
+use log::debug;
 use multiaddr::{Protocol, Multiaddr};
-use std::io::Error as IoError;
+use std::io;
 use std::path::PathBuf;
-use libp2p_core::Transport;
+use libp2p_core::transport::{Dialer, Listener};
 use tokio_uds::{UnixListener, UnixStream};
 
 /// Represents the configuration for a Unix domain sockets transport capability for libp2p.
@@ -73,8 +73,7 @@ use tokio_uds::{UnixListener, UnixStream};
 /// The Unixs sockets created by libp2p will need to be progressed by running the futures and
 /// streams obtained by libp2p through the tokio reactor.
 #[derive(Debug, Clone)]
-pub struct UdsConfig {
-}
+pub struct UdsConfig { }
 
 impl UdsConfig {
     /// Creates a new configuration object for TCP/IP.
@@ -84,13 +83,13 @@ impl UdsConfig {
     }
 }
 
-impl Transport for UdsConfig {
+impl Listener for UdsConfig {
     type Output = UnixStream;
-    type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError> + Send + Sync>;
-    type ListenerUpgrade = FutureResult<Self::Output, IoError>;
-    type Dial = Box<Future<Item = UnixStream, Error = IoError> + Send + Sync>;  // TODO: name this type
+    type Error = io::Error;
+    type Inbound = Box<Stream<Item = (Self::Upgrade, Multiaddr), Error = io::Error> + Send + Sync>;
+    type Upgrade = FutureResult<Self::Output, Self::Error>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Inbound, Multiaddr), (Self, Multiaddr)> {
         if let Ok(path) = multiaddr_to_path(&addr) {
             let listener = UnixListener::bind(&path);
             // We need to build the `Multiaddr` to return from this function. If an error happened,
@@ -118,21 +117,27 @@ impl Transport for UdsConfig {
         }
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        if server == observed {
+            Some(observed.clone())
+        } else {
+            None
+        }
+    }
+}
+
+impl Dialer for UdsConfig {
+    type Output = UnixStream;
+    type Error = io::Error;
+    type Outbound = Box<Future<Item = UnixStream, Error = Self::Error> + Send + Sync>;  // TODO: name this type
+
+    fn dial(self, addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> {
         if let Ok(path) = multiaddr_to_path(&addr) {
             debug!("Dialing {}", addr);
             let fut = UnixStream::connect(&path);
             Ok(Box::new(fut) as Box<_>)
         } else {
             Err((self, addr))
-        }
-    }
-
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        if server == observed {
-            Some(observed.clone())
-        } else {
-            None
         }
     }
 }
@@ -170,7 +175,7 @@ mod tests {
     use futures::Future;
     use multiaddr::{Protocol, Multiaddr};
     use std::{self, borrow::Cow, path::Path};
-    use libp2p_core::Transport;
+    use libp2p_core::transport::{Dialer, Listener};
     use tempfile;
     use tokio_io;
 

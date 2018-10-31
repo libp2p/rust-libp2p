@@ -18,8 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use muxing::StreamMuxer;
-use nodes::node::{NodeEvent, NodeStream, Substream};
+use crate::{
+    muxing::StreamMuxer,
+    nodes::node::{NodeEvent, NodeStream, Substream}
+};
 use futures::{prelude::*, stream::Fuse};
 use std::io::Error as IoError;
 
