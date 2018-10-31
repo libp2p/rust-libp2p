@@ -36,7 +36,7 @@ use {ConnectionUpgrade, Endpoint};
 ///
 /// Protocols with the remote can be opened in two different ways:
 ///
-/// - Dialing, which is a voluntary process. In order to do so, make `poll()` return a
+/// - Dialing, which is a voluntary process. In order to do so, make `poll()` return an
 ///   `OutboundSubstreamRequest` variant containing the connection upgrade to use.
 /// - Listening, which is used to determine which protocols are supported when the remote wants
 ///   to open a substream. The `listen_protocol()` method should return the upgrades supported when
