@@ -481,7 +481,7 @@ where
                     if actual_peer_id == expected_peer_id {
                         Ok((actual_peer_id, muxer))
                     } else {
-                        let msg = format!("public key mismatch ; expected = {:?} ; obtained = {:?}",
+                        let msg = format!("public key mismatch; expected = {:?}; obtained = {:?}",
                                           expected_peer_id, actual_peer_id);
                         Err(IoError::new(IoErrorKind::Other, msg))
                     }
@@ -573,10 +573,10 @@ where
                 }) => {
                     let endpoint = self.reach_attempts.connected_points.remove(&peer_id)
                         .expect("We insert into connected_points whenever a connection is \
-                                 opened and remove only when a connection is closed ; the \
+                                 opened and remove only when a connection is closed; the \
                                  underlying API is guaranteed to always deliver a connection \
                                  closed message after it has been opened, and no two closed \
-                                 messages ; qed");
+                                 messages; qed");
                     debug_assert!(!self.reach_attempts.out_reach_attempts.contains_key(&peer_id));
                     action = Default::default();
                     out_event = RawSwarmEvent::NodeError {
@@ -588,10 +588,10 @@ where
                 Async::Ready(CollectionEvent::NodeClosed { peer_id }) => {
                     let endpoint = self.reach_attempts.connected_points.remove(&peer_id)
                         .expect("We insert into connected_points whenever a connection is \
-                                 opened and remove only when a connection is closed ; the \
+                                 opened and remove only when a connection is closed; the \
                                  underlying API is guaranteed to always deliver a connection \
                                  closed message after it has been opened, and no two closed \
-                                 messages ; qed");
+                                 messages; qed");
                     debug_assert!(!self.reach_attempts.out_reach_attempts.contains_key(&peer_id));
                     action = Default::default();
                     out_event = RawSwarmEvent::NodeClosed { peer_id, endpoint };
@@ -607,15 +607,15 @@ where
             }
 
             if let Some(interrupt) = action.interrupt {
-                // TODO: improve proof or remove ; this is too complicated right now
+                // TODO: improve proof or remove; this is too complicated right now
                 self.active_nodes
                     .interrupt(interrupt)
-                    .expect("interrupt is guaranteed to be gathered from `out_reach_attempts` ;
+                    .expect("interrupt is guaranteed to be gathered from `out_reach_attempts`;
                              we insert in out_reach_attempts only when we call \
                              active_nodes.add_reach_attempt, and we remove only when we call \
-                             interrupt or when a reach attempt succeeds or errors ; therefore the \
+                             interrupt or when a reach attempt succeeds or errors; therefore the \
                              out_reach_attempts should always be in sync with the actual \
-                             attempts ; qed");
+                             attempts; qed");
             }
 
             return Async::Ready(out_event);
@@ -688,9 +688,9 @@ where
         if outcome == CollectionNodeAccept::ReplacedExisting {
             let closed_endpoint = closed_endpoint
                 .expect("We insert into connected_points whenever a connection is opened and \
-                         remove only when a connection is closed ; the underlying API is \
+                         remove only when a connection is closed; the underlying API is \
                          guaranteed to always deliver a connection closed message after it has \
-                         been opened, and no two closed messages ; qed");
+                         been opened, and no two closed messages; qed");
             return (action, RawSwarmEvent::Replaced {
                 peer_id,
                 endpoint: opened_endpoint,
@@ -726,9 +726,9 @@ where
         if outcome == CollectionNodeAccept::ReplacedExisting {
             let closed_endpoint = closed_endpoint
                 .expect("We insert into connected_points whenever a connection is opened and \
-                        remove only when a connection is closed ; the underlying API is guaranteed \
+                        remove only when a connection is closed; the underlying API is guaranteed \
                         to always deliver a connection closed message after it has been opened, \
-                        and no two closed messages ; qed");
+                        and no two closed messages; qed");
             return (Default::default(), RawSwarmEvent::Replaced {
                 peer_id,
                 endpoint: opened_endpoint,
@@ -740,7 +740,7 @@ where
     }
 
     // We didn't find any entry in neither the outgoing connections not ingoing connections.
-    // TODO: improve proof or remove ; this is too complicated right now
+    // TODO: improve proof or remove; this is too complicated right now
     panic!("The API of collection guarantees that the id sent back in NodeReached (which is where \
             we call handle_node_reached) is one that was passed to add_reach_attempt. Whenever we \
             call add_reach_attempt, we also insert at the same time an entry either in \
@@ -817,7 +817,7 @@ where TTrans: Transport
     }
 
     // The id was neither in the outbound list nor the inbound list.
-    // TODO: improve proof or remove ; this is too complicated right now
+    // TODO: improve proof or remove; this is too complicated right now
     panic!("The API of collection guarantees that the id sent back in ReachError events \
             (which is where we call handle_reach_error) is one that was passed to \
             add_reach_attempt. Whenever we call add_reach_attempt, we also insert \
@@ -999,7 +999,7 @@ impl<'a, TInEvent> PeerConnected<'a, TInEvent> {
     /// Closes the connection to this node.
     ///
     /// No `NodeClosed` message will be generated for this node.
-    // TODO: consider returning a `PeerNotConnected` ; however this makes all the borrows things
+    // TODO: consider returning a `PeerNotConnected`; however this makes all the borrows things
     // much more annoying to deal with
     pub fn close(self) {
         self.connected_points.remove(&self.peer_id);
@@ -1011,9 +1011,9 @@ impl<'a, TInEvent> PeerConnected<'a, TInEvent> {
     pub fn endpoint(&self) -> &ConnectedPoint {
         self.connected_points.get(&self.peer_id)
             .expect("We insert into connected_points whenever a connection is opened and remove \
-                     only when a connection is closed ; the underlying API is guaranteed to always \
+                     only when a connection is closed; the underlying API is guaranteed to always \
                      deliver a connection closed message after it has been opened, and no two \
-                     closed messages ; qed")        
+                     closed messages; qed")        
     }
 
     /// Sends an event to the node.
@@ -1031,13 +1031,13 @@ pub struct PeerPendingConnect<'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a> {
 
 impl<'a, TInEvent, TOutEvent, THandler> PeerPendingConnect<'a, TInEvent, TOutEvent, THandler> {
     /// Interrupt this connection attempt.
-    // TODO: consider returning a PeerNotConnected ; however that is really pain in terms of
+    // TODO: consider returning a PeerNotConnected; however that is really pain in terms of
     // borrows
     #[inline]
     pub fn interrupt(self) {
         let attempt = self.attempt.remove();
         if let Err(_) = self.active_nodes.interrupt(attempt.id) {
-            // TODO: improve proof or remove ; this is too complicated right now
+            // TODO: improve proof or remove; this is too complicated right now
             panic!("We retreived this attempt.id from out_reach_attempts. We insert in \
                     out_reach_attempts only at the same time as we call add_reach_attempt. \
                     Whenever we receive a NodeReached, NodeReplaced or ReachError event, which \

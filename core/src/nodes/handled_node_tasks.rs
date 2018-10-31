@@ -407,7 +407,7 @@ where
                                     node.inject_event(event);
                                 },
                                 Ok(Async::Ready(None)) => {
-                                    // Node closed by the external API ; start shutdown process.
+                                    // Node closed by the external API; start shutdown process.
                                     node.shutdown();
                                     break;
                                 }
