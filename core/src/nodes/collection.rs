@@ -333,12 +333,12 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
     /// Returns `None` if we don't have a connection to this peer.
     #[inline]
     pub fn peer_mut(&mut self, id: &PeerId) -> Option<PeerMut<TInEvent>> {
-        println!("[peer_mut] id={:?}, self.nodes={:?}, self.tasks={:?}", id, self.nodes, self.tasks);
+        println!("[CollectionStream, peer_mut] id={:?}, self.nodes={:?}, self.tasks={:?}", id, self.nodes, self.tasks);
         let task = match self.nodes.get(id) {
             Some(&task) => task,
             None => return None,
         };
-        println!("[peer_mut] task={:?}", task);
+        println!("[CollectionStream, peer_mut] task={:?}", task);
 
         match self.inner.task(task) {
             Some(inner) => Some(PeerMut {

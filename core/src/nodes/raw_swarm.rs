@@ -27,8 +27,9 @@ use nodes::collection::{
 use nodes::handled_node::NodeHandler;
 use nodes::listeners::{ListenersEvent, ListenersStream};
 use nodes::node::Substream;
-use std::collections::hash_map::{Entry, OccupiedEntry};
+use std::{collections::hash_map::{Entry, OccupiedEntry}, fmt};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
+
 use {Endpoint, Multiaddr, PeerId, Transport};
 
 /// Implementation of `Stream` that handles the nodes.
@@ -179,6 +180,83 @@ where
         event: TOutEvent,
     },
 }
+
+impl<'a, TTrans, TInEvent, TOutEvent, THandler> fmt::Debug for RawSwarmEvent<'a, TTrans, TInEvent, TOutEvent, THandler>
+where
+    TOutEvent: fmt::Debug,
+    TTrans: Transport,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match *self {
+            RawSwarmEvent::ListenerClosed { ref listen_addr, listener: _, ref result } => {
+                f.debug_struct("ListenerClosed")
+                    .field("listen_addr", listen_addr)
+                    .field("result", result)
+                    .finish()
+            }
+            RawSwarmEvent::IncomingConnection( IncomingConnectionEvent { ref listen_addr, ref send_back_addr, .. } ) => {
+                f.debug_struct("IncomingConnection")
+                    .field("listen_addr", listen_addr)
+                    .field("send_back_addr", send_back_addr)
+                    .finish()
+            }
+            RawSwarmEvent::IncomingConnectionError { ref listen_addr, ref send_back_addr, ref error} => {
+                f.debug_struct("IncomingConnectionError")
+                    .field("listen_addr", listen_addr)
+                    .field("send_back_addr", send_back_addr)
+                    .field("error", error)
+                    .finish()
+            }
+            RawSwarmEvent::Connected { ref peer_id, ref endpoint } => {
+                f.debug_struct("Connected")
+                    .field("peer_id", peer_id)
+                    .field("endpoint", endpoint)
+                    .finish()
+            }
+            RawSwarmEvent::Replaced { ref peer_id, ref closed_endpoint, ref endpoint } => {
+                f.debug_struct("Replaced")
+                    .field("peer_id", peer_id)
+                    .field("closed_endpoint", closed_endpoint)
+                    .field("endpoint", endpoint)
+                    .finish()
+            }
+            RawSwarmEvent::NodeClosed { ref peer_id, ref endpoint } => {
+                f.debug_struct("NodeClosed")
+                    .field("peer_id", peer_id)
+                    .field("endpoint", endpoint)
+                    .finish()
+            }
+            RawSwarmEvent::NodeError { ref peer_id, ref endpoint, ref error } => {
+                f.debug_struct("NodeError")
+                    .field("peer_id", peer_id)
+                    .field("endpoint", endpoint)
+                    .field("error", error)
+                    .finish()
+            }
+            RawSwarmEvent::DialError { ref remain_addrs_attempt, ref peer_id, ref multiaddr, ref error } => {
+                f.debug_struct("DialError")
+                    .field("remain_addrs_attempt", remain_addrs_attempt)
+                    .field("peer_id", peer_id)
+                    .field("multiaddr", multiaddr)
+                    .field("error", error)
+                    .finish()
+            }
+            RawSwarmEvent::UnknownPeerDialError { ref multiaddr, ref error, .. } => {
+                f.debug_struct("UnknownPeerDialError")
+                    .field("multiaddr", multiaddr)
+                    .field("error", error)
+                    .finish()
+            }
+            RawSwarmEvent::NodeEvent { ref peer_id, ref event } => {
+                f.debug_struct("UnknownPeerDialError")
+                    .field("peer_id", peer_id)
+                    .field("event", event)
+                    .finish()
+            }
+        }
+    }
+}
+
 
 /// A new connection arrived on a listener.
 pub struct IncomingConnectionEvent<'a, TTrans: 'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a>
@@ -521,14 +599,19 @@ where
         THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
         THandler::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
     {
+        println!("[RawSwarm, poll]  START");
         // Start by polling the listeners for events.
         match self.listeners.poll() {
-            Async::NotReady => (),
+            Async::NotReady => {
+                println!("[RawSwarm, poll]      listeners.poll() – NotReady – doing nothing");
+                ()
+            },
             Async::Ready(ListenersEvent::Incoming {
                 upgrade,
                 listen_addr,
                 send_back_addr,
             }) => {
+                println!("[RawSwarm, poll]      listeners.poll() – Ready(ListenersEvent::Incoming) – returning Ready(IncomingConnection)");
                 let event = IncomingConnectionEvent {
                     upgrade,
                     listen_addr,
@@ -544,6 +627,7 @@ where
                 listener,
                 result,
             }) => {
+                println!("[RawSwarm, poll]      listeners.poll() – Ready(ListenersEvent::Closed) – returning Ready(ListenerClosed)");
                 return Async::Ready(RawSwarmEvent::ListenerClosed {
                     listen_addr,
                     listener,
@@ -554,15 +638,21 @@ where
 
         // Poll the existing nodes.
         loop {
+            println!("[RawSwarm, poll]  Existing nodes – top of the loop");
             let (action, out_event);
             match self.active_nodes.poll() {
-                Async::NotReady => break,
+                Async::NotReady => {
+                    println!("[RawSwarm, poll]      active_nodes.poll() – NotReady – breaking loop");
+                    break
+                },
                 Async::Ready(CollectionEvent::NodeReached(reach_event)) => {
+                    println!("[RawSwarm, poll]      active_nodes.poll() – Ready(NodeReached) – handling <–––");
                     let (a, e) = handle_node_reached(&mut self.reach_attempts, reach_event);
                     action = a;
                     out_event = e;
                 }
                 Async::Ready(CollectionEvent::ReachError { id, error, handler }) => {
+                    println!("[RawSwarm, poll]      active_nodes.poll() – Ready(ReachError) – handling error");
                     let (a, e) = handle_reach_error(&mut self.reach_attempts, id, error, handler);
                     action = a;
                     out_event = e;
@@ -571,6 +661,7 @@ where
                     peer_id,
                     error,
                 }) => {
+                    println!("[RawSwarm, poll]      active_nodes.poll() – Ready(NodeError) – setting out event and continuing");
                     let endpoint = self.reach_attempts.connected_points.remove(&peer_id)
                         .expect("We insert into connected_points whenever a connection is \
                                  opened and remove only when a connection is closed; the \
@@ -586,6 +677,7 @@ where
                     };
                 }
                 Async::Ready(CollectionEvent::NodeClosed { peer_id }) => {
+                    println!("[RawSwarm, poll]      active_nodes.poll() – Ready(NodeClosed) – setting out event and continuing");
                     let endpoint = self.reach_attempts.connected_points.remove(&peer_id)
                         .expect("We insert into connected_points whenever a connection is \
                                  opened and remove only when a connection is closed; the \
@@ -597,16 +689,19 @@ where
                     out_event = RawSwarmEvent::NodeClosed { peer_id, endpoint };
                 }
                 Async::Ready(CollectionEvent::NodeEvent { peer_id, event }) => {
+                    println!("[RawSwarm, poll]      active_nodes.poll() – Ready(NodeEvent) – setting out event and continuing");
                     action = Default::default();
                     out_event = RawSwarmEvent::NodeEvent { peer_id, event };
                 }
             };
 
             if let Some((peer_id, handler, first, rest)) = action.start_dial_out {
+                println!("[RawSwarm, poll]      active_nodes.poll() – action: start_dial_out");
                 self.start_dial_out(peer_id, handler, first, rest);
             }
 
             if let Some(interrupt) = action.interrupt {
+                println!("[RawSwarm, poll]      active_nodes.poll() – action: interrupt");
                 // TODO: improve proof or remove; this is too complicated right now
                 self.active_nodes
                     .interrupt(interrupt)
@@ -617,10 +712,11 @@ where
                              out_reach_attempts should always be in sync with the actual \
                              attempts; qed");
             }
-
+            println!("[RawSwarm, poll]      active_nodes.poll() – end of loop, returning out_event");
             return Async::Ready(out_event);
         }
 
+        println!("[RawSwarm, poll]  Returning NotReady");
         Async::NotReady
     }
 }
@@ -685,6 +781,7 @@ where
         };
 
         let (outcome, peer_id) = event.accept();
+        println!("[RawSwarm, handle_node_reached] accepted event; peer_id={:?}", peer_id);
         if outcome == CollectionNodeAccept::ReplacedExisting {
             let closed_endpoint = closed_endpoint
                 .expect("We insert into connected_points whenever a connection is opened and \
@@ -842,6 +939,32 @@ where
     /// > **Note**: It is however possible that a pending incoming connection is being negotiated
     /// > and will connect to this peer, but we don't know it yet.
     NotConnected(PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandler>),
+}
+
+impl<'a, TTrans, TInEvent, TOutEvent, THandler> fmt::Debug for Peer<'a, TTrans, TInEvent, TOutEvent, THandler>
+where
+    TTrans: Transport,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match *self {
+            Peer::Connected( PeerConnected { peer: _, ref peer_id, ref connected_points }) => {
+                f.debug_struct("Connected")
+                    .field("peer_id", peer_id)
+                    .field("connected_points", connected_points)
+                    .finish()
+            }
+            Peer::PendingConnect( PeerPendingConnect { ref attempt, .. } ) => {
+                f.debug_struct("PendingConnect")
+                    .field("attempt", attempt)
+                    .finish()
+            }
+            Peer::NotConnected(PeerNotConnected { ref peer_id, .. }) => {
+                f.debug_struct("NotConnected")
+                    .field("peer_id", peer_id)
+                    .finish()
+            }
+        }
+    }
 }
 
 // TODO: add other similar methods that wrap to the ones of `PeerNotConnected`
@@ -1170,11 +1293,9 @@ mod tests {
     use super::*;
     use tests::dummy_transport::DummyTransport;
     use tests::dummy_handler::{Handler, InEvent, OutEvent};
-
-    #[test]
-    fn delete_me_can_create_new() {
-        let _raw_swarm = RawSwarm::<_, _, _, Handler>::new(DummyTransport::new());
-    }
+    use std::sync::Arc;
+    use parking_lot::Mutex;
+    use tokio::runtime::Builder;
 
     #[test]
     fn query_transport() {
@@ -1196,7 +1317,8 @@ mod tests {
     }
 
     #[test]
-    fn nat_traversal() {
+    fn nat_traversal_transforms_the_observed_address_according_to_the_transport_used() {
+        // the DummyTransport adds /udt to all addresses
         let transport = DummyTransport::new();
         let mut raw_swarm = RawSwarm::<_, _, _, Handler>::new(transport);
         let addr1 = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
@@ -1214,13 +1336,59 @@ mod tests {
     }
 
     #[test]
-    fn dial() {
-        unimplemented!();
+    fn successful_dial_reaches_a_node() {
+        let transport = DummyTransport::new();
+        let mut raw_swarm = RawSwarm::<_, _, _, Handler>::new(transport);
+        let addr = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
+        let handler = Handler::default();
+        let res = raw_swarm.dial(addr, handler);
+        assert!(res.is_ok());
+
+        // Poll the swarm until we get a `NodeReached` then assert on the peer:
+        // it's there and it's connected.
+        let raw_swarm = Arc::new(Mutex::new(raw_swarm));
+
+        let mut rt = Builder::new().core_threads(2).build().unwrap();
+        let swarm = raw_swarm.clone();
+        let fut = future::poll_fn(move || -> Poll<_, ()> {
+            let mut swarm = swarm.lock();
+            swarm.poll();
+            Ok(Async::Ready(()))
+        });
+        rt.block_on(fut).expect("tokio works");
+
+        let swarm = raw_swarm.clone();
+        let fut = future::poll_fn(move || -> Poll<PeerId, ()> {
+            let mut swarm = swarm.lock();
+            let event = swarm.poll();
+            let peer_id = assert_matches!(event, Async::Ready(RawSwarmEvent::Connected{peer_id, ..}) => peer_id );
+            Ok(Async::Ready(peer_id))
+        });
+        let peer_id = rt.block_on(fut).expect("tokio works");
+
+        let mut raw_swarm = raw_swarm.lock();
+        let peer = raw_swarm.peer(peer_id);
+        assert_matches!(peer, Peer::Connected(PeerConnected{..}));
     }
 
     #[test]
     fn num_incoming_negotiated() {
-        unimplemented!();
+        use transport;
+        let (tx, rx) = transport::connector();
+        // let swarm = RawSwarm::new(rx);
+        let swarm = RawSwarm {
+            listeners: ListenersStream::new(rx),
+            active_nodes: CollectionStream::new(),
+            reach_attempts: ReachAttempts {
+                out_reach_attempts: Default::default(),
+                other_reach_attempts: Vec::new(),
+                connected_points: Default::default(),
+            },
+        };
+        // let mut listeners = ListenersStream::new(rx);
+        // listeners.listen_on("/memory".parse().unwrap()).unwrap();
+
+        // let dial = tx.dial("/memory".parse().unwrap()).unwrap_or_else(|_| panic!());
     }
 
 
