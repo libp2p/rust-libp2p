@@ -21,7 +21,7 @@
 //! General-purpose key-value storage.
 //! The keys are strings, and the values are of any type you want.
 //!
-//! > **Note**: This crate is meant to be a utility for the implementation of other crates ; it
+//! > **Note**: This crate is meant to be a utility for the implementation of other crates; it
 //! >            does not directly participate in the stack of libp2p.
 //!
 //! This crate provides the `Datastore` trait, whose template parameter is the type of the value.

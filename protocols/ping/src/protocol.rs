@@ -341,7 +341,7 @@ impl Encoder for Codec {
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio_current_thread;
+    extern crate tokio;
     extern crate tokio_tcp;
 
     use self::tokio_tcp::TcpListener;
@@ -391,7 +391,8 @@ mod tests {
             })
             .map(|_| ());
 
-        tokio_current_thread::block_on_all(server.select(client).map_err(|_| panic!())).unwrap();
+        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(server.select(client).map_err(|_| panic!())).unwrap();
     }
 
     #[test]
@@ -440,6 +441,7 @@ mod tests {
                 _ => unreachable!(),
             });
 
-        tokio_current_thread::block_on_all(server.select(client)).unwrap_or_else(|_| panic!());
+        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(server.select(client)).unwrap_or_else(|_| panic!());
     }
 }

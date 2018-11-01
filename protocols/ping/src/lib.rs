@@ -53,11 +53,12 @@
 //! extern crate libp2p_ping;
 //! extern crate libp2p_core;
 //! extern crate libp2p_tcp_transport;
-//! extern crate tokio_current_thread;
+//! extern crate tokio;
 //!
 //! use futures::{Future, Stream};
 //! use libp2p_ping::protocol::{Ping, PingOutput};
 //! use libp2p_core::Transport;
+//! use tokio::runtime::current_thread::Runtime;
 //!
 //! # fn main() {
 //! let ping_finished_future = libp2p_tcp_transport::TcpConfig::new()
@@ -75,7 +76,8 @@
 //!     });
 //!
 //! // Runs until the ping arrives.
-//! tokio_current_thread::block_on_all(ping_finished_future).unwrap();
+//! let mut rt = Runtime::new().unwrap();
+//! let _ = rt.block_on(ping_finished_future).unwrap();
 //! # }
 //! ```
 //!

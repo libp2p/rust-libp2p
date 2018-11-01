@@ -360,10 +360,11 @@ where
                         },
                         Some(EventSource::LocalResponse(message)) => {
                             let future = message
-                                .map_err(|_| {
+                                .map_err(|err| {
                                     // The user destroyed the responder without responding.
                                     warn!("Kad responder object destroyed without responding");
-                                    panic!()        // TODO: what to do here? we have to close the connection
+                                    // TODO: what to do here? we have to close the connection
+                                    IoError::new(IoErrorKind::Other, err)
                                 })
                                 .and_then(move |message| {
                                     kad_sink

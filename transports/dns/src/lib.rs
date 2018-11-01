@@ -179,7 +179,7 @@ where
     }
 }
 
-// How to resolve ; to an IPv4 address or an IPv6 address?
+// How to resolve; to an IPv4 address or an IPv6 address?
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum ResolveTy {
     Dns4,
