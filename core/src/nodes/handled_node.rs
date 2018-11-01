@@ -256,6 +256,7 @@ where
                 }
             }
 
+            match if self.handler_is_done { Async::Ready(None) } else { self.handler.poll()? } {
                 Async::NotReady => {
                     if node_not_ready {
                         break
