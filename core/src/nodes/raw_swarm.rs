@@ -1530,4 +1530,21 @@ mod tests {
         });
         rt.block_on(fut).expect("tokio works");
     }
+
+    #[test]
+    fn node_cant_be_reached() {
+        // Node returns ReachError
+    }
+
+    #[test]
+    fn node_error() {
+        // Node returns NodeError
+    }
+
+    #[test]
+    fn node_closed() {
+        // Node returns NodeClosed – not covered?
+    }
+
+
 }

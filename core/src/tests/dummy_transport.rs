@@ -89,16 +89,25 @@ impl Transport for DummyTransport {
         }
     }
 
-    fn dial(self, _addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)>
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)>
     where
         Self: Sized
     {
+        println!("[DummyTransport, dial] addr={:?}", addr);
         let peer_id = if let Some(peer_id) = self.next_peer_id {
             peer_id
         } else {
             PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id()
         };
-        Ok(Box::new(future::ok((peer_id, DummyMuxer::new()))))
+
+        let fut =
+            if addr.to_string() == "/unix/unreachable" {
+                let err_string = format!("unreachable host error, peer={:?}", peer_id);
+                future::err(io::Error::new(io::ErrorKind::Other, err_string))
+            } else {
+                future::ok((peer_id, DummyMuxer::new()))
+            };
+        Ok(Box::new(fut))
     }
 
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
