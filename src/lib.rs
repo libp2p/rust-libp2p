@@ -135,8 +135,11 @@ pub extern crate futures;
 #[cfg(not(target_os = "emscripten"))]
 pub extern crate tokio_current_thread;
 pub extern crate multiaddr;
+pub extern crate multihash;
 pub extern crate tokio_io;
 pub extern crate tokio_codec;
+
+extern crate tokio_executor;
 
 pub extern crate libp2p_core as core;
 #[cfg(not(target_os = "emscripten"))]
@@ -157,11 +160,14 @@ pub extern crate libp2p_uds as uds;
 pub extern crate libp2p_websocket as websocket;
 pub extern crate libp2p_yamux as yamux;
 
+mod transport_ext;
+
 pub mod simple;
 
-pub use self::core::{Transport, ConnectionUpgrade, PeerId, swarm};
+pub use self::core::{Transport, ConnectionUpgrade, PeerId};
 pub use self::multiaddr::Multiaddr;
 pub use self::simple::SimpleProtocol;
+pub use self::transport_ext::TransportExt;
 pub use self::transport_timeout::TransportTimeout;
 
 /// Implementation of `Transport` that supports the most common protocols.
@@ -212,7 +218,6 @@ impl CommonTransport {
 
 impl Transport for CommonTransport {
     type Output = <InnerImplementation as Transport>::Output;
-    type MultiaddrFuture = <InnerImplementation as Transport>::MultiaddrFuture;
     type Listener = <InnerImplementation as Transport>::Listener;
     type ListenerUpgrade = <InnerImplementation as Transport>::ListenerUpgrade;
     type Dial = <InnerImplementation as Transport>::Dial;

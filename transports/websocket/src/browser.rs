@@ -20,7 +20,7 @@
 
 use futures::stream::Then as StreamThen;
 use futures::sync::{mpsc, oneshot};
-use futures::{future, future::FutureResult, Async, Future, Poll, Stream};
+use futures::{Async, Future, Poll, Stream};
 use multiaddr::{Protocol, Multiaddr};
 use rw_stream_sink::RwStreamSink;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -53,11 +53,9 @@ impl BrowserWsConfig {
 
 impl Transport for BrowserWsConfig {
     type Output = BrowserWsConn;
-    type MultiaddrFuture = FutureResult<Multiaddr, IoError>;
-    type Listener = Box<Stream<Item = Self::ListenerUpgrade, Error = IoError> + Send>; // TODO: use `!`
-    type ListenerUpgrade =
-        Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>; // TODO: use `!`
-    type Dial = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
+    type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError> + Send>; // TODO: use `!`
+    type ListenerUpgrade = Box<Future<Item = Self::Output, Error = IoError> + Send>; // TODO: use `!`
+    type Dial = Box<Future<Item = Self::Output, Error = IoError> + Send>;
 
     #[inline]
     fn listen_on(self, a: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -196,7 +194,7 @@ impl Transport for BrowserWsConfig {
 
         Ok(Box::new(open_rx.then(|result| {
             match result {
-                Ok(Ok(r)) => Ok((r, future::ok(original_addr))),
+                Ok(Ok(r)) => Ok(r),
                 Ok(Err(e)) => Err(e),
                 // `Err` would happen here if `open_tx` is destroyed. `open_tx` is captured by
                 // the `WebSocket`, and the `WebSocket` is captured by `open_cb`, which is itself
@@ -209,49 +207,40 @@ impl Transport for BrowserWsConfig {
     }
 
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        let mut server_protocols = server.iter();
-        let server_proto0 = server_protocols.next()?;
-        let server_proto1 = server_protocols.next()?;
-        let server_proto2 = server_protocols.next()?;
-        if server_protocols.next().is_some() {
-            return None;
+        let mut address = Multiaddr::empty();
+
+        let mut iter = server.iter().zip(observed.iter());
+
+        // Use the observed IP address.
+        match iter.next() {
+            Some((Protocol::Ip4(_), x@Protocol::Ip4(_))) => address.append(x),
+            Some((Protocol::Ip6(_), x@Protocol::Ip6(_))) => address.append(x),
+            _ => return None
         }
 
-        let mut observed_protocols = observed.iter();
-        let obs_proto0 = observed_protocols.next()?;
-        let obs_proto1 = observed_protocols.next()?;
-        let obs_proto2 = observed_protocols.next()?;
-        if observed_protocols.next().is_some() {
-            return None;
+        // Skip over next protocol (assumed to contain port information).
+        if iter.next().is_none() {
+            return None
         }
 
-        // Check that `server` is a valid TCP/IP address.
-        match (&server_proto0, &server_proto1, &server_proto2) {
-            (&Protocol::Ip4(_), &Protocol::Tcp(_), &Protocol::Ws)
-            | (&Protocol::Ip6(_), &Protocol::Tcp(_), &Protocol::Ws)
-            | (&Protocol::Ip4(_), &Protocol::Tcp(_), &Protocol::Wss)
-            | (&Protocol::Ip6(_), &Protocol::Tcp(_), &Protocol::Wss) => {}
-            _ => return None,
+        // Check for WS/WSS.
+        //
+        // Note that it will still work if the server uses WSS while the client uses
+        // WS, or vice-versa.
+        match iter.next() {
+            Some((x@Protocol::Ws, Protocol::Ws)) => address.append(x),
+            Some((x@Protocol::Ws, Protocol::Wss)) => address.append(x),
+            Some((x@Protocol::Wss, Protocol::Ws)) => address.append(x),
+            Some((x@Protocol::Wss, Protocol::Wss)) => address.append(x),
+            _ => return None
         }
 
-        // Check that `observed` is a valid TCP/IP address.
-        match (&obs_proto0, &obs_proto1, &obs_proto2) {
-            (&Protocol::Ip4(_), &Protocol::Tcp(_), &Protocol::Ws)
-            | (&Protocol::Ip6(_), &Protocol::Tcp(_), &Protocol::Ws)
-            | (&Protocol::Ip4(_), &Protocol::Tcp(_), &Protocol::Wss)
-            | (&Protocol::Ip6(_), &Protocol::Tcp(_), &Protocol::Wss) => {}
-            _ => return None,
+        // Carry over everything else from the server address.
+        for proto in server.iter().skip(3) {
+            address.append(proto)
         }
 
-        // Note that it will still work if the server uses WSS while the client uses WS,
-        // or vice-versa.
-
-        let result = iter::once(obs_proto0)
-            .chain(iter::once(server_proto1))
-            .chain(iter::once(server_proto2))
-            .collect();
-
-        Some(result)
+        Some(address)
     }
 }
 

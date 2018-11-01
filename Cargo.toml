@@ -13,6 +13,7 @@ secio-secp256k1 = ["libp2p-secio/secp256k1"]
 bytes = "0.4"
 futures = "0.1"
 multiaddr = { path = "./misc/multiaddr" }
+multihash = { path = "./misc/multihash" }
 libp2p-mplex = { path = "./muxers/mplex" }
 libp2p-identify = { path = "./protocols/identify" }
 libp2p-kad = { path = "./protocols/kad" }
@@ -28,6 +29,7 @@ libp2p-uds = { path = "./transports/uds" }
 libp2p-websocket = { path = "./transports/websocket" }
 libp2p-yamux = { path = "./muxers/yamux" }
 tokio-codec = "0.1"
+tokio-executor = "0.1"
 tokio-io = "0.1"
 
 [target.'cfg(not(target_os = "emscripten"))'.dependencies]
@@ -43,31 +45,9 @@ bigint = "4.2"
 env_logger = "0.5.4"
 rand = "0.4"
 structopt =  "0.2"
-tokio-current-thread = "0.1"
+tokio = "0.1"
 tokio-io = "0.1"
 tokio-stdin = "0.1"
-
-[[example]]
-name = "echo-dialer"
-
-[[example]]
-name = "echo-server"
-
-[[example]]
-name = "floodsub"
-
-[[example]]
-name = "kademlia"
-
-[[example]]
-name = "ping-client"
-
-[[example]]
-name = "random_peerid"
-
-[[example]]
-name = "relay"
-
 
 [workspace]
 members = [
@@ -81,6 +61,7 @@ members = [
     "protocols/identify",
     "protocols/kad",
     "protocols/ping",
+    "protocols/observed",
     "transports/relay",
     "protocols/secio",
     "muxers/mplex",

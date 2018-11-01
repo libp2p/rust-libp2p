@@ -117,18 +117,17 @@ pub enum MaxBufferBehaviour {
     Block,
 }
 
-impl<C, Maf> ConnectionUpgrade<C, Maf> for MplexConfig
+impl<C> ConnectionUpgrade<C> for MplexConfig
 where
     C: AsyncRead + AsyncWrite,
 {
     type Output = Multiplex<C>;
-    type MultiaddrFuture = Maf;
-    type Future = future::FutureResult<(Self::Output, Self::MultiaddrFuture), IoError>;
+    type Future = future::FutureResult<Self::Output, IoError>;
     type UpgradeIdentifier = ();
     type NamesIter = iter::Once<(Bytes, ())>;
 
     #[inline]
-    fn upgrade(self, i: C, _: (), endpoint: Endpoint, remote_addr: Maf) -> Self::Future {
+    fn upgrade(self, i: C, _: (), endpoint: Endpoint) -> Self::Future {
         let max_buffer_len = self.max_buffer_len;
 
         let out = Multiplex {
@@ -149,7 +148,7 @@ where
             })
         };
 
-        future::ok((out, remote_addr))
+        future::ok(out)
     }
 
     #[inline]
@@ -330,7 +329,7 @@ where C: AsyncRead + AsyncWrite
         let mut inner = self.inner.lock();
 
         if inner.opened_substreams.len() >= inner.config.max_substreams {
-            debug!("Refused substream ; reached maximum number of substreams {}", inner.config.max_substreams);
+            debug!("Refused substream; reached maximum number of substreams {}", inner.config.max_substreams);
             return Err(IoError::new(IoErrorKind::ConnectionRefused,
                                     "exceeded maximum number of open substreams"));
         }
@@ -461,7 +460,7 @@ where C: AsyncRead + AsyncWrite
                 Ok(Async::Ready(Some(data))) => substream.current_data = data,
                 Ok(Async::Ready(None)) => return Ok(Async::Ready(0)),
                 Ok(Async::NotReady) => {
-                    // There was no data packet in the buffer about this substream ; maybe it's
+                    // There was no data packet in the buffer about this substream; maybe it's
                     // because it has been closed.
                     if inner.opened_substreams.contains(&(substream.num, substream.endpoint)) {
                         return Ok(Async::NotReady)

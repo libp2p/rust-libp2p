@@ -23,7 +23,7 @@ extern crate futures;
 extern crate libp2p_mplex as multiplex;
 extern crate libp2p_core as swarm;
 extern crate libp2p_tcp_transport as tcp;
-extern crate tokio_current_thread;
+extern crate tokio;
 extern crate tokio_io;
 
 use futures::future::Future;
@@ -33,6 +33,7 @@ use std::thread;
 use swarm::{muxing, Transport};
 use tcp::TcpConfig;
 use tokio_io::codec::length_delimited::Framed;
+use tokio::runtime::current_thread::Runtime;
 
 #[test]
 fn client_to_server_outbound() {
@@ -52,8 +53,8 @@ fn client_to_server_outbound() {
         let future = listener
             .into_future()
             .map_err(|(err, _)| err)
-            .and_then(|(client, _)| client.unwrap().map(|v| Arc::new(v.0)))
-            .and_then(|client| muxing::outbound_from_ref_and_wrap(client))
+            .and_then(|(client, _)| client.unwrap().0)
+            .and_then(|client| muxing::outbound_from_ref_and_wrap(Arc::new(client)))
             .map(|client| Framed::<_, bytes::BytesMut>::new(client.unwrap()))
             .and_then(|client| {
                 client
@@ -67,7 +68,8 @@ fn client_to_server_outbound() {
                 Ok(())
             });
 
-        tokio_current_thread::block_on_all(future).unwrap();
+        let mut rt = Runtime::new().unwrap();
+        let _ = rt.block_on(future).unwrap();
     });
 
     let transport = TcpConfig::new().with_upgrade(multiplex::MplexConfig::new());
@@ -75,12 +77,13 @@ fn client_to_server_outbound() {
     let future = transport
         .dial(rx.recv().unwrap())
         .unwrap()
-        .and_then(|client| muxing::inbound_from_ref_and_wrap(Arc::new(client.0)))
+        .and_then(|client| muxing::inbound_from_ref_and_wrap(Arc::new(client)))
         .map(|server| Framed::<_, bytes::BytesMut>::new(server.unwrap()))
         .and_then(|server| server.send("hello world".into()))
         .map(|_| ());
 
-    tokio_current_thread::block_on_all(future).unwrap();
+    let mut rt = Runtime::new().unwrap();
+    let _ = rt.block_on(future).unwrap();
     bg_thread.join().unwrap();
 }
 
@@ -102,7 +105,7 @@ fn client_to_server_inbound() {
         let future = listener
             .into_future()
             .map_err(|(err, _)| err)
-            .and_then(|(client, _)| client.unwrap().map(|v| v.0))
+            .and_then(|(client, _)| client.unwrap().0)
             .and_then(|client| muxing::inbound_from_ref_and_wrap(Arc::new(client)))
             .map(|client| Framed::<_, bytes::BytesMut>::new(client.unwrap()))
             .and_then(|client| {
@@ -117,7 +120,8 @@ fn client_to_server_inbound() {
                 Ok(())
             });
 
-        tokio_current_thread::block_on_all(future).unwrap();
+        let mut rt = Runtime::new().unwrap();
+        let _ = rt.block_on(future).unwrap();
     });
 
     let transport = TcpConfig::new().with_upgrade(multiplex::MplexConfig::new());
@@ -125,11 +129,12 @@ fn client_to_server_inbound() {
     let future = transport
         .dial(rx.recv().unwrap())
         .unwrap()
-        .and_then(|(client, _)| muxing::outbound_from_ref_and_wrap(Arc::new(client)))
+        .and_then(|client| muxing::outbound_from_ref_and_wrap(Arc::new(client)))
         .map(|server| Framed::<_, bytes::BytesMut>::new(server.unwrap()))
         .and_then(|server| server.send("hello world".into()))
         .map(|_| ());
 
-    tokio_current_thread::block_on_all(future).unwrap();
+    let mut rt = Runtime::new().unwrap();
+    let _ = rt.block_on(future).unwrap();
     bg_thread.join().unwrap();
 }

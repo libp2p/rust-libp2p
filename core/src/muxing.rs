@@ -28,6 +28,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Ways to shutdown a substream or stream muxer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Shutdown {
     /// Shutdown inbound direction.
     Inbound,

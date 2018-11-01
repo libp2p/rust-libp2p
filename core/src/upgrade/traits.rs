@@ -50,7 +50,7 @@ impl Not for Endpoint {
 /// > **Note**: The `upgrade` method of this trait uses `self` and not `&self` or `&mut self`.
 /// >           This has been designed so that you would implement this trait on `&Foo` or
 /// >           `&mut Foo` instead of directly on `Foo`.
-pub trait ConnectionUpgrade<C, TAddrFut> {
+pub trait ConnectionUpgrade<C> {
     /// Iterator returned by `protocol_names`.
     type NamesIter: Iterator<Item = (Bytes, Self::UpgradeIdentifier)>;
     /// Type that serves as an identifier for the protocol. This type only exists to be returned
@@ -68,20 +68,12 @@ pub trait ConnectionUpgrade<C, TAddrFut> {
     /// > **Note**: For upgrades that add an intermediary layer (such as `secio` or `multiplex`),
     /// >           this associated type must implement `AsyncRead + AsyncWrite`.
     type Output;
-    /// Type of the future that will resolve to the remote's multiaddr.
-    type MultiaddrFuture;
     /// Type of the future that will resolve to `Self::Output`.
-    type Future: Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError>;
+    type Future: Future<Item = Self::Output, Error = IoError>;
 
     /// This method is called after protocol negotiation has been performed.
     ///
     /// Because performing the upgrade may not be instantaneous (eg. it may require a handshake),
     /// this function returns a future instead of the direct output.
-    fn upgrade(
-        self,
-        socket: C,
-        id: Self::UpgradeIdentifier,
-        ty: Endpoint,
-        remote_addr: TAddrFut,
-    ) -> Self::Future;
+    fn upgrade(self, socket: C, id: Self::UpgradeIdentifier, ty: Endpoint) -> Self::Future;
 }

@@ -89,10 +89,9 @@ impl FloodSubUpgrade {
     }
 }
 
-impl<C, Maf> ConnectionUpgrade<C, Maf> for FloodSubUpgrade
+impl<C> ConnectionUpgrade<C> for FloodSubUpgrade
 where
     C: AsyncRead + AsyncWrite + Send + 'static,
-    Maf: Future<Item = Multiaddr, Error = IoError> + Send + 'static,
 {
     type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
     type UpgradeIdentifier = ();
@@ -103,8 +102,7 @@ where
     }
 
     type Output = FloodSubFuture;
-    type MultiaddrFuture = future::FutureResult<Multiaddr, IoError>;
-    type Future = Box<Future<Item = (Self::Output, Self::MultiaddrFuture), Error = IoError> + Send>;
+    type Future = Box<Future<Item = Self::Output, Error = IoError> + Send>;
 
     #[inline]
     fn upgrade(
@@ -112,11 +110,13 @@ where
         socket: C,
         _: Self::UpgradeIdentifier,
         _: Endpoint,
-        remote_addr: Maf,
     ) -> Self::Future {
         debug!("Upgrading connection as floodsub");
 
-        let future = remote_addr.and_then(move |remote_addr| {
+        let future = {
+            // FIXME: WRONG
+            let remote_addr: Multiaddr = "/ip4/127.0.0.1/tcp/5000".parse().unwrap();
+
             // Whenever a new node connects, we send to it a message containing the topics we are
             // already subscribed to.
             let init_msg: Vec<u8> = {
@@ -168,7 +168,6 @@ where
             }
 
             let inner = self.inner.clone();
-            let remote_addr_ret = future::ok(remote_addr.clone());
             let future = future::loop_fn(
                 (floodsub_sink, messages),
                 move |(floodsub_sink, messages)| {
@@ -215,10 +214,10 @@ where
                 },
             );
 
-            future::ok((FloodSubFuture {
+            future::ok(FloodSubFuture {
                 inner: Box::new(future) as Box<_>,
-            }, remote_addr_ret))
-        });
+            })
+        };
 
         Box::new(future) as Box<_>
     }
@@ -346,7 +345,7 @@ impl FloodSubController {
         let topics = topics.into_iter();
 
         if log_enabled!(Level::Debug) {
-            debug!("Queuing sub/unsub message ; sub = {:?} ; unsub = {:?}",
+            debug!("Queuing sub/unsub message; sub = {:?}; unsub = {:?}",
                 topics.clone().filter(|t| t.1)
                         .map(|t| t.0.hash().clone().into_string())
                         .collect::<Vec<_>>(),
@@ -390,7 +389,7 @@ impl FloodSubController {
     {
         let topics = topics.into_iter().collect::<Vec<_>>();
 
-        debug!("Queueing publish message ; topics = {:?} ; data_len = {:?}",
+        debug!("Queueing publish message; topics = {:?}; data_len = {:?}",
                topics.iter().map(|t| t.hash().clone().into_string()).collect::<Vec<_>>(),
                data.len());
 
@@ -555,7 +554,7 @@ fn handle_packet_received(
     let mut input = match protobuf::parse_from_bytes::<rpc_proto::RPC>(&bytes) {
         Ok(msg) => msg,
         Err(err) => {
-            debug!("Failed to parse protobuf message ; err = {:?}", err);
+            debug!("Failed to parse protobuf message; err = {:?}", err);
             return Err(err.into());
         }
     };
@@ -589,7 +588,7 @@ fn handle_packet_received(
             .lock()
             .insert(hash((from.clone(), publish.take_seqno())))
         {
-            trace!("Skipping message because we had already received it ; payload = {} bytes",
+            trace!("Skipping message because we had already received it; payload = {} bytes",
                    publish.get_data().len());
             continue;
         }
@@ -610,7 +609,7 @@ fn handle_packet_received(
             .map(|h| TopicHash::from_raw(h))
             .collect::<Vec<_>>();
 
-        trace!("Processing message for topics {:?} ; payload = {} bytes",
+        trace!("Processing message for topics {:?}; payload = {} bytes",
                topics,
                publish.get_data().len());
 
