@@ -144,6 +144,7 @@ impl<TInEvent, TOutEvent, THandler> HandledNodesTasks<TInEvent, TOutEvent, THand
         THandler::OutboundOpenInfo: Send + 'static,     // TODO: shouldn't be required?
         TMuxer: StreamMuxer + Send + Sync + 'static,  // TODO: Send + Sync + 'static shouldn't be required
         TMuxer::OutboundSubstream: Send + 'static,  // TODO: shouldn't be required
+        TMuxer::Substream: fmt::Debug,
     {
         let task_id = self.next_task_id;
         self.next_task_id.0 += 1;
@@ -349,6 +350,7 @@ impl<TFut, TMuxer, THandler, TInEvent, TOutEvent> Future for
     NodeTask<TFut, TMuxer, THandler, TInEvent, TOutEvent>
 where
     TMuxer: StreamMuxer,
+    TMuxer::Substream: fmt::Debug,
     TFut: Future<Item = (PeerId, TMuxer), Error = IoError>,
     THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent>,
 {

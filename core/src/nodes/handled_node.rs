@@ -22,6 +22,7 @@ use muxing::StreamMuxer;
 use nodes::node::{NodeEvent, NodeStream, Substream};
 use futures::{prelude::*, stream::Fuse};
 use std::io::Error as IoError;
+use std::fmt;
 
 /// Handler for the substreams of a node.
 // TODO: right now it is possible for a node handler to be built, then shut down right after if we
@@ -163,6 +164,7 @@ where
 impl<TMuxer, THandler> HandledNode<TMuxer, THandler>
 where
     TMuxer: StreamMuxer,
+    TMuxer::Substream: fmt::Debug,
     THandler: NodeHandler<Substream = Substream<TMuxer>>,
 {
     /// Builds a new `HandledNode`.
@@ -221,6 +223,7 @@ where
 impl<TMuxer, THandler> Stream for HandledNode<TMuxer, THandler>
 where
     TMuxer: StreamMuxer,
+    TMuxer::Substream: fmt::Debug,
     THandler: NodeHandler<Substream = Substream<TMuxer>>,
 {
     type Item = THandler::OutEvent;

@@ -29,6 +29,7 @@ use nodes::listeners::{ListenersEvent, ListenersStream};
 use nodes::node::Substream;
 use std::collections::hash_map::{Entry, OccupiedEntry};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
+use std::fmt;
 use {Endpoint, Multiaddr, PeerId, Transport};
 
 /// Implementation of `Stream` that handles the nodes.
@@ -205,7 +206,7 @@ where
     THandler::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
     TMuxer: StreamMuxer + Send + Sync + 'static,
     TMuxer::OutboundSubstream: Send,
-    TMuxer::Substream: Send,
+    TMuxer::Substream: Send + fmt::Debug,
     TInEvent: Send + 'static,
     TOutEvent: Send + 'static,
 {
@@ -384,7 +385,7 @@ where
         TTrans::Dial: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
-        TMuxer::Substream: Send,
+        TMuxer::Substream: Send + fmt::Debug,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
     {
@@ -470,7 +471,7 @@ where
         TTrans::Dial: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
-        TMuxer::Substream: Send,
+        TMuxer::Substream: Send + fmt::Debug,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
     {
@@ -515,7 +516,7 @@ where
         TTrans::ListenerUpgrade: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
-        TMuxer::Substream: Send,
+        TMuxer::Substream: Send + fmt::Debug,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
         THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
@@ -899,7 +900,7 @@ where
         TTrans::Dial: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
-        TMuxer::Substream: Send,
+        TMuxer::Substream: Send + fmt::Debug,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
     {
@@ -927,7 +928,7 @@ where
         TTrans::Dial: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
-        TMuxer::Substream: Send,
+        TMuxer::Substream: Send + fmt::Debug,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
     {
@@ -1013,7 +1014,7 @@ impl<'a, TInEvent> PeerConnected<'a, TInEvent> {
             .expect("We insert into connected_points whenever a connection is opened and remove \
                      only when a connection is closed; the underlying API is guaranteed to always \
                      deliver a connection closed message after it has been opened, and no two \
-                     closed messages; qed")        
+                     closed messages; qed")
     }
 
     /// Sends an event to the node.
@@ -1098,7 +1099,7 @@ where
         TTrans::Dial: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
-        TMuxer::Substream: Send,
+        TMuxer::Substream: Send + fmt::Debug,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
     {
@@ -1125,7 +1126,7 @@ where
         TTrans::Dial: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
-        TMuxer::Substream: Send,
+        TMuxer::Substream: Send + fmt::Debug,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
     {
@@ -1147,7 +1148,7 @@ where
         TTrans::Dial: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
-        TMuxer::Substream: Send,
+        TMuxer::Substream: Send + fmt::Debug,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
     {

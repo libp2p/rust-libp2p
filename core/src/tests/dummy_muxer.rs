@@ -29,6 +29,7 @@ use muxing::{StreamMuxer, Shutdown};
 use futures::prelude::*;
 
 /// Substream type
+#[derive(Debug)]
 pub struct DummySubstream {}
 
 /// OutboundSubstream type

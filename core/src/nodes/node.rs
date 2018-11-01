@@ -84,6 +84,7 @@ enum StreamState {
 pub enum NodeEvent<TMuxer, TUserData>
 where
     TMuxer: muxing::StreamMuxer,
+    TMuxer::Substream: fmt::Debug,
 {
     /// A new inbound substream arrived.
     InboundSubstream {
@@ -252,6 +253,7 @@ where
 impl<TMuxer, TUserData> Stream for NodeStream<TMuxer, TUserData>
 where
     TMuxer: muxing::StreamMuxer,
+    TMuxer::Substream: fmt::Debug,
 {
     type Item = NodeEvent<TMuxer, TUserData>;
     type Error = IoError;
