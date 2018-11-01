@@ -28,12 +28,21 @@ use libp2p_secio::SecioKeyPair;
 use std::{env, str, thread, time::Duration};
 
 fn main() {
+    // Due to the fact that a peer id uses a SHA-256 multihash, it always starts with the
+    // bytes 0x1220, meaning that only some characters are valid.
+    const ALLOWED_FIRST_BYTE: &'static [u8] = b"NPQRSTUVWXYZ";
+
     let prefix = match env::args().nth(1) {
         Some(prefix) => prefix,
         None => {
             println!(
-                "Usage: {} <prefix>",
-                env::current_exe().unwrap().file_name().unwrap().to_str().unwrap()
+                "Usage: {} <prefix>\n\n\
+                 Generates a peer id that starts with the chosen prefix using a secp256k1 public \
+                 key.\n\n\
+                 Prefix must be a sequence of characters in the base58 \
+                 alphabet, and must start with one of the following: {}",
+                env::current_exe().unwrap().file_name().unwrap().to_str().unwrap(),
+                str::from_utf8(ALLOWED_FIRST_BYTE).unwrap()
             );
             return;
         }
@@ -46,10 +55,8 @@ fn main() {
         return;
     }
 
-    // Due to the fact that a peer id uses a SHA-256 multihash, it always starts with the
-    // bytes 0x1220, meaning that only some characters are valid.
+    // Checking conformity to ALLOWED_FIRST_BYTE.
     if !prefix.is_empty() {
-        const ALLOWED_FIRST_BYTE: &'static [u8] = b"NPQRSTUVWXYZ";
         if !ALLOWED_FIRST_BYTE.contains(&prefix.as_bytes()[0]) {
             println!("Prefix {} is not reachable", prefix);
             println!(
