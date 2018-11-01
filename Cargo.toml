@@ -13,6 +13,7 @@ secio-secp256k1 = ["libp2p-secio/secp256k1"]
 bytes = "0.4"
 futures = "0.1"
 multiaddr = { path = "./misc/multiaddr" }
+multihash = { path = "./misc/multihash" }
 libp2p-mplex = { path = "./muxers/mplex" }
 libp2p-identify = { path = "./protocols/identify" }
 libp2p-kad = { path = "./protocols/kad" }
