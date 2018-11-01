@@ -41,6 +41,12 @@ pub trait NodeHandler {
     /// Sends a new substream to the handler.
     ///
     /// The handler is responsible for upgrading the substream to whatever protocol it wants.
+    ///
+    /// # Panic
+    ///
+    /// Implementations are allowed to panic in the case of dialing if the `user_data` in
+    /// `endpoint` doesn't correspond to what was returned earlier when polling, or is used
+    /// multiple times.
     fn inject_substream(&mut self, substream: Self::Substream, endpoint: NodeHandlerEndpoint<Self::OutboundOpenInfo>);
 
     /// Indicates to the handler that the inbound part of the muxer has been closed, and that
@@ -49,6 +55,11 @@ pub trait NodeHandler {
 
     /// Indicates to the handler that an outbound substream failed to open because the outbound
     /// part of the muxer has been closed.
+    ///
+    /// # Panic
+    ///
+    /// Implementations are allowed to panic if `user_data` doesn't correspond to what was returned
+    /// earlier when polling, or is used multiple times.
     fn inject_outbound_closed(&mut self, user_data: Self::OutboundOpenInfo);
 
     /// Injects an event coming from the outside into the handler.
