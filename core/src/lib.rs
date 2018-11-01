@@ -184,6 +184,7 @@ extern crate rw_stream_sink;
 extern crate smallvec;
 extern crate tokio_executor;
 extern crate tokio_io;
+extern crate tokio_timer;
 extern crate void;
 
 #[cfg(test)]
@@ -192,8 +193,6 @@ extern crate rand;
 extern crate tokio;
 #[cfg(test)]
 extern crate tokio_codec;
-#[cfg(test)]
-extern crate tokio_timer;
 #[cfg(test)]
 #[macro_use]
 extern crate assert_matches;
