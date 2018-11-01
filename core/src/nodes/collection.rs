@@ -699,7 +699,6 @@ mod tests {
             });
             Ok(Async::Ready(()))
         })).expect("tokio works");
-
     }
 
     #[test]
