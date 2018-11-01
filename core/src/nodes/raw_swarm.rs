@@ -33,6 +33,7 @@ use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use {Endpoint, Multiaddr, PeerId, Transport};
 
 /// Implementation of `Stream` that handles the nodes.
+#[derive(Debug)]
 pub struct RawSwarm<TTrans, TInEvent, TOutEvent, THandler>
 where
     TTrans: Transport,
@@ -48,6 +49,7 @@ where
     reach_attempts: ReachAttempts,
 }
 
+#[derive(Debug)]
 struct ReachAttempts {
     /// Attempts to reach a peer.
     out_reach_attempts: FnvHashMap<PeerId, OutReachAttempt>,
@@ -627,7 +629,7 @@ where
                 listener,
                 result,
             }) => {
-                println!("[RawSwarm, poll]      listeners.poll() – Ready(ListenersEvent::Closed) – returning Ready(ListenerClosed)");
+                println!("[RawSwarm, poll]      listeners.poll() – Ready(ListenersEvent::Closed) – returning Ready(ListenerClosed) <–––");
                 return Async::Ready(RawSwarmEvent::ListenerClosed {
                     listen_addr,
                     listener,
@@ -646,7 +648,7 @@ where
                     break
                 },
                 Async::Ready(CollectionEvent::NodeReached(reach_event)) => {
-                    println!("[RawSwarm, poll]      active_nodes.poll() – Ready(NodeReached) – handling <–––");
+                    println!("[RawSwarm, poll]      active_nodes.poll() – Ready(NodeReached) – handling");
                     let (a, e) = handle_node_reached(&mut self.reach_attempts, reach_event);
                     action = a;
                     out_event = e;
@@ -859,6 +861,7 @@ fn handle_reach_error<'a, TTrans, TInEvent, TOutEvent, THandler>(
 ) -> (ActionItem<THandler>, RawSwarmEvent<'a, TTrans, TInEvent, TOutEvent, THandler>)
 where TTrans: Transport
 {
+    println!("[RawSwarm, handle_reach_error] reach_id={:?}, error={:?}", reach_id, error);
     // Search for the attempt in `out_reach_attempts`.
     // TODO: could be more optimal than iterating over everything
     let out_reach_peer_id = reach_attempts
@@ -866,7 +869,9 @@ where TTrans: Transport
         .iter()
         .find(|(_, a)| a.id == reach_id)
         .map(|(p, _)| p.clone());
+    println!("[RawSwarm, handle_reach_error] have peer in the out_reach_attempts? out_reach_peer_id={:?}", out_reach_peer_id);
     if let Some(peer_id) = out_reach_peer_id {
+        println!("[RawSwarm, handle_reach_error] have peer in the out_reach_attempts? YES, building ActionItem");
         let mut attempt = reach_attempts.out_reach_attempts.remove(&peer_id)
             .expect("out_reach_peer_id is a key that is grabbed from out_reach_attempts");
 
@@ -893,6 +898,7 @@ where TTrans: Transport
     }
 
     // If this is not an outgoing reach attempt, check the incoming reach attempts.
+    println!("[RawSwarm, handle_reach_error] If this is not an outgoing reach attempt, check the incoming reach attempts?");
     if let Some(in_pos) = reach_attempts
         .other_reach_attempts
         .iter()
@@ -1147,6 +1153,7 @@ impl<'a, TInEvent> PeerConnected<'a, TInEvent> {
 }
 
 /// Access to a peer we are attempting to connect to.
+#[derive(Debug)]
 pub struct PeerPendingConnect<'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a> {
     attempt: OccupiedEntry<'a, PeerId, OutReachAttempt>,
     active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent, THandler>,
@@ -1194,6 +1201,7 @@ impl<'a, TInEvent, TOutEvent, THandler> PeerPendingConnect<'a, TInEvent, TOutEve
 }
 
 /// Access to a peer we're not connected to.
+#[derive(Debug)]
 pub struct PeerNotConnected<'a, TTrans: 'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a>
 where
     TTrans: Transport,
@@ -1293,7 +1301,7 @@ mod tests {
     use super::*;
     use std::sync::Arc;
     use parking_lot::Mutex;
-    use tokio::runtime::{Builder, Runtime};
+    use tokio::runtime::Runtime;
     use PublicKey;
     use tests::dummy_transport::DummyTransport;
     use tests::dummy_handler::{Handler, HandlerState, InEvent, OutEvent};
@@ -1341,37 +1349,32 @@ mod tests {
 
     #[test]
     fn successful_dial_reaches_a_node() {
-        let transport = DummyTransport::new();
-        let mut raw_swarm = RawSwarm::<_, _, _, Handler>::new(transport);
+        let mut swarm = RawSwarm::<_, _, _, Handler>::new(DummyTransport::new());
         let addr = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
-        let handler = Handler::default();
-        let res = raw_swarm.dial(addr, handler);
-        assert!(res.is_ok());
+        let dial_res = swarm.dial(addr, Handler::default());
+        assert!(dial_res.is_ok());
 
         // Poll the swarm until we get a `NodeReached` then assert on the peer:
         // it's there and it's connected.
-        let raw_swarm = Arc::new(Mutex::new(raw_swarm));
+        let swarm = Arc::new(Mutex::new(swarm));
 
-        let mut rt = Builder::new().core_threads(2).build().unwrap();
-        let swarm = raw_swarm.clone();
-        let fut = future::poll_fn(move || -> Poll<_, ()> {
-            let mut swarm = swarm.lock();
-            swarm.poll();
-            Ok(Async::Ready(()))
-        });
-        rt.block_on(fut).expect("tokio works");
+        let mut rt = Runtime::new().unwrap();
+        let mut peer_id : Option<PeerId> = None;
+        // Drive forward until we're Connected
+        while peer_id.is_none() {
+            let swarm_fut = swarm.clone();
+            peer_id = rt.block_on(future::poll_fn(move || -> Poll<Option<PeerId>, ()> {
+                let mut swarm = swarm_fut.lock();
+                let poll_res = swarm.poll();
+                match poll_res {
+                    Async::Ready(RawSwarmEvent::Connected { peer_id, .. }) => Ok(Async::Ready(Some(peer_id))),
+                    _ => Ok(Async::Ready(None))
+                }
+            })).expect("tokio works");
+        }
 
-        let swarm = raw_swarm.clone();
-        let fut = future::poll_fn(move || -> Poll<PeerId, ()> {
-            let mut swarm = swarm.lock();
-            let event = swarm.poll();
-            let peer_id = assert_matches!(event, Async::Ready(RawSwarmEvent::Connected{peer_id, ..}) => peer_id );
-            Ok(Async::Ready(peer_id))
-        });
-        let peer_id = rt.block_on(fut).expect("tokio works");
-
-        let mut raw_swarm = raw_swarm.lock();
-        let peer = raw_swarm.peer(peer_id);
+        let mut swarm = swarm.lock();
+        let peer = swarm.peer(peer_id.unwrap());
         assert_matches!(peer, Peer::Connected(PeerConnected{..}));
     }
 
@@ -1409,56 +1412,122 @@ mod tests {
 
     #[test]
     fn broadcasted_events_reach_active_nodes() {
-        let transport = DummyTransport::new();
-        let mut swarm = RawSwarm::<_, _, _, Handler>::new(transport);
+        let mut swarm = RawSwarm::<_, _, _, Handler>::new(DummyTransport::new());
         let mut muxer = DummyMuxer::new();
         muxer.set_inbound_connection_state(DummyConnectionState::Pending);
         muxer.set_outbound_connection_state(DummyConnectionState::Opened);
-
         let addr = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
         let mut handler = Handler::default();
         handler.next_states = vec![HandlerState::Ready(Some(NodeHandlerEvent::Custom(OutEvent::Custom("from handler 1") ))),];
         let dial_result = swarm.dial(addr, handler);
         assert!(dial_result.is_ok());
 
+        swarm.broadcast_event(&InEvent::NextState);
         let swarm = Arc::new(Mutex::new(swarm));
+        let mut rt = Runtime::new().unwrap();
+        let mut peer_id : Option<PeerId> = None;
+        while peer_id.is_none() {
+            let swarm_fut = swarm.clone();
+            peer_id = rt.block_on(future::poll_fn(move || -> Poll<Option<PeerId>, ()> {
+                let mut swarm = swarm_fut.lock();
+                let poll_res = swarm.poll();
+                match poll_res {
+                    Async::Ready(RawSwarmEvent::Connected { peer_id, .. }) => Ok(Async::Ready(Some(peer_id))),
+                    _ => Ok(Async::Ready(None))
+                }
+            })).expect("tokio works");
+        }
 
-        let mut rt = Builder::new().core_threads(1).build().unwrap();
-
-        let swarm_fut = swarm.clone();
-        rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
-            let mut swarm = swarm_fut.lock();
-            assert_matches!(swarm.poll(), Async::NotReady);
-            // Signalling handler to send an event, bubbles back up at a later poll()
-            swarm.broadcast_event(&InEvent::NextState);
-            Ok(Async::Ready(()))
-        })).expect("tokio works");
-
-        let swarm_fut = swarm.clone();
-        rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
-            let mut swarm = swarm_fut.lock();
-            assert_matches!(swarm.poll(), Async::Ready(RawSwarmEvent::Connected { .. }));
-            Ok(Async::Ready(()))
-        })).expect("tokio works");
-
-        let swarm_fut = swarm.clone();
-        rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
-            let mut swarm = swarm_fut.lock();
-            assert_matches!(swarm.poll(), Async::Ready(RawSwarmEvent::NodeEvent { peer_id: _, event }) => {
-                // The even we sent reached the node and triggered sending the out event we told it to return
-                assert_matches!(event, OutEvent::Custom("from handler 1"));
-            });
-            Ok(Async::Ready(()))
-        })).expect("tokio works");
+        let mut keep_polling = true;
+        while keep_polling {
+            let swarm_fut = swarm.clone();
+            keep_polling = rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
+                let mut swarm = swarm_fut.lock();
+                match swarm.poll() {
+                    Async::Ready(event) => {
+                        assert_matches!(event, RawSwarmEvent::NodeEvent { peer_id: _, event: inner_event } => {
+                            // The event we sent reached the node and triggered sending the out event we told it to return
+                            assert_matches!(inner_event, OutEvent::Custom("from handler 1"));
+                        });
+                        Ok(Async::Ready(false))
+                    },
+                    _ => Ok(Async::Ready(true))
+                }
+            })).expect("tokio works");
+        }
     }
 
     #[test]
-    fn querying_for_unknown_peer_returns_not_connected() {
+    fn querying_for_pending_peer() {
+        let transport = DummyTransport::new();
+        let mut swarm = RawSwarm::<_, _, _, Handler>::new(transport);
+        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        let peer = swarm.peer(peer_id.clone());
+        assert_matches!(peer, Peer::NotConnected(PeerNotConnected{ .. }));
+        let addr = "/memory".parse().expect("bad multiaddr");
+        let pending_peer = peer.as_not_connected().unwrap().connect(addr, Handler::default());
+        assert!(pending_peer.is_ok());
+        assert_matches!(pending_peer, Ok(PeerPendingConnect { .. } ));
+    }
+
+    #[test]
+    fn querying_for_unknown_peer() {
         let mut swarm = RawSwarm::<_, _, _, Handler>::new(DummyTransport::new());
         let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
         let peer = swarm.peer(peer_id.clone());
         assert_matches!(peer, Peer::NotConnected( PeerNotConnected { nodes: _, peer_id: node_peer_id }) => {
             assert_eq!(node_peer_id, peer_id);
         });
+    }
+
+    #[test]
+    fn querying_for_connected_peer() {
+        let mut swarm = RawSwarm::<_, _, _, Handler>::new(DummyTransport::new());
+
+        // Dial a node
+        let addr = "/ip4/127.0.0.1/tcp/1234".parse().expect("bad multiaddr");
+        swarm.dial(addr, Handler::default()).expect("dialing works");
+
+        let swarm = Arc::new(Mutex::new(swarm));
+        let mut rt = Runtime::new().unwrap();
+        // Drive it forward until we connect; extract the new PeerId.
+        let mut peer_id : Option<PeerId> = None;
+        while peer_id.is_none() {
+            let swarm_fut = swarm.clone();
+            peer_id = rt.block_on(future::poll_fn(move || -> Poll<Option<PeerId>, ()> {
+                let mut swarm = swarm_fut.lock();
+                let poll_res = swarm.poll();
+                match poll_res {
+                    Async::Ready(RawSwarmEvent::Connected { peer_id, .. }) => Ok(Async::Ready(Some(peer_id))),
+                    _ => Ok(Async::Ready(None))
+                }
+            })).expect("tokio works");
+        }
+
+        // We're connected.
+        let mut swarm = swarm.lock();
+        let peer = swarm.peer(peer_id.unwrap());
+        assert_matches!(peer, Peer::Connected( PeerConnected { .. } ));
+    }
+
+    #[test]
+    fn poll_with_closed_listener() {
+        let mut transport = DummyTransport::new();
+        // Set up listener to be closed
+        transport.set_initial_listener_state(ListenerState::Ok(Async::Ready(None)));
+
+        let mut swarm = RawSwarm::<_, _, _, Handler>::new(transport);
+        swarm.listen_on("/memory".parse().unwrap()).unwrap();
+
+        let mut rt = Runtime::new().unwrap();
+        let swarm = Arc::new(Mutex::new(swarm));
+
+        let swarm_fut = swarm.clone();
+        let fut = future::poll_fn(move || -> Poll<_, ()> {
+            let mut swarm = swarm_fut.lock();
+            assert_matches!(swarm.poll(), Async::Ready(RawSwarmEvent::ListenerClosed { .. } ));
+            Ok(Async::Ready(()))
+        });
+        rt.block_on(fut).expect("tokio works");
     }
 }
