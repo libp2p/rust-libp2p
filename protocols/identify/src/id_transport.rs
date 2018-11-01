@@ -85,7 +85,7 @@ where
             .map(move |(upgrade, remote_addr)| {
                 let upgr = upgrade
                     .and_then(move |muxer| {
-                        IdRetreiver::new(muxer, IdentifyProtocolConfig, Endpoint::Listener)
+                        IdRetriever::new(muxer, IdentifyProtocolConfig, Endpoint::Listener)
                     });
                 (Box::new(upgr) as Box<Future<Item = _, Error = _> + Send>, remote_addr)
             });
@@ -107,7 +107,7 @@ where
         };
 
         let dial = dial.and_then(move |muxer| {
-            IdRetreiver::new(muxer, IdentifyProtocolConfig, Endpoint::Dialer)
+            IdRetriever::new(muxer, IdentifyProtocolConfig, Endpoint::Dialer)
         });
 
         Ok(Box::new(dial) as Box<_>)
@@ -121,7 +121,7 @@ where
 
 /// Implementation of `Future` that asks the remote of its `PeerId`.
 // TODO: remove unneeded bounds
-struct IdRetreiver<TMuxer>
+struct IdRetriever<TMuxer>
 where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
       TMuxer::Substream: Send,
 {
@@ -129,12 +129,12 @@ where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
     /// it.
     muxer: Option<Arc<TMuxer>>,
     /// Internal state.
-    state: IdRetreiverState<TMuxer>,
+    state: IdRetrieverState<TMuxer>,
     /// Whether we're dialing or listening.
     endpoint: Endpoint,
 }
 
-enum IdRetreiverState<TMuxer>
+enum IdRetrieverState<TMuxer>
 where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
       TMuxer::Substream: Send,
 {
@@ -148,24 +148,24 @@ where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
     Poisoned,
 }
 
-impl<TMuxer> IdRetreiver<TMuxer>
+impl<TMuxer> IdRetriever<TMuxer>
 where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
       TMuxer::Substream: Send,
 {
-    /// Creates a new `IdRetreiver` ready to be polled.
+    /// Creates a new `IdRetriever` ready to be polled.
     fn new(muxer: TMuxer, config: IdentifyProtocolConfig, endpoint: Endpoint) -> Self {
         let muxer = Arc::new(muxer);
         let opening = muxing::outbound_from_ref_and_wrap(muxer.clone());
 
-        IdRetreiver {
+        IdRetriever {
             muxer: Some(muxer),
-            state: IdRetreiverState::OpeningSubstream(opening, config),
+            state: IdRetrieverState::OpeningSubstream(opening, config),
             endpoint,
         }
     }
 }
 
-impl<TMuxer> Future for IdRetreiver<TMuxer>
+impl<TMuxer> Future for IdRetriever<TMuxer>
 where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
       TMuxer::Substream: Send,
 {
@@ -177,40 +177,40 @@ where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
         loop {
             // In order to satisfy the borrow checker, we extract the state and temporarily put
             // `Poisoned` instead.
-            match mem::replace(&mut self.state, IdRetreiverState::Poisoned) {
-                IdRetreiverState::OpeningSubstream(mut opening, config) => {
+            match mem::replace(&mut self.state, IdRetrieverState::Poisoned) {
+                IdRetrieverState::OpeningSubstream(mut opening, config) => {
                     match opening.poll() {
                         Ok(Async::Ready(Some(substream))) => {
                             let upgrade = apply::apply(substream, config, self.endpoint);
-                            self.state = IdRetreiverState::NegotiatingIdentify(upgrade);
+                            self.state = IdRetrieverState::NegotiatingIdentify(upgrade);
                         },
                         Ok(Async::Ready(None)) => {
                             return Err(IoError::new(IoErrorKind::Other, "remote refused our identify attempt"));
                         },
                         Ok(Async::NotReady) => {
-                            self.state = IdRetreiverState::OpeningSubstream(opening, config);
+                            self.state = IdRetrieverState::OpeningSubstream(opening, config);
                             return Ok(Async::NotReady);
                         },
                         Err(err) => return Err(err),
                     }
                 },
-                IdRetreiverState::NegotiatingIdentify(mut nego) => {
+                IdRetrieverState::NegotiatingIdentify(mut nego) => {
                     match nego.poll() {
                         Ok(Async::Ready(IdentifyOutput::RemoteInfo { info, .. })) => {
-                            self.state = IdRetreiverState::Finishing(info.public_key);
+                            self.state = IdRetrieverState::Finishing(info.public_key);
                         },
                         Ok(Async::Ready(IdentifyOutput::Sender { .. })) => {
                             unreachable!("IdentifyOutput::Sender can never be the output from \
                                           the dialing side");
                         },
                         Ok(Async::NotReady) => {
-                            self.state = IdRetreiverState::NegotiatingIdentify(nego);
+                            self.state = IdRetrieverState::NegotiatingIdentify(nego);
                             return Ok(Async::NotReady);
                         },
                         Err(err) => return Err(err),
                     }
                 },
-                IdRetreiverState::Finishing(public_key) => {
+                IdRetrieverState::Finishing(public_key) => {
                     // Here is a tricky part: we need to get back the muxer in order to return
                     // it, but it is in an `Arc`.
                     let muxer = self.muxer.take()
@@ -226,7 +226,7 @@ where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
                     // We leave `Poisoned` as the state when returning.
                     return Ok(Async::Ready((public_key.into(), unwrapped)));
                 },
-                IdRetreiverState::Poisoned => {
+                IdRetrieverState::Poisoned => {
                     panic!("Future state panicked inside poll() or is finished")
                 },
             }
