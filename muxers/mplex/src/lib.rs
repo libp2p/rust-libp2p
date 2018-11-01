@@ -329,7 +329,7 @@ where C: AsyncRead + AsyncWrite
         let mut inner = self.inner.lock();
 
         if inner.opened_substreams.len() >= inner.config.max_substreams {
-            debug!("Refused substream ; reached maximum number of substreams {}", inner.config.max_substreams);
+            debug!("Refused substream; reached maximum number of substreams {}", inner.config.max_substreams);
             return Err(IoError::new(IoErrorKind::ConnectionRefused,
                                     "exceeded maximum number of open substreams"));
         }
@@ -460,7 +460,7 @@ where C: AsyncRead + AsyncWrite
                 Ok(Async::Ready(Some(data))) => substream.current_data = data,
                 Ok(Async::Ready(None)) => return Ok(Async::Ready(0)),
                 Ok(Async::NotReady) => {
-                    // There was no data packet in the buffer about this substream ; maybe it's
+                    // There was no data packet in the buffer about this substream; maybe it's
                     // because it has been closed.
                     if inner.opened_substreams.contains(&(substream.num, substream.endpoint)) {
                         return Ok(Async::NotReady)

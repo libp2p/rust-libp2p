@@ -23,7 +23,7 @@ extern crate futures;
 extern crate libp2p_mplex as multiplex;
 extern crate libp2p_core as swarm;
 extern crate libp2p_tcp_transport as tcp;
-extern crate tokio_current_thread;
+extern crate tokio;
 extern crate tokio_io;
 
 use futures::future::Future;
@@ -33,6 +33,7 @@ use std::thread;
 use swarm::{muxing, Transport};
 use tcp::TcpConfig;
 use tokio_io::codec::length_delimited::Framed;
+use tokio::runtime::current_thread::Runtime;
 
 #[test]
 fn client_to_server_outbound() {
@@ -67,7 +68,8 @@ fn client_to_server_outbound() {
                 Ok(())
             });
 
-        tokio_current_thread::block_on_all(future).unwrap();
+        let mut rt = Runtime::new().unwrap();
+        let _ = rt.block_on(future).unwrap();
     });
 
     let transport = TcpConfig::new().with_upgrade(multiplex::MplexConfig::new());
@@ -80,7 +82,8 @@ fn client_to_server_outbound() {
         .and_then(|server| server.send("hello world".into()))
         .map(|_| ());
 
-    tokio_current_thread::block_on_all(future).unwrap();
+    let mut rt = Runtime::new().unwrap();
+    let _ = rt.block_on(future).unwrap();
     bg_thread.join().unwrap();
 }
 
@@ -117,7 +120,8 @@ fn client_to_server_inbound() {
                 Ok(())
             });
 
-        tokio_current_thread::block_on_all(future).unwrap();
+        let mut rt = Runtime::new().unwrap();
+        let _ = rt.block_on(future).unwrap();
     });
 
     let transport = TcpConfig::new().with_upgrade(multiplex::MplexConfig::new());
@@ -130,6 +134,7 @@ fn client_to_server_inbound() {
         .and_then(|server| server.send("hello world".into()))
         .map(|_| ());
 
-    tokio_current_thread::block_on_all(future).unwrap();
+    let mut rt = Runtime::new().unwrap();
+    let _ = rt.block_on(future).unwrap();
     bg_thread.join().unwrap();
 }
