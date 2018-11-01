@@ -629,7 +629,7 @@ where
                 listener,
                 result,
             }) => {
-                println!("[RawSwarm, poll]      listeners.poll() – Ready(ListenersEvent::Closed) – returning Ready(ListenerClosed) <–––");
+                println!("[RawSwarm, poll]      listeners.poll() – Ready(ListenersEvent::Closed) – returning Ready(ListenerClosed)");
                 return Async::Ready(RawSwarmEvent::ListenerClosed {
                     listen_addr,
                     listener,
@@ -654,7 +654,7 @@ where
                     out_event = e;
                 }
                 Async::Ready(CollectionEvent::ReachError { id, error, handler }) => {
-                    println!("[RawSwarm, poll]      active_nodes.poll() – Ready(ReachError) – handling error");
+                    println!("[RawSwarm, poll]      active_nodes.poll() – Ready(ReachError) – handling error <––");
                     let (a, e) = handle_reach_error(&mut self.reach_attempts, id, error, handler);
                     action = a;
                     out_event = e;
@@ -1459,8 +1459,7 @@ mod tests {
 
     #[test]
     fn querying_for_pending_peer() {
-        let transport = DummyTransport::new();
-        let mut swarm = RawSwarm::<_, _, _, Handler>::new(transport);
+        let mut swarm = RawSwarm::<_, _, _, Handler>::new(DummyTransport::new());
         let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
         let peer = swarm.peer(peer_id.clone());
         assert_matches!(peer, Peer::NotConnected(PeerNotConnected{ .. }));
@@ -1532,8 +1531,72 @@ mod tests {
     }
 
     #[test]
+    fn dial_unknown_peer() {
+        let mut swarm = RawSwarm::<_, _, _, Handler>::new(DummyTransport::new());
+        // Will not be reachable
+        let addr = "/unix/unreachable".parse::<Multiaddr>().expect("bad multiaddr");
+        let handler = Handler::default();
+        let dial_result = swarm.dial(addr, handler);
+        assert!(dial_result.is_ok());
+
+        let swarm = Arc::new(Mutex::new(swarm));
+        let mut rt = Runtime::new().unwrap();
+        // Drive it forward until we hear back from the node.
+        let mut keep_polling = true;
+        while keep_polling {
+            let swarm_fut = swarm.clone();
+            keep_polling = rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
+                let mut swarm = swarm_fut.lock();
+                match swarm.poll() {
+                    Async::NotReady => Ok(Async::Ready(true)),
+                    Async::Ready(event) => {
+                        assert_matches!(event, RawSwarmEvent::UnknownPeerDialError { .. } );
+                        Ok(Async::Ready(false))
+                    },
+                }
+            })).expect("tokio works");
+        }
+    }
+
+    #[test]
     fn node_cant_be_reached() {
-        // Node returns ReachError
+        let mut transport = DummyTransport::new();
+        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        transport.set_next_peer_id(&peer_id);
+        let swarm = Arc::new(Mutex::new(RawSwarm::<_, _, _, Handler>::new(transport)));
+
+        {
+            let swarm1 = swarm.clone();
+            let mut swarm1 = swarm1.lock();
+            let peer = swarm1.peer(peer_id.clone());
+            assert_matches!(peer, Peer::NotConnected(PeerNotConnected{ .. }));
+            // Magic address that will cause outreach to fail
+            let addr = "/unix/unreachable".parse().expect("bad multiaddr");
+            let pending_peer = peer.as_not_connected().unwrap().connect(addr, Handler::default());
+            assert!(pending_peer.is_ok());
+            assert_matches!(pending_peer, Ok(PeerPendingConnect { .. } ));
+        }
+        let mut rt = Runtime::new().unwrap();
+        // Drive it forward until we hear back from the node.
+        let mut keep_polling = true;
+        while keep_polling {
+            let swarm_fut = swarm.clone();
+            let peer_id = peer_id.clone();
+            keep_polling = rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
+                let mut swarm = swarm_fut.lock();
+                match swarm.poll() {
+                    Async::NotReady => Ok(Async::Ready(true)),
+                    Async::Ready(event) => {
+                        let failed_peer_id = assert_matches!(
+                            event,
+                            RawSwarmEvent::DialError { remain_addrs_attempt: _, peer_id: failed_peer_id, .. } => failed_peer_id
+                        );
+                        assert_eq!(peer_id, failed_peer_id);
+                        Ok(Async::Ready(false))
+                    },
+                }
+            })).expect("tokio works");
+        }
     }
 
     #[test]
