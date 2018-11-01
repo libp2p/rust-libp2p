@@ -45,7 +45,7 @@
 //! extern crate bytes;
 //! extern crate futures;
 //! extern crate multistream_select;
-//! extern crate tokio_current_thread;
+//! extern crate tokio;
 //! extern crate tokio_tcp;
 //!
 //! # fn main() {
@@ -53,6 +53,7 @@
 //! use multistream_select::dialer_select_proto;
 //! use futures::{Future, Sink, Stream};
 //! use tokio_tcp::TcpStream;
+//! use tokio::runtime::current_thread::Runtime;
 //!
 //! #[derive(Debug, Copy, Clone)]
 //! enum MyProto { Echo, Hello }
@@ -68,7 +69,8 @@
 //!         dialer_select_proto(connec, protos).map(|r| r.0)
 //!     });
 //!
-//! let negotiated_protocol: MyProto = tokio_current_thread::block_on_all(client)
+//! let mut rt = Runtime::new().unwrap();
+//! let negotiated_protocol: MyProto = rt.block_on(client)
 //!     .expect("failed to find a protocol");
 //! println!("negotiated: {:?}", negotiated_protocol);
 //! # }
@@ -80,7 +82,7 @@
 //! extern crate bytes;
 //! extern crate futures;
 //! extern crate multistream_select;
-//! extern crate tokio_current_thread;
+//! extern crate tokio;
 //! extern crate tokio_tcp;
 //!
 //! # fn main() {
@@ -88,6 +90,7 @@
 //! use multistream_select::listener_select_proto;
 //! use futures::{Future, Sink, Stream};
 //! use tokio_tcp::TcpListener;
+//! use tokio::runtime::current_thread::Runtime;
 //!
 //! #[derive(Debug, Copy, Clone)]
 //! enum MyProto { Echo, Hello }
@@ -108,7 +111,8 @@
 //!         Ok(())
 //!     });
 //!
-//! tokio_current_thread::block_on_all(server).expect("failed to run server");
+//! let mut rt = Runtime::new().unwrap();
+//! let _ = rt.block_on(server).expect("failed to run server");
 //! # }
 //! ```
 

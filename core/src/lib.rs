@@ -129,11 +129,12 @@
 //! extern crate libp2p_ping;
 //! extern crate libp2p_core;
 //! extern crate libp2p_tcp_transport;
-//! extern crate tokio_current_thread;
+//! extern crate tokio;
 //!
 //! use futures::{Future, Stream};
 //! use libp2p_ping::{Ping, PingOutput};
 //! use libp2p_core::Transport;
+//! use tokio::runtime::current_thread::Runtime;
 //!
 //! # fn main() {
 //! let ping_finished_future = libp2p_tcp_transport::TcpConfig::new()
@@ -154,7 +155,8 @@
 //!     });
 //!
 //! // Runs until the ping arrives.
-//! tokio_current_thread::block_on_all(ping_finished_future).unwrap();
+//! let mut rt = Runtime::new().unwrap();
+//! let _ = rt.block_on(ping_finished_future).unwrap();
 //! # }
 //! ```
 //!
@@ -182,6 +184,7 @@ extern crate rw_stream_sink;
 extern crate smallvec;
 extern crate tokio_executor;
 extern crate tokio_io;
+extern crate tokio_timer;
 extern crate void;
 
 #[cfg(test)]
@@ -190,10 +193,6 @@ extern crate rand;
 extern crate tokio;
 #[cfg(test)]
 extern crate tokio_codec;
-#[cfg(test)]
-extern crate tokio_current_thread;
-#[cfg(test)]
-extern crate tokio_timer;
 #[cfg(test)]
 #[macro_use]
 extern crate assert_matches;
