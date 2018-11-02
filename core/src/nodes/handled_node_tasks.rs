@@ -72,7 +72,7 @@ pub struct HandledNodesTasks<TInEvent, TOutEvent, THandler> {
 
 impl<TInEvent, TOutEvent, THandler> fmt::Debug for HandledNodesTasks<TInEvent, TOutEvent, THandler> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        f.debug_struct("HandledNodesTask").finish().expect("works");
+        f.debug_struct("HandledNodesTask").finish().expect("adding a string works");
         f.debug_list()
             .entries(self.tasks.keys().cloned())
             .finish()
@@ -403,9 +403,11 @@ where
                         loop {
                             match self.in_events_rx.poll() {
                                 Ok(Async::NotReady) => break,
-                                Ok(Async::Ready(Some(event))) => node.inject_event(event),
+                                Ok(Async::Ready(Some(event))) => {
+                                    node.inject_event(event)
+                                },
                                 Ok(Async::Ready(None)) => {
-                                    // Node closed by the external API ; start shutdown process.
+                                    // Node closed by the external API; start shutdown process.
                                     node.shutdown();
                                     break;
                                 }
