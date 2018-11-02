@@ -294,7 +294,7 @@ where
                     }
                 }
                 Async::Ready(Some(NodeHandlerEvent::Custom(event))) => {
-                    println!("[HandledNode, poll]     handler; Async::Ready(Some(Custom)); returning the event up the stack <––––");
+                    println!("[HandledNode, poll]     handler; Async::Ready(Some(Custom)); returning the event up the stack");
                     return Ok(Async::Ready(Some(event)));
                 }
                 Async::Ready(None) => {

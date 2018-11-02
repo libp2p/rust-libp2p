@@ -138,7 +138,7 @@ impl NodeHandler for Handler {
                 HandlerState::NotReady => Ok(Async::NotReady),
                 HandlerState::Ready(None) => Ok(Async::Ready(None)),
                 HandlerState::Ready(Some(event)) => Ok(Async::Ready(Some(event.clone()))),
-                HandlerState::Err => {Err(io::Error::new(io::ErrorKind::Other, "oh noes"))},
+                HandlerState::Err => Err(io::Error::new(io::ErrorKind::Other, "oh noes")),
             },
             None => Ok(Async::NotReady)
         }

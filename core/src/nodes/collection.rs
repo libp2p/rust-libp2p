@@ -386,7 +386,7 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
 
         match item {
             HandledNodesEvent::TaskClosed { id, result, handler } => {
-                println!("[CollectionStream, poll]  TaskClosed id={:?}, result={:?} – returning Async::Ready", id, result);
+                println!("[CollectionStream, poll]  TaskClosed id={:?}, result={:?} – returning Async::Ready(…) <––", id, result);
                 match (self.tasks.remove(&id), result, handler) {
                     (Some(TaskState::Pending), Err(err), Some(handler)) => {
                         println!("[CollectionStream, poll]      TaskState::Pending with error");
@@ -410,7 +410,7 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
                         })
                     },
                     (Some(TaskState::Connected(peer_id)), Err(err), _handler) => {
-                        println!("[CollectionStream, poll]      TaskState::Connected, Err({:?}", err);
+                        println!("[CollectionStream, poll]      TaskState::Connected, Err({:?} <–––", err);
                         debug_assert!(_handler.is_none());
                         let _node_task_id = self.nodes.remove(&peer_id);
                         debug_assert_eq!(_node_task_id, Some(id));

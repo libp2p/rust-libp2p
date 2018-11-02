@@ -474,13 +474,13 @@ where
                                 }
                             }
                             Ok(Async::Ready(None)) => {
-                                println!("[NodeTask, poll]      NodeTaskInner::Node; polled handled node; Async::Ready(None) – sending TaskClosed and returning Async::Ready(()) <–––");
+                                println!("[NodeTask, poll]      NodeTaskInner::Node; polled handled node; Async::Ready(None) – sending TaskClosed and returning Async::Ready(())");
                                 let event = InToExtMessage::TaskClosed(Ok(()), None);
                                 let _ = self.events_tx.unbounded_send((event, self.id));
                                 return Ok(Async::Ready(())); // End the task.
                             }
                             Err(err) => {
-                                println!("[NodeTask, poll]      NodeTaskInner::Node; polled handled node; Err");
+                                println!("[NodeTask, poll]      NodeTaskInner::Node; polled handled node; Err – Sending TaskClosed(Err) <–––");
                                 let event = InToExtMessage::TaskClosed(Err(err), None);
                                 let _ = self.events_tx.unbounded_send((event, self.id));
                                 return Ok(Async::Ready(())); // End the task.
