@@ -297,8 +297,8 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
             Entry::Vacant(_) => Err(()),
             Entry::Occupied(entry) => {
                 match entry.get() {
-                    &TaskState::Connected(_) => return Err(()),
-                    &TaskState::Pending => (),
+                    TaskState::Connected(_) => return Err(()),
+                    TaskState::Pending => (),
                 };
 
                 entry.remove();
