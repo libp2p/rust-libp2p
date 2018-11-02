@@ -9,7 +9,6 @@ workflows:
       - test-wasm
       - test-win32
       - integration-test
-      - net-sim
 
 jobs:
   test:
@@ -108,22 +107,6 @@ jobs:
           key: integration-test-cache
       - save_cache:
           key: integration-test-cache
-          paths:
-            - "~/.cargo"
-            - "./target"
-
-  net-sim:
-    docker:
-      - image: tomaka/net-sim-docker-image
-    steps:
-      - checkout
-      - restore_cache:
-          key: net-sim-cache
-      - run:
-          name: Test the network simulation
-          command: cargo test --release --package netsim-tests
-      - save_cache:
-          key: net-sim-cache
           paths:
             - "~/.cargo"
             - "./target"
