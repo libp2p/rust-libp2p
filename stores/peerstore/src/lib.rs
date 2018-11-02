@@ -31,7 +31,7 @@
 //! - `MemoryPeerstore`: Stores the information in memory.
 //!
 //! Note that the peerstore implementations do not consider information inside a peer store to be
-//! critical. In case of an error (eg. corrupted file, disk error, etc.) they will prefer to lose
+//! critical. In case of an error (e.g. corrupted file, disk error, etc.) they will prefer to lose
 //! data rather than returning the error.
 //!
 //! # Example
