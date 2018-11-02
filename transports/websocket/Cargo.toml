@@ -13,9 +13,7 @@ rw-stream-sink = { path = "../../misc/rw-stream-sink" }
 tokio-io = "0.1"
 
 [target.'cfg(not(target_os = "emscripten"))'.dependencies]
-# TODO: restore the upstream version once the branch is merged
-websocket = { git = "https://github.com/tomaka/rust-websocket", branch = "send", default-features = false, features = ["async", "async-ssl"] }
-#websocket = { version = "0.20.2", default-features = false, features = ["async", "async-ssl"] }
+websocket = { version = "0.21.0", default-features = false, features = ["async", "async-ssl"] }
 
 [target.'cfg(target_os = "emscripten")'.dependencies]
 stdweb = { version = "0.1.3", default-features = false }
