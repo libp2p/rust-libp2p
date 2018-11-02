@@ -27,7 +27,7 @@
 //!
 //! The main trait that this crate provides is `Transport`, which provides the `dial` and
 //! `listen_on` methods and can be used to dial or listen on a multiaddress. The `swarm` crate
-//! itself does not provide any concrete (ie. non-dummy, non-adapter) implementation of this trait.
+//! itself does not provide any concrete (i.e. non-dummy, non-adapter) implementation of this trait.
 //! It is implemented on structs that are provided by external crates, such as `TcpConfig` from
 //! `tcp-transport`, `UdpConfig`, or `WebsocketConfig` (note: as of the writing of this
 //! documentation, the last two structs don't exist yet).
