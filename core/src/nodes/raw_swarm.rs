@@ -654,7 +654,7 @@ where
                     out_event = e;
                 }
                 Async::Ready(CollectionEvent::ReachError { id, error, handler }) => {
-                    println!("[RawSwarm, poll]      active_nodes.poll() – Ready(ReachError) – handling error <––");
+                    println!("[RawSwarm, poll]      active_nodes.poll() – Ready(ReachError) – handling error");
                     let (a, e) = handle_reach_error(&mut self.reach_attempts, id, error, handler);
                     action = a;
                     out_event = e;
@@ -663,7 +663,7 @@ where
                     peer_id,
                     error,
                 }) => {
-                    println!("[RawSwarm, poll]      active_nodes.poll() – Ready(NodeError) – setting out event and continuing");
+                    println!("[RawSwarm, poll]      active_nodes.poll() – Ready(NodeError) – returning out event and continuing <––––");
                     let endpoint = self.reach_attempts.connected_points.remove(&peer_id)
                         .expect("We insert into connected_points whenever a connection is \
                                  opened and remove only when a connection is closed; the \
@@ -679,7 +679,7 @@ where
                     };
                 }
                 Async::Ready(CollectionEvent::NodeClosed { peer_id }) => {
-                    println!("[RawSwarm, poll]      active_nodes.poll() – Ready(NodeClosed) – setting out event and continuing");
+                    println!("[RawSwarm, poll]      active_nodes.poll() – Ready(NodeClosed) – returning out event and continuing");
                     let endpoint = self.reach_attempts.connected_points.remove(&peer_id)
                         .expect("We insert into connected_points whenever a connection is \
                                  opened and remove only when a connection is closed; the \
@@ -691,7 +691,7 @@ where
                     out_event = RawSwarmEvent::NodeClosed { peer_id, endpoint };
                 }
                 Async::Ready(CollectionEvent::NodeEvent { peer_id, event }) => {
-                    println!("[RawSwarm, poll]      active_nodes.poll() – Ready(NodeEvent) – setting out event and continuing");
+                    println!("[RawSwarm, poll]      active_nodes.poll() – Ready(NodeEvent) – returning out event and continuing");
                     action = Default::default();
                     out_event = RawSwarmEvent::NodeEvent { peer_id, event };
                 }
@@ -1531,7 +1531,7 @@ mod tests {
     }
 
     #[test]
-    fn dial_unknown_peer() {
+    fn unknown_peer_that_is_unreachable_yields_unknown_peer_dial_error() {
         let mut swarm = RawSwarm::<_, _, _, Handler>::new(DummyTransport::new());
         // Will not be reachable
         let addr = "/unix/unreachable".parse::<Multiaddr>().expect("bad multiaddr");
@@ -1559,7 +1559,7 @@ mod tests {
     }
 
     #[test]
-    fn node_cant_be_reached() {
+    fn known_peer_that_is_unreachable_yields_dial_error() {
         let mut transport = DummyTransport::new();
         let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
         transport.set_next_peer_id(&peer_id);
@@ -1598,16 +1598,4 @@ mod tests {
             })).expect("tokio works");
         }
     }
-
-    #[test]
-    fn node_error() {
-        // Node returns NodeError
-    }
-
-    #[test]
-    fn node_closed() {
-        // Node returns NodeClosed – not covered?
-    }
-
-
 }
