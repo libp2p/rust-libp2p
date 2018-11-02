@@ -107,7 +107,6 @@ impl NodeHandler for Handler {
         }
     }
     fn inject_event(&mut self, inevent: Self::InEvent) {
-        println!("[NodeHandler, inject_event] inevent={:?}", inevent);
         self.events.push(inevent.clone());
         match inevent {
             InEvent::Custom(s) => {
@@ -116,34 +115,21 @@ impl NodeHandler for Handler {
                 ))))
             }
             InEvent::Substream(Some(user_data)) => {
-                println!(
-                    "[NodeHandler, inject_event] opening a substream with user_data={:?}",
-                    user_data
-                );
                 self.state = Some(HandlerState::Ready(Some(
                     NodeHandlerEvent::OutboundSubstreamRequest(user_data),
                 )))
             }
             InEvent::NextState => {
                 let next_state = self.next_states.pop();
-                println!(
-                    "[NodeHandler, inject_event] Setting next state of the handler to ––>{:?}",
-                    next_state
-                );
                 self.state = next_state
             }
             _ => unreachable!(),
         }
     }
     fn shutdown(&mut self) {
-        println!("[NodeHandler, shutdown] Handler shutting down");
         self.state = Some(HandlerState::Ready(None));
     }
     fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<usize, OutEvent>>, IoError> {
-        println!(
-            "[NodeHandler, poll] current handler state: {:?}",
-            self.state
-        );
         match self.state.take() {
             Some(ref state) => match state {
                 HandlerState::NotReady => Ok(Async::NotReady),

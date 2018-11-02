@@ -237,77 +237,58 @@ where
     type Error = IoError;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        println!("[HandledNode, poll] START");
         loop {
-            println!("[HandledNode, poll] top of the loop");
             if self.node.is_done() && self.handler_is_done {
                 return Ok(Async::Ready(None));
             }
 
             let mut node_not_ready = false;
 
-            println!("[HandledNode, poll]   node");
             match self.node.poll()? {
                 Async::NotReady => node_not_ready = true,
                 Async::Ready(Some(NodeEvent::InboundSubstream { substream })) => {
-                    println!("[HandledNode, poll]   node; Async::Ready(Some(InboundStream)");
                     self.handler.inject_substream(substream, NodeHandlerEndpoint::Listener)
                 }
                 Async::Ready(Some(NodeEvent::OutboundSubstream { user_data, substream })) => {
-                    println!("[HandledNode, poll]   node; Async::Ready(Some(OutboundStream)");
                     let endpoint = NodeHandlerEndpoint::Dialer(user_data);
                     self.handler.inject_substream(substream, endpoint)
                 }
                 Async::Ready(None) => {
-                    println!("[HandledNode, poll]   node; Async::Ready(None) – are we shutting down? {:?}", self.is_shutting_down);
                     if !self.is_shutting_down {
-                        println!("[HandledNode, poll]   node; Async::Ready(None) – are we shutting down? No. Starting shutdown.");
                         self.is_shutting_down = true;
                         self.handler.shutdown()
                     }
                 }
                 Async::Ready(Some(NodeEvent::OutboundClosed { user_data })) => {
-                    println!("[HandledNode, poll]   node; Async::Ready(Some(OutboundClosed))");
                     self.handler.inject_outbound_closed(user_data)
                 }
                 Async::Ready(Some(NodeEvent::InboundClosed)) => {
-                    println!("[HandledNode, poll]   node; Async::Ready(Some(InboundClosed))");
                     self.handler.inject_inbound_closed()
                 }
             }
 
-            match if self.handler_is_done { println!("[HandledNode, poll]   handler; Async::Ready(None)"); Async::Ready(None) } else { self.handler.poll()? } {
+            match if self.handler_is_done { Async::Ready(None) } else { self.handler.poll()? } {
                 Async::NotReady => {
-                    println!("[HandledNode, poll]   handler; Async::NotReady");
                     if node_not_ready {
                         break
                     }
                 }
                 Async::Ready(Some(NodeHandlerEvent::OutboundSubstreamRequest(user_data))) => {
-                    println!("[HandledNode, poll]   handler; Async::Ready(Some(OutboundSubstreamRequest))");
                     if self.node.get_ref().is_outbound_open() {
-                        println!("[HandledNode, poll]       handler; outbound is open");
                         match self.node.get_mut().open_substream(user_data) {
-                            Ok(()) => {
-                                println!("[HandledNode, poll]           handler; open_substream ok");
-                                ()
-                            },
+                            Ok(()) => (),
                             Err(user_data) => {
-                                println!("[HandledNode, poll]           handler; open_substream failed");
                                 self.handler.inject_outbound_closed(user_data)
                             },
                         }
                     } else {
-                        println!("[HandledNode, poll]       handler; outbound is closed");
                         self.handler.inject_outbound_closed(user_data);
                     }
                 }
                 Async::Ready(Some(NodeHandlerEvent::Custom(event))) => {
-                    println!("[HandledNode, poll]     handler; Async::Ready(Some(Custom))");
                     return Ok(Async::Ready(Some(event)));
                 }
                 Async::Ready(None) => {
-                    println!("[HandledNode, poll]     handler; Async::Ready(None) – setting handler_is_done, shutting down node and starting shutdown for HandledNode");
                     self.handler_is_done = true;
                     if !self.is_shutting_down {
                         self.is_shutting_down = true;
@@ -317,7 +298,6 @@ where
                 }
             }
         }
-        println!("[HandledNode, poll] NotReady");
         // REVIEW: I don't think this can ever happen. The only way to break out
         // of the loop without returning is if node_not_ready is true and the
         // Handler is NotReady, but node_not_ready is only ever set if the
