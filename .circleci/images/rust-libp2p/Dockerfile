@@ -1,7 +1,7 @@
 FROM rust
 
 # Required for the network simulation tests
-RUN apt-get update && apt-get install -yq libpcap-dev libclang-dev
+RUN apt-get update && apt-get install -yq libpcap-dev libclang-dev clang
 
 RUN mkdir /app
 WORKDIR /app
