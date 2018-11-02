@@ -485,6 +485,7 @@ impl<'a> MdnsPeer<'a> {
             })
             .flat_map(|txt| txt.iter())
             .filter_map(move |txt| {
+                // TODO: wrong, txt can be multiple character strings
                 let addr = match dns::decode_character_string(txt) {
                     Ok(a) => a,
                     Err(_) => return None,
