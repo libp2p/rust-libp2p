@@ -2,6 +2,7 @@
 name = "netsim-tests"
 version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
+description = "Network tests crate"
 license = "MIT"
 
 [dependencies]
@@ -12,4 +13,4 @@ rand = "0.5"
 tokio = "0.1"
 tokio-codec = "0.1"
 tokio-core = "0.1"
-libp2p = { path = ".." }
+libp2p = { path = "../.." }
