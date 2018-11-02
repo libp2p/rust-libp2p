@@ -1036,7 +1036,7 @@ impl<'a, TInEvent, TOutEvent, THandler> PeerPendingConnect<'a, TInEvent, TOutEve
     #[inline]
     pub fn interrupt(self) {
         let attempt = self.attempt.remove();
-        if let Err(_) = self.active_nodes.interrupt(attempt.id) {
+        if self.active_nodes.interrupt(attempt.id).is_err() {
             // TODO: improve proof or remove; this is too complicated right now
             panic!("We retreived this attempt.id from out_reach_attempts. We insert in \
                     out_reach_attempts only at the same time as we call add_reach_attempt. \
