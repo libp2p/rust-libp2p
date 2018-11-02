@@ -349,19 +349,20 @@ where
 impl<TMuxer, TUserData> fmt::Debug for NodeEvent<TMuxer, TUserData>
 where 
     TMuxer: muxing::StreamMuxer,
-    TUserData: fmt::Debug
+    TMuxer::Substream: fmt::Debug,
+    TUserData: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            NodeEvent::InboundSubstream { .. } => {
+            NodeEvent::InboundSubstream { substream } => {
                 f.debug_struct("NodeEvent::OutboundClosed")
-                    .field("substream", &"...")
+                    .field("substream", substream)
                     .finish()
             },
-            NodeEvent::OutboundSubstream { user_data, .. } => {
+            NodeEvent::OutboundSubstream { user_data, substream } => {
                 f.debug_struct("NodeEvent::OutboundSubstream")
                     .field("user_data", user_data)
-                    .field("substream", &"...")
+                    .field("substream", substream)
                     .finish()
             },
             NodeEvent::OutboundClosed { user_data } => {
