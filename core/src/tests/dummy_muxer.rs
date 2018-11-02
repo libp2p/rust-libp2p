@@ -22,8 +22,6 @@
 //! version of the trait along with a way to setup the muxer to behave in the
 //! desired way when testing other components.
 
-extern crate futures;
-
 use std::io::Error as IoError;
 use muxing::{StreamMuxer, Shutdown};
 use futures::prelude::*;
@@ -36,19 +34,19 @@ pub struct DummyOutboundSubstream {}
 
 /// Control the muxer state by setting the "connection" state as to set up a mock
 /// muxer for higher level components.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum DummyConnectionState {
     Pending, // use this to trigger the Async::NotReady code path
     Closed, // use this to trigger the Async::Ready(None) code path
     Opened, // use this to trigger the Async::Ready(Some(_)) code path
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct DummyConnection {
     state: DummyConnectionState
 }
 
 /// `DummyMuxer` implements `StreamMuxer` and methods to control its behavior when used in tests
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DummyMuxer{
     in_connection: DummyConnection,
     out_connection: DummyConnection,

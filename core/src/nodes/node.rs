@@ -306,7 +306,6 @@ where
                 }
             }
         }
-
         // Closing the node if there's no way we can do anything more.
         if self.inbound_state == StreamState::Closed
             && self.outbound_state == StreamState::Closed
