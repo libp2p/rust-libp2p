@@ -24,14 +24,14 @@
 use data_encoding;
 use libp2p_core::{Multiaddr, PeerId};
 use rand;
-use std::{cmp, error, fmt, str, time::Duration};
+use std::{borrow::Cow, cmp, error, fmt, str, time::Duration};
 use {META_QUERY_SERVICE, SERVICE_NAME};
 
 /// Decodes a `<character-string>` (as defined by RFC1035) into a `Vec` of ASCII characters.
 // TODO: better error type?
-pub fn decode_character_string(mut from: &[u8]) -> Result<Vec<u8>, ()> {
+pub fn decode_character_string(mut from: &[u8]) -> Result<Cow<[u8]>, ()> {
     if from.is_empty() {
-        return Ok(Vec::new());
+        return Ok(Cow::Owned(Vec::new()));
     }
 
     // Remove the initial and trailing " if any.
@@ -44,7 +44,7 @@ pub fn decode_character_string(mut from: &[u8]) -> Result<Vec<u8>, ()> {
     }
 
     // TODO: remove the backslashes if any
-    Ok(from.to_vec())
+    Ok(Cow::Borrowed(from))
 }
 
 /// Builds the binary representation of a DNS query to send on the network.
