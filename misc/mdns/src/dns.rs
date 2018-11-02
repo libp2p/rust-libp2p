@@ -111,10 +111,8 @@ pub fn build_query_response(
     append_qname(&mut out, SERVICE_NAME);
 
     // Flags.
-    out.push(0x00);
-    out.push(0x0c);     // PTR record.
-    out.push(0x80);
-    out.push(0x01);
+    append_u16(&mut out, 0x000c);
+    append_u16(&mut out, 0x8001);
 
     // TTL for the answer
     append_u32(&mut out, ttl);
@@ -171,10 +169,8 @@ pub fn build_service_discovery_response(id: u16, ttl: Duration) -> Vec<u8> {
     append_qname(&mut out, META_QUERY_SERVICE);
 
     // Flags.
-    out.push(0x00);
-    out.push(0x0c);     // PTR record requested.
-    out.push(0x80);
-    out.push(0x01);
+    append_u16(&mut out, 0x000c);
+    append_u16(&mut out, 0x8001);
 
     // TTL for the answer
     append_u32(&mut out, ttl);
