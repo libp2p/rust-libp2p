@@ -347,7 +347,7 @@ where
 }
 
 impl<TMuxer, TUserData> fmt::Debug for NodeEvent<TMuxer, TUserData>
-where 
+where
     TMuxer: muxing::StreamMuxer,
     TMuxer::Substream: fmt::Debug,
     TUserData: fmt::Debug,
