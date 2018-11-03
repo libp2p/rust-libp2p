@@ -45,7 +45,7 @@ jobs:
             - "/cache"
 
 jobs:
-  test:
+  net-sim:
     machine:
       enabled: true
     steps:
