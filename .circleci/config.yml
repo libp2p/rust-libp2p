@@ -9,6 +9,7 @@ workflows:
       - test-wasm
       - test-win32
       - integration-test
+      - net-sim
 
 jobs:
   test:
@@ -42,6 +43,16 @@ jobs:
           key: test-cache
           paths:
             - "/cache"
+
+jobs:
+  test:
+    machine:
+      enabled: true
+    steps:
+      - checkout
+      - run:
+          name: Run network simulation tests
+          command: cargo test --package netsim-tests
 
   test-emscripten:
     docker:
