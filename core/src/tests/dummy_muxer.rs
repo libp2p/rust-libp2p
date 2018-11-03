@@ -27,9 +27,11 @@ use muxing::{StreamMuxer, Shutdown};
 use futures::prelude::*;
 
 /// Substream type
+#[derive(Debug)]
 pub struct DummySubstream {}
 
 /// OutboundSubstream type
+#[derive(Debug)]
 pub struct DummyOutboundSubstream {}
 
 /// Control the muxer state by setting the "connection" state as to set up a mock
