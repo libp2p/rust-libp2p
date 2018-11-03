@@ -84,6 +84,7 @@
 
 extern crate arrayvec;
 extern crate bytes;
+#[macro_use]
 extern crate futures;
 extern crate libp2p_core;
 #[macro_use]

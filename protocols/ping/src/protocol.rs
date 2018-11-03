@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::{BufMut, Bytes, BytesMut};
-use futures::{prelude::*, future::{FutureResult, IntoFuture}, task};
+use futures::{prelude::*, future::FutureResult, future::IntoFuture};
 use libp2p_core::{ConnectionUpgrade, Endpoint};
 use rand::{distributions::Standard, prelude::*, rngs::EntropyRng};
 use std::collections::VecDeque;
@@ -135,7 +135,6 @@ impl<TSocket, TUserData> PingDialer<TSocket, TUserData> {
         let payload: [u8; 32] = self.rng.sample(Standard);
         debug!("Preparing for ping with payload {:?}", payload);
         self.pings_to_send.push_back((Bytes::from(payload.to_vec()), user_data));
-        task::current().notify();
     }
 }
 
@@ -158,11 +157,8 @@ where TSocket: AsyncRead + AsyncWrite,
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         if self.needs_close {
-            match self.inner.close() {
-                Ok(Async::Ready(())) => return Ok(Async::Ready(None)),
-                Ok(Async::NotReady) => return Ok(Async::NotReady),
-                Err(err) => return Err(err),
-            }
+            try_ready!(self.inner.close());
+            return Ok(Async::Ready(None));
         }
 
         while let Some((ping, user_data)) = self.pings_to_send.pop_front() {
@@ -201,8 +197,8 @@ where TSocket: AsyncRead + AsyncWrite,
                 Ok(Async::Ready(None)) => {
                     // Notify the current task so that we poll again.
                     self.needs_close = true;
-                    task::current().notify();
-                    return Ok(Async::NotReady);
+                    try_ready!(self.inner.close());
+                    return Ok(Async::Ready(None));
                 }
                 Err(err) => return Err(err),
             }
