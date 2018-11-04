@@ -132,7 +132,7 @@
 //! extern crate tokio;
 //!
 //! use futures::{Future, Stream};
-//! use libp2p_ping::{Ping, PingOutput};
+//! use libp2p_ping::protocol::{Ping, PingOutput};
 //! use libp2p_core::Transport;
 //! use tokio::runtime::current_thread::Runtime;
 //!
