@@ -56,6 +56,7 @@ members = [
     "misc/multihash",
     "misc/multistream-select",
     "misc/net-test",
+    "misc/peer-id-generator",
     "misc/rw-stream-sink",
     "transports/dns",
     "protocols/floodsub",

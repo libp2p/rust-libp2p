@@ -183,7 +183,7 @@ impl<TInEvent, TOutEvent, THandler> HandledNodesTasks<TInEvent, TOutEvent, THand
     /// Returns `None` if the task id is invalid.
     #[inline]
     pub fn task(&mut self, id: TaskId) -> Option<Task<TInEvent>> {
-        match self.tasks.entry(id.clone()) {
+        match self.tasks.entry(id) {
             Entry::Occupied(inner) => Some(Task { inner }),
             Entry::Vacant(_) => None,
         }
@@ -378,7 +378,7 @@ where
                             for event in events_buffer {
                                 node.inject_event(event);
                             }
-                            if let Err(_) = self.events_tx.unbounded_send((event, self.id)) {
+                            if self.events_tx.unbounded_send((event, self.id)).is_err() {
                                 node.shutdown();
                             }
                             self.inner = NodeTaskInner::Node(node);
@@ -425,7 +425,7 @@ where
                             },
                             Ok(Async::Ready(Some(event))) => {
                                 let event = InToExtMessage::NodeEvent(event);
-                                if let Err(_) = self.events_tx.unbounded_send((event, self.id)) {
+                                if self.events_tx.unbounded_send((event, self.id)).is_err() {
                                     node.shutdown();
                                 }
                             }
