@@ -98,7 +98,7 @@ where
     }
 
     #[inline]
-    fn inject_event(&mut self, _: &Self::InEvent) {}
+    fn inject_event(&mut self, _: Self::InEvent) {}
 
     #[inline]
     fn inject_inbound_closed(&mut self) {}
