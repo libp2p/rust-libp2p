@@ -59,7 +59,7 @@ jobs:
             - "~/.cargo"
       - run:
           name: Add Rust to PATH
-          command: export PATH="$HOME/.cargo/bin:$PATH"
+          command: source ~/.cargo/env
       - run:
           name: Run apt-get update
           command: sudo apt-get update
@@ -69,7 +69,7 @@ jobs:
       - checkout
       - run:
           name: Run network simulation tests
-          command: cargo test --package netsim-tests
+          command: ~/.cargo/bin/cargo test --package netsim-tests
 
   test-emscripten:
     docker:
