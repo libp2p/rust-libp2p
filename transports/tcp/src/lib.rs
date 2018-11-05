@@ -47,9 +47,6 @@ extern crate tk_listen;
 extern crate tokio_io;
 extern crate tokio_tcp;
 
-#[cfg(test)]
-extern crate tokio_current_thread;
-
 use futures::{future, future::FutureResult, prelude::*, Async, Poll};
 use multiaddr::{Protocol, Multiaddr, ToMultiaddr};
 use std::fmt;
@@ -394,6 +391,8 @@ impl Drop for TcpTransStream {
 
 #[cfg(test)]
 mod tests {
+    extern crate tokio;
+    use self::tokio::runtime::current_thread::Runtime;
     use super::{multiaddr_to_socketaddr, TcpConfig};
     use futures::stream::Stream;
     use futures::Future;
@@ -401,7 +400,6 @@ mod tests {
     use std;
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use swarm::Transport;
-    use tokio_current_thread;
     use tokio_io;
 
     #[test]
@@ -460,6 +458,8 @@ mod tests {
         std::thread::spawn(move || {
             let addr = "/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap();
             let tcp = TcpConfig::new();
+            let mut rt = Runtime::new().unwrap();
+            let handle = rt.handle();
             let listener = tcp.listen_on(addr).unwrap().0.for_each(|(sock, _)| {
                 sock.and_then(|sock| {
                     // Define what to do with the socket that just connected to us
@@ -469,13 +469,14 @@ mod tests {
                         .map_err(|err| panic!("IO error {:?}", err));
 
                     // Spawn the future as a concurrent task
-                    tokio_current_thread::spawn(handle_conn);
+                    handle.spawn(handle_conn).unwrap();
 
                     Ok(())
                 })
             });
 
-            tokio_current_thread::block_on_all(listener).unwrap();
+            rt.block_on(listener).unwrap();
+            rt.run().unwrap();
         });
         std::thread::sleep(std::time::Duration::from_millis(100));
         let addr = "/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap();
@@ -488,8 +489,8 @@ mod tests {
             Ok(())
         });
         // Execute the future in our event loop
-        tokio_current_thread::block_on_all(action).unwrap();
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        let mut rt = Runtime::new().unwrap();
+        let _ = rt.block_on(action).unwrap();
     }
 
     #[test]

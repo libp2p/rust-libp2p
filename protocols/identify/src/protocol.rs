@@ -87,7 +87,7 @@ where
 
         let bytes = message
             .write_to_bytes()
-            .expect("writing protobuf failed ; should never happen");
+            .expect("writing protobuf failed; should never happen");
 
         let future = self.inner.send(bytes).map(|_| ());
         Box::new(future) as Box<_>
@@ -99,14 +99,14 @@ where
 pub struct IdentifyInfo {
     /// Public key of the node.
     pub public_key: PublicKey,
-    /// Version of the "global" protocol, eg. `ipfs/1.0.0` or `polkadot/1.0.0`.
+    /// Version of the "global" protocol, e.g. `ipfs/1.0.0` or `polkadot/1.0.0`.
     pub protocol_version: String,
     /// Name and version of the client. Can be thought as similar to the `User-Agent` header
     /// of HTTP.
     pub agent_version: String,
     /// Addresses that the node is listening on.
     pub listen_addrs: Vec<Multiaddr>,
-    /// Protocols supported by the node, eg. `/ipfs/ping/1.0.0`.
+    /// Protocols supported by the node, e.g. `/ipfs/ping/1.0.0`.
     pub protocols: Vec<String>,
 }
 
@@ -142,7 +142,7 @@ where
                             let (info, observed_addr) = match parse_proto_msg(msg) {
                                 Ok(v) => v,
                                 Err(err) => {
-                                    debug!("Failed to parse protobuf message ; error = {:?}", err);
+                                    debug!("Failed to parse protobuf message; error = {:?}", err);
                                     return Err(err.into());
                                 }
                             };
@@ -211,8 +211,9 @@ fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> 
 #[cfg(test)]
 mod tests {
     extern crate libp2p_tcp_transport;
-    extern crate tokio_current_thread;
+    extern crate tokio;
 
+    use self::tokio::runtime::current_thread::Runtime;
     use self::libp2p_tcp_transport::TcpConfig;
     use futures::{Future, Stream};
     use libp2p_core::{PublicKey, Transport};
@@ -255,8 +256,8 @@ mod tests {
                     ),
                     _ => panic!(),
                 });
-
-            let _ = tokio_current_thread::block_on_all(future).unwrap();
+            let mut rt = Runtime::new().unwrap();
+            let _ = rt.block_on(future).unwrap();
         });
 
         let transport = TcpConfig::new().with_upgrade(IdentifyProtocolConfig);
@@ -291,8 +292,8 @@ mod tests {
                 }
                 _ => panic!(),
             });
-
-        let _ = tokio_current_thread::block_on_all(future).unwrap();
+        let mut rt = Runtime::new().unwrap();
+        let _ = rt.block_on(future).unwrap();
         bg_thread.join().unwrap();
     }
 }

@@ -57,10 +57,10 @@ where
 
         let (listening_stream, new_addr) = match self.transport.listen_on(addr) {
             Ok((l, new_addr)) => (l, new_addr),
-            Err((trans, addr)) => {
+            Err((transport, addr)) => {
                 let builder = AndThen {
-                    transport: trans,
-                    upgrade: upgrade,
+                    transport,
+                    upgrade,
                 };
 
                 return Err((builder, addr));
@@ -96,10 +96,10 @@ where
 
         let dialed_fut = match self.transport.dial(addr.clone()) {
             Ok(f) => f,
-            Err((trans, addr)) => {
+            Err((transport, addr)) => {
                 let builder = AndThen {
-                    transport: trans,
-                    upgrade: upgrade,
+                    transport,
+                    upgrade,
                 };
 
                 return Err((builder, addr));

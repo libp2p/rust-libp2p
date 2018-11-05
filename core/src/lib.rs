@@ -27,7 +27,7 @@
 //!
 //! The main trait that this crate provides is `Transport`, which provides the `dial` and
 //! `listen_on` methods and can be used to dial or listen on a multiaddress. The `swarm` crate
-//! itself does not provide any concrete (ie. non-dummy, non-adapter) implementation of this trait.
+//! itself does not provide any concrete (i.e. non-dummy, non-adapter) implementation of this trait.
 //! It is implemented on structs that are provided by external crates, such as `TcpConfig` from
 //! `tcp-transport`, `UdpConfig`, or `WebsocketConfig` (note: as of the writing of this
 //! documentation, the last two structs don't exist yet).
@@ -129,11 +129,12 @@
 //! extern crate libp2p_ping;
 //! extern crate libp2p_core;
 //! extern crate libp2p_tcp_transport;
-//! extern crate tokio_current_thread;
+//! extern crate tokio;
 //!
 //! use futures::{Future, Stream};
-//! use libp2p_ping::{Ping, PingOutput};
+//! use libp2p_ping::protocol::{Ping, PingOutput};
 //! use libp2p_core::Transport;
+//! use tokio::runtime::current_thread::Runtime;
 //!
 //! # fn main() {
 //! let ping_finished_future = libp2p_tcp_transport::TcpConfig::new()
@@ -154,7 +155,8 @@
 //!     });
 //!
 //! // Runs until the ping arrives.
-//! tokio_current_thread::block_on_all(ping_finished_future).unwrap();
+//! let mut rt = Runtime::new().unwrap();
+//! let _ = rt.block_on(ping_finished_future).unwrap();
 //! # }
 //! ```
 //!
@@ -191,8 +193,6 @@ extern crate rand;
 extern crate tokio;
 #[cfg(test)]
 extern crate tokio_codec;
-#[cfg(test)]
-extern crate tokio_current_thread;
 #[cfg(test)]
 #[macro_use]
 extern crate assert_matches;

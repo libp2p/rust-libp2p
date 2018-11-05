@@ -225,8 +225,9 @@ impl<T: AsyncRead + AsyncWrite> Future for ListenerFuture<T> {
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio_current_thread;
+    extern crate tokio;
     extern crate tokio_tcp;
+    use self::tokio::runtime::current_thread::Runtime;
     use self::tokio_tcp::{TcpListener, TcpStream};
     use bytes::Bytes;
     use futures::Future;
@@ -252,7 +253,8 @@ mod tests {
             .from_err()
             .and_then(move |stream| Dialer::new(stream));
 
-        match tokio_current_thread::block_on_all(server.join(client)) {
+        let mut rt = Runtime::new().unwrap();
+        match rt.block_on(server.join(client)) {
             Err(MultistreamSelectError::WrongProtocolName) => (),
             _ => panic!(),
         }

@@ -23,7 +23,7 @@ use core::nodes::handled_node::NodeHandlerEndpoint;
 use core::nodes::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent};
 use core::{ConnectionUpgrade, Multiaddr, PeerId};
 use protocol::{RelayDestinationRequest, RelayHopRequest, RelayOutput, RelayConfig};
-use std::{cell::RefCell, io, marker::PhantomData};
+use std::{io, marker::PhantomData};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Protocol handler that identifies the remote at a regular period.
@@ -64,12 +64,12 @@ pub enum RelayHandlerIn<TSubstream, TDestSubstream> {
     /// Accept a hop request from the remote.
     AcceptHopRequest {
         /// The request that was produced by the handler earlier.
-        request: RefCell<Option<RelayHandlerHopRequest<TSubstream>>>,
+        request: RelayHandlerHopRequest<TSubstream>,
         /// The substream to the destination.
-        dest_substream: RefCell<Option<TDestSubstream>>,
+        dest_substream: TDestSubstream,
     },
     /// Denies a hop request from the remote.
-    DenyHopRequest(RefCell<Option<RelayHandlerHopRequest<TSubstream>>>),
+    DenyHopRequest(RelayHandlerHopRequest<TSubstream>),
     /// Opens a new substream to the remote and asks it to relay communications to a third party.
     RelayRequest {
         /// Id of the peer to connect to.
@@ -190,21 +190,15 @@ where
     }
 
     #[inline]
-    fn inject_event(&mut self, event: &Self::InEvent) {
+    fn inject_event(&mut self, event: Self::InEvent) {
         match event {
             RelayHandlerIn::AcceptHopRequest { request, dest_substream } => {
-                if let Some(request) = request.borrow_mut().take() {
-                    if let Some(dest_substream) = dest_substream.borrow_mut().take() {
-                        let fut = request.inner.fulfill(dest_substream);
-                        self.active_futures.push(Box::new(fut));
-                    }
-                }
+                let fut = request.inner.fulfill(dest_substream);
+                self.active_futures.push(Box::new(fut));
             },
             RelayHandlerIn::DenyHopRequest(rq) => {
-                if let Some(rq) = rq.borrow_mut().take() {
-                    let fut = rq.inner.deny();
-                    self.active_futures.push(Box::new(fut));
-                }
+                let fut = rq.inner.deny();
+                self.active_futures.push(Box::new(fut));
             },
             RelayHandlerIn::RelayRequest { target, addresses } => {
                 self.relay_requests.push((target.clone(), addresses.clone()));
