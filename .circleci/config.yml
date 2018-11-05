@@ -50,7 +50,10 @@ jobs:
     steps:
       - run:
           name: Install dependencies
-          command: curl https://sh.rustup.rs -sSf | sh && \
+          command: curl https://sh.rustup.rs -sSf > rustup && \
+            chmod +x rustup && \
+            ./rustup -y && \
+            rm rustup && \
             apt-get update && \
             apt-get install -yq libclang-dev libpcap-dev
       - checkout
