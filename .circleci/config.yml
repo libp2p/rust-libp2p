@@ -59,10 +59,7 @@ jobs:
             - "~/.cargo"
       - run:
           name: Add Rust to PATH
-          command: source ~/.cargo/env
-      - run:
-          name: Echo PATH
-          command: echo $PATH
+          command: export PATH="$HOME/.cargo/bin:$PATH"
       - run:
           name: Run apt-get update
           command: sudo apt-get update
