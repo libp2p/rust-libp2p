@@ -49,10 +49,14 @@ jobs:
       enabled: true
     steps:
       - run:
-          name: Install dependencies
-          command: curl https://sh.rustup.rs -sSf | sh -s -- -y && \
-            apt-get update && \
-            apt-get install -yq libclang-dev libpcap-dev
+          name: Install dependencies, step 1
+          command: curl https://sh.rustup.rs -sSf | sh -s -- -y
+      - run:
+          name: Install dependencies, step 2
+          command: apt-get update
+      - run:
+          name: Install dependencies, step 3
+          command: apt-get install -yq libclang-dev libpcap-dev
       - checkout
       - run:
           name: Run network simulation tests
