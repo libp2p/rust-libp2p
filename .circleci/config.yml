@@ -48,14 +48,23 @@ jobs:
     machine:
       enabled: true
     steps:
+      - restore_cache:
+          key: rust-installation
       - run:
-          name: Install dependencies, step 1
+          name: Install Rust
           command: curl https://sh.rustup.rs -sSf | sh -s -- -y
+      - save_cache:
+          key: rust-installation
+          paths:
+            - "~/.cargo/bin"
       - run:
-          name: Install dependencies, step 2
+          name: Add Rust to PATH
+          command: source ~/.cargo/env
+      - run:
+          name: Run apt-get update
           command: sudo apt-get update
       - run:
-          name: Install dependencies, step 3
+          name: Install dependencies with apt-get
           command: sudo apt-get install -yq libclang-dev libpcap-dev
       - checkout
       - run:
