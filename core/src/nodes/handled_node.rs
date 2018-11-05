@@ -54,7 +54,7 @@ pub trait NodeHandler {
     /// Injects an event coming from the outside into the handler.
     fn inject_event(&mut self, event: Self::InEvent);
 
-    /// Indicates that the node that it should shut down. After that, it is expected that `poll()`
+    /// Indicates to the node that it should shut down. After that, it is expected that `poll()`
     /// returns `Ready(None)` as soon as possible.
     ///
     /// This method allows an implementation to perform a graceful shutdown of the substreams, and
