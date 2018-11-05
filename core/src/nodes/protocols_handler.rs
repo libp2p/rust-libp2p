@@ -103,7 +103,7 @@ pub trait ProtocolsHandler {
     );
 
     /// Injects an event coming from the outside in the handler.
-    fn inject_event(&mut self, event: &Self::InEvent);
+    fn inject_event(&mut self, event: Self::InEvent);
 
     /// Indicates to the handler that upgrading a substream to the given protocol has failed.
     fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: io::Error);
@@ -299,7 +299,7 @@ where
     }
 
     #[inline]
-    fn inject_event(&mut self, _: &Self::InEvent) {}
+    fn inject_event(&mut self, _: Self::InEvent) {}
 
     #[inline]
     fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: io::Error) {}
@@ -337,7 +337,7 @@ pub struct MapInEvent<TProtoHandler, TNewIn, TMap> {
 impl<TProtoHandler, TMap, TNewIn> ProtocolsHandler for MapInEvent<TProtoHandler, TNewIn, TMap>
 where
     TProtoHandler: ProtocolsHandler,
-    TMap: Fn(&TNewIn) -> Option<&TProtoHandler::InEvent>,
+    TMap: Fn(TNewIn) -> Option<TProtoHandler::InEvent>,
 {
     type InEvent = TNewIn;
     type OutEvent = TProtoHandler::OutEvent;
@@ -360,7 +360,7 @@ where
     }
 
     #[inline]
-    fn inject_event(&mut self, event: &TNewIn) {
+    fn inject_event(&mut self, event: TNewIn) {
         if let Some(event) = (self.map)(event) {
             self.inner.inject_event(event);
         }
@@ -424,7 +424,7 @@ where
     }
 
     #[inline]
-    fn inject_event(&mut self, event: &Self::InEvent) {
+    fn inject_event(&mut self, event: Self::InEvent) {
         self.inner.inject_event(event)
     }
 
@@ -608,7 +608,7 @@ where
 
     #[inline]
     fn inject_event(&mut self, event: Self::InEvent) {
-        self.handler.inject_event(&event);
+        self.handler.inject_event(event);
     }
 
     #[inline]
