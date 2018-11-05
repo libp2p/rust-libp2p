@@ -49,14 +49,14 @@ jobs:
       enabled: true
     steps:
       - restore_cache:
-          key: rust-installation
+          key: new-rust-installation
       - run:
           name: Install Rust
           command: curl https://sh.rustup.rs -sSf | sh -s -- -y
       - save_cache:
-          key: rust-installation
+          key: new-rust-installation
           paths:
-            - "~/.cargo/bin"
+            - "~/.cargo"
       - run:
           name: Add Rust to PATH
           command: source ~/.cargo/env
