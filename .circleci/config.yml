@@ -61,6 +61,9 @@ jobs:
           name: Add Rust to PATH
           command: source ~/.cargo/env
       - run:
+          name: Echo PATH
+          command: echo $PATH
+      - run:
           name: Run apt-get update
           command: sudo apt-get update
       - run:
