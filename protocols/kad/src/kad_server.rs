@@ -96,7 +96,7 @@ where
 pub struct KadConnecController {
     // In order to send a request, we use this sender to send a tuple. The first element of the
     // tuple is the message to send to the remote, and the second element is what is used to
-    // receive the response. If the query doesn't expect a response (eg. `PUT_VALUE`), then the
+    // receive the response. If the query doesn't expect a response (e.g. `PUT_VALUE`), then the
     // one-shot sender will be dropped without being used.
     inner: mpsc::UnboundedSender<(KadMsg, oneshot::Sender<KadMsg>)>,
 }

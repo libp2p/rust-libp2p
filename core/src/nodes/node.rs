@@ -80,7 +80,6 @@ enum StreamState {
 }
 
 /// Event that can happen on the `NodeStream`.
-#[derive(Debug)]
 pub enum NodeEvent<TMuxer, TUserData>
 where
     TMuxer: muxing::StreamMuxer,
@@ -346,32 +345,37 @@ where
     }
 }
 
-// TODO:
-/*impl<TTrans> fmt::Debug for NodeEvent<TTrans>
-where TTrans: Transport,
-      <TTrans::Listener as Stream>::Error: fmt::Debug,
+impl<TMuxer, TUserData> fmt::Debug for NodeEvent<TMuxer, TUserData>
+where
+    TMuxer: muxing::StreamMuxer,
+    TMuxer::Substream: fmt::Debug,
+    TUserData: fmt::Debug,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            NodeEvent::Incoming { ref listen_addr, .. } => {
-                f.debug_struct("NodeEvent::Incoming")
-                    .field("listen_addr", listen_addr)
+            NodeEvent::InboundSubstream { substream } => {
+                f.debug_struct("NodeEvent::OutboundClosed")
+                    .field("substream", substream)
                     .finish()
             },
-            NodeEvent::Closed { ref listen_addr, .. } => {
-                f.debug_struct("NodeEvent::Closed")
-                    .field("listen_addr", listen_addr)
+            NodeEvent::OutboundSubstream { user_data, substream } => {
+                f.debug_struct("NodeEvent::OutboundSubstream")
+                    .field("user_data", user_data)
+                    .field("substream", substream)
                     .finish()
             },
-            NodeEvent::Error { ref listen_addr, ref error, .. } => {
-                f.debug_struct("NodeEvent::Error")
-                    .field("listen_addr", listen_addr)
-                    .field("error", error)
+            NodeEvent::OutboundClosed { user_data } => {
+                f.debug_struct("NodeEvent::OutboundClosed")
+                    .field("user_data", user_data)
+                    .finish()
+            },
+            NodeEvent::InboundClosed => {
+                f.debug_struct("NodeEvent::InboundClosed")
                     .finish()
             },
         }
     }
-}*/
+}
 
 #[cfg(test)]
 mod node_stream {
