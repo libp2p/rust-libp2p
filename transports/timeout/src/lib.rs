@@ -41,39 +41,14 @@ use tokio_timer::Timeout;
 #[derive(Debug, Copy, Clone)]
 pub struct TransportTimeout<T> {
     transport: T,
-    outgoing_timeout: Duration,
-    incoming_timeout: Duration,
+    timeout: Duration
 }
 
 impl<T> TransportTimeout<T> {
     /// Wraps around a `Transport` to add timeouts to all the sockets created by it.
     #[inline]
-    pub fn new(trans: T, timeout: Duration) -> Self {
-        TransportTimeout {
-            transport: trans,
-            outgoing_timeout: timeout,
-            incoming_timeout: timeout,
-        }
-    }
-
-    /// Wraps around a `Transport` to add timeouts to the outgoing connections.
-    #[inline]
-    pub fn with_outgoing_timeout(trans: T, timeout: Duration) -> Self {
-        TransportTimeout {
-            transport: trans,
-            outgoing_timeout: timeout,
-            incoming_timeout: Duration::from_secs(100 * 365 * 24 * 3600), // 100 years
-        }
-    }
-
-    /// Wraps around a `Transport` to add timeouts to the ingoing connections.
-    #[inline]
-    pub fn with_ingoing_timeout(trans: T, timeout: Duration) -> Self {
-        TransportTimeout {
-            transport: trans,
-            outgoing_timeout: Duration::from_secs(100 * 365 * 24 * 3600), // 100 years
-            incoming_timeout: timeout,
-        }
+    pub fn new(transport: T, timeout: Duration) -> Self {
+        TransportTimeout { transport, timeout }
     }
 }
 
@@ -124,18 +99,15 @@ where
             Ok((listener, addr)) => {
                 let listener = TimeoutListener {
                     inner: listener,
-                    timeout: self.incoming_timeout,
+                    timeout: self.timeout
                 };
-
                 Ok((listener, addr))
             }
             Err((transport, addr)) => {
                 let transport = TransportTimeout {
                     transport,
-                    outgoing_timeout: self.outgoing_timeout,
-                    incoming_timeout: self.incoming_timeout,
+                    timeout: self.timeout
                 };
-
                 Err((transport, addr))
             }
         }
@@ -157,15 +129,13 @@ where
     fn dial(self, addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> {
         match self.transport.dial(addr) {
             Ok(dial) => Ok(TokioTimerMapErr {
-                inner: Timeout::new(dial, self.outgoing_timeout),
+                inner: Timeout::new(dial, self.timeout)
             }),
             Err((transport, addr)) => {
                 let transport = TransportTimeout {
                     transport,
-                    outgoing_timeout: self.outgoing_timeout,
-                    incoming_timeout: self.incoming_timeout,
+                    timeout: self.timeout
                 };
-
                 Err((transport, addr))
             }
         }
