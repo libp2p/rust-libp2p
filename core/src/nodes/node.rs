@@ -283,8 +283,6 @@ where
         if self.outbound_state == StreamState::Open {
             if self.outbound_substreams.is_empty() {
                 self.outbound_state = StreamState::Closed;
-                // REVIEW: No way to return `user_data` less than requiring TUserData be Default or some such devilry
-                // return Ok(Async::Ready(Some(NodeEvent::OutboundClosed { user_data: Default::default() })));
                 return Ok(Async::Ready(None))
             }
             for n in (0..self.outbound_substreams.len()).rev() {
