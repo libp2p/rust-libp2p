@@ -418,23 +418,30 @@ where
 
                     // Process the node.
                     loop {
+                        println!("top of the loop");
                         match node.poll() {
                             Ok(Async::NotReady) => {
+                                println!("  NotReady");
                                 self.inner = NodeTaskInner::Node(node);
                                 return Ok(Async::NotReady);
                             },
                             Ok(Async::Ready(Some(event))) => {
+                                println!("  ReadySome");
                                 let event = InToExtMessage::NodeEvent(event);
                                 if self.events_tx.unbounded_send((event, self.id)).is_err() {
                                     node.shutdown();
                                 }
                             }
                             Ok(Async::Ready(None)) => {
+                                println!("  ReadyNone");
+
                                 let event = InToExtMessage::TaskClosed(Ok(()), None);
                                 let _ = self.events_tx.unbounded_send((event, self.id));
                                 return Ok(Async::Ready(())); // End the task.
                             }
                             Err(err) => {
+                                println!("  Err");
+
                                 let event = InToExtMessage::TaskClosed(Err(err), None);
                                 let _ = self.events_tx.unbounded_send((event, self.id));
                                 return Ok(Async::Ready(())); // End the task.
@@ -597,11 +604,13 @@ mod tests {
             // Async::Ready(None) and sends a TaskClosed and returns
             // Async::Ready(()). Qed.
 
-            let create_outbound_substream_event = InEvent::Substream(Some(135));
-            tx.unbounded_send(create_outbound_substream_event).expect("send msg works");
+            // let create_outbound_substream_event = InEvent::Substream(Some(135));
+            // tx.unbounded_send(create_outbound_substream_event).expect("send msg works");
             rt.spawn(node_task);
             let events = rt.block_on(rx.collect()).expect("rx failed");
 
+            // let events = rt.block_on(node_task).expect("dsds");
+            println!("[test] events={:?}", events);
             assert_eq!(events.len(), 2);
             assert_matches!(events[0].0, InToExtMessage::NodeReached(PeerId{..}));
             assert_matches!(events[1].0, InToExtMessage::TaskClosed(Ok(()), _));
