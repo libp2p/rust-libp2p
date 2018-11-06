@@ -453,61 +453,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    mod task {
-        use super::super::*;
-        use std::collections::{HashMap, hash_map::Entry};
-
-        #[derive(Debug)]
-        enum InEvent{Banana}
-
-        #[test]
-        fn send_event() {
-            let mut dict = HashMap::new();
-            let (tx, mut rx) = mpsc::unbounded::<InEvent>();
-            let id = TaskId(123);
-            dict.insert(id, tx);
-            let mut task = match dict.entry(id) {
-                Entry::Occupied(inner) => Task{inner},
-                _ => unreachable!()
-            };
-
-            task.send_event(InEvent::Banana);
-            assert_matches!(rx.poll(), Ok(Async::Ready(Some(InEvent::Banana))));
-        }
-
-        #[test]
-        fn id() {
-            let mut dict = HashMap::new();
-            let (tx, _) = mpsc::unbounded::<InEvent>();
-            let id = TaskId(123);
-            dict.insert(id, tx);
-            let task = match dict.entry(id) {
-                Entry::Occupied(inner) => Task{inner},
-                _ => unreachable!()
-            };
-
-            assert_eq!(id, task.id())
-        }
-
-        #[test]
-        #[ignore]
-        fn close() {
-            let mut dict = HashMap::new();
-            let (tx, _) = mpsc::unbounded::<InEvent>();
-            let id = TaskId(123);
-            dict.insert(id, tx);
-            let task = match dict.entry(id) {
-                Entry::Occupied(inner) => Task{inner},
-                _ => unreachable!()
-            };
-
-            task.close();
-            // REVIEW: this doesn't work because the value is moved. I'd argue
-            // this doesn't need to be tested as it's enforced at compile time.
-            // assert!(!dict.contains_key(&id));
-        }
-    }
-
     mod node_task {
         use super::super::*;
         use futures::future::{self, FutureResult};
@@ -732,6 +677,30 @@ mod tests {
             assert_eq!(handled_nodes.task(TaskId(2)).unwrap().id(), task_ids[2]);
             assert!(handled_nodes.task(TaskId(545534)).is_none());
         }
+
+        #[test]
+        fn send_event_to_task() {
+            let (mut handled_nodes, _) = TestBuilder::new()
+                .with_tasks(1)
+                .handled_nodes_tasks();
+
+            let task_id = {
+                let mut task = handled_nodes.task(TaskId(0)).expect("can fetch a Task");
+                task.send_event(InEvent::Custom("banana"));
+                task.id()
+            };
+
+            let mut rt = Builder::new().core_threads(1).build().unwrap();
+            let mut events = rt.block_on(handled_nodes.into_future()).unwrap();
+            assert_matches!(events.0.unwrap(), HandledNodesEvent::NodeReached{..});
+
+            events = rt.block_on(events.1.into_future()).unwrap();
+            assert_matches!(events.0.unwrap(), HandledNodesEvent::NodeEvent{id: event_task_id, event} => {
+                assert_eq!(event_task_id, task_id);
+                assert_matches!(event, OutEvent::Custom("banana"));
+            });
+        }
+
         #[test]
         fn iterate_over_all_tasks() {
             let (handled_nodes, task_ids) = TestBuilder::new()
@@ -804,7 +773,7 @@ mod tests {
                 tx.clone()
             };
 
-            let mut rt = Builder::new().core_threads(4).build().unwrap();
+            let mut rt = Builder::new().core_threads(1).build().unwrap();
             let mut events = rt.block_on(handled_nodes_tasks.into_future()).unwrap();
             assert_matches!(events.0.unwrap(), HandledNodesEvent::NodeReached{..});
 
