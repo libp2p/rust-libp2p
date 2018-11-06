@@ -419,7 +419,6 @@ where
                     // Process the node.
                     loop {
                         match node.poll() {
-                            // REVIEW: I don't think this can happen, see comment in handled_node.rs
                             Ok(Async::NotReady) => {
                                 self.inner = NodeTaskInner::Node(node);
                                 return Ok(Async::NotReady);

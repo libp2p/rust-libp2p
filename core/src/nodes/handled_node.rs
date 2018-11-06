@@ -298,13 +298,6 @@ where
                 }
             }
         }
-        // REVIEW: I don't think this can ever happen. The only way to break out
-        // of the loop without returning is if node_not_ready is true and the
-        // Handler is NotReady, but node_not_ready is only ever set if the
-        // node.poll() returns Async::Ready(None) which in turn triggers a
-        // shutdown, which will make the Handler yield Async::Ready(None), which
-        // will return Async::Ready(None). So no way we can return
-        // Async::NotReady.
         Ok(Async::NotReady)
     }
 }
