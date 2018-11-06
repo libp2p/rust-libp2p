@@ -418,30 +418,24 @@ where
 
                     // Process the node.
                     loop {
-                        println!("top of the loop");
                         match node.poll() {
                             Ok(Async::NotReady) => {
-                                println!("  NotReady");
                                 self.inner = NodeTaskInner::Node(node);
                                 return Ok(Async::NotReady);
                             },
                             Ok(Async::Ready(Some(event))) => {
-                                println!("  ReadySome");
                                 let event = InToExtMessage::NodeEvent(event);
                                 if self.events_tx.unbounded_send((event, self.id)).is_err() {
                                     node.shutdown();
                                 }
                             }
                             Ok(Async::Ready(None)) => {
-                                println!("  ReadyNone");
 
                                 let event = InToExtMessage::TaskClosed(Ok(()), None);
                                 let _ = self.events_tx.unbounded_send((event, self.id));
                                 return Ok(Async::Ready(())); // End the task.
                             }
                             Err(err) => {
-                                println!("  Err");
-
                                 let event = InToExtMessage::TaskClosed(Err(err), None);
                                 let _ = self.events_tx.unbounded_send((event, self.id));
                                 return Ok(Async::Ready(())); // End the task.
@@ -580,37 +574,9 @@ mod tests {
                 .with_task_id(345)
                 .node_task();
 
-            // Even though we set up the muxer outbound state to be `Closed` we
-            // still need to open a substream or the outbound state will never
-            // be checked.
-            // We do not have a HandledNode yet, so we can't simply call
-            // `open_substream`. Instead we send a message to the NodeTask,
-            // which will be buffered until the inner future resolves, then
-            // it'll call `inject_event` on the handler. In the test Handler,
-            // inject_event will set the next state so that it yields an
-            // OutboundSubstreamRequest.
-            // Back up in the HandledNode, at the next iteration we'll
-            // open_substream() and iterate again. This time, node.poll() will
-            // poll the muxer inbound (closed) and also outbound (because now
-            // there's an entry in the outbound_streams) which will be Closed
-            // (because we set up the muxer state so) and thus yield
-            // Async::Ready(None) which in turn makes the NodeStream yield an
-            // Async::Ready(OutboundClosed) to the HandledNode.
-            // Now we're at the point where poll_inbound, poll_outbound and
-            // address are all skipped and there is nothing left to do: we yield
-            // Async::Ready(None) from the NodeStream. In the HandledNode,
-            // Async::Ready(None) triggers a shutdown of the Handler so that it
-            // also yields Async::Ready(None). Finally, the NodeTask gets a
-            // Async::Ready(None) and sends a TaskClosed and returns
-            // Async::Ready(()). Qed.
-
-            // let create_outbound_substream_event = InEvent::Substream(Some(135));
-            // tx.unbounded_send(create_outbound_substream_event).expect("send msg works");
             rt.spawn(node_task);
             let events = rt.block_on(rx.collect()).expect("rx failed");
 
-            // let events = rt.block_on(node_task).expect("dsds");
-            println!("[test] events={:?}", events);
             assert_eq!(events.len(), 2);
             assert_matches!(events[0].0, InToExtMessage::NodeReached(PeerId{..}));
             assert_matches!(events[1].0, InToExtMessage::TaskClosed(Ok(()), _));

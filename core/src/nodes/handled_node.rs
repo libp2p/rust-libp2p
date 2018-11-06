@@ -243,33 +243,25 @@ where
             }
 
             let mut node_not_ready = false;
-            println!("      HandledNode, polling NodeStream");
             match self.node.poll()? {
-                Async::NotReady => {
-                    println!("          HandledNode, NotReady");
-                    node_not_ready = true},
+                Async::NotReady => node_not_ready = true,
                 Async::Ready(Some(NodeEvent::InboundSubstream { substream })) => {
-                    println!("          HandledNode, Ready(InboundSubstream)");
                     self.handler.inject_substream(substream, NodeHandlerEndpoint::Listener)
                 }
                 Async::Ready(Some(NodeEvent::OutboundSubstream { user_data, substream })) => {
-                    println!("          HandledNode, Ready(OutboundSubstream)");
                     let endpoint = NodeHandlerEndpoint::Dialer(user_data);
                     self.handler.inject_substream(substream, endpoint)
                 }
                 Async::Ready(None) => {
-                    println!("          HandledNode, Ready(None)");
                     if !self.is_shutting_down {
                         self.is_shutting_down = true;
                         self.handler.shutdown()
                     }
                 }
                 Async::Ready(Some(NodeEvent::OutboundClosed { user_data })) => {
-                    println!("          HandledNode, Ready(OutboundClosed)");
                     self.handler.inject_outbound_closed(user_data)
                 }
                 Async::Ready(Some(NodeEvent::InboundClosed)) => {
-                    println!("          HandledNode, Ready(InboundClosed)");
                     self.handler.inject_inbound_closed()
                 }
             }
@@ -305,7 +297,6 @@ where
                 }
             }
         }
-        println!("      HandledNode, done polling HandledNode – returning NotReady");
         Ok(Async::NotReady)
     }
 }

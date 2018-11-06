@@ -194,7 +194,6 @@ where
     // If in progress, drive this node's stream muxer shutdown to completion.
     fn poll_shutdown(&mut self) -> Poll<(), IoError> {
         use self::StreamState::*;
-        println!("            NodeStream, poll_shutdown, inbound_state={:?}, outbound_state={:?}", self.inbound_state, self.outbound_state);
         loop {
             match (self.inbound_state, self.outbound_state) {
                 (Open, Open) | (Open, Closed) | (Closed, Open) | (Closed, Closed) => {
@@ -259,7 +258,6 @@ where
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         // Drive the shutdown process, if any.
         if self.poll_shutdown()?.is_not_ready() {
-            println!("            NodeStream,  shutdown not ready, returning NotReady");
             return Ok(Async::NotReady)
         }
 
@@ -273,7 +271,6 @@ where
                     })));
                 }
                 Async::Ready(None) => {
-                    println!("              NodeStream,  poll_inbound: Ready(None) – returning InboundClosed");
                     self.inbound_state = StreamState::Closed;
                     return Ok(Async::Ready(Some(NodeEvent::InboundClosed)));
                 }
@@ -284,9 +281,7 @@ where
         // Polling outbound substreams.
         // We remove each element from `outbound_substreams` one by one and add them back.
         if self.outbound_state == StreamState::Open {
-            println!("            NodeStream,  outbound_state is Open");
             if self.outbound_substreams.is_empty() {
-                println!("              NodeStream,  poll_outbound, Ready(None) – returning OutboundClosed");
                 self.outbound_state = StreamState::Closed;
                 // REVIEW: No way to return `user_data` less than requiring TUserData be Default or some such devilry
                 // return Ok(Async::Ready(Some(NodeEvent::OutboundClosed { user_data: Default::default() })));
@@ -296,7 +291,6 @@ where
                 let (user_data, mut outbound) = self.outbound_substreams.swap_remove(n);
                 match self.muxer.poll_outbound(&mut outbound) {
                     Ok(Async::Ready(Some(substream))) => {
-                        println!("              NodeStream,  poll_outbound, Ready(substream)");
                         let substream = muxing::substream_from_ref(self.muxer.clone(), substream);
                         self.muxer.destroy_outbound(outbound);
                         return Ok(Async::Ready(Some(NodeEvent::OutboundSubstream {
@@ -305,24 +299,20 @@ where
                         })));
                     }
                     Ok(Async::Ready(None)) => {
-                        println!("              NodeStream,  poll_outbound, Ready(None) – returning OutboundClosed");
                         self.outbound_state = StreamState::Closed;
                         self.muxer.destroy_outbound(outbound);
                         return Ok(Async::Ready(Some(NodeEvent::OutboundClosed { user_data })));
                     }
                     Ok(Async::NotReady) => {
-                        println!("              NodeStream,  poll_outbound, NotReady");
                         self.outbound_substreams.push((user_data, outbound));
                     }
                     Err(err) => {
-                        println!("              NodeStream,  poll_outbound, Err – destroying outbound");
                         self.muxer.destroy_outbound(outbound);
                         return Err(err);
                     }
                 }
             }
         }
-        println!("            NodeStream, inbound_state={:?}, outbound_state={:?}", self.inbound_state, self.outbound_state);
         // Closing the node if there's no way we can do anything more.
         if self.inbound_state == StreamState::Closed
             && self.outbound_state == StreamState::Closed
@@ -332,7 +322,6 @@ where
         }
 
         // Nothing happened. Register our task to be notified and return.
-        println!("            NodeStream, Nothing happened. Register our task to be notified and return.");
         Ok(Async::NotReady)
     }
 }
