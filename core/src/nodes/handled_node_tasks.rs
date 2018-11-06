@@ -72,9 +72,9 @@ pub struct HandledNodesTasks<TInEvent, TOutEvent, THandler> {
 
 impl<TInEvent, TOutEvent, THandler> fmt::Debug for HandledNodesTasks<TInEvent, TOutEvent, THandler> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        f.debug_struct("HandledNodesTask").finish().expect("adding a string works");
-        f.debug_list()
-            .entries(self.tasks.keys().cloned())
+        f.debug_struct("HandledNodesTasks")
+            .field("tasks", &self.tasks.keys())
+            .field("next_task_id", &self.next_task_id)
             .finish()
     }
 }
@@ -721,6 +721,7 @@ mod tests {
                 (handled_nodes, task_ids)
             }
         }
+
         #[test]
         fn query_for_tasks() {
             let (mut handled_nodes, task_ids) = TestBuilder::new()
