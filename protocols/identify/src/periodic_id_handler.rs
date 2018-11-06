@@ -22,7 +22,7 @@ use crate::{RemoteInfo, IdentifyProtocolConfig};
 use futures::prelude::*;
 use libp2p_core::{
     nodes::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent},
-    upgrade::{self, DeniedUpgrade, OutboundUpgrade, toggleable::Toggleable}
+    upgrade::{self, DeniedUpgrade, OutboundUpgrade, Toggleable}
 };
 use std::{io, marker::PhantomData, time::{Duration, Instant}};
 use tokio_io::{AsyncRead, AsyncWrite};

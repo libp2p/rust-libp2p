@@ -18,31 +18,32 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-pub mod and_then;
-pub mod denied;
-pub mod error;
-pub mod map;
+mod and_then;
+mod denied;
+mod error;
+mod map;
 pub mod memory;
-pub mod or;
-pub mod or_else;
-pub mod refused;
-pub mod then;
-pub mod upgrade;
+mod or;
+mod or_else;
+mod refused;
+mod then;
+mod upgrade;
 
-pub use self::error::Error;
-pub use self::or::{OrDialer, OrListener};
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
-use self::{
+use tokio_io::{AsyncRead, AsyncWrite};
+
+pub use self::{
     and_then::{AndThenDialer, AndThenListener},
+    error::Error,
     denied::{DeniedDialer, DeniedListener},
     map::{MapDialer, MapErrDialer, MapListener, MapErrListener},
+    or::{OrDialer, OrListener},
     or_else::{OrElseDialer, OrElseListener},
     then::{ThenDialer, ThenListener},
     upgrade::{DialerUpgrade, ListenerUpgrade}
 };
-use tokio_io::{AsyncRead, AsyncWrite};
 
 pub trait Listener {
     type Output;

@@ -18,18 +18,24 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-pub mod apply;
-pub mod denied;
-pub mod error;
-pub mod toggleable;
+mod apply;
+mod denied;
+mod error;
+mod map;
+mod or;
+mod toggleable;
 
 use bytes::Bytes;
 use futures::future::Future;
 
-pub use self::apply::{apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply};
-pub use self::denied::DeniedUpgrade;
-pub use self::error::Error;
-pub use self::toggleable::toggleable;
+pub use self::{
+    apply::{apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply},
+    denied::DeniedUpgrade,
+    error::Error,
+    map::{MapUpgrade, MapUpgradeErr},
+    or::OrUpgrade,
+    toggleable::{toggleable, Toggleable}
+};
 
 pub trait UpgradeInfo {
     type UpgradeId;
@@ -44,6 +50,30 @@ pub trait InboundUpgrade<C>: UpgradeInfo {
     type Future: Future<Item = Self::Output, Error = Self::Error>;
 
     fn upgrade_inbound(self, socket: C, id: Self::UpgradeId) -> Self::Future;
+
+    fn map_inbound<F, T>(self, f: F) -> MapUpgrade<Self, F>
+    where
+        Self: Sized,
+        F: FnOnce(Self::Output) -> T + Clone + 'static
+    {
+        MapUpgrade::new(self, f)
+    }
+
+    fn map_inbound_err<F, T>(self, f: F) -> MapUpgradeErr<Self, F>
+    where
+        Self: Sized,
+        F: FnOnce(Self::Error) -> T + Clone + 'static
+    {
+        MapUpgradeErr::new(self, f)
+    }
+
+    fn or_inbound<U>(self, upgrade: U) -> OrUpgrade<Self, U>
+    where
+        Self: Sized,
+        U: InboundUpgrade<C, Output = Self::Output, Error = Self::Error>
+    {
+        OrUpgrade::new(self, upgrade)
+    }
 }
 
 pub trait OutboundUpgrade<C>: UpgradeInfo {
@@ -52,5 +82,29 @@ pub trait OutboundUpgrade<C>: UpgradeInfo {
     type Future: Future<Item = Self::Output, Error = Self::Error>;
 
     fn upgrade_outbound(self, socket: C, id: Self::UpgradeId) -> Self::Future;
+
+    fn map_outbound<F, T>(self, f: F) -> MapUpgrade<Self, F>
+    where
+        Self: Sized,
+        F: FnOnce(Self::Output) -> T + Clone + 'static
+    {
+        MapUpgrade::new(self, f)
+    }
+
+    fn map_outbound_err<F, T>(self, f: F) -> MapUpgradeErr<Self, F>
+    where
+        Self: Sized,
+        F: FnOnce(Self::Error) -> T + Clone + 'static
+    {
+        MapUpgradeErr::new(self, f)
+    }
+
+    fn or_outbound<U>(self, upgrade: U) -> OrUpgrade<Self, U>
+    where
+        Self: Sized,
+        U: OutboundUpgrade<C, Output = Self::Output, Error = Self::Error>
+    {
+        OrUpgrade::new(self, upgrade)
+    }
 }
 

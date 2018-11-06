@@ -22,7 +22,7 @@ use futures::prelude::*;
 use libp2p_core::{
     OutboundUpgrade,
     nodes::{ProtocolsHandler, ProtocolsHandlerEvent},
-    upgrade::{toggleable, DeniedUpgrade}
+    upgrade::{self, DeniedUpgrade}
 };
 use log::warn;
 use protocol::{Ping, PingDialer};
@@ -39,7 +39,7 @@ use void::{Void, unreachable};
 /// If the remote doesn't respond, produces `Unresponsive` and closes the connection.
 pub struct PeriodicPingHandler<TSubstream> {
     /// Configuration for the ping protocol.
-    ping_config: toggleable::Toggleable<Ping<Instant>>,
+    ping_config: upgrade::Toggleable<Ping<Instant>>,
 
     /// State of the outgoing ping.
     out_state: OutState<TSubstream>,
@@ -127,7 +127,7 @@ impl<TSubstream> PeriodicPingHandler<TSubstream> {
         let ping_timeout = Duration::from_secs(30);
 
         PeriodicPingHandler {
-            ping_config: toggleable::toggleable(Default::default()),
+            ping_config: upgrade::toggleable(Default::default()),
             out_state: OutState::NeedToOpen {
                 expires: Delay::new(Instant::now() + ping_timeout),
             },
@@ -153,7 +153,7 @@ where
     type OutEvent = OutEvent;
     type Substream = TSubstream;
     type InboundProtocol = DeniedUpgrade;
-    type OutboundProtocol = toggleable::Toggleable<Ping<Instant>>;
+    type OutboundProtocol = upgrade::Toggleable<Ping<Instant>>;
     type OutboundOpenInfo = ();
 
     #[inline]

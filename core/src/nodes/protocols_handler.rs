@@ -25,8 +25,9 @@ use crate::{
         InboundUpgrade,
         OutboundUpgrade,
         UpgradeInfo,
-        apply::{InboundUpgradeApply, OutboundUpgradeApply},
-        denied::DeniedUpgrade
+        InboundUpgradeApply,
+        OutboundUpgradeApply,
+        DeniedUpgrade
     }
 };
 use futures::prelude::*;
