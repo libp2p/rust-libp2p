@@ -21,13 +21,15 @@
 pub mod apply;
 pub mod denied;
 pub mod error;
+pub mod toggleable;
 
 use bytes::Bytes;
 use futures::future::Future;
 
-pub use self::error::Error;
+pub use self::apply::{apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply};
 pub use self::denied::DeniedUpgrade;
-pub use self::apply::{apply_inbound, apply_outbound};
+pub use self::error::Error;
+pub use self::toggleable::toggleable;
 
 pub trait UpgradeInfo {
     type UpgradeId;

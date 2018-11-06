@@ -20,5 +20,9 @@
 
 #[cfg(test)]
 pub(crate) mod dummy_muxer;
+
 #[cfg(test)]
 pub(crate) mod dummy_transport;
+
+#[cfg(test)]
+pub(crate) mod dummy_handler;

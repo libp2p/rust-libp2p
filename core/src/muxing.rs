@@ -268,9 +268,10 @@ impl<P> fmt::Debug for SubstreamRef<P>
 where
     P: Deref,
     P::Target: StreamMuxer,
+    <P::Target as StreamMuxer>::Substream: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "Substream({:?})", self)
+        write!(f, "Substream({:?})", self.substream)
     }
 }
 

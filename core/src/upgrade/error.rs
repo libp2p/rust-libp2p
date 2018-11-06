@@ -29,6 +29,26 @@ pub enum Error<E> {
     __Nonexhaustive
 }
 
+impl<E> Error<E> {
+    pub fn map_err<F, T>(self, f: F) -> Error<T>
+    where
+        F: FnOnce(E) -> T
+    {
+        match self {
+            Error::Select(e) => Error::Select(e),
+            Error::Apply(e) => Error::Apply(f(e)),
+            Error::__Nonexhaustive => Error::__Nonexhaustive
+        }
+    }
+
+    pub fn from_err<T>(self) -> Error<T>
+    where
+        T: From<E>
+    {
+        self.map_err(Into::into)
+    }
+}
+
 impl<E> fmt::Display for Error<E>
 where
     E: fmt::Display

@@ -28,7 +28,7 @@
 //!
 //! Whenever a new connection or a new multiplexed substream is opened, libp2p uses
 //! `multistream-select` to negotiate with the remote which protocol to use. After a protocol has
-//! been successfully negotiated, the stream (ie. the connection or the multiplexed substream)
+//! been successfully negotiated, the stream (i.e. the connection or the multiplexed substream)
 //! immediately stops using `multistream-select` and starts using the negotiated protocol.
 //!
 //! ## Protocol explanation

@@ -29,6 +29,31 @@ pub enum Error<T, U> {
     __Nonexhaustive
 }
 
+impl<T, U> Error<T, U> {
+    pub fn map_transport_err<F, E>(self, f: F) -> Error<E, U>
+    where
+        F: FnOnce(T) -> E
+    {
+        match self {
+            Error::Transport(t) => Error::Transport(f(t)),
+            Error::Upgrade(e) => Error::Upgrade(e),
+            Error::__Nonexhaustive => Error::__Nonexhaustive
+        }
+    }
+
+    pub fn map_upgrade_err<F, E>(self, f: F) -> Error<T, E>
+    where
+        F: FnOnce(U) -> E
+    {
+        match self {
+            Error::Transport(t) => Error::Transport(t),
+            Error::Upgrade(e) => Error::Upgrade(e.map_err(f)),
+            Error::__Nonexhaustive => Error::__Nonexhaustive
+        }
+    }
+}
+
+
 impl<T, U> fmt::Display for Error<T, U>
 where
     T: fmt::Display,
