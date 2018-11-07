@@ -55,7 +55,7 @@ pub use self::upgrade::UpgradedNode;
 /// A transport is an object that can be used to produce connections by listening or dialing a
 /// peer.
 ///
-/// This trait is implemented on concrete transports (eg. TCP, UDP, etc.), but also on wrappers
+/// This trait is implemented on concrete transports (e.g. TCP, UDP, etc.), but also on wrappers
 /// around them.
 ///
 /// > **Note**: The methods of this trait use `self` and not `&self` or `&mut self`. In other
@@ -74,7 +74,7 @@ pub trait Transport {
     type Listener: Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>;
 
     /// After a connection has been received, we may need to do some asynchronous pre-processing
-    /// on it (eg. an intermediary protocol negotiation). While this pre-processing takes place, we
+    /// on it (e.g. an intermediary protocol negotiation). While this pre-processing takes place, we
     /// want to be able to continue polling on the listener.
     type ListenerUpgrade: Future<Item = Self::Output, Error = IoError>;
 

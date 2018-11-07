@@ -24,7 +24,7 @@ use {PeerId, TTL};
 
 /// Implemented on objects that store peers.
 ///
-/// Note that the methods of this trait take by ownership (ie. `self` instead of `&self` or
+/// Note that the methods of this trait take by ownership (i.e. `self` instead of `&self` or
 /// `&mut self`). This was made so that the associated types could hold `self` internally and
 /// because Rust doesn't have higher-ranked trait bounds yet.
 ///

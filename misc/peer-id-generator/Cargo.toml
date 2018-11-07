@@ -1,0 +1,12 @@
+[package]
+name = "peer-id-generator"
+version = "0.1.0"
+description = "Generate peer ids that are prefixed with a specific string"
+authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
+
+[dependencies]
+libp2p-core = { path = "../../core" }
+libp2p-secio = { path = "../../protocols/secio" }
+num_cpus = "1.8"
+rand = "0.5"
