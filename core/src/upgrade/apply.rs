@@ -53,6 +53,7 @@ where
     inner: UpgradeApplyState<C, U>
 }
 
+#[must_use = "futures do nothing unless polled"]
 enum UpgradeApplyState<C, U>
 where
     U: ConnectionUpgrade<C>,
@@ -142,6 +143,7 @@ where
 }
 
 /// Future, returned by `negotiate`, which negotiates a protocol and stream.
+#[must_use = "futures do nothing unless polled"]
 pub struct NegotiationFuture<R: AsyncRead + AsyncWrite, I, P> {
     inner: Either<ListenerSelectFuture<R, I, P>, DialerSelectFuture<R, I, P>>
 }
@@ -191,5 +193,3 @@ where
         self.0.size_hint()
     }
 }
-
-

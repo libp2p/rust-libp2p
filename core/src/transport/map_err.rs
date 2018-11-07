@@ -100,6 +100,7 @@ where T: Transport,
 }
 
 /// Listening upgrade future for `MapErr`.
+#[must_use = "futures do nothing unless polled"]
 pub struct MapErrListenerUpgrade<T, F>
 where T: Transport {
     inner: T::ListenerUpgrade,
@@ -129,6 +130,7 @@ where T: Transport,
 }
 
 /// Dialing future for `MapErr`.
+#[must_use = "futures do nothing unless polled"]
 pub struct MapErrDial<T, F>
 where T: Transport,
     F: FnOnce(IoError) -> IoError,

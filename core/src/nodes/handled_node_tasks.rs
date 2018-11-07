@@ -306,6 +306,7 @@ enum InToExtMessage<TOutEvent, THandler> {
 
 /// Implementation of `Future` that handles a single node, and all the communications between
 /// the various components of the `HandledNodesTasks`.
+#[must_use = "futures do nothing unless polled"]
 struct NodeTask<TFut, TMuxer, THandler, TInEvent, TOutEvent>
 where
     TMuxer: StreamMuxer,
