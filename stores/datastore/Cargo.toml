@@ -6,7 +6,7 @@ license = "MIT"
 
 [dependencies]
 base64 = "0.7"
-chashmap = { git = "https://github.com/redox-os/tfs" }
+chashmap = "2.2"
 futures = "0.1"
 serde = "1.0"
 serde_json = "1.0"
