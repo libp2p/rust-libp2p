@@ -31,7 +31,7 @@
 //! use libp2p_tcp_transport::TcpConfig;
 //!
 //! # fn main() {
-//! let tcp = TcpConfig::new();
+//! let tcp = TcpConfig::default();
 //! # }
 //! ```
 //!
@@ -59,7 +59,7 @@ use tokio_tcp::{ConnectFuture, Incoming, TcpListener, TcpStream};
 ///
 /// The TCP sockets created by libp2p will need to be progressed by running the futures and streams
 /// obtained by libp2p through the tokio reactor.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct TcpConfig {
     /// How long a listener should sleep after receiving an error, before trying again.
     sleep_on_error: Duration,
@@ -75,10 +75,10 @@ pub struct TcpConfig {
     nodelay: Option<bool>,
 }
 
-impl TcpConfig {
+impl Default for TcpConfig {
     /// Creates a new configuration object for TCP/IP.
     #[inline]
-    pub fn new() -> TcpConfig {
+    fn default() -> Self {
         TcpConfig {
             sleep_on_error: Duration::from_millis(100),
             recv_buffer_size: None,
@@ -88,7 +88,9 @@ impl TcpConfig {
             nodelay: None,
         }
     }
+}
 
+impl TcpConfig {
     /// Sets the size of the recv buffer size to set for opened sockets.
     #[inline]
     pub fn recv_buffer_size(mut self, value: usize) -> Self {
@@ -460,7 +462,7 @@ mod tests {
 
         std::thread::spawn(move || {
             let addr = "/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap();
-            let tcp = TcpConfig::new();
+            let tcp = TcpConfig::default();
             let mut rt = Runtime::new().unwrap();
             let handle = rt.handle();
             let listener = tcp.listen_on(addr).unwrap().0.for_each(|(sock, _)| {
@@ -483,7 +485,7 @@ mod tests {
         });
         std::thread::sleep(std::time::Duration::from_millis(100));
         let addr = "/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap();
-        let tcp = TcpConfig::new();
+        let tcp = TcpConfig::default();
         // Obtain a future socket through dialing
         let socket = tcp.dial(addr.clone()).unwrap();
         // Define what to do with the socket once it's obtained
@@ -498,7 +500,7 @@ mod tests {
 
     #[test]
     fn replace_port_0_in_returned_multiaddr_ipv4() {
-        let tcp = TcpConfig::new();
+        let tcp = TcpConfig::default();
 
         let addr = "/ip4/127.0.0.1/tcp/0".parse::<Multiaddr>().unwrap();
         assert!(addr.to_string().contains("tcp/0"));
@@ -509,7 +511,7 @@ mod tests {
 
     #[test]
     fn replace_port_0_in_returned_multiaddr_ipv6() {
-        let tcp = TcpConfig::new();
+        let tcp = TcpConfig::default();
 
         let addr: Multiaddr = "/ip6/::1/tcp/0".parse().unwrap();
         assert!(addr.to_string().contains("tcp/0"));
@@ -520,7 +522,7 @@ mod tests {
 
     #[test]
     fn larger_addr_denied() {
-        let tcp = TcpConfig::new();
+        let tcp = TcpConfig::default();
 
         let addr = "/ip4/127.0.0.1/tcp/12345/tcp/12345"
             .parse::<Multiaddr>()
@@ -530,7 +532,7 @@ mod tests {
 
     #[test]
     fn nat_traversal() {
-        let tcp = TcpConfig::new();
+        let tcp = TcpConfig::default();
 
         let server = "/ip4/127.0.0.1/tcp/10000".parse::<Multiaddr>().unwrap();
         let observed = "/ip4/80.81.82.83/tcp/25000".parse::<Multiaddr>().unwrap();

@@ -281,7 +281,7 @@ mod tests {
 
     #[test]
     fn dialer_connects_to_listener_ipv4() {
-        let ws_config = WsConfig::new(tcp::TcpConfig::new());
+        let ws_config = WsConfig::new(tcp::TcpConfig::default());
 
         let (listener, addr) = ws_config
             .clone()
@@ -305,7 +305,7 @@ mod tests {
 
     #[test]
     fn dialer_connects_to_listener_ipv6() {
-        let ws_config = WsConfig::new(tcp::TcpConfig::new());
+        let ws_config = WsConfig::new(tcp::TcpConfig::default());
 
         let (listener, addr) = ws_config
             .clone()
@@ -330,7 +330,7 @@ mod tests {
 
     #[test]
     fn nat_traversal() {
-        let ws_config = WsConfig::new(tcp::TcpConfig::new());
+        let ws_config = WsConfig::new(tcp::TcpConfig::default());
 
         {
             let server = "/ip4/127.0.0.1/tcp/10000/ws".parse::<Multiaddr>().unwrap();

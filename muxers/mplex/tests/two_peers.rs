@@ -43,7 +43,7 @@ fn client_to_server_outbound() {
 
     let bg_thread = thread::spawn(move || {
         let transport =
-            TcpConfig::new().with_listener_upgrade(multiplex::MplexConfig::new());
+            TcpConfig::default().with_listener_upgrade(multiplex::MplexConfig::new());
 
         let (listener, addr) = transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -72,7 +72,7 @@ fn client_to_server_outbound() {
         let _ = rt.block_on(future).unwrap();
     });
 
-    let transport = TcpConfig::new().with_dialer_upgrade(multiplex::MplexConfig::new());
+    let transport = TcpConfig::default().with_dialer_upgrade(multiplex::MplexConfig::new());
 
     let future = transport
         .dial(rx.recv().unwrap())
@@ -94,7 +94,7 @@ fn client_to_server_inbound() {
     let (tx, rx) = mpsc::channel();
 
     let bg_thread = thread::spawn(move || {
-        let transport = TcpConfig::new().with_listener_upgrade(multiplex::MplexConfig::new());
+        let transport = TcpConfig::default().with_listener_upgrade(multiplex::MplexConfig::new());
 
         let (listener, addr) = transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -123,7 +123,7 @@ fn client_to_server_inbound() {
         let _ = rt.block_on(future).unwrap();
     });
 
-    let transport = TcpConfig::new().with_dialer_upgrade(multiplex::MplexConfig::new());
+    let transport = TcpConfig::default().with_dialer_upgrade(multiplex::MplexConfig::new());
 
     let future = transport
         .dial(rx.recv().unwrap())

@@ -37,7 +37,7 @@ use transport_timeout::TransportTimeout;
 /// use libp2p::tcp::TcpConfig;
 /// use std::time::Duration;
 ///
-/// let _transport = TcpConfig::new()
+/// let _transport = TcpConfig::default()
 ///     .with_dialer_timeout(Duration::from_secs(20))
 ///     .with_dialer_rate_limit(1024 * 1024, 1024 * 1024);
 /// ```
@@ -84,7 +84,7 @@ pub trait DialerExt: Dialer {
 /// use libp2p::tcp::TcpConfig;
 /// use std::time::Duration;
 ///
-/// let _transport = TcpConfig::new()
+/// let _transport = TcpConfig::default()
 ///     .with_listener_timeout(Duration::from_secs(20))
 ///     .with_listener_rate_limit(1024 * 1024, 1024 * 1024);
 /// ```

@@ -499,7 +499,7 @@ mod tests {
             let (tx, rx) = mpsc::channel();
 
             let bg_thread = thread::spawn(move || {
-                let transport = TcpConfig::new().with_listener_upgrade(KademliaProtocolConfig);
+                let transport = TcpConfig::default().with_listener_upgrade(KademliaProtocolConfig);
 
                 let (listener, addr) = transport
                     .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -523,7 +523,7 @@ mod tests {
                 let _ = rt.block_on(future).unwrap();
             });
 
-            let transport = TcpConfig::new().with_dialer_upgrade(KademliaProtocolConfig);
+            let transport = TcpConfig::default().with_dialer_upgrade(KademliaProtocolConfig);
 
             let future = transport
                 .dial(rx.recv().unwrap())

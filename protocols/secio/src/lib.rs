@@ -45,7 +45,7 @@
 //! use tokio_io::io::write_all;
 //! use tokio::runtime::current_thread::Runtime;
 //!
-//! let dialer = TcpConfig::new()
+//! let dialer = TcpConfig::default()
 //!     .with_dialer_upgrade({
 //!         # let private_key = b"";
 //!         //let private_key = include_bytes!("test-rsa-private-key.pk8");

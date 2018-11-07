@@ -46,7 +46,7 @@ use void::Void;
 /// use futures::prelude::*;
 /// use libp2p_core::nodes::listeners::{ListenersEvent, ListenersStream};
 ///
-/// let mut listeners = ListenersStream::new(libp2p_tcp_transport::TcpConfig::new());
+/// let mut listeners = ListenersStream::new(libp2p_tcp_transport::TcpConfig::default());
 ///
 /// // Ask the `listeners` to start listening on the given multiaddress.
 /// listeners.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();

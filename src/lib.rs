@@ -46,7 +46,7 @@
 //!
 //! ```rust
 //! use libp2p::{Multiaddr, Dialer, tcp::TcpConfig};
-//! let tcp_transport = TcpConfig::new();
+//! let tcp_transport = TcpConfig::default();
 //! let addr: Multiaddr = "/ip4/98.97.96.95/tcp/20500".parse().expect("invalid multiaddr");
 //! let _outgoing_connec = tcp_transport.dial(addr);
 //! // Note that `_outgoing_connec` is a `Future`, and therefore doesn't do anything by itself
@@ -91,7 +91,7 @@
 //! ```rust
 //! # #[cfg(all(not(target_os = "emscripten"), feature = "libp2p-secio"))] {
 //! use libp2p::{Dialer, tcp::TcpConfig, secio::{SecioConfig, SecioKeyPair}};
-//! let tcp_transport = TcpConfig::new();
+//! let tcp_transport = TcpConfig::default();
 //! let secio_upgrade = SecioConfig::new(SecioKeyPair::ed25519_generated().unwrap());
 //! let with_security = tcp_transport.with_dialer_upgrade(secio_upgrade);
 //! // let _ = with_security.dial(...);
@@ -203,12 +203,12 @@ impl CommonTransport {
     #[inline]
     #[cfg(not(target_os = "emscripten"))]
     pub fn new() -> CommonTransport {
-        let dns = dns::DnsDialer::new(tcp::TcpConfig::new());
+        let dns = dns::DnsDialer::new(tcp::TcpConfig::default());
         let web = websocket::WsConfig::new(dns.clone());
 
         let dialer = dns.or_dialer(web.clone());
-        let listener = tcp::TcpConfig::new()
-            .or_listener(websocket::WsConfig::new(tcp::TcpConfig::new()));
+        let listener = tcp::TcpConfig::default()
+            .or_listener(websocket::WsConfig::new(tcp::TcpConfig::default()));
 
         CommonTransport {
             inner: CommonTransportInner { inner: Transport::new(dialer, listener) }

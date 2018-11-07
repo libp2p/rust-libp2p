@@ -61,7 +61,7 @@
 //! use tokio::runtime::current_thread::Runtime;
 //!
 //! # fn main() {
-//! let ping_dialer = libp2p_tcp_transport::TcpConfig::new()
+//! let ping_dialer = libp2p_tcp_transport::TcpConfig::default()
 //!     .with_dialer_upgrade(Ping::default())
 //!     .dial("127.0.0.1:12345".parse::<libp2p_core::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())
 //!     .and_then(|mut pinger| {
