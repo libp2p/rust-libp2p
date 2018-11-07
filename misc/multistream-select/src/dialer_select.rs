@@ -96,6 +96,7 @@ where
 
 /// Future, returned by `dialer_select_proto_serial` which selects a protocol
 /// and dialer sequentially.
+#[must_use = "futures do nothing unless polled"]
 pub struct DialerSelectSeq<R: AsyncRead + AsyncWrite, I, P> {
     inner: DialerSelectSeqState<R, I, P>
 }
@@ -233,6 +234,7 @@ where
 /// Future, returned by `dialer_select_proto_parallel`, which selects a protocol and dialer in
 /// parellel, by first requesting the liste of protocols supported by the remote endpoint and
 /// then selecting the most appropriate one by applying a match predicate to the result.
+#[must_use = "futures do nothing unless polled"]
 pub struct DialerSelectPar<R: AsyncRead + AsyncWrite, I, P> {
     inner: DialerSelectParState<R, I, P>
 }
@@ -377,5 +379,3 @@ where
         }
     }
 }
-
-

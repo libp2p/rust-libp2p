@@ -33,6 +33,7 @@ use unsigned_varint::decode;
 
 /// Wraps around a `AsyncRead+AsyncWrite`. Assumes that we're on the dialer's side. Produces and
 /// accepts messages.
+#[must_use = "streams do nothing unless polled"]
 pub struct Dialer<R> {
     inner: LengthDelimited<Bytes, R>,
     handshake_finished: bool,
@@ -166,6 +167,7 @@ where
 }
 
 /// Future, returned by `Dialer::new`, which send the handshake and returns the actual `Dialer`.
+#[must_use = "futures do nothing unless polled"]
 pub struct DialerFuture<T: AsyncWrite> {
     inner: sink::Send<LengthDelimited<Bytes, T>>
 }

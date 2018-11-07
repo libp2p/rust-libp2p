@@ -157,6 +157,7 @@ where
 }
 
 /// Future returned by `outbound_from_ref_and_wrap`.
+#[must_use = "futures do nothing unless polled"]
 pub struct OutboundSubstreamRefWrapFuture<P>
 where
     P: Deref + Clone,
@@ -201,6 +202,7 @@ where
 }
 
 /// Future returned by `outbound_from_ref`.
+#[must_use = "futures do nothing unless polled"]
 pub struct OutboundSubstreamRefFuture<P>
 where
     P: Deref,

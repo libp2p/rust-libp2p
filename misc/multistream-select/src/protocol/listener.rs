@@ -34,6 +34,7 @@ use unsigned_varint::encode;
 
 /// Wraps around a `AsyncRead+AsyncWrite`. Assumes that we're on the listener's side. Produces and
 /// accepts messages.
+#[must_use = "streams do nothing unless polled"]
 pub struct Listener<R> {
     inner: LengthDelimited<Bytes, R>
 }
@@ -167,6 +168,7 @@ where
 
 /// Future, returned by `Listener::new` which performs the handshake and returns
 /// the `Listener` if successful.
+#[must_use = "futures do nothing unless polled"]
 pub struct ListenerFuture<T: AsyncRead + AsyncWrite> {
     inner: ListenerFutureState<T>
 }

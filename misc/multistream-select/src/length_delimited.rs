@@ -30,6 +30,7 @@ use unsigned_varint::codec::UviBytes;
 ///
 /// We purposely only support a frame length of under 64kiB. Frames mostly consist
 /// in a short protocol name, which is highly unlikely to be more than 64kiB long.
+#[must_use = "streams do nothing unless polled"]
 pub struct LengthDelimited<I, S> {
     // The inner socket where data is pulled from.
     inner: FramedWrite<S, UviBytes>,
@@ -348,4 +349,3 @@ mod tests {
         }
     }
 }
-

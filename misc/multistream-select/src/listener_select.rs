@@ -54,6 +54,7 @@ where
 }
 
 /// Future, returned by `listener_select_proto` which selects a protocol among the ones supported.
+#[must_use = "futures do nothing unless polled"]
 pub struct ListenerSelectFuture<R: AsyncRead + AsyncWrite, I, P> {
     inner: ListenerSelectState<R, I, P>
 }
