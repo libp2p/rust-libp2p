@@ -38,6 +38,7 @@ use futures::StartSend;
 /// frames isn't handled by this module.
 ///
 /// Also implements `Sink` for convenience.
+#[must_use = "streams do nothing unless polled"]
 pub struct DecoderMiddleware<S> {
     cipher_state: StreamCipher,
     hmac: Hmac,

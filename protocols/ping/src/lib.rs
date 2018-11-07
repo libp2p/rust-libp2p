@@ -187,6 +187,7 @@ where TSocket: AsyncRead + AsyncWrite,
 /// Sends pings and receives the pongs.
 ///
 /// Implements `Stream`. The stream indicates when we receive a pong.
+#[must_use = "streams do nothing unless polled"]
 pub struct PingDialer<TSocket, TUserData> {
     /// The underlying socket.
     inner: Framed<TSocket, Codec>,
@@ -278,6 +279,7 @@ where TSocket: AsyncRead + AsyncWrite,
 /// Listens to incoming pings and answers them.
 ///
 /// Implements `Future`. The future terminates when the underlying socket closes.
+#[must_use = "futures do nothing unless polled"]
 pub struct PingListener<TSocket> {
     /// The underlying socket.
     inner: Framed<TSocket, Codec>,

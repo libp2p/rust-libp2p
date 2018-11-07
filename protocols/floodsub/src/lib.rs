@@ -480,6 +480,7 @@ impl FloodSubController {
 }
 
 /// Implementation of `Stream` that provides messages for the subscribed topics you subscribed to.
+#[must_use = "streams do nothing unless polled"]
 pub struct FloodSubReceiver {
     inner: mpsc::UnboundedReceiver<Message>,
 }

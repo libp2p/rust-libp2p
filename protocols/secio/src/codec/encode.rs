@@ -31,6 +31,7 @@ use futures::prelude::*;
 /// prefix is not covered by this module.
 ///
 /// Also implements `Stream` for convenience.
+#[must_use = "streams do nothing unless polled"]
 pub struct EncoderMiddleware<S> {
     cipher_state: StreamCipher,
     hmac: Hmac,

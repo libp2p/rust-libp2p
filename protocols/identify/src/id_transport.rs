@@ -121,6 +121,7 @@ where
 
 /// Implementation of `Future` that asks the remote of its `PeerId`.
 // TODO: remove unneeded bounds
+#[must_use = "futures do nothing unless polled"]
 struct IdRetriever<TMuxer>
 where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
       TMuxer::Substream: Send,

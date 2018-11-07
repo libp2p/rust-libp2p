@@ -397,6 +397,7 @@ fn map_err(err: SecioError) -> IoError {
 ///
 /// Implements `Sink` and `Stream` whose items are frames of data. Each frame is encoded
 /// individually, so you are encouraged to group data in few frames if possible.
+#[must_use = "streams do nothing unless polled"]
 pub struct SecioMiddleware<S> {
     inner: codec::FullCodec<S>,
 }
