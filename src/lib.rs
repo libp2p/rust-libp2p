@@ -194,7 +194,7 @@ pub type InnerImplementation =
     >;
 
 #[cfg(target_os = "emscripten")]
-pub type InnerImplementation = websocket::BrowserWsConfig;
+pub type InnerImplementation = Transport<websocket::BrowserWsConfig, transport::DeniedListener>;
 
 #[derive(Debug, Clone)]
 struct CommonTransportInner {
@@ -221,7 +221,7 @@ impl CommonTransport {
     #[inline]
     #[cfg(target_os = "emscripten")]
     pub fn new() -> CommonTransport {
-        let inner = websocket::BrowserWsConfig::new();
+        let inner = Transport::dialer(websocket::BrowserWsConfig::new());
         CommonTransport {
             inner: CommonTransportInner { inner: inner }
         }
