@@ -37,7 +37,7 @@
 //! use libp2p_uds::UdsConfig;
 //!
 //! # fn main() {
-//! let uds = UdsConfig::new();
+//! let uds = UdsConfig::default();
 //! # }
 //! ```
 //!
@@ -72,18 +72,21 @@ use tokio_uds::{UnixListener, UnixStream};
 ///
 /// The Unixs sockets created by libp2p will need to be progressed by running the futures and
 /// streams obtained by libp2p through the tokio reactor.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct UdsConfig { }
 
-impl UdsConfig {
-    /// Creates a new configuration object for TCP/IP.
-    #[inline]
-    pub fn new() -> UdsConfig {
-        UdsConfig {}
+#[derive(Clone, Debug, Default)]
+pub struct UdsListener {
+    config: UdsConfig
+}
+
+impl UdsListener {
+    pub fn new(config: UdsConfig) -> Self {
+        UdsListener { config }
     }
 }
 
-impl Listener for UdsConfig {
+impl Listener for UdsListener {
     type Output = UnixStream;
     type Error = io::Error;
     type Inbound = Box<Stream<Item = (Self::Upgrade, Multiaddr), Error = io::Error> + Send + Sync>;
@@ -126,7 +129,18 @@ impl Listener for UdsConfig {
     }
 }
 
-impl Dialer for UdsConfig {
+#[derive(Clone, Debug, Default)]
+pub struct UdsDialer {
+    config: UdsConfig
+}
+
+impl UdsDialer {
+    pub fn new(config: UdsConfig) -> Self {
+        UdsDialer { config }
+    }
+}
+
+impl Dialer for UdsDialer {
     type Output = UnixStream;
     type Error = io::Error;
     type Outbound = Box<Future<Item = UnixStream, Error = Self::Error> + Send + Sync>;  // TODO: name this type
@@ -170,7 +184,7 @@ fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
 #[cfg(test)]
 mod tests {
     use tokio::runtime::current_thread::Runtime;
-    use super::{multiaddr_to_path, UdsConfig};
+    use super::{multiaddr_to_path, UdsDialer, UdsListener};
     use futures::stream::Stream;
     use futures::Future;
     use multiaddr::{Protocol, Multiaddr};
@@ -205,11 +219,10 @@ mod tests {
         let addr2 = addr.clone();
 
         std::thread::spawn(move || {
-            let tcp = UdsConfig::new();
-
+            let listener = UdsListener::default();
             let mut rt = Runtime::new().unwrap();
             let handle = rt.handle();
-            let listener = tcp.listen_on(addr2).unwrap().0.for_each(|(sock, _)| {
+            let inbound = listener.listen_on(addr2).unwrap().0.for_each(|(sock, _)| {
                 sock.and_then(|sock| {
                     // Define what to do with the socket that just connected to us
                     // Which in this case is read 3 bytes
@@ -223,13 +236,14 @@ mod tests {
                 })
             });
 
-            rt.block_on(listener).unwrap();
+            rt.block_on(inbound).unwrap();
             rt.run().unwrap();
         });
         std::thread::sleep(std::time::Duration::from_millis(100));
-        let tcp = UdsConfig::new();
+
+        let dialer = UdsDialer::default();
         // Obtain a future socket through dialing
-        let socket = tcp.dial(addr.clone()).unwrap();
+        let socket = dialer.dial(addr.clone()).unwrap();
         // Define what to do with the socket once it's obtained
         let action = socket.then(|sock| -> Result<(), ()> {
             sock.unwrap().write(&[0x1, 0x2, 0x3]).unwrap();
@@ -243,12 +257,13 @@ mod tests {
     #[test]
     #[ignore]       // TODO: for the moment unix addresses fail to parse
     fn larger_addr_denied() {
-        let tcp = UdsConfig::new();
+        let listener = UdsListener::default();
 
         let addr = "/ip4/127.0.0.1/tcp/12345/unix//foo/bar"
             .parse::<Multiaddr>()
             .unwrap();
-        assert!(tcp.listen_on(addr).is_err());
+
+        assert!(listener.listen_on(addr).is_err());
     }
 
     #[test]
