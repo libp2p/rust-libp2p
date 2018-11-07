@@ -164,7 +164,7 @@ pub struct Multiplex<C> {
 
 // Struct shared throughout the implementation.
 struct MultiplexInner<C> {
-    // Errored that happend earlier. Should poison any attempt to use this `MultiplexError`.
+    // Error that happened earlier. Should poison any attempt to use this `MultiplexError`.
     error: Result<(), IoError>,
     // Underlying stream.
     inner: executor::Spawn<Fuse<Framed<C, codec::Codec>>>,
