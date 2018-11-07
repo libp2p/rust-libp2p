@@ -51,6 +51,7 @@ use PeerId;
 
 /// Implementation of `Stream` that handles a collection of nodes.
 // TODO: implement Debug
+#[must_use = "streams do nothing unless polled"]
 pub struct HandledNodesTasks<TInEvent, TOutEvent, THandler> {
     /// For each active task, a sender allowing to transmit messages. Closing the sender interrupts
     /// the task. It is possible that we receive messages from tasks that used to be in this list

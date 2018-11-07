@@ -145,6 +145,7 @@ impl<TOutboundOpenInfo, TCustom> NodeHandlerEvent<TOutboundOpenInfo, TCustom> {
 
 /// A node combined with an implementation of `NodeHandler`.
 // TODO: impl Debug
+#[must_use = "streams do nothing unless polled"]
 pub struct HandledNode<TMuxer, THandler>
 where
     TMuxer: StreamMuxer,

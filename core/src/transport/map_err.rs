@@ -76,6 +76,7 @@ where
 }
 
 /// Listening stream for `MapErr`.
+#[must_use = "streams do nothing unless polled"]
 pub struct MapErrListener<T, F>
 where T: Transport {
     inner: T::Listener,

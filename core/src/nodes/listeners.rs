@@ -74,6 +74,7 @@ use {Multiaddr, Transport};
 /// tokio::run(future.map_err(|_| ()));
 /// # }
 /// ```
+#[must_use = "streams do nothing unless polled"]
 pub struct ListenersStream<TTrans>
 where
     TTrans: Transport,

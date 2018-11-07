@@ -147,6 +147,7 @@ pub type Channel<T> = RwStreamSink<Chan<T>>;
 /// A channel represents an established, in-memory, logical connection between two endpoints.
 ///
 /// Implements `Sink` and `Stream`.
+#[must_use = "streams do nothing unless polled"]
 pub struct Chan<T = Bytes> {
     incoming: mpsc::UnboundedReceiver<T>,
     outgoing: mpsc::UnboundedSender<T>,
