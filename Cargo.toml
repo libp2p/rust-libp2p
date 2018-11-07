@@ -35,7 +35,6 @@ tokio-io = "0.1"
 [target.'cfg(not(target_os = "emscripten"))'.dependencies]
 libp2p-dns = { path = "./transports/dns" }
 libp2p-tcp-transport = { path = "./transports/tcp" }
-tokio-current-thread = "0.1"
 
 [target.'cfg(target_os = "emscripten")'.dependencies]
 stdweb = { version = "0.1.3", default-features = false }
