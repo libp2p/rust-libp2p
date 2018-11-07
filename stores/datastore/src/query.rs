@@ -136,6 +136,7 @@ where
 
 /// Returned by `naive_apply_keys_only`.
 #[derive(Debug, Clone)]
+#[must_use = "streams do nothing unless polled"]
 pub struct NaiveKeysOnlyApply<S> {
     keys_only: bool,
     stream: S,
@@ -176,6 +177,7 @@ where
 
 /// Returned by `naive_apply_prefix`.
 #[derive(Debug, Clone)]
+#[must_use = "streams do nothing unless polled"]
 pub struct NaivePrefixApply<'a, S> {
     prefix: Cow<'a, str>,
     stream: S,
@@ -249,6 +251,7 @@ where
 }
 
 /// Returned by `naive_apply_ordered`.
+#[must_use = "streams do nothing unless polled"]
 pub struct NaiveApplyOrdered<'a, S, T> {
     inner: NaiveApplyOrderedInner<'a, S, T>,
 }
@@ -291,6 +294,7 @@ where
 
 /// Returned by `naive_apply_prefix`.
 #[derive(Debug, Clone)]
+#[must_use = "streams do nothing unless polled"]
 pub struct NaiveFiltersApply<'a, S, I> {
     filters: I,
     stream: S,
