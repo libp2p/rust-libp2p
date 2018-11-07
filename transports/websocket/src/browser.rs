@@ -43,17 +43,17 @@ use tokio_io::{AsyncRead, AsyncWrite};
 /// If the underlying multiaddress uses `/dns4` or `/dns6`, then the domain name will be passed in
 /// the headers of the request. This is important is the listener is behind an HTTP proxy.
 #[derive(Debug, Clone)]
-pub struct BrowserWsConfig;
+pub struct BrowserWsDialer;
 
-impl BrowserWsConfig {
+impl BrowserWsDialer {
     /// Creates a new configuration object for websocket.
     #[inline]
-    pub fn new() -> BrowserWsConfig {
-        BrowserWsConfig
+    pub fn new() -> BrowserWsDialer {
+        BrowserWsDialer
     }
 }
 
-impl Dialer for BrowserWsConfig {
+impl Dialer for BrowserWsDialer {
     type Output = BrowserWsConn;
     type Error = IoError;
     type Outbound = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;

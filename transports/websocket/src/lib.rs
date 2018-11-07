@@ -30,16 +30,15 @@
 //!
 //! # Emscripten
 //!
-//! On emscripten, you can create a `BrowserWsConfig` object with `BrowserWsConfig::new()`. It can
-//! then be used as a transport.
+//! On emscripten, you can create a `BrowserWsDialer` object with `BrowserWsDialer::new()`.
 //!
 //! Listening on a websockets multiaddress isn't supported on emscripten. Dialing a multiaddress
 //! which uses `ws` on top of TCP/IP will automatically use the `XMLHttpRequest` Javascript object.
 //!
 //! ```ignore
-//! use libp2p_websocket::BrowserWsConfig;
+//! use libp2p_websocket::BrowserWsDialer;
 //!
-//! let ws_config = BrowserWsConfig::new();
+//! let dialer = BrowserWsDialer::new();
 //! // let _ = ws_config.dial("/ip4/40.41.42.43/tcp/12345/ws".parse().unwrap());
 //! ```
 //!
@@ -58,10 +57,10 @@
 //!
 //! use libp2p_core::{Multiaddr, transport::Dialer};
 //! use libp2p_tcp_transport::TcpDialer;
-//! use libp2p_websocket::WsConfig;
+//! use libp2p_websocket::WsDialer;
 //!
 //! # fn main() {
-//! let ws_config = WsConfig::new(TcpDialer::default());
+//! let ws_config = WsDialer::new(TcpDialer::default());
 //! # return;
 //! let _ = ws_config.dial("/ip4/40.41.42.43/tcp/12345/ws".parse().unwrap());
 //! # }
@@ -87,6 +86,6 @@ mod browser;
 mod desktop;
 
 #[cfg(target_os = "emscripten")]
-pub use self::browser::{BrowserWsConfig, BrowserWsConn};
+pub use self::browser::{BrowserWsDialer, BrowserWsConn};
 #[cfg(not(target_os = "emscripten"))]
-pub use self::desktop::WsConfig;
+pub use self::desktop::{WsDialer, WsListener};

@@ -44,34 +44,34 @@ use websocket::{
 ///
 /// > **Note**: `/wss` is only supported for dialing and not listening.
 #[derive(Debug, Clone)]
-pub struct WsConfig<T> {
-    transport: T,
+pub struct WsListener<L> {
+    listener: L
 }
 
-impl<T> WsConfig<T> {
+impl<L> WsListener<L> {
     /// Creates a new configuration object for websocket.
     ///
     /// The websockets will run on top of the `Transport` you pass as parameter.
     #[inline]
-    pub fn new(inner: T) -> WsConfig<T> {
-        WsConfig { transport: inner }
+    pub fn new(listener: L) -> Self {
+        WsListener { listener }
     }
 }
 
-impl<T> Listener for WsConfig<T>
+impl<L> Listener for WsListener<L>
 where
     // TODO: this 'static is pretty arbitrary and is necessary because of the websocket library
-    T: Listener + 'static,
-    T::Inbound: Send,
-    T::Upgrade: Send,
+    L: Listener + 'static,
+    L::Inbound: Send,
+    L::Upgrade: Send,
     // TODO: this Send is pretty arbitrary and is necessary because of the websocket library
-    T::Output: AsyncRead + AsyncWrite + Send,
-    T::Error: From<IoError> + Send
+    L::Output: AsyncRead + AsyncWrite + Send,
+    L::Error: From<IoError> + Send
 {
     type Output = Box<AsyncStream + Send>;
-    type Error = T::Error;
+    type Error = L::Error;
     type Inbound =
-        stream::Map<T::Inbound, fn((<T as Listener>::Upgrade, Multiaddr)) -> (Self::Upgrade, Multiaddr)>;
+        stream::Map<L::Inbound, fn((<L as Listener>::Upgrade, Multiaddr)) -> (Self::Upgrade, Multiaddr)>;
     type Upgrade = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
 
     fn listen_on(self, original_addr: Multiaddr) -> Result<(Self::Inbound, Multiaddr), (Self, Multiaddr)> {
@@ -81,20 +81,13 @@ where
             _ => return Err((self, original_addr)),
         };
 
-        let (inner_listen, new_addr) = match self.transport.listen_on(inner_addr) {
+        let (inner_listen, new_addr) = match self.listener.listen_on(inner_addr) {
             Ok((listen, mut new_addr)) => {
                 // Need to suffix `/ws` to the listening address.
                 new_addr.append(Protocol::Ws);
                 (listen, new_addr)
             }
-            Err((transport, _)) => {
-                return Err((
-                    WsConfig {
-                        transport: transport,
-                    },
-                    original_addr,
-                ));
-            }
+            Err((listener, _)) => return Err((WsListener { listener }, original_addr))
         };
 
         debug!("Listening on {}", new_addr);
@@ -153,19 +146,34 @@ where
     }
 
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.transport.nat_traversal(server, observed)
+        self.listener.nat_traversal(server, observed)
     }
 }
 
-impl<T> Dialer for WsConfig<T>
+#[derive(Debug, Clone)]
+pub struct WsDialer<D> {
+    dialer: D
+}
+
+impl<D> WsDialer<D> {
+    /// Creates a new configuration object for websocket.
+    ///
+    /// The websockets will run on top of the `Transport` you pass as parameter.
+    #[inline]
+    pub fn new(dialer: D) -> Self {
+        WsDialer { dialer }
+    }
+}
+
+impl<D> Dialer for WsDialer<D>
 where
-    T: Dialer + 'static,
-    T::Output: AsyncRead + AsyncWrite + Send,
-    T::Outbound: Send,
-    T::Error: From<IoError> + Send
+    D: Dialer + 'static,
+    D::Output: AsyncRead + AsyncWrite + Send,
+    D::Outbound: Send,
+    D::Error: From<IoError> + Send
 {
     type Output = Box<AsyncStream + Send>;
-    type Error = T::Error;
+    type Error = D::Error;
     type Outbound = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
 
     fn dial(self, original_addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> {
@@ -186,19 +194,14 @@ where
 
         let ws_addr = client_addr_to_ws(&inner_addr, is_wss);
 
-        let inner_dial = match self.transport.dial(inner_addr) {
+        let inner_dial = match self.dialer.dial(inner_addr) {
             Ok(d) => d,
-            Err((transport, old_addr)) => {
+            Err((dialer, old_addr)) => {
                 debug!(
                     "Failed to dial {} because {} is not supported by the underlying transport",
                     original_addr, old_addr
                 );
-                return Err((
-                    WsConfig {
-                        transport: transport,
-                    },
-                    original_addr,
-                ));
+                return Err((WsDialer { dialer }, original_addr))
             }
         };
 
@@ -277,11 +280,11 @@ mod tests {
     use futures::{Future, Stream};
     use multiaddr::Multiaddr;
     use libp2p_core::transport::{Dialer, Listener};
-    use WsConfig;
+    use super::{WsDialer, WsListener};
 
     #[test]
     fn dialer_connects_to_listener_ipv4() {
-        let ws_config = WsConfig::new(tcp::TcpListener::default());
+        let ws_config = WsListener::new(tcp::TcpListener::default());
 
         let (listener, addr) = ws_config
             .clone()
@@ -294,7 +297,7 @@ mod tests {
             .map_err(|(e, _)| e)
             .and_then(|(c, _)| c.unwrap().0);
 
-        let dialer = WsConfig::new(tcp::TcpDialer::default()).dial(addr).unwrap();
+        let dialer = WsDialer::new(tcp::TcpDialer::default()).dial(addr).unwrap();
 
         let future = listener.select(dialer)
             .map_err(|(e, _)| e)
@@ -306,7 +309,7 @@ mod tests {
 
     #[test]
     fn dialer_connects_to_listener_ipv6() {
-        let ws_config = WsConfig::new(tcp::TcpListener::default());
+        let ws_config = WsListener::new(tcp::TcpListener::default());
 
         let (listener, addr) = ws_config
             .clone()
@@ -320,7 +323,7 @@ mod tests {
             .map_err(|(e, _)| e)
             .and_then(|(c, _)| c.unwrap().0);
 
-        let dialer = WsConfig::new(tcp::TcpDialer::default()).dial(addr).unwrap();
+        let dialer = WsDialer::new(tcp::TcpDialer::default()).dial(addr).unwrap();
 
         let future = listener
             .select(dialer)
@@ -333,7 +336,7 @@ mod tests {
 
     #[test]
     fn nat_traversal() {
-        let ws_config = WsConfig::new(tcp::TcpListener::default());
+        let ws_config = WsListener::new(tcp::TcpListener::default());
 
         {
             let server = "/ip4/127.0.0.1/tcp/10000/ws".parse::<Multiaddr>().unwrap();
