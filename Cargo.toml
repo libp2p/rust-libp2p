@@ -55,6 +55,7 @@ members = [
     "misc/multiaddr",
     "misc/multihash",
     "misc/multistream-select",
+    "misc/peer-id-generator",
     "misc/rw-stream-sink",
     "transports/dns",
     "protocols/floodsub",

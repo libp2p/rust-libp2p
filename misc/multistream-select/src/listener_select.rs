@@ -31,7 +31,7 @@ use ProtocolChoiceError;
 /// Helps selecting a protocol amongst the ones supported.
 ///
 /// This function expects a socket and an iterator of the list of supported protocols. The iterator
-/// must be clonable (ie. iterable multiple times), because the list may need to be accessed
+/// must be clonable (i.e. iterable multiple times), because the list may need to be accessed
 /// multiple times.
 ///
 /// The iterator must produce tuples of the name of the protocol that is advertised to the remote,
