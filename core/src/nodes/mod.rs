@@ -25,8 +25,10 @@ pub mod listeners;
 pub mod node;
 pub mod protocols_handler;
 pub mod raw_swarm;
+pub mod swarm;
 
 pub use self::node::Substream;
 pub use self::handled_node::{NodeHandlerEvent, NodeHandlerEndpoint};
 pub use self::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent};
 pub use self::raw_swarm::{ConnectedPoint, Peer, RawSwarm, RawSwarmEvent};
+pub use self::swarm::{Swarm, NetworkBehavior, NetworkBehaviorAction};
