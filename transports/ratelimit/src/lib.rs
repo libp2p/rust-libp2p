@@ -116,6 +116,7 @@ impl<C: AsyncRead + AsyncWrite> AsyncWrite for Connection<C> {
     }
 }
 
+#[must_use = "streams do nothing unless polled"]
 pub struct Listener<T: Transport>(RateLimited<T::Listener>);
 
 impl<T: Transport> Stream for Listener<T> {

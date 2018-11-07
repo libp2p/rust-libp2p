@@ -136,6 +136,7 @@ where
 
 // TODO: can be removed and replaced with an `impl Stream` once impl Trait is fully stable
 //       in Rust (https://github.com/rust-lang/rust/issues/34511)
+#[must_use = "streams do nothing unless polled"]
 pub struct TimeoutListener<InnerStream> {
     inner: InnerStream,
     timeout: Duration,

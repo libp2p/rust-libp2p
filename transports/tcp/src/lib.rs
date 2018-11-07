@@ -277,6 +277,7 @@ impl Future for TcpDialFut {
 }
 
 /// Stream that listens on an TCP/IP address.
+#[must_use = "streams do nothing unless polled"]
 pub struct TcpListenStream {
     inner: Result<SleepOnError<Incoming>, Option<IoError>>,
     /// Original configuration.
