@@ -44,82 +44,53 @@ use futures::future::{self, Future};
 use log::{Level, debug, log_enabled, trace};
 use multiaddr::{Protocol, Multiaddr};
 use std::{fmt, io, net::IpAddr};
-use libp2p_core::transport;
+use libp2p_core::transport::Dialer;
 use tokio_dns::{CpuPoolResolver, Resolver};
 
-/// Represents the configuration for a DNS transport capability of libp2p.
+/// Represents the configuration for a DNS dialer capability of libp2p.
 ///
-/// This struct implements the `Transport` trait and holds an underlying transport. Any call to
+/// This struct implements the `Dialer` trait and holds an underlying dialer. Any call to
 /// `dial` with a multiaddr that contains `/dns4/` or `/dns6/` will be first be resolved, then
 /// passed to the underlying transport.
-///
-/// Listening is unaffected.
 #[derive(Clone)]
-pub struct DnsConfig<T> {
-    inner: T,
+pub struct DnsDialer<D> {
+    dialer: D,
     resolver: CpuPoolResolver,
 }
 
-impl<T> DnsConfig<T> {
+impl<D> DnsDialer<D> {
     /// Creates a new configuration object for DNS.
     #[inline]
-    pub fn new(inner: T) -> DnsConfig<T> {
-        DnsConfig::with_resolve_threads(inner, 1)
+    pub fn new(dialer: D) -> Self {
+        DnsDialer::with_resolve_threads(dialer, 1)
     }
 
     /// Same as `new`, but allows specifying a number of threads for the resolving.
     #[inline]
-    pub fn with_resolve_threads(inner: T, num_threads: usize) -> DnsConfig<T> {
+    pub fn with_resolve_threads(dialer: D, num_threads: usize) -> Self {
         trace!("Created a CpuPoolResolver");
-
-        DnsConfig {
-            inner,
-            resolver: CpuPoolResolver::new(num_threads),
-        }
+        DnsDialer { dialer, resolver: CpuPoolResolver::new(num_threads) }
     }
 }
 
-impl<T> fmt::Debug for DnsConfig<T>
+impl<D> fmt::Debug for DnsDialer<D>
 where
-    T: fmt::Debug,
+    D: fmt::Debug,
 {
     #[inline]
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        fmt.debug_tuple("DnsConfig").field(&self.inner).finish()
+        fmt.debug_tuple("DnsDialer").field(&self.dialer).finish()
     }
 }
 
-impl<T> transport::Listener for DnsConfig<T>
+impl<D> Dialer for DnsDialer<D>
 where
-    T: transport::Listener + Send + 'static
+    D: Dialer + Send + 'static,
+    D::Outbound: Send + 'static,
+    D::Error: From<io::Error>
 {
-    type Output = T::Output;
-    type Error = T::Error;
-    type Inbound = T::Inbound;
-    type Upgrade = T::Upgrade;
-
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Inbound, Multiaddr), (Self, Multiaddr)> {
-        let resolver = self.resolver;
-        self.inner
-            .listen_on(addr)
-            .map_err(move |(inner, addr)| (DnsConfig { inner, resolver }, addr))
-    }
-
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        // Since `listen_on` doesn't perform any resolution, we just pass through
-        // `nat_traversal` as well.
-        self.inner.nat_traversal(server, observed)
-    }
-}
-
-impl<T> transport::Dialer for DnsConfig<T>
-where
-    T: transport::Dialer + Send + 'static,
-    T::Outbound: Send + 'static,
-    T::Error: From<io::Error>
-{
-    type Output = T::Output;
-    type Error = T::Error;
+    type Output = D::Output;
+    type Error = D::Error;
     type Outbound = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> {
@@ -131,15 +102,9 @@ where
 
         if !contains_dns {
             trace!("Pass-through address without DNS: {}", addr);
-            return match self.inner.dial(addr) {
+            return match self.dialer.dial(addr) {
                 Ok(d) => Ok(Box::new(d) as Box<_>),
-                Err((inner, addr)) => Err((
-                    DnsConfig {
-                        inner,
-                        resolver: self.resolver,
-                    },
-                    addr,
-                )),
+                Err((dialer, addr)) => Err((DnsDialer { dialer, resolver: self.resolver }, addr)),
             };
         }
 
@@ -165,10 +130,10 @@ where
             outcome
         });
 
-        let inner = self.inner;
+        let dialer = self.dialer;
         let future = new_addr
             .and_then(move |addr| {
-                inner
+                dialer
                     .dial(addr)
                     .map_err(|_| io::Error::new(io::ErrorKind::Other, "multiaddr not supported"))
             })
@@ -225,7 +190,7 @@ mod tests {
     use futures::future;
     use libp2p_core::transport::Dialer;
     use multiaddr::{Protocol, Multiaddr};
-    use DnsConfig;
+    use super::DnsDialer;
 
     #[test]
     fn basic_resolve() {
@@ -253,7 +218,7 @@ mod tests {
             }
         }
 
-        let dialer = DnsConfig::new(CustomDialer);
+        let dialer = DnsDialer::new(CustomDialer);
 
         let _ = dialer
             .clone()

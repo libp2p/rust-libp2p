@@ -184,13 +184,10 @@ pub struct CommonTransport {
 pub type InnerImplementation =
     Transport<
         transport::Or<
-            dns::DnsConfig<tcp::TcpConfig>,
-            websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>
+            dns::DnsDialer<tcp::TcpConfig>,
+            websocket::WsConfig<dns::DnsDialer<tcp::TcpConfig>>
         >,
-        transport::Or<
-            dns::DnsConfig<tcp::TcpConfig>,
-            websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>
-        >
+        transport::Or<tcp::TcpConfig, websocket::WsConfig<tcp::TcpConfig>>
     >;
 
 #[cfg(target_os = "emscripten")]
@@ -206,11 +203,12 @@ impl CommonTransport {
     #[inline]
     #[cfg(not(target_os = "emscripten"))]
     pub fn new() -> CommonTransport {
-        let tcp = tcp::TcpConfig::new();
-        let with_dns = dns::DnsConfig::new(tcp);
-        let with_ws = websocket::WsConfig::new(with_dns.clone());
-        let dialer = with_dns.clone().or_dialer(with_ws.clone());
-        let listener = with_dns.or_listener(with_ws);
+        let dns = dns::DnsDialer::new(tcp::TcpConfig::new());
+        let web = websocket::WsConfig::new(dns.clone());
+
+        let dialer = dns.or_dialer(web.clone());
+        let listener = tcp::TcpConfig::new()
+            .or_listener(websocket::WsConfig::new(tcp::TcpConfig::new()));
 
         CommonTransport {
             inner: CommonTransportInner { inner: Transport::new(dialer, listener) }
