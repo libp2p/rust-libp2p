@@ -57,11 +57,11 @@
 //! extern crate libp2p_websocket;
 //!
 //! use libp2p_core::{Multiaddr, transport::Dialer};
-//! use libp2p_tcp_transport::TcpConfig;
+//! use libp2p_tcp_transport::TcpDialer;
 //! use libp2p_websocket::WsConfig;
 //!
 //! # fn main() {
-//! let ws_config = WsConfig::new(TcpConfig::default());
+//! let ws_config = WsConfig::new(TcpDialer::default());
 //! # return;
 //! let _ = ws_config.dial("/ip4/40.41.42.43/tcp/12345/ws".parse().unwrap());
 //! # }

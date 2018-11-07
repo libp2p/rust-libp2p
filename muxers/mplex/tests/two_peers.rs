@@ -31,7 +31,7 @@ use futures::{Sink, Stream};
 use std::sync::{Arc, mpsc};
 use std::thread;
 use swarm::{muxing, transport::{Dialer, Listener, Error}};
-use tcp::TcpConfig;
+use tcp::{TcpDialer, TcpListener};
 use tokio_io::codec::length_delimited::Framed;
 use tokio::runtime::current_thread::Runtime;
 
@@ -42,12 +42,13 @@ fn client_to_server_outbound() {
     let (tx, rx) = mpsc::channel();
 
     let bg_thread = thread::spawn(move || {
-        let transport =
-            TcpConfig::default().with_listener_upgrade(multiplex::MplexConfig::new());
+        let listener = TcpListener::default()
+            .with_listener_upgrade(multiplex::MplexConfig::new());
 
-        let (listener, addr) = transport
+        let (listener, addr) = listener
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
             .unwrap();
+
         tx.send(addr).unwrap();
 
         let future = listener
@@ -72,10 +73,10 @@ fn client_to_server_outbound() {
         let _ = rt.block_on(future).unwrap();
     });
 
-    let transport = TcpConfig::default().with_dialer_upgrade(multiplex::MplexConfig::new());
+    let dialer = TcpDialer::default()
+        .with_dialer_upgrade(multiplex::MplexConfig::new());
 
-    let future = transport
-        .dial(rx.recv().unwrap())
+    let future = dialer.dial(rx.recv().unwrap())
         .unwrap()
         .and_then(|client| muxing::inbound_from_ref_and_wrap(Arc::new(client)).map_err(Error::Transport))
         .map(|server| Framed::<_, bytes::BytesMut>::new(server.unwrap()))
@@ -94,11 +95,13 @@ fn client_to_server_inbound() {
     let (tx, rx) = mpsc::channel();
 
     let bg_thread = thread::spawn(move || {
-        let transport = TcpConfig::default().with_listener_upgrade(multiplex::MplexConfig::new());
+        let listener = TcpListener::default()
+            .with_listener_upgrade(multiplex::MplexConfig::new());
 
-        let (listener, addr) = transport
+        let (listener, addr) = listener
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
             .unwrap();
+
         tx.send(addr).unwrap();
 
         let future = listener
@@ -123,10 +126,10 @@ fn client_to_server_inbound() {
         let _ = rt.block_on(future).unwrap();
     });
 
-    let transport = TcpConfig::default().with_dialer_upgrade(multiplex::MplexConfig::new());
+    let dialer = TcpDialer::default()
+        .with_dialer_upgrade(multiplex::MplexConfig::new());
 
-    let future = transport
-        .dial(rx.recv().unwrap())
+    let future = dialer.dial(rx.recv().unwrap())
         .unwrap()
         .and_then(|client| muxing::outbound_from_ref_and_wrap(Arc::new(client)).map_err(Error::Transport))
         .map(|server| Framed::<_, bytes::BytesMut>::new(server.unwrap()))

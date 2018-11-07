@@ -281,7 +281,7 @@ mod tests {
 
     #[test]
     fn dialer_connects_to_listener_ipv4() {
-        let ws_config = WsConfig::new(tcp::TcpConfig::default());
+        let ws_config = WsConfig::new(tcp::TcpListener::default());
 
         let (listener, addr) = ws_config
             .clone()
@@ -293,31 +293,34 @@ mod tests {
             .into_future()
             .map_err(|(e, _)| e)
             .and_then(|(c, _)| c.unwrap().0);
-        let dialer = ws_config.clone().dial(addr).unwrap();
 
-        let future = listener
-            .select(dialer)
+        let dialer = WsConfig::new(tcp::TcpDialer::default()).dial(addr).unwrap();
+
+        let future = listener.select(dialer)
             .map_err(|(e, _)| e)
             .and_then(|(_, n)| n);
+
         let mut rt = Runtime::new().unwrap();
         let _ = rt.block_on(future).unwrap();
     }
 
     #[test]
     fn dialer_connects_to_listener_ipv6() {
-        let ws_config = WsConfig::new(tcp::TcpConfig::default());
+        let ws_config = WsConfig::new(tcp::TcpListener::default());
 
         let (listener, addr) = ws_config
             .clone()
             .listen_on("/ip6/::1/tcp/0/ws".parse().unwrap())
             .unwrap();
+
         assert!(addr.to_string().ends_with("/ws"));
         assert!(!addr.to_string().ends_with("/0/ws"));
         let listener = listener
             .into_future()
             .map_err(|(e, _)| e)
             .and_then(|(c, _)| c.unwrap().0);
-        let dialer = ws_config.clone().dial(addr).unwrap();
+
+        let dialer = WsConfig::new(tcp::TcpDialer::default()).dial(addr).unwrap();
 
         let future = listener
             .select(dialer)
@@ -330,7 +333,7 @@ mod tests {
 
     #[test]
     fn nat_traversal() {
-        let ws_config = WsConfig::new(tcp::TcpConfig::default());
+        let ws_config = WsConfig::new(tcp::TcpListener::default());
 
         {
             let server = "/ip4/127.0.0.1/tcp/10000/ws".parse::<Multiaddr>().unwrap();

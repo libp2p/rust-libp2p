@@ -215,7 +215,7 @@ mod tests {
     extern crate tokio;
 
     use self::tokio::runtime::current_thread::Runtime;
-    use self::libp2p_tcp_transport::TcpConfig;
+    use self::libp2p_tcp_transport::{TcpDialer, TcpListener};
     use futures::{Future, Stream};
     use libp2p_core::{PublicKey, transport::{self, Dialer, Listener}};
     use std::sync::mpsc;
@@ -230,9 +230,10 @@ mod tests {
         let (tx, rx) = mpsc::channel();
 
         let bg_thread = thread::spawn(move || {
-            let transport = TcpConfig::default().with_listener_upgrade(IdentifyProtocolConfig);
+            let listener = TcpListener::default()
+                .with_listener_upgrade(IdentifyProtocolConfig);
 
-            let (listener, addr) = transport
+            let (listener, addr) = listener
                 .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
                 .unwrap();
 
@@ -263,10 +264,10 @@ mod tests {
             let _ = rt.block_on(future).unwrap();
         });
 
-        let transport = TcpConfig::default().with_dialer_upgrade(IdentifyProtocolConfig);
+        let dialer = TcpDialer::default()
+            .with_dialer_upgrade(IdentifyProtocolConfig);
 
-        let future = transport
-            .dial(rx.recv().unwrap())
+        let future = dialer.dial(rx.recv().unwrap())
             .unwrap_or_else(|_| panic!())
             .and_then(|RemoteInfo { info, observed_addr, .. }| {
                 assert_eq!(observed_addr, "/ip4/100.101.102.103/tcp/5000".parse().unwrap());

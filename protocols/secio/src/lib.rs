@@ -41,11 +41,11 @@
 //! use libp2p_secio::{SecioConfig, SecioKeyPair, SecioOutput};
 //! use libp2p_core::{Multiaddr, upgrade::apply_inbound};
 //! use libp2p_core::transport::{self, Dialer};
-//! use libp2p_tcp_transport::TcpConfig;
+//! use libp2p_tcp_transport::TcpDialer;
 //! use tokio_io::io::write_all;
 //! use tokio::runtime::current_thread::Runtime;
 //!
-//! let dialer = TcpConfig::default()
+//! let dialer = TcpDialer::default()
 //!     .with_dialer_upgrade({
 //!         # let private_key = b"";
 //!         //let private_key = include_bytes!("test-rsa-private-key.pk8");

@@ -39,16 +39,16 @@
 //! object that implements the trait.
 //!
 //! Each implementation of `Transport` typically supports only some multiaddresses. For example
-//! the `TcpConfig` type (which implements `Transport`) only supports multiaddresses of the format
+//! the `TcpDialer` type (which implements `Dialer`) only supports multiaddresses of the format
 //! `/ip4/.../tcp/...`.
 //!
 //! Example:
 //!
 //! ```rust
-//! use libp2p::{Multiaddr, Dialer, tcp::TcpConfig};
-//! let tcp_transport = TcpConfig::default();
+//! use libp2p::{Multiaddr, Dialer, tcp::TcpDialer};
+//! let tcp_dialer = TcpDialer::default();
 //! let addr: Multiaddr = "/ip4/98.97.96.95/tcp/20500".parse().expect("invalid multiaddr");
-//! let _outgoing_connec = tcp_transport.dial(addr);
+//! let _outgoing_connec = tcp_dialer.dial(addr);
 //! // Note that `_outgoing_connec` is a `Future`, and therefore doesn't do anything by itself
 //! // unless it is run through a tokio runtime.
 //! ```
@@ -90,10 +90,10 @@
 //!
 //! ```rust
 //! # #[cfg(all(not(target_os = "emscripten"), feature = "libp2p-secio"))] {
-//! use libp2p::{Dialer, tcp::TcpConfig, secio::{SecioConfig, SecioKeyPair}};
-//! let tcp_transport = TcpConfig::default();
+//! use libp2p::{Dialer, tcp::TcpDialer, secio::{SecioConfig, SecioKeyPair}};
+//! let tcp_dialer = TcpDialer::default();
 //! let secio_upgrade = SecioConfig::new(SecioKeyPair::ed25519_generated().unwrap());
-//! let with_security = tcp_transport.with_dialer_upgrade(secio_upgrade);
+//! let with_security = tcp_dialer.with_dialer_upgrade(secio_upgrade);
 //! // let _ = with_security.dial(...);
 //! // `with_security` also implements the `Transport` trait, and all the connections opened
 //! // through it will automatically negotiate the `secio` protocol.
@@ -184,10 +184,10 @@ pub struct CommonTransport {
 pub type InnerImplementation =
     Transport<
         transport::Or<
-            dns::DnsDialer<tcp::TcpConfig>,
-            websocket::WsConfig<dns::DnsDialer<tcp::TcpConfig>>
+            dns::DnsDialer<tcp::TcpDialer>,
+            websocket::WsConfig<dns::DnsDialer<tcp::TcpDialer>>
         >,
-        transport::Or<tcp::TcpConfig, websocket::WsConfig<tcp::TcpConfig>>
+        transport::Or<tcp::TcpListener, websocket::WsConfig<tcp::TcpListener>>
     >;
 
 #[cfg(target_os = "emscripten")]
@@ -203,12 +203,12 @@ impl CommonTransport {
     #[inline]
     #[cfg(not(target_os = "emscripten"))]
     pub fn new() -> CommonTransport {
-        let dns = dns::DnsDialer::new(tcp::TcpConfig::default());
+        let dns = dns::DnsDialer::new(tcp::TcpDialer::default());
         let web = websocket::WsConfig::new(dns.clone());
 
         let dialer = dns.or_dialer(web.clone());
-        let listener = tcp::TcpConfig::default()
-            .or_listener(websocket::WsConfig::new(tcp::TcpConfig::default()));
+        let listener = tcp::TcpListener::default()
+            .or_listener(websocket::WsConfig::new(tcp::TcpListener::default()));
 
         CommonTransport {
             inner: CommonTransportInner { inner: Transport::new(dialer, listener) }
