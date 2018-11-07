@@ -27,7 +27,7 @@
 //!
 //! The main trait that this crate provides is `Transport`, which provides the `dial` and
 //! `listen_on` methods and can be used to dial or listen on a multiaddress. The `swarm` crate
-//! itself does not provide any concrete (ie. non-dummy, non-adapter) implementation of this trait.
+//! itself does not provide any concrete (i.e. non-dummy, non-adapter) implementation of this trait.
 //! It is implemented on structs that are provided by external crates, such as `TcpConfig` from
 //! `tcp-transport`, `UdpConfig`, or `WebsocketConfig` (note: as of the writing of this
 //! documentation, the last two structs don't exist yet).
@@ -132,7 +132,7 @@
 //! extern crate tokio;
 //!
 //! use futures::{Future, Stream};
-//! use libp2p_ping::{Ping, PingOutput};
+//! use libp2p_ping::protocol::{Ping, PingOutput};
 //! use libp2p_core::Transport;
 //! use tokio::runtime::current_thread::Runtime;
 //!
@@ -184,6 +184,7 @@ extern crate rw_stream_sink;
 extern crate smallvec;
 extern crate tokio_executor;
 extern crate tokio_io;
+extern crate tokio_timer;
 extern crate void;
 
 #[cfg(test)]
@@ -192,8 +193,6 @@ extern crate rand;
 extern crate tokio;
 #[cfg(test)]
 extern crate tokio_codec;
-#[cfg(test)]
-extern crate tokio_timer;
 #[cfg(test)]
 #[macro_use]
 extern crate assert_matches;
