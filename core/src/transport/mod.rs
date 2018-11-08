@@ -18,32 +18,33 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-mod and_then;
 mod denied;
 mod error;
-mod map;
-pub mod memory;
-mod or;
-mod or_else;
 mod refused;
-mod then;
-mod upgrade;
+
+pub mod and_then;
+pub mod map;
+pub mod map_err;
+pub mod memory;
+pub mod or;
+pub mod or_else;
+pub mod then;
+pub mod upgrade;
 
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
+use self::{
+    and_then::AndThen,
+    map::Map,
+    map_err::MapErr,
+    or_else::OrElse,
+    then::Then,
+    upgrade::Upgrade
+};
 use tokio_io::{AsyncRead, AsyncWrite};
 
-pub use self::{
-    and_then::{AndThenDialer, AndThenListener},
-    error::Error,
-    denied::{DeniedDialer, DeniedListener},
-    map::{MapDialer, MapErrDialer, MapListener, MapErrListener},
-    or::{OrDialer, OrListener},
-    or_else::{OrElseDialer, OrElseListener},
-    then::{ThenDialer, ThenListener},
-    upgrade::{DialerUpgrade, ListenerUpgrade}
-};
+pub use self::{error::Error, denied::{DeniedDialer, DeniedListener}, or::Or};
 
 pub trait Listener {
     type Output;
@@ -57,60 +58,60 @@ pub trait Listener {
 
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
 
-    fn or_listener<T>(self, other: T) -> OrListener<Self, T>
+    fn or_listener<T>(self, other: T) -> Or<Self, T>
     where
         Self: Sized
     {
-        OrListener::new(self, other)
+        Or::new(self, other)
     }
 
-    fn map_listener_output<F, T>(self, f: F) -> MapListener<Self, F>
+    fn map_listener_output<F, T>(self, f: F) -> Map<Self, F>
     where
         Self: Sized,
         F: FnOnce(Self::Output, Multiaddr) -> T + Clone + 'static
     {
-        MapListener::new(self, f)
+        Map::new(self, f)
     }
 
-    fn map_listener_error<F, E>(self, f: F) -> MapErrListener<Self, F>
+    fn map_listener_error<F, E>(self, f: F) -> MapErr<Self, F>
     where
         Self: Sized,
         F: FnOnce(Self::Error, Multiaddr) -> E + Clone + 'static
     {
-        MapErrListener::new(self, f)
+        MapErr::new(self, f)
     }
 
-    fn listener_and_then<F, T>(self, f: F) -> AndThenListener<Self, F>
+    fn listener_and_then<F, T>(self, f: F) -> AndThen<Self, F>
     where
         Self: Sized,
         F: FnOnce(Self::Output, Multiaddr) -> T + Clone + 'static,
         T: IntoFuture<Error = Self::Error> + 'static,
         T::Future: Send + 'static
     {
-        AndThenListener::new(self, f)
+        AndThen::new(self, f)
     }
 
-    fn listener_or_else<F, T>(self, f: F) -> OrElseListener<Self, F>
+    fn listener_or_else<F, T>(self, f: F) -> OrElse<Self, F>
     where
         Self: Sized,
         F: FnOnce(Self::Error, Multiaddr) -> T + Clone + 'static,
         T: IntoFuture<Item = Self::Output> + 'static,
         T::Future: Send + 'static
     {
-        OrElseListener::new(self, f)
+        OrElse::new(self, f)
     }
 
-    fn listener_then<F, T>(self, f: F) -> ThenListener<Self, F>
+    fn listener_then<F, T>(self, f: F) -> Then<Self, F>
     where
         Self: Sized,
         F: FnOnce(Result<(Self::Output, Multiaddr), Self::Error>) -> T + Clone + 'static,
         T: IntoFuture + 'static,
         T::Future: Send + 'static
     {
-        ThenListener::new(self, f)
+        Then::new(self, f)
     }
 
-    fn with_listener_upgrade<U>(self, upgrade: U) -> ListenerUpgrade<Self, U>
+    fn with_listener_upgrade<U>(self, upgrade: U) -> Upgrade<Self, U>
     where
         Self: Sized,
         Self::Inbound: Send,
@@ -121,7 +122,7 @@ pub trait Listener {
         U::UpgradeId: Send,
         U::Future: Send
     {
-        ListenerUpgrade::new(self, upgrade)
+        Upgrade::new(self, upgrade)
     }
 }
 
@@ -134,60 +135,60 @@ pub trait Dialer {
     where
         Self: Sized;
 
-    fn or_dialer<T>(self, other: T) -> OrDialer<Self, T>
+    fn or_dialer<T>(self, other: T) -> Or<Self, T>
     where
         Self: Sized
     {
-        OrDialer::new(self, other)
+        Or::new(self, other)
     }
 
-    fn map_dialer_output<F, T>(self, f: F) -> MapDialer<Self, F>
+    fn map_dialer_output<F, T>(self, f: F) -> Map<Self, F>
     where
         Self: Sized,
         F: FnOnce(Self::Output, Multiaddr) -> T + Clone + 'static
     {
-        MapDialer::new(self, f)
+        Map::new(self, f)
     }
 
-    fn map_dialer_error<F, E>(self, f: F) -> MapErrDialer<Self, F>
+    fn map_dialer_error<F, E>(self, f: F) -> MapErr<Self, F>
     where
         Self: Sized,
         F: FnOnce(Self::Error, Multiaddr) -> E + Clone + 'static
     {
-        MapErrDialer::new(self, f)
+        MapErr::new(self, f)
     }
 
-    fn dialer_and_then<F, T>(self, f: F) -> AndThenDialer<Self, F>
+    fn dialer_and_then<F, T>(self, f: F) -> AndThen<Self, F>
     where
         Self: Sized,
         F: FnOnce(Self::Output, Multiaddr) -> T + Clone + 'static,
         T: IntoFuture<Error = Self::Error> + 'static,
         T::Future: Send + 'static
     {
-        AndThenDialer::new(self, f)
+        AndThen::new(self, f)
     }
 
-    fn dialer_or_else<F, T>(self, f: F) -> OrElseDialer<Self, F>
+    fn dialer_or_else<F, T>(self, f: F) -> OrElse<Self, F>
     where
         Self: Sized,
         F: FnOnce(Self::Error, Multiaddr) -> T + Clone + 'static,
         T: IntoFuture<Item = Self::Output> + 'static,
         T::Future: Send + 'static
     {
-        OrElseDialer::new(self, f)
+        OrElse::new(self, f)
     }
 
-    fn dialer_then<F, T>(self, f: F) -> ThenDialer<Self, F>
+    fn dialer_then<F, T>(self, f: F) -> Then<Self, F>
     where
         Self: Sized,
         F: FnOnce(Result<(Self::Output, Multiaddr), Self::Error>) -> T + Clone + 'static,
         T: IntoFuture + 'static,
         T::Future: Send + 'static
     {
-        ThenDialer::new(self, f)
+        Then::new(self, f)
     }
 
-    fn with_dialer_upgrade<U>(self, upgrade: U) -> DialerUpgrade<Self, U>
+    fn with_dialer_upgrade<U>(self, upgrade: U) -> Upgrade<Self, U>
     where
         Self: Sized,
         Self::Outbound: Send,
@@ -197,7 +198,7 @@ pub trait Dialer {
         U::UpgradeId: Send,
         U::Future: Send
     {
-        DialerUpgrade::new(self, upgrade)
+        Upgrade::new(self, upgrade)
     }
 }
 

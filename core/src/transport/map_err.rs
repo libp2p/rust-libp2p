@@ -23,49 +23,45 @@ use multiaddr::Multiaddr;
 use crate::transport::{Dialer, Listener};
 
 #[derive(Debug, Copy, Clone)]
-pub struct Then<T, F> { inner: T, fun: F }
+pub struct MapErr<T, F> { inner: T, fun: F }
 
-impl<T, F> Then<T, F> {
+impl<T, F> MapErr<T, F> {
     pub fn new(inner: T, fun: F) -> Self {
-        Then { inner, fun }
+        MapErr { inner, fun }
     }
 }
 
-impl<D, F, T> Dialer for Then<D, F>
+impl<D, F, E> Dialer for MapErr<D, F>
 where
     D: Dialer + 'static,
     D::Outbound: Send,
-    F: FnOnce(Result<(D::Output, Multiaddr), D::Error>) -> T + Clone + Send + 'static,
-    T: IntoFuture + Send + 'static,
-    T::Future: Send + 'static
+    F: FnOnce(D::Error, Multiaddr) -> E + Clone + Send + 'static
 {
-    type Output = T::Item;
-    type Error = T::Error;
+    type Output = D::Output;
+    type Error = E;
     type Outbound = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> {
         let fun = self.fun;
         match self.inner.dial(addr.clone()) {
             Ok(future) => {
-                let future = future.then(move |x| fun(x.map(|x| (x, addr))).into_future());
+                let future = future.map_err(move |e| fun(e, addr));
                 Ok(Box::new(future))
             }
-            Err((dialer, addr)) => Err((Then::new(dialer, fun), addr))
+            Err((dialer, addr)) => Err((MapErr::new(dialer, fun), addr))
         }
     }
 }
 
-impl<L, F, T> Listener for Then<L, F>
+impl<L, F, E> Listener for MapErr<L, F>
 where
     L: Listener + 'static,
     L::Inbound: Send,
     L::Upgrade: Send,
-    F: FnOnce(Result<(L::Output, Multiaddr), L::Error>) -> T + Clone + Send + 'static,
-    T: IntoFuture + Send + 'static,
-    T::Future: Send + 'static
+    F: FnOnce(L::Error, Multiaddr) -> E + Clone + Send + 'static
 {
-    type Output = T::Item;
-    type Error = T::Error;
+    type Output = L::Output;
+    type Error = E;
     type Inbound = Box<Stream<Item = (Self::Upgrade, Multiaddr), Error = std::io::Error> + Send>;
     type Upgrade = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
 
@@ -76,12 +72,12 @@ where
                 let stream = stream.map(move |(future, addr)| {
                     let f = fun.clone();
                     let a = addr.clone();
-                    let future = future.then(move |x| f(x.map(|x| (x, a))).into_future());
+                    let future = future.map_err(move |e| f(e, a));
                     (Box::new(future) as Box<_>, addr)
                 });
                 Ok((Box::new(stream), addr))
             }
-            Err((listener, addr)) => Err((Then::new(listener, fun), addr)),
+            Err((listener, addr)) => Err((MapErr::new(listener, fun), addr)),
         }
     }
 

@@ -183,11 +183,11 @@ pub struct CommonTransport {
 #[cfg(not(target_os = "emscripten"))]
 pub type InnerImplementation =
     Transport<
-        transport::OrDialer<
+        transport::Or<
             dns::DnsConfig<tcp::TcpConfig>,
             websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>
         >,
-        transport::OrListener<
+        transport::Or<
             dns::DnsConfig<tcp::TcpConfig>,
             websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>
         >

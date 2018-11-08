@@ -25,15 +25,15 @@ use crate::{
 };
 
 #[derive(Debug, Copy, Clone)]
-pub struct OrDialer<A, B>(A, B);
+pub struct Or<A, B>(A, B);
 
-impl<A, B> OrDialer<A, B> {
+impl<A, B> Or<A, B> {
     pub fn new(a: A, b: B) -> Self {
-        OrDialer(a, b)
+        Or(a, b)
     }
 }
 
-impl<A, B> Dialer for OrDialer<A, B>
+impl<A, B> Dialer for Or<A, B>
 where
     A: Dialer,
     B: Dialer
@@ -48,22 +48,13 @@ where
             Err((a, addr)) =>
                 match self.1.dial(addr) {
                     Ok(future) => Ok(EitherFuture2::B(future)),
-                    Err((b, addr)) => Err((OrDialer(a, b), addr))
+                    Err((b, addr)) => Err((Or(a, b), addr))
                 }
         }
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub struct OrListener<A, B>(A, B);
-
-impl<A, B> OrListener<A, B> {
-    pub fn new(a: A, b: B) -> Self {
-        OrListener(a, b)
-    }
-}
-
-impl<A, B> Listener for OrListener<A, B>
+impl<A, B> Listener for Or<A, B>
 where
     A: Listener,
     B: Listener
@@ -79,7 +70,7 @@ where
             Err((a, addr)) =>
                 match self.1.listen_on(addr) {
                     Ok((inc, addr)) => Ok((EitherIncoming::B(inc), addr)),
-                    Err((b, addr)) => Err((OrListener(a, b), addr))
+                    Err((b, addr)) => Err((Or(a, b), addr))
                 }
         }
     }

@@ -23,15 +23,15 @@ use multiaddr::Multiaddr;
 use crate::transport::{Dialer, Listener};
 
 #[derive(Debug, Copy, Clone)]
-pub struct AndThenDialer<D, F> { dialer: D, fun: F }
+pub struct AndThen<T, F> { inner: T, fun: F }
 
-impl<D, F> AndThenDialer<D, F> {
-    pub fn new(dialer: D, fun: F) -> Self {
-        AndThenDialer { dialer, fun }
+impl<T, F> AndThen<T, F> {
+    pub fn new(inner: T, fun: F) -> Self {
+        AndThen { inner, fun }
     }
 }
 
-impl<D, F, T> Dialer for AndThenDialer<D, F>
+impl<D, F, T> Dialer for AndThen<D, F>
 where
     D: Dialer + 'static,
     D::Outbound: Send,
@@ -45,26 +45,17 @@ where
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> {
         let fun = self.fun;
-        match self.dialer.dial(addr.clone()) {
+        match self.inner.dial(addr.clone()) {
             Ok(future) => {
                 let future = future.and_then(move |x| fun(x, addr).into_future());
                 Ok(Box::new(future))
             }
-            Err((dialer, addr)) => Err((AndThenDialer::new(dialer, fun), addr))
+            Err((dialer, addr)) => Err((AndThen::new(dialer, fun), addr))
         }
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub struct AndThenListener<L, F> { listener: L, fun: F }
-
-impl<L, F> AndThenListener<L, F> {
-    pub fn new(listener: L, fun: F) -> Self {
-        AndThenListener { listener, fun }
-    }
-}
-
-impl<L, F, T> Listener for AndThenListener<L, F>
+impl<L, F, T> Listener for AndThen<L, F>
 where
     L: Listener + 'static,
     L::Inbound: Send,
@@ -80,7 +71,7 @@ where
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Inbound, Multiaddr), (Self, Multiaddr)> {
         let fun = self.fun;
-        match self.listener.listen_on(addr) {
+        match self.inner.listen_on(addr) {
             Ok((stream, addr)) => {
                 let stream = stream.map(move |(future, addr)| {
                     let f = fun.clone();
@@ -90,11 +81,12 @@ where
                 });
                 Ok((Box::new(stream), addr))
             }
-            Err((listener, addr)) => Err((AndThenListener::new(listener, fun), addr)),
+            Err((listener, addr)) => Err((AndThen::new(listener, fun), addr)),
         }
     }
 
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.listener.nat_traversal(server, observed)
+        self.inner.nat_traversal(server, observed)
     }
 }
+

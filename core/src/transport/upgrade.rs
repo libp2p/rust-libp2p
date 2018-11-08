@@ -21,21 +21,21 @@
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use crate::{
-    transport::{self, Dialer, Listener},
+    transport::{Dialer, Listener, Error},
     upgrade::{OutboundUpgrade, InboundUpgrade, apply_inbound, apply_outbound}
 };
 use tokio_io::{AsyncRead, AsyncWrite};
 
 #[derive(Debug, Copy, Clone)]
-pub struct DialerUpgrade<D, U> { dialer: D, upgrade: U }
+pub struct Upgrade<T, U> { inner: T, upgrade: U }
 
-impl<D, U> DialerUpgrade<D, U> {
-    pub fn new(dialer: D, upgrade: U) -> Self {
-        DialerUpgrade { dialer, upgrade }
+impl<T, U> Upgrade<T, U> {
+    pub fn new(inner: T, upgrade: U) -> Self {
+        Upgrade { inner, upgrade }
     }
 }
 
-impl<D, U> Dialer for DialerUpgrade<D, U>
+impl<D, U> Dialer for Upgrade<D, U>
 where
     D: Dialer + 'static,
     D::Outbound: Send,
@@ -46,33 +46,24 @@ where
     U::Future: Send
 {
     type Output = U::Output;
-    type Error = transport::Error<D::Error, U::Error>;
+    type Error = Error<D::Error, U::Error>;
     type Outbound = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> {
         let upgrade = self.upgrade;
-        match self.dialer.dial(addr.clone()) {
+        match self.inner.dial(addr.clone()) {
             Ok(outbound) => {
                 let future = outbound
-                    .map_err(transport::Error::Transport)
-                    .and_then(move |x| apply_outbound(x, upgrade).map_err(transport::Error::Upgrade));
+                    .map_err(Error::Transport)
+                    .and_then(move |x| apply_outbound(x, upgrade).map_err(Error::Upgrade));
                 Ok(Box::new(future))
             }
-            Err((dialer, addr)) => Err((DialerUpgrade::new(dialer, upgrade), addr))
+            Err((dialer, addr)) => Err((Upgrade::new(dialer, upgrade), addr))
         }
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub struct ListenerUpgrade<L, U> { listener: L, upgrade: U }
-
-impl<L, U> ListenerUpgrade<L, U> {
-    pub fn new(listener: L, upgrade: U) -> Self {
-        ListenerUpgrade { listener, upgrade }
-    }
-}
-
-impl<L, U> Listener for ListenerUpgrade<L, U>
+impl<L, U> Listener for Upgrade<L, U>
 where
     L: Listener + 'static,
     L::Inbound: Send,
@@ -84,29 +75,29 @@ where
     U::Future: Send
 {
     type Output = U::Output;
-    type Error = transport::Error<L::Error, U::Error>;
+    type Error = Error<L::Error, U::Error>;
     type Inbound = Box<Stream<Item = (Self::Upgrade, Multiaddr), Error = std::io::Error> + Send>;
     type Upgrade = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Inbound, Multiaddr), (Self, Multiaddr)> {
         let upgrade = self.upgrade;
-        match self.listener.listen_on(addr) {
+        match self.inner.listen_on(addr) {
             Ok((inbound, addr)) => {
                 let stream = inbound
                     .map(move |(future, addr)| {
                         let upgrade = upgrade.clone();
                         let future = future
-                            .map_err(transport::Error::Transport)
-                            .and_then(move |x| apply_inbound(x, upgrade).map_err(transport::Error::Upgrade));
+                            .map_err(Error::Transport)
+                            .and_then(move |x| apply_inbound(x, upgrade).map_err(Error::Upgrade));
                     (Box::new(future) as Box<_>, addr)
                 });
                 Ok((Box::new(stream), addr))
             }
-            Err((listener, addr)) => Err((ListenerUpgrade::new(listener, upgrade), addr)),
+            Err((listener, addr)) => Err((Upgrade::new(listener, upgrade), addr)),
         }
     }
 
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.listener.nat_traversal(server, observed)
+        self.inner.nat_traversal(server, observed)
     }
 }
