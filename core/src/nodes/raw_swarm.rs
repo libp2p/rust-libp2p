@@ -211,7 +211,8 @@ where
 
 impl<'a, TTrans, TInEvent, TOutEvent, TMuxer, THandler> IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler>
 where
-    TTrans: transport::Listener<Output = (PeerId, TMuxer), Error = IoError>,
+    TTrans: transport::Listener<Output = (PeerId, TMuxer)>,
+    TTrans::Error: std::error::Error + Send + Sync + 'static,
     TTrans::Upgrade: Send + 'static,
     THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
     THandler::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
@@ -478,7 +479,8 @@ where
     /// given peer.
     fn start_dial_out(&mut self, peer_id: PeerId, handler: THandler, first: Multiaddr, rest: Vec<Multiaddr>)
     where
-        TTrans: transport::Dialer<Output = (PeerId, TMuxer), Error = IoError>,
+        TTrans: transport::Dialer<Output = (PeerId, TMuxer)>,
+        <TTrans as transport::Dialer>::Error: From<IoError> + std::error::Error + Send + Sync + 'static,
         TTrans::Outbound: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,
         TMuxer::OutboundSubstream: Send,
@@ -495,7 +497,7 @@ where
                     } else {
                         let msg = format!("public key mismatch; expected = {:?}; obtained = {:?}",
                                           expected_peer_id, actual_peer_id);
-                        Err(IoError::new(IoErrorKind::Other, msg))
+                        Err(IoError::new(IoErrorKind::Other, msg).into())
                     }
                 });
                 self.active_nodes.add_reach_attempt(fut, handler)
@@ -523,7 +525,8 @@ where
     pub fn poll(&mut self) -> Async<RawSwarmEvent<TTrans, TInEvent, TOutEvent, THandler>>
     where
         TTrans: transport::Listener<Output = (PeerId, TMuxer)>,
-        TTrans: transport::Dialer<Output = (PeerId, TMuxer), Error = IoError>,
+        TTrans: transport::Dialer<Output = (PeerId, TMuxer)>,
+        <TTrans as transport::Dialer>::Error: From<IoError> + std::error::Error + Send + Sync + 'static,
         TTrans::Outbound: Send + 'static,
         TTrans::Upgrade: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,

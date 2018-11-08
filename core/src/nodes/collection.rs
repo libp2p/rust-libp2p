@@ -280,7 +280,8 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
     pub fn add_reach_attempt<TFut, TMuxer>(&mut self, future: TFut, handler: THandler)
         -> ReachAttemptId
     where
-        TFut: Future<Item = (PeerId, TMuxer), Error = io::Error> + Send + 'static,
+        TFut: Future<Item = (PeerId, TMuxer)> + Send + 'static,
+        TFut::Error: std::error::Error + Send + Sync + 'static,
         THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,

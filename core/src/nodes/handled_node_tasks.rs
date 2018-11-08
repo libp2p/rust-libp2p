@@ -32,7 +32,7 @@ use smallvec::SmallVec;
 use std::{
     collections::hash_map::{Entry, OccupiedEntry},
     fmt,
-    io::Error as IoError,
+    io::{self, Error as IoError},
     mem
 };
 use tokio_executor;
@@ -141,10 +141,10 @@ impl<TInEvent, TOutEvent, THandler> HandledNodesTasks<TInEvent, TOutEvent, THand
     ///
     /// This method spawns a task dedicated to resolving this future and processing the node's
     /// events.
-    pub fn add_reach_attempt<TFut, TMuxer>(&mut self, future: TFut, handler: THandler)
-        -> TaskId
+    pub fn add_reach_attempt<TFut, TMuxer>(&mut self, future: TFut, handler: THandler) -> TaskId
     where
-        TFut: Future<Item = (PeerId, TMuxer), Error = IoError> + Send + 'static,
+        TFut: Future<Item = (PeerId, TMuxer)> + Send + 'static,
+        TFut::Error: std::error::Error + Send + Sync + 'static,
         THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
@@ -356,7 +356,8 @@ impl<TFut, TMuxer, THandler, TInEvent, TOutEvent> Future for
     NodeTask<TFut, TMuxer, THandler, TInEvent, TOutEvent>
 where
     TMuxer: StreamMuxer,
-    TFut: Future<Item = (PeerId, TMuxer), Error = IoError>,
+    TFut: Future<Item = (PeerId, TMuxer)>,
+    TFut::Error: std::error::Error + Send + Sync + 'static,
     THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent>,
 {
     type Item = ();
@@ -396,7 +397,8 @@ where
                         },
                         Err(err) => {
                             // End the task
-                            let event = InToExtMessage::TaskClosed(Err(err), Some(handler));
+                            let ioerr = IoError::new(io::ErrorKind::Other, err);
+                            let event = InToExtMessage::TaskClosed(Err(ioerr), Some(handler));
                             let _ = self.events_tx.unbounded_send((event, self.id));
                             return Ok(Async::Ready(()));
                         }
