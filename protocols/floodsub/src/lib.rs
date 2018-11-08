@@ -20,6 +20,7 @@
 
 extern crate bs58;
 extern crate bytes;
+extern crate fnv;
 extern crate futures;
 extern crate libp2p_core;
 extern crate protobuf;
@@ -29,10 +30,12 @@ extern crate tokio_io;
 extern crate unsigned_varint;
 
 mod handler;
+mod layer;
 mod protocol;
 mod rpc_proto;
 mod topic;
 
 pub use self::handler::FloodsubHandler;
+pub use self::layer::FloodsubBehaviour;
 pub use self::protocol::*; // TODO: exact reexports
 pub use self::topic::{Topic, TopicBuilder, TopicHash};
