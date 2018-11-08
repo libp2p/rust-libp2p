@@ -225,11 +225,172 @@ where
     }
 }
 
-//impl<D, L> Transport<D, L>
-//where
-//    L: Listener
-//{
-//}
+impl<D, L> Transport<D, L>
+where
+    L: Listener
+{
+    pub fn or_listener<T>(self, other: T) -> Transport<D, Or<L, T>> {
+        Transport {
+            dialer: self.dialer,
+            listener: Or::new(self.listener, other)
+        }
+    }
+
+    pub fn map_listener_output<F, T>(self, f: F) -> Transport<D, Map<L, F>>
+    where
+        F: FnOnce(L::Output, Multiaddr) -> T + Clone + 'static
+    {
+        Transport {
+            dialer: self.dialer,
+            listener: Map::new(self.listener, f)
+        }
+    }
+
+    pub fn map_listener_error<F, E>(self, f: F) -> Transport<D, MapErr<L, F>>
+    where
+        F: FnOnce(L::Error, Multiaddr) -> E + Clone + 'static
+    {
+        Transport {
+            dialer: self.dialer,
+            listener: MapErr::new(self.listener, f)
+        }
+    }
+
+    pub fn listener_and_then<F, T>(self, f: F) -> Transport<D, AndThen<L, F>>
+    where
+        F: FnOnce(L::Output, Multiaddr) -> T + Clone + 'static,
+        T: IntoFuture<Error = L::Error> + 'static,
+        T::Future: Send + 'static
+    {
+        Transport {
+            dialer: self.dialer,
+            listener: AndThen::new(self.listener, f)
+        }
+    }
+
+    pub fn listener_or_else<F, T>(self, f: F) -> Transport<D, OrElse<L, F>>
+    where
+        F: FnOnce(L::Error, Multiaddr) -> T + Clone + 'static,
+        T: IntoFuture<Item = L::Output> + 'static,
+        T::Future: Send + 'static
+    {
+        Transport {
+            dialer: self.dialer,
+            listener: OrElse::new(self.listener, f)
+        }
+    }
+
+    pub fn listener_then<F, T>(self, f: F) -> Transport<D, Then<L, F>>
+    where
+        F: FnOnce(Result<(L::Output, Multiaddr), L::Error>) -> T + Clone + 'static,
+        T: IntoFuture + 'static,
+        T::Future: Send + 'static
+    {
+        Transport {
+            dialer: self.dialer,
+            listener: Then::new(self.listener, f)
+        }
+    }
+
+    pub fn with_listener_upgrade<U>(self, upgrade: U) -> Transport<D, Upgrade<L, U>>
+    where
+        L::Inbound: Send,
+        L::Upgrade: Send,
+        L::Output: AsyncRead + AsyncWrite + Send,
+        U: InboundUpgrade<L::Output> + Clone + Send + 'static,
+        U::NamesIter: Send + Clone,
+        U::UpgradeId: Send,
+        U::Future: Send
+    {
+        Transport {
+            dialer: self.dialer,
+            listener: Upgrade::new(self.listener, upgrade)
+        }
+    }
+}
+
+impl<D, L> Transport<D, L>
+where
+    D: Dialer
+{
+    pub fn or_dialer<T>(self, other: T) -> Transport<Or<D, T>, L> {
+        Transport {
+            dialer: Or::new(self.dialer, other),
+            listener: self.listener
+        }
+    }
+
+    pub fn map_dialer_output<F, T>(self, f: F) -> Transport<Map<D, F>, L>
+    where
+        F: FnOnce(D::Output, Multiaddr) -> T + Clone + 'static
+    {
+        Transport {
+            dialer: Map::new(self.dialer, f),
+            listener: self.listener
+        }
+    }
+
+    pub fn map_dialer_error<F, E>(self, f: F) -> Transport<MapErr<D, F>, L>
+    where
+        F: FnOnce(D::Error, Multiaddr) -> E + Clone + 'static
+    {
+        Transport {
+            dialer: MapErr::new(self.dialer, f),
+            listener: self.listener
+        }
+    }
+
+    pub fn dialer_and_then<F, T>(self, f: F) -> Transport<AndThen<D, F>, L>
+    where
+        F: FnOnce(D::Output, Multiaddr) -> T + Clone + 'static,
+        T: IntoFuture<Error = D::Error> + 'static,
+        T::Future: Send + 'static
+    {
+        Transport {
+            dialer: AndThen::new(self.dialer, f),
+            listener: self.listener
+        }
+    }
+
+    pub fn dialer_or_else<F, T>(self, f: F) -> Transport<OrElse<D, F>, L>
+    where
+        F: FnOnce(D::Error, Multiaddr) -> T + Clone + 'static,
+        T: IntoFuture<Item = D::Output> + 'static,
+        T::Future: Send + 'static
+    {
+        Transport {
+            dialer: OrElse::new(self.dialer, f),
+            listener: self.listener
+        }
+    }
+
+    pub fn dialer_then<F, T>(self, f: F) -> Transport<Then<D, F>, L>
+    where
+        F: FnOnce(Result<(D::Output, Multiaddr), D::Error>) -> T + Clone + 'static,
+        T: IntoFuture + 'static,
+        T::Future: Send + 'static
+    {
+        Transport {
+            dialer: Then::new(self.dialer, f),
+            listener: self.listener
+        }
+    }
+
+    pub fn with_dialer_upgrade<U>(self, upgrade: U) -> Transport<Upgrade<D, U>, L>
+    where
+        D::Outbound: Send,
+        D::Output: AsyncRead + AsyncWrite + Send,
+        U: OutboundUpgrade<D::Output> + Clone + Send + 'static,
+        U::NamesIter: Send + Clone,
+        U::UpgradeId: Send,
+        U::Future: Send
+    {
+        Transport {
+            dialer: Upgrade::new(self.dialer, upgrade),
+            listener: self.listener
+        }
+    }
+}
 
 impl<L> Transport<DeniedDialer, L>
 where
