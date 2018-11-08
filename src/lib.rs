@@ -90,10 +90,10 @@
 //!
 //! ```rust
 //! # #[cfg(all(not(target_os = "emscripten"), feature = "libp2p-secio"))] {
-//! use libp2p::{Dialer, tcp::TcpDialer, secio::{SecioConfig, SecioKeyPair}};
+//! use libp2p::{Dialer, DialerExt, tcp::TcpDialer, secio::{SecioConfig, SecioKeyPair}};
 //! let tcp_dialer = TcpDialer::default();
 //! let secio_upgrade = SecioConfig::new(SecioKeyPair::ed25519_generated().unwrap());
-//! let with_security = tcp_dialer.with_dialer_upgrade(secio_upgrade);
+//! let with_security = tcp_dialer.with_upgrade(secio_upgrade);
 //! // let _ = with_security.dial(...);
 //! // `with_security` also implements the `Transport` trait, and all the connections opened
 //! // through it will automatically negotiate the `secio` protocol.
@@ -162,10 +162,10 @@ mod ext;
 
 pub mod simple;
 
-pub use self::core::{Dialer, Listener, Transport, PeerId, transport};
+pub use self::core::{Dialer, DialerExt, Listener, ListenerExt, Transport, PeerId, transport};
 pub use self::multiaddr::Multiaddr;
 pub use self::simple::SimpleProtocol;
-pub use self::ext::{DialerExt, ListenerExt};
+pub use self::ext::{DialerExtra, ListenerExtra};
 pub use self::transport_timeout::TransportTimeout;
 
 /// Implementation of `Transport` that supports the most common protocols.
@@ -207,9 +207,9 @@ impl CommonTransport {
         let dns = dns::DnsDialer::new(tcp::TcpDialer::default());
         let web = websocket::WsDialer::new(dns.clone());
 
-        let dialer = dns.or_dialer(web.clone());
+        let dialer = dns.or(web.clone());
         let listener = tcp::TcpListener::default()
-            .or_listener(websocket::WsListener::new(tcp::TcpListener::default()));
+            .or(websocket::WsListener::new(tcp::TcpListener::default()));
 
         CommonTransport {
             inner: CommonTransportInner { inner: Transport::new(dialer, listener) }

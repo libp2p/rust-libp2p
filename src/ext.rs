@@ -33,7 +33,7 @@ use transport_timeout::TransportTimeout;
 /// # Example
 ///
 /// ```
-/// use libp2p::DialerExt;
+/// use libp2p::DialerExtra;
 /// use libp2p::tcp::TcpDialer;
 /// use std::time::Duration;
 ///
@@ -42,7 +42,7 @@ use transport_timeout::TransportTimeout;
 ///     .with_dialer_rate_limit(1024 * 1024, 1024 * 1024);
 /// ```
 ///
-pub trait DialerExt: Dialer {
+pub trait DialerExtra: Dialer {
     /// Adds a timeout to the connection and upgrade steps for all the sockets created by
     /// the transport.
     #[inline]
@@ -80,7 +80,7 @@ pub trait DialerExt: Dialer {
 /// # Example
 ///
 /// ```
-/// use libp2p::ListenerExt;
+/// use libp2p::ListenerExtra;
 /// use libp2p::tcp::TcpListener;
 /// use std::time::Duration;
 ///
@@ -89,7 +89,7 @@ pub trait DialerExt: Dialer {
 ///     .with_listener_rate_limit(1024 * 1024, 1024 * 1024);
 /// ```
 ///
-pub trait ListenerExt: Listener {
+pub trait ListenerExtra: Listener {
     /// Adds a timeout to the connection and upgrade steps for all the sockets created by
     /// the transport.
     #[inline]
@@ -121,5 +121,5 @@ pub trait ListenerExt: Listener {
     // TODO: add methods to easily upgrade for secio/mplex/yamux
 }
 
-impl<D: Dialer> DialerExt for D {}
-impl<L: Listener> ListenerExt for L {}
+impl<D: Dialer> DialerExtra for D {}
+impl<L: Listener> ListenerExtra for L {}

@@ -85,11 +85,11 @@
 //! extern crate libp2p_core;
 //! extern crate libp2p_tcp_transport;
 //!
-//! use libp2p_core::Dialer;
+//! use libp2p_core::{Dialer, DialerExt};
 //!
 //! # fn main() {
 //! let tcp_transport = libp2p_tcp_transport::TcpDialer::default();
-//! let upgraded = tcp_transport.with_dialer_upgrade(libp2p_core::upgrade::DeniedUpgrade);
+//! let upgraded = tcp_transport.with_upgrade(libp2p_core::upgrade::DeniedUpgrade);
 //!
 //! // upgraded.dial(...)   // automatically applies the plain text protocol on the socket
 //! # }
@@ -133,13 +133,13 @@
 //!
 //! use futures::{Future, Stream};
 //! use libp2p_ping::protocol::Ping;
-//! use libp2p_core::{Dialer, transport::Error};
+//! use libp2p_core::{Dialer, DialerExt, transport::Error};
 //! use tokio::runtime::current_thread::Runtime;
 //!
 //! # fn main() {
 //! let ping_dialer = libp2p_tcp_transport::TcpDialer::default()
 //!     // We have a `TcpDialer` struct that implements `Dialer`, and apply a `Ping` upgrade on it.
-//!     .with_dialer_upgrade(Ping::default())
+//!     .with_upgrade(Ping::default())
 //!     // TODO: right now the only available protocol is ping, but we want to replace it with
 //!     //       something that is more simple to use
 //!     .dial("127.0.0.1:12345".parse::<libp2p_core::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())
@@ -215,7 +215,7 @@ pub use self::multiaddr::Multiaddr;
 pub use self::muxing::StreamMuxer;
 pub use self::peer_id::PeerId;
 pub use self::public_key::PublicKey;
-pub use self::transport::{Dialer, Listener, Transport};
+pub use self::transport::{Dialer, DialerExt, Listener, ListenerExt, Transport};
 pub use self::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]

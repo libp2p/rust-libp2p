@@ -432,7 +432,7 @@ mod tests {
 
     use self::libp2p_tcp_transport::{TcpDialer, TcpListener};
     use futures::{Future, Sink, Stream};
-    use libp2p_core::{PeerId, PublicKey, transport::{self, Dialer, Listener}};
+    use libp2p_core::{PeerId, PublicKey, transport::{self, Dialer, DialerExt, Listener, ListenerExt}};
     use multihash::{encode, Hash};
     use protocol::{KadConnectionType, KadMsg, KademliaProtocolConfig, KadPeer};
     use std::sync::mpsc;
@@ -500,7 +500,7 @@ mod tests {
 
             let bg_thread = thread::spawn(move || {
                 let listener = TcpListener::default()
-                    .with_listener_upgrade(KademliaProtocolConfig);
+                    .with_upgrade(KademliaProtocolConfig);
 
                 let (listener, addr) = listener
                     .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -526,7 +526,7 @@ mod tests {
             });
 
             let dialer = TcpDialer::default()
-                .with_dialer_upgrade(KademliaProtocolConfig);
+                .with_upgrade(KademliaProtocolConfig);
 
             let future = dialer.dial(rx.recv().unwrap())
                 .unwrap_or_else(|_| panic!())

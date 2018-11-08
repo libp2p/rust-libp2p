@@ -217,7 +217,7 @@ mod tests {
     use self::tokio::runtime::current_thread::Runtime;
     use self::libp2p_tcp_transport::{TcpDialer, TcpListener};
     use futures::{Future, Stream};
-    use libp2p_core::{PublicKey, transport::{self, Dialer, Listener}};
+    use libp2p_core::{PublicKey, transport::{self, Dialer, DialerExt, Listener, ListenerExt}};
     use std::sync::mpsc;
     use std::thread;
     use {IdentifyInfo, RemoteInfo, IdentifyProtocolConfig};
@@ -231,7 +231,7 @@ mod tests {
 
         let bg_thread = thread::spawn(move || {
             let listener = TcpListener::default()
-                .with_listener_upgrade(IdentifyProtocolConfig);
+                .with_upgrade(IdentifyProtocolConfig);
 
             let (listener, addr) = listener
                 .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -265,7 +265,7 @@ mod tests {
         });
 
         let dialer = TcpDialer::default()
-            .with_dialer_upgrade(IdentifyProtocolConfig);
+            .with_upgrade(IdentifyProtocolConfig);
 
         let future = dialer.dial(rx.recv().unwrap())
             .unwrap_or_else(|_| panic!())

@@ -57,15 +57,17 @@ pub trait Listener {
         Self: Sized;
 
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
+}
 
-    fn or_listener<T>(self, other: T) -> Or<Self, T>
+pub trait ListenerExt: Listener {
+    fn or<T>(self, other: T) -> Or<Self, T>
     where
         Self: Sized
     {
         Or::new(self, other)
     }
 
-    fn map_listener_output<F, T>(self, f: F) -> Map<Self, F>
+    fn map<F, T>(self, f: F) -> Map<Self, F>
     where
         Self: Sized,
         F: FnOnce(Self::Output, Multiaddr) -> T + Clone + 'static
@@ -73,7 +75,7 @@ pub trait Listener {
         Map::new(self, f)
     }
 
-    fn map_listener_error<F, E>(self, f: F) -> MapErr<Self, F>
+    fn map_err<F, E>(self, f: F) -> MapErr<Self, F>
     where
         Self: Sized,
         F: FnOnce(Self::Error, Multiaddr) -> E + Clone + 'static
@@ -81,7 +83,7 @@ pub trait Listener {
         MapErr::new(self, f)
     }
 
-    fn listener_and_then<F, T>(self, f: F) -> AndThen<Self, F>
+    fn and_then<F, T>(self, f: F) -> AndThen<Self, F>
     where
         Self: Sized,
         F: FnOnce(Self::Output, Multiaddr) -> T + Clone + 'static,
@@ -91,7 +93,7 @@ pub trait Listener {
         AndThen::new(self, f)
     }
 
-    fn listener_or_else<F, T>(self, f: F) -> OrElse<Self, F>
+    fn or_else<F, T>(self, f: F) -> OrElse<Self, F>
     where
         Self: Sized,
         F: FnOnce(Self::Error, Multiaddr) -> T + Clone + 'static,
@@ -101,7 +103,7 @@ pub trait Listener {
         OrElse::new(self, f)
     }
 
-    fn listener_then<F, T>(self, f: F) -> Then<Self, F>
+    fn then<F, T>(self, f: F) -> Then<Self, F>
     where
         Self: Sized,
         F: FnOnce(Result<(Self::Output, Multiaddr), Self::Error>) -> T + Clone + 'static,
@@ -111,7 +113,7 @@ pub trait Listener {
         Then::new(self, f)
     }
 
-    fn with_listener_upgrade<U>(self, upgrade: U) -> Upgrade<Self, U>
+    fn with_upgrade<U>(self, upgrade: U) -> Upgrade<Self, U>
     where
         Self: Sized,
         Self::Inbound: Send,
@@ -126,23 +128,25 @@ pub trait Listener {
     }
 }
 
+impl<L: Listener> ListenerExt for L {}
+
 pub trait Dialer {
     type Output;
     type Error;
     type Outbound: Future<Item = Self::Output, Error = Self::Error>;
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)>
-    where
-        Self: Sized;
+    fn dial(self, addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> where Self: Sized;
+}
 
-    fn or_dialer<T>(self, other: T) -> Or<Self, T>
+pub trait DialerExt: Dialer {
+    fn or<T>(self, other: T) -> Or<Self, T>
     where
         Self: Sized
     {
         Or::new(self, other)
     }
 
-    fn map_dialer_output<F, T>(self, f: F) -> Map<Self, F>
+    fn map<F, T>(self, f: F) -> Map<Self, F>
     where
         Self: Sized,
         F: FnOnce(Self::Output, Multiaddr) -> T + Clone + 'static
@@ -150,7 +154,7 @@ pub trait Dialer {
         Map::new(self, f)
     }
 
-    fn map_dialer_error<F, E>(self, f: F) -> MapErr<Self, F>
+    fn map_err<F, E>(self, f: F) -> MapErr<Self, F>
     where
         Self: Sized,
         F: FnOnce(Self::Error, Multiaddr) -> E + Clone + 'static
@@ -158,7 +162,7 @@ pub trait Dialer {
         MapErr::new(self, f)
     }
 
-    fn dialer_and_then<F, T>(self, f: F) -> AndThen<Self, F>
+    fn and_then<F, T>(self, f: F) -> AndThen<Self, F>
     where
         Self: Sized,
         F: FnOnce(Self::Output, Multiaddr) -> T + Clone + 'static,
@@ -168,7 +172,7 @@ pub trait Dialer {
         AndThen::new(self, f)
     }
 
-    fn dialer_or_else<F, T>(self, f: F) -> OrElse<Self, F>
+    fn or_else<F, T>(self, f: F) -> OrElse<Self, F>
     where
         Self: Sized,
         F: FnOnce(Self::Error, Multiaddr) -> T + Clone + 'static,
@@ -178,7 +182,7 @@ pub trait Dialer {
         OrElse::new(self, f)
     }
 
-    fn dialer_then<F, T>(self, f: F) -> Then<Self, F>
+    fn then<F, T>(self, f: F) -> Then<Self, F>
     where
         Self: Sized,
         F: FnOnce(Result<(Self::Output, Multiaddr), Self::Error>) -> T + Clone + 'static,
@@ -188,7 +192,7 @@ pub trait Dialer {
         Then::new(self, f)
     }
 
-    fn with_dialer_upgrade<U>(self, upgrade: U) -> Upgrade<Self, U>
+    fn with_upgrade<U>(self, upgrade: U) -> Upgrade<Self, U>
     where
         Self: Sized,
         Self::Outbound: Send,
@@ -201,6 +205,8 @@ pub trait Dialer {
         Upgrade::new(self, upgrade)
     }
 }
+
+impl<D: Dialer> DialerExt for D {}
 
 #[derive(Debug, Clone)]
 pub struct Transport<D, L> { dialer: D, listener: L }
@@ -218,6 +224,12 @@ where
         (self.dialer, self.listener)
     }
 }
+
+//impl<D, L> Transport<D, L>
+//where
+//    L: Listener
+//{
+//}
 
 impl<L> Transport<DeniedDialer, L>
 where

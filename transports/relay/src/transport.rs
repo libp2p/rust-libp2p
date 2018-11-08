@@ -25,7 +25,7 @@ use crate::{
     utility::{Peer, RelayAddr}
 };
 use futures::{stream, prelude::*};
-use libp2p_core::transport::Dialer;
+use libp2p_core::transport::{Dialer, DialerExt};
 use log::{debug, info, trace};
 use multiaddr::Multiaddr;
 use peerstore::{PeerAccess, PeerId, Peerstore};
@@ -164,7 +164,7 @@ where
 
         let relay = relay.clone();
         let message = self.hop_message(destination);
-        let dialer = self.dialer.with_dialer_upgrade(protocol::Source(message));
+        let dialer = self.dialer.with_upgrade(protocol::Source(message));
         let future = stream::iter_ok(addresses.into_iter())
             .filter_map(move |addr| dialer.clone().dial(addr).ok())
             .and_then(|dial| dial)
