@@ -44,7 +44,12 @@ use self::{
 };
 use tokio_io::{AsyncRead, AsyncWrite};
 
-pub use self::{error::Error, denied::{DeniedDialer, DeniedListener}, or::Or};
+pub use self::{
+    error::Error,
+    denied::{DeniedDialer, DeniedListener},
+    refused::{RefusedDialer, RefusedListener},
+    or::Or
+};
 
 pub trait Listener {
     type Output;
@@ -210,6 +215,18 @@ impl<D: Dialer> DialerExt for D {}
 
 #[derive(Debug, Clone)]
 pub struct Transport<D, L> { dialer: D, listener: L }
+
+impl Transport<DeniedDialer, DeniedListener> {
+    pub fn denied() -> Self {
+        Transport { dialer: DeniedDialer, listener: DeniedListener }
+    }
+}
+
+impl<DT, DE, LT, LE> Transport<RefusedDialer<DT, DE>, RefusedListener<LT, LE>> {
+    pub fn refused() -> Self {
+        Transport { dialer: RefusedDialer::new(), listener: RefusedListener::new() }
+    }
+}
 
 impl<D, L> Transport<D, L>
 where

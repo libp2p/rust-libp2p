@@ -20,16 +20,26 @@
 
 use crate::{Multiaddr, transport::{Dialer, Listener}};
 use futures::prelude::*;
+use std::marker::PhantomData;
 
 #[derive(Debug, Copy, Clone)]
-pub struct Refused<T>(pub T);
+pub struct RefusedDialer<T, E> {
+    _output: PhantomData<T>,
+    _error: PhantomData<E>
+}
 
-impl<T> Dialer for Refused<T>
-where
-    T: Listener
-{
-    type Output = T::Output;
-    type Error = T::Error;
+impl<T, E> RefusedDialer<T, E> {
+    pub fn new() -> Self {
+        RefusedDialer {
+            _output: PhantomData,
+            _error: PhantomData
+        }
+    }
+}
+
+impl<T, E> Dialer for RefusedDialer<T, E> {
+    type Output = T;
+    type Error = E;
     type Outbound = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> {
@@ -37,12 +47,24 @@ where
     }
 }
 
-impl<T> Listener for Refused<T>
-where
-    T: Dialer
-{
-    type Output = T::Output;
-    type Error = T::Error;
+#[derive(Debug, Copy, Clone)]
+pub struct RefusedListener<T, E> {
+    _output: PhantomData<T>,
+    _error: PhantomData<E>
+}
+
+impl<T, E> RefusedListener<T, E> {
+    pub fn new() -> Self {
+        RefusedListener {
+            _output: PhantomData,
+            _error: PhantomData
+        }
+    }
+}
+
+impl<T, E> Listener for RefusedListener<T, E> {
+    type Output = T;
+    type Error = E;
     type Inbound = Box<Stream<Item = (Self::Upgrade, Multiaddr), Error = std::io::Error> + Send>;
     type Upgrade = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
 
