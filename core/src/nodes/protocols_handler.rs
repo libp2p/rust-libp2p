@@ -702,20 +702,16 @@ pub struct ProtocolsHandlerSelect<TProto1, TProto2> {
     proto2: TProto2,
 }
 
-impl<TSubstream, TProto1, TProto2, TProto1Out, TProto2Out, TOutEvent>
+impl<TSubstream, TProto1, TProto2, TProto1Out, TProto2Out>
     ProtocolsHandler for ProtocolsHandlerSelect<TProto1, TProto2>
-where TProto1: ProtocolsHandler<Substream = TSubstream, OutEvent = TOutEvent>,
-      TProto2: ProtocolsHandler<Substream = TSubstream, OutEvent = TOutEvent>,
+where TProto1: ProtocolsHandler<Substream = TSubstream>,
+      TProto2: ProtocolsHandler<Substream = TSubstream>,
       TSubstream: AsyncRead + AsyncWrite,
       TProto1::Protocol: ConnectionUpgrade<TSubstream, Output = TProto1Out>,
       TProto2::Protocol: ConnectionUpgrade<TSubstream, Output = TProto2Out>,
-      TProto1Out: Send + 'static,
-      TProto2Out: Send + 'static,
-      <TProto1::Protocol as ConnectionUpgrade<TSubstream>>::Future: Send + 'static,
-      <TProto2::Protocol as ConnectionUpgrade<TSubstream>>::Future: Send + 'static,
 {
     type InEvent = EitherOutput<TProto1::InEvent, TProto2::InEvent>;
-    type OutEvent = TOutEvent;
+    type OutEvent = EitherOutput<TProto1::OutEvent, TProto2::OutEvent>;
     type Substream = TSubstream;
     type Protocol = upgrade::OrUpgrade<upgrade::toggleable::Toggleable<upgrade::map::Map<TProto1::Protocol, fn(TProto1Out) -> EitherOutput<TProto1Out, TProto2Out>>>, upgrade::toggleable::Toggleable<upgrade::map::Map<TProto2::Protocol, fn(TProto2Out) -> EitherOutput<TProto1Out, TProto2Out>>>>;
     type OutboundOpenInfo = EitherOutput<TProto1::OutboundOpenInfo, TProto2::OutboundOpenInfo>;
@@ -781,7 +777,7 @@ where TProto1: ProtocolsHandler<Substream = TSubstream, OutEvent = TOutEvent>,
     fn poll(&mut self) -> Poll<Option<ProtocolsHandlerEvent<Self::Protocol, Self::OutboundOpenInfo, Self::OutEvent>>, io::Error> {
         match self.proto1.poll()? {
             Async::Ready(Some(ProtocolsHandlerEvent::Custom(event))) => {
-                return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(event))));
+                return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(EitherOutput::First(event)))));
             },
             Async::Ready(Some(ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info})) => {
                 let upgrade = {
@@ -802,7 +798,7 @@ where TProto1: ProtocolsHandler<Substream = TSubstream, OutEvent = TOutEvent>,
 
         match self.proto2.poll()? {
             Async::Ready(Some(ProtocolsHandlerEvent::Custom(event))) => {
-                return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(event))));
+                return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(EitherOutput::Second(event)))));
             },
             Async::Ready(Some(ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info })) => {
                 let upgrade = {
