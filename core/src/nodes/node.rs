@@ -23,7 +23,7 @@ use futures::prelude::*;
 use smallvec::SmallVec;
 use std::{fmt, io::Error as IoError, sync::Arc};
 
-// Implementor notes
+// Implementation notes
 // =================
 //
 // In order to minimize the risk of bugs in higher-level code, we want to avoid as much as

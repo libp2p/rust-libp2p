@@ -1106,7 +1106,10 @@ where
         TIter: IntoIterator<Item = Multiaddr>,
     {
         let mut addrs = addrs.into_iter();
-        let first = addrs.next().unwrap(); // TODO: bad
+        let first = match addrs.next() {
+            Some(f) => f,
+            None => return Err(self)
+        };
         let rest = addrs.collect();
         self.connect_inner(handler, first, rest)
     }
