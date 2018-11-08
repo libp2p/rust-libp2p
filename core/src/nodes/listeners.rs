@@ -182,11 +182,13 @@ where
     /// Provides an API similar to `Stream`, except that it cannot error.
     pub fn poll(&mut self) -> Async<ListenersEvent<TTrans>> {
         // We remove each element from `listeners` one by one and add them back.
-        for _n in 0..self.listeners.len() {
-            let mut listener = self.listeners.pop_back().expect("There is at least one Listener if we got here; qed");
+        let mut remaining = self.listeners.len();
+        while let Some(mut listener) = self.listeners.pop_back() {
             match listener.listener.poll() {
                 Ok(Async::NotReady) => {
                     self.listeners.push_front(listener);
+                    remaining -= 1;
+                    if remaining == 0 { break }
                 }
                 Ok(Async::Ready(Some((upgrade, send_back_addr)))) => {
                     let listen_addr = listener.address.clone();
@@ -212,6 +214,7 @@ where
                     });
                 }
             }
+
         }
 
         // We register the current task to be woken up if a new listener is added.
