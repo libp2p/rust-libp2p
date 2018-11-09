@@ -34,18 +34,17 @@ fn one_field() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
     struct Foo<TSubstream> {
-        ping: libp2p::ping::PeriodicPingHandler<TSubstream>,
+        ping: libp2p::ping::PeriodicPingBehaviour<TSubstream>,
     }
 }
 
-// TODO: not enough implementations of NetworkBehaviour exist to write tests
-/*#[test]
+#[test]
 fn two_fields() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
     struct Foo<TSubstream> {
-        ping_dialer: libp2p::ping::PeriodicPingHandler<TSubstream>,
-        ping_listener: libp2p::ping::PingListenHandler<TSubstream>,
+        ping_dialer: libp2p::ping::PeriodicPingBehaviour<TSubstream>,
+        ping_listener: libp2p::ping::PingListenBehaviour<TSubstream>,
     }
 }
 
@@ -54,26 +53,30 @@ fn three_fields() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
     struct Foo<TSubstream> {
-        ping_dialer: libp2p::ping::PeriodicPingHandler<TSubstream>,
-        ping_listener: libp2p::ping::PingListenHandler<TSubstream>,
+        ping_dialer: libp2p::ping::PeriodicPingBehaviour<TSubstream>,
+        ping_listener: libp2p::ping::PingListenBehaviour<TSubstream>,
         identify: libp2p::identify::PeriodicIdentification<TSubstream>,
     }
-}*/
+}
 
-// TODO: 
-/*#[test]
+#[test]
 fn event_handler() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    struct Foo<TSubstream> {
+    // TODO: remove the generics requirements once identify no longer requires them
+    struct Foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite + Send + Sync + 'static> {
         #[behaviour(handler = "foo")]
-        ping: libp2p::ping::PeriodicPingHandler<TSubstream>,
+        identify: libp2p::identify::PeriodicIdentifyBehaviour<TSubstream>,
     }
 
-    impl<TSubstream> Foo<TSubstream> {
-        fn foo(&mut self, ev: ()) {}
+    impl<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite + Send + Sync + 'static> Foo<TSubstream> {
+        // TODO: for some reason, the parameter cannot be `PeriodicIdentifyBehaviourEvent` or we
+        //       get a compilation error ; figure out why or open an issue to Rust
+        fn foo(&mut self, ev: <libp2p::identify::PeriodicIdentifyBehaviour<TSubstream> as libp2p::core::nodes::NetworkBehavior>::OutEvent) {
+            let libp2p::identify::PeriodicIdentifyBehaviourEvent::Identified { .. } = ev;
+        }
     }
-}*/
+}
 
 #[test]
 fn custom_polling() {
@@ -81,8 +84,8 @@ fn custom_polling() {
     #[derive(NetworkBehaviour)]
     #[behaviour(poll_method = "foo")]
     struct Foo<TSubstream> {
-        ping1: libp2p::ping::PeriodicPingHandler<TSubstream>,
-        ping2: libp2p::ping::PeriodicPingHandler<TSubstream>,
+        ping: libp2p::ping::PeriodicPingBehaviour<TSubstream>,
+        identify: libp2p::identify::PeriodicIdentifyBehaviour<TSubstream>,
     }
 
     impl<TSubstream> Foo<TSubstream> {
@@ -96,8 +99,8 @@ fn custom_event_no_polling() {
     #[derive(NetworkBehaviour)]
     #[behaviour(out_event = "String")]
     struct Foo<TSubstream> {
-        ping1: libp2p::ping::PeriodicPingHandler<TSubstream>,
-        ping2: libp2p::ping::PeriodicPingHandler<TSubstream>,
+        ping: libp2p::ping::PeriodicPingBehaviour<TSubstream>,
+        identify: libp2p::identify::PeriodicIdentifyBehaviour<TSubstream>,
     }
 }
 
@@ -107,8 +110,8 @@ fn custom_event_and_polling() {
     #[derive(NetworkBehaviour)]
     #[behaviour(poll_method = "foo", out_event = "String")]
     struct Foo<TSubstream> {
-        ping1: libp2p::ping::PeriodicPingHandler<TSubstream>,
-        ping2: libp2p::ping::PeriodicPingHandler<TSubstream>,
+        ping: libp2p::ping::PeriodicPingBehaviour<TSubstream>,
+        identify: libp2p::identify::PeriodicIdentifyBehaviour<TSubstream>,
     }
 
     impl<TSubstream> Foo<TSubstream> {

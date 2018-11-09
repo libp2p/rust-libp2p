@@ -48,7 +48,7 @@ fn build(ast: &DeriveInput) -> TokenStream {
 /// The version for structs
 fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let name = &ast.ident;
-    let (impl_generics, ty_generics, where_clause) = ast.generics.split_for_impl();
+    let (_, ty_generics, where_clause) = ast.generics.split_for_impl();
     let trait_to_impl = quote!{::libp2p::core::nodes::swarm::NetworkBehavior};
     let either_ident = quote!{::libp2p::core::either::EitherOutput};
     let network_behaviour_action = quote!{::libp2p::core::nodes::swarm::NetworkBehaviorAction};
@@ -57,12 +57,39 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let peer_id = quote!{::libp2p::core::PeerId};
     let connected_point = quote!{::libp2p::core::nodes::ConnectedPoint};
 
+    // Name of the type parameter that represents the substream.
+    let substream_generic = {
+        let mut n = "TSubstream".to_string();
+        // Avoid collisions.
+        while ast.generics.type_params().any(|tp| tp.ident.to_string() == n) {
+            n.push('1');
+        }
+        let n = Ident::new(&n, name.span());
+        quote!{#n}
+    };
+
+    // Build the generics.
+    let impl_generics = {
+        let tp = ast.generics.type_params();
+        let lf = ast.generics.lifetimes();
+        let cst = ast.generics.const_params();
+        quote!{<#(#lf,)* #(#tp,)* #(#cst,)* #substream_generic>}
+    };
+
     // Build the `where ...` clause of the trait implementation.
     let where_clause = {
-        let additional = data_struct.fields.iter().map(|field| {
+        let mut additional = data_struct.fields.iter().flat_map(|field| {
             let ty = &field.ty;
-            quote!{#ty: #trait_to_impl}
+            vec![
+                quote!{#ty: #trait_to_impl},
+                quote!{<#ty as #trait_to_impl>::ProtocolsHandler: #protocols_handler<Substream = #substream_generic>},
+                // Note: this bound is required because of https://github.com/rust-lang/rust/issues/55697
+                quote!{<<#ty as #trait_to_impl>::ProtocolsHandler as #protocols_handler>::Protocol: ::libp2p::core::ConnectionUpgrade<#substream_generic>},
+            ]
         }).collect::<Vec<_>>();
+
+        additional.push(quote!{#substream_generic: ::libp2p::tokio_io::AsyncRead});
+        additional.push(quote!{#substream_generic: ::libp2p::tokio_io::AsyncWrite});
 
         if let Some(where_clause) = where_clause {
             Some(quote!{#where_clause, #(#additional),*})
