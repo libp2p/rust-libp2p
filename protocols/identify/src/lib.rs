@@ -83,10 +83,12 @@ extern crate void;
 
 pub use self::id_transport::IdentifyTransport;
 pub use self::periodic_id_handler::{PeriodicIdentification, PeriodicIdentificationEvent};
+pub use self::periodic_id_layer::{PeriodicIdentifyBehaviour, PeriodicIdentifyBehaviourEvent};
 pub use self::protocol::{IdentifyInfo, IdentifyOutput};
 pub use self::protocol::{IdentifyProtocolConfig, IdentifySender};
 
 mod id_transport;
 mod periodic_id_handler;
+mod periodic_id_layer;
 mod protocol;
 mod structs_proto;
