@@ -65,30 +65,68 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         }).collect::<Vec<_>>();
 
         if let Some(where_clause) = where_clause {
-            // TODO: correct with the coma?
             Some(quote!{#where_clause, #(#additional),*})
         } else {
             Some(quote!{where #(#additional),*})
         }
     };
 
-    // Build the list of statements to put in the body of `inject_connected()`.
-    let inject_connected_stmts = data_struct.fields.iter().enumerate().map(|(field_n, field)| {
-        // TODO: don't clone the peer_id and endpoint at the last statement
-        match field.ident {
-            Some(ref i) => quote!{ self.#i.inject_connected(peer_id.clone(), endpoint.clone()); },
-            None => quote!{ self.#field_n.inject_connected(peer_id.clone(), endpoint.clone()); },
+    // The final out event.
+    // If we find a `#[behaviour(out_event = "Foo")]` attribute on the struct, we set `Foo` as
+    // the out event. Otherwise we use `()`.
+    let out_event = {
+        let mut out = quote!{()};
+        for meta_items in ast.attrs.iter().filter_map(get_meta_items) {
+            for meta_item in meta_items {
+                match meta_item {
+                    syn::NestedMeta::Meta(syn::Meta::NameValue(ref m)) if m.ident == "out_event" => {
+                        if let syn::Lit::Str(ref s) = m.lit {
+                            let ident: Ident = syn::parse_str(&s.value()).unwrap();
+                            out = quote!{#ident};
+                        }
+                    }
+                    _ => ()
+                }
+            }
         }
-    });
+        out
+    };
+
+    // Build the list of statements to put in the body of `inject_connected()`.
+    let inject_connected_stmts = {
+        let num_fields = data_struct.fields.iter().count();
+        data_struct.fields.iter().enumerate().map(move |(field_n, field)| {
+            if field_n == num_fields - 1 {
+                match field.ident {
+                    Some(ref i) => quote!{ self.#i.inject_connected(peer_id, endpoint); },
+                    None => quote!{ self.#field_n.inject_connected(peer_id, endpoint); },
+                }
+            } else {
+                match field.ident {
+                    Some(ref i) => quote!{ self.#i.inject_connected(peer_id.clone(), endpoint.clone()); },
+                    None => quote!{ self.#field_n.inject_connected(peer_id.clone(), endpoint.clone()); },
+                }
+            }
+        })
+    };
 
     // Build the list of statements to put in the body of `inject_disconnected()`.
-    let inject_disconnected_stmts = data_struct.fields.iter().enumerate().map(|(field_n, field)| {
-        // TODO: don't clone the peer_id and endpoint at the last statement
-        match field.ident {
-            Some(ref i) => quote!{ self.#i.inject_disconnected(peer_id, endpoint.clone()); },
-            None => quote!{ self.#field_n.inject_disconnected(peer_id, endpoint.clone()); },
-        }
-    });
+    let inject_disconnected_stmts = {
+        let num_fields = data_struct.fields.iter().count();
+        data_struct.fields.iter().enumerate().map(move |(field_n, field)| {
+            if field_n == num_fields - 1 {
+                match field.ident {
+                    Some(ref i) => quote!{ self.#i.inject_disconnected(peer_id, endpoint); },
+                    None => quote!{ self.#field_n.inject_disconnected(peer_id, endpoint); },
+                }
+            } else {
+                match field.ident {
+                    Some(ref i) => quote!{ self.#i.inject_disconnected(peer_id, endpoint.clone()); },
+                    None => quote!{ self.#field_n.inject_disconnected(peer_id, endpoint.clone()); },
+                }
+            }
+        })
+    };
 
     // Build the list of variants to put in the body of `inject_node_event()`.
     //
@@ -149,6 +187,27 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         out_handler.unwrap_or(quote!{()})     // TODO: incorrect
     };
 
+    // The method to use to poll.
+    // If we find a `#[behaviour(poll_method = "poll")]` attribute on the struct, we call
+    // `self.poll()` at the end of the polling.
+    let poll_method = {
+        let mut poll_method = quote!{Async::NotReady};
+        for meta_items in ast.attrs.iter().filter_map(get_meta_items) {
+            for meta_item in meta_items {
+                match meta_item {
+                    syn::NestedMeta::Meta(syn::Meta::NameValue(ref m)) if m.ident == "poll_method" => {
+                        if let syn::Lit::Str(ref s) = m.lit {
+                            let ident: Ident = syn::parse_str(&s.value()).unwrap();
+                            poll_method = quote!{#name::#ident(self)};
+                        }
+                    }
+                    _ => ()
+                }
+            }
+        }
+        poll_method
+    };
+
     // List of statements to put in `poll()`.
     //
     // We poll each child one by one and wrap around the output.
@@ -159,7 +218,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         };
 
         let mut handler_fn: Option<Ident> = None;
-        for meta_items in ast.attrs.iter().filter_map(get_meta_items) {
+        for meta_items in field.attrs.iter().filter_map(get_meta_items) {
             for meta_item in meta_items {
                 match meta_item {
                     // Parse `#[behaviour(handler = "foo")]`
@@ -218,7 +277,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         #where_clause
         {
             type ProtocolsHandler = #protocols_handler_ty;
-            type OutEvent = ();
+            type OutEvent = #out_event;
 
             #[inline]
             fn new_handler(&mut self) -> Self::ProtocolsHandler {
@@ -250,7 +309,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             fn poll(&mut self) -> ::libp2p::futures::Async<#network_behaviour_action<<Self::ProtocolsHandler as #protocols_handler>::InEvent, Self::OutEvent>> {
                 use libp2p::futures::prelude::*;
                 #(#poll_stmts)*
-                Async::NotReady
+                let f: ::libp2p::futures::Async<#out_event> = #poll_method;
+                f.map(#network_behaviour_action::GenerateEvent)
             }
         }
     };
@@ -259,12 +319,10 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 }
 
 fn get_meta_items(attr: &syn::Attribute) -> Option<Vec<syn::NestedMeta>> {
-    // TODO: blindly copy-pasted from serde
     if attr.path.segments.len() == 1 && attr.path.segments[0].ident == "behaviour" {
         match attr.interpret_meta() {
             Some(syn::Meta::List(ref meta)) => Some(meta.nested.iter().cloned().collect()),
             _ => {
-                // TODO: produce an error
                 None
             }
         }

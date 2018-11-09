@@ -59,3 +59,59 @@ fn three_fields() {
         identify: libp2p::identify::PeriodicIdentification<TSubstream>,
     }
 }*/
+
+// TODO: 
+/*#[test]
+fn event_handler() {
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    struct Foo<TSubstream> {
+        #[behaviour(handler = "foo")]
+        ping: libp2p::ping::PeriodicPingHandler<TSubstream>,
+    }
+
+    impl<TSubstream> Foo<TSubstream> {
+        fn foo(&mut self, ev: ()) {}
+    }
+}*/
+
+#[test]
+fn custom_polling() {
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    #[behaviour(poll_method = "foo")]
+    struct Foo<TSubstream> {
+        ping1: libp2p::ping::PeriodicPingHandler<TSubstream>,
+        ping2: libp2p::ping::PeriodicPingHandler<TSubstream>,
+    }
+
+    impl<TSubstream> Foo<TSubstream> {
+        fn foo(&mut self) -> libp2p::futures::Async<()> { libp2p::futures::Async::NotReady }
+    }
+}
+
+#[test]
+fn custom_event_no_polling() {
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    #[behaviour(out_event = "String")]
+    struct Foo<TSubstream> {
+        ping1: libp2p::ping::PeriodicPingHandler<TSubstream>,
+        ping2: libp2p::ping::PeriodicPingHandler<TSubstream>,
+    }
+}
+
+#[test]
+fn custom_event_and_polling() {
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    #[behaviour(poll_method = "foo", out_event = "String")]
+    struct Foo<TSubstream> {
+        ping1: libp2p::ping::PeriodicPingHandler<TSubstream>,
+        ping2: libp2p::ping::PeriodicPingHandler<TSubstream>,
+    }
+
+    impl<TSubstream> Foo<TSubstream> {
+        fn foo(&mut self) -> libp2p::futures::Async<String> { libp2p::futures::Async::NotReady }
+    }
+}
