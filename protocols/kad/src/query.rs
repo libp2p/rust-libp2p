@@ -100,7 +100,7 @@ where
 fn gen_random_id(my_id: &PeerId, bucket_num: usize) -> Result<PeerId, ()> {
     let my_id_len = my_id.as_bytes().len();
 
-    // TODO: this 2 is magic here ; it is the length of the hash of the multihash
+    // TODO: this 2 is magic here; it is the length of the hash of the multihash
     let bits_diff = bucket_num + 1;
     if bits_diff > 8 * (my_id_len - 2) {
         return Err(());
@@ -137,7 +137,7 @@ where
     FBuckets: Fn(PeerId) -> Vec<PeerId> + 'a + Clone,
     FFindNode: Fn(Multiaddr, PeerId) -> Box<Future<Item = Vec<protocol::Peer>, Error = IoError> + Send> + 'a + Clone,
 {
-    debug!("Start query for {:?} ; num results = {}", searched_key, num_results);
+    debug!("Start query for {:?}; num results = {}", searched_key, num_results);
 
     // State of the current iterative process.
     struct State<'a> {
@@ -230,7 +230,7 @@ where
             to_contact
         };
 
-        debug!("New query round ; {} queries in progress ; contacting {} new peers",
+        debug!("New query round; {} queries in progress; contacting {} new peers",
                state.current_attempts_fut.len(),
                to_contact.len());
 
@@ -350,7 +350,7 @@ where
 
             } else {
                 if !local_nearest_node_updated {
-                    trace!("Loop didn't update closer node ; jumping to step 2");
+                    trace!("Loop didn't update closer node; jumping to step 2");
                     state.stage = Stage::SecondStep;
                 }
             }

@@ -81,7 +81,7 @@ where
     /// # Panic
     ///
     /// Will panic if called while there is data inside the buffer. **This can only happen if
-    /// you call `poll()` manually**. Using this struct as it is intended to be used (ie. through
+    /// you call `poll()` manually**. Using this struct as it is intended to be used (i.e. through
     /// the modifiers provided by the `futures` crate) will always leave the object in a state in
     /// which `into_inner()` will not panic.
     #[inline]

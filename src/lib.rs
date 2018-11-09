@@ -132,9 +132,8 @@
 
 pub extern crate bytes;
 pub extern crate futures;
-#[cfg(not(target_os = "emscripten"))]
-pub extern crate tokio_current_thread;
 pub extern crate multiaddr;
+pub extern crate multihash;
 pub extern crate tokio_io;
 pub extern crate tokio_codec;
 

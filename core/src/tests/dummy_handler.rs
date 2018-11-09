@@ -81,11 +81,6 @@ pub(crate) enum OutEvent {
 // Concrete `HandledNode` parametrised for the test helpers
 pub(crate) type TestHandledNode = HandledNode<DummyMuxer, Handler>;
 
-impl Drop for Handler {
-	fn drop(&mut self) {
-		println!("[TestHandledNode, drop]");
-	}
-}
 
 impl NodeHandler for Handler {
 	type InEvent = InEvent;
@@ -93,7 +88,6 @@ impl NodeHandler for Handler {
 	type OutboundOpenInfo = usize;
 	type Substream = SubstreamRef<Arc<DummyMuxer>>;
 	fn inject_substream(&mut self, _subs: Self::Substream, endpoint: NodeHandlerEndpoint<Self::OutboundOpenInfo>) {
-		println!("[NodeHandler, inject_substream] substream=, endpoint={:?}", endpoint);
 		let user_data = match endpoint {
 			NodeHandlerEndpoint::Dialer(user_data) => Some(user_data),
 			NodeHandlerEndpoint::Listener => None
@@ -110,17 +104,14 @@ impl NodeHandler for Handler {
 		}
 	}
 	fn inject_event(&mut self, inevent: Self::InEvent) {
-		println!("[NodeHandler, inject_event] inevent={:?}", inevent);
 		self.events.push(inevent.clone());
 		match inevent {
 			InEvent::Custom(s) => self.state = Some(HandlerState::Ready(Some(NodeHandlerEvent::Custom(OutEvent::Custom(s))))),
 			InEvent::Substream(Some(user_data)) => {
-				println!("[NodeHandler, inject_event] opening a substream with user_data={:?}", user_data);
 				self.state = Some(HandlerState::Ready(Some(NodeHandlerEvent::OutboundSubstreamRequest(user_data))))
 			},
 			InEvent::NextState => {
 				let next_state = self.next_states.pop();
-				println!("[NodeHandler, inject_event] Setting next state of the handler to ––>{:?}", next_state);
 				self.state = next_state
 			}
 			_ => unreachable!()
@@ -128,11 +119,9 @@ impl NodeHandler for Handler {
 
 	}
 	fn shutdown(&mut self) {
-		println!("[NodeHandler, shutdown] Handler shutting down");
 		self.state = Some(HandlerState::Ready(None));
 	}
 	fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<usize, OutEvent>>, IoError> {
-		println!("[NodeHandler, poll] current handler state: {:?}", self.state);
 		match self.state.take() {
 			Some(ref state) => match state {
 				HandlerState::NotReady => Ok(Async::NotReady),

@@ -324,7 +324,7 @@ where
         .and_then(|context| {
             // Generate our nonce.
             let context = context.with_local()?;
-            trace!("starting handshake ; local nonce = {:?}", context.state.nonce);
+            trace!("starting handshake; local nonce = {:?}", context.state.nonce);
             Ok(context)
         })
         .and_then(|context| {
@@ -346,7 +346,7 @@ where
                             return Err(err.into())
                         },
                     };
-                    trace!("received proposition from remote ; pubkey = {:?} ; nonce = {:?}",
+                    trace!("received proposition from remote; pubkey = {:?}; nonce = {:?}",
                            context.state.public_key, context.state.nonce);
                     Ok((socket, context))
                 })
@@ -436,7 +436,7 @@ where
                     let remote_exch = match protobuf_parse_from_bytes::<Exchange>(&raw) {
                         Ok(e) => e,
                         Err(err) => {
-                            debug!("failed to parse remote's exchange protobuf ; {:?}", err);
+                            debug!("failed to parse remote's exchange protobuf; {:?}", err);
                             return Err(SecioError::HandshakeParsingFailure);
                         }
                     };

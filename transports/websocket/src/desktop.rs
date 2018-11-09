@@ -206,7 +206,7 @@ where
                                     OwnedMessage::Binary(data) => Ok(data),
                                     OwnedMessage::Text(data) => Ok(data.into_bytes()),
                                     // TODO: pings and pongs and close messages need to be
-                                    //       answered ; and this is really hard ; for now we produce
+                                    //       answered; and this is really hard; for now we produce
                                     //         an error when that happens
                                     _ => Err(IoError::new(IoErrorKind::Other, "unimplemented")),
                                 }
