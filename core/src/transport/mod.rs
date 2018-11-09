@@ -263,7 +263,7 @@ where
         }
     }
 
-    pub fn map_listener_error<F, E>(self, f: F) -> Transport<D, MapErr<L, F>>
+    pub fn map_listener_err<F, E>(self, f: F) -> Transport<D, MapErr<L, F>>
     where
         F: FnOnce(L::Error, Multiaddr) -> E + Clone + 'static
     {
@@ -347,7 +347,7 @@ where
         }
     }
 
-    pub fn map_dialer_error<F, E>(self, f: F) -> Transport<MapErr<D, F>, L>
+    pub fn map_dialer_err<F, E>(self, f: F) -> Transport<MapErr<D, F>, L>
     where
         F: FnOnce(D::Error, Multiaddr) -> E + Clone + 'static
     {
