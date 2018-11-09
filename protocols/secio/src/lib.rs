@@ -201,7 +201,7 @@ impl SecioConfig {
 ///
 /// Generating the keys:
 ///
-/// ```ignore
+/// ```text
 /// openssl genrsa -out private.pem 2048
 /// openssl rsa -in private.pem -outform DER -pubout -out public.der
 /// openssl pkcs8 -in private.pem -topk8 -nocrypt -out private.pk8
@@ -254,10 +254,13 @@ impl SecioKeyPair {
     /// Generates a new random sec256k1 key pair.
     #[cfg(feature = "secp256k1")]
     pub fn secp256k1_generated() -> Result<SecioKeyPair, Box<Error + Send + Sync>> {
-        let secp = secp256k1::Secp256k1::with_caps(secp256k1::ContextFlag::Full);
-        let (private, _) = secp.generate_keypair(&mut secp256k1::rand::thread_rng())
-            .expect("failed to generate secp256k1 key");
-
+        let secp = secp256k1::Secp256k1::new();
+        // TODO: This will work once 0.11.5 is released. See https://github.com/rust-bitcoin/rust-secp256k1/pull/80#pullrequestreview-172681778
+        // let private = secp256k1::key::SecretKey::new(&secp, &mut secp256k1::rand::thread_rng());
+        use rand::Rng;
+        let mut random_slice= [0u8; secp256k1::constants::SECRET_KEY_SIZE];
+        rand::thread_rng().fill(&mut random_slice[..]);
+        let private = secp256k1::key::SecretKey::from_slice(&secp, &random_slice).expect("slice has the right size");
         Ok(SecioKeyPair {
             inner: SecioKeyPairInner::Secp256k1 { private },
         })
@@ -269,7 +272,7 @@ impl SecioKeyPair {
     where
         K: AsRef<[u8]>,
     {
-        let secp = secp256k1::Secp256k1::with_caps(secp256k1::ContextFlag::None);
+        let secp = secp256k1::Secp256k1::without_caps();
         let private = secp256k1::key::SecretKey::from_slice(&secp, key.as_ref())?;
 
         Ok(SecioKeyPair {
@@ -304,10 +307,9 @@ impl SecioKeyPair {
             }
             #[cfg(feature = "secp256k1")]
             SecioKeyPairInner::Secp256k1 { ref private } => {
-                let secp = secp256k1::Secp256k1::with_caps(secp256k1::ContextFlag::SignOnly);
-                let pubkey = secp256k1::key::PublicKey::from_secret_key(&secp, private)
-                    .expect("wrong secp256k1 private key; type safety violated");
-                PublicKey::Secp256k1(pubkey.serialize_vec(&secp, true).to_vec())
+                let secp = secp256k1::Secp256k1::signing_only();
+                let pubkey = secp256k1::key::PublicKey::from_secret_key(&secp, private);
+                PublicKey::Secp256k1(pubkey.serialize().to_vec())
             }
         }
     }
