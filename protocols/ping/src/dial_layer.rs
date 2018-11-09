@@ -26,7 +26,7 @@ use tokio_io::{AsyncRead, AsyncWrite};
 use void::Void;
 use PeriodicPingHandler;
 
-/// Network behaviour that handles receiving to pings sent by other nodes.
+/// Network behaviour that handles receiving pings sent by other nodes.
 pub struct PeriodicPingBehaviour<TSubstream> {
     /// Marker to pin the generics.
     marker: PhantomData<TSubstream>,
