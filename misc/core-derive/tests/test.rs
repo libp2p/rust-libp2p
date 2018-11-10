@@ -91,7 +91,7 @@ fn custom_polling() {
     }
 
     impl<TSubstream> Foo<TSubstream> {
-        fn foo(&mut self) -> libp2p::futures::Async<()> { libp2p::futures::Async::NotReady }
+        fn foo<T>(&mut self) -> libp2p::futures::Async<libp2p::core::nodes::NetworkBehaviorAction<T, ()>> { libp2p::futures::Async::NotReady }
     }
 }
 
@@ -117,6 +117,6 @@ fn custom_event_and_polling() {
     }
 
     impl<TSubstream> Foo<TSubstream> {
-        fn foo(&mut self) -> libp2p::futures::Async<String> { libp2p::futures::Async::NotReady }
+        fn foo<T>(&mut self) -> libp2p::futures::Async<libp2p::core::nodes::NetworkBehaviorAction<T, String>> { libp2p::futures::Async::NotReady }
     }
 }
