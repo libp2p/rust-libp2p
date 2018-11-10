@@ -79,6 +79,10 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     // Build the `where ...` clause of the trait implementation.
     let where_clause = {
         let mut additional = data_struct.fields.iter().flat_map(|field| {
+            if is_ignored(&field) {
+                return vec![];
+            }
+
             let ty = &field.ty;
             vec![
                 quote!{#ty: #trait_to_impl},
@@ -121,9 +125,13 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Build the list of statements to put in the body of `inject_connected()`.
     let inject_connected_stmts = {
-        let num_fields = data_struct.fields.iter().count();
-        data_struct.fields.iter().enumerate().map(move |(field_n, field)| {
-            if field_n == num_fields - 1 {
+        let num_fields = data_struct.fields.iter().filter(|f| !is_ignored(f)).count();
+        data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
+            if is_ignored(&field) {
+                return None;
+            }
+
+            Some(if field_n == num_fields - 1 {
                 match field.ident {
                     Some(ref i) => quote!{ self.#i.inject_connected(peer_id, endpoint); },
                     None => quote!{ self.#field_n.inject_connected(peer_id, endpoint); },
@@ -133,15 +141,19 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                     Some(ref i) => quote!{ self.#i.inject_connected(peer_id.clone(), endpoint.clone()); },
                     None => quote!{ self.#field_n.inject_connected(peer_id.clone(), endpoint.clone()); },
                 }
-            }
+            })
         })
     };
 
     // Build the list of statements to put in the body of `inject_disconnected()`.
     let inject_disconnected_stmts = {
-        let num_fields = data_struct.fields.iter().count();
-        data_struct.fields.iter().enumerate().map(move |(field_n, field)| {
-            if field_n == num_fields - 1 {
+        let num_fields = data_struct.fields.iter().filter(|f| !is_ignored(f)).count();
+        data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
+            if is_ignored(&field) {
+                return None;
+            }
+
+            Some(if field_n == num_fields - 1 {
                 match field.ident {
                     Some(ref i) => quote!{ self.#i.inject_disconnected(peer_id, endpoint); },
                     None => quote!{ self.#field_n.inject_disconnected(peer_id, endpoint); },
@@ -151,7 +163,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                     Some(ref i) => quote!{ self.#i.inject_disconnected(peer_id, endpoint.clone()); },
                     None => quote!{ self.#field_n.inject_disconnected(peer_id, endpoint.clone()); },
                 }
-            }
+            })
         })
     };
 
@@ -160,26 +172,33 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     // The event type is a construction of nested `#either_ident`s of the events of the children.
     // We call `inject_node_event` on the corresponding child.
     let inject_node_event_stmts = data_struct.fields.iter().enumerate().map(|(field_n, field)| {
+        if is_ignored(&field) {
+            return None;
+        }
+
         let mut elem = if field_n != 0 {
             quote!{ #either_ident::Second(ev) }
         } else {
             quote!{ ev }
         };
 
-        for _ in 0 .. data_struct.fields.iter().count() - 1 - field_n {
+        for _ in 0 .. data_struct.fields.iter().filter(|f| !is_ignored(f)).count() - 1 - field_n {
             elem = quote!{ #either_ident::First(#elem) };
         }
 
-        match field.ident {
+        Some(match field.ident {
             Some(ref i) => quote!{ #elem => self.#i.inject_node_event(peer_id, ev) },
             None => quote!{ #elem => self.#field_n.inject_node_event(peer_id, ev) },
-        }
+        })
     });
 
     // The `ProtocolsHandler` associated type.
     let protocols_handler_ty = {
         let mut ph_ty = None;
         for field in data_struct.fields.iter() {
+            if is_ignored(&field) {
+                continue;
+            }
             let ty = &field.ty;
             let field_info = quote!{ <#ty as #trait_to_impl>::ProtocolsHandler };
             match ph_ty {
@@ -196,6 +215,10 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         let mut out_handler = None;
 
         for (field_n, field) in data_struct.fields.iter().enumerate() {
+            if is_ignored(&field) {
+                continue;
+            }
+
             let field_name = match field.ident {
                 Some(ref i) => quote!{ self.#i },
                 None => quote!{ self.#field_n },
@@ -238,7 +261,11 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     // List of statements to put in `poll()`.
     //
     // We poll each child one by one and wrap around the output.
-    let poll_stmts = data_struct.fields.iter().enumerate().map(|(field_n, field)| {
+    let poll_stmts = data_struct.fields.iter().enumerate().filter_map(|(field_n, field)| {
+        if is_ignored(&field) {
+            return None;
+        }
+
         let field_name = match field.ident {
             Some(ref i) => quote!{ self.#i },
             None => quote!{ self.#field_n },
@@ -270,11 +297,11 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         } else {
             quote!{ event }
         };
-        for _ in 0 .. data_struct.fields.iter().count() - 1 - field_n {
+        for _ in 0 .. data_struct.fields.iter().filter(|f| !is_ignored(f)).count() - 1 - field_n {
             wrapped_event = quote!{ #either_ident::First(#wrapped_event) };
         }
 
-        quote!{
+        Some(quote!{
             loop {
                 match #field_name.poll() {
                     Async::Ready(#network_behaviour_action::GenerateEvent(event)) => {
@@ -295,7 +322,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                     Async::NotReady => break,
                 }
             }
-        }
+        })
     });
 
     // Now the magic happens.
@@ -356,4 +383,20 @@ fn get_meta_items(attr: &syn::Attribute) -> Option<Vec<syn::NestedMeta>> {
     } else {
         None
     }
+}
+
+/// Returns true if a field is marked as ignored by the user.
+fn is_ignored(field: &syn::Field) -> bool {
+    for meta_items in field.attrs.iter().filter_map(get_meta_items) {
+        for meta_item in meta_items {
+            match meta_item {
+                syn::NestedMeta::Meta(syn::Meta::Word(ref m)) if m == "ignore" => {
+                    return true;
+                }
+                _ => ()
+            }
+        }
+    }
+
+    false
 }

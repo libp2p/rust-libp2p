@@ -56,6 +56,8 @@ fn three_fields() {
         ping_dialer: libp2p::ping::PeriodicPingBehaviour<TSubstream>,
         ping_listener: libp2p::ping::PingListenBehaviour<TSubstream>,
         identify: libp2p::identify::PeriodicIdentification<TSubstream>,
+        #[behaviour(ignore)]
+        foo: String,
     }
 }
 
