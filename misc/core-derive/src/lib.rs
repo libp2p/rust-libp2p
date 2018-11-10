@@ -171,12 +171,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     //
     // The event type is a construction of nested `#either_ident`s of the events of the children.
     // We call `inject_node_event` on the corresponding child.
-    let inject_node_event_stmts = data_struct.fields.iter().enumerate().map(|(field_n, field)| {
-        if is_ignored(&field) {
-            return None;
-        }
-
-        let mut elem = if field_n != 0 {
+    let inject_node_event_stmts = data_struct.fields.iter().enumerate().filter(|f| !is_ignored(&f.1)).enumerate().map(|(enum_n, (field_n, field))| {
+        let mut elem = if enum_n != 0 {
             quote!{ #either_ident::Second(ev) }
         } else {
             quote!{ ev }
@@ -261,11 +257,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     // List of statements to put in `poll()`.
     //
     // We poll each child one by one and wrap around the output.
-    let poll_stmts = data_struct.fields.iter().enumerate().filter_map(|(field_n, field)| {
-        if is_ignored(&field) {
-            return None;
-        }
-
+    let poll_stmts = data_struct.fields.iter().enumerate().filter(|f| !is_ignored(&f.1)).enumerate().map(|(enum_n, (field_n, field))| {
         let field_name = match field.ident {
             Some(ref i) => quote!{ self.#i },
             None => quote!{ self.#field_n },
@@ -292,7 +284,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             quote!{}
         };
 
-        let mut wrapped_event = if field_n != 0 {
+        let mut wrapped_event = if enum_n != 0 {
             quote!{ #either_ident::Second(event) }
         } else {
             quote!{ event }
