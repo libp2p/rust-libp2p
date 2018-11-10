@@ -209,9 +209,7 @@ where
                         }
                     }
                     SubstreamState::Closing(mut substream) => match substream.close() {
-                        Ok(Async::Ready(())) => {
-                            return Ok(Async::Ready(None));
-                        }
+                        Ok(Async::Ready(())) => break,
                         Ok(Async::NotReady) => {
                             self.substreams.push(SubstreamState::Closing(substream));
                             return Ok(Async::NotReady);
