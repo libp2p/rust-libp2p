@@ -25,7 +25,7 @@ use core::Endpoint;
 use tokio_io::codec::{Decoder, Encoder};
 use unsigned_varint::{codec, encode};
 
-// Maximum size for a packet: 1Mb.
+// Maximum size for a packet: 1MB as per the spec.
 // Since data is entirely buffered before being dispatched, we need a limit or remotes could just
 // send a 4 TB-long packet full of zeroes that we kill our process with an OOM error.
 const MAX_FRAME_SIZE: usize = 1024 * 1024;
