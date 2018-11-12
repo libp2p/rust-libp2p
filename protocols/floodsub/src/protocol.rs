@@ -102,11 +102,16 @@ impl Encoder for FloodsubCodec {
             proto.mut_subscriptions().push(subscription);
         }
 
+        let msg_size = proto.compute_size();
+        // Reserve enough space for the data and the length. The length has a maximum of 32 bytes,
+        // which means that 5 bytes is enough for the variable-length integer.
+        dst.reserve(msg_size as usize + 5);
+
         proto
             .write_length_delimited_to_writer(&mut dst.by_ref().writer())
             .expect(
                 "there is no situation in which the protobuf message can be invalid, and \
-                 writing to a BytesMut never fails",
+                 writing to a BytesMut never fails as we reserved enough space beforehand",
             );
         Ok(())
     }
