@@ -51,10 +51,16 @@ impl<TSubstream> IdentifyListen<TSubstream> {
         }
     }
 
+    /// Gets the information that is sent back to remotes.
+    #[inline]
+    pub fn infos(&self) -> &IdentifyInfo {
+        &self.send_back_info
+    }
+
     /// Modifies the information to send back to remotes.
     #[inline]
-    pub fn set_infos(&mut self, info: IdentifyInfo) {
-        self.send_back_info = info;
+    pub fn infos_mut(&mut self) -> &mut IdentifyInfo {
+        &mut self.send_back_info
     }
 }
 
