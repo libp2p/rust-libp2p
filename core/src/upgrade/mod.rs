@@ -50,7 +50,9 @@ pub trait InboundUpgrade<C>: UpgradeInfo {
     type Future: Future<Item = Self::Output, Error = Self::Error>;
 
     fn upgrade_inbound(self, socket: C, id: Self::UpgradeId) -> Self::Future;
+}
 
+pub trait InboundUpgradeExt<C>: InboundUpgrade<C> {
     fn map_inbound<F, T>(self, f: F) -> MapUpgrade<Self, F>
     where
         Self: Sized,
@@ -76,13 +78,17 @@ pub trait InboundUpgrade<C>: UpgradeInfo {
     }
 }
 
+impl<C, U: InboundUpgrade<C>> InboundUpgradeExt<C> for U {}
+
 pub trait OutboundUpgrade<C>: UpgradeInfo {
     type Output;
     type Error;
     type Future: Future<Item = Self::Output, Error = Self::Error>;
 
     fn upgrade_outbound(self, socket: C, id: Self::UpgradeId) -> Self::Future;
+}
 
+pub trait OutboundUpgradeExt<C>: OutboundUpgrade<C> {
     fn map_outbound<F, T>(self, f: F) -> MapUpgrade<Self, F>
     where
         Self: Sized,
@@ -107,4 +113,6 @@ pub trait OutboundUpgrade<C>: UpgradeInfo {
         OrUpgrade::new(self, upgrade)
     }
 }
+
+impl<C, U: OutboundUpgrade<C>> OutboundUpgradeExt<C> for U {}
 
