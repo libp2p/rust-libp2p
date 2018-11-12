@@ -367,14 +367,14 @@ mod tests {
             let mut bytes = vec![random(); 34];
             bytes[0] = 18;
             bytes[1] = 32;
-            PeerId::from_bytes(bytes).unwrap()
+            PeerId::from_bytes(bytes.clone()).expect(&format!("creating `my_id` PeerId from bytes {:#?} failed", bytes))
         };
 
         let other_id = {
             let mut bytes = vec![random(); 34];
             bytes[0] = 18;
             bytes[1] = 32;
-            PeerId::from_bytes(bytes).unwrap()
+            PeerId::from_bytes(bytes.clone()).expect(&format!("creating `other_id` PeerId from bytes {:#?} failed", bytes))
         };
 
         let table = KBucketsTable::new(my_id, Duration::from_secs(5));

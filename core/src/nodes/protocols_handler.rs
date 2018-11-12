@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use either::EitherOutput;
 use futures::prelude::*;
 use nodes::handled_node::{NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent};
 use std::{io, marker::PhantomData, time::Duration};
@@ -154,6 +155,19 @@ pub trait ProtocolsHandler {
         TMap: FnMut(Self::OutEvent) -> TNewOut,
     {
         MapOutEvent { inner: self, map }
+    }
+
+    /// Builds an implementation of `ProtocolsHandler` that handles both this protocol and the
+    /// other one together.
+    #[inline]
+    fn select<TProto2>(self, other: TProto2) -> ProtocolsHandlerSelect<Self, TProto2>
+    where
+        Self: Sized,
+    {
+        ProtocolsHandlerSelect {
+            proto1: self,
+            proto2: other,
+        }
     }
 
     /// Creates a builder that will allow creating a `NodeHandler` that handles this protocol
@@ -675,6 +689,132 @@ where
             }
             Async::Ready(None) => return Ok(Async::Ready(None)),
             Async::NotReady => (),
+        };
+
+        Ok(Async::NotReady)
+    }
+}
+
+/// Implementation of `ProtocolsHandler` that combines two protocols into one.
+#[derive(Debug, Clone)]
+pub struct ProtocolsHandlerSelect<TProto1, TProto2> {
+    proto1: TProto1,
+    proto2: TProto2,
+}
+
+impl<TSubstream, TProto1, TProto2, TProto1Out, TProto2Out>
+    ProtocolsHandler for ProtocolsHandlerSelect<TProto1, TProto2>
+where TProto1: ProtocolsHandler<Substream = TSubstream>,
+      TProto2: ProtocolsHandler<Substream = TSubstream>,
+      TSubstream: AsyncRead + AsyncWrite,
+      TProto1::Protocol: ConnectionUpgrade<TSubstream, Output = TProto1Out>,
+      TProto2::Protocol: ConnectionUpgrade<TSubstream, Output = TProto2Out>,
+{
+    type InEvent = EitherOutput<TProto1::InEvent, TProto2::InEvent>;
+    type OutEvent = EitherOutput<TProto1::OutEvent, TProto2::OutEvent>;
+    type Substream = TSubstream;
+    type Protocol = upgrade::OrUpgrade<upgrade::toggleable::Toggleable<upgrade::map::Map<TProto1::Protocol, fn(TProto1Out) -> EitherOutput<TProto1Out, TProto2Out>>>, upgrade::toggleable::Toggleable<upgrade::map::Map<TProto2::Protocol, fn(TProto2Out) -> EitherOutput<TProto1Out, TProto2Out>>>>;
+    type OutboundOpenInfo = EitherOutput<TProto1::OutboundOpenInfo, TProto2::OutboundOpenInfo>;
+
+    #[inline]
+    fn listen_protocol(&self) -> Self::Protocol {
+        let proto1 = upgrade::toggleable(upgrade::map::<_, fn(_) -> _>(self.proto1.listen_protocol(), EitherOutput::First));
+        let proto2 = upgrade::toggleable(upgrade::map::<_, fn(_) -> _>(self.proto2.listen_protocol(), EitherOutput::Second));
+        upgrade::or(proto1, proto2)
+    }
+
+    fn inject_fully_negotiated(&mut self, protocol: <Self::Protocol as ConnectionUpgrade<TSubstream>>::Output, endpoint: NodeHandlerEndpoint<Self::OutboundOpenInfo>) {
+        match (protocol, endpoint) {
+            (EitherOutput::First(protocol), NodeHandlerEndpoint::Dialer(EitherOutput::First(info))) => {
+                self.proto1.inject_fully_negotiated(protocol, NodeHandlerEndpoint::Dialer(info));
+            },
+            (EitherOutput::Second(protocol), NodeHandlerEndpoint::Dialer(EitherOutput::Second(info))) => {
+                self.proto2.inject_fully_negotiated(protocol, NodeHandlerEndpoint::Dialer(info));
+            },
+            (EitherOutput::First(_), NodeHandlerEndpoint::Dialer(EitherOutput::Second(_))) => {
+                panic!("wrong API usage: the protocol doesn't match the upgrade info")
+            },
+            (EitherOutput::Second(_), NodeHandlerEndpoint::Dialer(EitherOutput::First(_))) => {
+                panic!("wrong API usage: the protocol doesn't match the upgrade info")
+            },
+            (EitherOutput::First(protocol), NodeHandlerEndpoint::Listener) => {
+                self.proto1.inject_fully_negotiated(protocol, NodeHandlerEndpoint::Listener);
+            },
+            (EitherOutput::Second(protocol), NodeHandlerEndpoint::Listener) => {
+                self.proto2.inject_fully_negotiated(protocol, NodeHandlerEndpoint::Listener);
+            },
+        }
+    }
+
+    #[inline]
+    fn inject_event(&mut self, event: Self::InEvent) {
+        match event {
+            EitherOutput::First(event) => self.proto1.inject_event(event),
+            EitherOutput::Second(event) => self.proto2.inject_event(event),
+        }
+    }
+
+    #[inline]
+    fn inject_inbound_closed(&mut self) {
+        self.proto1.inject_inbound_closed();
+        self.proto2.inject_inbound_closed();
+    }
+
+    #[inline]
+    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: io::Error) {
+        match info {
+            EitherOutput::First(info) => self.proto1.inject_dial_upgrade_error(info, error),
+            EitherOutput::Second(info) => self.proto2.inject_dial_upgrade_error(info, error),
+        }
+    }
+
+    #[inline]
+    fn shutdown(&mut self) {
+        self.proto1.shutdown();
+        self.proto2.shutdown();
+    }
+
+    fn poll(&mut self) -> Poll<Option<ProtocolsHandlerEvent<Self::Protocol, Self::OutboundOpenInfo, Self::OutEvent>>, io::Error> {
+        match self.proto1.poll()? {
+            Async::Ready(Some(ProtocolsHandlerEvent::Custom(event))) => {
+                return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(EitherOutput::First(event)))));
+            },
+            Async::Ready(Some(ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info})) => {
+                let upgrade = {
+                    let proto1 = upgrade::toggleable(upgrade::map::<_, fn(_) -> _>(upgrade, EitherOutput::First));
+                    let mut proto2 = upgrade::toggleable(upgrade::map::<_, fn(_) -> _>(self.proto2.listen_protocol(), EitherOutput::Second));
+                    proto2.disable();
+                    upgrade::or(proto1, proto2)
+                };
+
+                return Ok(Async::Ready(Some(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                    upgrade,
+                    info: EitherOutput::First(info),
+                })));
+            },
+            Async::Ready(None) => return Ok(Async::Ready(None)),
+            Async::NotReady => ()
+        };
+
+        match self.proto2.poll()? {
+            Async::Ready(Some(ProtocolsHandlerEvent::Custom(event))) => {
+                return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(EitherOutput::Second(event)))));
+            },
+            Async::Ready(Some(ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info })) => {
+                let upgrade = {
+                    let mut proto1 = upgrade::toggleable(upgrade::map::<_, fn(_) -> _>(self.proto1.listen_protocol(), EitherOutput::First));
+                    proto1.disable();
+                    let proto2 = upgrade::toggleable(upgrade::map::<_, fn(_) -> _>(upgrade, EitherOutput::Second));
+                    upgrade::or(proto1, proto2)
+                };
+
+                return Ok(Async::Ready(Some(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                    upgrade,
+                    info: EitherOutput::Second(info),
+                })));
+            },
+            Async::Ready(None) => return Ok(Async::Ready(None)),
+            Async::NotReady => ()
         };
 
         Ok(Async::NotReady)
