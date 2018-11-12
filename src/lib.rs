@@ -159,14 +159,14 @@ pub extern crate libp2p_uds as uds;
 pub extern crate libp2p_websocket as websocket;
 pub extern crate libp2p_yamux as yamux;
 
-mod ext;
+mod transport_ext;
 
 pub mod simple;
 
 pub use self::core::{Dialer, DialerExt, Listener, ListenerExt, Transport, PeerId, transport};
 pub use self::multiaddr::Multiaddr;
 pub use self::simple::SimpleProtocol;
-pub use self::ext::{DialerExtra, ListenerExtra};
+pub use self::transport_ext::{DialerExtra, ListenerExtra};
 pub use self::transport_timeout::TransportTimeout;
 
 /// Implementation of `Transport` that supports the most common protocols.
