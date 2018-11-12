@@ -74,37 +74,37 @@ use void::Void;
 /// tokio::run(future.map_err(|_| ()));
 /// # }
 /// ```
-pub struct ListenersStream<L>
+pub struct ListenersStream<TListener>
 where
-    L: transport::Listener,
+    TListener: transport::Listener,
 {
     /// Transport used to spawn listeners.
-    transport: L,
+    transport: TListener,
     /// All the active listeners.
-    listeners: VecDeque<Listener<L>>,
+    listeners: VecDeque<Listener<TListener>>,
 }
 
 /// A single active listener.
 #[derive(Debug)]
-struct Listener<L>
+struct Listener<TListener>
 where
-    L: transport::Listener,
+    TListener: transport::Listener,
 {
     /// The object that actually listens.
-    inbound: L::Inbound,
+    inbound: TListener::Inbound,
     /// Address it is listening on.
     address: Multiaddr,
 }
 
 /// Event that can happen on the `ListenersStream`.
-pub enum ListenersEvent<L>
+pub enum ListenersEvent<TListener>
 where
-    L: transport::Listener,
+    TListener: transport::Listener,
 {
     /// A connection is incoming on one of the listeners.
     Incoming {
         /// The produced upgrade.
-        upgrade: L::Upgrade,
+        upgrade: TListener::Upgrade,
         /// Address of the listener which received the connection.
         listen_addr: Multiaddr,
         /// Address used to send back data to the incoming client.
@@ -116,19 +116,19 @@ where
         /// Address of the listener which closed.
         listen_addr: Multiaddr,
         /// The listener that closed.
-        inbound: L::Inbound,
+        inbound: TListener::Inbound,
         /// The error that happened. `Ok` if gracefully closed.
-        result: Result<(), <L::Inbound as Stream>::Error>,
+        result: Result<(), <TListener::Inbound as Stream>::Error>,
     },
 }
 
-impl<L> ListenersStream<L>
+impl<TListener> ListenersStream<TListener>
 where
-    L: transport::Listener,
+    TListener: transport::Listener,
 {
     /// Starts a new stream of listeners.
     #[inline]
-    pub fn new(transport: L) -> Self {
+    pub fn new(transport: TListener) -> Self {
         ListenersStream {
             transport,
             listeners: VecDeque::new(),
@@ -138,7 +138,7 @@ where
     /// Same as `new`, but pre-allocates enough memory for the given number of
     /// simultaneous listeners.
     #[inline]
-    pub fn with_capacity(transport: L, capacity: usize) -> Self {
+    pub fn with_capacity(transport: TListener, capacity: usize) -> Self {
         ListenersStream {
             transport,
             listeners: VecDeque::with_capacity(capacity),
@@ -150,7 +150,7 @@ where
     /// Returns an error if the transport doesn't support the given multiaddress.
     pub fn listen_on(&mut self, addr: Multiaddr) -> Result<Multiaddr, Multiaddr>
     where
-        L: Clone,
+        TListener: Clone,
     {
         let (inbound, new_addr) = self
             .transport
@@ -168,7 +168,7 @@ where
 
     /// Returns the transport passed when building this object.
     #[inline]
-    pub fn transport(&self) -> &L {
+    pub fn transport(&self) -> &TListener {
         &self.transport
     }
 
@@ -179,7 +179,7 @@ where
     }
 
     /// Provides an API similar to `Stream`, except that it cannot error.
-    pub fn poll(&mut self) -> Async<ListenersEvent<L>> {
+    pub fn poll(&mut self) -> Async<ListenersEvent<TListener>> {
         // We remove each element from `listeners` one by one and add them back.
         let mut remaining = self.listeners.len();
         while let Some(mut listener) = self.listeners.pop_back() {
@@ -220,11 +220,11 @@ where
     }
 }
 
-impl<L> Stream for ListenersStream<L>
+impl<TListener> Stream for ListenersStream<TListener>
 where
-    L: transport::Listener,
+    TListener: transport::Listener,
 {
-    type Item = ListenersEvent<L>;
+    type Item = ListenersEvent<TListener>;
     type Error = Void; // TODO: use ! once stable
 
     #[inline]
@@ -233,9 +233,9 @@ where
     }
 }
 
-impl<L> fmt::Debug for ListenersStream<L>
+impl<TListener> fmt::Debug for ListenersStream<TListener>
 where
-    L: transport::Listener + fmt::Debug,
+    TListener: transport::Listener + fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         f.debug_struct("ListenersStream")
@@ -245,10 +245,10 @@ where
     }
 }
 
-impl<L> fmt::Debug for ListenersEvent<L>
+impl<TListener> fmt::Debug for ListenersEvent<TListener>
 where
-    L: transport::Listener,
-    <L::Inbound as Stream>::Error: fmt::Debug,
+    TListener: transport::Listener,
+    <TListener::Inbound as Stream>::Error: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
