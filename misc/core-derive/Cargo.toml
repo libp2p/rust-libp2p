@@ -1,0 +1,15 @@
+[package]
+name = "libp2p-core-derive"
+version = "0.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "0.15", default-features = false, features = ["derive", "parsing", "printing", "proc-macro"] }
+quote = "0.6"
+
+[dev-dependencies]
+libp2p = { path = "../.." }

@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::io::Error as IoError;
 use futures::prelude::*;
 use tokio_io::{AsyncRead, AsyncWrite};
 use upgrade::{ConnectionUpgrade, Endpoint};
@@ -39,9 +38,8 @@ pub struct Map<U, F> {
 impl<C, U, F, O> ConnectionUpgrade<C> for Map<U, F>
 where
     U: ConnectionUpgrade<C>,
-    U::Future: Send + 'static,     // TODO: 'static :(
     C: AsyncRead + AsyncWrite,
-    F: FnOnce(U::Output) -> O + Send + 'static,     // TODO: 'static :(
+    F: FnOnce(U::Output) -> O,
 {
     type NamesIter = U::NamesIter;
     type UpgradeIdentifier = U::UpgradeIdentifier;
@@ -51,7 +49,7 @@ where
     }
 
     type Output = O;
-    type Future = Box<Future<Item = O, Error = IoError> + Send>;
+    type Future = MapFuture<U::Future, F>;
 
     fn upgrade(
         self,
@@ -59,10 +57,28 @@ where
         id: Self::UpgradeIdentifier,
         ty: Endpoint,
     ) -> Self::Future {
-        let map = self.map;
-        let fut = self.upgrade
-            .upgrade(socket, id, ty)
-            .map(map);
-        Box::new(fut) as Box<_>
+        MapFuture {
+            inner: self.upgrade.upgrade(socket, id, ty),
+            map: Some(self.map),
+        }
+    }
+}
+
+pub struct MapFuture<TInnerFut, TMap> {
+    inner: TInnerFut,
+    map: Option<TMap>,
+}
+
+impl<TInnerFut, TIn, TMap, TOut> Future for MapFuture<TInnerFut, TMap>
+where TInnerFut: Future<Item = TIn>,
+      TMap: FnOnce(TIn) -> TOut,
+{
+    type Item = TOut;
+    type Error = TInnerFut::Error;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let item = try_ready!(self.inner.poll());
+        let map = self.map.take().expect("Future has already finished");
+        Ok(Async::Ready(map(item)))
     }
 }

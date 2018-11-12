@@ -137,6 +137,7 @@ pub extern crate multihash;
 pub extern crate tokio_io;
 pub extern crate tokio_codec;
 
+extern crate libp2p_core_derive;
 extern crate tokio_executor;
 
 pub extern crate libp2p_core as core;
@@ -163,6 +164,7 @@ mod transport_ext;
 
 pub mod simple;
 
+pub use libp2p_core_derive::NetworkBehaviour;
 pub use self::core::{Transport, ConnectionUpgrade, PeerId};
 pub use self::multiaddr::Multiaddr;
 pub use self::simple::SimpleProtocol;
