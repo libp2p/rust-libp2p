@@ -100,11 +100,15 @@ impl<TSubstream> FloodsubBehaviour<TSubstream> {
     }
 
     /// Publishes a message to the network.
+    ///
+    /// This publishes a message even if we're not subscribed to the topic.
     pub fn publish(&mut self, topic: impl Into<TopicHash>, data: impl Into<Vec<u8>>) {
         self.publish_many(iter::once(topic), data)
     }
 
     /// Publishes a message to the network that has multiple topics.
+    ///
+    /// This publishes a message even if we're not subscribed to any of the topics.
     pub fn publish_many(&mut self, topic: impl IntoIterator<Item = impl Into<TopicHash>>, data: impl Into<Vec<u8>>) {
         let message = FloodsubMessage {
             source: self.local_peer_id.clone(),
@@ -182,12 +186,12 @@ where
                 continue;
             }
 
-            // Add the message to be dispatched outside of the layer.
-            if self.subscribed_topics.iter().any(|t| message.topics.iter().any(|u| t.hash() == u)) {
-                self.events.push_back(NetworkBehaviorAction::GenerateEvent(message.clone()));
+            // Ignore messages that aren't from a topic we're subscribed to.
+            if !self.subscribed_topics.iter().any(|t| message.topics.iter().any(|u| t.hash() == u)) {
+                continue;
             }
 
-            // Propagate the message to everyone else.
+            self.events.push_back(NetworkBehaviorAction::GenerateEvent(message.clone()));
             rpc_to_dispatch.messages.push(message);
         }
 
