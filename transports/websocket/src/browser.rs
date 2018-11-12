@@ -58,7 +58,7 @@ impl Dialer for BrowserWsDialer {
     type Error = IoError;
     type Outbound = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
 
-   fn dial(self, original_addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> {
+    fn dial(self, original_addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> {
         // Making sure we are initialized before we dial. Initialization is protected by a simple
         // boolean static variable, so it's not a problem to call it multiple times and the cost
         // is negligible.
