@@ -5,7 +5,7 @@ authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 
 [features]
-default = ["secio-rsa", "secio-secp256k1"]
+default = ["secio-rsa", "secio-secp256k1", "libp2p-websocket"]
 secio-rsa = ["libp2p-secio/rsa"]
 secio-secp256k1 = ["libp2p-secio/secp256k1"]
 
@@ -26,7 +26,7 @@ libp2p-core = { path = "./core" }
 libp2p-secio = { path = "./protocols/secio", default-features = false }
 libp2p-transport-timeout = { path = "./transports/timeout" }
 libp2p-uds = { path = "./transports/uds" }
-libp2p-websocket = { path = "./transports/websocket" }
+libp2p-websocket = { path = "./transports/websocket", optional = true }
 libp2p-yamux = { path = "./muxers/yamux" }
 tokio-codec = "0.1"
 tokio-executor = "0.1"

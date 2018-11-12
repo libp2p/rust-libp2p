@@ -155,6 +155,7 @@ pub extern crate libp2p_secio as secio;
 pub extern crate libp2p_tcp_transport as tcp;
 pub extern crate libp2p_transport_timeout as transport_timeout;
 pub extern crate libp2p_uds as uds;
+#[cfg(feature = "libp2p-websocket")]
 pub extern crate libp2p_websocket as websocket;
 pub extern crate libp2p_yamux as yamux;
 
@@ -178,8 +179,10 @@ pub struct CommonTransport {
     inner: CommonTransportInner
 }
 
-#[cfg(not(target_os = "emscripten"))]
+#[cfg(all(not(target_os = "emscripten"), feature = "libp2p-websocket"))]
 pub type InnerImplementation = core::transport::OrTransport<dns::DnsConfig<tcp::TcpConfig>, websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>>;
+#[cfg(all(not(target_os = "emscripten"), not(feature = "libp2p-websocket")))]
+pub type InnerImplementation = dns::DnsConfig<tcp::TcpConfig>;
 #[cfg(target_os = "emscripten")]
 pub type InnerImplementation = websocket::BrowserWsConfig;
 
@@ -193,13 +196,16 @@ impl CommonTransport {
     #[inline]
     #[cfg(not(target_os = "emscripten"))]
     pub fn new() -> CommonTransport {
-        let tcp = tcp::TcpConfig::new();
-        let with_dns = dns::DnsConfig::new(tcp);
-        let with_ws = websocket::WsConfig::new(with_dns.clone());
-        let inner = with_dns.or_transport(with_ws);
+        let transport = tcp::TcpConfig::new();
+        let transport = dns::DnsConfig::new(transport);
+        #[cfg(feature = "libp2p-websocket")]
+        let transport = {
+            let trans_clone = transport.clone();
+            transport.or_transport(websocket::WsConfig::new(trans_clone))
+        };
 
         CommonTransport {
-            inner: CommonTransportInner { inner }
+            inner: CommonTransportInner { inner: transport }
         }
     }
 
