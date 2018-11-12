@@ -155,6 +155,7 @@ pub extern crate libp2p_secio as secio;
 pub extern crate libp2p_tcp_transport as tcp;
 pub extern crate libp2p_transport_timeout as transport_timeout;
 pub extern crate libp2p_uds as uds;
+#[cfg(feature = "libp2p-websocket")]
 pub extern crate libp2p_websocket as websocket;
 pub extern crate libp2p_yamux as yamux;
 
@@ -178,7 +179,7 @@ pub struct CommonTransport {
     inner: CommonTransportInner
 }
 
-#[cfg(not(target_os = "emscripten"))]
+#[cfg(all(not(target_os = "emscripten"), feature = "libp2p-websocket"))]
 pub type InnerImplementation =
     Transport<
         transport::Or<
@@ -190,6 +191,9 @@ pub type InnerImplementation =
             websocket::WsListener<tcp::TcpListener>
         >
     >;
+
+#[cfg(all(not(target_os = "emscripten"), not(feature = "libp2p-websocket")))]
+pub type InnerImplementation = Transport<dns::DnsDialer<tcp::TcpDialer>, tcp::TcpListener>;
 
 #[cfg(target_os = "emscripten")]
 pub type InnerImplementation = Transport<websocket::BrowserWsDialer, transport::DeniedListener>;
@@ -204,12 +208,21 @@ impl CommonTransport {
     #[inline]
     #[cfg(not(target_os = "emscripten"))]
     pub fn new() -> CommonTransport {
-        let dns = dns::DnsDialer::new(tcp::TcpDialer::default());
-        let web = websocket::WsDialer::new(dns.clone());
+        let dialer = dns::DnsDialer::new(tcp::TcpDialer::default());
 
-        let dialer = dns.or(web.clone());
-        let listener = tcp::TcpListener::default()
-            .or(websocket::WsListener::new(tcp::TcpListener::default()));
+        #[cfg(feature = "libp2p-websocket")]
+        let dialer = {
+            let dns_dialer = dialer.clone();
+            dialer.or(websocket::WsDialer::new(dns_dialer))
+        };
+
+        let listener = tcp::TcpListener::default();
+
+        #[cfg(feature = "libp2p-websocket")]
+        let listener = {
+            let tcp_listener = listener.clone();
+            listener.or(websocket::WsListener::new(tcp_listener))
+        };
 
         CommonTransport {
             inner: CommonTransportInner { inner: Transport::new(dialer, listener) }
