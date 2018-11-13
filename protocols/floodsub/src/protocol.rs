@@ -29,7 +29,7 @@ use tokio_io::{AsyncRead, AsyncWrite};
 use topic::TopicHash;
 use unsigned_varint::codec;
 
-/// Implementation of the `ConnectionUpgrade` for the floodsub protocol.
+/// Implementation of `ConnectionUpgrade` for the floodsub protocol.
 #[derive(Debug, Clone)]
 pub struct FloodsubConfig {}
 
