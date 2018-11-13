@@ -64,7 +64,7 @@ pub trait InboundUpgradeExt<C>: InboundUpgrade<C> {
     fn map_inbound_err<F, T>(self, f: F) -> MapUpgradeErr<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Error) -> T + Clone + 'static
+        F: FnOnce(Self::Error) -> T
     {
         MapUpgradeErr::new(self, f)
     }
@@ -100,7 +100,7 @@ pub trait OutboundUpgradeExt<C>: OutboundUpgrade<C> {
     fn map_outbound_err<F, T>(self, f: F) -> MapUpgradeErr<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Error) -> T + Clone + 'static
+        F: FnOnce(Self::Error) -> T
     {
         MapUpgradeErr::new(self, f)
     }

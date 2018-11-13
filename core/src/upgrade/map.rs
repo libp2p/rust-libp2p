@@ -99,33 +99,35 @@ where
 
 impl<C, U, F, T> InboundUpgrade<C> for MapUpgradeErr<U, F>
 where
-    U: InboundUpgrade<C> + Send,
-    U::Future: Send + 'static,
-    F: FnOnce(U::Error) -> T + Clone + Send + 'static
+    U: InboundUpgrade<C>,
+    F: FnOnce(U::Error) -> T
 {
     type Output = U::Output;
     type Error = T;
-    type Future = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
+    type Future = MapErrFuture<U::Future, F>;
 
     fn upgrade_inbound(self, sock: C, id: Self::UpgradeId) -> Self::Future {
-        let fun = self.fun;
-        Box::new(self.upgrade.upgrade_inbound(sock, id).map_err(fun))
+        MapErrFuture {
+            fut: self.upgrade.upgrade_inbound(sock, id),
+            fun: Some(self.fun)
+        }
     }
 }
 
 impl<C, U, F, T> OutboundUpgrade<C> for MapUpgradeErr<U, F>
 where
-    U: OutboundUpgrade<C> + Send,
-    U::Future: Send + 'static,
-    F: FnOnce(U::Error) -> T + Clone + Send + 'static
+    U: OutboundUpgrade<C>,
+    F: FnOnce(U::Error) -> T,
 {
     type Output = U::Output;
     type Error = T;
-    type Future = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
+    type Future = MapErrFuture<U::Future, F>;
 
     fn upgrade_outbound(self, sock: C, id: Self::UpgradeId) -> Self::Future {
-        let fun = self.fun;
-        Box::new(self.upgrade.upgrade_outbound(sock, id).map_err(fun))
+        MapErrFuture {
+            fut: self.upgrade.upgrade_outbound(sock, id),
+            fun: Some(self.fun)
+        }
     }
 }
 
@@ -135,8 +137,9 @@ pub struct MapFuture<TInnerFut, TMap> {
 }
 
 impl<TInnerFut, TIn, TMap, TOut> Future for MapFuture<TInnerFut, TMap>
-where TInnerFut: Future<Item = TIn>,
-      TMap: FnOnce(TIn) -> TOut,
+where
+    TInnerFut: Future<Item = TIn>,
+    TMap: FnOnce(TIn) -> TOut,
 {
     type Item = TOut;
     type Error = TInnerFut::Error;
@@ -145,6 +148,31 @@ where TInnerFut: Future<Item = TIn>,
         let item = try_ready!(self.inner.poll());
         let map = self.map.take().expect("Future has already finished");
         Ok(Async::Ready(map(item)))
+    }
+}
+
+pub struct MapErrFuture<T, F> {
+    fut: T,
+    fun: Option<F>,
+}
+
+impl<T, E, F, A> Future for MapErrFuture<T, F>
+where
+    T: Future<Error = E>,
+    F: FnOnce(E) -> A,
+{
+    type Item = T::Item;
+    type Error = A;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        match self.fut.poll() {
+            Ok(Async::NotReady) => Ok(Async::NotReady),
+            Ok(Async::Ready(x)) => Ok(Async::Ready(x)),
+            Err(e) => {
+                let f = self.fun.take().expect("Future has not resolved yet");
+                Err(f(e))
+            }
+        }
     }
 }
 
