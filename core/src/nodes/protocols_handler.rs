@@ -19,11 +19,14 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
+    either::EitherOutput,
     nodes::handled_node::{NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent},
     upgrade::{
         self,
         InboundUpgrade,
+        InboundUpgradeExt,
         OutboundUpgrade,
+        OutboundUpgradeExt,
         UpgradeInfo,
         InboundUpgradeApply,
         OutboundUpgradeApply,
@@ -104,6 +107,8 @@ pub trait ProtocolsHandler {
     /// >           list of supported protocols in a cache in order to avoid spurious queries.
     fn listen_protocol(&self) -> Self::InboundProtocol;
 
+    fn dialer_protocol(&self) -> Self::OutboundProtocol;
+
     /// Injects a fully-negotiated substream in the handler.
     ///
     /// This method is called when a substream has been successfully opened and negotiated.
@@ -165,6 +170,19 @@ pub trait ProtocolsHandler {
         TMap: FnMut(Self::OutEvent) -> TNewOut,
     {
         MapOutEvent { inner: self, map }
+    }
+
+    /// Builds an implementation of `ProtocolsHandler` that handles both this protocol and the
+    /// other one together.
+    #[inline]
+    fn select<TProto2>(self, other: TProto2) -> ProtocolsHandlerSelect<Self, TProto2>
+    where
+        Self: Sized,
+    {
+        ProtocolsHandlerSelect {
+            proto1: self,
+            proto2: other,
+        }
     }
 
     /// Creates a builder that will allow creating a `NodeHandler` that handles this protocol
@@ -303,6 +321,11 @@ where
     }
 
     #[inline]
+    fn dialer_protocol(&self) -> Self::OutboundProtocol {
+        DeniedUpgrade
+    }
+
+    #[inline]
     fn inject_fully_negotiated_inbound(
         &mut self,
         _: <Self::InboundProtocol as InboundUpgrade<TSubstream>>::Output
@@ -368,6 +391,11 @@ where
     #[inline]
     fn listen_protocol(&self) -> Self::InboundProtocol {
         self.inner.listen_protocol()
+    }
+
+    #[inline]
+    fn dialer_protocol(&self) -> Self::OutboundProtocol {
+        self.inner.dialer_protocol()
     }
 
     #[inline]
@@ -441,6 +469,11 @@ where
     #[inline]
     fn listen_protocol(&self) -> Self::InboundProtocol {
         self.inner.listen_protocol()
+    }
+
+    #[inline]
+    fn dialer_protocol(&self) -> Self::OutboundProtocol {
+        self.inner.dialer_protocol()
     }
 
     #[inline]
@@ -706,6 +739,182 @@ where
             }
             Async::Ready(None) => return Ok(Async::Ready(None)),
             Async::NotReady => (),
+        };
+
+        Ok(Async::NotReady)
+    }
+}
+
+/// Implementation of `ProtocolsHandler` that combines two protocols into one.
+#[derive(Debug, Clone)]
+pub struct ProtocolsHandlerSelect<TProto1, TProto2> {
+    proto1: TProto1,
+    proto2: TProto2,
+}
+
+impl<TSubstream, TProto1, TProto2, TProto1Out, TProto2Out, TProtoErr> // TODO: different error types
+    ProtocolsHandler for ProtocolsHandlerSelect<TProto1, TProto2>
+where
+    TProto1: ProtocolsHandler<Substream = TSubstream>,
+    TProto2: ProtocolsHandler<Substream = TSubstream>,
+    TSubstream: AsyncRead + AsyncWrite,
+    TProto1::InboundProtocol: InboundUpgrade<TSubstream, Output = TProto1Out, Error = TProtoErr>,
+    TProto2::InboundProtocol: InboundUpgrade<TSubstream, Output = TProto2Out, Error = TProtoErr>,
+    TProto1::OutboundProtocol: OutboundUpgrade<TSubstream, Output = TProto1Out, Error = TProtoErr>,
+    TProto2::OutboundProtocol: OutboundUpgrade<TSubstream, Output = TProto2Out, Error = TProtoErr>
+{
+    type InEvent = EitherOutput<TProto1::InEvent, TProto2::InEvent>;
+    type OutEvent = EitherOutput<TProto1::OutEvent, TProto2::OutEvent>;
+    type Substream = TSubstream;
+    type InboundProtocol =
+        upgrade::OrUpgrade<
+            upgrade::Toggleable<
+                upgrade::MapUpgrade<
+                    TProto1::InboundProtocol,
+                    fn(TProto1Out) -> EitherOutput<TProto1Out, TProto2Out>
+                >
+            >,
+            upgrade::Toggleable<
+                upgrade::MapUpgrade<
+                    TProto2::InboundProtocol,
+                    fn(TProto2Out) -> EitherOutput<TProto1Out, TProto2Out>
+                >
+            >
+        >;
+    type OutboundProtocol =
+        upgrade::OrUpgrade<
+            upgrade::Toggleable<
+                upgrade::MapUpgrade<
+                    TProto1::OutboundProtocol,
+                    fn(TProto1Out) -> EitherOutput<TProto1Out, TProto2Out>
+                >
+            >,
+            upgrade::Toggleable<
+                upgrade::MapUpgrade<
+                    TProto2::OutboundProtocol,
+                    fn(TProto2Out) -> EitherOutput<TProto1Out, TProto2Out>
+                >
+            >
+        >;
+    type OutboundOpenInfo = EitherOutput<TProto1::OutboundOpenInfo, TProto2::OutboundOpenInfo>;
+
+    #[inline]
+    fn listen_protocol(&self) -> Self::InboundProtocol {
+        let proto1 = self.proto1.listen_protocol()
+            .map_inbound(EitherOutput::First as fn(TProto1Out) -> EitherOutput<TProto1Out, TProto2Out>);
+        let proto2 = self.proto2.listen_protocol()
+            .map_inbound(EitherOutput::Second as fn(TProto2Out) -> EitherOutput<TProto1Out, TProto2Out>);
+        upgrade::toggleable(proto1).or_inbound(upgrade::toggleable(proto2))
+    }
+
+    #[inline]
+    fn dialer_protocol(&self) -> Self::OutboundProtocol {
+        let proto1 = self.proto1.dialer_protocol()
+            .map_outbound(EitherOutput::First as fn(TProto1Out) -> EitherOutput<TProto1Out, TProto2Out>);
+        let proto2 = self.proto2.dialer_protocol()
+            .map_outbound(EitherOutput::Second as fn(TProto2Out) -> EitherOutput<TProto1Out, TProto2Out>);
+        upgrade::toggleable(proto1).or_outbound(upgrade::toggleable(proto2))
+    }
+
+    fn inject_fully_negotiated_outbound(&mut self, protocol: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output, endpoint: Self::OutboundOpenInfo) {
+        match (protocol, endpoint) {
+            (EitherOutput::First(protocol), EitherOutput::First(info)) =>
+                self.proto1.inject_fully_negotiated_outbound(protocol, info),
+            (EitherOutput::Second(protocol), EitherOutput::Second(info)) =>
+                self.proto2.inject_fully_negotiated_outbound(protocol, info),
+            (EitherOutput::First(_), EitherOutput::Second(_)) =>
+                panic!("wrong API usage: the protocol doesn't match the upgrade info"),
+            (EitherOutput::Second(_), EitherOutput::First(_)) =>
+                panic!("wrong API usage: the protocol doesn't match the upgrade info")
+        }
+    }
+
+    fn inject_fully_negotiated_inbound(&mut self, protocol: <Self::InboundProtocol as InboundUpgrade<TSubstream>>::Output) {
+        match protocol {
+            EitherOutput::First(protocol) =>
+                self.proto1.inject_fully_negotiated_inbound(protocol),
+            EitherOutput::Second(protocol) =>
+                self.proto2.inject_fully_negotiated_inbound(protocol)
+        }
+    }
+
+    #[inline]
+    fn inject_event(&mut self, event: Self::InEvent) {
+        match event {
+            EitherOutput::First(event) => self.proto1.inject_event(event),
+            EitherOutput::Second(event) => self.proto2.inject_event(event),
+        }
+    }
+
+    #[inline]
+    fn inject_inbound_closed(&mut self) {
+        self.proto1.inject_inbound_closed();
+        self.proto2.inject_inbound_closed();
+    }
+
+    #[inline]
+    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: io::Error) {
+        match info {
+            EitherOutput::First(info) => self.proto1.inject_dial_upgrade_error(info, error),
+            EitherOutput::Second(info) => self.proto2.inject_dial_upgrade_error(info, error),
+        }
+    }
+
+    #[inline]
+    fn shutdown(&mut self) {
+        self.proto1.shutdown();
+        self.proto2.shutdown();
+    }
+
+    fn poll(&mut self) -> Poll<Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>, io::Error> {
+        match self.proto1.poll()? {
+            Async::Ready(Some(ProtocolsHandlerEvent::Custom(event))) => {
+                return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(EitherOutput::First(event)))));
+            },
+            Async::Ready(Some(ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info})) => {
+                let upgrade = {
+                    let proto1 = upgrade
+                        .map_outbound(EitherOutput::First as fn(TProto1Out) -> EitherOutput<TProto1Out, TProto2Out>);
+                    let proto2 = self.proto2.dialer_protocol()
+                        .map_outbound(EitherOutput::Second as fn(TProto2Out) -> EitherOutput<TProto1Out, TProto2Out>);
+
+                    let proto1 = upgrade::toggleable(proto1);
+                    let mut proto2 = upgrade::toggleable(proto2);
+                    proto2.disable();
+                    proto1.or_outbound(proto2)
+                };
+                return Ok(Async::Ready(Some(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                    upgrade,
+                    info: EitherOutput::First(info),
+                })));
+            },
+            Async::Ready(None) => return Ok(Async::Ready(None)),
+            Async::NotReady => ()
+        };
+
+        match self.proto2.poll()? {
+            Async::Ready(Some(ProtocolsHandlerEvent::Custom(event))) => {
+                return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(EitherOutput::Second(event)))));
+            },
+            Async::Ready(Some(ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info })) => {
+                let upgrade = {
+                    let proto1 = self.proto1.dialer_protocol()
+                        .map_outbound(EitherOutput::First as fn(TProto1Out) -> EitherOutput<TProto1Out, TProto2Out>);
+                    let proto2 = upgrade
+                        .map_outbound(EitherOutput::Second as fn(TProto2Out) -> EitherOutput<TProto1Out, TProto2Out>);
+
+                    let mut proto1 = upgrade::toggleable(proto1);
+                    proto1.disable();
+                    let proto2 = upgrade::toggleable(proto2);
+                    proto1.or_outbound(proto2)
+                };
+                return Ok(Async::Ready(Some(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                    upgrade,
+                    info: EitherOutput::Second(info),
+                })));
+            },
+            Async::Ready(None) => return Ok(Async::Ready(None)),
+            Async::NotReady => ()
         };
 
         Ok(Async::NotReady)

@@ -56,7 +56,7 @@ pub trait InboundUpgradeExt<C>: InboundUpgrade<C> {
     fn map_inbound<F, T>(self, f: F) -> MapUpgrade<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Output) -> T + Clone + 'static
+        F: FnOnce(Self::Output) -> T
     {
         MapUpgrade::new(self, f)
     }
@@ -92,7 +92,7 @@ pub trait OutboundUpgradeExt<C>: OutboundUpgrade<C> {
     fn map_outbound<F, T>(self, f: F) -> MapUpgrade<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Output) -> T + Clone + 'static
+        F: FnOnce(Self::Output) -> T
     {
         MapUpgrade::new(self, f)
     }

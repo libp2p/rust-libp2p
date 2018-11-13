@@ -46,10 +46,8 @@ where
 
 impl<C, A, B, T, E> InboundUpgrade<C> for OrUpgrade<A, B>
 where
-    A: InboundUpgrade<C, Output = T, Error = E> + Send,
-    A::Future: Send + 'static,
-    B: InboundUpgrade<C, Output = T, Error = E> + Send,
-    B::Future: Send + 'static,
+    A: InboundUpgrade<C, Output = T, Error = E>,
+    B: InboundUpgrade<C, Output = T, Error = E>,
 {
     type Output = T; // TODO: different output types
     type Error = E; // TODO: different error types
@@ -65,10 +63,8 @@ where
 
 impl<C, A, B, T, E> OutboundUpgrade<C> for OrUpgrade<A, B>
 where
-    A: OutboundUpgrade<C, Output = T, Error = E> + Send,
-    A::Future: Send + 'static,
-    B: OutboundUpgrade<C, Output = T, Error = E> + Send,
-    B::Future: Send + 'static,
+    A: OutboundUpgrade<C, Output = T, Error = E>,
+    B: OutboundUpgrade<C, Output = T, Error = E>,
 {
     type Output = T; // TODO: different output types
     type Error = E; // TODO: different error types

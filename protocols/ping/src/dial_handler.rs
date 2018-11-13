@@ -161,6 +161,11 @@ where
         DeniedUpgrade
     }
 
+    #[inline]
+    fn dialer_protocol(&self) -> Self::OutboundProtocol {
+        self.ping_config
+    }
+
     fn inject_fully_negotiated_inbound(&mut self, protocol: Void) {
         unreachable(protocol)
     }

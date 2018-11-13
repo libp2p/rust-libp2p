@@ -44,33 +44,35 @@ where
 
 impl<C, U, F, T> InboundUpgrade<C> for MapUpgrade<U, F>
 where
-    U: InboundUpgrade<C> + Send,
-    U::Future: Send + 'static,
-    F: FnOnce(U::Output) -> T + Clone + Send + 'static
+    U: InboundUpgrade<C>,
+    F: FnOnce(U::Output) -> T
 {
     type Output = T;
     type Error = U::Error;
-    type Future = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
+    type Future = MapFuture<U::Future, F>;
 
     fn upgrade_inbound(self, sock: C, id: Self::UpgradeId) -> Self::Future {
-        let fun = self.fun;
-        Box::new(self.upgrade.upgrade_inbound(sock, id).map(fun))
+        MapFuture {
+            inner: self.upgrade.upgrade_inbound(sock, id),
+            map: Some(self.fun)
+        }
     }
 }
 
 impl<C, U, F, T> OutboundUpgrade<C> for MapUpgrade<U, F>
 where
-    U: OutboundUpgrade<C> + Send,
-    U::Future: Send + 'static,
-    F: FnOnce(U::Output) -> T + Clone + Send + 'static
+    U: OutboundUpgrade<C>,
+    F: FnOnce(U::Output) -> T
 {
     type Output = T;
     type Error = U::Error;
-    type Future = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
+    type Future = MapFuture<U::Future, F>;
 
     fn upgrade_outbound(self, sock: C, id: Self::UpgradeId) -> Self::Future {
-        let fun = self.fun;
-        Box::new(self.upgrade.upgrade_outbound(sock, id).map(fun))
+        MapFuture {
+            inner: self.upgrade.upgrade_outbound(sock, id),
+            map: Some(self.fun)
+        }
     }
 }
 
@@ -124,6 +126,25 @@ where
     fn upgrade_outbound(self, sock: C, id: Self::UpgradeId) -> Self::Future {
         let fun = self.fun;
         Box::new(self.upgrade.upgrade_outbound(sock, id).map_err(fun))
+    }
+}
+
+pub struct MapFuture<TInnerFut, TMap> {
+    inner: TInnerFut,
+    map: Option<TMap>,
+}
+
+impl<TInnerFut, TIn, TMap, TOut> Future for MapFuture<TInnerFut, TMap>
+where TInnerFut: Future<Item = TIn>,
+      TMap: FnOnce(TIn) -> TOut,
+{
+    type Item = TOut;
+    type Error = TInnerFut::Error;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let item = try_ready!(self.inner.poll());
+        let map = self.map.take().expect("Future has already finished");
+        Ok(Async::Ready(map(item)))
     }
 }
 
