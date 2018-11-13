@@ -103,7 +103,7 @@ impl Encoder for FloodsubCodec {
         }
 
         let msg_size = proto.compute_size();
-        // Reserve enough space for the data and the length. The length has a maximum of 32 bytes,
+        // Reserve enough space for the data and the length. The length has a maximum of 32 bits,
         // which means that 5 bytes is enough for the variable-length integer.
         dst.reserve(msg_size as usize + 5);
 

@@ -18,14 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use fnv::{FnvHashSet, FnvHasher};
+use cuckoofilter::CuckooFilter;
 use futures::prelude::*;
 use handler::FloodsubHandler;
 use libp2p_core::nodes::{ConnectedPoint, NetworkBehavior, NetworkBehaviorAction};
 use libp2p_core::{nodes::protocols_handler::ProtocolsHandler, PeerId};
 use protocol::{FloodsubMessage, FloodsubRpc, FloodsubSubscription, FloodsubSubscriptionAction};
 use smallvec::SmallVec;
-use std::{collections::HashMap, collections::VecDeque, hash::Hash, hash::Hasher, iter, marker::PhantomData};
+use std::{collections::VecDeque, iter, marker::PhantomData};
+use std::collections::hash_map::{DefaultHasher, HashMap};
 use tokio_io::{AsyncRead, AsyncWrite};
 use topic::{Topic, TopicHash};
 
@@ -52,8 +53,7 @@ pub struct FloodsubBehaviour<TSubstream> {
 
     // We keep track of the messages we received (in the format `hash(source ID, seq_no)`) so that
     // we don't dispatch the same message twice if we receive it twice on the network.
-    // TODO: the `HashSet` will keep growing indefinitely :-/
-    received: FnvHashSet<u64>,
+    received: CuckooFilter<DefaultHasher>,
 
     /// Marker to pin the generics.
     marker: PhantomData<TSubstream>,
@@ -68,7 +68,7 @@ impl<TSubstream> FloodsubBehaviour<TSubstream> {
             connected_peers: HashMap::new(),
             subscribed_topics: SmallVec::new(),
             seq_no: 0,
-            received: FnvHashSet::default(),
+            received: CuckooFilter::new(),
             marker: PhantomData,
         }
     }
@@ -151,7 +151,7 @@ impl<TSubstream> FloodsubBehaviour<TSubstream> {
             return;
         }
 
-        self.received.insert(hash(&message));
+        self.received.add(&message);
 
         // Send to peers we know are subscribed to the topic.
         for (peer_id, sub_topic) in self.connected_peers.iter() {
@@ -213,7 +213,7 @@ where
 
     fn inject_node_event(
         &mut self,
-        _: PeerId,
+        propagation_source: PeerId,
         event: FloodsubRpc,
     ) {
         // List of messages we're going to propagate on the network.
@@ -221,8 +221,8 @@ where
 
         for message in event.messages {
             // Use `self.received` to skip the messages that we have already received in the past.
-            let message_hash = hash(&message);
-            if !self.received.insert(message_hash) {
+            // Note that this can false positive.
+            if !self.received.test_and_add(&message) {
                 continue;
             }
 
@@ -233,6 +233,10 @@ where
 
             // Propagate the message to everyone else who is subscribed to any of the topics.
             for (peer_id, sub_topics) in self.connected_peers.iter() {
+                if peer_id == &propagation_source {
+                    continue;
+                }
+
                 if !sub_topics.iter().any(|t| message.topics.iter().any(|u| t == u)) {
                     continue;
                 }
@@ -270,12 +274,4 @@ where
 
         Async::NotReady
     }
-}
-
-// Shortcut function that hashes a message.
-#[inline]
-fn hash(message: &FloodsubMessage) -> u64 {
-    let mut h = FnvHasher::default();
-    (&message.source, &message.sequence_number).hash(&mut h);
-    h.finish()
 }

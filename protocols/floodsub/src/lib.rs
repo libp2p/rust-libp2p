@@ -20,6 +20,7 @@
 
 extern crate bs58;
 extern crate bytes;
+extern crate cuckoofilter;
 extern crate fnv;
 extern crate futures;
 extern crate libp2p_core;
