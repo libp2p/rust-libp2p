@@ -218,6 +218,7 @@ pub mod upgrade;
 
 pub use self::multiaddr::Multiaddr;
 pub use self::muxing::StreamMuxer;
+pub use self::nodes::Swarm;
 pub use self::peer_id::PeerId;
 pub use self::public_key::PublicKey;
 pub use self::transport::Transport;
