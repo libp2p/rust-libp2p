@@ -30,28 +30,28 @@ use {ConnectionUpgrade, Endpoint};
 
 /// Handler for a set of protocols for a specific connection with a remote.
 ///
-/// This trait should be implemented on struct that hold the state for a specific protocol
+/// This trait should be implemented on a struct that holds the state for a specific protocol
 /// behaviour with a specific remote.
 ///
 /// # Handling a protocol
 ///
-/// Protocols with the remote can be opened in two different ways:
+/// Communication with a remote over a set of protocols opened in two different ways:
 ///
 /// - Dialing, which is a voluntary process. In order to do so, make `poll()` return an
-///   `OutboundSubstreamRequest` variant containing the connection upgrade to use.
+///   `OutboundSubstreamRequest` variant containing the connection upgrade to use to start using a protocol.
 /// - Listening, which is used to determine which protocols are supported when the remote wants
 ///   to open a substream. The `listen_protocol()` method should return the upgrades supported when
 ///   listening.
 ///
 /// The upgrade when dialing and the upgrade when listening have to be of the same type, but you
-/// are free to return for example an `OrUpgrade` enum, or an enum of yours, containing the upgrade
+/// are free to return for example an `OrUpgrade` enum, or an enum of your own, containing the upgrade
 /// you want depending on the situation.
 ///
 /// # Shutting down
 ///
 /// Implementors of this trait should keep in mind that the connection can be closed at any time.
 /// When a connection is closed (either by us or by the remote) `shutdown()` is called and the
-/// handler continues to be processed until it produces `None`. Then only the handler is destroyed.
+/// handler continues to be processed until it produces `None`. Only then the handler is destroyed.
 ///
 /// This makes it possible for the handler to finish delivering events even after knowing that it
 /// is shutting down.
@@ -65,7 +65,7 @@ use {ConnectionUpgrade, Endpoint};
 /// This trait is very similar to the `NodeHandler` trait. The fundamental differences are:
 ///
 /// - The `NodeHandler` trait gives you more control and is therefore more difficult to implement.
-/// - The `NodeHandler` trait is designed to have exclusive ownership of the connection with a
+/// - The `NodeHandler` trait is designed to have exclusive ownership of the connection to a
 ///   node, while the `ProtocolsHandler` trait is designed to handle only a specific set of
 ///   protocols. Two or more implementations of `ProtocolsHandler` can be combined into one that
 ///   supports all the protocols together, which is not possible with `NodeHandler`.
@@ -109,11 +109,11 @@ pub trait ProtocolsHandler {
     /// Indicates to the handler that upgrading a substream to the given protocol has failed.
     fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: io::Error);
 
-    /// Indicates the handler that the inbound part of the muxer has been closed, and that
-    /// therefore no more inbound substream will be produced.
+    /// Indicates to the handler that the inbound part of the muxer has been closed, and that
+    /// therefore no more inbound substreams will be produced.
     fn inject_inbound_closed(&mut self);
 
-    /// Indicates the node that it should shut down. After that, it is expected that `poll()`
+    /// Indicates to the node that it should shut down. After that, it is expected that `poll()`
     /// returns `Ready(None)` as soon as possible.
     ///
     /// This method allows an implementation to perform a graceful shutdown of the substreams, and
@@ -199,11 +199,11 @@ pub trait ProtocolsHandler {
 /// Event produced by a handler.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ProtocolsHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom> {
-    /// Require a new outbound substream to be opened with the remote.
+    /// Request a new outbound substream to be opened with the remote.
     OutboundSubstreamRequest {
         /// The upgrade to apply on the substream.
         upgrade: TConnectionUpgrade,
-        /// User-defind information, passed back when the substream is open.
+        /// User-defined information, passed back when the substream is open.
         info: TOutboundOpenInfo,
     },
 
@@ -215,7 +215,7 @@ pub enum ProtocolsHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom> {
 impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
     ProtocolsHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
 {
-    /// If this is `OutboundSubstreamRequest`, maps the content to something else.
+    /// If this is an `OutboundSubstreamRequest`, maps the `info` member from a `TOutboundOpenInfo` to something else.
     #[inline]
     pub fn map_outbound_open_info<F, I>(
         self,
@@ -235,7 +235,7 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
         }
     }
 
-    /// If this is `OutboundSubstreamRequest`, maps the protocol to another.
+    /// If this is an `OutboundSubstreamRequest`, maps the protocol (`TConnectionUpgrade`) to something else.
     #[inline]
     pub fn map_protocol<F, I>(
         self,
@@ -255,7 +255,7 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
         }
     }
 
-    /// If this is `Custom`, maps the content to something else.
+    /// If this is a `Custom` event, maps the content to something else.
     #[inline]
     pub fn map_custom<F, I>(
         self,
