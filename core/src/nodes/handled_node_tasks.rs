@@ -201,7 +201,6 @@ impl<TInEvent, TOutEvent, THandler> HandledNodesTasks<TInEvent, TOutEvent, THand
         for to_spawn in self.to_spawn.drain() {
             tokio_executor::spawn(to_spawn);
         }
-
         loop {
             match self.events_rx.poll() {
                 Ok(Async::Ready(Some((message, task_id)))) => {
@@ -370,7 +369,6 @@ where
                             Err(_) => unreachable!("An UnboundedReceiver never errors"),
                         }
                     }
-
                     // Check whether dialing succeeded.
                     match future.poll() {
                         Ok(Async::Ready((peer_id, muxer))) => {
