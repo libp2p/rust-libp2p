@@ -162,7 +162,7 @@ where
 impl<TMuxer, THandler> fmt::Debug for HandledNode<TMuxer, THandler>
 where
     TMuxer: StreamMuxer,
-    THandler: NodeHandler<Substream = Substream<TMuxer>>,
+    THandler: NodeHandler<Substream = Substream<TMuxer>> + fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result<()> {
         f.debug_struct("HandledNode")
