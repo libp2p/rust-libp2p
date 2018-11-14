@@ -472,14 +472,14 @@ mod tests {
             OutEvent,
         >;
 
-        struct TestBuilder {
+        struct NodeTaskTestBuilder {
            task_id: TaskId,
            inner_node: Option<TestHandledNode>,
            inner_fut: Option<FutureResult<(PeerId, DummyMuxer), IoError>>,
         }
-        impl TestBuilder {
+        impl NodeTaskTestBuilder {
             fn new() -> Self {
-                TestBuilder {
+                NodeTaskTestBuilder {
                     task_id: TaskId(123),
                     inner_node: None,
                     inner_fut: {
@@ -527,7 +527,7 @@ mod tests {
 
         #[test]
         fn task_emits_event_when_things_happen_in_the_node() {
-            let (node_task, tx, mut rx) = TestBuilder::new()
+            let (node_task, tx, mut rx) = NodeTaskTestBuilder::new()
                 .with_task_id(890)
                 .node_task();
 
@@ -547,7 +547,7 @@ mod tests {
         #[test]
         fn task_exits_when_node_errors() {
             let mut rt = Runtime::new().unwrap();
-            let (node_task, _tx, rx) = TestBuilder::new()
+            let (node_task, _tx, rx) = NodeTaskTestBuilder::new()
                 .with_inner_fut(future::err(io::Error::new(io::ErrorKind::Other, "nah")))
                 .with_task_id(345)
                 .node_task();
@@ -568,7 +568,7 @@ mod tests {
                 muxer.set_outbound_connection_state(DummyConnectionState::Closed);
                 future::ok((peer_id, muxer))
             };
-            let (node_task, tx, rx) = TestBuilder::new()
+            let (node_task, tx, rx) = NodeTaskTestBuilder::new()
                 .with_inner_fut(fut)
                 .with_task_id(345)
                 .node_task();
@@ -619,14 +619,14 @@ mod tests {
         use nodes::handled_node::NodeHandlerEvent;
 
         type TestHandledNodesTasks = HandledNodesTasks<InEvent, OutEvent, Handler>;
-        struct TestBuilder {
+        struct HandledNodeTaskTestBuilder {
             muxer: DummyMuxer,
             handler: Handler,
             task_count: usize,
         }
-        impl TestBuilder {
+        impl HandledNodeTaskTestBuilder {
             fn new() -> Self {
-                TestBuilder {
+                HandledNodeTaskTestBuilder {
                     muxer: DummyMuxer::new(),
                     handler: Handler::default(),
                     task_count: 0,
@@ -669,7 +669,7 @@ mod tests {
 
         #[test]
         fn query_for_tasks() {
-            let (mut handled_nodes, task_ids) = TestBuilder::new()
+            let (mut handled_nodes, task_ids) = HandledNodeTaskTestBuilder::new()
                 .with_tasks(3)
                 .handled_nodes_tasks();
 
@@ -680,7 +680,7 @@ mod tests {
 
         #[test]
         fn send_event_to_task() {
-            let (mut handled_nodes, _) = TestBuilder::new()
+            let (mut handled_nodes, _) = HandledNodeTaskTestBuilder::new()
                 .with_tasks(1)
                 .handled_nodes_tasks();
 
@@ -703,7 +703,7 @@ mod tests {
 
         #[test]
         fn iterate_over_all_tasks() {
-            let (handled_nodes, task_ids) = TestBuilder::new()
+            let (handled_nodes, task_ids) = HandledNodeTaskTestBuilder::new()
                 .with_tasks(3)
                 .handled_nodes_tasks();
 
@@ -727,7 +727,7 @@ mod tests {
 
         #[test]
         fn running_handled_tasks_reaches_the_nodes() {
-            let (mut handled_nodes_tasks, _) = TestBuilder::new()
+            let (mut handled_nodes_tasks, _) = HandledNodeTaskTestBuilder::new()
                 .with_tasks(5)
                 .with_muxer_inbound_state(DummyConnectionState::Closed)
                 .with_muxer_outbound_state(DummyConnectionState::Closed)
@@ -760,7 +760,7 @@ mod tests {
                 HandlerState::Ready(Some(NodeHandlerEvent::Custom(OutEvent::Custom("from handler") ))),
             ];
 
-            let (mut handled_nodes_tasks, _) = TestBuilder::new()
+            let (mut handled_nodes_tasks, _) = HandledNodeTaskTestBuilder::new()
                 .with_tasks(1)
                 .with_muxer_inbound_state(DummyConnectionState::Pending)
                 .with_muxer_outbound_state(DummyConnectionState::Opened)
