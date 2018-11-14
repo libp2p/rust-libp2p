@@ -218,7 +218,9 @@ where
     ) {
         // Update connected peers topics
         for subscription in event.subscriptions {
-            let mut remote_peer_topics = self.connected_peers.get_mut(&propagation_source).expect("This peer just sent us a message");
+            let mut remote_peer_topics = self.connected_peers
+                .get_mut(&propagation_source)
+                .expect("This peer just sent us a message");
             match subscription.action {
                 FloodsubSubscriptionAction::Subscribe => {
                     if !remote_peer_topics.contains(&subscription.topic) {
