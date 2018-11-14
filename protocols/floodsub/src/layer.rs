@@ -216,6 +216,23 @@ where
         propagation_source: PeerId,
         event: FloodsubRpc,
     ) {
+        // Update connected peers topics
+        for subscription in event.subscriptions {
+            let mut remote_peer_topics = self.connected_peers.get_mut(&propagation_source).expect("This peer just sent us a message");
+            match subscription.action {
+                FloodsubSubscriptionAction::Subscribe => {
+                    if !remote_peer_topics.contains(&subscription.topic) {
+                        remote_peer_topics.push(subscription.topic);
+                    }
+                }
+                FloodsubSubscriptionAction::Unsubscribe => {
+                    if let Some(pos) = remote_peer_topics.iter().position(|t| t == &subscription.topic ) {
+                        remote_peer_topics.remove(pos);
+                    }
+                }
+            }
+        }
+
         // List of messages we're going to propagate on the network.
         let mut rpcs_to_dispatch: Vec<(PeerId, FloodsubRpc)> = Vec::new();
 
