@@ -25,14 +25,19 @@ use std::io::{self, Error as IoError};
 use super::dummy_muxer::DummyMuxer;
 use futures::prelude::*;
 use muxing::SubstreamRef;
-use nodes::handled_node::{NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent};
+use nodes::handled_node::{HandledNode, NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent};
 use std::sync::Arc;
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) struct Handler {
-    pub events: Vec<Event>,
+    /// Inspect events passed through the Handler
+    pub events: Vec<InEvent>,
+    /// Current state of the Handler
     pub state: Option<HandlerState>,
+    /// Next state for outbound streams of the Handler
     pub next_outbound_state: Option<HandlerState>,
+    /// Vec of states the Handler will assume
+    pub next_states: Vec<HandlerState>,
 }
 
 impl Default for Handler {
@@ -40,6 +45,7 @@ impl Default for Handler {
         Handler {
             events: Vec::new(),
             state: None,
+            next_states: Vec::new(),
             next_outbound_state: None,
         }
     }
@@ -48,21 +54,36 @@ impl Default for Handler {
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) enum HandlerState {
     NotReady,
-    Ready(Option<NodeHandlerEvent<usize, Event>>),
+    Ready(Option<NodeHandlerEvent<usize, OutEvent>>),
     Err,
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub(crate) enum Event {
+pub(crate) enum InEvent {
+    /// A custom inbound event
     Custom(&'static str),
+    /// A substream request with a dummy payload
     Substream(Option<usize>),
+    /// Request closing of the outbound substream
     OutboundClosed,
+    /// Request closing of the inbound substreams
     InboundClosed,
+    /// Request the handler to move to the next state
+    NextState,
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub(crate) enum OutEvent {
+    /// A message from the Handler upwards in the stack
+    Custom(&'static str),
+}
+
+// Concrete `HandledNode` parametrised for the test helpers
+pub(crate) type TestHandledNode = HandledNode<DummyMuxer, Handler>;
+
 impl NodeHandler for Handler {
-    type InEvent = Event;
-    type OutEvent = Event;
+    type InEvent = InEvent;
+    type OutEvent = OutEvent;
     type OutboundOpenInfo = usize;
     type Substream = SubstreamRef<Arc<DummyMuxer>>;
     fn inject_substream(
@@ -74,25 +95,42 @@ impl NodeHandler for Handler {
             NodeHandlerEndpoint::Dialer(user_data) => Some(user_data),
             NodeHandlerEndpoint::Listener => None,
         };
-        self.events.push(Event::Substream(user_data));
+        self.events.push(InEvent::Substream(user_data));
     }
     fn inject_inbound_closed(&mut self) {
-        self.events.push(Event::InboundClosed);
+        self.events.push(InEvent::InboundClosed);
     }
     fn inject_outbound_closed(&mut self, _: usize) {
-        self.events.push(Event::OutboundClosed);
+        self.events.push(InEvent::OutboundClosed);
         if let Some(ref state) = self.next_outbound_state {
             self.state = Some(state.clone());
         }
     }
     fn inject_event(&mut self, inevent: Self::InEvent) {
-        self.events.push(inevent)
+        self.events.push(inevent.clone());
+        match inevent {
+            InEvent::Custom(s) => {
+                self.state = Some(HandlerState::Ready(Some(NodeHandlerEvent::Custom(
+                    OutEvent::Custom(s),
+                ))))
+            }
+            InEvent::Substream(Some(user_data)) => {
+                self.state = Some(HandlerState::Ready(Some(
+                    NodeHandlerEvent::OutboundSubstreamRequest(user_data),
+                )))
+            }
+            InEvent::NextState => {
+                let next_state = self.next_states.pop();
+                self.state = next_state
+            }
+            _ => unreachable!(),
+        }
     }
     fn shutdown(&mut self) {
         self.state = Some(HandlerState::Ready(None));
     }
-    fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<usize, Event>>, IoError> {
-        match self.state {
+    fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<usize, OutEvent>>, IoError> {
+        match self.state.take() {
             Some(ref state) => match state {
                 HandlerState::NotReady => Ok(Async::NotReady),
                 HandlerState::Ready(None) => Ok(Async::Ready(None)),

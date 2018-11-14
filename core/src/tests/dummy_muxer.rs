@@ -22,9 +22,9 @@
 //! version of the trait along with a way to setup the muxer to behave in the
 //! desired way when testing other components.
 
-use std::io::Error as IoError;
-use muxing::{StreamMuxer, Shutdown};
 use futures::prelude::*;
+use muxing::{Shutdown, StreamMuxer};
+use std::io::Error as IoError;
 
 /// Substream type
 #[derive(Debug)]
@@ -39,17 +39,17 @@ pub struct DummyOutboundSubstream {}
 #[derive(Debug, PartialEq, Clone)]
 pub enum DummyConnectionState {
     Pending, // use this to trigger the Async::NotReady code path
-    Closed, // use this to trigger the Async::Ready(None) code path
-    Opened, // use this to trigger the Async::Ready(Some(_)) code path
+    Closed,  // use this to trigger the Async::Ready(None) code path
+    Opened,  // use this to trigger the Async::Ready(Some(_)) code path
 }
 #[derive(Debug, Clone)]
 struct DummyConnection {
-    state: DummyConnectionState
+    state: DummyConnectionState,
 }
 
 /// `DummyMuxer` implements `StreamMuxer` and methods to control its behavior when used in tests
 #[derive(Debug, Clone)]
-pub struct DummyMuxer{
+pub struct DummyMuxer {
     in_connection: DummyConnection,
     out_connection: DummyConnection,
 }
@@ -59,8 +59,12 @@ impl DummyMuxer {
     /// and the (single) outbound substream to `Closed`.
     pub fn new() -> Self {
         DummyMuxer {
-            in_connection: DummyConnection{ state: DummyConnectionState::Pending },
-            out_connection: DummyConnection{ state: DummyConnectionState::Closed },
+            in_connection: DummyConnection {
+                state: DummyConnectionState::Pending,
+            },
+            out_connection: DummyConnection {
+                state: DummyConnectionState::Closed,
+            },
         }
     }
     /// Set the muxer state inbound "connection" state
@@ -80,23 +84,40 @@ impl StreamMuxer for DummyMuxer {
         match self.in_connection.state {
             DummyConnectionState::Pending => Ok(Async::NotReady),
             DummyConnectionState::Closed => Ok(Async::Ready(None)),
-            DummyConnectionState::Opened => Ok(Async::Ready(Some(Self::Substream{}))),
+            DummyConnectionState::Opened => Ok(Async::Ready(Some(Self::Substream {}))),
         }
     }
-    fn open_outbound(&self) -> Self::OutboundSubstream { Self::OutboundSubstream{} }
-    fn poll_outbound(&self, _substream: &mut Self::OutboundSubstream) -> Poll<Option<Self::Substream>, IoError> {
+    fn open_outbound(&self) -> Self::OutboundSubstream {
+        Self::OutboundSubstream {}
+    }
+    fn poll_outbound(
+        &self,
+        _substream: &mut Self::OutboundSubstream,
+    ) -> Poll<Option<Self::Substream>, IoError> {
         match self.out_connection.state {
             DummyConnectionState::Pending => Ok(Async::NotReady),
             DummyConnectionState::Closed => Ok(Async::Ready(None)),
-            DummyConnectionState::Opened => Ok(Async::Ready(Some(Self::Substream{}))),
+            DummyConnectionState::Opened => Ok(Async::Ready(Some(Self::Substream {}))),
         }
     }
     fn destroy_outbound(&self, _: Self::OutboundSubstream) {}
-    fn read_substream(&self, _: &mut Self::Substream, _buf: &mut [u8]) -> Poll<usize, IoError> { unreachable!() }
-    fn write_substream(&self, _: &mut Self::Substream, _buf: &[u8]) -> Poll<usize, IoError> { unreachable!() }
-    fn flush_substream(&self, _: &mut Self::Substream) -> Poll<(), IoError> { unreachable!() }
-    fn shutdown_substream(&self, _: &mut Self::Substream, _: Shutdown) -> Poll<(), IoError> { unreachable!() }
+    fn read_substream(&self, _: &mut Self::Substream, _buf: &mut [u8]) -> Poll<usize, IoError> {
+        unreachable!()
+    }
+    fn write_substream(&self, _: &mut Self::Substream, _buf: &[u8]) -> Poll<usize, IoError> {
+        unreachable!()
+    }
+    fn flush_substream(&self, _: &mut Self::Substream) -> Poll<(), IoError> {
+        unreachable!()
+    }
+    fn shutdown_substream(&self, _: &mut Self::Substream, _: Shutdown) -> Poll<(), IoError> {
+        unreachable!()
+    }
     fn destroy_substream(&self, _: Self::Substream) {}
-    fn shutdown(&self, _: Shutdown) -> Poll<(), IoError> { Ok(Async::Ready(())) }
-    fn flush_all(&self) -> Poll<(), IoError> { Ok(Async::Ready(())) }
+    fn shutdown(&self, _: Shutdown) -> Poll<(), IoError> {
+        Ok(Async::Ready(()))
+    }
+    fn flush_all(&self) -> Poll<(), IoError> {
+        Ok(Async::Ready(()))
+    }
 }

@@ -18,21 +18,30 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{Multiaddr, transport::Listener};
-use futures::{future::{self, FutureResult}, prelude::*, stream};
+//! `DummyListener` is a `Listener` used in tests. It implements a bare-bones
+//! version of the trait along with a way to setup the transport listeners with
+//! an initial state to facilitate testing.
+
+use crate::{Multiaddr, Listener};
+use futures::prelude::*;
+use futures::{
+    future::{self, FutureResult},
+    stream,
+};
 use std::io;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub(crate) enum ListenerState {
     /// The `usize` indexes items produced by the listener
     Ok(Async<Option<usize>>),
-    Error
+    Error,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub(crate) struct DummyListener {
     state: ListenerState,
 }
+
 impl DummyListener {
     pub(crate) fn new() -> Self {
         DummyListener {
@@ -60,18 +69,18 @@ impl Listener for DummyListener {
                     Async::NotReady => {
                         let stream = stream::poll_fn(|| Ok(Async::NotReady)).map(tupelize);
                         (Box::new(stream), addr2)
-                    },
+                    }
                     Async::Ready(Some(n)) => {
                         let stream = stream::iter_ok(n..).map(tupelize);
                         (Box::new(stream), addr2)
-                    },
+                    }
                     Async::Ready(None) => {
                         let stream = stream::empty();
                         (Box::new(stream), addr2)
-                    },
+                    }
                 })
             }
-            ListenerState::Error => Err( (self, addr2) )
+            ListenerState::Error => Err((self, addr2)),
         }
     }
 
