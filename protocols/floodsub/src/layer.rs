@@ -220,7 +220,7 @@ where
         for subscription in event.subscriptions {
             let mut remote_peer_topics = self.connected_peers
                 .get_mut(&propagation_source)
-                .expect("connected_peers is kept in sync with the peers we are connected to ; we are guaranteed to only receive events from connected peers ; qed");
+                .expect("connected_peers is kept in sync with the peers we are connected to; we are guaranteed to only receive events from connected peers ; qed");
             match subscription.action {
                 FloodsubSubscriptionAction::Subscribe => {
                     if !remote_peer_topics.contains(&subscription.topic) {
