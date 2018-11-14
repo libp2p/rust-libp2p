@@ -139,6 +139,9 @@ impl<TSubstream> FloodsubBehaviour<TSubstream> {
         let message = FloodsubMessage {
             source: self.local_peer_id.clone(),
             data: data.into(),
+            // If the sequence numbers are predictable, then an attacker could flood the network
+            // with packets with the predetermined sequence numbers and absorb our legitimate
+            // messages. We therefore use a random number.
             sequence_number: rand::random::<[u8; 20]>().to_vec(),
             topics: topic.into_iter().map(|t| t.into().clone()).collect(),
         };
