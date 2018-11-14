@@ -162,6 +162,7 @@ where
     > {
         if !self.send_queue.is_empty() {
             let message = self.send_queue.remove(0);
+            println!("[ProtocolsHandler for FloodsubHandler, poll] popped one from the send_queue: {:?}", message);
             return Ok(Async::Ready(Some(
                 ProtocolsHandlerEvent::OutboundSubstreamRequest {
                     info: message,
@@ -189,6 +190,7 @@ where
                         Err(_) => SubstreamState::Closing(substream),
                     },
                     SubstreamState::PendingSend(mut substream, message) => {
+                        println!("[ProtocolsHandler for FloodsubHandler, poll] PendingSend with message={:?}", message);
                         match substream.start_send(message)? {
                             AsyncSink::Ready => SubstreamState::PendingFlush(substream),
                             AsyncSink::NotReady(message) => {

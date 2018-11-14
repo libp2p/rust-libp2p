@@ -148,17 +148,23 @@ impl<TSubstream> FloodsubBehaviour<TSubstream> {
 
         // Don't publish the message if we're not subscribed ourselves to any of the topics.
         if !self.subscribed_topics.iter().any(|t| message.topics.iter().any(|u| t.hash() == u)) {
+            println!("[Floodsub, publish_many] Not subscribed");
             return;
         }
+        println!("[Floodsub, publish_many] my subscribed_topics={:?}", self.subscribed_topics);
+
 
         self.received.add(&message);
 
+        println!("[Floodsub, publish_many] connected_peers={:?}", self.connected_peers);
         // Send to peers we know are subscribed to the topic.
         for (peer_id, sub_topic) in self.connected_peers.iter() {
             if !sub_topic.iter().any(|t| message.topics.iter().any(|u| t == u)) {
+                println!("[Floodsub, publish_many] peer {:?} is not subscribed to topic={:?}", peer_id, sub_topic);
                 continue;
             }
 
+            println!("[Floodsub, publish_many] sending message to peer {:?}", peer_id);
             self.events.push_back(NetworkBehaviorAction::SendEvent {
                 peer_id: peer_id.clone(),
                 event: FloodsubRpc {
@@ -191,6 +197,7 @@ where
     fn inject_connected(&mut self, id: PeerId, _: ConnectedPoint) {
         // We need to send our subscriptions to the newly-connected node.
         for topic in self.subscribed_topics.iter() {
+            println!("[NetworkBehavior for FloodsubBehaviour, inject_connected] enqueuing FloodsubSubscription about topic={:?}", topic);
             self.events.push_back(NetworkBehaviorAction::SendEvent {
                 peer_id: id.clone(),
                 event: FloodsubRpc {
@@ -216,19 +223,42 @@ where
         propagation_source: PeerId,
         event: FloodsubRpc,
     ) {
+        println!("[NetworkBehavior for FloodsubBehaviour, inject_node_event] START event={:?}, my topics={:?}", event, self.subscribed_topics);
+        // Update connected peers topics
+        for subscription in event.subscriptions {
+            let mut remote_peer_topics = self.connected_peers.get_mut(&propagation_source).expect("This peer just sent us a message");
+            match subscription.action {
+                FloodsubSubscriptionAction::Subscribe => {
+                    if !remote_peer_topics.contains(&subscription.topic) {
+                        remote_peer_topics.push(subscription.topic);
+                    }
+                }
+                FloodsubSubscriptionAction::Unsubscribe => {
+                    if let Some(pos) = remote_peer_topics.iter().position(|t| t == &subscription.topic ) {
+                        remote_peer_topics.remove(pos);
+                    }
+                }
+            }
+        }
+
         // List of messages we're going to propagate on the network.
         let mut rpcs_to_dispatch: Vec<(PeerId, FloodsubRpc)> = Vec::new();
 
         for message in event.messages {
+            println!("[NetworkBehavior for FloodsubBehaviour, inject_node_event] message={:?}", message);
             // Use `self.received` to skip the messages that we have already received in the past.
             // Note that this can false positive.
             if !self.received.test_and_add(&message) {
+                println!("[NetworkBehavior for FloodsubBehaviour, inject_node_event] message seen already");
                 continue;
             }
 
             // Add the message to be dispatched to the user.
             if self.subscribed_topics.iter().any(|t| message.topics.iter().any(|u| t.hash() == u)) {
+                println!("[NetworkBehavior for FloodsubBehaviour, inject_node_event] message topic matches one of mine");
                 self.events.push_back(NetworkBehaviorAction::GenerateEvent(message.clone()));
+            } else {
+                println!("[NetworkBehavior for FloodsubBehaviour, inject_node_event] message topic DOES NOT MATCH one of mine");
             }
 
             // Propagate the message to everyone else who is subscribed to any of the topics.
@@ -269,6 +299,7 @@ where
         >,
     > {
         if let Some(event) = self.events.pop_front() {
+            println!("[NetworkBehavior for FloodsubBehaviour, poll] popped an event: {:?}", event);
             return Async::Ready(event);
         }
 

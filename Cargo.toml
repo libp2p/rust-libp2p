@@ -48,6 +48,8 @@ structopt =  "0.2"
 tokio = "0.1"
 tokio-io = "0.1"
 tokio-stdin = "0.1"
+tokio-timer = "0.1"
+tokio-stdin-stdout = "0.1"
 
 [workspace]
 members = [

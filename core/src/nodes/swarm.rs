@@ -189,9 +189,11 @@ where TBehaviour: NetworkBehavior,
             match self.raw_swarm.poll() {
                 Async::NotReady => raw_swarm_not_ready = true,
                 Async::Ready(RawSwarmEvent::NodeEvent { peer_id, event }) => {
+                    println!("[Swarm, poll] NodeEvent from peer_id={:?}", peer_id);
                     self.behaviour.inject_node_event(peer_id, event);
                 },
                 Async::Ready(RawSwarmEvent::Connected { peer_id, endpoint }) => {
+                    println!("[Swarm, poll] Connected from peer_id={:?}", peer_id);
                     self.behaviour.inject_connected(peer_id, endpoint);
                 },
                 Async::Ready(RawSwarmEvent::NodeClosed { peer_id, endpoint }) |

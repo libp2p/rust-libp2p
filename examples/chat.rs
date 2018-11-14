@@ -51,6 +51,7 @@ fn main() {
     println!("Listening on {:?}", addr);
 
     if let Some(to_dial) = std::env::args().nth(1) {
+        println!("Dialing {:?}", to_dial);
         match to_dial.parse() {
             Ok(to_dial) => { let _ = libp2p::Swarm::dial_addr(&mut swarm, to_dial); },
             Err(err) => println!("Failed to parse address to dial: {:?}", err),
@@ -62,9 +63,15 @@ fn main() {
     tokio::run(futures::future::poll_fn(move || -> Result<_, ()> {
         loop {
             match stdin.poll().expect("Error while polling stdin") {
-                Async::Ready(Some(key)) => swarm.publish(&floodsub_topic, vec![key]),
+                Async::Ready(Some(key)) => {
+                    println!("[stdin.poll()] Ready(Some) – Key: {:?}", key);
+                    swarm.publish(&floodsub_topic, vec![key])
+                },
                 Async::Ready(None) => panic!("Stdin closed"),
-                Async::NotReady => break,
+                Async::NotReady => {
+                    println!("[stdin.poll()] NotReady");
+                    break
+                }
             };
         }
 
@@ -73,7 +80,10 @@ fn main() {
                 Async::Ready(message) => {
                     println!("Received: {:?}", message);
                 },
-                Async::NotReady => break,
+                Async::NotReady => {
+                    println!("[swarm.poll()] NotReady");
+                    break
+                },
             }
         }
 
