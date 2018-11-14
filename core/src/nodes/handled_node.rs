@@ -277,7 +277,9 @@ where
                     if self.node.get_ref().is_outbound_open() {
                         match self.node.get_mut().open_substream(user_data) {
                             Ok(()) => (),
-                            Err(user_data) => self.handler.inject_outbound_closed(user_data),
+                            Err(user_data) => {
+                                self.handler.inject_outbound_closed(user_data)
+                            },
                         }
                     } else {
                         self.handler.inject_outbound_closed(user_data);
@@ -305,7 +307,7 @@ mod tests {
     use super::*;
     use tokio::runtime::current_thread;
     use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
-    use tests::dummy_handler::{Handler, HandlerState, Event};
+    use tests::dummy_handler::{Handler, HandlerState, InEvent, OutEvent};
     use std::marker::PhantomData;
 
     // Concrete `HandledNode`
@@ -433,7 +435,7 @@ mod tests {
             .with_muxer_inbound_state(DummyConnectionState::Closed)
             .handled_node();
 
-        let event = Event::Custom("banana");
+        let event = InEvent::Custom("banana");
         handled.inject_event(event.clone());
         assert_eq!(handled.handler().events, vec![event]);
     }
@@ -528,7 +530,7 @@ mod tests {
 
     #[test]
     fn poll_with_unready_node_stream_and_handler_emits_custom_event() {
-        let expected_event = Some(NodeHandlerEvent::Custom(Event::Custom("pineapple")));
+        let expected_event = Some(NodeHandlerEvent::Custom(OutEvent::Custom("pineapple")));
         let mut handled = TestBuilder::new()
             // make NodeStream return NotReady
             .with_muxer_inbound_state(DummyConnectionState::Pending)
@@ -537,7 +539,7 @@ mod tests {
             .handled_node();
 
         assert_matches!(handled.poll(), Ok(Async::Ready(Some(event))) => {
-            assert_matches!(event, Event::Custom("pineapple"))
+            assert_matches!(event, OutEvent::Custom("pineapple"))
         });
     }
 
@@ -552,10 +554,10 @@ mod tests {
 
         set_next_handler_outbound_state(
             &mut handled,
-            HandlerState::Ready(Some(NodeHandlerEvent::Custom(Event::Custom("pear"))))
+            HandlerState::Ready(Some(NodeHandlerEvent::Custom(OutEvent::Custom("pear"))))
         );
         handled.poll().expect("poll works");
-        assert_eq!(handled.handler().events, vec![Event::OutboundClosed]);
+        assert_eq!(handled.handler().events, vec![InEvent::OutboundClosed]);
     }
 
     #[test]
@@ -572,7 +574,7 @@ mod tests {
         //   closed, `inbound_finished` is set to true.
         // - an Async::Ready(NodeEvent::InboundClosed) is yielded (also calls
         //   `inject_inbound_close`, but that's irrelevant here)
-        // - back in `poll()` we cal `handler.poll()` which does nothing because
+        // - back in `poll()` we call `handler.poll()` which does nothing because
         //   `HandlerState` is `NotReady`: loop continues
         // - polls the node again which now skips the inbound block because
         //   `inbound_finished` is true.
@@ -593,7 +595,7 @@ mod tests {
         // – which in turn makes the HandledNode to yield Async::Ready(None) as well
         assert_matches!(handled.poll(), Ok(Async::Ready(None)));
         assert_eq!(handled.handler().events, vec![
-            Event::InboundClosed, Event::OutboundClosed
+            InEvent::InboundClosed, InEvent::OutboundClosed
         ]);
     }
 
@@ -606,7 +608,7 @@ mod tests {
 
         assert_eq!(h.handler().events, vec![]);
         let _ = h.poll();
-        assert_eq!(h.handler().events, vec![Event::InboundClosed]);
+        assert_eq!(h.handler().events, vec![InEvent::InboundClosed]);
     }
 
     #[test]
@@ -620,7 +622,7 @@ mod tests {
 
         assert_eq!(h.handler().events, vec![]);
         let _ = h.poll();
-        assert_eq!(h.handler().events, vec![Event::OutboundClosed]);
+        assert_eq!(h.handler().events, vec![InEvent::OutboundClosed]);
     }
 
     #[test]
@@ -634,7 +636,7 @@ mod tests {
 
         assert_eq!(h.handler().events, vec![]);
         let _ = h.poll();
-        assert_eq!(h.handler().events, vec![Event::Substream(Some(1))]);
+        assert_eq!(h.handler().events, vec![InEvent::Substream(Some(1))]);
     }
 
     #[test]
@@ -647,6 +649,6 @@ mod tests {
 
         assert_eq!(h.handler().events, vec![]);
         let _ = h.poll();
-        assert_eq!(h.handler().events, vec![Event::Substream(None)]);
+        assert_eq!(h.handler().events, vec![InEvent::Substream(None)]);
     }
 }
