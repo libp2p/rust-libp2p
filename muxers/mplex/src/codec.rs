@@ -25,10 +25,10 @@ use core::Endpoint;
 use tokio_io::codec::{Decoder, Encoder};
 use unsigned_varint::{codec, encode};
 
-// Arbitrary maximum size for a packet.
+// Maximum size for a packet: 1MB as per the spec.
 // Since data is entirely buffered before being dispatched, we need a limit or remotes could just
 // send a 4 TB-long packet full of zeroes that we kill our process with an OOM error.
-const MAX_FRAME_SIZE: usize = 32 * 1024 * 1024;
+const MAX_FRAME_SIZE: usize = 1024 * 1024;
 
 #[derive(Debug, Clone)]
 pub enum Elem {
@@ -215,5 +215,27 @@ impl Encoder for Codec {
         dst.put(data_len_bytes);
         dst.put(data);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn encode_large_messages_fails() {
+        let mut enc = Codec::new();
+        let endpoint = Endpoint::Dialer;
+        let data = Bytes::from(&[123u8; MAX_FRAME_SIZE + 1][..]);
+        let bad_msg = Elem::Data{ substream_id: 123, endpoint, data };
+        let mut out = BytesMut::new();
+        match enc.encode(bad_msg, &mut out) {
+            Err(e) => assert_eq!(e.to_string(), "data size exceed maximum"),
+            _ => panic!("Can't send a message bigger than MAX_FRAME_SIZE")
+        }
+
+        let data = Bytes::from(&[123u8; MAX_FRAME_SIZE][..]);
+        let ok_msg = Elem::Data{ substream_id: 123, endpoint, data };
+        assert!(enc.encode(ok_msg, &mut out).is_ok());
     }
 }

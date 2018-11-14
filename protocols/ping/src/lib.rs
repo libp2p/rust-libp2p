@@ -98,9 +98,13 @@ extern crate tokio_timer;
 extern crate void;
 
 pub use self::dial_handler::PeriodicPingHandler;
+pub use self::dial_layer::PeriodicPingBehaviour;
 pub use self::listen_handler::PingListenHandler;
+pub use self::listen_layer::PingListenBehaviour;
 
 pub mod protocol;
 
 mod dial_handler;
+mod dial_layer;
 mod listen_handler;
+mod listen_layer;
