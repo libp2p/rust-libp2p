@@ -7,7 +7,7 @@ use std::{
     convert::From,
     fmt,
     io::{Cursor, Write},
-    net::{Ipv4Addr, Ipv6Addr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
     str::{self, FromStr}
 };
 use unsigned_varint::{encode, decode};
@@ -379,6 +379,16 @@ impl<'a> fmt::Display for Protocol<'a> {
             Utp => f.write_str("/utp"),
             Ws => f.write_str("/ws"),
             Wss => f.write_str("/wss"),
+        }
+    }
+}
+
+impl<'a> From<IpAddr> for Protocol<'a> {
+    #[inline]
+    fn from(addr: IpAddr) -> Self {
+        match addr {
+            IpAddr::V4(addr) => Protocol::Ip4(addr),
+            IpAddr::V6(addr) => Protocol::Ip6(addr),
         }
     }
 }

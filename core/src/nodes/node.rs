@@ -170,7 +170,6 @@ where
 
     /// Destroys all outbound streams and returns the corresponding user data.
     pub fn cancel_outgoing(&mut self) -> Vec<TUserData> {
-        println!("[NodeStream, cancel_outgoing] START");
         let mut out = Vec::with_capacity(self.outbound_substreams.len());
         for (user_data, outbound) in self.outbound_substreams.drain() {
             out.push(user_data);
@@ -184,7 +183,6 @@ where
     /// After this, `NodeStream::poll` will eventually produce `None`, when both endpoints are
     /// closed.
     pub fn shutdown_all(&mut self) {
-        println!("[NodeStream, shutdown_all] START");
         if self.inbound_state == StreamState::Open {
             self.inbound_state = StreamState::Shutdown
         }
@@ -196,11 +194,9 @@ where
     // If in progress, drive this node's stream muxer shutdown to completion.
     fn poll_shutdown(&mut self) -> Poll<(), IoError> {
         use self::StreamState::*;
-        println!("[NodeStream, poll_shutdown] START");
         loop {
             match (self.inbound_state, self.outbound_state) {
                 (Open, Open) | (Open, Closed) | (Closed, Open) | (Closed, Closed) => {
-                    println!("[NodeStream, poll_shutdown]   returning Async::Ready(()); in={:?}, out={:?}", self.inbound_state, self.outbound_state);
                     return Ok(Async::Ready(()))
                 }
                 (Shutdown, Shutdown) => {
@@ -262,40 +258,32 @@ where
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         // Drive the shutdown process, if any.
         if self.poll_shutdown()?.is_not_ready() {
-            println!("[NodeStream, poll, poll_shutdown] Not done shutting down; returning Async::NotReady");
             return Ok(Async::NotReady)
         }
 
         // Polling inbound substream.
         if self.inbound_state == StreamState::Open {
-            println!("[NodeStream, poll]  inbound_state is OPEN");
             match self.muxer.poll_inbound()? {
                 Async::Ready(Some(substream)) => {
-                    println!("[NodeStream, poll, poll_inbound]  Async::Ready(Some(substream)) - creating new substream");
                     let substream = muxing::substream_from_ref(self.muxer.clone(), substream);
                     return Ok(Async::Ready(Some(NodeEvent::InboundSubstream {
                         substream,
                     })));
                 }
                 Async::Ready(None) => {
-                    println!("[NodeStream, poll, poll_inbound]  Async::Ready(None) - setting inbound state to Closed, yielding InboundClosed event");
                     self.inbound_state = StreamState::Closed;
                     return Ok(Async::Ready(Some(NodeEvent::InboundClosed)));
                 }
-                Async::NotReady => {
-                    println!("[NodeStream, poll, poll_inbound]  Async::NotReady - no action");
-                }
+                Async::NotReady => {}
             }
         }
 
         // Polling outbound substreams.
         // We remove each element from `outbound_substreams` one by one and add them back.
         for n in (0..self.outbound_substreams.len()).rev() {
-            println!("[NodeStream, poll, poll_outbound] START");
             let (user_data, mut outbound) = self.outbound_substreams.swap_remove(n);
             match self.muxer.poll_outbound(&mut outbound) {
                 Ok(Async::Ready(Some(substream))) => {
-                    println!("[NodeStream, poll, poll_outbound] AsyncReady(Some), returning Async::Ready(Some(OutboundSubstream))");
                     let substream = muxing::substream_from_ref(self.muxer.clone(), substream);
                     self.muxer.destroy_outbound(outbound);
                     return Ok(Async::Ready(Some(NodeEvent::OutboundSubstream {
@@ -304,33 +292,27 @@ where
                     })));
                 }
                 Ok(Async::Ready(None)) => {
-                    println!("[NodeStream, poll, poll_outbound] Async::Ready(None) – setting outbound_state to Closed, destroying outbound, returning NodeEvent::OutboundClosed");
                     self.outbound_state = StreamState::Closed;
                     self.muxer.destroy_outbound(outbound);
                     return Ok(Async::Ready(Some(NodeEvent::OutboundClosed { user_data })));
                 }
                 Ok(Async::NotReady) => {
-                    println!("[NodeStream, poll, poll_outbound] Async::NotReady, yielding and putting putting back the outbound stream");
                     self.outbound_substreams.push((user_data, outbound));
                 }
                 Err(err) => {
-                    println!("[NodeStream, poll, poll_outbound] Err, yielding Err");
                     self.muxer.destroy_outbound(outbound);
                     return Err(err);
                 }
             }
         }
-        println!("[NodeStream, poll] is_inbound_open={}, is_outbound_open={}, outbound_substreams={:?}", self.is_inbound_open(), self.is_outbound_open(), self.outbound_substreams.len());
         // Closing the node if there's no way we can do anything more.
         if self.inbound_state == StreamState::Closed
             && self.outbound_state == StreamState::Closed
             && self.outbound_substreams.is_empty()
         {
-            println!("[NodeStream, poll]    returning Async::Ready(None) – in and out are closed; we have no substreams");
             return Ok(Async::Ready(None))
         }
 
-        println!("[NodeStream, poll] Nothing happened. Register our task to be notified and return NotReady");
         // Nothing happened. Register our task to be notified and return.
         Ok(Async::NotReady)
     }
@@ -354,7 +336,6 @@ where
     TMuxer: muxing::StreamMuxer,
 {
     fn drop(&mut self) {
-        println!("[NodeStream, drop]");
         // The substreams that were produced will continue to work, as the muxer is held in an Arc.
         // However we will no longer process any further inbound or outbound substream, and we
         // therefore close everything.

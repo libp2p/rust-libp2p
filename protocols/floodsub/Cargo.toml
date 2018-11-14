@@ -6,16 +6,13 @@ license = "MIT"
 
 [dependencies]
 bs58 = "0.2.0"
-byteorder = "1.2.1"
 bytes = "0.4"
+cuckoofilter = "0.3.2"
 fnv = "1.0"
 futures = "0.1"
 libp2p-core = { path = "../../core" }
-log = "0.4.1"
-multiaddr = { path = "../../misc/multiaddr" }
-parking_lot = "0.6"
 protobuf = "2.0.2"
-smallvec = "0.6"
+smallvec = "0.6.5"
 tokio-codec = "0.1"
 tokio-io = "0.1"
 unsigned-varint = { version = "0.2.1", features = ["codec"] }
