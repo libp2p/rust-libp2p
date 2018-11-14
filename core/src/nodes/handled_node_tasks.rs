@@ -467,7 +467,6 @@ mod tests {
     use tokio::runtime::current_thread::Runtime;
     use {PeerId, PublicKey};
 
-
     type TestNodeTask = NodeTask<
         FutureResult<(PeerId, DummyMuxer), IoError>,
         DummyMuxer,
@@ -481,6 +480,7 @@ mod tests {
        inner_node: Option<TestHandledNode>,
        inner_fut: Option<FutureResult<(PeerId, DummyMuxer), IoError>>,
     }
+
     impl NodeTaskTestBuilder {
         fn new() -> Self {
             NodeTaskTestBuilder {
@@ -530,11 +530,13 @@ mod tests {
     }
 
     type TestHandledNodesTasks = HandledNodesTasks<InEvent, OutEvent, Handler>;
+
     struct HandledNodeTaskTestBuilder {
         muxer: DummyMuxer,
         handler: Handler,
         task_count: usize,
     }
+
     impl HandledNodeTaskTestBuilder {
         fn new() -> Self {
             HandledNodeTaskTestBuilder {
