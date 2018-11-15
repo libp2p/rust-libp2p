@@ -21,7 +21,7 @@
 use muxing::StreamMuxer;
 use nodes::node::{NodeEvent, NodeStream, Substream};
 use futures::{prelude::*, stream::Fuse};
-use std::io::Error as IoError;
+use std::{io::Error as IoError, fmt};
 
 /// Handler for the substreams of a node.
 // TODO: right now it is possible for a node handler to be built, then shut down right after if we
@@ -144,7 +144,6 @@ impl<TOutboundOpenInfo, TCustom> NodeHandlerEvent<TOutboundOpenInfo, TCustom> {
 }
 
 /// A node combined with an implementation of `NodeHandler`.
-// TODO: impl Debug
 pub struct HandledNode<TMuxer, THandler>
 where
     TMuxer: StreamMuxer,
@@ -158,6 +157,21 @@ where
     handler_is_done: bool,
     // True, if the node is shutting down.
     is_shutting_down: bool
+}
+
+impl<TMuxer, THandler> fmt::Debug for HandledNode<TMuxer, THandler>
+where
+    TMuxer: StreamMuxer,
+    THandler: NodeHandler<Substream = Substream<TMuxer>> + fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("HandledNode")
+            .field("node", &self.node)
+            .field("handler", &self.handler)
+            .field("handler_is_done", &self.handler_is_done)
+            .field("is_shutting_down", &self.is_shutting_down)
+            .finish()
+    }
 }
 
 impl<TMuxer, THandler> HandledNode<TMuxer, THandler>
