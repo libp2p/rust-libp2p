@@ -27,7 +27,7 @@ use std::{fmt, io};
 use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
 
-/// Protocol handler that handles communications with the remote for the fileshare protocol.
+/// Protocol handler that handles communication with the remote for the floodsub protocol.
 ///
 /// The handler will automatically open a substream with the remote for each request we make.
 ///
@@ -36,10 +36,10 @@ pub struct FloodsubHandler<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
-    /// Configuration for the Kademlia protocol.
+    /// Configuration for the floodsub protocol.
     config: FloodsubConfig,
 
-    /// If true, we are trying to shut down the existing Kademlia substream and should refuse any
+    /// If true, we are trying to shut down the existing floodsub substream and should refuse any
     /// incoming connection.
     shutting_down: bool,
 
@@ -60,7 +60,6 @@ where
     WaitingInput(Framed<TSubstream, FloodsubCodec>),
     /// Waiting to send a message to the remote.
     PendingSend(Framed<TSubstream, FloodsubCodec>, FloodsubRpc),
-    /// Waiting to send a message to the remote.
     /// Waiting to flush the substream so that the data arrives to the remote.
     PendingFlush(Framed<TSubstream, FloodsubCodec>),
     /// The substream is being closed.
@@ -71,13 +70,13 @@ impl<TSubstream> SubstreamState<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
-    /// Consumes this state and produces the substream, if relevant.
-    fn into_substream(self) -> Option<Framed<TSubstream, FloodsubCodec>> {
+    /// Consumes this state and produces the substream.
+    fn into_substream(self) -> Framed<TSubstream, FloodsubCodec> {
         match self {
-            SubstreamState::WaitingInput(substream) => Some(substream),
-            SubstreamState::PendingSend(substream, _) => Some(substream),
-            SubstreamState::PendingFlush(substream) => Some(substream),
-            SubstreamState::Closing(substream) => Some(substream),
+            SubstreamState::WaitingInput(substream) => substream,
+            SubstreamState::PendingSend(substream, _) => substream,
+            SubstreamState::PendingFlush(substream) => substream,
+            SubstreamState::Closing(substream) => substream,
         }
     }
 }
@@ -148,9 +147,7 @@ where
         self.shutting_down = true;
         for n in (0..self.substreams.len()).rev() {
             let mut substream = self.substreams.swap_remove(n);
-            if let Some(substream) = substream.into_substream() {
-                self.substreams.push(SubstreamState::Closing(substream));
-            }
+            self.substreams.push(SubstreamState::Closing(substream.into_substream()));
         }
     }
 
