@@ -75,18 +75,7 @@ use tokio_uds::{UnixListener, UnixStream};
 #[derive(Clone, Debug, Default)]
 pub struct UdsConfig { }
 
-#[derive(Clone, Debug, Default)]
-pub struct UdsListener {
-    config: UdsConfig
-}
-
-impl UdsListener {
-    pub fn new(config: UdsConfig) -> Self {
-        UdsListener { config }
-    }
-}
-
-impl Listener for UdsListener {
+impl Listener for UdsConfig {
     type Output = UnixStream;
     type Error = io::Error;
     type Inbound = Box<Stream<Item = (Self::Upgrade, Multiaddr), Error = io::Error> + Send + Sync>;
@@ -129,18 +118,7 @@ impl Listener for UdsListener {
     }
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct UdsDialer {
-    config: UdsConfig
-}
-
-impl UdsDialer {
-    pub fn new(config: UdsConfig) -> Self {
-        UdsDialer { config }
-    }
-}
-
-impl Dialer for UdsDialer {
+impl Dialer for UdsConfig {
     type Output = UnixStream;
     type Error = io::Error;
     type Outbound = Box<Future<Item = UnixStream, Error = Self::Error> + Send + Sync>;  // TODO: name this type
@@ -184,7 +162,7 @@ fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
 #[cfg(test)]
 mod tests {
     use tokio::runtime::current_thread::Runtime;
-    use super::{multiaddr_to_path, UdsDialer, UdsListener};
+    use super::{multiaddr_to_path, UdsConfig};
     use futures::stream::Stream;
     use futures::Future;
     use multiaddr::{Protocol, Multiaddr};
@@ -219,7 +197,7 @@ mod tests {
         let addr2 = addr.clone();
 
         std::thread::spawn(move || {
-            let listener = UdsListener::default();
+            let listener = UdsConfig::default();
             let mut rt = Runtime::new().unwrap();
             let handle = rt.handle();
             let inbound = listener.listen_on(addr2).unwrap().0.for_each(|(sock, _)| {
@@ -241,7 +219,7 @@ mod tests {
         });
         std::thread::sleep(std::time::Duration::from_millis(100));
 
-        let dialer = UdsDialer::default();
+        let dialer = UdsConfig::default();
         // Obtain a future socket through dialing
         let socket = dialer.dial(addr.clone()).unwrap();
         // Define what to do with the socket once it's obtained
@@ -257,7 +235,7 @@ mod tests {
     #[test]
     #[ignore]       // TODO: for the moment unix addresses fail to parse
     fn larger_addr_denied() {
-        let listener = UdsListener::default();
+        let listener = UdsConfig::default();
 
         let addr = "/ip4/127.0.0.1/tcp/12345/unix//foo/bar"
             .parse::<Multiaddr>()

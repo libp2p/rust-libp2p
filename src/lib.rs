@@ -45,10 +45,10 @@
 //! Example:
 //!
 //! ```rust
-//! use libp2p::{Multiaddr, Dialer, tcp::TcpDialer};
-//! let tcp_dialer = TcpDialer::default();
+//! use libp2p::{Multiaddr, Dialer, tcp::TcpConfig};
+//! let tcp = TcpConfig::default();
 //! let addr: Multiaddr = "/ip4/98.97.96.95/tcp/20500".parse().expect("invalid multiaddr");
-//! let _outgoing_connec = tcp_dialer.dial(addr);
+//! let _outgoing_connec = tcp.dial(addr);
 //! // Note that `_outgoing_connec` is a `Future`, and therefore doesn't do anything by itself
 //! // unless it is run through a tokio runtime.
 //! ```
@@ -90,10 +90,10 @@
 //!
 //! ```rust
 //! # #[cfg(all(not(target_os = "emscripten"), feature = "libp2p-secio"))] {
-//! use libp2p::{Dialer, DialerExt, tcp::TcpDialer, secio::{SecioConfig, SecioKeyPair}};
-//! let tcp_dialer = TcpDialer::default();
+//! use libp2p::{Dialer, DialerExt, tcp::TcpConfig, secio::{SecioConfig, SecioKeyPair}};
+//! let tcp = TcpConfig::default();
 //! let secio_upgrade = SecioConfig::new(SecioKeyPair::ed25519_generated().unwrap());
-//! let with_security = tcp_dialer.with_upgrade(secio_upgrade);
+//! let with_security = tcp.with_outbound_upgrade(secio_upgrade);
 //! // let _ = with_security.dial(...);
 //! // `with_security` also implements the `Transport` trait, and all the connections opened
 //! // through it will automatically negotiate the `secio` protocol.
@@ -185,17 +185,14 @@ pub struct CommonTransport {
 pub type InnerImplementation =
     Transport<
         transport::Or<
-            dns::DnsDialer<tcp::TcpDialer>,
-            websocket::WsDialer<dns::DnsDialer<tcp::TcpDialer>>
+            dns::DnsDialer<tcp::TcpConfig>,
+            websocket::WsConfig<dns::DnsDialer<tcp::TcpConfig>>
         >,
-        transport::Or<
-            tcp::TcpListener,
-            websocket::WsListener<tcp::TcpListener>
-        >
+        transport::Or<tcp::TcpConfig, websocket::WsConfig<tcp::TcpConfig>>
     >;
 
 #[cfg(all(not(target_os = "emscripten"), not(feature = "libp2p-websocket")))]
-pub type InnerImplementation = Transport<dns::DnsDialer<tcp::TcpDialer>, tcp::TcpListener>;
+pub type InnerImplementation = Transport<dns::DnsDialer<tcp::TcpConfig>, tcp::TcpConfig>;
 
 #[cfg(target_os = "emscripten")]
 pub type InnerImplementation = Transport<websocket::BrowserWsDialer, transport::DeniedListener>;
@@ -210,20 +207,20 @@ impl CommonTransport {
     #[inline]
     #[cfg(not(target_os = "emscripten"))]
     pub fn new() -> CommonTransport {
-        let dialer = dns::DnsDialer::new(tcp::TcpDialer::default());
+        let dialer = dns::DnsDialer::new(tcp::TcpConfig::default());
 
         #[cfg(feature = "libp2p-websocket")]
         let dialer = {
             let dns_dialer = dialer.clone();
-            dialer.or(websocket::WsDialer::new(dns_dialer))
+            dialer.or_dialer(websocket::WsConfig::new(dns_dialer))
         };
 
-        let listener = tcp::TcpListener::default();
+        let listener = tcp::TcpConfig::default();
 
         #[cfg(feature = "libp2p-websocket")]
         let listener = {
             let tcp_listener = listener.clone();
-            listener.or(websocket::WsListener::new(tcp_listener))
+            listener.or_listener(websocket::WsConfig::new(tcp_listener))
         };
 
         CommonTransport {

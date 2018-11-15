@@ -31,7 +31,7 @@ use futures::{Sink, Stream};
 use std::sync::{Arc, mpsc};
 use std::thread;
 use swarm::{muxing, transport::{Dialer, DialerExt, Listener, ListenerExt, Error}};
-use tcp::{TcpDialer, TcpListener};
+use tcp::TcpConfig;
 use tokio_io::codec::length_delimited::Framed;
 use tokio::runtime::current_thread::Runtime;
 
@@ -42,8 +42,8 @@ fn client_to_server_outbound() {
     let (tx, rx) = mpsc::channel();
 
     let bg_thread = thread::spawn(move || {
-        let listener = TcpListener::default()
-            .with_upgrade(multiplex::MplexConfig::new());
+        let listener = TcpConfig::default()
+            .with_inbound_upgrade(multiplex::MplexConfig::new());
 
         let (listener, addr) = listener
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -73,8 +73,8 @@ fn client_to_server_outbound() {
         let _ = rt.block_on(future).unwrap();
     });
 
-    let dialer = TcpDialer::default()
-        .with_upgrade(multiplex::MplexConfig::new());
+    let dialer = TcpConfig::default()
+        .with_outbound_upgrade(multiplex::MplexConfig::new());
 
     let future = dialer.dial(rx.recv().unwrap())
         .unwrap()
@@ -95,8 +95,8 @@ fn client_to_server_inbound() {
     let (tx, rx) = mpsc::channel();
 
     let bg_thread = thread::spawn(move || {
-        let listener = TcpListener::default()
-            .with_upgrade(multiplex::MplexConfig::new());
+        let listener = TcpConfig::default()
+            .with_inbound_upgrade(multiplex::MplexConfig::new());
 
         let (listener, addr) = listener
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -126,8 +126,8 @@ fn client_to_server_inbound() {
         let _ = rt.block_on(future).unwrap();
     });
 
-    let dialer = TcpDialer::default()
-        .with_upgrade(multiplex::MplexConfig::new());
+    let dialer = TcpConfig::default()
+        .with_outbound_upgrade(multiplex::MplexConfig::new());
 
     let future = dialer.dial(rx.recv().unwrap())
         .unwrap()

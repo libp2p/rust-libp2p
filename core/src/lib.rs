@@ -88,8 +88,8 @@
 //! use libp2p_core::{Dialer, DialerExt};
 //!
 //! # fn main() {
-//! let tcp_transport = libp2p_tcp_transport::TcpDialer::default();
-//! let upgraded = tcp_transport.with_upgrade(libp2p_core::upgrade::DeniedUpgrade);
+//! let tcp_transport = libp2p_tcp_transport::TcpConfig::default();
+//! let upgraded = tcp_transport.with_outbound_upgrade(libp2p_core::upgrade::DeniedUpgrade);
 //!
 //! // upgraded.dial(...)   // automatically applies the plain text protocol on the socket
 //! # }
@@ -137,9 +137,9 @@
 //! use tokio::runtime::current_thread::Runtime;
 //!
 //! # fn main() {
-//! let ping_dialer = libp2p_tcp_transport::TcpDialer::default()
+//! let ping_dialer = libp2p_tcp_transport::TcpConfig::default()
 //!     // We have a `TcpDialer` struct that implements `Dialer`, and apply a `Ping` upgrade on it.
-//!     .with_upgrade(Ping::default())
+//!     .with_outbound_upgrade(Ping::default())
 //!     // TODO: right now the only available protocol is ping, but we want to replace it with
 //!     //       something that is more simple to use
 //!     .dial("127.0.0.1:12345".parse::<libp2p_core::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())

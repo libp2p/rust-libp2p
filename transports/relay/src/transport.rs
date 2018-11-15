@@ -164,7 +164,7 @@ where
 
         let relay = relay.clone();
         let message = self.hop_message(destination);
-        let dialer = self.dialer.with_upgrade(protocol::Source(message));
+        let dialer = self.dialer.with_outbound_upgrade(protocol::Source(message));
         let future = stream::iter_ok(addresses.into_iter())
             .filter_map(move |addr| dialer.clone().dial(addr).ok())
             .and_then(|dial| dial)

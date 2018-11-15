@@ -151,7 +151,7 @@ where
 
         let stop = stop_message(&from, &dest);
 
-        let dialer = self.dialer.with_upgrade(TrivialUpgrade);
+        let dialer = self.dialer.with_outbound_upgrade(TrivialUpgrade);
         let future = stream::iter_ok(dest.addrs.into_iter())
             .and_then(move |dest_addr| {
                 dialer.clone().dial(dest_addr).map_err(|_| RelayError::Message("could no dial addr"))

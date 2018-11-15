@@ -34,19 +34,19 @@ use transport_timeout::TransportTimeout;
 ///
 /// ```
 /// use libp2p::DialerExtra;
-/// use libp2p::tcp::TcpDialer;
+/// use libp2p::tcp::TcpConfig;
 /// use std::time::Duration;
 ///
-/// let _dialer = TcpDialer::default()
-///     .with_dialer_timeout(Duration::from_secs(20))
-///     .with_dialer_rate_limit(1024 * 1024, 1024 * 1024);
+/// let _dialer = TcpConfig::default()
+///     .with_outbound_timeout(Duration::from_secs(20))
+///     .with_outbound_rate_limit(1024 * 1024, 1024 * 1024);
 /// ```
 ///
 pub trait DialerExtra: Dialer {
     /// Adds a timeout to the connection and upgrade steps for all the sockets created by
     /// the transport.
     #[inline]
-    fn with_dialer_timeout(self, timeout: Duration) -> TransportTimeout<Self>
+    fn with_outbound_timeout(self, timeout: Duration) -> TransportTimeout<Self>
     where
         Self: Sized,
     {
@@ -55,7 +55,7 @@ pub trait DialerExtra: Dialer {
 
     /// Adds a maximum transfer rate to the sockets created with the transport.
     #[inline]
-    fn with_dialer_rate_limit(
+    fn with_outbound_rate_limit(
         self,
         max_read_bytes_per_sec: usize,
         max_write_bytes_per_sec: usize,
@@ -81,19 +81,19 @@ pub trait DialerExtra: Dialer {
 ///
 /// ```
 /// use libp2p::ListenerExtra;
-/// use libp2p::tcp::TcpListener;
+/// use libp2p::tcp::TcpConfig;
 /// use std::time::Duration;
 ///
-/// let _listener = TcpListener::default()
-///     .with_listener_timeout(Duration::from_secs(20))
-///     .with_listener_rate_limit(1024 * 1024, 1024 * 1024);
+/// let _listener = TcpConfig::default()
+///     .with_inbound_timeout(Duration::from_secs(20))
+///     .with_inbound_rate_limit(1024 * 1024, 1024 * 1024);
 /// ```
 ///
 pub trait ListenerExtra: Listener {
     /// Adds a timeout to the connection and upgrade steps for all the sockets created by
     /// the transport.
     #[inline]
-    fn with_listener_timeout(self, timeout: Duration) -> TransportTimeout<Self>
+    fn with_inbound_timeout(self, timeout: Duration) -> TransportTimeout<Self>
     where
         Self: Sized,
     {
@@ -102,7 +102,7 @@ pub trait ListenerExtra: Listener {
 
     /// Adds a maximum transfer rate to the sockets created with the transport.
     #[inline]
-    fn with_listener_rate_limit(
+    fn with_inbound_rate_limit(
         self,
         max_read_bytes_per_sec: usize,
         max_write_bytes_per_sec: usize,

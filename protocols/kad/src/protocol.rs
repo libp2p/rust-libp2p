@@ -430,7 +430,7 @@ mod tests {
     extern crate libp2p_tcp_transport;
     extern crate tokio;
 
-    use self::libp2p_tcp_transport::{TcpDialer, TcpListener};
+    use self::libp2p_tcp_transport::TcpConfig;
     use futures::{Future, Sink, Stream};
     use libp2p_core::{PeerId, PublicKey, transport::{self, Dialer, DialerExt, Listener, ListenerExt}};
     use multihash::{encode, Hash};
@@ -499,8 +499,8 @@ mod tests {
             let (tx, rx) = mpsc::channel();
 
             let bg_thread = thread::spawn(move || {
-                let listener = TcpListener::default()
-                    .with_upgrade(KademliaProtocolConfig);
+                let listener = TcpConfig::default()
+                    .with_inbound_upgrade(KademliaProtocolConfig);
 
                 let (listener, addr) = listener
                     .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -525,8 +525,8 @@ mod tests {
                 let _ = rt.block_on(future).unwrap();
             });
 
-            let dialer = TcpDialer::default()
-                .with_upgrade(KademliaProtocolConfig);
+            let dialer = TcpConfig::default()
+                .with_outbound_upgrade(KademliaProtocolConfig);
 
             let future = dialer.dial(rx.recv().unwrap())
                 .unwrap_or_else(|_| panic!())

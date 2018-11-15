@@ -28,10 +28,10 @@
 //!
 //! ```
 //! extern crate libp2p_tcp_transport;
-//! use libp2p_tcp_transport::TcpListener;
+//! use libp2p_tcp_transport::TcpConfig;
 //!
 //! # fn main() {
-//! let tcp = TcpListener::default();
+//! let tcp = TcpConfig::default();
 //! # }
 //! ```
 
@@ -124,18 +124,7 @@ impl TcpConfig {
     }
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct TcpListener {
-    config: TcpConfig
-}
-
-impl TcpListener {
-    pub fn new(config: TcpConfig) -> Self {
-        TcpListener { config }
-    }
-}
-
-impl Listener for TcpListener {
+impl Listener for TcpConfig {
     type Output = TcpTransStream;
     type Error = io::Error;
     type Inbound = TcpListenStream;
@@ -159,11 +148,11 @@ impl Listener for TcpListener {
             };
 
             debug!("Now listening on {}", new_addr);
-            let sleep_on_error = self.config.sleep_on_error;
+            let sleep_on_error = self.sleep_on_error;
             let inner = listener
                 .map_err(Some)
                 .map(move |l| l.incoming().sleep_on_error(sleep_on_error));
-            Ok((TcpListenStream { inner, config: self.config }, new_addr))
+            Ok((TcpListenStream { inner, config: self }, new_addr))
         } else {
             Err((self, addr))
         }
@@ -188,18 +177,7 @@ impl Listener for TcpListener {
     }
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct TcpDialer {
-    config: TcpConfig
-}
-
-impl TcpDialer {
-    pub fn new(config: TcpConfig) -> Self {
-        TcpDialer { config }
-    }
-}
-
-impl Dialer for TcpDialer {
+impl Dialer for TcpConfig {
     type Output = TcpTransStream;
     type Error = io::Error;
     type Outbound = TcpDialFut;
@@ -212,7 +190,7 @@ impl Dialer for TcpDialer {
                 debug!("Dialing {}", addr);
                 Ok(TcpDialFut {
                     inner: TcpStream::connect(&socket_addr),
-                    config: self.config,
+                    config: self,
                 })
             } else {
                 debug!("Instantly refusing dialing {}, as it is invalid", addr);
@@ -411,7 +389,7 @@ impl Drop for TcpTransStream {
 mod tests {
     extern crate tokio;
     use self::tokio::runtime::current_thread::Runtime;
-    use super::{multiaddr_to_socketaddr, TcpDialer, TcpListener};
+    use super::{multiaddr_to_socketaddr, TcpConfig};
     use futures::stream::Stream;
     use futures::Future;
     use multiaddr::Multiaddr;
@@ -475,7 +453,7 @@ mod tests {
 
         std::thread::spawn(move || {
             let addr = "/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap();
-            let tcp = TcpListener::default();
+            let tcp = TcpConfig::default();
             let mut rt = Runtime::new().unwrap();
             let handle = rt.handle();
             let listener = tcp.listen_on(addr).unwrap().0.for_each(|(sock, _)| {
@@ -498,7 +476,7 @@ mod tests {
         });
         std::thread::sleep(std::time::Duration::from_millis(100));
         let addr = "/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap();
-        let tcp = TcpDialer::default();
+        let tcp = TcpConfig::default();
         // Obtain a future socket through dialing
         let socket = tcp.dial(addr.clone()).unwrap();
         // Define what to do with the socket once it's obtained
@@ -513,7 +491,7 @@ mod tests {
 
     #[test]
     fn replace_port_0_in_returned_multiaddr_ipv4() {
-        let tcp = TcpListener::default();
+        let tcp = TcpConfig::default();
 
         let addr = "/ip4/127.0.0.1/tcp/0".parse::<Multiaddr>().unwrap();
         assert!(addr.to_string().contains("tcp/0"));
@@ -524,7 +502,7 @@ mod tests {
 
     #[test]
     fn replace_port_0_in_returned_multiaddr_ipv6() {
-        let tcp = TcpListener::default();
+        let tcp = TcpConfig::default();
 
         let addr: Multiaddr = "/ip6/::1/tcp/0".parse().unwrap();
         assert!(addr.to_string().contains("tcp/0"));
@@ -535,7 +513,7 @@ mod tests {
 
     #[test]
     fn larger_addr_denied() {
-        let tcp = TcpListener::default();
+        let tcp = TcpConfig::default();
 
         let addr = "/ip4/127.0.0.1/tcp/12345/tcp/12345"
             .parse::<Multiaddr>()
@@ -545,7 +523,7 @@ mod tests {
 
     #[test]
     fn nat_traversal() {
-        let tcp = TcpListener::default();
+        let tcp = TcpConfig::default();
 
         let server = "/ip4/127.0.0.1/tcp/10000".parse::<Multiaddr>().unwrap();
         let observed = "/ip4/80.81.82.83/tcp/25000".parse::<Multiaddr>().unwrap();

@@ -186,7 +186,7 @@ fn resolve_dns<'a>(name: &str, resolver: &CpuPoolResolver, ty: ResolveTy)
 #[cfg(test)]
 mod tests {
     extern crate libp2p_tcp_transport;
-    use self::libp2p_tcp_transport::TcpDialer;
+    use self::libp2p_tcp_transport::TcpConfig;
     use futures::future;
     use libp2p_core::transport::Dialer;
     use multiaddr::{Protocol, Multiaddr};
@@ -198,8 +198,8 @@ mod tests {
         struct CustomDialer;
 
         impl Dialer for CustomDialer {
-            type Output = <TcpDialer as Dialer>::Output;
-            type Error = <TcpDialer as Dialer>::Error;
+            type Output = <TcpConfig as Dialer>::Output;
+            type Error = <TcpConfig as Dialer>::Error;
             type Outbound = future::Empty<Self::Output, Self::Error>;
 
             fn dial(self, addr: Multiaddr) -> Result<Self::Outbound, (Self, Multiaddr)> {

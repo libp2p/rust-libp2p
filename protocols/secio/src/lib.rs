@@ -41,12 +41,12 @@
 //! use libp2p_secio::{SecioConfig, SecioKeyPair, SecioOutput};
 //! use libp2p_core::{Multiaddr, upgrade::apply_inbound};
 //! use libp2p_core::transport::{self, Dialer, DialerExt};
-//! use libp2p_tcp_transport::TcpDialer;
+//! use libp2p_tcp_transport::TcpConfig;
 //! use tokio_io::io::write_all;
 //! use tokio::runtime::current_thread::Runtime;
 //!
-//! let dialer = TcpDialer::default()
-//!     .with_upgrade({
+//! let dialer = TcpConfig::default()
+//!     .with_outbound_upgrade({
 //!         # let private_key = b"";
 //!         //let private_key = include_bytes!("test-rsa-private-key.pk8");
 //!         # let public_key = vec![];
@@ -55,7 +55,7 @@
 //!         let keypair = SecioKeyPair::rsa_from_pkcs8(private_key, public_key).unwrap();
 //!         SecioConfig::new(keypair)
 //!     })
-//!     .map(|out: SecioOutput<_>, _| out.stream);
+//!     .map_outbound(|out: SecioOutput<_>, _| out.stream);
 //!
 //! let future = dialer.dial("/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap())
 //!     .unwrap_or_else(|_| panic!("Unable to dial node"))

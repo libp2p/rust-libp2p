@@ -215,7 +215,7 @@ mod tests {
     extern crate tokio;
 
     use self::tokio::runtime::current_thread::Runtime;
-    use self::libp2p_tcp_transport::{TcpDialer, TcpListener};
+    use self::libp2p_tcp_transport::TcpConfig;
     use futures::{Future, Stream};
     use libp2p_core::{PublicKey, transport::{self, Dialer, DialerExt, Listener, ListenerExt}};
     use std::sync::mpsc;
@@ -230,8 +230,8 @@ mod tests {
         let (tx, rx) = mpsc::channel();
 
         let bg_thread = thread::spawn(move || {
-            let listener = TcpListener::default()
-                .with_upgrade(IdentifyProtocolConfig);
+            let listener = TcpConfig::default()
+                .with_inbound_upgrade(IdentifyProtocolConfig);
 
             let (listener, addr) = listener
                 .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -264,8 +264,8 @@ mod tests {
             let _ = rt.block_on(future).unwrap();
         });
 
-        let dialer = TcpDialer::default()
-            .with_upgrade(IdentifyProtocolConfig);
+        let dialer = TcpConfig::default()
+            .with_outbound_upgrade(IdentifyProtocolConfig);
 
         let future = dialer.dial(rx.recv().unwrap())
             .unwrap_or_else(|_| panic!())

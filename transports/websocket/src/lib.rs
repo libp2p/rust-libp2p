@@ -56,11 +56,11 @@
 //! extern crate libp2p_websocket;
 //!
 //! use libp2p_core::{Multiaddr, transport::Dialer};
-//! use libp2p_tcp_transport::TcpDialer;
-//! use libp2p_websocket::WsDialer;
+//! use libp2p_tcp_transport::TcpConfig;
+//! use libp2p_websocket::WsConfig;
 //!
 //! # fn main() {
-//! let ws_config = WsDialer::new(TcpDialer::default());
+//! let ws_config = WsConfig::new(TcpConfig::default());
 //! # return;
 //! let _ = ws_config.dial("/ip4/40.41.42.43/tcp/12345/ws".parse().unwrap());
 //! # }
@@ -88,4 +88,4 @@ mod desktop;
 #[cfg(target_os = "emscripten")]
 pub use self::browser::{BrowserWsDialer, BrowserWsConn};
 #[cfg(not(target_os = "emscripten"))]
-pub use self::desktop::{WsDialer, WsListener};
+pub use self::desktop::WsConfig;
