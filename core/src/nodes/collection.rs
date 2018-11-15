@@ -372,7 +372,6 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
 
         match item {
             HandledNodesEvent::TaskClosed { id, result, handler } => {
-                println!("[CollectionStream, poll]  TaskClosed id={:?}, result={:?} – returning Async::Ready", id, result);
                 match (self.tasks.remove(&id), result, handler) {
                     (Some(TaskState::Pending), Err(err), Some(handler)) => {
                         Async::Ready(CollectionEvent::ReachError {
