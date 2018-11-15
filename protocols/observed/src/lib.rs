@@ -30,19 +30,67 @@ extern crate unsigned_varint;
 
 use bytes::Bytes;
 use futures::{future, prelude::*};
-use libp2p_core::{ConnectionUpgrade, Endpoint, Multiaddr};
+use libp2p_core::{Multiaddr, upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}};
 use std::{io, iter};
 use tokio_codec::{FramedRead, FramedWrite};
 use tokio_io::{AsyncRead, AsyncWrite};
 use unsigned_varint::codec::UviBytes;
 
-/// The output, this connection upgrade produces.
-pub enum Output<C> {
-    /// As `Dialer`, we get our own externally observed address.
-    Address(Multiaddr),
-    /// As `Listener`, we return a sender which allows reporting the observed
-    /// address the client.
-    Sender(Sender<C>)
+/// The connection upgrade type to retrieve or report externally visible addresses.
+pub struct Observed {}
+
+impl Observed {
+    pub fn new() -> Self {
+        Observed {}
+    }
+}
+
+impl UpgradeInfo for Observed {
+    type UpgradeId = ();
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once((Bytes::from("/paritytech/observed-address/0.1.0"), ()))
+    }
+}
+
+impl<C> InboundUpgrade<C> for Observed
+where
+    C: AsyncRead + AsyncWrite + Send + 'static
+{
+    type Output = Sender<C>;
+    type Error = io::Error;
+    type Future = Box<dyn Future<Item=Self::Output, Error=Self::Error> + Send>;
+
+    fn upgrade_inbound(self, conn: C, _: ()) -> Self::Future {
+        let io = FramedWrite::new(conn, UviBytes::default());
+        Box::new(future::ok(Sender { io }))
+    }
+}
+
+impl<C> OutboundUpgrade<C> for Observed
+where
+    C: AsyncRead + AsyncWrite + Send + 'static
+{
+    type Output = Multiaddr;
+    type Error = io::Error;
+    type Future = Box<dyn Future<Item=Self::Output, Error=Self::Error> + Send>;
+
+    fn upgrade_outbound(self, conn: C, _: ()) -> Self::Future {
+        let io = FramedRead::new(conn, UviBytes::default());
+        let future = io.into_future()
+            .map_err(|(e, _): (io::Error, FramedRead<C, UviBytes>)| e)
+            .and_then(move |(bytes, _)| {
+                if let Some(b) = bytes {
+                    let ma = Multiaddr::from_bytes(b.to_vec())
+                        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+                    Ok(ma)
+                } else {
+                    Err(io::ErrorKind::InvalidData.into())
+                }
+            });
+        Box::new(future)
+    }
 }
 
 /// `Sender` allows reporting back the observed address to the remote endpoint.
@@ -57,58 +105,11 @@ impl<C: AsyncWrite> Sender<C> {
     }
 }
 
-/// The connection upgrade type to retrieve or report externally visible addresses.
-pub struct Observed {}
-
-impl Observed {
-    pub fn new() -> Self {
-        Observed {}
-    }
-}
-
-impl<C> ConnectionUpgrade<C> for Observed
-where
-    C: AsyncRead + AsyncWrite + Send + 'static
-{
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
-    type UpgradeIdentifier = ();
-    type Output = Output<C>;
-    type Future = Box<dyn Future<Item=Self::Output, Error=io::Error> + Send>;
-
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once((Bytes::from("/paritytech/observed-address/0.1.0"), ()))
-    }
-
-    fn upgrade(self, conn: C, _: (), role: Endpoint) -> Self::Future {
-        match role {
-            Endpoint::Dialer => {
-                let io = FramedRead::new(conn, UviBytes::default());
-                let future = io.into_future()
-                    .map_err(|(e, _): (io::Error, FramedRead<C, UviBytes>)| e)
-                    .and_then(move |(bytes, _)| {
-                        if let Some(b) = bytes {
-                            let ma = Multiaddr::from_bytes(b.to_vec())
-                                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-                            Ok(Output::Address(ma))
-                        } else {
-                            Err(io::ErrorKind::InvalidData.into())
-                        }
-                    });
-                Box::new(future)
-            }
-            Endpoint::Listener => {
-                let io = FramedWrite::new(conn, UviBytes::default());
-                Box::new(future::ok(Output::Sender(Sender { io })))
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     extern crate tokio;
 
-    use libp2p_core::{ConnectionUpgrade, Endpoint, Multiaddr};
+    use libp2p_core::{Multiaddr, upgrade::{InboundUpgrade, OutboundUpgrade}};
     use self::tokio::runtime::current_thread;
     use self::tokio::net::{TcpListener, TcpStream};
     use super::*;
@@ -125,28 +126,18 @@ mod tests {
             .into_future()
             .map_err(|(e, _)| e.into())
             .and_then(move |(conn, _)| {
-                Observed::new().upgrade(conn.unwrap(), (), Endpoint::Listener)
+                Observed::new().upgrade_inbound(conn.unwrap(), ())
             })
-            .and_then(move |output| {
-                match output {
-                    Output::Sender(s) => s.send_address(observed_addr1),
-                    Output::Address(_) => unreachable!()
-                }
-            });
+            .and_then(move |sender| sender.send_address(observed_addr1));
 
         let client = TcpStream::connect(&server_addr)
             .map_err(|e| e.into())
             .and_then(|conn| {
-                Observed::new().upgrade(conn, (), Endpoint::Dialer)
+                Observed::new().upgrade_outbound(conn, ())
             })
-            .map(move |output| {
-                match output {
-                    Output::Address(addr) => {
-                        eprintln!("{} {}", addr, observed_addr2);
-                        assert_eq!(addr, observed_addr2)
-                    }
-                    _ => unreachable!()
-                }
+            .map(move |addr| {
+                eprintln!("{} {}", addr, observed_addr2);
+                assert_eq!(addr, observed_addr2)
             });
 
         current_thread::block_on_all(future::lazy(move || {

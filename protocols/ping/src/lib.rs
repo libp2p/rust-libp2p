@@ -56,38 +56,35 @@
 //! extern crate tokio;
 //!
 //! use futures::{Future, Stream};
-//! use libp2p_ping::protocol::{Ping, PingOutput};
-//! use libp2p_core::Transport;
+//! use libp2p_core::{transport::Transport, upgrade::apply_outbound};
+//! use libp2p_ping::protocol::Ping;
 //! use tokio::runtime::current_thread::Runtime;
 //!
 //! # fn main() {
-//! let ping_finished_future = libp2p_tcp_transport::TcpConfig::new()
-//!     .with_upgrade(Ping::default())
-//!     .dial("127.0.0.1:12345".parse::<libp2p_core::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())
-//!     .and_then(|out| {
-//!         match out {
-//!             PingOutput::Ponger(processing) => Box::new(processing) as Box<Future<Item = _, Error = _> + Send>,
-//!             PingOutput::Pinger(mut pinger) => {
-//!                 pinger.ping(());
-//!                 let f = pinger.into_future().map(|_| ()).map_err(|(err, _)| err);
-//!                 Box::new(f) as Box<Future<Item = _, Error = _> + Send>
-//!             },
-//!         }
+//! let ping_dialer = libp2p_tcp_transport::TcpConfig::new()
+//!     .and_then(|socket, _| {
+//!         apply_outbound(socket, Ping::default()).map_err(|e| e.into_io_error())
+//!     })
+//!     .dial("/ip4/127.0.0.1/tcp/12345".parse::<libp2p_core::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())
+//!     .and_then(|mut pinger| {
+//!         pinger.ping(());
+//!         let f = pinger.into_future()
+//!             .map(|_| println!("received pong"))
+//!             .map_err(|(e, _)| e);
+//!         Box::new(f) as Box<Future<Item = _, Error = _> + Send>
 //!     });
 //!
 //! // Runs until the ping arrives.
 //! let mut rt = Runtime::new().unwrap();
-//! let _ = rt.block_on(ping_finished_future).unwrap();
+//! let _ = rt.block_on(ping_dialer).unwrap();
 //! # }
 //! ```
 //!
 
 extern crate arrayvec;
 extern crate bytes;
-#[macro_use]
 extern crate futures;
 extern crate libp2p_core;
-#[macro_use]
 extern crate log;
 extern crate multistream_select;
 extern crate parking_lot;

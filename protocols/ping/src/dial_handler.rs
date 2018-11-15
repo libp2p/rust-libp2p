@@ -20,25 +20,26 @@
 
 use futures::prelude::*;
 use libp2p_core::{
-    nodes::{NodeHandlerEndpoint, ProtocolsHandler, ProtocolsHandlerEvent},
-    upgrade::toggleable,
-    ConnectionUpgrade,
+    OutboundUpgrade,
+    nodes::{ProtocolsHandler, ProtocolsHandlerEvent},
+    upgrade::{self, DeniedUpgrade}
 };
-use protocol::{Ping, PingDialer, PingOutput};
+use log::warn;
+use protocol::{Ping, PingDialer};
 use std::{
     io, mem,
     time::{Duration, Instant},
 };
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_timer::Delay;
-use void::Void;
+use void::{Void, unreachable};
 
 /// Protocol handler that handles pinging the remote at a regular period.
 ///
 /// If the remote doesn't respond, produces `Unresponsive` and closes the connection.
 pub struct PeriodicPingHandler<TSubstream> {
     /// Configuration for the ping protocol.
-    ping_config: toggleable::Toggleable<Ping<Instant>>,
+    ping_config: upgrade::Toggleable<Ping<Instant>>,
 
     /// State of the outgoing ping.
     out_state: OutState<TSubstream>,
@@ -126,7 +127,7 @@ impl<TSubstream> PeriodicPingHandler<TSubstream> {
         let ping_timeout = Duration::from_secs(30);
 
         PeriodicPingHandler {
-            ping_config: toggleable::toggleable(Default::default()),
+            ping_config: upgrade::toggleable(Default::default()),
             out_state: OutState::NeedToOpen {
                 expires: Delay::new(Instant::now() + ping_timeout),
             },
@@ -151,36 +152,36 @@ where
     type InEvent = Void;
     type OutEvent = OutEvent;
     type Substream = TSubstream;
-    type Protocol = toggleable::Toggleable<Ping<Instant>>;
+    type InboundProtocol = DeniedUpgrade;
+    type OutboundProtocol = upgrade::Toggleable<Ping<Instant>>;
     type OutboundOpenInfo = ();
 
     #[inline]
-    fn listen_protocol(&self) -> Self::Protocol {
-        let mut config = self.ping_config;
-        config.disable();
-        config
+    fn listen_protocol(&self) -> Self::InboundProtocol {
+        DeniedUpgrade
     }
 
-    fn inject_fully_negotiated(
+    #[inline]
+    fn dialer_protocol(&self) -> Self::OutboundProtocol {
+        self.ping_config
+    }
+
+    fn inject_fully_negotiated_inbound(&mut self, protocol: Void) {
+        unreachable(protocol)
+    }
+
+    fn inject_fully_negotiated_outbound(
         &mut self,
-        protocol: <Self::Protocol as ConnectionUpgrade<TSubstream>>::Output,
-        _endpoint: NodeHandlerEndpoint<Self::OutboundOpenInfo>,
+        mut substream: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output,
+        _info: Self::OutboundOpenInfo
     ) {
-        match protocol {
-            PingOutput::Pinger(mut substream) => {
-                debug_assert!(_endpoint.is_dialer());
-                match mem::replace(&mut self.out_state, OutState::Poisoned) {
-                    OutState::Upgrading { expires } => {
-                        // We always upgrade with the intent of immediately pinging.
-                        substream.ping(Instant::now());
-                        self.out_state = OutState::WaitingForPong { substream, expires };
-                    }
-                    _ => (),
-                }
+        match mem::replace(&mut self.out_state, OutState::Poisoned) {
+            OutState::Upgrading { expires } => {
+                // We always upgrade with the intent of immediately pinging.
+                substream.ping(Instant::now());
+                self.out_state = OutState::WaitingForPong { substream, expires };
             }
-            PingOutput::Ponger(_) => {
-                debug_assert!(false, "Received an unexpected incoming ping substream");
-            }
+            _ => (),
         }
     }
 
@@ -218,7 +219,7 @@ where
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<ProtocolsHandlerEvent<Self::Protocol, Self::OutboundOpenInfo, Self::OutEvent>>,
+        Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>,
         io::Error,
     > {
         // Shortcut for polling a `tokio_timer::Delay`
