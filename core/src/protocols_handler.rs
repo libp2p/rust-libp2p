@@ -19,18 +19,19 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    either::{EitherError, EitherOutput},
+    either::EitherOutput,
     nodes::handled_node::{NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent},
     upgrade::{
         self,
         InboundUpgrade,
         InboundUpgradeExt,
         OutboundUpgrade,
-        OutboundUpgradeExt,
         UpgradeInfo,
         InboundUpgradeApply,
         OutboundUpgradeApply,
-        DeniedUpgrade
+        DeniedUpgrade,
+        EitherUpgrade,
+        OrUpgrade
     }
 };
 use futures::prelude::*;
@@ -106,8 +107,6 @@ pub trait ProtocolsHandler {
     /// >           a time for a given protocol). The reason is that remotes are allowed to put the
     /// >           list of supported protocols in a cache in order to avoid spurious queries.
     fn listen_protocol(&self) -> Self::InboundProtocol;
-
-    fn dialer_protocol(&self) -> Self::OutboundProtocol;
 
     /// Injects a fully-negotiated substream in the handler.
     ///
@@ -321,11 +320,6 @@ where
     }
 
     #[inline]
-    fn dialer_protocol(&self) -> Self::OutboundProtocol {
-        DeniedUpgrade
-    }
-
-    #[inline]
     fn inject_fully_negotiated_inbound(
         &mut self,
         _: <Self::InboundProtocol as InboundUpgrade<TSubstream>>::Output
@@ -391,11 +385,6 @@ where
     #[inline]
     fn listen_protocol(&self) -> Self::InboundProtocol {
         self.inner.listen_protocol()
-    }
-
-    #[inline]
-    fn dialer_protocol(&self) -> Self::OutboundProtocol {
-        self.inner.dialer_protocol()
     }
 
     #[inline]
@@ -469,11 +458,6 @@ where
     #[inline]
     fn listen_protocol(&self) -> Self::InboundProtocol {
         self.inner.listen_protocol()
-    }
-
-    #[inline]
-    fn dialer_protocol(&self) -> Self::OutboundProtocol {
-        self.inner.dialer_protocol()
     }
 
     #[inline]
@@ -766,105 +750,15 @@ where
     type InEvent = EitherOutput<TProto1::InEvent, TProto2::InEvent>;
     type OutEvent = EitherOutput<TProto1::OutEvent, TProto2::OutEvent>;
     type Substream = TSubstream;
-
-    type InboundProtocol =
-        upgrade::OrUpgrade<
-            upgrade::Toggleable<
-                upgrade::MapInboundUpgradeErr<
-                    upgrade::MapInboundUpgrade<
-                        TProto1::InboundProtocol,
-                        fn(TProto1Out) -> EitherOutput<TProto1Out, TProto2Out>
-                    >,
-                    fn(<TProto1::InboundProtocol as InboundUpgrade<TSubstream>>::Error) ->
-                        EitherError<
-                            <TProto1::InboundProtocol as InboundUpgrade<TSubstream>>::Error,
-                            <TProto2::InboundProtocol as InboundUpgrade<TSubstream>>::Error
-                        >
-                >
-            >,
-            upgrade::Toggleable<
-                upgrade::MapInboundUpgradeErr<
-                    upgrade::MapInboundUpgrade<
-                        TProto2::InboundProtocol,
-                        fn(TProto2Out) -> EitherOutput<TProto1Out, TProto2Out>
-                    >,
-                    fn(<TProto2::InboundProtocol as InboundUpgrade<TSubstream>>::Error) ->
-                        EitherError<
-                            <TProto1::InboundProtocol as InboundUpgrade<TSubstream>>::Error,
-                            <TProto2::InboundProtocol as InboundUpgrade<TSubstream>>::Error
-                        >
-                >
-            >
-        >;
-
-    type OutboundProtocol =
-        upgrade::OrUpgrade<
-            upgrade::Toggleable<
-                upgrade::MapOutboundUpgradeErr<
-                    upgrade::MapOutboundUpgrade<
-                        TProto1::OutboundProtocol,
-                        fn(TProto1Out) -> EitherOutput<TProto1Out, TProto2Out>
-                    >,
-                    fn(<TProto1::OutboundProtocol as OutboundUpgrade<TSubstream>>::Error) ->
-                        EitherError<
-                            <TProto1::OutboundProtocol as OutboundUpgrade<TSubstream>>::Error,
-                            <TProto2::OutboundProtocol as OutboundUpgrade<TSubstream>>::Error
-                        >
-                >
-            >,
-            upgrade::Toggleable<
-                upgrade::MapOutboundUpgradeErr<
-                    upgrade::MapOutboundUpgrade<
-                        TProto2::OutboundProtocol,
-                        fn(TProto2Out) -> EitherOutput<TProto1Out, TProto2Out>
-                    >,
-                    fn(<TProto2::OutboundProtocol as OutboundUpgrade<TSubstream>>::Error) ->
-                        EitherError<
-                            <TProto1::OutboundProtocol as OutboundUpgrade<TSubstream>>::Error,
-                            <TProto2::OutboundProtocol as OutboundUpgrade<TSubstream>>::Error
-                        >
-                >
-            >
-        >;
-
+    type InboundProtocol = OrUpgrade<TProto1::InboundProtocol, TProto2::InboundProtocol>;
+    type OutboundProtocol = EitherUpgrade<TProto1::OutboundProtocol, TProto2::OutboundProtocol>;
     type OutboundOpenInfo = EitherOutput<TProto1::OutboundOpenInfo, TProto2::OutboundOpenInfo>;
 
     #[inline]
     fn listen_protocol(&self) -> Self::InboundProtocol {
-        let proto1 = self.proto1.listen_protocol()
-            .map_inbound(EitherOutput::First as fn(TProto1Out) -> EitherOutput<TProto1Out, TProto2Out>)
-            .map_inbound_err(EitherError::A as fn(<TProto1::InboundProtocol as InboundUpgrade<TSubstream>>::Error) ->
-                EitherError<
-                    <TProto1::InboundProtocol as InboundUpgrade<TSubstream>>::Error,
-                    <TProto2::InboundProtocol as InboundUpgrade<TSubstream>>::Error
-                >);
-        let proto2 = self.proto2.listen_protocol()
-            .map_inbound(EitherOutput::Second as fn(TProto2Out) -> EitherOutput<TProto1Out, TProto2Out>)
-            .map_inbound_err(EitherError::B as fn(<TProto2::InboundProtocol as InboundUpgrade<TSubstream>>::Error) ->
-                EitherError<
-                    <TProto1::InboundProtocol as InboundUpgrade<TSubstream>>::Error,
-                    <TProto2::InboundProtocol as InboundUpgrade<TSubstream>>::Error
-                >);
-        upgrade::toggleable(proto1).or_inbound(upgrade::toggleable(proto2))
-    }
-
-    #[inline]
-    fn dialer_protocol(&self) -> Self::OutboundProtocol {
-        let proto1 = self.proto1.dialer_protocol()
-            .map_outbound(EitherOutput::First as fn(TProto1Out) -> EitherOutput<TProto1Out, TProto2Out>)
-            .map_outbound_err(EitherError::A as fn(<TProto1::OutboundProtocol as OutboundUpgrade<TSubstream>>::Error) ->
-                EitherError<
-                    <TProto1::OutboundProtocol as OutboundUpgrade<TSubstream>>::Error,
-                    <TProto2::OutboundProtocol as OutboundUpgrade<TSubstream>>::Error
-                >);
-        let proto2 = self.proto2.dialer_protocol()
-            .map_outbound(EitherOutput::Second as fn(TProto2Out) -> EitherOutput<TProto1Out, TProto2Out>)
-            .map_outbound_err(EitherError::B as fn(<TProto2::OutboundProtocol as OutboundUpgrade<TSubstream>>::Error) ->
-                EitherError<
-                    <TProto1::OutboundProtocol as OutboundUpgrade<TSubstream>>::Error,
-                    <TProto2::OutboundProtocol as OutboundUpgrade<TSubstream>>::Error
-                >);
-        upgrade::toggleable(proto1).or_outbound(upgrade::toggleable(proto2))
+        let proto1 = self.proto1.listen_protocol();
+        let proto2 = self.proto2.listen_protocol();
+        proto1.or_inbound(proto2)
     }
 
     fn inject_fully_negotiated_outbound(&mut self, protocol: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output, endpoint: Self::OutboundOpenInfo) {
@@ -923,29 +817,8 @@ where
                 return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(EitherOutput::First(event)))));
             },
             Async::Ready(Some(ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info})) => {
-                let upgrade = {
-                    let proto1 = upgrade
-                        .map_outbound(EitherOutput::First as fn(TProto1Out) -> EitherOutput<TProto1Out, TProto2Out>)
-                        .map_outbound_err(EitherError::A as fn(<TProto1::OutboundProtocol as OutboundUpgrade<TSubstream>>::Error) ->
-                            EitherError<
-                                <TProto1::OutboundProtocol as OutboundUpgrade<TSubstream>>::Error,
-                                <TProto2::OutboundProtocol as OutboundUpgrade<TSubstream>>::Error
-                            >);
-                    let proto2 = self.proto2.dialer_protocol()
-                        .map_outbound(EitherOutput::Second as fn(TProto2Out) -> EitherOutput<TProto1Out, TProto2Out>)
-                        .map_outbound_err(EitherError::B as fn(<TProto2::OutboundProtocol as OutboundUpgrade<TSubstream>>::Error) ->
-                            EitherError<
-                                <TProto1::OutboundProtocol as OutboundUpgrade<TSubstream>>::Error,
-                                <TProto2::OutboundProtocol as OutboundUpgrade<TSubstream>>::Error
-                            >);
-
-                    let proto1 = upgrade::toggleable(proto1);
-                    let mut proto2 = upgrade::toggleable(proto2);
-                    proto2.disable();
-                    proto1.or_outbound(proto2)
-                };
                 return Ok(Async::Ready(Some(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                    upgrade,
+                    upgrade: EitherUpgrade::A(upgrade),
                     info: EitherOutput::First(info),
                 })));
             },
@@ -958,29 +831,8 @@ where
                 return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(EitherOutput::Second(event)))));
             },
             Async::Ready(Some(ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info })) => {
-                let upgrade = {
-                    let proto1 = self.proto1.dialer_protocol()
-                        .map_outbound(EitherOutput::First as fn(TProto1Out) -> EitherOutput<TProto1Out, TProto2Out>)
-                        .map_outbound_err(EitherError::A as fn(<TProto1::OutboundProtocol as OutboundUpgrade<TSubstream>>::Error) ->
-                            EitherError<
-                                <TProto1::OutboundProtocol as OutboundUpgrade<TSubstream>>::Error,
-                                <TProto2::OutboundProtocol as OutboundUpgrade<TSubstream>>::Error
-                            >);
-                    let proto2 = upgrade
-                        .map_outbound(EitherOutput::Second as fn(TProto2Out) -> EitherOutput<TProto1Out, TProto2Out>)
-                        .map_outbound_err(EitherError::B as fn(<TProto2::OutboundProtocol as OutboundUpgrade<TSubstream>>::Error) ->
-                            EitherError<
-                                <TProto1::OutboundProtocol as OutboundUpgrade<TSubstream>>::Error,
-                                <TProto2::OutboundProtocol as OutboundUpgrade<TSubstream>>::Error
-                            >);
-
-                    let mut proto1 = upgrade::toggleable(proto1);
-                    proto1.disable();
-                    let proto2 = upgrade::toggleable(proto2);
-                    proto1.or_outbound(proto2)
-                };
                 return Ok(Async::Ready(Some(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                    upgrade,
+                    upgrade: EitherUpgrade::B(upgrade),
                     info: EitherOutput::Second(info),
                 })));
             },

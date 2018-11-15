@@ -23,7 +23,7 @@ use libp2p_core::{
     OutboundUpgrade,
     ProtocolsHandler,
     ProtocolsHandlerEvent,
-    upgrade::{self, DeniedUpgrade}
+    upgrade::DeniedUpgrade
 };
 use log::warn;
 use protocol::{Ping, PingDialer};
@@ -40,7 +40,7 @@ use void::{Void, unreachable};
 /// If the remote doesn't respond, produces `Unresponsive` and closes the connection.
 pub struct PeriodicPingHandler<TSubstream> {
     /// Configuration for the ping protocol.
-    ping_config: upgrade::Toggleable<Ping<Instant>>,
+    ping_config: Ping<Instant>,
 
     /// State of the outgoing ping.
     out_state: OutState<TSubstream>,
@@ -128,7 +128,7 @@ impl<TSubstream> PeriodicPingHandler<TSubstream> {
         let ping_timeout = Duration::from_secs(30);
 
         PeriodicPingHandler {
-            ping_config: upgrade::toggleable(Default::default()),
+            ping_config: Default::default(),
             out_state: OutState::NeedToOpen {
                 expires: Delay::new(Instant::now() + ping_timeout),
             },
@@ -154,17 +154,12 @@ where
     type OutEvent = OutEvent;
     type Substream = TSubstream;
     type InboundProtocol = DeniedUpgrade;
-    type OutboundProtocol = upgrade::Toggleable<Ping<Instant>>;
+    type OutboundProtocol = Ping<Instant>;
     type OutboundOpenInfo = ();
 
     #[inline]
     fn listen_protocol(&self) -> Self::InboundProtocol {
         DeniedUpgrade
-    }
-
-    #[inline]
-    fn dialer_protocol(&self) -> Self::OutboundProtocol {
-        self.ping_config
     }
 
     fn inject_fully_negotiated_inbound(&mut self, protocol: Void) {
