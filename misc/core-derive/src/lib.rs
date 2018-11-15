@@ -68,29 +68,44 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         quote!{#n}
     };
 
+    let output_types = {
+        let mut start = 1;
+        // Avoid collisions.
+        while ast.generics.type_params().any(|tp| tp.ident.to_string() == format!("TOut{}", start)) {
+            start += 1;
+        }
+        data_struct.fields.iter()
+            .filter(|x| !is_ignored(x))
+            .enumerate()
+            .map(move |(i, _)| Ident::new(&format!("TOut{}", start + i), name.span()))
+            .collect::<Vec<_>>()
+    };
+
     // Build the generics.
     let impl_generics = {
         let tp = ast.generics.type_params();
         let lf = ast.generics.lifetimes();
         let cst = ast.generics.const_params();
-        quote!{<#(#lf,)* #(#tp,)* #(#cst,)* #substream_generic>}
+        let out = output_types.clone();
+        quote!{<#(#lf,)* #(#tp,)* #(#cst,)* #substream_generic, #(#out),*>}
     };
 
     // Build the `where ...` clause of the trait implementation.
     let where_clause = {
-        let mut additional = data_struct.fields.iter().flat_map(|field| {
-            if is_ignored(&field) {
-                return vec![];
-            }
-
-            let ty = &field.ty;
-            vec![
-                quote!{#ty: #trait_to_impl},
-                quote!{<#ty as #trait_to_impl>::ProtocolsHandler: #protocols_handler<Substream = #substream_generic>},
-                // Note: this bound is required because of https://github.com/rust-lang/rust/issues/55697
-                quote!{<<#ty as #trait_to_impl>::ProtocolsHandler as #protocols_handler>::Protocol: ::libp2p::core::ConnectionUpgrade<#substream_generic>},
-            ]
-        }).collect::<Vec<_>>();
+        let mut additional = data_struct.fields.iter()
+            .filter(|x| !is_ignored(x))
+            .zip(output_types)
+            .flat_map(|(field, out)| {
+                let ty = &field.ty;
+                vec![
+                    quote!{#ty: #trait_to_impl},
+                    quote!{<#ty as #trait_to_impl>::ProtocolsHandler: #protocols_handler<Substream = #substream_generic>},
+                    // Note: this bound is required because of https://github.com/rust-lang/rust/issues/55697
+                    quote!{<<#ty as #trait_to_impl>::ProtocolsHandler as #protocols_handler>::InboundProtocol: ::libp2p::core::InboundUpgrade<#substream_generic, Output = #out>},
+                    quote!{<<#ty as #trait_to_impl>::ProtocolsHandler as #protocols_handler>::OutboundProtocol: ::libp2p::core::OutboundUpgrade<#substream_generic, Output = #out>},
+                ]
+            })
+            .collect::<Vec<_>>();
 
         additional.push(quote!{#substream_generic: ::libp2p::tokio_io::AsyncRead});
         additional.push(quote!{#substream_generic: ::libp2p::tokio_io::AsyncWrite});

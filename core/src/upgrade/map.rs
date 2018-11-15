@@ -1,4 +1,4 @@
-// Copyright 2017 Parity Technologies (UK) Ltd.
+// Copyright 2018 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -19,47 +19,114 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use tokio_io::{AsyncRead, AsyncWrite};
-use upgrade::{ConnectionUpgrade, Endpoint};
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 
-/// Applies a closure on the output of a connection upgrade.
-#[inline]
-pub fn map<U, F>(upgrade: U, map: F) -> Map<U, F> {
-    Map { upgrade, map }
+#[derive(Debug, Clone)]
+pub struct MapUpgrade<U, F> { upgrade: U, fun: F }
+
+impl<U, F> MapUpgrade<U, F> {
+    pub fn new(upgrade: U, fun: F) -> Self {
+        MapUpgrade { upgrade, fun }
+    }
 }
 
-/// Application of a closure on the output of a connection upgrade.
-#[derive(Debug, Copy, Clone)]
-pub struct Map<U, F> {
-    upgrade: U,
-    map: F,
-}
-
-impl<C, U, F, O> ConnectionUpgrade<C> for Map<U, F>
+impl<U, F> UpgradeInfo for MapUpgrade<U, F>
 where
-    U: ConnectionUpgrade<C>,
-    C: AsyncRead + AsyncWrite,
-    F: FnOnce(U::Output) -> O,
+    U: UpgradeInfo
 {
+    type UpgradeId = U::UpgradeId;
     type NamesIter = U::NamesIter;
-    type UpgradeIdentifier = U::UpgradeIdentifier;
 
     fn protocol_names(&self) -> Self::NamesIter {
         self.upgrade.protocol_names()
     }
+}
 
-    type Output = O;
+impl<C, U, F, T> InboundUpgrade<C> for MapUpgrade<U, F>
+where
+    U: InboundUpgrade<C>,
+    F: FnOnce(U::Output) -> T
+{
+    type Output = T;
+    type Error = U::Error;
     type Future = MapFuture<U::Future, F>;
 
-    fn upgrade(
-        self,
-        socket: C,
-        id: Self::UpgradeIdentifier,
-        ty: Endpoint,
-    ) -> Self::Future {
+    fn upgrade_inbound(self, sock: C, id: Self::UpgradeId) -> Self::Future {
         MapFuture {
-            inner: self.upgrade.upgrade(socket, id, ty),
-            map: Some(self.map),
+            inner: self.upgrade.upgrade_inbound(sock, id),
+            map: Some(self.fun)
+        }
+    }
+}
+
+impl<C, U, F, T> OutboundUpgrade<C> for MapUpgrade<U, F>
+where
+    U: OutboundUpgrade<C>,
+    F: FnOnce(U::Output) -> T
+{
+    type Output = T;
+    type Error = U::Error;
+    type Future = MapFuture<U::Future, F>;
+
+    fn upgrade_outbound(self, sock: C, id: Self::UpgradeId) -> Self::Future {
+        MapFuture {
+            inner: self.upgrade.upgrade_outbound(sock, id),
+            map: Some(self.fun)
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct MapUpgradeErr<U, F> { upgrade: U, fun: F }
+
+impl<U, F> MapUpgradeErr<U, F> {
+    pub fn new(upgrade: U, fun: F) -> Self {
+        MapUpgradeErr { upgrade, fun }
+    }
+}
+
+impl<U, F> UpgradeInfo for MapUpgradeErr<U, F>
+where
+    U: UpgradeInfo
+{
+    type UpgradeId = U::UpgradeId;
+    type NamesIter = U::NamesIter;
+
+    fn protocol_names(&self) -> Self::NamesIter {
+        self.upgrade.protocol_names()
+    }
+}
+
+impl<C, U, F, T> InboundUpgrade<C> for MapUpgradeErr<U, F>
+where
+    U: InboundUpgrade<C>,
+    F: FnOnce(U::Error) -> T
+{
+    type Output = U::Output;
+    type Error = T;
+    type Future = MapErrFuture<U::Future, F>;
+
+    fn upgrade_inbound(self, sock: C, id: Self::UpgradeId) -> Self::Future {
+        MapErrFuture {
+            fut: self.upgrade.upgrade_inbound(sock, id),
+            fun: Some(self.fun)
+        }
+    }
+}
+
+impl<C, U, F, T> OutboundUpgrade<C> for MapUpgradeErr<U, F>
+where
+    U: OutboundUpgrade<C>,
+    F: FnOnce(U::Error) -> T,
+{
+    type Output = U::Output;
+    type Error = T;
+    type Future = MapErrFuture<U::Future, F>;
+
+    fn upgrade_outbound(self, sock: C, id: Self::UpgradeId) -> Self::Future {
+        MapErrFuture {
+            fut: self.upgrade.upgrade_outbound(sock, id),
+            fun: Some(self.fun)
         }
     }
 }
@@ -70,8 +137,9 @@ pub struct MapFuture<TInnerFut, TMap> {
 }
 
 impl<TInnerFut, TIn, TMap, TOut> Future for MapFuture<TInnerFut, TMap>
-where TInnerFut: Future<Item = TIn>,
-      TMap: FnOnce(TIn) -> TOut,
+where
+    TInnerFut: Future<Item = TIn>,
+    TMap: FnOnce(TIn) -> TOut,
 {
     type Item = TOut;
     type Error = TInnerFut::Error;
@@ -82,3 +150,29 @@ where TInnerFut: Future<Item = TIn>,
         Ok(Async::Ready(map(item)))
     }
 }
+
+pub struct MapErrFuture<T, F> {
+    fut: T,
+    fun: Option<F>,
+}
+
+impl<T, E, F, A> Future for MapErrFuture<T, F>
+where
+    T: Future<Error = E>,
+    F: FnOnce(E) -> A,
+{
+    type Item = T::Item;
+    type Error = A;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        match self.fut.poll() {
+            Ok(Async::NotReady) => Ok(Async::NotReady),
+            Ok(Async::Ready(x)) => Ok(Async::Ready(x)),
+            Err(e) => {
+                let f = self.fun.take().expect("Future has not resolved yet");
+                Err(f(e))
+            }
+        }
+    }
+}
+

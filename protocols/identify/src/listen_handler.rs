@@ -18,15 +18,16 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::{IdentifySender, IdentifyProtocolConfig};
 use futures::prelude::*;
-use libp2p_core::nodes::handled_node::NodeHandlerEndpoint;
-use libp2p_core::nodes::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent};
-use libp2p_core::ConnectionUpgrade;
+use libp2p_core::{
+    nodes::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent},
+    upgrade::{DeniedUpgrade, InboundUpgrade}
+};
 use smallvec::SmallVec;
 use std::io;
 use tokio_io::{AsyncRead, AsyncWrite};
-use void::Void;
-use {IdentifySender, IdentifyOutput, IdentifyProtocolConfig};
+use void::{Void, unreachable};
 
 /// Protocol handler that identifies the remote at a regular period.
 pub struct IdentifyListenHandler<TSubstream> {
@@ -59,28 +60,29 @@ where
     type InEvent = Void;
     type OutEvent = IdentifySender<TSubstream>;
     type Substream = TSubstream;
-    type Protocol = IdentifyProtocolConfig;
+    type InboundProtocol = IdentifyProtocolConfig;
+    type OutboundProtocol = DeniedUpgrade;
     type OutboundOpenInfo = ();
 
     #[inline]
-    fn listen_protocol(&self) -> Self::Protocol {
+    fn listen_protocol(&self) -> Self::InboundProtocol {
         self.config.clone()
     }
 
-    fn inject_fully_negotiated(
+    #[inline]
+    fn dialer_protocol(&self) -> Self::OutboundProtocol {
+        DeniedUpgrade
+    }
+
+    fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::Protocol as ConnectionUpgrade<TSubstream>>::Output,
-        endpoint: NodeHandlerEndpoint<Self::OutboundOpenInfo>,
+        protocol: <Self::InboundProtocol as InboundUpgrade<TSubstream>>::Output
     ) {
-        match protocol {
-            IdentifyOutput::Sender { sender } => {
-                debug_assert!(if let NodeHandlerEndpoint::Listener = endpoint { true } else { false });
-                self.pending_result.push(sender);
-            }
-            IdentifyOutput::RemoteInfo { .. } => unreachable!(
-                "RemoteInfo can only be produced if we dial the protocol, but we never do that"
-            ),
-        }
+        self.pending_result.push(protocol)
+    }
+
+    fn inject_fully_negotiated_outbound(&mut self, protocol: Void, _: Self::OutboundOpenInfo) {
+        unreachable(protocol)
     }
 
     #[inline]
@@ -102,7 +104,7 @@ where
     ) -> Poll<
         Option<
             ProtocolsHandlerEvent<
-                Self::Protocol,
+                Self::OutboundProtocol,
                 Self::OutboundOpenInfo,
                 Self::OutEvent,
             >,

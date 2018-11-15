@@ -18,18 +18,16 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::{RemoteInfo, IdentifyProtocolConfig};
 use futures::prelude::*;
-use libp2p_core::nodes::handled_node::NodeHandlerEndpoint;
-use libp2p_core::nodes::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent};
-use libp2p_core::upgrade::{self, toggleable::Toggleable};
-use libp2p_core::{ConnectionUpgrade, Multiaddr};
-use std::io;
-use std::marker::PhantomData;
-use std::time::{Duration, Instant};
+use libp2p_core::{
+    nodes::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent},
+    upgrade::{self, DeniedUpgrade, OutboundUpgrade, Toggleable}
+};
+use std::{io, marker::PhantomData, time::{Duration, Instant}};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_timer::Delay;
-use void::Void;
-use {IdentifyInfo, IdentifyOutput, IdentifyProtocolConfig};
+use void::{Void, unreachable};
 
 /// Delay between the moment we connect and the first time we identify.
 const DELAY_TO_FIRST_ID: Duration = Duration::from_millis(500);
@@ -59,13 +57,7 @@ pub struct PeriodicIdentification<TSubstream> {
 #[derive(Debug)]
 pub enum PeriodicIdentificationEvent {
     /// We obtained identification information from the remote
-    Identified {
-        /// Information of the remote.
-        info: IdentifyInfo,
-        /// Address the remote observes us as.
-        observed_addr: Multiaddr,
-    },
-
+    Identified(RemoteInfo),
     /// Failed to identify the remote.
     IdentificationError(io::Error),
 }
@@ -90,36 +82,30 @@ where
     type InEvent = Void;
     type OutEvent = PeriodicIdentificationEvent;
     type Substream = TSubstream;
-    type Protocol = Toggleable<IdentifyProtocolConfig>;
+    type InboundProtocol = DeniedUpgrade;
+    type OutboundProtocol = Toggleable<IdentifyProtocolConfig>;
     type OutboundOpenInfo = ();
 
     #[inline]
-    fn listen_protocol(&self) -> Self::Protocol {
-        let mut upgrade = self.config.clone();
-        upgrade.disable();
-        upgrade
+    fn listen_protocol(&self) -> Self::InboundProtocol {
+        DeniedUpgrade
     }
 
-    fn inject_fully_negotiated(
+    #[inline]
+    fn dialer_protocol(&self) -> Self::OutboundProtocol {
+        self.config.clone()
+    }
+
+    fn inject_fully_negotiated_inbound(&mut self, protocol: Void) {
+        unreachable(protocol)
+    }
+
+    fn inject_fully_negotiated_outbound(
         &mut self,
-        protocol: <Self::Protocol as ConnectionUpgrade<TSubstream>>::Output,
-        _endpoint: NodeHandlerEndpoint<Self::OutboundOpenInfo>,
+        protocol: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output,
+        _info: Self::OutboundOpenInfo,
     ) {
-        match protocol {
-            IdentifyOutput::RemoteInfo {
-                info,
-                observed_addr,
-            } => {
-                self.pending_result = Some(PeriodicIdentificationEvent::Identified {
-                    info,
-                    observed_addr,
-                });
-            }
-            IdentifyOutput::Sender { .. } => unreachable!(
-                "Sender can only be produced if we listen for the identify \
-                 protocol ; however we disable it in listen_protocol"
-            ),
-        }
+        self.pending_result = Some(PeriodicIdentificationEvent::Identified(protocol))
     }
 
     #[inline]
@@ -146,7 +132,7 @@ where
     ) -> Poll<
         Option<
             ProtocolsHandlerEvent<
-                Self::Protocol,
+                Self::OutboundProtocol,
                 Self::OutboundOpenInfo,
                 PeriodicIdentificationEvent,
             >,

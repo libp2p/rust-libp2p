@@ -34,7 +34,7 @@ use topic::{Topic, TopicHash};
 /// Network behaviour that automatically identifies nodes periodically, and returns information
 /// about them.
 pub struct FloodsubBehaviour<TSubstream> {
-    /// Events that need to be produced outside when polling.
+    /// Events that need to be yielded to the outside when polling.
     events: VecDeque<NetworkBehaviorAction<FloodsubRpc, FloodsubMessage>>,
 
     /// Peer id of the local node. Used for the source of the messages that we publish.
@@ -45,8 +45,8 @@ pub struct FloodsubBehaviour<TSubstream> {
     //       opened substream
     connected_peers: HashMap<PeerId, SmallVec<[TopicHash; 8]>>,
 
-    // List of topics we're subscribed to. Necessary in order to filter out messages that we
-    // erroneously receive.
+    // List of topics we're subscribed to. Necessary to filter out messages that we receive
+    // erroneously.
     subscribed_topics: SmallVec<[Topic; 16]>,
 
     // We keep track of the messages we received (in the format `hash(source ID, seq_no)`) so that
@@ -99,6 +99,8 @@ impl<TSubstream> FloodsubBehaviour<TSubstream> {
 
     /// Unsubscribes from a topic.
     ///
+    /// Note that this only requires a `TopicHash` and not a full `Topic`.
+    ///
     /// Returns true if we were subscribed to this topic.
     pub fn unsubscribe(&mut self, topic: impl AsRef<TopicHash>) -> bool {
         let topic = topic.as_ref();
@@ -132,7 +134,7 @@ impl<TSubstream> FloodsubBehaviour<TSubstream> {
         self.publish_many(iter::once(topic), data)
     }
 
-    /// Publishes a message to the network that has multiple topics.
+    /// Publishes a message with multiple topics to the network.
     ///
     /// > **Note**: Doesn't do anything if we're not subscribed to any of the topics.
     pub fn publish_many(&mut self, topic: impl IntoIterator<Item = impl Into<TopicHash>>, data: impl Into<Vec<u8>>) {
@@ -209,6 +211,25 @@ where
         propagation_source: PeerId,
         event: FloodsubRpc,
     ) {
+        // Update connected peers topics
+        for subscription in event.subscriptions {
+            let mut remote_peer_topics = self.connected_peers
+                .get_mut(&propagation_source)
+                .expect("connected_peers is kept in sync with the peers we are connected to; we are guaranteed to only receive events from connected peers ; qed");
+            match subscription.action {
+                FloodsubSubscriptionAction::Subscribe => {
+                    if !remote_peer_topics.contains(&subscription.topic) {
+                        remote_peer_topics.push(subscription.topic);
+                    }
+                }
+                FloodsubSubscriptionAction::Unsubscribe => {
+                    if let Some(pos) = remote_peer_topics.iter().position(|t| t == &subscription.topic ) {
+                        remote_peer_topics.remove(pos);
+                    }
+                }
+            }
+        }
+
         // List of messages we're going to propagate on the network.
         let mut rpcs_to_dispatch: Vec<(PeerId, FloodsubRpc)> = Vec::new();
 
@@ -225,12 +246,12 @@ where
             }
 
             // Propagate the message to everyone else who is subscribed to any of the topics.
-            for (peer_id, sub_topics) in self.connected_peers.iter() {
+            for (peer_id, subscr_topics) in self.connected_peers.iter() {
                 if peer_id == &propagation_source {
                     continue;
                 }
 
-                if !sub_topics.iter().any(|t| message.topics.iter().any(|u| t == u)) {
+                if !subscr_topics.iter().any(|t| message.topics.iter().any(|u| t == u)) {
                     continue;
                 }
 
