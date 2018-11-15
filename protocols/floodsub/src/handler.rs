@@ -100,7 +100,7 @@ where
 
 impl<TSubstream> ProtocolsHandler for FloodsubHandler<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite + 'static,
+    TSubstream: AsyncRead + AsyncWrite,
 {
     type InEvent = FloodsubRpc;
     type OutEvent = FloodsubRpc;
