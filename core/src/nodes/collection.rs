@@ -44,7 +44,6 @@ pub struct CollectionStream<TInEvent, TOutEvent, THandler> {
 
 impl<TInEvent, TOutEvent, THandler> fmt::Debug for CollectionStream<TInEvent, TOutEvent, THandler> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        f.debug_struct("CollectionStream").finish()?;
         let mut list = f.debug_list();
         for (id, task) in &self.tasks {
             match *task {
@@ -200,10 +199,8 @@ impl<'a, TInEvent, TOutEvent, THandler> CollectionReachEvent<'a, TInEvent, TOutE
             debug_assert_eq!(_former_other_state, Some(TaskState::Connected(self.peer_id.clone())));
 
             // TODO: we unfortunately have to clone the peer id here
-            println!("[CollectionReachEvent, accept] ReplacedExisting");
             (CollectionNodeAccept::ReplacedExisting, self.peer_id.clone())
         } else {
-            println!("[CollectionReachEvent, accept] NewEntry");
             // TODO: we unfortunately have to clone the peer id here
             (CollectionNodeAccept::NewEntry, self.peer_id.clone())
         };
@@ -237,7 +234,6 @@ impl<'a, TInEvent, TOutEvent, THandler> fmt::Debug for CollectionReachEvent<'a, 
 
 impl<'a, TInEvent, TOutEvent, THandler> Drop for CollectionReachEvent<'a, TInEvent, TOutEvent, THandler> {
     fn drop(&mut self) {
-        println!("[CollectionReachEvent, drop]");
         let task_state = self.parent.tasks.remove(&self.id);
         debug_assert!(if let Some(TaskState::Pending) = task_state { true } else { false });
         self.parent.inner.task(self.id)
@@ -324,7 +320,6 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
     where TInEvent: Clone,
     {
         // TODO: remove the ones we're not connected to?
-        println!("[CollectionStream, broadcast_event] Sending NextState event to HandledNodesTasks");
         self.inner.broadcast_event(event)
     }
 
@@ -333,12 +328,10 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
     /// Returns `None` if we don't have a connection to this peer.
     #[inline]
     pub fn peer_mut(&mut self, id: &PeerId) -> Option<PeerMut<TInEvent>> {
-        println!("[peer_mut] id={:?}, self.nodes={:?}, self.tasks={:?}", id, self.nodes, self.tasks);
         let task = match self.nodes.get(id) {
             Some(&task) => task,
             None => return None,
         };
-        println!("[peer_mut] task={:?}", task);
 
         match self.inner.task(task) {
             Some(inner) => Some(PeerMut {
@@ -372,16 +365,9 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
     /// > remove the `Err` variant, but also because we want the `CollectionStream` to stay
     /// > borrowed if necessary.
     pub fn poll(&mut self) -> Async<CollectionEvent<TInEvent, TOutEvent, THandler>> {
-        println!("[CollectionStream, poll] START");
         let item = match self.inner.poll() {
-            Async::Ready(item) => {
-                println!("[CollectionStream, poll]  polled the HandledNodesTask, got Async::Ready(item)");
-                item
-            },
-            Async::NotReady => {
-                println!("[CollectionStream, poll]  polled the HandledNodesTask, got Async::NotReady – returning NotReady");
-                return Async::NotReady
-            },
+            Async::Ready(item) => item,
+            Async::NotReady => return Async::NotReady,
         };
 
         match item {
@@ -389,7 +375,6 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
                 println!("[CollectionStream, poll]  TaskClosed id={:?}, result={:?} – returning Async::Ready", id, result);
                 match (self.tasks.remove(&id), result, handler) {
                     (Some(TaskState::Pending), Err(err), Some(handler)) => {
-                        println!("[CollectionStream, poll]      TaskState::Pending with error");
                         Async::Ready(CollectionEvent::ReachError {
                             id: ReachAttemptId(id),
                             error: err,
@@ -401,7 +386,6 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
                         panic!()
                     },
                     (Some(TaskState::Connected(peer_id)), Ok(()), _handler) => {
-                        println!("[CollectionStream, poll]      TaskState::Connected, OK(())");
                         debug_assert!(_handler.is_none());
                         let _node_task_id = self.nodes.remove(&peer_id);
                         debug_assert_eq!(_node_task_id, Some(id));
@@ -410,7 +394,6 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
                         })
                     },
                     (Some(TaskState::Connected(peer_id)), Err(err), _handler) => {
-                        println!("[CollectionStream, poll]      TaskState::Connected, Err({:?}", err);
                         debug_assert!(_handler.is_none());
                         let _node_task_id = self.nodes.remove(&peer_id);
                         debug_assert_eq!(_node_task_id, Some(id));
@@ -428,7 +411,6 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
                 }
             },
             HandledNodesEvent::NodeReached { id, peer_id } => {
-                println!("[CollectionStream, poll]  NodeReached id={:?}, peer_id={:?}", id, peer_id);
                 Async::Ready(CollectionEvent::NodeReached(CollectionReachEvent {
                     parent: self,
                     id,
@@ -436,7 +418,6 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
                 }))
             },
             HandledNodesEvent::NodeEvent { id, event } => {
-                println!("[CollectionStream, poll]  NodeEvent id={:?}", id);
                 let peer_id = match self.tasks.get(&id) {
                     Some(TaskState::Connected(peer_id)) => peer_id.clone(),
                     _ => panic!("we can only receive NodeEvent events from a task after we \
