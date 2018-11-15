@@ -19,19 +19,27 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::Bytes;
-use copy;
-use core::{ConnectionUpgrade, Endpoint, Transport};
+use crate::{
+    copy,
+    error::RelayError,
+    message::{CircuitRelay, CircuitRelay_Peer, CircuitRelay_Status, CircuitRelay_Type},
+    utility::{io_err, is_success, status, Io, Peer}
+};
 use futures::{stream, future::{self, Either::{A, B}, FutureResult}, prelude::*};
-use message::{CircuitRelay, CircuitRelay_Peer, CircuitRelay_Status, CircuitRelay_Type};
+use libp2p_core::{
+    transport::Transport,
+    upgrade::{apply_outbound, InboundUpgrade, OutboundUpgrade, UpgradeInfo}
+};
+use log::debug;
 use peerstore::{PeerAccess, PeerId, Peerstore};
 use std::{io, iter, ops::Deref};
 use tokio_io::{AsyncRead, AsyncWrite};
-use utility::{io_err, is_success, status, Io, Peer};
+use void::Void;
 
 #[derive(Debug, Clone)]
 pub struct RelayConfig<T, P> {
     my_id: PeerId,
-    transport: T,
+    dialer: T,
     peers: P,
     // If `allow_relays` is false this node can only be used as a
     // destination but will not allow relaying streams to other
@@ -49,7 +57,16 @@ pub enum Output<C> {
     Sealed(Box<Future<Item=(), Error=io::Error> + Send>)
 }
 
-impl<C, T, P, S> ConnectionUpgrade<C> for RelayConfig<T, P>
+impl<T, P> UpgradeInfo for RelayConfig<T, P> {
+    type UpgradeId = ();
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once((Bytes::from("/libp2p/relay/circuit/0.1.0"), ()))
+    }
+}
+
+impl<C, T, P, S> InboundUpgrade<C> for RelayConfig<T, P>
 where
     C: AsyncRead + AsyncWrite + Send + 'static,
     T: Transport + Clone + Send + 'static,
@@ -61,34 +78,28 @@ where
     S: 'static,
     for<'a> &'a S: Peerstore
 {
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
-    type UpgradeIdentifier = ();
-
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once((Bytes::from("/libp2p/relay/circuit/0.1.0"), ()))
-    }
-
     type Output = Output<C>;
-    type Future = Box<Future<Item=Self::Output, Error=io::Error> + Send>;
+    type Error = RelayError<Void>;
+    type Future = Box<Future<Item=Self::Output, Error=Self::Error> + Send>;
 
-    fn upgrade(self, conn: C, _: (), _: Endpoint) -> Self::Future {
-        let future = Io::new(conn).recv().and_then(move |(message, io)| {
+    fn upgrade_inbound(self, conn: C, _: ()) -> Self::Future {
+        let future = Io::new(conn).recv().from_err().and_then(move |(message, io)| {
             let msg = if let Some(m) = message {
                 m
             } else {
-                return A(A(future::err(io_err("no message received"))))
+                return A(A(future::err(RelayError::Message("no message received"))))
             };
             match msg.get_field_type() {
                 CircuitRelay_Type::HOP if self.allow_relays => { // act as relay
                     B(A(self.on_hop(msg, io).map(|fut| Output::Sealed(Box::new(fut)))))
                 }
                 CircuitRelay_Type::STOP => { // act as destination
-                    B(B(self.on_stop(msg, io).map(Output::Stream)))
+                    B(B(self.on_stop(msg, io).from_err().map(Output::Stream)))
                 }
                 other => {
                     debug!("invalid message type: {:?}", other);
                     let resp = status(CircuitRelay_Status::MALFORMED_MESSAGE);
-                    A(B(io.send(resp).and_then(|_| Err(io_err("invalid message type")))))
+                    A(B(io.send(resp).from_err().and_then(|_| Err(RelayError::Message("invalid message type")))))
                 }
             }
         });
@@ -106,8 +117,8 @@ where
     P: Deref<Target = S> + Clone + 'static,
     for<'a> &'a S: Peerstore,
 {
-    pub fn new(my_id: PeerId, transport: T, peers: P) -> RelayConfig<T, P> {
-        RelayConfig { my_id, transport, peers, allow_relays: true }
+    pub fn new(my_id: PeerId, dialer: T, peers: P) -> RelayConfig<T, P> {
+        RelayConfig { my_id, dialer, peers, allow_relays: true }
     }
 
     pub fn allow_relays(&mut self, val: bool) {
@@ -115,7 +126,7 @@ where
     }
 
     // HOP message handling (relay mode).
-    fn on_hop<C>(self, mut msg: CircuitRelay, io: Io<C>) -> impl Future<Item=impl Future<Item=(), Error=io::Error>, Error=io::Error>
+    fn on_hop<C>(self, mut msg: CircuitRelay, io: Io<C>) -> impl Future<Item=impl Future<Item=(), Error=io::Error>, Error=RelayError<Void>>
     where
         C: AsyncRead + AsyncWrite + 'static,
     {
@@ -123,14 +134,14 @@ where
             peer
         } else {
             let msg = status(CircuitRelay_Status::HOP_SRC_MULTIADDR_INVALID);
-            return A(io.send(msg).and_then(|_| Err(io_err("invalid src address"))))
+            return A(io.send(msg).from_err().and_then(|_| Err(RelayError::Message("invalid src address"))))
         };
 
         let mut dest = if let Some(peer) = Peer::from_message(msg.take_dstPeer()) {
             peer
         } else {
             let msg = status(CircuitRelay_Status::HOP_DST_MULTIADDR_INVALID);
-            return B(A(io.send(msg).and_then(|_| Err(io_err("invalid dest address")))))
+            return B(A(io.send(msg).from_err().and_then(|_| Err(RelayError::Message("invalid dest address")))))
         };
 
         if dest.addrs.is_empty() {
@@ -142,13 +153,12 @@ where
 
         let stop = stop_message(&from, &dest);
 
-        let transport = self.transport.with_upgrade(TrivialUpgrade);
-        let dest_id = dest.id;
+        let dialer = self.dialer;
         let future = stream::iter_ok(dest.addrs.into_iter())
             .and_then(move |dest_addr| {
-                transport.clone().dial(dest_addr).map_err(|_| io_err("failed to dial"))
+                dialer.clone().dial(dest_addr).map_err(|_| RelayError::Message("could no dial addr"))
             })
-            .and_then(|dial| dial)
+            .and_then(|outbound| outbound.from_err().and_then(|c| apply_outbound(c, TrivialUpgrade).from_err()))
             .then(|result| Ok(result.ok()))
             .filter_map(|result| result)
             .into_future()
@@ -156,22 +166,24 @@ where
             .and_then(move |(ok, _stream)| {
                 if let Some(c) = ok {
                     // send STOP message to destination and expect back a SUCCESS message
-                    let future = Io::new(c).send(stop)
+                    let future = Io::new(c)
+                        .send(stop)
                         .and_then(Io::recv)
+                        .from_err()
                         .and_then(|(response, io)| {
                             let rsp = match response {
                                 Some(m) => m,
-                                None => return Err(io_err("no message from destination"))
+                                None => return Err(RelayError::Message("no message from destination"))
                             };
                             if is_success(&rsp) {
                                 Ok(io.into())
                             } else {
-                                Err(io_err("no success response from relay"))
+                                Err(RelayError::Message("no success response from relay"))
                             }
                         });
                     A(future)
                 } else {
-                    B(future::err(io_err(format!("could not dial to {:?}", dest_id))))
+                    B(future::err(RelayError::Message("could not dial peer")))
                 }
             })
             // signal success or failure to source
@@ -179,11 +191,11 @@ where
                 match result {
                     Ok(c) => {
                         let msg = status(CircuitRelay_Status::SUCCESS);
-                        A(io.send(msg).map(|io| (io.into(), c)))
+                        A(io.send(msg).map(|io| (io.into(), c)).from_err())
                     }
                     Err(e) => {
                         let msg = status(CircuitRelay_Status::HOP_CANT_DIAL_DST);
-                        B(io.send(msg).and_then(|_| Err(e)))
+                        B(io.send(msg).from_err().and_then(|_| Err(e)))
                     }
                 }
             })
@@ -247,21 +259,24 @@ fn stop_message(from: &Peer, dest: &Peer) -> CircuitRelay {
 #[derive(Debug, Clone)]
 struct TrivialUpgrade;
 
-impl<C> ConnectionUpgrade<C> for TrivialUpgrade
-where
-    C: AsyncRead + AsyncWrite + 'static
-{
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
-    type UpgradeIdentifier = ();
+impl UpgradeInfo for TrivialUpgrade {
+    type UpgradeId = ();
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
 
     fn protocol_names(&self) -> Self::NamesIter {
         iter::once((Bytes::from("/libp2p/relay/circuit/0.1.0"), ()))
     }
+}
 
+impl<C> OutboundUpgrade<C> for TrivialUpgrade
+where
+    C: AsyncRead + AsyncWrite + 'static
+{
     type Output = C;
-    type Future = FutureResult<Self::Output, io::Error>;
+    type Error = Void;
+    type Future = FutureResult<Self::Output, Self::Error>;
 
-    fn upgrade(self, conn: C, _: (), _: Endpoint) -> Self::Future {
+    fn upgrade_outbound(self, conn: C, _: ()) -> Self::Future {
         future::ok(conn)
     }
 }
@@ -269,21 +284,24 @@ where
 #[derive(Debug, Clone)]
 pub(crate) struct Source(pub(crate) CircuitRelay);
 
-impl<C> ConnectionUpgrade<C> for Source
-where
-    C: AsyncRead + AsyncWrite + Send + 'static,
-{
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
-    type UpgradeIdentifier = ();
+impl UpgradeInfo for Source {
+    type UpgradeId = ();
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
 
     fn protocol_names(&self) -> Self::NamesIter {
         iter::once((Bytes::from("/libp2p/relay/circuit/0.1.0"), ()))
     }
+}
 
+impl<C> OutboundUpgrade<C> for Source
+where
+    C: AsyncRead + AsyncWrite + Send + 'static,
+{
     type Output = C;
-    type Future = Box<Future<Item=Self::Output, Error=io::Error> + Send>;
+    type Error = io::Error;
+    type Future = Box<Future<Item=Self::Output, Error=Self::Error> + Send>;
 
-    fn upgrade(self, conn: C, _: (), _: Endpoint) -> Self::Future {
+    fn upgrade_outbound(self, conn: C, _: ()) -> Self::Future {
         let future = Io::new(conn)
             .send(self.0)
             .and_then(Io::recv)

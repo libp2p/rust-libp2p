@@ -65,15 +65,12 @@ where
         event: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
     ) {
         match event {
-            PeriodicIdentificationEvent::Identified {
-                info,
-                observed_addr,
-            } => {
+            PeriodicIdentificationEvent::Identified(remote) => {
                 self.events
                     .push_back(PeriodicIdentifyBehaviourEvent::Identified {
                         peer_id: peer_id,
-                        info: info,
-                        observed_addr: observed_addr,
+                        info: remote.info,
+                        observed_addr: remote.observed_addr,
                     });
             }
             _ => (), // TODO: exhaustive pattern
