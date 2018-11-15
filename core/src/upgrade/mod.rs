@@ -23,7 +23,6 @@ mod denied;
 mod error;
 mod map;
 mod or;
-mod toggleable;
 
 use bytes::Bytes;
 use futures::future::Future;
@@ -33,8 +32,7 @@ pub use self::{
     denied::DeniedUpgrade,
     error::UpgradeError,
     map::{MapUpgrade, MapUpgradeErr},
-    or::OrUpgrade,
-    toggleable::{toggleable, Toggleable}
+    or::OrUpgrade
 };
 
 pub trait UpgradeInfo {
@@ -116,3 +114,63 @@ pub trait OutboundUpgradeExt<C>: OutboundUpgrade<C> {
 
 impl<C, U: OutboundUpgrade<C>> OutboundUpgradeExt<C> for U {}
 
+impl<TUpgr> UpgradeInfo for Option<TUpgr>
+where TUpgr: UpgradeInfo
+{
+    type UpgradeId = TUpgr::UpgradeId;
+    type NamesIter = OptionalIter<TUpgr::NamesIter>;
+
+    fn protocol_names(&self) -> Self::NamesIter {
+        match self {
+            Some(upgr) => OptionalIter(Some(upgr.protocol_names())),
+            None => OptionalIter(None)
+        }
+    }
+}
+
+/// Wraps around an `Option<impl Iterator>` and implements `Iterator` itself.
+#[derive(Debug, Copy, Clone)]
+pub struct OptionalIter<T>(pub Option<T>);
+
+impl<T> Iterator for OptionalIter<T> where T: Iterator {
+    type Item = T::Item;
+
+    #[inline]
+    fn next(&mut self) -> Option<T::Item> {
+        match self.0 {
+            Some(ref mut i) => i.next(),
+            None => None,
+        }
+    }
+}
+
+impl<T> ExactSizeIterator for OptionalIter<T> where T: ExactSizeIterator {
+}
+
+impl<TUpgr, C> InboundUpgrade<C> for Option<TUpgr>
+where TUpgr: InboundUpgrade<C>
+{
+    type Output = TUpgr::Output;
+    type Error = TUpgr::Error;
+    type Future = TUpgr::Future;
+
+    fn upgrade_inbound(self, socket: C, id: Self::UpgradeId) -> Self::Future {
+        let inner = self.expect("Wrong API usage: set upgrade to None between negotiation \
+                                 and handshake");
+        inner.upgrade_inbound(socket, id)
+    }
+}
+
+impl<TUpgr, C> OutboundUpgrade<C> for Option<TUpgr>
+where TUpgr: OutboundUpgrade<C>
+{
+    type Output = TUpgr::Output;
+    type Error = TUpgr::Error;
+    type Future = TUpgr::Future;
+
+    fn upgrade_outbound(self, socket: C, id: Self::UpgradeId) -> Self::Future {
+        let inner = self.expect("Wrong API usage: set upgrade to None between negotiation \
+                                 and handshake");
+        inner.upgrade_outbound(socket, id)
+    }
+}

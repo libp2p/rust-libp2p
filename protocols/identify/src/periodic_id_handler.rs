@@ -22,7 +22,7 @@ use crate::{RemoteInfo, IdentifyProtocolConfig};
 use futures::prelude::*;
 use libp2p_core::{
     protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent},
-    upgrade::{self, DeniedUpgrade, OutboundUpgrade, Toggleable}
+    upgrade::{DeniedUpgrade, OutboundUpgrade}
 };
 use std::{io, marker::PhantomData, time::{Duration, Instant}};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -39,7 +39,7 @@ const TRY_AGAIN_ON_ERR: Duration = Duration::from_secs(60 * 60);
 /// Protocol handler that identifies the remote at a regular period.
 pub struct PeriodicIdentification<TSubstream> {
     /// Configuration for the protocol.
-    config: Toggleable<IdentifyProtocolConfig>,
+    config: IdentifyProtocolConfig,
 
     /// If `Some`, we successfully generated an `PeriodicIdentificationEvent` and we will produce
     /// it the next time `poll()` is invoked.
@@ -67,7 +67,7 @@ impl<TSubstream> PeriodicIdentification<TSubstream> {
     #[inline]
     pub fn new() -> Self {
         PeriodicIdentification {
-            config: upgrade::toggleable(IdentifyProtocolConfig),
+            config: IdentifyProtocolConfig,
             pending_result: None,
             next_id: Some(Delay::new(Instant::now() + DELAY_TO_FIRST_ID)),
             marker: PhantomData,
@@ -83,17 +83,12 @@ where
     type OutEvent = PeriodicIdentificationEvent;
     type Substream = TSubstream;
     type InboundProtocol = DeniedUpgrade;
-    type OutboundProtocol = Toggleable<IdentifyProtocolConfig>;
+    type OutboundProtocol = IdentifyProtocolConfig;
     type OutboundOpenInfo = ();
 
     #[inline]
     fn listen_protocol(&self) -> Self::InboundProtocol {
         DeniedUpgrade
-    }
-
-    #[inline]
-    fn dialer_protocol(&self) -> Self::OutboundProtocol {
-        self.config.clone()
     }
 
     fn inject_fully_negotiated_inbound(&mut self, protocol: Void) {
@@ -155,8 +150,7 @@ where
             Ok(Async::NotReady) => Ok(Async::NotReady),
             Ok(Async::Ready(())) => {
                 next_id.reset(Instant::now() + DELAY_TO_NEXT_ID);
-                let mut upgrade = self.config.clone();
-                upgrade.enable();
+                let upgrade = self.config.clone();
                 let ev = ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info: () };
                 Ok(Async::Ready(Some(ev)))
             }
