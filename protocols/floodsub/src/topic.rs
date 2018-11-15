@@ -59,6 +59,27 @@ impl Topic {
     }
 }
 
+impl AsRef<TopicHash> for Topic {
+    #[inline]
+    fn as_ref(&self) -> &TopicHash {
+        &self.hash
+    }
+}
+
+impl From<Topic> for TopicHash {
+    #[inline]
+    fn from(topic: Topic) -> TopicHash {
+        topic.hash
+    }
+}
+
+impl<'a> From<&'a Topic> for TopicHash {
+    #[inline]
+    fn from(topic: &'a Topic) -> TopicHash {
+        topic.hash.clone()
+    }
+}
+
 /// Builder for a `TopicHash`.
 #[derive(Debug, Clone)]
 pub struct TopicBuilder {
@@ -78,15 +99,17 @@ impl TopicBuilder {
 
     /// Turns the builder into an actual `Topic`.
     pub fn build(self) -> Topic {
-        let bytes = self.builder
+        let bytes = self
+            .builder
             .write_to_bytes()
             .expect("protobuf message is always valid");
+        // TODO: https://github.com/libp2p/rust-libp2p/issues/473
         let hash = TopicHash {
             hash: bs58::encode(&bytes).into_string(),
         };
         Topic {
             descriptor: self.builder,
-            hash: hash,
+            hash,
         }
     }
 }

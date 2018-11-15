@@ -39,7 +39,7 @@
 //!
 //! For implementation reasons, resources allocated for a ping are only ever fully reclaimed after
 //! a pong has been received by the remote. Therefore if you repeatidely ping a non-responsive
-//! remote you will end up using more and memory memory (albeit the amount is very very small every
+//! remote you will end up using more and more memory (albeit the amount is very very small every
 //! time), even if you destroy the future returned by `ping`.
 //!
 //! This is probably not a problem in practice, because the nature of the ping protocol is to
