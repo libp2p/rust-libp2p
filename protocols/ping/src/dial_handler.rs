@@ -21,7 +21,8 @@
 use futures::prelude::*;
 use libp2p_core::{
     OutboundUpgrade,
-    nodes::{ProtocolsHandler, ProtocolsHandlerEvent},
+    ProtocolsHandler,
+    ProtocolsHandlerEvent,
     upgrade::{self, DeniedUpgrade}
 };
 use log::warn;
