@@ -18,12 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use futures::future;
-use std::io::Error as IoError;
-use tokio_io::{AsyncRead, AsyncWrite};
-use upgrade::{ConnectionUpgrade, Endpoint};
 
-/// Wraps around a `ConnectionUpgrade` and makes it possible to enable or disable an upgrade.
+/// Wraps around a `InboundUpgrade` or `OutboundUpgrade` and makes it possible
+/// to enable or disable the upgrade.
 #[inline]
 pub fn toggleable<U>(upgrade: U) -> Toggleable<U> {
     Toggleable {
@@ -32,7 +31,7 @@ pub fn toggleable<U>(upgrade: U) -> Toggleable<U> {
     }
 }
 
-/// See `upgrade::toggleable`.
+/// See `toggleable`.
 #[derive(Debug, Copy, Clone)]
 pub struct Toggleable<U> {
     inner: U,
@@ -65,13 +64,12 @@ impl<U> Toggleable<U> {
     }
 }
 
-impl<C, U> ConnectionUpgrade<C> for Toggleable<U>
+impl<U> UpgradeInfo for Toggleable<U>
 where
-    C: AsyncRead + AsyncWrite,
-    U: ConnectionUpgrade<C>,
+    U: UpgradeInfo
 {
+    type UpgradeId = U::UpgradeId;
     type NamesIter = ToggleableIter<U::NamesIter>;
-    type UpgradeIdentifier = U::UpgradeIdentifier;
 
     #[inline]
     fn protocol_names(&self) -> Self::NamesIter {
@@ -80,19 +78,38 @@ where
             enabled: self.enabled,
         }
     }
+}
 
+impl<C, U> InboundUpgrade<C> for Toggleable<U>
+where
+    U: InboundUpgrade<C>
+{
     type Output = U::Output;
-    type Future = future::Either<future::Empty<U::Output, IoError>, U::Future>;
+    type Error = U::Error;
+    type Future = future::Either<future::Empty<Self::Output, Self::Error>, U::Future>;
 
     #[inline]
-    fn upgrade(
-        self,
-        socket: C,
-        id: Self::UpgradeIdentifier,
-        ty: Endpoint,
-    ) -> Self::Future {
+    fn upgrade_inbound(self, socket: C, id: Self::UpgradeId) -> Self::Future {
         if self.enabled {
-            future::Either::B(self.inner.upgrade(socket, id, ty))
+            future::Either::B(self.inner.upgrade_inbound(socket, id))
+        } else {
+            future::Either::A(future::empty())
+        }
+    }
+}
+
+impl<C, U> OutboundUpgrade<C> for Toggleable<U>
+where
+    U: OutboundUpgrade<C>
+{
+    type Output = U::Output;
+    type Error = U::Error;
+    type Future = future::Either<future::Empty<Self::Output, Self::Error>, U::Future>;
+
+    #[inline]
+    fn upgrade_outbound(self, socket: C, id: Self::UpgradeId) -> Self::Future {
+        if self.enabled {
+            future::Either::B(self.inner.upgrade_outbound(socket, id))
         } else {
             future::Either::A(future::empty())
         }
@@ -130,4 +147,7 @@ where I: Iterator
 }
 
 impl<I> ExactSizeIterator for ToggleableIter<I>
-where I: ExactSizeIterator {}
+where
+    I: ExactSizeIterator
+{}
+

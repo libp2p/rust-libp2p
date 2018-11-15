@@ -18,8 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::message::{CircuitRelay, CircuitRelay_Peer, CircuitRelay_Status, CircuitRelay_Type};
 use futures::{future::{self, Either}, prelude::*};
-use message::{CircuitRelay, CircuitRelay_Peer, CircuitRelay_Status, CircuitRelay_Type};
+use log::trace;
 use multiaddr::{Protocol, Multiaddr};
 use peerstore::PeerId;
 use protobuf::{self, Message};

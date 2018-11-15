@@ -164,8 +164,11 @@ mod transport_ext;
 
 pub mod simple;
 
+pub use self::core::{
+    Transport, PeerId,
+    upgrade::{InboundUpgrade, InboundUpgradeExt, OutboundUpgrade, OutboundUpgradeExt}
+};
 pub use libp2p_core_derive::NetworkBehaviour;
-pub use self::core::{Transport, ConnectionUpgrade, PeerId};
 pub use self::multiaddr::Multiaddr;
 pub use self::simple::SimpleProtocol;
 pub use self::transport_ext::TransportExt;

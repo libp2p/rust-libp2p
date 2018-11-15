@@ -18,15 +18,19 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::{
+    Transport, Multiaddr, PeerId, InboundUpgrade, OutboundUpgrade, UpgradeInfo,
+    muxing::StreamMuxer,
+    nodes::{
+        handled_node::NodeHandler,
+        node::Substream,
+        protocols_handler::{NodeHandlerWrapper, ProtocolsHandler},
+        raw_swarm::{RawSwarm, RawSwarmEvent, ConnectedPoint}
+    },
+    topology::Topology
+};
 use futures::prelude::*;
-use muxing::StreamMuxer;
-use nodes::handled_node::NodeHandler;
-use nodes::node::Substream;
-use nodes::protocols_handler::{NodeHandlerWrapper, ProtocolsHandler};
-use nodes::raw_swarm::{RawSwarm, RawSwarmEvent, ConnectedPoint};
-use std::{io, ops::{Deref, DerefMut}};
-use topology::Topology;
-use {ConnectionUpgrade, Multiaddr, PeerId, Transport};
+use std::{fmt, io, ops::{Deref, DerefMut}};
 
 /// Contains the state of the network, plus the way it should behave.
 pub struct Swarm<TTransport, TBehaviour, TTopology>
@@ -77,17 +81,23 @@ where TBehaviour: NetworkBehavior,
       <TMuxer as StreamMuxer>::OutboundSubstream: Send + 'static,
       <TMuxer as StreamMuxer>::Substream: Send + 'static,
       TTransport: Transport<Output = (PeerId, TMuxer)> + Clone,
-      TTransport::Dial: Send + 'static,
       TTransport::Listener: Send + 'static,
       TTransport::ListenerUpgrade: Send + 'static,
+      TTransport::Dial: Send + 'static,
       TBehaviour::ProtocolsHandler: ProtocolsHandler<Substream = Substream<TMuxer>> + Send + 'static,
       <TBehaviour::ProtocolsHandler as ProtocolsHandler>::InEvent: Send + 'static,
       <TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutEvent: Send + 'static,
-      <TBehaviour::ProtocolsHandler as ProtocolsHandler>::Protocol: ConnectionUpgrade<Substream<TMuxer>> + Send + 'static,
-      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::Protocol as ConnectionUpgrade<Substream<TMuxer>>>::Future: Send + 'static,
-      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::Protocol as ConnectionUpgrade<Substream<TMuxer>>>::NamesIter: Clone + Send + 'static,
-      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::Protocol as ConnectionUpgrade<Substream<TMuxer>>>::UpgradeIdentifier: Send + 'static,
       <TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
+      <TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<Substream<TMuxer>> + Send + 'static,
+      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::NamesIter: Clone + Send + 'static,
+      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::UpgradeId: Send + 'static,
+      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Substream<TMuxer>>>::Error: fmt::Debug + Send + 'static,
+      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Substream<TMuxer>>>::Future: Send + 'static,
+      <TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol: OutboundUpgrade<Substream<TMuxer>> + Send + 'static,
+      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::NamesIter: Send + 'static,
+      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::UpgradeId: Send + 'static,
+      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<Substream<TMuxer>>>::Future: Send + 'static,
+      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<Substream<TMuxer>>>::Error: fmt::Debug + Send + 'static,
       <NodeHandlerWrapper<TBehaviour::ProtocolsHandler> as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
       TTopology: Topology,
 {
@@ -164,17 +174,23 @@ where TBehaviour: NetworkBehavior,
       <TMuxer as StreamMuxer>::OutboundSubstream: Send + 'static,
       <TMuxer as StreamMuxer>::Substream: Send + 'static,
       TTransport: Transport<Output = (PeerId, TMuxer)> + Clone,
-      TTransport::Dial: Send + 'static,
       TTransport::Listener: Send + 'static,
       TTransport::ListenerUpgrade: Send + 'static,
+      TTransport::Dial: Send + 'static,
       TBehaviour::ProtocolsHandler: ProtocolsHandler<Substream = Substream<TMuxer>> + Send + 'static,
       <TBehaviour::ProtocolsHandler as ProtocolsHandler>::InEvent: Send + 'static,
       <TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutEvent: Send + 'static,
-      <TBehaviour::ProtocolsHandler as ProtocolsHandler>::Protocol: ConnectionUpgrade<Substream<TMuxer>> + Send + 'static,
-      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::Protocol as ConnectionUpgrade<Substream<TMuxer>>>::Future: Send + 'static,
-      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::Protocol as ConnectionUpgrade<Substream<TMuxer>>>::NamesIter: Clone + Send + 'static,
-      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::Protocol as ConnectionUpgrade<Substream<TMuxer>>>::UpgradeIdentifier: Send + 'static,
       <TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
+      <TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<Substream<TMuxer>> + Send + 'static,
+      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Substream<TMuxer>>>::Future: Send + 'static,
+      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Substream<TMuxer>>>::Error: fmt::Debug + Send + 'static,
+      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::NamesIter: Clone + Send + 'static,
+      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::UpgradeId: Send + 'static,
+      <TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol: OutboundUpgrade<Substream<TMuxer>> + Send + 'static,
+      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<Substream<TMuxer>>>::Future: Send + 'static,
+      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<Substream<TMuxer>>>::Error: fmt::Debug + Send + 'static,
+      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::NamesIter: Clone + Send + 'static,
+      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::UpgradeId: Send + 'static,
       <NodeHandlerWrapper<TBehaviour::ProtocolsHandler> as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
       TTopology: Topology,
 {
