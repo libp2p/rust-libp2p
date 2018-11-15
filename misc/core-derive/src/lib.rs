@@ -52,8 +52,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let trait_to_impl = quote!{::libp2p::core::nodes::swarm::NetworkBehavior};
     let either_ident = quote!{::libp2p::core::either::EitherOutput};
     let network_behaviour_action = quote!{::libp2p::core::nodes::swarm::NetworkBehaviorAction};
-    let protocols_handler = quote!{::libp2p::core::nodes::protocols_handler::ProtocolsHandler};
-    let proto_select_ident = quote!{::libp2p::core::nodes::protocols_handler::ProtocolsHandlerSelect};
+    let protocols_handler = quote!{::libp2p::core::protocols_handler::ProtocolsHandler};
+    let proto_select_ident = quote!{::libp2p::core::protocols_handler::ProtocolsHandlerSelect};
     let peer_id = quote!{::libp2p::core::PeerId};
     let connected_point = quote!{::libp2p::core::nodes::ConnectedPoint};
 

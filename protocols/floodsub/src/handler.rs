@@ -21,7 +21,7 @@
 use crate::protocol::{FloodsubCodec, FloodsubConfig, FloodsubRpc};
 use futures::prelude::*;
 use libp2p_core::{
-    nodes::{ProtocolsHandler, ProtocolsHandlerEvent},
+    ProtocolsHandler, ProtocolsHandlerEvent,
     upgrade::{InboundUpgrade, OutboundUpgrade}
 };
 use smallvec::SmallVec;

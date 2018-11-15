@@ -20,7 +20,7 @@
 
 use futures::prelude::*;
 use libp2p_core::nodes::{ConnectedPoint, NetworkBehavior, NetworkBehaviorAction};
-use libp2p_core::{nodes::protocols_handler::ProtocolsHandler, PeerId};
+use libp2p_core::{protocols_handler::ProtocolsHandler, PeerId};
 use std::marker::PhantomData;
 use tokio_io::{AsyncRead, AsyncWrite};
 use void::Void;

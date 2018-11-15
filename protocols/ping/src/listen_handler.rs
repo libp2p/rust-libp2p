@@ -22,7 +22,8 @@ use arrayvec::ArrayVec;
 use futures::prelude::*;
 use libp2p_core::{
     InboundUpgrade,
-    nodes::{ProtocolsHandler, ProtocolsHandlerEvent},
+    ProtocolsHandler,
+    ProtocolsHandlerEvent,
     upgrade::DeniedUpgrade
 };
 use log::warn;
