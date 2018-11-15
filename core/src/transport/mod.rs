@@ -1,4 +1,4 @@
-// Copyright 2017 Parity Technologies (UK) Ltd.
+// Copyright 2017-2018 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -29,12 +29,12 @@
 //! `UpgradedNode::or_upgrade` methods, you can combine multiple transports and/or upgrades
 //! together in a complex chain of protocols negotiation.
 
+use crate::{InboundUpgrade, OutboundUpgrade, Endpoint};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use nodes::raw_swarm::ConnectedPoint;
 use std::io::Error as IoError;
 use tokio_io::{AsyncRead, AsyncWrite};
-use upgrade::{ConnectionUpgrade, Endpoint};
 
 pub mod and_then;
 pub mod boxed;
@@ -50,12 +50,12 @@ pub mod upgrade;
 pub use self::choice::OrTransport;
 pub use self::denied::DeniedTransport;
 pub use self::memory::connector;
-pub use self::upgrade::UpgradedNode;
+pub use self::upgrade::Upgrade;
 
 /// A transport is an object that can be used to produce connections by listening or dialing a
 /// peer.
 ///
-/// This trait is implemented on concrete transports (eg. TCP, UDP, etc.), but also on wrappers
+/// This trait is implemented on concrete transports (e.g. TCP, UDP, etc.), but also on wrappers
 /// around them.
 ///
 /// > **Note**: The methods of this trait use `self` and not `&self` or `&mut self`. In other
@@ -74,7 +74,7 @@ pub trait Transport {
     type Listener: Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError>;
 
     /// After a connection has been received, we may need to do some asynchronous pre-processing
-    /// on it (eg. an intermediary protocol negotiation). While this pre-processing takes place, we
+    /// on it (e.g. an intermediary protocol negotiation). While this pre-processing takes place, we
     /// want to be able to continue polling on the listener.
     type ListenerUpgrade: Future<Item = Self::Output, Error = IoError>;
 
@@ -178,13 +178,14 @@ pub trait Transport {
     /// > **Note**: The concept of an *upgrade* for example includes middlewares such *secio*
     /// >           (communication encryption), *multiplex*, but also a protocol handler.
     #[inline]
-    fn with_upgrade<U>(self, upgrade: U) -> UpgradedNode<Self, U>
+    fn with_upgrade<U, O, E>(self, upgrade: U) -> Upgrade<Self, U>
     where
         Self: Sized,
         Self::Output: AsyncRead + AsyncWrite,
-        U: ConnectionUpgrade<Self::Output>,
+        U: InboundUpgrade<Self::Output, Output = O, Error = E>,
+        U: OutboundUpgrade<Self::Output, Output = O, Error = E>
     {
-        UpgradedNode::new(self, upgrade)
+        Upgrade::new(self, upgrade)
     }
 
     /// Wraps this transport inside an upgrade. Whenever a connection that uses this transport

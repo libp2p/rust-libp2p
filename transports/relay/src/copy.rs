@@ -26,8 +26,8 @@
 
 // Based on copy.rs from tokio-io in https://github.com/tokio-rs/tokio
 
+use futures::{Future, Poll, try_ready};
 use std::io;
-use futures::{Future, Poll};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// A future which will copy all data from a reader into a writer.

@@ -27,7 +27,10 @@
 
 use bytes::{Bytes, BytesMut};
 use futures::{future, sink, Sink, stream, Stream};
-use libp2p_core::{ConnectionUpgrade, Endpoint, Multiaddr, PeerId};
+use libp2p_core::{
+    Multiaddr, PeerId,
+    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
+};
 use multihash::Multihash;
 use protobuf::{self, Message};
 use protobuf_structs;
@@ -88,7 +91,7 @@ impl KadPeer {
     // Builds a `KadPeer` from its raw protobuf equivalent.
     // TODO: use TryFrom once stable
     fn from_peer(peer: &mut protobuf_structs::dht::Message_Peer) -> Result<KadPeer, IoError> {
-        // TODO: this is in fact a CID ; not sure if this should be handled in `from_bytes` or
+        // TODO: this is in fact a CID; not sure if this should be handled in `from_bytes` or
         //       as a special case here
         let node_id = PeerId::from_bytes(peer.get_id().to_vec())
             .map_err(|_| IoError::new(IoErrorKind::InvalidData, "invalid peer id"))?;
@@ -128,22 +131,40 @@ impl Into<protobuf_structs::dht::Message_Peer> for KadPeer {
 #[derive(Debug, Default, Copy, Clone)]
 pub struct KademliaProtocolConfig;
 
-impl<C> ConnectionUpgrade<C> for KademliaProtocolConfig
-where
-    C: AsyncRead + AsyncWrite + 'static, // TODO: 'static :-/
-{
-    type Output = KadStreamSink<C>;
-    type Future = future::FutureResult<Self::Output, IoError>;
-    type NamesIter = iter::Once<(Bytes, ())>;
-    type UpgradeIdentifier = ();
+impl UpgradeInfo for KademliaProtocolConfig {
+    type UpgradeId = ();
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
 
     #[inline]
     fn protocol_names(&self) -> Self::NamesIter {
         iter::once(("/ipfs/kad/1.0.0".into(), ()))
     }
+}
+
+impl<C> InboundUpgrade<C> for KademliaProtocolConfig
+where
+    C: AsyncRead + AsyncWrite + 'static, // TODO: 'static :-/
+{
+    type Output = KadStreamSink<C>;
+    type Error = IoError;
+    type Future = future::FutureResult<Self::Output, Self::Error>;
 
     #[inline]
-    fn upgrade(self, incoming: C, _: (), _: Endpoint) -> Self::Future {
+    fn upgrade_inbound(self, incoming: C, _: Self::UpgradeId) -> Self::Future {
+        future::ok(kademlia_protocol(incoming))
+    }
+}
+
+impl<C> OutboundUpgrade<C> for KademliaProtocolConfig
+where
+    C: AsyncRead + AsyncWrite + 'static, // TODO: 'static :-/
+{
+    type Output = KadStreamSink<C>;
+    type Error = IoError;
+    type Future = future::FutureResult<Self::Output, Self::Error>;
+
+    #[inline]
+    fn upgrade_outbound(self, incoming: C, _: Self::UpgradeId) -> Self::Future {
         future::ok(kademlia_protocol(incoming))
     }
 }
@@ -151,9 +172,7 @@ where
 type KadStreamSink<S> = stream::AndThen<sink::With<stream::FromErr<Framed<S, codec::UviBytes<Vec<u8>>>, IoError>, KadMsg, fn(KadMsg) -> Result<Vec<u8>, IoError>, Result<Vec<u8>, IoError>>, fn(BytesMut) -> Result<KadMsg, IoError>, Result<KadMsg, IoError>>;
 
 // Upgrades a socket to use the Kademlia protocol.
-fn kademlia_protocol<S>(
-    socket: S,
-) -> KadStreamSink<S>
+fn kademlia_protocol<S>(socket: S) -> KadStreamSink<S>
 where
     S: AsyncRead + AsyncWrite,
 {
@@ -339,7 +358,7 @@ fn proto_to_msg(mut message: protobuf_structs::dht::Message) -> Result<KadMsg, I
 
             } else {
                 // TODO: for now we don't parse the peer properly, so it is possible that we get
-                //       parsing errors for peers even when they are valid ; we ignore these
+                //       parsing errors for peers even when they are valid; we ignore these
                 //       errors for now, but ultimately we should just error altogether
                 let closer_peers = message.mut_closerPeers()
                     .iter_mut()
@@ -362,7 +381,7 @@ fn proto_to_msg(mut message: protobuf_structs::dht::Message) -> Result<KadMsg, I
 
             } else {
                 // TODO: for now we don't parse the peer properly, so it is possible that we get
-                //       parsing errors for peers even when they are valid ; we ignore these
+                //       parsing errors for peers even when they are valid; we ignore these
                 //       errors for now, but ultimately we should just error altogether
                 let closer_peers = message.mut_closerPeers()
                     .iter_mut()
@@ -382,7 +401,7 @@ fn proto_to_msg(mut message: protobuf_structs::dht::Message) -> Result<KadMsg, I
 
         protobuf_structs::dht::Message_MessageType::ADD_PROVIDER => {
             // TODO: for now we don't parse the peer properly, so it is possible that we get
-            //       parsing errors for peers even when they are valid ; we ignore these
+            //       parsing errors for peers even when they are valid; we ignore these
             //       errors for now, but ultimately we should just error altogether
             let provider_peer = message.mut_providerPeers()
                 .iter_mut()
@@ -409,7 +428,7 @@ fn proto_to_msg(mut message: protobuf_structs::dht::Message) -> Result<KadMsg, I
 #[cfg(test)]
 mod tests {
     extern crate libp2p_tcp_transport;
-    extern crate tokio_current_thread;
+    extern crate tokio;
 
     use self::libp2p_tcp_transport::TcpConfig;
     use futures::{Future, Sink, Stream};
@@ -418,6 +437,8 @@ mod tests {
     use protocol::{KadConnectionType, KadMsg, KademliaProtocolConfig, KadPeer};
     use std::sync::mpsc;
     use std::thread;
+    use self::tokio::runtime::current_thread::Runtime;
+
 
     #[test]
     fn correct_transfer() {
@@ -483,6 +504,7 @@ mod tests {
                 let (listener, addr) = transport
                     .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
                     .unwrap();
+
                 tx.send(addr).unwrap();
 
                 let future = listener
@@ -494,8 +516,8 @@ mod tests {
                         assert_eq!(recv_msg.unwrap(), msg_server);
                         ()
                     });
-
-                let _ = tokio_current_thread::block_on_all(future).unwrap();
+                let mut rt = Runtime::new().unwrap();
+                let _ = rt.block_on(future).unwrap();
             });
 
             let transport = TcpConfig::new().with_upgrade(KademliaProtocolConfig);
@@ -505,8 +527,8 @@ mod tests {
                 .unwrap_or_else(|_| panic!())
                 .and_then(|proto| proto.send(msg_client))
                 .map(|_| ());
-
-            let _ = tokio_current_thread::block_on_all(future).unwrap();
+            let mut rt = Runtime::new().unwrap();
+            let _ = rt.block_on(future).unwrap();
             bg_thread.join().unwrap();
         }
     }

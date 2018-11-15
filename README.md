@@ -1,5 +1,7 @@
 # Central repository for work on libp2p
 
+[![dependency status](https://deps.rs/repo/github/libp2p/rust-libp2p/status.svg)](https://deps.rs/repo/github/libp2p/rust-libp2p)
+
 This repository is the central place for Rust development of the [libp2p](https://libp2p.io) spec.
 
 **This readme will be more fleshed out the closer the project gets to completion.
@@ -22,3 +24,4 @@ libp2p = { git = "https://github.com/libp2p/rust-libp2p" }
 (open a pull request if you want your project to be added here)
 
 - https://github.com/paritytech/polkadot
+- https://github.com/paritytech/substrate

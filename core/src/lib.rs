@@ -27,7 +27,7 @@
 //!
 //! The main trait that this crate provides is `Transport`, which provides the `dial` and
 //! `listen_on` methods and can be used to dial or listen on a multiaddress. The `swarm` crate
-//! itself does not provide any concrete (ie. non-dummy, non-adapter) implementation of this trait.
+//! itself does not provide any concrete (i.e. non-dummy, non-adapter) implementation of this trait.
 //! It is implemented on structs that are provided by external crates, such as `TcpConfig` from
 //! `tcp-transport`, `UdpConfig`, or `WebsocketConfig` (note: as of the writing of this
 //! documentation, the last two structs don't exist yet).
@@ -89,7 +89,7 @@
 //!
 //! # fn main() {
 //! let tcp_transport = libp2p_tcp_transport::TcpConfig::new();
-//! let upgraded = tcp_transport.with_upgrade(libp2p_core::upgrade::PlainTextConfig);
+//! let upgraded = tcp_transport.with_upgrade(libp2p_core::upgrade::DeniedUpgrade);
 //!
 //! // upgraded.dial(...)   // automatically applies the plain text protocol on the socket
 //! # }
@@ -129,32 +129,31 @@
 //! extern crate libp2p_ping;
 //! extern crate libp2p_core;
 //! extern crate libp2p_tcp_transport;
-//! extern crate tokio_current_thread;
+//! extern crate tokio;
 //!
 //! use futures::{Future, Stream};
-//! use libp2p_ping::{Ping, PingOutput};
-//! use libp2p_core::Transport;
+//! use libp2p_ping::protocol::Ping;
+//! use libp2p_core::{Transport, upgrade::apply_outbound};
+//! use tokio::runtime::current_thread::Runtime;
 //!
 //! # fn main() {
-//! let ping_finished_future = libp2p_tcp_transport::TcpConfig::new()
-//!     // We have a `TcpConfig` struct that implements `Transport`, and apply a `Ping` upgrade on it.
-//!     .with_upgrade(Ping::default())
+//! let ping_dialer = libp2p_tcp_transport::TcpConfig::new()
+//!     // We have a `TcpConfig` struct that implements `Dialer`, and apply a `Ping` upgrade on it.
+//!     .and_then(|socket, _| {
+//!         apply_outbound(socket, Ping::default()).map_err(|e| e.into_io_error())
+//!     })
 //!     // TODO: right now the only available protocol is ping, but we want to replace it with
 //!     //       something that is more simple to use
-//!     .dial("127.0.0.1:12345".parse::<libp2p_core::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())
-//!     .and_then(|out| {
-//!         match out {
-//!             PingOutput::Ponger(processing) => Box::new(processing) as Box<Future<Item = _, Error = _>>,
-//!             PingOutput::Pinger(mut pinger) => {
-//!                 pinger.ping(());
-//!                 let f = pinger.into_future().map(|_| ()).map_err(|(err, _)| err);
-//!                 Box::new(f) as Box<Future<Item = _, Error = _>>
-//!             },
-//!         }
+//!     .dial("/ip4/127.0.0.1/tcp/12345".parse::<libp2p_core::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())
+//!     .and_then(|mut pinger| {
+//!         pinger.ping(());
+//!         let f = pinger.into_future().map(|_| ()).map_err(|(e, _)| e);
+//!         Box::new(f) as Box<Future<Item = _, Error = _>>
 //!     });
 //!
 //! // Runs until the ping arrives.
-//! tokio_current_thread::block_on_all(ping_finished_future).unwrap();
+//! let mut rt = Runtime::new().unwrap();
+//! let _ = rt.block_on(ping_dialer).unwrap();
 //! # }
 //! ```
 //!
@@ -182,6 +181,7 @@ extern crate rw_stream_sink;
 extern crate smallvec;
 extern crate tokio_executor;
 extern crate tokio_io;
+extern crate tokio_timer;
 extern crate void;
 
 #[cfg(test)]
@@ -190,10 +190,6 @@ extern crate rand;
 extern crate tokio;
 #[cfg(test)]
 extern crate tokio_codec;
-#[cfg(test)]
-extern crate tokio_current_thread;
-#[cfg(test)]
-extern crate tokio_timer;
 #[cfg(test)]
 #[macro_use]
 extern crate assert_matches;
@@ -213,12 +209,35 @@ mod tests;
 pub mod either;
 pub mod muxing;
 pub mod nodes;
+pub mod protocols_handler;
+pub mod topology;
 pub mod transport;
 pub mod upgrade;
 
 pub use self::multiaddr::Multiaddr;
 pub use self::muxing::StreamMuxer;
 pub use self::peer_id::PeerId;
+pub use self::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent};
 pub use self::public_key::PublicKey;
 pub use self::transport::Transport;
-pub use self::upgrade::{ConnectionUpgrade, Endpoint};
+pub use self::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, UpgradeError};
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum Endpoint {
+    /// The socket comes from a dialer.
+    Dialer,
+    /// The socket comes from a listener.
+    Listener,
+}
+
+impl std::ops::Not for Endpoint {
+    type Output = Endpoint;
+
+    fn not(self) -> Self::Output {
+        match self {
+            Endpoint::Dialer => Endpoint::Listener,
+            Endpoint::Listener => Endpoint::Dialer
+        }
+    }
+}
+
