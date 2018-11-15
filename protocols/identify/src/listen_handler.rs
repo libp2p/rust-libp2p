@@ -21,7 +21,7 @@
 use crate::{IdentifySender, IdentifyProtocolConfig};
 use futures::prelude::*;
 use libp2p_core::{
-    nodes::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent},
+    protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent},
     upgrade::{DeniedUpgrade, InboundUpgrade}
 };
 use smallvec::SmallVec;

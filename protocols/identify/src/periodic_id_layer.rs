@@ -20,7 +20,7 @@
 
 use futures::prelude::*;
 use libp2p_core::nodes::{ConnectedPoint, NetworkBehavior, NetworkBehaviorAction};
-use libp2p_core::{nodes::protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
+use libp2p_core::{protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
 use std::{collections::VecDeque, marker::PhantomData};
 use tokio_io::{AsyncRead, AsyncWrite};
 use {IdentifyInfo, PeriodicIdentification, PeriodicIdentificationEvent};

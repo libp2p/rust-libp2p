@@ -22,7 +22,7 @@ use cuckoofilter::CuckooFilter;
 use futures::prelude::*;
 use handler::FloodsubHandler;
 use libp2p_core::nodes::{ConnectedPoint, NetworkBehavior, NetworkBehaviorAction};
-use libp2p_core::{nodes::protocols_handler::ProtocolsHandler, PeerId};
+use libp2p_core::{protocols_handler::ProtocolsHandler, PeerId};
 use protocol::{FloodsubMessage, FloodsubRpc, FloodsubSubscription, FloodsubSubscriptionAction};
 use rand;
 use smallvec::SmallVec;

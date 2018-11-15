@@ -24,9 +24,9 @@ use crate::{
     nodes::{
         handled_node::NodeHandler,
         node::Substream,
-        protocols_handler::{NodeHandlerWrapper, ProtocolsHandler},
         raw_swarm::{RawSwarm, RawSwarmEvent, ConnectedPoint}
     },
+    protocols_handler::{NodeHandlerWrapper, ProtocolsHandler},
     topology::Topology
 };
 use futures::prelude::*;
