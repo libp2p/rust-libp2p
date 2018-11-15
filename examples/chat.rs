@@ -31,12 +31,10 @@
 //!
 //! In the second terminal window, start a new instance of the example with:
 //! ```text
-//! cargo run --example chat -- /ip4/0.0.0.0/tcp/24915
+//! cargo run --example chat -- /ip4/127.0.0.1/tcp/24915
 //! ```
 //! The two nodes connect. Type a message in either terminal and hit return: the
-//! message is sent and printed in the other terminal. You can issue two special
-//! commands: `unsubscribe` and `subscribe` (to re-subscribe to the "chat"
-//! topic). Close with Ctrl-c.
+//! message is sent and printed in the other terminal.Close with Ctrl-c.
 //!
 //! You can of course open more terminal windows and add more participants.
 //! Dialing any of the other peers will propagate the new participant to all
