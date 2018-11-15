@@ -18,29 +18,30 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-/// A basic chat application demonstrating libp2p and the Floodsub protocol.
-///
-/// Using two terminal windows, start two instances. Take note of the listening
-/// address of the first instance and start the second with this address as the
-/// first argument. In the first terminal window, run:
-/// ```text
-/// cargo run --example chat
-/// ```
-/// It will print the PeerId and the listening address, e.g. `Listening on
-/// "/ip4/0.0.0.0/tcp/24915"`
-///
-/// In the second terminal window, start a new instance of the example with:
-/// ```text
-/// cargo run --example chat -- /ip4/0.0.0.0/tcp/24915
-/// ```
-/// The two nodes connect. Type a message in either terminal and hit return: the
-/// message is sent and printed in the other terminal. You can issue two special
-/// commands: `unsubscribe` and `subscribe` (to re-subscribe to the "chat"
-/// topic). Close with Ctrl-c.
-///
-/// You can of course open more terminal windows and add more participants.
-/// Dialing any of the other peers will propagate the new participant to all
-/// chat members and everyone will receive all messages.
+//! A basic chat application demonstrating libp2p and the Floodsub protocol.
+//!
+//! Using two terminal windows, start two instances. Take note of the listening
+//! address of the first instance and start the second with this address as the
+//! first argument. In the first terminal window, run:
+//! ```text
+//! cargo run --example chat
+//! ```
+//! It will print the PeerId and the listening address, e.g. `Listening on
+//! "/ip4/0.0.0.0/tcp/24915"`
+//!
+//! In the second terminal window, start a new instance of the example with:
+//! ```text
+//! cargo run --example chat -- /ip4/0.0.0.0/tcp/24915
+//! ```
+//! The two nodes connect. Type a message in either terminal and hit return: the
+//! message is sent and printed in the other terminal. You can issue two special
+//! commands: `unsubscribe` and `subscribe` (to re-subscribe to the "chat"
+//! topic). Close with Ctrl-c.
+//!
+//! You can of course open more terminal windows and add more participants.
+//! Dialing any of the other peers will propagate the new participant to all
+//! chat members and everyone will receive all messages.
+
 extern crate futures;
 extern crate libp2p;
 extern crate tokio;
@@ -100,22 +101,7 @@ fn main() {
     tokio::run(futures::future::poll_fn(move || -> Result<_, ()> {
         loop {
             match framed_stdin.poll().expect("Error while polling stdin") {
-                Async::Ready(Some(line)) => {
-                    match line.as_ref() {
-                        "unsubscribe" => {
-                            if swarm.unsubscribe(&floodsub_topic) {
-                                println!("Unsubscribed");
-                            }
-                        },
-                        "subscribe" => {
-                            if swarm.subscribe(floodsub_topic.clone()) {
-                                println!("Subscribed");
-                            }
-                        },
-                        _ => swarm.publish(&floodsub_topic, line.as_bytes())
-
-                    };
-                },
+                Async::Ready(Some(line)) => swarm.publish(&floodsub_topic, line.as_bytes()),
                 Async::Ready(None) => panic!("Stdin closed"),
                 Async::NotReady => break,
             };
