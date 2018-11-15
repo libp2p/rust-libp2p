@@ -164,7 +164,7 @@ where
     TMuxer: StreamMuxer,
     THandler: NodeHandler<Substream = Substream<TMuxer>> + fmt::Debug,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result<()> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("HandledNode")
             .field("node", &self.node)
             .field("handler", &self.handler)
