@@ -24,7 +24,7 @@
 //! opened, the next step is to *upgrade* this connection or substream to use a protocol.
 //!
 //! This is where the `UpgradeInfo`, `InboundUpgrade` and `OutboundUpgrade` traits come into play.
-//! The `InboundUpgrade` and `OutboundUpgrade` traits are implemented on types that represent an
+//! The `InboundUpgrade` and `OutboundUpgrade` traits are implemented on types that represent a
 //! collection of one or more possible protocols for respectively an ingoing or outgoing
 //! connection or substream.
 //!
@@ -106,10 +106,10 @@ pub trait InboundUpgrade<C>: UpgradeInfo {
     fn upgrade_inbound(self, socket: C, id: Self::UpgradeId) -> Self::Future;
 }
 
-/// Extention trait for `InboundUpgrade`. Automatically implemented on all types that implement
+/// Extension trait for `InboundUpgrade`. Automatically implemented on all types that implement
 /// `InboundUpgrade`.
 pub trait InboundUpgradeExt<C>: InboundUpgrade<C> {
-    /// Returns a new object that wraps around `Self` and applies a closure on the `Output`.
+    /// Returns a new object that wraps around `Self` and applies a closure to the `Output`.
     fn map_inbound<F, T>(self, f: F) -> MapUpgrade<Self, F>
     where
         Self: Sized,
@@ -118,7 +118,7 @@ pub trait InboundUpgradeExt<C>: InboundUpgrade<C> {
         MapUpgrade::new(self, f)
     }
 
-    /// Returns a new object that wraps around `Self` and applies a closure on the `Error`.
+    /// Returns a new object that wraps around `Self` and applies a closure to the `Error`.
     fn map_inbound_err<F, T>(self, f: F) -> MapUpgradeErr<Self, F>
     where
         Self: Sized,
@@ -159,7 +159,7 @@ pub trait OutboundUpgrade<C>: UpgradeInfo {
 /// Extention trait for `OutboundUpgrade`. Automatically implemented on all types that implement
 /// `OutboundUpgrade`.
 pub trait OutboundUpgradeExt<C>: OutboundUpgrade<C> {
-    /// Returns a new object that wraps around `Self` and applies a closure on the `Output`.
+    /// Returns a new object that wraps around `Self` and applies a closure to the `Output`.
     fn map_outbound<F, T>(self, f: F) -> MapUpgrade<Self, F>
     where
         Self: Sized,
@@ -168,7 +168,7 @@ pub trait OutboundUpgradeExt<C>: OutboundUpgrade<C> {
         MapUpgrade::new(self, f)
     }
 
-    /// Returns a new object that wraps around `Self` and applies a closure on the `Error`.
+    /// Returns a new object that wraps around `Self` and applies a closure to the `Error`.
     fn map_outbound_err<F, T>(self, f: F) -> MapUpgradeErr<Self, F>
     where
         Self: Sized,
