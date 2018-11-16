@@ -48,7 +48,7 @@ impl<TSubstream> Default for PingListenBehaviour<TSubstream> {
     }
 }
 
-impl<TSubstream> NetworkBehaviour for PingListenBehaviour<TSubstream>
+impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for PingListenBehaviour<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
@@ -72,6 +72,7 @@ where
 
     fn poll(
         &mut self,
+        _: &mut TTopology,
     ) -> Async<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,

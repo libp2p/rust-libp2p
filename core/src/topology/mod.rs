@@ -27,6 +27,9 @@ pub trait Topology {
     fn add_discovered_address(&mut self, peer: &PeerId, addr: Multiaddr);
     /// Returns the addresses to try use to reach the given peer.
     fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr>;
+    /// Returns all the known peers.
+    // TODO: bad API ; also, is the method even a good idea?
+    fn peers(&self) -> Vec<PeerId>;
 }
 
 /// Topology of the network stored in memory.
@@ -58,5 +61,9 @@ impl Topology for MemoryTopology {
 
     fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
         self.list.get(peer).map(|v| v.clone()).unwrap_or(Vec::new())
+    }
+
+    fn peers(&self) -> Vec<PeerId> {
+        self.list.keys().map(|k| k.clone()).collect()
     }
 }
