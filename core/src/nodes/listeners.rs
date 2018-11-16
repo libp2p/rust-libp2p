@@ -52,7 +52,7 @@ use std::collections::VecDeque;
 /// // Ask the `listeners` to start listening on the given multiaddress.
 /// listeners.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
 ///
-/// // You can retreive the list of active listeners with `listeners()`.
+/// // You can retrieve the list of active listeners with `listeners()`.
 /// println!("Listening on: {:?}", listeners.listeners().collect::<Vec<_>>());
 ///
 /// // The `listeners` will now generate events when polled.
