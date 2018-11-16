@@ -533,7 +533,7 @@ where C: AsyncRead + AsyncWrite
     }
 
     fn shutdown_substream(&self, sub: &mut Self::Substream, _: Shutdown) -> Poll<(), IoError> {
-        let elem = codec::Elem::Reset {
+        let elem = codec::Elem::Close {
             substream_id: sub.num,
             endpoint: sub.endpoint,
         };

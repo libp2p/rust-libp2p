@@ -174,7 +174,7 @@ impl<TSubstream> FloodsubBehaviour<TSubstream> {
 
 impl<TSubstream> NetworkBehavior for FloodsubBehaviour<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite + Send + Sync + 'static,
+    TSubstream: AsyncRead + AsyncWrite,
 {
     type ProtocolsHandler = FloodsubHandler<TSubstream>;
     type OutEvent = FloodsubMessage;
