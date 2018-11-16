@@ -23,11 +23,13 @@
 //! an initial state to facilitate testing.
 
 use futures::prelude::*;
-use futures::{future::{self, FutureResult}, stream};
-use {Multiaddr, Transport, PeerId};
+use futures::{
+    future::{self, FutureResult},
+    stream,
+};
 use std::io;
+use {Multiaddr, PeerId, PublicKey, Transport};
 use tests::dummy_muxer::DummyMuxer;
-use PublicKey;
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) enum ListenerState {
@@ -60,11 +62,11 @@ impl Transport for DummyTransport {
     type Output = (PeerId, DummyMuxer);
     type Listener = Box<Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=io::Error> + Send>;
     type ListenerUpgrade = FutureResult<Self::Output, io::Error>;
-    type Dial = Box<Future<Item=Self::Output, Error=io::Error> + Send>;
+    type Dial = Box<Future<Item = Self::Output, Error = io::Error> + Send>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)>
     where
-        Self: Sized
+        Self: Sized,
     {
         let addr2 = addr.clone();
         match self.listener_state {
@@ -74,26 +76,25 @@ impl Transport for DummyTransport {
                     Async::NotReady => {
                         let stream = stream::poll_fn(|| Ok(Async::NotReady)).map(tupelize);
                         (Box::new(stream), addr2)
-                    },
+                    }
                     Async::Ready(Some(tup)) => {
                         let stream = stream::poll_fn(move || Ok( Async::Ready(Some(tup.clone()) ))).map(tupelize);
                         (Box::new(stream), addr2)
-                    },
+                    }
                     Async::Ready(None) => {
                         let stream = stream::empty();
                         (Box::new(stream), addr2)
-                    },
+                    }
                 })
             }
-            ListenerState::Error => Err( (self, addr2) )
+            ListenerState::Error => Err((self, addr2)),
         }
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)>
     where
-        Self: Sized
+        Self: Sized,
     {
-        println!("[DummyTransport, dial] addr={:?}", addr);
         let peer_id = if let Some(peer_id) = self.next_peer_id {
             peer_id
         } else {

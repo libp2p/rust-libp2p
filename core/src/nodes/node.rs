@@ -25,7 +25,7 @@ use std::fmt;
 use std::io::Error as IoError;
 use std::sync::Arc;
 
-// Implementor notes
+// Implementation notes
 // =================
 //
 // In order to minimize the risk of bugs in higher-level code, we want to avoid as much as

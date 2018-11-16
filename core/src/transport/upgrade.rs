@@ -1,4 +1,4 @@
-// Copyright 2017 Parity Technologies (UK) Ltd.
+// Copyright 2017-2018 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -20,173 +20,75 @@
 
 use futures::prelude::*;
 use multiaddr::Multiaddr;
-use std::io::Error as IoError;
+use crate::{
+    transport::Transport,
+    upgrade::{OutboundUpgrade, InboundUpgrade, UpgradeInfo, apply_inbound, apply_outbound}
+};
 use tokio_io::{AsyncRead, AsyncWrite};
-use transport::Transport;
-use upgrade::{apply, ConnectionUpgrade, Endpoint};
 
-/// Implements the `Transport` trait. Dials or listens, then upgrades any dialed or received
-/// connection.
-///
-/// See the `Transport::with_upgrade` method.
-#[derive(Debug, Clone)]
-pub struct UpgradedNode<T, C> {
-    transports: T,
-    upgrade: C,
+#[derive(Debug, Copy, Clone)]
+pub struct Upgrade<T, U> { inner: T, upgrade: U }
+
+impl<T, U> Upgrade<T, U> {
+    pub fn new(inner: T, upgrade: U) -> Self {
+        Upgrade { inner, upgrade }
+    }
 }
 
-impl<T, C> UpgradedNode<T, C> {
-    pub fn new(transports: T, upgrade: C) -> UpgradedNode<T, C> {
-        UpgradedNode {
-            transports,
-            upgrade,
+impl<D, U, O, E> Transport for Upgrade<D, U>
+where
+    D: Transport,
+    D::Dial: Send + 'static,
+    D::Listener: Send + 'static,
+    D::ListenerUpgrade: Send + 'static,
+    D::Output: AsyncRead + AsyncWrite + Send + 'static,
+    U: InboundUpgrade<D::Output, Output = O, Error = E>,
+    U: OutboundUpgrade<D::Output, Output = O, Error = E> + Send + Clone + 'static,
+    <U as UpgradeInfo>::NamesIter: Clone + Send,
+    <U as UpgradeInfo>::UpgradeId: Send,
+    <U as InboundUpgrade<D::Output>>::Future: Send,
+    <U as OutboundUpgrade<D::Output>>::Future: Send,
+    E: std::error::Error + Send + Sync + 'static
+{
+    type Output = O;
+    type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = std::io::Error> + Send>;
+    type ListenerUpgrade = Box<Future<Item = Self::Output, Error = std::io::Error> + Send>;
+    type Dial = Box<Future<Item = Self::Output, Error = std::io::Error> + Send>;
+
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+        let upgrade = self.upgrade;
+        match self.inner.dial(addr.clone()) {
+            Ok(outbound) => {
+                let future = outbound
+                    .and_then(move |x| apply_outbound(x, upgrade).map_err(|e| {
+                        std::io::Error::new(std::io::ErrorKind::Other, e)
+                    }));
+                Ok(Box::new(future))
+            }
+            Err((dialer, addr)) => Err((Upgrade::new(dialer, upgrade), addr))
         }
     }
-}
 
-impl<'a, T, C> UpgradedNode<T, C>
-where
-    T: Transport + 'a,
-    T::Dial: Send,
-    T::Listener: Send,
-    T::ListenerUpgrade: Send,
-    T::Output: Send + AsyncRead + AsyncWrite,
-    C: ConnectionUpgrade<T::Output> + Send + 'a,
-    C::NamesIter: Send,
-    C::Future: Send,
-    C::UpgradeIdentifier: Send,
-{
-    /// Returns a reference to the inner `Transport`.
-    #[inline]
-    pub fn transport(&self) -> &T {
-        &self.transports
-    }
-
-    /// Tries to dial on the `Multiaddr` using the transport that was passed to `new`, then upgrade
-    /// the connection.
-    ///
-    /// Note that this does the same as `Transport::dial`, but with less restrictions on the trait
-    /// requirements.
-    #[inline]
-    pub fn dial(
-        self,
-        addr: Multiaddr,
-    ) -> Result<Box<Future<Item = C::Output, Error = IoError> + Send + 'a>, (Self, Multiaddr)>
-    where
-        C::NamesIter: Clone, // TODO: not elegant
-    {
-        let upgrade = self.upgrade;
-
-        let dialed_fut = match self.transports.dial(addr.clone()) {
-            Ok(f) => f,
-            Err((trans, addr)) => {
-                let builder = UpgradedNode {
-                    transports: trans,
-                    upgrade: upgrade,
-                };
-
-                return Err((builder, addr));
-            }
-        };
-
-        let future = dialed_fut
-            // Try to negotiate the protocol.
-            .and_then(move |connection| {
-                apply(connection, upgrade, Endpoint::Dialer)
-            });
-
-        Ok(Box::new(future))
-    }
-
-    /// Start listening on the multiaddr using the transport that was passed to `new`.
-    /// Then whenever a connection is opened, it is upgraded.
-    ///
-    /// Note that this does the same as `Transport::listen_on`, but with less restrictions on the
-    /// trait requirements.
-    #[inline]
-    pub fn listen_on(
-        self,
-        addr: Multiaddr,
-    ) -> Result<
-        (
-            Box<
-                Stream<
-                        Item = (Box<Future<Item = C::Output, Error = IoError> + Send + 'a>, Multiaddr),
-                        Error = IoError,
-                    >
-                    + Send
-                    + 'a,
-            >,
-            Multiaddr,
-        ),
-        (Self, Multiaddr),
-    >
-    where
-        C::NamesIter: Clone, // TODO: not elegant
-        C: Clone,
-    {
-        let upgrade = self.upgrade;
-
-        let (listening_stream, new_addr) = match self.transports.listen_on(addr) {
-            Ok((l, new_addr)) => (l, new_addr),
-            Err((trans, addr)) => {
-                let builder = UpgradedNode {
-                    transports: trans,
-                    upgrade: upgrade,
-                };
-
-                return Err((builder, addr));
-            }
-        };
-
-        // Try to negotiate the protocol.
-        // Note that failing to negotiate a protocol will never produce a future with an error.
-        // Instead the `stream` will produce `Ok(Err(...))`.
-        // `stream` can only produce an `Err` if `listening_stream` produces an `Err`.
-        let stream = listening_stream.map(move |(connection, client_addr)| {
-            let upgrade = upgrade.clone();
-            let connection = connection
-                // Try to negotiate the protocol.
-                .and_then(move |connection| {
-                    apply(connection, upgrade, Endpoint::Listener)
-                });
-
-            (Box::new(connection) as Box<_>, client_addr)
-        });
-
-        Ok((Box::new(stream), new_addr))
-    }
-}
-
-impl<T, C> Transport for UpgradedNode<T, C>
-where
-    T: Transport + 'static,
-    T::Dial: Send,
-    T::Listener: Send,
-    T::ListenerUpgrade: Send,
-    T::Output: Send + AsyncRead + AsyncWrite,
-    C: ConnectionUpgrade<T::Output> + Clone + Send + 'static,
-    C::NamesIter: Clone + Send,
-    C::Future: Send,
-    C::UpgradeIdentifier: Send,
-{
-    type Output = C::Output;
-    type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError> + Send>;
-    type ListenerUpgrade = Box<Future<Item = C::Output, Error = IoError> + Send>;
-    type Dial = Box<Future<Item = C::Output, Error = IoError> + Send>;
-
-    #[inline]
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        self.listen_on(addr)
+        let upgrade = self.upgrade;
+        match self.inner.listen_on(addr) {
+            Ok((inbound, addr)) => {
+                let stream = inbound
+                    .map(move |(future, addr)| {
+                        let upgrade = upgrade.clone();
+                        let future = future
+                            .and_then(move |x| apply_inbound(x, upgrade).map_err(|e| {
+                                 std::io::Error::new(std::io::ErrorKind::Other, e)
+                            }));
+                    (Box::new(future) as Box<_>, addr)
+                });
+                Ok((Box::new(stream), addr))
+            }
+            Err((listener, addr)) => Err((Upgrade::new(listener, upgrade), addr)),
+        }
     }
 
-    #[inline]
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-        self.dial(addr)
-    }
-
-    #[inline]
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.transports.nat_traversal(server, observed)
+        self.inner.nat_traversal(server, observed)
     }
 }

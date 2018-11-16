@@ -18,15 +18,19 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::{
+    PeerId,
+    muxing::StreamMuxer,
+    nodes::{
+        node::Substream,
+        handled_node_tasks::{HandledNodesEvent, HandledNodesTasks},
+        handled_node_tasks::{Task as HandledNodesTask, TaskId},
+        handled_node::NodeHandler
+    }
+};
 use fnv::FnvHashMap;
 use futures::prelude::*;
-use muxing::StreamMuxer;
-use nodes::node::Substream;
-use nodes::handled_node_tasks::{HandledNodesEvent, HandledNodesTasks};
-use nodes::handled_node_tasks::{Task as HandledNodesTask, TaskId};
-use nodes::handled_node::NodeHandler;
 use std::{collections::hash_map::Entry, fmt, io, mem};
-use PeerId;
 
 // TODO: make generic over PeerId
 
@@ -44,7 +48,6 @@ pub struct CollectionStream<TInEvent, TOutEvent, THandler> {
 
 impl<TInEvent, TOutEvent, THandler> fmt::Debug for CollectionStream<TInEvent, TOutEvent, THandler> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        f.debug_struct("CollectionStream").finish()?;
         let mut list = f.debug_list();
         for (id, task) in &self.tasks {
             match *task {
@@ -200,10 +203,8 @@ impl<'a, TInEvent, TOutEvent, THandler> CollectionReachEvent<'a, TInEvent, TOutE
             debug_assert_eq!(_former_other_state, Some(TaskState::Connected(self.peer_id.clone())));
 
             // TODO: we unfortunately have to clone the peer id here
-            println!("[CollectionReachEvent, accept] ReplacedExisting");
             (CollectionNodeAccept::ReplacedExisting, self.peer_id.clone())
         } else {
-            println!("[CollectionReachEvent, accept] NewEntry");
             // TODO: we unfortunately have to clone the peer id here
             (CollectionNodeAccept::NewEntry, self.peer_id.clone())
         };
@@ -237,7 +238,6 @@ impl<'a, TInEvent, TOutEvent, THandler> fmt::Debug for CollectionReachEvent<'a, 
 
 impl<'a, TInEvent, TOutEvent, THandler> Drop for CollectionReachEvent<'a, TInEvent, TOutEvent, THandler> {
     fn drop(&mut self) {
-        println!("[CollectionReachEvent, drop]");
         let task_state = self.parent.tasks.remove(&self.id);
         debug_assert!(if let Some(TaskState::Pending) = task_state { true } else { false });
         self.parent.inner.task(self.id)
@@ -280,7 +280,8 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
     pub fn add_reach_attempt<TFut, TMuxer>(&mut self, future: TFut, handler: THandler)
         -> ReachAttemptId
     where
-        TFut: Future<Item = (PeerId, TMuxer), Error = io::Error> + Send + 'static,
+        TFut: Future<Item = (PeerId, TMuxer)> + Send + 'static,
+        TFut::Error: std::error::Error + Send + Sync + 'static,
         THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
@@ -324,7 +325,6 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
     where TInEvent: Clone,
     {
         // TODO: remove the ones we're not connected to?
-        println!("[CollectionStream, broadcast_event] Sending NextState event to HandledNodesTasks");
         self.inner.broadcast_event(event)
     }
 
@@ -333,12 +333,10 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
     /// Returns `None` if we don't have a connection to this peer.
     #[inline]
     pub fn peer_mut(&mut self, id: &PeerId) -> Option<PeerMut<TInEvent>> {
-        println!("[CollectionStream, peer_mut] id={:?}, self.nodes={:?}, self.tasks={:?}", id, self.nodes, self.tasks);
         let task = match self.nodes.get(id) {
             Some(&task) => task,
             None => return None,
         };
-        println!("[CollectionStream, peer_mut] task={:?}", task);
 
         match self.inner.task(task) {
             Some(inner) => Some(PeerMut {
@@ -372,24 +370,15 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
     /// > remove the `Err` variant, but also because we want the `CollectionStream` to stay
     /// > borrowed if necessary.
     pub fn poll(&mut self) -> Async<CollectionEvent<TInEvent, TOutEvent, THandler>> {
-        println!("[CollectionStream, poll] START");
         let item = match self.inner.poll() {
-            Async::Ready(item) => {
-                println!("[CollectionStream, poll]  polled the HandledNodesTask, got Async::Ready(item)");
-                item
-            },
-            Async::NotReady => {
-                println!("[CollectionStream, poll]  polled the HandledNodesTask, got Async::NotReady – returning NotReady");
-                return Async::NotReady
-            },
+            Async::Ready(item) => item,
+            Async::NotReady => return Async::NotReady,
         };
 
         match item {
             HandledNodesEvent::TaskClosed { id, result, handler } => {
-                println!("[CollectionStream, poll]  TaskClosed id={:?}, result={:?} – returning Async::Ready(…) <––", id, result);
                 match (self.tasks.remove(&id), result, handler) {
                     (Some(TaskState::Pending), Err(err), Some(handler)) => {
-                        println!("[CollectionStream, poll]      TaskState::Pending with error");
                         Async::Ready(CollectionEvent::ReachError {
                             id: ReachAttemptId(id),
                             error: err,
@@ -401,7 +390,6 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
                         panic!()
                     },
                     (Some(TaskState::Connected(peer_id)), Ok(()), _handler) => {
-                        println!("[CollectionStream, poll]      TaskState::Connected, OK(())");
                         debug_assert!(_handler.is_none());
                         let _node_task_id = self.nodes.remove(&peer_id);
                         debug_assert_eq!(_node_task_id, Some(id));
@@ -410,7 +398,6 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
                         })
                     },
                     (Some(TaskState::Connected(peer_id)), Err(err), _handler) => {
-                        println!("[CollectionStream, poll]      TaskState::Connected, Err({:?} <–––", err);
                         debug_assert!(_handler.is_none());
                         let _node_task_id = self.nodes.remove(&peer_id);
                         debug_assert_eq!(_node_task_id, Some(id));
@@ -428,7 +415,6 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
                 }
             },
             HandledNodesEvent::NodeReached { id, peer_id } => {
-                println!("[CollectionStream, poll]  NodeReached id={:?}, peer_id={:?}", id, peer_id);
                 Async::Ready(CollectionEvent::NodeReached(CollectionReachEvent {
                     parent: self,
                     id,
@@ -436,7 +422,6 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
                 }))
             },
             HandledNodesEvent::NodeEvent { id, event } => {
-                println!("[CollectionStream, poll]  NodeEvent id={:?}", id);
                 let peer_id = match self.tasks.get(&id) {
                     Some(TaskState::Connected(peer_id)) => peer_id.clone(),
                     _ => panic!("we can only receive NodeEvent events from a task after we \
@@ -498,16 +483,9 @@ mod tests {
     use nodes::NodeHandlerEvent;
     use std::sync::Arc;
     use parking_lot::Mutex;
+    use void::Void;
 
     type TestCollectionStream = CollectionStream<InEvent, OutEvent, Handler>;
-
-    #[test]
-    fn can_create_new() {
-        let cs = TestCollectionStream::new();
-        assert_matches!(cs.inner, HandledNodesTasks{..});
-        assert_matches!(cs.nodes, FnvHashMap{..});
-        assert_matches!(cs.tasks, FnvHashMap{..});
-    }
 
     #[test]
     fn has_connection_is_false_before_a_connection_has_been_made() {
@@ -529,7 +507,7 @@ mod tests {
         assert!(cs.peer_mut(&peer_id).is_none());
 
         let handler = Handler::default();
-        let fut = future::ok((peer_id.clone(), DummyMuxer::new()));
+        let fut = future::ok::<_, Void>((peer_id.clone(), DummyMuxer::new()));
         cs.add_reach_attempt(fut, handler);
         assert!(cs.peer_mut(&peer_id).is_none()); // task is pending
     }
@@ -543,7 +521,7 @@ mod tests {
         muxer.set_inbound_connection_state(DummyConnectionState::Pending);
         muxer.set_outbound_connection_state(DummyConnectionState::Opened);
 
-        let fut = future::ok((peer_id, muxer));
+        let fut = future::ok::<_, Void>((peer_id, muxer));
         cs.add_reach_attempt(fut, Handler::default());
         let mut rt = Runtime::new().unwrap();
         let mut poll_count = 0;
@@ -567,7 +545,7 @@ mod tests {
     fn accepting_a_node_yields_new_entry() {
         let mut cs = TestCollectionStream::new();
         let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
-        let fut = future::ok((peer_id.clone(), DummyMuxer::new()));
+        let fut = future::ok::<_, Void>((peer_id.clone(), DummyMuxer::new()));
         cs.add_reach_attempt(fut, Handler::default());
 
         let mut rt = Runtime::new().unwrap();
@@ -619,7 +597,7 @@ mod tests {
         muxer.set_inbound_connection_state(DummyConnectionState::Pending);
         muxer.set_outbound_connection_state(DummyConnectionState::Opened);
 
-        let fut = future::ok((task_peer_id.clone(), muxer));
+        let fut = future::ok::<_, Void>((task_peer_id.clone(), muxer));
         cs.lock().add_reach_attempt(fut, handler);
 
         let mut rt = Builder::new().core_threads(1).build().unwrap();
@@ -699,6 +677,7 @@ mod tests {
             });
             Ok(Async::Ready(()))
         })).expect("tokio works");
+
     }
 
     #[test]
@@ -706,7 +685,7 @@ mod tests {
         let cs = Arc::new(Mutex::new(TestCollectionStream::new()));
         let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
         let muxer = DummyMuxer::new();
-        let task_inner_fut = future::ok((peer_id.clone(), muxer));
+        let task_inner_fut = future::ok::<_, Void>((peer_id.clone(), muxer));
         let mut handler = Handler::default();
         handler.next_states = vec![HandlerState::Err]; // triggered when sending a NextState event
 
@@ -752,7 +731,7 @@ mod tests {
         let cs = Arc::new(Mutex::new(TestCollectionStream::new()));
         let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
         let muxer = DummyMuxer::new();
-        let task_inner_fut = future::ok((peer_id.clone(), muxer));
+        let task_inner_fut = future::ok::<_, Void>((peer_id.clone(), muxer));
         let mut handler = Handler::default();
         handler.next_states = vec![HandlerState::Ready(None)]; // triggered when sending a NextState event
 
@@ -798,32 +777,19 @@ mod tests {
     #[test]
     fn interrupting_a_pending_connection_attempt_is_ok() {
         let mut cs = TestCollectionStream::new();
-        let fut = future::empty();
+        let fut = future::empty::<_, Void>();
         let reach_id = cs.add_reach_attempt(fut, Handler::default());
         let interrupt = cs.interrupt(reach_id);
         assert!(interrupt.is_ok());
     }
 
     #[test]
-    fn interrupting_a_pending_connection_with_invalid_reach_attempt_id_is_err() {
+    fn interrupting_a_connection_attempt_twice_is_err() {
         let mut cs = TestCollectionStream::new();
-        let fut = future::empty();
-        let valid_reach_id = cs.add_reach_attempt(fut, Handler::default());
-
-        // Obtain a TaskId we can use to build a ReachAttemptId that is not in
-        // the list of tasks in the CollectionStream we're testing. Note that
-        // TaskIds with the same number are all considered equal, so TaskId(0)
-        // from one HandledNodesTask is == to TaskId(0) from another
-        // HandledNodesTask.
-        let invalid_reach_id = {
-            let mut hn = HandledNodesTasks::new();
-            hn.add_reach_attempt(future::empty(), Handler::default());
-            let task_id = hn.add_reach_attempt(future::empty(), Handler::default());
-            ReachAttemptId(task_id)
-        };
-
-        assert!(cs.interrupt(invalid_reach_id).is_err());
-        assert!(cs.interrupt(valid_reach_id).is_ok());
+        let fut = future::empty::<_, Void>();
+        let reach_id = cs.add_reach_attempt(fut, Handler::default());
+        assert!(cs.interrupt(reach_id).is_ok());
+        assert!(cs.interrupt(reach_id).is_err());
     }
 
     #[test]
@@ -831,7 +797,7 @@ mod tests {
         let cs = Arc::new(Mutex::new(TestCollectionStream::new()));
         let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
         let muxer = DummyMuxer::new();
-        let task_inner_fut = future::ok((peer_id.clone(), muxer));
+        let task_inner_fut = future::ok::<_, Void>((peer_id.clone(), muxer));
         let handler = Handler::default();
 
         let reach_id = cs.lock().add_reach_attempt(task_inner_fut, handler);

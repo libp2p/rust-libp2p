@@ -18,16 +18,20 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use core::Transport;
+use crate::{
+    error::RelayError,
+    message::{CircuitRelay, CircuitRelay_Peer, CircuitRelay_Type},
+    protocol,
+    utility::{Peer, RelayAddr}
+};
 use futures::{stream, prelude::*};
-use message::{CircuitRelay, CircuitRelay_Peer, CircuitRelay_Type};
+use libp2p_core::{transport::Transport, upgrade::apply_outbound};
+use log::{debug, info, trace};
 use multiaddr::Multiaddr;
 use peerstore::{PeerAccess, PeerId, Peerstore};
-use protocol;
 use rand::{self, Rng};
 use std::{io, iter::FromIterator, ops::Deref, sync::Arc};
 use tokio_io::{AsyncRead, AsyncWrite};
-use utility::{io_err, Peer, RelayAddr};
 
 #[derive(Debug, Clone)]
 pub struct RelayTransport<T, P> {
@@ -70,10 +74,10 @@ where
             RelayAddr::Address { relay, dest } => {
                 if let Some(ref r) = relay {
                     let f = self.relay_via(r, &dest).map_err(|this| (this, addr))?;
-                    Ok(Box::new(f))
+                    Ok(Box::new(f.map_err(|e| io::Error::new(io::ErrorKind::Other, e))))
                 } else {
                     let f = self.relay_to(&dest).map_err(|this| (this, addr))?;
-                    Ok(Box::new(f))
+                    Ok(Box::new(f.map_err(|e| io::Error::new(io::ErrorKind::Other, e))))
                 }
             }
         }
@@ -111,7 +115,7 @@ where
     }
 
     // Relay to destination over any available relay node.
-    fn relay_to(self, destination: &Peer) -> Result<impl Future<Item=T::Output, Error=io::Error>, Self> {
+    fn relay_to(self, destination: &Peer) -> Result<impl Future<Item=T::Output, Error=RelayError<io::Error>>, Self> {
         trace!("relay_to {:?}", destination.id);
         let mut dials = Vec::new();
         for relay in &*self.relays {
@@ -142,14 +146,14 @@ where
                 if let Some(out) = ok {
                     Ok(out)
                 } else {
-                    Err(io_err(format!("no relay for {:?}", dest_peer)))
+                    Err(RelayError::NoRelayFor(dest_peer))
                 }
             });
         Ok(future)
     }
 
     // Relay to destination via the given peer.
-    fn relay_via(self, relay: &Peer, destination: &Peer) -> Result<impl Future<Item=T::Output, Error=io::Error>, Self> {
+    fn relay_via(self, relay: &Peer, destination: &Peer) -> Result<impl Future<Item=T::Output, Error=RelayError<io::Error>>, Self> {
         trace!("relay_via {:?} to {:?}", relay.id, destination.id);
         let mut addresses = Vec::new();
 
@@ -171,10 +175,15 @@ where
 
         let relay = relay.clone();
         let message = self.hop_message(destination);
-        let transport = self.transport.with_upgrade(protocol::Source(message));
+        let upgrade = protocol::Source(message);
+        let dialer = self.transport;
         let future = stream::iter_ok(addresses.into_iter())
-            .filter_map(move |addr| transport.clone().dial(addr).ok())
-            .and_then(|dial| dial)
+            .filter_map(move |addr| dialer.clone().dial(addr).ok())
+            .and_then(move |dial| {
+                let upgrade = upgrade.clone();
+                dial.map_err(|_| RelayError::Message("could not dial"))
+                    .and_then(move |c| apply_outbound(c, upgrade).from_err())
+            })
             .then(|result| Ok(result.ok()))
             .filter_map(|result| result)
             .into_future()
@@ -186,7 +195,7 @@ where
                 }
                 None => {
                     info!("failed to dial to {:?}", relay.id);
-                    Err(io_err(format!("failed to dial to relay {:?}", relay.id)))
+                    Err(RelayError::Message("failed to dial to relay"))
                 }
             });
         Ok(future)

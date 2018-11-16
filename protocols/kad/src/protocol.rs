@@ -27,7 +27,10 @@
 
 use bytes::{Bytes, BytesMut};
 use futures::{future, sink, Sink, stream, Stream};
-use libp2p_core::{ConnectionUpgrade, Endpoint, Multiaddr, PeerId};
+use libp2p_core::{
+    Multiaddr, PeerId,
+    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
+};
 use multihash::Multihash;
 use protobuf::{self, Message};
 use protobuf_structs;
@@ -128,22 +131,40 @@ impl Into<protobuf_structs::dht::Message_Peer> for KadPeer {
 #[derive(Debug, Default, Copy, Clone)]
 pub struct KademliaProtocolConfig;
 
-impl<C> ConnectionUpgrade<C> for KademliaProtocolConfig
-where
-    C: AsyncRead + AsyncWrite + 'static, // TODO: 'static :-/
-{
-    type Output = KadStreamSink<C>;
-    type Future = future::FutureResult<Self::Output, IoError>;
-    type NamesIter = iter::Once<(Bytes, ())>;
-    type UpgradeIdentifier = ();
+impl UpgradeInfo for KademliaProtocolConfig {
+    type UpgradeId = ();
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
 
     #[inline]
     fn protocol_names(&self) -> Self::NamesIter {
         iter::once(("/ipfs/kad/1.0.0".into(), ()))
     }
+}
+
+impl<C> InboundUpgrade<C> for KademliaProtocolConfig
+where
+    C: AsyncRead + AsyncWrite + 'static, // TODO: 'static :-/
+{
+    type Output = KadStreamSink<C>;
+    type Error = IoError;
+    type Future = future::FutureResult<Self::Output, Self::Error>;
 
     #[inline]
-    fn upgrade(self, incoming: C, _: (), _: Endpoint) -> Self::Future {
+    fn upgrade_inbound(self, incoming: C, _: Self::UpgradeId) -> Self::Future {
+        future::ok(kademlia_protocol(incoming))
+    }
+}
+
+impl<C> OutboundUpgrade<C> for KademliaProtocolConfig
+where
+    C: AsyncRead + AsyncWrite + 'static, // TODO: 'static :-/
+{
+    type Output = KadStreamSink<C>;
+    type Error = IoError;
+    type Future = future::FutureResult<Self::Output, Self::Error>;
+
+    #[inline]
+    fn upgrade_outbound(self, incoming: C, _: Self::UpgradeId) -> Self::Future {
         future::ok(kademlia_protocol(incoming))
     }
 }
@@ -151,9 +172,7 @@ where
 type KadStreamSink<S> = stream::AndThen<sink::With<stream::FromErr<Framed<S, codec::UviBytes<Vec<u8>>>, IoError>, KadMsg, fn(KadMsg) -> Result<Vec<u8>, IoError>, Result<Vec<u8>, IoError>>, fn(BytesMut) -> Result<KadMsg, IoError>, Result<KadMsg, IoError>>;
 
 // Upgrades a socket to use the Kademlia protocol.
-fn kademlia_protocol<S>(
-    socket: S,
-) -> KadStreamSink<S>
+fn kademlia_protocol<S>(socket: S) -> KadStreamSink<S>
 where
     S: AsyncRead + AsyncWrite,
 {
@@ -485,6 +504,7 @@ mod tests {
                 let (listener, addr) = transport
                     .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
                     .unwrap();
+
                 tx.send(addr).unwrap();
 
                 let future = listener

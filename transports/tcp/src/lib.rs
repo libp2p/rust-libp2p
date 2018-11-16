@@ -310,7 +310,7 @@ impl Stream for TcpListenStream {
                             .expect("generating a multiaddr from a socket addr never fails"),
                         Err(err) => {
                             // If we can't get the address of the newly-opened socket, there's
-                            // nothing we can except ignore this connection attempt.
+                            // nothing we can do except ignore this connection attempt.
                             error!("Ignored incoming because could't determine its \
                                     address: {:?}", err);
                             continue
