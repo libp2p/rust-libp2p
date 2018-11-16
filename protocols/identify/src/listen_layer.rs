@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use libp2p_core::nodes::{ConnectedPoint, NetworkBehavior, NetworkBehaviorAction};
+use libp2p_core::nodes::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction};
 use libp2p_core::{protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
 use smallvec::SmallVec;
 use std::{collections::HashMap, io, marker::PhantomData};
@@ -64,7 +64,7 @@ impl<TSubstream> IdentifyListen<TSubstream> {
     }
 }
 
-impl<TSubstream> NetworkBehavior for IdentifyListen<TSubstream>
+impl<TSubstream> NetworkBehaviour for IdentifyListen<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite + Send + Sync + 'static,
 {
@@ -103,7 +103,7 @@ where
     fn poll(
         &mut self,
     ) -> Async<
-        NetworkBehaviorAction<
+        NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
             Self::OutEvent,
         >,

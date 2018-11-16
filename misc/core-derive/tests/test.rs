@@ -74,7 +74,7 @@ fn event_handler() {
     impl<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite + Send + Sync + 'static> Foo<TSubstream> {
         // TODO: for some reason, the parameter cannot be `PeriodicIdentifyBehaviourEvent` or we
         //       get a compilation error ; figure out why or open an issue to Rust
-        fn foo(&mut self, ev: <libp2p::identify::PeriodicIdentifyBehaviour<TSubstream> as libp2p::core::nodes::NetworkBehavior>::OutEvent) {
+        fn foo(&mut self, ev: <libp2p::identify::PeriodicIdentifyBehaviour<TSubstream> as libp2p::core::nodes::NetworkBehaviour>::OutEvent) {
             let libp2p::identify::PeriodicIdentifyBehaviourEvent::Identified { .. } = ev;
         }
     }
@@ -91,7 +91,7 @@ fn custom_polling() {
     }
 
     impl<TSubstream> Foo<TSubstream> {
-        fn foo<T>(&mut self) -> libp2p::futures::Async<libp2p::core::nodes::NetworkBehaviorAction<T, ()>> { libp2p::futures::Async::NotReady }
+        fn foo<T>(&mut self) -> libp2p::futures::Async<libp2p::core::nodes::NetworkBehaviourAction<T, ()>> { libp2p::futures::Async::NotReady }
     }
 }
 
@@ -117,6 +117,6 @@ fn custom_event_and_polling() {
     }
 
     impl<TSubstream> Foo<TSubstream> {
-        fn foo<T>(&mut self) -> libp2p::futures::Async<libp2p::core::nodes::NetworkBehaviorAction<T, String>> { libp2p::futures::Async::NotReady }
+        fn foo<T>(&mut self) -> libp2p::futures::Async<libp2p::core::nodes::NetworkBehaviourAction<T, String>> { libp2p::futures::Async::NotReady }
     }
 }
