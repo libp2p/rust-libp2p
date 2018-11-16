@@ -19,8 +19,12 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::{Bytes, BytesMut};
-use futures::{future, Future, Sink, Stream};
-use libp2p_core::{ConnectionUpgrade, Endpoint, Multiaddr, PublicKey};
+use futures::{future::{self, FutureResult}, Async, AsyncSink, Future, Poll, Sink, Stream};
+use libp2p_core::{
+    Multiaddr, PublicKey,
+    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
+};
+use log::{debug, trace};
 use protobuf::Message as ProtobufMessage;
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
 use protobuf::RepeatedField;
@@ -35,22 +39,14 @@ use unsigned_varint::codec;
 #[derive(Debug, Clone)]
 pub struct IdentifyProtocolConfig;
 
-/// Output of the connection upgrade.
-pub enum IdentifyOutput<T> {
-    /// We obtained information from the remote. Happens when we are the dialer.
-    RemoteInfo {
-        /// Information about the remote.
-        info: IdentifyInfo,
-        /// Address the remote sees for us.
-        observed_addr: Multiaddr,
-    },
+#[derive(Debug, Clone)]
+pub struct RemoteInfo {
+    /// Information about the remote.
+    pub info: IdentifyInfo,
+    /// Address the remote sees for us.
+    pub observed_addr: Multiaddr,
 
-    /// We opened a connection to the remote and need to send it information. Happens when we are
-    /// the listener.
-    Sender {
-        /// Object used to send identify info to the client.
-        sender: IdentifySender<T>,
-    },
+    _priv: ()
 }
 
 /// Object used to send back information to the client.
@@ -58,17 +54,10 @@ pub struct IdentifySender<T> {
     inner: Framed<T, codec::UviBytes<Vec<u8>>>,
 }
 
-impl<'a, T> IdentifySender<T>
-where
-    T: AsyncWrite + Send + 'a,
-{
+impl<T> IdentifySender<T> where T: AsyncWrite {
     /// Sends back information to the client. Returns a future that is signalled whenever the
     /// info have been sent.
-    pub fn send(
-        self,
-        info: IdentifyInfo,
-        observed_addr: &Multiaddr,
-    ) -> Box<Future<Item = (), Error = IoError> + Send + 'a> {
+    pub fn send(self, info: IdentifyInfo, observed_addr: &Multiaddr) -> IdentifySenderFuture<T> {
         debug!("Sending identify info to client");
         trace!("Sending: {:?}", info);
 
@@ -89,8 +78,42 @@ where
             .write_to_bytes()
             .expect("writing protobuf failed; should never happen");
 
-        let future = self.inner.send(bytes).map(|_| ());
-        Box::new(future) as Box<_>
+        IdentifySenderFuture {
+            inner: self.inner,
+            item: Some(bytes),
+        }
+    }
+}
+
+/// Future returned by `IdentifySender::send()`. Must be processed to the end in order to send
+/// the information to the remote.
+// Note: we don't use a `futures::sink::Sink` because it requires `T` to implement `Sink`, which
+//       means that we would require `T: AsyncWrite` in this struct definition. This requirement
+//       would then propagate everywhere.
+#[must_use = "futures do nothing unless polled"]
+pub struct IdentifySenderFuture<T> {
+    /// The Sink where to send the data.
+    inner: Framed<T, codec::UviBytes<Vec<u8>>>,
+    /// Bytes to send, or `None` if we've already sent them.
+    item: Option<Vec<u8>>,
+}
+
+impl<T> Future for IdentifySenderFuture<T>
+where T: AsyncWrite
+{
+    type Item = ();
+    type Error = IoError;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        if let Some(item) = self.item.take() {
+            if let AsyncSink::NotReady(item) = self.inner.start_send(item)? {
+                self.item = Some(item);
+                return Ok(Async::NotReady);
+            }
+        }
+
+        try_ready!(self.inner.poll_complete());
+        Ok(Async::Ready(()))
     }
 }
 
@@ -108,67 +131,89 @@ pub struct IdentifyInfo {
     pub listen_addrs: Vec<Multiaddr>,
     /// Protocols supported by the node, e.g. `/ipfs/ping/1.0.0`.
     pub protocols: Vec<String>,
+
+    _priv: ()
 }
 
-impl<C> ConnectionUpgrade<C> for IdentifyProtocolConfig
-where
-    C: AsyncRead + AsyncWrite + Send + 'static,
-{
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
-    type UpgradeIdentifier = ();
-    type Output = IdentifyOutput<C>;
-    type Future = Box<Future<Item = Self::Output, Error = IoError> + Send>;
+impl UpgradeInfo for IdentifyProtocolConfig {
+    type UpgradeId = ();
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
 
     #[inline]
     fn protocol_names(&self) -> Self::NamesIter {
         iter::once((Bytes::from("/ipfs/id/1.0.0"), ()))
     }
+}
 
-    fn upgrade(self, socket: C, _: (), ty: Endpoint) -> Self::Future {
-        trace!("Upgrading connection as {:?}", ty);
+impl<C> InboundUpgrade<C> for IdentifyProtocolConfig
+where
+    C: AsyncRead + AsyncWrite,
+{
+    type Output = IdentifySender<C>;
+    type Error = IoError;
+    type Future = FutureResult<Self::Output, IoError>;
 
+    fn upgrade_inbound(self, socket: C, _: ()) -> Self::Future {
+        trace!("Upgrading inbound connection");
         let socket = Framed::new(socket, codec::UviBytes::default());
+        let sender = IdentifySender { inner: socket };
+        future::ok(sender)
+    }
+}
 
-        match ty {
-            Endpoint::Dialer => {
-                let future = socket
-                    .into_future()
-                    .map(|(msg, _)| msg)
-                    .map_err(|(err, _)| err)
-                    .and_then(|msg| {
-                        debug!("Received identify message");
+impl<C> OutboundUpgrade<C> for IdentifyProtocolConfig
+where
+    C: AsyncRead + AsyncWrite,
+{
+    type Output = RemoteInfo;
+    type Error = IoError;
+    type Future = IdentifyOutboundFuture<C>;
 
-                        if let Some(msg) = msg {
-                            let (info, observed_addr) = match parse_proto_msg(msg) {
-                                Ok(v) => v,
-                                Err(err) => {
-                                    debug!("Failed to parse protobuf message; error = {:?}", err);
-                                    return Err(err.into());
-                                }
-                            };
-
-                            trace!("Remote observes us as {:?}", observed_addr);
-                            trace!("Information received: {:?}", info);
-
-                            Ok(IdentifyOutput::RemoteInfo {
-                                info,
-                                observed_addr: observed_addr.clone(),
-                            })
-                        } else {
-                            debug!("Identify protocol stream closed before receiving info");
-                            Err(IoErrorKind::InvalidData.into())
-                        }
-                    });
-
-                Box::new(future) as Box<_>
-            }
-
-            Endpoint::Listener => {
-                let sender = IdentifySender { inner: socket };
-                let future = future::ok(IdentifyOutput::Sender { sender });
-                Box::new(future) as Box<_>
-            }
+    fn upgrade_outbound(self, socket: C, _: ()) -> Self::Future {
+        IdentifyOutboundFuture {
+            inner: Framed::new(socket, codec::UviBytes::<BytesMut>::default()),
         }
+    }
+}
+
+/// Future returned by `OutboundUpgrade::upgrade_outbound`.
+pub struct IdentifyOutboundFuture<T> {
+    inner: Framed<T, codec::UviBytes<BytesMut>>,
+}
+
+impl<T> Future for IdentifyOutboundFuture<T>
+where T: AsyncRead
+{
+    type Item = RemoteInfo;
+    type Error = IoError;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let msg = match try_ready!(self.inner.poll()) {
+            Some(i) => i,
+            None => {
+                debug!("Identify protocol stream closed before receiving info");
+                return Err(IoErrorKind::InvalidData.into());
+            }
+        };
+
+        debug!("Received identify message");
+
+        let (info, observed_addr) = match parse_proto_msg(msg) {
+            Ok(v) => v,
+            Err(err) => {
+                debug!("Failed to parse protobuf message; error = {:?}", err);
+                return Err(err.into());
+            }
+        };
+
+        trace!("Remote observes us as {:?}", observed_addr);
+        trace!("Information received: {:?}", info);
+
+        Ok(Async::Ready(RemoteInfo {
+            info,
+            observed_addr: observed_addr.clone(),
+            _priv: ()
+        }))
     }
 }
 
@@ -199,6 +244,7 @@ fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> 
                 agent_version: msg.take_agentVersion(),
                 listen_addrs: listen_addrs,
                 protocols: msg.take_protocols().into_vec(),
+                _priv: ()
             };
 
             Ok((info, observed_addr))
@@ -216,10 +262,10 @@ mod tests {
     use self::tokio::runtime::current_thread::Runtime;
     use self::libp2p_tcp_transport::TcpConfig;
     use futures::{Future, Stream};
-    use libp2p_core::{PublicKey, Transport};
+    use libp2p_core::{PublicKey, Transport, upgrade::{apply_outbound, apply_inbound}};
     use std::sync::mpsc;
     use std::thread;
-    use {IdentifyInfo, IdentifyOutput, IdentifyProtocolConfig};
+    use {IdentifyInfo, RemoteInfo, IdentifyProtocolConfig};
 
     #[test]
     fn correct_transfer() {
@@ -229,19 +275,23 @@ mod tests {
         let (tx, rx) = mpsc::channel();
 
         let bg_thread = thread::spawn(move || {
-            let transport = TcpConfig::new().with_upgrade(IdentifyProtocolConfig);
+            let transport = TcpConfig::new();
 
             let (listener, addr) = transport
                 .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
                 .unwrap();
+
             tx.send(addr).unwrap();
 
             let future = listener
                 .into_future()
                 .map_err(|(err, _)| err)
                 .and_then(|(client, _)| client.unwrap().0)
-                .and_then(|identify| match identify {
-                    IdentifyOutput::Sender { sender, .. } => sender.send(
+                .and_then(|socket| {
+                    apply_inbound(socket, IdentifyProtocolConfig).map_err(|e| e.into_io_error())
+                })
+                .and_then(|sender| {
+                    sender.send(
                         IdentifyInfo {
                             public_key: PublicKey::Ed25519(vec![1, 2, 3, 4, 5, 7]),
                             protocol_version: "proto_version".to_owned(),
@@ -251,47 +301,34 @@ mod tests {
                                 "/ip6/::1/udp/1000".parse().unwrap(),
                             ],
                             protocols: vec!["proto1".to_string(), "proto2".to_string()],
+                            _priv: ()
                         },
                         &"/ip4/100.101.102.103/tcp/5000".parse().unwrap(),
-                    ),
-                    _ => panic!(),
+                    )
                 });
             let mut rt = Runtime::new().unwrap();
             let _ = rt.block_on(future).unwrap();
         });
 
-        let transport = TcpConfig::new().with_upgrade(IdentifyProtocolConfig);
+        let transport = TcpConfig::new();
 
-        let future = transport
-            .dial(rx.recv().unwrap())
+        let future = transport.dial(rx.recv().unwrap())
             .unwrap_or_else(|_| panic!())
-            .and_then(|identify| match identify {
-                IdentifyOutput::RemoteInfo {
-                    info,
-                    observed_addr,
-                } => {
-                    assert_eq!(
-                        observed_addr,
-                        "/ip4/100.101.102.103/tcp/5000".parse().unwrap()
-                    );
-                    assert_eq!(info.public_key, PublicKey::Ed25519(vec![1, 2, 3, 4, 5, 7]));
-                    assert_eq!(info.protocol_version, "proto_version");
-                    assert_eq!(info.agent_version, "agent_version");
-                    assert_eq!(
-                        info.listen_addrs,
-                        &[
-                            "/ip4/80.81.82.83/tcp/500".parse().unwrap(),
-                            "/ip6/::1/udp/1000".parse().unwrap()
-                        ]
-                    );
-                    assert_eq!(
-                        info.protocols,
-                        &["proto1".to_string(), "proto2".to_string()]
-                    );
-                    Ok(())
-                }
-                _ => panic!(),
+            .and_then(|socket| {
+                apply_outbound(socket, IdentifyProtocolConfig).map_err(|e| e.into_io_error())
+            })
+            .and_then(|RemoteInfo { info, observed_addr, .. }| {
+                assert_eq!(observed_addr, "/ip4/100.101.102.103/tcp/5000".parse().unwrap());
+                assert_eq!(info.public_key, PublicKey::Ed25519(vec![1, 2, 3, 4, 5, 7]));
+                assert_eq!(info.protocol_version, "proto_version");
+                assert_eq!(info.agent_version, "agent_version");
+                assert_eq!(info.listen_addrs,
+                    &["/ip4/80.81.82.83/tcp/500".parse().unwrap(),
+                      "/ip6/::1/udp/1000".parse().unwrap()]);
+                assert_eq!(info.protocols, &["proto1".to_string(), "proto2".to_string()]);
+                Ok(())
             });
+
         let mut rt = Runtime::new().unwrap();
         let _ = rt.block_on(future).unwrap();
         bg_thread.join().unwrap();

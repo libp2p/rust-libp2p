@@ -321,11 +321,8 @@ mod tests {
     use super::*;
     use tokio::runtime::current_thread;
     use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
-    use tests::dummy_handler::{Handler, HandlerState, InEvent, OutEvent};
+    use tests::dummy_handler::{Handler, HandlerState, InEvent, OutEvent, TestHandledNode};
     use std::marker::PhantomData;
-
-    // Concrete `HandledNode`
-    type TestHandledNode = HandledNode<DummyMuxer, Handler>;
 
     struct TestBuilder {
         muxer: DummyMuxer,

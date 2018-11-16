@@ -67,10 +67,10 @@
 
 extern crate bytes;
 extern crate fnv;
+#[macro_use]
 extern crate futures;
 extern crate libp2p_peerstore;
 extern crate libp2p_core;
-#[macro_use]
 extern crate log;
 extern crate multiaddr;
 extern crate parking_lot;
@@ -87,8 +87,8 @@ pub use self::listen_handler::IdentifyListenHandler;
 pub use self::listen_layer::IdentifyListen;
 pub use self::periodic_id_handler::{PeriodicIdentification, PeriodicIdentificationEvent};
 pub use self::periodic_id_layer::{PeriodicIdentifyBehaviour, PeriodicIdentifyBehaviourEvent};
-pub use self::protocol::{IdentifyInfo, IdentifyOutput};
-pub use self::protocol::{IdentifyProtocolConfig, IdentifySender};
+pub use self::protocol::{IdentifyInfo, RemoteInfo};
+pub use self::protocol::{IdentifyProtocolConfig, IdentifySender, IdentifySenderFuture};
 
 mod id_transport;
 mod listen_handler;

@@ -21,8 +21,11 @@
 //! Contains the `IdentifyTransport` type.
 
 use futures::prelude::*;
-use libp2p_core::{Endpoint, Multiaddr, PeerId, PublicKey, Transport, muxing, upgrade::apply};
-use protocol::{IdentifyOutput, IdentifyProtocolConfig};
+use libp2p_core::{
+    Multiaddr, PeerId, PublicKey, muxing, Transport,
+    upgrade::{self, OutboundUpgradeApply, UpgradeError}
+};
+use protocol::{RemoteInfo, IdentifyProtocolConfig};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::mem;
 use std::sync::Arc;
@@ -71,26 +74,7 @@ where
 
     #[inline]
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        let (listener, new_addr) = match self.transport.listen_on(addr) {
-            Ok((l, a)) => (l, a),
-            Err((inner, addr)) => {
-                let id = IdentifyTransport {
-                    transport: inner,
-                };
-                return Err((id, addr));
-            }
-        };
-
-        let listener = listener
-            .map(move |(upgrade, remote_addr)| {
-                let upgr = upgrade
-                    .and_then(move |muxer| {
-                        IdRetriever::new(muxer, IdentifyProtocolConfig, Endpoint::Listener)
-                    });
-                (Box::new(upgr) as Box<Future<Item = _, Error = _> + Send>, remote_addr)
-            });
-
-        Ok((Box::new(listener) as Box<_>, new_addr))
+        Err((self, addr))
     }
 
     #[inline]
@@ -107,7 +91,7 @@ where
         };
 
         let dial = dial.and_then(move |muxer| {
-            IdRetriever::new(muxer, IdentifyProtocolConfig, Endpoint::Dialer)
+            IdRetriever::new(muxer, IdentifyProtocolConfig).map_err(|e| e.into_io_error())
         });
 
         Ok(Box::new(dial) as Box<_>)
@@ -126,9 +110,7 @@ where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
       TMuxer::Substream: Send,
 {
     /// Internal state.
-    state: IdRetrieverState<TMuxer>,
-    /// Whether we're dialing or listening.
-    endpoint: Endpoint,
+    state: IdRetrieverState<TMuxer>
 }
 
 enum IdRetrieverState<TMuxer>
@@ -138,7 +120,7 @@ where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
     /// We are in the process of opening a substream with the remote.
     OpeningSubstream(Arc<TMuxer>, muxing::OutboundSubstreamRefWrapFuture<Arc<TMuxer>>, IdentifyProtocolConfig),
     /// We opened the substream and are currently negotiating the identify protocol.
-    NegotiatingIdentify(Arc<TMuxer>, apply::UpgradeApplyFuture<muxing::SubstreamRef<Arc<TMuxer>>, IdentifyProtocolConfig>),
+    NegotiatingIdentify(Arc<TMuxer>, OutboundUpgradeApply<muxing::SubstreamRef<Arc<TMuxer>>, IdentifyProtocolConfig>),
     /// We retreived the remote's public key and are ready to yield it when polled again.
     Finishing(Arc<TMuxer>, PublicKey),
     /// Something bad happend, or the `Future` is finished, and shouldn't be polled again.
@@ -150,13 +132,12 @@ where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
       TMuxer::Substream: Send,
 {
     /// Creates a new `IdRetriever` ready to be polled.
-    fn new(muxer: TMuxer, config: IdentifyProtocolConfig, endpoint: Endpoint) -> Self {
+    fn new(muxer: TMuxer, config: IdentifyProtocolConfig) -> Self {
         let muxer = Arc::new(muxer);
         let opening = muxing::outbound_from_ref_and_wrap(muxer.clone());
 
         IdRetriever {
-            state: IdRetrieverState::OpeningSubstream(muxer, opening, config),
-            endpoint,
+            state: IdRetrieverState::OpeningSubstream(muxer, opening, config)
         }
     }
 }
@@ -166,7 +147,7 @@ where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
       TMuxer::Substream: Send,
 {
     type Item = (PeerId, TMuxer);
-    type Error = IoError;
+    type Error = UpgradeError<IoError>;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         // This loop is here so that we can continue polling until we're ready.
@@ -177,27 +158,23 @@ where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
                 IdRetrieverState::OpeningSubstream(muxer, mut opening, config) => {
                     match opening.poll() {
                         Ok(Async::Ready(Some(substream))) => {
-                            let upgrade = apply::apply(substream, config, self.endpoint);
-                            self.state = IdRetrieverState::NegotiatingIdentify(muxer, upgrade);
+                            let upgrade = upgrade::apply_outbound(substream, config);
+                            self.state = IdRetrieverState::NegotiatingIdentify(muxer, upgrade)
                         },
                         Ok(Async::Ready(None)) => {
-                            return Err(IoError::new(IoErrorKind::Other, "remote refused our identify attempt"));
-                        },
+                            return Err(UpgradeError::Apply(IoError::new(IoErrorKind::Other, "remote refused our identify attempt")))
+                        }
                         Ok(Async::NotReady) => {
                             self.state = IdRetrieverState::OpeningSubstream(muxer, opening, config);
                             return Ok(Async::NotReady);
                         },
-                        Err(err) => return Err(err),
+                        Err(err) => return Err(UpgradeError::Apply(err))
                     }
                 },
                 IdRetrieverState::NegotiatingIdentify(muxer, mut nego) => {
                     match nego.poll() {
-                        Ok(Async::Ready(IdentifyOutput::RemoteInfo { info, .. })) => {
+                        Ok(Async::Ready(RemoteInfo { info, .. })) => {
                             self.state = IdRetrieverState::Finishing(muxer, info.public_key);
-                        },
-                        Ok(Async::Ready(IdentifyOutput::Sender { .. })) => {
-                            unreachable!("IdentifyOutput::Sender can never be the output from \
-                                          the dialing side");
                         },
                         Ok(Async::NotReady) => {
                             self.state = IdRetrieverState::NegotiatingIdentify(muxer, nego);

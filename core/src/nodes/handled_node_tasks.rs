@@ -18,18 +18,25 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::{
+    PeerId,
+    muxing::StreamMuxer,
+    nodes::{
+        handled_node::{HandledNode, NodeHandler},
+        node::Substream
+    }
+};
 use fnv::FnvHashMap;
 use futures::{prelude::*, stream, sync::mpsc};
-use muxing::StreamMuxer;
-use nodes::node::Substream;
-use nodes::handled_node::{HandledNode, NodeHandler};
 use smallvec::SmallVec;
-use std::collections::hash_map::{Entry, OccupiedEntry};
-use std::io::Error as IoError;
-use std::{fmt, mem};
+use std::{
+    collections::hash_map::{Entry, OccupiedEntry},
+    fmt,
+    io::{self, Error as IoError},
+    mem
+};
 use tokio_executor;
 use void::Void;
-use PeerId;
 
 // TODO: make generic over PeerId
 
@@ -135,10 +142,10 @@ impl<TInEvent, TOutEvent, THandler> HandledNodesTasks<TInEvent, TOutEvent, THand
     ///
     /// This method spawns a task dedicated to resolving this future and processing the node's
     /// events.
-    pub fn add_reach_attempt<TFut, TMuxer>(&mut self, future: TFut, handler: THandler)
-        -> TaskId
+    pub fn add_reach_attempt<TFut, TMuxer>(&mut self, future: TFut, handler: THandler) -> TaskId
     where
-        TFut: Future<Item = (PeerId, TMuxer), Error = IoError> + Send + 'static,
+        TFut: Future<Item = (PeerId, TMuxer)> + Send + 'static,
+        TFut::Error: std::error::Error + Send + Sync + 'static,
         THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
@@ -349,7 +356,8 @@ impl<TFut, TMuxer, THandler, TInEvent, TOutEvent> Future for
     NodeTask<TFut, TMuxer, THandler, TInEvent, TOutEvent>
 where
     TMuxer: StreamMuxer,
-    TFut: Future<Item = (PeerId, TMuxer), Error = IoError>,
+    TFut: Future<Item = (PeerId, TMuxer)>,
+    TFut::Error: std::error::Error + Send + Sync + 'static,
     THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent>,
 {
     type Item = ();
@@ -388,7 +396,8 @@ where
                         },
                         Err(err) => {
                             // End the task
-                            let event = InToExtMessage::TaskClosed(Err(err), Some(handler));
+                            let ioerr = IoError::new(io::ErrorKind::Other, err);
+                            let event = InToExtMessage::TaskClosed(Err(ioerr), Some(handler));
                             let _ = self.events_tx.unbounded_send((event, self.id));
                             return Ok(Async::Ready(()));
                         }
@@ -464,6 +473,7 @@ mod tests {
     use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
     use tokio::runtime::Builder;
     use tokio::runtime::current_thread::Runtime;
+    use void::Void;
     use {PeerId, PublicKey};
 
     type TestNodeTask = NodeTask<
@@ -570,7 +580,7 @@ mod tests {
             let peer_id = PublicKey::Rsa((0 .. 2048).map(|_| -> u8 { random() }).collect()).into_peer_id();
             let mut task_ids = Vec::new();
             for _i in 0..self.task_count {
-                let fut = future::ok((peer_id.clone(), self.muxer.clone()));
+                let fut = future::ok::<_, Void>((peer_id.clone(), self.muxer.clone()));
                 task_ids.push(
                     handled_nodes.add_reach_attempt(fut, self.handler.clone())
                 );
@@ -719,7 +729,7 @@ mod tests {
         assert_eq!(handled_nodes.tasks().count(), 0);
         assert_eq!(handled_nodes.to_spawn.len(), 0);
 
-        handled_nodes.add_reach_attempt( future::empty(), Handler::default() );
+        handled_nodes.add_reach_attempt( future::empty::<_, Void>(), Handler::default() );
 
         assert_eq!(handled_nodes.tasks().count(), 1);
         assert_eq!(handled_nodes.to_spawn.len(), 1);

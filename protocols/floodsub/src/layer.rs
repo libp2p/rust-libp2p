@@ -21,9 +21,10 @@
 use cuckoofilter::CuckooFilter;
 use futures::prelude::*;
 use handler::FloodsubHandler;
-use libp2p_core::nodes::{ConnectedPoint, NetworkBehavior, NetworkBehaviorAction};
-use libp2p_core::{nodes::protocols_handler::ProtocolsHandler, PeerId};
+use libp2p_core::nodes::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction};
+use libp2p_core::{protocols_handler::ProtocolsHandler, PeerId};
 use protocol::{FloodsubMessage, FloodsubRpc, FloodsubSubscription, FloodsubSubscriptionAction};
+use rand;
 use smallvec::SmallVec;
 use std::{collections::VecDeque, iter, marker::PhantomData};
 use std::collections::hash_map::{DefaultHasher, HashMap};
@@ -34,7 +35,7 @@ use topic::{Topic, TopicHash};
 /// about them.
 pub struct FloodsubBehaviour<TSubstream> {
     /// Events that need to be yielded to the outside when polling.
-    events: VecDeque<NetworkBehaviorAction<FloodsubRpc, FloodsubMessage>>,
+    events: VecDeque<NetworkBehaviourAction<FloodsubRpc, FloodsubMessage>>,
 
     /// Peer id of the local node. Used for the source of the messages that we publish.
     local_peer_id: PeerId,
@@ -47,9 +48,6 @@ pub struct FloodsubBehaviour<TSubstream> {
     // List of topics we're subscribed to. Necessary to filter out messages that we receive
     // erroneously.
     subscribed_topics: SmallVec<[Topic; 16]>,
-
-    // Sequence number for the messages we send.
-    seq_no: usize,
 
     // We keep track of the messages we received (in the format `hash(source ID, seq_no)`) so that
     // we don't dispatch the same message twice if we receive it twice on the network.
@@ -67,7 +65,6 @@ impl<TSubstream> FloodsubBehaviour<TSubstream> {
             local_peer_id,
             connected_peers: HashMap::new(),
             subscribed_topics: SmallVec::new(),
-            seq_no: 0,
             received: CuckooFilter::new(),
             marker: PhantomData,
         }
@@ -84,7 +81,7 @@ impl<TSubstream> FloodsubBehaviour<TSubstream> {
         }
 
         for peer in self.connected_peers.keys() {
-            self.events.push_back(NetworkBehaviorAction::SendEvent {
+            self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer.clone(),
                 event: FloodsubRpc {
                     messages: Vec::new(),
@@ -115,7 +112,7 @@ impl<TSubstream> FloodsubBehaviour<TSubstream> {
         self.subscribed_topics.remove(pos);
 
         for peer in self.connected_peers.keys() {
-            self.events.push_back(NetworkBehaviorAction::SendEvent {
+            self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer.clone(),
                 event: FloodsubRpc {
                     messages: Vec::new(),
@@ -144,7 +141,10 @@ impl<TSubstream> FloodsubBehaviour<TSubstream> {
         let message = FloodsubMessage {
             source: self.local_peer_id.clone(),
             data: data.into(),
-            sequence_number: self.next_sequence_number(),
+            // If the sequence numbers are predictable, then an attacker could flood the network
+            // with packets with the predetermined sequence numbers and absorb our legitimate
+            // messages. We therefore use a random number.
+            sequence_number: rand::random::<[u8; 20]>().to_vec(),
             topics: topic.into_iter().map(|t| t.into().clone()).collect(),
         };
 
@@ -161,7 +161,7 @@ impl<TSubstream> FloodsubBehaviour<TSubstream> {
                 continue;
             }
 
-            self.events.push_back(NetworkBehaviorAction::SendEvent {
+            self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer_id.clone(),
                 event: FloodsubRpc {
                     subscriptions: Vec::new(),
@@ -170,18 +170,11 @@ impl<TSubstream> FloodsubBehaviour<TSubstream> {
             });
         }
     }
-
-    /// Builds a unique sequence number to put in a `FloodsubMessage`.
-    fn next_sequence_number(&mut self) -> Vec<u8> {
-        let data = self.seq_no.to_string();
-        self.seq_no += 1;
-        data.into()
-    }
 }
 
-impl<TSubstream> NetworkBehavior for FloodsubBehaviour<TSubstream>
+impl<TSubstream> NetworkBehaviour for FloodsubBehaviour<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite + Send + Sync + 'static,
+    TSubstream: AsyncRead + AsyncWrite,
 {
     type ProtocolsHandler = FloodsubHandler<TSubstream>;
     type OutEvent = FloodsubMessage;
@@ -193,7 +186,7 @@ where
     fn inject_connected(&mut self, id: PeerId, _: ConnectedPoint) {
         // We need to send our subscriptions to the newly-connected node.
         for topic in self.subscribed_topics.iter() {
-            self.events.push_back(NetworkBehaviorAction::SendEvent {
+            self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: id.clone(),
                 event: FloodsubRpc {
                     messages: Vec::new(),
@@ -249,7 +242,7 @@ where
 
             // Add the message to be dispatched to the user.
             if self.subscribed_topics.iter().any(|t| message.topics.iter().any(|u| t.hash() == u)) {
-                self.events.push_back(NetworkBehaviorAction::GenerateEvent(message.clone()));
+                self.events.push_back(NetworkBehaviourAction::GenerateEvent(message.clone()));
             }
 
             // Propagate the message to everyone else who is subscribed to any of the topics.
@@ -274,7 +267,7 @@ where
         }
 
         for (peer_id, rpc) in rpcs_to_dispatch {
-            self.events.push_back(NetworkBehaviorAction::SendEvent {
+            self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id,
                 event: rpc,
             });
@@ -284,7 +277,7 @@ where
     fn poll(
         &mut self,
     ) -> Async<
-        NetworkBehaviorAction<
+        NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
             Self::OutEvent,
         >,

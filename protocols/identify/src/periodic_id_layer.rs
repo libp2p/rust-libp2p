@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use libp2p_core::nodes::{ConnectedPoint, NetworkBehavior, NetworkBehaviorAction};
-use libp2p_core::{nodes::protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
+use libp2p_core::nodes::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction};
+use libp2p_core::{protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
 use std::{collections::VecDeque, marker::PhantomData};
 use tokio_io::{AsyncRead, AsyncWrite};
 use {IdentifyInfo, PeriodicIdentification, PeriodicIdentificationEvent};
@@ -44,9 +44,9 @@ impl<TSubstream> PeriodicIdentifyBehaviour<TSubstream> {
     }
 }
 
-impl<TSubstream> NetworkBehavior for PeriodicIdentifyBehaviour<TSubstream>
+impl<TSubstream> NetworkBehaviour for PeriodicIdentifyBehaviour<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite + Send + Sync + 'static,
+    TSubstream: AsyncRead + AsyncWrite,
 {
     type ProtocolsHandler = PeriodicIdentification<TSubstream>;
     type OutEvent = PeriodicIdentifyBehaviourEvent;
@@ -65,15 +65,12 @@ where
         event: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
     ) {
         match event {
-            PeriodicIdentificationEvent::Identified {
-                info,
-                observed_addr,
-            } => {
+            PeriodicIdentificationEvent::Identified(remote) => {
                 self.events
                     .push_back(PeriodicIdentifyBehaviourEvent::Identified {
                         peer_id: peer_id,
-                        info: info,
-                        observed_addr: observed_addr,
+                        info: remote.info,
+                        observed_addr: remote.observed_addr,
                     });
             }
             _ => (), // TODO: exhaustive pattern
@@ -83,13 +80,13 @@ where
     fn poll(
         &mut self,
     ) -> Async<
-        NetworkBehaviorAction<
+        NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
             Self::OutEvent,
         >,
     > {
         if let Some(event) = self.events.pop_front() {
-            return Async::Ready(NetworkBehaviorAction::GenerateEvent(event));
+            return Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
         }
 
         Async::NotReady
