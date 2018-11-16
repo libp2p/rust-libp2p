@@ -50,7 +50,7 @@ impl<TSubstream> Default for PingListenBehaviour<TSubstream> {
 
 impl<TSubstream> NetworkBehavior for PingListenBehaviour<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite + Send + Sync + 'static,
+    TSubstream: AsyncRead + AsyncWrite,
 {
     type ProtocolsHandler = PingListenHandler<TSubstream>;
     type OutEvent = Void;
