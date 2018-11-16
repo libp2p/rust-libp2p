@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::{Bytes, BytesMut};
-use futures::{future::{self, FutureResult}, Future, Sink, Stream};
+use futures::{future::{self, FutureResult}, Async, AsyncSink, Future, Poll, Sink, Stream};
 use libp2p_core::{
     Multiaddr, PublicKey,
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
@@ -54,15 +54,10 @@ pub struct IdentifySender<T> {
     inner: Framed<T, codec::UviBytes<Vec<u8>>>,
 }
 
-impl<'a, T> IdentifySender<T>
-where
-    T: AsyncWrite + Send + 'a,
-{
+impl<T> IdentifySender<T> where T: AsyncWrite {
     /// Sends back information to the client. Returns a future that is signalled whenever the
     /// info have been sent.
-    pub fn send(self, info: IdentifyInfo, observed_addr: &Multiaddr)
-        -> Box<Future<Item = (), Error = IoError> + Send + 'a>
-    {
+    pub fn send(self, info: IdentifyInfo, observed_addr: &Multiaddr) -> IdentifySenderFuture<T> {
         debug!("Sending identify info to client");
         trace!("Sending: {:?}", info);
 
@@ -83,8 +78,42 @@ where
             .write_to_bytes()
             .expect("writing protobuf failed; should never happen");
 
-        let future = self.inner.send(bytes).map(|_| ());
-        Box::new(future) as Box<_>
+        IdentifySenderFuture {
+            inner: self.inner,
+            item: Some(bytes),
+        }
+    }
+}
+
+/// Future returned by `IdentifySender::send()`. Must be processed to the end in order to send
+/// the information to the remote.
+// Note: we don't use a `futures::sink::Sink` because it requires `T` to implement `Sink`, which
+//       means that we would require `T: AsyncWrite` in this struct definition. This requirement
+//       would then propagate everywhere.
+#[must_use = "futures do nothing unless polled"]
+pub struct IdentifySenderFuture<T> {
+    /// The Sink where to send the data.
+    inner: Framed<T, codec::UviBytes<Vec<u8>>>,
+    /// Bytes to send, or `None` if we've already sent them.
+    item: Option<Vec<u8>>,
+}
+
+impl<T> Future for IdentifySenderFuture<T>
+where T: AsyncWrite
+{
+    type Item = ();
+    type Error = IoError;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        if let Some(item) = self.item.take() {
+            if let AsyncSink::NotReady(item) = self.inner.start_send(item)? {
+                self.item = Some(item);
+                return Ok(Async::NotReady);
+            }
+        }
+
+        try_ready!(self.inner.poll_complete());
+        Ok(Async::Ready(()))
     }
 }
 
@@ -118,7 +147,7 @@ impl UpgradeInfo for IdentifyProtocolConfig {
 
 impl<C> InboundUpgrade<C> for IdentifyProtocolConfig
 where
-    C: AsyncRead + AsyncWrite + Send + 'static,
+    C: AsyncRead + AsyncWrite,
 {
     type Output = IdentifySender<C>;
     type Error = IoError;
@@ -134,41 +163,57 @@ where
 
 impl<C> OutboundUpgrade<C> for IdentifyProtocolConfig
 where
-    C: AsyncRead + AsyncWrite + Send + 'static,
+    C: AsyncRead + AsyncWrite,
 {
     type Output = RemoteInfo;
     type Error = IoError;
-    type Future = Box<dyn Future<Item=Self::Output, Error=IoError> + Send>;
+    type Future = IdentifyOutboundFuture<C>;
 
     fn upgrade_outbound(self, socket: C, _: ()) -> Self::Future {
-        let socket = Framed::new(socket, codec::UviBytes::<BytesMut>::default());
-        let future = socket
-            .into_future()
-            .map(|(msg, _)| msg)
-            .map_err(|(err, _)| err)
-            .and_then(|msg| {
-                debug!("Received identify message");
-                if let Some(msg) = msg {
-                    let (info, observed_addr) = match parse_proto_msg(msg) {
-                        Ok(v) => v,
-                        Err(err) => {
-                            debug!("Failed to parse protobuf message; error = {:?}", err);
-                            return Err(err.into());
-                        }
-                    };
-                    trace!("Remote observes us as {:?}", observed_addr);
-                    trace!("Information received: {:?}", info);
-                    Ok(RemoteInfo {
-                        info,
-                        observed_addr: observed_addr.clone(),
-                        _priv: ()
-                    })
-                } else {
-                    debug!("Identify protocol stream closed before receiving info");
-                    Err(IoErrorKind::InvalidData.into())
-                }
-            });
-        Box::new(future) as Box<_>
+        IdentifyOutboundFuture {
+            inner: Framed::new(socket, codec::UviBytes::<BytesMut>::default()),
+        }
+    }
+}
+
+/// Future returned by `OutboundUpgrade::upgrade_outbound`.
+pub struct IdentifyOutboundFuture<T> {
+    inner: Framed<T, codec::UviBytes<BytesMut>>,
+}
+
+impl<T> Future for IdentifyOutboundFuture<T>
+where T: AsyncRead
+{
+    type Item = RemoteInfo;
+    type Error = IoError;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let msg = match try_ready!(self.inner.poll()) {
+            Some(i) => i,
+            None => {
+                debug!("Identify protocol stream closed before receiving info");
+                return Err(IoErrorKind::InvalidData.into());
+            }
+        };
+
+        debug!("Received identify message");
+
+        let (info, observed_addr) = match parse_proto_msg(msg) {
+            Ok(v) => v,
+            Err(err) => {
+                debug!("Failed to parse protobuf message; error = {:?}", err);
+                return Err(err.into());
+            }
+        };
+
+        trace!("Remote observes us as {:?}", observed_addr);
+        trace!("Information received: {:?}", info);
+
+        Ok(Async::Ready(RemoteInfo {
+            info,
+            observed_addr: observed_addr.clone(),
+            _priv: ()
+        }))
     }
 }
 
