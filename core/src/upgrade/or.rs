@@ -22,10 +22,17 @@ use bytes::Bytes;
 use futures::future::Either;
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 
+/// Upgrade that combines two upgrades into one. Supports all the protocols supported by either
+/// sub-upgrade.
+///
+/// The protocols supported by the first element have a higher priority.
 #[derive(Debug, Clone)]
 pub struct OrUpgrade<A, B>(A, B);
 
 impl<A, B> OrUpgrade<A, B> {
+    /// Combines two upgrades into an `OrUpgrade`.
+    ///
+    /// The protocols supported by the first element have a higher priority.
     pub fn new(a: A, b: B) -> Self {
         OrUpgrade(a, b)
     }
@@ -78,6 +85,7 @@ where
     }
 }
 
+/// Iterator that combines the protocol names of twp upgrades.
 #[derive(Debug, Clone)]
 pub struct NamesIterChain<A, B>(A, B);
 

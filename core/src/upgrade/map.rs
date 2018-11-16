@@ -21,6 +21,7 @@
 use futures::prelude::*;
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 
+/// Wraps around an upgrade and applies a closure to the output.
 #[derive(Debug, Clone)]
 pub struct MapUpgrade<U, F> { upgrade: U, fun: F }
 
@@ -76,6 +77,7 @@ where
     }
 }
 
+/// Wraps around an upgrade and applies a closure to the error.
 #[derive(Debug, Clone)]
 pub struct MapUpgradeErr<U, F> { upgrade: U, fun: F }
 
