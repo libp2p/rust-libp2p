@@ -1,0 +1,12 @@
+[package]
+name = "libp2p-plaintext"
+version = "0.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
+
+[dependencies]
+bytes = "0.4"
+futures = "0.1"
+libp2p-core = { path = "../../core" }
+void = "1"
+

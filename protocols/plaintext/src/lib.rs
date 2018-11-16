@@ -1,4 +1,4 @@
-// Copyright 2017 Parity Technologies (UK) Ltd.
+// Copyright 2018 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,36 +18,46 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+extern crate bytes;
+extern crate futures;
+extern crate libp2p_core;
+extern crate void;
+
 use bytes::Bytes;
 use futures::future::{self, FutureResult};
-use std::{iter, io::Error as IoError};
-use tokio_io::{AsyncRead, AsyncWrite};
-use upgrade::{ConnectionUpgrade, Endpoint};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use std::iter;
+use void::Void;
 
-/// Implementation of the `ConnectionUpgrade` that negotiates the `/plaintext/1.0.0` protocol and
-/// simply passes communications through without doing anything more.
-///
-/// > **Note**: Generally used as an alternative to `secio` if a security layer is not desirable.
-// TODO: move to a separate crate?
 #[derive(Debug, Copy, Clone)]
 pub struct PlainTextConfig;
 
-impl<C> ConnectionUpgrade<C> for PlainTextConfig
-where
-    C: AsyncRead + AsyncWrite,
-{
-    type Output = C;
-    type Future = FutureResult<C, IoError>;
-    type UpgradeIdentifier = ();
-    type NamesIter = iter::Once<(Bytes, ())>;
+impl UpgradeInfo for PlainTextConfig {
+    type UpgradeId = ();
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
 
-    #[inline]
-    fn upgrade(self, i: C, _: (), _: Endpoint) -> Self::Future {
-        future::ok(i)
-    }
-
-    #[inline]
     fn protocol_names(&self) -> Self::NamesIter {
         iter::once((Bytes::from("/plaintext/1.0.0"), ()))
     }
 }
+
+impl<C> InboundUpgrade<C> for PlainTextConfig {
+    type Output = C;
+    type Error = Void;
+    type Future = FutureResult<C, Self::Error>;
+
+    fn upgrade_inbound(self, i: C, _: Self::UpgradeId) -> Self::Future {
+        future::ok(i)
+    }
+}
+
+impl<C> OutboundUpgrade<C> for PlainTextConfig {
+    type Output = C;
+    type Error = Void;
+    type Future = FutureResult<C, Self::Error>;
+
+    fn upgrade_outbound(self, i: C, _: Self::UpgradeId) -> Self::Future {
+        future::ok(i)
+    }
+}
+
