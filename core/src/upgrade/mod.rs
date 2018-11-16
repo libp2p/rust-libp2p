@@ -28,9 +28,9 @@
 //! collection of one or more possible protocols for respectively an ingoing or outgoing
 //! connection or substream.
 //!
-//! > **Note**: Multiple versions of the same protocol are handled the same way as multiple
-//! >           different protocols are. For example, `/foo/1.0.0` and `/foo/1.1.0` are treated as
-//! >           if they were totally unrelated.
+//! > **Note**: Multiple versions of the same protocol are treated as different protocols.
+//! >           For example, `/foo/1.0.0` and `/foo/1.1.0` are totally unrelated as far as
+//! >           upgrading is concerned.
 //!
 //! # Upgrade process
 //!
@@ -40,8 +40,8 @@
 //!   which protocols are supported by the trait implementation. The `multistream-select` protocol
 //!   is used in order to agree on which protocol to use amongst the ones supported.
 //!
-//! - A handshake. After a successful negotiation, the `InboundUpgrade::upgrade` or
-//!   `OutboundUpgrade::upgrade` method is called. This method will return a `Future` that
+//! - A handshake. After a successful negotiation, the `InboundUpgrade::upgrade_inbound` or
+//!   `OutboundUpgrade::upgrade_outbound` method is called. This method will return a `Future` that
 //!   performs a handshake. This handshake is considered mandatory, however in practice it is
 //!   possible for the trait implementation to return a dummy `Future` that doesn't perform any
 //!   action and immediately succeeds.
