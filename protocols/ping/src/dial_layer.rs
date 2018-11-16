@@ -50,7 +50,7 @@ impl<TSubstream> Default for PeriodicPingBehaviour<TSubstream> {
 
 impl<TSubstream> NetworkBehavior for PeriodicPingBehaviour<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite + Send + Sync + 'static,
+    TSubstream: AsyncRead + AsyncWrite,
 {
     type ProtocolsHandler = PeriodicPingHandler<TSubstream>;
     type OutEvent = Void;
