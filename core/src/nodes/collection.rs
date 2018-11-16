@@ -483,6 +483,7 @@ mod tests {
     use nodes::NodeHandlerEvent;
     use std::sync::Arc;
     use parking_lot::Mutex;
+    use void::Void;
 
     type TestCollectionStream = CollectionStream<InEvent, OutEvent, Handler>;
 
@@ -506,7 +507,7 @@ mod tests {
         assert!(cs.peer_mut(&peer_id).is_none());
 
         let handler = Handler::default();
-        let fut = future::ok((peer_id.clone(), DummyMuxer::new()));
+        let fut = future::ok::<_, Void>((peer_id.clone(), DummyMuxer::new()));
         cs.add_reach_attempt(fut, handler);
         assert!(cs.peer_mut(&peer_id).is_none()); // task is pending
     }
@@ -520,7 +521,7 @@ mod tests {
         muxer.set_inbound_connection_state(DummyConnectionState::Pending);
         muxer.set_outbound_connection_state(DummyConnectionState::Opened);
 
-        let fut = future::ok((peer_id, muxer));
+        let fut = future::ok::<_, Void>((peer_id, muxer));
         cs.add_reach_attempt(fut, Handler::default());
         let mut rt = Runtime::new().unwrap();
         let mut poll_count = 0;
@@ -544,7 +545,7 @@ mod tests {
     fn accepting_a_node_yields_new_entry() {
         let mut cs = TestCollectionStream::new();
         let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
-        let fut = future::ok((peer_id.clone(), DummyMuxer::new()));
+        let fut = future::ok::<_, Void>((peer_id.clone(), DummyMuxer::new()));
         cs.add_reach_attempt(fut, Handler::default());
 
         let mut rt = Runtime::new().unwrap();
@@ -596,7 +597,7 @@ mod tests {
         muxer.set_inbound_connection_state(DummyConnectionState::Pending);
         muxer.set_outbound_connection_state(DummyConnectionState::Opened);
 
-        let fut = future::ok((task_peer_id.clone(), muxer));
+        let fut = future::ok::<_, Void>((task_peer_id.clone(), muxer));
         cs.lock().add_reach_attempt(fut, handler);
 
         let mut rt = Builder::new().core_threads(1).build().unwrap();
@@ -684,7 +685,7 @@ mod tests {
         let cs = Arc::new(Mutex::new(TestCollectionStream::new()));
         let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
         let muxer = DummyMuxer::new();
-        let task_inner_fut = future::ok((peer_id.clone(), muxer));
+        let task_inner_fut = future::ok::<_, Void>((peer_id.clone(), muxer));
         let mut handler = Handler::default();
         handler.next_states = vec![HandlerState::Err]; // triggered when sending a NextState event
 
@@ -730,7 +731,7 @@ mod tests {
         let cs = Arc::new(Mutex::new(TestCollectionStream::new()));
         let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
         let muxer = DummyMuxer::new();
-        let task_inner_fut = future::ok((peer_id.clone(), muxer));
+        let task_inner_fut = future::ok::<_, Void>((peer_id.clone(), muxer));
         let mut handler = Handler::default();
         handler.next_states = vec![HandlerState::Ready(None)]; // triggered when sending a NextState event
 
@@ -776,7 +777,7 @@ mod tests {
     #[test]
     fn interrupting_a_pending_connection_attempt_is_ok() {
         let mut cs = TestCollectionStream::new();
-        let fut = future::empty();
+        let fut = future::empty::<_, Void>();
         let reach_id = cs.add_reach_attempt(fut, Handler::default());
         let interrupt = cs.interrupt(reach_id);
         assert!(interrupt.is_ok());
@@ -785,7 +786,7 @@ mod tests {
     #[test]
     fn interrupting_a_connection_attempt_twice_is_err() {
         let mut cs = TestCollectionStream::new();
-        let fut = future::empty();
+        let fut = future::empty::<_, Void>();
         let reach_id = cs.add_reach_attempt(fut, Handler::default());
         assert!(cs.interrupt(reach_id).is_ok());
         assert!(cs.interrupt(reach_id).is_err());
@@ -796,7 +797,7 @@ mod tests {
         let cs = Arc::new(Mutex::new(TestCollectionStream::new()));
         let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
         let muxer = DummyMuxer::new();
-        let task_inner_fut = future::ok((peer_id.clone(), muxer));
+        let task_inner_fut = future::ok::<_, Void>((peer_id.clone(), muxer));
         let handler = Handler::default();
 
         let reach_id = cs.lock().add_reach_attempt(task_inner_fut, handler);
