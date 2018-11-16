@@ -40,8 +40,8 @@ pub fn hello_macro_derive(input: TokenStream) -> TokenStream {
 fn build(ast: &DeriveInput) -> TokenStream {
     match ast.data {
         Data::Struct(ref s) => build_struct(ast, s),
-        Data::Enum(_) => unimplemented!("Deriving NetworkBehavior is not implemented for enums"),
-        Data::Union(_) => unimplemented!("Deriving NetworkBehavior is not implemented for unions"),
+        Data::Enum(_) => unimplemented!("Deriving NetworkBehaviour is not implemented for enums"),
+        Data::Union(_) => unimplemented!("Deriving NetworkBehaviour is not implemented for unions"),
     }
 }
 
@@ -49,9 +49,9 @@ fn build(ast: &DeriveInput) -> TokenStream {
 fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let name = &ast.ident;
     let (_, ty_generics, where_clause) = ast.generics.split_for_impl();
-    let trait_to_impl = quote!{::libp2p::core::nodes::swarm::NetworkBehavior};
+    let trait_to_impl = quote!{::libp2p::core::nodes::swarm::NetworkBehaviour};
     let either_ident = quote!{::libp2p::core::either::EitherOutput};
-    let network_behaviour_action = quote!{::libp2p::core::nodes::swarm::NetworkBehaviorAction};
+    let network_behaviour_action = quote!{::libp2p::core::nodes::swarm::NetworkBehaviourAction};
     let protocols_handler = quote!{::libp2p::core::protocols_handler::ProtocolsHandler};
     let proto_select_ident = quote!{::libp2p::core::protocols_handler::ProtocolsHandlerSelect};
     let peer_id = quote!{::libp2p::core::PeerId};
