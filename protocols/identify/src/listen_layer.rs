@@ -22,10 +22,10 @@ use futures::prelude::*;
 use libp2p_core::nodes::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction};
 use libp2p_core::{protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
 use smallvec::SmallVec;
-use std::{collections::HashMap, io, marker::PhantomData};
+use std::collections::HashMap;
 use tokio_io::{AsyncRead, AsyncWrite};
 use void::Void;
-use {IdentifyListenHandler, IdentifyInfo};
+use {IdentifyListenHandler, IdentifyInfo, IdentifySenderFuture};
 
 /// Network behaviour that automatically identifies nodes periodically, and returns information
 /// about them.
@@ -35,9 +35,7 @@ pub struct IdentifyListen<TSubstream> {
     /// For each peer we're connected to, the observed address to send back to it.
     observed_addresses: HashMap<PeerId, Multiaddr>,
     /// List of futures that send back information back to remotes.
-    futures: SmallVec<[Box<Future<Item = (), Error = io::Error> + Send>; 4]>,
-    /// Marker to pin the generics.
-    marker: PhantomData<TSubstream>,
+    futures: SmallVec<[IdentifySenderFuture<TSubstream>; 4]>,
 }
 
 impl<TSubstream> IdentifyListen<TSubstream> {
@@ -47,7 +45,6 @@ impl<TSubstream> IdentifyListen<TSubstream> {
             send_back_info: info,
             observed_addresses: HashMap::new(),
             futures: SmallVec::new(),
-            marker: PhantomData,
         }
     }
 
@@ -66,7 +63,7 @@ impl<TSubstream> IdentifyListen<TSubstream> {
 
 impl<TSubstream> NetworkBehaviour for IdentifyListen<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite + Send + Sync + 'static,
+    TSubstream: AsyncRead + AsyncWrite,
 {
     type ProtocolsHandler = IdentifyListenHandler<TSubstream>;
     type OutEvent = Void;

@@ -77,7 +77,7 @@ impl<TSubstream> PeriodicIdentification<TSubstream> {
 
 impl<TSubstream> ProtocolsHandler for PeriodicIdentification<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite + Send + Sync + 'static, // TODO: remove useless bounds
+    TSubstream: AsyncRead + AsyncWrite,
 {
     type InEvent = Void;
     type OutEvent = PeriodicIdentificationEvent;

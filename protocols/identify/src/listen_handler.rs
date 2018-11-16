@@ -55,7 +55,7 @@ impl<TSubstream> IdentifyListenHandler<TSubstream> {
 
 impl<TSubstream> ProtocolsHandler for IdentifyListenHandler<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite + Send + Sync + 'static, // TODO: remove useless bounds
+    TSubstream: AsyncRead + AsyncWrite,
 {
     type InEvent = Void;
     type OutEvent = IdentifySender<TSubstream>;
