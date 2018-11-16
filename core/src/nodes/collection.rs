@@ -482,14 +482,6 @@ mod tests {
     type TestCollectionStream = CollectionStream<InEvent, OutEvent, Handler>;
 
     #[test]
-    fn can_create_new() {
-        let cs = TestCollectionStream::new();
-        assert_matches!(cs.inner, HandledNodesTasks{..});
-        assert_matches!(cs.nodes, FnvHashMap{..});
-        assert_matches!(cs.tasks, FnvHashMap{..});
-    }
-
-    #[test]
     fn has_connection_is_false_before_a_connection_has_been_made() {
         let cs = TestCollectionStream::new();
         let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
@@ -786,25 +778,12 @@ mod tests {
     }
 
     #[test]
-    fn interrupting_a_pending_connection_with_invalid_reach_attempt_id_is_err() {
+    fn interrupting_a_connection_attempt_twice_is_err() {
         let mut cs = TestCollectionStream::new();
         let fut = future::empty();
-        let valid_reach_id = cs.add_reach_attempt(fut, Handler::default());
-
-        // Obtain a TaskId we can use to build a ReachAttemptId that is not in
-        // the list of tasks in the CollectionStream we're testing. Note that
-        // TaskIds with the same number are all considered equal, so TaskId(0)
-        // from one HandledNodesTask is == to TaskId(0) from another
-        // HandledNodesTask.
-        let invalid_reach_id = {
-            let mut hn = HandledNodesTasks::new();
-            hn.add_reach_attempt(future::empty(), Handler::default());
-            let task_id = hn.add_reach_attempt(future::empty(), Handler::default());
-            ReachAttemptId(task_id)
-        };
-
-        assert!(cs.interrupt(invalid_reach_id).is_err());
-        assert!(cs.interrupt(valid_reach_id).is_ok());
+        let reach_id = cs.add_reach_attempt(fut, Handler::default());
+        assert!(cs.interrupt(reach_id).is_ok());
+        assert!(cs.interrupt(reach_id).is_err());
     }
 
     #[test]
