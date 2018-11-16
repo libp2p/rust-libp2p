@@ -24,6 +24,8 @@ use futures::future::FutureResult;
 use std::iter;
 use void::{unreachable, Void};
 
+/// Dummy implementation of `UpgradeInfo`/`InboundUpgrade`/`OutboundUpgrade` that doesn't support
+/// any protocol.
 #[derive(Debug, Copy, Clone)]
 pub struct DeniedUpgrade;
 

@@ -25,6 +25,7 @@ use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
 use std::mem;
 use tokio_io::{AsyncRead, AsyncWrite};
 
+/// Tries to perform an upgrade on an inbound connection or substream.
 pub fn apply_inbound<C, U>(conn: C, up: U) -> InboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite,
@@ -38,6 +39,7 @@ where
     }
 }
 
+/// Tries to perform an upgrade on an outbound connection or substream.
 pub fn apply_outbound<C, U>(conn: C, up: U) -> OutboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite,
@@ -50,6 +52,7 @@ where
     }
 }
 
+/// Future returned by `apply_inbound`. Drives the upgrade process.
 pub struct InboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite,
@@ -120,6 +123,7 @@ where
     }
 }
 
+/// Future returned by `apply_outbound`. Drives the upgrade process.
 pub struct OutboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite,

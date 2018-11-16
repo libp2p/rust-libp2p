@@ -21,9 +21,12 @@
 use multistream_select::ProtocolChoiceError;
 use std::fmt;
 
+/// Error that can happen when upgrading a connection or substream to use a protocol.
 #[derive(Debug)]
 pub enum UpgradeError<E> {
+    /// Error during the negotiation process.
     Select(ProtocolChoiceError),
+    /// Error during the post-negotiation handshake.
     Apply(E),
     #[doc(hidden)]
     __Nonexhaustive
