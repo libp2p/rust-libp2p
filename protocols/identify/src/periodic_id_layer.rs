@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use libp2p_core::nodes::{ConnectedPoint, NetworkBehavior, NetworkBehaviorAction};
+use libp2p_core::nodes::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction};
 use libp2p_core::{protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
 use std::{collections::VecDeque, marker::PhantomData};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -44,7 +44,7 @@ impl<TSubstream> PeriodicIdentifyBehaviour<TSubstream> {
     }
 }
 
-impl<TSubstream> NetworkBehavior for PeriodicIdentifyBehaviour<TSubstream>
+impl<TSubstream> NetworkBehaviour for PeriodicIdentifyBehaviour<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite + Send + Sync + 'static,
 {
@@ -80,13 +80,13 @@ where
     fn poll(
         &mut self,
     ) -> Async<
-        NetworkBehaviorAction<
+        NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
             Self::OutEvent,
         >,
     > {
         if let Some(event) = self.events.pop_front() {
-            return Async::Ready(NetworkBehaviorAction::GenerateEvent(event));
+            return Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
         }
 
         Async::NotReady

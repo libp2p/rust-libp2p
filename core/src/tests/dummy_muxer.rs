@@ -47,7 +47,7 @@ struct DummyConnection {
     state: DummyConnectionState,
 }
 
-/// `DummyMuxer` implements `StreamMuxer` and methods to control its behavior when used in tests
+/// `DummyMuxer` implements `StreamMuxer` and methods to control its behaviour when used in tests
 #[derive(Debug, Clone)]
 pub struct DummyMuxer {
     in_connection: DummyConnection,

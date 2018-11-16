@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use libp2p_core::nodes::{ConnectedPoint, NetworkBehavior, NetworkBehaviorAction};
+use libp2p_core::nodes::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction};
 use libp2p_core::{protocols_handler::ProtocolsHandler, PeerId};
 use std::marker::PhantomData;
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -48,7 +48,7 @@ impl<TSubstream> Default for PingListenBehaviour<TSubstream> {
     }
 }
 
-impl<TSubstream> NetworkBehavior for PingListenBehaviour<TSubstream>
+impl<TSubstream> NetworkBehaviour for PingListenBehaviour<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
@@ -73,7 +73,7 @@ where
     fn poll(
         &mut self,
     ) -> Async<
-        NetworkBehaviorAction<
+        NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
             Self::OutEvent,
         >,
