@@ -25,6 +25,7 @@ extern crate fnv;
 extern crate futures;
 extern crate libp2p_core;
 extern crate protobuf;
+extern crate rand;
 extern crate smallvec;
 extern crate tokio_codec;
 extern crate tokio_io;

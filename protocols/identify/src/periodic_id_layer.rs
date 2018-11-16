@@ -20,7 +20,7 @@
 
 use futures::prelude::*;
 use libp2p_core::nodes::{ConnectedPoint, NetworkBehavior, NetworkBehaviorAction};
-use libp2p_core::{nodes::protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
+use libp2p_core::{protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
 use std::{collections::VecDeque, marker::PhantomData};
 use tokio_io::{AsyncRead, AsyncWrite};
 use {IdentifyInfo, PeriodicIdentification, PeriodicIdentificationEvent};
@@ -65,15 +65,12 @@ where
         event: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
     ) {
         match event {
-            PeriodicIdentificationEvent::Identified {
-                info,
-                observed_addr,
-            } => {
+            PeriodicIdentificationEvent::Identified(remote) => {
                 self.events
                     .push_back(PeriodicIdentifyBehaviourEvent::Identified {
                         peer_id: peer_id,
-                        info: info,
-                        observed_addr: observed_addr,
+                        info: remote.info,
+                        observed_addr: remote.observed_addr,
                     });
             }
             _ => (), // TODO: exhaustive pattern

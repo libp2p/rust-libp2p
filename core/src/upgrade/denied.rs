@@ -1,4 +1,4 @@
-// Copyright 2017 Parity Technologies (UK) Ltd.
+// Copyright 2017-2018 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -19,31 +19,40 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::Bytes;
-use futures::prelude::*;
-use std::{io, iter};
-use tokio_io::{AsyncRead, AsyncWrite};
-use upgrade::{ConnectionUpgrade, Endpoint};
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use futures::future::FutureResult;
+use std::iter;
+use void::{unreachable, Void};
 
-/// Implementation of `ConnectionUpgrade` that always fails to negotiate.
 #[derive(Debug, Copy, Clone)]
-pub struct DeniedConnectionUpgrade;
+pub struct DeniedUpgrade;
 
-impl<C> ConnectionUpgrade<C> for DeniedConnectionUpgrade
-where
-    C: AsyncRead + AsyncWrite,
-{
-    type NamesIter = iter::Empty<(Bytes, ())>;
-    type UpgradeIdentifier = (); // TODO: could use `!`
-    type Output = (); // TODO: could use `!`
-    type Future = Box<Future<Item = (), Error = io::Error> + Send + Sync>; // TODO: could use `!`
+impl UpgradeInfo for DeniedUpgrade {
+    type UpgradeId = Void;
+    type NamesIter = iter::Empty<(Bytes, Self::UpgradeId)>;
 
-    #[inline]
     fn protocol_names(&self) -> Self::NamesIter {
         iter::empty()
     }
+}
 
-    #[inline]
-    fn upgrade(self, _: C, _: Self::UpgradeIdentifier, _: Endpoint) -> Self::Future {
-        unreachable!("the denied connection upgrade always fails to negotiate")
+impl<C> InboundUpgrade<C> for DeniedUpgrade {
+    type Output = Void;
+    type Error = Void;
+    type Future = FutureResult<Self::Output, Self::Error>;
+
+    fn upgrade_inbound(self, _: C, id: Self::UpgradeId) -> Self::Future {
+        unreachable(id)
     }
 }
+
+impl<C> OutboundUpgrade<C> for DeniedUpgrade {
+    type Output = Void;
+    type Error = Void;
+    type Future = FutureResult<Self::Output, Self::Error>;
+
+    fn upgrade_outbound(self, _: C, id: Self::UpgradeId) -> Self::Future {
+        unreachable(id)
+    }
+}
+

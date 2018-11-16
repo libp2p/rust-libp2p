@@ -18,16 +18,18 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::protocol::{FloodsubCodec, FloodsubConfig, FloodsubRpc};
 use futures::prelude::*;
-use libp2p_core::nodes::{NodeHandlerEndpoint, ProtocolsHandler, ProtocolsHandlerEvent};
-use libp2p_core::ConnectionUpgrade;
-use protocol::{FloodsubCodec, FloodsubConfig, FloodsubRpc};
+use libp2p_core::{
+    ProtocolsHandler, ProtocolsHandlerEvent,
+    upgrade::{InboundUpgrade, OutboundUpgrade}
+};
 use smallvec::SmallVec;
 use std::{fmt, io};
 use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
 
-/// Protocol handler that handles communications with the remote for the fileshare protocol.
+/// Protocol handler that handles communication with the remote for the floodsub protocol.
 ///
 /// The handler will automatically open a substream with the remote for each request we make.
 ///
@@ -36,10 +38,10 @@ pub struct FloodsubHandler<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
-    /// Configuration for the Kademlia protocol.
+    /// Configuration for the floodsub protocol.
     config: FloodsubConfig,
 
-    /// If true, we are trying to shut down the existing Kademlia substream and should refuse any
+    /// If true, we are trying to shut down the existing floodsub substream and should refuse any
     /// incoming connection.
     shutting_down: bool,
 
@@ -60,7 +62,6 @@ where
     WaitingInput(Framed<TSubstream, FloodsubCodec>),
     /// Waiting to send a message to the remote.
     PendingSend(Framed<TSubstream, FloodsubCodec>, FloodsubRpc),
-    /// Waiting to send a message to the remote.
     /// Waiting to flush the substream so that the data arrives to the remote.
     PendingFlush(Framed<TSubstream, FloodsubCodec>),
     /// The substream is being closed.
@@ -71,13 +72,13 @@ impl<TSubstream> SubstreamState<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
-    /// Consumes this state and produces the substream, if relevant.
-    fn into_substream(self) -> Option<Framed<TSubstream, FloodsubCodec>> {
+    /// Consumes this state and produces the substream.
+    fn into_substream(self) -> Framed<TSubstream, FloodsubCodec> {
         match self {
-            SubstreamState::WaitingInput(substream) => Some(substream),
-            SubstreamState::PendingSend(substream, _) => Some(substream),
-            SubstreamState::PendingFlush(substream) => Some(substream),
-            SubstreamState::Closing(substream) => Some(substream),
+            SubstreamState::WaitingInput(substream) => substream,
+            SubstreamState::PendingSend(substream, _) => substream,
+            SubstreamState::PendingFlush(substream) => substream,
+            SubstreamState::Closing(substream) => substream,
         }
     }
 }
@@ -99,37 +100,44 @@ where
 
 impl<TSubstream> ProtocolsHandler for FloodsubHandler<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite + 'static,
+    TSubstream: AsyncRead + AsyncWrite,
 {
     type InEvent = FloodsubRpc;
     type OutEvent = FloodsubRpc;
     type Substream = TSubstream;
-    type Protocol = FloodsubConfig;
+    type InboundProtocol = FloodsubConfig;
+    type OutboundProtocol = FloodsubConfig;
     type OutboundOpenInfo = FloodsubRpc;
 
     #[inline]
-    fn listen_protocol(&self) -> Self::Protocol {
+    fn listen_protocol(&self) -> Self::InboundProtocol {
         self.config.clone()
     }
 
-    fn inject_fully_negotiated(
+    #[inline]
+    fn dialer_protocol(&self) -> Self::OutboundProtocol {
+        self.config.clone()
+    }
+
+    fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::Protocol as ConnectionUpgrade<TSubstream>>::Output,
-        endpoint: NodeHandlerEndpoint<Self::OutboundOpenInfo>,
+        protocol: <Self::InboundProtocol as InboundUpgrade<TSubstream>>::Output
     ) {
         if self.shutting_down {
-            return;
+            return ()
         }
+        self.substreams.push(SubstreamState::WaitingInput(protocol))
+    }
 
-        match endpoint {
-            NodeHandlerEndpoint::Dialer(message) => {
-                self.substreams
-                    .push(SubstreamState::PendingSend(protocol, message));
-            }
-            NodeHandlerEndpoint::Listener => {
-                self.substreams.push(SubstreamState::WaitingInput(protocol));
-            }
+    fn inject_fully_negotiated_outbound(
+        &mut self,
+        protocol: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output,
+        message: Self::OutboundOpenInfo
+    ) {
+        if self.shutting_down {
+            return ()
         }
+        self.substreams.push(SubstreamState::PendingSend(protocol, message))
     }
 
     #[inline]
@@ -148,16 +156,14 @@ where
         self.shutting_down = true;
         for n in (0..self.substreams.len()).rev() {
             let mut substream = self.substreams.swap_remove(n);
-            if let Some(substream) = substream.into_substream() {
-                self.substreams.push(SubstreamState::Closing(substream));
-            }
+            self.substreams.push(SubstreamState::Closing(substream.into_substream()));
         }
     }
 
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<ProtocolsHandlerEvent<Self::Protocol, Self::OutboundOpenInfo, Self::OutEvent>>,
+        Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>,
         io::Error,
     > {
         if !self.send_queue.is_empty() {
