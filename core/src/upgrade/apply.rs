@@ -25,6 +25,7 @@ use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
 use std::mem;
 use tokio_io::{AsyncRead, AsyncWrite};
 
+/// Applies an upgrade to the inbound and outbound direction of a connection or substream.
 pub fn apply<C, U>(conn: C, up: U, cp: ConnectedPoint)
     -> Either<InboundUpgradeApply<C, U>, OutboundUpgradeApply<C, U>>
 where
