@@ -57,22 +57,26 @@
 //!             need to use these methods.
 //!
 
+mod and_then;
 mod apply;
 mod denied;
 mod error;
 mod map;
 mod or;
+mod or_else;
 mod toggleable;
 
 use bytes::Bytes;
-use futures::future::Future;
+use futures::future::{Future, IntoFuture};
 
 pub use self::{
+    and_then::{InboundUpgradeAndThen, OutboundUpgradeAndThen},
     apply::{apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply},
     denied::DeniedUpgrade,
     error::UpgradeError,
     map::{MapInboundUpgrade, MapOutboundUpgrade, MapUpgradeErr},
     or::OrUpgrade,
+    or_else::{InboundUpgradeOrElse, OutboundUpgradeOrElse},
     toggleable::{toggleable, Toggleable}
 };
 
@@ -127,6 +131,26 @@ pub trait InboundUpgradeExt<C>: InboundUpgrade<C> {
         MapUpgradeErr::new(self, f)
     }
 
+    /// Create a future from the `Output` of this upgrade.
+    fn inbound_and_then<F, T>(self, f: F) -> InboundUpgradeAndThen<Self, F>
+    where
+        Self: Sized,
+        F: FnOnce(Self::Output) -> T,
+        T: IntoFuture<Error = Self::Error>
+    {
+        InboundUpgradeAndThen::new(self, f)
+    }
+
+    /// Create a future from the `Error` of this upgrade.
+    fn inbound_or_else<F, T>(self, f: F) -> InboundUpgradeOrElse<Self, F>
+    where
+        Self: Sized,
+        F: FnOnce(Self::Error) -> T,
+        T: IntoFuture<Item = Self::Output>
+    {
+        InboundUpgradeOrElse::new(self, f)
+    }
+
     /// Returns a new object that combines `Self` and another upgrade to support both at the same
     /// time.
     fn or_inbound<U>(self, upgrade: U) -> OrUpgrade<Self, U>
@@ -175,6 +199,26 @@ pub trait OutboundUpgradeExt<C>: OutboundUpgrade<C> {
         F: FnOnce(Self::Error) -> T
     {
         MapUpgradeErr::new(self, f)
+    }
+
+    /// Create a future from the `Output` of this upgrade.
+    fn outbound_and_then<F, T>(self, f: F) -> OutboundUpgradeAndThen<Self, F>
+    where
+        Self: Sized,
+        F: FnOnce(Self::Output) -> T,
+        T: IntoFuture<Error = Self::Error>
+    {
+        OutboundUpgradeAndThen::new(self, f)
+    }
+
+    /// Create a future from the `Error` of this upgrade.
+    fn outbound_or_else<F, T>(self, f: F) -> OutboundUpgradeOrElse<Self, F>
+    where
+        Self: Sized,
+        F: FnOnce(Self::Error) -> T,
+        T: IntoFuture<Item = Self::Output>
+    {
+        OutboundUpgradeOrElse::new(self, f)
     }
 
     /// Returns a new object that combines `Self` and another upgrade to support both at the same
