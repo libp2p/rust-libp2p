@@ -68,7 +68,7 @@ use bytes::Bytes;
 use futures::future::Future;
 
 pub use self::{
-    apply::{apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply},
+    apply::{apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply},
     denied::DeniedUpgrade,
     error::UpgradeError,
     map::{MapInboundUpgrade, MapOutboundUpgrade, MapUpgradeErr},
