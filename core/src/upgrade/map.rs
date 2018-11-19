@@ -60,10 +60,9 @@ where
     }
 }
 
-impl<C, U, F, T> OutboundUpgrade<C> for MapInboundUpgrade<U, F>
+impl<C, U, F> OutboundUpgrade<C> for MapInboundUpgrade<U, F>
 where
-    U: OutboundUpgrade<C>,
-    F: FnOnce(U::Output) -> T
+    U: OutboundUpgrade<C>
 {
     type Output = U::Output;
     type Error = U::Error;
@@ -96,10 +95,9 @@ where
     }
 }
 
-impl<C, U, F, T> InboundUpgrade<C> for MapOutboundUpgrade<U, F>
+impl<C, U, F> InboundUpgrade<C> for MapOutboundUpgrade<U, F>
 where
-    U: InboundUpgrade<C>,
-    F: FnOnce(U::Output) -> T
+    U: InboundUpgrade<C>
 {
     type Output = U::Output;
     type Error = U::Error;
@@ -129,15 +127,15 @@ where
 
 /// Wraps around an upgrade and applies a closure to the error.
 #[derive(Debug, Clone)]
-pub struct MapUpgradeErr<U, F> { upgrade: U, fun: F }
+pub struct MapInboundUpgradeErr<U, F> { upgrade: U, fun: F }
 
-impl<U, F> MapUpgradeErr<U, F> {
+impl<U, F> MapInboundUpgradeErr<U, F> {
     pub fn new(upgrade: U, fun: F) -> Self {
-        MapUpgradeErr { upgrade, fun }
+        MapInboundUpgradeErr { upgrade, fun }
     }
 }
 
-impl<U, F> UpgradeInfo for MapUpgradeErr<U, F>
+impl<U, F> UpgradeInfo for MapInboundUpgradeErr<U, F>
 where
     U: UpgradeInfo
 {
@@ -149,7 +147,7 @@ where
     }
 }
 
-impl<C, U, F, T> InboundUpgrade<C> for MapUpgradeErr<U, F>
+impl<C, U, F, T> InboundUpgrade<C> for MapInboundUpgradeErr<U, F>
 where
     U: InboundUpgrade<C>,
     F: FnOnce(U::Error) -> T
@@ -166,10 +164,45 @@ where
     }
 }
 
-impl<C, U, F, T> OutboundUpgrade<C> for MapUpgradeErr<U, F>
+impl<C, U, F> OutboundUpgrade<C> for MapInboundUpgradeErr<U, F>
+where
+    U: OutboundUpgrade<C>
+{
+    type Output = U::Output;
+    type Error = U::Error;
+    type Future = U::Future;
+
+    fn upgrade_outbound(self, sock: C, id: Self::UpgradeId) -> Self::Future {
+        self.upgrade.upgrade_outbound(sock, id)
+    }
+}
+
+/// Wraps around an upgrade and applies a closure to the error.
+#[derive(Debug, Clone)]
+pub struct MapOutboundUpgradeErr<U, F> { upgrade: U, fun: F }
+
+impl<U, F> MapOutboundUpgradeErr<U, F> {
+    pub fn new(upgrade: U, fun: F) -> Self {
+        MapOutboundUpgradeErr { upgrade, fun }
+    }
+}
+
+impl<U, F> UpgradeInfo for MapOutboundUpgradeErr<U, F>
+where
+    U: UpgradeInfo
+{
+    type UpgradeId = U::UpgradeId;
+    type NamesIter = U::NamesIter;
+
+    fn protocol_names(&self) -> Self::NamesIter {
+        self.upgrade.protocol_names()
+    }
+}
+
+impl<C, U, F, T> OutboundUpgrade<C> for MapOutboundUpgradeErr<U, F>
 where
     U: OutboundUpgrade<C>,
-    F: FnOnce(U::Error) -> T,
+    F: FnOnce(U::Error) -> T
 {
     type Output = U::Output;
     type Error = T;
@@ -180,6 +213,19 @@ where
             fut: self.upgrade.upgrade_outbound(sock, id),
             fun: Some(self.fun)
         }
+    }
+}
+
+impl<C, U, F> InboundUpgrade<C> for MapOutboundUpgradeErr<U, F>
+where
+    U: InboundUpgrade<C>
+{
+    type Output = U::Output;
+    type Error = U::Error;
+    type Future = U::Future;
+
+    fn upgrade_inbound(self, sock: C, id: Self::UpgradeId) -> Self::Future {
+        self.upgrade.upgrade_inbound(sock, id)
     }
 }
 
