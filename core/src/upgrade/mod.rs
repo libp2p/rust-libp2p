@@ -71,7 +71,7 @@ pub use self::{
     apply::{apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply},
     denied::DeniedUpgrade,
     error::UpgradeError,
-    map::{MapInboundUpgrade, MapOutboundUpgrade, MapUpgradeErr},
+    map::{MapInboundUpgrade, MapOutboundUpgrade, MapInboundUpgradeErr, MapOutboundUpgradeErr},
     or::OrUpgrade,
     toggleable::{toggleable, Toggleable}
 };
@@ -119,12 +119,12 @@ pub trait InboundUpgradeExt<C>: InboundUpgrade<C> {
     }
 
     /// Returns a new object that wraps around `Self` and applies a closure to the `Error`.
-    fn map_inbound_err<F, T>(self, f: F) -> MapUpgradeErr<Self, F>
+    fn map_inbound_err<F, T>(self, f: F) -> MapInboundUpgradeErr<Self, F>
     where
         Self: Sized,
         F: FnOnce(Self::Error) -> T
     {
-        MapUpgradeErr::new(self, f)
+        MapInboundUpgradeErr::new(self, f)
     }
 
     /// Returns a new object that combines `Self` and another upgrade to support both at the same
@@ -169,12 +169,12 @@ pub trait OutboundUpgradeExt<C>: OutboundUpgrade<C> {
     }
 
     /// Returns a new object that wraps around `Self` and applies a closure to the `Error`.
-    fn map_outbound_err<F, T>(self, f: F) -> MapUpgradeErr<Self, F>
+    fn map_outbound_err<F, T>(self, f: F) -> MapOutboundUpgradeErr<Self, F>
     where
         Self: Sized,
         F: FnOnce(Self::Error) -> T
     {
-        MapUpgradeErr::new(self, f)
+        MapOutboundUpgradeErr::new(self, f)
     }
 
     /// Returns a new object that combines `Self` and another upgrade to support both at the same
