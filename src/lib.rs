@@ -165,7 +165,7 @@ mod transport_ext;
 pub mod simple;
 
 pub use self::core::{
-    Transport, PeerId,
+    Transport, PeerId, Swarm,
     upgrade::{InboundUpgrade, InboundUpgradeExt, OutboundUpgrade, OutboundUpgradeExt}
 };
 pub use libp2p_core_derive::NetworkBehaviour;
