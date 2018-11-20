@@ -316,3 +316,29 @@ where
         }
     }
 }
+
+#[derive(Debug, Copy, Clone)]
+#[must_use = "futures do nothing unless polled"]
+pub enum EitherFuture2<A, B> { A(A), B(B) }
+
+impl<AFut, BFut, AItem, BItem, AError, BError> Future for EitherFuture2<AFut, BFut>
+where
+    AFut: Future<Item = AItem, Error = AError>,
+    BFut: Future<Item = BItem, Error = BError>
+{
+    type Item = EitherOutput<AItem, BItem>;
+    type Error = EitherError<AError, BError>;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        match self {
+            EitherFuture2::A(a) => a.poll()
+                .map(|v| v.map(EitherOutput::First))
+                .map_err(|e| EitherError::A(e)),
+
+            EitherFuture2::B(b) => b.poll()
+                .map(|v| v.map(EitherOutput::Second))
+                .map_err(|e| EitherError::B(e))
+        }
+    }
+}
+
