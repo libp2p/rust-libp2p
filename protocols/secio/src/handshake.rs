@@ -396,6 +396,11 @@ where
                         },
                         #[cfg(feature = "secp256k1")]
                         SecioKeyPairInner::Secp256k1 { ref private } => {
+                            let data_to_sign = Sha256::digest(&data_to_sign);
+                            let message = secp256k1::Message::from_slice(data_to_sign.as_ref())
+                                .expect("digest output length doesn't match secp256k1 input length");
+                            let secp256k1 = secp256k1::Secp256k1::signing_only();
+// mine:
                             let data_to_sign: [u8; 32] = Sha256::digest(&data_to_sign);
 //                            let message = secp256k1::Message::from_slice(data_to_sign.as_ref())
 //                                .expect("digest output length doesn't match secp256k1 input length");
@@ -403,7 +408,6 @@ where
                             let secp256k1 = secp256k1::Secp256k1::with_caps(secp256k1::ContextFlag::SignOnly);
                             secp256k1
                                 .sign(&message, private)
-                                .expect("failed to sign message")
                                 .serialize_der(&secp256k1)
                         },
                     }
@@ -491,6 +495,12 @@ where
                 },
                 #[cfg(feature = "secp256k1")]
                 PublicKey::Secp256k1(ref remote_public_key) => {
+                    let data_to_verify = Sha256::digest(&data_to_verify);
+                    let message = secp256k1::Message::from_slice(data_to_verify.as_ref())
+                        .expect("digest output length doesn't match secp256k1 input length");
+                    let secp256k1 = secp256k1::Secp256k1::verification_only();
+                    let signature = secp256k1::Signature::from_der(&secp256k1, remote_exch.get_signature());
+// mine:
                     let data_to_verify: [u8; 32] = Sha256::digest(&data_to_verify);
                     let message = secp256k1::Message::parse(&data_to_verify);
 //                    let message = secp256k1::Message::from_slice(data_to_verify.as_ref())
@@ -529,7 +539,7 @@ where
             Ok((remote_exch, socket, context))
         })
         // Generate a key from the local ephemeral private key and the remote ephemeral public key,
-        // derive from it a ciper key, an iv, and a hmac key, and build the encoder/decoder.
+        // derive from it a cipher key, an iv, and a hmac key, and build the encoder/decoder.
         .and_then(|(remote_exch, socket, context)| {
             let (context, local_priv_key) = context.take_private_key();
             let key_size = context.state.remote.chosen_hash.num_bytes();
@@ -537,7 +547,7 @@ where
                 .map(move |key_material| (socket, context, key_material))
         })
         // Generate a key from the local ephemeral private key and the remote ephemeral public key,
-        // derive from it a ciper key, an iv, and a hmac key, and build the encoder/decoder.
+        // derive from it a cipher key, an iv, and a hmac key, and build the encoder/decoder.
         .and_then(|(socket, context, key_material)| {
             let chosen_cipher = context.state.remote.chosen_cipher;
             let cipher_key_size = chosen_cipher.key_size();

@@ -18,39 +18,52 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::{
+    either::EitherOutput,
+    nodes::handled_node::{NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent},
+    upgrade::{
+        self,
+        InboundUpgrade,
+        InboundUpgradeExt,
+        OutboundUpgrade,
+        UpgradeInfo,
+        InboundUpgradeApply,
+        OutboundUpgradeApply,
+        DeniedUpgrade,
+        EitherUpgrade,
+        OrUpgrade
+    }
+};
 use futures::prelude::*;
-use nodes::handled_node::{NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent};
 use std::{io, marker::PhantomData, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_timer::Timeout;
-use upgrade::{self, apply::UpgradeApplyFuture, DeniedConnectionUpgrade};
 use void::Void;
-use {ConnectionUpgrade, Endpoint};
 
 /// Handler for a set of protocols for a specific connection with a remote.
 ///
-/// This trait should be implemented on struct that hold the state for a specific protocol
+/// This trait should be implemented on a struct that holds the state for a specific protocol
 /// behaviour with a specific remote.
 ///
 /// # Handling a protocol
 ///
-/// Protocols with the remote can be opened in two different ways:
+/// Communication with a remote over a set of protocols opened in two different ways:
 ///
 /// - Dialing, which is a voluntary process. In order to do so, make `poll()` return an
-///   `OutboundSubstreamRequest` variant containing the connection upgrade to use.
+///   `OutboundSubstreamRequest` variant containing the connection upgrade to use to start using a protocol.
 /// - Listening, which is used to determine which protocols are supported when the remote wants
 ///   to open a substream. The `listen_protocol()` method should return the upgrades supported when
 ///   listening.
 ///
 /// The upgrade when dialing and the upgrade when listening have to be of the same type, but you
-/// are free to return for example an `OrUpgrade` enum, or an enum of yours, containing the upgrade
+/// are free to return for example an `OrUpgrade` enum, or an enum of your own, containing the upgrade
 /// you want depending on the situation.
 ///
 /// # Shutting down
 ///
 /// Implementors of this trait should keep in mind that the connection can be closed at any time.
 /// When a connection is closed (either by us or by the remote) `shutdown()` is called and the
-/// handler continues to be processed until it produces `None`. Then only the handler is destroyed.
+/// handler continues to be processed until it produces `None`. Only then the handler is destroyed.
 ///
 /// This makes it possible for the handler to finish delivering events even after knowing that it
 /// is shutting down.
@@ -64,7 +77,7 @@ use {ConnectionUpgrade, Endpoint};
 /// This trait is very similar to the `NodeHandler` trait. The fundamental differences are:
 ///
 /// - The `NodeHandler` trait gives you more control and is therefore more difficult to implement.
-/// - The `NodeHandler` trait is designed to have exclusive ownership of the connection with a
+/// - The `NodeHandler` trait is designed to have exclusive ownership of the connection to a
 ///   node, while the `ProtocolsHandler` trait is designed to handle only a specific set of
 ///   protocols. Two or more implementations of `ProtocolsHandler` can be combined into one that
 ///   supports all the protocols together, which is not possible with `NodeHandler`.
@@ -80,7 +93,9 @@ pub trait ProtocolsHandler {
     /// The type of the substream that contains the raw data.
     type Substream: AsyncRead + AsyncWrite;
     /// The upgrade for the protocol or protocols handled by this handler.
-    type Protocol: ConnectionUpgrade<Self::Substream>;
+    type InboundProtocol: InboundUpgrade<Self::Substream>;
+    /// The upgrade for the protocol or protocols handled by this handler.
+    type OutboundProtocol: OutboundUpgrade<Self::Substream>;
     /// Information about a substream. Can be sent to the handler through a `NodeHandlerEndpoint`,
     /// and will be passed back in `inject_substream` or `inject_outbound_closed`.
     type OutboundOpenInfo;
@@ -91,15 +106,20 @@ pub trait ProtocolsHandler {
     /// >           context you wouldn't accept one in particular (eg. only allow one substream at
     /// >           a time for a given protocol). The reason is that remotes are allowed to put the
     /// >           list of supported protocols in a cache in order to avoid spurious queries.
-    fn listen_protocol(&self) -> Self::Protocol;
+    fn listen_protocol(&self) -> Self::InboundProtocol;
 
     /// Injects a fully-negotiated substream in the handler.
     ///
     /// This method is called when a substream has been successfully opened and negotiated.
-    fn inject_fully_negotiated(
+    fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::Protocol as ConnectionUpgrade<Self::Substream>>::Output,
-        endpoint: NodeHandlerEndpoint<Self::OutboundOpenInfo>,
+        protocol: <Self::InboundProtocol as InboundUpgrade<Self::Substream>>::Output
+    );
+
+    fn inject_fully_negotiated_outbound(
+        &mut self,
+        protocol: <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Output,
+        info: Self::OutboundOpenInfo
     );
 
     /// Injects an event coming from the outside in the handler.
@@ -108,11 +128,11 @@ pub trait ProtocolsHandler {
     /// Indicates to the handler that upgrading a substream to the given protocol has failed.
     fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: io::Error);
 
-    /// Indicates the handler that the inbound part of the muxer has been closed, and that
-    /// therefore no more inbound substream will be produced.
+    /// Indicates to the handler that the inbound part of the muxer has been closed, and that
+    /// therefore no more inbound substreams will be produced.
     fn inject_inbound_closed(&mut self);
 
-    /// Indicates the node that it should shut down. After that, it is expected that `poll()`
+    /// Indicates to the node that it should shut down. After that, it is expected that `poll()`
     /// returns `Ready(None)` as soon as possible.
     ///
     /// This method allows an implementation to perform a graceful shutdown of the substreams, and
@@ -125,12 +145,7 @@ pub trait ProtocolsHandler {
     /// > **Note**: If this handler is combined with other handlers, as soon as `poll()` returns
     /// >           `Ok(Async::Ready(None))`, all the other handlers will receive a call to
     /// >           `shutdown()` and will eventually be closed and destroyed.
-    fn poll(
-        &mut self,
-    ) -> Poll<
-        Option<ProtocolsHandlerEvent<Self::Protocol, Self::OutboundOpenInfo, Self::OutEvent>>,
-        io::Error,
-    >;
+    fn poll(&mut self) -> Poll<Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>, io::Error>;
 
     /// Adds a closure that turns the input event into something else.
     #[inline]
@@ -154,6 +169,19 @@ pub trait ProtocolsHandler {
         TMap: FnMut(Self::OutEvent) -> TNewOut,
     {
         MapOutEvent { inner: self, map }
+    }
+
+    /// Builds an implementation of `ProtocolsHandler` that handles both this protocol and the
+    /// other one together.
+    #[inline]
+    fn select<TProto2>(self, other: TProto2) -> ProtocolsHandlerSelect<Self, TProto2>
+    where
+        Self: Sized,
+    {
+        ProtocolsHandlerSelect {
+            proto1: self,
+            proto2: other,
+        }
     }
 
     /// Creates a builder that will allow creating a `NodeHandler` that handles this protocol
@@ -185,11 +213,11 @@ pub trait ProtocolsHandler {
 /// Event produced by a handler.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ProtocolsHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom> {
-    /// Require a new outbound substream to be opened with the remote.
+    /// Request a new outbound substream to be opened with the remote.
     OutboundSubstreamRequest {
         /// The upgrade to apply on the substream.
         upgrade: TConnectionUpgrade,
-        /// User-defind information, passed back when the substream is open.
+        /// User-defined information, passed back when the substream is open.
         info: TOutboundOpenInfo,
     },
 
@@ -201,7 +229,7 @@ pub enum ProtocolsHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom> {
 impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
     ProtocolsHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
 {
-    /// If this is `OutboundSubstreamRequest`, maps the content to something else.
+    /// If this is an `OutboundSubstreamRequest`, maps the `info` member from a `TOutboundOpenInfo` to something else.
     #[inline]
     pub fn map_outbound_open_info<F, I>(
         self,
@@ -221,7 +249,7 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
         }
     }
 
-    /// If this is `OutboundSubstreamRequest`, maps the protocol to another.
+    /// If this is an `OutboundSubstreamRequest`, maps the protocol (`TConnectionUpgrade`) to something else.
     #[inline]
     pub fn map_protocol<F, I>(
         self,
@@ -241,7 +269,7 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
         }
     }
 
-    /// If this is `Custom`, maps the content to something else.
+    /// If this is a `Custom` event, maps the content to something else.
     #[inline]
     pub fn map_custom<F, I>(
         self,
@@ -282,19 +310,27 @@ where
     type InEvent = Void;
     type OutEvent = Void;
     type Substream = TSubstream;
-    type Protocol = DeniedConnectionUpgrade;
+    type InboundProtocol = DeniedUpgrade;
+    type OutboundProtocol = DeniedUpgrade;
     type OutboundOpenInfo = Void;
 
     #[inline]
-    fn listen_protocol(&self) -> Self::Protocol {
-        DeniedConnectionUpgrade
+    fn listen_protocol(&self) -> Self::InboundProtocol {
+        DeniedUpgrade
     }
 
     #[inline]
-    fn inject_fully_negotiated(
+    fn inject_fully_negotiated_inbound(
         &mut self,
-        _: <Self::Protocol as ConnectionUpgrade<TSubstream>>::Output,
-        _: NodeHandlerEndpoint<Self::OutboundOpenInfo>,
+        _: <Self::InboundProtocol as InboundUpgrade<TSubstream>>::Output
+    ) {
+    }
+
+    #[inline]
+    fn inject_fully_negotiated_outbound(
+        &mut self,
+        _: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output,
+        _: Self::OutboundOpenInfo
     ) {
     }
 
@@ -316,7 +352,7 @@ where
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<ProtocolsHandlerEvent<Self::Protocol, Self::OutboundOpenInfo, Self::OutEvent>>,
+        Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>,
         io::Error,
     > {
         if self.shutting_down {
@@ -342,21 +378,30 @@ where
     type InEvent = TNewIn;
     type OutEvent = TProtoHandler::OutEvent;
     type Substream = TProtoHandler::Substream;
-    type Protocol = TProtoHandler::Protocol;
+    type InboundProtocol = TProtoHandler::InboundProtocol;
+    type OutboundProtocol = TProtoHandler::OutboundProtocol;
     type OutboundOpenInfo = TProtoHandler::OutboundOpenInfo;
 
     #[inline]
-    fn listen_protocol(&self) -> Self::Protocol {
+    fn listen_protocol(&self) -> Self::InboundProtocol {
         self.inner.listen_protocol()
     }
 
     #[inline]
-    fn inject_fully_negotiated(
+    fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::Protocol as ConnectionUpgrade<Self::Substream>>::Output,
-        endpoint: NodeHandlerEndpoint<Self::OutboundOpenInfo>,
+        protocol: <Self::InboundProtocol as InboundUpgrade<Self::Substream>>::Output
     ) {
-        self.inner.inject_fully_negotiated(protocol, endpoint)
+        self.inner.inject_fully_negotiated_inbound(protocol)
+    }
+
+    #[inline]
+    fn inject_fully_negotiated_outbound(
+        &mut self,
+        protocol: <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Output,
+        info: Self::OutboundOpenInfo
+    ) {
+        self.inner.inject_fully_negotiated_outbound(protocol, info)
     }
 
     #[inline]
@@ -385,7 +430,7 @@ where
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<ProtocolsHandlerEvent<Self::Protocol, Self::OutboundOpenInfo, Self::OutEvent>>,
+        Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>,
         io::Error,
     > {
         self.inner.poll()
@@ -406,21 +451,30 @@ where
     type InEvent = TProtoHandler::InEvent;
     type OutEvent = TNewOut;
     type Substream = TProtoHandler::Substream;
-    type Protocol = TProtoHandler::Protocol;
+    type InboundProtocol = TProtoHandler::InboundProtocol;
+    type OutboundProtocol = TProtoHandler::OutboundProtocol;
     type OutboundOpenInfo = TProtoHandler::OutboundOpenInfo;
 
     #[inline]
-    fn listen_protocol(&self) -> Self::Protocol {
+    fn listen_protocol(&self) -> Self::InboundProtocol {
         self.inner.listen_protocol()
     }
 
     #[inline]
-    fn inject_fully_negotiated(
+    fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::Protocol as ConnectionUpgrade<Self::Substream>>::Output,
-        endpoint: NodeHandlerEndpoint<Self::OutboundOpenInfo>,
+        protocol: <Self::InboundProtocol as InboundUpgrade<Self::Substream>>::Output
     ) {
-        self.inner.inject_fully_negotiated(protocol, endpoint)
+        self.inner.inject_fully_negotiated_inbound(protocol)
+    }
+
+    #[inline]
+    fn inject_fully_negotiated_outbound(
+        &mut self,
+        protocol: <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Output,
+        info: Self::OutboundOpenInfo
+    ) {
+        self.inner.inject_fully_negotiated_outbound(protocol, info)
     }
 
     #[inline]
@@ -447,7 +501,7 @@ where
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<ProtocolsHandlerEvent<Self::Protocol, Self::OutboundOpenInfo, Self::OutEvent>>,
+        Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>,
         io::Error,
     > {
         Ok(self.inner.poll()?.map(|ev| {
@@ -517,12 +571,12 @@ where
     handler: TProtoHandler,
     /// Futures that upgrade incoming substreams.
     negotiating_in:
-        Vec<Timeout<UpgradeApplyFuture<TProtoHandler::Substream, TProtoHandler::Protocol>>>,
+        Vec<Timeout<InboundUpgradeApply<TProtoHandler::Substream, TProtoHandler::InboundProtocol>>>,
     /// Futures that upgrade outgoing substreams. The first element of the tuple is the userdata
     /// to pass back once successfully opened.
     negotiating_out: Vec<(
         TProtoHandler::OutboundOpenInfo,
-        Timeout<UpgradeApplyFuture<TProtoHandler::Substream, TProtoHandler::Protocol>>,
+        Timeout<OutboundUpgradeApply<TProtoHandler::Substream, TProtoHandler::OutboundProtocol>>,
     )>,
     /// Timeout for incoming substreams negotiation.
     in_timeout: Duration,
@@ -530,7 +584,7 @@ where
     out_timeout: Duration,
     /// For each outbound substream request, how to upgrade it. The first element of the tuple
     /// is the unique identifier (see `unique_dial_upgrade_id`).
-    queued_dial_upgrades: Vec<(u64, TProtoHandler::Protocol)>,
+    queued_dial_upgrades: Vec<(u64, TProtoHandler::OutboundProtocol)>,
     /// Unique identifier assigned to each queued dial upgrade.
     unique_dial_upgrade_id: u64,
 }
@@ -538,7 +592,8 @@ where
 impl<TProtoHandler> NodeHandler for NodeHandlerWrapper<TProtoHandler>
 where
     TProtoHandler: ProtocolsHandler,
-    <TProtoHandler::Protocol as ConnectionUpgrade<TProtoHandler::Substream>>::NamesIter: Clone,
+    <TProtoHandler::InboundProtocol as UpgradeInfo>::NamesIter: Clone,
+    <TProtoHandler::OutboundProtocol as OutboundUpgrade<<TProtoHandler as ProtocolsHandler>::Substream>>::Error: std::fmt::Debug
 {
     type InEvent = TProtoHandler::InEvent;
     type OutEvent = TProtoHandler::OutEvent;
@@ -555,7 +610,7 @@ where
         match endpoint {
             NodeHandlerEndpoint::Listener => {
                 let protocol = self.handler.listen_protocol();
-                let upgrade = upgrade::apply(substream, protocol, Endpoint::Listener);
+                let upgrade = upgrade::apply_inbound(substream, protocol);
                 let with_timeout = Timeout::new(upgrade, self.in_timeout);
                 self.negotiating_in.push(with_timeout);
             }
@@ -573,7 +628,7 @@ where
                 };
 
                 let (_, proto_upgrade) = self.queued_dial_upgrades.remove(pos);
-                let upgrade = upgrade::apply(substream, proto_upgrade, Endpoint::Dialer);
+                let upgrade = upgrade::apply_outbound(substream, proto_upgrade);
                 let with_timeout = Timeout::new(upgrade, self.out_timeout);
                 self.negotiating_out.push((user_data, with_timeout));
             }
@@ -616,21 +671,15 @@ where
         self.handler.shutdown();
     }
 
-    fn poll(
-        &mut self,
-    ) -> Poll<Option<NodeHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>>, io::Error> {
+    fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>>, io::Error> {
         // Continue negotiation of newly-opened substreams on the listening side.
         // We remove each element from `negotiating_in` one by one and add them back if not ready.
         for n in (0..self.negotiating_in.len()).rev() {
             let mut in_progress = self.negotiating_in.swap_remove(n);
             match in_progress.poll() {
-                Ok(Async::Ready(upgrade)) => {
-                    self.handler
-                        .inject_fully_negotiated(upgrade, NodeHandlerEndpoint::Listener);
-                }
-                Ok(Async::NotReady) => {
-                    self.negotiating_in.push(in_progress);
-                }
+                Ok(Async::Ready(upgrade)) =>
+                    self.handler.inject_fully_negotiated_inbound(upgrade),
+                Ok(Async::NotReady) => self.negotiating_in.push(in_progress),
                 // TODO: return a diagnostic event?
                 Err(_err) => {}
             }
@@ -642,8 +691,7 @@ where
             let (upgr_info, mut in_progress) = self.negotiating_out.swap_remove(n);
             match in_progress.poll() {
                 Ok(Async::Ready(upgrade)) => {
-                    let endpoint = NodeHandlerEndpoint::Dialer(upgr_info);
-                    self.handler.inject_fully_negotiated(upgrade, endpoint);
+                    self.handler.inject_fully_negotiated_outbound(upgrade, upgr_info);
                 }
                 Ok(Async::NotReady) => {
                     self.negotiating_out.push((upgr_info, in_progress));
@@ -675,6 +723,121 @@ where
             }
             Async::Ready(None) => return Ok(Async::Ready(None)),
             Async::NotReady => (),
+        };
+
+        Ok(Async::NotReady)
+    }
+}
+
+/// Implementation of `ProtocolsHandler` that combines two protocols into one.
+#[derive(Debug, Clone)]
+pub struct ProtocolsHandlerSelect<TProto1, TProto2> {
+    proto1: TProto1,
+    proto2: TProto2,
+}
+
+impl<TSubstream, TProto1, TProto2, TProto1Out, TProto2Out>
+    ProtocolsHandler for ProtocolsHandlerSelect<TProto1, TProto2>
+where
+    TProto1: ProtocolsHandler<Substream = TSubstream>,
+    TProto2: ProtocolsHandler<Substream = TSubstream>,
+    TSubstream: AsyncRead + AsyncWrite,
+    TProto1::InboundProtocol: InboundUpgrade<TSubstream, Output = TProto1Out>,
+    TProto2::InboundProtocol: InboundUpgrade<TSubstream, Output = TProto2Out>,
+    TProto1::OutboundProtocol: OutboundUpgrade<TSubstream, Output = TProto1Out>,
+    TProto2::OutboundProtocol: OutboundUpgrade<TSubstream, Output = TProto2Out>
+{
+    type InEvent = EitherOutput<TProto1::InEvent, TProto2::InEvent>;
+    type OutEvent = EitherOutput<TProto1::OutEvent, TProto2::OutEvent>;
+    type Substream = TSubstream;
+    type InboundProtocol = OrUpgrade<TProto1::InboundProtocol, TProto2::InboundProtocol>;
+    type OutboundProtocol = EitherUpgrade<TProto1::OutboundProtocol, TProto2::OutboundProtocol>;
+    type OutboundOpenInfo = EitherOutput<TProto1::OutboundOpenInfo, TProto2::OutboundOpenInfo>;
+
+    #[inline]
+    fn listen_protocol(&self) -> Self::InboundProtocol {
+        let proto1 = self.proto1.listen_protocol();
+        let proto2 = self.proto2.listen_protocol();
+        proto1.or_inbound(proto2)
+    }
+
+    fn inject_fully_negotiated_outbound(&mut self, protocol: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output, endpoint: Self::OutboundOpenInfo) {
+        match (protocol, endpoint) {
+            (EitherOutput::First(protocol), EitherOutput::First(info)) =>
+                self.proto1.inject_fully_negotiated_outbound(protocol, info),
+            (EitherOutput::Second(protocol), EitherOutput::Second(info)) =>
+                self.proto2.inject_fully_negotiated_outbound(protocol, info),
+            (EitherOutput::First(_), EitherOutput::Second(_)) =>
+                panic!("wrong API usage: the protocol doesn't match the upgrade info"),
+            (EitherOutput::Second(_), EitherOutput::First(_)) =>
+                panic!("wrong API usage: the protocol doesn't match the upgrade info")
+        }
+    }
+
+    fn inject_fully_negotiated_inbound(&mut self, protocol: <Self::InboundProtocol as InboundUpgrade<TSubstream>>::Output) {
+        match protocol {
+            EitherOutput::First(protocol) =>
+                self.proto1.inject_fully_negotiated_inbound(protocol),
+            EitherOutput::Second(protocol) =>
+                self.proto2.inject_fully_negotiated_inbound(protocol)
+        }
+    }
+
+    #[inline]
+    fn inject_event(&mut self, event: Self::InEvent) {
+        match event {
+            EitherOutput::First(event) => self.proto1.inject_event(event),
+            EitherOutput::Second(event) => self.proto2.inject_event(event),
+        }
+    }
+
+    #[inline]
+    fn inject_inbound_closed(&mut self) {
+        self.proto1.inject_inbound_closed();
+        self.proto2.inject_inbound_closed();
+    }
+
+    #[inline]
+    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: io::Error) {
+        match info {
+            EitherOutput::First(info) => self.proto1.inject_dial_upgrade_error(info, error),
+            EitherOutput::Second(info) => self.proto2.inject_dial_upgrade_error(info, error),
+        }
+    }
+
+    #[inline]
+    fn shutdown(&mut self) {
+        self.proto1.shutdown();
+        self.proto2.shutdown();
+    }
+
+    fn poll(&mut self) -> Poll<Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>, io::Error> {
+        match self.proto1.poll()? {
+            Async::Ready(Some(ProtocolsHandlerEvent::Custom(event))) => {
+                return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(EitherOutput::First(event)))));
+            },
+            Async::Ready(Some(ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info})) => {
+                return Ok(Async::Ready(Some(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                    upgrade: EitherUpgrade::A(upgrade),
+                    info: EitherOutput::First(info),
+                })));
+            },
+            Async::Ready(None) => return Ok(Async::Ready(None)),
+            Async::NotReady => ()
+        };
+
+        match self.proto2.poll()? {
+            Async::Ready(Some(ProtocolsHandlerEvent::Custom(event))) => {
+                return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(EitherOutput::Second(event)))));
+            },
+            Async::Ready(Some(ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info })) => {
+                return Ok(Async::Ready(Some(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                    upgrade: EitherUpgrade::B(upgrade),
+                    info: EitherOutput::Second(info),
+                })));
+            },
+            Async::Ready(None) => return Ok(Async::Ready(None)),
+            Async::NotReady => ()
         };
 
         Ok(Async::NotReady)
