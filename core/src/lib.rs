@@ -68,7 +68,7 @@
 //! ## Middlewares
 //!
 //! Examples of middleware connection upgrades include `PlainTextConfig` (dummy upgrade) or
-//! `SecioConfig` (encyption layer, provided by the `secio` crate).
+//! `SecioConfig` (encryption layer, provided by the `secio` crate).
 //!
 //! The output of a middleware connection upgrade implements the `AsyncRead` and `AsyncWrite`
 //! traits, just like sockets do.
