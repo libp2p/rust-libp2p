@@ -19,11 +19,26 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::Bytes;
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeError};
-use futures::prelude::*;
+use crate::{nodes::ConnectedPoint, upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeError}};
+use futures::{future::Either, prelude::*};
 use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
 use std::mem;
 use tokio_io::{AsyncRead, AsyncWrite};
+
+/// Applies an upgrade to the inbound and outbound direction of a connection or substream.
+pub fn apply<C, U>(conn: C, up: U, cp: ConnectedPoint)
+    -> Either<InboundUpgradeApply<C, U>, OutboundUpgradeApply<C, U>>
+where
+    C: AsyncRead + AsyncWrite,
+    U: InboundUpgrade<C> + OutboundUpgrade<C>,
+    U::NamesIter: Clone
+{
+    if cp.is_listener() {
+        Either::A(apply_inbound(conn, up))
+    } else {
+        Either::B(apply_outbound(conn, up))
+    }
+}
 
 /// Tries to perform an upgrade on an inbound connection or substream.
 pub fn apply_inbound<C, U>(conn: C, up: U) -> InboundUpgradeApply<C, U>
