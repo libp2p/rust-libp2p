@@ -25,6 +25,7 @@ use crate::{
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
 };
 
+/// A type to represent two possible upgrade types (inbound or outbound).
 #[derive(Debug, Clone)]
 pub enum EitherUpgrade<A, B> { A(A), B(B) }
 
@@ -80,6 +81,7 @@ where
     }
 }
 
+/// A type to represent two possible `Iterator` types.
 #[derive(Debug, Clone)]
 pub enum EitherIter<A, B> { A(A), B(B) }
 
