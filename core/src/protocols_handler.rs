@@ -26,7 +26,6 @@ use crate::{
         InboundUpgrade,
         InboundUpgradeExt,
         OutboundUpgrade,
-        UpgradeInfo,
         InboundUpgradeApply,
         OutboundUpgradeApply,
         DeniedUpgrade,
@@ -592,7 +591,6 @@ where
 impl<TProtoHandler> NodeHandler for NodeHandlerWrapper<TProtoHandler>
 where
     TProtoHandler: ProtocolsHandler,
-    <TProtoHandler::InboundProtocol as UpgradeInfo>::NamesIter: Clone,
     <TProtoHandler::OutboundProtocol as OutboundUpgrade<<TProtoHandler as ProtocolsHandler>::Substream>>::Error: std::fmt::Debug
 {
     type InEvent = TProtoHandler::InEvent;
