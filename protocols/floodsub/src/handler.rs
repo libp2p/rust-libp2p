@@ -21,6 +21,7 @@
 use crate::protocol::{FloodsubCodec, FloodsubConfig, FloodsubRpc};
 use futures::prelude::*;
 use libp2p_core::{
+    CheckSuccessStream,
     ProtocolsHandler, ProtocolsHandlerEvent,
     protocols_handler::ProtocolsHandlerUpgrErr,
     upgrade::{InboundUpgrade, OutboundUpgrade}
@@ -60,13 +61,13 @@ where
     TSubstream: AsyncRead + AsyncWrite,
 {
     /// Waiting for a message from the remote.
-    WaitingInput(Framed<TSubstream, FloodsubCodec>),
+    WaitingInput(Framed<CheckSuccessStream<TSubstream>, FloodsubCodec>),
     /// Waiting to send a message to the remote.
-    PendingSend(Framed<TSubstream, FloodsubCodec>, FloodsubRpc),
+    PendingSend(Framed<CheckSuccessStream<TSubstream>, FloodsubCodec>, FloodsubRpc),
     /// Waiting to flush the substream so that the data arrives to the remote.
-    PendingFlush(Framed<TSubstream, FloodsubCodec>),
+    PendingFlush(Framed<CheckSuccessStream<TSubstream>, FloodsubCodec>),
     /// The substream is being closed.
-    Closing(Framed<TSubstream, FloodsubCodec>),
+    Closing(Framed<CheckSuccessStream<TSubstream>, FloodsubCodec>),
 }
 
 impl<TSubstream> SubstreamState<TSubstream>
@@ -74,7 +75,7 @@ where
     TSubstream: AsyncRead + AsyncWrite,
 {
     /// Consumes this state and produces the substream.
-    fn into_substream(self) -> Framed<TSubstream, FloodsubCodec> {
+    fn into_substream(self) -> Framed<CheckSuccessStream<TSubstream>, FloodsubCodec> {
         match self {
             SubstreamState::WaitingInput(substream) => substream,
             SubstreamState::PendingSend(substream, _) => substream,
@@ -128,7 +129,7 @@ where
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output,
+        protocol: <Self::OutboundProtocol as OutboundUpgrade<CheckSuccessStream<TSubstream>>>::Output,
         message: Self::OutboundOpenInfo
     ) {
         if self.shutting_down {

@@ -105,6 +105,7 @@ pub mod transport;
 pub mod upgrade;
 
 pub use self::multiaddr::Multiaddr;
+pub use self::multistream_select::CheckSuccessStream;
 pub use self::muxing::StreamMuxer;
 pub use self::peer_id::PeerId;
 pub use self::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent};

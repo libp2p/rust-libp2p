@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
+    CheckSuccessStream,
     either::EitherError,
     either::EitherOutput,
     protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
@@ -59,8 +60,8 @@ where
     TSubstream: AsyncRead + AsyncWrite,
     TProto1::InboundProtocol: InboundUpgrade<TSubstream>,
     TProto2::InboundProtocol: InboundUpgrade<TSubstream>,
-    TProto1::OutboundProtocol: OutboundUpgrade<TSubstream>,
-    TProto2::OutboundProtocol: OutboundUpgrade<TSubstream>
+    TProto1::OutboundProtocol: OutboundUpgrade<CheckSuccessStream<TSubstream>>,
+    TProto2::OutboundProtocol: OutboundUpgrade<CheckSuccessStream<TSubstream>>
 {
     type InEvent = EitherOutput<TProto1::InEvent, TProto2::InEvent>;
     type OutEvent = EitherOutput<TProto1::OutEvent, TProto2::OutEvent>;
@@ -77,7 +78,7 @@ where
         SelectUpgrade::new(proto1, proto2)
     }
 
-    fn inject_fully_negotiated_outbound(&mut self, protocol: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output, endpoint: Self::OutboundOpenInfo) {
+    fn inject_fully_negotiated_outbound(&mut self, protocol: <Self::OutboundProtocol as OutboundUpgrade<CheckSuccessStream<TSubstream>>>::Output, endpoint: Self::OutboundOpenInfo) {
         match (protocol, endpoint) {
             (EitherOutput::First(protocol), EitherOutput::First(info)) =>
                 self.proto1.inject_fully_negotiated_outbound(protocol, info),
@@ -114,7 +115,7 @@ where
     }
 
     #[inline]
-    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {
+    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<CheckSuccessStream<Self::Substream>>>::Error>) {
         match (info, error) {
             (EitherOutput::First(info), ProtocolsHandlerUpgrErr::MuxerDeniedSubstream) => {
                 self.proto1.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::MuxerDeniedSubstream)

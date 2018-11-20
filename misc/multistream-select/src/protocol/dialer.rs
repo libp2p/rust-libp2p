@@ -27,11 +27,11 @@ use crate::protocol::DialerToListenerMessage;
 use crate::protocol::ListenerToDialerMessage;
 use crate::protocol::MultistreamSelectError;
 use crate::protocol::MULTISTREAM_PROTOCOL_WITH_LF;
+use std::io::{self, Write};
 use tokio_io::{AsyncRead, AsyncWrite};
 use unsigned_varint::decode;
 
-
-/// Wraps around a `AsyncRead+AsyncWrite`. Assumes that we're on the dialer's side. Produces and
+/// Wraps around a `AsyncRead + AsyncWrite`. Assumes that we're on the dialer's side. Produces and
 /// accepts messages.
 pub struct Dialer<R> {
     inner: LengthDelimited<Bytes, R>,
@@ -48,6 +48,15 @@ where
         let sender = LengthDelimited::new(inner);
         DialerFuture {
             inner: sender.send(Bytes::from(MULTISTREAM_PROTOCOL_WITH_LF))
+        }
+    }
+
+    /// Turns this `Dialer` into a `DialerReadOnly`. Allows writing raw data while still reading
+    /// through the `Stream`.
+    #[inline]
+    pub fn into_read_only(self) -> DialerReadOnly<R> {
+        DialerReadOnly {
+            inner: self,
         }
     }
 
@@ -180,6 +189,58 @@ impl<T: AsyncWrite> Future for DialerFuture<T> {
     }
 }
 
+/// Similar to `Dialer`. Wraps around an `AsyncRead + AsyncWrite`, but allows writing raw data
+/// while reading must be done through the `Stream`.
+pub struct DialerReadOnly<R> {
+    inner: Dialer<R>,
+}
+
+impl<R> DialerReadOnly<R>
+where
+    R: AsyncRead + AsyncWrite,
+{
+    /// Grants back the socket. Typically used after a `ProtocolAck` has been received.
+    #[inline]
+    pub fn into_inner(self) -> R {
+        self.inner.into_inner()
+    }
+}
+
+impl<R> Stream for DialerReadOnly<R>
+where
+    R: AsyncRead + AsyncWrite,
+{
+    type Item = ListenerToDialerMessage;
+    type Error = MultistreamSelectError;
+
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        
+        self.inner.poll()
+    }
+}
+
+impl<R> Write for DialerReadOnly<R>
+where R: AsyncRead + AsyncWrite
+{
+    #[inline]
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.inner.inner.get_mut().write(buf)
+    }
+
+    #[inline]
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.inner.get_mut().flush()
+    }
+}
+
+impl<R> AsyncWrite for DialerReadOnly<R>
+where R: AsyncRead + AsyncWrite
+{
+    #[inline]
+    fn shutdown(&mut self) -> Poll<(), io::Error> {
+        self.inner.inner.get_mut().shutdown()
+    }
+}
 
 #[cfg(test)]
 mod tests {

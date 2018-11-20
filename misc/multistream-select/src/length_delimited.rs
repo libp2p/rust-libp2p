@@ -73,6 +73,16 @@ where
         }
     }
 
+    /// Grants access to the underlying socket.
+    ///
+    /// > **Warning**: After you read raw data, you shouldn't use the `Stream` anymore or you will
+    /// >              likely get logic errors. After you write raw data, you shouldn't use the
+    /// >              `Sink` anymore or you will likely get logic errors.
+    #[inline]
+    pub fn get_mut(&mut self) -> &mut S {
+        self.inner.get_mut()
+    }
+
     /// Destroys the `LengthDelimited` and returns the underlying socket.
     ///
     /// Contrary to its equivalent `tokio_io::codec::length_delimited::FramedRead`, this method is

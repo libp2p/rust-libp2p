@@ -66,6 +66,7 @@
 //! ```
 //!
 
+mod check_success;
 mod dialer_select;
 mod error;
 mod length_delimited;
@@ -74,6 +75,7 @@ mod tests;
 
 pub mod protocol;
 
+pub use self::check_success::CheckSuccessStream;
 pub use self::dialer_select::{dialer_select_proto, DialerSelectFuture};
 pub use self::error::ProtocolChoiceError;
 pub use self::listener_select::{listener_select_proto, ListenerSelectFuture};

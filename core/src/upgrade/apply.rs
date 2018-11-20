@@ -21,7 +21,7 @@
 use crate::nodes::ConnectedPoint;
 use crate::upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade, UpgradeError, ProtocolName};
 use futures::{future::Either, prelude::*};
-use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
+use multistream_select::{self, CheckSuccessStream, DialerSelectFuture, ListenerSelectFuture};
 use std::mem;
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -30,7 +30,7 @@ pub fn apply<C, U>(conn: C, up: U, cp: ConnectedPoint)
     -> Either<InboundUpgradeApply<C, U>, OutboundUpgradeApply<C, U>>
 where
     C: AsyncRead + AsyncWrite,
-    U: InboundUpgrade<C> + OutboundUpgrade<C>,
+    U: InboundUpgrade<C> + OutboundUpgrade<CheckSuccessStream<C>>,
 {
     if cp.is_listener() {
         Either::A(apply_inbound(conn, up))
@@ -56,7 +56,7 @@ where
 pub fn apply_outbound<C, U>(conn: C, up: U) -> OutboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite,
-    U: OutboundUpgrade<C>
+    U: OutboundUpgrade<CheckSuccessStream<C>>
 {
     let iter = up.protocol_info().into_iter().map(NameWrap as fn(_) -> NameWrap<_>);
     let future = multistream_select::dialer_select_proto(conn, iter);
@@ -138,7 +138,7 @@ where
 pub struct OutboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite,
-    U: OutboundUpgrade<C>
+    U: OutboundUpgrade<CheckSuccessStream<C>>
 {
     inner: OutboundUpgradeApplyState<C, U>
 }
@@ -146,7 +146,7 @@ where
 enum OutboundUpgradeApplyState<C, U>
 where
     C: AsyncRead + AsyncWrite,
-    U: OutboundUpgrade<C>
+    U: OutboundUpgrade<CheckSuccessStream<C>>
 {
     Init {
         future: DialerSelectFuture<C, NameWrapIter<<U::InfoIter as IntoIterator>::IntoIter>>,
@@ -161,7 +161,7 @@ where
 impl<C, U> Future for OutboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite,
-    U: OutboundUpgrade<C>
+    U: OutboundUpgrade<CheckSuccessStream<C>>
 {
     type Item = U::Output;
     type Error = UpgradeError<U::Error>;

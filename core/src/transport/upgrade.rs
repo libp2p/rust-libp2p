@@ -21,6 +21,7 @@
 use futures::{future::Either, prelude::*};
 use multiaddr::Multiaddr;
 use crate::{
+    CheckSuccessStream,
     transport::Transport,
     upgrade::{
         OutboundUpgrade,
@@ -48,7 +49,7 @@ where
     D: Transport,
     D::Output: AsyncRead + AsyncWrite,
     U: InboundUpgrade<D::Output, Output = O, Error = E>,
-    U: OutboundUpgrade<D::Output, Output = O, Error = E> + Clone,
+    U: OutboundUpgrade<CheckSuccessStream<D::Output>, Output = O, Error = E> + Clone,
     E: std::error::Error + Send + Sync + 'static
 {
     type Output = O;
@@ -84,7 +85,7 @@ pub struct DialUpgradeFuture<T, U>
 where
     T: Future,
     T::Item: AsyncRead + AsyncWrite,
-    U: OutboundUpgrade<T::Item>
+    U: OutboundUpgrade<CheckSuccessStream<T::Item>>
 {
     future: T,
     upgrade: Either<Option<U>, OutboundUpgradeApply<T::Item, U>>
@@ -94,7 +95,7 @@ impl<T, U> Future for DialUpgradeFuture<T, U>
 where
     T: Future<Error = std::io::Error>,
     T::Item: AsyncRead + AsyncWrite,
-    U: OutboundUpgrade<T::Item>,
+    U: OutboundUpgrade<CheckSuccessStream<T::Item>>,
     U::Error: std::error::Error + Send + Sync + 'static
 {
     type Item = U::Output;

@@ -21,6 +21,7 @@
 use crate::protocol::{Ping, PingDialer};
 use futures::prelude::*;
 use libp2p_core::{
+    CheckSuccessStream,
     OutboundUpgrade,
     ProtocolsHandler,
     ProtocolsHandlerEvent,
@@ -86,7 +87,7 @@ enum OutState<TSubstream> {
     /// We sent a ping and we are waiting for the pong.
     WaitingForPong {
         /// Substream where we should receive the pong.
-        substream: PingDialer<TSubstream, Instant>,
+        substream: PingDialer<CheckSuccessStream<TSubstream>, Instant>,
         /// Timeout after which we decide that we're not going to receive the pong.
         expires: Delay,
     },
@@ -95,7 +96,7 @@ enum OutState<TSubstream> {
     /// next ping.
     Idle {
         /// The substream to use to send pings.
-        substream: PingDialer<TSubstream, Instant>,
+        substream: PingDialer<CheckSuccessStream<TSubstream>, Instant>,
         /// When to send the ping next.
         next_ping: Delay,
     },
@@ -170,7 +171,7 @@ where
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        mut substream: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output,
+        mut substream: <Self::OutboundProtocol as OutboundUpgrade<CheckSuccessStream<TSubstream>>>::Output,
         _info: Self::OutboundOpenInfo
     ) {
         if let OutState::Upgrading { expires } = mem::replace(&mut self.out_state, OutState::Poisoned) {

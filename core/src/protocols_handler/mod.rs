@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::CheckSuccessStream;
 use crate::upgrade::{
     InboundUpgrade,
     OutboundUpgrade,
@@ -97,7 +98,7 @@ pub trait ProtocolsHandler {
     /// The upgrade for the protocol or protocols handled by this handler.
     type InboundProtocol: InboundUpgrade<Self::Substream>;
     /// The upgrade for the protocol or protocols handled by this handler.
-    type OutboundProtocol: OutboundUpgrade<Self::Substream>;
+    type OutboundProtocol: OutboundUpgrade<CheckSuccessStream<Self::Substream>>;
     /// Information about a substream. Can be sent to the handler through a `NodeHandlerEndpoint`,
     /// and will be passed back in `inject_substream` or `inject_outbound_closed`.
     type OutboundOpenInfo;
@@ -120,7 +121,7 @@ pub trait ProtocolsHandler {
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Output,
+        protocol: <Self::OutboundProtocol as OutboundUpgrade<CheckSuccessStream<Self::Substream>>>::Output,
         info: Self::OutboundOpenInfo
     );
 
@@ -128,7 +129,7 @@ pub trait ProtocolsHandler {
     fn inject_event(&mut self, event: Self::InEvent);
 
     /// Indicates to the handler that upgrading a substream to the given protocol has failed.
-    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>);
+    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<CheckSuccessStream<Self::Substream>>>::Error>);
 
     /// Indicates to the handler that the inbound part of the muxer has been closed, and that
     /// therefore no more inbound substreams will be produced.
