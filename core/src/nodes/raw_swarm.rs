@@ -1318,7 +1318,7 @@ mod tests {
     #[test]
     fn num_incoming_negotiated() {
         let mut transport = DummyTransport::new();
-        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        let peer_id = PeerId::random();
         let muxer = DummyMuxer::new();
 
         // Set up listener to see an incoming connection
@@ -1397,7 +1397,7 @@ mod tests {
     #[test]
     fn querying_for_pending_peer() {
         let mut swarm = RawSwarm::<_, _, _, Handler>::new(DummyTransport::new());
-        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        let peer_id = PeerId::random();
         let peer = swarm.peer(peer_id.clone());
         assert_matches!(peer, Peer::NotConnected(PeerNotConnected{ .. }));
         let addr = "/memory".parse().expect("bad multiaddr");
@@ -1409,7 +1409,7 @@ mod tests {
     #[test]
     fn querying_for_unknown_peer() {
         let mut swarm = RawSwarm::<_, _, _, Handler>::new(DummyTransport::new());
-        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        let peer_id = PeerId::random();
         let peer = swarm.peer(peer_id.clone());
         assert_matches!(peer, Peer::NotConnected( PeerNotConnected { nodes: _, peer_id: node_peer_id }) => {
             assert_eq!(node_peer_id, peer_id);
@@ -1498,7 +1498,7 @@ mod tests {
     #[test]
     fn known_peer_that_is_unreachable_yields_dial_error() {
         let mut transport = DummyTransport::new();
-        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        let peer_id = PeerId::random();
         transport.set_next_peer_id(&peer_id);
         let swarm = Arc::new(Mutex::new(RawSwarm::<_, _, _, Handler>::new(transport)));
 
@@ -1539,7 +1539,7 @@ mod tests {
     #[test]
     fn yields_node_error_when_there_is_an_error_after_successful_connect() {
         let mut transport = DummyTransport::new();
-        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 159 }).collect()).into_peer_id();
+        let peer_id = PeerId::random();
         transport.set_next_peer_id(&peer_id);
         let swarm = Arc::new(Mutex::new(RawSwarm::<_, _, _, Handler>::new(transport)));
 
@@ -1593,7 +1593,7 @@ mod tests {
     #[test]
     fn yields_node_closed_when_the_node_closes_after_successful_connect() {
         let mut transport = DummyTransport::new();
-        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 159 }).collect()).into_peer_id();
+        let peer_id = PeerId::random();
         transport.set_next_peer_id(&peer_id);
         let swarm = Arc::new(Mutex::new(RawSwarm::<_, _, _, Handler>::new(transport)));
 
