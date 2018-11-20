@@ -523,9 +523,8 @@ mod tests {
     use futures::{Future, Poll, Sink, StartSend, Stream};
     use futures::sync::mpsc;
     use kad_server::{self, KadIncomingRequest, KadConnecController};
-    use libp2p_core::PublicKey;
+    use libp2p_core::PeerId;
     use protocol::{KadConnectionType, KadPeer};
-    use rand;
 
     // This struct merges a stream and a sink and is quite useful for tests.
     struct Wrapper<St, Si>(St, Si);
@@ -591,18 +590,12 @@ mod tests {
     fn find_node_response() {
         let (controller_a, stream_events_a, _controller_b, stream_events_b) = build_test();
 
-        let random_peer_id = {
-            let buf = (0 .. 1024).map(|_| -> u8 { rand::random() }).collect::<Vec<_>>();
-            PublicKey::Rsa(buf).into_peer_id()
-        };
+        let random_peer_id = PeerId::random();
 
         let find_node_fut = controller_a.find_node(&random_peer_id);
 
         let example_response = KadPeer {
-            node_id: {
-                let buf = (0 .. 1024).map(|_| -> u8 { rand::random() }).collect::<Vec<_>>();
-                PublicKey::Rsa(buf).into_peer_id()
-            },
+            node_id: PeerId::random(),
             multiaddrs: Vec::new(),
             connection_ty: KadConnectionType::Connected,
         };

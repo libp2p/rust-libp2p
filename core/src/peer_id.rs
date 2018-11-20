@@ -75,6 +75,16 @@ impl PeerId {
         }
     }
 
+    /// Generates a random peer ID from a cryptographically secure PRNG.
+    ///
+    /// This is useful for randomly walking on a DHT, or for testing purposes.
+    #[inline]
+    pub fn random() -> PeerId {
+        PeerId {
+            multihash: multihash::Multihash::random(multihash::Hash::SHA2256)
+        }
+    }
+
     /// Returns a raw bytes representation of this `PeerId`.
     ///
     /// Note that this is not the same as the public key of the peer.
@@ -178,5 +188,13 @@ mod tests {
         let peer_id = PublicKey::Rsa((0 .. 2048).map(|_| -> u8 { random() }).collect()).into_peer_id();
         let second: PeerId = peer_id.to_base58().parse().unwrap();
         assert_eq!(peer_id, second);
+    }
+
+    #[test]
+    fn random_peer_id_is_valid() {
+        for _ in 0 .. 5000 {
+            let peer_id = PeerId::random();
+            assert_eq!(peer_id, PeerId::from_bytes(peer_id.clone().into_bytes()).unwrap());
+        }
     }
 }
