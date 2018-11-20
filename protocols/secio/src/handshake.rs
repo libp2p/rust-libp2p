@@ -397,18 +397,9 @@ where
                         #[cfg(feature = "secp256k1")]
                         SecioKeyPairInner::Secp256k1 { ref private } => {
                             let data_to_sign = Sha256::digest(&data_to_sign);
-                            let message = secp256k1::Message::from_slice(data_to_sign.as_ref())
-                                .expect("digest output length doesn't match secp256k1 input length");
-                            let secp256k1 = secp256k1::Secp256k1::signing_only();
-// mine:
-                            let data_to_sign: [u8; 32] = Sha256::digest(&data_to_sign);
-//                            let message = secp256k1::Message::from_slice(data_to_sign.as_ref())
-//                                .expect("digest output length doesn't match secp256k1 input length");
-                            let message = secp256k1::Message::parse(&data_to_sign);
-                            let secp256k1 = secp256k1::Secp256k1::with_caps(secp256k1::ContextFlag::SignOnly);
-                            secp256k1
-                                .sign(&message, private)
-                                .serialize_der(&secp256k1)
+                            let message = secp256k1::Message::parse_slice(&data_to_sign)?;
+                            let (signature, _) = secp256k1::sign(&message, private)?;
+                            signature.serialize_der().as_ref().to_vec()
                         },
                     }
                 });
@@ -496,24 +487,15 @@ where
                 #[cfg(feature = "secp256k1")]
                 PublicKey::Secp256k1(ref remote_public_key) => {
                     let data_to_verify = Sha256::digest(&data_to_verify);
-                    let message = secp256k1::Message::from_slice(data_to_verify.as_ref())
-                        .expect("digest output length doesn't match secp256k1 input length");
-                    let secp256k1 = secp256k1::Secp256k1::verification_only();
-                    let signature = secp256k1::Signature::from_der(&secp256k1, remote_exch.get_signature());
-// mine:
-                    let data_to_verify: [u8; 32] = Sha256::digest(&data_to_verify);
-                    let message = secp256k1::Message::parse(&data_to_verify);
-//                    let message = secp256k1::Message::from_slice(data_to_verify.as_ref())
-//                        .expect("digest output length doesn't match secp256k1 input length");
-//                    let secp256k1 = secp256k1::Secp256k1::with_caps(secp256k1::ContextFlag::VerifyOnly);
-//                    let signature = secp256k1::Signature::from_der(&secp256k1, remote_exch.get_signature());
-                    let signature = secp256k1::Signature::parse(remote_exch.get_signature());
-                    let remote_public_key = secp256k1::PublicKey::parse(remote_public_key)?;
-                    let remote_public_key = secp256k1::key::PublicKey::from_slice(&secp256k1, remote_public_key);
+                    let message = secp256k1::Message::parse_slice(&data_to_verify)?;
+                    let signature = secp256k1::Signature::parse_der(remote_exch.get_signature());
+                    // TODO: is the key compressed or not?
+                    let remote_public_key = secp256k1::PublicKey::parse_slice(remote_public_key, None);
+
                     if let (Ok(signature), Ok(remote_public_key)) = (signature, remote_public_key) {
-                        match secp256k1.verify(&message, &signature, &remote_public_key) {
-                            Ok(()) => (),
-                            Err(_) => {
+                        match secp256k1::verify(&message, &signature, &remote_public_key) {
+                            true => (),
+                            false => {
                                 debug!("failed to verify the remote's signature");
                                 return Err(SecioError::SignatureVerificationFailed)
                             },

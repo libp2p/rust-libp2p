@@ -22,6 +22,7 @@
 
 use aes_ctr::stream_cipher::LoopError;
 use protobuf::error::ProtobufError;
+use secp256k1::Error as Secp256k1Error;
 use std::error;
 use std::fmt;
 use std::io::Error as IoError;
@@ -145,5 +146,13 @@ impl From<ProtobufError> for SecioError {
     #[inline]
     fn from(err: ProtobufError) -> SecioError {
         SecioError::Protobuf(err)
+    }
+}
+
+impl From<Secp256k1Error> for SecioError {
+    #[inline]
+    fn from(err: Secp256k1Error) -> SecioError {
+        // TODO: probably need a specific SecioError here
+        SecioError::SignatureVerificationFailed
     }
 }
