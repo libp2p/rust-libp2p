@@ -310,7 +310,7 @@ impl HandshakeContext<Ephemeral> {
 pub fn handshake<'a, S: 'a>(
     socket: S,
     config: SecioConfig
-) -> Box<Future<Item = (FullCodec<S>, PublicKey, Vec<u8>), Error = SecioError> + Send + 'a>
+) -> impl Future<Item = (FullCodec<S>, PublicKey, Vec<u8>), Error = SecioError> + Send + 'a
 where
     S: AsyncRead + AsyncWrite + Send,
 {
@@ -320,7 +320,7 @@ where
         .length_field_length(4)
         .new_framed(socket);
 
-    let future = future::ok::<_, SecioError>(HandshakeContext::new(config))
+    future::ok::<_, SecioError>(HandshakeContext::new(config))
         .and_then(|context| {
             // Generate our nonce.
             let context = context.with_local()?;
@@ -570,7 +570,14 @@ where
                 (cipher, hmac)
             };
 
-            let codec = full_codec(socket, encoding_cipher, encoding_hmac, decoding_cipher, decoding_hmac);
+            let codec = full_codec(
+                socket,
+                encoding_cipher,
+                encoding_hmac,
+                decoding_cipher,
+                decoding_hmac,
+                context.state.remote.local.nonce.to_vec()
+            );
             Ok((codec, context))
         })
         // We send back their nonce to check if the connection works.
@@ -578,32 +585,9 @@ where
             let remote_nonce = context.state.remote.nonce.clone();
             trace!("checking encryption by sending back remote's nonce");
             codec.send(BytesMut::from(remote_nonce))
-                .map(|s| (s, context))
+                .map(|s| (s, context.state.remote.public_key, context.state.local_tmp_pub_key))
                 .from_err()
         })
-        // Check that the received nonce is correct.
-        .and_then(|(codec, context)| {
-            codec.into_future()
-                .map_err(|(e, _)| e)
-                .and_then(move |(nonce, rest)| {
-                    match nonce {
-                        Some(ref n) if n == &context.state.remote.local.nonce => {
-                            trace!("secio handshake success");
-                            Ok((rest, context.state.remote.public_key, context.state.local_tmp_pub_key))
-                        },
-                        None => {
-                            debug!("unexpected eof during nonce check");
-                            Err(IoError::new(IoErrorKind::BrokenPipe, "unexpected eof").into())
-                        },
-                        _ => {
-                            debug!("failed nonce verification with remote");
-                            Err(SecioError::NonceVerificationFailed)
-                        }
-                    }
-                })
-        });
-
-    Box::new(future)
 }
 
 /// Custom algorithm translated from reference implementations. Needs to be the same algorithm
