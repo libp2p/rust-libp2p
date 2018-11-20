@@ -25,36 +25,27 @@ use crate::{
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
 };
 
-/// Upgrade that combines two upgrades into one. Supports all the protocols supported by either
-/// sub-upgrade.
-///
-/// The protocols supported by the first element have a higher priority.
+/// A type to represent two possible upgrade types (inbound or outbound).
 #[derive(Debug, Clone)]
-pub struct OrUpgrade<A, B>(A, B);
+pub enum EitherUpgrade<A, B> { A(A), B(B) }
 
-impl<A, B> OrUpgrade<A, B> {
-    /// Combines two upgrades into an `OrUpgrade`.
-    ///
-    /// The protocols supported by the first element have a higher priority.
-    pub fn new(a: A, b: B) -> Self {
-        OrUpgrade(a, b)
-    }
-}
-
-impl<A, B> UpgradeInfo for OrUpgrade<A, B>
+impl<A, B> UpgradeInfo for EitherUpgrade<A, B>
 where
     A: UpgradeInfo,
     B: UpgradeInfo
 {
     type UpgradeId = Either<A::UpgradeId, B::UpgradeId>;
-    type NamesIter = NamesIterChain<A::NamesIter, B::NamesIter>;
+    type NamesIter = EitherIter<A::NamesIter, B::NamesIter>;
 
     fn protocol_names(&self) -> Self::NamesIter {
-        NamesIterChain(self.0.protocol_names(), self.1.protocol_names())
+        match self {
+            EitherUpgrade::A(a) => EitherIter::A(a.protocol_names()),
+            EitherUpgrade::B(b) => EitherIter::B(b.protocol_names())
+        }
     }
 }
 
-impl<C, A, B, TA, TB, EA, EB> InboundUpgrade<C> for OrUpgrade<A, B>
+impl<C, A, B, TA, TB, EA, EB> InboundUpgrade<C> for EitherUpgrade<A, B>
 where
     A: InboundUpgrade<C, Output = TA, Error = EA>,
     B: InboundUpgrade<C, Output = TB, Error = EB>,
@@ -64,14 +55,15 @@ where
     type Future = EitherFuture2<A::Future, B::Future>;
 
     fn upgrade_inbound(self, sock: C, id: Self::UpgradeId) -> Self::Future {
-        match id {
-            Either::A(id) => EitherFuture2::A(self.0.upgrade_inbound(sock, id)),
-            Either::B(id) => EitherFuture2::B(self.1.upgrade_inbound(sock, id))
+        match (self, id) {
+            (EitherUpgrade::A(a), Either::A(id)) => EitherFuture2::A(a.upgrade_inbound(sock, id)),
+            (EitherUpgrade::B(b), Either::B(id)) => EitherFuture2::B(b.upgrade_inbound(sock, id)),
+            _ => panic!("Invalid invocation of EitherUpgrade::upgrade_inbound")
         }
     }
 }
 
-impl<C, A, B, TA, TB, EA, EB> OutboundUpgrade<C> for OrUpgrade<A, B>
+impl<C, A, B, TA, TB, EA, EB> OutboundUpgrade<C> for EitherUpgrade<A, B>
 where
     A: OutboundUpgrade<C, Output = TA, Error = EA>,
     B: OutboundUpgrade<C, Output = TB, Error = EB>,
@@ -81,18 +73,19 @@ where
     type Future = EitherFuture2<A::Future, B::Future>;
 
     fn upgrade_outbound(self, sock: C, id: Self::UpgradeId) -> Self::Future {
-        match id {
-            Either::A(id) => EitherFuture2::A(self.0.upgrade_outbound(sock, id)),
-            Either::B(id) => EitherFuture2::B(self.1.upgrade_outbound(sock, id))
+        match (self, id) {
+            (EitherUpgrade::A(a), Either::A(id)) => EitherFuture2::A(a.upgrade_outbound(sock, id)),
+            (EitherUpgrade::B(b), Either::B(id)) => EitherFuture2::B(b.upgrade_outbound(sock, id)),
+            _ => panic!("Invalid invocation of EitherUpgrade::upgrade_outbound")
         }
     }
 }
 
-/// Iterator that combines the protocol names of twp upgrades.
+/// A type to represent two possible `Iterator` types.
 #[derive(Debug, Clone)]
-pub struct NamesIterChain<A, B>(A, B);
+pub enum EitherIter<A, B> { A(A), B(B) }
 
-impl<A, B, AId, BId> Iterator for NamesIterChain<A, B>
+impl<A, B, AId, BId> Iterator for EitherIter<A, B>
 where
     A: Iterator<Item = (Bytes, AId)>,
     B: Iterator<Item = (Bytes, BId)>,
@@ -100,20 +93,17 @@ where
     type Item = (Bytes, Either<AId, BId>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some((name, id)) = self.0.next() {
-            return Some((name, Either::A(id)))
+        match self {
+            EitherIter::A(a) => a.next().map(|(name, id)| (name, Either::A(id))),
+            EitherIter::B(b) => b.next().map(|(name, id)| (name, Either::B(id)))
         }
-        if let Some((name, id)) = self.1.next() {
-            return Some((name, Either::B(id)))
-        }
-        None
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let (min1, max1) = self.0.size_hint();
-        let (min2, max2) = self.1.size_hint();
-        let max = max1.and_then(move |m1| max2.and_then(move |m2| m1.checked_add(m2)));
-        (min1.saturating_add(min2), max)
+        match self {
+            EitherIter::A(a) => a.size_hint(),
+            EitherIter::B(b) => b.size_hint()
+        }
     }
 }
 

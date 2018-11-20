@@ -59,10 +59,10 @@
 
 mod apply;
 mod denied;
+mod either;
 mod error;
 mod map;
 mod or;
-mod toggleable;
 
 use bytes::Bytes;
 use futures::future::Future;
@@ -70,10 +70,10 @@ use futures::future::Future;
 pub use self::{
     apply::{apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply},
     denied::DeniedUpgrade,
+    either::EitherUpgrade,
     error::UpgradeError,
     map::{MapInboundUpgrade, MapOutboundUpgrade, MapInboundUpgradeErr, MapOutboundUpgradeErr},
     or::OrUpgrade,
-    toggleable::{toggleable, Toggleable}
 };
 
 /// Common trait for upgrades that can be applied on inbound substreams, outbound substreams,
@@ -132,7 +132,7 @@ pub trait InboundUpgradeExt<C>: InboundUpgrade<C> {
     fn or_inbound<U>(self, upgrade: U) -> OrUpgrade<Self, U>
     where
         Self: Sized,
-        U: InboundUpgrade<C, Output = Self::Output, Error = Self::Error>
+        U: InboundUpgrade<C>
     {
         OrUpgrade::new(self, upgrade)
     }
@@ -182,7 +182,7 @@ pub trait OutboundUpgradeExt<C>: OutboundUpgrade<C> {
     fn or_outbound<U>(self, upgrade: U) -> OrUpgrade<Self, U>
     where
         Self: Sized,
-        U: OutboundUpgrade<C, Output = Self::Output, Error = Self::Error>
+        U: OutboundUpgrade<C>
     {
         OrUpgrade::new(self, upgrade)
     }

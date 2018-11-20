@@ -69,11 +69,6 @@ where
         self.config.clone()
     }
 
-    #[inline]
-    fn dialer_protocol(&self) -> Self::OutboundProtocol {
-        DeniedUpgrade
-    }
-
     fn inject_fully_negotiated_inbound(
         &mut self,
         protocol: <Self::InboundProtocol as InboundUpgrade<TSubstream>>::Output
