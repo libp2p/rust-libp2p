@@ -467,13 +467,12 @@ mod tests {
     use futures::future::{self, FutureResult};
     use futures::sync::mpsc::{UnboundedReceiver, UnboundedSender};
     use nodes::handled_node::NodeHandlerEvent;
-    use rand::random;
     use tests::dummy_handler::{Handler, HandlerState, InEvent, OutEvent, TestHandledNode};
     use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
     use tokio::runtime::Builder;
     use tokio::runtime::current_thread::Runtime;
     use void::Void;
-    use {PeerId, PublicKey};
+    use PeerId;
 
     type TestNodeTask = NodeTask<
         FutureResult<(PeerId, DummyMuxer), IoError>,
@@ -495,7 +494,7 @@ mod tests {
                 task_id: TaskId(123),
                 inner_node: None,
                 inner_fut: {
-                    let peer_id = PublicKey::Rsa((0 .. 2048).map(|_| -> u8 { random() }).collect()).into_peer_id();
+                    let peer_id = PeerId::random();
                     Some(future::ok((peer_id, DummyMuxer::new())))
                 },
             }
@@ -576,7 +575,7 @@ mod tests {
         }
         fn handled_nodes_tasks(&mut self) -> (TestHandledNodesTasks, Vec<TaskId>) {
             let mut handled_nodes = HandledNodesTasks::new();
-            let peer_id = PublicKey::Rsa((0 .. 2048).map(|_| -> u8 { random() }).collect()).into_peer_id();
+            let peer_id = PeerId::random();
             let mut task_ids = Vec::new();
             for _i in 0..self.task_count {
                 let fut = future::ok::<_, Void>((peer_id.clone(), self.muxer.clone()));
@@ -628,7 +627,7 @@ mod tests {
     fn task_exits_when_node_is_done() {
         let mut rt = Runtime::new().unwrap();
         let fut = {
-            let peer_id = PublicKey::Rsa((0 .. 2048).map(|_| -> u8 { random() }).collect()).into_peer_id();
+            let peer_id = PeerId::random();
             let mut muxer = DummyMuxer::new();
             muxer.set_inbound_connection_state(DummyConnectionState::Closed);
             muxer.set_outbound_connection_state(DummyConnectionState::Closed);

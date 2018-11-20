@@ -17,6 +17,7 @@ documentation = "https://docs.rs/multihash/"
 
 [dependencies]
 blake2 = { version = "0.7", default-features = false }
+rand = { version = "0.6", default-features = false, features = ["std"] }
 sha1 = "0.5"
 sha2 = { version = "0.7", default-features = false }
 tiny-keccak = "1.4"
