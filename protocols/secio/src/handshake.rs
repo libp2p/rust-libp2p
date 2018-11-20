@@ -631,15 +631,16 @@ where ::hmac::Hmac<D>: Clone {
 mod tests {
     extern crate tokio;
     extern crate tokio_tcp;
+    use bytes::BytesMut;
     use self::tokio::runtime::current_thread::Runtime;
     use self::tokio_tcp::TcpListener;
     use self::tokio_tcp::TcpStream;
+    use crate::SecioError;
     use super::handshake;
     use super::stretch_key;
     use algo_support::Digest;
     use codec::Hmac;
-    use futures::Future;
-    use futures::Stream;
+    use futures::prelude::*;
     use {SecioConfig, SecioKeyPair};
 
     #[test]
@@ -691,11 +692,29 @@ mod tests {
             .incoming()
             .into_future()
             .map_err(|(e, _)| e.into())
-            .and_then(move |(connec, _)| handshake(connec.unwrap(), key1));
+            .and_then(move |(connec, _)| handshake(connec.unwrap(), key1))
+            .and_then(|(connec, _, _)| {
+                let (sink, stream) = connec.split();
+                stream
+                    .filter(|v| !v.is_empty())
+                    .forward(sink.with(|v| Ok::<_, SecioError>(BytesMut::from(v))))
+            });
 
         let client = TcpStream::connect(&listener_addr)
             .map_err(|e| e.into())
-            .and_then(move |stream| handshake(stream, key2));
+            .and_then(move |stream| handshake(stream, key2))
+            .and_then(|(connec, _, _)| {
+                connec.send("hello".into())
+                    .from_err()
+                    .and_then(|connec| {
+                        connec.filter(|v| !v.is_empty())
+                            .into_future()
+                            .map(|(v, _)| v)
+                            .map_err(|(e, _)| e)
+                    })
+                    .map(|v| assert_eq!(b"hello", &v.unwrap()[..]))
+            });
+
         let mut rt = Runtime::new().unwrap();
         let _ = rt.block_on(server.join(client)).unwrap();
     }
