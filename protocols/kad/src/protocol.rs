@@ -432,7 +432,7 @@ mod tests {
 
     use self::libp2p_tcp_transport::TcpConfig;
     use futures::{Future, Sink, Stream};
-    use libp2p_core::{Transport, PeerId, PublicKey};
+    use libp2p_core::{Transport, PeerId};
     use multihash::{encode, Hash};
     use protocol::{KadConnectionType, KadMsg, KademliaProtocolConfig, KadPeer};
     use std::sync::mpsc;
@@ -454,12 +454,12 @@ mod tests {
             key: encode(Hash::SHA2256, &[10, 11, 12]).unwrap(),
         });
         test_one(KadMsg::FindNodeReq {
-            key: PeerId::from_public_key(PublicKey::Rsa(vec![9, 12, 0, 245, 245, 201, 28, 95]))
+            key: PeerId::random()
         });
         test_one(KadMsg::FindNodeRes {
             closer_peers: vec![
                 KadPeer {
-                    node_id: PeerId::from_public_key(PublicKey::Rsa(vec![93, 80, 12, 250])),
+                    node_id: PeerId::random(),
                     multiaddrs: vec!["/ip4/100.101.102.103/tcp/20105".parse().unwrap()],
                     connection_ty: KadConnectionType::Connected,
                 },
@@ -471,14 +471,14 @@ mod tests {
         test_one(KadMsg::GetProvidersRes {
             closer_peers: vec![
                 KadPeer {
-                    node_id: PeerId::from_public_key(PublicKey::Rsa(vec![93, 80, 12, 250])),
+                    node_id: PeerId::random(),
                     multiaddrs: vec!["/ip4/100.101.102.103/tcp/20105".parse().unwrap()],
                     connection_ty: KadConnectionType::Connected,
                 },
             ],
             provider_peers: vec![
                 KadPeer {
-                    node_id: PeerId::from_public_key(PublicKey::Rsa(vec![12, 90, 1, 28])),
+                    node_id: PeerId::random(),
                     multiaddrs: vec!["/ip4/200.201.202.203/tcp/1999".parse().unwrap()],
                     connection_ty: KadConnectionType::NotConnected,
                 },
@@ -487,7 +487,7 @@ mod tests {
         test_one(KadMsg::AddProvider {
             key: encode(Hash::SHA2256, &[9, 12, 0, 245, 245, 201, 28, 95]).unwrap(),
             provider_peer: KadPeer {
-                node_id: PeerId::from_public_key(PublicKey::Rsa(vec![5, 6, 7, 8])),
+                node_id: PeerId::random(),
                 multiaddrs: vec!["/ip4/9.1.2.3/udp/23".parse().unwrap()],
                 connection_ty: KadConnectionType::Connected,
             },

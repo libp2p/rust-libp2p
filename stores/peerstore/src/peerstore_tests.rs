@@ -33,14 +33,13 @@ macro_rules! peerstore_tests {
         use std::thread;
         use std::time::Duration;
         use {Peerstore, PeerAccess, PeerId};
-        use libp2p_core::PublicKey;
         use multiaddr::Multiaddr;
 
         #[test]
         fn initially_empty() {
             $($stmt;)*
             let peer_store = $create_peerstore;
-            let peer_id = PeerId::from_public_key(PublicKey::Ed25519(vec![1, 2, 3]));
+            let peer_id = PeerId::random();
             assert_eq!(peer_store.peers().count(), 0);
             assert!(peer_store.peer(&peer_id).is_none());
         }
@@ -49,7 +48,7 @@ macro_rules! peerstore_tests {
         fn set_then_get_addr() {
             $($stmt;)*
             let peer_store = $create_peerstore;
-            let peer_id = PeerId::from_public_key(PublicKey::Ed25519(vec![1, 2, 3]));
+            let peer_id = PeerId::random();
             let addr = "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap();
 
             peer_store.peer_or_create(&peer_id).add_addr(addr.clone(), Duration::from_millis(5000));
@@ -63,7 +62,7 @@ macro_rules! peerstore_tests {
             // Add an already-expired address to a peer.
             $($stmt;)*
             let peer_store = $create_peerstore;
-            let peer_id = PeerId::from_public_key(PublicKey::Ed25519(vec![1, 2, 3]));
+            let peer_id = PeerId::random();
             let addr = "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap();
 
             peer_store.peer_or_create(&peer_id).add_addr(addr.clone(), Duration::from_millis(0));
@@ -77,7 +76,7 @@ macro_rules! peerstore_tests {
         fn clear_addrs() {
             $($stmt;)*
             let peer_store = $create_peerstore;
-            let peer_id = PeerId::from_public_key(PublicKey::Ed25519(vec![1, 2, 3]));
+            let peer_id = PeerId::random();
             let addr = "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap();
 
             peer_store.peer_or_create(&peer_id)
@@ -92,7 +91,7 @@ macro_rules! peerstore_tests {
         fn no_update_ttl() {
             $($stmt;)*
             let peer_store = $create_peerstore;
-            let peer_id = PeerId::from_public_key(PublicKey::Ed25519(vec![1, 2, 3]));
+            let peer_id = PeerId::random();
 
             let addr1 = "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap();
             let addr2 = "/ip4/0.0.0.1/tcp/0".parse::<Multiaddr>().unwrap();
@@ -113,7 +112,7 @@ macro_rules! peerstore_tests {
         fn force_update_ttl() {
             $($stmt;)*
             let peer_store = $create_peerstore;
-            let peer_id = PeerId::from_public_key(PublicKey::Ed25519(vec![1, 2, 3]));
+            let peer_id = PeerId::random();
 
             let addr1 = "/ip4/0.0.0.0/tcp/0".parse::<Multiaddr>().unwrap();
             let addr2 = "/ip4/0.0.0.1/tcp/0".parse::<Multiaddr>().unwrap();

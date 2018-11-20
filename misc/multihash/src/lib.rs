@@ -6,6 +6,7 @@
 //! A `MultihashRef` is the same as a `Multihash`, except that it doesn't own its data.
 
 extern crate blake2;
+extern crate rand;
 extern crate sha1;
 extern crate sha2;
 extern crate tiny_keccak;
@@ -132,6 +133,28 @@ impl Multihash {
         Ok(Multihash { bytes })
     }
 
+    /// Generates a random `Multihash` from a cryptographically secure PRNG.
+    pub fn random(hash: Hash) -> Multihash {
+        let mut buf = encode::u16_buffer();
+        let code = encode::u16(hash.code(), &mut buf);
+
+        let header_len = code.len() + 1;
+        let size = hash.size();
+
+        let mut output = Vec::new();
+        output.resize(header_len + size as usize, 0);
+        output[..code.len()].copy_from_slice(code);
+        output[code.len()] = size;
+
+        for b in output[header_len..].iter_mut() {
+            *b = rand::random();
+        }
+
+        Multihash {
+            bytes: output,
+        }
+    }
+
     /// Returns the bytes representation of the multihash.
     #[inline]
     pub fn into_bytes(self) -> Vec<u8> {
@@ -249,4 +272,25 @@ pub fn to_hex(bytes: &[u8]) -> String {
     }
 
     hex
+}
+
+#[cfg(test)]
+mod tests {
+    use {Hash, Multihash};
+
+    #[test]
+    fn rand_generates_valid_multihash() {
+        // Iterate over every possible hash function.
+        for code in 0 .. u16::max_value() {
+            let hash_fn = match Hash::from_code(code) {
+                Some(c) => c,
+                None => continue,
+            };
+
+            for _ in 0 .. 2000 {
+                let hash = Multihash::random(hash_fn);
+                assert_eq!(hash, Multihash::from_bytes(hash.clone().into_bytes()).unwrap());
+            }
+        }
+    }
 }
