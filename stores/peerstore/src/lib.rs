@@ -50,7 +50,7 @@
 //!
 //! // In this example we use a `MemoryPeerstore`, but you can easily swap it for another backend.
 //! let mut peerstore = MemoryPeerstore::empty();
-//! let peer_id = PeerId::from_public_key(PublicKey::Rsa(vec![1, 2, 3, 4]));
+//! let peer_id = PeerId::random();
 //!
 //! // Let's write some information about a peer.
 //! {

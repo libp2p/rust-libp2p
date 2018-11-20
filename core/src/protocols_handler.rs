@@ -770,8 +770,8 @@ where
     type InboundProtocol =
         upgrade::OrUpgrade<
             upgrade::Toggleable<
-                upgrade::MapUpgradeErr<
-                    upgrade::MapUpgrade<
+                upgrade::MapInboundUpgradeErr<
+                    upgrade::MapInboundUpgrade<
                         TProto1::InboundProtocol,
                         fn(TProto1Out) -> EitherOutput<TProto1Out, TProto2Out>
                     >,
@@ -783,8 +783,8 @@ where
                 >
             >,
             upgrade::Toggleable<
-                upgrade::MapUpgradeErr<
-                    upgrade::MapUpgrade<
+                upgrade::MapInboundUpgradeErr<
+                    upgrade::MapInboundUpgrade<
                         TProto2::InboundProtocol,
                         fn(TProto2Out) -> EitherOutput<TProto1Out, TProto2Out>
                     >,
@@ -800,8 +800,8 @@ where
     type OutboundProtocol =
         upgrade::OrUpgrade<
             upgrade::Toggleable<
-                upgrade::MapUpgradeErr<
-                    upgrade::MapUpgrade<
+                upgrade::MapOutboundUpgradeErr<
+                    upgrade::MapOutboundUpgrade<
                         TProto1::OutboundProtocol,
                         fn(TProto1Out) -> EitherOutput<TProto1Out, TProto2Out>
                     >,
@@ -813,8 +813,8 @@ where
                 >
             >,
             upgrade::Toggleable<
-                upgrade::MapUpgradeErr<
-                    upgrade::MapUpgrade<
+                upgrade::MapOutboundUpgradeErr<
+                    upgrade::MapOutboundUpgrade<
                         TProto2::OutboundProtocol,
                         fn(TProto2Out) -> EitherOutput<TProto1Out, TProto2Out>
                     >,

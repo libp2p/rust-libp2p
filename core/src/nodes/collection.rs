@@ -477,7 +477,6 @@ mod tests {
     use futures::future::{self};
     use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
     use tests::dummy_handler::{Handler, InEvent, OutEvent, HandlerState};
-    use PublicKey;
     use tokio::runtime::current_thread::Runtime;
     use tokio::runtime::Builder;
     use nodes::NodeHandlerEvent;
@@ -490,7 +489,7 @@ mod tests {
     #[test]
     fn has_connection_is_false_before_a_connection_has_been_made() {
         let cs = TestCollectionStream::new();
-        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        let peer_id = PeerId::random();
         assert!(!cs.has_connection(&peer_id));
     }
 
@@ -503,7 +502,7 @@ mod tests {
     #[test]
     fn retrieving_a_peer_is_none_if_peer_is_missing_or_not_connected() {
         let mut cs = TestCollectionStream::new();
-        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        let peer_id = PeerId::random();
         assert!(cs.peer_mut(&peer_id).is_none());
 
         let handler = Handler::default();
@@ -515,7 +514,7 @@ mod tests {
     #[test]
     fn collection_stream_reaches_the_nodes() {
         let mut cs = TestCollectionStream::new();
-        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        let peer_id = PeerId::random();
 
         let mut muxer = DummyMuxer::new();
         muxer.set_inbound_connection_state(DummyConnectionState::Pending);
@@ -544,7 +543,7 @@ mod tests {
     #[test]
     fn accepting_a_node_yields_new_entry() {
         let mut cs = TestCollectionStream::new();
-        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        let peer_id = PeerId::random();
         let fut = future::ok::<_, Void>((peer_id.clone(), DummyMuxer::new()));
         cs.add_reach_attempt(fut, Handler::default());
 
@@ -581,7 +580,7 @@ mod tests {
     #[test]
     fn events_in_a_node_reaches_the_collection_stream() {
         let cs = Arc::new(Mutex::new(TestCollectionStream::new()));
-        let task_peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        let task_peer_id = PeerId::random();
 
         let mut handler = Handler::default();
         handler.state = Some(HandlerState::Ready(Some(NodeHandlerEvent::Custom(OutEvent::Custom("init")))));
@@ -683,7 +682,7 @@ mod tests {
     #[test]
     fn task_closed_with_error_when_task_is_connected_yields_node_error() {
         let cs = Arc::new(Mutex::new(TestCollectionStream::new()));
-        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        let peer_id = PeerId::random();
         let muxer = DummyMuxer::new();
         let task_inner_fut = future::ok::<_, Void>((peer_id.clone(), muxer));
         let mut handler = Handler::default();
@@ -729,7 +728,7 @@ mod tests {
     #[test]
     fn task_closed_ok_when_task_is_connected_yields_node_closed() {
         let cs = Arc::new(Mutex::new(TestCollectionStream::new()));
-        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        let peer_id = PeerId::random();
         let muxer = DummyMuxer::new();
         let task_inner_fut = future::ok::<_, Void>((peer_id.clone(), muxer));
         let mut handler = Handler::default();
@@ -795,7 +794,7 @@ mod tests {
     #[test]
     fn interrupting_an_established_connection_is_err() {
         let cs = Arc::new(Mutex::new(TestCollectionStream::new()));
-        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        let peer_id = PeerId::random();
         let muxer = DummyMuxer::new();
         let task_inner_fut = future::ok::<_, Void>((peer_id.clone(), muxer));
         let handler = Handler::default();

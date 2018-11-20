@@ -46,7 +46,7 @@ impl<TSubstream> PeriodicIdentifyBehaviour<TSubstream> {
 
 impl<TSubstream> NetworkBehaviour for PeriodicIdentifyBehaviour<TSubstream>
 where
-    TSubstream: AsyncRead + AsyncWrite + Send + Sync + 'static,
+    TSubstream: AsyncRead + AsyncWrite,
 {
     type ProtocolsHandler = PeriodicIdentification<TSubstream>;
     type OutEvent = PeriodicIdentifyBehaviourEvent;
