@@ -274,8 +274,7 @@ where
                     self.inbound_state = StreamState::Closed;
                     return Ok(Async::Ready(Some(NodeEvent::InboundClosed)));
                 }
-                Async::NotReady => {
-                }
+                Async::NotReady => {}
             }
         }
 
