@@ -1239,7 +1239,6 @@ mod tests {
     use std::sync::Arc;
     use parking_lot::Mutex;
     use tokio::runtime::{Builder, Runtime};
-    use PublicKey;
     use tests::dummy_transport::DummyTransport;
     use tests::dummy_handler::{Handler, HandlerState, InEvent, OutEvent};
     use tests::dummy_transport::ListenerState;
