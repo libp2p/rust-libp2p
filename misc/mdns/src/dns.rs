@@ -98,8 +98,8 @@ pub fn build_query_response(
     let mut out = Vec::with_capacity(320);
 
     append_u16(&mut out, id);
-    // Flags ; 0x80 for an answer.
-    append_u16(&mut out, 0x8000);
+    // Flags ; 0x84 for an answer.
+    append_u16(&mut out, 0x8400);
     // Number of questions, answers, authorities, additionals.
     append_u16(&mut out, 0x0);
     append_u16(&mut out, 0x1);
