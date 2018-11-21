@@ -37,6 +37,7 @@ use {dialer_select_proto, listener_select_proto};
 
 /// Holds a `Vec` and satifies the iterator requirements of `listener_select_proto`.
 struct VecRefIntoIter<T>(Vec<T>);
+
 impl<'a, T> IntoIterator for &'a VecRefIntoIter<T>
 where T: Clone
 {

@@ -110,7 +110,7 @@ where
                     match msg {
                         Some(DialerToListenerMessage::ProtocolsListRequest) => {
                             let msg = ListenerToDialerMessage::ProtocolsListResponse {
-                                list: (&protocols).into_iter().map(|(p, _, _)| p).collect(),
+                                list: protocols.into_iter().map(|(p, _, _)| p).collect(),
                             };
                             trace!("protocols list response: {:?}", msg);
                             let sender = listener.send(msg);

@@ -206,6 +206,7 @@ where
 
 /// Wraps around a `UpgradeInfo` and satisfies the requirement of `listener_select_proto`.
 struct UpgradeIntoProtocolsIterWrap<U>(U);
+
 impl<'a, U> IntoIterator for &'a UpgradeIntoProtocolsIterWrap<U>
 where U: UpgradeInfo
 {
