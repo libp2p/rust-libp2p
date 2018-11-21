@@ -22,14 +22,14 @@ extern crate bytes;
 extern crate futures;
 #[macro_use]
 extern crate log;
-extern crate libp2p_core as core;
+extern crate libp2p_core;
 extern crate parking_lot;
 extern crate tokio_io;
 extern crate yamux;
 
 use bytes::Bytes;
-use core::{Endpoint, muxing::Shutdown};
 use futures::{future::{self, FutureResult}, prelude::*};
+use libp2p_core::{muxing::Shutdown, upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}};
 use parking_lot::Mutex;
 use std::{io, iter};
 use std::io::{Error as IoError};
@@ -47,7 +47,7 @@ where
     }
 }
 
-impl<C> core::StreamMuxer for Yamux<C>
+impl<C> libp2p_core::StreamMuxer for Yamux<C>
 where
     C: AsyncRead + AsyncWrite + 'static
 {
@@ -134,27 +134,38 @@ impl Default for Config {
     }
 }
 
-impl<C> core::ConnectionUpgrade<C> for Config
-where
-    C: AsyncRead + AsyncWrite + 'static,
-{
-    type UpgradeIdentifier = ();
-    type NamesIter = iter::Once<(Bytes, ())>;
+impl UpgradeInfo for Config {
+    type UpgradeId = ();
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
 
     fn protocol_names(&self) -> Self::NamesIter {
         iter::once((Bytes::from("/yamux/1.0.0"), ()))
     }
+}
 
+impl<C> InboundUpgrade<C> for Config
+where
+    C: AsyncRead + AsyncWrite + 'static,
+{
     type Output = Yamux<C>;
+    type Error = io::Error;
     type Future = FutureResult<Yamux<C>, io::Error>;
 
-    fn upgrade(self, i: C, _: (), end: Endpoint) -> Self::Future {
-        let mode = match end {
-            Endpoint::Dialer => yamux::Mode::Client,
-            Endpoint::Listener => yamux::Mode::Server
-        };
+    fn upgrade_inbound(self, i: C, _: Self::UpgradeId) -> Self::Future {
+        future::ok(Yamux::new(i, self.0, yamux::Mode::Server))
+    }
+}
 
-        future::ok(Yamux::new(i, self.0, mode))
+impl<C> OutboundUpgrade<C> for Config
+where
+    C: AsyncRead + AsyncWrite + 'static,
+{
+    type Output = Yamux<C>;
+    type Error = io::Error;
+    type Future = FutureResult<Yamux<C>, io::Error>;
+
+    fn upgrade_outbound(self, i: C, _: Self::UpgradeId) -> Self::Future {
+        future::ok(Yamux::new(i, self.0, yamux::Mode::Client))
     }
 }
 

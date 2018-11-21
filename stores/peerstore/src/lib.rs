@@ -31,7 +31,7 @@
 //! - `MemoryPeerstore`: Stores the information in memory.
 //!
 //! Note that the peerstore implementations do not consider information inside a peer store to be
-//! critical. In case of an error (eg. corrupted file, disk error, etc.) they will prefer to lose
+//! critical. In case of an error (e.g. corrupted file, disk error, etc.) they will prefer to lose
 //! data rather than returning the error.
 //!
 //! # Example
@@ -50,7 +50,7 @@
 //!
 //! // In this example we use a `MemoryPeerstore`, but you can easily swap it for another backend.
 //! let mut peerstore = MemoryPeerstore::empty();
-//! let peer_id = PeerId::from_public_key(PublicKey::Rsa(vec![1, 2, 3, 4]));
+//! let peer_id = PeerId::random();
 //!
 //! // Let's write some information about a peer.
 //! {

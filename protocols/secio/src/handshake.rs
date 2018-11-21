@@ -307,10 +307,8 @@ impl HandshakeContext<Ephemeral> {
 /// On success, returns an object that implements the `Sink` and `Stream` trait whose items are
 /// buffers of data, plus the public key of the remote, plus the ephemeral public key used during
 /// negotiation.
-pub fn handshake<'a, S: 'a>(
-    socket: S,
-    config: SecioConfig
-) -> Box<Future<Item = (FullCodec<S>, PublicKey, Vec<u8>), Error = SecioError> + Send + 'a>
+pub fn handshake<'a, S: 'a>(socket: S, config: SecioConfig)
+    -> impl Future<Item = (FullCodec<S>, PublicKey, Vec<u8>), Error = SecioError>
 where
     S: AsyncRead + AsyncWrite + Send,
 {
@@ -320,7 +318,7 @@ where
         .length_field_length(4)
         .new_framed(socket);
 
-    let future = future::ok::<_, SecioError>(HandshakeContext::new(config))
+    future::ok::<_, SecioError>(HandshakeContext::new(config))
         .and_then(|context| {
             // Generate our nonce.
             let context = context.with_local()?;
@@ -399,10 +397,9 @@ where
                             let data_to_sign = Sha256::digest(&data_to_sign);
                             let message = secp256k1::Message::from_slice(data_to_sign.as_ref())
                                 .expect("digest output length doesn't match secp256k1 input length");
-                            let secp256k1 = secp256k1::Secp256k1::with_caps(secp256k1::ContextFlag::SignOnly);
+                            let secp256k1 = secp256k1::Secp256k1::signing_only();
                             secp256k1
                                 .sign(&message, private)
-                                .expect("failed to sign message")
                                 .serialize_der(&secp256k1)
                         },
                     }
@@ -493,7 +490,7 @@ where
                     let data_to_verify = Sha256::digest(&data_to_verify);
                     let message = secp256k1::Message::from_slice(data_to_verify.as_ref())
                         .expect("digest output length doesn't match secp256k1 input length");
-                    let secp256k1 = secp256k1::Secp256k1::with_caps(secp256k1::ContextFlag::VerifyOnly);
+                    let secp256k1 = secp256k1::Secp256k1::verification_only();
                     let signature = secp256k1::Signature::from_der(&secp256k1, remote_exch.get_signature());
                     let remote_public_key = secp256k1::key::PublicKey::from_slice(&secp256k1, remote_public_key);
                     if let (Ok(signature), Ok(remote_public_key)) = (signature, remote_public_key) {
@@ -525,7 +522,7 @@ where
             Ok((remote_exch, socket, context))
         })
         // Generate a key from the local ephemeral private key and the remote ephemeral public key,
-        // derive from it a ciper key, an iv, and a hmac key, and build the encoder/decoder.
+        // derive from it a cipher key, an iv, and a hmac key, and build the encoder/decoder.
         .and_then(|(remote_exch, socket, context)| {
             let (context, local_priv_key) = context.take_private_key();
             let key_size = context.state.remote.chosen_hash.num_bytes();
@@ -533,7 +530,7 @@ where
                 .map(move |key_material| (socket, context, key_material))
         })
         // Generate a key from the local ephemeral private key and the remote ephemeral public key,
-        // derive from it a ciper key, an iv, and a hmac key, and build the encoder/decoder.
+        // derive from it a cipher key, an iv, and a hmac key, and build the encoder/decoder.
         .and_then(|(socket, context, key_material)| {
             let chosen_cipher = context.state.remote.chosen_cipher;
             let cipher_key_size = chosen_cipher.key_size();
@@ -571,7 +568,14 @@ where
                 (cipher, hmac)
             };
 
-            let codec = full_codec(socket, encoding_cipher, encoding_hmac, decoding_cipher, decoding_hmac);
+            let codec = full_codec(
+                socket,
+                encoding_cipher,
+                encoding_hmac,
+                decoding_cipher,
+                decoding_hmac,
+                context.state.remote.local.nonce.to_vec()
+            );
             Ok((codec, context))
         })
         // We send back their nonce to check if the connection works.
@@ -579,32 +583,9 @@ where
             let remote_nonce = context.state.remote.nonce.clone();
             trace!("checking encryption by sending back remote's nonce");
             codec.send(BytesMut::from(remote_nonce))
-                .map(|s| (s, context))
+                .map(|s| (s, context.state.remote.public_key, context.state.local_tmp_pub_key))
                 .from_err()
         })
-        // Check that the received nonce is correct.
-        .and_then(|(codec, context)| {
-            codec.into_future()
-                .map_err(|(e, _)| e)
-                .and_then(move |(nonce, rest)| {
-                    match nonce {
-                        Some(ref n) if n == &context.state.remote.local.nonce => {
-                            trace!("secio handshake success");
-                            Ok((rest, context.state.remote.public_key, context.state.local_tmp_pub_key))
-                        },
-                        None => {
-                            debug!("unexpected eof during nonce check");
-                            Err(IoError::new(IoErrorKind::BrokenPipe, "unexpected eof").into())
-                        },
-                        _ => {
-                            debug!("failed nonce verification with remote");
-                            Err(SecioError::NonceVerificationFailed)
-                        }
-                    }
-                })
-        });
-
-    Box::new(future)
 }
 
 /// Custom algorithm translated from reference implementations. Needs to be the same algorithm
@@ -648,15 +629,16 @@ where ::hmac::Hmac<D>: Clone {
 mod tests {
     extern crate tokio;
     extern crate tokio_tcp;
+    use bytes::BytesMut;
     use self::tokio::runtime::current_thread::Runtime;
     use self::tokio_tcp::TcpListener;
     use self::tokio_tcp::TcpStream;
+    use crate::SecioError;
     use super::handshake;
     use super::stretch_key;
     use algo_support::Digest;
     use codec::Hmac;
-    use futures::Future;
-    use futures::Stream;
+    use futures::prelude::*;
     use {SecioConfig, SecioKeyPair};
 
     #[test]
@@ -708,11 +690,29 @@ mod tests {
             .incoming()
             .into_future()
             .map_err(|(e, _)| e.into())
-            .and_then(move |(connec, _)| handshake(connec.unwrap(), key1));
+            .and_then(move |(connec, _)| handshake(connec.unwrap(), key1))
+            .and_then(|(connec, _, _)| {
+                let (sink, stream) = connec.split();
+                stream
+                    .filter(|v| !v.is_empty())
+                    .forward(sink.with(|v| Ok::<_, SecioError>(BytesMut::from(v))))
+            });
 
         let client = TcpStream::connect(&listener_addr)
             .map_err(|e| e.into())
-            .and_then(move |stream| handshake(stream, key2));
+            .and_then(move |stream| handshake(stream, key2))
+            .and_then(|(connec, _, _)| {
+                connec.send("hello".into())
+                    .from_err()
+                    .and_then(|connec| {
+                        connec.filter(|v| !v.is_empty())
+                            .into_future()
+                            .map(|(v, _)| v)
+                            .map_err(|(e, _)| e)
+                    })
+                    .map(|v| assert_eq!(b"hello", &v.unwrap()[..]))
+            });
+
         let mut rt = Runtime::new().unwrap();
         let _ = rt.block_on(server.join(client)).unwrap();
     }
