@@ -47,18 +47,18 @@ pub struct DecoderMiddleware<S> {
 }
 
 impl<S> DecoderMiddleware<S> {
+    /// Create a new decoder for the given stream, using the provided cipher and HMAC.
+    ///
+    /// The `nonce` parameter denotes a sequence of bytes which are expected to be found at the
+    /// beginning of the stream and are checked for equality.
     #[inline]
-    pub fn new(raw_stream: S, cipher: StreamCipher, hmac: Hmac) -> DecoderMiddleware<S> {
+    pub fn new(raw_stream: S, cipher: StreamCipher, hmac: Hmac, nonce: Vec<u8>) -> DecoderMiddleware<S> {
         DecoderMiddleware {
             cipher_state: cipher,
             hmac,
             raw_stream,
-            nonce: Vec::new()
+            nonce
         }
-    }
-
-    pub fn remote_nonce(&mut self, data: Vec<u8>) {
-        self.nonce = data
     }
 }
 

@@ -115,9 +115,7 @@ where
     S: AsyncRead + AsyncWrite,
 {
     let encoder = EncoderMiddleware::new(socket, cipher_encoding, encoding_hmac);
-    let mut decoder = DecoderMiddleware::new(encoder, cipher_decoder, decoding_hmac);
-    decoder.remote_nonce(remote_nonce);
-    decoder
+    DecoderMiddleware::new(encoder, cipher_decoder, decoding_hmac, remote_nonce)
 }
 
 #[cfg(test)]
@@ -162,6 +160,7 @@ mod tests {
             data_rx,
             ctr(Cipher::Aes256, &cipher_key, &NULL_IV[..]),
             Hmac::from_key(Digest::Sha256, &hmac_key),
+            Vec::new()
         );
 
         let data = b"hello world";

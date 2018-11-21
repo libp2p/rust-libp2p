@@ -307,10 +307,8 @@ impl HandshakeContext<Ephemeral> {
 /// On success, returns an object that implements the `Sink` and `Stream` trait whose items are
 /// buffers of data, plus the public key of the remote, plus the ephemeral public key used during
 /// negotiation.
-pub fn handshake<'a, S: 'a>(
-    socket: S,
-    config: SecioConfig
-) -> impl Future<Item = (FullCodec<S>, PublicKey, Vec<u8>), Error = SecioError> + Send + 'a
+pub fn handshake<'a, S: 'a>(socket: S, config: SecioConfig)
+    -> impl Future<Item = (FullCodec<S>, PublicKey, Vec<u8>), Error = SecioError>
 where
     S: AsyncRead + AsyncWrite + Send,
 {
