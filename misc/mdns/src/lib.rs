@@ -122,17 +122,22 @@ const META_QUERY_SERVICE: &'static [u8] = b"_services._dns-sd._udp.local";
 ///
 /// See the crate root documentation for more info.
 pub struct MdnsService {
+    /// Main socket for listening.
     socket: UdpSocket,
+    /// Socket for sending queries on the network.
+    query_socket: UdpSocket,
     /// Interval for sending queries.
     query_interval: Interval,
     /// Whether we send queries on the network at all.
     /// Note that we still need to have an interval for querying, as we need to wake up the socket
     /// regularly to recover from errors. Otherwise we could simply use an `Option<Interval>`.
     silent: bool,
-    /// Buffer used for receiving data.
+    /// Buffer used for receiving data from the main socket.
     recv_buffer: [u8; 2048],
-    /// Buffers pending to send on the socket.
+    /// Buffers pending to send on the main socket.
     send_buffers: Vec<Vec<u8>>,
+    /// Buffers pending to send on the query socket.
+    query_send_buffers: Vec<Vec<u8>>,
 }
 
 impl MdnsService {
@@ -172,10 +177,12 @@ impl MdnsService {
 
         Ok(MdnsService {
             socket,
+            query_socket: UdpSocket::bind(&From::from(([0, 0, 0, 0], 0)))?,
             query_interval: Interval::new(Instant::now(), Duration::from_secs(20)),
             silent,
             recv_buffer: [0; 2048],
             send_buffers: Vec::new(),
+            query_send_buffers: Vec::new(),
         })
     }
 
@@ -188,15 +195,14 @@ impl MdnsService {
             Ok(Async::Ready(_)) => {
                 if !self.silent {
                     let query = dns::build_query();
-                    self.send_buffers.push(query.to_vec());
+                    self.query_send_buffers.push(query.to_vec());
                 }
             }
             Ok(Async::NotReady) => (),
             _ => unreachable!("A tokio_timer::Interval never errors"), // TODO: is that true?
         };
 
-        // Flush the send buffer.
-        // This has to be after the push to `send_buffers`.
+        // Flush the send buffer of the main socket.
         while !self.send_buffers.is_empty() {
             let to_send = self.send_buffers.remove(0);
             match self
@@ -214,6 +220,30 @@ impl MdnsService {
                     // Errors are non-fatal because they can happen for example if we lose
                     // connection to the network.
                     self.send_buffers.clear();
+                    break;
+                }
+            }
+        }
+
+        // Flush the query send buffer.
+        // This has to be after the push to `query_send_buffers`.
+        while !self.query_send_buffers.is_empty() {
+            let to_send = self.query_send_buffers.remove(0);
+            match self
+                .query_socket
+                .poll_send_to(&to_send, &From::from(([224, 0, 0, 251], 5353)))
+            {
+                Ok(Async::Ready(bytes_written)) => {
+                    debug_assert_eq!(bytes_written, to_send.len());
+                }
+                Ok(Async::NotReady) => {
+                    self.query_send_buffers.insert(0, to_send);
+                    break;
+                }
+                Err(_) => {
+                    // Errors are non-fatal because they can happen for example if we lose
+                    // connection to the network.
+                    self.query_send_buffers.clear();
                     break;
                 }
             }
