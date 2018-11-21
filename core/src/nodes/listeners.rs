@@ -283,7 +283,7 @@ mod tests {
     use futures::{future::{self}, stream};
     use tests::dummy_transport::{DummyTransport, ListenerState};
     use tests::dummy_muxer::DummyMuxer;
-    use PublicKey;
+    use PeerId;
 
     fn set_listener_state(ls: &mut ListenersStream<DummyTransport>, idx: usize, state: ListenerState) {
         let l = &mut ls.listeners[idx];
@@ -387,7 +387,7 @@ mod tests {
     #[test]
     fn listener_stream_poll_with_ready_listeners_is_ready() {
         let mut t = DummyTransport::new();
-        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        let peer_id = PeerId::random();
         let muxer = DummyMuxer::new();
         let expected_output = (peer_id.clone(), muxer.clone());
         t.set_initial_listener_state(ListenerState::Ok(Async::Ready(Some( (peer_id, muxer) ))));
@@ -446,7 +446,7 @@ mod tests {
     #[test]
     fn listener_stream_poll_with_erroring_listener_emits_closed_event() {
         let mut t = DummyTransport::new();
-        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        let peer_id = PeerId::random();
         let muxer = DummyMuxer::new();
         t.set_initial_listener_state(ListenerState::Ok(Async::Ready(Some( (peer_id, muxer) ))));
         let addr = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
@@ -462,7 +462,7 @@ mod tests {
     #[test]
     fn listener_stream_poll_chatty_listeners_each_get_their_turn() {
         let mut t = DummyTransport::new();
-        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        let peer_id = PeerId::random();
         let muxer = DummyMuxer::new();
         t.set_initial_listener_state(ListenerState::Ok(Async::Ready(Some( (peer_id.clone(), muxer) ))));        let mut ls = ListenersStream::new(t);
 
@@ -518,7 +518,7 @@ mod tests {
     #[test]
     fn listener_stream_poll_processes_listeners_in_turn() {
         let mut t = DummyTransport::new();
-        let peer_id = PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id();
+        let peer_id = PeerId::random();
         let muxer = DummyMuxer::new();
         t.set_initial_listener_state(ListenerState::Ok(Async::Ready(Some( (peer_id, muxer) ))));
         let mut ls = ListenersStream::new(t);

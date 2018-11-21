@@ -28,7 +28,7 @@ use futures::{
     stream,
 };
 use std::io;
-use {Multiaddr, PeerId, PublicKey, Transport};
+use {Multiaddr, PeerId, Transport};
 use tests::dummy_muxer::DummyMuxer;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -98,7 +98,7 @@ impl Transport for DummyTransport {
         let peer_id = if let Some(peer_id) = self.next_peer_id {
             peer_id
         } else {
-            PublicKey::Rsa((0 .. 128).map(|_| -> u8 { 1 }).collect()).into_peer_id()
+            PeerId::random()
         };
 
         let fut =
