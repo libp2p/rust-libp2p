@@ -427,19 +427,13 @@ where
     ///
     /// On success, produces a `SecioMiddleware` that can then be used to encode/decode
     /// communications, plus the public key of the remote, plus the ephemeral public key.
-    pub fn handshake<'a>(
-        socket: S,
-        config: SecioConfig,
-    ) -> Box<Future<Item = (SecioMiddleware<S>, PublicKey, Vec<u8>), Error = SecioError> + Send + 'a>
-    where
-        S: 'a,
+    pub fn handshake(socket: S, config: SecioConfig)
+        -> impl Future<Item = (SecioMiddleware<S>, PublicKey, Vec<u8>), Error = SecioError>
     {
-        let fut = handshake::handshake(socket, config).map(|(inner, pubkey, ephemeral)| {
+        handshake::handshake(socket, config).map(|(inner, pubkey, ephemeral)| {
             let inner = SecioMiddleware { inner };
             (inner, pubkey, ephemeral)
-        });
-
-        Box::new(fut)
+        })
     }
 }
 
