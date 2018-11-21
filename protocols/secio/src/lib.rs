@@ -275,7 +275,7 @@ impl SecioKeyPair {
         const SECRET_KEY_SIZE: usize = 32; // TODO: coming to libsecp256k1 as well
         let mut random_slice= [0u8; SECRET_KEY_SIZE];
         rand::thread_rng().fill(&mut random_slice[..]);
-        let private = secp256k1::SecretKey::parse(&random_slice).expect("slice has the right size");
+        let private = secp256k1::SecretKey::parse(&random_slice).map_err(|_| "secp256k1 parse error")?;
         Ok(SecioKeyPair {
             inner: SecioKeyPairInner::Secp256k1 { private },
         })

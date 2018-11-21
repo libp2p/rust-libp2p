@@ -491,12 +491,9 @@ where
                     let remote_public_key = secp256k1::PublicKey::parse_slice(remote_public_key, None);
 
                     if let (Ok(signature), Ok(remote_public_key)) = (signature, remote_public_key) {
-                        match secp256k1::verify(&message, &signature, &remote_public_key) {
-                            true => (),
-                            false => {
-                                debug!("failed to verify the remote's signature");
-                                return Err(SecioError::SignatureVerificationFailed)
-                            },
+                        if !secp256k1::verify(&message, &signature, &remote_public_key) {
+                            debug!("failed to verify the remote's signature");
+                            return Err(SecioError::SignatureVerificationFailed)
                         }
                     } else {
                         debug!("remote's secp256k1 signature has wrong format");

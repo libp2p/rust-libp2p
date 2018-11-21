@@ -151,7 +151,7 @@ impl From<ProtobufError> for SecioError {
 
 impl From<Secp256k1Error> for SecioError {
     #[inline]
-    fn from(err: Secp256k1Error) -> SecioError {
+    fn from(_err: Secp256k1Error) -> SecioError {
         // TODO: probably need a specific SecioError here
         SecioError::SignatureVerificationFailed
     }
