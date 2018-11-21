@@ -207,7 +207,7 @@ enum PingListenerState {
     Listening,
     /// We are trying to send a pong.
     Sending(Bytes),
-    /// We are flusing the underlying sink.
+    /// We are flushing the underlying sink.
     Flushing,
     /// We are shutting down everything.
     Closing,
