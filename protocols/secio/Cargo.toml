@@ -12,8 +12,6 @@ libp2p-core = { path = "../../core" }
 log = "0.4.1"
 protobuf = "2.0.2"
 rand = "0.5"
-#master: secp256k1 = {version = "0.11", optional = true }
-#old: eth-secp256k1 = { git = "https://github.com/paritytech/rust-secp256k1", optional = true }
 libsecp256k1 = { version = "0.2", optional = true }
 aes-ctr = "0.1.0"
 aesni = { version = "0.4.1", features = ["nocheck"], optional = true }
