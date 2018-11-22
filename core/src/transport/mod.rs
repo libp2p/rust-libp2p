@@ -36,6 +36,7 @@ use std::io::Error as IoError;
 use tokio_io::{AsyncRead, AsyncWrite};
 
 pub mod and_then;
+pub mod boxed;
 pub mod choice;
 pub mod map;
 pub mod map_err;
@@ -111,6 +112,17 @@ pub trait Transport {
     /// Returns `None` if nothing can be determined. This happens if this trait implementation
     /// doesn't recognize the protocols, or if `server` and `observed` are related.
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
+
+    /// Turns this `Transport` into an abstract boxed transport.
+    #[inline]
+    fn boxed(self) -> boxed::Boxed<Self::Output>
+    where Self: Sized + Clone + Send + Sync + 'static,
+          Self::Dial: Send + 'static,
+          Self::Listener: Send + 'static,
+          Self::ListenerUpgrade: Send + 'static,
+    {
+        boxed::boxed(self)
+    }
 
     /// Applies a function on the output of the `Transport`.
     #[inline]
