@@ -143,7 +143,7 @@ pub trait Transport {
     fn map_err<F>(self, map_err: F) -> map_err::MapErr<Self, F>
     where
         Self: Sized,
-        F: FnOnce(IoError) -> IoError + Clone + 'static,        // TODO: 'static :-/
+        F: FnOnce(IoError) -> IoError + Clone
     {
         map_err::MapErr::new(self, map_err)
     }
@@ -155,7 +155,7 @@ pub trait Transport {
     fn map_err_dial<F>(self, map_err: F) -> map_err_dial::MapErrDial<Self, F>
     where
         Self: Sized,
-        F: FnOnce(IoError, Multiaddr) -> IoError + Clone + 'static,        // TODO: 'static :-/
+        F: FnOnce(IoError, Multiaddr) -> IoError
     {
         map_err_dial::MapErrDial::new(self, map_err)
     }
@@ -198,7 +198,7 @@ pub trait Transport {
     where
         Self: Sized,
         C: FnOnce(Self::Output, ConnectedPoint) -> F + Clone,
-        F: Future<Item = O, Error = IoError>
+        F: IntoFuture<Item = O, Error = IoError>
     {
         and_then::AndThen::new(self, upgrade)
     }
