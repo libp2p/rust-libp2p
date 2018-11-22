@@ -29,7 +29,7 @@
 //! `UpgradedNode::or_upgrade` methods, you can combine multiple transports and/or upgrades
 //! together in a complex chain of protocols negotiation.
 
-use crate::{InboundUpgrade, OutboundUpgrade, Endpoint};
+use crate::{InboundUpgrade, OutboundUpgrade};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use nodes::raw_swarm::ConnectedPoint;
@@ -133,7 +133,7 @@ pub trait Transport {
     fn map<F, O>(self, map: F) -> map::Map<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Output, Endpoint) -> O + Clone + 'static,        // TODO: 'static :-/
+        F: FnOnce(Self::Output, ConnectedPoint) -> O + Clone
     {
         map::Map::new(self, map)
     }
@@ -200,7 +200,7 @@ pub trait Transport {
         C: FnOnce(Self::Output, ConnectedPoint) -> F + Clone,
         F: Future<Item = O, Error = IoError>
     {
-        and_then::and_then(self, upgrade)
+        and_then::AndThen::new(self, upgrade)
     }
 
     /// Wraps around the `Transport` and makes it interruptible.
