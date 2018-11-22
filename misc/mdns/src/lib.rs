@@ -103,7 +103,7 @@ use dns_parser::{Packet, RData};
 use futures::{prelude::*, task};
 use libp2p_core::{Multiaddr, PeerId};
 use multiaddr::Protocol;
-use std::{fmt, io, net::SocketAddr, str, time::Duration, time::Instant};
+use std::{fmt, io, net::Ipv4Addr, net::SocketAddr, str, time::Duration, time::Instant};
 use tokio_reactor::Handle;
 use tokio_timer::Interval;
 use tokio_udp::UdpSocket;
@@ -173,7 +173,7 @@ impl MdnsService {
         socket.set_multicast_loop_v4(true)?;
         socket.set_multicast_ttl_v4(255)?;
         // TODO: correct interfaces?
-        socket.join_multicast_v4(&From::from([224, 0, 0, 251]), &From::from([0, 0, 0, 0]))?;
+        socket.join_multicast_v4(&From::from([224, 0, 0, 251]), &Ipv4Addr::UNSPECIFIED)?;
 
         Ok(MdnsService {
             socket,

@@ -112,7 +112,7 @@ pub fn build_query_response(
 
     // Flags.
     append_u16(&mut out, 0x000c);
-    append_u16(&mut out, 0x8001);
+    append_u16(&mut out, 0x8000);
 
     // TTL for the answer
     append_u32(&mut out, ttl);
