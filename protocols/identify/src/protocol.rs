@@ -131,8 +131,6 @@ pub struct IdentifyInfo {
     pub listen_addrs: Vec<Multiaddr>,
     /// Protocols supported by the node, e.g. `/ipfs/ping/1.0.0`.
     pub protocols: Vec<String>,
-
-    _priv: ()
 }
 
 impl UpgradeInfo for IdentifyProtocolConfig {
@@ -244,7 +242,6 @@ fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> 
                 agent_version: msg.take_agentVersion(),
                 listen_addrs: listen_addrs,
                 protocols: msg.take_protocols().into_vec(),
-                _priv: ()
             };
 
             Ok((info, observed_addr))
@@ -301,7 +298,6 @@ mod tests {
                                 "/ip6/::1/udp/1000".parse().unwrap(),
                             ],
                             protocols: vec!["proto1".to_string(), "proto2".to_string()],
-                            _priv: ()
                         },
                         &"/ip4/100.101.102.103/tcp/5000".parse().unwrap(),
                     )

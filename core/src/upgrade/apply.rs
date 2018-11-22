@@ -19,7 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::Bytes;
-use crate::{nodes::ConnectedPoint, upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeError}};
+use crate::nodes::ConnectedPoint;
+use crate::upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade, UpgradeError};
 use futures::{future::Either, prelude::*};
 use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
 use std::mem;
@@ -31,7 +32,6 @@ pub fn apply<C, U>(conn: C, up: U, cp: ConnectedPoint)
 where
     C: AsyncRead + AsyncWrite,
     U: InboundUpgrade<C> + OutboundUpgrade<C>,
-    U::NamesIter: Clone
 {
     if cp.is_listener() {
         Either::A(apply_inbound(conn, up))
@@ -45,12 +45,10 @@ pub fn apply_inbound<C, U>(conn: C, up: U) -> InboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite,
     U: InboundUpgrade<C>,
-    U::NamesIter: Clone
 {
-    let iter = ProtocolNames(up.protocol_names());
-    let future = multistream_select::listener_select_proto(conn, iter);
+    let future = multistream_select::listener_select_proto(conn, UpgradeIntoProtocolsIterWrap(up));
     InboundUpgradeApply {
-        inner: InboundUpgradeApplyState::Init { future, upgrade: up }
+        inner: InboundUpgradeApplyState::Init { future }
     }
 }
 
@@ -82,8 +80,7 @@ where
     U: InboundUpgrade<C>
 {
     Init {
-        future: ListenerSelectFuture<C, ProtocolNames<U::NamesIter>, U::UpgradeId>,
-        upgrade: U
+        future: ListenerSelectFuture<C, UpgradeIntoProtocolsIterWrap<U>, U::UpgradeId>,
     },
     Upgrade {
         future: U::Future
@@ -95,7 +92,6 @@ impl<C, U> Future for InboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite,
     U: InboundUpgrade<C>,
-    U::NamesIter: Clone
 {
     type Item = U::Output;
     type Error = UpgradeError<U::Error>;
@@ -103,16 +99,16 @@ where
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
             match mem::replace(&mut self.inner, InboundUpgradeApplyState::Undefined) {
-                InboundUpgradeApplyState::Init { mut future, upgrade } => {
-                    let (upgrade_id, connection) = match future.poll()? {
+                InboundUpgradeApplyState::Init { mut future } => {
+                    let (upgrade_id, connection, upgrade) = match future.poll()? {
                         Async::Ready(x) => x,
                         Async::NotReady => {
-                            self.inner = InboundUpgradeApplyState::Init { future, upgrade };
+                            self.inner = InboundUpgradeApplyState::Init { future };
                             return Ok(Async::NotReady)
                         }
                     };
                     self.inner = InboundUpgradeApplyState::Upgrade {
-                        future: upgrade.upgrade_inbound(connection, upgrade_id)
+                        future: upgrade.0.upgrade_inbound(connection, upgrade_id)
                     };
                 }
                 InboundUpgradeApplyState::Upgrade { mut future } => {
@@ -205,6 +201,21 @@ where
                     panic!("OutboundUpgradeApplyState::poll called after completion")
             }
         }
+    }
+}
+
+/// Wraps around a `UpgradeInfo` and satisfies the requirement of `listener_select_proto`.
+struct UpgradeIntoProtocolsIterWrap<U>(U);
+
+impl<'a, U> IntoIterator for &'a UpgradeIntoProtocolsIterWrap<U>
+where U: UpgradeInfo
+{
+    type Item = (Bytes, fn(&Bytes, &Bytes) -> bool, U::UpgradeId);
+    type IntoIter = ProtocolNames<U::NamesIter>;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        ProtocolNames(self.0.protocol_names())
     }
 }
 
