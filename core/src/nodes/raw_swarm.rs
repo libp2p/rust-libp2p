@@ -1266,21 +1266,34 @@ mod tests {
 
     #[test]
     fn nat_traversal_transforms_the_observed_address_according_to_the_transport_used() {
-        // the DummyTransport adds /udt to all addresses
+        // the DummyTransport nat_traversal increments the port number by one for Ip4 addresses
         let transport = DummyTransport::new();
         let mut raw_swarm = RawSwarm::<_, _, _, Handler>::new(transport);
         let addr1 = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
-        let outside_addr1 = "/ip4/10.1.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
+        // An unrelated outside address is returned as-is, no transform
+        let outside_addr1 = "/memory".parse::<Multiaddr>().expect("bad multiaddr");
+
+        // An Ip4 address is transformed
         let addr2 = "/ip4/127.0.0.2/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
-        let outside_addr2 = "/ip4/127.0.0.2/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
+        let outside_addr2 = "/ip4/15.16.17.18/tcp/1920".parse::<Multiaddr>().expect("bad multiaddr");
+
+        // 2 listeners, so we'll get two addresses back from nat_traversal
         raw_swarm.listen_on(addr1).unwrap();
         raw_swarm.listen_on(addr2).unwrap();
 
-        let natted = raw_swarm.nat_traversal(&outside_addr1).collect::<Vec<Multiaddr>>();
-        assert!(natted.is_empty());
+        let natted = raw_swarm
+            .nat_traversal(&outside_addr1)
+            .map(|a| a.to_string())
+            .collect::<Vec<_>>();
 
-        let natted = raw_swarm.nat_traversal(&outside_addr2).collect::<Vec<Multiaddr>>();
-        assert_eq!(natted[0], "/ip4/127.0.0.2/tcp/1234/udt".parse::<Multiaddr>().expect("bad multiaddr"));
+        assert_eq!(natted, vec!["/memory", "/memory"]);
+
+        let natted = raw_swarm
+            .nat_traversal(&outside_addr2)
+            .map(|a| a.to_string())
+            .collect::<Vec<_>>();
+
+        assert_eq!(natted, vec!["/ip4/15.16.17.18/tcp/1235", "/ip4/15.16.17.18/tcp/1235"])
     }
 
     #[test]

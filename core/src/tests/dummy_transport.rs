@@ -111,11 +111,26 @@ impl Transport for DummyTransport {
         Ok(Box::new(fut))
     }
 
+    /// Increments the port number by one for Ip4 addresses, leaves other addresses as they are.
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        if server == observed {
-            Some(observed.encapsulate("/udt").unwrap())
-        } else {
-            None
+        use multiaddr::Protocol;
+
+        let mut address = Multiaddr::empty();
+        // Use the observed IP address if present, otherwise just return the `observed`
+        match server.iter().zip(observed.iter()).next() {
+            Some((Protocol::Ip4(_), x@Protocol::Ip4(_))) => address.append(x),
+            _ => return Some(observed.clone())
         }
+
+        // Carry over everything else from the server address; if it's a Tcp port, increment by one
+        for proto in server.iter().skip(1) {
+            if let Protocol::Tcp(port) = proto {
+                address.append(Protocol::Tcp(port + 1))
+            } else {
+                address.append(proto)
+            }
+        }
+
+        Some(address)
     }
 }
