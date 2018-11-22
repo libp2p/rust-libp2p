@@ -197,8 +197,8 @@ pub trait Transport {
     fn and_then<C, F, O>(self, upgrade: C) -> and_then::AndThen<Self, C>
     where
         Self: Sized,
-        C: FnOnce(Self::Output, ConnectedPoint) -> F + Clone + 'static,
-        F: Future<Item = O, Error = IoError> + 'static,
+        C: FnOnce(Self::Output, ConnectedPoint) -> F + Clone,
+        F: Future<Item = O, Error = IoError>
     {
         and_then::and_then(self, upgrade)
     }
