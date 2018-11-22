@@ -30,6 +30,7 @@ use futures::{
 use std::io;
 use {Multiaddr, PeerId, Transport};
 use tests::dummy_muxer::DummyMuxer;
+use multiaddr::Protocol;
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) enum ListenerState {
@@ -95,6 +96,11 @@ impl Transport for DummyTransport {
     where
         Self: Sized,
     {
+        // The IPv6 Discard Prefix as per https://tools.ietf.org/html/rfc6666
+        const IP6_BLACKHOLE_MADDR: &[u8] = &[
+            0x29, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0
+        ];
+
         let peer_id = if let Some(peer_id) = self.next_peer_id {
             peer_id
         } else {
@@ -102,19 +108,18 @@ impl Transport for DummyTransport {
         };
 
         let fut =
-            if addr.to_string() == "/unix/unreachable" {
+            if addr.to_bytes() == IP6_BLACKHOLE_MADDR {
                 let err_string = format!("unreachable host error, peer={:?}", peer_id);
                 future::err(io::Error::new(io::ErrorKind::Other, err_string))
             } else {
                 future::ok((peer_id, DummyMuxer::new()))
             };
+
         Ok(Box::new(fut))
     }
 
     /// Increments the port number by one for Ip4 addresses, leaves other addresses as they are.
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        use multiaddr::Protocol;
-
         let mut address = Multiaddr::empty();
         // Use the observed IP address if present, otherwise just return the `observed`
         match server.iter().zip(observed.iter()).next() {

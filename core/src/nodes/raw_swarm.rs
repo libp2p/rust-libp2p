@@ -1482,8 +1482,8 @@ mod tests {
     #[test]
     fn unknown_peer_that_is_unreachable_yields_unknown_peer_dial_error() {
         let mut swarm = RawSwarm::<_, _, _, Handler>::new(DummyTransport::new());
-        // Will not be reachable
-        let addr = "/unix/unreachable".parse::<Multiaddr>().expect("bad multiaddr");
+        // Using the Ip6 Discard Prefix the DummyTransport will return an address that is not reachable.
+        let addr = "/ip6/0100::".parse::<Multiaddr>().expect("bad multiaddr");
         let handler = Handler::default();
         let dial_result = swarm.dial(addr, handler);
         assert!(dial_result.is_ok());
@@ -1519,8 +1519,8 @@ mod tests {
             let mut swarm1 = swarm1.lock();
             let peer = swarm1.peer(peer_id.clone());
             assert_matches!(peer, Peer::NotConnected(PeerNotConnected{ .. }));
-            // Magic address that will cause outreach to fail
-            let addr = "/unix/unreachable".parse().expect("bad multiaddr");
+            // Using the Ip6 Discard Prefix the DummyTransport will return an address that is not reachable.
+            let addr = "/ip6/0100::".parse::<Multiaddr>().expect("bad multiaddr");
             let pending_peer = peer.as_not_connected().unwrap().connect(addr, Handler::default());
             assert!(pending_peer.is_ok());
             assert_matches!(pending_peer, Ok(PeerPendingConnect { .. } ));
