@@ -80,23 +80,33 @@ where
             };
 
             if need_new_item {
-                self.current_item = match self.inner.poll() {
-                    Ok(Async::Ready(i)) => i.map(|b| b.into_buf()),
-                    Ok(Async::NotReady) => {
-                        if written == 0 {
-                            return Err(IoError::new(IoErrorKind::WouldBlock, "stream not ready"));
-                        } else {
-                            return Ok(written);
+                loop {
+                    self.current_item = match self.inner.poll() {
+                        Ok(Async::Ready(None)) => None,
+                        Ok(Async::Ready(Some(i))) => {
+                            let b = i.into_buf();
+                            if !b.has_remaining() {
+                                continue // skip over empty items
+                            }
+                            Some(b)
                         }
-                    }
-                    Err(err) => {
-                        if written == 0 {
-                            return Err(err);
-                        } else {
-                            return Ok(written);
+                        Ok(Async::NotReady) => {
+                            if written == 0 {
+                                return Err(IoError::new(IoErrorKind::WouldBlock, "stream not ready"));
+                            } else {
+                                return Ok(written);
+                            }
                         }
-                    }
-                };
+                        Err(err) => {
+                            if written == 0 {
+                                return Err(err);
+                            } else {
+                                return Ok(written);
+                            }
+                        }
+                    };
+                    break
+                }
             }
 
             let current_item = match self.current_item {
