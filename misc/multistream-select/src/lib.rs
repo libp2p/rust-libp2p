@@ -76,45 +76,6 @@
 //! # }
 //! ```
 //!
-//! For a listener:
-//!
-//! ```no_run
-//! extern crate bytes;
-//! extern crate futures;
-//! extern crate multistream_select;
-//! extern crate tokio;
-//! extern crate tokio_tcp;
-//!
-//! # fn main() {
-//! use bytes::Bytes;
-//! use multistream_select::listener_select_proto;
-//! use futures::{Future, Sink, Stream};
-//! use tokio_tcp::TcpListener;
-//! use tokio::runtime::current_thread::Runtime;
-//!
-//! #[derive(Debug, Copy, Clone)]
-//! enum MyProto { Echo, Hello }
-//!
-//! let server = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap()
-//!     .incoming()
-//!     .from_err()
-//!     .and_then(move |connec| {
-//!         let protos = vec![
-//!             (Bytes::from("/echo/1.0.0"), <Bytes as PartialEq>::eq, MyProto::Echo),
-//!             (Bytes::from("/hello/2.5.0"), <Bytes as PartialEq>::eq, MyProto::Hello),
-//!         ]
-//!                         .into_iter();
-//!         listener_select_proto(connec, protos)
-//!     })
-//!     .for_each(|(proto, _connec)| {
-//!         println!("new remote with {:?} negotiated", proto);
-//!         Ok(())
-//!     });
-//!
-//! let mut rt = Runtime::new().unwrap();
-//! let _ = rt.block_on(server).expect("failed to run server");
-//! # }
-//! ```
 
 extern crate bytes;
 #[macro_use]
