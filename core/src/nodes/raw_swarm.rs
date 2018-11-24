@@ -1273,11 +1273,9 @@ mod tests {
         // An unrelated outside address is returned as-is, no transform
         let outside_addr1 = "/memory".parse::<Multiaddr>().expect("bad multiaddr");
 
-        // An Ip4 address is transformed
         let addr2 = "/ip4/127.0.0.2/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
-        let outside_addr2 = "/ip4/15.16.17.18/tcp/1920".parse::<Multiaddr>().expect("bad multiaddr");
+        let outside_addr2 = "/ip4/127.0.0.2/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
 
-        // 2 listeners, so we'll get two addresses back from nat_traversal
         raw_swarm.listen_on(addr1).unwrap();
         raw_swarm.listen_on(addr2).unwrap();
 
@@ -1286,14 +1284,14 @@ mod tests {
             .map(|a| a.to_string())
             .collect::<Vec<_>>();
 
-        assert_eq!(natted, vec!["/memory", "/memory"]);
+        assert!(natted.is_empty());
 
         let natted = raw_swarm
             .nat_traversal(&outside_addr2)
             .map(|a| a.to_string())
             .collect::<Vec<_>>();
 
-        assert_eq!(natted, vec!["/ip4/15.16.17.18/tcp/1235", "/ip4/15.16.17.18/tcp/1235"])
+        assert_eq!(natted, vec!["/ip4/127.0.0.2/tcp/1234"])
     }
 
     #[test]
