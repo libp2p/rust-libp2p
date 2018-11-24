@@ -1481,9 +1481,10 @@ mod tests {
 
     #[test]
     fn unknown_peer_that_is_unreachable_yields_unknown_peer_dial_error() {
-        let mut swarm = RawSwarm::<_, _, _, Handler>::new(DummyTransport::new());
-        // Using the Ip6 Discard Prefix the DummyTransport will return an address that is not reachable.
-        let addr = "/ip6/0100::".parse::<Multiaddr>().expect("bad multiaddr");
+        let mut transport = DummyTransport::new();
+        transport.make_dial_fail();
+        let mut swarm = RawSwarm::<_, _, _, Handler>::new(transport);
+        let addr = "/memory".parse::<Multiaddr>().expect("bad multiaddr");
         let handler = Handler::default();
         let dial_result = swarm.dial(addr, handler);
         assert!(dial_result.is_ok());
@@ -1512,6 +1513,7 @@ mod tests {
         let mut transport = DummyTransport::new();
         let peer_id = PeerId::random();
         transport.set_next_peer_id(&peer_id);
+        transport.make_dial_fail();
         let swarm = Arc::new(Mutex::new(RawSwarm::<_, _, _, Handler>::new(transport)));
 
         {
@@ -1519,8 +1521,7 @@ mod tests {
             let mut swarm1 = swarm1.lock();
             let peer = swarm1.peer(peer_id.clone());
             assert_matches!(peer, Peer::NotConnected(PeerNotConnected{ .. }));
-            // Using the Ip6 Discard Prefix the DummyTransport will return an address that is not reachable.
-            let addr = "/ip6/0100::".parse::<Multiaddr>().expect("bad multiaddr");
+            let addr = "/memory".parse::<Multiaddr>().expect("bad multiaddr");
             let pending_peer = peer.as_not_connected().unwrap().connect(addr, Handler::default());
             assert!(pending_peer.is_ok());
             assert_matches!(pending_peer, Ok(PeerPendingConnect { .. } ));

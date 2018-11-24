@@ -40,15 +40,19 @@ pub(crate) enum ListenerState {
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) struct DummyTransport {
+    /// The current state of Listeners.
     listener_state: ListenerState,
-    // The next peer returned from dial()
+    /// The next peer returned from dial().
     next_peer_id: Option<PeerId>,
+    /// When true, all dial attempts return error.
+    dial_should_fail: bool,
 }
 impl DummyTransport {
     pub(crate) fn new() -> Self {
         DummyTransport {
             listener_state: ListenerState::Ok(Async::NotReady),
             next_peer_id: None,
+            dial_should_fail: false,
         }
     }
     pub(crate) fn set_initial_listener_state(&mut self, state: ListenerState) {
@@ -57,6 +61,10 @@ impl DummyTransport {
 
     pub(crate) fn set_next_peer_id(&mut self, peer_id: &PeerId) {
         self.next_peer_id = Some(peer_id.clone());
+    }
+
+    pub(crate) fn make_dial_fail(&mut self) {
+        self.dial_should_fail = true;
     }
 }
 impl Transport for DummyTransport {
@@ -92,15 +100,10 @@ impl Transport for DummyTransport {
         }
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)>
+    fn dial(self, _addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)>
     where
         Self: Sized,
     {
-        // The IPv6 Discard Prefix as per https://tools.ietf.org/html/rfc6666
-        const IP6_BLACKHOLE_MADDR: &[u8] = &[
-            0x29, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0
-        ];
-
         let peer_id = if let Some(peer_id) = self.next_peer_id {
             peer_id
         } else {
@@ -108,7 +111,7 @@ impl Transport for DummyTransport {
         };
 
         let fut =
-            if addr.to_bytes() == IP6_BLACKHOLE_MADDR {
+            if self.dial_should_fail {
                 let err_string = format!("unreachable host error, peer={:?}", peer_id);
                 future::err(io::Error::new(io::ErrorKind::Other, err_string))
             } else {
