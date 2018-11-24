@@ -28,7 +28,6 @@ use crate::{
         OutboundUpgrade,
         InboundUpgradeApply,
         OutboundUpgradeApply,
-        DeniedUpgrade,
         EitherUpgrade,
         OrUpgrade
     }
@@ -37,7 +36,10 @@ use futures::prelude::*;
 use std::{io, marker::PhantomData, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_timer::Timeout;
-use void::Void;
+
+pub use self::dummy::DummyProtocolsHandler;
+
+mod dummy;
 
 /// Handler for a set of protocols for a specific connection with a remote.
 ///
@@ -282,82 +284,6 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
                 ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info }
             }
             ProtocolsHandlerEvent::Custom(val) => ProtocolsHandlerEvent::Custom(map(val)),
-        }
-    }
-}
-
-/// Implementation of `ProtocolsHandler` that doesn't handle anything.
-pub struct DummyProtocolsHandler<TSubstream> {
-    shutting_down: bool,
-    marker: PhantomData<TSubstream>,
-}
-
-impl<TSubstream> Default for DummyProtocolsHandler<TSubstream> {
-    #[inline]
-    fn default() -> Self {
-        DummyProtocolsHandler {
-            shutting_down: false,
-            marker: PhantomData,
-        }
-    }
-}
-
-impl<TSubstream> ProtocolsHandler for DummyProtocolsHandler<TSubstream>
-where
-    TSubstream: AsyncRead + AsyncWrite,
-{
-    type InEvent = Void;
-    type OutEvent = Void;
-    type Substream = TSubstream;
-    type InboundProtocol = DeniedUpgrade;
-    type OutboundProtocol = DeniedUpgrade;
-    type OutboundOpenInfo = Void;
-
-    #[inline]
-    fn listen_protocol(&self) -> Self::InboundProtocol {
-        DeniedUpgrade
-    }
-
-    #[inline]
-    fn inject_fully_negotiated_inbound(
-        &mut self,
-        _: <Self::InboundProtocol as InboundUpgrade<TSubstream>>::Output
-    ) {
-    }
-
-    #[inline]
-    fn inject_fully_negotiated_outbound(
-        &mut self,
-        _: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output,
-        _: Self::OutboundOpenInfo
-    ) {
-    }
-
-    #[inline]
-    fn inject_event(&mut self, _: Self::InEvent) {}
-
-    #[inline]
-    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: io::Error) {}
-
-    #[inline]
-    fn inject_inbound_closed(&mut self) {}
-
-    #[inline]
-    fn shutdown(&mut self) {
-        self.shutting_down = true;
-    }
-
-    #[inline]
-    fn poll(
-        &mut self,
-    ) -> Poll<
-        Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>,
-        io::Error,
-    > {
-        if self.shutting_down {
-            Ok(Async::Ready(None))
-        } else {
-            Ok(Async::NotReady)
         }
     }
 }
