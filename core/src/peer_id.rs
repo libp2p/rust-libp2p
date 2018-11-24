@@ -133,6 +133,20 @@ impl From<PublicKey> for PeerId {
     }
 }
 
+impl PartialEq<multihash::Multihash> for PeerId {
+    #[inline]
+    fn eq(&self, other: &multihash::Multihash) -> bool {
+        &self.multihash == other
+    }
+}
+
+impl PartialEq<PeerId> for multihash::Multihash {
+    #[inline]
+    fn eq(&self, other: &PeerId) -> bool {
+        self == &other.multihash
+    }
+}
+
 impl Into<multihash::Multihash> for PeerId {
     #[inline]
     fn into(self) -> multihash::Multihash {
