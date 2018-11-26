@@ -38,6 +38,7 @@ use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
 use unsigned_varint::codec;
 
+/// Status of our connection to a node reported by the Kademlia protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum KadConnectionType {
     /// Sender hasn't tried to connect to peer.
@@ -79,9 +80,11 @@ impl Into<protobuf_structs::dht::Message_ConnectionType> for KadConnectionType {
 /// Information about a peer, as known by the sender.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KadPeer {
+    /// Identifier of the peer.
     pub node_id: PeerId,
-    /// The multiaddresses that are known for that peer.
+    /// The multiaddresses that the sender think can be used in order to reach the peer.
     pub multiaddrs: Vec<Multiaddr>,
+    /// How the sender is connected to that remote.
     pub connection_ty: KadConnectionType,
 }
 
@@ -126,6 +129,9 @@ impl Into<protobuf_structs::dht::Message_Peer> for KadPeer {
 
 /// Configuration for a Kademlia connection upgrade. When applied to a connection, turns this
 /// connection into a `Stream + Sink` whose items are of type `KadRequestMsg` and `KadResponseMsg`.
+// TODO: if, as suspected, we can confirm with Protocol Labs that each open Kademlia substream does
+//       only one request, then we can change the output of the `InboundUpgrade` and
+//       `OutboundUpgrade` to be just a single message
 #[derive(Debug, Default, Copy, Clone)]
 pub struct KademliaProtocolConfig;
 
@@ -203,6 +209,7 @@ pub type KadInStreamSink<S> = stream::AndThen<
     fn(BytesMut) -> Result<KadRequestMsg, IoError>,
     Result<KadRequestMsg, IoError>,
 >;
+
 /// Sink of requests and stream of responses.
 pub type KadOutStreamSink<S> = stream::AndThen<
     sink::With<
@@ -216,7 +223,6 @@ pub type KadOutStreamSink<S> = stream::AndThen<
 >;
 
 /// Request that we can send to a peer or that we received from a peer.
-// TODO: document the rest
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum KadRequestMsg {
     /// Ping request.
@@ -230,6 +236,7 @@ pub enum KadRequestMsg {
         record: (), //record: protobuf_structs::record::Record, // TODO: no
     },
 
+    /// Request for a value stored in the DHT.
     GetValue {
         /// Identifier of the record.
         key: Multihash,
@@ -503,7 +510,7 @@ mod tests {
     use std::sync::mpsc;
     use std::thread;
 
-    /*// TODO:
+    /*// TODO: restore
     #[test]
     fn correct_transfer() {
         // We open a server and a client, send a message between the two, and check that they were
