@@ -42,14 +42,14 @@ pub enum DummyConnectionState {
     Closed,  // use this to trigger the Async::Ready(None) code path
     Opened,  // use this to trigger the Async::Ready(Some(_)) code path
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 struct DummyConnection {
     state: DummyConnectionState,
 }
 
 /// `DummyMuxer` implements `StreamMuxer` and methods to control its behaviour when used in tests
-#[derive(Debug, Clone)]
-pub struct DummyMuxer {
+#[derive(Debug, PartialEq, Clone)]
+pub struct DummyMuxer{
     in_connection: DummyConnection,
     out_connection: DummyConnection,
 }
