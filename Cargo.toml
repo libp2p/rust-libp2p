@@ -43,8 +43,8 @@ libp2p-tcp-transport = { path = "./transports/tcp" }
 stdweb = { version = "0.1.3", default-features = false }
 
 [dev-dependencies]
-env_logger = "0.5.4"
-rand = "0.5"
+env_logger = "0.6.0"
+rand = "0.6"
 tokio = "0.1"
 tokio-stdin-stdout = "0.1"
 

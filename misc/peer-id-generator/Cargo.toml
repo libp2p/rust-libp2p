@@ -9,4 +9,4 @@ license = "MIT"
 libp2p-core = { path = "../../core" }
 libp2p-secio = { path = "../../protocols/secio" }
 num_cpus = "1.8"
-rand = "0.5"
+rand = "0.6"

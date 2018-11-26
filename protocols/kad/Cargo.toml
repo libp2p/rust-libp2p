@@ -18,9 +18,9 @@ libp2p-core = { path = "../../core" }
 log = "0.4"
 multiaddr = { path = "../../misc/multiaddr" }
 multihash = { path = "../../misc/multihash" }
-parking_lot = "0.6"
+parking_lot = "0.7"
 protobuf = "2.0.2"
-rand = "0.4.2"
+rand = "0.6.0"
 smallvec = "0.6"
 tokio-codec = "0.1"
 tokio-io = "0.1"
@@ -29,5 +29,4 @@ unsigned-varint = { version = "0.2.1", features = ["codec"] }
 
 [dev-dependencies]
 libp2p-tcp-transport = { path = "../../transports/tcp" }
-rand = "0.4.2"
 tokio = "0.1"
