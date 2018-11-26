@@ -44,7 +44,7 @@ where
     D::Output: AsyncRead + AsyncWrite + Send + 'static,
     U: InboundUpgrade<D::Output, Output = O, Error = E>,
     U: OutboundUpgrade<D::Output, Output = O, Error = E> + Send + Clone + 'static,
-    <U as UpgradeInfo>::NamesIter: Clone + Send,
+    <U as UpgradeInfo>::NamesIter: Send,
     <U as UpgradeInfo>::UpgradeId: Send,
     <U as InboundUpgrade<D::Output>>::Future: Send,
     <U as OutboundUpgrade<D::Output>>::Future: Send,

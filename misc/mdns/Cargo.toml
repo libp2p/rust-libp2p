@@ -1,0 +1,21 @@
+[package]
+name = "libp2p-mdns"
+version = "0.1.0"
+description = "Implementation of the libp2p mDNS discovery method"
+authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
+
+[dependencies]
+data-encoding = "2.0"
+dns-parser = "0.8"
+futures = "0.1"
+libp2p-core = { path = "../../core" }
+multiaddr = { path = "../multiaddr" }
+net2 = "0.2"
+rand = "0.5"
+tokio-reactor = "0.1"
+tokio-timer = "0.2"
+tokio-udp = "0.1"
+
+[dev-dependencies]
+tokio = "0.1"
