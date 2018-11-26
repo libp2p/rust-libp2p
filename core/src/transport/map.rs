@@ -18,69 +18,55 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::{nodes::raw_swarm::ConnectedPoint, transport::Transport};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
-use std::io::Error as IoError;
-use transport::Transport;
-use Endpoint;
 
 /// See `Transport::map`.
 #[derive(Debug, Copy, Clone)]
-pub struct Map<T, F> {
-    transport: T,
-    map: F,
-}
+pub struct Map<T, F> { transport: T, fun: F }
 
 impl<T, F> Map<T, F> {
-    /// Internal function that builds a `Map`.
     #[inline]
-    pub(crate) fn new(transport: T, map: F) -> Map<T, F> {
-        Map { transport, map }
+    pub(crate) fn new(transport: T, fun: F) -> Self {
+        Map { transport, fun }
     }
 }
 
 impl<T, F, D> Transport for Map<T, F>
 where
-    T: Transport + 'static,                  // TODO: 'static :-/
-    T::Dial: Send,
-    T::Listener: Send,
-    T::ListenerUpgrade: Send,
-    F: FnOnce(T::Output, Endpoint) -> D + Clone + Send + 'static, // TODO: 'static :-/
+    T: Transport,
+    F: FnOnce(T::Output, ConnectedPoint) -> D + Clone
 {
     type Output = D;
-    type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError> + Send>;
-    type ListenerUpgrade = Box<Future<Item = Self::Output, Error = IoError> + Send>;
-    type Dial = Box<Future<Item = Self::Output, Error = IoError> + Send>;
+    type Listener = MapStream<T::Listener, F>;
+    type ListenerUpgrade = MapFuture<T::ListenerUpgrade, F>;
+    type Dial = MapFuture<T::Dial, F>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        let map = self.map;
-
         match self.transport.listen_on(addr) {
             Ok((stream, listen_addr)) => {
-                let stream = stream.map(move |(future, addr)| {
-                    let map = map.clone();
-                    let future = future
-                        .into_future()
-                        .map(move |output| map(output, Endpoint::Listener));
-                    (Box::new(future) as Box<_>, addr)
-                });
-                Ok((Box::new(stream), listen_addr))
+                let stream = MapStream {
+                    stream,
+                    listen_addr: listen_addr.clone(),
+                    fun: self.fun
+                };
+                Ok((stream, listen_addr))
             }
-            Err((transport, addr)) => Err((Map { transport, map }, addr)),
+            Err((transport, addr)) => Err((Map { transport, fun: self.fun }, addr)),
         }
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-        let map = self.map;
-
-        match self.transport.dial(addr) {
+        match self.transport.dial(addr.clone()) {
             Ok(future) => {
-                let future = future
-                    .into_future()
-                    .map(move |output| map(output, Endpoint::Dialer));
-                Ok(Box::new(future))
+                let p = ConnectedPoint::Dialer { address: addr };
+                Ok(MapFuture {
+                    inner: future,
+                    args: Some((self.fun, p))
+                })
             }
-            Err((transport, addr)) => Err((Map { transport, map }, addr)),
+            Err((transport, addr)) => Err((Map { transport, fun: self.fun }, addr)),
         }
     }
 
@@ -89,3 +75,63 @@ where
         self.transport.nat_traversal(server, observed)
     }
 }
+
+/// Custom `Stream` implementation to avoid boxing.
+///
+/// Maps a function over every stream item.
+#[derive(Clone, Debug)]
+pub struct MapStream<T, F> { stream: T, listen_addr: Multiaddr, fun: F }
+
+impl<T, F, A, B, X> Stream for MapStream<T, F>
+where
+    T: Stream<Item = (X, Multiaddr)>,
+    X: Future<Item = A>,
+    F: FnOnce(A, ConnectedPoint) -> B + Clone
+{
+    type Item = (MapFuture<X, F>, Multiaddr);
+    type Error = T::Error;
+
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        match self.stream.poll()? {
+            Async::Ready(Some((future, addr))) => {
+                let f = self.fun.clone();
+                let p = ConnectedPoint::Listener {
+                    listen_addr: self.listen_addr.clone(),
+                    send_back_addr: addr.clone()
+                };
+                let future = MapFuture {
+                    inner: future,
+                    args: Some((f, p))
+                };
+                Ok(Async::Ready(Some((future, addr))))
+            }
+            Async::Ready(None) => Ok(Async::Ready(None)),
+            Async::NotReady => Ok(Async::NotReady)
+        }
+    }
+}
+
+/// Custom `Future` to avoid boxing.
+///
+/// Applies a function to the inner future's result.
+#[derive(Clone, Debug)]
+pub struct MapFuture<T, F> {
+    inner: T,
+    args: Option<(F, ConnectedPoint)>
+}
+
+impl<T, A, F, B> Future for MapFuture<T, F>
+where
+    T: Future<Item = A>,
+    F: FnOnce(A, ConnectedPoint) -> B
+{
+    type Item = B;
+    type Error = T::Error;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let item = try_ready!(self.inner.poll());
+        let (f, a) = self.args.take().expect("MapFuture has already finished.");
+        Ok(Async::Ready(f(item, a)))
+    }
+}
+

@@ -29,7 +29,7 @@
 //! `UpgradedNode::or_upgrade` methods, you can combine multiple transports and/or upgrades
 //! together in a complex chain of protocols negotiation.
 
-use crate::{InboundUpgrade, OutboundUpgrade, Endpoint, nodes::raw_swarm::ConnectedPoint};
+use crate::{InboundUpgrade, OutboundUpgrade, nodes::raw_swarm::ConnectedPoint};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::io::Error as IoError;
@@ -129,7 +129,7 @@ pub trait Transport {
     fn map<F, O>(self, map: F) -> map::Map<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Output, Endpoint) -> O + Clone + 'static,        // TODO: 'static :-/
+        F: FnOnce(Self::Output, ConnectedPoint) -> O + Clone
     {
         map::Map::new(self, map)
     }
@@ -139,7 +139,7 @@ pub trait Transport {
     fn map_err<F>(self, map_err: F) -> map_err::MapErr<Self, F>
     where
         Self: Sized,
-        F: FnOnce(IoError) -> IoError + Clone + 'static,        // TODO: 'static :-/
+        F: FnOnce(IoError) -> IoError + Clone
     {
         map_err::MapErr::new(self, map_err)
     }
@@ -151,7 +151,7 @@ pub trait Transport {
     fn map_err_dial<F>(self, map_err: F) -> map_err_dial::MapErrDial<Self, F>
     where
         Self: Sized,
-        F: FnOnce(IoError, Multiaddr) -> IoError + Clone + 'static,        // TODO: 'static :-/
+        F: FnOnce(IoError, Multiaddr) -> IoError
     {
         map_err_dial::MapErrDial::new(self, map_err)
     }
@@ -193,9 +193,9 @@ pub trait Transport {
     fn and_then<C, F, O>(self, upgrade: C) -> and_then::AndThen<Self, C>
     where
         Self: Sized,
-        C: FnOnce(Self::Output, ConnectedPoint) -> F + Clone + 'static,
-        F: Future<Item = O, Error = IoError> + 'static,
+        C: FnOnce(Self::Output, ConnectedPoint) -> F + Clone,
+        F: IntoFuture<Item = O, Error = IoError>
     {
-        and_then::and_then(self, upgrade)
+        and_then::AndThen::new(self, upgrade)
     }
 }
