@@ -147,6 +147,8 @@ pub extern crate libp2p_identify as identify;
 pub extern crate libp2p_kad as kad;
 pub extern crate libp2p_floodsub as floodsub;
 pub extern crate libp2p_mplex as mplex;
+#[cfg(not(target_os = "emscripten"))]
+pub extern crate libp2p_mdns as mdns;
 pub extern crate libp2p_peerstore as peerstore;
 pub extern crate libp2p_ping as ping;
 pub extern crate libp2p_plaintext as plaintext;
