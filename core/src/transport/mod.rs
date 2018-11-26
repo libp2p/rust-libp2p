@@ -29,18 +29,15 @@
 //! `UpgradedNode::or_upgrade` methods, you can combine multiple transports and/or upgrades
 //! together in a complex chain of protocols negotiation.
 
-use crate::{InboundUpgrade, OutboundUpgrade, Endpoint};
+use crate::{InboundUpgrade, OutboundUpgrade, Endpoint, nodes::raw_swarm::ConnectedPoint};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
-use nodes::raw_swarm::ConnectedPoint;
 use std::io::Error as IoError;
 use tokio_io::{AsyncRead, AsyncWrite};
 
 pub mod and_then;
 pub mod boxed;
 pub mod choice;
-pub mod denied;
-pub mod interruptible;
 pub mod map;
 pub mod map_err;
 pub mod map_err_dial;
@@ -48,7 +45,6 @@ pub mod memory;
 pub mod upgrade;
 
 pub use self::choice::OrTransport;
-pub use self::denied::DeniedTransport;
 pub use self::memory::connector;
 pub use self::upgrade::Upgrade;
 
@@ -201,14 +197,5 @@ pub trait Transport {
         F: Future<Item = O, Error = IoError> + 'static,
     {
         and_then::and_then(self, upgrade)
-    }
-
-    /// Wraps around the `Transport` and makes it interruptible.
-    #[inline]
-    fn interruptible(self) -> (interruptible::Interruptible<Self>, interruptible::Interrupt)
-    where
-        Self: Sized,
-    {
-        interruptible::Interruptible::new(self)
     }
 }
