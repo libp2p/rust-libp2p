@@ -24,7 +24,7 @@ use crate::{
     protocol,
     utility::{Peer, RelayAddr}
 };
-use futures::{stream, prelude::*};
+use futures::{future, stream, prelude::*};
 use libp2p_core::{transport::Transport, upgrade::apply_outbound};
 use log::{debug, info, trace};
 use multiaddr::Multiaddr;
@@ -45,16 +45,14 @@ impl<T, P, S> Transport for RelayTransport<T, P>
 where
     T: Transport + Send + Clone + 'static,
     T::Dial: Send,
-    T::Listener: Send,
-    T::ListenerUpgrade: Send,
     T::Output: AsyncRead + AsyncWrite + Send,
     P: Deref<Target=S> + Clone + 'static,
     S: 'static,
     for<'a> &'a S: Peerstore
 {
     type Output = T::Output;
-    type Listener = Box<Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=io::Error> + Send>;
-    type ListenerUpgrade = Box<Future<Item=Self::Output, Error=io::Error> + Send>;
+    type Listener = stream::Empty<(Self::ListenerUpgrade, Multiaddr), io::Error>;
+    type ListenerUpgrade = future::Empty<Self::Output, io::Error>;
     type Dial = Box<Future<Item=Self::Output, Error=io::Error> + Send>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -92,8 +90,6 @@ impl<T, P, S> RelayTransport<T, P>
 where
     T: Transport + Clone + 'static,
     T::Dial: Send,
-    T::Listener: Send,
-    T::ListenerUpgrade: Send,
     T::Output: AsyncRead + AsyncWrite + Send,
     P: Deref<Target=S> + Clone + 'static,
     for<'a> &'a S: Peerstore

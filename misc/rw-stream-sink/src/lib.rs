@@ -173,10 +173,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use RwStreamSink;
     use bytes::Bytes;
-    use futures::sync::mpsc::channel;
-    use futures::{Future, Poll, Sink, StartSend, Stream};
+    use crate::RwStreamSink;
+    use futures::{prelude::*, stream, sync::mpsc::channel};
     use std::io::Read;
 
     // This struct merges a stream and a sink and is quite useful for tests.
@@ -231,5 +230,14 @@ mod tests {
         let mut data2 = Vec::new();
         wrapper.read_to_end(&mut data2).unwrap();
         assert_eq!(data2, b" world");
+    }
+
+    #[test]
+    fn skip_empty_stream_items() {
+        let data: Vec<&[u8]> = vec![b"", b"foo", b"", b"bar", b"", b"baz", b""];
+        let mut rws = RwStreamSink::new(stream::iter_ok::<_, std::io::Error>(data));
+        let mut buf = [0; 9];
+        assert_eq!(9, rws.read(&mut buf).unwrap());
+        assert_eq!(b"foobarbaz", &buf[..])
     }
 }
