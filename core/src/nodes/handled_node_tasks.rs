@@ -58,7 +58,7 @@ use void::Void;
 
 /// Implementation of `Stream` that handles a collection of nodes.
 pub struct HandledNodesTasks<TInEvent, TOutEvent, THandler> {
-    /// An FNV hashmap for each active task to a sender allowing to transmit messages. Closing the sender interrupts
+    /// A map between active tasks to an unbounded sender, used to control the task. Closing the sender interrupts
     /// the task. It is possible that we receive messages from tasks that used to be in this list
     /// but no longer are, in which case we should ignore them.
     tasks: FnvHashMap<TaskId, mpsc::UnboundedSender<TInEvent>>,
