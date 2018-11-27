@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use libp2p_core::nodes::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction};
+use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction};
 use libp2p_core::{protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
 use std::{collections::VecDeque, marker::PhantomData};
 use tokio_io::{AsyncRead, AsyncWrite};

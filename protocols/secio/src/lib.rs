@@ -259,7 +259,7 @@ impl SecioKeyPair {
 
     /// Generates a new Ed25519 key pair and uses it.
     pub fn ed25519_generated() -> Result<SecioKeyPair, Box<Error + Send + Sync>> {
-        let mut csprng = rand::OsRng::new()?;
+        let mut csprng = rand::rngs::OsRng::new()?;
         let keypair: Ed25519KeyPair = Ed25519KeyPair::generate::<sha2::Sha512, _>(&mut csprng);
         Ok(SecioKeyPair {
             inner: SecioKeyPairInner::Ed25519 {
