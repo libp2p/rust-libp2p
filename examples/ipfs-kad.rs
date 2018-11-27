@@ -66,10 +66,13 @@ fn main() {
 
     // Create a swarm to manage peers and events.
     let mut swarm = {
-        // Create a Kademlia behaviour ; note that we use `without_init` because this example is
-        // very ephemeral. In a real world application, you want to use `new` instead.
+        // Create a Kademlia behaviour.
+        // Note that normally the Kademlia process starts by performing lots of request in order
+        // to insert our local node in the DHT. However here we use `without_init` because this
+        // example is very ephemeral and we don't want to pollute the DHT. In a real world
+        // application, you want to use `new` instead.
         let mut behaviour = libp2p::kad::Kademlia::without_init(local_peer_id);
-        libp2p::core::nodes::Swarm::new(transport, behaviour, topology)
+        libp2p::core::Swarm::new(transport, behaviour, topology)
     };
 
     // Order Kademlia to search for a peer.

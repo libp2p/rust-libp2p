@@ -692,31 +692,17 @@ fn process_kad_request<TUserData>(
 ) -> Result<KademliaHandlerEvent<TUserData>, io::Error> {
     match event {
         KadRequestMsg::Ping => {
-            // TODO: implement
+            // TODO: implement ; in practice the PING message is never used, so we may consider
+            //       removing it altogether
             Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "the PING Kademlia message is not implemented",
             ))
         }
-        KadRequestMsg::PutValue { .. } => {
-            // TODO: implement
-            Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "the PUT_VALUE Kademlia message is not implemented",
-            ))
-        }
-
         KadRequestMsg::FindNode { key } => Ok(KademliaHandlerEvent::FindNodeReq {
             key,
             request_id: KademliaRequestId { connec_unique_id },
         }),
-        KadRequestMsg::GetValue { .. } => {
-            // TODO: implement
-            Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "the GET_VALUE Kademlia message is not implemented",
-            ))
-        }
         KadRequestMsg::GetProviders { key } => Ok(KademliaHandlerEvent::GetProvidersReq {
             key,
             request_id: KademliaRequestId { connec_unique_id },
@@ -739,17 +725,6 @@ fn process_kad_response<TUserData>(
             let err = io::Error::new(
                 io::ErrorKind::InvalidData,
                 "received unexpected PONG message",
-            );
-            KademliaHandlerEvent::QueryError {
-                error: err,
-                user_data,
-            }
-        }
-        KadResponseMsg::GetValue { .. } => {
-            // TODO: implement
-            let err = io::Error::new(
-                io::ErrorKind::InvalidData,
-                "received unexpected GET_VALUE response",
             );
             KademliaHandlerEvent::QueryError {
                 error: err,

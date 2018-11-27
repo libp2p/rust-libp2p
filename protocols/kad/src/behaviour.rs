@@ -21,7 +21,7 @@
 use fnv::{FnvHashMap, FnvHashSet};
 use futures::prelude::*;
 use handler::{KademliaHandler, KademliaHandlerEvent, KademliaHandlerIn, KademliaRequestId};
-use libp2p_core::nodes::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction};
+use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction};
 use libp2p_core::{protocols_handler::ProtocolsHandler, topology::Topology, Multiaddr, PeerId};
 use multihash::Multihash;
 use protocol::{KadConnectionType, KadPeer};

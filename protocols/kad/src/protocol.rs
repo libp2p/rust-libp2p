@@ -228,20 +228,6 @@ pub enum KadRequestMsg {
     /// Ping request.
     Ping,
 
-    /// Target must save the given record, can be queried later with `GetValueReq`.
-    PutValue {
-        /// Identifier of the record.
-        key: Multihash,
-        /// The record itself.
-        record: (), //record: protobuf_structs::record::Record, // TODO: no
-    },
-
-    /// Request for a value stored in the DHT.
-    GetValue {
-        /// Identifier of the record.
-        key: Multihash,
-    },
-
     /// Request for the list of nodes whose IDs are the closest to `key`. The number of nodes
     /// returned is not specified, but should be around 20.
     FindNode {
@@ -266,17 +252,10 @@ pub enum KadRequestMsg {
 }
 
 /// Response that we can send to a peer or that we received from a peer.
-// TODO: document the rest
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum KadResponseMsg {
     /// Ping response.
     Pong,
-
-    /// Response to a `GetValue`.
-    GetValue {
-        record: (), //record: Option<protobuf_structs::record::Record>, // TODO: no
-        closer_peers: Vec<KadPeer>,
-    },
 
     /// Response to a `FindNode`.
     FindNode {
@@ -299,20 +278,6 @@ fn req_msg_to_proto(kad_msg: KadRequestMsg) -> protobuf_structs::dht::Message {
         KadRequestMsg::Ping => {
             let mut msg = protobuf_structs::dht::Message::new();
             msg.set_field_type(protobuf_structs::dht::Message_MessageType::PING);
-            msg
-        }
-        KadRequestMsg::PutValue { key, .. } => {
-            let mut msg = protobuf_structs::dht::Message::new();
-            msg.set_field_type(protobuf_structs::dht::Message_MessageType::PUT_VALUE);
-            msg.set_key(key.into_bytes());
-            //msg.set_record(record);		// TODO:
-            msg
-        }
-        KadRequestMsg::GetValue { key } => {
-            let mut msg = protobuf_structs::dht::Message::new();
-            msg.set_field_type(protobuf_structs::dht::Message_MessageType::GET_VALUE);
-            msg.set_key(key.into_bytes());
-            msg.set_clusterLevelRaw(10);
             msg
         }
         KadRequestMsg::FindNode { key } => {
@@ -348,7 +313,6 @@ fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> protobuf_structs::dht::Message 
             msg.set_field_type(protobuf_structs::dht::Message_MessageType::PING);
             msg
         }
-        KadResponseMsg::GetValue { .. } => unimplemented!(), // TODO:
         KadResponseMsg::FindNode { closer_peers } => {
             assert!(!closer_peers.is_empty());
             let mut msg = protobuf_structs::dht::Message::new();
@@ -384,19 +348,17 @@ fn proto_to_req_msg(mut message: protobuf_structs::dht::Message) -> Result<KadRe
         protobuf_structs::dht::Message_MessageType::PING => Ok(KadRequestMsg::Ping),
 
         protobuf_structs::dht::Message_MessageType::PUT_VALUE => {
-            let key = Multihash::from_bytes(message.take_key())
-                .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))?;
-            let _record = message.take_record();
-            Ok(KadRequestMsg::PutValue {
-                key: key,
-                record: (),
-            })
+            Err(IoError::new(
+                IoErrorKind::InvalidData,
+                "received a PUT_VALUE message, but this is not supported by rust-libp2p yet",
+            ))
         }
 
         protobuf_structs::dht::Message_MessageType::GET_VALUE => {
-            let key = Multihash::from_bytes(message.take_key())
-                .map_err(|err| IoError::new(IoErrorKind::InvalidData, err))?;
-            Ok(KadRequestMsg::GetValue { key: key })
+            Err(IoError::new(
+                IoErrorKind::InvalidData,
+                "received a GET_VALUE message, but this is not supported by rust-libp2p yet",
+            ))
         }
 
         protobuf_structs::dht::Message_MessageType::FIND_NODE => {
@@ -444,16 +406,10 @@ fn proto_to_resp_msg(
         protobuf_structs::dht::Message_MessageType::PING => Ok(KadResponseMsg::Pong),
 
         protobuf_structs::dht::Message_MessageType::GET_VALUE => {
-            let closer_peers = message
-                .mut_closerPeers()
-                .iter_mut()
-                .filter_map(|peer| KadPeer::from_peer(peer).ok())
-                .collect::<Vec<_>>();
-
-            Ok(KadResponseMsg::GetValue {
-                record: (),
-                closer_peers,
-            })
+            Err(IoError::new(
+                IoErrorKind::InvalidData,
+                "received a GET_VALUE message, but this is not supported by rust-libp2p yet",
+            ))
         }
 
         protobuf_structs::dht::Message_MessageType::FIND_NODE => {
@@ -517,13 +473,6 @@ mod tests {
         // successfully received.
     
         test_one(KadMsg::Ping);
-        test_one(KadMsg::PutValue {
-            key: encode(Hash::SHA2256, &[1, 2, 3, 4]).unwrap(),
-            record: (),
-        });
-        test_one(KadMsg::GetValueReq {
-            key: encode(Hash::SHA2256, &[10, 11, 12]).unwrap(),
-        });
         test_one(KadMsg::FindNodeReq {
             key: PeerId::random(),
         });
