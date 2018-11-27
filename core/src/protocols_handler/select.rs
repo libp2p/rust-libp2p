@@ -51,16 +51,16 @@ impl<TProto1, TProto2> ProtocolsHandlerSelect<TProto1, TProto2> {
     }
 }
 
-impl<TSubstream, TProto1, TProto2, TProto1Out, TProto2Out>
+impl<TSubstream, TProto1, TProto2>
     ProtocolsHandler for ProtocolsHandlerSelect<TProto1, TProto2>
 where
     TProto1: ProtocolsHandler<Substream = TSubstream>,
     TProto2: ProtocolsHandler<Substream = TSubstream>,
     TSubstream: AsyncRead + AsyncWrite,
-    TProto1::InboundProtocol: InboundUpgrade<TSubstream, Output = TProto1Out>,
-    TProto2::InboundProtocol: InboundUpgrade<TSubstream, Output = TProto2Out>,
-    TProto1::OutboundProtocol: OutboundUpgrade<TSubstream, Output = TProto1Out>,
-    TProto2::OutboundProtocol: OutboundUpgrade<TSubstream, Output = TProto2Out>
+    TProto1::InboundProtocol: InboundUpgrade<TSubstream>,
+    TProto2::InboundProtocol: InboundUpgrade<TSubstream>,
+    TProto1::OutboundProtocol: OutboundUpgrade<TSubstream>,
+    TProto2::OutboundProtocol: OutboundUpgrade<TSubstream>
 {
     type InEvent = EitherOutput<TProto1::InEvent, TProto2::InEvent>;
     type OutEvent = EitherOutput<TProto1::OutEvent, TProto2::OutEvent>;
