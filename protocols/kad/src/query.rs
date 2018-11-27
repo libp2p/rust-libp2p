@@ -421,7 +421,7 @@ mod tests {
     use super::{QueryConfig, QueryState, QueryStatePollOut, QueryTarget};
     use futures::{self, prelude::*};
     use libp2p_core::PeerId;
-    use std::{iter, time::Duration, sync::Arc, sync::Mutex};
+    use std::{iter, time::Duration, sync::Arc, sync::Mutex, thread};
     use tokio;
 
     #[test]
@@ -484,6 +484,62 @@ mod tests {
             move || {
                 match try_ready!(Ok(query.lock().unwrap().poll())) {
                     QueryStatePollOut::SendRpc { peer_id, .. } if peer_id == &random_id2 => {
+                        Ok(Async::Ready(()))
+                    }
+                    _ => panic!(),
+                }
+            }
+        }));
+    }
+
+    #[test]
+    fn timeout_works() {
+        let random_id = PeerId::random();
+
+        let query = Arc::new(Mutex::new(QueryState::new(QueryConfig {
+            target: QueryTarget::FindPeer(PeerId::random()),
+            known_closest_peers: iter::once(random_id.clone()),
+            parallelism: 3,
+            num_results: 100,
+            rpc_timeout: Duration::from_millis(100),
+        })));
+
+        // Let's do a first polling round to obtain the `SendRpc` request.
+        tokio::run(futures::future::poll_fn({
+            let random_id = random_id.clone();
+            let query = query.clone();
+            move || {
+                match try_ready!(Ok(query.lock().unwrap().poll())) {
+                    QueryStatePollOut::SendRpc { peer_id, .. } if peer_id == &random_id => {
+                        Ok(Async::Ready(()))
+                    }
+                    _ => panic!(),
+                }
+            }
+        }));
+
+        // Wait for a bit.
+        thread::sleep(Duration::from_millis(200));
+
+        // Second polling round to check the timeout.
+        tokio::run(futures::future::poll_fn({
+            let query = query.clone();
+            move || {
+                match try_ready!(Ok(query.lock().unwrap().poll())) {
+                    QueryStatePollOut::CancelRpc { peer_id, .. } if peer_id == &random_id => {
+                        Ok(Async::Ready(()))
+                    }
+                    _ => panic!(),
+                }
+            }
+        }));
+
+        // Third polling round for finished.
+        tokio::run(futures::future::poll_fn({
+            let query = query.clone();
+            move || {
+                match try_ready!(Ok(query.lock().unwrap().poll())) {
+                    QueryStatePollOut::Finished => {
                         Ok(Async::Ready(()))
                     }
                     _ => panic!(),
