@@ -23,7 +23,7 @@
 //! This crate contains all the core traits and mechanisms of the transport and swarm systems
 //! of *libp2p*.
 //!
-//! # General overview
+//! # Overview
 //!
 //! From a user point of view, the main concepts of libp2p are:
 //!
