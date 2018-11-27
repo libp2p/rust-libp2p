@@ -358,8 +358,6 @@ pub enum QueryStatePollOut<'a> {
 pub enum QueryTarget {
     /// Finding a peer.
     FindPeer(PeerId),
-    /// Find a value.
-    FindValue(Multihash),
     /// Find the peers that provide a certain value.
     GetProviders(Multihash),
 }
@@ -372,10 +370,6 @@ impl QueryTarget {
                 key: peer.clone(),
                 user_data,
             },
-            QueryTarget::FindValue(_) => {
-                // TODO: no `KademliaHandlerIn` variant exists yet, as this is not implemented
-                unimplemented!()
-            },
             QueryTarget::GetProviders(key) => KademliaHandlerIn::GetProvidersReq {
                 key: key.clone(),
                 user_data,
@@ -387,7 +381,6 @@ impl QueryTarget {
     pub fn as_hash(&self) -> &Multihash {
         match self {
             QueryTarget::FindPeer(peer) => peer.as_ref(),
-            QueryTarget::FindValue(key) => key,
             QueryTarget::GetProviders(key) => key,
         }
     }

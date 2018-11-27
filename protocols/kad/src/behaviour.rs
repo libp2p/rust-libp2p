@@ -480,9 +480,6 @@ where
                                     provider_peers: Vec::new(),     // FIXME:
                                 }
                             },
-                            QueryTarget::FindValue(key) => {
-                                unimplemented!()        // TODO:
-                            },
                         };
 
                         break Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
