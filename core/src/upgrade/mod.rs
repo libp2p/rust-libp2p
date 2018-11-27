@@ -129,7 +129,7 @@ pub trait InboundUpgradeExt<C>: InboundUpgrade<C> {
 
     /// Returns a new object that combines `Self` and another upgrade to support both at the same
     /// time.
-    fn or_inbound<U>(self, upgrade: U) -> OrUpgrade<Self, U>
+    fn or_inbound<U>(self, upgrade: U) -> OrUpgrade<C, Self, U>
     where
         Self: Sized,
         U: InboundUpgrade<C>
@@ -179,7 +179,7 @@ pub trait OutboundUpgradeExt<C>: OutboundUpgrade<C> {
 
     /// Returns a new object that combines `Self` and another upgrade to support both at the same
     /// time.
-    fn or_outbound<U>(self, upgrade: U) -> OrUpgrade<Self, U>
+    fn or_outbound<U>(self, upgrade: U) -> OrUpgrade<C, Self, U>
     where
         Self: Sized,
         U: OutboundUpgrade<C>

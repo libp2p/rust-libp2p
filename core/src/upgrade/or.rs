@@ -24,24 +24,25 @@ use crate::{
     either::{EitherOutput, EitherError, EitherFuture2},
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
 };
+use std::marker::PhantomData;
 
 /// Upgrade that combines two upgrades into one. Supports all the protocols supported by either
 /// sub-upgrade.
 ///
 /// The protocols supported by the first element have a higher priority.
 #[derive(Debug, Clone)]
-pub struct OrUpgrade<A, B>(A, B);
+pub struct OrUpgrade<T, A, B>(A, B, PhantomData<T>);
 
-impl<A, B> OrUpgrade<A, B> {
+impl<T, A, B> OrUpgrade<T, A, B> {
     /// Combines two upgrades into an `OrUpgrade`.
     ///
     /// The protocols supported by the first element have a higher priority.
     pub fn new(a: A, b: B) -> Self {
-        OrUpgrade(a, b)
+        OrUpgrade(a, b, PhantomData)
     }
 }
 
-impl<A, B> UpgradeInfo for OrUpgrade<A, B>
+impl<T, A, B> UpgradeInfo for OrUpgrade<T, A, B>
 where
     A: UpgradeInfo,
     B: UpgradeInfo
@@ -54,7 +55,7 @@ where
     }
 }
 
-impl<C, A, B, TA, TB, EA, EB> InboundUpgrade<C> for OrUpgrade<A, B>
+impl<C, A, B, TA, TB, EA, EB> InboundUpgrade<C> for OrUpgrade<C, A, B>
 where
     A: InboundUpgrade<C, Output = TA, Error = EA>,
     B: InboundUpgrade<C, Output = TB, Error = EB>,
@@ -71,7 +72,7 @@ where
     }
 }
 
-impl<C, A, B, TA, TB, EA, EB> OutboundUpgrade<C> for OrUpgrade<A, B>
+impl<C, A, B, TA, TB, EA, EB> OutboundUpgrade<C> for OrUpgrade<C, A, B>
 where
     A: OutboundUpgrade<C, Output = TA, Error = EA>,
     B: OutboundUpgrade<C, Output = TB, Error = EB>,
