@@ -21,9 +21,9 @@
 #[macro_use]
 extern crate libp2p;
 
-// Small utility to check that a type implements `NetworkBehaviour`.
+/// Small utility to check that a type implements `NetworkBehaviour`.
 #[allow(dead_code)]
-fn req_net_behaviour<T: libp2p::core::swarm::NetworkBehaviour>() {}
+fn require_net_behaviour<T: libp2p::core::swarm::NetworkBehaviour>() {}
 
 // TODO: doesn't compile
 /*#[test]
@@ -42,7 +42,7 @@ fn one_field() {
     }
 
     fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
-        req_net_behaviour::<Foo<TSubstream>>();
+        require_net_behaviour::<Foo<TSubstream>>();
     }
 }
 
@@ -69,7 +69,7 @@ fn three_fields() {
     }
 
     fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
-        req_net_behaviour::<Foo<TSubstream>>();
+        require_net_behaviour::<Foo<TSubstream>>();
     }
 }
 
@@ -91,7 +91,7 @@ fn event_handler() {
     }
 
     fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
-        req_net_behaviour::<Foo<TSubstream>>();
+        require_net_behaviour::<Foo<TSubstream>>();
     }
 }
 
@@ -110,7 +110,7 @@ fn custom_polling() {
     }
 
     fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
-        req_net_behaviour::<Foo<TSubstream>>();
+        require_net_behaviour::<Foo<TSubstream>>();
     }
 }
 
@@ -125,7 +125,7 @@ fn custom_event_no_polling() {
     }
 
     fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
-        req_net_behaviour::<Foo<TSubstream>>();
+        require_net_behaviour::<Foo<TSubstream>>();
     }
 }
 
@@ -144,6 +144,6 @@ fn custom_event_and_polling() {
     }
 
     fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
-        req_net_behaviour::<Foo<TSubstream>>();
+        require_net_behaviour::<Foo<TSubstream>>();
     }
 }
