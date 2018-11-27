@@ -18,53 +18,46 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::transport::Transport;
 use futures::prelude::*;
 use multiaddr::Multiaddr;
-use std::io::Error as IoError;
-use transport::Transport;
+use std::io;
 
 /// See `Transport::map_err_dial`.
 #[derive(Debug, Copy, Clone)]
-pub struct MapErrDial<T, F> {
-    transport: T,
-    map: F,
-}
+pub struct MapErrDial<T, F> { transport: T, fun: F }
 
 impl<T, F> MapErrDial<T, F> {
     /// Internal function that builds a `MapErrDial`.
     #[inline]
-    pub(crate) fn new(transport: T, map: F) -> MapErrDial<T, F> {
-        MapErrDial { transport, map }
+    pub(crate) fn new(transport: T, fun: F) -> MapErrDial<T, F> {
+        MapErrDial { transport, fun }
     }
 }
 
 impl<T, F> Transport for MapErrDial<T, F>
 where
-    T: Transport + 'static,                          // TODO: 'static :-/
-    T::Dial: Send,
-    F: FnOnce(IoError, Multiaddr) -> IoError + Clone + Send + 'static, // TODO: 'static :-/
+    T: Transport,
+    F: FnOnce(io::Error, Multiaddr) -> io::Error
 {
     type Output = T::Output;
     type Listener = T::Listener;
     type ListenerUpgrade = T::ListenerUpgrade;
-    type Dial = Box<Future<Item = Self::Output, Error = IoError> + Send>;
+    type Dial = MapErrFuture<T::Dial, F>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        match self.transport.listen_on(addr) {
-            Ok(l) => Ok(l),
-            Err((transport, addr)) => Err((MapErrDial { transport, map: self.map }, addr)),
-        }
+        let fun = self.fun;
+        self.transport.listen_on(addr)
+            .map_err(move |(transport, addr)| (MapErrDial { transport, fun }, addr))
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-        let map = self.map;
-
         match self.transport.dial(addr.clone()) {
-            Ok(future) => {
-                let future = future.into_future().map_err(move |err| map(err, addr));
-                Ok(Box::new(future))
-            }
-            Err((transport, addr)) => Err((MapErrDial { transport, map }, addr)),
+            Ok(future) => Ok(MapErrFuture {
+                inner: future,
+                args: Some((self.fun, addr))
+            }),
+            Err((transport, addr)) => Err((MapErrDial { transport, fun: self.fun }, addr))
         }
     }
 
@@ -73,3 +66,33 @@ where
         self.transport.nat_traversal(server, observed)
     }
 }
+
+/// Custom `Future` to avoid boxing.
+///
+/// Applies a function to the inner future's error type.
+#[derive(Debug, Clone)]
+pub struct MapErrFuture<T, F> {
+    inner: T,
+    args: Option<(F, Multiaddr)>,
+}
+
+impl<T, E, F, A> Future for MapErrFuture<T, F>
+where
+    T: Future<Error = E>,
+    F: FnOnce(E, Multiaddr) -> A
+{
+    type Item = T::Item;
+    type Error = A;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        match self.inner.poll() {
+            Ok(Async::NotReady) => Ok(Async::NotReady),
+            Ok(Async::Ready(x)) => Ok(Async::Ready(x)),
+            Err(e) => {
+                let (f, a) = self.args.take().expect("MapErrFuture has already finished.");
+                Err(f(e, a))
+            }
+        }
+    }
+}
+

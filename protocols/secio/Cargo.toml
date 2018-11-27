@@ -11,13 +11,13 @@ futures = "0.1"
 libp2p-core = { path = "../../core" }
 log = "0.4.1"
 protobuf = "2.0.2"
-rand = "0.5"
+rand = "0.6"
 secp256k1 = {version = "0.11", optional = true }
 aes-ctr = "0.1.0"
 aesni = { version = "0.4.1", features = ["nocheck"], optional = true }
 twofish = "0.1.0"
 ctr = "0.1"
-lazy_static = { version = "0.2.11", optional = true }
+lazy_static = { version = "1.2.0", optional = true }
 rw-stream-sink = { path = "../../misc/rw-stream-sink" }
 tokio-io = "0.1.0"
 sha2 = "0.7.1"
