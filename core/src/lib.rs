@@ -41,7 +41,7 @@
 //! In order to get started with libp2p, proceed with the following steps:
 //!
 //! - Create an instance of a type that implements `Transport` based on the list of transport
-//!   protocols (such as TCP/IP, DNS, bluetooth, etc.) that you want to support. See the
+//!   protocols that you want to support (such as TCP/IP, DNS, bluetooth, etc.). See the
 //!   `transport` module for information about how to do that.
 //! - Create an instance of a type that implements `NetworkBehaviour`. See the `swarm` module for
 //!   information about how to do that.
