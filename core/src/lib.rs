@@ -27,7 +27,7 @@
 //!
 //! From a user point of view, the main concepts of libp2p are:
 //!
-//! - A `PeerId` is a unique global identifier for a node on the network. Each node should have a
+//! - A `PeerId` is a unique global identifier for a node on the network. Each node must have a
 //!   different `PeerId`. Normally, a `PeerId` is the hash of the public key used to negotiate
 //!   encryption on the communication channel, thereby guaranteeing that they cannot be spoofed.
 //! - The `Transport` trait define how to reach a remote or listen for incoming remote connections.
