@@ -228,12 +228,16 @@ impl QueryState {
     /// Polls this individual query.
     pub fn poll(&mut self) -> Async<QueryStatePollOut> {
         // While iterating over peers, count the number of queries currently being processed.
+        // This is used to not go over the limit of parallel requests.
+        // If this is still 0 at the end of the function, that means the query is finished.
         let mut active_counter = 0;
-        // While iterating over peers, count the number of queries in a row that succeeded.
+
+        // While iterating over peers, count the number of queries in a row (from closer to further
+        // away from target) that are in the succeeded in state.
         // Contains `None` if the chain is broken.
         let mut succeeded_counter = Some(0);
 
-        // Extract `self.num_results` to avoid multiple borrowing errors with closures.
+        // Extract `self.num_results` to avoid borrowing errors with closures.
         let num_results = self.num_results;
 
         for &mut (ref peer_id, ref mut state) in self.closest_peers.iter_mut() {
@@ -252,7 +256,7 @@ impl QueryState {
                 }
             }
 
-            // Increment the counters.
+            // Increment the local counters.
             match state {
                 QueryPeerState::InProgress(_) => {
                     active_counter += 1;
@@ -274,14 +278,18 @@ impl QueryState {
                 return Async::Ready(QueryStatePollOut::Finished);
             }
 
-            // Dial nodes that need dialing.
+            // Dial the node if it needs dialing.
             let need_connect = match state {
                 QueryPeerState::NotContacted => match self.stage {
                     QueryStage::Iterating { .. } => active_counter < self.parallelism,
-                    QueryStage::Frozen => true,
+                    QueryStage::Frozen => match self.target {
+                        QueryTarget::FindPeer(_) => true,
+                        QueryTarget::GetProviders(_) => false,
+                    },
                 },
                 _ => false,
             };
+
             if need_connect {
                 let delay = Delay::new(Instant::now() + self.rpc_timeout);
                 *state = QueryPeerState::InProgress(delay);
@@ -302,6 +310,9 @@ impl QueryState {
     }
 
     /// Consumes the query and returns the known closest peers.
+    ///
+    /// > **Note**: This can be called at any time, but you normally only do that once the query
+    /// >           is finished.
     pub fn into_closest_peers(self) -> impl Iterator<Item = PeerId> {
         self.closest_peers
             .into_iter()
@@ -364,14 +375,20 @@ pub enum QueryTarget {
 
 impl QueryTarget {
     /// Creates the corresponding RPC request to send to remote.
+    #[inline]
     pub fn to_rpc_request<TUserData>(&self, user_data: TUserData) -> KademliaHandlerIn<TUserData> {
+        self.clone().into_rpc_request(user_data)
+    }
+
+    /// Creates the corresponding RPC request to send to remote.
+    pub fn into_rpc_request<TUserData>(self, user_data: TUserData) -> KademliaHandlerIn<TUserData> {
         match self {
-            QueryTarget::FindPeer(peer) => KademliaHandlerIn::FindNodeReq {
-                key: peer.clone(),
+            QueryTarget::FindPeer(key) => KademliaHandlerIn::FindNodeReq {
+                key,
                 user_data,
             },
             QueryTarget::GetProviders(key) => KademliaHandlerIn::GetProvidersReq {
-                key: key.clone(),
+                key,
                 user_data,
             },
         }
