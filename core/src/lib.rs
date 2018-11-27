@@ -49,7 +49,7 @@
 //!   information about how to do that.
 //! - Create a `Swarm` by passing the three objects you have just created.
 //!
-//! Additionally, if you want to create your own protocol, there are some additional concepts:
+//! If you want to create your own protocol, there are some additional lower-level concepts:
 //!
 //! - The `StreamMuxer` trait is implemented on structs that hold a connection to a remote and can
 //!   subdivide this connection into multiple substreams. See the `muxing` module.
