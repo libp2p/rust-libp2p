@@ -12,7 +12,7 @@ libp2p-core = { path = "../../core" }
 log = "0.4"
 multiaddr = { path = "../../misc/multiaddr" }
 protobuf = "2.0.2"
-rand = "0.4"
+rand = "0.6"
 tokio-codec = "0.1"
 tokio-io = "0.1"
 unsigned-varint = { version = "0.2.1", features = ["codec"] }
