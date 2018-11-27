@@ -24,13 +24,15 @@ use crate::{
     nodes::{
         handled_node::NodeHandler,
         node::Substream,
-        raw_swarm::{RawSwarm, RawSwarmEvent, ConnectedPoint}
+        raw_swarm::{RawSwarm, RawSwarmEvent}
     },
     protocols_handler::{NodeHandlerWrapper, ProtocolsHandler},
     topology::Topology
 };
 use futures::prelude::*;
 use std::{fmt, io, ops::{Deref, DerefMut}};
+
+pub use crate::nodes::raw_swarm::ConnectedPoint;
 
 /// Contains the state of the network, plus the way it should behave.
 pub struct Swarm<TTransport, TBehaviour, TTopology>
