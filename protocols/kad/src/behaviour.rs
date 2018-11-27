@@ -365,7 +365,7 @@ where
     > {
         // Flush the changes to the topology that we want to make.
         for (peer_id, addr, connection_ty) in self.add_to_topology.drain() {
-            topology.add_kad_discovered_address(&peer_id, addr, connection_ty);
+            topology.add_kad_discovered_address(peer_id, addr, connection_ty);
         }
         self.add_to_topology.shrink_to_fit();
         for (key, provider) in self.add_provider.drain() {

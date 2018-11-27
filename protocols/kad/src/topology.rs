@@ -33,7 +33,7 @@ pub trait KademliaTopology: Topology {
     type GetProvidersIter: Iterator<Item = PeerId>;
 
     /// Adds an address discovered through Kademlia to the topology.
-    fn add_kad_discovered_address(&mut self, peer: &PeerId, addr: Multiaddr,
+    fn add_kad_discovered_address(&mut self, peer: PeerId, addr: Multiaddr,
                                   connection_ty: KadConnectionType);
 
     /// Returns the known peers closest by XOR distance to the `target`.
@@ -53,12 +53,12 @@ impl KademliaTopology for MemoryTopology {
     type ClosestPeersIter = vec::IntoIter<PeerId>;
     type GetProvidersIter = vec::IntoIter<PeerId>;
 
-    fn add_kad_discovered_address(&mut self, peer: &PeerId, addr: Multiaddr, _: KadConnectionType) {
-        Topology::add_discovered_address(self, peer, addr)
+    fn add_kad_discovered_address(&mut self, peer: PeerId, addr: Multiaddr, _: KadConnectionType) {
+        self.add_address(peer, addr)
     }
 
     fn closest_peers(&mut self, target: &Multihash, _: usize) -> Self::ClosestPeersIter {
-        let mut list = self.peers();
+        let mut list = self.peers().map(|p| p.clone()).collect::<Vec<_>>();
         list.sort_by(|a, b| target.distance_with(b.as_ref()).cmp(&target.distance_with(a.as_ref())));
         list.into_iter()
     }
