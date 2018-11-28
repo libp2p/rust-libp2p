@@ -259,7 +259,7 @@ impl SecioKeyPair {
 
     /// Generates a new Ed25519 key pair and uses it.
     pub fn ed25519_generated() -> Result<SecioKeyPair, Box<Error + Send + Sync>> {
-        let mut csprng = rand::OsRng::new()?;
+        let mut csprng = rand::rngs::OsRng::new()?;
         let keypair: Ed25519KeyPair = Ed25519KeyPair::generate::<sha2::Sha512, _>(&mut csprng);
         Ok(SecioKeyPair {
             inner: SecioKeyPairInner::Ed25519 {
@@ -427,19 +427,13 @@ where
     ///
     /// On success, produces a `SecioMiddleware` that can then be used to encode/decode
     /// communications, plus the public key of the remote, plus the ephemeral public key.
-    pub fn handshake<'a>(
-        socket: S,
-        config: SecioConfig,
-    ) -> Box<Future<Item = (SecioMiddleware<S>, PublicKey, Vec<u8>), Error = SecioError> + Send + 'a>
-    where
-        S: 'a,
+    pub fn handshake(socket: S, config: SecioConfig)
+        -> impl Future<Item = (SecioMiddleware<S>, PublicKey, Vec<u8>), Error = SecioError>
     {
-        let fut = handshake::handshake(socket, config).map(|(inner, pubkey, ephemeral)| {
+        handshake::handshake(socket, config).map(|(inner, pubkey, ephemeral)| {
             let inner = SecioMiddleware { inner };
             (inner, pubkey, ephemeral)
-        });
-
-        Box::new(fut)
+        })
     }
 }
 
