@@ -1,4 +1,4 @@
-// Copyright 2017 Parity Technologies (UK) Ltd.
+// Copyright 2018 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,34 +18,46 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::prelude::*;
-use multiaddr::Multiaddr;
-use std::io::{self, Cursor};
-use transport::Transport;
+extern crate bytes;
+extern crate futures;
+extern crate libp2p_core;
+extern crate void;
 
-/// Dummy implementation of `Transport` that just denies every single attempt.
+use bytes::Bytes;
+use futures::future::{self, FutureResult};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use std::iter;
+use void::Void;
+
 #[derive(Debug, Copy, Clone)]
-pub struct DeniedTransport;
+pub struct PlainTextConfig;
 
-impl Transport for DeniedTransport {
-    // TODO: could use `!` for associated types once stable
-    type Output = Cursor<Vec<u8>>;
-    type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = io::Error> + Send + Sync>;
-    type ListenerUpgrade = Box<Future<Item = Self::Output, Error = io::Error> + Send + Sync>;
-    type Dial = Box<Future<Item = Self::Output, Error = io::Error> + Send + Sync>;
+impl UpgradeInfo for PlainTextConfig {
+    type UpgradeId = ();
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
 
-    #[inline]
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        Err((DeniedTransport, addr))
-    }
-
-    #[inline]
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-        Err((DeniedTransport, addr))
-    }
-
-    #[inline]
-    fn nat_traversal(&self, _: &Multiaddr, _: &Multiaddr) -> Option<Multiaddr> {
-        None
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once((Bytes::from("/plaintext/1.0.0"), ()))
     }
 }
+
+impl<C> InboundUpgrade<C> for PlainTextConfig {
+    type Output = C;
+    type Error = Void;
+    type Future = FutureResult<C, Self::Error>;
+
+    fn upgrade_inbound(self, i: C, _: Self::UpgradeId) -> Self::Future {
+        future::ok(i)
+    }
+}
+
+impl<C> OutboundUpgrade<C> for PlainTextConfig {
+    type Output = C;
+    type Error = Void;
+    type Future = FutureResult<C, Self::Error>;
+
+    fn upgrade_outbound(self, i: C, _: Self::UpgradeId) -> Self::Future {
+        future::ok(i)
+    }
+}
+

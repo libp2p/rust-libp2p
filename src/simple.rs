@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::Bytes;
-use core::upgrade::{ConnectionUpgrade, Endpoint};
+use core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use futures::prelude::*;
 use std::{iter, io::Error as IoError, sync::Arc};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -57,26 +57,48 @@ impl<F> Clone for SimpleProtocol<F> {
     }
 }
 
-impl<C, F, O> ConnectionUpgrade<C> for SimpleProtocol<F>
+impl<F> UpgradeInfo for SimpleProtocol<F> {
+    type UpgradeId = ();
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+
+    #[inline]
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once((self.name.clone(), ()))
+    }
+}
+
+impl<C, F, O> InboundUpgrade<C> for SimpleProtocol<F>
 where
     C: AsyncRead + AsyncWrite,
     F: Fn(C) -> O,
     O: IntoFuture<Error = IoError>,
     O::Future: Send + 'static,
 {
-    type NamesIter = iter::Once<(Bytes, ())>;
-    type UpgradeIdentifier = ();
-
-    #[inline]
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once((self.name.clone(), ()))
-    }
-
     type Output = O::Item;
-    type Future = Box<Future<Item = O::Item, Error = IoError> + Send>;
+    type Error = IoError;
+    type Future = Box<Future<Item = O::Item, Error = Self::Error> + Send>;
 
     #[inline]
-    fn upgrade(self, socket: C, _: (), _: Endpoint) -> Self::Future {
+    fn upgrade_inbound(self, socket: C, _: Self::UpgradeId) -> Self::Future {
+        let upgrade = &self.upgrade;
+        let fut = upgrade(socket).into_future().from_err();
+        Box::new(fut) as Box<_>
+    }
+}
+
+impl<C, F, O> OutboundUpgrade<C> for SimpleProtocol<F>
+where
+    C: AsyncRead + AsyncWrite,
+    F: Fn(C) -> O,
+    O: IntoFuture<Error = IoError>,
+    O::Future: Send + 'static,
+{
+    type Output = O::Item;
+    type Error = IoError;
+    type Future = Box<Future<Item = O::Item, Error = Self::Error> + Send>;
+
+    #[inline]
+    fn upgrade_outbound(self, socket: C, _: Self::UpgradeId) -> Self::Future {
         let upgrade = &self.upgrade;
         let fut = upgrade(socket).into_future().from_err();
         Box::new(fut) as Box<_>

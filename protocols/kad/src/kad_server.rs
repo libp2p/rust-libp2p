@@ -36,7 +36,8 @@
 use bytes::Bytes;
 use futures::sync::{mpsc, oneshot};
 use futures::{future, Future, Sink, stream, Stream};
-use libp2p_core::{ConnectionUpgrade, Endpoint, PeerId};
+use libp2p_core::{PeerId, upgrade::{InboundUpgrade, UpgradeInfo}};
+use log::{debug, warn};
 use multihash::Multihash;
 use protocol::{self, KadMsg, KademliaProtocolConfig, KadPeer};
 use std::collections::VecDeque;
@@ -64,7 +65,17 @@ impl KadConnecConfig {
     }
 }
 
-impl<C> ConnectionUpgrade<C> for KadConnecConfig
+impl UpgradeInfo for KadConnecConfig {
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+    type UpgradeId = ();
+
+    #[inline]
+    fn protocol_names(&self) -> Self::NamesIter {
+        self.raw_proto.protocol_names()
+    }
+}
+
+impl<C> InboundUpgrade<C> for KadConnecConfig
 where
     C: AsyncRead + AsyncWrite + Send + 'static, // TODO: 'static :-/
 {
@@ -72,22 +83,14 @@ where
         KadConnecController,
         Box<Stream<Item = KadIncomingRequest, Error = IoError> + Send>,
     );
-    type Future = future::Map<<KademliaProtocolConfig as ConnectionUpgrade<C>>::Future, fn(<KademliaProtocolConfig as ConnectionUpgrade<C>>::Output) -> Self::Output>;
-    type NamesIter = iter::Once<(Bytes, ())>;
-    type UpgradeIdentifier = ();
+    type Error = IoError;
+    type Future = future::Map<<KademliaProtocolConfig as InboundUpgrade<C>>::Future, fn(<KademliaProtocolConfig as InboundUpgrade<C>>::Output) -> Self::Output>;
 
     #[inline]
-    fn protocol_names(&self) -> Self::NamesIter {
-        ConnectionUpgrade::<C>::protocol_names(&self.raw_proto)
-    }
-
-    #[inline]
-    fn upgrade(self, incoming: C, id: (), endpoint: Endpoint) -> Self::Future {
+    fn upgrade_inbound(self, incoming: C, id: Self::UpgradeId) -> Self::Future {
         self.raw_proto
-            .upgrade(incoming, id, endpoint)
-            .map::<fn(_) -> _, _>(move |connec| {
-                build_from_sink_stream(connec)
-            })
+            .upgrade_inbound(incoming, id)
+            .map(build_from_sink_stream)
     }
 }
 
@@ -520,9 +523,8 @@ mod tests {
     use futures::{Future, Poll, Sink, StartSend, Stream};
     use futures::sync::mpsc;
     use kad_server::{self, KadIncomingRequest, KadConnecController};
-    use libp2p_core::PublicKey;
+    use libp2p_core::PeerId;
     use protocol::{KadConnectionType, KadPeer};
-    use rand;
 
     // This struct merges a stream and a sink and is quite useful for tests.
     struct Wrapper<St, Si>(St, Si);
@@ -588,18 +590,12 @@ mod tests {
     fn find_node_response() {
         let (controller_a, stream_events_a, _controller_b, stream_events_b) = build_test();
 
-        let random_peer_id = {
-            let buf = (0 .. 1024).map(|_| -> u8 { rand::random() }).collect::<Vec<_>>();
-            PublicKey::Rsa(buf).into_peer_id()
-        };
+        let random_peer_id = PeerId::random();
 
         let find_node_fut = controller_a.find_node(&random_peer_id);
 
         let example_response = KadPeer {
-            node_id: {
-                let buf = (0 .. 1024).map(|_| -> u8 { rand::random() }).collect::<Vec<_>>();
-                PublicKey::Rsa(buf).into_peer_id()
-            },
+            node_id: PeerId::random(),
             multiaddrs: Vec::new(),
             connection_ty: KadConnectionType::Connected,
         };

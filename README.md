@@ -1,5 +1,9 @@
 # Central repository for work on libp2p
 
+<a href="http://libp2p.io/"><img src="https://img.shields.io/badge/project-libp2p-yellow.svg?style=flat-square" /></a>
+<a href="http://webchat.freenode.net/?channels=%23libp2p"><img src="https://img.shields.io/badge/freenode-%23libp2p-yellow.svg?style=flat-square" /></a>
+[![dependency status](https://deps.rs/repo/github/libp2p/rust-libp2p/status.svg?style=flat-square)](https://deps.rs/repo/github/libp2p/rust-libp2p)
+
 This repository is the central place for Rust development of the [libp2p](https://libp2p.io) spec.
 
 **This readme will be more fleshed out the closer the project gets to completion.

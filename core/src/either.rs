@@ -18,11 +18,42 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::{muxing::{Shutdown, StreamMuxer}, Multiaddr};
 use futures::prelude::*;
-use muxing::{Shutdown, StreamMuxer};
-use std::io::{Error as IoError, Read, Write};
+use std::{fmt, io::{Error as IoError, Read, Write}};
 use tokio_io::{AsyncRead, AsyncWrite};
-use Multiaddr;
+
+#[derive(Debug, Copy, Clone)]
+pub enum EitherError<A, B> {
+    A(A),
+    B(B)
+}
+
+impl<A, B> fmt::Display for EitherError<A, B>
+where
+    A: fmt::Display,
+    B: fmt::Display
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            EitherError::A(a) => a.fmt(f),
+            EitherError::B(b) => b.fmt(f)
+        }
+    }
+}
+
+impl<A, B> std::error::Error for EitherError<A, B>
+where
+    A: fmt::Debug + std::error::Error,
+    B: fmt::Debug + std::error::Error
+{
+    fn cause(&self) -> Option<&dyn std::error::Error> {
+        match self {
+            EitherError::A(a) => a.cause(),
+            EitherError::B(b) => b.cause()
+        }
+    }
+}
 
 /// Implements `AsyncRead` and `AsyncWrite` and dispatches all method calls to
 /// either `First` or `Second`.
@@ -285,3 +316,29 @@ where
         }
     }
 }
+
+#[derive(Debug, Copy, Clone)]
+#[must_use = "futures do nothing unless polled"]
+pub enum EitherFuture2<A, B> { A(A), B(B) }
+
+impl<AFut, BFut, AItem, BItem, AError, BError> Future for EitherFuture2<AFut, BFut>
+where
+    AFut: Future<Item = AItem, Error = AError>,
+    BFut: Future<Item = BItem, Error = BError>
+{
+    type Item = EitherOutput<AItem, BItem>;
+    type Error = EitherError<AError, BError>;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        match self {
+            EitherFuture2::A(a) => a.poll()
+                .map(|v| v.map(EitherOutput::First))
+                .map_err(|e| EitherError::A(e)),
+
+            EitherFuture2::B(b) => b.poll()
+                .map(|v| v.map(EitherOutput::Second))
+                .map_err(|e| EitherError::B(e))
+        }
+    }
+}
+

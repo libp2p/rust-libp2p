@@ -25,7 +25,7 @@ use futures::{future::{self, Either::{A, B}, FutureResult}, prelude::*};
 use message::{CircuitRelay, CircuitRelay_Peer, CircuitRelay_Status, CircuitRelay_Type};
 use std::{io, iter};
 use tokio_io::{AsyncRead, AsyncWrite};
-use utility::{io_err, is_success, status, Io, Peer};
+use void::Void;
 
 /// Configuration for a connection upgrade that handles the relay protocol.
 #[derive(Debug, Clone)]
@@ -368,21 +368,24 @@ fn deny_message(status: CircuitRelay_Status) -> CircuitRelay {
 #[derive(Debug, Clone)]
 struct TrivialUpgrade;
 
-impl<C> ConnectionUpgrade<C> for TrivialUpgrade
-where
-    C: AsyncRead + AsyncWrite + 'static
-{
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
-    type UpgradeIdentifier = ();
+impl UpgradeInfo for TrivialUpgrade {
+    type UpgradeId = ();
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
 
     fn protocol_names(&self) -> Self::NamesIter {
         iter::once((Bytes::from("/libp2p/relay/circuit/0.1.0"), ()))
     }
+}
 
+impl<C> OutboundUpgrade<C> for TrivialUpgrade
+where
+    C: AsyncRead + AsyncWrite + 'static
+{
     type Output = C;
-    type Future = FutureResult<Self::Output, io::Error>;
+    type Error = Void;
+    type Future = FutureResult<Self::Output, Self::Error>;
 
-    fn upgrade(self, conn: C, _: (), _: Endpoint) -> Self::Future {
+    fn upgrade_outbound(self, conn: C, _: ()) -> Self::Future {
         future::ok(conn)
     }
 }
@@ -392,21 +395,24 @@ where
 #[derive(Debug, Clone)]
 pub(crate) struct Source(pub(crate) CircuitRelay);
 
-impl<C> ConnectionUpgrade<C> for Source
-where
-    C: AsyncRead + AsyncWrite + Send + 'static,
-{
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeIdentifier)>;
-    type UpgradeIdentifier = ();
+impl UpgradeInfo for Source {
+    type UpgradeId = ();
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
 
     fn protocol_names(&self) -> Self::NamesIter {
         iter::once((Bytes::from("/libp2p/relay/circuit/0.1.0"), ()))
     }
+}
 
+impl<C> OutboundUpgrade<C> for Source
+where
+    C: AsyncRead + AsyncWrite + Send + 'static,
+{
     type Output = C;
-    type Future = Box<Future<Item=Self::Output, Error=io::Error> + Send>;
+    type Error = io::Error;
+    type Future = Box<Future<Item=Self::Output, Error=Self::Error> + Send>;
 
-    fn upgrade(self, conn: C, _: (), _: Endpoint) -> Self::Future {
+    fn upgrade_outbound(self, conn: C, _: ()) -> Self::Future {
         let future = Io::new(conn)
             .send(self.0)
             .and_then(Io::recv)

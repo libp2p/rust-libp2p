@@ -19,10 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 extern crate bytes;
-#[macro_use]
 extern crate futures;
-extern crate libp2p_core as core;
-#[macro_use]
+extern crate libp2p_core;
 extern crate log;
 extern crate multiaddr;
 extern crate protobuf;
@@ -34,6 +32,7 @@ extern crate void;
 
 mod copy;
 mod handler;
+mod error;
 mod message;
 mod protocol;
 mod utility;

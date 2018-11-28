@@ -132,13 +132,12 @@
 
 pub extern crate bytes;
 pub extern crate futures;
-#[cfg(not(target_os = "emscripten"))]
-pub extern crate tokio_current_thread;
 pub extern crate multiaddr;
 pub extern crate multihash;
 pub extern crate tokio_io;
 pub extern crate tokio_codec;
 
+extern crate libp2p_core_derive;
 extern crate tokio_executor;
 
 pub extern crate libp2p_core as core;
@@ -148,8 +147,11 @@ pub extern crate libp2p_identify as identify;
 pub extern crate libp2p_kad as kad;
 pub extern crate libp2p_floodsub as floodsub;
 pub extern crate libp2p_mplex as mplex;
+#[cfg(not(target_os = "emscripten"))]
+pub extern crate libp2p_mdns as mdns;
 pub extern crate libp2p_peerstore as peerstore;
 pub extern crate libp2p_ping as ping;
+pub extern crate libp2p_plaintext as plaintext;
 pub extern crate libp2p_ratelimit as ratelimit;
 pub extern crate libp2p_relay as relay;
 pub extern crate libp2p_secio as secio;
@@ -157,6 +159,7 @@ pub extern crate libp2p_secio as secio;
 pub extern crate libp2p_tcp_transport as tcp;
 pub extern crate libp2p_transport_timeout as transport_timeout;
 pub extern crate libp2p_uds as uds;
+#[cfg(feature = "libp2p-websocket")]
 pub extern crate libp2p_websocket as websocket;
 pub extern crate libp2p_yamux as yamux;
 
@@ -164,7 +167,11 @@ mod transport_ext;
 
 pub mod simple;
 
-pub use self::core::{Transport, ConnectionUpgrade, PeerId};
+pub use self::core::{
+    Transport, PeerId, Swarm,
+    upgrade::{InboundUpgrade, InboundUpgradeExt, OutboundUpgrade, OutboundUpgradeExt}
+};
+pub use libp2p_core_derive::NetworkBehaviour;
 pub use self::multiaddr::Multiaddr;
 pub use self::simple::SimpleProtocol;
 pub use self::transport_ext::TransportExt;
@@ -180,8 +187,10 @@ pub struct CommonTransport {
     inner: CommonTransportInner
 }
 
-#[cfg(not(target_os = "emscripten"))]
+#[cfg(all(not(target_os = "emscripten"), feature = "libp2p-websocket"))]
 pub type InnerImplementation = core::transport::OrTransport<dns::DnsConfig<tcp::TcpConfig>, websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>>;
+#[cfg(all(not(target_os = "emscripten"), not(feature = "libp2p-websocket")))]
+pub type InnerImplementation = dns::DnsConfig<tcp::TcpConfig>;
 #[cfg(target_os = "emscripten")]
 pub type InnerImplementation = websocket::BrowserWsConfig;
 
@@ -195,13 +204,16 @@ impl CommonTransport {
     #[inline]
     #[cfg(not(target_os = "emscripten"))]
     pub fn new() -> CommonTransport {
-        let tcp = tcp::TcpConfig::new();
-        let with_dns = dns::DnsConfig::new(tcp);
-        let with_ws = websocket::WsConfig::new(with_dns.clone());
-        let inner = with_dns.or_transport(with_ws);
+        let transport = tcp::TcpConfig::new();
+        let transport = dns::DnsConfig::new(transport);
+        #[cfg(feature = "libp2p-websocket")]
+        let transport = {
+            let trans_clone = transport.clone();
+            transport.or_transport(websocket::WsConfig::new(trans_clone))
+        };
 
         CommonTransport {
-            inner: CommonTransportInner { inner }
+            inner: CommonTransportInner { inner: transport }
         }
     }
 
