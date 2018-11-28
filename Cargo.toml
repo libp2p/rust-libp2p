@@ -60,6 +60,7 @@ members = [
     "misc/rw-stream-sink",
     "muxers/mplex",
     "muxers/yamux",
+    "muxers/test-muxer",
     "protocols/floodsub",
     "protocols/identify",
     "protocols/kad",
