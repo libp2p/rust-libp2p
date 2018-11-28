@@ -18,24 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-extern crate bytes;
-#[macro_use]
-extern crate futures;
-extern crate libp2p_core;
-extern crate log;
-extern crate multiaddr;
-extern crate protobuf;
-extern crate rand;
-extern crate tokio_codec;
-extern crate tokio_io;
-extern crate unsigned_varint;
-extern crate void;
-
-mod codec;
-mod copy;
-mod error;
-mod message;
-mod utility;
-
-//pub mod handler;
-pub mod protocol;
+mod dest_request;
+mod hop_request;
+mod listen;
+mod relay_request;
+mod target_open;

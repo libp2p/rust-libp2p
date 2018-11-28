@@ -20,6 +20,7 @@
 
 use crate::message::{CircuitRelay, CircuitRelay_Peer, CircuitRelay_Status, CircuitRelay_Type};
 use futures::{future::{self, Either}, prelude::*};
+use libp2p_core::PeerId;
 use log::trace;
 use multiaddr::{Protocol, Multiaddr};
 use protobuf::{self, Message};

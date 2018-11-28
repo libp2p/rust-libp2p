@@ -19,9 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use core::nodes::handled_node::NodeHandlerEndpoint;
-use core::nodes::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent};
-use core::{ConnectionUpgrade, Multiaddr, PeerId};
+use libp2p_core::nodes::handled_node::NodeHandlerEndpoint;
+use libp2p_core::nodes::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent};
+use libp2p_core::{ConnectionUpgrade, Multiaddr, PeerId};
 use protocol::{RelayDestinationRequest, RelayHopRequest, RelayOutput, RelayConfig};
 use std::{io, marker::PhantomData};
 use tokio_io::{AsyncRead, AsyncWrite};
