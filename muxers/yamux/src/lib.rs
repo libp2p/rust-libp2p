@@ -26,6 +26,8 @@ extern crate libp2p_core;
 extern crate parking_lot;
 extern crate tokio_io;
 extern crate yamux;
+#[cfg(test)]
+extern crate libp2p_test_muxer;
 
 use bytes::Bytes;
 use futures::{future::{self, FutureResult}, prelude::*};
@@ -169,3 +171,20 @@ where
     }
 }
 
+#[cfg(test)]
+mod test {
+    use super::*;
+    use libp2p_test_muxer::test_muxer;
+    use std::io::Cursor;
+
+    #[test]
+    fn test_muxing() {
+        test_muxer(
+            Yamux::new(
+                Cursor::new(vec![0; 256]),
+                yamux::Config::default(),
+                yamux::Mode::Client,
+            )
+        );
+    }
+}

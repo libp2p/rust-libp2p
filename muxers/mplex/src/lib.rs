@@ -29,6 +29,8 @@ extern crate parking_lot;
 extern crate tokio_codec;
 extern crate tokio_io;
 extern crate unsigned_varint;
+#[cfg(test)]
+extern crate libp2p_test_muxer;
 
 mod codec;
 
@@ -589,4 +591,21 @@ pub struct Substream {
     // Read buffer. Contains data read from `inner` but not yet dispatched by a call to `read()`.
     current_data: Bytes,
     endpoint: Endpoint,
+}
+
+#[cfg(test)]
+mod test_mplex {
+    use super::*;
+    use libp2p_test_muxer::test_muxer;
+    use std::io::Cursor;
+
+    #[test]
+    fn test_muxing() {
+        let cfg = MplexConfig::default();
+        let cursor = Cursor::new(vec![0; 256]);
+        let mplex = cfg.upgrade_inbound(cursor, ()).poll().expect("future::ok is ok");
+        if let Async::Ready(muxer) = mplex {
+            test_muxer(muxer);
+        }
+    }
 }
