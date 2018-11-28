@@ -1,0 +1,12 @@
+[package]
+name = "libp2p-test-muxer"
+version = "0.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
+
+[dependencies]
+libp2p-core = { path = "../../core" }
+log = "0.4"
+env_logger = "0.6"
+
+[dev-dependencies]
