@@ -149,16 +149,18 @@ where
     type Error = T::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let future = match self.inner {
-            Either::A(ref mut future) => {
-                let item = try_ready!(future.poll());
-                let (f, a) = self.args.take().expect("AndThenFuture has already finished.");
-                f(item, a).into_future()
-            }
-            Either::B(ref mut future) => return future.poll()
-        };
-        self.inner = Either::B(future);
-        Ok(Async::NotReady)
+        loop {
+            let future = match self.inner {
+                Either::A(ref mut future) => {
+                    let item = try_ready!(future.poll());
+                    let (f, a) = self.args.take().expect("AndThenFuture has already finished.");
+                    f(item, a).into_future()
+                }
+                Either::B(ref mut future) => return future.poll()
+            };
+
+            self.inner = Either::B(future);
+        }
     }
 }
 
