@@ -22,15 +22,12 @@ use futures::prelude::*;
 use libp2p_core::nodes::handled_node::NodeHandlerEndpoint;
 use libp2p_core::nodes::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent};
 use libp2p_core::{ConnectionUpgrade, Multiaddr, PeerId};
-use protocol::{RelayDestinationRequest, RelayHopRequest, RelayOutput, RelayConfig};
+use protocol;
 use std::{io, marker::PhantomData};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Protocol handler that identifies the remote at a regular period.
 pub struct RelayHandler<TSubstream, TDestSubstream> {
-    /// Configuration for the protocol.
-    config: RelayConfig,
-
     /// True if wanting to shut down.
     shutdown: bool,
 
@@ -149,13 +146,14 @@ where
     type InEvent = RelayHandlerIn<TSubstream, TDestSubstream>;
     type OutEvent = RelayHandlerEvent<TSubstream>;
     type Substream = TSubstream;
-    type Protocol = RelayConfig;
+    type InboundProtocol = protocol::RelayListen;
+    type OutboundProtocol = RelayConfig;
     // The information is the peer we want to relay communications to.
     type OutboundOpenInfo = (PeerId, Vec<Multiaddr>);
 
     #[inline]
     fn listen_protocol(&self) -> Self::Protocol {
-        self.config.clone()
+        protocol::RelayListen::new()
     }
 
     fn inject_fully_negotiated(

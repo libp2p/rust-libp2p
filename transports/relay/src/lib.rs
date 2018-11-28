@@ -37,5 +37,5 @@ mod error;
 mod message;
 mod utility;
 
-//pub mod handler;
+pub mod handler;
 pub mod protocol;
