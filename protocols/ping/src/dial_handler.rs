@@ -20,7 +20,7 @@
 
 use futures::prelude::*;
 use libp2p_core::{
-    OutboundUpgrade,
+    Upgrade,
     ProtocolsHandler,
     ProtocolsHandlerEvent,
     upgrade::DeniedUpgrade
@@ -168,7 +168,7 @@ where
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        mut substream: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output,
+        mut substream: <Self::OutboundProtocol as Upgrade<TSubstream>>::Output,
         _info: Self::OutboundOpenInfo
     ) {
         match mem::replace(&mut self.out_state, OutState::Poisoned) {

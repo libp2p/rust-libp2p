@@ -18,11 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{IdentifySender, IdentifyProtocolConfig};
+use crate::{IdentifySender, IdentifyProtocolListenerConfig};
 use futures::prelude::*;
 use libp2p_core::{
     protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent},
-    upgrade::{DeniedUpgrade, InboundUpgrade}
+    upgrade::{DeniedUpgrade, Upgrade}
 };
 use smallvec::SmallVec;
 use std::io;
@@ -32,7 +32,7 @@ use void::{Void, unreachable};
 /// Protocol handler that identifies the remote at a regular period.
 pub struct IdentifyListenHandler<TSubstream> {
     /// Configuration for the protocol.
-    config: IdentifyProtocolConfig,
+    config: IdentifyProtocolListenerConfig,
 
     /// List of senders to yield to the user.
     pending_result: SmallVec<[IdentifySender<TSubstream>; 4]>,
@@ -46,7 +46,7 @@ impl<TSubstream> IdentifyListenHandler<TSubstream> {
     #[inline]
     pub fn new() -> Self {
         IdentifyListenHandler {
-            config: IdentifyProtocolConfig,
+            config: IdentifyProtocolListenerConfig,
             pending_result: SmallVec::new(),
             shutdown: false,
         }
@@ -60,7 +60,7 @@ where
     type InEvent = Void;
     type OutEvent = IdentifySender<TSubstream>;
     type Substream = TSubstream;
-    type InboundProtocol = IdentifyProtocolConfig;
+    type InboundProtocol = IdentifyProtocolListenerConfig;
     type OutboundProtocol = DeniedUpgrade;
     type OutboundOpenInfo = ();
 
@@ -71,7 +71,7 @@ where
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgrade<TSubstream>>::Output
+        protocol: <Self::InboundProtocol as Upgrade<TSubstream>>::Output
     ) {
         self.pending_result.push(protocol)
     }

@@ -169,7 +169,7 @@ pub mod simple;
 
 pub use self::core::{
     Transport, PeerId, Swarm,
-    upgrade::{InboundUpgrade, InboundUpgradeExt, OutboundUpgrade, OutboundUpgradeExt}
+    upgrade::{Upgrade, UpgradeExt}
 };
 pub use libp2p_core_derive::NetworkBehaviour;
 pub use self::multiaddr::Multiaddr;

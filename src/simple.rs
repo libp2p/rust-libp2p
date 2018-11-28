@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::Bytes;
-use core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use core::upgrade::Upgrade;
 use futures::prelude::*;
 use std::{iter, io::Error as IoError, sync::Arc};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -57,50 +57,29 @@ impl<F> Clone for SimpleProtocol<F> {
     }
 }
 
-impl<F> UpgradeInfo for SimpleProtocol<F> {
+impl<C, F, O> Upgrade<C> for SimpleProtocol<F>
+where
+    C: AsyncRead + AsyncWrite,
+    F: Fn(C) -> O,
+    O: IntoFuture<Error = IoError>,
+    O::Future: Send + 'static,
+{
     type UpgradeId = ();
     type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+    type Output = O::Item;
+    type Error = IoError;
+    type Future = Box<Future<Item = O::Item, Error = Self::Error> + Send>;
 
     #[inline]
     fn protocol_names(&self) -> Self::NamesIter {
         iter::once((self.name.clone(), ()))
     }
-}
-
-impl<C, F, O> InboundUpgrade<C> for SimpleProtocol<F>
-where
-    C: AsyncRead + AsyncWrite,
-    F: Fn(C) -> O,
-    O: IntoFuture<Error = IoError>,
-    O::Future: Send + 'static,
-{
-    type Output = O::Item;
-    type Error = IoError;
-    type Future = Box<Future<Item = O::Item, Error = Self::Error> + Send>;
 
     #[inline]
-    fn upgrade_inbound(self, socket: C, _: Self::UpgradeId) -> Self::Future {
+    fn upgrade(self, socket: C, _: Self::UpgradeId) -> Self::Future {
         let upgrade = &self.upgrade;
         let fut = upgrade(socket).into_future().from_err();
         Box::new(fut) as Box<_>
     }
 }
 
-impl<C, F, O> OutboundUpgrade<C> for SimpleProtocol<F>
-where
-    C: AsyncRead + AsyncWrite,
-    F: Fn(C) -> O,
-    O: IntoFuture<Error = IoError>,
-    O::Future: Send + 'static,
-{
-    type Output = O::Item;
-    type Error = IoError;
-    type Future = Box<Future<Item = O::Item, Error = Self::Error> + Send>;
-
-    #[inline]
-    fn upgrade_outbound(self, socket: C, _: Self::UpgradeId) -> Self::Future {
-        let upgrade = &self.upgrade;
-        let fut = upgrade(socket).into_future().from_err();
-        Box::new(fut) as Box<_>
-    }
-}

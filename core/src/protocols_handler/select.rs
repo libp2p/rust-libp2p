@@ -21,13 +21,7 @@
 use crate::{
     either::EitherOutput,
     protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent},
-    upgrade::{
-        InboundUpgrade,
-        InboundUpgradeExt,
-        OutboundUpgrade,
-        EitherUpgrade,
-        OrUpgrade
-    }
+    upgrade::{Upgrade, UpgradeExt, EitherUpgrade, Or}
 };
 use futures::prelude::*;
 use std::io;
@@ -57,15 +51,15 @@ where
     TProto1: ProtocolsHandler<Substream = TSubstream>,
     TProto2: ProtocolsHandler<Substream = TSubstream>,
     TSubstream: AsyncRead + AsyncWrite,
-    TProto1::InboundProtocol: InboundUpgrade<TSubstream>,
-    TProto2::InboundProtocol: InboundUpgrade<TSubstream>,
-    TProto1::OutboundProtocol: OutboundUpgrade<TSubstream>,
-    TProto2::OutboundProtocol: OutboundUpgrade<TSubstream>
+    TProto1::InboundProtocol: Upgrade<TSubstream>,
+    TProto2::InboundProtocol: Upgrade<TSubstream>,
+    TProto1::OutboundProtocol: Upgrade<TSubstream>,
+    TProto2::OutboundProtocol: Upgrade<TSubstream>
 {
     type InEvent = EitherOutput<TProto1::InEvent, TProto2::InEvent>;
     type OutEvent = EitherOutput<TProto1::OutEvent, TProto2::OutEvent>;
     type Substream = TSubstream;
-    type InboundProtocol = OrUpgrade<TProto1::InboundProtocol, TProto2::InboundProtocol>;
+    type InboundProtocol = Or<TProto1::InboundProtocol, TProto2::InboundProtocol>;
     type OutboundProtocol = EitherUpgrade<TProto1::OutboundProtocol, TProto2::OutboundProtocol>;
     type OutboundOpenInfo = EitherOutput<TProto1::OutboundOpenInfo, TProto2::OutboundOpenInfo>;
 
@@ -73,10 +67,10 @@ where
     fn listen_protocol(&self) -> Self::InboundProtocol {
         let proto1 = self.proto1.listen_protocol();
         let proto2 = self.proto2.listen_protocol();
-        proto1.or_inbound(proto2)
+        proto1.or(proto2)
     }
 
-    fn inject_fully_negotiated_outbound(&mut self, protocol: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output, endpoint: Self::OutboundOpenInfo) {
+    fn inject_fully_negotiated_outbound(&mut self, protocol: <Self::OutboundProtocol as Upgrade<TSubstream>>::Output, endpoint: Self::OutboundOpenInfo) {
         match (protocol, endpoint) {
             (EitherOutput::First(protocol), EitherOutput::First(info)) =>
                 self.proto1.inject_fully_negotiated_outbound(protocol, info),
@@ -89,7 +83,7 @@ where
         }
     }
 
-    fn inject_fully_negotiated_inbound(&mut self, protocol: <Self::InboundProtocol as InboundUpgrade<TSubstream>>::Output) {
+    fn inject_fully_negotiated_inbound(&mut self, protocol: <Self::InboundProtocol as Upgrade<TSubstream>>::Output) {
         match protocol {
             EitherOutput::First(protocol) =>
                 self.proto1.inject_fully_negotiated_inbound(protocol),

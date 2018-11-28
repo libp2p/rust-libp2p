@@ -120,7 +120,7 @@ use bytes::{Bytes, BytesMut};
 use ed25519_dalek::Keypair as Ed25519KeyPair;
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
-use libp2p_core::{PeerId, PublicKey, upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade}};
+use libp2p_core::{PeerId, PublicKey, upgrade::Upgrade};
 #[cfg(all(feature = "rsa", not(target_os = "emscripten")))]
 use ring::signature::RSAKeyPair;
 use rw_stream_sink::RwStreamSink;
@@ -370,37 +370,21 @@ where
     pub ephemeral_public_key: Vec<u8>,
 }
 
-impl UpgradeInfo for SecioConfig {
+impl<T> Upgrade<T> for SecioConfig
+where
+    T: AsyncRead + AsyncWrite + Send + 'static
+{
     type UpgradeId = ();
     type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+    type Output = SecioOutput<T>;
+    type Error = SecioError;
+    type Future = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
 
     fn protocol_names(&self) -> Self::NamesIter {
         iter::once(("/secio/1.0.0".into(), ()))
     }
-}
 
-impl<T> InboundUpgrade<T> for SecioConfig
-where
-    T: AsyncRead + AsyncWrite + Send + 'static
-{
-    type Output = SecioOutput<T>;
-    type Error = SecioError;
-    type Future = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
-
-    fn upgrade_inbound(self, socket: T, id: Self::UpgradeId) -> Self::Future {
-        Box::new(self.handshake(socket, id))
-    }
-}
-
-impl<T> OutboundUpgrade<T> for SecioConfig
-where
-    T: AsyncRead + AsyncWrite + Send + 'static
-{
-    type Output = SecioOutput<T>;
-    type Error = SecioError;
-    type Future = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
-
-    fn upgrade_outbound(self, socket: T, id: Self::UpgradeId) -> Self::Future {
+    fn upgrade(self, socket: T, id: Self::UpgradeId) -> Self::Future {
         Box::new(self.handshake(socket, id))
     }
 }

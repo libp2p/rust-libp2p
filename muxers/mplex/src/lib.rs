@@ -40,7 +40,7 @@ use core::{
     Endpoint,
     StreamMuxer,
     muxing::Shutdown,
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
+    upgrade::Upgrade
 };
 use parking_lot::Mutex;
 use fnv::{FnvHashMap, FnvHashSet};
@@ -147,39 +147,23 @@ pub enum MaxBufferBehaviour {
     Block,
 }
 
-impl UpgradeInfo for MplexConfig {
+impl<C> Upgrade<C> for MplexConfig
+where
+    C: AsyncRead + AsyncWrite,
+{
     type UpgradeId = ();
     type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+    type Output = Multiplex<C>;
+    type Error = IoError;
+    type Future = future::FutureResult<Self::Output, IoError>;
 
     #[inline]
     fn protocol_names(&self) -> Self::NamesIter {
         iter::once((Bytes::from("/mplex/6.7.0"), ()))
     }
-}
 
-impl<C> InboundUpgrade<C> for MplexConfig
-where
-    C: AsyncRead + AsyncWrite,
-{
-    type Output = Multiplex<C>;
-    type Error = IoError;
-    type Future = future::FutureResult<Self::Output, IoError>;
-
-    fn upgrade_inbound(self, socket: C, _: Self::UpgradeId) -> Self::Future {
+    fn upgrade(self, socket: C, _: Self::UpgradeId) -> Self::Future {
         future::ok(self.upgrade(socket, Endpoint::Listener))
-    }
-}
-
-impl<C> OutboundUpgrade<C> for MplexConfig
-where
-    C: AsyncRead + AsyncWrite,
-{
-    type Output = Multiplex<C>;
-    type Error = IoError;
-    type Future = future::FutureResult<Self::Output, IoError>;
-
-    fn upgrade_outbound(self, socket: C, _: Self::UpgradeId) -> Self::Future {
-        future::ok(self.upgrade(socket, Endpoint::Dialer))
     }
 }
 

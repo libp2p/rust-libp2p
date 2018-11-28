@@ -20,22 +20,23 @@
 
 use bytes::Bytes;
 use futures::future::Either;
-use crate::{
-    either::{EitherOutput, EitherError, EitherFuture2},
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
-};
+use crate::{either::{EitherOutput, EitherError, EitherFuture2}, upgrade::Upgrade};
 
 /// A type to represent two possible upgrade types (inbound or outbound).
 #[derive(Debug, Clone)]
 pub enum EitherUpgrade<A, B> { A(A), B(B) }
 
-impl<A, B> UpgradeInfo for EitherUpgrade<A, B>
+impl<C, A, B, TA, TB, EA, EB> Upgrade<C> for EitherUpgrade<A, B>
 where
-    A: UpgradeInfo,
-    B: UpgradeInfo
+    A: Upgrade<C, Output = TA, Error = EA>,
+    B: Upgrade<C, Output = TB, Error = EB>
 {
     type UpgradeId = Either<A::UpgradeId, B::UpgradeId>;
     type NamesIter = EitherIter<A::NamesIter, B::NamesIter>;
+
+    type Output = EitherOutput<TA, TB>;
+    type Error = EitherError<EA, EB>;
+    type Future = EitherFuture2<A::Future, B::Future>;
 
     fn protocol_names(&self) -> Self::NamesIter {
         match self {
@@ -43,40 +44,12 @@ where
             EitherUpgrade::B(b) => EitherIter::B(b.protocol_names())
         }
     }
-}
 
-impl<C, A, B, TA, TB, EA, EB> InboundUpgrade<C> for EitherUpgrade<A, B>
-where
-    A: InboundUpgrade<C, Output = TA, Error = EA>,
-    B: InboundUpgrade<C, Output = TB, Error = EB>,
-{
-    type Output = EitherOutput<TA, TB>;
-    type Error = EitherError<EA, EB>;
-    type Future = EitherFuture2<A::Future, B::Future>;
-
-    fn upgrade_inbound(self, sock: C, id: Self::UpgradeId) -> Self::Future {
+    fn upgrade(self, sock: C, id: Self::UpgradeId) -> Self::Future {
         match (self, id) {
-            (EitherUpgrade::A(a), Either::A(id)) => EitherFuture2::A(a.upgrade_inbound(sock, id)),
-            (EitherUpgrade::B(b), Either::B(id)) => EitherFuture2::B(b.upgrade_inbound(sock, id)),
+            (EitherUpgrade::A(a), Either::A(id)) => EitherFuture2::A(a.upgrade(sock, id)),
+            (EitherUpgrade::B(b), Either::B(id)) => EitherFuture2::B(b.upgrade(sock, id)),
             _ => panic!("Invalid invocation of EitherUpgrade::upgrade_inbound")
-        }
-    }
-}
-
-impl<C, A, B, TA, TB, EA, EB> OutboundUpgrade<C> for EitherUpgrade<A, B>
-where
-    A: OutboundUpgrade<C, Output = TA, Error = EA>,
-    B: OutboundUpgrade<C, Output = TB, Error = EB>,
-{
-    type Output = EitherOutput<TA, TB>;
-    type Error = EitherError<EA, EB>;
-    type Future = EitherFuture2<A::Future, B::Future>;
-
-    fn upgrade_outbound(self, sock: C, id: Self::UpgradeId) -> Self::Future {
-        match (self, id) {
-            (EitherUpgrade::A(a), Either::A(id)) => EitherFuture2::A(a.upgrade_outbound(sock, id)),
-            (EitherUpgrade::B(b), Either::B(id)) => EitherFuture2::B(b.upgrade_outbound(sock, id)),
-            _ => panic!("Invalid invocation of EitherUpgrade::upgrade_outbound")
         }
     }
 }

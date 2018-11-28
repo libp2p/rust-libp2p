@@ -23,7 +23,7 @@ use crate::{
     protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent},
     upgrade::{
         self,
-        OutboundUpgrade,
+        Upgrade,
         InboundUpgradeApply,
         OutboundUpgradeApply,
     }
@@ -119,7 +119,7 @@ where
 impl<TProtoHandler> NodeHandler for NodeHandlerWrapper<TProtoHandler>
 where
     TProtoHandler: ProtocolsHandler,
-    <TProtoHandler::OutboundProtocol as OutboundUpgrade<<TProtoHandler as ProtocolsHandler>::Substream>>::Error: std::fmt::Debug
+    <TProtoHandler::OutboundProtocol as Upgrade<<TProtoHandler as ProtocolsHandler>::Substream>>::Error: std::fmt::Debug
 {
     type InEvent = TProtoHandler::InEvent;
     type OutEvent = TProtoHandler::OutEvent;

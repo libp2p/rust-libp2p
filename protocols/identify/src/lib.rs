@@ -55,10 +55,10 @@
 //! Because of the behaviour of `IdentifyProtocol`, it is recommended to build it on top of a
 //! `ConnectionReuse`.
 //!
-//! ## Low-level usage through the `IdentifyProtocolConfig` struct
+//! ## Low-level usage through the `IdentifyProtocolDialerConfig` and
+//! `IdentifyProtocolListenerConfig` structs.
 //!
-//! The `IdentifyProtocolConfig` struct implements the `ConnectionUpgrade` trait. Using it will
-//! negotiate the *identify* protocol.
+//! The structs implements the `Upgrade` trait. Using it will negotiate the *identify* protocol.
 //!
 //! The output of the upgrade is a `IdentifyOutput`. If we are the dialer, then `IdentifyOutput`
 //! will contain the information sent by the remote. If we are the listener, then it will contain
@@ -88,7 +88,8 @@ pub use self::listen_layer::IdentifyListen;
 pub use self::periodic_id_handler::{PeriodicIdentification, PeriodicIdentificationEvent};
 pub use self::periodic_id_layer::{PeriodicIdentifyBehaviour, PeriodicIdentifyBehaviourEvent};
 pub use self::protocol::{IdentifyInfo, RemoteInfo};
-pub use self::protocol::{IdentifyProtocolConfig, IdentifySender, IdentifySenderFuture};
+pub use self::protocol::{IdentifyProtocolDialerConfig, IdentifyProtocolListenerConfig};
+pub use self::protocol::{IdentifySender, IdentifySenderFuture};
 
 mod id_transport;
 mod listen_handler;

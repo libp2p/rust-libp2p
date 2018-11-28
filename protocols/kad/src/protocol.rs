@@ -27,10 +27,7 @@
 
 use bytes::{Bytes, BytesMut};
 use futures::{future, sink, Sink, stream, Stream};
-use libp2p_core::{
-    Multiaddr, PeerId,
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
-};
+use libp2p_core::{Multiaddr, PeerId, upgrade::Upgrade};
 use multihash::Multihash;
 use protobuf::{self, Message};
 use protobuf_structs;
@@ -131,40 +128,23 @@ impl Into<protobuf_structs::dht::Message_Peer> for KadPeer {
 #[derive(Debug, Default, Copy, Clone)]
 pub struct KademliaProtocolConfig;
 
-impl UpgradeInfo for KademliaProtocolConfig {
+impl<C> Upgrade<C> for KademliaProtocolConfig
+where
+    C: AsyncRead + AsyncWrite + 'static, // TODO: 'static :-/
+{
     type UpgradeId = ();
     type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+    type Output = KadStreamSink<C>;
+    type Error = IoError;
+    type Future = future::FutureResult<Self::Output, Self::Error>;
 
     #[inline]
     fn protocol_names(&self) -> Self::NamesIter {
         iter::once(("/ipfs/kad/1.0.0".into(), ()))
     }
-}
-
-impl<C> InboundUpgrade<C> for KademliaProtocolConfig
-where
-    C: AsyncRead + AsyncWrite + 'static, // TODO: 'static :-/
-{
-    type Output = KadStreamSink<C>;
-    type Error = IoError;
-    type Future = future::FutureResult<Self::Output, Self::Error>;
 
     #[inline]
-    fn upgrade_inbound(self, incoming: C, _: Self::UpgradeId) -> Self::Future {
-        future::ok(kademlia_protocol(incoming))
-    }
-}
-
-impl<C> OutboundUpgrade<C> for KademliaProtocolConfig
-where
-    C: AsyncRead + AsyncWrite + 'static, // TODO: 'static :-/
-{
-    type Output = KadStreamSink<C>;
-    type Error = IoError;
-    type Future = future::FutureResult<Self::Output, Self::Error>;
-
-    #[inline]
-    fn upgrade_outbound(self, incoming: C, _: Self::UpgradeId) -> Self::Future {
+    fn upgrade(self, incoming: C, _: Self::UpgradeId) -> Self::Future {
         future::ok(kademlia_protocol(incoming))
     }
 }

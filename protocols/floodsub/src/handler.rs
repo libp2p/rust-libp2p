@@ -22,7 +22,7 @@ use crate::protocol::{FloodsubCodec, FloodsubConfig, FloodsubRpc};
 use futures::prelude::*;
 use libp2p_core::{
     ProtocolsHandler, ProtocolsHandlerEvent,
-    upgrade::{InboundUpgrade, OutboundUpgrade}
+    upgrade::Upgrade
 };
 use smallvec::SmallVec;
 use std::{fmt, io};
@@ -116,7 +116,7 @@ where
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgrade<TSubstream>>::Output
+        protocol: <Self::InboundProtocol as Upgrade<TSubstream>>::Output
     ) {
         if self.shutting_down {
             return ()
@@ -126,7 +126,7 @@ where
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output,
+        protocol: <Self::OutboundProtocol as Upgrade<TSubstream>>::Output,
         message: Self::OutboundOpenInfo
     ) {
         if self.shutting_down {

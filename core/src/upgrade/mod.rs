@@ -72,121 +72,67 @@ pub use self::{
     denied::DeniedUpgrade,
     either::EitherUpgrade,
     error::UpgradeError,
-    map::{MapInboundUpgrade, MapOutboundUpgrade, MapInboundUpgradeErr, MapOutboundUpgradeErr},
-    or::OrUpgrade,
+    map::{Map, MapErr},
+    or::Or
 };
 
-/// Common trait for upgrades that can be applied on inbound substreams, outbound substreams,
-/// or both.
-pub trait UpgradeInfo {
+/// Trait for upgrades that can be applied to substreams.
+pub trait Upgrade<T> {
     /// Opaque type representing a negotiable protocol.
     type UpgradeId;
     /// Iterator returned by `protocol_names`.
     type NamesIter: Iterator<Item = (Bytes, Self::UpgradeId)>;
+    /// Output after the upgrade has been successfully negotiated and the handshake performed.
+    type Output;
+    /// Possible error during the handshake.
+    type Error;
+    /// Future that performs the handshake with the remote.
+    type Future: Future<Item = Self::Output, Error = Self::Error>;
 
     /// Returns the list of protocols that are supported. Used during the negotiation process.
     ///
     /// Each item returned by the iterator is a pair of a protocol name and an opaque identifier.
     fn protocol_names(&self) -> Self::NamesIter;
-}
-
-/// Possible upgrade on an inbound connection or substream.
-pub trait InboundUpgrade<C>: UpgradeInfo {
-    /// Output after the upgrade has been successfully negotiated and the handshake performed.
-    type Output;
-    /// Possible error during the handshake.
-    type Error;
-    /// Future that performs the handshake with the remote.
-    type Future: Future<Item = Self::Output, Error = Self::Error>;
 
     /// After we have determined that the remote supports one of the protocols we support, this
     /// method is called to start the handshake.
     ///
     /// The `id` is the identifier of the protocol, as produced by `protocol_names()`.
-    fn upgrade_inbound(self, socket: C, id: Self::UpgradeId) -> Self::Future;
+    fn upgrade(self, input: T, id: Self::UpgradeId) -> Self::Future;
 }
 
-/// Extension trait for `InboundUpgrade`. Automatically implemented on all types that implement
-/// `InboundUpgrade`.
-pub trait InboundUpgradeExt<C>: InboundUpgrade<C> {
+/// Extension trait for `Upgrade`.
+///
+/// Automatically implemented on all types that implement `Upgrade`.
+pub trait UpgradeExt<T>: Upgrade<T> {
     /// Returns a new object that wraps around `Self` and applies a closure to the `Output`.
-    fn map_inbound<F, T>(self, f: F) -> MapInboundUpgrade<Self, F>
+    fn map<F, A>(self, f: F) -> Map<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Output) -> T
+        F: FnOnce(Self::Output) -> A
     {
-        MapInboundUpgrade::new(self, f)
+        map::map(self, f)
     }
 
     /// Returns a new object that wraps around `Self` and applies a closure to the `Error`.
-    fn map_inbound_err<F, T>(self, f: F) -> MapInboundUpgradeErr<Self, F>
+    fn map_err<F, A>(self, f: F) -> MapErr<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Error) -> T
+        F: FnOnce(Self::Error) -> A
     {
-        MapInboundUpgradeErr::new(self, f)
+        map::map_err(self, f)
     }
 
     /// Returns a new object that combines `Self` and another upgrade to support both at the same
     /// time.
-    fn or_inbound<U>(self, upgrade: U) -> OrUpgrade<Self, U>
+    fn or<U>(self, other: U) -> Or<Self, U>
     where
         Self: Sized,
-        U: InboundUpgrade<C>
+        U: Upgrade<T>
     {
-        OrUpgrade::new(self, upgrade)
+        or::or(self, other)
     }
 }
 
-impl<C, U: InboundUpgrade<C>> InboundUpgradeExt<C> for U {}
-
-/// Possible upgrade on an outbound connection or substream.
-pub trait OutboundUpgrade<C>: UpgradeInfo {
-    /// Output after the upgrade has been successfully negotiated and the handshake performed.
-    type Output;
-    /// Possible error during the handshake.
-    type Error;
-    /// Future that performs the handshake with the remote.
-    type Future: Future<Item = Self::Output, Error = Self::Error>;
-
-    /// After we have determined that the remote supports one of the protocols we support, this
-    /// method is called to start the handshake.
-    ///
-    /// The `id` is the identifier of the protocol, as produced by `protocol_names()`.
-    fn upgrade_outbound(self, socket: C, id: Self::UpgradeId) -> Self::Future;
-}
-
-/// Extention trait for `OutboundUpgrade`. Automatically implemented on all types that implement
-/// `OutboundUpgrade`.
-pub trait OutboundUpgradeExt<C>: OutboundUpgrade<C> {
-    /// Returns a new object that wraps around `Self` and applies a closure to the `Output`.
-    fn map_outbound<F, T>(self, f: F) -> MapOutboundUpgrade<Self, F>
-    where
-        Self: Sized,
-        F: FnOnce(Self::Output) -> T
-    {
-        MapOutboundUpgrade::new(self, f)
-    }
-
-    /// Returns a new object that wraps around `Self` and applies a closure to the `Error`.
-    fn map_outbound_err<F, T>(self, f: F) -> MapOutboundUpgradeErr<Self, F>
-    where
-        Self: Sized,
-        F: FnOnce(Self::Error) -> T
-    {
-        MapOutboundUpgradeErr::new(self, f)
-    }
-
-    /// Returns a new object that combines `Self` and another upgrade to support both at the same
-    /// time.
-    fn or_outbound<U>(self, upgrade: U) -> OrUpgrade<Self, U>
-    where
-        Self: Sized,
-        U: OutboundUpgrade<C>
-    {
-        OrUpgrade::new(self, upgrade)
-    }
-}
-
-impl<C, U: OutboundUpgrade<C>> OutboundUpgradeExt<C> for U {}
+impl<T, U: Upgrade<T>> UpgradeExt<T> for U {}
 

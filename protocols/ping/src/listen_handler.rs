@@ -21,13 +21,13 @@
 use arrayvec::ArrayVec;
 use futures::prelude::*;
 use libp2p_core::{
-    InboundUpgrade,
+    Upgrade,
     ProtocolsHandler,
     ProtocolsHandlerEvent,
     upgrade::DeniedUpgrade
 };
 use log::warn;
-use protocol::{Ping, PingListener};
+use protocol::{Pong, PingListener};
 use std::io;
 use tokio_io::{AsyncRead, AsyncWrite};
 use void::{Void, unreachable};
@@ -35,7 +35,7 @@ use void::{Void, unreachable};
 /// Handler for handling pings received from a remote.
 pub struct PingListenHandler<TSubstream> {
     /// Configuration for the ping protocol.
-    ping_config: Ping<()>,
+    ping_config: Pong<()>,
 
     /// The ping substreams that were opened by the remote.
     /// Note that we only accept a certain number of substreams, after which we refuse new ones
@@ -71,7 +71,7 @@ where
     type InEvent = Void;
     type OutEvent = Void;
     type Substream = TSubstream;
-    type InboundProtocol = Ping<()>;
+    type InboundProtocol = Pong<()>;
     type OutboundProtocol = DeniedUpgrade;
     type OutboundOpenInfo = ();
 
@@ -82,7 +82,7 @@ where
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgrade<TSubstream>>::Output
+        protocol: <Self::InboundProtocol as Upgrade<TSubstream>>::Output
     ) {
         if self.shutdown {
             return;

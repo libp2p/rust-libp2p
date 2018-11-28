@@ -25,7 +25,7 @@ use libp2p_core::{
     Multiaddr, PeerId, PublicKey, muxing, Transport,
     upgrade::{self, OutboundUpgradeApply, UpgradeError}
 };
-use protocol::{RemoteInfo, IdentifyProtocolConfig};
+use protocol::{RemoteInfo, IdentifyProtocolDialerConfig};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::mem;
 use std::sync::Arc;
@@ -91,7 +91,7 @@ where
         };
 
         let dial = dial.and_then(move |muxer| {
-            IdRetriever::new(muxer, IdentifyProtocolConfig).map_err(|e| e.into_io_error())
+            IdRetriever::new(muxer, IdentifyProtocolDialerConfig).map_err(|e| e.into_io_error())
         });
 
         Ok(Box::new(dial) as Box<_>)
@@ -118,9 +118,9 @@ where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
       TMuxer::Substream: Send,
 {
     /// We are in the process of opening a substream with the remote.
-    OpeningSubstream(Arc<TMuxer>, muxing::OutboundSubstreamRefWrapFuture<Arc<TMuxer>>, IdentifyProtocolConfig),
+    OpeningSubstream(Arc<TMuxer>, muxing::OutboundSubstreamRefWrapFuture<Arc<TMuxer>>, IdentifyProtocolDialerConfig),
     /// We opened the substream and are currently negotiating the identify protocol.
-    NegotiatingIdentify(Arc<TMuxer>, OutboundUpgradeApply<muxing::SubstreamRef<Arc<TMuxer>>, IdentifyProtocolConfig>),
+    NegotiatingIdentify(Arc<TMuxer>, OutboundUpgradeApply<muxing::SubstreamRef<Arc<TMuxer>>, IdentifyProtocolDialerConfig>),
     /// We retreived the remote's public key and are ready to yield it when polled again.
     Finishing(Arc<TMuxer>, PublicKey),
     /// Something bad happend, or the `Future` is finished, and shouldn't be polled again.
@@ -132,7 +132,7 @@ where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
       TMuxer::Substream: Send,
 {
     /// Creates a new `IdRetriever` ready to be polled.
-    fn new(muxer: TMuxer, config: IdentifyProtocolConfig) -> Self {
+    fn new(muxer: TMuxer, config: IdentifyProtocolDialerConfig) -> Self {
         let muxer = Arc::new(muxer);
         let opening = muxing::outbound_from_ref_and_wrap(muxer.clone());
 

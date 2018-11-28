@@ -28,7 +28,7 @@ use crate::{
 use futures::{stream, future::{self, Either::{A, B}, FutureResult}, prelude::*};
 use libp2p_core::{
     transport::Transport,
-    upgrade::{apply_outbound, InboundUpgrade, OutboundUpgrade, UpgradeInfo}
+    upgrade::{apply_outbound, Upgrade}
 };
 use log::debug;
 use peerstore::{PeerAccess, PeerId, Peerstore};
@@ -57,16 +57,7 @@ pub enum Output<C> {
     Sealed(Box<Future<Item=(), Error=io::Error> + Send>)
 }
 
-impl<T, P> UpgradeInfo for RelayConfig<T, P> {
-    type UpgradeId = ();
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
-
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once((Bytes::from("/libp2p/relay/circuit/0.1.0"), ()))
-    }
-}
-
-impl<C, T, P, S> InboundUpgrade<C> for RelayConfig<T, P>
+impl<C, T, P, S> Upgrade<C> for RelayConfig<T, P>
 where
     C: AsyncRead + AsyncWrite + Send + 'static,
     T: Transport + Clone + Send + 'static,
@@ -78,11 +69,17 @@ where
     S: 'static,
     for<'a> &'a S: Peerstore
 {
+    type UpgradeId = ();
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
     type Output = Output<C>;
     type Error = RelayError<Void>;
     type Future = Box<Future<Item=Self::Output, Error=Self::Error> + Send>;
 
-    fn upgrade_inbound(self, conn: C, _: ()) -> Self::Future {
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once((Bytes::from("/libp2p/relay/circuit/0.1.0"), ()))
+    }
+
+    fn upgrade(self, conn: C, _: ()) -> Self::Future {
         let future = Io::new(conn).recv().from_err().and_then(move |(message, io)| {
             let msg = if let Some(m) = message {
                 m
@@ -259,24 +256,21 @@ fn stop_message(from: &Peer, dest: &Peer) -> CircuitRelay {
 #[derive(Debug, Clone)]
 struct TrivialUpgrade;
 
-impl UpgradeInfo for TrivialUpgrade {
-    type UpgradeId = ();
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
-
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once((Bytes::from("/libp2p/relay/circuit/0.1.0"), ()))
-    }
-}
-
-impl<C> OutboundUpgrade<C> for TrivialUpgrade
+impl<C> Upgrade<C> for TrivialUpgrade
 where
     C: AsyncRead + AsyncWrite + 'static
 {
+    type UpgradeId = ();
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
     type Output = C;
     type Error = Void;
     type Future = FutureResult<Self::Output, Self::Error>;
 
-    fn upgrade_outbound(self, conn: C, _: ()) -> Self::Future {
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once((Bytes::from("/libp2p/relay/circuit/0.1.0"), ()))
+    }
+
+    fn upgrade(self, conn: C, _: ()) -> Self::Future {
         future::ok(conn)
     }
 }
@@ -284,24 +278,21 @@ where
 #[derive(Debug, Clone)]
 pub(crate) struct Source(pub(crate) CircuitRelay);
 
-impl UpgradeInfo for Source {
-    type UpgradeId = ();
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
-
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once((Bytes::from("/libp2p/relay/circuit/0.1.0"), ()))
-    }
-}
-
-impl<C> OutboundUpgrade<C> for Source
+impl<C> Upgrade<C> for Source
 where
     C: AsyncRead + AsyncWrite + Send + 'static,
 {
+    type UpgradeId = ();
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
     type Output = C;
     type Error = io::Error;
     type Future = Box<Future<Item=Self::Output, Error=Self::Error> + Send>;
 
-    fn upgrade_outbound(self, conn: C, _: ()) -> Self::Future {
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once((Bytes::from("/libp2p/relay/circuit/0.1.0"), ()))
+    }
+
+    fn upgrade(self, conn: C, _: ()) -> Self::Future {
         let future = Io::new(conn)
             .send(self.0)
             .and_then(Io::recv)

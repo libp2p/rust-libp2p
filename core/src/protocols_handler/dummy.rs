@@ -20,11 +20,7 @@
 
 use crate::{
     protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent},
-    upgrade::{
-        InboundUpgrade,
-        OutboundUpgrade,
-        DeniedUpgrade,
-    }
+    upgrade::{Upgrade, DeniedUpgrade}
 };
 use futures::prelude::*;
 use std::{io, marker::PhantomData};
@@ -66,14 +62,14 @@ where
     #[inline]
     fn inject_fully_negotiated_inbound(
         &mut self,
-        _: <Self::InboundProtocol as InboundUpgrade<TSubstream>>::Output
+        _: <Self::InboundProtocol as Upgrade<TSubstream>>::Output
     ) {
     }
 
     #[inline]
     fn inject_fully_negotiated_outbound(
         &mut self,
-        _: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output,
+        _: <Self::OutboundProtocol as Upgrade<TSubstream>>::Output,
         _: Self::OutboundOpenInfo
     ) {
     }

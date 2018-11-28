@@ -30,53 +30,64 @@ extern crate unsigned_varint;
 
 use bytes::Bytes;
 use futures::{future, prelude::*};
-use libp2p_core::{Multiaddr, upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}};
+use libp2p_core::{Multiaddr, upgrade::Upgrade};
 use std::{io, iter};
 use tokio_codec::{FramedRead, FramedWrite};
 use tokio_io::{AsyncRead, AsyncWrite};
 use unsigned_varint::codec::UviBytes;
 
 /// The connection upgrade type to retrieve or report externally visible addresses.
-pub struct Observed {}
+pub struct ObservedListener {}
 
-impl Observed {
+impl ObservedListener {
     pub fn new() -> Self {
-        Observed {}
+        ObservedListener {}
     }
 }
 
-impl UpgradeInfo for Observed {
-    type UpgradeId = ();
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
-
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once((Bytes::from("/paritytech/observed-address/0.1.0"), ()))
-    }
-}
-
-impl<C> InboundUpgrade<C> for Observed
+impl<C> Upgrade<C> for ObservedListener
 where
     C: AsyncRead + AsyncWrite + Send + 'static
 {
+    type UpgradeId = ();
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
     type Output = Sender<C>;
     type Error = io::Error;
     type Future = Box<dyn Future<Item=Self::Output, Error=Self::Error> + Send>;
 
-    fn upgrade_inbound(self, conn: C, _: ()) -> Self::Future {
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once((Bytes::from("/paritytech/observed-address/0.1.0"), ()))
+    }
+
+    fn upgrade(self, conn: C, _: ()) -> Self::Future {
         let io = FramedWrite::new(conn, UviBytes::default());
         Box::new(future::ok(Sender { io }))
     }
 }
 
-impl<C> OutboundUpgrade<C> for Observed
+pub struct ObservedDialer {}
+
+impl ObservedDialer {
+    pub fn new() -> Self {
+        ObservedDialer {}
+    }
+}
+
+impl<C> Upgrade<C> for ObservedDialer
 where
     C: AsyncRead + AsyncWrite + Send + 'static
 {
+    type UpgradeId = ();
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
     type Output = Multiaddr;
     type Error = io::Error;
     type Future = Box<dyn Future<Item=Self::Output, Error=Self::Error> + Send>;
 
-    fn upgrade_outbound(self, conn: C, _: ()) -> Self::Future {
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once((Bytes::from("/paritytech/observed-address/0.1.0"), ()))
+    }
+
+    fn upgrade(self, conn: C, _: ()) -> Self::Future {
         let io = FramedRead::new(conn, UviBytes::default());
         let future = io.into_future()
             .map_err(|(e, _): (io::Error, FramedRead<C, UviBytes>)| e)
@@ -109,7 +120,7 @@ impl<C: AsyncWrite> Sender<C> {
 mod tests {
     extern crate tokio;
 
-    use libp2p_core::{Multiaddr, upgrade::{InboundUpgrade, OutboundUpgrade}};
+    use libp2p_core::{Multiaddr, upgrade::Upgrade};
     use self::tokio::runtime::current_thread;
     use self::tokio::net::{TcpListener, TcpStream};
     use super::*;
@@ -126,14 +137,14 @@ mod tests {
             .into_future()
             .map_err(|(e, _)| e.into())
             .and_then(move |(conn, _)| {
-                Observed::new().upgrade_inbound(conn.unwrap(), ())
+                ObservedListener::new().upgrade(conn.unwrap(), ())
             })
             .and_then(move |sender| sender.send_address(observed_addr1));
 
         let client = TcpStream::connect(&server_addr)
             .map_err(|e| e.into())
             .and_then(|conn| {
-                Observed::new().upgrade_outbound(conn, ())
+                ObservedDialer::new().upgrade(conn, ())
             })
             .map(move |addr| {
                 eprintln!("{} {}", addr, observed_addr2);

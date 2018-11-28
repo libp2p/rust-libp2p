@@ -29,12 +29,11 @@ extern crate yamux;
 
 use bytes::Bytes;
 use futures::{future::{self, FutureResult}, prelude::*};
-use libp2p_core::{muxing::Shutdown, upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}};
+use libp2p_core::{muxing::Shutdown, upgrade::Upgrade};
 use parking_lot::Mutex;
 use std::{io, iter};
 use std::io::{Error as IoError};
 use tokio_io::{AsyncRead, AsyncWrite};
-
 
 pub struct Yamux<C>(Mutex<yamux::Connection<C>>);
 
@@ -134,38 +133,22 @@ impl Default for Config {
     }
 }
 
-impl UpgradeInfo for Config {
+impl<C> Upgrade<C> for Config
+where
+    C: AsyncRead + AsyncWrite + 'static,
+{
     type UpgradeId = ();
     type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+    type Output = Yamux<C>;
+    type Error = io::Error;
+    type Future = FutureResult<Yamux<C>, io::Error>;
 
     fn protocol_names(&self) -> Self::NamesIter {
         iter::once((Bytes::from("/yamux/1.0.0"), ()))
     }
-}
 
-impl<C> InboundUpgrade<C> for Config
-where
-    C: AsyncRead + AsyncWrite + 'static,
-{
-    type Output = Yamux<C>;
-    type Error = io::Error;
-    type Future = FutureResult<Yamux<C>, io::Error>;
-
-    fn upgrade_inbound(self, i: C, _: Self::UpgradeId) -> Self::Future {
+    fn upgrade(self, i: C, _: Self::UpgradeId) -> Self::Future {
         future::ok(Yamux::new(i, self.0, yamux::Mode::Server))
-    }
-}
-
-impl<C> OutboundUpgrade<C> for Config
-where
-    C: AsyncRead + AsyncWrite + 'static,
-{
-    type Output = Yamux<C>;
-    type Error = io::Error;
-    type Future = FutureResult<Yamux<C>, io::Error>;
-
-    fn upgrade_outbound(self, i: C, _: Self::UpgradeId) -> Self::Future {
-        future::ok(Yamux::new(i, self.0, yamux::Mode::Client))
     }
 }
 

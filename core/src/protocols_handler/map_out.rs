@@ -20,10 +20,7 @@
 
 use crate::{
     protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent},
-    upgrade::{
-        InboundUpgrade,
-        OutboundUpgrade,
-    }
+    upgrade::Upgrade
 };
 use futures::prelude::*;
 use std::io;
@@ -65,7 +62,7 @@ where
     #[inline]
     fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgrade<Self::Substream>>::Output
+        protocol: <Self::InboundProtocol as Upgrade<Self::Substream>>::Output
     ) {
         self.inner.inject_fully_negotiated_inbound(protocol)
     }
@@ -73,7 +70,7 @@ where
     #[inline]
     fn inject_fully_negotiated_outbound(
         &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Output,
+        protocol: <Self::OutboundProtocol as Upgrade<Self::Substream>>::Output,
         info: Self::OutboundOpenInfo
     ) {
         self.inner.inject_fully_negotiated_outbound(protocol, info)

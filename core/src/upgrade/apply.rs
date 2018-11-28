@@ -20,10 +20,10 @@
 
 use bytes::Bytes;
 use crate::nodes::ConnectedPoint;
-use crate::upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade, UpgradeError};
+use crate::upgrade::{Upgrade, UpgradeError};
 use futures::{future::Either, prelude::*};
 use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
-use std::mem;
+use std::{marker::PhantomData, mem};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Applies an upgrade to the inbound and outbound direction of a connection or substream.
@@ -31,7 +31,7 @@ pub fn apply<C, U>(conn: C, up: U, cp: ConnectedPoint)
     -> Either<InboundUpgradeApply<C, U>, OutboundUpgradeApply<C, U>>
 where
     C: AsyncRead + AsyncWrite,
-    U: InboundUpgrade<C> + OutboundUpgrade<C>,
+    U: Upgrade<C>
 {
     if cp.is_listener() {
         Either::A(apply_inbound(conn, up))
@@ -44,9 +44,9 @@ where
 pub fn apply_inbound<C, U>(conn: C, up: U) -> InboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite,
-    U: InboundUpgrade<C>,
+    U: Upgrade<C>
 {
-    let future = multistream_select::listener_select_proto(conn, UpgradeIntoProtocolsIterWrap(up));
+    let future = multistream_select::listener_select_proto(conn, UpgradeIntoProtocolsIterWrap(up, PhantomData));
     InboundUpgradeApply {
         inner: InboundUpgradeApplyState::Init { future }
     }
@@ -56,7 +56,7 @@ where
 pub fn apply_outbound<C, U>(conn: C, up: U) -> OutboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite,
-    U: OutboundUpgrade<C>
+    U: Upgrade<C>
 {
     let iter = ProtocolNames(up.protocol_names());
     let future = multistream_select::dialer_select_proto(conn, iter);
@@ -69,7 +69,7 @@ where
 pub struct InboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite,
-    U: InboundUpgrade<C>
+    U: Upgrade<C>
 {
     inner: InboundUpgradeApplyState<C, U>
 }
@@ -77,10 +77,10 @@ where
 enum InboundUpgradeApplyState<C, U>
 where
     C: AsyncRead + AsyncWrite,
-    U: InboundUpgrade<C>
+    U: Upgrade<C>
 {
     Init {
-        future: ListenerSelectFuture<C, UpgradeIntoProtocolsIterWrap<U>, U::UpgradeId>,
+        future: ListenerSelectFuture<C, UpgradeIntoProtocolsIterWrap<U, C>, U::UpgradeId>,
     },
     Upgrade {
         future: U::Future
@@ -91,7 +91,7 @@ where
 impl<C, U> Future for InboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite,
-    U: InboundUpgrade<C>,
+    U: Upgrade<C>
 {
     type Item = U::Output;
     type Error = UpgradeError<U::Error>;
@@ -108,7 +108,7 @@ where
                         }
                     };
                     self.inner = InboundUpgradeApplyState::Upgrade {
-                        future: upgrade.0.upgrade_inbound(connection, upgrade_id)
+                        future: upgrade.0.upgrade(connection, upgrade_id)
                     };
                 }
                 InboundUpgradeApplyState::Upgrade { mut future } => {
@@ -138,7 +138,7 @@ where
 pub struct OutboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite,
-    U: OutboundUpgrade<C>
+    U: Upgrade<C>
 {
     inner: OutboundUpgradeApplyState<C, U>
 }
@@ -146,7 +146,7 @@ where
 enum OutboundUpgradeApplyState<C, U>
 where
     C: AsyncRead + AsyncWrite,
-    U: OutboundUpgrade<C>
+    U: Upgrade<C>
 {
     Init {
         future: DialerSelectFuture<C, ProtocolNames<U::NamesIter>, U::UpgradeId>,
@@ -161,7 +161,7 @@ where
 impl<C, U> Future for OutboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite,
-    U: OutboundUpgrade<C>
+    U: Upgrade<C>
 {
     type Item = U::Output;
     type Error = UpgradeError<U::Error>;
@@ -178,7 +178,7 @@ where
                         }
                     };
                     self.inner = OutboundUpgradeApplyState::Upgrade {
-                        future: upgrade.upgrade_outbound(connection, upgrade_id)
+                        future: upgrade.upgrade(connection, upgrade_id)
                     };
                 }
                 OutboundUpgradeApplyState::Upgrade { mut future } => {
@@ -205,10 +205,11 @@ where
 }
 
 /// Wraps around a `UpgradeInfo` and satisfies the requirement of `listener_select_proto`.
-struct UpgradeIntoProtocolsIterWrap<U>(U);
+struct UpgradeIntoProtocolsIterWrap<U, T>(U, PhantomData<T>);
 
-impl<'a, U> IntoIterator for &'a UpgradeIntoProtocolsIterWrap<U>
-where U: UpgradeInfo
+impl<'a, U, T> IntoIterator for &'a UpgradeIntoProtocolsIterWrap<U, T>
+where
+    U: Upgrade<T>
 {
     type Item = (Bytes, fn(&Bytes, &Bytes) -> bool, U::UpgradeId);
     type IntoIter = ProtocolNames<U::NamesIter>;

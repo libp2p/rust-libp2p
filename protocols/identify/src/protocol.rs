@@ -20,10 +20,7 @@
 
 use bytes::{Bytes, BytesMut};
 use futures::{future::{self, FutureResult}, Async, AsyncSink, Future, Poll, Sink, Stream};
-use libp2p_core::{
-    Multiaddr, PublicKey,
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
-};
+use libp2p_core::{Multiaddr, PublicKey, upgrade::Upgrade};
 use log::{debug, trace};
 use protobuf::Message as ProtobufMessage;
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
@@ -37,7 +34,10 @@ use unsigned_varint::codec;
 
 /// Configuration for an upgrade to the identity protocol.
 #[derive(Debug, Clone)]
-pub struct IdentifyProtocolConfig;
+pub struct IdentifyProtocolDialerConfig;
+
+#[derive(Debug, Clone)]
+pub struct IdentifyProtocolListenerConfig;
 
 #[derive(Debug, Clone)]
 pub struct RemoteInfo {
@@ -133,25 +133,22 @@ pub struct IdentifyInfo {
     pub protocols: Vec<String>,
 }
 
-impl UpgradeInfo for IdentifyProtocolConfig {
+impl<C> Upgrade<C> for IdentifyProtocolListenerConfig
+where
+    C: AsyncRead + AsyncWrite,
+{
     type UpgradeId = ();
     type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+    type Output = IdentifySender<C>;
+    type Error = IoError;
+    type Future = FutureResult<Self::Output, IoError>;
 
     #[inline]
     fn protocol_names(&self) -> Self::NamesIter {
         iter::once((Bytes::from("/ipfs/id/1.0.0"), ()))
     }
-}
 
-impl<C> InboundUpgrade<C> for IdentifyProtocolConfig
-where
-    C: AsyncRead + AsyncWrite,
-{
-    type Output = IdentifySender<C>;
-    type Error = IoError;
-    type Future = FutureResult<Self::Output, IoError>;
-
-    fn upgrade_inbound(self, socket: C, _: ()) -> Self::Future {
+    fn upgrade(self, socket: C, _: ()) -> Self::Future {
         trace!("Upgrading inbound connection");
         let socket = Framed::new(socket, codec::UviBytes::default());
         let sender = IdentifySender { inner: socket };
@@ -159,15 +156,22 @@ where
     }
 }
 
-impl<C> OutboundUpgrade<C> for IdentifyProtocolConfig
+impl<C> Upgrade<C> for IdentifyProtocolDialerConfig
 where
     C: AsyncRead + AsyncWrite,
 {
+    type UpgradeId = ();
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
     type Output = RemoteInfo;
     type Error = IoError;
     type Future = IdentifyOutboundFuture<C>;
 
-    fn upgrade_outbound(self, socket: C, _: ()) -> Self::Future {
+    #[inline]
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once((Bytes::from("/ipfs/id/1.0.0"), ()))
+    }
+
+    fn upgrade(self, socket: C, _: ()) -> Self::Future {
         IdentifyOutboundFuture {
             inner: Framed::new(socket, codec::UviBytes::<BytesMut>::default()),
         }
@@ -262,7 +266,7 @@ mod tests {
     use libp2p_core::{PublicKey, Transport, upgrade::{apply_outbound, apply_inbound}};
     use std::sync::mpsc;
     use std::thread;
-    use {IdentifyInfo, RemoteInfo, IdentifyProtocolConfig};
+    use {IdentifyInfo, RemoteInfo, IdentifyProtocolDialerConfig, IdentifyProtocolListenerConfig};
 
     #[test]
     fn correct_transfer() {
@@ -285,7 +289,7 @@ mod tests {
                 .map_err(|(err, _)| err)
                 .and_then(|(client, _)| client.unwrap().0)
                 .and_then(|socket| {
-                    apply_inbound(socket, IdentifyProtocolConfig).map_err(|e| e.into_io_error())
+                    apply_inbound(socket, IdentifyProtocolListenerConfig).map_err(|e| e.into_io_error())
                 })
                 .and_then(|sender| {
                     sender.send(
@@ -311,7 +315,7 @@ mod tests {
         let future = transport.dial(rx.recv().unwrap())
             .unwrap_or_else(|_| panic!())
             .and_then(|socket| {
-                apply_outbound(socket, IdentifyProtocolConfig).map_err(|e| e.into_io_error())
+                apply_outbound(socket, IdentifyProtocolDialerConfig).map_err(|e| e.into_io_error())
             })
             .and_then(|RemoteInfo { info, observed_addr, .. }| {
                 assert_eq!(observed_addr, "/ip4/100.101.102.103/tcp/5000".parse().unwrap());

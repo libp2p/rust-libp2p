@@ -18,10 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::upgrade::{
-    InboundUpgrade,
-    OutboundUpgrade,
-};
+use crate::upgrade::Upgrade;
 use futures::prelude::*;
 use std::{io, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -91,9 +88,9 @@ pub trait ProtocolsHandler {
     /// The type of the substream that contains the raw data.
     type Substream: AsyncRead + AsyncWrite;
     /// The upgrade for the protocol or protocols handled by this handler.
-    type InboundProtocol: InboundUpgrade<Self::Substream>;
+    type InboundProtocol: Upgrade<Self::Substream>;
     /// The upgrade for the protocol or protocols handled by this handler.
-    type OutboundProtocol: OutboundUpgrade<Self::Substream>;
+    type OutboundProtocol: Upgrade<Self::Substream>;
     /// Information about a substream. Can be sent to the handler through a `NodeHandlerEndpoint`,
     /// and will be passed back in `inject_substream` or `inject_outbound_closed`.
     type OutboundOpenInfo;
@@ -111,12 +108,12 @@ pub trait ProtocolsHandler {
     /// This method is called when a substream has been successfully opened and negotiated.
     fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgrade<Self::Substream>>::Output
+        protocol: <Self::InboundProtocol as Upgrade<Self::Substream>>::Output
     );
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Output,
+        protocol: <Self::OutboundProtocol as Upgrade<Self::Substream>>::Output,
         info: Self::OutboundOpenInfo
     );
 

@@ -29,7 +29,7 @@
 //! `UpgradedNode::or_upgrade` methods, you can combine multiple transports and/or upgrades
 //! together in a complex chain of protocols negotiation.
 
-use crate::{InboundUpgrade, OutboundUpgrade, nodes::raw_swarm::ConnectedPoint};
+use crate::{Upgrade, nodes::raw_swarm::ConnectedPoint};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::io::Error as IoError;
@@ -46,7 +46,7 @@ pub mod upgrade;
 
 pub use self::choice::OrTransport;
 pub use self::memory::connector;
-pub use self::upgrade::Upgrade;
+pub use self::upgrade::{UpgradeDialer, UpgradeListener, UpgradeTransport};
 
 /// A transport is an object that can be used to produce connections by listening or dialing a
 /// peer.
@@ -174,14 +174,31 @@ pub trait Transport {
     /// > **Note**: The concept of an *upgrade* for example includes middlewares such *secio*
     /// >           (communication encryption), *multiplex*, but also a protocol handler.
     #[inline]
-    fn with_upgrade<U, O, E>(self, upgrade: U) -> Upgrade<Self, U>
+    fn with_upgrade<U>(self, upgrade: U) -> UpgradeTransport<Self, U>
     where
         Self: Sized,
         Self::Output: AsyncRead + AsyncWrite,
-        U: InboundUpgrade<Self::Output, Output = O, Error = E>,
-        U: OutboundUpgrade<Self::Output, Output = O, Error = E>
+        U: Upgrade<Self::Output>
     {
-        Upgrade::new(self, upgrade)
+        UpgradeTransport::new(self, upgrade)
+    }
+
+    fn with_listener_upgrade<U>(self, upgrade: U) -> UpgradeListener<Self, U>
+    where
+        Self: Sized,
+        Self::Output: AsyncRead + AsyncWrite,
+        U: Upgrade<Self::Output>
+    {
+        UpgradeListener::new(self, upgrade)
+    }
+
+    fn with_dialer_upgrade<U>(self, upgrade: U) -> UpgradeDialer<Self, U>
+    where
+        Self: Sized,
+        Self::Output: AsyncRead + AsyncWrite,
+        U: Upgrade<Self::Output>
+    {
+        UpgradeDialer::new(self, upgrade)
     }
 
     /// Wraps this transport inside an upgrade. Whenever a connection that uses this transport

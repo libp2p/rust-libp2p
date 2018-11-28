@@ -21,7 +21,7 @@
 use bytes::{BufMut, Bytes, BytesMut};
 use crate::rpc_proto;
 use futures::future;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, PeerId};
+use libp2p_core::{Upgrade, PeerId};
 use protobuf::Message as ProtobufMessage;
 use std::{io, iter};
 use tokio_codec::{Decoder, Encoder, Framed};
@@ -41,40 +41,23 @@ impl FloodsubConfig {
     }
 }
 
-impl UpgradeInfo for FloodsubConfig {
+impl<TSocket> Upgrade<TSocket> for FloodsubConfig
+where
+    TSocket: AsyncRead + AsyncWrite,
+{
     type UpgradeId = ();
     type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+    type Output = Framed<TSocket, FloodsubCodec>;
+    type Error = io::Error;
+    type Future = future::FutureResult<Self::Output, Self::Error>;
 
     #[inline]
     fn protocol_names(&self) -> Self::NamesIter {
         iter::once(("/floodsub/1.0.0".into(), ()))
     }
-}
-
-impl<TSocket> InboundUpgrade<TSocket> for FloodsubConfig
-where
-    TSocket: AsyncRead + AsyncWrite,
-{
-    type Output = Framed<TSocket, FloodsubCodec>;
-    type Error = io::Error;
-    type Future = future::FutureResult<Self::Output, Self::Error>;
 
     #[inline]
-    fn upgrade_inbound(self, socket: TSocket, _: Self::UpgradeId) -> Self::Future {
-        future::ok(Framed::new(socket, FloodsubCodec { length_prefix: Default::default() }))
-    }
-}
-
-impl<TSocket> OutboundUpgrade<TSocket> for FloodsubConfig
-where
-    TSocket: AsyncRead + AsyncWrite,
-{
-    type Output = Framed<TSocket, FloodsubCodec>;
-    type Error = io::Error;
-    type Future = future::FutureResult<Self::Output, Self::Error>;
-
-    #[inline]
-    fn upgrade_outbound(self, socket: TSocket, _: Self::UpgradeId) -> Self::Future {
+    fn upgrade(self, socket: TSocket, _: Self::UpgradeId) -> Self::Future {
         future::ok(Framed::new(socket, FloodsubCodec { length_prefix: Default::default() }))
     }
 }

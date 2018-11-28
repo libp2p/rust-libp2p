@@ -36,7 +36,7 @@
 use bytes::Bytes;
 use futures::sync::{mpsc, oneshot};
 use futures::{future, Future, Sink, stream, Stream};
-use libp2p_core::{PeerId, upgrade::{InboundUpgrade, UpgradeInfo}};
+use libp2p_core::{PeerId, upgrade::Upgrade};
 use log::{debug, warn};
 use multihash::Multihash;
 use protocol::{self, KadMsg, KademliaProtocolConfig, KadPeer};
@@ -65,32 +65,27 @@ impl KadConnecConfig {
     }
 }
 
-impl UpgradeInfo for KadConnecConfig {
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
-    type UpgradeId = ();
-
-    #[inline]
-    fn protocol_names(&self) -> Self::NamesIter {
-        self.raw_proto.protocol_names()
-    }
-}
-
-impl<C> InboundUpgrade<C> for KadConnecConfig
+impl<C> Upgrade<C> for KadConnecConfig
 where
     C: AsyncRead + AsyncWrite + Send + 'static, // TODO: 'static :-/
 {
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+    type UpgradeId = ();
     type Output = (
         KadConnecController,
         Box<Stream<Item = KadIncomingRequest, Error = IoError> + Send>,
     );
     type Error = IoError;
-    type Future = future::Map<<KademliaProtocolConfig as InboundUpgrade<C>>::Future, fn(<KademliaProtocolConfig as InboundUpgrade<C>>::Output) -> Self::Output>;
+    type Future = future::Map<<KademliaProtocolConfig as Upgrade<C>>::Future, fn(<KademliaProtocolConfig as Upgrade<C>>::Output) -> Self::Output>;
 
     #[inline]
-    fn upgrade_inbound(self, incoming: C, id: Self::UpgradeId) -> Self::Future {
-        self.raw_proto
-            .upgrade_inbound(incoming, id)
-            .map(build_from_sink_stream)
+    fn protocol_names(&self) -> Self::NamesIter {
+        Upgrade::<C>::protocol_names(&self.raw_proto)
+    }
+
+    #[inline]
+    fn upgrade(self, incoming: C, id: Self::UpgradeId) -> Self::Future {
+        self.raw_proto.upgrade(incoming, id).map(build_from_sink_stream)
     }
 }
 

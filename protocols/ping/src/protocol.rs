@@ -20,7 +20,7 @@
 
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::{prelude::*, future::{self, FutureResult}, try_ready};
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::Upgrade;
 use log::debug;
 use rand::{distributions::Standard, prelude::*, rngs::EntropyRng};
 use std::collections::VecDeque;
@@ -29,7 +29,7 @@ use std::{iter, marker::PhantomData, mem};
 use tokio_codec::{Decoder, Encoder, Framed};
 use tokio_io::{AsyncRead, AsyncWrite};
 
-/// Represents a prototype for an upgrade to handle the ping protocol.
+/// Represents a prototype for an outbound upgrade to handle the ping protocol.
 ///
 /// According to the design of libp2p, this struct would normally contain the configuration options
 /// for the protocol, but in the case of `Ping` no configuration is required.
@@ -43,43 +43,22 @@ impl<TUserData> Default for Ping<TUserData> {
     }
 }
 
-impl<TUserData> UpgradeInfo for Ping<TUserData> {
+impl<TSocket, TUserData> Upgrade<TSocket> for Ping<TUserData>
+where
+    TSocket: AsyncRead + AsyncWrite,
+{
     type UpgradeId = ();
     type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
-
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once(("/ipfs/ping/1.0.0".into(), ()))
-    }
-}
-
-impl<TSocket, TUserData> InboundUpgrade<TSocket> for Ping<TUserData>
-where
-    TSocket: AsyncRead + AsyncWrite,
-{
-    type Output = PingListener<TSocket>;
-    type Error = IoError;
-    type Future = FutureResult<Self::Output, Self::Error>;
-
-    #[inline]
-    fn upgrade_inbound(self, socket: TSocket, _: Self::UpgradeId) -> Self::Future {
-        let listener = PingListener {
-            inner: Framed::new(socket, Codec),
-            state: PingListenerState::Listening,
-        };
-        future::ok(listener)
-    }
-}
-
-impl<TSocket, TUserData> OutboundUpgrade<TSocket> for Ping<TUserData>
-where
-    TSocket: AsyncRead + AsyncWrite,
-{
     type Output = PingDialer<TSocket, TUserData>;
     type Error = IoError;
     type Future = FutureResult<Self::Output, Self::Error>;
 
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once(("/ipfs/ping/1.0.0".into(), ()))
+    }
+
     #[inline]
-    fn upgrade_outbound(self, socket: TSocket, _: Self::UpgradeId) -> Self::Future {
+    fn upgrade(self, socket: TSocket, _: Self::UpgradeId) -> Self::Future {
         let dialer = PingDialer {
             inner: Framed::new(socket, Codec),
             need_writer_flush: false,
@@ -89,6 +68,44 @@ where
             pings_to_send: VecDeque::with_capacity(4),
         };
         future::ok(dialer)
+    }
+}
+
+/// Represents a prototype for an inbound upgrade to handle the ping protocol.
+///
+/// According to the design of libp2p, this struct would normally contain the configuration options
+/// for the protocol, but in the case of `Ping` no configuration is required.
+#[derive(Debug, Copy, Clone)]
+pub struct Pong<TUserData = ()>(PhantomData<TUserData>);
+
+impl<TUserData> Default for Pong<TUserData> {
+    #[inline]
+    fn default() -> Self {
+        Pong(PhantomData)
+    }
+}
+
+impl<TSocket, TUserData> Upgrade<TSocket> for Pong<TUserData>
+where
+    TSocket: AsyncRead + AsyncWrite,
+{
+    type UpgradeId = ();
+    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+    type Output = PingListener<TSocket>;
+    type Error = IoError;
+    type Future = FutureResult<Self::Output, Self::Error>;
+
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once(("/ipfs/ping/1.0.0".into(), ()))
+    }
+
+    #[inline]
+    fn upgrade(self, socket: TSocket, _: Self::UpgradeId) -> Self::Future {
+        let listener = PingListener {
+            inner: Framed::new(socket, Codec),
+            state: PingListenerState::Listening,
+        };
+        future::ok(listener)
     }
 }
 
@@ -325,9 +342,9 @@ mod tests {
 
     use self::tokio_tcp::TcpListener;
     use self::tokio_tcp::TcpStream;
-    use super::Ping;
+    use super::{Ping, Pong};
     use futures::{Future, Stream};
-    use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade};
+    use libp2p_core::upgrade::Upgrade;
 
     // TODO: rewrite tests with the MemoryTransport
 
@@ -341,14 +358,14 @@ mod tests {
             .into_future()
             .map_err(|(e, _)| e.into())
             .and_then(|(c, _)| {
-                Ping::<()>::default().upgrade_inbound(c.unwrap(), ())
+                Pong::<()>::default().upgrade(c.unwrap(), ())
             })
             .flatten();
 
         let client = TcpStream::connect(&listener_addr)
             .map_err(|e| e.into())
             .and_then(|c| {
-                Ping::<()>::default().upgrade_outbound(c, ())
+                Ping::<()>::default().upgrade(c, ())
             })
             .and_then(|mut pinger| {
                 pinger.ping(());
@@ -371,14 +388,14 @@ mod tests {
             .into_future()
             .map_err(|(e, _)| e.into())
             .and_then(|(c, _)| {
-                Ping::<u32>::default().upgrade_inbound(c.unwrap(), ())
+                Pong::<u32>::default().upgrade(c.unwrap(), ())
             })
             .flatten();
 
         let client = TcpStream::connect(&listener_addr)
             .map_err(|e| e.into())
             .and_then(|c| {
-                Ping::<u32>::default().upgrade_outbound(c, ())
+                Ping::<u32>::default().upgrade(c, ())
             })
             .and_then(|mut pinger| {
                 for n in 0..20 {

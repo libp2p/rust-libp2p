@@ -25,38 +25,25 @@ extern crate void;
 
 use bytes::Bytes;
 use futures::future::{self, FutureResult};
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::Upgrade;
 use std::iter;
 use void::Void;
 
 #[derive(Debug, Copy, Clone)]
 pub struct PlainTextConfig;
 
-impl UpgradeInfo for PlainTextConfig {
+impl<C> Upgrade<C> for PlainTextConfig {
     type UpgradeId = ();
     type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+    type Output = C;
+    type Error = Void;
+    type Future = FutureResult<C, Self::Error>;
 
     fn protocol_names(&self) -> Self::NamesIter {
         iter::once((Bytes::from("/plaintext/1.0.0"), ()))
     }
-}
 
-impl<C> InboundUpgrade<C> for PlainTextConfig {
-    type Output = C;
-    type Error = Void;
-    type Future = FutureResult<C, Self::Error>;
-
-    fn upgrade_inbound(self, i: C, _: Self::UpgradeId) -> Self::Future {
-        future::ok(i)
-    }
-}
-
-impl<C> OutboundUpgrade<C> for PlainTextConfig {
-    type Output = C;
-    type Error = Void;
-    type Future = FutureResult<C, Self::Error>;
-
-    fn upgrade_outbound(self, i: C, _: Self::UpgradeId) -> Self::Future {
+    fn upgrade(self, i: C, _: Self::UpgradeId) -> Self::Future {
         future::ok(i)
     }
 }

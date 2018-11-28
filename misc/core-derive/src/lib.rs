@@ -86,8 +86,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                     quote!{#ty: #trait_to_impl},
                     quote!{<#ty as #trait_to_impl>::ProtocolsHandler: #protocols_handler<Substream = #substream_generic>},
                     // Note: this bound is required because of https://github.com/rust-lang/rust/issues/55697
-                    quote!{<<#ty as #trait_to_impl>::ProtocolsHandler as #protocols_handler>::InboundProtocol: ::libp2p::core::InboundUpgrade<#substream_generic>},
-                    quote!{<<#ty as #trait_to_impl>::ProtocolsHandler as #protocols_handler>::OutboundProtocol: ::libp2p::core::OutboundUpgrade<#substream_generic>},
+                    quote!{<<#ty as #trait_to_impl>::ProtocolsHandler as #protocols_handler>::InboundProtocol: ::libp2p::core::Upgrade<#substream_generic>},
+                    quote!{<<#ty as #trait_to_impl>::ProtocolsHandler as #protocols_handler>::OutboundProtocol: ::libp2p::core::Upgrade<#substream_generic>},
                 ]
             })
             .collect::<Vec<_>>();

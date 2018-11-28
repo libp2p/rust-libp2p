@@ -20,34 +20,29 @@
 
 use futures::prelude::*;
 use multiaddr::Multiaddr;
-use crate::{
-    transport::Transport,
-    upgrade::{OutboundUpgrade, InboundUpgrade, UpgradeInfo, apply_inbound, apply_outbound}
-};
+use crate::{either::EitherOutput, transport::Transport, upgrade::{Upgrade, apply_inbound, apply_outbound}};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 #[derive(Debug, Copy, Clone)]
-pub struct Upgrade<T, U> { inner: T, upgrade: U }
+pub struct UpgradeTransport<T, U> { inner: T, upgrade: U }
 
-impl<T, U> Upgrade<T, U> {
+impl<T, U> UpgradeTransport<T, U> {
     pub fn new(inner: T, upgrade: U) -> Self {
-        Upgrade { inner, upgrade }
+        UpgradeTransport { inner, upgrade }
     }
 }
 
-impl<D, U, O, E> Transport for Upgrade<D, U>
+impl<D, U, O, E> Transport for UpgradeTransport<D, U>
 where
     D: Transport,
     D::Dial: Send + 'static,
     D::Listener: Send + 'static,
     D::ListenerUpgrade: Send + 'static,
     D::Output: AsyncRead + AsyncWrite + Send + 'static,
-    U: InboundUpgrade<D::Output, Output = O, Error = E>,
-    U: OutboundUpgrade<D::Output, Output = O, Error = E> + Send + Clone + 'static,
-    <U as UpgradeInfo>::NamesIter: Send,
-    <U as UpgradeInfo>::UpgradeId: Send,
-    <U as InboundUpgrade<D::Output>>::Future: Send,
-    <U as OutboundUpgrade<D::Output>>::Future: Send,
+    U: Upgrade<D::Output, Output = O, Error = E> + Send + 'static + Clone,
+    U::NamesIter: Send,
+    U::UpgradeId: Send,
+    U::Future: Send,
     E: std::error::Error + Send + Sync + 'static
 {
     type Output = O;
@@ -58,14 +53,135 @@ where
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
         let upgrade = self.upgrade;
         match self.inner.dial(addr.clone()) {
+            Ok(outbound) =>
+                Ok(Box::new(outbound.and_then(move |x| {
+                    apply_outbound(x, upgrade).map_err(|e| e.into_io_error())
+                }))),
+            Err((dialer, addr)) => Err((UpgradeTransport::new(dialer, upgrade), addr))
+        }
+    }
+
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+        let upgrade = self.upgrade;
+        match self.inner.listen_on(addr) {
+            Ok((inbound, addr)) => {
+                let stream = inbound
+                    .map(move |(future, addr)| {
+                        let upgrade = upgrade.clone();
+                        let future = future.and_then(move |x| {
+                            apply_inbound(x, upgrade).map_err(|e| e.into_io_error())
+                        });
+                    (Box::new(future) as Box<_>, addr)
+                });
+                Ok((Box::new(stream), addr))
+            }
+            Err((listener, addr)) => Err((UpgradeTransport::new(listener, upgrade), addr)),
+        }
+    }
+
+    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        self.inner.nat_traversal(server, observed)
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct UpgradeDialer<T, U> { inner: T, upgrade: U }
+
+impl<T, U> UpgradeDialer<T, U> {
+    pub fn new(inner: T, upgrade: U) -> Self {
+        UpgradeDialer { inner, upgrade }
+    }
+}
+
+impl<D, U, O, E> Transport for UpgradeDialer<D, U>
+where
+    D: Transport,
+    D::Dial: Send + 'static,
+    D::Listener: Send + 'static,
+    D::ListenerUpgrade: Send + 'static,
+    D::Output: AsyncRead + AsyncWrite + Send + 'static,
+    U: Upgrade<D::Output, Output = O, Error = E> + Send + 'static,
+    U::NamesIter: Send,
+    U::UpgradeId: Send,
+    U::Future: Send,
+    O: 'static,
+    E: std::error::Error + Send + Sync + 'static
+{
+    type Output = EitherOutput<O, D::Output>;
+    type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = std::io::Error> + Send>;
+    type ListenerUpgrade = Box<Future<Item = Self::Output, Error = std::io::Error> + Send>;
+    type Dial = Box<Future<Item = Self::Output, Error = std::io::Error> + Send>;
+
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+        let upgrade = self.upgrade;
+        match self.inner.dial(addr.clone()) {
             Ok(outbound) => {
                 let future = outbound
-                    .and_then(move |x| apply_outbound(x, upgrade).map_err(|e| {
-                        std::io::Error::new(std::io::ErrorKind::Other, e)
-                    }));
+                    .and_then(move |x| {
+                        apply_outbound(x, upgrade).map_err(|e| e.into_io_error())
+                    })
+                    .map(EitherOutput::First);
                 Ok(Box::new(future))
             }
-            Err((dialer, addr)) => Err((Upgrade::new(dialer, upgrade), addr))
+            Err((dialer, addr)) => Err((UpgradeDialer::new(dialer, upgrade), addr))
+        }
+    }
+
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+        let upgrade = self.upgrade;
+        match self.inner.listen_on(addr) {
+            Ok((inbound, addr)) => {
+                let stream = inbound.map(move |(future, addr)| {
+                    let future = future.map(EitherOutput::Second);
+                    (Box::new(future) as Box<_>, addr)
+                });
+                Ok((Box::new(stream), addr))
+            }
+            Err((listener, addr)) => Err((UpgradeDialer::new(listener, upgrade), addr)),
+        }
+    }
+
+    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        self.inner.nat_traversal(server, observed)
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct UpgradeListener<T, U> { inner: T, upgrade: U }
+
+impl<T, U> UpgradeListener<T, U> {
+    pub fn new(inner: T, upgrade: U) -> Self {
+        UpgradeListener { inner, upgrade }
+    }
+}
+
+impl<D, U, O, E> Transport for UpgradeListener<D, U>
+where
+    D: Transport,
+    D::Dial: Send + 'static,
+    D::Listener: Send + 'static,
+    D::ListenerUpgrade: Send + 'static,
+    D::Output: AsyncRead + AsyncWrite + Send + 'static,
+    U: Upgrade<D::Output, Output = O, Error = E> + Send + 'static + Clone,
+    U::NamesIter: Send,
+    U::UpgradeId: Send,
+    U::Future: Send,
+    O: 'static,
+    E: std::error::Error + Send + Sync + 'static
+{
+    type Output = EitherOutput<D::Output, O>;
+    type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = std::io::Error> + Send>;
+    type ListenerUpgrade = Box<Future<Item = Self::Output, Error = std::io::Error> + Send>;
+    type Dial = Box<Future<Item = Self::Output, Error = std::io::Error> + Send>;
+
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+        let upgrade = self.upgrade;
+        match self.inner.dial(addr.clone()) {
+            Ok(outbound) => {
+                let future = outbound.map(EitherOutput::First);
+                Ok(Box::new(future))
+            }
+            Err((dialer, addr)) => Err((UpgradeListener::new(dialer, upgrade), addr))
         }
     }
 
@@ -77,14 +193,15 @@ where
                     .map(move |(future, addr)| {
                         let upgrade = upgrade.clone();
                         let future = future
-                            .and_then(move |x| apply_inbound(x, upgrade).map_err(|e| {
-                                 std::io::Error::new(std::io::ErrorKind::Other, e)
-                            }));
+                            .and_then(move |x| {
+                                apply_inbound(x, upgrade).map_err(|e| e.into_io_error())
+                            })
+                            .map(EitherOutput::Second);
                     (Box::new(future) as Box<_>, addr)
                 });
                 Ok((Box::new(stream), addr))
             }
-            Err((listener, addr)) => Err((Upgrade::new(listener, upgrade), addr)),
+            Err((listener, addr)) => Err((UpgradeListener::new(listener, upgrade), addr)),
         }
     }
 
@@ -92,3 +209,4 @@ where
         self.inner.nat_traversal(server, observed)
     }
 }
+

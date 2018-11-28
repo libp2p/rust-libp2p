@@ -18,11 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{RemoteInfo, IdentifyProtocolConfig};
+use crate::{RemoteInfo, IdentifyProtocolDialerConfig};
 use futures::prelude::*;
 use libp2p_core::{
     protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent},
-    upgrade::{DeniedUpgrade, OutboundUpgrade}
+    upgrade::{DeniedUpgrade, Upgrade}
 };
 use std::{io, marker::PhantomData, time::{Duration, Instant}};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -39,7 +39,7 @@ const TRY_AGAIN_ON_ERR: Duration = Duration::from_secs(60 * 60);
 /// Protocol handler that identifies the remote at a regular period.
 pub struct PeriodicIdentification<TSubstream> {
     /// Configuration for the protocol.
-    config: IdentifyProtocolConfig,
+    config: IdentifyProtocolDialerConfig,
 
     /// If `Some`, we successfully generated an `PeriodicIdentificationEvent` and we will produce
     /// it the next time `poll()` is invoked.
@@ -67,7 +67,7 @@ impl<TSubstream> PeriodicIdentification<TSubstream> {
     #[inline]
     pub fn new() -> Self {
         PeriodicIdentification {
-            config: IdentifyProtocolConfig,
+            config: IdentifyProtocolDialerConfig,
             pending_result: None,
             next_id: Some(Delay::new(Instant::now() + DELAY_TO_FIRST_ID)),
             marker: PhantomData,
@@ -83,7 +83,7 @@ where
     type OutEvent = PeriodicIdentificationEvent;
     type Substream = TSubstream;
     type InboundProtocol = DeniedUpgrade;
-    type OutboundProtocol = IdentifyProtocolConfig;
+    type OutboundProtocol = IdentifyProtocolDialerConfig;
     type OutboundOpenInfo = ();
 
     #[inline]
@@ -97,7 +97,7 @@ where
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output,
+        protocol: <Self::OutboundProtocol as Upgrade<TSubstream>>::Output,
         _info: Self::OutboundOpenInfo,
     ) {
         self.pending_result = Some(PeriodicIdentificationEvent::Identified(protocol))
