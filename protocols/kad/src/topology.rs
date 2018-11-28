@@ -38,13 +38,19 @@ pub trait KademliaTopology: Topology {
 
     /// Returns the known peers closest by XOR distance to the `target`.
     ///
-    /// The `max` parameter is the maximum number of results that we are going to use.
+    /// The `max` parameter is the maximum number of results that we are going to use. If more
+    /// than `max` elements are returned, they will be ignored.
     fn closest_peers(&mut self, target: &Multihash, max: usize) -> Self::ClosestPeersIter;
 
     /// Registers the given peer as provider of the resource with the given ID.
+    ///
+    /// > **Note**: There is no `remove_provider` method. Implementations must include a
+    /// >           time-to-live system so that entries disappear after a while.
+    // TODO: specify the TTL? it has to match the timeout in the behaviour somehow, but this could
+    //       also be handled by the user
     fn add_provider(&mut self, key: Multihash, peer_id: PeerId);
 
-    /// Returns the list of providers that have been registered.
+    /// Returns the list of providers that have been registered with `add_provider`.
     fn get_providers(&mut self, key: &Multihash) -> Self::GetProvidersIter;
 }
 

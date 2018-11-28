@@ -160,7 +160,8 @@ where
                 .from_err::<IoError>()
                 .with::<_, fn(_) -> _, _>(|response| -> Result<_, IoError> {
                     let proto_struct = resp_msg_to_proto(response);
-                    Ok(proto_struct.write_to_bytes().unwrap()) // TODO: error?
+                    proto_struct.write_to_bytes()
+                        .map_err(|err| IoError::new(IoErrorKind::InvalidData, err.to_string()))
                 })
                 .and_then::<fn(_) -> _, _>(|bytes: BytesMut| {
                     let request = protobuf::parse_from_bytes(&bytes)?;
