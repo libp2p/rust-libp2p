@@ -50,7 +50,7 @@ fn main() {
             let upgrade = mplex::MplexConfig::new().map_outbound(move |muxer| (peer_id, muxer) );
             upgrade::apply_outbound(out.stream, upgrade).map_err(|e| e.into_io_error())
         });
-    
+
     // Create the topology of the network with the IPFS bootstrap nodes.
     let mut topology = libp2p::core::topology::MemoryTopology::empty();
     topology.add_address("QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ".parse().unwrap(), "/ip4/104.131.131.82/tcp/4001".parse().unwrap());

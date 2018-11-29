@@ -472,7 +472,7 @@ mod tests {
     fn correct_transfer() {
         // We open a server and a client, send a message between the two, and check that they were
         // successfully received.
-    
+
         test_one(KadMsg::Ping);
         test_one(KadMsg::FindNodeReq {
             key: PeerId::random(),
@@ -508,19 +508,19 @@ mod tests {
             },
         });
         // TODO: all messages
-    
+
         fn test_one(msg_server: KadMsg) {
             let msg_client = msg_server.clone();
             let (tx, rx) = mpsc::channel();
-    
+
             let bg_thread = thread::spawn(move || {
                 let transport = TcpConfig::new().with_upgrade(KademliaProtocolConfig);
-    
+
                 let (listener, addr) = transport
                     .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
                     .unwrap();
                 tx.send(addr).unwrap();
-    
+
                 let future = listener
                     .into_future()
                     .map_err(|(err, _)| err)
@@ -533,9 +533,9 @@ mod tests {
                 let mut rt = Runtime::new().unwrap();
                 let _ = rt.block_on(future).unwrap();
             });
-    
+
             let transport = TcpConfig::new().with_upgrade(KademliaProtocolConfig);
-    
+
             let future = transport
                 .dial(rx.recv().unwrap())
                 .unwrap_or_else(|_| panic!())
