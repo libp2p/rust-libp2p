@@ -602,6 +602,7 @@ mod test_mplex {
     #[test]
     fn test_muxing() {
         let cfg = MplexConfig::default();
+        // TODO: maybe use https://github.com/facebookincubator/rust-partial-io here?
         let cursor = Cursor::new(vec![0; 256]);
         let mplex = cfg.upgrade_inbound(cursor, ()).poll().expect("future::ok is ok");
         if let Async::Ready(muxer) = mplex {
