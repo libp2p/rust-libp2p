@@ -124,7 +124,7 @@
 //!   the upgrades you want, such as the security layer and multiplexing.
 //! - Create a struct that implements the `NetworkBehaviour` trait and that combines all the
 //!   network behaviours that you want.
-//! - Create an implement the `Topology` trait and that will store the topology of the network.
+//! - Create and implement the `Topology` trait that to store the topology of the network.
 //! - Create a swarm that combines your base transport, the network behaviour, and the topology.
 //! - This swarm can now be polled with the `tokio` library in order to start the network.
 //!
