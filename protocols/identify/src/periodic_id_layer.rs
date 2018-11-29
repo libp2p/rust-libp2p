@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use libp2p_core::nodes::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction};
+use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction};
 use libp2p_core::{protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
 use std::{collections::VecDeque, marker::PhantomData};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -44,7 +44,7 @@ impl<TSubstream> PeriodicIdentifyBehaviour<TSubstream> {
     }
 }
 
-impl<TSubstream> NetworkBehaviour for PeriodicIdentifyBehaviour<TSubstream>
+impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for PeriodicIdentifyBehaviour<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
@@ -79,6 +79,7 @@ where
 
     fn poll(
         &mut self,
+        _: &mut TTopology,
     ) -> Async<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,

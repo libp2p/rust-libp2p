@@ -12,7 +12,7 @@ fnv = "1.0"
 futures = "0.1"
 libp2p-core = { path = "../../core" }
 protobuf = "2.0.2"
-rand = "0.5"
+rand = "0.6"
 smallvec = "0.6.5"
 tokio-codec = "0.1"
 tokio-io = "0.1"

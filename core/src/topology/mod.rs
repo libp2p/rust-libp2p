@@ -23,8 +23,6 @@ use {Multiaddr, PeerId};
 
 /// Storage for the network topology.
 pub trait Topology {
-    /// Adds a discovered address to the topology.
-    fn add_discovered_address(&mut self, peer: &PeerId, addr: Multiaddr);
     /// Returns the addresses to try use to reach the given peer.
     fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr>;
 }
@@ -42,6 +40,30 @@ impl MemoryTopology {
             list: Default::default()
         }
     }
+
+    /// Returns true if the topology is empty.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.list.is_empty()
+    }
+
+    /// Adds an address to the topology.
+    #[inline]
+    pub fn add_address(&mut self, peer: PeerId, addr: Multiaddr) {
+        self.list.entry(peer).or_insert_with(|| Vec::new()).push(addr);
+    }
+
+    /// Returns a list of all the known peers in the topology.
+    #[inline]
+    pub fn peers(&self) -> impl Iterator<Item = &PeerId> {
+        self.list.keys()
+    }
+
+    /// Returns an iterator to all the entries in the topology.
+    #[inline]
+    pub fn iter(&self) -> impl Iterator<Item = (&PeerId, &Multiaddr)> {
+        self.list.iter().flat_map(|(p, l)| l.iter().map(move |ma| (p, ma)))
+    }
 }
 
 impl Default for MemoryTopology {
@@ -52,10 +74,6 @@ impl Default for MemoryTopology {
 }
 
 impl Topology for MemoryTopology {
-    fn add_discovered_address(&mut self, peer: &PeerId, addr: Multiaddr) {
-        self.list.entry(peer.clone()).or_insert_with(|| Vec::new()).push(addr);
-    }
-
     fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
         self.list.get(peer).map(|v| v.clone()).unwrap_or(Vec::new())
     }

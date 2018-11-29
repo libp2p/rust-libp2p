@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use futures::{future, stream};
 use futures::stream::Then as StreamThen;
 use futures::sync::{mpsc, oneshot};
 use futures::{Async, Future, Poll, Stream};
@@ -25,7 +26,6 @@ use multiaddr::{Protocol, Multiaddr};
 use rw_stream_sink::RwStreamSink;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::io::{Read, Write};
-use std::iter;
 use std::sync::{Arc, Mutex};
 use stdweb::web::TypedArray;
 use stdweb::{self, Reference};
@@ -53,8 +53,8 @@ impl BrowserWsConfig {
 
 impl Transport for BrowserWsConfig {
     type Output = BrowserWsConn;
-    type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError> + Send>; // TODO: use `!`
-    type ListenerUpgrade = Box<Future<Item = Self::Output, Error = IoError> + Send>; // TODO: use `!`
+    type Listener = stream::Empty<(Self::ListenerUpgrade, Multiaddr), IoError>;
+    type ListenerUpgrade = future::Empty<Self::Output, IoError>;
     type Dial = Box<Future<Item = Self::Output, Error = IoError> + Send>;
 
     #[inline]
