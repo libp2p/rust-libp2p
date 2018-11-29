@@ -78,7 +78,7 @@ where
                         let upgrade = upgrade.clone();
                         let future = future
                             .and_then(move |x| {
-                                apply_inbound(x, upgrade).map_err(UpgradeError::into_io_error )
+                                apply_inbound(x, upgrade).map_err(UpgradeError::into_io_error)
                             });
                     (Box::new(future) as Box<_>, addr)
                 });
