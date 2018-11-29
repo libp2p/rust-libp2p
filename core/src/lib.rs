@@ -1,4 +1,4 @@
-// Copyright 2017 Parity Technologies (UK) Ltd.
+// Copyright 2017-2018 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -32,11 +32,14 @@
 //!   encryption on the communication channel, thereby guaranteeing that they cannot be spoofed.
 //! - The `Transport` trait defines how to reach a remote node or listen for incoming remote connections.
 //!   See the `transport` module.
-//! - The `Swarm` struct contains all the active or pending connections to remotes, including all
-//!   the opened protocols.
-//! - The `NetworkBehaviour` trait is implemented on types that can customize the behaviour of the
-//!   `Swarm`. It is the `NetworkBehaviour` that defines what happens on the network.
-//! - The `Topology` trait is implemented on types that can hold the layout of the network.
+//! - The `Swarm` struct contains all active and pending connections to remotes and manages the
+//!   state of all the substreams that have been opened, and all the upgrades that were built upon
+//!   these substreams.
+//! - Use the `NetworkBehaviour` trait to customize the behaviour of a `Swarm`. It is the
+//!   `NetworkBehaviour` that controls what happens on the network. Multiple types that implement
+//!   `NetworkBehaviour` can be composed into a single behaviour.
+//! - The `Topology` trait is implemented for types that hold the layout of a network. When other
+//!   components need the network layout to operate, they are passed an instance of a `Topology`.
 //!
 //! In order to get started with libp2p, proceed with the following steps:
 //!
