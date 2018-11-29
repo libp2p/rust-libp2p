@@ -25,13 +25,17 @@
 //!
 //! # Overview
 //!
-//! From a user point of view, the main concepts of libp2p are:
+//! This documentation focuses on the concepts of *libp2p-core*, and is interesting mostly if you
+//! want to extend *libp2p* with new protocols. If you only want to use libp2p, you might find the
+//! documentation of the main *libp2p* crate more interesting.
+//!
+//! The main concepts of libp2p are:
 //!
 //! - A `PeerId` is a unique global identifier for a node on the network. Each node must have a
 //!   different `PeerId`. Normally, a `PeerId` is the hash of the public key used to negotiate
 //!   encryption on the communication channel, thereby guaranteeing that they cannot be spoofed.
-//! - The `Transport` trait defines how to reach a remote node or listen for incoming remote connections.
-//!   See the `transport` module.
+//! - The `Transport` trait defines how to reach a remote node or listen for incoming remote
+//!   connections. See the `transport` module.
 //! - The `Swarm` struct contains all active and pending connections to remotes and manages the
 //!   state of all the substreams that have been opened, and all the upgrades that were built upon
 //!   these substreams.
@@ -40,20 +44,6 @@
 //!   `NetworkBehaviour` can be composed into a single behaviour.
 //! - The `Topology` trait is implemented for types that hold the layout of a network. When other
 //!   components need the network layout to operate, they are passed an instance of a `Topology`.
-//!
-//! In order to get started with libp2p, proceed with the following steps:
-//!
-//! - Create an instance of a type that implements `Transport` based on the list of transport
-//!   protocols that you want to support (such as TCP/IP, DNS, bluetooth, etc.). See the
-//!   `transport` module for information about how to do that.
-//! - Create an instance of a type that implements `NetworkBehaviour`. See the `swarm` module for
-//!   information about how to do that.
-//! - Create an instance of a swarm that implements `Topology`. See the `topology` module for
-//!   information about how to do that.
-//! - Create a `Swarm` by passing the three objects you have just created.
-//!
-//! If you want to create your own protocol, there are some additional lower-level concepts:
-//!
 //! - The `StreamMuxer` trait is implemented on structs that hold a connection to a remote and can
 //!   subdivide this connection into multiple substreams. See the `muxing` module.
 //! - The `UpgradeInfo`, `InboundUpgrade` and `OutboundUpgrade` traits define how to upgrade each
