@@ -29,18 +29,15 @@
 //! `UpgradedNode::or_upgrade` methods, you can combine multiple transports and/or upgrades
 //! together in a complex chain of protocols negotiation.
 
-use crate::{InboundUpgrade, OutboundUpgrade, Endpoint};
+use crate::{InboundUpgrade, OutboundUpgrade, nodes::raw_swarm::ConnectedPoint};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
-use nodes::raw_swarm::ConnectedPoint;
 use std::io::Error as IoError;
 use tokio_io::{AsyncRead, AsyncWrite};
 
 pub mod and_then;
 pub mod boxed;
 pub mod choice;
-pub mod denied;
-pub mod interruptible;
 pub mod map;
 pub mod map_err;
 pub mod map_err_dial;
@@ -48,7 +45,6 @@ pub mod memory;
 pub mod upgrade;
 
 pub use self::choice::OrTransport;
-pub use self::denied::DeniedTransport;
 pub use self::memory::connector;
 pub use self::upgrade::Upgrade;
 
@@ -94,7 +90,7 @@ pub trait Transport {
     where
         Self: Sized;
 
-    /// Dial to the given multi-addr.
+    /// Dial the given multi-addr.
     ///
     /// Returns either a future which may resolve to a connection, or gives back the multiaddress.
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)>
@@ -114,7 +110,7 @@ pub trait Transport {
     /// as is.
     ///
     /// Returns `None` if nothing can be determined. This happens if this trait implementation
-    /// doesn't recognize the protocols, or if `server` and `observed` are related.
+    /// doesn't recognize the protocols, or if `server` and `observed` are not related.
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
 
     /// Turns this `Transport` into an abstract boxed transport.
@@ -133,7 +129,7 @@ pub trait Transport {
     fn map<F, O>(self, map: F) -> map::Map<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Output, Endpoint) -> O + Clone + 'static,        // TODO: 'static :-/
+        F: FnOnce(Self::Output, ConnectedPoint) -> O + Clone
     {
         map::Map::new(self, map)
     }
@@ -143,7 +139,7 @@ pub trait Transport {
     fn map_err<F>(self, map_err: F) -> map_err::MapErr<Self, F>
     where
         Self: Sized,
-        F: FnOnce(IoError) -> IoError + Clone + 'static,        // TODO: 'static :-/
+        F: FnOnce(IoError) -> IoError + Clone
     {
         map_err::MapErr::new(self, map_err)
     }
@@ -155,7 +151,7 @@ pub trait Transport {
     fn map_err_dial<F>(self, map_err: F) -> map_err_dial::MapErrDial<Self, F>
     where
         Self: Sized,
-        F: FnOnce(IoError, Multiaddr) -> IoError + Clone + 'static,        // TODO: 'static :-/
+        F: FnOnce(IoError, Multiaddr) -> IoError
     {
         map_err_dial::MapErrDial::new(self, map_err)
     }
@@ -197,18 +193,9 @@ pub trait Transport {
     fn and_then<C, F, O>(self, upgrade: C) -> and_then::AndThen<Self, C>
     where
         Self: Sized,
-        C: FnOnce(Self::Output, ConnectedPoint) -> F + Clone + 'static,
-        F: Future<Item = O, Error = IoError> + 'static,
+        C: FnOnce(Self::Output, ConnectedPoint) -> F + Clone,
+        F: IntoFuture<Item = O, Error = IoError>
     {
-        and_then::and_then(self, upgrade)
-    }
-
-    /// Wraps around the `Transport` and makes it interruptible.
-    #[inline]
-    fn interruptible(self) -> (interruptible::Interruptible<Self>, interruptible::Interrupt)
-    where
-        Self: Sized,
-    {
-        interruptible::Interruptible::new(self)
+        and_then::AndThen::new(self, upgrade)
     }
 }

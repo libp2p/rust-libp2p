@@ -40,6 +40,7 @@
 //! Dialing any of the other peers will propagate the new participant to all
 //! chat members and everyone will receive all messages.
 
+extern crate env_logger;
 extern crate futures;
 extern crate libp2p;
 extern crate tokio;
@@ -54,6 +55,7 @@ use libp2p::{
 };
 
 fn main() {
+    env_logger::init();
     // Create a random PeerId
     let local_key = secio::SecioKeyPair::ed25519_generated().unwrap();
     let local_peer_id = local_key.to_peer_id();

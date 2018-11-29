@@ -45,7 +45,7 @@ use ProtocolChoiceError;
 pub fn listener_select_proto<R, I, M, P>(inner: R, protocols: I) -> ListenerSelectFuture<R, I, P>
 where
     R: AsyncRead + AsyncWrite,
-    I: Iterator<Item = (Bytes, M, P)> + Clone,
+    for<'r> &'r I: IntoIterator<Item = (Bytes, M, P)>,
     M: FnMut(&Bytes, &Bytes) -> bool,
 {
     ListenerSelectFuture {
@@ -77,11 +77,11 @@ enum ListenerSelectState<R: AsyncRead + AsyncWrite, I, P> {
 
 impl<R, I, M, P> Future for ListenerSelectFuture<R, I, P>
 where
-    I: Iterator<Item=(Bytes, M, P)> + Clone,
+    for<'r> &'r I: IntoIterator<Item=(Bytes, M, P)>,
     M: FnMut(&Bytes, &Bytes) -> bool,
     R: AsyncRead + AsyncWrite,
 {
-    type Item = (P, R);
+    type Item = (P, R, I);
     type Error = ProtocolChoiceError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -110,7 +110,7 @@ where
                     match msg {
                         Some(DialerToListenerMessage::ProtocolsListRequest) => {
                             let msg = ListenerToDialerMessage::ProtocolsListResponse {
-                                list: protocols.clone().map(|(p, _, _)| p).collect(),
+                                list: protocols.into_iter().map(|(p, _, _)| p).collect(),
                             };
                             trace!("protocols list response: {:?}", msg);
                             let sender = listener.send(msg);
@@ -123,7 +123,7 @@ where
                         Some(DialerToListenerMessage::ProtocolRequest { name }) => {
                             let mut outcome = None;
                             let mut send_back = ListenerToDialerMessage::NotAvailable;
-                            for (supported, mut matches, value) in protocols.clone() {
+                            for (supported, mut matches, value) in &protocols {
                                 if matches(&name, &supported) {
                                     send_back = ListenerToDialerMessage::ProtocolAck {name: name.clone()};
                                     outcome = Some(value);
@@ -149,7 +149,7 @@ where
                         }
                     };
                     if let Some(p) = outcome {
-                        return Ok(Async::Ready((p, listener.into_inner())))
+                        return Ok(Async::Ready((p, listener.into_inner(), protocols)))
                     } else {
                         let stream = listener.into_future();
                         self.inner = ListenerSelectState::Incoming { stream, protocols }

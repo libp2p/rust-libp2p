@@ -13,7 +13,7 @@ multiaddr = { path = "../misc/multiaddr" }
 multihash = { path = "../misc/multihash" }
 multistream-select = { path = "../misc/multistream-select" }
 futures = { version = "0.1", features = ["use_std"] }
-parking_lot = "0.6"
+parking_lot = "0.7"
 protobuf = "2.0.2"
 quick-error = "1.2"
 rw-stream-sink = { path = "../misc/rw-stream-sink" }
@@ -27,7 +27,7 @@ void = "1"
 libp2p-ping = { path = "../protocols/ping" }
 libp2p-tcp-transport = { path = "../transports/tcp" }
 libp2p-mplex = { path = "../muxers/mplex" }
-rand = "0.5"
+rand = "0.6"
 tokio = "0.1"
 tokio-codec = "0.1"
 tokio-timer = "0.2"
