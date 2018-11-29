@@ -297,12 +297,12 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
     /// Interrupts a reach attempt.
     ///
     /// Returns `Ok` if something was interrupted, and `Err` if the ID is not or no longer valid.
-    pub fn interrupt(&mut self, id: ReachAttemptId) -> Result<(), ()> {
+    pub fn interrupt(&mut self, id: ReachAttemptId) -> Result<(), &str> {
         match self.tasks.entry(id.0) {
-            Entry::Vacant(_) => Err(()),
+            Entry::Vacant(_) => Err("The task entry is vacant."),
             Entry::Occupied(entry) => {
                 match entry.get() {
-                    TaskState::Connected(_) => return Err(()),
+                    TaskState::Connected(_) => return Err("The task is connected."),
                     TaskState::Pending => (),
                 };
 
