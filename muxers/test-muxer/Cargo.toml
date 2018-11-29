@@ -8,5 +8,6 @@ license = "MIT"
 libp2p-core = { path = "../../core" }
 log = "0.4"
 env_logger = "0.6"
-
-[dev-dependencies]
+tokio = "0.1"
+futures = "0.1"
+assert_matches = "1.3"

@@ -19,13 +19,28 @@
 // DEALINGS IN THE SOFTWARE.
 
 extern crate libp2p_core;
+extern crate tokio;
+extern crate futures;
 #[macro_use]
 extern crate log;
 extern crate env_logger;
+#[macro_use]
+extern crate assert_matches;
 
 use libp2p_core::StreamMuxer;
+use tokio::runtime::{Builder, Runtime};
+use futures::{prelude::*, future};
+use std::io::Error as IoError;
 
-pub fn test_muxer<T: StreamMuxer>(muxer: T) {
+pub fn test_muxer<T: StreamMuxer + Send + 'static>(muxer: T) {
     env_logger::init();
-    info!("HI");
+
+    let mut rt = Runtime::new().unwrap();
+
+    let out = rt.block_on(future::poll_fn(move || -> Poll<(), IoError> {
+        let substream = muxer.poll_inbound();
+        trace!("Polled muxer inbound.");
+        assert_matches!(substream, Ok(Async::Ready(Some(substream))));
+        Ok(Async::Ready(()))
+    }));
 }
