@@ -61,7 +61,7 @@ where
             Ok(outbound) => {
                 let future = outbound
                     .and_then(move |x| {
-                        apply_outbound(x, upgrade).map_err(UpgradeError::into_io_error )
+                        apply_outbound(x, upgrade).map_err(UpgradeError::into_io_error)
                     });
                 Ok(Box::new(future))
             }
