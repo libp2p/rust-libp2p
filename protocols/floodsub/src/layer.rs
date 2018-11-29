@@ -21,7 +21,7 @@
 use cuckoofilter::CuckooFilter;
 use futures::prelude::*;
 use handler::FloodsubHandler;
-use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction};
+use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use libp2p_core::{protocols_handler::ProtocolsHandler, PeerId};
 use protocol::{FloodsubMessage, FloodsubRpc, FloodsubSubscription, FloodsubSubscriptionAction};
 use rand;
@@ -276,7 +276,7 @@ where
 
     fn poll(
         &mut self,
-        _: &mut TTopology,
+        _: &mut PollParameters<TTopology>,
     ) -> Async<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,

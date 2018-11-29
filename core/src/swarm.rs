@@ -230,7 +230,14 @@ where TBehaviour: NetworkBehaviour<TTopology>,
                 Async::Ready(RawSwarmEvent::UnknownPeerDialError { .. }) => {},
             }
 
-            match self.behaviour.poll(&mut self.topology) {
+            let behaviour_poll = {
+                let mut parameters = PollParameters {
+                    topology: &mut self.topology,
+                };
+                self.behaviour.poll(&mut parameters)
+            };
+
+            match behaviour_poll {
                 Async::NotReady if raw_swarm_not_ready => return Ok(Async::NotReady),
                 Async::NotReady => (),
                 Async::Ready(NetworkBehaviourAction::GenerateEvent(event)) => {
@@ -286,7 +293,21 @@ pub trait NetworkBehaviour<TTopology> {
     /// Polls for things that swarm should do.
     ///
     /// This API mimics the API of the `Stream` trait.
-    fn poll(&mut self, topology: &mut TTopology) -> Async<NetworkBehaviourAction<<Self::ProtocolsHandler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
+    fn poll(&mut self, topology: &mut PollParameters<TTopology>) -> Async<NetworkBehaviourAction<<Self::ProtocolsHandler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
+}
+
+/// Parameters passed to `poll()` that the `NetworkBehaviour` has access to.
+#[derive(Debug)]
+pub struct PollParameters<'a, TTopology> {
+    topology: &'a mut TTopology,
+}
+
+impl<'a, TTopology> PollParameters<'a, TTopology> {
+    /// Returns a reference to the topology of the network.
+    #[inline]
+    pub fn topology(&mut self) -> &mut TTopology {
+        &mut self.topology
+    }
 }
 
 /// Action to perform.
