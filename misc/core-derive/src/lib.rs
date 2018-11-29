@@ -324,6 +324,9 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                             event: #wrapped_event,
                         });
                     }
+                    Async::Ready(#network_behaviour_action::ReportObservedAddr { address }) => {
+                        return Async::Ready(#network_behaviour_action::ReportObservedAddr { address });
+                    }
                     Async::NotReady => break,
                 }
             }
