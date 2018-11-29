@@ -165,7 +165,7 @@ pub struct CollectionReachEvent<'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a> {
 }
 
 impl<'a, TInEvent, TOutEvent, THandler> CollectionReachEvent<'a, TInEvent, TOutEvent, THandler> {
-    /// Returns the peer id the node that has been reached.
+    /// Returns the peer id of the node that has been reached.
     #[inline]
     pub fn peer_id(&self) -> &PeerId {
         &self.peer_id
