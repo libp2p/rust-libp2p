@@ -30,6 +30,7 @@ use crate::{
     topology::Topology
 };
 use futures::prelude::*;
+use smallvec::SmallVec;
 use std::{fmt, io, ops::{Deref, DerefMut}};
 
 pub use crate::nodes::raw_swarm::ConnectedPoint;
@@ -53,6 +54,9 @@ where TTransport: Transport,
     /// Holds the topology of the network. In other words all the nodes that we think exist, even
     /// if we're not connected to them.
     topology: TTopology,
+
+    /// List of protocols that the behaviour says it supports.
+    supported_protocols: SmallVec<[Vec<u8>; 16]>,
 }
 
 impl<TTransport, TBehaviour, TTopology> Deref for Swarm<TTransport, TBehaviour, TTopology>
@@ -105,12 +109,20 @@ where TBehaviour: NetworkBehaviour<TTopology>,
 {
     /// Builds a new `Swarm`.
     #[inline]
-    pub fn new(transport: TTransport, behaviour: TBehaviour, topology: TTopology) -> Self {
+    pub fn new(transport: TTransport, mut behaviour: TBehaviour, topology: TTopology) -> Self {
+        let supported_protocols = behaviour
+            .new_handler()
+            .listen_protocol()
+            .protocol_names()
+            .map(|(name, _)| name.to_vec())
+            .collect();
+
         let raw_swarm = RawSwarm::new(transport);
         Swarm {
             raw_swarm,
             behaviour,
             topology,
+            supported_protocols,
         }
     }
 
@@ -233,6 +245,7 @@ where TBehaviour: NetworkBehaviour<TTopology>,
             let behaviour_poll = {
                 let mut parameters = PollParameters {
                     topology: &mut self.topology,
+                    supported_protocols: &self.supported_protocols,
                 };
                 self.behaviour.poll(&mut parameters)
             };
@@ -300,6 +313,7 @@ pub trait NetworkBehaviour<TTopology> {
 #[derive(Debug)]
 pub struct PollParameters<'a, TTopology> {
     topology: &'a mut TTopology,
+    supported_protocols: &'a [Vec<u8>],
 }
 
 impl<'a, TTopology> PollParameters<'a, TTopology> {
@@ -307,6 +321,15 @@ impl<'a, TTopology> PollParameters<'a, TTopology> {
     #[inline]
     pub fn topology(&mut self) -> &mut TTopology {
         &mut self.topology
+    }
+
+    /// Returns the list of protocol the behaviour supports when a remote negotiates a protocol on
+    /// an inbound substream.
+    ///
+    /// The iterator's elements are the ASCII names as reported on the wire.
+    #[inline]
+    pub fn supported_protocols(&self) -> impl ExactSizeIterator<Item = &[u8]> {
+        self.supported_protocols.iter().map(AsRef::as_ref)
     }
 }
 
