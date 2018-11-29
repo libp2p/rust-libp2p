@@ -32,13 +32,13 @@ use void::Void;
 
 /// Upgrade that negotiates the relay protocol and returns the socket.
 #[derive(Debug, Clone)]
-pub struct TargetOpen {
+pub struct RelayTargetOpen {
     /// The message to send to the destination. Pre-computed.
     message: CircuitRelay,
 }
 
-impl TargetOpen {
-    /// Creates a `TargetOpen`. Must pass the parameters of the message.
+impl RelayTargetOpen {
+    /// Creates a `RelayTargetOpen`. Must pass the parameters of the message.
     pub(crate) fn new(from: Peer, dest: Peer) -> Self {
         let mut msg = CircuitRelay::new();
         msg.set_field_type(CircuitRelay_Type::STOP);
@@ -57,13 +57,13 @@ impl TargetOpen {
         }
         msg.set_dstPeer(d);
 
-        TargetOpen {
+        RelayTargetOpen {
             message: msg,
         }
     }
 }
 
-impl upgrade::UpgradeInfo for TargetOpen {
+impl upgrade::UpgradeInfo for RelayTargetOpen {
     type UpgradeId = ();
     type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
 
@@ -73,7 +73,7 @@ impl upgrade::UpgradeInfo for TargetOpen {
     }
 }
 
-impl<TSubstream> upgrade::OutboundUpgrade<TSubstream> for TargetOpen
+impl<TSubstream> upgrade::OutboundUpgrade<TSubstream> for RelayTargetOpen
 where
     TSubstream: AsyncRead + AsyncWrite,
 {

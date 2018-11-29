@@ -24,7 +24,9 @@ mod listen;
 mod relay_request;
 mod target_open;
 
+// TODO: exact reexports
 pub use self::dest_request::*;
 pub use self::hop_request::*;
 pub use self::listen::*;
 pub use self::relay_request::*;
+pub use self::target_open::RelayTargetOpen;

@@ -19,9 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use libp2p_core::nodes::handled_node::NodeHandlerEndpoint;
-use libp2p_core::nodes::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent};
-use libp2p_core::{ConnectionUpgrade, Multiaddr, PeerId};
+use libp2p_core::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent};
+use libp2p_core::{Multiaddr, PeerId};
 use protocol;
 use std::{io, marker::PhantomData};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -55,7 +54,7 @@ pub enum RelayHandlerEvent<TSubstream> {
     DestinationRequest(RelayHandlerDestRequest<TSubstream>),
 }
 
-/// Event produced by the relay handler.
+/// Event that can be sent to the relay handler.
 //#[derive(Debug)]      // TODO: restore
 pub enum RelayHandlerIn<TSubstream, TDestSubstream> {
     /// Accept a hop request from the remote.
@@ -67,6 +66,8 @@ pub enum RelayHandlerIn<TSubstream, TDestSubstream> {
     },
     /// Denies a hop request from the remote.
     DenyHopRequest(RelayHandlerHopRequest<TSubstream>),
+    /// Denies a destination request from the remote.
+    DenyDestinationRequest(RelayHandlerDestRequest<TSubstream>),
     /// Opens a new substream to the remote and asks it to relay communications to a third party.
     RelayRequest {
         /// Id of the peer to connect to.
@@ -115,12 +116,6 @@ where TSubstream: AsyncRead + AsyncWrite + 'static
     pub fn accept(self) -> impl Future<Item = TSubstream, Error = io::Error> {
         self.inner.accept()
     }
-
-    /// Denies the request. Produces a `Future` that sends back an error message to the proxyy.
-    #[inline]
-    pub fn deny(self) -> impl Future<Item = (), Error = io::Error> {
-        self.inner.deny()
-    }
 }
 
 impl<TSubstream, TDestSubstream> RelayHandler<TSubstream, TDestSubstream> {
@@ -128,7 +123,6 @@ impl<TSubstream, TDestSubstream> RelayHandler<TSubstream, TDestSubstream> {
     #[inline]
     pub fn new() -> Self {
         RelayHandler {
-            config: RelayConfig::new(),
             shutdown: false,
             active_futures: Vec::new(),
             relay_requests: Vec::new(),
@@ -147,42 +141,41 @@ where
     type OutEvent = RelayHandlerEvent<TSubstream>;
     type Substream = TSubstream;
     type InboundProtocol = protocol::RelayListen;
-    type OutboundProtocol = RelayConfig;
-    // The information is the peer we want to relay communications to.
-    type OutboundOpenInfo = (PeerId, Vec<Multiaddr>);
+    type OutboundProtocol = EitherUpgrade<protocol::RelayProxyRequest, protocol::RelayTargetOpen>;
+    type OutboundOpenInfo = ();
 
     #[inline]
-    fn listen_protocol(&self) -> Self::Protocol {
+    fn listen_protocol(&self) -> Self::InboundProtocol {
         protocol::RelayListen::new()
     }
 
-    fn inject_fully_negotiated(
+    fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::Protocol as ConnectionUpgrade<TSubstream>>::Output,
-        endpoint: NodeHandlerEndpoint<Self::OutboundOpenInfo>,
+        protocol: <Self::InboundProtocol as ConnectionUpgrade<TSubstream>>::Output,
     ) {
-        match (protocol, endpoint) {
-            (RelayOutput::HopRequest(inner), _) => {
-                // The remote wants us to relay communications to a third party.
-                let ev = RelayHandlerEvent::HopRequest(RelayHandlerHopRequest {
-                    inner,
-                });
-                self.queued_events.push(ev);
+        match protocol {
+            // We have been asked to become a destination.
+            RelayRemoteRequest::DestinationRequest(dest_request) => {
+
             },
-            (RelayOutput::DestinationRequest(inner), _) => {
-                // The remote wants to use us as a destination.
-                let ev = RelayHandlerEvent::DestinationRequest(RelayHandlerDestRequest {
-                    inner,
-                });
-                self.queued_events.push(ev);
+            // We have been asked to act as a proxy.
+            RelayRemoteRequest::HopRequest(hop_request) => {
+
             },
-            (RelayOutput::ProxyRequest(request), NodeHandlerEndpoint::Dialer((peer_id, addresses))) => {
-                // We can ask the remote for what we want it to do.
-                request.request(peer_id, addresses);
+        }
+    }
+
+    fn inject_fully_negotiated_outbound(
+        &mut self,
+        protocol: <Self::OutboundProtocol as ConnectionUpgrade<TSubstream>>::Output,
+        _: Self::OutboundOpenInfo,
+    ) {
+        match protocol {
+            EitherOutput::First(proxy_request) => {
+
             },
-            (RelayOutput::ProxyRequest(_), NodeHandlerEndpoint::Listener) => {
-                // This shouldn't happen.
-                debug_assert!(false, "the protocol forbids ProxyRequest when listening");
+            EitherOutput::Second(target_request) => {
+
             },
         }
     }
@@ -222,7 +215,7 @@ where
     ) -> Poll<
         Option<
             ProtocolsHandlerEvent<
-                Self::Protocol,
+                Self::OutboundProtocol,
                 Self::OutboundOpenInfo,
                 RelayHandlerEvent<TSubstream>,
             >,
