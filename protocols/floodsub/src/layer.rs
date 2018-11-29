@@ -172,7 +172,7 @@ impl<TSubstream> FloodsubBehaviour<TSubstream> {
     }
 }
 
-impl<TSubstream> NetworkBehaviour for FloodsubBehaviour<TSubstream>
+impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for FloodsubBehaviour<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
@@ -276,6 +276,7 @@ where
 
     fn poll(
         &mut self,
+        _: &mut TTopology,
     ) -> Async<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,

@@ -61,7 +61,7 @@ impl<TSubstream> IdentifyListen<TSubstream> {
     }
 }
 
-impl<TSubstream> NetworkBehaviour for IdentifyListen<TSubstream>
+impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for IdentifyListen<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
@@ -99,6 +99,7 @@ where
 
     fn poll(
         &mut self,
+        _: &mut TTopology,
     ) -> Async<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,

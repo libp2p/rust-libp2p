@@ -147,6 +147,13 @@ impl PartialEq<PeerId> for multihash::Multihash {
     }
 }
 
+impl AsRef<multihash::Multihash> for PeerId {
+    #[inline]
+    fn as_ref(&self) -> &multihash::Multihash {
+        &self.multihash
+    }
+}
+
 impl Into<multihash::Multihash> for PeerId {
     #[inline]
     fn into(self) -> multihash::Multihash {
