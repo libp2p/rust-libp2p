@@ -64,7 +64,7 @@ impl KademliaTopology for MemoryTopology {
     }
 
     fn closest_peers(&mut self, target: &Multihash, _: usize) -> Self::ClosestPeersIter {
-        let mut list = self.peers().map(|p| p.clone()).collect::<Vec<_>>();
+        let mut list = self.peers().cloned().collect::<Vec<_>>();
         list.sort_by(|a, b| target.distance_with(b.as_ref()).cmp(&target.distance_with(a.as_ref())));
         list.into_iter()
     }
