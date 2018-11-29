@@ -660,7 +660,7 @@ mod tests {
         // Async::Ready(None) triggers a shutdown of the Handler so that it
         // also yields Async::Ready(None). Finally, the NodeTask gets a
         // Async::Ready(None) and sends a TaskClosed and returns
-        // Async::Ready(()). Qed.
+        // Async::Ready(()). QED.
 
         let create_outbound_substream_event = InEvent::Substream(Some(135));
         tx.unbounded_send(create_outbound_substream_event).expect("send msg works");
