@@ -144,9 +144,8 @@ impl QueryState {
         // Mark the peer as succeeded.
         for (peer_id, state) in self.closest_peers.iter_mut() {
             if peer_id == result_source {
-                match state {
-                    state @ QueryPeerState::InProgress(_) => *state = QueryPeerState::Succeeded,
-                    _ => (),
+                if let state @ QueryPeerState::InProgress(_) = state {
+                    *state = QueryPeerState::Succeeded;
                 }
             }
         }
