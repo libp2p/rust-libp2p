@@ -48,7 +48,7 @@ impl<TSubstream> Default for PeriodicPingBehaviour<TSubstream> {
     }
 }
 
-impl<TSubstream> NetworkBehaviour for PeriodicPingBehaviour<TSubstream>
+impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for PeriodicPingBehaviour<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
@@ -72,6 +72,7 @@ where
 
     fn poll(
         &mut self,
+        _: &mut TTopology,
     ) -> Async<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,

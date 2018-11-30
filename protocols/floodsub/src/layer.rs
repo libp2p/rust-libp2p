@@ -172,7 +172,7 @@ impl<TSubstream> FloodsubBehaviour<TSubstream> {
     }
 }
 
-impl<TSubstream> NetworkBehaviour for FloodsubBehaviour<TSubstream>
+impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for FloodsubBehaviour<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
@@ -215,7 +215,7 @@ where
         for subscription in event.subscriptions {
             let mut remote_peer_topics = self.connected_peers
                 .get_mut(&propagation_source)
-                .expect("connected_peers is kept in sync with the peers we are connected to; we are guaranteed to only receive events from connected peers ; qed");
+                .expect("connected_peers is kept in sync with the peers we are connected to; we are guaranteed to only receive events from connected peers; QED");
             match subscription.action {
                 FloodsubSubscriptionAction::Subscribe => {
                     if !remote_peer_topics.contains(&subscription.topic) {
@@ -276,6 +276,7 @@ where
 
     fn poll(
         &mut self,
+        _: &mut TTopology,
     ) -> Async<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
