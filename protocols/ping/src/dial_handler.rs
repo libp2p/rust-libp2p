@@ -171,13 +171,10 @@ where
         mut substream: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output,
         _info: Self::OutboundOpenInfo
     ) {
-        match mem::replace(&mut self.out_state, OutState::Poisoned) {
-            OutState::Upgrading { expires } => {
-                // We always upgrade with the intent of immediately pinging.
-                substream.ping(Instant::now());
-                self.out_state = OutState::WaitingForPong { substream, expires };
-            }
-            _ => (),
+        if let OutState::Upgrading { expires } = mem::replace(&mut self.out_state, OutState::Poisoned) {
+            // We always upgrade with the intent of immediately pinging.
+            substream.ping(Instant::now());
+            self.out_state = OutState::WaitingForPong { substream, expires }
         }
     }
 
@@ -232,100 +229,92 @@ where
             )
         }
 
-        loop {
-            match mem::replace(&mut self.out_state, OutState::Poisoned) {
-                OutState::Shutdown | OutState::Poisoned => {
-                    // This shuts down the whole connection with the remote.
-                    return Ok(Async::Ready(None));
-                },
+        match mem::replace(&mut self.out_state, OutState::Poisoned) {
+            OutState::Shutdown | OutState::Poisoned => {
+                // This shuts down the whole connection with the remote.
+                Ok(Async::Ready(None))
+            },
 
-                OutState::Disabled => {
-                    return Ok(Async::NotReady);
+            OutState::Disabled => {
+                Ok(Async::NotReady)
+            }
+
+            // Need to open an outgoing substream.
+            OutState::NeedToOpen { expires } => {
+                // Note that we ignore the expiration here, as it's pretty unlikely to happen.
+                // The expiration is only here to be transmitted to the `Upgrading`.
+                self.out_state = OutState::Upgrading { expires };
+                Ok(Async::Ready(Some(
+                    ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                        upgrade: self.ping_config,
+                        info: (),
+                    },
+                )))
+            }
+
+            // Waiting for the upgrade to be negotiated.
+            OutState::Upgrading { mut expires } => poll_delay!(expires => {
+                    NotReady => {
+                        self.out_state = OutState::Upgrading { expires };
+                        Ok(Async::NotReady)
+                    },
+                    Ready => {
+                        self.out_state = OutState::Shutdown;
+                        let ev = OutEvent::Unresponsive;
+                        Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(ev))))
+                    },
+                }),
+
+            // Waiting for the pong.
+            OutState::WaitingForPong { mut substream, mut expires } => {
+                // We start by dialing the substream, leaving one last chance for it to
+                // produce the pong even if the expiration happened.
+                match substream.poll()? {
+                    Async::Ready(Some(started)) => {
+                        self.out_state = OutState::Idle {
+                            substream,
+                            next_ping: Delay::new(Instant::now() + self.delay_to_next_ping),
+                        };
+                        let ev = OutEvent::PingSuccess(started.elapsed());
+                        return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(ev))));
+                    }
+                    Async::NotReady => {}
+                    Async::Ready(None) => {
+                        self.out_state = OutState::Shutdown;
+                        return Ok(Async::Ready(None));
+                    }
                 }
 
-                // Need to open an outgoing substream.
-                OutState::NeedToOpen { expires } => {
-                    // Note that we ignore the expiration here, as it's pretty unlikely to happen.
-                    // The expiration is only here to be transmitted to the `Upgrading`.
-                    self.out_state = OutState::Upgrading { expires };
-                    return Ok(Async::Ready(Some(
-                        ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                            upgrade: self.ping_config,
-                            info: (),
-                        },
-                    )));
-                }
+                // Check the expiration.
+                poll_delay!(expires => {
+                    NotReady => {
+                        self.out_state = OutState::WaitingForPong { substream, expires };
+                        // Both `substream` and `expires` and not ready, so it's fine to return
+                        // not ready.
+                        Ok(Async::NotReady)
+                    },
+                    Ready => {
+                        self.out_state = OutState::Shutdown;
+                        let ev = OutEvent::Unresponsive;
+                        Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(ev))))
+                    },
+                })
+            }
 
-                // Waiting for the upgrade to be negotiated.
-                OutState::Upgrading { mut expires } => poll_delay!(expires => {
-                        NotReady => {
-                            self.out_state = OutState::Upgrading { expires };
-                            return Ok(Async::NotReady);
-                        },
-                        Ready => {
-                            self.out_state = OutState::Shutdown;
-                            let ev = OutEvent::Unresponsive;
-                            return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(ev))));
-                        },
-                    }),
-
-                // Waiting for the pong.
-                OutState::WaitingForPong {
-                    mut substream,
-                    mut expires,
-                } => {
-                    // We start by dialing the substream, leaving one last chance for it to
-                    // produce the pong even if the expiration happened.
-                    match substream.poll()? {
-                        Async::Ready(Some(started)) => {
-                            self.out_state = OutState::Idle {
-                                substream,
-                                next_ping: Delay::new(Instant::now() + self.delay_to_next_ping),
-                            };
-                            let ev = OutEvent::PingSuccess(started.elapsed());
-                            return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(ev))));
-                        }
-                        Async::NotReady => {}
-                        Async::Ready(None) => {
-                            self.out_state = OutState::Shutdown;
-                            return Ok(Async::Ready(None));
-                        }
-                    };
-
-                    // Check the expiration.
-                    poll_delay!(expires => {
-                        NotReady => {
-                            self.out_state = OutState::WaitingForPong { substream, expires };
-                            // Both `substream` and `expires` and not ready, so it's fine to return
-                            // not ready.
-                            return Ok(Async::NotReady);
-                        },
-                        Ready => {
-                            self.out_state = OutState::Shutdown;
-                            let ev = OutEvent::Unresponsive;
-                            return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(ev))));
-                        },
-                    })
-                }
-
-                OutState::Idle {
-                    mut substream,
-                    mut next_ping,
-                } => {
-                    // Poll the future that fires when we need to ping the node again.
-                    poll_delay!(next_ping => {
-                        NotReady => {
-                            self.out_state = OutState::Idle { substream, next_ping };
-                            return Ok(Async::NotReady);
-                        },
-                        Ready => {
-                            let expires = Delay::new(Instant::now() + self.ping_timeout);
-                            substream.ping(Instant::now());
-                            self.out_state = OutState::WaitingForPong { substream, expires };
-                            return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(OutEvent::PingStart))));
-                        },
-                    })
-                }
+            OutState::Idle { mut substream, mut next_ping } => {
+                // Poll the future that fires when we need to ping the node again.
+                poll_delay!(next_ping => {
+                    NotReady => {
+                        self.out_state = OutState::Idle { substream, next_ping };
+                        Ok(Async::NotReady)
+                    },
+                    Ready => {
+                        let expires = Delay::new(Instant::now() + self.ping_timeout);
+                        substream.ping(Instant::now());
+                        self.out_state = OutState::WaitingForPong { substream, expires };
+                        Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(OutEvent::PingStart))))
+                    },
+                })
             }
         }
     }
