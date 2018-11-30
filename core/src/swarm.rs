@@ -340,12 +340,16 @@ impl<'a, TTopology> PollParameters<'a, TTopology> {
     /// an inbound substream.
     ///
     /// The iterator's elements are the ASCII names as reported on the wire.
+    ///
+    /// Note that the list is computed once at initialization and never refreshed.
     #[inline]
     pub fn supported_protocols(&self) -> impl ExactSizeIterator<Item = &[u8]> {
         self.supported_protocols.iter().map(AsRef::as_ref)
     }
 
     /// Returns the list of the addresses we're listening on, after accounting for NAT traversal.
+    ///
+    /// This corresponds to the elements produced with `ReportObservedAddr`.
     #[inline]
     pub fn external_addresses(&self) -> impl ExactSizeIterator<Item = &Multiaddr> {
         self.external_addresses.iter()
