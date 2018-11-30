@@ -189,7 +189,7 @@ where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
                     let unwrapped = Arc::try_unwrap(muxer).unwrap_or_else(|_| {
                         panic!("we clone the Arc only to put it into substreams ; once in the \
                                 Finishing state, no substream or upgrade exists anymore ; \
-                                therefore there exists only one instance of the Arc ; qed")
+                                therefore there exists only one instance of the Arc; QED")
                     });
 
                     // We leave `Poisoned` as the state when returning.

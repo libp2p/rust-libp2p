@@ -32,20 +32,20 @@ impl<T, U> UpgradeTransport<T, U> {
     }
 }
 
-impl<D, U, O, E> Transport for UpgradeTransport<D, U>
+impl<D, U> Transport for UpgradeTransport<D, U>
 where
     D: Transport,
     D::Dial: Send + 'static,
     D::Listener: Send + 'static,
     D::ListenerUpgrade: Send + 'static,
     D::Output: AsyncRead + AsyncWrite + Send + 'static,
-    U: Upgrade<D::Output, Output = O, Error = E> + Send + 'static + Clone,
+    U: Upgrade<D::Output> + Send + 'static + Clone,
     U::NamesIter: Send,
     U::UpgradeId: Send,
     U::Future: Send,
-    E: std::error::Error + Send + Sync + 'static
+    U::Error: std::error::Error + Send + Sync + 'static
 {
-    type Output = O;
+    type Output = U::Output;
     type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = std::io::Error> + Send>;
     type ListenerUpgrade = Box<Future<Item = Self::Output, Error = std::io::Error> + Send>;
     type Dial = Box<Future<Item = Self::Output, Error = std::io::Error> + Send>;
@@ -93,21 +93,21 @@ impl<T, U> UpgradeDialer<T, U> {
     }
 }
 
-impl<D, U, O, E> Transport for UpgradeDialer<D, U>
+impl<D, U> Transport for UpgradeDialer<D, U>
 where
     D: Transport,
     D::Dial: Send + 'static,
     D::Listener: Send + 'static,
     D::ListenerUpgrade: Send + 'static,
     D::Output: AsyncRead + AsyncWrite + Send + 'static,
-    U: Upgrade<D::Output, Output = O, Error = E> + Send + 'static,
+    U: Upgrade<D::Output> + Send + 'static,
     U::NamesIter: Send,
     U::UpgradeId: Send,
     U::Future: Send,
-    O: 'static,
-    E: std::error::Error + Send + Sync + 'static
+    U::Output: 'static,
+    U::Error: std::error::Error + Send + Sync + 'static
 {
-    type Output = EitherOutput<O, D::Output>;
+    type Output = EitherOutput<U::Output, D::Output>;
     type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = std::io::Error> + Send>;
     type ListenerUpgrade = Box<Future<Item = Self::Output, Error = std::io::Error> + Send>;
     type Dial = Box<Future<Item = Self::Output, Error = std::io::Error> + Send>;
@@ -155,21 +155,21 @@ impl<T, U> UpgradeListener<T, U> {
     }
 }
 
-impl<D, U, O, E> Transport for UpgradeListener<D, U>
+impl<D, U> Transport for UpgradeListener<D, U>
 where
     D: Transport,
     D::Dial: Send + 'static,
     D::Listener: Send + 'static,
     D::ListenerUpgrade: Send + 'static,
     D::Output: AsyncRead + AsyncWrite + Send + 'static,
-    U: Upgrade<D::Output, Output = O, Error = E> + Send + 'static + Clone,
+    U: Upgrade<D::Output> + Send + 'static + Clone,
     U::NamesIter: Send,
     U::UpgradeId: Send,
     U::Future: Send,
-    O: 'static,
-    E: std::error::Error + Send + Sync + 'static
+    U::Output: 'static,
+    U::Error: std::error::Error + Send + Sync + 'static
 {
-    type Output = EitherOutput<D::Output, O>;
+    type Output = EitherOutput<D::Output, U::Output>;
     type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = std::io::Error> + Send>;
     type ListenerUpgrade = Box<Future<Item = Self::Output, Error = std::io::Error> + Send>;
     type Dial = Box<Future<Item = Self::Output, Error = std::io::Error> + Send>;
