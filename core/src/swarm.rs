@@ -323,7 +323,7 @@ pub trait NetworkBehaviour<TTopology> {
 
 /// Parameters passed to `poll()` that the `NetworkBehaviour` has access to.
 #[derive(Debug)]
-pub struct PollParameters<'a, TTopology> {
+pub struct PollParameters<'a, TTopology: 'a> {
     topology: &'a mut TTopology,
     supported_protocols: &'a [Vec<u8>],
     external_addresses: &'a [Multiaddr],
