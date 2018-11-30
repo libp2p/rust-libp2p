@@ -44,7 +44,7 @@ impl<TSubstream> PeriodicIdentifyBehaviour<TSubstream> {
     }
 }
 
-impl<TSubstream> NetworkBehaviour for PeriodicIdentifyBehaviour<TSubstream>
+impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for PeriodicIdentifyBehaviour<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
@@ -79,6 +79,7 @@ where
 
     fn poll(
         &mut self,
+        _: &mut TTopology,
     ) -> Async<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,

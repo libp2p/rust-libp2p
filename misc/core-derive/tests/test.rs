@@ -23,7 +23,7 @@ extern crate libp2p;
 
 /// Small utility to check that a type implements `NetworkBehaviour`.
 #[allow(dead_code)]
-fn require_net_behaviour<T: libp2p::core::swarm::NetworkBehaviour>() {}
+fn require_net_behaviour<T: libp2p::core::swarm::NetworkBehaviour<libp2p::core::topology::MemoryTopology>>() {}
 
 // TODO: doesn't compile
 /*#[test]
@@ -85,7 +85,7 @@ fn event_handler() {
     impl<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite> Foo<TSubstream> {
         // TODO: for some reason, the parameter cannot be `PeriodicIdentifyBehaviourEvent` or we
         //       get a compilation error ; figure out why or open an issue to Rust
-        fn foo(&mut self, ev: <libp2p::identify::PeriodicIdentifyBehaviour<TSubstream> as libp2p::core::swarm::NetworkBehaviour>::OutEvent) {
+        fn foo<TTopology>(&mut self, ev: <libp2p::identify::PeriodicIdentifyBehaviour<TSubstream> as libp2p::core::swarm::NetworkBehaviour<TTopology>>::OutEvent) {
             let libp2p::identify::PeriodicIdentifyBehaviourEvent::Identified { .. } = ev;
         }
     }
