@@ -26,8 +26,6 @@ extern crate futures;
 #[macro_use]
 extern crate log;
 extern crate env_logger;
-#[macro_use]
-extern crate assert_matches;
 extern crate libp2p_tcp_transport as tcp;
 
 use tcp::{TcpConfig, TcpTransStream};
@@ -36,14 +34,12 @@ use libp2p_core::{
     Transport,
     StreamMuxer,
     muxing::{self, SubstreamRef},
-    transport::Upgrade,
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
 };
 
-use tokio::runtime::{Builder, Runtime};
+use tokio::runtime::Runtime;
 use tokio_io::codec::length_delimited::Framed;
-use futures::{prelude::*, future};
-use std::io::Error as IoError;
+use futures::prelude::*;
 use std::thread;
 use std::sync::mpsc;
 use std::fmt::Debug;
