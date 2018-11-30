@@ -439,7 +439,7 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
     }
 }
 
-/// Errors for CollectionStream.interrupt(). 
+/// Errors for interrupt(). 
 #[derive(Debug)]
 pub enum InterruptErr {
     /// The task entry is vacant; it needs to be added first via add_reach_attempt
