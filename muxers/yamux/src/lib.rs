@@ -37,7 +37,6 @@ use std::{io, iter};
 use std::io::{Error as IoError};
 use tokio_io::{AsyncRead, AsyncWrite};
 
-
 pub struct Yamux<C>(Mutex<yamux::Connection<C>>);
 
 impl<C> Yamux<C>
@@ -171,20 +170,19 @@ where
     }
 }
 
+impl std::fmt::Debug for Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:?}", &self.0)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use libp2p_test_muxer::test_muxer;
-    use std::io::Cursor;
 
     #[test]
     fn test_muxing() {
-        test_muxer(
-            Yamux::new(
-                Cursor::new(vec![0; 256]),
-                yamux::Config::default(),
-                yamux::Mode::Client,
-            )
-        );
+        test_muxer(Config::default())
     }
 }

@@ -35,7 +35,7 @@ use tcp::{TcpConfig, TcpTransStream};
 use libp2p_core::{
     Transport,
     StreamMuxer,
-    muxing,
+    muxing::{self, SubstreamRef},
     transport::Upgrade,
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
 };
@@ -53,13 +53,14 @@ pub fn test_muxer<U, O, E>(config: U)
 where
     U: OutboundUpgrade<TcpTransStream, Output = O, Error = E> + Send + Clone + 'static,
     U: InboundUpgrade<TcpTransStream, Output = O, Error = E>,
-    U: Debug,
+    U: Debug, // needed for `unwrap()`
     <U as UpgradeInfo>::NamesIter: Send,
     <U as UpgradeInfo>::UpgradeId: Send,
     <U as InboundUpgrade<TcpTransStream>>::Future: Send,
     <U as OutboundUpgrade<TcpTransStream>>::Future: Send,
-    E: std::error::Error + Send + Sync + Debug + 'static,
-    O: StreamMuxer + Send + Sync + 'static,
+    E: std::error::Error + Send + Sync + 'static,
+    O: StreamMuxer + Send + Sync + 'static ,
+    <O as StreamMuxer>::Substream: Send + Sync,
     <O as StreamMuxer>::Substream: Send + Sync,
     <O as StreamMuxer>::OutboundSubstream: Send + Sync,
 {
@@ -75,17 +76,24 @@ where
 
         let mut rt_listener = Runtime::new().unwrap();
         let fut = listener
+            // convert stream to future yielding a tuple ("next stream item", "rest of stream")
             .into_future()
+            // convert the error type from `(err, ?)` to `err`
             .map_err(|(e, _)| e)
-            .and_then(|(client, _)| client.unwrap().0 )
-            .and_then(|client| {
-                // This returns an OutboundSubstreamRefWrapFuture<Arc<…>>
-                muxing::outbound_from_ref_and_wrap(Arc::new(client))
+            // stream_item is an `Option<(Future<Item=O, …>, Multiaddr)>` (the ignored tuple item is the rest of the Stream)
+            .and_then(|(maybe_muxer, _)| maybe_muxer.unwrap().0)
+            .and_then(|muxer: O| {
+                // This calls `open_outbound()` on the `StreamMuxer` and returns
+                // an `OutboundSubstreamRefWrapFuture<Arc<…>>`.
+                // take the muxer and build a future out of it, that, when resolved, yields
+                // a substream we can set up the framed codec on.
+                muxing::outbound_from_ref_and_wrap(Arc::new(muxer))
             })
-            .map(|client| Framed::<_, bytes::BytesMut>::new(client.unwrap()))
-            .and_then(|client| {
-                client.into_future()
-                    .map_err(|(e, _)| e )
+            .map(|substream: Option<SubstreamRef<Arc<O>>>| Framed::<_, bytes::BytesMut>::new(substream.unwrap()))
+            // substream is a `Framed<SubstreamRef<Arc<O>>>`, and `Framed` is a `Stream`
+            .and_then(|substream: Framed<SubstreamRef<Arc<O>>>| {
+                substream.into_future()
+                    .map_err(|(e, _): (std::io::Error, Framed<SubstreamRef<Arc<O>>>)| e)
                     .map(|(msg, _)| msg)
             })
             .and_then(|msg| {
@@ -100,11 +108,11 @@ where
 
     let transport = TcpConfig::new().with_upgrade(config);
     let fut = transport.dial(addr).unwrap()
-       .and_then(|muxer| {
+       .and_then(|muxer: O| {
            muxing::inbound_from_ref_and_wrap(Arc::new(muxer))
        })
-       .map(|server| Framed::<_, bytes::BytesMut>::new(server.unwrap()))
-       .and_then(|server| {
+       .map(|server: Option<SubstreamRef<Arc<O>>>| Framed::<_, bytes::BytesMut>::new(server.unwrap()))
+       .and_then(|server: Framed<SubstreamRef<Arc<O>>>| {
            server.send("hello".into())
        });
 

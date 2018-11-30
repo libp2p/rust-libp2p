@@ -83,6 +83,12 @@ pub struct Codec {
     decoder_state: CodecDecodeState,
 }
 
+impl std::fmt::Debug for Codec {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "Codec(…)")
+    }
+}
+
 #[derive(Debug, Clone)]
 enum CodecDecodeState {
     Begin,

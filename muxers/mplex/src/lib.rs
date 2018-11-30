@@ -186,11 +186,13 @@ where
 }
 
 /// Multiplexer. Implements the `StreamMuxer` trait.
+#[derive(Debug)]
 pub struct Multiplex<C> {
     inner: Mutex<MultiplexInner<C>>,
 }
 
 // Struct shared throughout the implementation.
+#[derive(Debug)]
 struct MultiplexInner<C> {
     // Error that happened earlier. Should poison any attempt to use this `MultiplexError`.
     error: Result<(), IoError>,
@@ -216,6 +218,7 @@ struct MultiplexInner<C> {
     is_shutdown: bool
 }
 
+#[derive(Debug)]
 struct Notifier {
     /// List of tasks to notify.
     to_notify: Mutex<FnvHashMap<usize, task::Task>>,
@@ -594,7 +597,7 @@ pub struct Substream {
 }
 
 #[cfg(test)]
-mod test_mplex {
+mod test {
     use super::*;
     use libp2p_test_muxer::test_muxer;
 
