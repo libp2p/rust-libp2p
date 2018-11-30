@@ -445,7 +445,8 @@ pub enum InterruptErr {
     /// The task entry is vacant; needs to be added first via add_reach_attempt
     /// with the state set to TaskState::Pending before we try to connect.
     VacantEntry,
-    /// The task has already connected to the node; a reach attempt is thus redundant.
+    /// The task has already connected to the node; interrupting a reach attempt
+    /// is thus redundant as it has already completed.
     Connected,
 }
 
