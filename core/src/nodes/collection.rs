@@ -297,12 +297,12 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
     /// Interrupts a reach attempt.
     ///
     /// Returns `Ok` if something was interrupted, and `Err` if the ID is not or no longer valid.
-    pub fn interrupt(&mut self, id: ReachAttemptId) -> Result<(), &str> {
+    pub fn interrupt(&mut self, id: ReachAttemptId) -> Result<(), InterruptErr> {
         match self.tasks.entry(id.0) {
-            Entry::Vacant(_) => Err("The task entry is vacant."),
+            Entry::Vacant(_) => Err(InterruptErr::VacantEntry),
             Entry::Occupied(entry) => {
                 match entry.get() {
-                    TaskState::Connected(_) => return Err("The task is connected."),
+                    TaskState::Connected(_) => return Err(InterruptErr::Connected),
                     TaskState::Pending => (),
                 };
 
@@ -437,6 +437,16 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
             }
         }
     }
+}
+
+/// Errors for CollectionStream.interrupt(). 
+#[derive(Debug)]
+pub enum InterruptErr {
+    /// The task entry is vacant; needs to be added first via add_reach_attempt
+    /// with the state set to TaskState::Pending before we try to connect.
+    VacantEntry,
+    /// The task has already connected to the node; a reach attempt is thus redundant.
+    Connected,
 }
 
 /// Access to a peer in the collection.
