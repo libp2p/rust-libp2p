@@ -115,7 +115,7 @@ fn main() {
         loop {
             match swarm.poll().expect("Error while polling swarm") {
                 Async::Ready(Some(message)) => {
-                    println!("Received: {:?}", String::from_utf8_lossy(&message.data));
+                    println!("Received: '{:?}' from {:?}", String::from_utf8_lossy(&message.data), message.source);
                 },
                 Async::Ready(None) | Async::NotReady => break,
             }
