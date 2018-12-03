@@ -56,21 +56,7 @@ where
 
     #[inline]
     fn poll_inbound(&self) -> Poll<Option<Self::Substream>, IoError> {
-//        match self.0.lock().poll() {
-//        let mut inner = self.0.inner.lock();
-//        match inner.poll() {
-//        match self.0.make_mut().poll() {
-//        match self.0.get_inner_mut() {
-//        use std::ops::DerefMut;
-//        let &mut inner = self.0.inner.lock().deref_mut();
-//        use std::borrow::BorrowMut;
-//        let inner = self.0.borrow_mut();
-//        match inner.poll() {
-//        use std::sync::Arc;
-//        let x = Arc::make_mut(&mut self.0.inner);
-//        let mut x = self.0.clone();
-        match self.0.clone().poll() {
-//        match self.0.poll() {
+        match self.0.poll() {
             Err(e) => {
                 error!("connection error: {}", e);
                 Err(io::Error::new(io::ErrorKind::Other, e))
