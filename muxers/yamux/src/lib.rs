@@ -23,14 +23,12 @@ extern crate futures;
 #[macro_use]
 extern crate log;
 extern crate libp2p_core;
-extern crate parking_lot;
 extern crate tokio_io;
 extern crate yamux;
 
 use bytes::Bytes;
 use futures::{future::{self, FutureResult}, prelude::*};
 use libp2p_core::{muxing::Shutdown, upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}};
-use parking_lot::Mutex;
 use std::{io, iter};
 use std::io::{Error as IoError};
 use tokio_io::{AsyncRead, AsyncWrite};
