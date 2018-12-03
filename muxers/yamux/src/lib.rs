@@ -36,14 +36,14 @@ use std::io::{Error as IoError};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 
-pub struct Yamux<C>(Mutex<yamux::Connection<C>>);
+pub struct Yamux<C>(yamux::Connection<C>);
 
 impl<C> Yamux<C>
 where
     C: AsyncRead + AsyncWrite + 'static
 {
     pub fn new(c: C, cfg: yamux::Config, mode: yamux::Mode) -> Self {
-        Yamux(Mutex::new(yamux::Connection::new(c, cfg, mode)))
+        Yamux(yamux::Connection::new(c, cfg, mode))
     }
 }
 
@@ -56,7 +56,21 @@ where
 
     #[inline]
     fn poll_inbound(&self) -> Poll<Option<Self::Substream>, IoError> {
-        match self.0.lock().poll() {
+//        match self.0.lock().poll() {
+//        let mut inner = self.0.inner.lock();
+//        match inner.poll() {
+//        match self.0.make_mut().poll() {
+//        match self.0.get_inner_mut() {
+//        use std::ops::DerefMut;
+//        let &mut inner = self.0.inner.lock().deref_mut();
+//        use std::borrow::BorrowMut;
+//        let inner = self.0.borrow_mut();
+//        match inner.poll() {
+//        use std::sync::Arc;
+//        let x = Arc::make_mut(&mut self.0.inner);
+//        let mut x = self.0.clone();
+        match self.0.clone().poll() {
+//        match self.0.poll() {
             Err(e) => {
                 error!("connection error: {}", e);
                 Err(io::Error::new(io::ErrorKind::Other, e))
@@ -69,7 +83,7 @@ where
 
     #[inline]
     fn open_outbound(&self) -> Self::OutboundSubstream {
-        let stream = self.0.lock().open_stream().map_err(|e| io::Error::new(io::ErrorKind::Other, e));
+        let stream = self.0.open_stream().map_err(|e| io::Error::new(io::ErrorKind::Other, e));
         future::result(stream)
     }
 
@@ -108,12 +122,12 @@ where
 
     #[inline]
     fn shutdown(&self, _: Shutdown) -> Poll<(), IoError> {
-        self.0.lock().shutdown()
+        self.0.shutdown()
     }
 
     #[inline]
     fn flush_all(&self) -> Poll<(), IoError> {
-        self.0.lock().flush()
+        self.0.flush()
     }
 }
 
