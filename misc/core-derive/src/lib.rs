@@ -79,6 +79,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         quote!{#n}
     };
 
+    let poll_parameters = quote!{::libp2p::core::swarm::PollParameters<#topology_generic>};
+
     // Build the generics.
     let impl_generics = {
         let tp = ast.generics.type_params();
@@ -306,7 +308,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
         Some(quote!{
             loop {
-                match #field_name.poll(topology) {
+                match #field_name.poll(poll_params) {
                     Async::Ready(#network_behaviour_action::GenerateEvent(event)) => {
                         #handling
                     }
@@ -321,6 +323,9 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                             peer_id,
                             event: #wrapped_event,
                         });
+                    }
+                    Async::Ready(#network_behaviour_action::ReportObservedAddr { address }) => {
+                        return Async::Ready(#network_behaviour_action::ReportObservedAddr { address });
                     }
                     Async::NotReady => break,
                 }
@@ -363,7 +368,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 }
             }
 
-            fn poll(&mut self, topology: &mut #topology_generic) -> ::libp2p::futures::Async<#network_behaviour_action<<Self::ProtocolsHandler as #protocols_handler>::InEvent, Self::OutEvent>> {
+            fn poll(&mut self, poll_params: &mut #poll_parameters) -> ::libp2p::futures::Async<#network_behaviour_action<<Self::ProtocolsHandler as #protocols_handler>::InEvent, Self::OutEvent>> {
                 use libp2p::futures::prelude::*;
                 #(#poll_stmts)*
                 let f: ::libp2p::futures::Async<#network_behaviour_action<<Self::ProtocolsHandler as #protocols_handler>::InEvent, Self::OutEvent>> = #poll_method;
