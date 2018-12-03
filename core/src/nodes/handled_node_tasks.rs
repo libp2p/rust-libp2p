@@ -58,7 +58,7 @@ use void::Void;
 
 /// Implementation of `Stream` that handles a collection of nodes.
 pub struct HandledNodesTasks<TInEvent, TOutEvent, THandler> {
-    /// For each active task, a sender allowing to transmit messages. Closing the sender interrupts
+    /// A map between active tasks to an unbounded sender, used to control the task. Closing the sender interrupts
     /// the task. It is possible that we receive messages from tasks that used to be in this list
     /// but no longer are, in which case we should ignore them.
     tasks: FnvHashMap<TaskId, mpsc::UnboundedSender<TInEvent>>,
@@ -101,7 +101,7 @@ pub enum HandledNodesEvent<TOutEvent, THandler> {
         handler: Option<THandler>,
     },
 
-    /// A task has succeesfully connected to a node.
+    /// A task has successfully connected to a node.
     NodeReached {
         /// Identifier of the task that succeeded.
         id: TaskId,
@@ -202,7 +202,7 @@ impl<TInEvent, TOutEvent, THandler> HandledNodesTasks<TInEvent, TOutEvent, THand
         self.tasks.keys().cloned()
     }
 
-    /// Provides an API similar to `Stream`, except that it cannot error.
+    /// Provides an API similar to `Stream`, except that it cannot produce an error.
     pub fn poll(&mut self) -> Async<HandledNodesEvent<TOutEvent, THandler>> {
         for to_spawn in self.to_spawn.drain() {
             tokio_executor::spawn(to_spawn);
@@ -660,7 +660,7 @@ mod tests {
         // Async::Ready(None) triggers a shutdown of the Handler so that it
         // also yields Async::Ready(None). Finally, the NodeTask gets a
         // Async::Ready(None) and sends a TaskClosed and returns
-        // Async::Ready(()). Qed.
+        // Async::Ready(()). QED.
 
         let create_outbound_substream_event = InEvent::Substream(Some(135));
         tx.unbounded_send(create_outbound_substream_event).expect("send msg works");

@@ -34,12 +34,13 @@
 //! cargo run --example chat -- /ip4/127.0.0.1/tcp/24915
 //! ```
 //! The two nodes connect. Type a message in either terminal and hit return: the
-//! message is sent and printed in the other terminal.Close with Ctrl-c.
+//! message is sent and printed in the other terminal. Close with Ctrl-c.
 //!
 //! You can of course open more terminal windows and add more participants.
 //! Dialing any of the other peers will propagate the new participant to all
 //! chat members and everyone will receive all messages.
 
+extern crate env_logger;
 extern crate futures;
 extern crate libp2p;
 extern crate tokio;
@@ -54,6 +55,7 @@ use libp2p::{
 };
 
 fn main() {
+    env_logger::init();
     // Create a random PeerId
     let local_key = secio::SecioKeyPair::ed25519_generated().unwrap();
     let local_peer_id = local_key.to_peer_id();
@@ -113,7 +115,7 @@ fn main() {
         loop {
             match swarm.poll().expect("Error while polling swarm") {
                 Async::Ready(Some(message)) => {
-                    println!("Received: {:?}", String::from_utf8_lossy(&message.data));
+                    println!("Received: '{:?}' from {:?}", String::from_utf8_lossy(&message.data), message.source);
                 },
                 Async::Ready(None) | Async::NotReady => break,
             }

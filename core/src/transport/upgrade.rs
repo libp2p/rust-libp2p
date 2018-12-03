@@ -22,7 +22,7 @@ use futures::prelude::*;
 use multiaddr::Multiaddr;
 use crate::{
     transport::Transport,
-    upgrade::{OutboundUpgrade, InboundUpgrade, UpgradeInfo, apply_inbound, apply_outbound}
+    upgrade::{OutboundUpgrade, InboundUpgrade, UpgradeInfo, apply_inbound, apply_outbound, UpgradeError}
 };
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -44,7 +44,7 @@ where
     D::Output: AsyncRead + AsyncWrite + Send + 'static,
     U: InboundUpgrade<D::Output, Output = O, Error = E>,
     U: OutboundUpgrade<D::Output, Output = O, Error = E> + Send + Clone + 'static,
-    <U as UpgradeInfo>::NamesIter: Clone + Send,
+    <U as UpgradeInfo>::NamesIter: Send,
     <U as UpgradeInfo>::UpgradeId: Send,
     <U as InboundUpgrade<D::Output>>::Future: Send,
     <U as OutboundUpgrade<D::Output>>::Future: Send,
@@ -60,9 +60,9 @@ where
         match self.inner.dial(addr.clone()) {
             Ok(outbound) => {
                 let future = outbound
-                    .and_then(move |x| apply_outbound(x, upgrade).map_err(|e| {
-                        std::io::Error::new(std::io::ErrorKind::Other, e)
-                    }));
+                    .and_then(move |x| {
+                        apply_outbound(x, upgrade).map_err(UpgradeError::into_io_error)
+                    });
                 Ok(Box::new(future))
             }
             Err((dialer, addr)) => Err((Upgrade::new(dialer, upgrade), addr))
@@ -77,9 +77,9 @@ where
                     .map(move |(future, addr)| {
                         let upgrade = upgrade.clone();
                         let future = future
-                            .and_then(move |x| apply_inbound(x, upgrade).map_err(|e| {
-                                 std::io::Error::new(std::io::ErrorKind::Other, e)
-                            }));
+                            .and_then(move |x| {
+                                apply_inbound(x, upgrade).map_err(UpgradeError::into_io_error)
+                            });
                     (Box::new(future) as Box<_>, addr)
                 });
                 Ok((Box::new(stream), addr))

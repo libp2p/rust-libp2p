@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use libp2p_core::nodes::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction};
+use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use libp2p_core::{protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
 use smallvec::SmallVec;
 use std::collections::HashMap;
@@ -61,7 +61,7 @@ impl<TSubstream> IdentifyListen<TSubstream> {
     }
 }
 
-impl<TSubstream> NetworkBehaviour for IdentifyListen<TSubstream>
+impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for IdentifyListen<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
@@ -92,13 +92,14 @@ where
     ) {
         let observed = self.observed_addresses.get(&peer_id)
             .expect("We only receive events from nodes we're connected to ; we insert into the \
-                     hashmap when we connect to a node and remove only when we disconnect ; qed");
+                     hashmap when we connect to a node and remove only when we disconnect; QED");
         let future = sender.send(self.send_back_info.clone(), &observed);
         self.futures.push(future);
     }
 
     fn poll(
         &mut self,
+        _: &mut PollParameters<TTopology>,
     ) -> Async<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,

@@ -35,6 +35,19 @@ use protocol::{Dialer, DialerToListenerMessage, Listener, ListenerToDialerMessag
 use ProtocolChoiceError;
 use {dialer_select_proto, listener_select_proto};
 
+/// Holds a `Vec` and satifies the iterator requirements of `listener_select_proto`.
+struct VecRefIntoIter<T>(Vec<T>);
+
+impl<'a, T> IntoIterator for &'a VecRefIntoIter<T>
+where T: Clone
+{
+    type Item = T;
+    type IntoIter = std::vec::IntoIter<T>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.clone().into_iter()
+    }
+}
+
 #[test]
 fn negotiate_with_self_succeeds() {
     let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap();
@@ -88,8 +101,8 @@ fn select_proto_basic() {
             let protos = vec![
                 (Bytes::from("/proto1"), <Bytes as PartialEq>::eq, 0),
                 (Bytes::from("/proto2"), <Bytes as PartialEq>::eq, 1),
-            ].into_iter();
-            listener_select_proto(connec, protos).map(|r| r.0)
+            ];
+            listener_select_proto(connec, VecRefIntoIter(protos)).map(|r| r.0)
         });
 
     let client = TcpStream::connect(&listener_addr)
@@ -122,8 +135,8 @@ fn no_protocol_found() {
             let protos = vec![
                 (Bytes::from("/proto1"), <Bytes as PartialEq>::eq, 1),
                 (Bytes::from("/proto2"), <Bytes as PartialEq>::eq, 2),
-            ].into_iter();
-            listener_select_proto(connec, protos).map(|r| r.0)
+            ];
+            listener_select_proto(connec, VecRefIntoIter(protos)).map(|r| r.0)
         });
 
     let client = TcpStream::connect(&listener_addr)
@@ -156,8 +169,8 @@ fn select_proto_parallel() {
             let protos = vec![
                 (Bytes::from("/proto1"), <Bytes as PartialEq>::eq, 0),
                 (Bytes::from("/proto2"), <Bytes as PartialEq>::eq, 1),
-            ].into_iter();
-            listener_select_proto(connec, protos).map(|r| r.0)
+            ];
+            listener_select_proto(connec, VecRefIntoIter(protos)).map(|r| r.0)
         });
 
     let client = TcpStream::connect(&listener_addr)
@@ -191,8 +204,8 @@ fn select_proto_serial() {
             let protos = vec![
                 (Bytes::from("/proto1"), <Bytes as PartialEq>::eq, 0),
                 (Bytes::from("/proto2"), <Bytes as PartialEq>::eq, 1),
-            ].into_iter();
-            listener_select_proto(connec, protos).map(|r| r.0)
+            ];
+            listener_select_proto(connec, VecRefIntoIter(protos)).map(|r| r.0)
         });
 
     let client = TcpStream::connect(&listener_addr)
