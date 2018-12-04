@@ -22,8 +22,8 @@ use crate::service::{MdnsService, MdnsPacket};
 use futures::prelude::*;
 use libp2p_core::protocols_handler::{DummyProtocolsHandler, ProtocolsHandler};
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
-use libp2p_core::{Multiaddr, PeerId, topology::MemoryTopology};
-use std::{io, marker::PhantomData, time::Duration};
+use libp2p_core::{Multiaddr, PeerId, multiaddr::Protocol, topology::MemoryTopology};
+use std::{io, iter, marker::PhantomData, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
 use void::{self, Void};
 
@@ -108,10 +108,23 @@ where
                     );
                 },
                 MdnsPacket::Response(response) => {
+                    // We perform a call to `nat_traversal()` with the address we observe the
+                    // remote as and the address they listen on.
+                    let obs_ip = Protocol::from(response.remote_addr().ip());
+                    let obs_port = Protocol::Udp(response.remote_addr().port());
+                    let observed: Multiaddr = iter::once(obs_ip)
+                        .chain(iter::once(obs_port))
+                        .collect();
+
                     for peer in response.discovered_peers() {
                         for addr in peer.addresses() {
-                            // TODO: call nat_traversal on the address
-                            params.topology().add_mdns_discovered_address(peer.id().clone(), addr);
+                            let to_insert = if let Some(new_addr) = params.nat_traversal(&addr, &observed) {
+                                new_addr
+                            } else {
+                                addr
+                            };
+
+                            params.topology().add_mdns_discovered_address(peer.id().clone(), to_insert);
                         }
                     }
                 },
