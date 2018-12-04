@@ -29,7 +29,7 @@ use libp2p_core::{transport::Transport, upgrade::apply_outbound};
 use log::{debug, info, trace};
 use multiaddr::Multiaddr;
 use peerstore::{PeerAccess, PeerId, Peerstore};
-use rand::{self, Rng};
+use rand::prelude::*;
 use std::{io, iter::FromIterator, ops::Deref, sync::Arc};
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -130,7 +130,7 @@ where
         }
 
         // Try one relay after another and stick to the first working one.
-        rand::thread_rng().shuffle(&mut dials); // randomise to spread load
+        dials.shuffle(&mut thread_rng()); // randomise to spread load
         let dest_peer = destination.id.clone();
         let future = stream::iter_ok(dials.into_iter())
             .and_then(|dial| dial)
