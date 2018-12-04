@@ -140,8 +140,8 @@ pub struct ListenerUpgrade<T: Transport>(RateLimited<T::ListenerUpgrade>);
 
 impl<T> Future for ListenerUpgrade<T>
 where
-    T: Transport + 'static,
-    T::Output: AsyncRead + AsyncWrite,
+    T: Transport,
+    T::Output: AsyncRead + AsyncWrite
 {
     type Item = Connection<T::Output>;
     type Error = io::Error;
@@ -156,19 +156,15 @@ where
 
 impl<T> Transport for RateLimited<T>
 where
-    T: Transport + 'static,
-    T::Dial: Send,
-    T::Output: AsyncRead + AsyncWrite + Send,
+    T: Transport,
+    T::Output: AsyncRead + AsyncWrite
 {
     type Output = Connection<T::Output>;
     type Listener = Listener<T>;
     type ListenerUpgrade = ListenerUpgrade<T>;
-    type Dial = Box<Future<Item = Connection<T::Output>, Error = io::Error> + Send>;
+    type Dial = DialFuture<T::Dial>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)>
-    where
-        Self: Sized,
-    {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         let r = self.rlimiter;
         let w = self.wlimiter;
         self.value
@@ -182,26 +178,38 @@ where
             .map_err(|(transport, a)| (RateLimited::from_parts(transport, r, w), a))
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)>
-    where
-        Self: Sized,
-    {
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
         let r = self.rlimiter;
         let w = self.wlimiter;
-        let r2 = r.clone();
-        let w2 = w.clone();
-
-        self.value
-            .dial(addr)
-            .map(move |dial| {
-                let future = dial
-                    .and_then(move |conn| Ok(Connection::new(conn, r, w)?));
-                Box::new(future) as Box<_>
-            })
-            .map_err(|(transport, a)| (RateLimited::from_parts(transport, r2, w2), a))
+        match self.value.dial(addr) {
+            Ok(dial) => Ok(DialFuture { r, w, f: dial }),
+            Err((t, a)) => Err((RateLimited::from_parts(t, r, w), a))
+        }
     }
 
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         self.value.nat_traversal(server, observed)
+    }
+}
+
+/// Future to avoid boxing.
+pub struct DialFuture<T> {
+    r: Limiter,
+    w: Limiter,
+    f: T
+}
+
+impl<T> Future for DialFuture<T>
+where
+    T: Future,
+    T::Item: AsyncRead + AsyncWrite,
+    T::Error: From<io::Error>
+{
+    type Item = Connection<T::Item>;
+    type Error = T::Error;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let item = try_ready!(self.f.poll());
+        Ok(Async::Ready(Connection::new(item, self.r.clone(), self.w.clone())?))
     }
 }

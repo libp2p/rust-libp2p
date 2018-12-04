@@ -20,7 +20,7 @@
 
 use bytes::Bytes;
 use core::upgrade::Upgrade;
-use futures::prelude::*;
+use futures::{future::FromErr, prelude::*};
 use std::{iter, io::Error as IoError, sync::Arc};
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -61,14 +61,13 @@ impl<C, F, O> Upgrade<C> for SimpleProtocol<F>
 where
     C: AsyncRead + AsyncWrite,
     F: Fn(C) -> O,
-    O: IntoFuture<Error = IoError>,
-    O::Future: Send + 'static,
+    O: IntoFuture<Error = IoError>
 {
     type UpgradeId = ();
     type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
     type Output = O::Item;
     type Error = IoError;
-    type Future = Box<Future<Item = O::Item, Error = Self::Error> + Send>;
+    type Future = FromErr<O::Future, IoError>;
 
     #[inline]
     fn protocol_names(&self) -> Self::NamesIter {
@@ -78,8 +77,7 @@ where
     #[inline]
     fn upgrade(self, socket: C, _: Self::UpgradeId) -> Self::Future {
         let upgrade = &self.upgrade;
-        let fut = upgrade(socket).into_future().from_err();
-        Box::new(fut) as Box<_>
+        upgrade(socket).into_future().from_err()
     }
 }
 

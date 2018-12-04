@@ -42,7 +42,7 @@ pub struct FloodsubBehaviour<TSubstream> {
 
     /// List of peers the network is connected to, and the topics that they're subscribed to.
     // TODO: filter out peers that don't support floodsub, so that we avoid hammering them with
-    //       opened substream
+    //       opened substreams
     connected_peers: HashMap<PeerId, SmallVec<[TopicHash; 8]>>,
 
     // List of topics we're subscribed to. Necessary to filter out messages that we receive

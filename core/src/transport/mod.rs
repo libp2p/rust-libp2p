@@ -46,7 +46,7 @@ pub mod upgrade;
 
 pub use self::choice::OrTransport;
 pub use self::memory::connector;
-pub use self::upgrade::{UpgradeDialer, UpgradeListener, UpgradeTransport};
+pub use self::upgrade::UpgradeTransport;
 
 /// A transport is an object that can be used to produce connections by listening or dialing a
 /// peer.
@@ -181,24 +181,6 @@ pub trait Transport {
         U: Upgrade<Self::Output>
     {
         UpgradeTransport::new(self, upgrade)
-    }
-
-    fn with_listener_upgrade<U>(self, upgrade: U) -> UpgradeListener<Self, U>
-    where
-        Self: Sized,
-        Self::Output: AsyncRead + AsyncWrite,
-        U: Upgrade<Self::Output>
-    {
-        UpgradeListener::new(self, upgrade)
-    }
-
-    fn with_dialer_upgrade<U>(self, upgrade: U) -> UpgradeDialer<Self, U>
-    where
-        Self: Sized,
-        Self::Output: AsyncRead + AsyncWrite,
-        U: Upgrade<Self::Output>
-    {
-        UpgradeDialer::new(self, upgrade)
     }
 
     /// Wraps this transport inside an upgrade. Whenever a connection that uses this transport
