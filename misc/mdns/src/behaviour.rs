@@ -110,6 +110,7 @@ where
                 MdnsPacket::Response(response) => {
                     for peer in response.discovered_peers() {
                         for addr in peer.addresses() {
+                            // TODO: call nat_traversal on the address
                             params.topology().add_mdns_discovered_address(peer.id().clone(), addr);
                         }
                     }
