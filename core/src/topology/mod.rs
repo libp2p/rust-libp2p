@@ -51,7 +51,7 @@ impl MemoryTopology {
     #[inline]
     pub fn add_address(&mut self, peer: PeerId, addr: Multiaddr) {
         let addrs = self.list.entry(peer).or_insert_with(|| Vec::new());
-        if !addrs.iter().any(|a| a != &addr) {
+        if addrs.iter().all(|a| a != &addr) {
             addrs.push(addr);
         }
     }
