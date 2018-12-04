@@ -69,7 +69,6 @@ extern crate bytes;
 extern crate fnv;
 #[macro_use]
 extern crate futures;
-extern crate libp2p_peerstore;
 extern crate libp2p_core;
 extern crate log;
 extern crate multiaddr;
