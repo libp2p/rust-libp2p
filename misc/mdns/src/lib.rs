@@ -36,6 +36,7 @@ extern crate tokio_io;
 extern crate tokio_reactor;
 extern crate tokio_timer;
 extern crate tokio_udp;
+extern crate void;
 
 #[cfg(test)]
 extern crate tokio;
@@ -45,6 +46,7 @@ const SERVICE_NAME: &'static [u8] = b"_p2p._udp.local";
 /// Hardcoded name of the service used for DNS-SD.
 const META_QUERY_SERVICE: &'static [u8] = b"_services._dns-sd._udp.local";
 
+pub use self::behaviour::{Mdns, MdnsTopology};
 pub use self::service::MdnsService;
 
 mod behaviour;
