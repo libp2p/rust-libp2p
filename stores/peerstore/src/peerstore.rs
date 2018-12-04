@@ -99,7 +99,6 @@ pub trait PeerAccess {
     /// Sets the TTL of an address of a peer. Adds the address if it is currently unknown.
     ///
     /// Contrary to `add_addr`, this operation is never a no-op.
-    #[inline]
     fn set_addr_ttl(&mut self, addr: Multiaddr, ttl: TTL);
 
     // Similar to calling `set_addr_ttl` multiple times in a row.
