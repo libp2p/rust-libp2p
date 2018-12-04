@@ -65,6 +65,7 @@ mod map;
 mod or;
 
 use bytes::Bytes;
+use crate::Endpoint;
 use futures::future::Future;
 
 pub use self::{
@@ -98,7 +99,7 @@ pub trait Upgrade<T> {
     /// method is called to start the handshake.
     ///
     /// The `id` is the identifier of the protocol, as produced by `protocol_names()`.
-    fn upgrade(self, input: T, id: Self::UpgradeId) -> Self::Future;
+    fn upgrade(self, input: T, id: Self::UpgradeId, end: Endpoint) -> Self::Future;
 }
 
 /// Extension trait for `Upgrade`.

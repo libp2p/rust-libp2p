@@ -20,7 +20,7 @@
 
 use bytes::Bytes;
 use futures::future::Either;
-use crate::{either::{EitherOutput, EitherError, EitherFuture2}, upgrade::Upgrade};
+use crate::{Endpoint, either::{EitherOutput, EitherError, EitherFuture2}, upgrade::Upgrade};
 
 /// A type to represent two possible upgrade types (inbound or outbound).
 #[derive(Debug, Clone)]
@@ -45,10 +45,10 @@ where
         }
     }
 
-    fn upgrade(self, sock: C, id: Self::UpgradeId) -> Self::Future {
+    fn upgrade(self, sock: C, id: Self::UpgradeId, e: Endpoint) -> Self::Future {
         match (self, id) {
-            (EitherUpgrade::A(a), Either::A(id)) => EitherFuture2::A(a.upgrade(sock, id)),
-            (EitherUpgrade::B(b), Either::B(id)) => EitherFuture2::B(b.upgrade(sock, id)),
+            (EitherUpgrade::A(a), Either::A(id)) => EitherFuture2::A(a.upgrade(sock, id, e)),
+            (EitherUpgrade::B(b), Either::B(id)) => EitherFuture2::B(b.upgrade(sock, id, e)),
             _ => panic!("Invalid invocation of EitherUpgrade::upgrade_inbound")
         }
     }

@@ -28,7 +28,7 @@
 
 use bytes::{Bytes, BytesMut};
 use futures::{future, sink, Sink, stream, Stream};
-use libp2p_core::{Multiaddr, PeerId, Upgrade};
+use libp2p_core::{Endpoint, Multiaddr, PeerId, Upgrade};
 use multihash::Multihash;
 use protobuf::{self, Message};
 use protobuf_structs;
@@ -150,7 +150,7 @@ where
     }
 
     #[inline]
-    fn upgrade(self, incoming: C, _: Self::UpgradeId) -> Self::Future {
+    fn upgrade(self, incoming: C, _: Self::UpgradeId, _: Endpoint) -> Self::Future {
         future::ok(
             Framed::new(incoming, codec::UviBytes::default())
                 .from_err::<IoError>()
@@ -190,7 +190,7 @@ where
     }
 
     #[inline]
-    fn upgrade(self, incoming: C, _: ()) -> Self::Future {
+    fn upgrade(self, incoming: C, _: (), _: Endpoint) -> Self::Future {
         future::ok(
             Framed::new(incoming, codec::UviBytes::default())
                 .from_err::<IoError>()

@@ -120,7 +120,7 @@ use bytes::{Bytes, BytesMut};
 use ed25519_dalek::Keypair as Ed25519KeyPair;
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
-use libp2p_core::{PeerId, PublicKey, upgrade::Upgrade};
+use libp2p_core::{Endpoint, PeerId, PublicKey, Upgrade};
 #[cfg(all(feature = "rsa", not(target_os = "emscripten")))]
 use ring::signature::RSAKeyPair;
 use rw_stream_sink::RwStreamSink;
@@ -384,7 +384,7 @@ where
         iter::once(("/secio/1.0.0".into(), ()))
     }
 
-    fn upgrade(self, socket: T, id: Self::UpgradeId) -> Self::Future {
+    fn upgrade(self, socket: T, id: Self::UpgradeId, _: Endpoint) -> Self::Future {
         Box::new(self.handshake(socket, id))
     }
 }

@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::Bytes;
-use crate::nodes::ConnectedPoint;
+use crate::{Endpoint, nodes::ConnectedPoint};
 use crate::upgrade::{Upgrade, UpgradeError};
 use futures::{future::Either, prelude::*};
 use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
@@ -108,7 +108,7 @@ where
                         }
                     };
                     self.inner = InboundUpgradeApplyState::Upgrade {
-                        future: upgrade.0.upgrade(connection, upgrade_id)
+                        future: upgrade.0.upgrade(connection, upgrade_id, Endpoint::Listener)
                     };
                 }
                 InboundUpgradeApplyState::Upgrade { mut future } => {
@@ -178,7 +178,7 @@ where
                         }
                     };
                     self.inner = OutboundUpgradeApplyState::Upgrade {
-                        future: upgrade.upgrade(connection, upgrade_id)
+                        future: upgrade.upgrade(connection, upgrade_id, Endpoint::Dialer)
                     };
                 }
                 OutboundUpgradeApplyState::Upgrade { mut future } => {

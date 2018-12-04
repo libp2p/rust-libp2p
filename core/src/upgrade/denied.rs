@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::Bytes;
-use crate::upgrade::Upgrade;
+use crate::{Endpoint, upgrade::Upgrade};
 use futures::future;
 use std::iter;
 use void::{unreachable, Void};
@@ -39,7 +39,7 @@ impl<T> Upgrade<T> for DeniedUpgrade {
         iter::empty()
     }
 
-    fn upgrade(self, _: T, id: Self::UpgradeId) -> Self::Future {
+    fn upgrade(self, _: T, id: Self::UpgradeId, _: Endpoint) -> Self::Future {
         unreachable(id)
     }
 }

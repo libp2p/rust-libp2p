@@ -25,7 +25,7 @@ extern crate void;
 
 use bytes::Bytes;
 use futures::future::{self, FutureResult};
-use libp2p_core::Upgrade;
+use libp2p_core::{Endpoint, Upgrade};
 use std::iter;
 use void::Void;
 
@@ -43,7 +43,7 @@ impl<C> Upgrade<C> for PlainTextConfig {
         iter::once((Bytes::from("/plaintext/1.0.0"), ()))
     }
 
-    fn upgrade(self, i: C, _: Self::UpgradeId) -> Self::Future {
+    fn upgrade(self, i: C, _: Self::UpgradeId, _: Endpoint) -> Self::Future {
         future::ok(i)
     }
 }

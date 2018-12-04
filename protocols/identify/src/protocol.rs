@@ -20,7 +20,7 @@
 
 use bytes::{Bytes, BytesMut};
 use futures::{future::{self, FutureResult}, Async, AsyncSink, Future, Poll, Sink, Stream};
-use libp2p_core::{Multiaddr, PublicKey, upgrade::Upgrade};
+use libp2p_core::{Endpoint, Multiaddr, PublicKey, Upgrade};
 use log::{debug, trace};
 use protobuf::Message as ProtobufMessage;
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
@@ -148,7 +148,7 @@ where
         iter::once((Bytes::from("/ipfs/id/1.0.0"), ()))
     }
 
-    fn upgrade(self, socket: C, _: ()) -> Self::Future {
+    fn upgrade(self, socket: C, _: (), _: Endpoint) -> Self::Future {
         trace!("Upgrading inbound connection");
         let socket = Framed::new(socket, codec::UviBytes::default());
         let sender = IdentifySender { inner: socket };
@@ -171,7 +171,7 @@ where
         iter::once((Bytes::from("/ipfs/id/1.0.0"), ()))
     }
 
-    fn upgrade(self, socket: C, _: ()) -> Self::Future {
+    fn upgrade(self, socket: C, _: (), _: Endpoint) -> Self::Future {
         IdentifyOutboundFuture {
             inner: Framed::new(socket, codec::UviBytes::<BytesMut>::default()),
         }

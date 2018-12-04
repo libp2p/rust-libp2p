@@ -30,7 +30,7 @@ extern crate unsigned_varint;
 
 use bytes::Bytes;
 use futures::{future, prelude::*};
-use libp2p_core::{Multiaddr, upgrade::Upgrade};
+use libp2p_core::{Endpoint, Multiaddr, Upgrade};
 use std::{io, iter};
 use tokio_codec::{FramedRead, FramedWrite};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -59,7 +59,7 @@ where
         iter::once((Bytes::from("/paritytech/observed-address/0.1.0"), ()))
     }
 
-    fn upgrade(self, conn: C, _: ()) -> Self::Future {
+    fn upgrade(self, conn: C, _: (), _: Endpoint) -> Self::Future {
         let io = FramedWrite::new(conn, UviBytes::default());
         Box::new(future::ok(Sender { io }))
     }
@@ -87,7 +87,7 @@ where
         iter::once((Bytes::from("/paritytech/observed-address/0.1.0"), ()))
     }
 
-    fn upgrade(self, conn: C, _: ()) -> Self::Future {
+    fn upgrade(self, conn: C, _: (), _: Endpoint) -> Self::Future {
         let io = FramedRead::new(conn, UviBytes::default());
         let future = io.into_future()
             .map_err(|(e, _): (io::Error, FramedRead<C, UviBytes>)| e)
@@ -120,7 +120,7 @@ impl<C: AsyncWrite> Sender<C> {
 mod tests {
     extern crate tokio;
 
-    use libp2p_core::{Multiaddr, upgrade::Upgrade};
+    use libp2p_core::{Multiaddr, Upgrade};
     use self::tokio::runtime::current_thread;
     use self::tokio::net::{TcpListener, TcpStream};
     use super::*;
@@ -137,14 +137,14 @@ mod tests {
             .into_future()
             .map_err(|(e, _)| e.into())
             .and_then(move |(conn, _)| {
-                ObservedListener::new().upgrade(conn.unwrap(), ())
+                ObservedListener::new().upgrade(conn.unwrap(), (), Endpoint::Listener)
             })
             .and_then(move |sender| sender.send_address(observed_addr1));
 
         let client = TcpStream::connect(&server_addr)
             .map_err(|e| e.into())
             .and_then(|conn| {
-                ObservedDialer::new().upgrade(conn, ())
+                ObservedDialer::new().upgrade(conn, (), Endpoint::Dialer)
             })
             .map(move |addr| {
                 eprintln!("{} {}", addr, observed_addr2);

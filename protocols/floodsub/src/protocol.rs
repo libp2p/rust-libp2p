@@ -21,7 +21,7 @@
 use bytes::{BufMut, Bytes, BytesMut};
 use crate::rpc_proto;
 use futures::future;
-use libp2p_core::{Upgrade, PeerId};
+use libp2p_core::{Endpoint, Upgrade, PeerId};
 use protobuf::Message as ProtobufMessage;
 use std::{io, iter};
 use tokio_codec::{Decoder, Encoder, Framed};
@@ -57,7 +57,7 @@ where
     }
 
     #[inline]
-    fn upgrade(self, socket: TSocket, _: Self::UpgradeId) -> Self::Future {
+    fn upgrade(self, socket: TSocket, _: Self::UpgradeId, _: Endpoint) -> Self::Future {
         future::ok(Framed::new(socket, FloodsubCodec { length_prefix: Default::default() }))
     }
 }

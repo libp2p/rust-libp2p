@@ -23,26 +23,24 @@ extern crate futures;
 #[macro_use]
 extern crate log;
 extern crate libp2p_core;
-extern crate parking_lot;
 extern crate tokio_io;
 extern crate yamux;
 
 use bytes::Bytes;
 use futures::{future::{self, FutureResult}, prelude::*};
-use libp2p_core::{muxing::Shutdown, upgrade::Upgrade};
-use parking_lot::Mutex;
+use libp2p_core::{Endpoint, muxing::Shutdown, upgrade::Upgrade};
 use std::{io, iter};
 use std::io::{Error as IoError};
 use tokio_io::{AsyncRead, AsyncWrite};
 
-pub struct Yamux<C>(Mutex<yamux::Connection<C>>);
+pub struct Yamux<C>(yamux::Connection<C>);
 
 impl<C> Yamux<C>
 where
     C: AsyncRead + AsyncWrite + 'static
 {
     pub fn new(c: C, cfg: yamux::Config, mode: yamux::Mode) -> Self {
-        Yamux(Mutex::new(yamux::Connection::new(c, cfg, mode)))
+        Yamux(yamux::Connection::new(c, cfg, mode))
     }
 }
 
@@ -55,7 +53,7 @@ where
 
     #[inline]
     fn poll_inbound(&self) -> Poll<Option<Self::Substream>, IoError> {
-        match self.0.lock().poll() {
+        match self.0.poll() {
             Err(e) => {
                 error!("connection error: {}", e);
                 Err(io::Error::new(io::ErrorKind::Other, e))
@@ -68,7 +66,7 @@ where
 
     #[inline]
     fn open_outbound(&self) -> Self::OutboundSubstream {
-        let stream = self.0.lock().open_stream().map_err(|e| io::Error::new(io::ErrorKind::Other, e));
+        let stream = self.0.open_stream().map_err(|e| io::Error::new(io::ErrorKind::Other, e));
         future::result(stream)
     }
 
@@ -107,29 +105,22 @@ where
 
     #[inline]
     fn shutdown(&self, _: Shutdown) -> Poll<(), IoError> {
-        self.0.lock().shutdown()
+        self.0.shutdown()
     }
 
     #[inline]
     fn flush_all(&self) -> Poll<(), IoError> {
-        self.0.lock().flush()
+        self.0.flush()
     }
 }
 
-
-
-#[derive(Clone)]
+/// Outbound connection upgrade.
+#[derive(Clone, Default)]
 pub struct Config(yamux::Config);
 
 impl Config {
     pub fn new(cfg: yamux::Config) -> Self {
         Config(cfg)
-    }
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Config(yamux::Config::default())
     }
 }
 
@@ -147,8 +138,11 @@ where
         iter::once((Bytes::from("/yamux/1.0.0"), ()))
     }
 
-    fn upgrade(self, i: C, _: Self::UpgradeId) -> Self::Future {
-        future::ok(Yamux::new(i, self.0, yamux::Mode::Server))
+    fn upgrade(self, i: C, _: Self::UpgradeId, e: Endpoint) -> Self::Future {
+        let mode = match e {
+            Endpoint::Dialer => yamux::Mode::Client,
+            Endpoint::Listener => yamux::Mode::Server
+        };
+        future::ok(Yamux::new(i, self.0, mode))
     }
 }
-

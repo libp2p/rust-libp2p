@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::Bytes;
-use core::upgrade::Upgrade;
+use core::{Endpoint, Upgrade};
 use futures::{future::FromErr, prelude::*};
 use std::{iter, io::Error as IoError, sync::Arc};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -75,7 +75,7 @@ where
     }
 
     #[inline]
-    fn upgrade(self, socket: C, _: Self::UpgradeId) -> Self::Future {
+    fn upgrade(self, socket: C, _: Self::UpgradeId, _: Endpoint) -> Self::Future {
         let upgrade = &self.upgrade;
         upgrade(socket).into_future().from_err()
     }

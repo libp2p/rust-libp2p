@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use crate::upgrade::Upgrade;
+use crate::{Endpoint, upgrade::Upgrade};
 
 /// Wraps around an upgrade and applies a closure to the output.
 #[derive(Debug, Clone)]
@@ -45,9 +45,9 @@ where
         self.upgrade.protocol_names()
     }
 
-    fn upgrade(self, input: T, id: Self::UpgradeId) -> Self::Future {
+    fn upgrade(self, input: T, id: Self::UpgradeId, e: Endpoint) -> Self::Future {
         MapFuture {
-            inner: self.upgrade.upgrade(input, id),
+            inner: self.upgrade.upgrade(input, id, e),
             fun: Some(self.fun)
         }
     }
@@ -77,9 +77,9 @@ where
         self.upgrade.protocol_names()
     }
 
-    fn upgrade(self, input: T, id: Self::UpgradeId) -> Self::Future {
+    fn upgrade(self, input: T, id: Self::UpgradeId, e: Endpoint) -> Self::Future {
         MapErrFuture {
-            inner: self.upgrade.upgrade(input, id),
+            inner: self.upgrade.upgrade(input, id, e),
             fun: Some(self.fun)
         }
     }

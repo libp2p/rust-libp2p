@@ -162,8 +162,8 @@ where
         iter::once((Bytes::from("/mplex/6.7.0"), ()))
     }
 
-    fn upgrade(self, socket: C, _: Self::UpgradeId) -> Self::Future {
-        future::ok(self.upgrade(socket, Endpoint::Listener))
+    fn upgrade(self, socket: C, _: Self::UpgradeId, e: Endpoint) -> Self::Future {
+        future::ok(self.upgrade(socket, e))
     }
 }
 

@@ -20,7 +20,7 @@
 
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::{prelude::*, future::{self, FutureResult}, try_ready};
-use libp2p_core::Upgrade;
+use libp2p_core::{Endpoint, Upgrade};
 use log::debug;
 use rand::{distributions::Standard, prelude::*, rngs::EntropyRng};
 use std::collections::VecDeque;
@@ -58,7 +58,7 @@ where
     }
 
     #[inline]
-    fn upgrade(self, socket: TSocket, _: Self::UpgradeId) -> Self::Future {
+    fn upgrade(self, socket: TSocket, _: Self::UpgradeId, _: Endpoint) -> Self::Future {
         let dialer = PingDialer {
             inner: Framed::new(socket, Codec),
             need_writer_flush: false,
@@ -100,7 +100,7 @@ where
     }
 
     #[inline]
-    fn upgrade(self, socket: TSocket, _: Self::UpgradeId) -> Self::Future {
+    fn upgrade(self, socket: TSocket, _: Self::UpgradeId, _: Endpoint) -> Self::Future {
         let listener = PingListener {
             inner: Framed::new(socket, Codec),
             state: PingListenerState::Listening,
@@ -344,7 +344,7 @@ mod tests {
     use self::tokio_tcp::TcpStream;
     use super::{Ping, Pong};
     use futures::{Future, Stream};
-    use libp2p_core::upgrade::Upgrade;
+    use libp2p_core::{Endpoint, Upgrade};
 
     // TODO: rewrite tests with the MemoryTransport
 
@@ -358,14 +358,14 @@ mod tests {
             .into_future()
             .map_err(|(e, _)| e.into())
             .and_then(|(c, _)| {
-                Pong::<()>::default().upgrade(c.unwrap(), ())
+                Pong::<()>::default().upgrade(c.unwrap(), (), Endpoint::Listener)
             })
             .flatten();
 
         let client = TcpStream::connect(&listener_addr)
             .map_err(|e| e.into())
             .and_then(|c| {
-                Ping::<()>::default().upgrade(c, ())
+                Ping::<()>::default().upgrade(c, (), Endpoint::Dialer)
             })
             .and_then(|mut pinger| {
                 pinger.ping(());
@@ -388,14 +388,14 @@ mod tests {
             .into_future()
             .map_err(|(e, _)| e.into())
             .and_then(|(c, _)| {
-                Pong::<u32>::default().upgrade(c.unwrap(), ())
+                Pong::<u32>::default().upgrade(c.unwrap(), (), Endpoint::Listener)
             })
             .flatten();
 
         let client = TcpStream::connect(&listener_addr)
             .map_err(|e| e.into())
             .and_then(|c| {
-                Ping::<u32>::default().upgrade(c, ())
+                Ping::<u32>::default().upgrade(c, (), Endpoint::Dialer)
             })
             .and_then(|mut pinger| {
                 for n in 0..20 {

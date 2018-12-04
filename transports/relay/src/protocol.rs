@@ -27,6 +27,7 @@ use crate::{
 };
 use futures::{stream, future::{self, Either::{A, B}, FutureResult}, prelude::*};
 use libp2p_core::{
+    Endpoint,
     transport::Transport,
     upgrade::{apply_outbound, Upgrade}
 };
@@ -79,7 +80,7 @@ where
         iter::once((Bytes::from("/libp2p/relay/circuit/0.1.0"), ()))
     }
 
-    fn upgrade(self, conn: C, _: ()) -> Self::Future {
+    fn upgrade(self, conn: C, _: (), _: Endpoint) -> Self::Future {
         let future = Io::new(conn).recv().from_err().and_then(move |(message, io)| {
             let msg = if let Some(m) = message {
                 m
@@ -270,7 +271,7 @@ where
         iter::once((Bytes::from("/libp2p/relay/circuit/0.1.0"), ()))
     }
 
-    fn upgrade(self, conn: C, _: ()) -> Self::Future {
+    fn upgrade(self, conn: C, _: (), _: Endpoint) -> Self::Future {
         future::ok(conn)
     }
 }
@@ -292,7 +293,7 @@ where
         iter::once((Bytes::from("/libp2p/relay/circuit/0.1.0"), ()))
     }
 
-    fn upgrade(self, conn: C, _: ()) -> Self::Future {
+    fn upgrade(self, conn: C, _: (), _: Endpoint) -> Self::Future {
         let future = Io::new(conn)
             .send(self.0)
             .and_then(Io::recv)

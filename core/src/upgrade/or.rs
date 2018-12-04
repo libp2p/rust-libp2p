@@ -20,7 +20,7 @@
 
 use bytes::Bytes;
 use futures::future::Either;
-use crate::{either::{EitherOutput, EitherError, EitherFuture2}, upgrade::Upgrade};
+use crate::{Endpoint, either::{EitherOutput, EitherError, EitherFuture2}, upgrade::Upgrade};
 
 /// Upgrade that combines two upgrades into one. Supports all the protocols supported by either
 /// sub-upgrade.
@@ -51,10 +51,10 @@ where
         NamesIterChain(self.0.protocol_names(), self.1.protocol_names())
     }
 
-    fn upgrade(self, input: T, id: Self::UpgradeId) -> Self::Future {
+    fn upgrade(self, input: T, id: Self::UpgradeId, e: Endpoint) -> Self::Future {
         match id {
-            Either::A(id) => EitherFuture2::A(self.0.upgrade(input, id)),
-            Either::B(id) => EitherFuture2::B(self.1.upgrade(input, id))
+            Either::A(id) => EitherFuture2::A(self.0.upgrade(input, id, e)),
+            Either::B(id) => EitherFuture2::B(self.1.upgrade(input, id, e))
         }
     }
 }
