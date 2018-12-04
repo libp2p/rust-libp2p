@@ -60,7 +60,6 @@ extern crate arrayvec;
 extern crate bigint;
 extern crate bs58;
 extern crate bytes;
-extern crate datastore;
 extern crate fnv;
 #[cfg_attr(test, macro_use)]
 extern crate futures;
