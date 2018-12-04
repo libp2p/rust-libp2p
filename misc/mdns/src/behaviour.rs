@@ -50,6 +50,8 @@ impl<TSubstream> Mdns<TSubstream> {
 /// Trait that must be implemented on the network topology for it to be usable with `Mdns`.
 pub trait MdnsTopology {
     /// Adds an address discovered by mDNS.
+    ///
+    /// Will never be called with the local peer ID.
     fn add_mdns_discovered_address(&mut self, peer: PeerId, addr: Multiaddr);
 }
 
@@ -117,6 +119,10 @@ where
                         .collect();
 
                     for peer in response.discovered_peers() {
+                        if peer.id() == params.local_peer_id() {
+                            continue;
+                        }
+
                         for addr in peer.addresses() {
                             let to_insert = if let Some(new_addr) = params.nat_traversal(&addr, &observed) {
                                 new_addr
