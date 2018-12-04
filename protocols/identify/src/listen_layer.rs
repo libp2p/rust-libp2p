@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::protocol::{IdentifyInfo, IdentifySenderFuture};
+use crate::listen_handler::IdentifyListenHandler;
 use futures::prelude::*;
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use libp2p_core::{protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
@@ -25,7 +27,6 @@ use smallvec::SmallVec;
 use std::collections::HashMap;
 use tokio_io::{AsyncRead, AsyncWrite};
 use void::Void;
-use {IdentifyListenHandler, IdentifyInfo, IdentifySenderFuture};
 
 /// Network behaviour that automatically identifies nodes periodically, and returns information
 /// about them.
