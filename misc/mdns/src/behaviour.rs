@@ -27,7 +27,8 @@ use std::{io, marker::PhantomData, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
 use void::{self, Void};
 
-/// A `NetworkBehaviour` for mDNS.
+/// A `NetworkBehaviour` for mDNS. Automatically discovers peers on the local network and adds
+/// them to the topology.
 // TODO: #[derive(Debug)]
 pub struct Mdns<TSubstream> {
     /// The inner service.

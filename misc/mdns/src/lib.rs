@@ -24,6 +24,11 @@
 //! In the context of libp2p, the mDNS protocol is used to discover other nodes on the local
 //! network that support libp2p.
 //!
+//! # Usage
+//!
+//! This crate provides the `Mdns` struct which implements the `NetworkBehaviour` trait. This
+//! struct will automatically discover other libp2p nodes on the local network.
+//!
 
 extern crate data_encoding;
 extern crate dns_parser;
