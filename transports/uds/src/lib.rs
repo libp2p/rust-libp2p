@@ -60,7 +60,7 @@ extern crate tokio_io;
 #[cfg(test)]
 extern crate tokio;
 
-use futures::future::{self, Future, FutureResult};
+use futures::{future::{self, FutureResult}, prelude::*, try_ready};
 use futures::stream::Stream;
 use multiaddr::{Protocol, Multiaddr};
 use std::io::Error as IoError;
@@ -86,9 +86,9 @@ impl UdsConfig {
 
 impl Transport for UdsConfig {
     type Output = UnixStream;
-    type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError> + Send + Sync>;
+    type Listener = ListenerStream<tokio_uds::Incoming>;
     type ListenerUpgrade = FutureResult<Self::Output, IoError>;
-    type Dial = Box<Future<Item = UnixStream, Error = IoError> + Send + Sync>;  // TODO: name this type
+    type Dial = tokio_uds::ConnectFuture;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         if let Ok(path) = multiaddr_to_path(&addr) {
@@ -96,23 +96,16 @@ impl Transport for UdsConfig {
             // We need to build the `Multiaddr` to return from this function. If an error happened,
             // just return the original multiaddr.
             match listener {
-                Ok(_) => {},
+                Ok(listener) => {
+                    debug!("Now listening on {}", addr);
+                    let future = ListenerStream {
+                        stream: listener.incoming(),
+                        addr: addr.clone()
+                    };
+                    Ok((future, addr))
+                }
                 Err(_) => return Err((self, addr)),
-            };
-
-            debug!("Now listening on {}", addr);
-            let new_addr = addr.clone();
-
-            let future = future::result(listener)
-                .map(move |listener| {
-                    // Pull out a stream of sockets for incoming connections
-                    listener.incoming().map(move |sock| {
-                        debug!("Incoming connection on {}", addr);
-                        (future::ok(sock), addr.clone())
-                    })
-                })
-                .flatten_stream();
-            Ok((Box::new(future), new_addr))
+            }
         } else {
             Err((self, addr))
         }
@@ -121,8 +114,7 @@ impl Transport for UdsConfig {
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
         if let Ok(path) = multiaddr_to_path(&addr) {
             debug!("Dialing {}", addr);
-            let fut = UnixStream::connect(&path);
-            Ok(Box::new(fut) as Box<_>)
+            Ok(UnixStream::connect(&path))
         } else {
             Err((self, addr))
         }
@@ -160,6 +152,29 @@ fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
     }
 
     Ok(out)
+}
+
+pub struct ListenerStream<T> {
+    stream: T,
+    addr: Multiaddr
+}
+
+impl<T> Stream for ListenerStream<T>
+where
+    T: Stream
+{
+    type Item = (FutureResult<T::Item, T::Error>, Multiaddr);
+    type Error = T::Error;
+
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        match try_ready!(self.stream.poll()) {
+            Some(item) => {
+                debug!("incoming connection on {}", self.addr);
+                Ok(Async::Ready(Some((future::ok(item), self.addr.clone()))))
+            }
+            None => Ok(Async::Ready(None))
+        }
+    }
 }
 
 #[cfg(test)]

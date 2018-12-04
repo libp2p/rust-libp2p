@@ -21,7 +21,7 @@
 use cuckoofilter::CuckooFilter;
 use futures::prelude::*;
 use handler::FloodsubHandler;
-use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction};
+use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use libp2p_core::{protocols_handler::ProtocolsHandler, PeerId};
 use protocol::{FloodsubMessage, FloodsubRpc, FloodsubSubscription, FloodsubSubscriptionAction};
 use rand;
@@ -42,7 +42,7 @@ pub struct FloodsubBehaviour<TSubstream> {
 
     /// List of peers the network is connected to, and the topics that they're subscribed to.
     // TODO: filter out peers that don't support floodsub, so that we avoid hammering them with
-    //       opened substream
+    //       opened substreams
     connected_peers: HashMap<PeerId, SmallVec<[TopicHash; 8]>>,
 
     // List of topics we're subscribed to. Necessary to filter out messages that we receive
@@ -276,7 +276,7 @@ where
 
     fn poll(
         &mut self,
-        _: &mut TTopology,
+        _: &mut PollParameters<TTopology>,
     ) -> Async<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,

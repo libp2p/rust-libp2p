@@ -21,7 +21,7 @@
 use fnv::{FnvHashMap, FnvHashSet};
 use futures::{prelude::*, stream};
 use handler::{KademliaHandler, KademliaHandlerEvent, KademliaHandlerIn, KademliaRequestId};
-use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction};
+use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use libp2p_core::{protocols_handler::ProtocolsHandler, topology::Topology, Multiaddr, PeerId};
 use multihash::Multihash;
 use protocol::{KadConnectionType, KadPeer};
@@ -161,21 +161,25 @@ impl<TSubstream> Kademlia<TSubstream> {
     }
 
     /// Builds a `KadPeer` structure corresponding to the local node.
-    fn build_local_kad_peer(&self) -> KadPeer {
+    fn build_local_kad_peer<'a>(&self, local_addrs: impl IntoIterator<Item = &'a Multiaddr>) -> KadPeer {
         KadPeer {
             node_id: self.local_peer_id.clone(),
-            multiaddrs: Vec::new(),     // FIXME: return the addresses we're listening on
+            multiaddrs: local_addrs.into_iter().cloned().collect(),
             connection_ty: KadConnectionType::Connected,
         }
     }
 
     /// Builds the answer to a request.
-    fn build_result<TUserData, TTopology>(&self, query: QueryTarget, request_id: KademliaRequestId, topology: &mut TTopology)
+    fn build_result<TUserData, TTopology>(&self, query: QueryTarget, request_id: KademliaRequestId, parameters: &mut PollParameters<TTopology>)
         -> KademliaHandlerIn<TUserData>
     where TTopology: KademliaTopology
     {
+        let local_kad_peer = self.build_local_kad_peer(parameters.external_addresses());
+
         match query {
             QueryTarget::FindPeer(key) => {
+                let mut topology = parameters.topology();
+                // TODO: insert local_kad_peer somewhere?
                 let closer_peers = topology
                     .closest_peers(key.as_ref(), self.num_results)
                     .map(|peer_id| build_kad_peer(peer_id, topology, &self.connected_peers))
@@ -187,6 +191,8 @@ impl<TSubstream> Kademlia<TSubstream> {
                 }
             },
             QueryTarget::GetProviders(key) => {
+                let mut topology = parameters.topology();
+                // TODO: insert local_kad_peer somewhere?
                 let closer_peers = topology
                     .closest_peers(&key, self.num_results)
                     .map(|peer_id| build_kad_peer(peer_id, topology, &self.connected_peers))
@@ -198,7 +204,7 @@ impl<TSubstream> Kademlia<TSubstream> {
                     .get_providers(&key)
                     .map(|peer_id| build_kad_peer(peer_id, topology, &self.connected_peers))
                     .chain(if local_node_is_providing {
-                        Some(self.build_local_kad_peer())
+                        Some(local_kad_peer)
                     } else {
                         None
                     }.into_iter())
@@ -364,7 +370,7 @@ where
 
     fn poll(
         &mut self,
-        topology: &mut TTopology,
+        parameters: &mut PollParameters<TTopology>,
     ) -> Async<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
@@ -373,11 +379,11 @@ where
     > {
         // Flush the changes to the topology that we want to make.
         for (peer_id, addr, connection_ty) in self.add_to_topology.drain() {
-            topology.add_kad_discovered_address(peer_id, addr, connection_ty);
+            parameters.topology().add_kad_discovered_address(peer_id, addr, connection_ty);
         }
         self.add_to_topology.shrink_to_fit();
         for (key, provider) in self.add_provider.drain() {
-            topology.add_provider(key, provider);
+            parameters.topology().add_provider(key, provider);
         }
         self.add_provider.shrink_to_fit();
 
@@ -396,7 +402,8 @@ where
 
         // Start queries that are waiting to start.
         for (query_id, query_target, query_purpose) in self.queries_to_starts.drain() {
-            let known_closest_peers = topology
+            let known_closest_peers = parameters
+                .topology()
                 .closest_peers(query_target.as_hash(), self.num_results);
             self.active_queries.insert(
                 query_id,
@@ -418,7 +425,7 @@ where
         // Handle remote queries.
         if !self.remote_requests.is_empty() {
             let (peer_id, request_id, query) = self.remote_requests.remove(0);
-            let result = self.build_result(query, request_id, topology);
+            let result = self.build_result(query, request_id, parameters);
             return Async::Ready(NetworkBehaviourAction::SendEvent {
                 peer_id,
                 event: result,
@@ -501,7 +508,7 @@ where
                                 peer_id: closest,
                                 event: KademliaHandlerIn::AddProvider {
                                     key: key.clone(),
-                                    provider_peer: self.build_local_kad_peer(),
+                                    provider_peer: self.build_local_kad_peer(parameters.external_addresses()),
                                 },
                             };
 
