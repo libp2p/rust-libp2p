@@ -634,75 +634,71 @@ where
         }
 
         // Poll the existing nodes.
-        loop {
-            let (action, out_event);
-            match self.active_nodes.poll() {
-                Async::NotReady => break,
-                Async::Ready(CollectionEvent::NodeReached(reach_event)) => {
-                    let (a, e) = handle_node_reached(&mut self.reach_attempts, reach_event);
-                    action = a;
-                    out_event = e;
-                }
-                Async::Ready(CollectionEvent::ReachError { id, error, handler }) => {
-                    let (a, e) = handle_reach_error(&mut self.reach_attempts, id, error, handler);
-                    action = a;
-                    out_event = e;
-                }
-                Async::Ready(CollectionEvent::NodeError {
+        let (action, out_event);
+        match self.active_nodes.poll() {
+            Async::NotReady => return Async::NotReady,
+            Async::Ready(CollectionEvent::NodeReached(reach_event)) => {
+                let (a, e) = handle_node_reached(&mut self.reach_attempts, reach_event);
+                action = a;
+                out_event = e;
+            }
+            Async::Ready(CollectionEvent::ReachError { id, error, handler }) => {
+                let (a, e) = handle_reach_error(&mut self.reach_attempts, id, error, handler);
+                action = a;
+                out_event = e;
+            }
+            Async::Ready(CollectionEvent::NodeError {
+                peer_id,
+                error,
+            }) => {
+                let endpoint = self.reach_attempts.connected_points.remove(&peer_id)
+                    .expect("We insert into connected_points whenever a connection is \
+                             opened and remove only when a connection is closed; the \
+                             underlying API is guaranteed to always deliver a connection \
+                             closed message after it has been opened, and no two closed \
+                             messages; QED");
+                debug_assert!(!self.reach_attempts.out_reach_attempts.contains_key(&peer_id));
+                action = Default::default();
+                out_event = RawSwarmEvent::NodeError {
                     peer_id,
+                    endpoint,
                     error,
-                }) => {
-                    let endpoint = self.reach_attempts.connected_points.remove(&peer_id)
-                        .expect("We insert into connected_points whenever a connection is \
-                                 opened and remove only when a connection is closed; the \
-                                 underlying API is guaranteed to always deliver a connection \
-                                 closed message after it has been opened, and no two closed \
-                                 messages; QED");
-                    debug_assert!(!self.reach_attempts.out_reach_attempts.contains_key(&peer_id));
-                    action = Default::default();
-                    out_event = RawSwarmEvent::NodeError {
-                        peer_id,
-                        endpoint,
-                        error,
-                    };
-                }
-                Async::Ready(CollectionEvent::NodeClosed { peer_id }) => {
-                    let endpoint = self.reach_attempts.connected_points.remove(&peer_id)
-                        .expect("We insert into connected_points whenever a connection is \
-                                 opened and remove only when a connection is closed; the \
-                                 underlying API is guaranteed to always deliver a connection \
-                                 closed message after it has been opened, and no two closed \
-                                 messages; QED");
-                    debug_assert!(!self.reach_attempts.out_reach_attempts.contains_key(&peer_id));
-                    action = Default::default();
-                    out_event = RawSwarmEvent::NodeClosed { peer_id, endpoint };
-                }
-                Async::Ready(CollectionEvent::NodeEvent { peer_id, event }) => {
-                    action = Default::default();
-                    out_event = RawSwarmEvent::NodeEvent { peer_id, event };
-                }
-            };
-
-            if let Some((peer_id, handler, first, rest)) = action.start_dial_out {
-                self.start_dial_out(peer_id, handler, first, rest);
+                };
             }
-
-            if let Some(interrupt) = action.interrupt {
-                // TODO: improve proof or remove; this is too complicated right now
-                self.active_nodes
-                    .interrupt(interrupt)
-                    .expect("interrupt is guaranteed to be gathered from `out_reach_attempts`;
-                             we insert in out_reach_attempts only when we call \
-                             active_nodes.add_reach_attempt, and we remove only when we call \
-                             interrupt or when a reach attempt succeeds or errors; therefore the \
-                             out_reach_attempts should always be in sync with the actual \
-                             attempts; QED");
+            Async::Ready(CollectionEvent::NodeClosed { peer_id }) => {
+                let endpoint = self.reach_attempts.connected_points.remove(&peer_id)
+                    .expect("We insert into connected_points whenever a connection is \
+                             opened and remove only when a connection is closed; the \
+                             underlying API is guaranteed to always deliver a connection \
+                             closed message after it has been opened, and no two closed \
+                             messages; QED");
+                debug_assert!(!self.reach_attempts.out_reach_attempts.contains_key(&peer_id));
+                action = Default::default();
+                out_event = RawSwarmEvent::NodeClosed { peer_id, endpoint };
             }
-
-            return Async::Ready(out_event);
+            Async::Ready(CollectionEvent::NodeEvent { peer_id, event }) => {
+                action = Default::default();
+                out_event = RawSwarmEvent::NodeEvent { peer_id, event };
+            }
         }
 
-        Async::NotReady
+        if let Some((peer_id, handler, first, rest)) = action.start_dial_out {
+            self.start_dial_out(peer_id, handler, first, rest);
+        }
+
+        if let Some(interrupt) = action.interrupt {
+            // TODO: improve proof or remove; this is too complicated right now
+            self.active_nodes
+                .interrupt(interrupt)
+                .expect("interrupt is guaranteed to be gathered from `out_reach_attempts`;
+                         we insert in out_reach_attempts only when we call \
+                         active_nodes.add_reach_attempt, and we remove only when we call \
+                         interrupt or when a reach attempt succeeds or errors; therefore the \
+                         out_reach_attempts should always be in sync with the actual \
+                         attempts; QED");
+        }
+
+        Async::Ready(out_event)
     }
 }
 
