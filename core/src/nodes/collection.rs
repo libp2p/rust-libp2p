@@ -439,7 +439,7 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
     }
 }
 
-/// Errors for interrupt(). 
+/// Reach attempt interrupt errors. 
 #[derive(Debug)]
 pub enum InterruptError<Error, Display> {
     /// An invalid reach attempt has been used to try to interrupt. The task
