@@ -20,13 +20,13 @@
 
 use futures::prelude::*;
 use libp2p_core::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent};
-use libp2p_core::{Multiaddr, PeerId};
+use libp2p_core::{Multiaddr, PeerId, either, upgrade};
 use protocol;
-use std::{io, marker::PhantomData};
+use std::{error, io, marker::PhantomData};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Protocol handler that identifies the remote at a regular period.
-pub struct RelayHandler<TSubstream, TDestSubstream> {
+pub struct RelayHandler<TSubstream, TDestSubstream, TSrcSubstream> {
     /// True if wanting to shut down.
     shutdown: bool,
 
@@ -41,7 +41,7 @@ pub struct RelayHandler<TSubstream, TDestSubstream> {
     queued_events: Vec<RelayHandlerEvent<TSubstream>>,
 
     /// Phantom data.
-    marker: PhantomData<TDestSubstream>
+    marker: PhantomData<(TDestSubstream, TSrcSubstream)>
 }
 
 /// Event produced by the relay handler.
@@ -49,6 +49,7 @@ pub struct RelayHandler<TSubstream, TDestSubstream> {
 pub enum RelayHandlerEvent<TSubstream> {
     /// The remote wants us to relay communications to a third party.
     HopRequest(RelayHandlerHopRequest<TSubstream>),
+
     /// The remote is a relay and is relaying a connection to us. In other words, we are used as
     /// destination.
     DestinationRequest(RelayHandlerDestRequest<TSubstream>),
@@ -56,7 +57,7 @@ pub enum RelayHandlerEvent<TSubstream> {
 
 /// Event that can be sent to the relay handler.
 //#[derive(Debug)]      // TODO: restore
-pub enum RelayHandlerIn<TSubstream, TDestSubstream> {
+pub enum RelayHandlerIn<TSubstream, TDestSubstream, TSrcSubstream> {
     /// Accept a hop request from the remote.
     AcceptHopRequest {
         /// The request that was produced by the handler earlier.
@@ -64,10 +65,13 @@ pub enum RelayHandlerIn<TSubstream, TDestSubstream> {
         /// The substream to the destination.
         dest_substream: TDestSubstream,
     },
+
     /// Denies a hop request from the remote.
     DenyHopRequest(RelayHandlerHopRequest<TSubstream>),
+
     /// Denies a destination request from the remote.
     DenyDestinationRequest(RelayHandlerDestRequest<TSubstream>),
+
     /// Opens a new substream to the remote and asks it to relay communications to a third party.
     RelayRequest {
         /// Id of the peer to connect to.
@@ -75,11 +79,21 @@ pub enum RelayHandlerIn<TSubstream, TDestSubstream> {
         /// Addresses known for this peer.
         addresses: Vec<Multiaddr>,
     },
+
+    /// Asks the node to be used as a destination for a relayed connection.
+    DestinationRequest {
+        /// Peer id of the node whose communications are being relayed.
+        source: PeerId,
+        /// Addresses of the node whose communications are being relayed.
+        source_addresses: Vec<Multiaddr>,
+        /// Substream to the source.
+        substream: TSrcSubstream,
+    },
 }
 
 /// The remote wants us to be treated as a destination.
 pub struct RelayHandlerHopRequest<TSubstream> {
-    inner: RelayHopRequest<TSubstream>,
+    inner: protocol::RelayHopRequest<TSubstream>,
 }
 
 impl<TSubstream> RelayHandlerHopRequest<TSubstream>
@@ -96,7 +110,7 @@ where TSubstream: AsyncRead + AsyncWrite + 'static
 
 /// The remote wants us to be treated as a destination.
 pub struct RelayHandlerDestRequest<TSubstream> {
-    inner: RelayDestinationRequest<TSubstream>,
+    inner: protocol::RelayDestinationRequest<TSubstream>,
 }
 
 impl<TSubstream> RelayHandlerDestRequest<TSubstream>
@@ -108,17 +122,21 @@ where TSubstream: AsyncRead + AsyncWrite + 'static
         self.inner.source_id()
     }
 
-    // TODO: addresses
+    /// Addresses of the source that is being relayed.
+    #[inline]
+    pub fn source_addresses(&self) -> &PeerId {
+        self.inner.source_addresses()
+    }
 
     /// Accepts the request. Produces a `Future` that sends back a success message then provides
     /// the stream to the source.
     #[inline]
-    pub fn accept(self) -> impl Future<Item = TSubstream, Error = io::Error> {
+    pub fn accept(self) -> impl Future<Item = TSubstream, Error = Box<dyn error::Error + 'static>> {
         self.inner.accept()
     }
 }
 
-impl<TSubstream, TDestSubstream> RelayHandler<TSubstream, TDestSubstream> {
+impl<TSubstream, TDestSubstream, TSrcSubstream> RelayHandler<TSubstream, TDestSubstream, TSrcSubstream> {
     /// Builds a new `RelayHandler`.
     #[inline]
     pub fn new() -> Self {
@@ -132,16 +150,16 @@ impl<TSubstream, TDestSubstream> RelayHandler<TSubstream, TDestSubstream> {
     }
 }
 
-impl<TSubstream, TDestSubstream> ProtocolsHandler for RelayHandler<TSubstream, TDestSubstream>
+impl<TSubstream, TDestSubstream, TSrcSubstream> ProtocolsHandler for RelayHandler<TSubstream, TDestSubstream, TSrcSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite + Send + Sync + 'static, // TODO: remove useless bounds
     TDestSubstream: AsyncRead + AsyncWrite + Send + Sync + 'static, // TODO: remove useless bounds
 {
-    type InEvent = RelayHandlerIn<TSubstream, TDestSubstream>;
+    type InEvent = RelayHandlerIn<TSubstream, TDestSubstream, TSrcSubstream>;
     type OutEvent = RelayHandlerEvent<TSubstream>;
     type Substream = TSubstream;
     type InboundProtocol = protocol::RelayListen;
-    type OutboundProtocol = EitherUpgrade<protocol::RelayProxyRequest, protocol::RelayTargetOpen>;
+    type OutboundProtocol = upgrade::EitherUpgrade<protocol::RelayProxyRequest, protocol::RelayTargetOpen>;
     type OutboundOpenInfo = ();
 
     #[inline]
@@ -151,15 +169,15 @@ where
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as ConnectionUpgrade<TSubstream>>::Output,
+        protocol: <Self::InboundProtocol as upgrade::InboundUpgrade<TSubstream>>::Output,
     ) {
         match protocol {
             // We have been asked to become a destination.
-            RelayRemoteRequest::DestinationRequest(dest_request) => {
+            protocol::RelayRemoteRequest::DestinationRequest(dest_request) => {
 
             },
             // We have been asked to act as a proxy.
-            RelayRemoteRequest::HopRequest(hop_request) => {
+            protocol::RelayRemoteRequest::HopRequest(hop_request) => {
 
             },
         }
@@ -167,14 +185,14 @@ where
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        protocol: <Self::OutboundProtocol as ConnectionUpgrade<TSubstream>>::Output,
+        protocol: <Self::OutboundProtocol as upgrade::OutboundUpgrade<TSubstream>>::Output,
         _: Self::OutboundOpenInfo,
     ) {
         match protocol {
-            EitherOutput::First(proxy_request) => {
+            either::EitherOutput::First(proxy_request) => {
 
             },
-            EitherOutput::Second(target_request) => {
+            either::EitherOutput::Second(target_request) => {
 
             },
         }
