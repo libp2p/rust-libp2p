@@ -94,14 +94,12 @@ extern crate tokio_io;
 extern crate tokio_timer;
 extern crate void;
 
-pub use self::dial_handler::PeriodicPingHandler;
-pub use self::dial_layer::PeriodicPingBehaviour;
-pub use self::listen_handler::PingListenHandler;
-pub use self::listen_layer::PingListenBehaviour;
+pub use self::dial_layer::PeriodicPing;
+pub use self::listen_layer::PingListen;
 
+pub mod dial_handler;
+pub mod listen_handler;
 pub mod protocol;
 
-mod dial_handler;
 mod dial_layer;
-mod listen_handler;
 mod listen_layer;

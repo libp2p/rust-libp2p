@@ -18,37 +18,37 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::listen_handler::PingListenHandler;
 use futures::prelude::*;
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use libp2p_core::{protocols_handler::ProtocolsHandler, PeerId};
 use std::marker::PhantomData;
 use tokio_io::{AsyncRead, AsyncWrite};
 use void::Void;
-use PingListenHandler;
 
 /// Network behaviour that handles receiving pings sent by other nodes.
-pub struct PingListenBehaviour<TSubstream> {
+pub struct PingListen<TSubstream> {
     /// Marker to pin the generics.
     marker: PhantomData<TSubstream>,
 }
 
-impl<TSubstream> PingListenBehaviour<TSubstream> {
-    /// Creates a `PingListenBehaviour`.
+impl<TSubstream> PingListen<TSubstream> {
+    /// Creates a `PingListen`.
     pub fn new() -> Self {
-        PingListenBehaviour {
+        PingListen {
             marker: PhantomData,
         }
     }
 }
 
-impl<TSubstream> Default for PingListenBehaviour<TSubstream> {
+impl<TSubstream> Default for PingListen<TSubstream> {
     #[inline]
     fn default() -> Self {
-        PingListenBehaviour::new()
+        PingListen::new()
     }
 }
 
-impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for PingListenBehaviour<TSubstream>
+impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for PingListen<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
