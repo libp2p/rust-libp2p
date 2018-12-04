@@ -145,27 +145,27 @@ fn construct_success() {
     ma_valid("/ip6/2601:9:4f81:9700:803e:ca65:66e8:c21",
              "29260100094F819700803ECA6566E80C21",
              vec![Ip6("2601:9:4f81:9700:803e:ca65:66e8:c21".parse().unwrap())]);
-    ma_valid("/udp/0", "110000", vec![Udp(0)]);
+    ma_valid("/udp/0", "91020000", vec![Udp(0)]);
     ma_valid("/tcp/0", "060000", vec![Tcp(0)]);
     ma_valid("/sctp/0", "84010000", vec![Sctp(0)]);
-    ma_valid("/udp/1234", "1104D2", vec![Udp(1234)]);
+    ma_valid("/udp/1234", "910204D2", vec![Udp(1234)]);
     ma_valid("/tcp/1234", "0604D2", vec![Tcp(1234)]);
     ma_valid("/sctp/1234", "840104D2", vec![Sctp(1234)]);
-    ma_valid("/udp/65535", "11FFFF", vec![Udp(65535)]);
+    ma_valid("/udp/65535", "9102FFFF", vec![Udp(65535)]);
     ma_valid("/tcp/65535", "06FFFF", vec![Tcp(65535)]);
     ma_valid("/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
              "A503221220D52EBB89D85B02A284948203A62FF28389C57C9F42BEEC4EC20DB76A68911C0B",
              vec![P2p(multihash("QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC"))]);
-    ma_valid("/udp/1234/sctp/1234", "1104D2840104D2", vec![Udp(1234), Sctp(1234)]);
-    ma_valid("/udp/1234/udt", "1104D2AD02", vec![Udp(1234), Udt]);
-    ma_valid("/udp/1234/utp", "1104D2AE02", vec![Udp(1234), Utp]);
+    ma_valid("/udp/1234/sctp/1234", "910204D2840104D2", vec![Udp(1234), Sctp(1234)]);
+    ma_valid("/udp/1234/udt", "910204D2AD02", vec![Udp(1234), Udt]);
+    ma_valid("/udp/1234/utp", "910204D2AE02", vec![Udp(1234), Utp]);
     ma_valid("/tcp/1234/http", "0604D2E003", vec![Tcp(1234), Http]);
     ma_valid("/tcp/1234/https", "0604D2BB03", vec![Tcp(1234), Https]);
     ma_valid("/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC/tcp/1234",
              "A503221220D52EBB89D85B02A284948203A62FF28389C57C9F42BEEC4EC20DB76A68911C0B0604D2",
              vec![P2p(multihash("QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC")), Tcp(1234)]);
-    ma_valid("/ip4/127.0.0.1/udp/1234", "047F0000011104D2", vec![Ip4(local.clone()), Udp(1234)]);
-    ma_valid("/ip4/127.0.0.1/udp/0", "047F000001110000", vec![Ip4(local.clone()), Udp(0)]);
+    ma_valid("/ip4/127.0.0.1/udp/1234", "047F000001910204D2", vec![Ip4(local.clone()), Udp(1234)]);
+    ma_valid("/ip4/127.0.0.1/udp/0", "047F00000191020000", vec![Ip4(local.clone()), Udp(0)]);
     ma_valid("/ip4/127.0.0.1/tcp/1234", "047F0000010604D2", vec![Ip4(local.clone()), Tcp(1234)]);
     ma_valid("/ip4/127.0.0.1/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC",
              "047F000001A503221220D52EBB89D85B02A284948203A62FF28389C57C9F42BEEC4EC20DB76A68911C0B",
