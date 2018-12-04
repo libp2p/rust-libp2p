@@ -29,7 +29,7 @@
 //! A `Multiaddr` is a way to reach a node. Examples:
 //!
 //! * `/ip4/80.123.90.4/tcp/5432`
-//! * `/ip6/[::1]/udp/10560`
+//! * `/ip6/[::1]/udp/10560/quic`
 //! * `/unix//path/to/socket`
 //!
 //! ## Transport
@@ -69,22 +69,8 @@
 //! # Connection upgrades
 //!
 //! Once a connection has been opened with a remote through a `Transport`, it can be *upgraded*.
-//! This consists in negotiating a protocol with the remote (through the `multistream-select`
-//! protocol), and applying that protocol on the socket.
-//!
-//! Example upgrades:
-//!
-//! - Adding a security layer on top of the connection.
-//! - Applying multiplexing, so that a connection can be split into multiple substreams.
-//! - Negotiating a specific protocol, such as *ping* or *kademlia*.
-//!
-//! A potential connection upgrade is represented with the `ConnectionUpgrade` trait. The trait
-//! consists in a protocol name plus a method that turns the socket into an `Output` object whose
-//! nature and type is specific to each upgrade. For example, if you upgrade a connection with a
-//! security layer, the output might contain an encrypted stream and the public key of the remote.
-//!
-//! You can combine a `Transport` with a compatible `ConnectionUpgrade` in order to obtain another
-//! `Transport` that yields the output of the upgrade.
+//! This consists in negotiating a protocol with the remote (through a negotiation protocol
+//! `multistream-select`), and applying that protocol on the socket.
 //!
 //! Example:
 //!
@@ -102,12 +88,29 @@
 //!
 //! See the documentation of the `libp2p-core` crate for more details about upgrades.
 //!
+//! ## Topology
+//!
+//! The `Topology` trait is implemented for types that hold the layout of a network. When other
+//! components need the network layout to operate, they are passed an instance of a `Topology`.
+//!
+//! The most basic implementation of `Topology` is the `MemoryTopology`, which is essentially a
+//! `HashMap`. Creating your own `Topology` makes it possible to add for example a reputation
+//! system.
+//!
+//! ## Network behaviour
+//!
+//! The `NetworkBehaviour` trait is implemented on types that provide some capability to the
+//! network. Examples of network behaviours include: periodically ping the nodes we are connected
+//! to, periodically ask for information from the nodes we are connected to, connect to a DHT and
+//! make queries to it, propagate messages to the nodes we are connected to (pubsub), and so on.
+//!
 //! ## Swarm
 //!
-//! Once you have created an object that implements the `Transport` trait, you can put it in a
-//! *swarm*. This is done by calling the `swarm()` freestanding function with the transport
-//! alongside with a function or a closure that will turn the output of the upgrade (usually an
-//! actual protocol, as explained above) into a `Future` producing `()`.
+//! The `Swarm` struct contains all active and pending connections to remotes and manages the
+//! state of all the substreams that have been opened, and all the upgrades that were built upon
+//! these substreams.
+//! 
+//! It combines a `Transport`, a `NetworkBehaviour` and a `Topology` together.
 //!
 //! See the documentation of the `libp2p-core` crate for more details about creating a swarm.
 //!
@@ -119,15 +122,11 @@
 //!
 //! - Create a *base* implementation of `Transport` that combines all the protocols you want and
 //!   the upgrades you want, such as the security layer and multiplexing.
-//! - Create structs that implement the `ConnectionUpgrade` trait for the protocols you want to
-//!   create, or use the protocols provided by the `libp2p` crate.
-//! - Create a swarm that combines your base transport and all the upgrades and that handles the
-//!   behaviour that happens.
-//! - Use this swarm to dial and listen.
-//!
-//! You probably also want to have some sort of nodes discovery mechanism, so that you
-//! automatically connect to nodes of the network. The details of this haven't been fleshed out
-//! in libp2p and will be written later.
+//! - Create a struct that implements the `NetworkBehaviour` trait and that combines all the
+//!   network behaviours that you want.
+//! - Create and implement the `Topology` trait that to store the topology of the network.
+//! - Create a swarm that combines your base transport, the network behaviour, and the topology.
+//! - This swarm can now be polled with the `tokio` library in order to start the network.
 //!
 
 pub extern crate bytes;
