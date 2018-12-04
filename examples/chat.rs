@@ -76,7 +76,7 @@ fn main() {
 
     // Create a Swarm to manage peers and events
     let mut swarm = {
-        let mut behaviour = libp2p::floodsub::FloodsubBehaviour::new(local_pub_key.clone().into_peer_id());
+        let mut behaviour = libp2p::floodsub::Floodsub::new(local_pub_key.clone().into_peer_id());
         behaviour.subscribe(floodsub_topic.clone());
         libp2p::Swarm::new(transport, behaviour, libp2p::core::topology::MemoryTopology::empty(), local_pub_key)
     };

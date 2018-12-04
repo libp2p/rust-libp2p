@@ -31,13 +31,12 @@ extern crate tokio_codec;
 extern crate tokio_io;
 extern crate unsigned_varint;
 
-mod handler;
+pub mod handler;
+pub mod protocol;
+
 mod layer;
-mod protocol;
 mod rpc_proto;
 mod topic;
 
-pub use self::handler::FloodsubHandler;
-pub use self::layer::FloodsubBehaviour;
-pub use self::protocol::*; // TODO: exact reexports
+pub use self::layer::Floodsub;
 pub use self::topic::{Topic, TopicBuilder, TopicHash};
