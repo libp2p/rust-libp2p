@@ -18,11 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{future, stream};
 use futures::stream::Then as StreamThen;
 use futures::sync::{mpsc, oneshot};
+use futures::{future, stream};
 use futures::{Async, Future, Poll, Stream};
-use multiaddr::{Protocol, Multiaddr};
+use multiaddr::{Multiaddr, Protocol};
 use rw_stream_sink::RwStreamSink;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::io::{Read, Write};
@@ -213,14 +213,14 @@ impl Transport for BrowserWsConfig {
 
         // Use the observed IP address.
         match iter.next() {
-            Some((Protocol::Ip4(_), x@Protocol::Ip4(_))) => address.append(x),
-            Some((Protocol::Ip6(_), x@Protocol::Ip6(_))) => address.append(x),
-            _ => return None
+            Some((Protocol::Ip4(_), x @ Protocol::Ip4(_))) => address.append(x),
+            Some((Protocol::Ip6(_), x @ Protocol::Ip6(_))) => address.append(x),
+            _ => return None,
         }
 
         // Skip over next protocol (assumed to contain port information).
         if iter.next().is_none() {
-            return None
+            return None;
         }
 
         // Check for WS/WSS.
@@ -228,11 +228,11 @@ impl Transport for BrowserWsConfig {
         // Note that it will still work if the server uses WSS while the client uses
         // WS, or vice-versa.
         match iter.next() {
-            Some((x@Protocol::Ws, Protocol::Ws)) => address.append(x),
-            Some((x@Protocol::Ws, Protocol::Wss)) => address.append(x),
-            Some((x@Protocol::Wss, Protocol::Ws)) => address.append(x),
-            Some((x@Protocol::Wss, Protocol::Wss)) => address.append(x),
-            _ => return None
+            Some((x @ Protocol::Ws, Protocol::Ws)) => address.append(x),
+            Some((x @ Protocol::Ws, Protocol::Wss)) => address.append(x),
+            Some((x @ Protocol::Wss, Protocol::Ws)) => address.append(x),
+            Some((x @ Protocol::Wss, Protocol::Wss)) => address.append(x),
+            _ => return None,
         }
 
         // Carry over everything else from the server address.

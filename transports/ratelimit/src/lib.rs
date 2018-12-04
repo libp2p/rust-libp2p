@@ -32,7 +32,10 @@ use futures::prelude::*;
 use libp2p_core::{Multiaddr, Transport};
 use std::io;
 use tokio_executor::Executor;
-use tokio_io::{AsyncRead, AsyncWrite, io::{ReadHalf, WriteHalf}};
+use tokio_io::{
+    io::{ReadHalf, WriteHalf},
+    AsyncRead, AsyncWrite,
+};
 
 #[derive(Clone)]
 pub struct RateLimited<T> {
@@ -141,7 +144,7 @@ pub struct ListenerUpgrade<T: Transport>(RateLimited<T::ListenerUpgrade>);
 impl<T> Future for ListenerUpgrade<T>
 where
     T: Transport,
-    T::Output: AsyncRead + AsyncWrite
+    T::Output: AsyncRead + AsyncWrite,
 {
     type Item = Connection<T::Output>;
     type Error = io::Error;
@@ -157,7 +160,7 @@ where
 impl<T> Transport for RateLimited<T>
 where
     T: Transport,
-    T::Output: AsyncRead + AsyncWrite
+    T::Output: AsyncRead + AsyncWrite,
 {
     type Output = Connection<T::Output>;
     type Listener = Listener<T>;
@@ -183,7 +186,7 @@ where
         let w = self.wlimiter;
         match self.value.dial(addr) {
             Ok(dial) => Ok(DialFuture { r, w, f: dial }),
-            Err((t, a)) => Err((RateLimited::from_parts(t, r, w), a))
+            Err((t, a)) => Err((RateLimited::from_parts(t, r, w), a)),
         }
     }
 
@@ -196,20 +199,24 @@ where
 pub struct DialFuture<T> {
     r: Limiter,
     w: Limiter,
-    f: T
+    f: T,
 }
 
 impl<T> Future for DialFuture<T>
 where
     T: Future,
     T::Item: AsyncRead + AsyncWrite,
-    T::Error: From<io::Error>
+    T::Error: From<io::Error>,
 {
     type Item = Connection<T::Item>;
     type Error = T::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let item = try_ready!(self.f.poll());
-        Ok(Async::Ready(Connection::new(item, self.r.clone(), self.w.clone())?))
+        Ok(Async::Ready(Connection::new(
+            item,
+            self.r.clone(),
+            self.w.clone(),
+        )?))
     }
 }

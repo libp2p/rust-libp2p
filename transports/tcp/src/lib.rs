@@ -48,7 +48,7 @@ extern crate tokio_io;
 extern crate tokio_tcp;
 
 use futures::{future, future::FutureResult, prelude::*, Async, Poll};
-use multiaddr::{Protocol, Multiaddr, ToMultiaddr};
+use multiaddr::{Multiaddr, Protocol, ToMultiaddr};
 use std::fmt;
 use std::io::{Error as IoError, Read, Write};
 use std::net::SocketAddr;
@@ -140,14 +140,16 @@ impl Transport for TcpConfig {
             // We need to build the `Multiaddr` to return from this function. If an error happened,
             // just return the original multiaddr.
             let new_addr = match listener {
-                Ok(ref l) => if let Ok(new_s_addr) = l.local_addr() {
-                    new_s_addr.to_multiaddr().expect(
-                        "multiaddr generated from socket addr is \
-                         always valid",
-                    )
-                } else {
-                    addr
-                },
+                Ok(ref l) => {
+                    if let Ok(new_s_addr) = l.local_addr() {
+                        new_s_addr.to_multiaddr().expect(
+                            "multiaddr generated from socket addr is \
+                             always valid",
+                        )
+                    } else {
+                        addr
+                    }
+                }
                 Err(_) => addr,
             };
 
@@ -192,9 +194,9 @@ impl Transport for TcpConfig {
 
         // Use the observed IP address.
         match server.iter().zip(observed.iter()).next() {
-            Some((Protocol::Ip4(_), x@Protocol::Ip4(_))) => address.append(x),
-            Some((Protocol::Ip6(_), x@Protocol::Ip6(_))) => address.append(x),
-            _ => return None
+            Some((Protocol::Ip4(_), x @ Protocol::Ip4(_))) => address.append(x),
+            Some((Protocol::Ip6(_), x @ Protocol::Ip6(_))) => address.append(x),
+            _ => return None,
         }
 
         // Carry over everything else from the server address.
@@ -289,10 +291,7 @@ impl Stream for TcpListenStream {
 
     fn poll(
         &mut self,
-    ) -> Poll<
-        Option<(FutureResult<TcpTransStream, IoError>, Multiaddr)>,
-        IoError,
-    > {
+    ) -> Poll<Option<(FutureResult<TcpTransStream, IoError>, Multiaddr)>, IoError> {
         let inner = match self.inner {
             Ok(ref mut inc) => inc,
             Err(ref mut err) => {
@@ -311,10 +310,13 @@ impl Stream for TcpListenStream {
                         Err(err) => {
                             // If we can't get the address of the newly-opened socket, there's
                             // nothing we can do except ignore this connection attempt.
-                            error!("Ignored incoming because could't determine its \
-                                    address: {:?}", err);
-                            continue
-                        },
+                            error!(
+                                "Ignored incoming because could't determine its \
+                                 address: {:?}",
+                                err
+                            );
+                            continue;
+                        }
                     };
 
                     match apply_config(&self.config, &sock) {
@@ -324,7 +326,7 @@ impl Stream for TcpListenStream {
 
                     debug!("Incoming connection from {}", addr);
                     let ret = future::ok(TcpTransStream { inner: sock });
-                    break Ok(Async::Ready(Some((ret, addr))))
+                    break Ok(Async::Ready(Some((ret, addr))));
                 }
                 Ok(Async::Ready(None)) => break Ok(Async::Ready(None)),
                 Ok(Async::NotReady) => break Ok(Async::NotReady),

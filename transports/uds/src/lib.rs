@@ -56,16 +56,20 @@ extern crate tokio_uds;
 #[cfg(test)]
 extern crate tempfile;
 #[cfg(test)]
-extern crate tokio_io;
-#[cfg(test)]
 extern crate tokio;
+#[cfg(test)]
+extern crate tokio_io;
 
-use futures::{future::{self, FutureResult}, prelude::*, try_ready};
 use futures::stream::Stream;
-use multiaddr::{Protocol, Multiaddr};
+use futures::{
+    future::{self, FutureResult},
+    prelude::*,
+    try_ready,
+};
+use libp2p_core::Transport;
+use multiaddr::{Multiaddr, Protocol};
 use std::io::Error as IoError;
 use std::path::PathBuf;
-use libp2p_core::Transport;
 use tokio_uds::{UnixListener, UnixStream};
 
 /// Represents the configuration for a Unix domain sockets transport capability for libp2p.
@@ -73,8 +77,7 @@ use tokio_uds::{UnixListener, UnixStream};
 /// The Unixs sockets created by libp2p will need to be progressed by running the futures and
 /// streams obtained by libp2p through the tokio reactor.
 #[derive(Debug, Clone)]
-pub struct UdsConfig {
-}
+pub struct UdsConfig {}
 
 impl UdsConfig {
     /// Creates a new configuration object for TCP/IP.
@@ -100,7 +103,7 @@ impl Transport for UdsConfig {
                     debug!("Now listening on {}", addr);
                     let future = ListenerStream {
                         stream: listener.incoming(),
-                        addr: addr.clone()
+                        addr: addr.clone(),
                     };
                     Ok((future, addr))
                 }
@@ -144,7 +147,7 @@ fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
 
     let out: PathBuf = match path {
         Some(Protocol::Unix(ref path)) => path.as_ref().into(),
-        _ => return Err(())
+        _ => return Err(()),
     };
 
     if !out.is_absolute() {
@@ -156,12 +159,12 @@ fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
 
 pub struct ListenerStream<T> {
     stream: T,
-    addr: Multiaddr
+    addr: Multiaddr,
 }
 
 impl<T> Stream for ListenerStream<T>
 where
-    T: Stream
+    T: Stream,
 {
     type Item = (FutureResult<T::Item, T::Error>, Multiaddr);
     type Error = T::Error;
@@ -172,28 +175,27 @@ where
                 debug!("incoming connection on {}", self.addr);
                 Ok(Async::Ready(Some((future::ok(item), self.addr.clone()))))
             }
-            None => Ok(Async::Ready(None))
+            None => Ok(Async::Ready(None)),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use tokio::runtime::current_thread::Runtime;
     use super::{multiaddr_to_path, UdsConfig};
     use futures::stream::Stream;
     use futures::Future;
-    use multiaddr::{Protocol, Multiaddr};
-    use std::{self, borrow::Cow, path::Path};
     use libp2p_core::Transport;
+    use multiaddr::{Multiaddr, Protocol};
+    use std::{self, borrow::Cow, path::Path};
     use tempfile;
+    use tokio::runtime::current_thread::Runtime;
     use tokio_io;
 
     #[test]
     fn multiaddr_to_path_conversion() {
         assert!(
-            multiaddr_to_path(&"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap())
-                .is_err()
+            multiaddr_to_path(&"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap()).is_err()
         );
 
         assert_eq!(
@@ -211,7 +213,9 @@ mod tests {
         use std::io::Write;
         let temp_dir = tempfile::tempdir().unwrap();
         let socket = temp_dir.path().join("socket");
-        let addr = Multiaddr::from(Protocol::Unix(Cow::Owned(socket.to_string_lossy().into_owned())));
+        let addr = Multiaddr::from(Protocol::Unix(Cow::Owned(
+            socket.to_string_lossy().into_owned(),
+        )));
         let addr2 = addr.clone();
 
         std::thread::spawn(move || {
@@ -251,7 +255,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]       // TODO: for the moment unix addresses fail to parse
+    #[ignore] // TODO: for the moment unix addresses fail to parse
     fn larger_addr_denied() {
         let tcp = UdsConfig::new();
 
@@ -262,8 +266,10 @@ mod tests {
     }
 
     #[test]
-    #[ignore]       // TODO: for the moment unix addresses fail to parse
+    #[ignore] // TODO: for the moment unix addresses fail to parse
     fn relative_addr_denied() {
-        assert!("/ip4/127.0.0.1/tcp/12345/unix/./foo/bar".parse::<Multiaddr>().is_err());
+        assert!("/ip4/127.0.0.1/tcp/12345/unix/./foo/bar"
+            .parse::<Multiaddr>()
+            .is_err());
     }
 }

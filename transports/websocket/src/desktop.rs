@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{stream, Future, IntoFuture, Sink, Stream};
-use multiaddr::{Protocol, Multiaddr};
+use multiaddr::{Multiaddr, Protocol};
 use rw_stream_sink::RwStreamSink;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use swarm::Transport;
@@ -66,8 +66,10 @@ where
     T::Output: AsyncRead + AsyncWrite + Send,
 {
     type Output = Box<AsyncStream + Send>;
-    type Listener =
-        stream::Map<T::Listener, fn((<T as Transport>::ListenerUpgrade, Multiaddr)) -> (Self::ListenerUpgrade, Multiaddr)>;
+    type Listener = stream::Map<
+        T::Listener,
+        fn((<T as Transport>::ListenerUpgrade, Multiaddr)) -> (Self::ListenerUpgrade, Multiaddr),
+    >;
     type ListenerUpgrade = Box<Future<Item = Self::Output, Error = IoError> + Send>;
     type Dial = Box<Future<Item = Self::Output, Error = IoError> + Send>;
 
@@ -130,7 +132,7 @@ where
                                             OwnedMessage::Close(_) => Ok(None),
                                             // TODO: handle pings and pongs, which is freaking hard
                                             //         for now we close the socket when that happens
-                                            _ => Ok(None)
+                                            _ => Ok(None),
                                         }
                                     })
                                     // TODO: is there a way to merge both lines into one?
@@ -141,12 +143,17 @@ where
                                 Box::new(read_write) as Box<AsyncStream + Send>
                             })
                     })
-                    .map(|s| Box::new(Ok(s).into_future()) as Box<Future<Item = _, Error = _> + Send>)
+                    .map(|s| {
+                        Box::new(Ok(s).into_future()) as Box<Future<Item = _, Error = _> + Send>
+                    })
                     .into_future()
                     .flatten()
             });
 
-            (Box::new(upgraded) as Box<Future<Item = _, Error = _> + Send>, client_addr)
+            (
+                Box::new(upgraded) as Box<Future<Item = _, Error = _> + Send>,
+                client_addr,
+            )
         });
 
         Ok((listen, new_addr))
@@ -186,35 +193,33 @@ where
             }
         };
 
-        let dial = inner_dial
-            .into_future()
-            .and_then(move |connec| {
-                ClientBuilder::new(&ws_addr)
-                    .expect("generated ws address is always valid")
-                    .async_connect_on(connec)
-                    .map_err(|err| IoError::new(IoErrorKind::Other, err))
-                    .map(|(client, _)| {
-                        debug!("Upgraded outgoing connection to websockets");
+        let dial = inner_dial.into_future().and_then(move |connec| {
+            ClientBuilder::new(&ws_addr)
+                .expect("generated ws address is always valid")
+                .async_connect_on(connec)
+                .map_err(|err| IoError::new(IoErrorKind::Other, err))
+                .map(|(client, _)| {
+                    debug!("Upgraded outgoing connection to websockets");
 
-                        // Plug our own API on top of the API of the websockets library.
-                        let framed_data = client
-                            .map_err(|err| IoError::new(IoErrorKind::Other, err))
-                            .sink_map_err(|err| IoError::new(IoErrorKind::Other, err))
-                            .with(|data| Ok(OwnedMessage::Binary(data)))
-                            .and_then(|recv| {
-                                match recv {
-                                    OwnedMessage::Binary(data) => Ok(data),
-                                    OwnedMessage::Text(data) => Ok(data.into_bytes()),
-                                    // TODO: pings and pongs and close messages need to be
-                                    //       answered; and this is really hard; for now we produce
-                                    //         an error when that happens
-                                    _ => Err(IoError::new(IoErrorKind::Other, "unimplemented")),
-                                }
-                            });
-                        let read_write = RwStreamSink::new(framed_data);
-                        Box::new(read_write) as Box<AsyncStream + Send>
-                    })
-            });
+                    // Plug our own API on top of the API of the websockets library.
+                    let framed_data = client
+                        .map_err(|err| IoError::new(IoErrorKind::Other, err))
+                        .sink_map_err(|err| IoError::new(IoErrorKind::Other, err))
+                        .with(|data| Ok(OwnedMessage::Binary(data)))
+                        .and_then(|recv| {
+                            match recv {
+                                OwnedMessage::Binary(data) => Ok(data),
+                                OwnedMessage::Text(data) => Ok(data.into_bytes()),
+                                // TODO: pings and pongs and close messages need to be
+                                //       answered; and this is really hard; for now we produce
+                                //         an error when that happens
+                                _ => Err(IoError::new(IoErrorKind::Other, "unimplemented")),
+                            }
+                        });
+                    let read_write = RwStreamSink::new(framed_data);
+                    Box::new(read_write) as Box<AsyncStream + Send>
+                })
+        });
 
         Ok(Box::new(dial) as Box<_>)
     }
@@ -232,18 +237,10 @@ fn client_addr_to_ws(client_addr: &Multiaddr, is_wss: bool) -> String {
             "127.0.0.1".to_owned()
         } else {
             match (&protocols[0], &protocols[1]) {
-                (&Protocol::Ip4(ref ip), &Protocol::Tcp(port)) => {
-                    format!("{}:{}", ip, port)
-                }
-                (&Protocol::Ip6(ref ip), &Protocol::Tcp(port)) => {
-                    format!("[{}]:{}", ip, port)
-                }
-                (&Protocol::Dns4(ref ns), &Protocol::Tcp(port)) => {
-                    format!("{}:{}", ns, port)
-                }
-                (&Protocol::Dns6(ref ns), &Protocol::Tcp(port)) => {
-                    format!("{}:{}", ns, port)
-                }
+                (&Protocol::Ip4(ref ip), &Protocol::Tcp(port)) => format!("{}:{}", ip, port),
+                (&Protocol::Ip6(ref ip), &Protocol::Tcp(port)) => format!("[{}]:{}", ip, port),
+                (&Protocol::Dns4(ref ns), &Protocol::Tcp(port)) => format!("{}:{}", ns, port),
+                (&Protocol::Dns6(ref ns), &Protocol::Tcp(port)) => format!("{}:{}", ns, port),
                 _ => "127.0.0.1".to_owned(),
             }
         }

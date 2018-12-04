@@ -41,9 +41,13 @@ extern crate multiaddr;
 extern crate tokio_dns;
 extern crate tokio_io;
 
-use futures::{future::{self, Either, FutureResult, JoinAll}, prelude::*, try_ready};
+use futures::{
+    future::{self, Either, FutureResult, JoinAll},
+    prelude::*,
+    try_ready,
+};
 use log::Level;
-use multiaddr::{Protocol, Multiaddr};
+use multiaddr::{Multiaddr, Protocol};
 use std::fmt;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::net::IpAddr;
@@ -94,16 +98,26 @@ where
 
 impl<T> Transport for DnsConfig<T>
 where
-    T: Transport
+    T: Transport,
 {
     type Output = T::Output;
     type Listener = T::Listener;
     type ListenerUpgrade = T::ListenerUpgrade;
-    type Dial = Either<T::Dial,
-        DialFuture<T, JoinFuture<JoinAll<std::vec::IntoIter<Either<
-            ResolveFuture<tokio_dns::IoFuture<Vec<IpAddr>>>,
-            FutureResult<Protocol<'static>, IoError>>>>
-        >>
+    type Dial = Either<
+        T::Dial,
+        DialFuture<
+            T,
+            JoinFuture<
+                JoinAll<
+                    std::vec::IntoIter<
+                        Either<
+                            ResolveFuture<tokio_dns::IoFuture<Vec<IpAddr>>>,
+                            FutureResult<Protocol<'static>, IoError>,
+                        >,
+                    >,
+                >,
+            >,
+        >,
     >;
 
     #[inline]
@@ -144,35 +158,40 @@ where
         let resolver = self.resolver;
 
         trace!("Dialing address with DNS: {}", addr);
-        let resolve_iters = addr.iter()
+        let resolve_iters = addr
+            .iter()
             .map(move |cmp| match cmp {
-                Protocol::Dns4(ref name) =>
-                    Either::A(ResolveFuture {
-                        name: if log_enabled!(Level::Trace) {
-                            Some(name.clone().into_owned())
-                        } else {
-                            None
-                        },
-                        inner: resolver.resolve(name),
-                        ty: ResolveTy::Dns4
-                    }),
-                Protocol::Dns6(ref name) =>
-                    Either::A(ResolveFuture {
-                        name: if log_enabled!(Level::Trace) {
-                            Some(name.clone().into_owned())
-                        } else {
-                            None
-                        },
-                        inner: resolver.resolve(name),
-                        ty: ResolveTy::Dns6
-                    }),
-                cmp => Either::B(future::ok(cmp.acquire()))
+                Protocol::Dns4(ref name) => Either::A(ResolveFuture {
+                    name: if log_enabled!(Level::Trace) {
+                        Some(name.clone().into_owned())
+                    } else {
+                        None
+                    },
+                    inner: resolver.resolve(name),
+                    ty: ResolveTy::Dns4,
+                }),
+                Protocol::Dns6(ref name) => Either::A(ResolveFuture {
+                    name: if log_enabled!(Level::Trace) {
+                        Some(name.clone().into_owned())
+                    } else {
+                        None
+                    },
+                    inner: resolver.resolve(name),
+                    ty: ResolveTy::Dns6,
+                }),
+                cmp => Either::B(future::ok(cmp.acquire())),
             })
             .collect::<Vec<_>>()
             .into_iter();
 
-        let new_addr = JoinFuture { addr, future: future::join_all(resolve_iters) };
-        Ok(Either::B(DialFuture { trans: Some(self.inner), future: Either::A(new_addr) }))
+        let new_addr = JoinFuture {
+            addr,
+            future: future::join_all(resolve_iters),
+        };
+        Ok(Either::B(DialFuture {
+            trans: Some(self.inner),
+            future: Either::A(new_addr),
+        }))
     }
 
     #[inline]
@@ -195,12 +214,12 @@ enum ResolveTy {
 pub struct ResolveFuture<T> {
     name: Option<String>,
     inner: T,
-    ty: ResolveTy
+    ty: ResolveTy,
 }
 
 impl<T> Future for ResolveFuture<T>
 where
-    T: Future<Item = Vec<IpAddr>, Error = IoError>
+    T: Future<Item = Vec<IpAddr>, Error = IoError>,
 {
     type Item = Protocol<'static>;
     type Error = IoError;
@@ -209,16 +228,17 @@ where
         let ty = self.ty;
         let addrs = try_ready!(self.inner.poll());
         trace!("DNS component resolution: {:?} => {:?}", self.name, addrs);
-        let mut addrs = addrs
-            .into_iter()
-            .filter_map(move |addr| match (addr, ty) {
-                (IpAddr::V4(addr), ResolveTy::Dns4) => Some(Protocol::Ip4(addr)),
-                (IpAddr::V6(addr), ResolveTy::Dns6) => Some(Protocol::Ip6(addr)),
-                _ => None,
-            });
+        let mut addrs = addrs.into_iter().filter_map(move |addr| match (addr, ty) {
+            (IpAddr::V4(addr), ResolveTy::Dns4) => Some(Protocol::Ip4(addr)),
+            (IpAddr::V6(addr), ResolveTy::Dns6) => Some(Protocol::Ip6(addr)),
+            _ => None,
+        });
         match addrs.next() {
             Some(a) => Ok(Async::Ready(a)),
-            None => Err(IoError::new(IoErrorKind::Other, "couldn't find any relevant IP address"))
+            None => Err(IoError::new(
+                IoErrorKind::Other,
+                "couldn't find any relevant IP address",
+            )),
         }
     }
 }
@@ -227,12 +247,12 @@ where
 #[derive(Debug)]
 pub struct JoinFuture<T> {
     addr: Multiaddr,
-    future: T
+    future: T,
 }
 
 impl<T> Future for JoinFuture<T>
 where
-    T: Future<Item = Vec<Protocol<'static>>, Error = IoError>
+    T: Future<Item = Vec<Protocol<'static>>, Error = IoError>,
 {
     type Item = Multiaddr;
     type Error = IoError;
@@ -255,7 +275,7 @@ pub struct DialFuture<T: Transport, F> {
 impl<T, F> Future for DialFuture<T, F>
 where
     T: Transport,
-    F: Future<Item = Multiaddr, Error = IoError>
+    F: Future<Item = Multiaddr, Error = IoError>,
 {
     type Item = T::Output;
     type Error = IoError;
@@ -267,10 +287,12 @@ where
                     let addr = try_ready!(f.poll());
                     match self.trans.take().unwrap().dial(addr) {
                         Ok(dial) => Either::B(dial),
-                        Err(_) => return Err(IoError::new(IoErrorKind::Other, "multiaddr not supported"))
+                        Err(_) => {
+                            return Err(IoError::new(IoErrorKind::Other, "multiaddr not supported"))
+                        }
                     }
                 }
-                Either::B(ref mut f) => return f.poll()
+                Either::B(ref mut f) => return f.poll(),
             };
             self.future = next
         }
@@ -282,9 +304,9 @@ mod tests {
     extern crate libp2p_tcp_transport;
     use self::libp2p_tcp_transport::TcpConfig;
     use futures::future;
-    use swarm::Transport;
-    use multiaddr::{Protocol, Multiaddr};
+    use multiaddr::{Multiaddr, Protocol};
     use std::io::Error as IoError;
+    use swarm::Transport;
     use DnsConfig;
 
     #[test]

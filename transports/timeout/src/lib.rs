@@ -34,8 +34,8 @@ use futures::{Async, Future, Poll, Stream};
 use libp2p_core::{Multiaddr, Transport};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::time::Duration;
-use tokio_timer::Timeout;
 use tokio_timer::timeout::Error as TimeoutError;
+use tokio_timer::Timeout;
 
 /// Wraps around a `Transport` and adds a timeout to all the incoming and outgoing connections.
 ///
