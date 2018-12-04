@@ -657,7 +657,7 @@ where
                                  opened and remove only when a connection is closed; the \
                                  underlying API is guaranteed to always deliver a connection \
                                  closed message after it has been opened, and no two closed \
-                                 messages; qed");
+                                 messages; QED");
                     debug_assert!(!self.reach_attempts.out_reach_attempts.contains_key(&peer_id));
                     action = Default::default();
                     out_event = RawSwarmEvent::NodeError {
@@ -672,7 +672,7 @@ where
                                  opened and remove only when a connection is closed; the \
                                  underlying API is guaranteed to always deliver a connection \
                                  closed message after it has been opened, and no two closed \
-                                 messages; qed");
+                                 messages; QED");
                     debug_assert!(!self.reach_attempts.out_reach_attempts.contains_key(&peer_id));
                     action = Default::default();
                     out_event = RawSwarmEvent::NodeClosed { peer_id, endpoint };
@@ -696,7 +696,7 @@ where
                              active_nodes.add_reach_attempt, and we remove only when we call \
                              interrupt or when a reach attempt succeeds or errors; therefore the \
                              out_reach_attempts should always be in sync with the actual \
-                             attempts; qed");
+                             attempts; QED");
             }
 
             return Async::Ready(out_event);
@@ -770,7 +770,7 @@ where
                 .expect("We insert into connected_points whenever a connection is opened and \
                          remove only when a connection is closed; the underlying API is \
                          guaranteed to always deliver a connection closed message after it has \
-                         been opened, and no two closed messages; qed");
+                         been opened, and no two closed messages; QED");
             return (action, RawSwarmEvent::Replaced {
                 peer_id,
                 endpoint: opened_endpoint,
@@ -808,7 +808,7 @@ where
                 .expect("We insert into connected_points whenever a connection is opened and \
                         remove only when a connection is closed; the underlying API is guaranteed \
                         to always deliver a connection closed message after it has been opened, \
-                        and no two closed messages; qed");
+                        and no two closed messages; QED");
             return (Default::default(), RawSwarmEvent::Replaced {
                 peer_id,
                 endpoint: opened_endpoint,
@@ -1103,7 +1103,7 @@ impl<'a, TInEvent> PeerConnected<'a, TInEvent> {
             .expect("We insert into connected_points whenever a connection is opened and remove \
                      only when a connection is closed; the underlying API is guaranteed to always \
                      deliver a connection closed message after it has been opened, and no two \
-                     closed messages; qed")
+                     closed messages; QED")
     }
 
     /// Sends an event to the node.

@@ -29,7 +29,7 @@
 
 use arrayvec::ArrayVec;
 use bigint::U512;
-use libp2p_core::PeerId;
+use multihash::Multihash;
 use parking_lot::{Mutex, MutexGuard};
 use std::mem;
 use std::slice::Iter as SliceIter;
@@ -57,7 +57,8 @@ where
     fn clone(&self) -> Self {
         KBucketsTable {
             my_id: self.my_id.clone(),
-            tables: self.tables
+            tables: self
+                .tables
                 .iter()
                 .map(|t| t.lock().clone())
                 .map(Mutex::new)
@@ -124,7 +125,7 @@ pub trait KBucketsPeerId: Eq + Clone {
     fn leading_zeros(Self::Distance) -> u32;
 }
 
-impl KBucketsPeerId for PeerId {
+impl KBucketsPeerId for Multihash {
     type Distance = U512;
 
     #[inline]
@@ -201,7 +202,7 @@ where
             let mut table = table.lock();
             table.flush(self.ping_timeout);
             if table.last_update.elapsed() > self.ping_timeout {
-                continue // ignore bucket with expired nodes
+                continue; // ignore bucket with expired nodes
             }
             for node in table.nodes.iter() {
                 out.push(node.id.clone());
@@ -357,7 +358,7 @@ mod tests {
     extern crate rand;
     use self::rand::random;
     use kbucket::{KBucketsTable, UpdateOutcome, MAX_NODES_PER_BUCKET};
-    use libp2p_core::PeerId;
+    use multihash::Multihash;
     use std::thread;
     use std::time::Duration;
 
@@ -367,14 +368,20 @@ mod tests {
             let mut bytes = vec![random(); 34];
             bytes[0] = 18;
             bytes[1] = 32;
-            PeerId::from_bytes(bytes.clone()).expect(&format!("creating `my_id` PeerId from bytes {:#?} failed", bytes))
+            Multihash::from_bytes(bytes.clone()).expect(&format!(
+                "creating `my_id` Multihash from bytes {:#?} failed",
+                bytes
+            ))
         };
 
         let other_id = {
             let mut bytes = vec![random(); 34];
             bytes[0] = 18;
             bytes[1] = 32;
-            PeerId::from_bytes(bytes.clone()).expect(&format!("creating `other_id` PeerId from bytes {:#?} failed", bytes))
+            Multihash::from_bytes(bytes.clone()).expect(&format!(
+                "creating `other_id` Multihash from bytes {:#?} failed",
+                bytes
+            ))
         };
 
         let table = KBucketsTable::new(my_id, Duration::from_secs(5));
@@ -391,13 +398,13 @@ mod tests {
             let mut bytes = vec![random(); 34];
             bytes[0] = 18;
             bytes[1] = 32;
-            PeerId::from_bytes(bytes).unwrap()
+            Multihash::from_bytes(bytes).unwrap()
         };
 
         let table = KBucketsTable::new(my_id.clone(), Duration::from_secs(5));
         match table.update(my_id, ()) {
             UpdateOutcome::FailSelfUpdate => (),
-            _ => panic!()
+            _ => panic!(),
         }
     }
 
@@ -407,7 +414,7 @@ mod tests {
             let mut bytes = vec![random(); 34];
             bytes[0] = 18;
             bytes[1] = 32;
-            PeerId::from_bytes(bytes).unwrap()
+            Multihash::from_bytes(bytes).unwrap()
         };
 
         // Generate some other IDs varying by just one bit.
@@ -416,7 +423,7 @@ mod tests {
                 let bit_num = random::<usize>() % 256;
                 let mut id = my_id.as_bytes().to_vec().clone();
                 id[33 - (bit_num / 8)] ^= 1 << (bit_num % 8);
-                (PeerId::from_bytes(id).unwrap(), bit_num)
+                (Multihash::from_bytes(id).unwrap(), bit_num)
             })
             .collect::<Vec<_>>();
 
@@ -445,7 +452,7 @@ mod tests {
             let mut bytes = vec![random(); 34];
             bytes[0] = 18;
             bytes[1] = 32;
-            PeerId::from_bytes(bytes).unwrap()
+            Multihash::from_bytes(bytes).unwrap()
         };
 
         assert!(MAX_NODES_PER_BUCKET <= 251); // Test doesn't work otherwise.
@@ -454,7 +461,7 @@ mod tests {
                 let mut id = my_id.clone().into_bytes();
                 id[2] ^= 0x80; // Flip the first bit so that we get in the most distant bucket.
                 id[33] = id[33].wrapping_add(n as u8);
-                PeerId::from_bytes(id).unwrap()
+                Multihash::from_bytes(id).unwrap()
             })
             .collect::<Vec<_>>();
 
