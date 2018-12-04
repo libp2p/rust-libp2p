@@ -32,6 +32,7 @@ extern crate libp2p_core;
 extern crate multiaddr;
 extern crate net2;
 extern crate rand;
+extern crate tokio_io;
 extern crate tokio_reactor;
 extern crate tokio_timer;
 extern crate tokio_udp;
@@ -46,6 +47,7 @@ const META_QUERY_SERVICE: &'static [u8] = b"_services._dns-sd._udp.local";
 
 pub use self::service::MdnsService;
 
+mod behaviour;
 mod dns;
 
 pub mod service;

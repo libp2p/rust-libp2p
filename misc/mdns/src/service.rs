@@ -325,7 +325,7 @@ pub struct MdnsQuery<'a> {
 impl<'a> MdnsQuery<'a> {
     /// Respond to the query.
     ///
-    /// Pass the ID of the local peer, and the list o addresses we're listening on.
+    /// Pass the ID of the local peer, and the list of addresses we're listening on.
     ///
     /// If there are more than 2^16-1 addresses, ignores the others.
     ///
