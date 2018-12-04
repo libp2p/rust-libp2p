@@ -30,6 +30,7 @@ use crate::{
     topology::Topology
 };
 use futures::prelude::*;
+use smallvec::SmallVec;
 use std::{fmt, io, ops::{Deref, DerefMut}};
 
 pub use crate::nodes::raw_swarm::ConnectedPoint;
@@ -37,12 +38,12 @@ pub use crate::nodes::raw_swarm::ConnectedPoint;
 /// Contains the state of the network, plus the way it should behave.
 pub struct Swarm<TTransport, TBehaviour, TTopology>
 where TTransport: Transport,
-      TBehaviour: NetworkBehaviour,
+      TBehaviour: NetworkBehaviour<TTopology>,
 {
     raw_swarm: RawSwarm<
         TTransport,
-        <<TBehaviour as NetworkBehaviour>::ProtocolsHandler as ProtocolsHandler>::InEvent,
-        <<TBehaviour as NetworkBehaviour>::ProtocolsHandler as ProtocolsHandler>::OutEvent,
+        <<TBehaviour as NetworkBehaviour<TTopology>>::ProtocolsHandler as ProtocolsHandler>::InEvent,
+        <<TBehaviour as NetworkBehaviour<TTopology>>::ProtocolsHandler as ProtocolsHandler>::OutEvent,
         NodeHandlerWrapper<TBehaviour::ProtocolsHandler>,
     >,
 
@@ -53,11 +54,17 @@ where TTransport: Transport,
     /// Holds the topology of the network. In other words all the nodes that we think exist, even
     /// if we're not connected to them.
     topology: TTopology,
+
+    /// List of protocols that the behaviour says it supports.
+    supported_protocols: SmallVec<[Vec<u8>; 16]>,
+
+    /// List of multiaddresses we're listening on after NAT traversal.
+    external_addresses: SmallVec<[Multiaddr; 8]>,
 }
 
 impl<TTransport, TBehaviour, TTopology> Deref for Swarm<TTransport, TBehaviour, TTopology>
 where TTransport: Transport,
-      TBehaviour: NetworkBehaviour,
+      TBehaviour: NetworkBehaviour<TTopology>,
 {
     type Target = TBehaviour;
 
@@ -69,7 +76,7 @@ where TTransport: Transport,
 
 impl<TTransport, TBehaviour, TTopology> DerefMut for Swarm<TTransport, TBehaviour, TTopology>
 where TTransport: Transport,
-      TBehaviour: NetworkBehaviour,
+      TBehaviour: NetworkBehaviour<TTopology>,
 {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
@@ -78,7 +85,7 @@ where TTransport: Transport,
 }
 
 impl<TTransport, TBehaviour, TMuxer, TTopology> Swarm<TTransport, TBehaviour, TTopology>
-where TBehaviour: NetworkBehaviour,
+where TBehaviour: NetworkBehaviour<TTopology>,
       TMuxer: StreamMuxer + Send + Sync + 'static,
       <TMuxer as StreamMuxer>::OutboundSubstream: Send + 'static,
       <TMuxer as StreamMuxer>::Substream: Send + 'static,
@@ -105,12 +112,21 @@ where TBehaviour: NetworkBehaviour,
 {
     /// Builds a new `Swarm`.
     #[inline]
-    pub fn new(transport: TTransport, behaviour: TBehaviour, topology: TTopology) -> Self {
+    pub fn new(transport: TTransport, mut behaviour: TBehaviour, topology: TTopology) -> Self {
+        let supported_protocols = behaviour
+            .new_handler()
+            .listen_protocol()
+            .protocol_names()
+            .map(|(name, _)| name.to_vec())
+            .collect();
+
         let raw_swarm = RawSwarm::new(transport);
         Swarm {
             raw_swarm,
             behaviour,
             topology,
+            supported_protocols,
+            external_addresses: SmallVec::new(),
         }
     }
 
@@ -171,7 +187,7 @@ where TBehaviour: NetworkBehaviour,
 }
 
 impl<TTransport, TBehaviour, TMuxer, TTopology> Stream for Swarm<TTransport, TBehaviour, TTopology>
-where TBehaviour: NetworkBehaviour,
+where TBehaviour: NetworkBehaviour<TTopology>,
       TMuxer: StreamMuxer + Send + Sync + 'static,
       <TMuxer as StreamMuxer>::OutboundSubstream: Send + 'static,
       <TMuxer as StreamMuxer>::Substream: Send + 'static,
@@ -230,7 +246,16 @@ where TBehaviour: NetworkBehaviour,
                 Async::Ready(RawSwarmEvent::UnknownPeerDialError { .. }) => {},
             }
 
-            match self.behaviour.poll() {
+            let behaviour_poll = {
+                let mut parameters = PollParameters {
+                    topology: &mut self.topology,
+                    supported_protocols: &self.supported_protocols,
+                    external_addresses: &self.external_addresses,
+                };
+                self.behaviour.poll(&mut parameters)
+            };
+
+            match behaviour_poll {
                 Async::NotReady if raw_swarm_not_ready => return Ok(Async::NotReady),
                 Async::NotReady => (),
                 Async::Ready(NetworkBehaviourAction::GenerateEvent(event)) => {
@@ -247,6 +272,13 @@ where TBehaviour: NetworkBehaviour,
                         peer.send_event(event);
                     }
                 },
+                Async::Ready(NetworkBehaviourAction::ReportObservedAddr { address }) => {
+                    for addr in self.raw_swarm.nat_traversal(&address) {
+                        // TODO: is it a good idea to add these addresses permanently? what about
+                        //       a TTL instead?
+                        self.external_addresses.push(addr);
+                    }
+                },
             }
         }
     }
@@ -256,7 +288,7 @@ where TBehaviour: NetworkBehaviour,
 ///
 /// This trait has been designed to be composable. Multiple implementations can be combined into
 /// one that handles all the behaviours at once.
-pub trait NetworkBehaviour {
+pub trait NetworkBehaviour<TTopology> {
     /// Handler for all the protocols the network supports.
     type ProtocolsHandler: ProtocolsHandler;
     /// Event generated by the swarm.
@@ -286,7 +318,42 @@ pub trait NetworkBehaviour {
     /// Polls for things that swarm should do.
     ///
     /// This API mimics the API of the `Stream` trait.
-    fn poll(&mut self) -> Async<NetworkBehaviourAction<<Self::ProtocolsHandler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
+    fn poll(&mut self, topology: &mut PollParameters<TTopology>) -> Async<NetworkBehaviourAction<<Self::ProtocolsHandler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
+}
+
+/// Parameters passed to `poll()` that the `NetworkBehaviour` has access to.
+#[derive(Debug)]
+pub struct PollParameters<'a, TTopology: 'a> {
+    topology: &'a mut TTopology,
+    supported_protocols: &'a [Vec<u8>],
+    external_addresses: &'a [Multiaddr],
+}
+
+impl<'a, TTopology> PollParameters<'a, TTopology> {
+    /// Returns a reference to the topology of the network.
+    #[inline]
+    pub fn topology(&mut self) -> &mut TTopology {
+        &mut self.topology
+    }
+
+    /// Returns the list of protocol the behaviour supports when a remote negotiates a protocol on
+    /// an inbound substream.
+    ///
+    /// The iterator's elements are the ASCII names as reported on the wire.
+    ///
+    /// Note that the list is computed once at initialization and never refreshed.
+    #[inline]
+    pub fn supported_protocols(&self) -> impl ExactSizeIterator<Item = &[u8]> {
+        self.supported_protocols.iter().map(AsRef::as_ref)
+    }
+
+    /// Returns the list of the addresses we're listening on, after accounting for NAT traversal.
+    ///
+    /// This corresponds to the elements produced with `ReportObservedAddr`.
+    #[inline]
+    pub fn external_addresses(&self) -> impl ExactSizeIterator<Item = &Multiaddr> {
+        self.external_addresses.iter()
+    }
 }
 
 /// Action to perform.
@@ -318,5 +385,13 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
         peer_id: PeerId,
         /// Event to send to the peer.
         event: TInEvent,
+    },
+
+    /// Reports that a remote observes us as this address.
+    ///
+    /// The swarm will pass this address through the transport's NAT traversal.
+    ReportObservedAddr {
+        /// The address we're being observed as.
+        address: Multiaddr,
     },
 }
