@@ -30,7 +30,7 @@ use crate::{
 };
 use fnv::FnvHashMap;
 use futures::prelude::*;
-use std::{collections::hash_map::Entry, fmt, io, mem};
+use std::{collections::hash_map::Entry, error::Error, fmt, fmt::Display, io, mem};
 
 // TODO: make generic over PeerId
 
@@ -297,12 +297,12 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
     /// Interrupts a reach attempt.
     ///
     /// Returns `Ok` if something was interrupted, and `Err` if the ID is not or no longer valid.
-    pub fn interrupt(&mut self, id: ReachAttemptId) -> Result<(), InterruptErr> {
+    pub fn interrupt(&mut self, id: ReachAttemptId) -> Result<(), InterruptError> {
         match self.tasks.entry(id.0) {
-            Entry::Vacant(_) => Err(InterruptErr::VacantEntry),
+            Entry::Vacant(_) => Err(InterruptError::VacantEntry),
             Entry::Occupied(entry) => {
                 match entry.get() {
-                    TaskState::Connected(_) => return Err(InterruptErr::Connected),
+                    TaskState::Connected(_) => return Err(InterruptError::Connected),
                     TaskState::Pending => (),
                 };
 
@@ -440,14 +440,16 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
 }
 
 /// Errors for CollectionStream.interrupt(). 
-#[derive(Debug)]
-pub enum InterruptErr {
-    /// The task entry is vacant; it needs to be added first via add_reach_attempt
+#[derive(Debug, Error, Display)]
+pub enum InterruptError {
+    /// An invalid reach attempt has been used to try to interrupt. The task
+    /// entry is vacant; it needs to be added first via add_reach_attempt
     /// (with the TaskState set to Pending) before we try to connect.
-    VacantEntry,
+    ReachAttemptNotFound,
     /// The task has already connected to the node; interrupting a reach attempt
-    /// is thus redundant as it has already completed.
-    Connected,
+    /// is thus redundant as it has already completed. Thus, the reach attempt
+    /// that has tried to be used is no longer valid, since already reached.
+    AlreadyReached,
 }
 
 /// Access to a peer in the collection.
