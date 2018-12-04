@@ -20,20 +20,20 @@
 
 extern crate bytes;
 extern crate futures;
-extern crate libp2p_mplex as multiplex;
 extern crate libp2p_core as swarm;
+extern crate libp2p_mplex as multiplex;
 extern crate libp2p_tcp_transport as tcp;
 extern crate tokio;
 extern crate tokio_io;
 
 use futures::future::Future;
 use futures::{Sink, Stream};
-use std::sync::{Arc, mpsc};
+use std::sync::{mpsc, Arc};
 use std::thread;
 use swarm::{muxing, Transport};
 use tcp::TcpConfig;
-use tokio_io::codec::length_delimited::Framed;
 use tokio::runtime::current_thread::Runtime;
+use tokio_io::codec::length_delimited::Framed;
 
 #[test]
 fn client_to_server_outbound() {
@@ -42,8 +42,7 @@ fn client_to_server_outbound() {
     let (tx, rx) = mpsc::channel();
 
     let bg_thread = thread::spawn(move || {
-        let transport =
-            TcpConfig::new().with_upgrade(multiplex::MplexConfig::new());
+        let transport = TcpConfig::new().with_upgrade(multiplex::MplexConfig::new());
 
         let (listener, addr) = transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -94,8 +93,7 @@ fn client_to_server_inbound() {
     let (tx, rx) = mpsc::channel();
 
     let bg_thread = thread::spawn(move || {
-        let transport =
-            TcpConfig::new().with_upgrade(multiplex::MplexConfig::new());
+        let transport = TcpConfig::new().with_upgrade(multiplex::MplexConfig::new());
 
         let (listener, addr) = transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())

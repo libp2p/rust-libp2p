@@ -27,18 +27,23 @@ extern crate tokio_io;
 extern crate yamux;
 
 use bytes::Bytes;
-use futures::{future::{self, FutureResult}, prelude::*};
-use libp2p_core::{muxing::Shutdown, upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}};
+use futures::{
+    future::{self, FutureResult},
+    prelude::*,
+};
+use libp2p_core::{
+    muxing::Shutdown,
+    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
+};
+use std::io::Error as IoError;
 use std::{io, iter};
-use std::io::{Error as IoError};
 use tokio_io::{AsyncRead, AsyncWrite};
-
 
 pub struct Yamux<C>(yamux::Connection<C>);
 
 impl<C> Yamux<C>
 where
-    C: AsyncRead + AsyncWrite + 'static
+    C: AsyncRead + AsyncWrite + 'static,
 {
     pub fn new(c: C, cfg: yamux::Config, mode: yamux::Mode) -> Self {
         Yamux(yamux::Connection::new(c, cfg, mode))
@@ -47,7 +52,7 @@ where
 
 impl<C> libp2p_core::StreamMuxer for Yamux<C>
 where
-    C: AsyncRead + AsyncWrite + 'static
+    C: AsyncRead + AsyncWrite + 'static,
 {
     type Substream = yamux::StreamHandle<C>;
     type OutboundSubstream = FutureResult<Option<Self::Substream>, io::Error>;
@@ -61,24 +66,29 @@ where
             }
             Ok(Async::NotReady) => Ok(Async::NotReady),
             Ok(Async::Ready(None)) => Ok(Async::Ready(None)),
-            Ok(Async::Ready(Some(stream))) => Ok(Async::Ready(Some(stream)))
+            Ok(Async::Ready(Some(stream))) => Ok(Async::Ready(Some(stream))),
         }
     }
 
     #[inline]
     fn open_outbound(&self) -> Self::OutboundSubstream {
-        let stream = self.0.open_stream().map_err(|e| io::Error::new(io::ErrorKind::Other, e));
+        let stream = self
+            .0
+            .open_stream()
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e));
         future::result(stream)
     }
 
     #[inline]
-    fn poll_outbound(&self, substream: &mut Self::OutboundSubstream) -> Poll<Option<Self::Substream>, IoError> {
+    fn poll_outbound(
+        &self,
+        substream: &mut Self::OutboundSubstream,
+    ) -> Poll<Option<Self::Substream>, IoError> {
         substream.poll()
     }
 
     #[inline]
-    fn destroy_outbound(&self, _: Self::OutboundSubstream) {
-    }
+    fn destroy_outbound(&self, _: Self::OutboundSubstream) {}
 
     #[inline]
     fn read_substream(&self, sub: &mut Self::Substream, buf: &mut [u8]) -> Poll<usize, IoError> {
@@ -101,8 +111,7 @@ where
     }
 
     #[inline]
-    fn destroy_substream(&self, _: Self::Substream) {
-    }
+    fn destroy_substream(&self, _: Self::Substream) {}
 
     #[inline]
     fn shutdown(&self, _: Shutdown) -> Poll<(), IoError> {
@@ -114,8 +123,6 @@ where
         self.0.flush()
     }
 }
-
-
 
 #[derive(Clone)]
 pub struct Config(yamux::Config);
@@ -166,4 +173,3 @@ where
         future::ok(Yamux::new(i, self.0, yamux::Mode::Client))
     }
 }
-
