@@ -440,8 +440,8 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
 }
 
 /// Errors for CollectionStream.interrupt(). 
-#[derive(Debug, Error, Display)]
-pub enum InterruptError {
+#[derive(Debug)]
+pub enum InterruptError<Error, Display> {
     /// An invalid reach attempt has been used to try to interrupt. The task
     /// entry is vacant; it needs to be added first via add_reach_attempt
     /// (with the TaskState set to Pending) before we try to connect.
