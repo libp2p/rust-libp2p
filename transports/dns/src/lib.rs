@@ -41,7 +41,7 @@ extern crate multiaddr;
 extern crate tokio_dns;
 extern crate tokio_io;
 
-use futures::future::{self, Future};
+use futures::{future::{self, Either, FutureResult, JoinAll}, prelude::*, try_ready};
 use log::Level;
 use multiaddr::{Protocol, Multiaddr};
 use std::fmt;
@@ -94,13 +94,17 @@ where
 
 impl<T> Transport for DnsConfig<T>
 where
-    T: Transport + Send + 'static, // TODO: 'static :-/
-    T::Dial: Send,
+    T: Transport
 {
     type Output = T::Output;
     type Listener = T::Listener;
     type ListenerUpgrade = T::ListenerUpgrade;
-    type Dial = Box<Future<Item = Self::Output, Error = IoError> + Send>;
+    type Dial = Either<T::Dial,
+        DialFuture<T, JoinFuture<JoinAll<std::vec::IntoIter<Either<
+            ResolveFuture<tokio_dns::IoFuture<Vec<IpAddr>>>,
+            FutureResult<Protocol<'static>, IoError>>>>
+        >>
+    >;
 
     #[inline]
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -126,7 +130,7 @@ where
         if !contains_dns {
             trace!("Pass-through address without DNS: {}", addr);
             return match self.inner.dial(addr) {
-                Ok(d) => Ok(Box::new(d) as Box<_>),
+                Ok(d) => Ok(Either::A(d)),
                 Err((inner, addr)) => Err((
                     DnsConfig {
                         inner,
@@ -142,33 +146,33 @@ where
         trace!("Dialing address with DNS: {}", addr);
         let resolve_iters = addr.iter()
             .map(move |cmp| match cmp {
-                Protocol::Dns4(ref name) => {
-                    future::Either::A(resolve_dns(name, &resolver, ResolveTy::Dns4))
-                }
-                Protocol::Dns6(ref name) => {
-                    future::Either::A(resolve_dns(name, &resolver, ResolveTy::Dns6))
-                }
-                cmp => future::Either::B(future::ok(cmp.acquire())),
+                Protocol::Dns4(ref name) =>
+                    Either::A(ResolveFuture {
+                        name: if log_enabled!(Level::Trace) {
+                            Some(name.clone().into_owned())
+                        } else {
+                            None
+                        },
+                        inner: resolver.resolve(name),
+                        ty: ResolveTy::Dns4
+                    }),
+                Protocol::Dns6(ref name) =>
+                    Either::A(ResolveFuture {
+                        name: if log_enabled!(Level::Trace) {
+                            Some(name.clone().into_owned())
+                        } else {
+                            None
+                        },
+                        inner: resolver.resolve(name),
+                        ty: ResolveTy::Dns6
+                    }),
+                cmp => Either::B(future::ok(cmp.acquire()))
             })
             .collect::<Vec<_>>()
             .into_iter();
 
-        let new_addr = future::join_all(resolve_iters).map(move |outcome| {
-            let outcome: Multiaddr = outcome.into_iter().collect();
-            debug!("DNS resolution outcome: {} => {}", addr, outcome);
-            outcome
-        });
-
-        let inner = self.inner;
-        let future = new_addr
-            .and_then(move |addr| {
-                inner
-                    .dial(addr)
-                    .map_err(|_| IoError::new(IoErrorKind::Other, "multiaddr not supported"))
-            })
-            .flatten();
-
-        Ok(Box::new(future) as Box<_>)
+        let new_addr = JoinFuture { addr, future: future::join_all(resolve_iters) };
+        Ok(Either::B(DialFuture { trans: Some(self.inner), future: Either::A(new_addr) }))
     }
 
     #[inline]
@@ -186,39 +190,91 @@ enum ResolveTy {
     Dns6,
 }
 
-// Resolve a DNS name and returns a future with the result.
-fn resolve_dns<'a>(
-    name: &str,
-    resolver: &CpuPoolResolver,
-    ty: ResolveTy,
-) -> impl Future<Item = Protocol<'a>, Error = IoError> {
-    let debug_name = if log_enabled!(Level::Trace) {
-        Some(name.to_owned())
-    } else {
-        None
-    };
+/// Future, performing DNS resolution.
+#[derive(Debug)]
+pub struct ResolveFuture<T> {
+    name: Option<String>,
+    inner: T,
+    ty: ResolveTy
+}
 
-    resolver.resolve(name).and_then(move |addrs| {
-        if log_enabled!(Level::Trace) {
-            trace!(
-                "DNS component resolution: {} => {:?}",
-                debug_name.expect("trace log level was enabled"),
-                addrs
-            );
-        }
+impl<T> Future for ResolveFuture<T>
+where
+    T: Future<Item = Vec<IpAddr>, Error = IoError>
+{
+    type Item = Protocol<'static>;
+    type Error = IoError;
 
-        addrs
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let ty = self.ty;
+        let addrs = try_ready!(self.inner.poll());
+        trace!("DNS component resolution: {:?} => {:?}", self.name, addrs);
+        let mut addrs = addrs
             .into_iter()
             .filter_map(move |addr| match (addr, ty) {
                 (IpAddr::V4(addr), ResolveTy::Dns4) => Some(Protocol::Ip4(addr)),
                 (IpAddr::V6(addr), ResolveTy::Dns6) => Some(Protocol::Ip6(addr)),
                 _ => None,
-            })
-            .next()
-            .ok_or_else(|| {
-                IoError::new(IoErrorKind::Other, "couldn't find any relevant IP address")
-            })
-    })
+            });
+        match addrs.next() {
+            Some(a) => Ok(Async::Ready(a)),
+            None => Err(IoError::new(IoErrorKind::Other, "couldn't find any relevant IP address"))
+        }
+    }
+}
+
+/// Build final multi-address from resolving futures.
+#[derive(Debug)]
+pub struct JoinFuture<T> {
+    addr: Multiaddr,
+    future: T
+}
+
+impl<T> Future for JoinFuture<T>
+where
+    T: Future<Item = Vec<Protocol<'static>>, Error = IoError>
+{
+    type Item = Multiaddr;
+    type Error = IoError;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let outcome = try_ready!(self.future.poll());
+        let outcome: Multiaddr = outcome.into_iter().collect();
+        debug!("DNS resolution outcome: {} => {}", self.addr, outcome);
+        Ok(Async::Ready(outcome))
+    }
+}
+
+/// Future, dialing the resolved multi-address.
+#[derive(Debug)]
+pub struct DialFuture<T: Transport, F> {
+    trans: Option<T>,
+    future: Either<F, T::Dial>,
+}
+
+impl<T, F> Future for DialFuture<T, F>
+where
+    T: Transport,
+    F: Future<Item = Multiaddr, Error = IoError>
+{
+    type Item = T::Output;
+    type Error = IoError;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        loop {
+            let next = match self.future {
+                Either::A(ref mut f) => {
+                    let addr = try_ready!(f.poll());
+                    match self.trans.take().unwrap().dial(addr) {
+                        Ok(dial) => Either::B(dial),
+                        Err(_) => return Err(IoError::new(IoErrorKind::Other, "multiaddr not supported"))
+                    }
+                }
+                Either::B(ref mut f) => return f.poll()
+            };
+            self.future = next
+        }
+    }
 }
 
 #[cfg(test)]
