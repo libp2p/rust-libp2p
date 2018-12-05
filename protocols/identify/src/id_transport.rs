@@ -184,8 +184,8 @@ where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
                     // Here is a tricky part: we need to get back the muxer in order to return
                     // it, but it is in an `Arc`.
                     let unwrapped = Arc::try_unwrap(muxer).unwrap_or_else(|_| {
-                        panic!("we clone the Arc only to put it into substreams ; once in the \
-                                Finishing state, no substream or upgrade exists anymore ; \
+                        panic!("we clone the Arc only to put it into substreams; once in the \
+                                Finishing state, no substream or upgrade exists anymore; \
                                 therefore there exists only one instance of the Arc; QED")
                     });
 
