@@ -54,7 +54,7 @@ pub fn build_query() -> Vec<u8> {
     // Program-generated transaction ID; unused by our implementation.
     append_u16(&mut out, rand::random());
 
-    // flags: 0x0 for a regular query.
+    // Flags: 0x0 for a regular query.
     append_u16(&mut out, 0x0);
 
     // Number of questions.
@@ -98,7 +98,7 @@ pub fn build_query_response(
     let mut out = Vec::with_capacity(320);
 
     append_u16(&mut out, id);
-    // flags: 0x84 for an answer.
+    // Flags: 0x84 for an answer.
     append_u16(&mut out, 0x8400);
     // Number of questions, answers, authorities, additionals.
     append_u16(&mut out, 0x0);
@@ -156,7 +156,7 @@ pub fn build_service_discovery_response(id: u16, ttl: Duration) -> Vec<u8> {
     let mut out = Vec::with_capacity(69);
 
     append_u16(&mut out, id);
-    // flags: 0x84 for an answer.
+    // Flags: 0x84 for an answer.
     append_u16(&mut out, 0x8400);
     // Number of questions, answers, authorities, additionals.
     append_u16(&mut out, 0x0);
