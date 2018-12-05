@@ -24,13 +24,12 @@ use libp2p_core::protocols_handler::{DummyProtocolsHandler, ProtocolsHandler};
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use libp2p_core::{Multiaddr, PeerId, multiaddr::Protocol, topology::MemoryTopology};
 use smallvec::SmallVec;
-use std::{io, iter, marker::PhantomData, time::Duration};
+use std::{fmt, io, iter, marker::PhantomData, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
 use void::{self, Void};
 
 /// A `NetworkBehaviour` for mDNS. Automatically discovers peers on the local network and adds
 /// them to the topology.
-// TODO: #[derive(Debug)]
 pub struct Mdns<TSubstream> {
     /// The inner service.
     service: MdnsService,
@@ -160,5 +159,13 @@ where
                 },
             }
         }
+    }
+}
+
+impl<TSubstream> fmt::Debug for Mdns<TSubstream> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_struct("Mdns")
+            .field("service", &self.service)
+            .finish()
     }
 }

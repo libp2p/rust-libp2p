@@ -301,6 +301,14 @@ impl MdnsService {
     }
 }
 
+impl fmt::Debug for MdnsService {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_struct("MdnsService")
+            .field("silent", &self.silent)
+            .finish()
+    }
+}
+
 /// A valid mDNS packet received by the service.
 #[derive(Debug)]
 pub enum MdnsPacket<'a> {
