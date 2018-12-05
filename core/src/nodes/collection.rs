@@ -440,7 +440,7 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
 }
 
 /// Reach attempt interrupt errors. 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub enum InterruptError {
     /// An invalid reach attempt has been used to try to interrupt. The task
     /// entry is vacant; it needs to be added first via add_reach_attempt
