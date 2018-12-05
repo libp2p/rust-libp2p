@@ -34,10 +34,13 @@ use std::io;
 use tokio_executor::Executor;
 use tokio_io::{AsyncRead, AsyncWrite, io::{ReadHalf, WriteHalf}};
 
+/// Holds info for rate limiting a connection, useful if bandwidth is limited or if there are many connections.
 #[derive(Clone)]
 pub struct RateLimited<T> {
     value: T,
+    /// A read limiter
     rlimiter: Limiter,
+    /// A write limiter
     wlimiter: Limiter,
 }
 
@@ -72,11 +75,14 @@ impl<T> RateLimited<T> {
 
 /// A rate-limited connection.
 pub struct Connection<C: AsyncRead + AsyncWrite> {
+    /// The rate-limited, readable half of a connection. 
     reader: Limited<ReadHalf<C>>,
+    /// The rate-limited, writable half of a connection. 
     writer: Limited<WriteHalf<C>>,
 }
 
 impl<C: AsyncRead + AsyncWrite> Connection<C> {
+    /// Creates a rate-limited connection.
     pub fn new(c: C, rlimiter: Limiter, wlimiter: Limiter) -> io::Result<Connection<C>> {
         let (r, w) = c.split();
         Ok(Connection {
@@ -116,6 +122,7 @@ impl<C: AsyncRead + AsyncWrite> AsyncWrite for Connection<C> {
     }
 }
 
+/// A listener for a `RateLimited` connection.
 pub struct Listener<T: Transport>(RateLimited<T::Listener>);
 
 impl<T: Transport> Stream for Listener<T> {
@@ -135,6 +142,7 @@ impl<T: Transport> Stream for Listener<T> {
     }
 }
 
+/// A `ListenerUpgrade` for a `RateLimited` connection.
 #[must_use = "futures do nothing unless polled"]
 pub struct ListenerUpgrade<T: Transport>(RateLimited<T::ListenerUpgrade>);
 

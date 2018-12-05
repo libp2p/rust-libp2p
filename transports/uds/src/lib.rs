@@ -154,6 +154,7 @@ fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
     Ok(out)
 }
 
+/// Stream to avoid boxing.
 pub struct ListenerStream<T> {
     stream: T,
     addr: Multiaddr
