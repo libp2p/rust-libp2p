@@ -40,7 +40,7 @@ use libp2p::{
 fn main() {
     // Create a random key for ourselves.
     let local_key = secio::SecioKeyPair::ed25519_generated().unwrap();
-    let local_peer_id = local_key.to_peer_id();
+    let local_pub_key = local_key.to_public_key();
 
     // Set up a an encrypted DNS-enabled TCP Transport over the Mplex protocol
     let transport = libp2p::CommonTransport::new()
@@ -70,8 +70,8 @@ fn main() {
         // to insert our local node in the DHT. However here we use `without_init` because this
         // example is very ephemeral and we don't want to pollute the DHT. In a real world
         // application, you want to use `new` instead.
-        let mut behaviour = libp2p::kad::Kademlia::without_init(local_peer_id);
-        libp2p::core::Swarm::new(transport, behaviour, topology)
+        let mut behaviour = libp2p::kad::Kademlia::without_init(local_pub_key.clone().into_peer_id());
+        libp2p::core::Swarm::new(transport, behaviour, topology, local_pub_key)
     };
 
     // Order Kademlia to search for a peer.
