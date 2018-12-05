@@ -818,7 +818,6 @@ mod tests {
         let fut = future::empty::<_, Void>();
         let reach_id = cs.add_reach_attempt(fut, Handler::default());
         assert!(cs.interrupt(reach_id).is_ok());
-
         assert_eq!(cs.interrupt(reach_id), Err(InterruptError::ReachAttemptNotFound))
     }
  
