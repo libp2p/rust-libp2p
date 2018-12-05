@@ -818,7 +818,7 @@ mod tests {
         let fut = future::empty::<_, Void>();
         let reach_id = cs.add_reach_attempt(fut, Handler::default());
         assert!(cs.interrupt(reach_id).is_ok());
-        assert_eq!(cs.interrupt(reach_id), Err(InterruptError::ReachAttemptNotFound))
+        assert_matches!(cs.interrupt(reach_id), Err(InterruptError::ReachAttemptNotFound))
     }
  
     #[test]
@@ -854,6 +854,6 @@ mod tests {
 
         assert!(cs.lock().has_connection(&peer_id), "Connection was not established");
 
-        assert_eq!(cs.lock().interrupt(reach_id), Err(InterruptError::AlreadyReached));
+        assert_matches!(cs.lock().interrupt(reach_id), Err(InterruptError::AlreadyReached));
     }
 }
