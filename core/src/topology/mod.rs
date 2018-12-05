@@ -50,7 +50,10 @@ impl MemoryTopology {
     /// Adds an address to the topology.
     #[inline]
     pub fn add_address(&mut self, peer: PeerId, addr: Multiaddr) {
-        self.list.entry(peer).or_insert_with(|| Vec::new()).push(addr);
+        let addrs = self.list.entry(peer).or_insert_with(|| Vec::new());
+        if addrs.iter().all(|a| a != &addr) {
+            addrs.push(addr);
+        }
     }
 
     /// Returns a list of all the known peers in the topology.

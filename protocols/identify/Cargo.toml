@@ -8,7 +8,6 @@ license = "MIT"
 bytes = "0.4"
 fnv = "1"
 futures = "0.1"
-libp2p-peerstore = { path = "../../stores/peerstore" }
 libp2p-core = { path = "../../core" }
 log = "0.4.1"
 multiaddr = { path = "../../misc/multiaddr" }
