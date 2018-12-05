@@ -458,6 +458,7 @@ mod tests {
     extern crate libp2p_tcp_transport;
     extern crate tokio;
 
+    /*// TODO: restore
     use self::libp2p_tcp_transport::TcpConfig;
     use self::tokio::runtime::current_thread::Runtime;
     use futures::{Future, Sink, Stream};
@@ -467,7 +468,6 @@ mod tests {
     use std::sync::mpsc;
     use std::thread;
 
-    /*// TODO: restore
     #[test]
     fn correct_transfer() {
         // We open a server and a client, send a message between the two, and check that they were
