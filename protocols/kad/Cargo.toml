@@ -9,7 +9,6 @@ arrayvec = "0.4.7"
 bs58 = "0.2.0"
 bigint = "4.2"
 bytes = "0.4"
-datastore = { path = "../../stores/datastore" }
 fnv = "1.0"
 futures = "0.1"
 libp2p-identify = { path = "../../protocols/identify" }
