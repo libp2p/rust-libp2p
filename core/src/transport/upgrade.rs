@@ -80,6 +80,7 @@ where
     }
 }
 
+/// Future to avoid boxing.
 pub struct DialUpgradeFuture<T, U>
 where
     T: Future,
@@ -115,6 +116,7 @@ where
     }
 }
 
+/// Stream to avoid boxing.
 pub struct ListenerStream<T, U> {
     stream: T,
     upgrade: U
@@ -144,6 +146,7 @@ where
     }
 }
 
+/// Future to avoid boxing.
 pub struct ListenerUpgradeFuture<T, U>
 where
     T: Future,
