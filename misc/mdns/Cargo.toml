@@ -13,6 +13,7 @@ libp2p-core = { path = "../../core" }
 multiaddr = { path = "../multiaddr" }
 net2 = "0.2"
 rand = "0.6"
+smallvec = "0.6"
 tokio-io = "0.1"
 tokio-reactor = "0.1"
 tokio-timer = "0.2"

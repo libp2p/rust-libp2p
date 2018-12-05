@@ -23,6 +23,7 @@ use futures::prelude::*;
 use libp2p_core::protocols_handler::{DummyProtocolsHandler, ProtocolsHandler};
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use libp2p_core::{Multiaddr, PeerId, multiaddr::Protocol, topology::MemoryTopology};
+use smallvec::SmallVec;
 use std::{io, iter, marker::PhantomData, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
 use void::{self, Void};
@@ -33,6 +34,12 @@ use void::{self, Void};
 pub struct Mdns<TSubstream> {
     /// The inner service.
     service: MdnsService,
+
+    /// If `Some`, then we automatically connect to nodes we discover and this is the list of nodes
+    /// to connect to. Drained in `poll()`.
+    /// If `None`, then we don't automatically connect.
+    to_connect_to: Option<SmallVec<[PeerId; 8]>>,
+
     /// Marker to pin the generic.
     marker: PhantomData<TSubstream>,
 }
@@ -42,6 +49,7 @@ impl<TSubstream> Mdns<TSubstream> {
     pub fn new() -> io::Result<Mdns<TSubstream>> {
         Ok(Mdns {
             service: MdnsService::new()?,
+            to_connect_to: Some(SmallVec::new()),
             marker: PhantomData,
         })
     }
@@ -96,6 +104,15 @@ where
         >,
     > {
         loop {
+            if let Some(ref mut to_connect_to) = self.to_connect_to {
+                if !to_connect_to.is_empty() {
+                    let peer_id = to_connect_to.remove(0);
+                    return Async::Ready(NetworkBehaviourAction::DialPeer { peer_id });
+                } else {
+                    to_connect_to.shrink_to_fit();
+                }
+            }
+
             let event = match self.service.poll() {
                 Async::Ready(ev) => ev,
                 Async::NotReady => return Async::NotReady,
@@ -131,6 +148,10 @@ where
                             };
 
                             params.topology().add_mdns_discovered_address(peer.id().clone(), to_insert);
+                        }
+
+                        if let Some(ref mut to_connect_to) = self.to_connect_to {
+                            to_connect_to.push(peer.id().clone());
                         }
                     }
                 },

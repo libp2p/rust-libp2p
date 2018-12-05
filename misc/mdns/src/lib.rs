@@ -37,6 +37,7 @@ extern crate libp2p_core;
 extern crate multiaddr;
 extern crate net2;
 extern crate rand;
+extern crate smallvec;
 extern crate tokio_io;
 extern crate tokio_reactor;
 extern crate tokio_timer;
