@@ -75,9 +75,9 @@ impl<T> RateLimited<T> {
 
 /// A rate-limited connection.
 pub struct Connection<C: AsyncRead + AsyncWrite> {
-    /// The rate-limited, readable half of a connection. 
+    /// The rate-limited, readable half of a connection.
     reader: Limited<ReadHalf<C>>,
-    /// The rate-limited, writable half of a connection. 
+    /// The rate-limited, writable half of a connection.
     writer: Limited<WriteHalf<C>>,
 }
 
