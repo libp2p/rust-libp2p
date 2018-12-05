@@ -24,16 +24,16 @@ extern crate libp2p_mplex as multiplex;
 extern crate libp2p_core as swarm;
 extern crate libp2p_tcp_transport as tcp;
 extern crate tokio;
-extern crate tokio_io;
 
-use futures::future::Future;
-use futures::{Sink, Stream};
+use futures::prelude::*;
 use std::sync::{Arc, mpsc};
 use std::thread;
 use swarm::{muxing, Transport};
 use tcp::TcpConfig;
-use tokio_io::codec::length_delimited::Framed;
-use tokio::runtime::current_thread::Runtime;
+use tokio::{
+    codec::length_delimited::Builder,
+    runtime::current_thread::Runtime
+};
 
 #[test]
 fn client_to_server_outbound() {
@@ -55,7 +55,7 @@ fn client_to_server_outbound() {
             .map_err(|(err, _)| err)
             .and_then(|(client, _)| client.unwrap().0)
             .and_then(|client| muxing::outbound_from_ref_and_wrap(Arc::new(client)))
-            .map(|client| Framed::<_, bytes::BytesMut>::new(client.unwrap()))
+            .map(|client| Builder::new().new_read(client.unwrap()))
             .and_then(|client| {
                 client
                     .into_future()
@@ -78,7 +78,7 @@ fn client_to_server_outbound() {
         .dial(rx.recv().unwrap())
         .unwrap()
         .and_then(|client| muxing::inbound_from_ref_and_wrap(Arc::new(client)))
-        .map(|server| Framed::<_, bytes::BytesMut>::new(server.unwrap()))
+        .map(|server| Builder::new().new_write(server.unwrap()))
         .and_then(|server| server.send("hello world".into()))
         .map(|_| ());
 
@@ -107,7 +107,7 @@ fn client_to_server_inbound() {
             .map_err(|(err, _)| err)
             .and_then(|(client, _)| client.unwrap().0)
             .and_then(|client| muxing::inbound_from_ref_and_wrap(Arc::new(client)))
-            .map(|client| Framed::<_, bytes::BytesMut>::new(client.unwrap()))
+            .map(|client| Builder::new().new_read(client.unwrap()))
             .and_then(|client| {
                 client
                     .into_future()
@@ -130,7 +130,7 @@ fn client_to_server_inbound() {
         .dial(rx.recv().unwrap())
         .unwrap()
         .and_then(|client| muxing::outbound_from_ref_and_wrap(Arc::new(client)))
-        .map(|server| Framed::<_, bytes::BytesMut>::new(server.unwrap()))
+        .map(|server| Builder::new().new_write(server.unwrap()))
         .and_then(|server| server.send("hello world".into()))
         .map(|_| ());
 

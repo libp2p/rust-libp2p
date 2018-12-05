@@ -569,7 +569,7 @@ mod tests {
 
                 match packet {
                     MdnsPacket::Query(query) => {
-                        query.respond(peer_id.clone(), None, Duration::from_secs(120));
+                        query.respond(peer_id.clone(), None, Duration::from_secs(120)).unwrap();
                     }
                     MdnsPacket::Response(response) => {
                         for peer in response.discovered_peers() {
