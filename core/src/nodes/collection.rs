@@ -30,7 +30,7 @@ use crate::{
 };
 use fnv::FnvHashMap;
 use futures::prelude::*;
-use std::{collections::hash_map::Entry, error::Error, fmt, fmt::Display, io, mem};
+use std::{collections::hash_map::Entry, error, fmt, io, mem};
 
 // TODO: make generic over PeerId
 
@@ -441,7 +441,7 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
 
 /// Reach attempt interrupt errors. 
 #[derive(Debug)]
-pub enum InterruptError<Error, Display> {
+pub enum InterruptError {
     /// An invalid reach attempt has been used to try to interrupt. The task
     /// entry is vacant; it needs to be added first via add_reach_attempt
     /// (with the TaskState set to Pending) before we try to connect.
@@ -450,6 +450,23 @@ pub enum InterruptError<Error, Display> {
     /// is thus redundant as it has already completed. Thus, the reach attempt
     /// that has tried to be used is no longer valid, since already reached.
     AlreadyReached,
+}
+
+impl fmt::Display for InterruptError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            InterruptError::ReachAttemptNotFound => 
+                write!(f, "The reach attempt could not be found."),
+            InterruptError::AlreadyReached =>
+                write!(f, "The reach attempt has already reached the node"),
+        }
+    }
+}
+
+impl error::Error for InterruptError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        Some(self)
+    }
 }
 
 /// Access to a peer in the collection.
