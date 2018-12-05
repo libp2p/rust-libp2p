@@ -33,7 +33,7 @@ use topic::{Topic, TopicHash};
 
 /// Network behaviour that automatically identifies nodes periodically, and returns information
 /// about them.
-pub struct FloodsubBehaviour<TSubstream> {
+pub struct Floodsub<TSubstream> {
     /// Events that need to be yielded to the outside when polling.
     events: VecDeque<NetworkBehaviourAction<FloodsubRpc, FloodsubMessage>>,
 
@@ -57,10 +57,10 @@ pub struct FloodsubBehaviour<TSubstream> {
     marker: PhantomData<TSubstream>,
 }
 
-impl<TSubstream> FloodsubBehaviour<TSubstream> {
-    /// Creates a `FloodsubBehaviour`.
+impl<TSubstream> Floodsub<TSubstream> {
+    /// Creates a `Floodsub`.
     pub fn new(local_peer_id: PeerId) -> Self {
-        FloodsubBehaviour {
+        Floodsub {
             events: VecDeque::new(),
             local_peer_id,
             connected_peers: HashMap::new(),
@@ -71,7 +71,7 @@ impl<TSubstream> FloodsubBehaviour<TSubstream> {
     }
 }
 
-impl<TSubstream> FloodsubBehaviour<TSubstream> {
+impl<TSubstream> Floodsub<TSubstream> {
     /// Subscribes to a topic.
     ///
     /// Returns true if the subscription worked. Returns false if we were already subscribed.
@@ -172,7 +172,7 @@ impl<TSubstream> FloodsubBehaviour<TSubstream> {
     }
 }
 
-impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for FloodsubBehaviour<TSubstream>
+impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for Floodsub<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {

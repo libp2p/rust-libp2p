@@ -18,37 +18,37 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::dial_handler::PeriodicPingHandler;
 use futures::prelude::*;
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use libp2p_core::{protocols_handler::ProtocolsHandler, PeerId};
 use std::marker::PhantomData;
 use tokio_io::{AsyncRead, AsyncWrite};
 use void::Void;
-use PeriodicPingHandler;
 
 /// Network behaviour that handles receiving pings sent by other nodes.
-pub struct PeriodicPingBehaviour<TSubstream> {
+pub struct PeriodicPing<TSubstream> {
     /// Marker to pin the generics.
     marker: PhantomData<TSubstream>,
 }
 
-impl<TSubstream> PeriodicPingBehaviour<TSubstream> {
-    /// Creates a `PeriodicPingBehaviour`.
+impl<TSubstream> PeriodicPing<TSubstream> {
+    /// Creates a `PeriodicPing`.
     pub fn new() -> Self {
-        PeriodicPingBehaviour {
+        PeriodicPing {
             marker: PhantomData,
         }
     }
 }
 
-impl<TSubstream> Default for PeriodicPingBehaviour<TSubstream> {
+impl<TSubstream> Default for PeriodicPing<TSubstream> {
     #[inline]
     fn default() -> Self {
-        PeriodicPingBehaviour::new()
+        PeriodicPing::new()
     }
 }
 
-impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for PeriodicPingBehaviour<TSubstream>
+impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for PeriodicPing<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {

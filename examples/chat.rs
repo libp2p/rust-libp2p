@@ -88,13 +88,13 @@ fn main() {
     #[derive(NetworkBehaviour)]
     struct MyBehaviour<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite> {
         #[behaviour(handler = "on_floodsub")]
-        floodsub: libp2p::floodsub::FloodsubBehaviour<TSubstream>,
+        floodsub: libp2p::floodsub::Floodsub<TSubstream>,
         mdns: libp2p::mdns::Mdns<TSubstream>,
     }
 
     impl<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite> MyBehaviour<TSubstream> {
         // Called when `floodsub` produces an event.
-        fn on_floodsub<TTopology>(&mut self, message: <libp2p::floodsub::FloodsubBehaviour<TSubstream> as libp2p::core::swarm::NetworkBehaviour<TTopology>>::OutEvent)
+        fn on_floodsub<TTopology>(&mut self, message: <libp2p::floodsub::Floodsub<TSubstream> as libp2p::core::swarm::NetworkBehaviour<TTopology>>::OutEvent)
         where TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite
         {
             println!("Received: '{:?}' from {:?}", String::from_utf8_lossy(&message.data), message.source);
@@ -104,7 +104,7 @@ fn main() {
     // Create a Swarm to manage peers and events
     let mut swarm = {
         let mut behaviour = MyBehaviour {
-            floodsub: libp2p::floodsub::FloodsubBehaviour::new(local_pub_key.clone().into_peer_id()),
+            floodsub: libp2p::floodsub::Floodsub::new(local_pub_key.clone().into_peer_id()),
             mdns: libp2p::mdns::Mdns::new().expect("Failed to create mDNS service"),
         };
 

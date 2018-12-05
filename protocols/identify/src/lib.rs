@@ -82,17 +82,14 @@ extern crate unsigned_varint;
 extern crate void;
 
 pub use self::id_transport::IdentifyTransport;
-pub use self::listen_handler::IdentifyListenHandler;
 pub use self::listen_layer::IdentifyListen;
-pub use self::periodic_id_handler::{PeriodicIdentification, PeriodicIdentificationEvent};
 pub use self::periodic_id_layer::{PeriodicIdentifyBehaviour, PeriodicIdentifyBehaviourEvent};
-pub use self::protocol::{IdentifyInfo, RemoteInfo};
-pub use self::protocol::{IdentifyProtocolConfig, IdentifySender, IdentifySenderFuture};
+
+pub mod listen_handler;
+pub mod periodic_id_handler;
+pub mod protocol;
 
 mod id_transport;
-mod listen_handler;
 mod listen_layer;
-mod periodic_id_handler;
 mod periodic_id_layer;
-mod protocol;
 mod structs_proto;
