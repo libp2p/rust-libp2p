@@ -38,7 +38,7 @@ fn one_field() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
     struct Foo<TSubstream> {
-        ping: libp2p::ping::PeriodicPingBehaviour<TSubstream>,
+        ping: libp2p::ping::PeriodicPing<TSubstream>,
     }
 
     fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
@@ -51,8 +51,8 @@ fn two_fields() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
     struct Foo<TSubstream> {
-        ping_dialer: libp2p::ping::PeriodicPingBehaviour<TSubstream>,
-        ping_listener: libp2p::ping::PingListenBehaviour<TSubstream>,
+        ping_dialer: libp2p::ping::PeriodicPing<TSubstream>,
+        ping_listener: libp2p::ping::PingListen<TSubstream>,
     }
 }
 
@@ -61,8 +61,8 @@ fn three_fields() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
     struct Foo<TSubstream> {
-        ping_dialer: libp2p::ping::PeriodicPingBehaviour<TSubstream>,
-        ping_listener: libp2p::ping::PingListenBehaviour<TSubstream>,
+        ping_dialer: libp2p::ping::PeriodicPing<TSubstream>,
+        ping_listener: libp2p::ping::PingListen<TSubstream>,
         identify: libp2p::identify::PeriodicIdentifyBehaviour<TSubstream>,
         #[behaviour(ignore)]
         foo: String,
@@ -101,7 +101,7 @@ fn custom_polling() {
     #[derive(NetworkBehaviour)]
     #[behaviour(poll_method = "foo")]
     struct Foo<TSubstream> {
-        ping: libp2p::ping::PeriodicPingBehaviour<TSubstream>,
+        ping: libp2p::ping::PeriodicPing<TSubstream>,
         identify: libp2p::identify::PeriodicIdentifyBehaviour<TSubstream>,
     }
 
@@ -120,7 +120,7 @@ fn custom_event_no_polling() {
     #[derive(NetworkBehaviour)]
     #[behaviour(out_event = "String")]
     struct Foo<TSubstream> {
-        ping: libp2p::ping::PeriodicPingBehaviour<TSubstream>,
+        ping: libp2p::ping::PeriodicPing<TSubstream>,
         identify: libp2p::identify::PeriodicIdentifyBehaviour<TSubstream>,
     }
 
@@ -135,7 +135,7 @@ fn custom_event_and_polling() {
     #[derive(NetworkBehaviour)]
     #[behaviour(poll_method = "foo", out_event = "String")]
     struct Foo<TSubstream> {
-        ping: libp2p::ping::PeriodicPingBehaviour<TSubstream>,
+        ping: libp2p::ping::PeriodicPing<TSubstream>,
         identify: libp2p::identify::PeriodicIdentifyBehaviour<TSubstream>,
     }
 

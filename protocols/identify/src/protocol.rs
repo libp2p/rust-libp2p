@@ -256,13 +256,13 @@ mod tests {
     extern crate libp2p_tcp_transport;
     extern crate tokio;
 
+    use crate::protocol::{IdentifyInfo, RemoteInfo, IdentifyProtocolConfig};
     use self::tokio::runtime::current_thread::Runtime;
     use self::libp2p_tcp_transport::TcpConfig;
     use futures::{Future, Stream};
     use libp2p_core::{PublicKey, Transport, upgrade::{apply_outbound, apply_inbound}};
     use std::sync::mpsc;
     use std::thread;
-    use {IdentifyInfo, RemoteInfo, IdentifyProtocolConfig};
 
     #[test]
     fn correct_transfer() {

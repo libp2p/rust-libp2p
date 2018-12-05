@@ -18,12 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::periodic_id_handler::{PeriodicIdentification, PeriodicIdentificationEvent};
+use crate::protocol::IdentifyInfo;
 use futures::prelude::*;
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use libp2p_core::{protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
 use std::{collections::VecDeque, marker::PhantomData};
 use tokio_io::{AsyncRead, AsyncWrite};
-use {IdentifyInfo, PeriodicIdentification, PeriodicIdentificationEvent};
 
 /// Network behaviour that automatically identifies nodes periodically, and returns information
 /// about them.
