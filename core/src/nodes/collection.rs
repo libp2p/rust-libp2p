@@ -463,11 +463,7 @@ impl fmt::Display for InterruptError {
     }
 }
 
-impl error::Error for InterruptError {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        Some(self)
-    }
-}
+impl error::Error for InterruptError {}
 
 /// Access to a peer in the collection.
 pub struct PeerMut<'a, TInEvent: 'a> {
