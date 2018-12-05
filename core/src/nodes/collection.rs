@@ -440,7 +440,7 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
 }
 
 /// Reach attempt interrupt errors. 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum InterruptError {
     /// An invalid reach attempt has been used to try to interrupt. The task
     /// entry is vacant; it needs to be added first via add_reach_attempt
@@ -458,7 +458,7 @@ impl fmt::Display for InterruptError {
             InterruptError::ReachAttemptNotFound => 
                 write!(f, "The reach attempt could not be found."),
             InterruptError::AlreadyReached =>
-                write!(f, "The reach attempt has already reached the node"),
+                write!(f, "The reach attempt has already completed or reached the node."),
         }
     }
 }
@@ -854,6 +854,6 @@ mod tests {
 
         assert!(cs.lock().has_connection(&peer_id), "Connection was not established");
 
-        assert!(cs.lock().interrupt(reach_id).is_err(), "Could interrupt a reach attempt that already completed");
+        assert_eq!(cs.lock().interrupt(reach_id), Err(InterruptError::AlreadyReached));
     }
 }
