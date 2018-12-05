@@ -818,9 +818,10 @@ mod tests {
         let fut = future::empty::<_, Void>();
         let reach_id = cs.add_reach_attempt(fut, Handler::default());
         assert!(cs.interrupt(reach_id).is_ok());
-        assert!(cs.interrupt(reach_id).is_err());
-    }
 
+        assert_eq!(cs.interrupt(reach_id), Err(InterruptError::ReachAttemptNotFound))
+    }
+ 
     #[test]
     fn interrupting_an_established_connection_is_err() {
         let cs = Arc::new(Mutex::new(TestCollectionStream::new()));
