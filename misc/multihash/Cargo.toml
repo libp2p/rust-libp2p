@@ -1,19 +1,13 @@
 [package]
-name = "multihash"
+name = "parity-multihash"
 description = "Implementation of the multihash format"
-repository = "https://github.com/multiformats/rust-multihash"
-
+repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["multihash", "ipfs"]
-
-version = "0.8.1-pre"
-
-authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
-
+version = "0.1.0"
+authors = ["dignifiedquire <dignifiedquire@gmail.com>", "Parity Technologies <admin@parity.io>"]
 license = "MIT"
-
 readme = "README.md"
-
-documentation = "https://docs.rs/multihash/"
+documentation = "https://docs.rs/parity-multihash/"
 
 [dependencies]
 blake2 = { version = "0.8", default-features = false }
