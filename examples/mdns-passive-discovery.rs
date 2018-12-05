@@ -24,7 +24,7 @@ extern crate rand;
 extern crate tokio;
 
 use futures::prelude::*;
-use libp2p::mdns::{MdnsPacket, MdnsService};
+use libp2p::mdns::service::{MdnsPacket, MdnsService};
 use std::io;
 
 fn main() {
