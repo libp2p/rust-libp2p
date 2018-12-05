@@ -30,7 +30,7 @@ use crate::{
 };
 use fnv::FnvHashMap;
 use futures::prelude::*;
-use std::{collections::hash_map::Entry, fmt, io, mem};
+use std::{collections::hash_map::Entry, error, fmt, io, mem};
 
 // TODO: make generic over PeerId
 
@@ -297,12 +297,12 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
     /// Interrupts a reach attempt.
     ///
     /// Returns `Ok` if something was interrupted, and `Err` if the ID is not or no longer valid.
-    pub fn interrupt(&mut self, id: ReachAttemptId) -> Result<(), ()> {
+    pub fn interrupt(&mut self, id: ReachAttemptId) -> Result<(), InterruptError> {
         match self.tasks.entry(id.0) {
-            Entry::Vacant(_) => Err(()),
+            Entry::Vacant(_) => Err(InterruptError::ReachAttemptNotFound),
             Entry::Occupied(entry) => {
                 match entry.get() {
-                    TaskState::Connected(_) => return Err(()),
+                    TaskState::Connected(_) => return Err(InterruptError::AlreadyReached),
                     TaskState::Pending => (),
                 };
 
@@ -438,6 +438,32 @@ impl<TInEvent, TOutEvent, THandler> CollectionStream<TInEvent, TOutEvent, THandl
         }
     }
 }
+
+/// Reach attempt interrupt errors. 
+#[derive(Debug)]
+pub enum InterruptError {
+    /// An invalid reach attempt has been used to try to interrupt. The task
+    /// entry is vacant; it needs to be added first via add_reach_attempt
+    /// (with the TaskState set to Pending) before we try to connect.
+    ReachAttemptNotFound,
+    /// The task has already connected to the node; interrupting a reach attempt
+    /// is thus redundant as it has already completed. Thus, the reach attempt
+    /// that has tried to be used is no longer valid, since already reached.
+    AlreadyReached,
+}
+
+impl fmt::Display for InterruptError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            InterruptError::ReachAttemptNotFound => 
+                write!(f, "The reach attempt could not be found."),
+            InterruptError::AlreadyReached =>
+                write!(f, "The reach attempt has already completed or reached the node."),
+        }
+    }
+}
+
+impl error::Error for InterruptError {}
 
 /// Access to a peer in the collection.
 pub struct PeerMut<'a, TInEvent: 'a> {
@@ -788,9 +814,9 @@ mod tests {
         let fut = future::empty::<_, Void>();
         let reach_id = cs.add_reach_attempt(fut, Handler::default());
         assert!(cs.interrupt(reach_id).is_ok());
-        assert!(cs.interrupt(reach_id).is_err());
+        assert_matches!(cs.interrupt(reach_id), Err(InterruptError::ReachAttemptNotFound))
     }
-
+ 
     #[test]
     fn interrupting_an_established_connection_is_err() {
         let cs = Arc::new(Mutex::new(TestCollectionStream::new()));
@@ -824,6 +850,6 @@ mod tests {
 
         assert!(cs.lock().has_connection(&peer_id), "Connection was not established");
 
-        assert!(cs.lock().interrupt(reach_id).is_err(), "Could interrupt a reach attempt that already completed");
+        assert_matches!(cs.lock().interrupt(reach_id), Err(InterruptError::AlreadyReached));
     }
 }
