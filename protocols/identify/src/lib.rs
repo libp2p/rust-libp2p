@@ -81,7 +81,7 @@ extern crate tokio_timer;
 extern crate unsigned_varint;
 extern crate void;
 
-pub use self::identify::Identify;
+pub use self::identify::{Identify, IdentifyEvent};
 pub use self::id_transport::IdentifyTransport;
 pub use self::listen_layer::IdentifyListen;
 pub use self::periodic_id_layer::{PeriodicIdentify, PeriodicIdentifyEvent};
