@@ -20,7 +20,7 @@
 
 use bytes::Bytes;
 use core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
-use futures::prelude::*;
+use futures::{future::FromErr, prelude::*};
 use std::{iter, io::Error as IoError, sync::Arc};
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -71,18 +71,16 @@ impl<C, F, O> InboundUpgrade<C> for SimpleProtocol<F>
 where
     C: AsyncRead + AsyncWrite,
     F: Fn(C) -> O,
-    O: IntoFuture<Error = IoError>,
-    O::Future: Send + 'static,
+    O: IntoFuture<Error = IoError>
 {
     type Output = O::Item;
     type Error = IoError;
-    type Future = Box<Future<Item = O::Item, Error = Self::Error> + Send>;
+    type Future = FromErr<O::Future, IoError>;
 
     #[inline]
     fn upgrade_inbound(self, socket: C, _: Self::UpgradeId) -> Self::Future {
         let upgrade = &self.upgrade;
-        let fut = upgrade(socket).into_future().from_err();
-        Box::new(fut) as Box<_>
+        upgrade(socket).into_future().from_err()
     }
 }
 
@@ -90,17 +88,15 @@ impl<C, F, O> OutboundUpgrade<C> for SimpleProtocol<F>
 where
     C: AsyncRead + AsyncWrite,
     F: Fn(C) -> O,
-    O: IntoFuture<Error = IoError>,
-    O::Future: Send + 'static,
+    O: IntoFuture<Error = IoError>
 {
     type Output = O::Item;
     type Error = IoError;
-    type Future = Box<Future<Item = O::Item, Error = Self::Error> + Send>;
+    type Future = FromErr<O::Future, IoError>;
 
     #[inline]
     fn upgrade_outbound(self, socket: C, _: Self::UpgradeId) -> Self::Future {
         let upgrade = &self.upgrade;
-        let fut = upgrade(socket).into_future().from_err();
-        Box::new(fut) as Box<_>
+        upgrade(socket).into_future().from_err()
     }
 }

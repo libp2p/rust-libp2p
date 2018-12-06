@@ -9,9 +9,8 @@ bytes = "0.4"
 futures = "0.1"
 libp2p-core = { path = "../../core" }
 log = "0.4"
-parking_lot = "0.7"
 tokio-io = "0.1"
-yamux = "0.1"
+yamux = "0.1.1"
 
 [dev-dependencies]
 libp2p-test-muxer = { path = "../test-muxer" }

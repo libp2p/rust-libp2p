@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{IdentifySender, IdentifyProtocolConfig};
+use crate::protocol::{IdentifySender, IdentifyProtocolConfig};
 use futures::prelude::*;
 use libp2p_core::{
     protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent},
