@@ -1,8 +1,12 @@
 [package]
 name = "libp2p-observed-address"
+description = "Observed addresses protocol for libp2p"
 version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 bytes = "0.4"
