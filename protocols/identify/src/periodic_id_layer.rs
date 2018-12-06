@@ -25,12 +25,13 @@ use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourActio
 use libp2p_core::{protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
 use std::{collections::VecDeque, marker::PhantomData};
 use tokio_io::{AsyncRead, AsyncWrite};
+use void::Void;
 
 /// Network behaviour that automatically identifies nodes periodically, and returns information
 /// about them.
 pub struct PeriodicIdentify<TSubstream> {
     /// Events that need to be produced outside when polling..
-    events: VecDeque<PeriodicIdentifyEvent>,
+    events: VecDeque<NetworkBehaviourAction<Void, PeriodicIdentifyEvent>>,
     /// Marker to pin the generics.
     marker: PhantomData<TSubstream>,
 }
@@ -68,11 +69,15 @@ where
         match event {
             PeriodicIdentificationEvent::Identified(remote) => {
                 self.events
-                    .push_back(PeriodicIdentifyEvent::Identified {
+                    .push_back(NetworkBehaviourAction::ReportObservedAddr {
+                        address: remote.observed_addr.clone(),
+                    });
+                self.events
+                    .push_back(NetworkBehaviourAction::GenerateEvent(PeriodicIdentifyEvent::Identified {
                         peer_id: peer_id,
                         info: remote.info,
                         observed_addr: remote.observed_addr,
-                    });
+                    }));
             }
             _ => (), // TODO: exhaustive pattern
         }
@@ -88,7 +93,7 @@ where
         >,
     > {
         if let Some(event) = self.events.pop_front() {
-            return Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
+            return Async::Ready(event);
         }
 
         Async::NotReady
