@@ -94,7 +94,7 @@ where
             EitherOutput::Second(PeriodicIdentificationEvent::Identified(remote)) => {
                 self.events
                     .push_back(NetworkBehaviourAction::GenerateEvent(IdentifyEvent::Identified {
-                        peer_id: peer_id,
+                        peer_id,
                         info: remote.info,
                         observed_addr: remote.observed_addr.clone(),
                     }));
@@ -105,13 +105,17 @@ where
             }
             EitherOutput::First(sender) => {
                 let observed = self.observed_addresses.get(&peer_id)
-                    .expect("We only receive events from nodes we're connected to ; we insert into the \
-                            hashmap when we connect to a node and remove only when we disconnect; QED");
+                    .expect("We only receive events from nodes we're connected to ; we insert \
+                             into the hashmap when we connect to a node and remove only when we \
+                             disconnect; QED");
                 self.to_answer.push((sender, observed.clone()));
             }
             EitherOutput::Second(PeriodicIdentificationEvent::IdentificationError(err)) => {
                 self.events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(IdentifyEvent::Error(err)));
+                    .push_back(NetworkBehaviourAction::GenerateEvent(IdentifyEvent::Error {
+                        peer_id,
+                        error: err,
+                    }));
             }
         }
     }
@@ -176,5 +180,10 @@ pub enum IdentifyEvent {
         observed_addr: Multiaddr,
     },
     /// Error while attempting to identify the remote.
-    Error(io::Error),
+    Error {
+        /// Peer that we fail to identify.
+        peer_id: PeerId,
+        /// The error that happened.
+        error: io::Error,
+    },
 }
