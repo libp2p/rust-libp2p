@@ -83,7 +83,7 @@ extern crate void;
 
 pub use self::id_transport::IdentifyTransport;
 pub use self::listen_layer::IdentifyListen;
-pub use self::periodic_id_layer::{PeriodicIdentifyBehaviour, PeriodicIdentifyBehaviourEvent};
+pub use self::periodic_id_layer::{PeriodicIdentify, PeriodicIdentifyEvent};
 
 pub mod listen_handler;
 pub mod periodic_id_handler;
