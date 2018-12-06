@@ -10,7 +10,8 @@ futures = "0.1"
 libp2p-core = { path = "../../core" }
 log = "0.4"
 tokio-io = "0.1"
-yamux = "0.1.1"
+#yamux = "0.1.1"
+yamux = { path = "/Users/dvd/dev/parity/yamux" }
 
 [dev-dependencies]
 libp2p-test-muxer = { path = "../test-muxer" }
