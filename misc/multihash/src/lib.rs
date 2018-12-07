@@ -73,7 +73,7 @@ macro_rules! match_encoder {
 /// # Examples
 ///
 /// ```
-/// use multihash::{encode, Hash};
+/// use parity_multihash::{encode, Hash};
 ///
 /// assert_eq!(
 ///     encode(Hash::SHA2256, b"hello world").unwrap().into_bytes(),
