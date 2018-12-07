@@ -18,11 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use bytes::Bytes;
-use futures::future::Either;
 use crate::{
-    either::{EitherOutput, EitherError, EitherFuture2},
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
+    either::{EitherOutput, EitherError, EitherFuture2, EitherName},
+    upgrade::{InboundUpgrade, OutboundUpgrade}
 };
 
 /// Upgrade that combines two upgrades into one. Supports all the protocols supported by either
@@ -41,19 +39,6 @@ impl<A, B> SelectUpgrade<A, B> {
     }
 }
 
-impl<A, B> UpgradeInfo for SelectUpgrade<A, B>
-where
-    A: UpgradeInfo,
-    B: UpgradeInfo
-{
-    type UpgradeId = Either<A::UpgradeId, B::UpgradeId>;
-    type NamesIter = NamesIterChain<A::NamesIter, B::NamesIter>;
-
-    fn protocol_names(&self) -> Self::NamesIter {
-        NamesIterChain(self.0.protocol_names(), self.1.protocol_names())
-    }
-}
-
 impl<C, A, B, TA, TB, EA, EB> InboundUpgrade<C> for SelectUpgrade<A, B>
 where
     A: InboundUpgrade<C, Output = TA, Error = EA>,
@@ -62,11 +47,20 @@ where
     type Output = EitherOutput<TA, TB>;
     type Error = EitherError<EA, EB>;
     type Future = EitherFuture2<A::Future, B::Future>;
+    type Name = EitherName<A::Name, B::Name>;
+    type NamesIter = NamesIterChain<
+        <A::NamesIter as IntoIterator>::IntoIter,
+        <B::NamesIter as IntoIterator>::IntoIter
+    >;
 
-    fn upgrade_inbound(self, sock: C, id: Self::UpgradeId) -> Self::Future {
-        match id {
-            Either::A(id) => EitherFuture2::A(self.0.upgrade_inbound(sock, id)),
-            Either::B(id) => EitherFuture2::B(self.1.upgrade_inbound(sock, id))
+    fn protocol_names(&self) -> Self::NamesIter {
+        NamesIterChain(self.0.protocol_names().into_iter(), self.1.protocol_names().into_iter())
+    }
+
+    fn upgrade_inbound(self, sock: C, name: Self::Name) -> Self::Future {
+        match name {
+            EitherName::A(name) => EitherFuture2::A(self.0.upgrade_inbound(sock, name)),
+            EitherName::B(name) => EitherFuture2::B(self.1.upgrade_inbound(sock, name))
         }
     }
 }
@@ -79,11 +73,20 @@ where
     type Output = EitherOutput<TA, TB>;
     type Error = EitherError<EA, EB>;
     type Future = EitherFuture2<A::Future, B::Future>;
+    type Name = EitherName<A::Name, B::Name>;
+    type NamesIter = NamesIterChain<
+        <A::NamesIter as IntoIterator>::IntoIter,
+        <B::NamesIter as IntoIterator>::IntoIter
+    >;
 
-    fn upgrade_outbound(self, sock: C, id: Self::UpgradeId) -> Self::Future {
-        match id {
-            Either::A(id) => EitherFuture2::A(self.0.upgrade_outbound(sock, id)),
-            Either::B(id) => EitherFuture2::B(self.1.upgrade_outbound(sock, id))
+    fn protocol_names(&self) -> Self::NamesIter {
+        NamesIterChain(self.0.protocol_names().into_iter(), self.1.protocol_names().into_iter())
+    }
+
+    fn upgrade_outbound(self, sock: C, name: Self::Name) -> Self::Future {
+        match name {
+            EitherName::A(name) => EitherFuture2::A(self.0.upgrade_outbound(sock, name)),
+            EitherName::B(name) => EitherFuture2::B(self.1.upgrade_outbound(sock, name))
         }
     }
 }
@@ -92,19 +95,19 @@ where
 #[derive(Debug, Clone)]
 pub struct NamesIterChain<A, B>(A, B);
 
-impl<A, B, AId, BId> Iterator for NamesIterChain<A, B>
+impl<A, B> Iterator for NamesIterChain<A, B>
 where
-    A: Iterator<Item = (Bytes, AId)>,
-    B: Iterator<Item = (Bytes, BId)>,
+    A: Iterator,
+    B: Iterator
 {
-    type Item = (Bytes, Either<AId, BId>);
+    type Item = EitherName<A::Item, B::Item>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some((name, id)) = self.0.next() {
-            return Some((name, Either::A(id)))
+        if let Some(name) = self.0.next() {
+            return Some(EitherName::A(name))
         }
-        if let Some((name, id)) = self.1.next() {
-            return Some((name, Either::B(id)))
+        if let Some(name) = self.1.next() {
+            return Some(EitherName::B(name))
         }
         None
     }

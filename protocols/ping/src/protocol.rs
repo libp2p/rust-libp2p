@@ -20,7 +20,7 @@
 
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::{prelude::*, future::{self, FutureResult}, try_ready};
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade};
 use log::debug;
 use rand::{distributions::Standard, prelude::*, rngs::EntropyRng};
 use std::collections::VecDeque;
@@ -43,15 +43,6 @@ impl<TUserData> Default for Ping<TUserData> {
     }
 }
 
-impl<TUserData> UpgradeInfo for Ping<TUserData> {
-    type UpgradeId = ();
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
-
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once(("/ipfs/ping/1.0.0".into(), ()))
-    }
-}
-
 impl<TSocket, TUserData> InboundUpgrade<TSocket> for Ping<TUserData>
 where
     TSocket: AsyncRead + AsyncWrite,
@@ -59,9 +50,14 @@ where
     type Output = PingListener<TSocket>;
     type Error = IoError;
     type Future = FutureResult<Self::Output, Self::Error>;
+    type Name = &'static [u8];
+    type NamesIter = iter::Once<Self::Name>;
 
-    #[inline]
-    fn upgrade_inbound(self, socket: TSocket, _: Self::UpgradeId) -> Self::Future {
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once(b"/ipfs/ping/1.0.0")
+    }
+
+    fn upgrade_inbound(self, socket: TSocket, _: Self::Name) -> Self::Future {
         let listener = PingListener {
             inner: Framed::new(socket, Codec),
             state: PingListenerState::Listening,
@@ -77,9 +73,14 @@ where
     type Output = PingDialer<TSocket, TUserData>;
     type Error = IoError;
     type Future = FutureResult<Self::Output, Self::Error>;
+    type Name = &'static [u8];
+    type NamesIter = iter::Once<Self::Name>;
 
-    #[inline]
-    fn upgrade_outbound(self, socket: TSocket, _: Self::UpgradeId) -> Self::Future {
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once(b"/ipfs/ping/1.0.0")
+    }
+
+    fn upgrade_outbound(self, socket: TSocket, _: Self::Name) -> Self::Future {
         let dialer = PingDialer {
             inner: Framed::new(socket, Codec),
             need_writer_flush: false,
@@ -341,14 +342,14 @@ mod tests {
             .into_future()
             .map_err(|(e, _)| e.into())
             .and_then(|(c, _)| {
-                Ping::<()>::default().upgrade_inbound(c.unwrap(), ())
+                Ping::<()>::default().upgrade_inbound(c.unwrap(), b"/ipfs/ping/1.0.0")
             })
             .flatten();
 
         let client = TcpStream::connect(&listener_addr)
             .map_err(|e| e.into())
             .and_then(|c| {
-                Ping::<()>::default().upgrade_outbound(c, ())
+                Ping::<()>::default().upgrade_outbound(c, b"/ipfs/ping/1.0.0")
             })
             .and_then(|mut pinger| {
                 pinger.ping(());
@@ -371,14 +372,14 @@ mod tests {
             .into_future()
             .map_err(|(e, _)| e.into())
             .and_then(|(c, _)| {
-                Ping::<u32>::default().upgrade_inbound(c.unwrap(), ())
+                Ping::<u32>::default().upgrade_inbound(c.unwrap(), b"/ipfs/ping/1.0.0")
             })
             .flatten();
 
         let client = TcpStream::connect(&listener_addr)
             .map_err(|e| e.into())
             .and_then(|c| {
-                Ping::<u32>::default().upgrade_outbound(c, ())
+                Ping::<u32>::default().upgrade_outbound(c, b"/ipfs/ping/1.0.0")
             })
             .and_then(|mut pinger| {
                 for n in 0..20 {

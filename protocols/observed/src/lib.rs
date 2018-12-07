@@ -30,7 +30,7 @@ extern crate unsigned_varint;
 
 use bytes::Bytes;
 use futures::{future, prelude::*};
-use libp2p_core::{Multiaddr, upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}};
+use libp2p_core::{Multiaddr, upgrade::{InboundUpgrade, OutboundUpgrade}};
 use std::{io, iter};
 use tokio_codec::{FramedRead, FramedWrite};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -45,15 +45,6 @@ impl Observed {
     }
 }
 
-impl UpgradeInfo for Observed {
-    type UpgradeId = ();
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
-
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once((Bytes::from("/paritytech/observed-address/0.1.0"), ()))
-    }
-}
-
 impl<C> InboundUpgrade<C> for Observed
 where
     C: AsyncRead + AsyncWrite + Send + 'static
@@ -61,8 +52,14 @@ where
     type Output = Sender<C>;
     type Error = io::Error;
     type Future = Box<dyn Future<Item=Self::Output, Error=Self::Error> + Send>;
+    type Name = &'static [u8];
+    type NamesIter = iter::Once<Self::Name>;
 
-    fn upgrade_inbound(self, conn: C, _: ()) -> Self::Future {
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once(b"/paritytech/observed-address/0.1.0")
+    }
+
+    fn upgrade_inbound(self, conn: C, _: Self::Name) -> Self::Future {
         let io = FramedWrite::new(conn, UviBytes::default());
         Box::new(future::ok(Sender { io }))
     }
@@ -75,8 +72,14 @@ where
     type Output = Multiaddr;
     type Error = io::Error;
     type Future = Box<dyn Future<Item=Self::Output, Error=Self::Error> + Send>;
+    type Name = &'static [u8];
+    type NamesIter = iter::Once<Self::Name>;
 
-    fn upgrade_outbound(self, conn: C, _: ()) -> Self::Future {
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once(b"/paritytech/observed-address/0.1.0")
+    }
+
+    fn upgrade_outbound(self, conn: C, _: Self::Name) -> Self::Future {
         let io = FramedRead::new(conn, UviBytes::default());
         let future = io.into_future()
             .map_err(|(e, _): (io::Error, FramedRead<C, UviBytes>)| e)
@@ -126,14 +129,14 @@ mod tests {
             .into_future()
             .map_err(|(e, _)| e.into())
             .and_then(move |(conn, _)| {
-                Observed::new().upgrade_inbound(conn.unwrap(), ())
+                Observed::new().upgrade_inbound(conn.unwrap(), b"/paritytech/observed-address/0.1.0")
             })
             .and_then(move |sender| sender.send_address(observed_addr1));
 
         let client = TcpStream::connect(&server_addr)
             .map_err(|e| e.into())
             .and_then(|conn| {
-                Observed::new().upgrade_outbound(conn, ())
+                Observed::new().upgrade_outbound(conn, b"/paritytech/observed-address/0.1.0")
             })
             .map(move |addr| {
                 eprintln!("{} {}", addr, observed_addr2);

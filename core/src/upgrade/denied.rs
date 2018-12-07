@@ -18,33 +18,29 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use bytes::Bytes;
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade};
 use futures::future;
 use std::iter;
-use void::{unreachable, Void};
+use void::Void;
 
 /// Dummy implementation of `UpgradeInfo`/`InboundUpgrade`/`OutboundUpgrade` that doesn't support
 /// any protocol.
 #[derive(Debug, Copy, Clone)]
 pub struct DeniedUpgrade;
 
-impl UpgradeInfo for DeniedUpgrade {
-    type UpgradeId = Void;
-    type NamesIter = iter::Empty<(Bytes, Self::UpgradeId)>;
-
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::empty()
-    }
-}
-
 impl<C> InboundUpgrade<C> for DeniedUpgrade {
     type Output = Void;
     type Error = Void;
     type Future = future::Empty<Self::Output, Self::Error>;
+    type Name = &'static [u8];
+    type NamesIter = iter::Empty<Self::Name>;
 
-    fn upgrade_inbound(self, _: C, id: Self::UpgradeId) -> Self::Future {
-        unreachable(id)
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::empty()
+    }
+
+    fn upgrade_inbound(self, _: C, _: Self::Name) -> Self::Future {
+        future::empty()
     }
 }
 
@@ -52,9 +48,15 @@ impl<C> OutboundUpgrade<C> for DeniedUpgrade {
     type Output = Void;
     type Error = Void;
     type Future = future::Empty<Self::Output, Self::Error>;
+    type Name = &'static [u8];
+    type NamesIter = iter::Empty<Self::Name>;
 
-    fn upgrade_outbound(self, _: C, id: Self::UpgradeId) -> Self::Future {
-        unreachable(id)
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::empty()
+    }
+
+    fn upgrade_outbound(self, _: C, _: Self::Name) -> Self::Future {
+        future::empty()
     }
 }
 

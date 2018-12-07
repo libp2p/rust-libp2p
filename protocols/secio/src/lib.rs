@@ -116,11 +116,11 @@ pub use self::error::SecioError;
 
 #[cfg(feature = "secp256k1")]
 use asn1_der::{traits::FromDerEncoded, traits::FromDerObject, DerObject};
-use bytes::{Bytes, BytesMut};
+use bytes::BytesMut;
 use ed25519_dalek::Keypair as Ed25519KeyPair;
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
-use libp2p_core::{PeerId, PublicKey, upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade}};
+use libp2p_core::{PeerId, PublicKey, upgrade::{InboundUpgrade, OutboundUpgrade}};
 #[cfg(all(feature = "rsa", not(target_os = "emscripten")))]
 use ring::signature::RSAKeyPair;
 use rw_stream_sink::RwStreamSink;
@@ -193,7 +193,7 @@ impl SecioConfig {
         self
     }
 
-    fn handshake<T>(self, socket: T, _: ()) -> impl Future<Item=SecioOutput<T>, Error=SecioError>
+    fn handshake<T>(self, socket: T) -> impl Future<Item=SecioOutput<T>, Error=SecioError>
     where
         T: AsyncRead + AsyncWrite + Send + 'static
     {
@@ -370,15 +370,6 @@ where
     pub ephemeral_public_key: Vec<u8>,
 }
 
-impl UpgradeInfo for SecioConfig {
-    type UpgradeId = ();
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
-
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once(("/secio/1.0.0".into(), ()))
-    }
-}
-
 impl<T> InboundUpgrade<T> for SecioConfig
 where
     T: AsyncRead + AsyncWrite + Send + 'static
@@ -386,9 +377,15 @@ where
     type Output = SecioOutput<T>;
     type Error = SecioError;
     type Future = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
+    type Name = &'static [u8];
+    type NamesIter = iter::Once<Self::Name>;
 
-    fn upgrade_inbound(self, socket: T, id: Self::UpgradeId) -> Self::Future {
-        Box::new(self.handshake(socket, id))
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once(b"/secio/1.0.0")
+    }
+
+    fn upgrade_inbound(self, socket: T, _: Self::Name) -> Self::Future {
+        Box::new(self.handshake(socket))
     }
 }
 
@@ -399,9 +396,15 @@ where
     type Output = SecioOutput<T>;
     type Error = SecioError;
     type Future = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
+    type Name = &'static [u8];
+    type NamesIter = iter::Once<Self::Name>;
 
-    fn upgrade_outbound(self, socket: T, id: Self::UpgradeId) -> Self::Future {
-        Box::new(self.handshake(socket, id))
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once(b"/secio/1.0.0")
+    }
+
+    fn upgrade_outbound(self, socket: T, _: Self::Name) -> Self::Future {
+        Box::new(self.handshake(socket))
     }
 }
 

@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::Bytes;
-use core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use core::upgrade::{InboundUpgrade, OutboundUpgrade};
 use futures::{future::FromErr, prelude::*};
 use std::{iter, io::Error as IoError, sync::Arc};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -57,16 +57,6 @@ impl<F> Clone for SimpleProtocol<F> {
     }
 }
 
-impl<F> UpgradeInfo for SimpleProtocol<F> {
-    type UpgradeId = ();
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
-
-    #[inline]
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once((self.name.clone(), ()))
-    }
-}
-
 impl<C, F, O> InboundUpgrade<C> for SimpleProtocol<F>
 where
     C: AsyncRead + AsyncWrite,
@@ -76,9 +66,16 @@ where
     type Output = O::Item;
     type Error = IoError;
     type Future = FromErr<O::Future, IoError>;
+    type Name = Bytes;
+    type NamesIter = iter::Once<Self::Name>;
 
     #[inline]
-    fn upgrade_inbound(self, socket: C, _: Self::UpgradeId) -> Self::Future {
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once(self.name.clone())
+    }
+
+    #[inline]
+    fn upgrade_inbound(self, socket: C, _: Self::Name) -> Self::Future {
         let upgrade = &self.upgrade;
         upgrade(socket).into_future().from_err()
     }
@@ -93,9 +90,16 @@ where
     type Output = O::Item;
     type Error = IoError;
     type Future = FromErr<O::Future, IoError>;
+    type Name = Bytes;
+    type NamesIter = iter::Once<Self::Name>;
 
     #[inline]
-    fn upgrade_outbound(self, socket: C, _: Self::UpgradeId) -> Self::Future {
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once(self.name.clone())
+    }
+
+    #[inline]
+    fn upgrade_outbound(self, socket: C, _: Self::Name) -> Self::Future {
         let upgrade = &self.upgrade;
         upgrade(socket).into_future().from_err()
     }

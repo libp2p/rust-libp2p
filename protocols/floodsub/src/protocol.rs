@@ -18,10 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{BufMut, BytesMut};
 use crate::rpc_proto;
 use futures::future;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, PeerId};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, PeerId};
 use protobuf::Message as ProtobufMessage;
 use std::{io, iter};
 use tokio_codec::{Decoder, Encoder, Framed};
@@ -41,16 +41,6 @@ impl FloodsubConfig {
     }
 }
 
-impl UpgradeInfo for FloodsubConfig {
-    type UpgradeId = ();
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
-
-    #[inline]
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once(("/floodsub/1.0.0".into(), ()))
-    }
-}
-
 impl<TSocket> InboundUpgrade<TSocket> for FloodsubConfig
 where
     TSocket: AsyncRead + AsyncWrite,
@@ -58,9 +48,16 @@ where
     type Output = Framed<TSocket, FloodsubCodec>;
     type Error = io::Error;
     type Future = future::FutureResult<Self::Output, Self::Error>;
+    type Name = &'static [u8];
+    type NamesIter = iter::Once<Self::Name>;
 
     #[inline]
-    fn upgrade_inbound(self, socket: TSocket, _: Self::UpgradeId) -> Self::Future {
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once(b"/floodsub/1.0.0")
+    }
+
+    #[inline]
+    fn upgrade_inbound(self, socket: TSocket, _: Self::Name) -> Self::Future {
         future::ok(Framed::new(socket, FloodsubCodec { length_prefix: Default::default() }))
     }
 }
@@ -72,9 +69,16 @@ where
     type Output = Framed<TSocket, FloodsubCodec>;
     type Error = io::Error;
     type Future = future::FutureResult<Self::Output, Self::Error>;
+    type Name = &'static [u8];
+    type NamesIter = iter::Once<Self::Name>;
 
     #[inline]
-    fn upgrade_outbound(self, socket: TSocket, _: Self::UpgradeId) -> Self::Future {
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once(b"/floodsub/1.0.0")
+    }
+
+    #[inline]
+    fn upgrade_outbound(self, socket: TSocket, _: Self::Name) -> Self::Future {
         future::ok(Framed::new(socket, FloodsubCodec { length_prefix: Default::default() }))
     }
 }

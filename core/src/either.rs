@@ -342,3 +342,14 @@ where
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum EitherName<A, B> { A(A), B(B) }
+
+impl<A: AsRef<[u8]>, B: AsRef<[u8]>> AsRef<[u8]> for EitherName<A, B> {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            EitherName::A(a) => a.as_ref(),
+            EitherName::B(b) => b.as_ref()
+        }
+    }
+}

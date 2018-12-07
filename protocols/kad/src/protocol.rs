@@ -26,9 +26,9 @@
 //! The `Stream` component is used to poll the underlying transport, and the `Sink` component is
 //! used to send messages.
 
-use bytes::{Bytes, BytesMut};
+use bytes::BytesMut;
 use futures::{future, sink, stream, Sink, Stream};
-use libp2p_core::{InboundUpgrade, Multiaddr, OutboundUpgrade, PeerId, UpgradeInfo};
+use libp2p_core::{InboundUpgrade, Multiaddr, OutboundUpgrade, PeerId};
 use multihash::Multihash;
 use protobuf::{self, Message};
 use protobuf_structs;
@@ -135,16 +135,6 @@ impl Into<protobuf_structs::dht::Message_Peer> for KadPeer {
 #[derive(Debug, Default, Copy, Clone)]
 pub struct KademliaProtocolConfig;
 
-impl UpgradeInfo for KademliaProtocolConfig {
-    type NamesIter = iter::Once<(Bytes, ())>;
-    type UpgradeId = ();
-
-    #[inline]
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once(("/ipfs/kad/1.0.0".into(), ()))
-    }
-}
-
 impl<C> InboundUpgrade<C> for KademliaProtocolConfig
 where
     C: AsyncRead + AsyncWrite,
@@ -152,9 +142,16 @@ where
     type Output = KadInStreamSink<C>;
     type Future = future::FutureResult<Self::Output, IoError>;
     type Error = IoError;
+    type Name = &'static [u8];
+    type NamesIter = iter::Once<Self::Name>;
 
     #[inline]
-    fn upgrade_inbound(self, incoming: C, _: ()) -> Self::Future {
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once(b"/ipfs/kad/1.0.0")
+    }
+
+    #[inline]
+    fn upgrade_inbound(self, incoming: C, _: Self::Name) -> Self::Future {
         future::ok(
             Framed::new(incoming, codec::UviBytes::default())
                 .from_err::<IoError>()
@@ -178,9 +175,16 @@ where
     type Output = KadOutStreamSink<C>;
     type Future = future::FutureResult<Self::Output, IoError>;
     type Error = IoError;
+    type Name = &'static [u8];
+    type NamesIter = iter::Once<Self::Name>;
 
     #[inline]
-    fn upgrade_outbound(self, incoming: C, _: ()) -> Self::Future {
+    fn protocol_names(&self) -> Self::NamesIter {
+        iter::once(b"/ipfs/kad/1.0.0")
+    }
+
+    #[inline]
+    fn upgrade_outbound(self, incoming: C, _: Self::Name) -> Self::Future {
         future::ok(
             Framed::new(incoming, codec::UviBytes::default())
                 .from_err::<IoError>()
