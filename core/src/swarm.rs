@@ -58,9 +58,6 @@ where TTransport: Transport,
     /// Public key of the local node.
     local_public_key: PublicKey,
 
-    /// Peer ID of the local node.
-    local_peer_id: PeerId,
-
     /// List of protocols that the behaviour says it supports.
     supported_protocols: SmallVec<[Vec<u8>; 16]>,
 
@@ -129,16 +126,14 @@ where TBehaviour: NetworkBehaviour<TTopology>,
             .map(|(name, _)| name.to_vec())
             .collect();
 
-        let raw_swarm = RawSwarm::new(transport);
-
         let local_peer_id = local_public_key.clone().into_peer_id();
+        let raw_swarm = RawSwarm::new(transport, local_peer_id.clone());
 
         Swarm {
             raw_swarm,
             behaviour,
             topology,
             local_public_key,
-            local_peer_id,
             supported_protocols,
             listened_addrs: SmallVec::new(),
             external_addresses: SmallVec::new(),
@@ -195,7 +190,7 @@ where TBehaviour: NetworkBehaviour<TTopology>,
     /// Returns the peer ID of the swarm passed as parameter.
     #[inline]
     pub fn local_peer_id(me: &Self) -> &PeerId {
-        &me.local_peer_id
+        &me.raw_swarm.local_peer_id()
     }
 
     /// Returns the topology of the swarm.
@@ -278,7 +273,7 @@ where TBehaviour: NetworkBehaviour<TTopology>,
                     listened_addrs: &self.listened_addrs,
                     external_addresses: &self.external_addresses,
                     local_public_key: &self.local_public_key,
-                    local_peer_id: &self.local_peer_id,
+                    local_peer_id: &self.raw_swarm.local_peer_id(),
                 };
                 self.behaviour.poll(&mut parameters)
             };
