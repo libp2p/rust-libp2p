@@ -4,6 +4,10 @@ version = "0.1.0"
 description = "Generate peer ids that are prefixed with a specific string"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
+publish = false
 
 [dependencies]
 libp2p-core = { path = "../../core" }
