@@ -18,6 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! Implements the floodsub protocol, see also the:
+//! [spec](https://github.com/libp2p/specs/tree/master/pubsub).
+
 extern crate bs58;
 extern crate bytes;
 extern crate cuckoofilter;
