@@ -30,18 +30,18 @@ use crate::{
 ///
 /// The protocols supported by the first element have a higher priority.
 #[derive(Debug, Clone)]
-pub struct OrUpgrade<A, B>(A, B);
+pub struct SelectUpgrade<A, B>(A, B);
 
-impl<A, B> OrUpgrade<A, B> {
-    /// Combines two upgrades into an `OrUpgrade`.
+impl<A, B> SelectUpgrade<A, B> {
+    /// Combines two upgrades into an `SelectUpgrade`.
     ///
     /// The protocols supported by the first element have a higher priority.
     pub fn new(a: A, b: B) -> Self {
-        OrUpgrade(a, b)
+        SelectUpgrade(a, b)
     }
 }
 
-impl<A, B> UpgradeInfo for OrUpgrade<A, B>
+impl<A, B> UpgradeInfo for SelectUpgrade<A, B>
 where
     A: UpgradeInfo,
     B: UpgradeInfo
@@ -54,7 +54,7 @@ where
     }
 }
 
-impl<C, A, B, TA, TB, EA, EB> InboundUpgrade<C> for OrUpgrade<A, B>
+impl<C, A, B, TA, TB, EA, EB> InboundUpgrade<C> for SelectUpgrade<A, B>
 where
     A: InboundUpgrade<C, Output = TA, Error = EA>,
     B: InboundUpgrade<C, Output = TB, Error = EB>,
@@ -71,7 +71,7 @@ where
     }
 }
 
-impl<C, A, B, TA, TB, EA, EB> OutboundUpgrade<C> for OrUpgrade<A, B>
+impl<C, A, B, TA, TB, EA, EB> OutboundUpgrade<C> for SelectUpgrade<A, B>
 where
     A: OutboundUpgrade<C, Output = TA, Error = EA>,
     B: OutboundUpgrade<C, Output = TB, Error = EB>,
