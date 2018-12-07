@@ -167,14 +167,11 @@ where
             .and_then(|muxer: O| {
                 // This calls `open_outbound()` on the `StreamMuxer` and returns
                 // an `OutboundSubstreamRefWrapFuture<Arc<…>>`.
-                // take the muxer and build a future out of it, that, when resolved, yields
+                // It takes the muxer and builds a future out of it, that, when resolved, yields
                 // a substream we can set up the framed codec on.
                 muxing::outbound_from_ref_and_wrap(Arc::new(muxer))
             })
             .map(|substream| Builder::new().new_read(substream.unwrap() ))
-//            .map(|substream: Option<SubstreamRef<Arc<O>>>| Framed::<_, bytes::BytesMut>::new(substream.unwrap()))
-            // substream is a `Framed<SubstreamRef<Arc<O>>>`, and `Framed` is a `Stream`
-//            .and_then(|substream: Framed<SubstreamRef<Arc<O>>>| {
             .and_then(|substream| {
                 substream.into_future()
                     .map_err(|(e, _)| e)
