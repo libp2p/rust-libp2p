@@ -62,7 +62,7 @@ mod denied;
 mod either;
 mod error;
 mod map;
-mod or;
+mod select;
 
 use bytes::Bytes;
 use futures::future::Future;
@@ -73,7 +73,7 @@ pub use self::{
     either::EitherUpgrade,
     error::UpgradeError,
     map::{MapInboundUpgrade, MapOutboundUpgrade, MapInboundUpgradeErr, MapOutboundUpgradeErr},
-    or::OrUpgrade,
+    select::SelectUpgrade
 };
 
 /// Common trait for upgrades that can be applied on inbound substreams, outbound substreams,
@@ -126,16 +126,6 @@ pub trait InboundUpgradeExt<C>: InboundUpgrade<C> {
     {
         MapInboundUpgradeErr::new(self, f)
     }
-
-    /// Returns a new object that combines `Self` and another upgrade to support both at the same
-    /// time.
-    fn or_inbound<U>(self, upgrade: U) -> OrUpgrade<Self, U>
-    where
-        Self: Sized,
-        U: InboundUpgrade<C>
-    {
-        OrUpgrade::new(self, upgrade)
-    }
 }
 
 impl<C, U: InboundUpgrade<C>> InboundUpgradeExt<C> for U {}
@@ -175,16 +165,6 @@ pub trait OutboundUpgradeExt<C>: OutboundUpgrade<C> {
         F: FnOnce(Self::Error) -> T
     {
         MapOutboundUpgradeErr::new(self, f)
-    }
-
-    /// Returns a new object that combines `Self` and another upgrade to support both at the same
-    /// time.
-    fn or_outbound<U>(self, upgrade: U) -> OrUpgrade<Self, U>
-    where
-        Self: Sized,
-        U: OutboundUpgrade<C>
-    {
-        OrUpgrade::new(self, upgrade)
     }
 }
 

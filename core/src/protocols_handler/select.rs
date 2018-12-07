@@ -23,10 +23,9 @@ use crate::{
     protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent},
     upgrade::{
         InboundUpgrade,
-        InboundUpgradeExt,
         OutboundUpgrade,
         EitherUpgrade,
-        OrUpgrade
+        SelectUpgrade
     }
 };
 use futures::prelude::*;
@@ -65,7 +64,7 @@ where
     type InEvent = EitherOutput<TProto1::InEvent, TProto2::InEvent>;
     type OutEvent = EitherOutput<TProto1::OutEvent, TProto2::OutEvent>;
     type Substream = TSubstream;
-    type InboundProtocol = OrUpgrade<TProto1::InboundProtocol, TProto2::InboundProtocol>;
+    type InboundProtocol = SelectUpgrade<TProto1::InboundProtocol, TProto2::InboundProtocol>;
     type OutboundProtocol = EitherUpgrade<TProto1::OutboundProtocol, TProto2::OutboundProtocol>;
     type OutboundOpenInfo = EitherOutput<TProto1::OutboundOpenInfo, TProto2::OutboundOpenInfo>;
 
@@ -73,7 +72,7 @@ where
     fn listen_protocol(&self) -> Self::InboundProtocol {
         let proto1 = self.proto1.listen_protocol();
         let proto2 = self.proto2.listen_protocol();
-        proto1.or_inbound(proto2)
+        SelectUpgrade::new(proto1, proto2)
     }
 
     fn inject_fully_negotiated_outbound(&mut self, protocol: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output, endpoint: Self::OutboundOpenInfo) {
