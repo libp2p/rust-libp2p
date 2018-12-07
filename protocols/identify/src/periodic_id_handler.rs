@@ -37,13 +37,13 @@ const DELAY_TO_NEXT_ID: Duration = Duration::from_secs(5 * 60);
 const TRY_AGAIN_ON_ERR: Duration = Duration::from_secs(60 * 60);
 
 /// Protocol handler that identifies the remote at a regular period.
-pub struct PeriodicIdentification<TSubstream> {
+pub struct PeriodicIdHandler<TSubstream> {
     /// Configuration for the protocol.
     config: IdentifyProtocolConfig,
 
-    /// If `Some`, we successfully generated an `PeriodicIdentificationEvent` and we will produce
+    /// If `Some`, we successfully generated an `PeriodicIdHandlerEvent` and we will produce
     /// it the next time `poll()` is invoked.
-    pending_result: Option<PeriodicIdentificationEvent>,
+    pending_result: Option<PeriodicIdHandlerEvent>,
 
     /// Future that fires when we need to identify the node again. If `None`, means that we should
     /// shut down.
@@ -55,18 +55,18 @@ pub struct PeriodicIdentification<TSubstream> {
 
 /// Event produced by the periodic identifier.
 #[derive(Debug)]
-pub enum PeriodicIdentificationEvent {
+pub enum PeriodicIdHandlerEvent {
     /// We obtained identification information from the remote
     Identified(RemoteInfo),
     /// Failed to identify the remote.
     IdentificationError(io::Error),
 }
 
-impl<TSubstream> PeriodicIdentification<TSubstream> {
-    /// Builds a new `PeriodicIdentification`.
+impl<TSubstream> PeriodicIdHandler<TSubstream> {
+    /// Builds a new `PeriodicIdHandler`.
     #[inline]
     pub fn new() -> Self {
-        PeriodicIdentification {
+        PeriodicIdHandler {
             config: IdentifyProtocolConfig,
             pending_result: None,
             next_id: Some(Delay::new(Instant::now() + DELAY_TO_FIRST_ID)),
@@ -75,12 +75,12 @@ impl<TSubstream> PeriodicIdentification<TSubstream> {
     }
 }
 
-impl<TSubstream> ProtocolsHandler for PeriodicIdentification<TSubstream>
+impl<TSubstream> ProtocolsHandler for PeriodicIdHandler<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
     type InEvent = Void;
-    type OutEvent = PeriodicIdentificationEvent;
+    type OutEvent = PeriodicIdHandlerEvent;
     type Substream = TSubstream;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = IdentifyProtocolConfig;
@@ -100,7 +100,7 @@ where
         protocol: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output,
         _info: Self::OutboundOpenInfo,
     ) {
-        self.pending_result = Some(PeriodicIdentificationEvent::Identified(protocol))
+        self.pending_result = Some(PeriodicIdHandlerEvent::Identified(protocol))
     }
 
     #[inline]
@@ -111,7 +111,7 @@ where
 
     #[inline]
     fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, err: io::Error) {
-        self.pending_result = Some(PeriodicIdentificationEvent::IdentificationError(err));
+        self.pending_result = Some(PeriodicIdHandlerEvent::IdentificationError(err));
         if let Some(ref mut next_id) = self.next_id {
             next_id.reset(Instant::now() + TRY_AGAIN_ON_ERR);
         }
@@ -129,7 +129,7 @@ where
             ProtocolsHandlerEvent<
                 Self::OutboundProtocol,
                 Self::OutboundOpenInfo,
-                PeriodicIdentificationEvent,
+                PeriodicIdHandlerEvent,
             >,
         >,
         io::Error,
