@@ -18,33 +18,21 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-extern crate libp2p_core;
-extern crate tokio;
-extern crate bytes;
-extern crate futures;
-#[macro_use]
-extern crate log;
-extern crate env_logger;
-extern crate libp2p_tcp_transport as tcp;
-
+use log::{info, trace};
+use env_logger;
 use tcp::{TcpConfig, TcpTransStream};
-
 use libp2p_core::{
     Transport,
     StreamMuxer,
     muxing::{self, SubstreamRef},
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
 };
-
 use tokio::{
     codec::length_delimited::Builder,
     runtime::current_thread::Runtime
 };
 use futures::prelude::*;
-use std::thread;
-use std::sync::mpsc;
-use std::fmt::Debug;
-use std::sync::Arc;
+use std::{thread, sync::{mpsc, Arc}, fmt::Debug};
 
 pub fn test_muxer<U, O, E>(config: U)
 where
