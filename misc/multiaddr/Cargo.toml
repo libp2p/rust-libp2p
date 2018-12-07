@@ -1,19 +1,19 @@
 [package]
-authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
+name = "parity-multiaddr"
+authors = ["dignifiedquire <dignifiedquire@gmail.com>", "Parity Technologies <admin@parity.io>"]
 description = "Implementation of the multiaddr format"
-homepage = "https://github.com/multiformats/rust-multiaddr"
+homepage = "https://github.com/libp2p/rust-libp2p"
 keywords = ["multiaddr", "ipfs"]
 license = "MIT"
-name = "multiaddr"
 readme = "README.md"
-version = "0.3.0"
+version = "0.1.0"
 
 [dependencies]
 arrayref = "0.3"
 bs58 = "0.2.0"
 byteorder = "0.4"
 data-encoding = "2.1"
-multihash = { path = "../multihash" }
+multihash = { package = "parity-multihash", path = "../multihash" }
 serde = "1.0.70"
 unsigned-varint = "0.2"
 
@@ -21,7 +21,7 @@ unsigned-varint = "0.2"
 bincode = "1"
 bs58 = "0.2.0"
 data-encoding = "2"
-multihash = { path = "../multihash" }
+multihash = { package = "parity-multihash", path = "../multihash" }
 quickcheck = "0.7"
 rand = "0.6"
 serde_json = "1.0"

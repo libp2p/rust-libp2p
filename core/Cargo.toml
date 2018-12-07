@@ -13,8 +13,8 @@ bs58 = "0.2.0"
 bytes = "0.4"
 fnv = "1.0"
 log = "0.4"
-multiaddr = { path = "../misc/multiaddr" }
-multihash = { path = "../misc/multihash" }
+multiaddr = { package = "parity-multiaddr", path = "../misc/multiaddr" }
+multihash = { package = "parity-multihash", path = "../misc/multihash" }
 multistream-select = { path = "../misc/multistream-select" }
 futures = { version = "0.1", features = ["use_std"] }
 parking_lot = "0.7"

@@ -13,7 +13,7 @@ arrayvec = "0.4"
 bytes = "0.4"
 libp2p-core = { path = "../../core" }
 log = "0.4.1"
-multiaddr = { path = "../../misc/multiaddr" }
+multiaddr = { package = "parity-multiaddr", path = "../../misc/multiaddr" }
 multistream-select = { path = "../../misc/multistream-select" }
 futures = "0.1"
 parking_lot = "0.7"

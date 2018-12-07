@@ -19,8 +19,8 @@ libp2p-identify = { path = "../../protocols/identify" }
 libp2p-ping = { path = "../../protocols/ping" }
 libp2p-core = { path = "../../core" }
 log = "0.4"
-multiaddr = { path = "../../misc/multiaddr" }
-multihash = { path = "../../misc/multihash" }
+multiaddr = { package = "parity-multiaddr", path = "../../misc/multiaddr" }
+multihash = { package = "parity-multihash", path = "../../misc/multihash" }
 parking_lot = "0.7"
 protobuf = "2.0.2"
 rand = "0.6.0"
