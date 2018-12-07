@@ -113,6 +113,7 @@ pub use self::swarm::Swarm;
 pub use self::transport::Transport;
 pub use self::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, UpgradeError};
 
+/// "A remote computing device that communicates back and forth with a network to which is it connected."—https://www.paloaltonetworks.com/cyberpedia/what-is-an-endpoint
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Endpoint {
     /// The socket comes from a dialer.

@@ -34,8 +34,14 @@ use crate::{
 };
 use tokio_io::{AsyncRead, AsyncWrite};
 
+/// A possible upgrade: a `Transport` object on a connection or substream that enables transport over-the-wire via a protocol or protocols, and dialing, listening and NAT traversing a peer.
 #[derive(Debug, Copy, Clone)]
-pub struct Upgrade<T, U> { inner: T, upgrade: U }
+pub struct Upgrade<T, U> {
+    /// `Transport` object that is dialed, listened on and NAT traversed.
+    inner: T,
+    /// The upgrade that is returned in a wrapper on dialing or listening on a peer, 
+    upgrade: U
+}
 
 impl<T, U> Upgrade<T, U> {
     pub fn new(inner: T, upgrade: U) -> Self {
@@ -80,13 +86,14 @@ where
     }
 }
 
-/// Future to avoid boxing.
+/// Wrapper around a future that upgrades an outbound request or dial. Future that upgrades the dialing side to use an upgrade
 pub struct DialUpgradeFuture<T, U>
 where
     T: Future,
     T::Item: AsyncRead + AsyncWrite,
     U: OutboundUpgrade<T::Item>
 {
+    /// The future containing an outbound 
     future: T,
     upgrade: Either<Option<U>, OutboundUpgradeApply<T::Item, U>>
 }
@@ -116,9 +123,11 @@ where
     }
 }
 
-/// Stream to avoid boxing.
+/// Wrapper around a stream that upgrades a future of a listener or inbound request.
 pub struct ListenerStream<T, U> {
+    /// Stream containing the future (which contains the to-be-listener to upgrade) and multiaddress.
     stream: T,
+    /// Used for upgrading the future to a listener.
     upgrade: U
 }
 
@@ -146,14 +155,16 @@ where
     }
 }
 
-/// Future to avoid boxing.
+/// Wrapper around a future that contains a to-be upgraded listener, or inbound connection or substream.
 pub struct ListenerUpgradeFuture<T, U>
 where
     T: Future,
     T::Item: AsyncRead + AsyncWrite,
     U: InboundUpgrade<T::Item>
 {
+    /// Future to contain the to-be upgraded listener.
     future: T,
+    /// Upgrade for the listener.
     upgrade: Either<Option<U>, InboundUpgradeApply<T::Item, U>>
 }
 
