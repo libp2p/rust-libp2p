@@ -23,9 +23,12 @@ use futures::prelude::*;
 use std::{fmt, io::{Error as IoError, Read, Write}};
 use tokio_io::{AsyncRead, AsyncWrite};
 
+/// A wrapper for choosing or dispatching to one or another `Error`.
 #[derive(Debug, Copy, Clone)]
 pub enum EitherError<A, B> {
+    /// The first `Error` variant or option.
     A(A),
+    /// The second or other `Error` variant or option.
     B(B)
 }
 
@@ -56,10 +59,12 @@ where
 }
 
 /// Implements `AsyncRead` and `AsyncWrite` and dispatches all method calls to
-/// either `First` or `Second`.
+/// either a `First` or `Second` `StreamMuxer` that is used to handle an `Output` (which is an upgraded `Substream`).
 #[derive(Debug, Copy, Clone)]
 pub enum EitherOutput<A, B> {
+    /// The  first `StreamMuxer` option to handle an outbound substream.
     First(A),
+    /// The second `StreamMuxer` option.
     Second(B),
 }
 
@@ -166,13 +171,13 @@ where
             EitherOutput::First(inner) => {
                 match substream {
                     EitherOutbound::A(substream) => inner.destroy_outbound(substream),
-                    _ => panic!("Wrong API usage")
+                    _ => panic!("Wrong API usage, a substream is never destroyed")
                 }
             },
             EitherOutput::Second(inner) => {
                 match substream {
                     EitherOutbound::B(substream) => inner.destroy_outbound(substream),
-                    _ => panic!("Wrong API usage")
+                    _ => panic!("Wrong API usage, a substream is never destroyed")
                 }
             },
         }
@@ -258,10 +263,13 @@ where
     }
 }
 
+/// Used as an `OutboundSubstream` type, which is the return type for `open_outbound()`, and an input for `poll_outbound`, both of which are internal methods of `EitherOutput` (as well as `destroy_outbound()`, which is wrong API usage). All calls using `EitherOutbound` dispatch to either `A` or `B`.
 #[derive(Debug, Copy, Clone)]
 #[must_use = "futures do nothing unless polled"]
 pub enum EitherOutbound<A: StreamMuxer, B: StreamMuxer> {
+    /// The first `OutboundSubstream` variant.
     A(A::OutboundSubstream),
+    /// The second `OutboundSubstream` variant.
     B(B::OutboundSubstream),
 }
 
@@ -269,7 +277,9 @@ pub enum EitherOutbound<A: StreamMuxer, B: StreamMuxer> {
 #[derive(Debug, Copy, Clone)]
 #[must_use = "futures do nothing unless polled"]
 pub enum EitherListenStream<A, B> {
+    /// The first stream.
     First(A),
+    /// The second stream.
     Second(B),
 }
 
@@ -292,11 +302,14 @@ where
     }
 }
 
-/// Implements `Future` and dispatches all method calls to either `First` or `Second`.
+/// Dispatches all method calls to either a `First` or `Second` `Future`,
+/// each of which contains `EitherOutput` that contains the `Item` of `First` or `Second`, or an `io::error::Error` of the same.
 #[derive(Debug, Copy, Clone)]
 #[must_use = "futures do nothing unless polled"]
 pub enum EitherFuture<A, B> {
+    /// The first `Future` that contains `EitherOutput` or `io::error::Error`.
     First(A),
+    /// The second `Future`, contains `EitherOutput` or `io::error::Error`.
     Second(B),
 }
 
@@ -317,9 +330,15 @@ where
     }
 }
 
+/// Differs to `EitherFuture` in that the `Error` also contains either an `Error` in `A` or in `B`, as well as containing an `StreamMuxer` `Item` in `A` or `B.
 #[derive(Debug, Copy, Clone)]
 #[must_use = "futures do nothing unless polled"]
-pub enum EitherFuture2<A, B> { A(A), B(B) }
+pub enum EitherFuture2<A, B> {
+    /// The first `Future` option which contains a `StreamMuxer` `Item` or `Error` (like `B`).
+    A(A),
+    /// The second `Future` option which also contains `StreamMuxer` `Item` or `Error`.
+    B(B)
+}
 
 impl<AFut, BFut, AItem, BItem, AError, BError> Future for EitherFuture2<AFut, BFut>
 where

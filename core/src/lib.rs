@@ -44,7 +44,7 @@
 //!   `NetworkBehaviour` can be composed into a single behaviour.
 //! - The `Topology` trait is implemented for types that hold the layout of a network. When other
 //!   components need the network layout to operate, they are passed an instance of a `Topology`.
-//! - The `StreamMuxer` trait is implemented on structs that hold a connection to a remote and can
+//! - The `StreamMuxer` trait is implemented on objects that hold a connection to a remote and can
 //!   subdivide this connection into multiple substreams. See the `muxing` module.
 //! - The `UpgradeInfo`, `InboundUpgrade` and `OutboundUpgrade` traits define how to upgrade each
 //!   individual substream to use a protocol. See the `upgrade` module.
@@ -52,7 +52,7 @@
 //!   how to handle incoming substreams, which protocols are supported, when to open a new
 //!   outbound substream, etc. See the `protocols_handler` trait.
 //!
-
+#![warn(missing_docs)]
 extern crate bs58;
 extern crate bytes;
 extern crate fnv;
@@ -95,6 +95,7 @@ mod public_key;
 #[cfg(test)]
 mod tests;
 
+/// Has various structs containing ways to handle either one or another thing of the same type, such as an `Error`, `Output` (i.e. an upgraded `Substream`), `ListenStream` or `Future`.
 pub mod either;
 pub mod muxing;
 pub mod nodes;

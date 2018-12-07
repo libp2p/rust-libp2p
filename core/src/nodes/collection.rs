@@ -455,7 +455,7 @@ pub enum InterruptError {
 impl fmt::Display for InterruptError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            InterruptError::ReachAttemptNotFound => 
+            InterruptError::ReachAttemptNotFound =>
                 write!(f, "The reach attempt could not be found."),
             InterruptError::AlreadyReached =>
                 write!(f, "The reach attempt has already completed or reached the node."),

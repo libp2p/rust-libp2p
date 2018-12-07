@@ -71,12 +71,12 @@ pub enum Shutdown {
     All
 }
 
-/// Implemented on objects that can open and manage substreams.
+/// Implemented on objects that hold a connection to a remote and can subdivide this connection into multiple substreams, opening and managing them.
 pub trait StreamMuxer {
     /// Type of the object that represents the raw substream where data can be read and written.
     type Substream;
 
-    /// Future that will be resolved when the outgoing substream is open.
+    /// `Future` that will be resolved when the outgoing `Substream` is open.
     type OutboundSubstream;
 
     /// Polls for an inbound substream.
