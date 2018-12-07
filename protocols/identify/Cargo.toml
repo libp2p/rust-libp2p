@@ -14,7 +14,7 @@ fnv = "1"
 futures = "0.1"
 libp2p-core = { path = "../../core" }
 log = "0.4.1"
-multiaddr = { path = "../../misc/multiaddr" }
+multiaddr = { package = "parity-multiaddr", path = "../../misc/multiaddr" }
 parking_lot = "0.7"
 protobuf = "2.0.2"
 smallvec = "0.6"

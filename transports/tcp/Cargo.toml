@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 libp2p-core = { path = "../../core" }
 log = "0.4.1"
 futures = "0.1"
-multiaddr = { path = "../../misc/multiaddr" }
+multiaddr = { package = "parity-multiaddr", path = "../../misc/multiaddr" }
 tk-listen = "0.2.0"
 tokio-io = "0.1"
 tokio-tcp = "0.1"

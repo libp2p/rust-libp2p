@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::listen_handler::IdentifyListenHandler;
-use crate::periodic_id_handler::{PeriodicIdentification, PeriodicIdentificationEvent};
+use crate::periodic_id_handler::{PeriodicIdHandler, PeriodicIdHandlerEvent};
 use crate::protocol::{IdentifyInfo, IdentifySender, IdentifySenderFuture};
 use futures::prelude::*;
 use libp2p_core::protocols_handler::{ProtocolsHandler, ProtocolsHandlerSelect};
@@ -65,11 +65,11 @@ impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for Identify<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
-    type ProtocolsHandler = ProtocolsHandlerSelect<IdentifyListenHandler<TSubstream>, PeriodicIdentification<TSubstream>>;
+    type ProtocolsHandler = ProtocolsHandlerSelect<IdentifyListenHandler<TSubstream>, PeriodicIdHandler<TSubstream>>;
     type OutEvent = IdentifyEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        IdentifyListenHandler::new().select(PeriodicIdentification::new())
+        IdentifyListenHandler::new().select(PeriodicIdHandler::new())
     }
 
     fn inject_connected(&mut self, peer_id: PeerId, endpoint: ConnectedPoint) {
@@ -91,7 +91,7 @@ where
         event: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
     ) {
         match event {
-            EitherOutput::Second(PeriodicIdentificationEvent::Identified(remote)) => {
+            EitherOutput::Second(PeriodicIdHandlerEvent::Identified(remote)) => {
                 self.events
                     .push_back(NetworkBehaviourAction::GenerateEvent(IdentifyEvent::Identified {
                         peer_id,
@@ -110,7 +110,7 @@ where
                              disconnect; QED");
                 self.to_answer.push((sender, observed.clone()));
             }
-            EitherOutput::Second(PeriodicIdentificationEvent::IdentificationError(err)) => {
+            EitherOutput::Second(PeriodicIdHandlerEvent::IdentificationError(err)) => {
                 self.events
                     .push_back(NetworkBehaviourAction::GenerateEvent(IdentifyEvent::Error {
                         peer_id,
