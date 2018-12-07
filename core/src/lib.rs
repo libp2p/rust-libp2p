@@ -52,7 +52,7 @@
 //!   how to handle incoming substreams, which protocols are supported, when to open a new
 //!   outbound substream, etc. See the `protocols_handler` trait.
 //!
-#![warn(missing_docs)]
+
 extern crate bs58;
 extern crate bytes;
 extern crate fnv;
