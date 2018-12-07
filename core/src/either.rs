@@ -59,7 +59,8 @@ where
 }
 
 /// Implements `AsyncRead` and `AsyncWrite` and dispatches all method calls to
-/// either a `First` or `Second` `StreamMuxer` that is used to handle an `Output` (which is an upgraded `Substream`).
+/// either a `First` or `Second` `StreamMuxer` that is used to handle an
+/// `Output` (which is an upgraded `Substream`).
 #[derive(Debug, Copy, Clone)]
 pub enum EitherOutput<A, B> {
     /// The  first `StreamMuxer` option to handle an outbound substream.
@@ -263,7 +264,11 @@ where
     }
 }
 
-/// Used as an `OutboundSubstream` type, which is the return type for `open_outbound()`, and an input for `poll_outbound`, both of which are internal methods of `EitherOutput` (as well as `destroy_outbound()`, which is wrong API usage). All calls using `EitherOutbound` dispatch to either `A` or `B`.
+/// Used as an `OutboundSubstream` type, which is the return type for
+/// `open_outbound()`, and an input for `poll_outbound`, both of which
+/// are internal methods of `EitherOutput` (as well as
+/// `destroy_outbound()`, which is wrong API usage).
+/// All calls using `EitherOutbound` dispatch to either `A` or `B`.
 #[derive(Debug, Copy, Clone)]
 #[must_use = "futures do nothing unless polled"]
 pub enum EitherOutbound<A: StreamMuxer, B: StreamMuxer> {
