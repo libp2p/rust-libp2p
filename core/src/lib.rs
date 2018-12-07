@@ -95,7 +95,8 @@ mod public_key;
 #[cfg(test)]
 mod tests;
 
-/// Has various structs containing ways to handle either one or another thing of the same type, such as an `Error`, `Output` (i.e. an upgraded `Substream`), `ListenStream` or `Future`.
+/// Has various structs containing ways to handle either one or another thing of the same type,
+/// such as an `Error`, `Output` (i.e. an upgraded `Substream`), `ListenStream` or `Future`.
 pub mod either;
 pub mod muxing;
 pub mod nodes;

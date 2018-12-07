@@ -302,8 +302,9 @@ where
     }
 }
 
-/// Dispatches all method calls to either a `First` or `Second` `Future`,
-/// each of which contains `EitherOutput` that contains the `Item` of `First` or `Second`, or an `io::error::Error` of the same.
+/// Dispatches all method calls to either a `First` or `Second` `Future`, each
+/// of which contains `EitherOutput` that contains the `Item` of `First` or
+/// `Second`, or an `io::error::Error` of the same.
 #[derive(Debug, Copy, Clone)]
 #[must_use = "futures do nothing unless polled"]
 pub enum EitherFuture<A, B> {
@@ -330,7 +331,9 @@ where
     }
 }
 
-/// Differs to `EitherFuture` in that the `Error` also contains either an `Error` in `A` or in `B`, as well as containing an `StreamMuxer` `Item` in `A` or `B.
+/// Differs to `EitherFuture` in that the `Error` also contains either an
+/// `Error` in `A` or in `B`, as well as containing an `StreamMuxer` `Item`
+/// in `A` or `B.
 #[derive(Debug, Copy, Clone)]
 #[must_use = "futures do nothing unless polled"]
 pub enum EitherFuture2<A, B> {
