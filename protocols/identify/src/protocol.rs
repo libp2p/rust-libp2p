@@ -253,12 +253,12 @@ fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> 
 
 #[cfg(test)]
 mod tests {
-    extern crate libp2p_tcp_transport;
+    extern crate libp2p_tcp;
     extern crate tokio;
 
     use crate::protocol::{IdentifyInfo, RemoteInfo, IdentifyProtocolConfig};
     use self::tokio::runtime::current_thread::Runtime;
-    use self::libp2p_tcp_transport::TcpConfig;
+    use self::libp2p_tcp::TcpConfig;
     use futures::{Future, Stream};
     use libp2p_core::{PublicKey, Transport, upgrade::{apply_outbound, apply_inbound}};
     use std::sync::mpsc;

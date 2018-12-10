@@ -34,14 +34,14 @@
 //! extern crate tokio_io;
 //! extern crate libp2p_core;
 //! extern crate libp2p_secio;
-//! extern crate libp2p_tcp_transport;
+//! extern crate libp2p_tcp;
 //!
 //! # fn main() {
 //! use futures::Future;
 //! use libp2p_secio::{SecioConfig, SecioKeyPair, SecioOutput};
 //! use libp2p_core::{Multiaddr, upgrade::apply_inbound};
 //! use libp2p_core::transport::Transport;
-//! use libp2p_tcp_transport::TcpConfig;
+//! use libp2p_tcp::TcpConfig;
 //! use tokio_io::io::write_all;
 //! use tokio::runtime::current_thread::Runtime;
 //!

@@ -279,8 +279,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    extern crate libp2p_tcp_transport;
-    use self::libp2p_tcp_transport::TcpConfig;
+    extern crate libp2p_tcp;
+    use self::libp2p_tcp::TcpConfig;
     use futures::future;
     use swarm::Transport;
     use multiaddr::{Protocol, Multiaddr};
