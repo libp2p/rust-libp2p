@@ -267,11 +267,13 @@ where TBehaviour: NetworkBehaviour<TTopology>,
             }
 
             let behaviour_poll = {
+                let transport = self.raw_swarm.transport();
                 let mut parameters = PollParameters {
                     topology: &mut self.topology,
                     supported_protocols: &self.supported_protocols,
                     listened_addrs: &self.listened_addrs,
                     external_addresses: &self.external_addresses,
+                    nat_traversal: &move |a, b| transport.nat_traversal(a, b),
                     local_public_key: &self.local_public_key,
                     local_peer_id: &self.raw_swarm.local_peer_id(),
                 };
@@ -345,12 +347,13 @@ pub trait NetworkBehaviour<TTopology> {
 }
 
 /// Parameters passed to `poll()` that the `NetworkBehaviour` has access to.
-#[derive(Debug)]
+// TODO: #[derive(Debug)]
 pub struct PollParameters<'a, TTopology: 'a> {
     topology: &'a mut TTopology,
     supported_protocols: &'a [Vec<u8>],
     listened_addrs: &'a [Multiaddr],
     external_addresses: &'a [Multiaddr],
+    nat_traversal: &'a dyn Fn(&Multiaddr, &Multiaddr) -> Option<Multiaddr>,
     local_public_key: &'a PublicKey,
     local_peer_id: &'a PeerId,
 }
@@ -397,6 +400,12 @@ impl<'a, TTopology> PollParameters<'a, TTopology> {
     #[inline]
     pub fn local_peer_id(&self) -> &PeerId {
         self.local_peer_id
+    }
+
+    /// Calls the `nat_traversal` method on the underlying transport of the `Swarm`.
+    #[inline]
+    pub fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        (self.nat_traversal)(server, observed)
     }
 }
 
