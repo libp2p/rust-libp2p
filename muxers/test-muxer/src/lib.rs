@@ -170,11 +170,8 @@ where
             })
             .and_then(|(msg, stream)| {
                 assert_eq!(msg.unwrap(), Bytes::from("c"));
-                stream.into_future().map_err(|(e, _)| e)
-//                Ok(())
-            })
-            .and_then(|(_, stream)| stream.send("1".into()))
-            .and_then(|_| Ok(()));
+                Ok(())
+            });
 
         Runtime::new().unwrap().block_on(future).unwrap();
     });
@@ -190,16 +187,7 @@ where
             })
             .and_then(|(message, stream)| {
                 assert_eq!(message.unwrap(), Bytes::from("0"));
-                stream.send("c".into());
-                stream.into_future().map_err(|(e, _)| e)
-            })
-            .and_then(|(_, stream)| stream.send("c".into()))
-            .and_then(|stream| {
-                stream.into_future().map_err(|(e, _)| e)
-            })
-            .and_then(|(message, _)| {
-                assert_eq!(message.unwrap(), Bytes::from("1"));
-                Ok(())
+                stream.send("c".into())
             })
             .and_then(|_| Ok(()))
     ).unwrap();
