@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::nodes::ConnectedPoint;
-use crate::upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade, UpgradeError};
+use crate::upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade, UpgradeError, ProtocolName};
 use futures::{future::Either, prelude::*};
 use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
 use std::mem;
@@ -58,7 +58,7 @@ where
     C: AsyncRead + AsyncWrite,
     U: OutboundUpgrade<C>
 {
-    let iter = up.protocol_info().into_iter();
+    let iter = up.protocol_info().into_iter().map(NameWrap as fn(_) -> NameWrap<_>);
     let future = multistream_select::dialer_select_proto(conn, iter);
     OutboundUpgradeApply {
         inner: OutboundUpgradeApplyState::Init { future, upgrade: up }
@@ -80,7 +80,7 @@ where
     U: InboundUpgrade<C>
 {
     Init {
-        future: ListenerSelectFuture<C, UpgradeInfoIterWrap<U>, U::Info>,
+        future: ListenerSelectFuture<C, UpgradeInfoIterWrap<U>, NameWrap<U::Info>>,
     },
     Upgrade {
         future: U::Future
@@ -108,7 +108,7 @@ where
                         }
                     };
                     self.inner = InboundUpgradeApplyState::Upgrade {
-                        future: upgrade.0.upgrade_inbound(connection, info)
+                        future: upgrade.0.upgrade_inbound(connection, info.0)
                     };
                 }
                 InboundUpgradeApplyState::Upgrade { mut future } => {
@@ -149,7 +149,7 @@ where
     U: OutboundUpgrade<C>
 {
     Init {
-        future: DialerSelectFuture<C, <U::InfoIter as IntoIterator>::IntoIter>,
+        future: DialerSelectFuture<C, NameWrapIter<<U::InfoIter as IntoIterator>::IntoIter>>,
         upgrade: U
     },
     Upgrade {
@@ -178,7 +178,7 @@ where
                         }
                     };
                     self.inner = OutboundUpgradeApplyState::Upgrade {
-                        future: upgrade.upgrade_outbound(connection, info)
+                        future: upgrade.upgrade_outbound(connection, info.0)
                     };
                 }
                 OutboundUpgradeApplyState::Upgrade { mut future } => {
@@ -204,17 +204,30 @@ where
     }
 }
 
-/// Wraps around a `UpgradeInfo` and satisfies the requirement of `listener_select_proto`.
+// Wraps around a `UpgradeInfo` and satisfies the requirement of `listener_select_proto`.
 struct UpgradeInfoIterWrap<U>(U);
 
 impl<'a, U> IntoIterator for &'a UpgradeInfoIterWrap<U>
 where
     U: UpgradeInfo
 {
-    type Item = U::Info;
-    type IntoIter = <U::InfoIter as IntoIterator>::IntoIter;
+    type Item = NameWrap<U::Info>;
+    type IntoIter = NameWrapIter<<U::InfoIter as IntoIterator>::IntoIter>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.0.protocol_info().into_iter()
+        self.0.protocol_info().into_iter().map(NameWrap)
     }
 }
+
+type NameWrapIter<I> =
+    std::iter::Map<I, fn(<I as Iterator>::Item) -> NameWrap<<I as Iterator>::Item>>;
+
+// Wrapper type to expose an `AsRef<[u8]>` impl for all types implementing `ProtocolName`.
+struct NameWrap<N>(N);
+
+impl<N: ProtocolName> AsRef<[u8]> for NameWrap<N> {
+    fn as_ref(&self) -> &[u8] {
+        self.0.protocol_name()
+    }
+}
+

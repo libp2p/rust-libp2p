@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    either::{EitherOutput, EitherError, EitherFuture2, EitherInfo},
+    either::{EitherOutput, EitherError, EitherFuture2, EitherName},
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
 };
 
@@ -44,7 +44,7 @@ where
     A: UpgradeInfo,
     B: UpgradeInfo
 {
-    type Info = EitherInfo<A::Info, B::Info>;
+    type Info = EitherName<A::Info, B::Info>;
     type InfoIter = InfoIterChain<
         <A::InfoIter as IntoIterator>::IntoIter,
         <B::InfoIter as IntoIterator>::IntoIter
@@ -66,8 +66,8 @@ where
 
     fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         match info {
-            EitherInfo::A(info) => EitherFuture2::A(self.0.upgrade_inbound(sock, info)),
-            EitherInfo::B(info) => EitherFuture2::B(self.1.upgrade_inbound(sock, info))
+            EitherName::A(info) => EitherFuture2::A(self.0.upgrade_inbound(sock, info)),
+            EitherName::B(info) => EitherFuture2::B(self.1.upgrade_inbound(sock, info))
         }
     }
 }
@@ -83,8 +83,8 @@ where
 
     fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         match info {
-            EitherInfo::A(info) => EitherFuture2::A(self.0.upgrade_outbound(sock, info)),
-            EitherInfo::B(info) => EitherFuture2::B(self.1.upgrade_outbound(sock, info))
+            EitherName::A(info) => EitherFuture2::A(self.0.upgrade_outbound(sock, info)),
+            EitherName::B(info) => EitherFuture2::B(self.1.upgrade_outbound(sock, info))
         }
     }
 }
@@ -98,14 +98,14 @@ where
     A: Iterator,
     B: Iterator
 {
-    type Item = EitherInfo<A::Item, B::Item>;
+    type Item = EitherName<A::Item, B::Item>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(info) = self.0.next() {
-            return Some(EitherInfo::A(info))
+            return Some(EitherName::A(info))
         }
         if let Some(info) = self.1.next() {
-            return Some(EitherInfo::B(info))
+            return Some(EitherName::B(info))
         }
         None
     }

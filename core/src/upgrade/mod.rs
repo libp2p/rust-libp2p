@@ -75,11 +75,23 @@ pub use self::{
     select::SelectUpgrade
 };
 
+/// Types serving as protocol names.
+pub trait ProtocolName {
+    /// The protocol name as bytes.
+    fn protocol_name(&self) -> &[u8];
+}
+
+impl<T: AsRef<[u8]>> ProtocolName for T {
+    fn protocol_name(&self) -> &[u8] {
+        self.as_ref()
+    }
+}
+
 /// Common trait for upgrades that can be applied on inbound substreams, outbound substreams,
 /// or both.
 pub trait UpgradeInfo {
     /// Opaque type representing a negotiable protocol.
-    type Info: AsRef<[u8]> + Clone;
+    type Info: ProtocolName;
     /// Iterator returned by `protocol_info`.
     type InfoIter: IntoIterator<Item = Self::Info>;
 

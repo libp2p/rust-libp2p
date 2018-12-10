@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    Transport, Multiaddr, PublicKey, PeerId, InboundUpgrade, OutboundUpgrade, UpgradeInfo,
+    Transport, Multiaddr, PublicKey, PeerId, InboundUpgrade, OutboundUpgrade, UpgradeInfo, ProtocolName,
     muxing::StreamMuxer,
     nodes::{
         handled_node::NodeHandler,
@@ -126,7 +126,7 @@ where TBehaviour: NetworkBehaviour<TTopology>,
             .listen_protocol()
             .protocol_info()
             .into_iter()
-            .map(|info| info.as_ref().to_vec())
+            .map(|info| info.protocol_name().to_vec())
             .collect();
 
         let local_peer_id = local_public_key.clone().into_peer_id();
