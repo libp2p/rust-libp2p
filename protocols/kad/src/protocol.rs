@@ -28,7 +28,7 @@
 
 use bytes::BytesMut;
 use futures::{future, sink, stream, Sink, Stream};
-use libp2p_core::{InboundUpgrade, Multiaddr, OutboundUpgrade, PeerId};
+use libp2p_core::{InboundUpgrade, Multiaddr, OutboundUpgrade, PeerId, UpgradeInfo};
 use multihash::Multihash;
 use protobuf::{self, Message};
 use protobuf_structs;
@@ -135,6 +135,16 @@ impl Into<protobuf_structs::dht::Message_Peer> for KadPeer {
 #[derive(Debug, Default, Copy, Clone)]
 pub struct KademliaProtocolConfig;
 
+impl UpgradeInfo for KademliaProtocolConfig {
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
+
+    #[inline]
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once(b"/ipfs/kad/1.0.0")
+    }
+}
+
 impl<C> InboundUpgrade<C> for KademliaProtocolConfig
 where
     C: AsyncRead + AsyncWrite,
@@ -142,13 +152,6 @@ where
     type Output = KadInStreamSink<C>;
     type Future = future::FutureResult<Self::Output, IoError>;
     type Error = IoError;
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
-
-    #[inline]
-    fn info_iter(&self) -> Self::InfoIter {
-        iter::once(b"/ipfs/kad/1.0.0")
-    }
 
     #[inline]
     fn upgrade_inbound(self, incoming: C, _: Self::Info) -> Self::Future {
@@ -175,13 +178,6 @@ where
     type Output = KadOutStreamSink<C>;
     type Future = future::FutureResult<Self::Output, IoError>;
     type Error = IoError;
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
-
-    #[inline]
-    fn info_iter(&self) -> Self::InfoIter {
-        iter::once(b"/ipfs/kad/1.0.0")
-    }
 
     #[inline]
     fn upgrade_outbound(self, incoming: C, _: Self::Info) -> Self::Future {

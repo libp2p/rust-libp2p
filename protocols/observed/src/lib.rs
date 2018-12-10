@@ -30,7 +30,7 @@ extern crate unsigned_varint;
 
 use bytes::Bytes;
 use futures::{future, prelude::*};
-use libp2p_core::{Multiaddr, upgrade::{InboundUpgrade, OutboundUpgrade}};
+use libp2p_core::{Multiaddr, upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}};
 use std::{io, iter};
 use tokio_codec::{FramedRead, FramedWrite};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -45,6 +45,15 @@ impl Observed {
     }
 }
 
+impl UpgradeInfo for Observed {
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
+
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once(b"/paritytech/observed-address/0.1.0")
+    }
+}
+
 impl<C> InboundUpgrade<C> for Observed
 where
     C: AsyncRead + AsyncWrite + Send + 'static
@@ -52,12 +61,6 @@ where
     type Output = Sender<C>;
     type Error = io::Error;
     type Future = Box<dyn Future<Item=Self::Output, Error=Self::Error> + Send>;
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
-
-    fn info_iter(&self) -> Self::InfoIter {
-        iter::once(b"/paritytech/observed-address/0.1.0")
-    }
 
     fn upgrade_inbound(self, conn: C, _: Self::Info) -> Self::Future {
         let io = FramedWrite::new(conn, UviBytes::default());
@@ -72,12 +75,6 @@ where
     type Output = Multiaddr;
     type Error = io::Error;
     type Future = Box<dyn Future<Item=Self::Output, Error=Self::Error> + Send>;
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
-
-    fn info_iter(&self) -> Self::InfoIter {
-        iter::once(b"/paritytech/observed-address/0.1.0")
-    }
 
     fn upgrade_outbound(self, conn: C, _: Self::Info) -> Self::Future {
         let io = FramedRead::new(conn, UviBytes::default());

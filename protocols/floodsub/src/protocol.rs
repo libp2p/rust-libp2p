@@ -21,7 +21,7 @@
 use bytes::{BufMut, BytesMut};
 use crate::rpc_proto;
 use futures::future;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, PeerId};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, PeerId};
 use protobuf::Message as ProtobufMessage;
 use std::{io, iter};
 use tokio_codec::{Decoder, Encoder, Framed};
@@ -41,6 +41,16 @@ impl FloodsubConfig {
     }
 }
 
+impl UpgradeInfo for FloodsubConfig {
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
+
+    #[inline]
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once(b"/floodsub/1.0.0")
+    }
+}
+
 impl<TSocket> InboundUpgrade<TSocket> for FloodsubConfig
 where
     TSocket: AsyncRead + AsyncWrite,
@@ -48,13 +58,6 @@ where
     type Output = Framed<TSocket, FloodsubCodec>;
     type Error = io::Error;
     type Future = future::FutureResult<Self::Output, Self::Error>;
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
-
-    #[inline]
-    fn info_iter(&self) -> Self::InfoIter {
-        iter::once(b"/floodsub/1.0.0")
-    }
 
     #[inline]
     fn upgrade_inbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
@@ -69,13 +72,6 @@ where
     type Output = Framed<TSocket, FloodsubCodec>;
     type Error = io::Error;
     type Future = future::FutureResult<Self::Output, Self::Error>;
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
-
-    #[inline]
-    fn info_iter(&self) -> Self::InfoIter {
-        iter::once(b"/floodsub/1.0.0")
-    }
 
     #[inline]
     fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {

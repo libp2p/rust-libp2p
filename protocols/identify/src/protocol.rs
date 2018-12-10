@@ -22,7 +22,7 @@ use bytes::BytesMut;
 use futures::{future::{self, FutureResult}, Async, AsyncSink, Future, Poll, Sink, Stream};
 use libp2p_core::{
     Multiaddr, PublicKey,
-    upgrade::{InboundUpgrade, OutboundUpgrade}
+    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
 };
 use log::{debug, trace};
 use protobuf::Message as ProtobufMessage;
@@ -133,6 +133,15 @@ pub struct IdentifyInfo {
     pub protocols: Vec<String>,
 }
 
+impl UpgradeInfo for IdentifyProtocolConfig {
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
+
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once(b"/ipfs/id/1.0.0")
+    }
+}
+
 impl<C> InboundUpgrade<C> for IdentifyProtocolConfig
 where
     C: AsyncRead + AsyncWrite,
@@ -140,12 +149,6 @@ where
     type Output = IdentifySender<C>;
     type Error = IoError;
     type Future = FutureResult<Self::Output, IoError>;
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
-
-    fn info_iter(&self) -> Self::InfoIter {
-        iter::once(b"/ipfs/id/1.0.0")
-    }
 
     fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
         trace!("Upgrading inbound connection");
@@ -162,12 +165,6 @@ where
     type Output = RemoteInfo;
     type Error = IoError;
     type Future = IdentifyOutboundFuture<C>;
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
-
-    fn info_iter(&self) -> Self::InfoIter {
-        iter::once(b"/ipfs/id/1.0.0")
-    }
 
     fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
         IdentifyOutboundFuture {

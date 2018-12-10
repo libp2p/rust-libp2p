@@ -20,7 +20,7 @@
 
 use crate::{
     either::{EitherOutput, EitherError, EitherFuture2, EitherInfo},
-    upgrade::{InboundUpgrade, OutboundUpgrade}
+    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
 };
 
 /// Upgrade that combines two upgrades into one. Supports all the protocols supported by either
@@ -39,6 +39,22 @@ impl<A, B> SelectUpgrade<A, B> {
     }
 }
 
+impl<A, B> UpgradeInfo for SelectUpgrade<A, B>
+where
+    A: UpgradeInfo,
+    B: UpgradeInfo
+{
+    type Info = EitherInfo<A::Info, B::Info>;
+    type InfoIter = InfoIterChain<
+        <A::InfoIter as IntoIterator>::IntoIter,
+        <B::InfoIter as IntoIterator>::IntoIter
+    >;
+
+    fn protocol_info(&self) -> Self::InfoIter {
+        InfoIterChain(self.0.protocol_info().into_iter(), self.1.protocol_info().into_iter())
+    }
+}
+
 impl<C, A, B, TA, TB, EA, EB> InboundUpgrade<C> for SelectUpgrade<A, B>
 where
     A: InboundUpgrade<C, Output = TA, Error = EA>,
@@ -47,15 +63,6 @@ where
     type Output = EitherOutput<TA, TB>;
     type Error = EitherError<EA, EB>;
     type Future = EitherFuture2<A::Future, B::Future>;
-    type Info = EitherInfo<A::Info, B::Info>;
-    type InfoIter = InfoIterChain<
-        <A::InfoIter as IntoIterator>::IntoIter,
-        <B::InfoIter as IntoIterator>::IntoIter
-    >;
-
-    fn info_iter(&self) -> Self::InfoIter {
-        InfoIterChain(self.0.info_iter().into_iter(), self.1.info_iter().into_iter())
-    }
 
     fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         match info {
@@ -73,15 +80,6 @@ where
     type Output = EitherOutput<TA, TB>;
     type Error = EitherError<EA, EB>;
     type Future = EitherFuture2<A::Future, B::Future>;
-    type Info = EitherInfo<A::Info, B::Info>;
-    type InfoIter = InfoIterChain<
-        <A::InfoIter as IntoIterator>::IntoIter,
-        <B::InfoIter as IntoIterator>::IntoIter
-    >;
-
-    fn info_iter(&self) -> Self::InfoIter {
-        InfoIterChain(self.0.info_iter().into_iter(), self.1.info_iter().into_iter())
-    }
 
     fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         match info {

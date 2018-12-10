@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade};
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 
 /// Wraps around an upgrade and applies a closure to the output.
 #[derive(Debug, Clone)]
@@ -31,6 +31,18 @@ impl<U, F> MapInboundUpgrade<U, F> {
     }
 }
 
+impl<U, F> UpgradeInfo for MapInboundUpgrade<U, F>
+where
+    U: UpgradeInfo
+{
+    type Info = U::Info;
+    type InfoIter = U::InfoIter;
+
+    fn protocol_info(&self) -> Self::InfoIter {
+        self.upgrade.protocol_info()
+    }
+}
+
 impl<C, U, F, T> InboundUpgrade<C> for MapInboundUpgrade<U, F>
 where
     U: InboundUpgrade<C>,
@@ -39,12 +51,6 @@ where
     type Output = T;
     type Error = U::Error;
     type Future = MapFuture<U::Future, F>;
-    type Info = U::Info;
-    type InfoIter = U::InfoIter;
-
-    fn info_iter(&self) -> Self::InfoIter {
-        self.upgrade.info_iter()
-    }
 
     fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         MapFuture {
@@ -61,13 +67,6 @@ where
     type Output = U::Output;
     type Error = U::Error;
     type Future = U::Future;
-    type Info = U::Info;
-    type InfoIter = U::InfoIter;
-
-    fn info_iter(&self) -> Self::InfoIter {
-        self.upgrade.info_iter()
-    }
-
 
     fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         self.upgrade.upgrade_outbound(sock, info)
@@ -84,6 +83,18 @@ impl<U, F> MapOutboundUpgrade<U, F> {
     }
 }
 
+impl<U, F> UpgradeInfo for MapOutboundUpgrade<U, F>
+where
+    U: UpgradeInfo
+{
+    type Info = U::Info;
+    type InfoIter = U::InfoIter;
+
+    fn protocol_info(&self) -> Self::InfoIter {
+        self.upgrade.protocol_info()
+    }
+}
+
 impl<C, U, F> InboundUpgrade<C> for MapOutboundUpgrade<U, F>
 where
     U: InboundUpgrade<C>
@@ -91,12 +102,6 @@ where
     type Output = U::Output;
     type Error = U::Error;
     type Future = U::Future;
-    type Info = U::Info;
-    type InfoIter = U::InfoIter;
-
-    fn info_iter(&self) -> Self::InfoIter {
-        self.upgrade.info_iter()
-    }
 
     fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         self.upgrade.upgrade_inbound(sock, info)
@@ -111,12 +116,6 @@ where
     type Output = T;
     type Error = U::Error;
     type Future = MapFuture<U::Future, F>;
-    type Info = U::Info;
-    type InfoIter = U::InfoIter;
-
-    fn info_iter(&self) -> Self::InfoIter {
-        self.upgrade.info_iter()
-    }
 
     fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         MapFuture {
@@ -136,6 +135,18 @@ impl<U, F> MapInboundUpgradeErr<U, F> {
     }
 }
 
+impl<U, F> UpgradeInfo for MapInboundUpgradeErr<U, F>
+where
+    U: UpgradeInfo
+{
+    type Info = U::Info;
+    type InfoIter = U::InfoIter;
+
+    fn protocol_info(&self) -> Self::InfoIter {
+        self.upgrade.protocol_info()
+    }
+}
+
 impl<C, U, F, T> InboundUpgrade<C> for MapInboundUpgradeErr<U, F>
 where
     U: InboundUpgrade<C>,
@@ -144,12 +155,6 @@ where
     type Output = U::Output;
     type Error = T;
     type Future = MapErrFuture<U::Future, F>;
-    type Info = U::Info;
-    type InfoIter = U::InfoIter;
-
-    fn info_iter(&self) -> Self::InfoIter {
-        self.upgrade.info_iter()
-    }
 
     fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         MapErrFuture {
@@ -166,12 +171,6 @@ where
     type Output = U::Output;
     type Error = U::Error;
     type Future = U::Future;
-    type Info = U::Info;
-    type InfoIter = U::InfoIter;
-
-    fn info_iter(&self) -> Self::InfoIter {
-        self.upgrade.info_iter()
-    }
 
     fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         self.upgrade.upgrade_outbound(sock, info)
@@ -188,6 +187,18 @@ impl<U, F> MapOutboundUpgradeErr<U, F> {
     }
 }
 
+impl<U, F> UpgradeInfo for MapOutboundUpgradeErr<U, F>
+where
+    U: UpgradeInfo
+{
+    type Info = U::Info;
+    type InfoIter = U::InfoIter;
+
+    fn protocol_info(&self) -> Self::InfoIter {
+        self.upgrade.protocol_info()
+    }
+}
+
 impl<C, U, F, T> OutboundUpgrade<C> for MapOutboundUpgradeErr<U, F>
 where
     U: OutboundUpgrade<C>,
@@ -196,12 +207,6 @@ where
     type Output = U::Output;
     type Error = T;
     type Future = MapErrFuture<U::Future, F>;
-    type Info = U::Info;
-    type InfoIter = U::InfoIter;
-
-    fn info_iter(&self) -> Self::InfoIter {
-        self.upgrade.info_iter()
-    }
 
     fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         MapErrFuture {
@@ -218,12 +223,6 @@ where
     type Output = U::Output;
     type Error = U::Error;
     type Future = U::Future;
-    type Info = U::Info;
-    type InfoIter = U::InfoIter;
-
-    fn info_iter(&self) -> Self::InfoIter {
-        self.upgrade.info_iter()
-    }
 
     fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         self.upgrade.upgrade_inbound(sock, info)

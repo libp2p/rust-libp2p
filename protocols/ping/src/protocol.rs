@@ -20,7 +20,7 @@
 
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::{prelude::*, future::{self, FutureResult}, try_ready};
-use libp2p_core::{InboundUpgrade, OutboundUpgrade};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use log::debug;
 use rand::{distributions::Standard, prelude::*, rngs::EntropyRng};
 use std::collections::VecDeque;
@@ -43,6 +43,15 @@ impl<TUserData> Default for Ping<TUserData> {
     }
 }
 
+impl<TUserData> UpgradeInfo for Ping<TUserData> {
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
+
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once(b"/ipfs/ping/1.0.0")
+    }
+}
+
 impl<TSocket, TUserData> InboundUpgrade<TSocket> for Ping<TUserData>
 where
     TSocket: AsyncRead + AsyncWrite,
@@ -50,13 +59,8 @@ where
     type Output = PingListener<TSocket>;
     type Error = IoError;
     type Future = FutureResult<Self::Output, Self::Error>;
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
 
-    fn info_iter(&self) -> Self::InfoIter {
-        iter::once(b"/ipfs/ping/1.0.0")
-    }
-
+    #[inline]
     fn upgrade_inbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
         let listener = PingListener {
             inner: Framed::new(socket, Codec),
@@ -73,13 +77,8 @@ where
     type Output = PingDialer<TSocket, TUserData>;
     type Error = IoError;
     type Future = FutureResult<Self::Output, Self::Error>;
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
 
-    fn info_iter(&self) -> Self::InfoIter {
-        iter::once(b"/ipfs/ping/1.0.0")
-    }
-
+    #[inline]
     fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
         let dialer = PingDialer {
             inner: Framed::new(socket, Codec),

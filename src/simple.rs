@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::Bytes;
-use core::upgrade::{InboundUpgrade, OutboundUpgrade};
+use core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use futures::{future::FromErr, prelude::*};
 use std::{iter, io::Error as IoError, sync::Arc};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -57,6 +57,16 @@ impl<F> Clone for SimpleProtocol<F> {
     }
 }
 
+impl<F> UpgradeInfo for SimpleProtocol<F> {
+    type Info = Bytes;
+    type InfoIter = iter::Once<Self::Info>;
+
+    #[inline]
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once(self.info.clone())
+    }
+}
+
 impl<C, F, O> InboundUpgrade<C> for SimpleProtocol<F>
 where
     C: AsyncRead + AsyncWrite,
@@ -66,13 +76,6 @@ where
     type Output = O::Item;
     type Error = IoError;
     type Future = FromErr<O::Future, IoError>;
-    type Info = Bytes;
-    type InfoIter = iter::Once<Self::Info>;
-
-    #[inline]
-    fn info_iter(&self) -> Self::InfoIter {
-        iter::once(self.info.clone())
-    }
 
     #[inline]
     fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
@@ -90,13 +93,6 @@ where
     type Output = O::Item;
     type Error = IoError;
     type Future = FromErr<O::Future, IoError>;
-    type Info = Bytes;
-    type InfoIter = iter::Once<Self::Info>;
-
-    #[inline]
-    fn info_iter(&self) -> Self::InfoIter {
-        iter::once(self.info.clone())
-    }
 
     #[inline]
     fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {

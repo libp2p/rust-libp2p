@@ -19,10 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::nodes::ConnectedPoint;
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeError};
+use crate::upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade, UpgradeError};
 use futures::{future::Either, prelude::*};
 use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
-use std::{marker::PhantomData, mem};
+use std::mem;
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Applies an upgrade to the inbound and outbound direction of a connection or substream.
@@ -45,7 +45,7 @@ where
     C: AsyncRead + AsyncWrite,
     U: InboundUpgrade<C>,
 {
-    let iter = UpgradeInfoIterWrap(up, PhantomData);
+    let iter = UpgradeInfoIterWrap(up);
     let future = multistream_select::listener_select_proto(conn, iter);
     InboundUpgradeApply {
         inner: InboundUpgradeApplyState::Init { future }
@@ -58,7 +58,7 @@ where
     C: AsyncRead + AsyncWrite,
     U: OutboundUpgrade<C>
 {
-    let iter = up.info_iter().into_iter();
+    let iter = up.protocol_info().into_iter();
     let future = multistream_select::dialer_select_proto(conn, iter);
     OutboundUpgradeApply {
         inner: OutboundUpgradeApplyState::Init { future, upgrade: up }
@@ -80,7 +80,7 @@ where
     U: InboundUpgrade<C>
 {
     Init {
-        future: ListenerSelectFuture<C, UpgradeInfoIterWrap<C, U>, U::Info>,
+        future: ListenerSelectFuture<C, UpgradeInfoIterWrap<U>, U::Info>,
     },
     Upgrade {
         future: U::Future
@@ -204,17 +204,17 @@ where
     }
 }
 
-/// Wraps around a `InboundUpgrade` and satisfies the requirement of `listener_select_proto`.
-struct UpgradeInfoIterWrap<C, U>(U, PhantomData<C>);
+/// Wraps around a `UpgradeInfo` and satisfies the requirement of `listener_select_proto`.
+struct UpgradeInfoIterWrap<U>(U);
 
-impl<'a, C, U> IntoIterator for &'a UpgradeInfoIterWrap<C, U>
+impl<'a, U> IntoIterator for &'a UpgradeInfoIterWrap<U>
 where
-    U: InboundUpgrade<C>
+    U: UpgradeInfo
 {
     type Item = U::Info;
     type IntoIter = <U::InfoIter as IntoIterator>::IntoIter;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.0.info_iter().into_iter()
+        self.0.protocol_info().into_iter()
     }
 }

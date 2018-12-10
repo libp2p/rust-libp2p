@@ -29,7 +29,7 @@ extern crate tokio_io;
 extern crate yamux;
 
 use futures::{future::{self, FutureResult}, prelude::*};
-use libp2p_core::{muxing::Shutdown, upgrade::{InboundUpgrade, OutboundUpgrade}};
+use libp2p_core::{muxing::Shutdown, upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}};
 use std::{io, iter};
 use std::io::{Error as IoError};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -133,6 +133,15 @@ impl Default for Config {
     }
 }
 
+impl UpgradeInfo for Config {
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
+
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once(b"/yamux/1.0.0")
+    }
+}
+
 impl<C> InboundUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + 'static,
@@ -140,12 +149,6 @@ where
     type Output = Yamux<C>;
     type Error = io::Error;
     type Future = FutureResult<Yamux<C>, io::Error>;
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
-
-    fn info_iter(&self) -> Self::InfoIter {
-        iter::once(b"/yamux/1.0.0")
-    }
 
     fn upgrade_inbound(self, i: C, _: Self::Info) -> Self::Future {
         future::ok(Yamux::new(i, self.0, yamux::Mode::Server))
@@ -159,12 +162,6 @@ where
     type Output = Yamux<C>;
     type Error = io::Error;
     type Future = FutureResult<Yamux<C>, io::Error>;
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
-
-    fn info_iter(&self) -> Self::InfoIter {
-        iter::once(b"/yamux/1.0.0")
-    }
 
     fn upgrade_outbound(self, i: C, _: Self::Info) -> Self::Future {
         future::ok(Yamux::new(i, self.0, yamux::Mode::Client))
