@@ -9,9 +9,6 @@ This repository is the central place for Rust development of the [libp2p](https:
 **Warning**: While we are trying our best to be compatible with other lib2p implementations, we
 cannot guarantee that it is the case considering the lack of a precise libp2p specifications.
 
-**This readme will be more fleshed out the closer the project gets to completion.
-Right now everything including the crate organization is very much Work in Progress.**
-
 ## Documentation
 
 This repository includes a façade crate named `libp2p`, which reexports the rest of the repository.
