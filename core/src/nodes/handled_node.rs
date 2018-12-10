@@ -32,7 +32,7 @@ pub trait NodeHandler {
     type InEvent;
     /// Custom event that can be produced by the handler and that will be returned by the swarm.
     type OutEvent;
-    /// Error that can happen during the process of the node.
+    /// Error that can happen during the processing of the node.
     type Error;
     /// The type of the substream containing the data.
     type Substream;
