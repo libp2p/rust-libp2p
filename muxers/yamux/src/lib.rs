@@ -18,6 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! Implements the Yamux multiplexing protocol for libp2p, see also the
+//! [specification](https://github.com/hashicorp/yamux/blob/master/spec.md).
+
 extern crate bytes;
 extern crate futures;
 #[macro_use]

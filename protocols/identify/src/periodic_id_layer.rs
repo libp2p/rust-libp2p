@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::periodic_id_handler::{PeriodicIdentification, PeriodicIdentificationEvent};
+use crate::periodic_id_handler::{PeriodicIdHandler, PeriodicIdHandlerEvent};
 use crate::protocol::IdentifyInfo;
 use futures::prelude::*;
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
@@ -50,11 +50,11 @@ impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for PeriodicIdentify<TSu
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
-    type ProtocolsHandler = PeriodicIdentification<TSubstream>;
+    type ProtocolsHandler = PeriodicIdHandler<TSubstream>;
     type OutEvent = PeriodicIdentifyEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        PeriodicIdentification::new()
+        PeriodicIdHandler::new()
     }
 
     fn inject_connected(&mut self, _: PeerId, _: ConnectedPoint) {}
@@ -67,7 +67,7 @@ where
         event: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
     ) {
         match event {
-            PeriodicIdentificationEvent::Identified(remote) => {
+            PeriodicIdHandlerEvent::Identified(remote) => {
                 self.events
                     .push_back(NetworkBehaviourAction::ReportObservedAddr {
                         address: remote.observed_addr.clone(),

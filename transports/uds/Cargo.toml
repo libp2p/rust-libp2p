@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 libp2p-core = { path = "../../core" }
 log = "0.4.1"
 futures = "0.1"
-multiaddr = { path = "../../misc/multiaddr" }
+multiaddr = { package = "parity-multiaddr", path = "../../misc/multiaddr" }
 tokio-uds = "0.2"
 
 [target.'cfg(all(unix, not(target_os = "emscripten")))'.dev-dependencies]

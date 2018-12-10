@@ -1,15 +1,15 @@
 extern crate bs58;
 extern crate bincode;
 extern crate data_encoding;
-extern crate multiaddr;
+extern crate parity_multiaddr;
 extern crate multihash;
 extern crate quickcheck;
 extern crate rand;
 extern crate serde_json;
 
 use data_encoding::HEXUPPER;
-use multiaddr::*;
 use multihash::Multihash;
+use parity_multiaddr::*;
 use quickcheck::{Arbitrary, Gen, QuickCheck};
 use rand::Rng;
 use std::{

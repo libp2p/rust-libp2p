@@ -13,7 +13,7 @@ data-encoding = "2.0"
 dns-parser = "0.8"
 futures = "0.1"
 libp2p-core = { path = "../../core" }
-multiaddr = { path = "../multiaddr" }
+multiaddr = { package = "parity-multiaddr", path = "../multiaddr" }
 net2 = "0.2"
 rand = "0.6"
 tokio-reactor = "0.1"
