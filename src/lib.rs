@@ -46,9 +46,9 @@
 //!
 //! ```rust
 //! use libp2p::{Multiaddr, Transport, tcp::TcpConfig};
-//! let tcp_transport = TcpConfig::new();
+//! let tcp = TcpConfig::new();
 //! let addr: Multiaddr = "/ip4/98.97.96.95/tcp/20500".parse().expect("invalid multiaddr");
-//! let _outgoing_connec = tcp_transport.dial(addr);
+//! let _outgoing_connec = tcp.dial(addr);
 //! // Note that `_outgoing_connec` is a `Future`, and therefore doesn't do anything by itself
 //! // unless it is run through a tokio runtime.
 //! ```
@@ -77,9 +77,9 @@
 //! ```rust
 //! # #[cfg(all(not(target_os = "emscripten"), feature = "libp2p-secio"))] {
 //! use libp2p::{Transport, tcp::TcpConfig, secio::{SecioConfig, SecioKeyPair}};
-//! let tcp_transport = TcpConfig::new();
+//! let tcp = TcpConfig::new();
 //! let secio_upgrade = SecioConfig::new(SecioKeyPair::ed25519_generated().unwrap());
-//! let with_security = tcp_transport.with_upgrade(secio_upgrade);
+//! let with_security = tcp.with_upgrade(secio_upgrade);
 //! // let _ = with_security.dial(...);
 //! // `with_security` also implements the `Transport` trait, and all the connections opened
 //! // through it will automatically negotiate the `secio` protocol.
@@ -153,7 +153,7 @@ pub extern crate libp2p_plaintext as plaintext;
 pub extern crate libp2p_ratelimit as ratelimit;
 pub extern crate libp2p_secio as secio;
 #[cfg(not(target_os = "emscripten"))]
-pub extern crate libp2p_tcp_transport as tcp;
+pub extern crate libp2p_tcp as tcp;
 pub extern crate libp2p_transport_timeout as transport_timeout;
 pub extern crate libp2p_uds as uds;
 #[cfg(feature = "libp2p-websocket")]

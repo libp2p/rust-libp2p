@@ -1,5 +1,5 @@
 [package]
-name = "libp2p-tcp-transport"
+name = "libp2p-tcp"
 description = "TCP/IP transport protocol for libp2p"
 version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]

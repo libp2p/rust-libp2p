@@ -29,7 +29,7 @@ void = "1"
 
 [dev-dependencies]
 libp2p-ping = { path = "../protocols/ping" }
-libp2p-tcp-transport = { path = "../transports/tcp" }
+libp2p-tcp = { path = "../transports/tcp" }
 libp2p-mplex = { path = "../muxers/mplex" }
 rand = "0.6"
 tokio = "0.1"

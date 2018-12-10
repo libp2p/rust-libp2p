@@ -41,6 +41,6 @@ rsa = ["ring/rsa_signing"]
 aes-all = ["aesni", "lazy_static"]
 
 [dev-dependencies]
-libp2p-tcp-transport = { path = "../../transports/tcp" }
+libp2p-tcp = { path = "../../transports/tcp" }
 tokio = "0.1"
 tokio-tcp = "0.1"

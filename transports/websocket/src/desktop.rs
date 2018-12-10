@@ -258,7 +258,7 @@ fn client_addr_to_ws(client_addr: &Multiaddr, is_wss: bool) -> String {
 
 #[cfg(test)]
 mod tests {
-    extern crate libp2p_tcp_transport as tcp;
+    extern crate libp2p_tcp as tcp;
     extern crate tokio;
     use self::tokio::runtime::current_thread::Runtime;
     use futures::{Future, Stream};

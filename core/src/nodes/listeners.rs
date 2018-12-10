@@ -41,13 +41,13 @@ use std::collections::VecDeque;
 /// ```no_run
 /// # extern crate futures;
 /// # extern crate libp2p_core;
-/// # extern crate libp2p_tcp_transport;
+/// # extern crate libp2p_tcp;
 /// # extern crate tokio;
 /// # fn main() {
 /// use futures::prelude::*;
 /// use libp2p_core::nodes::listeners::{ListenersEvent, ListenersStream};
 ///
-/// let mut listeners = ListenersStream::new(libp2p_tcp_transport::TcpConfig::new());
+/// let mut listeners = ListenersStream::new(libp2p_tcp::TcpConfig::new());
 ///
 /// // Ask the `listeners` to start listening on the given multiaddress.
 /// listeners.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
@@ -274,7 +274,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    extern crate libp2p_tcp_transport;
+    extern crate libp2p_tcp;
 
     use super::*;
     use transport;
