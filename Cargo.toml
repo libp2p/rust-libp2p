@@ -28,7 +28,6 @@ libp2p-ratelimit = { path = "./transports/ratelimit" }
 libp2p-core = { path = "./core" }
 libp2p-core-derive = { path = "./misc/core-derive" }
 libp2p-secio = { path = "./protocols/secio", default-features = false }
-libp2p-transport-timeout = { path = "./transports/timeout" }
 libp2p-uds = { path = "./transports/uds" }
 libp2p-websocket = { path = "./transports/websocket", optional = true }
 libp2p-yamux = { path = "./muxers/yamux" }
@@ -72,7 +71,6 @@ members = [
     "transports/dns",
     "transports/ratelimit",
     "transports/tcp",
-    "transports/timeout",
     "transports/uds",
     "transports/websocket"
 ]
