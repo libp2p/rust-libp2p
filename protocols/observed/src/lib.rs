@@ -52,14 +52,14 @@ where
     type Output = Sender<C>;
     type Error = io::Error;
     type Future = Box<dyn Future<Item=Self::Output, Error=Self::Error> + Send>;
-    type Name = &'static [u8];
-    type NamesIter = iter::Once<Self::Name>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
-    fn protocol_names(&self) -> Self::NamesIter {
+    fn info_iter(&self) -> Self::InfoIter {
         iter::once(b"/paritytech/observed-address/0.1.0")
     }
 
-    fn upgrade_inbound(self, conn: C, _: Self::Name) -> Self::Future {
+    fn upgrade_inbound(self, conn: C, _: Self::Info) -> Self::Future {
         let io = FramedWrite::new(conn, UviBytes::default());
         Box::new(future::ok(Sender { io }))
     }
@@ -72,14 +72,14 @@ where
     type Output = Multiaddr;
     type Error = io::Error;
     type Future = Box<dyn Future<Item=Self::Output, Error=Self::Error> + Send>;
-    type Name = &'static [u8];
-    type NamesIter = iter::Once<Self::Name>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
-    fn protocol_names(&self) -> Self::NamesIter {
+    fn info_iter(&self) -> Self::InfoIter {
         iter::once(b"/paritytech/observed-address/0.1.0")
     }
 
-    fn upgrade_outbound(self, conn: C, _: Self::Name) -> Self::Future {
+    fn upgrade_outbound(self, conn: C, _: Self::Info) -> Self::Future {
         let io = FramedRead::new(conn, UviBytes::default());
         let future = io.into_future()
             .map_err(|(e, _): (io::Error, FramedRead<C, UviBytes>)| e)

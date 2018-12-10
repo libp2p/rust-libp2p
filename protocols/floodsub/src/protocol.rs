@@ -48,16 +48,16 @@ where
     type Output = Framed<TSocket, FloodsubCodec>;
     type Error = io::Error;
     type Future = future::FutureResult<Self::Output, Self::Error>;
-    type Name = &'static [u8];
-    type NamesIter = iter::Once<Self::Name>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
     #[inline]
-    fn protocol_names(&self) -> Self::NamesIter {
+    fn info_iter(&self) -> Self::InfoIter {
         iter::once(b"/floodsub/1.0.0")
     }
 
     #[inline]
-    fn upgrade_inbound(self, socket: TSocket, _: Self::Name) -> Self::Future {
+    fn upgrade_inbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
         future::ok(Framed::new(socket, FloodsubCodec { length_prefix: Default::default() }))
     }
 }
@@ -69,16 +69,16 @@ where
     type Output = Framed<TSocket, FloodsubCodec>;
     type Error = io::Error;
     type Future = future::FutureResult<Self::Output, Self::Error>;
-    type Name = &'static [u8];
-    type NamesIter = iter::Once<Self::Name>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
     #[inline]
-    fn protocol_names(&self) -> Self::NamesIter {
+    fn info_iter(&self) -> Self::InfoIter {
         iter::once(b"/floodsub/1.0.0")
     }
 
     #[inline]
-    fn upgrade_outbound(self, socket: TSocket, _: Self::Name) -> Self::Future {
+    fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
         future::ok(Framed::new(socket, FloodsubCodec { length_prefix: Default::default() }))
     }
 }

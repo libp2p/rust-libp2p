@@ -142,16 +142,16 @@ where
     type Output = KadInStreamSink<C>;
     type Future = future::FutureResult<Self::Output, IoError>;
     type Error = IoError;
-    type Name = &'static [u8];
-    type NamesIter = iter::Once<Self::Name>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
     #[inline]
-    fn protocol_names(&self) -> Self::NamesIter {
+    fn info_iter(&self) -> Self::InfoIter {
         iter::once(b"/ipfs/kad/1.0.0")
     }
 
     #[inline]
-    fn upgrade_inbound(self, incoming: C, _: Self::Name) -> Self::Future {
+    fn upgrade_inbound(self, incoming: C, _: Self::Info) -> Self::Future {
         future::ok(
             Framed::new(incoming, codec::UviBytes::default())
                 .from_err::<IoError>()
@@ -175,16 +175,16 @@ where
     type Output = KadOutStreamSink<C>;
     type Future = future::FutureResult<Self::Output, IoError>;
     type Error = IoError;
-    type Name = &'static [u8];
-    type NamesIter = iter::Once<Self::Name>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
     #[inline]
-    fn protocol_names(&self) -> Self::NamesIter {
+    fn info_iter(&self) -> Self::InfoIter {
         iter::once(b"/ipfs/kad/1.0.0")
     }
 
     #[inline]
-    fn upgrade_outbound(self, incoming: C, _: Self::Name) -> Self::Future {
+    fn upgrade_outbound(self, incoming: C, _: Self::Info) -> Self::Future {
         future::ok(
             Framed::new(incoming, codec::UviBytes::default())
                 .from_err::<IoError>()

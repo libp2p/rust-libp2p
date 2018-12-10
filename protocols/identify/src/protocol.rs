@@ -140,14 +140,14 @@ where
     type Output = IdentifySender<C>;
     type Error = IoError;
     type Future = FutureResult<Self::Output, IoError>;
-    type Name = &'static [u8];
-    type NamesIter = iter::Once<Self::Name>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
-    fn protocol_names(&self) -> Self::NamesIter {
+    fn info_iter(&self) -> Self::InfoIter {
         iter::once(b"/ipfs/id/1.0.0")
     }
 
-    fn upgrade_inbound(self, socket: C, _: Self::Name) -> Self::Future {
+    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
         trace!("Upgrading inbound connection");
         let socket = Framed::new(socket, codec::UviBytes::default());
         let sender = IdentifySender { inner: socket };
@@ -162,14 +162,14 @@ where
     type Output = RemoteInfo;
     type Error = IoError;
     type Future = IdentifyOutboundFuture<C>;
-    type Name = &'static [u8];
-    type NamesIter = iter::Once<Self::Name>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
-    fn protocol_names(&self) -> Self::NamesIter {
+    fn info_iter(&self) -> Self::InfoIter {
         iter::once(b"/ipfs/id/1.0.0")
     }
 
-    fn upgrade_outbound(self, socket: C, _: Self::Name) -> Self::Future {
+    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
         IdentifyOutboundFuture {
             inner: Framed::new(socket, codec::UviBytes::<BytesMut>::default()),
         }

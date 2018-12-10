@@ -39,16 +39,16 @@ where
     type Output = T;
     type Error = U::Error;
     type Future = MapFuture<U::Future, F>;
-    type Name = U::Name;
-    type NamesIter = U::NamesIter;
+    type Info = U::Info;
+    type InfoIter = U::InfoIter;
 
-    fn protocol_names(&self) -> Self::NamesIter {
-        self.upgrade.protocol_names()
+    fn info_iter(&self) -> Self::InfoIter {
+        self.upgrade.info_iter()
     }
 
-    fn upgrade_inbound(self, sock: C, name: Self::Name) -> Self::Future {
+    fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         MapFuture {
-            inner: self.upgrade.upgrade_inbound(sock, name),
+            inner: self.upgrade.upgrade_inbound(sock, info),
             map: Some(self.fun)
         }
     }
@@ -61,16 +61,16 @@ where
     type Output = U::Output;
     type Error = U::Error;
     type Future = U::Future;
-    type Name = U::Name;
-    type NamesIter = U::NamesIter;
+    type Info = U::Info;
+    type InfoIter = U::InfoIter;
 
-    fn protocol_names(&self) -> Self::NamesIter {
-        self.upgrade.protocol_names()
+    fn info_iter(&self) -> Self::InfoIter {
+        self.upgrade.info_iter()
     }
 
 
-    fn upgrade_outbound(self, sock: C, name: Self::Name) -> Self::Future {
-        self.upgrade.upgrade_outbound(sock, name)
+    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
+        self.upgrade.upgrade_outbound(sock, info)
     }
 }
 
@@ -91,15 +91,15 @@ where
     type Output = U::Output;
     type Error = U::Error;
     type Future = U::Future;
-    type Name = U::Name;
-    type NamesIter = U::NamesIter;
+    type Info = U::Info;
+    type InfoIter = U::InfoIter;
 
-    fn protocol_names(&self) -> Self::NamesIter {
-        self.upgrade.protocol_names()
+    fn info_iter(&self) -> Self::InfoIter {
+        self.upgrade.info_iter()
     }
 
-    fn upgrade_inbound(self, sock: C, name: Self::Name) -> Self::Future {
-        self.upgrade.upgrade_inbound(sock, name)
+    fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
+        self.upgrade.upgrade_inbound(sock, info)
     }
 }
 
@@ -111,16 +111,16 @@ where
     type Output = T;
     type Error = U::Error;
     type Future = MapFuture<U::Future, F>;
-    type Name = U::Name;
-    type NamesIter = U::NamesIter;
+    type Info = U::Info;
+    type InfoIter = U::InfoIter;
 
-    fn protocol_names(&self) -> Self::NamesIter {
-        self.upgrade.protocol_names()
+    fn info_iter(&self) -> Self::InfoIter {
+        self.upgrade.info_iter()
     }
 
-    fn upgrade_outbound(self, sock: C, name: Self::Name) -> Self::Future {
+    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         MapFuture {
-            inner: self.upgrade.upgrade_outbound(sock, name),
+            inner: self.upgrade.upgrade_outbound(sock, info),
             map: Some(self.fun)
         }
     }
@@ -144,16 +144,16 @@ where
     type Output = U::Output;
     type Error = T;
     type Future = MapErrFuture<U::Future, F>;
-    type Name = U::Name;
-    type NamesIter = U::NamesIter;
+    type Info = U::Info;
+    type InfoIter = U::InfoIter;
 
-    fn protocol_names(&self) -> Self::NamesIter {
-        self.upgrade.protocol_names()
+    fn info_iter(&self) -> Self::InfoIter {
+        self.upgrade.info_iter()
     }
 
-    fn upgrade_inbound(self, sock: C, name: Self::Name) -> Self::Future {
+    fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         MapErrFuture {
-            fut: self.upgrade.upgrade_inbound(sock, name),
+            fut: self.upgrade.upgrade_inbound(sock, info),
             fun: Some(self.fun)
         }
     }
@@ -166,15 +166,15 @@ where
     type Output = U::Output;
     type Error = U::Error;
     type Future = U::Future;
-    type Name = U::Name;
-    type NamesIter = U::NamesIter;
+    type Info = U::Info;
+    type InfoIter = U::InfoIter;
 
-    fn protocol_names(&self) -> Self::NamesIter {
-        self.upgrade.protocol_names()
+    fn info_iter(&self) -> Self::InfoIter {
+        self.upgrade.info_iter()
     }
 
-    fn upgrade_outbound(self, sock: C, name: Self::Name) -> Self::Future {
-        self.upgrade.upgrade_outbound(sock, name)
+    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
+        self.upgrade.upgrade_outbound(sock, info)
     }
 }
 
@@ -196,16 +196,16 @@ where
     type Output = U::Output;
     type Error = T;
     type Future = MapErrFuture<U::Future, F>;
-    type Name = U::Name;
-    type NamesIter = U::NamesIter;
+    type Info = U::Info;
+    type InfoIter = U::InfoIter;
 
-    fn protocol_names(&self) -> Self::NamesIter {
-        self.upgrade.protocol_names()
+    fn info_iter(&self) -> Self::InfoIter {
+        self.upgrade.info_iter()
     }
 
-    fn upgrade_outbound(self, sock: C, name: Self::Name) -> Self::Future {
+    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         MapErrFuture {
-            fut: self.upgrade.upgrade_outbound(sock, name),
+            fut: self.upgrade.upgrade_outbound(sock, info),
             fun: Some(self.fun)
         }
     }
@@ -218,15 +218,15 @@ where
     type Output = U::Output;
     type Error = U::Error;
     type Future = U::Future;
-    type Name = U::Name;
-    type NamesIter = U::NamesIter;
+    type Info = U::Info;
+    type InfoIter = U::InfoIter;
 
-    fn protocol_names(&self) -> Self::NamesIter {
-        self.upgrade.protocol_names()
+    fn info_iter(&self) -> Self::InfoIter {
+        self.upgrade.info_iter()
     }
 
-    fn upgrade_inbound(self, sock: C, name: Self::Name) -> Self::Future {
-        self.upgrade.upgrade_inbound(sock, name)
+    fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
+        self.upgrade.upgrade_inbound(sock, info)
     }
 }
 

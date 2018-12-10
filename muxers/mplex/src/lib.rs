@@ -154,15 +154,15 @@ where
     type Output = Multiplex<C>;
     type Error = IoError;
     type Future = future::FutureResult<Self::Output, IoError>;
-    type Name = &'static [u8];
-    type NamesIter = iter::Once<Self::Name>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
     #[inline]
-    fn protocol_names(&self) -> Self::NamesIter {
+    fn info_iter(&self) -> Self::InfoIter {
         iter::once(b"/mplex/6.7.0")
     }
 
-    fn upgrade_inbound(self, socket: C, _: Self::Name) -> Self::Future {
+    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
         future::ok(self.upgrade(socket, Endpoint::Listener))
     }
 }
@@ -174,15 +174,15 @@ where
     type Output = Multiplex<C>;
     type Error = IoError;
     type Future = future::FutureResult<Self::Output, IoError>;
-    type Name = &'static [u8];
-    type NamesIter = iter::Once<Self::Name>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
     #[inline]
-    fn protocol_names(&self) -> Self::NamesIter {
+    fn info_iter(&self) -> Self::InfoIter {
         iter::once(b"/mplex/6.7.0")
     }
 
-    fn upgrade_outbound(self, socket: C, _: Self::Name) -> Self::Future {
+    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
         future::ok(self.upgrade(socket, Endpoint::Dialer))
     }
 }

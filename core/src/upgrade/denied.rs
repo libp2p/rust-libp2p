@@ -32,14 +32,14 @@ impl<C> InboundUpgrade<C> for DeniedUpgrade {
     type Output = Void;
     type Error = Void;
     type Future = future::Empty<Self::Output, Self::Error>;
-    type Name = &'static [u8];
-    type NamesIter = iter::Empty<Self::Name>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Empty<Self::Info>;
 
-    fn protocol_names(&self) -> Self::NamesIter {
+    fn info_iter(&self) -> Self::InfoIter {
         iter::empty()
     }
 
-    fn upgrade_inbound(self, _: C, _: Self::Name) -> Self::Future {
+    fn upgrade_inbound(self, _: C, _: Self::Info) -> Self::Future {
         future::empty()
     }
 }
@@ -48,14 +48,14 @@ impl<C> OutboundUpgrade<C> for DeniedUpgrade {
     type Output = Void;
     type Error = Void;
     type Future = future::Empty<Self::Output, Self::Error>;
-    type Name = &'static [u8];
-    type NamesIter = iter::Empty<Self::Name>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Empty<Self::Info>;
 
-    fn protocol_names(&self) -> Self::NamesIter {
+    fn info_iter(&self) -> Self::InfoIter {
         iter::empty()
     }
 
-    fn upgrade_outbound(self, _: C, _: Self::Name) -> Self::Future {
+    fn upgrade_outbound(self, _: C, _: Self::Info) -> Self::Future {
         future::empty()
     }
 }

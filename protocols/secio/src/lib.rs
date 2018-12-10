@@ -377,14 +377,14 @@ where
     type Output = SecioOutput<T>;
     type Error = SecioError;
     type Future = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
-    type Name = &'static [u8];
-    type NamesIter = iter::Once<Self::Name>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
-    fn protocol_names(&self) -> Self::NamesIter {
+    fn info_iter(&self) -> Self::InfoIter {
         iter::once(b"/secio/1.0.0")
     }
 
-    fn upgrade_inbound(self, socket: T, _: Self::Name) -> Self::Future {
+    fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
         Box::new(self.handshake(socket))
     }
 }
@@ -396,14 +396,14 @@ where
     type Output = SecioOutput<T>;
     type Error = SecioError;
     type Future = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
-    type Name = &'static [u8];
-    type NamesIter = iter::Once<Self::Name>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
-    fn protocol_names(&self) -> Self::NamesIter {
+    fn info_iter(&self) -> Self::InfoIter {
         iter::once(b"/secio/1.0.0")
     }
 
-    fn upgrade_outbound(self, socket: T, _: Self::Name) -> Self::Future {
+    fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
         Box::new(self.handshake(socket))
     }
 }

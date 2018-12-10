@@ -45,7 +45,7 @@ where
     C: AsyncRead + AsyncWrite,
     U: InboundUpgrade<C>,
 {
-    let iter = UpgradeIntoNamesIterWrap(up, PhantomData);
+    let iter = UpgradeInfoIterWrap(up, PhantomData);
     let future = multistream_select::listener_select_proto(conn, iter);
     InboundUpgradeApply {
         inner: InboundUpgradeApplyState::Init { future }
@@ -58,7 +58,7 @@ where
     C: AsyncRead + AsyncWrite,
     U: OutboundUpgrade<C>
 {
-    let iter = up.protocol_names().into_iter();
+    let iter = up.info_iter().into_iter();
     let future = multistream_select::dialer_select_proto(conn, iter);
     OutboundUpgradeApply {
         inner: OutboundUpgradeApplyState::Init { future, upgrade: up }
@@ -80,7 +80,7 @@ where
     U: InboundUpgrade<C>
 {
     Init {
-        future: ListenerSelectFuture<C, UpgradeIntoNamesIterWrap<C, U>, U::Name>,
+        future: ListenerSelectFuture<C, UpgradeInfoIterWrap<C, U>, U::Info>,
     },
     Upgrade {
         future: U::Future
@@ -100,7 +100,7 @@ where
         loop {
             match mem::replace(&mut self.inner, InboundUpgradeApplyState::Undefined) {
                 InboundUpgradeApplyState::Init { mut future } => {
-                    let (name, connection, upgrade) = match future.poll()? {
+                    let (info, connection, upgrade) = match future.poll()? {
                         Async::Ready(x) => x,
                         Async::NotReady => {
                             self.inner = InboundUpgradeApplyState::Init { future };
@@ -108,7 +108,7 @@ where
                         }
                     };
                     self.inner = InboundUpgradeApplyState::Upgrade {
-                        future: upgrade.0.upgrade_inbound(connection, name)
+                        future: upgrade.0.upgrade_inbound(connection, info)
                     };
                 }
                 InboundUpgradeApplyState::Upgrade { mut future } => {
@@ -149,7 +149,7 @@ where
     U: OutboundUpgrade<C>
 {
     Init {
-        future: DialerSelectFuture<C, <U::NamesIter as IntoIterator>::IntoIter>,
+        future: DialerSelectFuture<C, <U::InfoIter as IntoIterator>::IntoIter>,
         upgrade: U
     },
     Upgrade {
@@ -170,7 +170,7 @@ where
         loop {
             match mem::replace(&mut self.inner, OutboundUpgradeApplyState::Undefined) {
                 OutboundUpgradeApplyState::Init { mut future, upgrade } => {
-                    let (name, connection) = match future.poll()? {
+                    let (info, connection) = match future.poll()? {
                         Async::Ready(x) => x,
                         Async::NotReady => {
                             self.inner = OutboundUpgradeApplyState::Init { future, upgrade };
@@ -178,7 +178,7 @@ where
                         }
                     };
                     self.inner = OutboundUpgradeApplyState::Upgrade {
-                        future: upgrade.upgrade_outbound(connection, name)
+                        future: upgrade.upgrade_outbound(connection, info)
                     };
                 }
                 OutboundUpgradeApplyState::Upgrade { mut future } => {
@@ -205,16 +205,16 @@ where
 }
 
 /// Wraps around a `InboundUpgrade` and satisfies the requirement of `listener_select_proto`.
-struct UpgradeIntoNamesIterWrap<C, U>(U, PhantomData<C>);
+struct UpgradeInfoIterWrap<C, U>(U, PhantomData<C>);
 
-impl<'a, C, U> IntoIterator for &'a UpgradeIntoNamesIterWrap<C, U>
+impl<'a, C, U> IntoIterator for &'a UpgradeInfoIterWrap<C, U>
 where
     U: InboundUpgrade<C>
 {
-    type Item = U::Name;
-    type IntoIter = <U::NamesIter as IntoIterator>::IntoIter;
+    type Item = U::Info;
+    type IntoIter = <U::InfoIter as IntoIterator>::IntoIter;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.0.protocol_names().into_iter()
+        self.0.info_iter().into_iter()
     }
 }

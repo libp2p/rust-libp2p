@@ -34,14 +34,14 @@ impl<C> InboundUpgrade<C> for PlainTextConfig {
     type Output = C;
     type Error = Void;
     type Future = FutureResult<C, Self::Error>;
-    type Name = &'static [u8];
-    type NamesIter = iter::Once<Self::Name>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
-    fn protocol_names(&self) -> Self::NamesIter {
+    fn info_iter(&self) -> Self::InfoIter {
         iter::once(b"/plaintext/1.0.0")
     }
 
-    fn upgrade_inbound(self, i: C, _: Self::Name) -> Self::Future {
+    fn upgrade_inbound(self, i: C, _: Self::Info) -> Self::Future {
         future::ok(i)
     }
 }
@@ -50,14 +50,14 @@ impl<C> OutboundUpgrade<C> for PlainTextConfig {
     type Output = C;
     type Error = Void;
     type Future = FutureResult<C, Self::Error>;
-    type Name = &'static [u8];
-    type NamesIter = iter::Once<Self::Name>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
-    fn protocol_names(&self) -> Self::NamesIter {
+    fn info_iter(&self) -> Self::InfoIter {
         iter::once(b"/plaintext/1.0.0")
     }
 
-    fn upgrade_outbound(self, i: C, _: Self::Name) -> Self::Future {
+    fn upgrade_outbound(self, i: C, _: Self::Info) -> Self::Future {
         future::ok(i)
     }
 }

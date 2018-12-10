@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    either::{EitherOutput, EitherError, EitherFuture2, EitherName},
+    either::{EitherOutput, EitherError, EitherFuture2, EitherInfo},
     upgrade::{InboundUpgrade, OutboundUpgrade}
 };
 
@@ -47,20 +47,20 @@ where
     type Output = EitherOutput<TA, TB>;
     type Error = EitherError<EA, EB>;
     type Future = EitherFuture2<A::Future, B::Future>;
-    type Name = EitherName<A::Name, B::Name>;
-    type NamesIter = NamesIterChain<
-        <A::NamesIter as IntoIterator>::IntoIter,
-        <B::NamesIter as IntoIterator>::IntoIter
+    type Info = EitherInfo<A::Info, B::Info>;
+    type InfoIter = InfoIterChain<
+        <A::InfoIter as IntoIterator>::IntoIter,
+        <B::InfoIter as IntoIterator>::IntoIter
     >;
 
-    fn protocol_names(&self) -> Self::NamesIter {
-        NamesIterChain(self.0.protocol_names().into_iter(), self.1.protocol_names().into_iter())
+    fn info_iter(&self) -> Self::InfoIter {
+        InfoIterChain(self.0.info_iter().into_iter(), self.1.info_iter().into_iter())
     }
 
-    fn upgrade_inbound(self, sock: C, name: Self::Name) -> Self::Future {
-        match name {
-            EitherName::A(name) => EitherFuture2::A(self.0.upgrade_inbound(sock, name)),
-            EitherName::B(name) => EitherFuture2::B(self.1.upgrade_inbound(sock, name))
+    fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
+        match info {
+            EitherInfo::A(info) => EitherFuture2::A(self.0.upgrade_inbound(sock, info)),
+            EitherInfo::B(info) => EitherFuture2::B(self.1.upgrade_inbound(sock, info))
         }
     }
 }
@@ -73,41 +73,41 @@ where
     type Output = EitherOutput<TA, TB>;
     type Error = EitherError<EA, EB>;
     type Future = EitherFuture2<A::Future, B::Future>;
-    type Name = EitherName<A::Name, B::Name>;
-    type NamesIter = NamesIterChain<
-        <A::NamesIter as IntoIterator>::IntoIter,
-        <B::NamesIter as IntoIterator>::IntoIter
+    type Info = EitherInfo<A::Info, B::Info>;
+    type InfoIter = InfoIterChain<
+        <A::InfoIter as IntoIterator>::IntoIter,
+        <B::InfoIter as IntoIterator>::IntoIter
     >;
 
-    fn protocol_names(&self) -> Self::NamesIter {
-        NamesIterChain(self.0.protocol_names().into_iter(), self.1.protocol_names().into_iter())
+    fn info_iter(&self) -> Self::InfoIter {
+        InfoIterChain(self.0.info_iter().into_iter(), self.1.info_iter().into_iter())
     }
 
-    fn upgrade_outbound(self, sock: C, name: Self::Name) -> Self::Future {
-        match name {
-            EitherName::A(name) => EitherFuture2::A(self.0.upgrade_outbound(sock, name)),
-            EitherName::B(name) => EitherFuture2::B(self.1.upgrade_outbound(sock, name))
+    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
+        match info {
+            EitherInfo::A(info) => EitherFuture2::A(self.0.upgrade_outbound(sock, info)),
+            EitherInfo::B(info) => EitherFuture2::B(self.1.upgrade_outbound(sock, info))
         }
     }
 }
 
 /// Iterator that combines the protocol names of twp upgrades.
 #[derive(Debug, Clone)]
-pub struct NamesIterChain<A, B>(A, B);
+pub struct InfoIterChain<A, B>(A, B);
 
-impl<A, B> Iterator for NamesIterChain<A, B>
+impl<A, B> Iterator for InfoIterChain<A, B>
 where
     A: Iterator,
     B: Iterator
 {
-    type Item = EitherName<A::Item, B::Item>;
+    type Item = EitherInfo<A::Item, B::Item>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(name) = self.0.next() {
-            return Some(EitherName::A(name))
+        if let Some(info) = self.0.next() {
+            return Some(EitherInfo::A(info))
         }
-        if let Some(name) = self.1.next() {
-            return Some(EitherName::B(name))
+        if let Some(info) = self.1.next() {
+            return Some(EitherInfo::B(info))
         }
         None
     }

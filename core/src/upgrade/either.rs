@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    either::{EitherOutput, EitherError, EitherFuture2, EitherName},
+    either::{EitherOutput, EitherError, EitherFuture2, EitherInfo},
     upgrade::{InboundUpgrade, OutboundUpgrade}
 };
 
@@ -35,23 +35,23 @@ where
     type Output = EitherOutput<TA, TB>;
     type Error = EitherError<EA, EB>;
     type Future = EitherFuture2<A::Future, B::Future>;
-    type Name = EitherName<A::Name, B::Name>;
-    type NamesIter = EitherIter<
-        <A::NamesIter as IntoIterator>::IntoIter,
-        <B::NamesIter as IntoIterator>::IntoIter
+    type Info = EitherInfo<A::Info, B::Info>;
+    type InfoIter = EitherIter<
+        <A::InfoIter as IntoIterator>::IntoIter,
+        <B::InfoIter as IntoIterator>::IntoIter
     >;
 
-    fn protocol_names(&self) -> Self::NamesIter {
+    fn info_iter(&self) -> Self::InfoIter {
         match self {
-            EitherUpgrade::A(a) => EitherIter::A(a.protocol_names().into_iter()),
-            EitherUpgrade::B(b) => EitherIter::B(b.protocol_names().into_iter())
+            EitherUpgrade::A(a) => EitherIter::A(a.info_iter().into_iter()),
+            EitherUpgrade::B(b) => EitherIter::B(b.info_iter().into_iter())
         }
     }
 
-    fn upgrade_inbound(self, sock: C, name: Self::Name) -> Self::Future {
-        match (self, name) {
-            (EitherUpgrade::A(a), EitherName::A(name)) => EitherFuture2::A(a.upgrade_inbound(sock, name)),
-            (EitherUpgrade::B(b), EitherName::B(name)) => EitherFuture2::B(b.upgrade_inbound(sock, name)),
+    fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
+        match (self, info) {
+            (EitherUpgrade::A(a), EitherInfo::A(info)) => EitherFuture2::A(a.upgrade_inbound(sock, info)),
+            (EitherUpgrade::B(b), EitherInfo::B(info)) => EitherFuture2::B(b.upgrade_inbound(sock, info)),
             _ => panic!("Invalid invocation of EitherUpgrade::upgrade_inbound")
         }
     }
@@ -65,23 +65,23 @@ where
     type Output = EitherOutput<TA, TB>;
     type Error = EitherError<EA, EB>;
     type Future = EitherFuture2<A::Future, B::Future>;
-    type Name = EitherName<A::Name, B::Name>;
-    type NamesIter = EitherIter<
-        <A::NamesIter as IntoIterator>::IntoIter,
-        <B::NamesIter as IntoIterator>::IntoIter
+    type Info = EitherInfo<A::Info, B::Info>;
+    type InfoIter = EitherIter<
+        <A::InfoIter as IntoIterator>::IntoIter,
+        <B::InfoIter as IntoIterator>::IntoIter
     >;
 
-    fn protocol_names(&self) -> Self::NamesIter {
+    fn info_iter(&self) -> Self::InfoIter {
         match self {
-            EitherUpgrade::A(a) => EitherIter::A(a.protocol_names().into_iter()),
-            EitherUpgrade::B(b) => EitherIter::B(b.protocol_names().into_iter())
+            EitherUpgrade::A(a) => EitherIter::A(a.info_iter().into_iter()),
+            EitherUpgrade::B(b) => EitherIter::B(b.info_iter().into_iter())
         }
     }
 
-    fn upgrade_outbound(self, sock: C, name: Self::Name) -> Self::Future {
-        match (self, name) {
-            (EitherUpgrade::A(a), EitherName::A(name)) => EitherFuture2::A(a.upgrade_outbound(sock, name)),
-            (EitherUpgrade::B(b), EitherName::B(name)) => EitherFuture2::B(b.upgrade_outbound(sock, name)),
+    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
+        match (self, info) {
+            (EitherUpgrade::A(a), EitherInfo::A(info)) => EitherFuture2::A(a.upgrade_outbound(sock, info)),
+            (EitherUpgrade::B(b), EitherInfo::B(info)) => EitherFuture2::B(b.upgrade_outbound(sock, info)),
             _ => panic!("Invalid invocation of EitherUpgrade::upgrade_outbound")
         }
     }
@@ -96,12 +96,12 @@ where
     A: Iterator,
     B: Iterator
 {
-    type Item = EitherName<A::Item, B::Item>;
+    type Item = EitherInfo<A::Item, B::Item>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
-            EitherIter::A(a) => a.next().map(EitherName::A),
-            EitherIter::B(b) => b.next().map(EitherName::B)
+            EitherIter::A(a) => a.next().map(EitherInfo::A),
+            EitherIter::B(b) => b.next().map(EitherInfo::B)
         }
     }
 
