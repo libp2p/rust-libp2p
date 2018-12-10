@@ -53,11 +53,11 @@
 //!
 //! ```
 //! extern crate libp2p_core;
-//! extern crate libp2p_tcp_transport;
+//! extern crate libp2p_tcp;
 //! extern crate libp2p_websocket;
 //!
 //! use libp2p_core::{Multiaddr, Transport};
-//! use libp2p_tcp_transport::TcpConfig;
+//! use libp2p_tcp::TcpConfig;
 //! use libp2p_websocket::WsConfig;
 //!
 //! # fn main() {

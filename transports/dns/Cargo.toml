@@ -17,5 +17,5 @@ tokio-dns-unofficial = "0.4"
 tokio-io = "0.1"
 
 [dev-dependencies]
-libp2p-tcp-transport = { path = "../../transports/tcp" }
+libp2p-tcp = { path = "../../transports/tcp" }
 tokio = "0.1"

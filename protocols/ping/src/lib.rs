@@ -52,7 +52,7 @@
 //! extern crate futures;
 //! extern crate libp2p_ping;
 //! extern crate libp2p_core;
-//! extern crate libp2p_tcp_transport;
+//! extern crate libp2p_tcp;
 //! extern crate tokio;
 //!
 //! use futures::{Future, Stream};
@@ -61,7 +61,7 @@
 //! use tokio::runtime::current_thread::Runtime;
 //!
 //! # fn main() {
-//! let ping_dialer = libp2p_tcp_transport::TcpConfig::new()
+//! let ping_dialer = libp2p_tcp::TcpConfig::new()
 //!     .and_then(|socket, _| {
 //!         apply_outbound(socket, Ping::default()).map_err(|e| e.into_io_error())
 //!     })
