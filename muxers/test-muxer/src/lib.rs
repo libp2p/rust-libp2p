@@ -112,24 +112,25 @@ where
     <O as StreamMuxer>::OutboundSubstream: Send + Sync,
 {
     env_logger::init();
+
     info!("\nCalling inbound\n");
     client_to_server_inbound(config.clone());
+
     info!("\nCalling outbound\n");
     client_to_server_outbound(config.clone());
 
-    info!("\nSending empty payload works fine\n");
+    info!("\nEmpty payload\n");
     send_empty_payload(config.clone());
 
     info!("\nBidirectional\n");
     bidirectional(config.clone());
-/*
-Then I would try all the things that the implementor didn't necessarily think of: send packets of 0 bytes, large packets (eg. 20MB), try cancels an outbound substream after it has succeeded
-- zero-sized payloads
-- bidirectional messages
-- large messages
-- unexpected cancel
-Etc.
-*/
+
+    // TODO:
+    // info!("\nLarge message\n");
+    // large_message(config.clone());
+    // TODO:
+    // info!("\nInterrup outbound after success");
+    // interrupt_outbound_after_success(config.clone());
 }
 
 fn bidirectional<U, O, E>(config: U)
