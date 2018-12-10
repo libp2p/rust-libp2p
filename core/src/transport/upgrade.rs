@@ -93,7 +93,7 @@ where
     T::Item: AsyncRead + AsyncWrite,
     U: OutboundUpgrade<T::Item>
 {
-    /// The future containing an outbound 
+    /// The future containing an outbound
     future: T,
     upgrade: Either<Option<U>, OutboundUpgradeApply<T::Item, U>>
 }
