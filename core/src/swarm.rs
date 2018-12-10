@@ -45,6 +45,7 @@ where TTransport: Transport,
         <<TBehaviour as NetworkBehaviour<TTopology>>::ProtocolsHandler as ProtocolsHandler>::InEvent,
         <<TBehaviour as NetworkBehaviour<TTopology>>::ProtocolsHandler as ProtocolsHandler>::OutEvent,
         NodeHandlerWrapper<TBehaviour::ProtocolsHandler>,
+        io::Error,
     >,
 
     /// Handles which nodes to connect to and how to handle the events sent back by the protocol
