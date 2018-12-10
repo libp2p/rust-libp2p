@@ -34,12 +34,13 @@ use crate::{
 };
 use tokio_io::{AsyncRead, AsyncWrite};
 
-/// A possible upgrade: a `Transport` object on a connection or substream that enables transport over-the-wire via a protocol or protocols, and dialing, listening and NAT traversing a peer.
+/// A possible upgrade: a `Transport` object on a connection or substream that enables transport
+/// over-the-wire via a protocol or protocols, and dialing, listening and NAT traversing a peer.
 #[derive(Debug, Copy, Clone)]
 pub struct Upgrade<T, U> {
     /// `Transport` object that is dialed, listened on and NAT traversed.
     inner: T,
-    /// The upgrade that is returned in a wrapper on dialing or listening on a peer, 
+    /// The upgrade that is returned in a wrapper on dialing or listening on a peer.
     upgrade: U
 }
 
@@ -93,7 +94,7 @@ where
     T::Item: AsyncRead + AsyncWrite,
     U: OutboundUpgrade<T::Item>
 {
-    /// The `Future` containing an outbound
+    /// The `Future` containing an `OutboundUpgrade`.
     future: T,
     /// An `Either` for `Future`s for an `OutboundUpgrade`.
     upgrade: Either<Option<U>, OutboundUpgradeApply<T::Item, U>>
