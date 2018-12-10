@@ -16,9 +16,12 @@ libp2p-core = { path = "../../core" }
 multiaddr = { package = "parity-multiaddr", path = "../multiaddr" }
 net2 = "0.2"
 rand = "0.6"
+smallvec = "0.6"
+tokio-io = "0.1"
 tokio-reactor = "0.1"
 tokio-timer = "0.2"
 tokio-udp = "0.1"
+void = "1.0"
 
 [dev-dependencies]
 tokio = "0.1"
