@@ -23,5 +23,5 @@ websocket = { version = "0.21.0", default-features = false, features = ["async",
 stdweb = { version = "0.1.3", default-features = false }
 
 [target.'cfg(not(target_os = "emscripten"))'.dev-dependencies]
-libp2p-tcp-transport = { path = "../tcp" }
+libp2p-tcp = { path = "../tcp" }
 tokio = "0.1"

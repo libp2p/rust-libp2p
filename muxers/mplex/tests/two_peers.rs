@@ -22,7 +22,7 @@ extern crate bytes;
 extern crate futures;
 extern crate libp2p_mplex as multiplex;
 extern crate libp2p_core as swarm;
-extern crate libp2p_tcp_transport as tcp;
+extern crate libp2p_tcp as tcp;
 extern crate tokio;
 
 use futures::prelude::*;
