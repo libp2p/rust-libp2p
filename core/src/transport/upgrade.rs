@@ -86,15 +86,16 @@ where
     }
 }
 
-/// Wrapper around a future that upgrades an outbound request or dial. Future that upgrades the dialing side to use an upgrade
+/// Wrapper around a `Future` that can upgrade an outbound request or dial.
 pub struct DialUpgradeFuture<T, U>
 where
     T: Future,
     T::Item: AsyncRead + AsyncWrite,
     U: OutboundUpgrade<T::Item>
 {
-    /// The future containing an outbound
+    /// The `Future` containing an outbound
     future: T,
+    /// An `Either` for `Future`s for an `OutboundUpgrade`.
     upgrade: Either<Option<U>, OutboundUpgradeApply<T::Item, U>>
 }
 
