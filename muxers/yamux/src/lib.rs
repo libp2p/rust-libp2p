@@ -21,7 +21,6 @@
 //! Implements the Yamux multiplexing protocol for libp2p, see also the
 //! [specification](https://github.com/hashicorp/yamux/blob/master/spec.md).
 
-extern crate bytes;
 extern crate futures;
 #[macro_use]
 extern crate log;
@@ -29,7 +28,6 @@ extern crate libp2p_core;
 extern crate tokio_io;
 extern crate yamux;
 
-use bytes::Bytes;
 use futures::{future::{self, FutureResult}, prelude::*};
 use libp2p_core::{muxing::Shutdown, upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}};
 use std::{io, iter};
@@ -136,11 +134,11 @@ impl Default for Config {
 }
 
 impl UpgradeInfo for Config {
-    type UpgradeId = ();
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once((Bytes::from("/yamux/1.0.0"), ()))
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once(b"/yamux/1.0.0")
     }
 }
 
@@ -152,7 +150,7 @@ where
     type Error = io::Error;
     type Future = FutureResult<Yamux<C>, io::Error>;
 
-    fn upgrade_inbound(self, i: C, _: Self::UpgradeId) -> Self::Future {
+    fn upgrade_inbound(self, i: C, _: Self::Info) -> Self::Future {
         future::ok(Yamux::new(i, self.0, yamux::Mode::Server))
     }
 }
@@ -165,7 +163,7 @@ where
     type Error = io::Error;
     type Future = FutureResult<Yamux<C>, io::Error>;
 
-    fn upgrade_outbound(self, i: C, _: Self::UpgradeId) -> Self::Future {
+    fn upgrade_outbound(self, i: C, _: Self::Info) -> Self::Future {
         future::ok(Yamux::new(i, self.0, yamux::Mode::Client))
     }
 }

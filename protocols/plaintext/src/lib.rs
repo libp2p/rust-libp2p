@@ -18,12 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-extern crate bytes;
 extern crate futures;
 extern crate libp2p_core;
 extern crate void;
 
-use bytes::Bytes;
 use futures::future::{self, FutureResult};
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use std::iter;
@@ -33,11 +31,11 @@ use void::Void;
 pub struct PlainTextConfig;
 
 impl UpgradeInfo for PlainTextConfig {
-    type UpgradeId = ();
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once((Bytes::from("/plaintext/1.0.0"), ()))
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once(b"/plaintext/1.0.0")
     }
 }
 
@@ -46,7 +44,7 @@ impl<C> InboundUpgrade<C> for PlainTextConfig {
     type Error = Void;
     type Future = FutureResult<C, Self::Error>;
 
-    fn upgrade_inbound(self, i: C, _: Self::UpgradeId) -> Self::Future {
+    fn upgrade_inbound(self, i: C, _: Self::Info) -> Self::Future {
         future::ok(i)
     }
 }
@@ -56,7 +54,7 @@ impl<C> OutboundUpgrade<C> for PlainTextConfig {
     type Error = Void;
     type Future = FutureResult<C, Self::Error>;
 
-    fn upgrade_outbound(self, i: C, _: Self::UpgradeId) -> Self::Future {
+    fn upgrade_outbound(self, i: C, _: Self::Info) -> Self::Future {
         future::ok(i)
     }
 }
