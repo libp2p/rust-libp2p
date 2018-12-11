@@ -588,6 +588,7 @@ enum OutboundSubstreamState {
 }
 
 /// Active substream to the remote.
+#[derive(Debug)]
 pub struct Substream {
     /// Substream number.
     num: u32,

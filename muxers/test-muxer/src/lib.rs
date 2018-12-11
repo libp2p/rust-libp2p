@@ -19,8 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 extern crate libp2p_tcp_transport as tcp;
 
-use log::{trace, debug, info};
+use assert_matches::assert_matches;
+use bytes::Bytes;
 use env_logger;
+use log::{trace, debug, info};
 use tcp::{TcpConfig, TcpTransStream, TcpListenStream};
 use libp2p_core::{
     Transport,
@@ -31,12 +33,12 @@ use libp2p_core::{
     Multiaddr,
 };
 use tokio::{
-    codec::{Framed, LengthDelimitedCodec, length_delimited::Builder},
+    codec::{Framed, LengthDelimitedCodec, length_delimited::{self, Builder}},
     runtime::current_thread::Runtime
 };
-use bytes::Bytes;
 use futures::prelude::*;
 use futures::future::Either;
+use rand::Rng;
 use std::{thread, sync::{mpsc, Arc}, fmt::Debug};
 
 mod helpers {
@@ -108,26 +110,21 @@ where
     <U as OutboundUpgrade<TcpTransStream>>::Future: Send,
     E: std::error::Error + Send + Sync + 'static,
     O: StreamMuxer + Send + Sync + 'static ,
-    <O as StreamMuxer>::Substream: Send + Sync,
+    <O as StreamMuxer>::Substream: Send + Sync + Debug,
     <O as StreamMuxer>::OutboundSubstream: Send + Sync,
 {
     env_logger::init();
 
-    info!("\nCalling inbound\n");
     client_to_server_inbound(config.clone());
 
-    info!("\nCalling outbound\n");
     client_to_server_outbound(config.clone());
 
-    info!("\nEmpty payload\n");
-    send_empty_payload(config.clone());
+    empty_payload(config.clone());
 
-    info!("\nBidirectional\n");
     bidirectional(config.clone());
 
-    // TODO:
-    // info!("\nLarge message\n");
-    // large_message(config.clone());
+     info!("\nLarge payload\n");
+     large_payload(config.clone());
     // TODO:
     // info!("\nInterrup outbound after success");
     // interrupt_outbound_after_success(config.clone());
@@ -158,9 +155,7 @@ where
         let framed = helpers::framed_listener_fut(listener, true);
         let future = framed
             .and_then(|stream| stream.send("0".into()))
-            .and_then(|stream| {
-                stream.into_future().map_err(|(e, _)| e)
-            })
+            .and_then(|stream| stream.into_future().map_err(|(e, _)| e))
             .and_then(|(msg, stream)| {
                 assert_eq!(msg.unwrap(), Bytes::from("a"));
                 stream.into_future().map_err(|(e, _)| e)
@@ -171,7 +166,7 @@ where
             })
             .and_then(|(msg, stream)| {
                 assert_eq!(msg.unwrap(), Bytes::from("c"));
-                Ok(())
+                stream.send("1".into())
             });
 
         Runtime::new().unwrap().block_on(future).unwrap();
@@ -183,19 +178,21 @@ where
         helpers::framed_dialler_fut(transport, addr, false)
             .and_then(|stream| stream.send("a".into()))
             .and_then(|stream| stream.send("b".into()))
-            .and_then(|stream| {
-                stream.into_future().map_err(|(e, _)| e)
-            })
+            .and_then(|stream| stream.into_future().map_err(|(e, _)| e))
             .and_then(|(message, stream)| {
                 assert_eq!(message.unwrap(), Bytes::from("0"));
                 stream.send("c".into())
             })
-            .and_then(|_| Ok(()))
+            .and_then(|stream| stream.into_future().map_err(|(e, _)| e))
+            .and_then(|(message, _)| {
+                assert_eq!(message.unwrap(), Bytes::from("1"));
+                Ok(())
+            })
     ).unwrap();
     thr.join().unwrap();
 }
 
-fn send_empty_payload<U, O, E>(config: U)
+fn empty_payload<U, O, E>(config: U)
 where
     U: OutboundUpgrade<TcpTransStream, Output = O, Error = E> + Send + Clone + Debug + 'static,
     U: InboundUpgrade<TcpTransStream, Output = O, Error = E>,
@@ -319,4 +316,62 @@ where
             .and_then(|subs| subs.send("world".into()))
     ).unwrap();
     thr.join().unwrap();
+}
+
+fn large_payload<U, O, E>(config: U)
+    where
+        U: OutboundUpgrade<TcpTransStream, Output = O, Error = E> + Send + Clone + Debug + 'static,
+        U: InboundUpgrade<TcpTransStream, Output = O, Error = E>,
+        <U as UpgradeInfo>::NamesIter: Send,
+        <U as UpgradeInfo>::UpgradeId: Send,
+        <U as InboundUpgrade<TcpTransStream>>::Future: Send,
+        <U as OutboundUpgrade<TcpTransStream>>::Future: Send,
+        E: std::error::Error + Send + Sync + 'static,
+        O: StreamMuxer + Send + Sync + 'static ,
+        <O as StreamMuxer>::Substream: Send + Sync + Debug,
+        <O as StreamMuxer>::OutboundSubstream: Send + Sync,
+{
+    let (tx, rx) = mpsc::channel();
+    let listener_conf = config.clone();
+    // 10Mbytes payload
+    let payload: Vec<u8> = (1..10485760).map(|_| rand::thread_rng().gen_range(1, u8::max_value()) ).collect();
+    // let thr = thread::spawn(move || {
+    let thr = thread::Builder::new().name("listener thr".to_string());
+    let thr = thr.spawn(move || {
+        let trans = TcpConfig::new().with_upgrade(listener_conf);
+        let (listener, addr) = trans
+            .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
+            .unwrap();
+        // Send our address to the connecting side so they know where to find us
+        tx.send(addr).unwrap();
+        let framed = helpers::framed_listener_fut(listener, true);
+        let future = framed
+            .and_then(|stream| stream.take(1).collect())
+            .and_then(|msgs| {
+                trace!("[thr] got message with len={:?}", msgs.len());
+                assert_eq!(msgs.len(), 0);
+                Ok(())
+            });
+        Runtime::new().unwrap().block_on(future);
+    }).expect("thread spawn failed");
+
+    let transport = TcpConfig::new().with_upgrade(config);
+    let addr = rx.recv().expect("address is valid");
+    Runtime::new().unwrap().block_on(
+        helpers::framed_dialler_fut(transport, addr, false)
+            .and_then(|subs| {
+                subs.send(payload.into())
+            })
+            .then(|res| {
+                assert!(res.is_err());
+                let err = res.err().unwrap();
+                trace!("send result error = {:?}", err);
+                 assert_matches!(err.kind(), std::io::ErrorKind::InvalidInput);
+                 assert_matches!(err.into_inner(), Some(inner) => {
+                     assert_eq!(format!("{:?}", inner), "FrameTooBig");
+                 });
+                Ok::<_, ()>(())
+            })
+    ).unwrap();
+    thr.join().expect("could not join thread");
 }
