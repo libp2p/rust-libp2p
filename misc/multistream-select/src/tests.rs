@@ -22,18 +22,15 @@
 
 #![cfg(test)]
 
-extern crate tokio;
-extern crate tokio_tcp;
-
-use self::tokio::runtime::current_thread::Runtime;
-use self::tokio_tcp::{TcpListener, TcpStream};
+use tokio::runtime::current_thread::Runtime;
+use tokio_tcp::{TcpListener, TcpStream};
 use bytes::Bytes;
-use dialer_select::{dialer_select_proto_parallel, dialer_select_proto_serial};
+use crate::dialer_select::{dialer_select_proto_parallel, dialer_select_proto_serial};
 use futures::Future;
 use futures::{Sink, Stream};
-use protocol::{Dialer, DialerToListenerMessage, Listener, ListenerToDialerMessage};
-use ProtocolChoiceError;
-use {dialer_select_proto, listener_select_proto};
+use crate::protocol::{Dialer, DialerToListenerMessage, Listener, ListenerToDialerMessage};
+use crate::ProtocolChoiceError;
+use crate::{dialer_select_proto, listener_select_proto};
 
 /// Holds a `Vec` and satifies the iterator requirements of `listener_select_proto`.
 struct VecRefIntoIter<T>(Vec<T>);

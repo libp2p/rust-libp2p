@@ -23,10 +23,11 @@
 
 use bytes::Bytes;
 use futures::{future::Either, prelude::*, sink, stream::StreamFuture};
-use protocol::{Dialer, DialerFuture, DialerToListenerMessage, ListenerToDialerMessage};
+use crate::protocol::{Dialer, DialerFuture, DialerToListenerMessage, ListenerToDialerMessage};
+use log::trace;
 use std::mem;
 use tokio_io::{AsyncRead, AsyncWrite};
-use ProtocolChoiceError;
+use crate::ProtocolChoiceError;
 
 /// Future, returned by `dialer_select_proto`, which selects a protocol and dialer
 /// either sequentially of by considering all protocols in parallel.
