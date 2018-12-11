@@ -16,4 +16,4 @@ syn = { version = "0.15", default-features = false, features = ["derive", "parsi
 quote = "0.6"
 
 [dev-dependencies]
-libp2p = { path = "../.." }
+libp2p = { version = "0.1.0", path = "../.." }
