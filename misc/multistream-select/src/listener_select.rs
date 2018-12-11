@@ -23,10 +23,11 @@
 
 use bytes::Bytes;
 use futures::{prelude::*, sink, stream::StreamFuture};
-use protocol::{DialerToListenerMessage, Listener, ListenerFuture, ListenerToDialerMessage};
+use crate::protocol::{DialerToListenerMessage, Listener, ListenerFuture, ListenerToDialerMessage};
+use log::{debug, trace};
 use std::mem;
 use tokio_io::{AsyncRead, AsyncWrite};
-use ProtocolChoiceError;
+use crate::ProtocolChoiceError;
 
 /// Helps selecting a protocol amongst the ones supported.
 ///
