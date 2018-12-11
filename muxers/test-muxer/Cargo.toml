@@ -13,5 +13,6 @@ tokio = "0.1"
 bytes = "0.4"
 futures = "0.1"
 assert_matches = "1.3"
+# TODO: uncomment this – using `extern crate` atm because IntelliJ is confused by new module system
 #tcp  = { package = "libp2p-tcp-transport", path = "../../transports/tcp" }
 libp2p-tcp-transport = { path = "../../transports/tcp" }
