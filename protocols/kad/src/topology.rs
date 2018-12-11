@@ -66,7 +66,7 @@ impl KademliaTopology for MemoryTopology {
     type GetProvidersIter = vec::IntoIter<PeerId>;
 
     fn add_kad_discovered_address(&mut self, peer: PeerId, addr: Multiaddr, _: KadConnectionType) {
-        if peer != self.local_peer_id() {
+        if &peer != self.local_peer_id() {
             self.add_address(peer, addr)
         }
     }
