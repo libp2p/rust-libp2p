@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 bytes = "0.4"
 fnv = "1"
 futures = "0.1"
-libp2p-core = { path = "../../core" }
+libp2p-core = { version = "0.1.0", path = "../../core" }
 log = "0.4.1"
 multiaddr = { package = "parity-multiaddr", path = "../../misc/multiaddr" }
 parking_lot = "0.7"
@@ -25,5 +25,5 @@ unsigned-varint = { version = "0.2.1", features = ["codec"] }
 void = "1.0"
 
 [dev-dependencies]
-libp2p-tcp = { path = "../../transports/tcp" }
+libp2p-tcp = { version = "0.1.0", path = "../../transports/tcp" }
 tokio = "0.1"
