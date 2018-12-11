@@ -116,7 +116,7 @@ pub use self::error::SecioError;
 
 #[cfg(feature = "secp256k1")]
 use asn1_der::{traits::FromDerEncoded, traits::FromDerObject, DerObject};
-use bytes::{Bytes, BytesMut};
+use bytes::BytesMut;
 use ed25519_dalek::Keypair as Ed25519KeyPair;
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
@@ -193,7 +193,7 @@ impl SecioConfig {
         self
     }
 
-    fn handshake<T>(self, socket: T, _: ()) -> impl Future<Item=SecioOutput<T>, Error=SecioError>
+    fn handshake<T>(self, socket: T) -> impl Future<Item=SecioOutput<T>, Error=SecioError>
     where
         T: AsyncRead + AsyncWrite + Send + 'static
     {
@@ -371,11 +371,11 @@ where
 }
 
 impl UpgradeInfo for SecioConfig {
-    type UpgradeId = ();
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once(("/secio/1.0.0".into(), ()))
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once(b"/secio/1.0.0")
     }
 }
 
@@ -387,8 +387,8 @@ where
     type Error = SecioError;
     type Future = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
 
-    fn upgrade_inbound(self, socket: T, id: Self::UpgradeId) -> Self::Future {
-        Box::new(self.handshake(socket, id))
+    fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
+        Box::new(self.handshake(socket))
     }
 }
 
@@ -400,8 +400,8 @@ where
     type Error = SecioError;
     type Future = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
 
-    fn upgrade_outbound(self, socket: T, id: Self::UpgradeId) -> Self::Future {
-        Box::new(self.handshake(socket, id))
+    fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
+        Box::new(self.handshake(socket))
     }
 }
 

@@ -111,7 +111,7 @@ pub use self::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent};
 pub use self::public_key::PublicKey;
 pub use self::swarm::Swarm;
 pub use self::transport::Transport;
-pub use self::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, UpgradeError};
+pub use self::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, UpgradeError, ProtocolName};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Endpoint {

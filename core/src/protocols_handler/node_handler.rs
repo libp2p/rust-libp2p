@@ -123,6 +123,7 @@ where
 {
     type InEvent = TProtoHandler::InEvent;
     type OutEvent = TProtoHandler::OutEvent;
+    type Error = io::Error;       // TODO: better error type
     type Substream = TProtoHandler::Substream;
     // The first element of the tuple is the unique upgrade identifier
     // (see `unique_dial_upgrade_id`).
