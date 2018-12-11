@@ -388,9 +388,20 @@ impl<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> CollectionStream<TIn
                             handler,
                         })
                     },
-                    (Some(TaskState::Pending), _, _) => {
-                        // TODO: this variant shouldn't happen; prove this
-                        panic!()
+                    (Some(TaskState::Pending), Ok(()), _) => {
+                        panic!("The API of HandledNodesTasks guarantees that a task cannot \
+                                gracefully closed before being connected to a node, in which case \
+                                its state should be Connected and not Pending; QED");
+                    },
+                    (Some(TaskState::Pending), Err(TaskClosedEvent::Node(_)), _) => {
+                        panic!("We switch the task state to Connected once we're connected, and \
+                                a TaskClosedEvent::Node can only happen after we're \
+                                connected; QED");
+                    },
+                    (Some(TaskState::Pending), Err(TaskClosedEvent::Reach(_)), None) => {
+                        // TODO: this could be improved in the API of HandledNodesTasks
+                        panic!("The HandledNodesTasks is guaranteed to always return the handler \
+                                when producing a TaskClosedEvent::Reach error");
                     },
                     (Some(TaskState::Connected(peer_id)), Ok(()), _handler) => {
                         debug_assert!(_handler.is_none());
@@ -409,9 +420,9 @@ impl<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> CollectionStream<TIn
                             error: err,
                         })
                     },
-                    (Some(TaskState::Connected(_)), _, _) => {
-                        // TODO: this variant shouldn't happen; prove this
-                        panic!()
+                    (Some(TaskState::Connected(_)), Err(TaskClosedEvent::Reach(_)), _) => {
+                        panic!("A TaskClosedEvent::Reach can only happen before we are connected \
+                                to a node; therefore the TaskState won't be Connected; QED");
                     },
                     (None, _, _) => {
                         panic!("self.tasks is always kept in sync with the tasks in self.inner; \
