@@ -85,6 +85,7 @@ pub use self::identify::{Identify, IdentifyEvent};
 pub use self::id_transport::IdentifyTransport;
 pub use self::listen_layer::IdentifyListen;
 pub use self::periodic_id_layer::{PeriodicIdentify, PeriodicIdentifyEvent};
+pub use self::topology::IdentifyTopology;
 
 pub mod listen_handler;
 pub mod periodic_id_handler;
@@ -95,3 +96,4 @@ mod id_transport;
 mod listen_layer;
 mod periodic_id_layer;
 mod structs_proto;
+mod topology;
