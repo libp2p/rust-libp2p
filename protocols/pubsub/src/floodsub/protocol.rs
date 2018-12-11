@@ -19,14 +19,14 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::{BufMut, Bytes, BytesMut};
-use crate::rpc_proto;
+use crate::floodsub::rpc_proto;
 use futures::future;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, PeerId};
 use protobuf::Message as ProtobufMessage;
 use std::{io, iter};
 use tokio_codec::{Decoder, Encoder, Framed};
 use tokio_io::{AsyncRead, AsyncWrite};
-use topic::TopicHash;
+use super::topic::TopicHash;
 use unsigned_varint::codec;
 
 /// Implementation of `ConnectionUpgrade` for the floodsub protocol.

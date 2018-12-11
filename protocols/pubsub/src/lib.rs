@@ -45,4 +45,4 @@ pub mod floodsub;
 pub mod gossipsub;
 
 pub use self::floodsub::layer::Floodsub;
-pub use self::floodsub::topic::{Topic, TopicBuilder, TopicHash};
+pub use self::floodsub::topic::{Topic as FTopic, TopicBuilder as FTopicBuilder, TopicHash as FTopicHash};
