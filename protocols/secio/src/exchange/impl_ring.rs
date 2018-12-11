@@ -20,11 +20,12 @@
 
 //! Implementation of the key agreement process using the `ring` library.
 
+use crate::{KeyAgreement, SecioError};
 use futures::{future, prelude::*};
+use log::debug;
 use ring::agreement as ring_agreement;
 use ring::rand as ring_rand;
 use untrusted::Input as UntrustedInput;
-use {KeyAgreement, SecioError};
 
 impl Into<&'static ring_agreement::Algorithm> for KeyAgreement {
     #[inline]
