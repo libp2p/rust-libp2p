@@ -21,6 +21,7 @@
 use crate::listen_handler::IdentifyListenHandler;
 use crate::periodic_id_handler::{PeriodicIdHandler, PeriodicIdHandlerEvent};
 use crate::protocol::{IdentifyInfo, IdentifySender, IdentifySenderFuture};
+use crate::topology::IdentifyTopology;
 use futures::prelude::*;
 use libp2p_core::protocols_handler::{ProtocolsHandler, ProtocolsHandlerSelect};
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
@@ -64,6 +65,7 @@ impl<TSubstream> Identify<TSubstream> {
 impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for Identify<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
+    TTopology: IdentifyTopology,
 {
     type ProtocolsHandler = ProtocolsHandlerSelect<IdentifyListenHandler<TSubstream>, PeriodicIdHandler<TSubstream>>;
     type OutEvent = IdentifyEvent;
@@ -130,6 +132,12 @@ where
         >,
     > {
         if let Some(event) = self.events.pop_front() {
+            // We intercept identified events in order to insert the addresses in the topology.
+            if let NetworkBehaviourAction::GenerateEvent(IdentifyEvent::Identified { ref peer_id, ref info, .. }) = event {
+                let iter = info.listen_addrs.iter().cloned();
+                params.topology().add_identify_discovered_addrs(peer_id, iter);
+            }
+
             return Async::Ready(event);
         }
 
