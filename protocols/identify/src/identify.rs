@@ -22,7 +22,7 @@ use crate::listen_handler::IdentifyListenHandler;
 use crate::periodic_id_handler::{PeriodicIdHandler, PeriodicIdHandlerEvent};
 use crate::protocol::{IdentifyInfo, IdentifySender, IdentifySenderFuture};
 use futures::prelude::*;
-use libp2p_core::protocols_handler::{ProtocolsHandler, ProtocolsHandlerSelect};
+use libp2p_core::protocols_handler::{ProtocolsHandler, ProtocolsHandlerSelect, ProtocolsHandlerUpgrErr};
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use libp2p_core::{Multiaddr, PeerId, either::EitherOutput};
 use smallvec::SmallVec;
@@ -184,6 +184,6 @@ pub enum IdentifyEvent {
         /// Peer that we fail to identify.
         peer_id: PeerId,
         /// The error that happened.
-        error: io::Error,
+        error: ProtocolsHandlerUpgrErr<io::Error>,
     },
 }

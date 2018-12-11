@@ -20,7 +20,7 @@
 
 use crate::{
     nodes::handled_node::{NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent},
-    protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent},
+    protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
     upgrade::{
         self,
         OutboundUpgrade,
@@ -185,7 +185,7 @@ where
 
         self.queued_dial_upgrades.remove(pos);
         self.handler
-            .inject_dial_upgrade_error(user_data.1, io::ErrorKind::ConnectionReset.into());
+            .inject_dial_upgrade_error(user_data.1, ProtocolsHandlerUpgrErr::MuxerDeniedSubstream);
     }
 
     #[inline]
@@ -224,8 +224,15 @@ where
                     self.negotiating_out.push((upgr_info, in_progress));
                 }
                 Err(err) => {
-                    let msg = format!("Error while upgrading: {:?}", err);
-                    let err = io::Error::new(io::ErrorKind::Other, msg);
+                    let err = if err.is_elapsed() {
+                        let err = err.into_timer().expect("is_elapsed returned true; QED");
+                        ProtocolsHandlerUpgrErr::Timeout(err)
+                    } else {
+                        debug_assert!(err.is_inner());
+                        let err = err.into_inner().expect("is_elapsed returned false; QED");
+                        ProtocolsHandlerUpgrErr::Upgrade(err)
+                    };
+
                     self.handler.inject_dial_upgrade_error(upgr_info, err);
                 }
             }
