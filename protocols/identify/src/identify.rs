@@ -24,7 +24,7 @@ use crate::protocol::{IdentifyInfo, IdentifySender, IdentifySenderFuture};
 use futures::prelude::*;
 use libp2p_core::protocols_handler::{ProtocolsHandler, ProtocolsHandlerSelect};
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
-use libp2p_core::{Multiaddr, PeerId, either::EitherOutput};
+use libp2p_core::{Multiaddr, PeerId, either::EitherOutput, topology::Topology};
 use smallvec::SmallVec;
 use std::{collections::HashMap, collections::VecDeque, io};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -64,6 +64,7 @@ impl<TSubstream> Identify<TSubstream> {
 impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for Identify<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
+    TTopology: Topology,
 {
     type ProtocolsHandler = ProtocolsHandlerSelect<IdentifyListenHandler<TSubstream>, PeriodicIdHandler<TSubstream>>;
     type OutEvent = IdentifyEvent;

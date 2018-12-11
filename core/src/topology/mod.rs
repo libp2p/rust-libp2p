@@ -19,25 +19,42 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::collections::HashMap;
-use {Multiaddr, PeerId};
+use {Multiaddr, PeerId, PublicKey};
 
 /// Storage for the network topology.
+///
+/// The topology should also store information about the local node, including its public key, its
+/// `PeerId`, and the addresses it's advertising.
 pub trait Topology {
     /// Returns the addresses to try use to reach the given peer.
+    ///
+    /// > **Note**: Keep in mind that `peer` can be the local node.
     fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr>;
+
+    /// Returns the `PeerId` of the local node.
+    fn local_peer_id(&self) -> &PeerId;
+
+    /// Returns the public key of the local node.
+    fn local_public_key(&self) -> &PublicKey;
 }
 
 /// Topology of the network stored in memory.
 pub struct MemoryTopology {
     list: HashMap<PeerId, Vec<Multiaddr>>,
+    local_peer_id: PeerId,
+    local_public_key: PublicKey,
 }
 
 impl MemoryTopology {
     /// Creates an empty topology.
     #[inline]
-    pub fn empty() -> MemoryTopology {
+    pub fn empty(pubkey: PublicKey) -> MemoryTopology {
+        let local_peer_id = pubkey.clone().into_peer_id();
+
         MemoryTopology {
-            list: Default::default()
+            list: Default::default(),
+            local_peer_id,
+            local_public_key: pubkey,
         }
     }
 
@@ -69,15 +86,18 @@ impl MemoryTopology {
     }
 }
 
-impl Default for MemoryTopology {
-    #[inline]
-    fn default() -> MemoryTopology {
-        MemoryTopology::empty()
-    }
-}
-
 impl Topology for MemoryTopology {
     fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
         self.list.get(peer).map(|v| v.clone()).unwrap_or(Vec::new())
+    }
+
+    #[inline]
+    fn local_peer_id(&self) -> &PeerId {
+        &self.local_peer_id
+    }
+
+    #[inline]
+    fn local_public_key(&self) -> &PublicKey {
+        &self.local_public_key
     }
 }

@@ -56,9 +56,6 @@ where TTransport: Transport,
     /// if we're not connected to them.
     topology: TTopology,
 
-    /// Public key of the local node.
-    local_public_key: PublicKey,
-
     /// List of protocols that the behaviour says it supports.
     supported_protocols: SmallVec<[Vec<u8>; 16]>,
 
@@ -121,7 +118,7 @@ where TBehaviour: NetworkBehaviour<TTopology>,
 {
     /// Builds a new `Swarm`.
     #[inline]
-    pub fn new(transport: TTransport, mut behaviour: TBehaviour, topology: TTopology, local_public_key: PublicKey) -> Self {
+    pub fn new(transport: TTransport, mut behaviour: TBehaviour, topology: TTopology) -> Self {
         let supported_protocols = behaviour
             .new_handler()
             .listen_protocol()
@@ -130,14 +127,12 @@ where TBehaviour: NetworkBehaviour<TTopology>,
             .map(|info| info.protocol_name().to_vec())
             .collect();
 
-        let local_peer_id = local_public_key.clone().into_peer_id();
-        let raw_swarm = RawSwarm::new(transport, local_peer_id.clone());
+        let raw_swarm = RawSwarm::new(transport, topology.local_peer_id().clone());
 
         Swarm {
             raw_swarm,
             behaviour,
             topology,
-            local_public_key,
             supported_protocols,
             listened_addrs: SmallVec::new(),
             external_addresses: SmallVec::new(),
@@ -280,8 +275,6 @@ where TBehaviour: NetworkBehaviour<TTopology>,
                     listened_addrs: &self.listened_addrs,
                     external_addresses: &self.external_addresses,
                     nat_traversal: &move |a, b| transport.nat_traversal(a, b),
-                    local_public_key: &self.local_public_key,
-                    local_peer_id: &self.raw_swarm.local_peer_id(),
                 };
                 self.behaviour.poll(&mut parameters)
             };
@@ -360,8 +353,6 @@ pub struct PollParameters<'a, TTopology: 'a> {
     listened_addrs: &'a [Multiaddr],
     external_addresses: &'a [Multiaddr],
     nat_traversal: &'a dyn Fn(&Multiaddr, &Multiaddr) -> Option<Multiaddr>,
-    local_public_key: &'a PublicKey,
-    local_peer_id: &'a PeerId,
 }
 
 impl<'a, TTopology> PollParameters<'a, TTopology> {
@@ -398,14 +389,18 @@ impl<'a, TTopology> PollParameters<'a, TTopology> {
 
     /// Returns the public key of the local node.
     #[inline]
-    pub fn local_public_key(&self) -> &PublicKey {
-        self.local_public_key
+    pub fn local_public_key(&self) -> &PublicKey
+    where TTopology: Topology
+    {
+        self.topology.local_public_key()
     }
 
     /// Returns the peer id of the local node.
     #[inline]
-    pub fn local_peer_id(&self) -> &PeerId {
-        self.local_peer_id
+    pub fn local_peer_id(&self) -> &PeerId
+    where TTopology: Topology
+    {
+        self.topology.local_peer_id()
     }
 
     /// Calls the `nat_traversal` method on the underlying transport of the `Swarm`.
