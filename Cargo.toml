@@ -21,7 +21,7 @@ multihash = { path = "./misc/multihash" }
 libp2p-mplex = { path = "./muxers/mplex" }
 libp2p-identify = { path = "./protocols/identify" }
 libp2p-kad = { path = "./protocols/kad" }
-libp2p-floodsub = { path = "./protocols/floodsub" }
+libp2p-pubsub = { path = "./protocols/pubsub" }
 libp2p-ping = { path = "./protocols/ping" }
 libp2p-plaintext = { path = "./protocols/plaintext" }
 libp2p-ratelimit = { path = "./transports/ratelimit" }
