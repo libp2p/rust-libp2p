@@ -63,7 +63,7 @@ fn three_fields() {
     struct Foo<TSubstream> {
         ping_dialer: libp2p::ping::PeriodicPing<TSubstream>,
         ping_listener: libp2p::ping::PingListen<TSubstream>,
-        identify: libp2p::identify::PeriodicIdentify<TSubstream>,
+        identify: libp2p::identify::Identify<TSubstream>,
         #[behaviour(ignore)]
         foo: String,
     }
@@ -79,14 +79,17 @@ fn event_handler() {
     #[derive(NetworkBehaviour)]
     struct Foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite> {
         #[behaviour(handler = "foo")]
-        identify: libp2p::identify::PeriodicIdentify<TSubstream>,
+        identify: libp2p::identify::Identify<TSubstream>,
     }
 
     impl<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite> Foo<TSubstream> {
-        // TODO: for some reason, the parameter cannot be `PeriodicIdentifyEvent` or we
+        // TODO: for some reason, the parameter cannot be `IdentifyEvent` or we
         //       get a compilation error ; figure out why or open an issue to Rust
-        fn foo<TTopology>(&mut self, ev: <libp2p::identify::PeriodicIdentify<TSubstream> as libp2p::core::swarm::NetworkBehaviour<TTopology>>::OutEvent) {
-            let libp2p::identify::PeriodicIdentifyEvent::Identified { .. } = ev;
+        fn foo<TTopology>(&mut self, ev: <libp2p::identify::Identify<TSubstream> as libp2p::core::swarm::NetworkBehaviour<TTopology>>::OutEvent) {
+            match ev {
+                libp2p::identify::IdentifyEvent::Identified { .. } => {},
+                libp2p::identify::IdentifyEvent::Error { .. } => {},
+            };
         }
     }
 
@@ -102,7 +105,7 @@ fn custom_polling() {
     #[behaviour(poll_method = "foo")]
     struct Foo<TSubstream> {
         ping: libp2p::ping::PeriodicPing<TSubstream>,
-        identify: libp2p::identify::PeriodicIdentify<TSubstream>,
+        identify: libp2p::identify::Identify<TSubstream>,
     }
 
     impl<TSubstream> Foo<TSubstream> {
@@ -121,7 +124,7 @@ fn custom_event_no_polling() {
     #[behaviour(out_event = "String")]
     struct Foo<TSubstream> {
         ping: libp2p::ping::PeriodicPing<TSubstream>,
-        identify: libp2p::identify::PeriodicIdentify<TSubstream>,
+        identify: libp2p::identify::Identify<TSubstream>,
     }
 
     fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
@@ -136,7 +139,7 @@ fn custom_event_and_polling() {
     #[behaviour(poll_method = "foo", out_event = "String")]
     struct Foo<TSubstream> {
         ping: libp2p::ping::PeriodicPing<TSubstream>,
-        identify: libp2p::identify::PeriodicIdentify<TSubstream>,
+        identify: libp2p::identify::Identify<TSubstream>,
     }
 
     impl<TSubstream> Foo<TSubstream> {
