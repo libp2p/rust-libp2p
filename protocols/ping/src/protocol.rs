@@ -44,11 +44,11 @@ impl<TUserData> Default for Ping<TUserData> {
 }
 
 impl<TUserData> UpgradeInfo for Ping<TUserData> {
-    type UpgradeId = ();
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once(("/ipfs/ping/1.0.0".into(), ()))
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once(b"/ipfs/ping/1.0.0")
     }
 }
 
@@ -61,7 +61,7 @@ where
     type Future = FutureResult<Self::Output, Self::Error>;
 
     #[inline]
-    fn upgrade_inbound(self, socket: TSocket, _: Self::UpgradeId) -> Self::Future {
+    fn upgrade_inbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
         let listener = PingListener {
             inner: Framed::new(socket, Codec),
             state: PingListenerState::Listening,
@@ -79,7 +79,7 @@ where
     type Future = FutureResult<Self::Output, Self::Error>;
 
     #[inline]
-    fn upgrade_outbound(self, socket: TSocket, _: Self::UpgradeId) -> Self::Future {
+    fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
         let dialer = PingDialer {
             inner: Framed::new(socket, Codec),
             need_writer_flush: false,
@@ -341,14 +341,14 @@ mod tests {
             .into_future()
             .map_err(|(e, _)| e.into())
             .and_then(|(c, _)| {
-                Ping::<()>::default().upgrade_inbound(c.unwrap(), ())
+                Ping::<()>::default().upgrade_inbound(c.unwrap(), b"/ipfs/ping/1.0.0")
             })
             .flatten();
 
         let client = TcpStream::connect(&listener_addr)
             .map_err(|e| e.into())
             .and_then(|c| {
-                Ping::<()>::default().upgrade_outbound(c, ())
+                Ping::<()>::default().upgrade_outbound(c, b"/ipfs/ping/1.0.0")
             })
             .and_then(|mut pinger| {
                 pinger.ping(());
@@ -371,14 +371,14 @@ mod tests {
             .into_future()
             .map_err(|(e, _)| e.into())
             .and_then(|(c, _)| {
-                Ping::<u32>::default().upgrade_inbound(c.unwrap(), ())
+                Ping::<u32>::default().upgrade_inbound(c.unwrap(), b"/ipfs/ping/1.0.0")
             })
             .flatten();
 
         let client = TcpStream::connect(&listener_addr)
             .map_err(|e| e.into())
             .and_then(|c| {
-                Ping::<u32>::default().upgrade_outbound(c, ())
+                Ping::<u32>::default().upgrade_outbound(c, b"/ipfs/ping/1.0.0")
             })
             .and_then(|mut pinger| {
                 for n in 0..20 {

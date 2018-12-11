@@ -18,44 +18,23 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-extern crate futures;
-extern crate libp2p_core;
-extern crate void;
+use libp2p_core::{topology::MemoryTopology, Multiaddr, PeerId};
 
-use futures::future::{self, FutureResult};
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
-use std::iter;
-use void::Void;
-
-#[derive(Debug, Copy, Clone)]
-pub struct PlainTextConfig;
-
-impl UpgradeInfo for PlainTextConfig {
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
-
-    fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/plaintext/1.0.0")
-    }
+/// Trait required on the topology for the identify system to store addresses.
+pub trait IdentifyTopology {
+    /// Adds to the topology an address discovered through identification.
+    fn add_identify_discovered_addrs<TIter>(&mut self, peer: &PeerId, addr: TIter)
+    where
+        TIter: Iterator<Item = Multiaddr>;
 }
 
-impl<C> InboundUpgrade<C> for PlainTextConfig {
-    type Output = C;
-    type Error = Void;
-    type Future = FutureResult<C, Self::Error>;
-
-    fn upgrade_inbound(self, i: C, _: Self::Info) -> Self::Future {
-        future::ok(i)
+impl IdentifyTopology for MemoryTopology {
+    fn add_identify_discovered_addrs<TIter>(&mut self, peer: &PeerId, addr: TIter)
+    where
+        TIter: Iterator<Item = Multiaddr>,
+    {
+        for addr in addr {
+            self.add_address(peer.clone(), addr);
+        }
     }
 }
-
-impl<C> OutboundUpgrade<C> for PlainTextConfig {
-    type Output = C;
-    type Error = Void;
-    type Future = FutureResult<C, Self::Error>;
-
-    fn upgrade_outbound(self, i: C, _: Self::Info) -> Self::Future {
-        future::ok(i)
-    }
-}
-

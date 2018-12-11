@@ -43,23 +43,32 @@ use crate::ProtocolChoiceError;
 ///
 /// On success, returns the socket and the identifier of the chosen protocol (of type `P`). The
 /// socket now uses this protocol.
-pub fn listener_select_proto<R, I, M, P>(inner: R, protocols: I) -> ListenerSelectFuture<R, I, P>
+pub fn listener_select_proto<R, I, X>(inner: R, protocols: I) -> ListenerSelectFuture<R, I, X>
 where
     R: AsyncRead + AsyncWrite,
-    for<'r> &'r I: IntoIterator<Item = (Bytes, M, P)>,
-    M: FnMut(&Bytes, &Bytes) -> bool,
+    for<'r> &'r I: IntoIterator<Item = X>,
+    X: AsRef<[u8]>
 {
     ListenerSelectFuture {
-        inner: ListenerSelectState::AwaitListener { listener_fut: Listener::new(inner), protocols }
+        inner: ListenerSelectState::AwaitListener {
+            listener_fut: Listener::new(inner),
+            protocols: protocols
+        }
     }
 }
 
 /// Future, returned by `listener_select_proto` which selects a protocol among the ones supported.
-pub struct ListenerSelectFuture<R: AsyncRead + AsyncWrite, I, P> {
-    inner: ListenerSelectState<R, I, P>
+pub struct ListenerSelectFuture<R: AsyncRead + AsyncWrite, I, X>
+where
+    for<'a> &'a I: IntoIterator<Item = X>
+{
+    inner: ListenerSelectState<R, I, X>
 }
 
-enum ListenerSelectState<R: AsyncRead + AsyncWrite, I, P> {
+enum ListenerSelectState<R: AsyncRead + AsyncWrite, I, X>
+where
+    for<'a> &'a I: IntoIterator<Item = X>
+{
     AwaitListener {
         listener_fut: ListenerFuture<R>,
         protocols: I
@@ -71,18 +80,18 @@ enum ListenerSelectState<R: AsyncRead + AsyncWrite, I, P> {
     Outgoing {
         sender: sink::Send<Listener<R>>,
         protocols: I,
-        outcome: Option<P>
+        outcome: Option<X>
     },
     Undefined
 }
 
-impl<R, I, M, P> Future for ListenerSelectFuture<R, I, P>
+impl<R, I, X> Future for ListenerSelectFuture<R, I, X>
 where
-    for<'r> &'r I: IntoIterator<Item=(Bytes, M, P)>,
-    M: FnMut(&Bytes, &Bytes) -> bool,
+    for<'a> &'a I: IntoIterator<Item = X>,
     R: AsyncRead + AsyncWrite,
+    X: AsRef<[u8]>
 {
-    type Item = (P, R, I);
+    type Item = (X, R, I);
     type Error = ProtocolChoiceError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -111,7 +120,7 @@ where
                     match msg {
                         Some(DialerToListenerMessage::ProtocolsListRequest) => {
                             let msg = ListenerToDialerMessage::ProtocolsListResponse {
-                                list: protocols.into_iter().map(|(p, _, _)| p).collect(),
+                                list: protocols.into_iter().map(|x| Bytes::from(x.as_ref())).collect(),
                             };
                             trace!("protocols list response: {:?}", msg);
                             let sender = listener.send(msg);
@@ -124,10 +133,10 @@ where
                         Some(DialerToListenerMessage::ProtocolRequest { name }) => {
                             let mut outcome = None;
                             let mut send_back = ListenerToDialerMessage::NotAvailable;
-                            for (supported, mut matches, value) in &protocols {
-                                if matches(&name, &supported) {
+                            for supported in &protocols {
+                                if name.as_ref() == supported.as_ref() {
                                     send_back = ListenerToDialerMessage::ProtocolAck {name: name.clone()};
-                                    outcome = Some(value);
+                                    outcome = Some(supported);
                                     break;
                                 }
                             }

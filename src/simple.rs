@@ -27,7 +27,7 @@ use tokio_io::{AsyncRead, AsyncWrite};
 /// Implementation of `ConnectionUpgrade`. Convenient to use with small protocols.
 #[derive(Debug)]
 pub struct SimpleProtocol<F> {
-    name: Bytes,
+    info: Bytes,
     // Note: we put the closure `F` in an `Arc` because Rust closures aren't automatically clonable
     // yet.
     upgrade: Arc<F>,
@@ -36,12 +36,12 @@ pub struct SimpleProtocol<F> {
 impl<F> SimpleProtocol<F> {
     /// Builds a `SimpleProtocol`.
     #[inline]
-    pub fn new<N>(name: N, upgrade: F) -> SimpleProtocol<F>
+    pub fn new<N>(info: N, upgrade: F) -> SimpleProtocol<F>
     where
         N: Into<Bytes>,
     {
         SimpleProtocol {
-            name: name.into(),
+            info: info.into(),
             upgrade: Arc::new(upgrade),
         }
     }
@@ -51,19 +51,19 @@ impl<F> Clone for SimpleProtocol<F> {
     #[inline]
     fn clone(&self) -> Self {
         SimpleProtocol {
-            name: self.name.clone(),
+            info: self.info.clone(),
             upgrade: self.upgrade.clone(),
         }
     }
 }
 
 impl<F> UpgradeInfo for SimpleProtocol<F> {
-    type UpgradeId = ();
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+    type Info = Bytes;
+    type InfoIter = iter::Once<Self::Info>;
 
     #[inline]
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once((self.name.clone(), ()))
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once(self.info.clone())
     }
 }
 
@@ -78,7 +78,7 @@ where
     type Future = FromErr<O::Future, IoError>;
 
     #[inline]
-    fn upgrade_inbound(self, socket: C, _: Self::UpgradeId) -> Self::Future {
+    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
         let upgrade = &self.upgrade;
         upgrade(socket).into_future().from_err()
     }
@@ -95,7 +95,7 @@ where
     type Future = FromErr<O::Future, IoError>;
 
     #[inline]
-    fn upgrade_outbound(self, socket: C, _: Self::UpgradeId) -> Self::Future {
+    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
         let upgrade = &self.upgrade;
         upgrade(socket).into_future().from_err()
     }

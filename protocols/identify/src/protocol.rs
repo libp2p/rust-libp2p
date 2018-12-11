@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use bytes::{Bytes, BytesMut};
+use bytes::BytesMut;
 use futures::{future::{self, FutureResult}, Async, AsyncSink, Future, Poll, Sink, Stream};
 use libp2p_core::{
     Multiaddr, PublicKey,
@@ -134,12 +134,11 @@ pub struct IdentifyInfo {
 }
 
 impl UpgradeInfo for IdentifyProtocolConfig {
-    type UpgradeId = ();
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
-    #[inline]
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once((Bytes::from("/ipfs/id/1.0.0"), ()))
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once(b"/ipfs/id/1.0.0")
     }
 }
 
@@ -151,7 +150,7 @@ where
     type Error = IoError;
     type Future = FutureResult<Self::Output, IoError>;
 
-    fn upgrade_inbound(self, socket: C, _: ()) -> Self::Future {
+    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
         trace!("Upgrading inbound connection");
         let socket = Framed::new(socket, codec::UviBytes::default());
         let sender = IdentifySender { inner: socket };
@@ -167,7 +166,7 @@ where
     type Error = IoError;
     type Future = IdentifyOutboundFuture<C>;
 
-    fn upgrade_outbound(self, socket: C, _: ()) -> Self::Future {
+    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
         IdentifyOutboundFuture {
             inner: Framed::new(socket, codec::UviBytes::<BytesMut>::default()),
         }

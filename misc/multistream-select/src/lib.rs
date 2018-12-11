@@ -55,17 +55,12 @@
 //! let client = TcpStream::connect(&"127.0.0.1:10333".parse().unwrap())
 //!     .from_err()
 //!     .and_then(move |connec| {
-//!         let protos = vec![
-//!             (Bytes::from("/echo/1.0.0"), <Bytes as PartialEq>::eq, MyProto::Echo),
-//!             (Bytes::from("/hello/2.5.0"), <Bytes as PartialEq>::eq, MyProto::Hello),
-//!         ]
-//!                         .into_iter();
+//!         let protos = vec![b"/echo/1.0.0", b"/echo/2.5.0"];
 //!         dialer_select_proto(connec, protos).map(|r| r.0)
 //!     });
 //!
 //! let mut rt = Runtime::new().unwrap();
-//! let negotiated_protocol: MyProto = rt.block_on(client)
-//!     .expect("failed to find a protocol");
+//! let negotiated_protocol = rt.block_on(client).expect("failed to find a protocol");
 //! println!("negotiated: {:?}", negotiated_protocol);
 //! # }
 //! ```

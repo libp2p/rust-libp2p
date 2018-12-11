@@ -22,7 +22,7 @@ use crate::{
     PeerId,
     muxing::StreamMuxer,
     nodes::{
-        handled_node::{HandledNode, NodeHandler},
+        handled_node::{HandledNode, HandledNodeError, NodeHandler},
         node::Substream
     }
 };
@@ -31,8 +31,8 @@ use futures::{prelude::*, stream, sync::mpsc};
 use smallvec::SmallVec;
 use std::{
     collections::hash_map::{Entry, OccupiedEntry},
+    error,
     fmt,
-    io::{self, Error as IoError},
     mem
 };
 use tokio_executor;
@@ -57,7 +57,7 @@ use void::Void;
 // conditions in the user's code. See similar comments in the documentation of `NodeStream`.
 
 /// Implementation of `Stream` that handles a collection of nodes.
-pub struct HandledNodesTasks<TInEvent, TOutEvent, THandler> {
+pub struct HandledNodesTasks<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> {
     /// A map between active tasks to an unbounded sender, used to control the task. Closing the sender interrupts
     /// the task. It is possible that we receive messages from tasks that used to be in this list
     /// but no longer are, in which case we should ignore them.
@@ -71,12 +71,12 @@ pub struct HandledNodesTasks<TInEvent, TOutEvent, THandler> {
     to_spawn: SmallVec<[Box<Future<Item = (), Error = ()> + Send>; 8]>,
 
     /// Sender to emit events to the outside. Meant to be cloned and sent to tasks.
-    events_tx: mpsc::UnboundedSender<(InToExtMessage<TOutEvent, THandler>, TaskId)>,
+    events_tx: mpsc::UnboundedSender<(InToExtMessage<TOutEvent, THandler, TReachErr, THandlerErr>, TaskId)>,
     /// Receiver side for the events.
-    events_rx: mpsc::UnboundedReceiver<(InToExtMessage<TOutEvent, THandler>, TaskId)>,
+    events_rx: mpsc::UnboundedReceiver<(InToExtMessage<TOutEvent, THandler, TReachErr, THandlerErr>, TaskId)>,
 }
 
-impl<TInEvent, TOutEvent, THandler> fmt::Debug for HandledNodesTasks<TInEvent, TOutEvent, THandler> {
+impl<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> fmt::Debug for HandledNodesTasks<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         f.debug_list()
             .entries(self.tasks.keys().cloned())
@@ -84,9 +84,44 @@ impl<TInEvent, TOutEvent, THandler> fmt::Debug for HandledNodesTasks<TInEvent, T
     }
 }
 
+/// Error that can happen in a task.
+#[derive(Debug)]
+pub enum TaskClosedEvent<TReachErr, THandlerErr> {
+    /// An error happend while we were trying to reach the node.
+    Reach(TReachErr),
+    /// An error happened after the node has been reached.
+    Node(HandledNodeError<THandlerErr>),
+}
+
+impl<TReachErr, THandlerErr> fmt::Display for TaskClosedEvent<TReachErr, THandlerErr>
+where
+    TReachErr: fmt::Display,
+    THandlerErr: fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            TaskClosedEvent::Reach(err) => write!(f, "{}", err),
+            TaskClosedEvent::Node(err) => write!(f, "{}", err),
+        }
+    }
+}
+
+impl<TReachErr, THandlerErr> error::Error for TaskClosedEvent<TReachErr, THandlerErr>
+where
+    TReachErr: error::Error + 'static,
+    THandlerErr: error::Error + 'static
+{
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            TaskClosedEvent::Reach(err) => Some(err),
+            TaskClosedEvent::Node(err) => Some(err),
+        }
+    }
+}
+
 /// Event that can happen on the `HandledNodesTasks`.
 #[derive(Debug)]
-pub enum HandledNodesEvent<TOutEvent, THandler> {
+pub enum HandledNodesEvent<TOutEvent, THandler, TReachErr, THandlerErr> {
     /// A task has been closed.
     ///
     /// This happens once the node handler closes or an error happens.
@@ -95,7 +130,7 @@ pub enum HandledNodesEvent<TOutEvent, THandler> {
         /// Identifier of the task that closed.
         id: TaskId,
         /// What happened.
-        result: Result<(), IoError>,
+        result: Result<(), TaskClosedEvent<TReachErr, THandlerErr>>,
         /// If the task closed before reaching the node, this contains the handler that was passed
         /// to `add_reach_attempt`.
         handler: Option<THandler>,
@@ -122,7 +157,7 @@ pub enum HandledNodesEvent<TOutEvent, THandler> {
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TaskId(usize);
 
-impl<TInEvent, TOutEvent, THandler> HandledNodesTasks<TInEvent, TOutEvent, THandler> {
+impl<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> HandledNodesTasks<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> {
     /// Creates a new empty collection.
     #[inline]
     pub fn new() -> Self {
@@ -143,9 +178,10 @@ impl<TInEvent, TOutEvent, THandler> HandledNodesTasks<TInEvent, TOutEvent, THand
     /// events.
     pub fn add_reach_attempt<TFut, TMuxer>(&mut self, future: TFut, handler: THandler) -> TaskId
     where
-        TFut: Future<Item = (PeerId, TMuxer)> + Send + 'static,
-        TFut::Error: std::error::Error + Send + Sync + 'static,
-        THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
+        TFut: Future<Item = (PeerId, TMuxer), Error = TReachErr> + Send + 'static,
+        THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
+        TReachErr: error::Error + Send + 'static,
+        THandlerErr: error::Error + Send + 'static,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
         THandler::OutboundOpenInfo: Send + 'static,     // TODO: shouldn't be required?
@@ -203,7 +239,7 @@ impl<TInEvent, TOutEvent, THandler> HandledNodesTasks<TInEvent, TOutEvent, THand
     }
 
     /// Provides an API similar to `Stream`, except that it cannot produce an error.
-    pub fn poll(&mut self) -> Async<HandledNodesEvent<TOutEvent, THandler>> {
+    pub fn poll(&mut self) -> Async<HandledNodesEvent<TOutEvent, THandler, TReachErr, THandlerErr>> {
         for to_spawn in self.to_spawn.drain() {
             tokio_executor::spawn(to_spawn);
         }
@@ -289,8 +325,8 @@ impl<'a, TInEvent> fmt::Debug for Task<'a, TInEvent> {
     }
 }
 
-impl<TInEvent, TOutEvent, THandler> Stream for HandledNodesTasks<TInEvent, TOutEvent, THandler> {
-    type Item = HandledNodesEvent<TOutEvent, THandler>;
+impl<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> Stream for HandledNodesTasks<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> {
+    type Item = HandledNodesEvent<TOutEvent, THandler, TReachErr, THandlerErr>;
     type Error = Void; // TODO: use ! once stable
 
     #[inline]
@@ -301,24 +337,24 @@ impl<TInEvent, TOutEvent, THandler> Stream for HandledNodesTasks<TInEvent, TOutE
 
 /// Message to transmit from a task to the public API.
 #[derive(Debug)]
-enum InToExtMessage<TOutEvent, THandler> {
+enum InToExtMessage<TOutEvent, THandler, TReachErr, THandlerErr> {
     /// A connection to a node has succeeded.
     NodeReached(PeerId),
     /// The task closed.
-    TaskClosed(Result<(), IoError>, Option<THandler>),
+    TaskClosed(Result<(), TaskClosedEvent<TReachErr, THandlerErr>>, Option<THandler>),
     /// An event from the node.
     NodeEvent(TOutEvent),
 }
 
 /// Implementation of `Future` that handles a single node, and all the communications between
 /// the various components of the `HandledNodesTasks`.
-struct NodeTask<TFut, TMuxer, THandler, TInEvent, TOutEvent>
+struct NodeTask<TFut, TMuxer, THandler, TInEvent, TOutEvent, TReachErr>
 where
     TMuxer: StreamMuxer,
     THandler: NodeHandler<Substream = Substream<TMuxer>>,
 {
     /// Sender to transmit events to the outside.
-    events_tx: mpsc::UnboundedSender<(InToExtMessage<TOutEvent, THandler>, TaskId)>,
+    events_tx: mpsc::UnboundedSender<(InToExtMessage<TOutEvent, THandler, TReachErr, THandler::Error>, TaskId)>,
     /// Receiving end for events sent from the main `HandledNodesTasks`.
     in_events_rx: stream::Fuse<mpsc::UnboundedReceiver<TInEvent>>,
     /// Inner state of the `NodeTask`.
@@ -351,12 +387,11 @@ where
     Poisoned,
 }
 
-impl<TFut, TMuxer, THandler, TInEvent, TOutEvent> Future for
-    NodeTask<TFut, TMuxer, THandler, TInEvent, TOutEvent>
+impl<TFut, TMuxer, THandler, TInEvent, TOutEvent, TReachErr> Future for
+    NodeTask<TFut, TMuxer, THandler, TInEvent, TOutEvent, TReachErr>
 where
     TMuxer: StreamMuxer,
-    TFut: Future<Item = (PeerId, TMuxer)>,
-    TFut::Error: std::error::Error + Send + Sync + 'static,
+    TFut: Future<Item = (PeerId, TMuxer), Error = TReachErr>,
     THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent>,
 {
     type Item = ();
@@ -395,8 +430,7 @@ where
                         },
                         Err(err) => {
                             // End the task
-                            let ioerr = IoError::new(io::ErrorKind::Other, err);
-                            let event = InToExtMessage::TaskClosed(Err(ioerr), Some(handler));
+                            let event = InToExtMessage::TaskClosed(Err(TaskClosedEvent::Reach(err)), Some(handler));
                             let _ = self.events_tx.unbounded_send((event, self.id));
                             return Ok(Async::Ready(()));
                         }
@@ -442,7 +476,7 @@ where
                                 return Ok(Async::Ready(())); // End the task.
                             }
                             Err(err) => {
-                                let event = InToExtMessage::TaskClosed(Err(err), None);
+                                let event = InToExtMessage::TaskClosed(Err(TaskClosedEvent::Node(err)), None);
                                 let _ = self.events_tx.unbounded_send((event, self.id));
                                 return Ok(Async::Ready(())); // End the task.
                             }
@@ -475,17 +509,18 @@ mod tests {
     use PeerId;
 
     type TestNodeTask = NodeTask<
-        FutureResult<(PeerId, DummyMuxer), IoError>,
+        FutureResult<(PeerId, DummyMuxer), io::Error>,
         DummyMuxer,
         Handler,
         InEvent,
         OutEvent,
+        io::Error,
     >;
 
     struct NodeTaskTestBuilder {
        task_id: TaskId,
        inner_node: Option<TestHandledNode>,
-       inner_fut: Option<FutureResult<(PeerId, DummyMuxer), IoError>>,
+       inner_fut: Option<FutureResult<(PeerId, DummyMuxer), io::Error>>,
     }
 
     impl NodeTaskTestBuilder {
@@ -500,7 +535,7 @@ mod tests {
             }
         }
 
-        fn with_inner_fut(&mut self, fut: FutureResult<(PeerId, DummyMuxer), IoError>) -> &mut Self{
+        fn with_inner_fut(&mut self, fut: FutureResult<(PeerId, DummyMuxer), io::Error>) -> &mut Self{
             self.inner_fut = Some(fut);
             self
         }
@@ -513,9 +548,9 @@ mod tests {
         fn node_task(&mut self) -> (
             TestNodeTask,
             UnboundedSender<InEvent>,
-            UnboundedReceiver<(InToExtMessage<OutEvent, Handler>, TaskId)>,
+            UnboundedReceiver<(InToExtMessage<OutEvent, Handler, io::Error, io::Error>, TaskId)>,
         ) {
-            let (events_from_node_task_tx, events_from_node_task_rx) = mpsc::unbounded::<(InToExtMessage<OutEvent, Handler>, TaskId)>();
+            let (events_from_node_task_tx, events_from_node_task_rx) = mpsc::unbounded::<(InToExtMessage<OutEvent, Handler, _, _>, TaskId)>();
             let (events_to_node_task_tx, events_to_node_task_rx) = mpsc::unbounded::<InEvent>();
             let inner = if self.inner_node.is_some() {
                 NodeTaskInner::Node(self.inner_node.take().unwrap())
@@ -536,7 +571,7 @@ mod tests {
         }
     }
 
-    type TestHandledNodesTasks = HandledNodesTasks<InEvent, OutEvent, Handler>;
+    type TestHandledNodesTasks = HandledNodesTasks<InEvent, OutEvent, Handler, io::Error, io::Error>;
 
     struct HandledNodeTaskTestBuilder {
         muxer: DummyMuxer,
@@ -578,7 +613,7 @@ mod tests {
             let peer_id = PeerId::random();
             let mut task_ids = Vec::new();
             for _i in 0..self.task_count {
-                let fut = future::ok::<_, Void>((peer_id.clone(), self.muxer.clone()));
+                let fut = future::ok((peer_id.clone(), self.muxer.clone()));
                 task_ids.push(
                     handled_nodes.add_reach_attempt(fut, self.handler.clone())
                 );
@@ -743,7 +778,7 @@ mod tests {
             .handled_nodes_tasks();
 
         let mut rt = Runtime::new().unwrap();
-        let mut events: (Option<HandledNodesEvent<_,_>>, TestHandledNodesTasks);
+        let mut events: (Option<HandledNodesEvent<_, _, _, _>>, TestHandledNodesTasks);
         // we're running on a single thread so events are sequential: first
         // we get a NodeReached, then a TaskClosed
         for i in 0..5 {
