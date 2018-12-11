@@ -22,11 +22,12 @@
 
 use bytes::Bytes;
 use futures::{Async, AsyncSink, prelude::*, sink, stream::StreamFuture};
-use length_delimited::LengthDelimited;
-use protocol::DialerToListenerMessage;
-use protocol::ListenerToDialerMessage;
-use protocol::MultistreamSelectError;
-use protocol::MULTISTREAM_PROTOCOL_WITH_LF;
+use crate::length_delimited::LengthDelimited;
+use crate::protocol::DialerToListenerMessage;
+use crate::protocol::ListenerToDialerMessage;
+use crate::protocol::MultistreamSelectError;
+use crate::protocol::MULTISTREAM_PROTOCOL_WITH_LF;
+use log::{debug, trace};
 use std::mem;
 use tokio_io::{AsyncRead, AsyncWrite};
 use unsigned_varint::encode;
@@ -225,14 +226,12 @@ impl<T: AsyncRead + AsyncWrite> Future for ListenerFuture<T> {
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio;
-    extern crate tokio_tcp;
-    use self::tokio::runtime::current_thread::Runtime;
-    use self::tokio_tcp::{TcpListener, TcpStream};
+    use tokio::runtime::current_thread::Runtime;
+    use tokio_tcp::{TcpListener, TcpStream};
     use bytes::Bytes;
     use futures::Future;
     use futures::{Sink, Stream};
-    use protocol::{Dialer, Listener, ListenerToDialerMessage, MultistreamSelectError};
+    use crate::protocol::{Dialer, Listener, ListenerToDialerMessage, MultistreamSelectError};
 
     #[test]
     fn wrong_proto_name() {

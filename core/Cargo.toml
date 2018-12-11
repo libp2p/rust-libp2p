@@ -15,12 +15,12 @@ fnv = "1.0"
 log = "0.4"
 multiaddr = { package = "parity-multiaddr", path = "../misc/multiaddr" }
 multihash = { package = "parity-multihash", path = "../misc/multihash" }
-multistream-select = { path = "../misc/multistream-select" }
+multistream-select = { version = "0.1.0", path = "../misc/multistream-select" }
 futures = { version = "0.1", features = ["use_std"] }
 parking_lot = "0.7"
 protobuf = "2.0.2"
 quick-error = "1.2"
-rw-stream-sink = { path = "../misc/rw-stream-sink" }
+rw-stream-sink = { version = "0.1.0", path = "../misc/rw-stream-sink" }
 smallvec = "0.6"
 tokio-executor = "0.1.4"
 tokio-io = "0.1"
@@ -28,9 +28,9 @@ tokio-timer = "0.2"
 void = "1"
 
 [dev-dependencies]
-libp2p-ping = { path = "../protocols/ping" }
-libp2p-tcp = { path = "../transports/tcp" }
-libp2p-mplex = { path = "../muxers/mplex" }
+libp2p-ping = { version = "0.1.0", path = "../protocols/ping" }
+libp2p-tcp = { version = "0.1.0", path = "../transports/tcp" }
+libp2p-mplex = { version = "0.1.0", path = "../muxers/mplex" }
 rand = "0.6"
 tokio = "0.1"
 tokio-codec = "0.1"

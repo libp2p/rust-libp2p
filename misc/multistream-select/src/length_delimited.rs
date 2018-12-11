@@ -237,7 +237,7 @@ fn decode_length_prefix(buf: &[u8]) -> u16 {
 #[cfg(test)]
 mod tests {
     use futures::{Future, Stream};
-    use length_delimited::LengthDelimited;
+    use crate::length_delimited::LengthDelimited;
     use std::io::Cursor;
     use std::io::ErrorKind;
 
