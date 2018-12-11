@@ -154,7 +154,6 @@ pub extern crate libp2p_ratelimit as ratelimit;
 pub extern crate libp2p_secio as secio;
 #[cfg(not(target_os = "emscripten"))]
 pub extern crate libp2p_tcp as tcp;
-pub extern crate libp2p_transport_timeout as transport_timeout;
 pub extern crate libp2p_uds as uds;
 #[cfg(feature = "libp2p-websocket")]
 pub extern crate libp2p_websocket as websocket;
@@ -172,7 +171,6 @@ pub use libp2p_core_derive::NetworkBehaviour;
 pub use self::multiaddr::Multiaddr;
 pub use self::simple::SimpleProtocol;
 pub use self::transport_ext::TransportExt;
-pub use self::transport_timeout::TransportTimeout;
 
 /// Implementation of `Transport` that supports the most common protocols.
 ///
