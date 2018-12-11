@@ -204,7 +204,7 @@ where
     }
 }
 
-// Wraps around a `UpgradeInfo` and satisfies the requirement of `listener_select_proto`.
+/// Wraps around a `UpgradeInfo` and satisfies the requirement of `listener_select_proto`.
 struct UpgradeInfoIterWrap<U>(U);
 
 impl<'a, U> IntoIterator for &'a UpgradeInfoIterWrap<U>
@@ -222,7 +222,7 @@ where
 type NameWrapIter<I> =
     std::iter::Map<I, fn(<I as Iterator>::Item) -> NameWrap<<I as Iterator>::Item>>;
 
-// Wrapper type to expose an `AsRef<[u8]>` impl for all types implementing `ProtocolName`.
+/// Wrapper type to expose an `AsRef<[u8]>` impl for all types implementing `ProtocolName`.
 struct NameWrap<N>(N);
 
 impl<N: ProtocolName> AsRef<[u8]> for NameWrap<N> {
