@@ -42,12 +42,6 @@
 //! For a dialer:
 //!
 //! ```no_run
-//! extern crate bytes;
-//! extern crate futures;
-//! extern crate multistream_select;
-//! extern crate tokio;
-//! extern crate tokio_tcp;
-//!
 //! # fn main() {
 //! use bytes::Bytes;
 //! use multistream_select::dialer_select_proto;
@@ -76,16 +70,6 @@
 //! # }
 //! ```
 //!
-
-extern crate bytes;
-#[macro_use]
-extern crate futures;
-#[macro_use]
-extern crate log;
-extern crate smallvec;
-extern crate tokio_codec;
-extern crate tokio_io;
-extern crate unsigned_varint;
 
 mod dialer_select;
 mod error;
