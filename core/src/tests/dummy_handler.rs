@@ -84,6 +84,7 @@ pub(crate) type TestHandledNode = HandledNode<DummyMuxer, Handler>;
 impl NodeHandler for Handler {
     type InEvent = InEvent;
     type OutEvent = OutEvent;
+    type Error = IoError;
     type OutboundOpenInfo = usize;
     type Substream = SubstreamRef<Arc<DummyMuxer>>;
     fn inject_substream(
