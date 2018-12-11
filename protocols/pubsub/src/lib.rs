@@ -18,6 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! A publish-subscribe peer-to-peer messaging protocol.
+//! For a specification, see https://github.com/libp2p/specs/tree/master/pubsub.
+//! Includes floodsub and gossipsub as protocols.
+
 extern crate bs58;
 extern crate bytes;
 extern crate cuckoofilter;
@@ -31,12 +35,14 @@ extern crate tokio_codec;
 extern crate tokio_io;
 extern crate unsigned_varint;
 
-pub mod handler;
-pub mod protocol;
+/// A flooding and subscribing p2p messaging protocol, i.e. dials and listens
+/// on all peers of a topic. For more details, see the pubsub/floodsub
+/// [spec](https://github.com/libp2p/specs/tree/master/pubsub) for details.
+pub mod floodsub;
+/// A gossiping and subscribing p2p messaging protocol, dials and listens on
+/// a random subset of peers in a mesh network. For more details, see the gossipsub
+/// [spec](https://github.com/libp2p/specs/tree/master/pubsub/gossipsub).
+pub mod gossipsub;
 
-mod layer;
-mod rpc_proto;
-mod topic;
-
-pub use self::layer::Floodsub;
-pub use self::topic::{Topic, TopicBuilder, TopicHash};
+pub use self::floodsub::layer::Floodsub;
+pub use self::floodsub::topic::{Topic, TopicBuilder, TopicHash};

@@ -62,7 +62,7 @@ members = [
     "misc/rw-stream-sink",
     "muxers/mplex",
     "muxers/yamux",
-    "protocols/floodsub",
+    "protocols/pubsub",
     "protocols/identify",
     "protocols/kad",
     "protocols/observed",
