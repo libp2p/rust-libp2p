@@ -61,9 +61,6 @@ where TTransport: Transport,
 
     /// List of multiaddresses we're listening on.
     listened_addrs: SmallVec<[Multiaddr; 8]>,
-
-    /// List of multiaddresses we're listening on after NAT traversal.
-    external_addresses: SmallVec<[Multiaddr; 8]>,
 }
 
 impl<TTransport, TBehaviour, TTopology> Deref for Swarm<TTransport, TBehaviour, TTopology>
@@ -135,7 +132,6 @@ where TBehaviour: NetworkBehaviour<TTopology>,
             topology,
             supported_protocols,
             listened_addrs: SmallVec::new(),
-            external_addresses: SmallVec::new(),
         }
     }
 
@@ -273,7 +269,6 @@ where TBehaviour: NetworkBehaviour<TTopology>,
                     topology: &mut self.topology,
                     supported_protocols: &self.supported_protocols,
                     listened_addrs: &self.listened_addrs,
-                    external_addresses: &self.external_addresses,
                     nat_traversal: &move |a, b| transport.nat_traversal(a, b),
                 };
                 self.behaviour.poll(&mut parameters)
@@ -297,11 +292,7 @@ where TBehaviour: NetworkBehaviour<TTopology>,
                     }
                 },
                 Async::Ready(NetworkBehaviourAction::ReportObservedAddr { address }) => {
-                    for addr in self.raw_swarm.nat_traversal(&address) {
-                        // TODO: is it a good idea to add these addresses permanently? what about
-                        //       a TTL instead?
-                        self.external_addresses.push(addr);
-                    }
+                    self.topology.add_local_external_addrs(self.raw_swarm.nat_traversal(&address));
                 },
             }
         }
@@ -351,7 +342,6 @@ pub struct PollParameters<'a, TTopology: 'a> {
     topology: &'a mut TTopology,
     supported_protocols: &'a [Vec<u8>],
     listened_addrs: &'a [Multiaddr],
-    external_addresses: &'a [Multiaddr],
     nat_traversal: &'a dyn Fn(&Multiaddr, &Multiaddr) -> Option<Multiaddr>,
 }
 
@@ -373,18 +363,19 @@ impl<'a, TTopology> PollParameters<'a, TTopology> {
         self.supported_protocols.iter().map(AsRef::as_ref)
     }
 
-    /// Returns the list of the addresses we're listening on
+    /// Returns the list of the addresses we're listening on.
     #[inline]
     pub fn listened_addresses(&self) -> impl ExactSizeIterator<Item = &Multiaddr> {
         self.listened_addrs.iter()
     }
 
-    /// Returns the list of the addresses we're listening on, after accounting for NAT traversal.
-    ///
-    /// This corresponds to the elements produced with `ReportObservedAddr`.
+    /// Returns the list of the addresses nodes can use to reach us.
     #[inline]
-    pub fn external_addresses(&self) -> impl ExactSizeIterator<Item = &Multiaddr> {
-        self.external_addresses.iter()
+    pub fn external_addresses<'b>(&'b mut self) -> impl ExactSizeIterator<Item = Multiaddr> + 'b
+    where TTopology: Topology
+    {
+        let local_peer_id = self.topology.local_peer_id().clone();
+        self.topology.addresses_of_peer(&local_peer_id).into_iter()
     }
 
     /// Returns the public key of the local node.

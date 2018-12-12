@@ -31,6 +31,13 @@ pub trait Topology {
     /// > **Note**: Keep in mind that `peer` can be the local node.
     fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr>;
 
+    /// Adds an address that other nodes can use to connect to our local node.
+    ///
+    /// > **Note**: Should later be returned when calling `addresses_of_peer()` with the `PeerId`
+    /// >           of the local node.
+    fn add_local_external_addrs<TIter>(&mut self, addrs: TIter)
+    where TIter: Iterator<Item = Multiaddr>;
+
     /// Returns the `PeerId` of the local node.
     fn local_peer_id(&self) -> &PeerId;
 
@@ -89,6 +96,15 @@ impl MemoryTopology {
 impl Topology for MemoryTopology {
     fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
         self.list.get(peer).map(|v| v.clone()).unwrap_or(Vec::new())
+    }
+
+    fn add_local_external_addrs<TIter>(&mut self, addrs: TIter)
+    where TIter: Iterator<Item = Multiaddr>
+    {
+        for addr in addrs {
+            let id = self.local_peer_id.clone();
+            self.add_address(id, addr);
+        }
     }
 
     #[inline]
