@@ -53,14 +53,14 @@
 //! // unless it is run through a tokio runtime.
 //! ```
 //!
-//! The easiest way to create a transport is to use the `CommonTransport` struct. This struct
-//! provides support for the most common protocols.
+//! The easiest way to create a transport is to use the `build_development_transport` function.
+//! This function provides support for the most common protocols.
 //!
 //! Example:
 //!
 //! ```rust
-//! use libp2p::CommonTransport;
-//! let _transport = CommonTransport::new();
+//! let key = libp2p::secio::SecioKeyPair::ed25519_generated().unwrap();
+//! let _transport = libp2p::build_development_transport(key);
 //! // _transport.dial(...);
 //! ```
 //!
