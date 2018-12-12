@@ -79,17 +79,13 @@ fn event_handler() {
     #[derive(NetworkBehaviour)]
     struct Foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite> {
         #[behaviour(handler = "foo")]
-        identify: libp2p::identify::Identify<TSubstream>,
+        ping: libp2p::ping::PingListen<TSubstream>,
     }
 
     impl<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite> Foo<TSubstream> {
-        // TODO: for some reason, the parameter cannot be `IdentifyEvent` or we
+        // TODO: for some reason, the parameter cannot be the event type or we
         //       get a compilation error ; figure out why or open an issue to Rust
-        fn foo<TTopology>(&mut self, ev: <libp2p::identify::Identify<TSubstream> as libp2p::core::swarm::NetworkBehaviour<TTopology>>::OutEvent) {
-            match ev {
-                libp2p::identify::IdentifyEvent::Identified { .. } => {},
-                libp2p::identify::IdentifyEvent::Error { .. } => {},
-            };
+        fn foo<TTopology>(&mut self, ev: <libp2p::ping::PingListen<TSubstream> as libp2p::core::swarm::NetworkBehaviour<TTopology>>::OutEvent) {
         }
     }
 
