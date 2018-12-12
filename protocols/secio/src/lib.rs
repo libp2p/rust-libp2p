@@ -75,6 +75,12 @@
 
 #![recursion_limit = "128"]
 
+// TODO: unfortunately the `js!` macro of stdweb depends on tons of "private" macros, which we
+//       don't want to import manually
+#[cfg(target_os = "emscripten")]
+#[macro_use]
+extern crate stdweb;
+
 pub use self::error::SecioError;
 
 #[cfg(feature = "secp256k1")]
