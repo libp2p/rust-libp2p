@@ -22,7 +22,7 @@ extern crate libp2p_tcp_transport as tcp;
 use assert_matches::assert_matches;
 use bytes::Bytes;
 use env_logger;
-use log::{trace, debug, info};
+use log::{trace, debug, info, error};
 use tcp::{TcpConfig, TcpTransStream, TcpListenStream};
 use libp2p_core::{
     Transport,
@@ -115,15 +115,15 @@ where
 {
     env_logger::init();
 
-    client_to_server_inbound(config.clone());
+    // client_to_server_inbound(config.clone());
 
-    client_to_server_outbound(config.clone());
+    // client_to_server_outbound(config.clone());
 
-    empty_payload(config.clone());
+    // empty_payload(config.clone());
 
-    bidirectional(config.clone());
+    // bidirectional(config.clone());
 
-     info!("\nLarge payload\n");
+    //  info!("\nLarge payload\n");
      large_payload(config.clone());
     // TODO:
     // info!("\nInterrup outbound after success");
@@ -337,7 +337,8 @@ fn large_payload<U, O, E>(config: U)
     // let payload: Vec<u8> = (0..10485760).map(|_| rand::thread_rng().gen_range(1, u8::max_value()) ).collect();
     // yamux, LengthDelimitedCodec { builder: Builder { max_frame_len: 8388608,…
     // let payload: Vec<u8> = (0..8388608).map(|_| rand::thread_rng().gen_range(1, u8::max_value()) ).collect();
-    let payload: Vec<u8> = (0..1500000).map(|_| rand::thread_rng().gen_range(1, u8::max_value()) ).collect();
+    // let payload: Vec<u8> = (0..1800000).map(|_| rand::thread_rng().gen_range(1, u8::max_value()) ).collect();
+    let payload: Vec<u8> = (0..1800000).map(|_| rand::thread_rng().gen_range(1, u8::max_value()) ).collect();
     debug!("PAYLOAD SIZE={}", payload.len());
     // let thr = thread::spawn(move || {
     let thr_builder = thread::Builder::new().name("listener thr".to_string());
@@ -349,39 +350,61 @@ fn large_payload<U, O, E>(config: U)
         // Send our address to the connecting side so they know where to find us
         tx.send(addr).expect("mpsc::send works");
         let framed = helpers::framed_listener_fut(listener, true);
-        debug!("listening ok; framed listener ok");
         let future = framed
-            .and_then(|stream| stream.take(1).collect())
-            .and_then(|msgs| {
-                trace!("[thr] got message with len={:?}", msgs.len());
-                // assert_eq!(msgs.len(), 0);
-                Ok(())
+            .and_then(|stream| {
+                stream.for_each(|x| {
+                    trace!("[test, thr] read off the stream x={:?}", x);
+                    Ok(())
+                })
             });
-        debug!("future setup ok");
+            // .and_then(|stream| stream.take(1).collect())
+            // .and_then(|msgs| {
+            //     trace!("[thr] got message with len={:?}", msgs.len());
+            //     // assert_eq!(msgs.len(), 0);
+            //     Ok(())
+            // });
 
-        Runtime::new().expect("new runtime is ok").block_on(future).expect("tokio works");
+        let receiver_res = Runtime::new().expect("new runtime is ok").block_on(future);
+        if receiver_res.is_err() {
+            error!("[test, thr] receiver_res={:?}", receiver_res);
+        } else {
+            info!("[test, thr] receiver_res={:?}", receiver_res);
+        }
     }).expect("thread spawn failed");
 
     let transport = TcpConfig::new().with_upgrade(config);
     let addr = rx.recv().expect("address is valid");
-    Runtime::new().unwrap().block_on(
+
+    let sender_res = Runtime::new().unwrap().block_on(
         helpers::framed_dialler_fut(transport, addr, false)
             .and_then(|subs| {
                 subs.send(payload.into())
             })
             .then(|res| {
+                trace!("[test] send result={:?}", res);
                 // assert!(res.is_err());
                 // let err = res.err().unwrap();
                 // trace!("send result error = {:?}", err);
-                trace!("send result error = {:?}", res);
                 // assert_matches!(err.kind(), std::io::ErrorKind::InvalidInput);
                 // assert_matches!(err.into_inner(), Some(inner) => {
                 //     assert_eq!(format!("{:?}", inner), "FrameTooBig");
                 // });
-                Ok::<_, ()>(())
+                // Ok::<_, ()>(())
+                res
             })
-    ).unwrap();
+            .and_then(|x| {
+                trace!("[test] need one more turn?");
+                Ok(())
+            })
+    );
+    if sender_res.is_err() {
+        error!("[test, thr] sender_res={:?}", sender_res);
+    } else {
+        info!("[test, thr] sender_res={:?}", sender_res);
+    }
+
+    // info!("[test] sender result={:?}", sender_res);
     // thr.join().expect("could not join thread");
     let res = thr.join();
-    debug!("res={:?}", res);
+    // debug!("[test] thread res={:?}", res);
 }
