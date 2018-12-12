@@ -56,10 +56,8 @@ extern crate tokio;
 
 use futures::prelude::*;
 use libp2p::{
-    NetworkBehaviour, Transport,
-    core::upgrade::{self, OutboundUpgradeExt},
+    NetworkBehaviour,
     secio,
-    mplex,
     tokio_codec::{FramedRead, LinesCodec}
 };
 
@@ -71,14 +69,8 @@ fn main() {
     let local_pub_key = local_key.to_public_key();
     println!("Local peer id: {:?}", local_pub_key.clone().into_peer_id());
 
-    // Set up a an encrypted DNS-enabled TCP Transport over the Mplex protocol
-    let transport = libp2p::CommonTransport::new()
-        .with_upgrade(secio::SecioConfig::new(local_key))
-        .and_then(move |out, _| {
-            let peer_id = out.remote_key.into_peer_id();
-            let upgrade = mplex::MplexConfig::new().map_outbound(move |muxer| (peer_id, muxer) );
-            upgrade::apply_outbound(out.stream, upgrade).map_err(|e| e.into_io_error())
-        });
+    // Set up a an encrypted DNS-enabled TCP Transport over the Mplex and Yamux protocols
+    let transport = libp2p::build_development_transport(local_key);
 
     // Create a Floodsub topic
     let floodsub_topic = libp2p::floodsub::TopicBuilder::new("chat").build();
