@@ -23,12 +23,12 @@
 //! One important part of the SECIO handshake is negotiating algorithms. This is what this module
 //! helps you with.
 
-use error::SecioError;
+use crate::error::SecioError;
 #[cfg(all(feature = "ring", not(target_os = "emscripten")))]
 use ring::digest;
 use std::cmp::Ordering;
-use stream_cipher::Cipher;
-use KeyAgreement;
+use crate::stream_cipher::Cipher;
+use crate::KeyAgreement;
 
 const ECDH_P256: &str = "P-256";
 const ECDH_P384: &str = "P-384";
