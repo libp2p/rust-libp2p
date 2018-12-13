@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::protocol::{Ping, PingDialer};
 use futures::prelude::*;
 use libp2p_core::{
     OutboundUpgrade,
@@ -26,7 +27,6 @@ use libp2p_core::{
     upgrade::DeniedUpgrade
 };
 use log::warn;
-use protocol::{Ping, PingDialer};
 use std::{
     io, mem,
     time::{Duration, Instant},

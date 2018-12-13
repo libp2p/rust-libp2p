@@ -320,11 +320,7 @@ impl Encoder for Codec {
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio;
-    extern crate tokio_tcp;
-
-    use self::tokio_tcp::TcpListener;
-    use self::tokio_tcp::TcpStream;
+    use tokio_tcp::{TcpListener, TcpStream};
     use super::Ping;
     use futures::{Future, Stream};
     use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade};
