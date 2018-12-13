@@ -230,7 +230,9 @@ where
                         ProtocolsHandlerUpgrErr::Timer
                     } else {
                         debug_assert!(err.is_inner());
-                        let err = err.into_inner().expect("is_elapsed returned false; QED");
+                        let err = err.into_inner().expect("Timeout error is one of {elapsed, \
+                            timer, inner}; is_inner and is_elapsed are both false; error is \
+                            inner; QED");
                         ProtocolsHandlerUpgrErr::Upgrade(err)
                     };
 
