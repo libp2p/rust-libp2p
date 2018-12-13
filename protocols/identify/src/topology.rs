@@ -18,11 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::{topology::MemoryTopology, Multiaddr, PeerId};
+use libp2p_core::{Multiaddr, PeerId};
+use libp2p_core::topology::{MemoryTopology, Topology};
 
 /// Trait required on the topology for the identify system to store addresses.
-pub trait IdentifyTopology {
+pub trait IdentifyTopology: Topology {
     /// Adds to the topology an address discovered through identification.
+    ///
+    /// > **Note**: Will never be called with the local peer ID.
     fn add_identify_discovered_addrs<TIter>(&mut self, peer: &PeerId, addr: TIter)
     where
         TIter: Iterator<Item = Multiaddr>;

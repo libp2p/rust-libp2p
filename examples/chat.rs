@@ -109,7 +109,7 @@ fn main() {
         };
 
         behaviour.floodsub.subscribe(floodsub_topic.clone());
-        libp2p::Swarm::new(transport, behaviour, libp2p::core::topology::MemoryTopology::empty(), local_pub_key)
+        libp2p::Swarm::new(transport, behaviour, libp2p::core::topology::MemoryTopology::empty(local_pub_key))
     };
 
     // Listen on all interfaces and whatever port the OS assigns

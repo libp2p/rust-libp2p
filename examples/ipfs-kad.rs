@@ -52,7 +52,7 @@ fn main() {
         });
 
     // Create the topology of the network with the IPFS bootstrap nodes.
-    let mut topology = libp2p::core::topology::MemoryTopology::empty();
+    let mut topology = libp2p::core::topology::MemoryTopology::empty(local_pub_key.clone());
     topology.add_address("QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ".parse().unwrap(), "/ip4/104.131.131.82/tcp/4001".parse().unwrap());
     topology.add_address("QmSoLPppuBtQSGwKDZT2M73ULpjvfd3aZ6ha4oFGL1KrGM".parse().unwrap(), "/ip4/104.236.179.241/tcp/4001".parse().unwrap());
     topology.add_address("QmSoLV4Bbm51jM9C4gDYZQ9Cy3U6aXMJDAbzgu2fzaDs64".parse().unwrap(), "/ip4/104.236.76.40/tcp/4001".parse().unwrap());
@@ -70,8 +70,8 @@ fn main() {
         // to insert our local node in the DHT. However here we use `without_init` because this
         // example is very ephemeral and we don't want to pollute the DHT. In a real world
         // application, you want to use `new` instead.
-        let mut behaviour = libp2p::kad::Kademlia::without_init(local_pub_key.clone().into_peer_id());
-        libp2p::core::Swarm::new(transport, behaviour, topology, local_pub_key)
+        let mut behaviour = libp2p::kad::Kademlia::without_init(local_pub_key.into_peer_id());
+        libp2p::core::Swarm::new(transport, behaviour, topology)
     };
 
     // Order Kademlia to search for a peer.
