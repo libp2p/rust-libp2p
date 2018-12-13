@@ -225,8 +225,9 @@ where
                 }
                 Err(err) => {
                     let err = if err.is_elapsed() {
-                        let err = err.into_timer().expect("is_elapsed returned true; QED");
-                        ProtocolsHandlerUpgrErr::Timeout(err)
+                        ProtocolsHandlerUpgrErr::Timeout
+                    } else if err.is_timer() {
+                        ProtocolsHandlerUpgrErr::Timer
                     } else {
                         debug_assert!(err.is_inner());
                         let err = err.into_inner().expect("is_elapsed returned false; QED");

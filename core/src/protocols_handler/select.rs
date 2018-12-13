@@ -119,8 +119,11 @@ where
             (EitherOutput::First(info), ProtocolsHandlerUpgrErr::MuxerDeniedSubstream) => {
                 self.proto1.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::MuxerDeniedSubstream)
             },
-            (EitherOutput::First(info), ProtocolsHandlerUpgrErr::Timeout(err)) => {
-                self.proto1.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Timeout(err))
+            (EitherOutput::First(info), ProtocolsHandlerUpgrErr::Timer) => {
+                self.proto1.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Timer)
+            },
+            (EitherOutput::First(info), ProtocolsHandlerUpgrErr::Timeout) => {
+                self.proto1.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Timeout)
             },
             (EitherOutput::First(info), ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(err))) => {
                 self.proto1.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(err)))
@@ -134,8 +137,11 @@ where
             (EitherOutput::Second(info), ProtocolsHandlerUpgrErr::MuxerDeniedSubstream) => {
                 self.proto2.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::MuxerDeniedSubstream)
             },
-            (EitherOutput::Second(info), ProtocolsHandlerUpgrErr::Timeout(err)) => {
-                self.proto2.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Timeout(err))
+            (EitherOutput::Second(info), ProtocolsHandlerUpgrErr::Timeout) => {
+                self.proto2.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Timeout)
+            },
+            (EitherOutput::Second(info), ProtocolsHandlerUpgrErr::Timer) => {
+                self.proto2.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Timer)
             },
             (EitherOutput::Second(info), ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(err))) => {
                 self.proto2.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(err)))

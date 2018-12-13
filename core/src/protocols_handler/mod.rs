@@ -279,7 +279,9 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
 #[derive(Debug)]
 pub enum ProtocolsHandlerUpgrErr<TUpgrErr> {
     /// The opening attempt timed out before the negotiation was fully completed.
-    Timeout(tokio_timer::Error),
+    Timeout,
+    /// There was an error in the timer used.
+    Timer,
     /// The remote muxer denied the attempt to open a substream.
     MuxerDeniedSubstream,
     /// Error while upgrading the substream to the protocol we want.
@@ -292,8 +294,11 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            ProtocolsHandlerUpgrErr::Timeout(err) => {
-                write!(f, "Error while opening a substream: {}", err)
+            ProtocolsHandlerUpgrErr::Timeout => {
+                write!(f, "Timeout error while opening a substream")
+            },
+            ProtocolsHandlerUpgrErr::Timer => {
+                write!(f, "Timer error while opening a substream")
             },
             ProtocolsHandlerUpgrErr::MuxerDeniedSubstream => {
                 write!(f, "Remote muxer denied our attempt to open a substream")
@@ -309,7 +314,8 @@ where
 {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
-            ProtocolsHandlerUpgrErr::Timeout(err) => Some(err),
+            ProtocolsHandlerUpgrErr::Timeout => None,
+            ProtocolsHandlerUpgrErr::Timer => None,
             ProtocolsHandlerUpgrErr::MuxerDeniedSubstream => None,
             ProtocolsHandlerUpgrErr::Upgrade(err) => Some(err),
         }
