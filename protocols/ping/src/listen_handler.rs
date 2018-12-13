@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::protocol::{Ping, PingListener};
 use arrayvec::ArrayVec;
 use futures::prelude::*;
 use libp2p_core::{
@@ -27,7 +28,6 @@ use libp2p_core::{
     upgrade::DeniedUpgrade
 };
 use log::warn;
-use protocol::{Ping, PingListener};
 use std::io;
 use tokio_io::{AsyncRead, AsyncWrite};
 use void::{Void, unreachable};

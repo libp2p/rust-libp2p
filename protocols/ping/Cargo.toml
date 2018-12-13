@@ -1,5 +1,6 @@
 [package]
 name = "libp2p-ping"
+edition = "2018"
 description = "Ping protocol for libp2p"
 version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
