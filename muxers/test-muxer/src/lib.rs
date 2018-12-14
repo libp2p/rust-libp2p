@@ -22,7 +22,7 @@ extern crate libp2p_tcp_transport as tcp;
 use assert_matches::assert_matches;
 use bytes::Bytes;
 use env_logger;
-use log::{trace, debug, info, error};
+use log::{trace, debug, info, warn, error};
 use tcp::{TcpConfig, TcpTransStream, TcpListenStream};
 use libp2p_core::{
     Transport,
@@ -95,9 +95,24 @@ mod helpers {
                     false => Either::B(muxing::outbound_from_ref_and_wrap(Arc::new(client))),
                 }
             })
-            .map(|client| Builder::new().new_framed(client.unwrap()))
+            .then(|substream_result| {
+                match substream_result {
+                    Err(e) => {
+                        error!("[framed_listener_fut] error opening substream: {:?}", e);
+                        Err(e)
+                    }
+                    Ok(Some(subs)) => {
+                        info!("[framed_listener_fut] opened substream without error");
+                        Ok(Builder::new().new_framed(subs))
+                    }
+                    Ok(None) => {
+                        warn!("[framed_listener_fut] no error, but also no substream");
+                        // TODO: I think we're loosing an error here somewhere. Not sure where yet but it doesn't feel right to let the Future resolve to a None here
+                        Err(std::io::Error::new(std::io::ErrorKind::Other, "something happened but we do not know what :/"))
+                    }
+                }
+            })
     }
-
 }
 
 pub fn test_muxer<U, O, E>(config: U)
@@ -124,7 +139,7 @@ where
     // bidirectional(config.clone());
 
     //  info!("\nLarge payload\n");
-     large_payload(config.clone());
+     large_payload_overflows_buffer(config.clone());
     // TODO:
     // info!("\nInterrup outbound after success");
     // interrupt_outbound_after_success(config.clone());
@@ -318,7 +333,7 @@ where
     thr.join().unwrap();
 }
 
-fn large_payload<U, O, E>(config: U)
+fn large_payload_overflows_buffer<U, O, E>(config: U)
     where
         U: OutboundUpgrade<TcpTransStream, Output = O, Error = E> + Send + Clone + Debug + 'static,
         U: InboundUpgrade<TcpTransStream, Output = O, Error = E>,
@@ -333,14 +348,10 @@ fn large_payload<U, O, E>(config: U)
 {
     let (tx, rx) = mpsc::channel();
     let listener_conf = config.clone();
-    // 10Mbytes payload
-    // let payload: Vec<u8> = (0..10485760).map(|_| rand::thread_rng().gen_range(1, u8::max_value()) ).collect();
-    // yamux, LengthDelimitedCodec { builder: Builder { max_frame_len: 8388608,…
-    // let payload: Vec<u8> = (0..8388608).map(|_| rand::thread_rng().gen_range(1, u8::max_value()) ).collect();
-    // let payload: Vec<u8> = (0..1800000).map(|_| rand::thread_rng().gen_range(1, u8::max_value()) ).collect();
-    let payload: Vec<u8> = (0..1800000).map(|_| rand::thread_rng().gen_range(1, u8::max_value()) ).collect();
+    // TODO: 10Mbytes payload
+    // let payload: Vec<u8> = vec![1; 10485760];
+    let payload: Vec<u8> = vec![1; 1900000];
     debug!("PAYLOAD SIZE={}", payload.len());
-    // let thr = thread::spawn(move || {
     let thr_builder = thread::Builder::new().name("listener thr".to_string());
     let thr = thr_builder.spawn(move || {
         let trans = TcpConfig::new().with_upgrade(listener_conf);
@@ -351,25 +362,12 @@ fn large_payload<U, O, E>(config: U)
         tx.send(addr).expect("mpsc::send works");
         let framed = helpers::framed_listener_fut(listener, true);
         let future = framed
-            .and_then(|stream| {
-                stream.for_each(|x| {
-                    trace!("[test, thr] read off the stream x={:?}", x);
-                    Ok(())
-                })
+            .then(|listener_result| {
+                trace!("[test, thr] received={:?}", listener_result);
+                assert!(listener_result.is_err());
+                listener_result
             });
-            // .and_then(|stream| stream.take(1).collect())
-            // .and_then(|msgs| {
-            //     trace!("[thr] got message with len={:?}", msgs.len());
-            //     // assert_eq!(msgs.len(), 0);
-            //     Ok(())
-            // });
-
-        let receiver_res = Runtime::new().expect("new runtime is ok").block_on(future);
-        if receiver_res.is_err() {
-            error!("[test, thr] receiver_res={:?}", receiver_res);
-        } else {
-            info!("[test, thr] receiver_res={:?}", receiver_res);
-        }
+        let _ = Runtime::new().expect("new runtime is ok").block_on(future);
     }).expect("thread spawn failed");
 
     let transport = TcpConfig::new().with_upgrade(config);
@@ -382,29 +380,21 @@ fn large_payload<U, O, E>(config: U)
             })
             .then(|res| {
                 trace!("[test] send result={:?}", res);
-                // assert!(res.is_err());
-                // let err = res.err().unwrap();
-                // trace!("send result error = {:?}", err);
-                // assert_matches!(err.kind(), std::io::ErrorKind::InvalidInput);
-                // assert_matches!(err.into_inner(), Some(inner) => {
-                //     assert_eq!(format!("{:?}", inner), "FrameTooBig");
-                // });
-                // Ok::<_, ()>(())
-                res
-            })
-            .and_then(|x| {
-                trace!("[test] need one more turn?");
-                Ok(())
+                assert_matches!(res, Err(e) => {
+                    assert_matches!(e.kind(), std::io::ErrorKind::WriteZero);
+                });
+                // TODO: for even bigger frames we expect a FrameTooBig error on the sender side.
+                Ok::<_, ()>(())
             })
     );
     if sender_res.is_err() {
-        error!("[test, thr] sender_res={:?}", sender_res);
+        error!("[test, main] sender_res={:?}", sender_res);
     } else {
-        info!("[test, thr] sender_res={:?}", sender_res);
+        info!("[test, main] sender_res={:?}", sender_res);
     }
-
+    // thr.join().unwrap();
     // info!("[test] sender result={:?}", sender_res);
     // thr.join().expect("could not join thread");
     let res = thr.join();
-    // debug!("[test] thread res={:?}", res);
+    debug!("[test] thread res={:?}", res);
 }
