@@ -53,14 +53,14 @@
 //! // unless it is run through a tokio runtime.
 //! ```
 //!
-//! The easiest way to create a transport is to use the `CommonTransport` struct. This struct
-//! provides support for the most common protocols.
+//! The easiest way to create a transport is to use the `build_development_transport` function.
+//! This function provides support for the most common protocols.
 //!
 //! Example:
 //!
 //! ```rust
-//! use libp2p::CommonTransport;
-//! let _transport = CommonTransport::new();
+//! let key = libp2p::secio::SecioKeyPair::ed25519_generated().unwrap();
+//! let _transport = libp2p::build_development_transport(key);
 //! // _transport.dial(...);
 //! ```
 //!
@@ -172,22 +172,62 @@ pub use self::multiaddr::Multiaddr;
 pub use self::simple::SimpleProtocol;
 pub use self::transport_ext::TransportExt;
 
+use futures::prelude::*;
+use std::time::Duration;
+
+/// Builds a `Transport` that supports the most commonly-used protocols that libp2p supports.
+///
+/// > **Note**: This `Transport` is not suitable for production usage, as its implementation
+/// >           reserves the right to support additional protocols or remove deprecated protocols.
+#[inline]
+pub fn build_development_transport(local_private_key: secio::SecioKeyPair)
+    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync), Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
+{
+     build_tcp_ws_secio_mplex_yamux(local_private_key)
+}
+
+/// Builds an implementation of `Transport` that is suitable for usage with the `Swarm`.
+///
+/// The implementation supports TCP/IP, WebSockets over TCP/IP, secio as the encryption layer,
+/// and mplex or yamux as the multiplexing layer.
+///
+/// > **Note**: If you ever need to express the type of this `Transport`.
+pub fn build_tcp_ws_secio_mplex_yamux(local_private_key: secio::SecioKeyPair)
+    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync), Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
+{
+    CommonTransport::new()
+        .with_upgrade(secio::SecioConfig::new(local_private_key))
+        .and_then(move |out, endpoint| {
+            let peer_id = out.remote_key.into_peer_id();
+            let peer_id2 = peer_id.clone();
+            let upgrade = core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new())
+                // TODO: use a single `.map` instead of two maps
+                .map_inbound(move |muxer| (peer_id, muxer))
+                .map_outbound(move |muxer| (peer_id2, muxer));
+
+            core::upgrade::apply(out.stream, upgrade, endpoint)
+                .map(|(id, muxer)| (id, core::muxing::StreamMuxerBox::new(muxer)))
+                .map_err(|e| e.into_io_error())
+        })
+        .with_timeout(Duration::from_secs(20))
+}
+
 /// Implementation of `Transport` that supports the most common protocols.
 ///
 /// The list currently is TCP/IP, DNS, and WebSockets. However this list could change in the
 /// future to get new transports.
 #[derive(Debug, Clone)]
-pub struct CommonTransport {
+struct CommonTransport {
     // The actual implementation of everything.
     inner: CommonTransportInner
 }
 
 #[cfg(all(not(target_os = "emscripten"), feature = "libp2p-websocket"))]
-pub type InnerImplementation = core::transport::OrTransport<dns::DnsConfig<tcp::TcpConfig>, websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>>;
+type InnerImplementation = core::transport::OrTransport<dns::DnsConfig<tcp::TcpConfig>, websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>>;
 #[cfg(all(not(target_os = "emscripten"), not(feature = "libp2p-websocket")))]
-pub type InnerImplementation = dns::DnsConfig<tcp::TcpConfig>;
+type InnerImplementation = dns::DnsConfig<tcp::TcpConfig>;
 #[cfg(target_os = "emscripten")]
-pub type InnerImplementation = websocket::BrowserWsConfig;
+type InnerImplementation = websocket::BrowserWsConfig;
 
 #[derive(Debug, Clone)]
 struct CommonTransportInner {

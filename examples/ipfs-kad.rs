@@ -30,11 +30,8 @@ extern crate tokio;
 
 use futures::prelude::*;
 use libp2p::{
-    Transport,
     core::PublicKey,
-    core::upgrade::{self, OutboundUpgradeExt},
     secio,
-    mplex,
 };
 
 fn main() {
@@ -43,13 +40,7 @@ fn main() {
     let local_pub_key = local_key.to_public_key();
 
     // Set up a an encrypted DNS-enabled TCP Transport over the Mplex protocol
-    let transport = libp2p::CommonTransport::new()
-        .with_upgrade(secio::SecioConfig::new(local_key))
-        .and_then(move |out, _| {
-            let peer_id = out.remote_key.into_peer_id();
-            let upgrade = mplex::MplexConfig::new().map_outbound(move |muxer| (peer_id, muxer) );
-            upgrade::apply_outbound(out.stream, upgrade).map_err(|e| e.into_io_error())
-        });
+    let transport = libp2p::build_development_transport(local_key);
 
     // Create the topology of the network with the IPFS bootstrap nodes.
     let mut topology = libp2p::core::topology::MemoryTopology::empty(local_pub_key.clone());
