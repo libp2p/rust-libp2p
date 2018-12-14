@@ -81,19 +81,6 @@
 //! ```
 //!
 
-extern crate arrayvec;
-extern crate bytes;
-extern crate futures;
-extern crate libp2p_core;
-extern crate log;
-extern crate multistream_select;
-extern crate parking_lot;
-extern crate rand;
-extern crate tokio_codec;
-extern crate tokio_io;
-extern crate tokio_timer;
-extern crate void;
-
 pub use self::dial_layer::PeriodicPing;
 pub use self::listen_layer::PingListen;
 

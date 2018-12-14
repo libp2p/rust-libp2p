@@ -29,13 +29,6 @@
 //! through it.
 //!
 //! ```no_run
-//! extern crate futures;
-//! extern crate tokio;
-//! extern crate tokio_io;
-//! extern crate libp2p_core;
-//! extern crate libp2p_secio;
-//! extern crate libp2p_tcp;
-//!
 //! # fn main() {
 //! use futures::Future;
 //! use libp2p_secio::{SecioConfig, SecioKeyPair, SecioOutput};
@@ -82,36 +75,12 @@
 
 #![recursion_limit = "128"]
 
-extern crate aes_ctr;
-#[cfg(feature = "secp256k1")]
-extern crate asn1_der;
-extern crate bytes;
-extern crate ctr;
-extern crate ed25519_dalek;
-extern crate futures;
-extern crate hmac;
-extern crate libp2p_core;
-#[macro_use]
-extern crate log;
-extern crate protobuf;
-extern crate rand;
-#[cfg(not(target_os = "emscripten"))]
-extern crate ring;
-extern crate rw_stream_sink;
-#[cfg(feature = "secp256k1")]
-extern crate secp256k1;
-extern crate sha2;
+// TODO: unfortunately the `js!` macro of stdweb depends on tons of "private" macros, which we
+//       don't want to import manually
 #[cfg(target_os = "emscripten")]
 #[macro_use]
 extern crate stdweb;
-extern crate tokio_io;
-extern crate twofish;
-#[cfg(not(target_os = "emscripten"))]
-extern crate untrusted;
 
-#[cfg(feature = "aes-all")]
-#[macro_use]
-extern crate lazy_static;
 pub use self::error::SecioError;
 
 #[cfg(feature = "secp256k1")]
@@ -121,6 +90,7 @@ use ed25519_dalek::Keypair as Ed25519KeyPair;
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
 use libp2p_core::{PeerId, PublicKey, upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade}};
+use log::debug;
 #[cfg(all(feature = "rsa", not(target_os = "emscripten")))]
 use ring::signature::RSAKeyPair;
 use rw_stream_sink::RwStreamSink;
@@ -140,9 +110,9 @@ mod handshake;
 mod structs_proto;
 mod stream_cipher;
 
-pub use algo_support::Digest;
-pub use exchange::KeyAgreement;
-pub use stream_cipher::Cipher;
+pub use crate::algo_support::Digest;
+pub use crate::exchange::KeyAgreement;
+pub use crate::stream_cipher::Cipher;
 
 /// Implementation of the `ConnectionUpgrade` trait of `libp2p_core`. Automatically applies
 /// secio on any connection.

@@ -23,12 +23,13 @@
 use bytes::BytesMut;
 use super::{Hmac, StreamCipher};
 
-use error::SecioError;
+use crate::error::SecioError;
 use futures::sink::Sink;
 use futures::stream::Stream;
 use futures::Async;
 use futures::Poll;
 use futures::StartSend;
+use log::debug;
 use std::cmp::min;
 
 /// Wraps around a `Stream<Item = BytesMut>`. The buffers produced by the underlying stream
