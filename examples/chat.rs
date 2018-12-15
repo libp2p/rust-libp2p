@@ -53,6 +53,7 @@ extern crate env_logger;
 extern crate futures;
 extern crate libp2p;
 extern crate tokio;
+extern crate void;
 
 use futures::prelude::*;
 use libp2p::{
@@ -79,16 +80,19 @@ fn main() {
     // In the future, we want to improve libp2p to make this easier to do.
     #[derive(NetworkBehaviour)]
     struct MyBehaviour<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite> {
-        #[behaviour(handler = "on_floodsub")]
         floodsub: libp2p::floodsub::Floodsub<TSubstream>,
         mdns: libp2p::mdns::Mdns<TSubstream>,
     }
 
-    impl<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite> MyBehaviour<TSubstream> {
+    impl<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite> libp2p::core::swarm::NetworkBehaviourEventProcess<void::Void> for MyBehaviour<TSubstream> {
+        fn inject_event(&mut self, _ev: void::Void) {
+            void::unreachable(_ev)
+        }
+    }
+
+    impl<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite> libp2p::core::swarm::NetworkBehaviourEventProcess<libp2p::floodsub::FloodsubMessage> for MyBehaviour<TSubstream> {
         // Called when `floodsub` produces an event.
-        fn on_floodsub<TTopology>(&mut self, message: <libp2p::floodsub::Floodsub<TSubstream> as libp2p::core::swarm::NetworkBehaviour<TTopology>>::OutEvent)
-        where TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite
-        {
+        fn inject_event(&mut self, message: libp2p::floodsub::FloodsubMessage) {
             println!("Received: '{:?}' from {:?}", String::from_utf8_lossy(&message.data), message.source);
         }
     }
