@@ -164,12 +164,18 @@ where TBehaviour: NetworkBehaviour<TTopology>,
     }
 
     /// Tries to reach the given peer using the elements in the topology.
+    /// Silently returns if address was associated with the `Self`
     ///
     /// Has no effect if we are already connected to that peer, or if no address is known for the
     /// peer.
     #[inline]
     pub fn dial(me: &mut Self, peer_id: PeerId) {
         let addrs = me.topology.addresses_of_peer(&peer_id);
+        for a in addrs.iter() {
+          if me.listened_addrs.iter().find(|addr| addr == &a).is_some() {
+            return;
+          }
+        }
         let handler = me.behaviour.new_handler().into_node_handler();
         if let Some(peer) = me.raw_swarm.peer(peer_id).as_not_connected() {
             let _ = peer.connect_iter(addrs, handler);
