@@ -171,10 +171,12 @@ where TBehaviour: NetworkBehaviour<TTopology>,
     #[inline]
     pub fn dial(me: &mut Self, peer_id: PeerId) {
         let addrs = me.topology.addresses_of_peer(&peer_id);
-        for a in addrs.iter() {
-          if me.listened_addrs.iter().find(|addr| addr == &a).is_some() {
+        let is_dialling_self = addrs.iter().any(|addr| {
+            me.listened_addrs.iter().any(|my_addr| my_addr == addr)
+        });
+        if is_dialling_self {
+            trace!("can't dial self!");
             return;
-          }
         }
         let handler = me.behaviour.new_handler().into_node_handler();
         if let Some(peer) = me.raw_swarm.peer(peer_id).as_not_connected() {
