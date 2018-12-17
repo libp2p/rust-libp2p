@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::floodsub::protocol::{FloodsubCodec, FloodsubConfig, FloodsubRpc};
+use crate::protocol::{FloodsubCodec, FloodsubConfig, FloodsubRpc};
 use futures::prelude::*;
 use libp2p_core::{
     ProtocolsHandler, ProtocolsHandlerEvent,

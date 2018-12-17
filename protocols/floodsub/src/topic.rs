@@ -20,7 +20,7 @@
 
 use bs58;
 use protobuf::Message;
-use super::rpc_proto;
+use rpc_proto;
 
 /// Represents the hash of a topic.
 ///

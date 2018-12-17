@@ -18,7 +18,7 @@ bytes = "0.4"
 futures = "0.1"
 multiaddr = { path = "./misc/multiaddr" }
 multihash = { path = "./misc/multihash" }
-libp2p-floodsub = { path = "./protocols/gossipsub" }
+libp2p-floodsub = { path = "./protocols/floodsub" }
 libp2p-gossipsub = { path = "./protocols/gossipsub" }
 libp2p-identify = { path = "./protocols/identify" }
 libp2p-kad = { path = "./protocols/kad" }

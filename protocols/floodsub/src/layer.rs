@@ -20,16 +20,16 @@
 
 use cuckoofilter::CuckooFilter;
 use futures::prelude::*;
-use super::handler::FloodsubHandler;
+use handler::FloodsubHandler;
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use libp2p_core::{protocols_handler::ProtocolsHandler, PeerId};
-use super::protocol::{FloodsubMessage, FloodsubRpc, FloodsubSubscription, FloodsubSubscriptionAction};
+use protocol::{FloodsubMessage, FloodsubRpc, FloodsubSubscription, FloodsubSubscriptionAction};
 use rand;
 use smallvec::SmallVec;
 use std::{collections::VecDeque, iter, marker::PhantomData};
 use std::collections::hash_map::{DefaultHasher, HashMap};
 use tokio_io::{AsyncRead, AsyncWrite};
-use super::topic::{Topic, TopicHash};
+use topic::{Topic, TopicHash};
 
 /// Network behaviour that automatically identifies nodes periodically, and returns information
 /// about them.
