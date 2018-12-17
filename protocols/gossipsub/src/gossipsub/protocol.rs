@@ -19,74 +19,74 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::{BufMut, Bytes, BytesMut};
-use crate::floodsub::rpc_proto;
+use crate::rpc_proto;
 use futures::future;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, PeerId};
 use protobuf::Message as ProtobufMessage;
 use std::{io, iter};
 use tokio_codec::{Decoder, Encoder, Framed};
 use tokio_io::{AsyncRead, AsyncWrite};
-use super::topic::TopicHash;
+use topic::TopicHash;
 use unsigned_varint::codec;
 
-/// Implementation of `ConnectionUpgrade` for the floodsub protocol.
+/// Implementation of `ConnectionUpgrade` for the Gossipsub protocol.
 #[derive(Debug, Clone)]
-pub struct FloodsubConfig {}
+pub struct GossipsubConfig {}
 
-impl FloodsubConfig {
-    /// Builds a new `FloodsubConfig`.
+impl GossipsubConfig {
+    /// Builds a new `GossipsubConfig`.
     #[inline]
-    pub fn new() -> FloodsubConfig {
-        FloodsubConfig {}
+    pub fn new() -> GossipsubConfig {
+        GossipsubConfig {}
     }
 }
 
-impl UpgradeInfo for FloodsubConfig {
+impl UpgradeInfo for GossipsubConfig {
     type UpgradeId = ();
     type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
 
     #[inline]
     fn protocol_names(&self) -> Self::NamesIter {
-        iter::once(("/floodsub/1.0.0".into(), ()))
+        iter::once(("/gossipsub/1.0.0".into(), ()))
     }
 }
 
-impl<TSocket> InboundUpgrade<TSocket> for FloodsubConfig
+impl<TSocket> InboundUpgrade<TSocket> for GossipsubConfig
 where
     TSocket: AsyncRead + AsyncWrite,
 {
-    type Output = Framed<TSocket, FloodsubCodec>;
+    type Output = Framed<TSocket, GossipsubCodec>;
     type Error = io::Error;
     type Future = future::FutureResult<Self::Output, Self::Error>;
 
     #[inline]
     fn upgrade_inbound(self, socket: TSocket, _: Self::UpgradeId) -> Self::Future {
-        future::ok(Framed::new(socket, FloodsubCodec { length_prefix: Default::default() }))
+        future::ok(Framed::new(socket, GossipsubCodec { length_prefix: Default::default() }))
     }
 }
 
-impl<TSocket> OutboundUpgrade<TSocket> for FloodsubConfig
+impl<TSocket> OutboundUpgrade<TSocket> for GossipsubConfig
 where
     TSocket: AsyncRead + AsyncWrite,
 {
-    type Output = Framed<TSocket, FloodsubCodec>;
+    type Output = Framed<TSocket, GossipsubCodec>;
     type Error = io::Error;
     type Future = future::FutureResult<Self::Output, Self::Error>;
 
     #[inline]
     fn upgrade_outbound(self, socket: TSocket, _: Self::UpgradeId) -> Self::Future {
-        future::ok(Framed::new(socket, FloodsubCodec { length_prefix: Default::default() }))
+        future::ok(Framed::new(socket, GossipsubCodec { length_prefix: Default::default() }))
     }
 }
 
 /// Implementation of `tokio_codec::Codec`.
-pub struct FloodsubCodec {
+pub struct GossipsubCodec {
     /// The codec for encoding/decoding the length prefix of messages.
     length_prefix: codec::UviBytes,
 }
 
-impl Encoder for FloodsubCodec {
-    type Item = FloodsubRpc;
+impl Encoder for GossipsubCodec {
+    type Item = GossipsubRpc;
     type Error = io::Error;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
@@ -104,12 +104,14 @@ impl Encoder for FloodsubCodec {
                     .map(TopicHash::into_string)
                     .collect(),
             );
+            msg.set_signature(message.signature)
+            msg.set_key(message.key)
             proto.mut_publish().push(msg);
         }
 
         for topic in item.subscriptions.into_iter() {
             let mut subscription = rpc_proto::RPC_SubOpts::new();
-            subscription.set_subscribe(topic.action == FloodsubSubscriptionAction::Subscribe);
+            subscription.set_subscribe(topic.action == GossipsubSubscriptionAction::Subscribe);
             subscription.set_topicid(topic.topic.into_string());
             proto.mut_subscriptions().push(subscription);
         }
@@ -129,8 +131,8 @@ impl Encoder for FloodsubCodec {
     }
 }
 
-impl Decoder for FloodsubCodec {
-    type Item = FloodsubRpc;
+impl Decoder for GossipsubCodec {
+    type Item = GossipsubRpc;
     type Error = io::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
@@ -143,7 +145,7 @@ impl Decoder for FloodsubCodec {
 
         let mut messages = Vec::with_capacity(rpc.get_publish().len());
         for mut publish in rpc.take_publish().into_iter() {
-            messages.push(FloodsubMessage {
+            messages.push(GossipsubMessage {
                 source: PeerId::from_bytes(publish.take_from()).map_err(|_| {
                     io::Error::new(io::ErrorKind::InvalidData, "Invalid peer ID in message")
                 })?,
@@ -154,19 +156,21 @@ impl Decoder for FloodsubCodec {
                     .into_iter()
                     .map(|topic| TopicHash::from_raw(topic))
                     .collect(),
+                signature: publish.take_signature(),
+                key: publish.take_key(),
             });
         }
 
-        Ok(Some(FloodsubRpc {
+        Ok(Some(GossipsubRpc {
             messages,
             subscriptions: rpc
                 .take_subscriptions()
                 .into_iter()
-                .map(|mut sub| FloodsubSubscription {
+                .map(|mut sub| GossipsubSubscription {
                     action: if sub.get_subscribe() {
-                        FloodsubSubscriptionAction::Subscribe
+                        GossipsubSubscriptionAction::Subscribe
                     } else {
-                        FloodsubSubscriptionAction::Unsubscribe
+                        GossipsubSubscriptionAction::Unsubscribe
                     },
                     topic: TopicHash::from_raw(sub.take_topicid()),
                 })
@@ -175,18 +179,18 @@ impl Decoder for FloodsubCodec {
     }
 }
 
-/// An RPC received by the floodsub system.
+/// An RPC received by the Gossipsub system.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct FloodsubRpc {
+pub struct GossipsubRpc {
     /// List of messages that were part of this RPC query.
-    pub messages: Vec<FloodsubMessage>,
+    pub messages: Vec<GossipsubMessage>,
     /// List of subscriptions.
-    pub subscriptions: Vec<FloodsubSubscription>,
+    pub subscriptions: Vec<GossipsubSubscription>,
 }
 
-/// A message received by the floodsub system.
+/// A message received by the Gossipsub system.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct FloodsubMessage {
+pub struct GossipsubMessage {
     /// Id of the peer that published this message.
     pub source: PeerId,
 
@@ -202,20 +206,21 @@ pub struct FloodsubMessage {
     pub topics: Vec<TopicHash>,
 }
 
-/// A subscription received by the floodsub system.
+/// A subscription received by the Gossipsub system.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct FloodsubSubscription {
+pub struct GossipsubSubscription {
     /// Action to perform.
-    pub action: FloodsubSubscriptionAction,
+    pub action: GossipsubSubscriptionAction,
     /// The topic from which to subscribe or unsubscribe.
     pub topic: TopicHash,
 }
 
 /// Action that a subscription wants to perform.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum FloodsubSubscriptionAction {
+pub enum GossipsubSubscriptionAction {
     /// The remote wants to subscribe to the given topic.
     Subscribe,
     /// The remote wants to unsubscribe from the given topic.
     Unsubscribe,
 }
+

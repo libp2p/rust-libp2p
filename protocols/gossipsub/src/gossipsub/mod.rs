@@ -1,6 +1,8 @@
+/// Includes constants to use in a `NetworkBehaviour`.
+pub mod constants;
 /// Implements a `ProtocolHandler` for the floodsub protocol.
 pub mod handler;
-/// Configures floodsub and coding and decoding from rpc_proto.rs.
+/// Configures floodsub and coding and decoding from `rpc_proto.rs.`
 pub mod protocol;
 
 // Implements `Floodsub`, a high level `NetworkBehaviour`.

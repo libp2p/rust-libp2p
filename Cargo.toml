@@ -18,10 +18,11 @@ bytes = "0.4"
 futures = "0.1"
 multiaddr = { path = "./misc/multiaddr" }
 multihash = { path = "./misc/multihash" }
-libp2p-mplex = { path = "./muxers/mplex" }
+libp2p-floodsub = { path = "./protocols/gossipsub" }
+libp2p-gossipsub = { path = "./protocols/gossipsub" }
 libp2p-identify = { path = "./protocols/identify" }
 libp2p-kad = { path = "./protocols/kad" }
-libp2p-pubsub = { path = "./protocols/pubsub" }
+libp2p-mplex = { path = "./muxers/mplex" }
 libp2p-ping = { path = "./protocols/ping" }
 libp2p-plaintext = { path = "./protocols/plaintext" }
 libp2p-ratelimit = { path = "./transports/ratelimit" }
@@ -62,7 +63,8 @@ members = [
     "misc/rw-stream-sink",
     "muxers/mplex",
     "muxers/yamux",
-    "protocols/pubsub",
+    "protocols/floodsub",
+    "protocols/gossipsub",
     "protocols/identify",
     "protocols/kad",
     "protocols/observed",
