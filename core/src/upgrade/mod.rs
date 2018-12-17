@@ -106,7 +106,7 @@ pub trait InboundUpgrade<C>: UpgradeInfo {
     fn upgrade_inbound(self, socket: C, id: Self::UpgradeId) -> Self::Future;
 }
 
-/// Extention trait for `InboundUpgrade`. Automatically implemented on all types that implement
+/// Extension trait for `InboundUpgrade`. Automatically implemented on all types that implement
 /// `InboundUpgrade`.
 pub trait InboundUpgradeExt<C>: InboundUpgrade<C> {
     /// Returns a new object that wraps around `Self` and applies a closure to the `Output`.
