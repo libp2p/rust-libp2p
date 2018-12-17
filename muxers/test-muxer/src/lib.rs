@@ -95,19 +95,20 @@ mod helpers {
                     false => Either::B(muxing::outbound_from_ref_and_wrap(Arc::new(client))),
                 }
             })
-            .then(|substream_result| {
+            .then(move|substream_result| {
                 match substream_result {
                     Err(e) => {
                         error!("[framed_listener_fut] error opening substream: {:?}", e);
                         Err(e)
                     }
                     Ok(Some(subs)) => {
-                        info!("[framed_listener_fut] opened substream without error");
+                        info!("[framed_listener_fut] opened substream without error, inbound={:?}", inbound);
                         Ok(Builder::new().new_framed(subs))
                     }
                     Ok(None) => {
-                        warn!("[framed_listener_fut] no error, but also no substream");
-                        // TODO: I think we're loosing an error here somewhere. Not sure where yet but it doesn't feel right to let the Future resolve to a None here
+                        warn!("[framed_listener_fut] no error, but also no substream, inbound={:?}", inbound);
+                        // TODO: I think we're loosing an error here somewhere. Not sure where yet but it doesn't
+                        // feel right to let the Future resolve to a None here
                         Err(std::io::Error::new(std::io::ErrorKind::Other, "something happened but we do not know what :/"))
                     }
                 }
@@ -141,7 +142,7 @@ where
     //  info!("\nLarge payload\n");
      large_payload_overflows_buffer(config.clone());
     // TODO:
-    // info!("\nInterrup outbound after success");
+    // info!("\nInterrupt outbound after success");
     // interrupt_outbound_after_success(config.clone());
 }
 
@@ -352,6 +353,7 @@ fn large_payload_overflows_buffer<U, O, E>(config: U)
     // let payload: Vec<u8> = vec![1; 10485760];
     let payload: Vec<u8> = vec![1; 1900000];
     debug!("PAYLOAD SIZE={}", payload.len());
+
     let thr_builder = thread::Builder::new().name("listener thr".to_string());
     let thr = thr_builder.spawn(move || {
         let trans = TcpConfig::new().with_upgrade(listener_conf);
@@ -373,7 +375,7 @@ fn large_payload_overflows_buffer<U, O, E>(config: U)
     let transport = TcpConfig::new().with_upgrade(config);
     let addr = rx.recv().expect("address is valid");
 
-    let sender_res = Runtime::new().unwrap().block_on(
+    Runtime::new().unwrap().block_on(
         helpers::framed_dialler_fut(transport, addr, false)
             .and_then(|subs| {
                 subs.send(payload.into())
@@ -386,15 +388,6 @@ fn large_payload_overflows_buffer<U, O, E>(config: U)
                 // TODO: for even bigger frames we expect a FrameTooBig error on the sender side.
                 Ok::<_, ()>(())
             })
-    );
-    if sender_res.is_err() {
-        error!("[test, main] sender_res={:?}", sender_res);
-    } else {
-        info!("[test, main] sender_res={:?}", sender_res);
-    }
-    // thr.join().unwrap();
-    // info!("[test] sender result={:?}", sender_res);
-    // thr.join().expect("could not join thread");
-    let res = thr.join();
-    debug!("[test] thread res={:?}", res);
+    ).expect("sender future works");
+     thr.join().unwrap();
 }
