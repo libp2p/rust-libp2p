@@ -192,8 +192,9 @@ mod test {
     use super::*;
     use libp2p_test_muxer::test_muxer;
 
-    #[test]
-    fn test_muxing() {
-        test_muxer(Config::default())
-    }
+    test_muxer!(empty_payload, Config::default());
+    test_muxer!(bidirectional, Config::default());
+    test_muxer!(client_to_server_inbound, Config::default());
+    test_muxer!(client_to_server_outbound, Config::default());
+    test_muxer!(one_megabyte_payload, Config::default());
 }
