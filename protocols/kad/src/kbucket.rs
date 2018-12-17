@@ -109,42 +109,30 @@ struct Node<Id, Val> {
 
 /// Trait that must be implemented on types that can be used as an identifier in a k-bucket.
 pub trait KBucketsPeerId: Eq + Clone {
-    /// Distance between two peer IDs.
-    type Distance: Ord;
-
-    /// Computes the XOR of this value and another one.
-    fn distance_with(&self, other: &Self) -> Self::Distance;
+    /// Computes the XOR of this value and another one. The lower the closer.
+    fn distance_with(&self, other: &Self) -> u32;
 
     /// Returns then number of bits that are necessary to store the distance between peer IDs.
     /// Used for pre-allocations.
     ///
     /// > **Note**: Returning 0 would lead to a panic.
-    fn num_bits() -> usize;
-
-    /// Returns the number of leading zeroes of the distance between peer IDs.
-    fn leading_zeros(Self::Distance) -> u32;
+    fn max_distance() -> usize;
 }
 
 impl KBucketsPeerId for Multihash {
-    type Distance = U512;
-
     #[inline]
-    fn num_bits() -> usize {
-        512
-    }
-
-    #[inline]
-    fn distance_with(&self, other: &Self) -> Self::Distance {
+    fn distance_with(&self, other: &Self) -> u32 {
         // Note that we don't compare the hash functions because there's no chance of collision
         // of the same value hashed with two different hash functions.
         let my_hash = U512::from(self.digest());
         let other_hash = U512::from(other.digest());
-        my_hash ^ other_hash
+        let xor = my_hash ^ other_hash;
+        xor.leading_zeros()
     }
 
     #[inline]
-    fn leading_zeros(distance: Self::Distance) -> u32 {
-        distance.leading_zeros()
+    fn max_distance() -> usize {
+        512
     }
 }
 
@@ -156,7 +144,7 @@ where
     pub fn new(my_id: Id, ping_timeout: Duration) -> Self {
         KBucketsTable {
             my_id: my_id,
-            tables: (0..Id::num_bits())
+            tables: (0..Id::max_distance())
                 .map(|_| KBucket {
                     nodes: ArrayVec::new(),
                     pending_node: None,
@@ -173,7 +161,7 @@ where
     // Returns `None` if out of range, which happens if `id` is the same as the local peer id.
     #[inline]
     fn bucket_num(&self, id: &Id) -> Option<usize> {
-        (Id::num_bits() - 1).checked_sub(Id::leading_zeros(self.my_id.distance_with(id)) as usize)
+        (Id::max_distance() - 1).checked_sub(self.my_id.distance_with(id) as usize)
     }
 
     /// Returns an iterator to all the buckets of this table.
