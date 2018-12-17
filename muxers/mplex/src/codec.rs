@@ -85,7 +85,9 @@ pub struct Codec {
 
 impl std::fmt::Debug for Codec {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "Codec(…)")
+        f.debug_struct("Codec")
+            .field("decoder_state", &self.decoder_state)
+            .finish()
     }
 }
 
