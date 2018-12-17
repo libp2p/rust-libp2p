@@ -172,13 +172,13 @@ where
             EitherOutput::First(inner) => {
                 match substream {
                     EitherOutbound::A(substream) => inner.destroy_outbound(substream),
-                    _ => panic!("Wrong API usage, a substream is never destroyed")
+                    _ => panic!("Wrong API usage: impossible combination of EitherOutput::First and EitherOutbound::B.")
                 }
             },
             EitherOutput::Second(inner) => {
                 match substream {
                     EitherOutbound::B(substream) => inner.destroy_outbound(substream),
-                    _ => panic!("Wrong API usage, a substream is never destroyed")
+                    _ => panic!("Wrong API usage: impossible combination of EitherOutput::Second and EitherOutbound::A")
                 }
             },
         }
