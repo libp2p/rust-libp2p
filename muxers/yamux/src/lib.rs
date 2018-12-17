@@ -64,18 +64,9 @@ where
                 error!("connection error: {}", e);
                 Err(io::Error::new(io::ErrorKind::Other, e))
             }
-            Ok(Async::NotReady) => {
-                trace!("[yamux, poll_inbound] NotReady");
-                Ok(Async::NotReady)
-            },
-            Ok(Async::Ready(None)) => {
-                trace!("[yamux, poll_inbound] Ready(None)");
-                Ok(Async::Ready(None))
-            },
-            Ok(Async::Ready(Some(stream))) => {
-                trace!("[yamux, poll_inbound] Ready(Some(stream))");
-                Ok(Async::Ready(Some(stream)))
-            }
+            Ok(Async::NotReady) => Ok(Async::NotReady),
+            Ok(Async::Ready(None)) => Ok(Async::Ready(None)),
+            Ok(Async::Ready(Some(stream))) => Ok(Async::Ready(Some(stream))),
         }
     }
 
