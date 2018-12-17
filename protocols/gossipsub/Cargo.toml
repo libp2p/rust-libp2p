@@ -1,11 +1,10 @@
 [package]
-name = "libp2p-pubsub"
+name = "libp2p-gossipsub"
 description = "Gossipsub for libp2p."
 version = "0.1.0"
-authors = ["Parity Technologies <admin@parity.io>"]
-license = "MIT"
+authors = ["James Ray <16969914+jamesray1@users.noreply.github.com>"]
 repository = "https://github.com/libp2p/rust-libp2p"
-keywords = ["peer-to-peer", "libp2p", "networking"]
+keywords = ["peer-to-peer", "libp2p", "networking", "pubsub", "gossipsub"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
@@ -15,6 +14,7 @@ cuckoofilter = "0.3.2"
 fnv = "1.0"
 futures = "0.1"
 libp2p-core = { path = "../../core" }
+libp2p-floodsub = { path = "../floodsub" }
 protobuf = "2.0.2"
 rand = "0.6"
 smallvec = "0.6.5"

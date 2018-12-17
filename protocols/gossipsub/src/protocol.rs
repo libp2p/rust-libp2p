@@ -22,6 +22,7 @@ use bytes::{BufMut, Bytes, BytesMut};
 use crate::rpc_proto;
 use futures::future;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, PeerId};
+
 use protobuf::Message as ProtobufMessage;
 use std::{io, iter};
 use tokio_codec::{Decoder, Encoder, Framed};
@@ -104,8 +105,8 @@ impl Encoder for GossipsubCodec {
                     .map(TopicHash::into_string)
                     .collect(),
             );
-            msg.set_signature(message.signature)
-            msg.set_key(message.key)
+            msg.set_signature(message.signature);
+            msg.set_key(message.key);
             proto.mut_publish().push(msg);
         }
 
@@ -204,6 +205,14 @@ pub struct GossipsubMessage {
     ///
     /// Each message can belong to multiple topics at once.
     pub topics: Vec<TopicHash>,
+
+    /// To use for an authentication scheme (not yet defined or implemented),
+    /// see rpc.proto for more info.
+    pub signature: Vec<u8>,
+
+    /// To use for an encryption scheme (not yet defined or implemented),
+    /// see rpc.proto for more info.
+    pub key: Vec<u8>,
 }
 
 /// A subscription received by the Gossipsub system.

@@ -18,22 +18,51 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::floodsub::protocol::{FloodsubCodec, FloodsubConfig, FloodsubRpc};
+use protocol::{GossipsubConfig,GossipsubRpc,GossipsubCodec};
 use futures::prelude::*;
 use libp2p_core::{
     ProtocolsHandler, ProtocolsHandlerEvent,
     upgrade::{InboundUpgrade, OutboundUpgrade}
 };
+use libp2p_floodsub::protocol::{FloodsubConfig, FloodsubRpc};
 use smallvec::SmallVec;
 use std::{fmt, io};
 use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
 
-/// Protocol handler that handles communication with the remote for the floodsub protocol.
+/// Protocol handler that handles communication with the remote for the
+/// gossipsub protocol (which is compatible with floodsub).
 ///
-/// The handler will automatically open a substream with the remote for each request we make.
+/// The handler will automatically open a substream with the remote for
+/// each request we make.
 ///
 /// It also handles requests made by the remote.
+// TODO: use the FloodsubHandler, figure out the best way to do so.
+// Also probably don't need to re-implement the same functionality from
+// Floodsub, just reuse from FloodsubHandler, and implement the
+// additional functionality.
+// Could either have a FloodsubHandler nested in a GossipsubHandler, or // reduplicate FloodsubHandler and other needed stuff. It seems like the
+// former option might be best, but not sure.
+pub struct GossipsubHandler<TSubstream>
+where
+    TSubstream: AsyncRead + AsyncWrite,
+{
+    /// Configuration for the floodsub protocol.
+    config: GossipsubConfig,
+
+    /// If true, we are trying to shut down the existing floodsub substream and should refuse any
+    /// incoming connection.
+    shutting_down: bool,
+
+    /// The active substreams.
+    // TODO: add a limit to the number of allowed substreams
+    substreams: Vec<SubstreamState<TSubstream>>,
+
+    /// Queue of values that we want to send to the remote.
+    send_queue: SmallVec<[GossipsubRpc; 16]>,
+}
+
+/// Duplicate from floodsub::handler::FloodsubHandler, since we need to
 pub struct FloodsubHandler<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
@@ -59,13 +88,13 @@ where
     TSubstream: AsyncRead + AsyncWrite,
 {
     /// Waiting for a message from the remote.
-    WaitingInput(Framed<TSubstream, FloodsubCodec>),
+    WaitingInput(Framed<TSubstream, GossipsubCodec>),
     /// Waiting to send a message to the remote.
-    PendingSend(Framed<TSubstream, FloodsubCodec>, FloodsubRpc),
+    PendingSend(Framed<TSubstream, GossipsubCodec>, GossipsubRpc),
     /// Waiting to flush the substream so that the data arrives to the remote.
-    PendingFlush(Framed<TSubstream, FloodsubCodec>),
+    PendingFlush(Framed<TSubstream, GossipsubCodec>),
     /// The substream is being closed.
-    Closing(Framed<TSubstream, FloodsubCodec>),
+    Closing(Framed<TSubstream, GossipsubCodec>),
 }
 
 impl<TSubstream> SubstreamState<TSubstream>
@@ -73,12 +102,27 @@ where
     TSubstream: AsyncRead + AsyncWrite,
 {
     /// Consumes this state and produces the substream.
-    fn into_substream(self) -> Framed<TSubstream, FloodsubCodec> {
+    fn into_substream(self) -> Framed<TSubstream, GossipsubCodec> {
         match self {
             SubstreamState::WaitingInput(substream) => substream,
             SubstreamState::PendingSend(substream, _) => substream,
             SubstreamState::PendingFlush(substream) => substream,
             SubstreamState::Closing(substream) => substream,
+        }
+    }
+}
+
+impl<TSubstream> GossipsubHandler<TSubstream>
+where
+    TSubstream: AsyncRead + AsyncWrite,
+{
+    /// Builds a new `GossipsubHandler`.
+    pub fn new() -> Self {
+        GossipsubHandler {
+            config: GossipsubConfig::new(),
+            shutting_down: false,
+            substreams: Vec::new(),
+            send_queue: SmallVec::new(),
         }
     }
 }
