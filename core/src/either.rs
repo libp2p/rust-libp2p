@@ -178,7 +178,7 @@ where
             EitherOutput::Second(inner) => {
                 match substream {
                     EitherOutbound::B(substream) => inner.destroy_outbound(substream),
-                    _ => panic!("Wrong API usage: impossible combination of EitherOutput::Second and EitherOutbound::A")
+                    _ => panic!("Wrong API usage: impossible combination of EitherOutput::Second and EitherOutbound::A.")
                 }
             },
         }
@@ -264,11 +264,8 @@ where
     }
 }
 
-/// Used as an `OutboundSubstream` type, which is the return type for
-/// `open_outbound()`, and an input for `poll_outbound`, both of which
-/// are internal methods of `EitherOutput` (as well as
-/// `destroy_outbound()`, which is wrong API usage).
-/// All calls using `EitherOutbound` dispatch to either `A` or `B`.
+/// Used to associate the correct `OutboundSubstream` type with the right
+/// `StreamMuxer`. Implements `Future`.
 #[derive(Debug, Copy, Clone)]
 #[must_use = "futures do nothing unless polled"]
 pub enum EitherOutbound<A: StreamMuxer, B: StreamMuxer> {
