@@ -41,7 +41,8 @@ use tokio_io::{AsyncRead, AsyncWrite};
 // Also probably don't need to re-implement the same functionality from
 // Floodsub, just reuse from FloodsubHandler, and implement the
 // additional functionality.
-// Could either have a FloodsubHandler nested in a GossipsubHandler, or // reduplicate FloodsubHandler and other needed stuff. It seems like the
+// Could either have a FloodsubHandler nested in a GossipsubHandler, or
+// reduplicate FloodsubHandler and other needed stuff. It seems like the
 // former option might be best, but not sure.
 pub struct GossipsubHandler<TSubstream>
 where
