@@ -24,7 +24,10 @@ use libp2p_core::{
     ProtocolsHandler, ProtocolsHandlerEvent,
     upgrade::{InboundUpgrade, OutboundUpgrade}
 };
-use libp2p_floodsub::protocol::{FloodsubConfig, FloodsubRpc};
+use libp2p_floodsub::{
+    protocol::{FloodsubConfig, FloodsubRpc},
+    handler::FloodsubHandler,
+};
 use smallvec::SmallVec;
 use std::{fmt, io};
 use tokio_codec::Framed;
@@ -37,13 +40,6 @@ use tokio_io::{AsyncRead, AsyncWrite};
 /// each request we make.
 ///
 /// It also handles requests made by the remote.
-// TODO: use the FloodsubHandler, figure out the best way to do so.
-// Also probably don't need to re-implement the same functionality from
-// Floodsub, just reuse from FloodsubHandler, and implement the
-// additional functionality.
-// Could either have a FloodsubHandler nested in a GossipsubHandler, or
-// reduplicate FloodsubHandler and other needed stuff. It seems like the
-// former option might be best, but not sure.
 pub struct GossipsubHandler<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
@@ -61,26 +57,6 @@ where
 
     /// Queue of values that we want to send to the remote.
     send_queue: SmallVec<[GossipsubRpc; 16]>,
-}
-
-/// Duplicate from floodsub::handler::FloodsubHandler, since we need to
-pub struct FloodsubHandler<TSubstream>
-where
-    TSubstream: AsyncRead + AsyncWrite,
-{
-    /// Configuration for the floodsub protocol.
-    config: FloodsubConfig,
-
-    /// If true, we are trying to shut down the existing floodsub substream and should refuse any
-    /// incoming connection.
-    shutting_down: bool,
-
-    /// The active substreams.
-    // TODO: add a limit to the number of allowed substreams
-    substreams: Vec<SubstreamState<TSubstream>>,
-
-    /// Queue of values that we want to send to the remote.
-    send_queue: SmallVec<[FloodsubRpc; 16]>,
 }
 
 /// State of an active substream, opened either by us or by the remote.
@@ -128,22 +104,7 @@ where
     }
 }
 
-impl<TSubstream> FloodsubHandler<TSubstream>
-where
-    TSubstream: AsyncRead + AsyncWrite,
-{
-    /// Builds a new `FloodsubHandler`.
-    pub fn new() -> Self {
-        FloodsubHandler {
-            config: FloodsubConfig::new(),
-            shutting_down: false,
-            substreams: Vec::new(),
-            send_queue: SmallVec::new(),
-        }
-    }
-}
-
-impl<TSubstream> ProtocolsHandler for FloodsubHandler<TSubstream>
+impl<TSubstream> ProtocolsHandler for GossipsubHandler<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
