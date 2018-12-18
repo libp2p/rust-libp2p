@@ -22,7 +22,7 @@ use crate::service::{MdnsService, MdnsPacket};
 use futures::prelude::*;
 use libp2p_core::protocols_handler::{DummyProtocolsHandler, ProtocolsHandler};
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
-use libp2p_core::{Multiaddr, PeerId, multiaddr::Protocol, topology::MemoryTopology};
+use libp2p_core::{Multiaddr, PeerId, multiaddr::Protocol, topology::MemoryTopology, topology::Topology};
 use smallvec::SmallVec;
 use std::{fmt, io, iter, marker::PhantomData, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -55,7 +55,7 @@ impl<TSubstream> Mdns<TSubstream> {
 }
 
 /// Trait that must be implemented on the network topology for it to be usable with `Mdns`.
-pub trait MdnsTopology {
+pub trait MdnsTopology: Topology {
     /// Adds an address discovered by mDNS.
     ///
     /// Will never be called with the local peer ID.

@@ -1,5 +1,6 @@
 [package]
 name = "libp2p-secio"
+edition = "2018"
 description = "Secio encryption protocol for libp2p"
 version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
