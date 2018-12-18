@@ -7,7 +7,7 @@
 This repository is the central place for Rust development of the [libp2p](https://libp2p.io) spec.
 
 **Warning**: While we are trying our best to be compatible with other lib2p implementations, we
-cannot guarantee that it is the case considering the lack of a precise libp2p specifications.
+cannot guarantee that this is the case considering the lack of a precise libp2p specifications.
 
 ## Documentation
 
