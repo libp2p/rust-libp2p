@@ -21,7 +21,7 @@
 use protocol::{GossipsubConfig,GossipsubRpc,GossipsubCodec};
 use futures::prelude::*;
 use libp2p_core::{
-    ProtocolsHandler, ProtocolsHandlerEvent,
+    ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerSelect,
     upgrade::{InboundUpgrade, OutboundUpgrade}
 };
 use libp2p_floodsub::{
@@ -33,6 +33,22 @@ use std::{fmt, io};
 use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
 
+pub struct GossipsubHandler<RawGossipsubHandler<TSubstream>,
+    FloodsubHandler<TSubstream>> {
+    gossipsub: RawGossipsubHandler<TSubstream>,
+    floodsub: FloodsubHandler<TSubstream>,
+}
+
+impl GossipsubHandler {
+    fn new(gossipsub: RawGossipsubHandler<TSubstream>,
+        floodsub: FloodsubHandler<TSubstream>) -> Self {
+        ProtocolsHandlerSelect::new(
+            gossipsub: RawGossipsubHandler<TSubstream>,
+            floodsub: FloodsubHandler<TSubstream>
+        );
+    }
+}
+
 /// Protocol handler that handles communication with the remote for the
 /// gossipsub protocol (which is compatible with floodsub).
 ///
@@ -40,7 +56,7 @@ use tokio_io::{AsyncRead, AsyncWrite};
 /// each request we make.
 ///
 /// It also handles requests made by the remote.
-pub struct GossipsubHandler<TSubstream>
+pub struct RawGossipsubHandler<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
@@ -89,13 +105,13 @@ where
     }
 }
 
-impl<TSubstream> GossipsubHandler<TSubstream>
+impl<TSubstream> RawGossipsubHandler<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
     /// Builds a new `GossipsubHandler`.
     pub fn new() -> Self {
-        GossipsubHandler {
+        RawGossipsubHandler {
             config: GossipsubConfig::new(),
             shutting_down: false,
             substreams: Vec::new(),
@@ -104,7 +120,7 @@ where
     }
 }
 
-impl<TSubstream> ProtocolsHandler for GossipsubHandler<TSubstream>
+impl<TSubstream> ProtocolsHandler for RawGossipsubHandler<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
