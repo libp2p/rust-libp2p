@@ -1,5 +1,6 @@
 [package]
 name = "libp2p-mplex"
+edition = "2018"
 description = "Mplex multiplexing protocol for libp2p"
 version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
