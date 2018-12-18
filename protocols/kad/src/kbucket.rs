@@ -30,65 +30,53 @@
 use arrayvec::ArrayVec;
 use bigint::U512;
 use multihash::Multihash;
-use parking_lot::{Mutex, MutexGuard};
 use std::mem;
-use std::slice::Iter as SliceIter;
+use std::slice::IterMut as SliceIterMut;
 use std::time::{Duration, Instant};
 use std::vec::IntoIter as VecIntoIter;
 
 /// Maximum number of nodes in a bucket.
 pub const MAX_NODES_PER_BUCKET: usize = 20;
 
-/// Table of k-buckets with interior mutability.
-#[derive(Debug)]
+/// Table of k-buckets.
+#[derive(Debug, Clone)]
 pub struct KBucketsTable<Id, Val> {
+    /// Peer ID of the local node.
     my_id: Id,
-    tables: Vec<Mutex<KBucket<Id, Val>>>,
+    /// The actual tables.
+    tables: Vec<KBucket<Id, Val>>,
     // The timeout when pinging the first node after which we consider that it no longer responds.
     ping_timeout: Duration,
 }
 
-impl<Id, Val> Clone for KBucketsTable<Id, Val>
-where
-    Id: Clone,
-    Val: Clone,
-{
-    #[inline]
-    fn clone(&self) -> Self {
-        KBucketsTable {
-            my_id: self.my_id.clone(),
-            tables: self
-                .tables
-                .iter()
-                .map(|t| t.lock().clone())
-                .map(Mutex::new)
-                .collect(),
-            ping_timeout: self.ping_timeout.clone(),
-        }
-    }
-}
-
+/// An individual table that stores peers or values.
 #[derive(Debug, Clone)]
 struct KBucket<Id, Val> {
-    // Nodes are always ordered from oldest to newest.
-    // Note that we will very often move elements to the end of this. No benchmarking has been
-    // performed, but it is very likely that a `ArrayVec` is the most performant data structure.
+    /// Nodes are always ordered from oldest to newest.
+    /// Note that we will very often move elements to the end of this. No benchmarking has been
+    /// performed, but it is very likely that a `ArrayVec` is the most performant data structure.
     nodes: ArrayVec<[Node<Id, Val>; MAX_NODES_PER_BUCKET]>,
 
-    // Node received when the bucket was full. Will be added to the list if the first node doesn't
-    // respond in time to our ping. The second element is the time when the pending node was added.
-    // If it is too much in the past, then we drop the first node and add the pending node to the
-    // end of the list.
+    /// Node received when the bucket was full. Will be added to the list if the first node doesn't
+    /// respond in time to our ping. The second element is the time when the pending node was added.
+    /// If it is too much in the past, then we drop the first node and add the pending node to the
+    /// end of the list.
     pending_node: Option<(Node<Id, Val>, Instant)>,
 
-    // Last time this bucket was updated.
+    /// Last time this bucket was updated.
     last_update: Instant,
 }
 
+#[derive(Debug, Clone)]
+struct Node<Id, Val> {
+    id: Id,
+    value: Val,
+}
+
 impl<Id, Val> KBucket<Id, Val> {
-    // Puts the kbucket into a coherent state.
-    // If a node is pending and the timeout has expired, removes the first element of `nodes`
-    // and pushes back the node in `pending_node`.
+    /// Puts the kbucket into a coherent state.
+    /// If a node is pending and the timeout has expired, removes the first element of `nodes`
+    /// and pushes back the node in `pending_node`.
     fn flush(&mut self, timeout: Duration) {
         if let Some((pending_node, instant)) = self.pending_node.take() {
             if instant.elapsed() >= timeout {
@@ -99,12 +87,6 @@ impl<Id, Val> KBucket<Id, Val> {
             }
         }
     }
-}
-
-#[derive(Debug, Clone)]
-struct Node<Id, Val> {
-    id: Id,
-    value: Val,
 }
 
 /// Trait that must be implemented on types that can be used as an identifier in a k-bucket.
@@ -150,7 +132,6 @@ where
                     pending_node: None,
                     last_update: Instant::now(),
                 })
-                .map(Mutex::new)
                 .collect(),
             ping_timeout: ping_timeout,
         }
@@ -169,8 +150,8 @@ where
     /// Ordered by proximity to the local node. Closest bucket (with max. one node in it) comes
     /// first.
     #[inline]
-    pub fn buckets(&self) -> BucketsIter<Id, Val> {
-        BucketsIter(self.tables.iter(), self.ping_timeout)
+    pub fn buckets(&mut self) -> BucketsIter<Id, Val> {
+        BucketsIter(self.tables.iter_mut(), self.ping_timeout)
     }
 
     /// Returns the ID of the local node.
@@ -180,14 +161,13 @@ where
     }
 
     /// Finds the `num` nodes closest to `id`, ordered by distance.
-    pub fn find_closest(&self, id: &Id) -> VecIntoIter<Id>
+    pub fn find_closest(&mut self, id: &Id) -> VecIntoIter<Id>
     where
         Id: Clone,
     {
         // TODO: optimize
         let mut out = Vec::new();
-        for table in self.tables.iter() {
-            let mut table = table.lock();
+        for table in self.tables.iter_mut() {
             table.flush(self.ping_timeout);
             if table.last_update.elapsed() > self.ping_timeout {
                 continue; // ignore bucket with expired nodes
@@ -201,7 +181,7 @@ where
     }
 
     /// Same as `find_closest`, but includes the local peer as well.
-    pub fn find_closest_with_self(&self, id: &Id) -> VecIntoIter<Id>
+    pub fn find_closest_with_self(&mut self, id: &Id) -> VecIntoIter<Id>
     where
         Id: Clone,
     {
@@ -222,13 +202,12 @@ where
 
     /// Marks the node as "most recent" in its bucket and modifies the value associated to it.
     /// This function should be called whenever we receive a communication from a node.
-    pub fn update(&self, id: Id, value: Val) -> UpdateOutcome<Id, Val> {
+    pub fn update(&mut self, id: Id, value: Val) -> UpdateOutcome<Id, Val> {
         let table = match self.bucket_num(&id) {
-            Some(n) => &self.tables[n],
+            Some(n) => &mut self.tables[n],
             None => return UpdateOutcome::FailSelfUpdate,
         };
 
-        let mut table = table.lock();
         table.flush(self.ping_timeout);
 
         if let Some(pos) = table.nodes.iter().position(|n| n.id == id) {
@@ -290,7 +269,7 @@ pub enum UpdateOutcome<Id, Val> {
 }
 
 /// Iterator giving access to a bucket.
-pub struct BucketsIter<'a, Id: 'a, Val: 'a>(SliceIter<'a, Mutex<KBucket<Id, Val>>>, Duration);
+pub struct BucketsIter<'a, Id: 'a, Val: 'a>(SliceIterMut<'a, KBucket<Id, Val>>, Duration);
 
 impl<'a, Id: 'a, Val: 'a> Iterator for BucketsIter<'a, Id, Val> {
     type Item = Bucket<'a, Id, Val>;
@@ -298,7 +277,6 @@ impl<'a, Id: 'a, Val: 'a> Iterator for BucketsIter<'a, Id, Val> {
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         self.0.next().map(|bucket| {
-            let mut bucket = bucket.lock();
             bucket.flush(self.1);
             Bucket(bucket)
         })
@@ -313,7 +291,7 @@ impl<'a, Id: 'a, Val: 'a> Iterator for BucketsIter<'a, Id, Val> {
 impl<'a, Id: 'a, Val: 'a> ExactSizeIterator for BucketsIter<'a, Id, Val> {}
 
 /// Access to a bucket.
-pub struct Bucket<'a, Id: 'a, Val: 'a>(MutexGuard<'a, KBucket<Id, Val>>);
+pub struct Bucket<'a, Id: 'a, Val: 'a>(&'a mut KBucket<Id, Val>);
 
 impl<'a, Id: 'a, Val: 'a> Bucket<'a, Id, Val> {
     /// Returns the number of entries in that bucket.
