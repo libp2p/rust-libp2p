@@ -1,4 +1,5 @@
-// From https://github.com/libp2p/go-libp2p-pubsub/blob/master/pb/rpc.proto
+// From https://github.com/libp2p/go-libp2p-pubsub/blob/master/pb/rpc.proto,
+// should be the same unless that has been changed.
 
 syntax = "proto2";
 

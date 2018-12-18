@@ -187,6 +187,8 @@ pub struct GossipsubRpc {
     pub messages: Vec<GossipsubMessage>,
     /// List of subscriptions.
     pub subscriptions: Vec<GossipsubSubscription>,
+    /// Optional control message.
+    pub controlMessage: ControlMessage,
 }
 
 /// A message received by the Gossipsub system.
@@ -232,3 +234,30 @@ pub enum GossipsubSubscriptionAction {
     /// The remote wants to unsubscribe from the given topic.
     Unsubscribe,
 }
+
+/// A message used to control the Gossipsub network.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ControlMessage {
+    /// The control message for gossiping.
+    pub ihave: ControlIHave,
+    /// Request transmission of messages announced in a `ControlIHave`
+    /// message.
+    pub iwant: ControlIWant,
+    /// Graft a mesh link; this notifies the peer that it has been added
+    /// to the local mesh view.
+    pub graft: ControlGraft,
+    /// The control message for pruning mesh links.
+    pub prune: ControlPrune,
+}
+
+/// Gossip control message; this notifies the peer that the following
+/// messages were recently seen and are available on request.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ControlIHave {
+    /// Topic that the messages belong to.
+    pub topic: TopicHash,
+    /// List of messages that have been recently seen and are available
+    /// on request.
+    pub messages: Vec<messageID>,
+}
+
