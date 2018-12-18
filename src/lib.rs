@@ -46,21 +46,21 @@
 //!
 //! ```rust
 //! use libp2p::{Multiaddr, Transport, tcp::TcpConfig};
-//! let tcp_transport = TcpConfig::new();
+//! let tcp = TcpConfig::new();
 //! let addr: Multiaddr = "/ip4/98.97.96.95/tcp/20500".parse().expect("invalid multiaddr");
-//! let _outgoing_connec = tcp_transport.dial(addr);
+//! let _outgoing_connec = tcp.dial(addr);
 //! // Note that `_outgoing_connec` is a `Future`, and therefore doesn't do anything by itself
 //! // unless it is run through a tokio runtime.
 //! ```
 //!
-//! The easiest way to create a transport is to use the `CommonTransport` struct. This struct
-//! provides support for the most common protocols.
+//! The easiest way to create a transport is to use the `build_development_transport` function.
+//! This function provides support for the most common protocols.
 //!
 //! Example:
 //!
 //! ```rust
-//! use libp2p::CommonTransport;
-//! let _transport = CommonTransport::new();
+//! let key = libp2p::secio::SecioKeyPair::ed25519_generated().unwrap();
+//! let _transport = libp2p::build_development_transport(key);
 //! // _transport.dial(...);
 //! ```
 //!
@@ -77,9 +77,9 @@
 //! ```rust
 //! # #[cfg(all(not(target_os = "emscripten"), feature = "libp2p-secio"))] {
 //! use libp2p::{Transport, tcp::TcpConfig, secio::{SecioConfig, SecioKeyPair}};
-//! let tcp_transport = TcpConfig::new();
+//! let tcp = TcpConfig::new();
 //! let secio_upgrade = SecioConfig::new(SecioKeyPair::ed25519_generated().unwrap());
-//! let with_security = tcp_transport.with_upgrade(secio_upgrade);
+//! let with_security = tcp.with_upgrade(secio_upgrade);
 //! // let _ = with_security.dial(...);
 //! // `with_security` also implements the `Transport` trait, and all the connections opened
 //! // through it will automatically negotiate the `secio` protocol.
@@ -153,8 +153,7 @@ pub extern crate libp2p_plaintext as plaintext;
 pub extern crate libp2p_ratelimit as ratelimit;
 pub extern crate libp2p_secio as secio;
 #[cfg(not(target_os = "emscripten"))]
-pub extern crate libp2p_tcp_transport as tcp;
-pub extern crate libp2p_transport_timeout as transport_timeout;
+pub extern crate libp2p_tcp as tcp;
 pub extern crate libp2p_uds as uds;
 #[cfg(feature = "libp2p-websocket")]
 pub extern crate libp2p_websocket as websocket;
@@ -172,24 +171,63 @@ pub use libp2p_core_derive::NetworkBehaviour;
 pub use self::multiaddr::Multiaddr;
 pub use self::simple::SimpleProtocol;
 pub use self::transport_ext::TransportExt;
-pub use self::transport_timeout::TransportTimeout;
+
+use futures::prelude::*;
+use std::time::Duration;
+
+/// Builds a `Transport` that supports the most commonly-used protocols that libp2p supports.
+///
+/// > **Note**: This `Transport` is not suitable for production usage, as its implementation
+/// >           reserves the right to support additional protocols or remove deprecated protocols.
+#[inline]
+pub fn build_development_transport(local_private_key: secio::SecioKeyPair)
+    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync), Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
+{
+     build_tcp_ws_secio_mplex_yamux(local_private_key)
+}
+
+/// Builds an implementation of `Transport` that is suitable for usage with the `Swarm`.
+///
+/// The implementation supports TCP/IP, WebSockets over TCP/IP, secio as the encryption layer,
+/// and mplex or yamux as the multiplexing layer.
+///
+/// > **Note**: If you ever need to express the type of this `Transport`.
+pub fn build_tcp_ws_secio_mplex_yamux(local_private_key: secio::SecioKeyPair)
+    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync), Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
+{
+    CommonTransport::new()
+        .with_upgrade(secio::SecioConfig::new(local_private_key))
+        .and_then(move |out, endpoint| {
+            let peer_id = out.remote_key.into_peer_id();
+            let peer_id2 = peer_id.clone();
+            let upgrade = core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new())
+                // TODO: use a single `.map` instead of two maps
+                .map_inbound(move |muxer| (peer_id, muxer))
+                .map_outbound(move |muxer| (peer_id2, muxer));
+
+            core::upgrade::apply(out.stream, upgrade, endpoint)
+                .map(|(id, muxer)| (id, core::muxing::StreamMuxerBox::new(muxer)))
+                .map_err(|e| e.into_io_error())
+        })
+        .with_timeout(Duration::from_secs(20))
+}
 
 /// Implementation of `Transport` that supports the most common protocols.
 ///
 /// The list currently is TCP/IP, DNS, and WebSockets. However this list could change in the
 /// future to get new transports.
 #[derive(Debug, Clone)]
-pub struct CommonTransport {
+struct CommonTransport {
     // The actual implementation of everything.
     inner: CommonTransportInner
 }
 
 #[cfg(all(not(target_os = "emscripten"), feature = "libp2p-websocket"))]
-pub type InnerImplementation = core::transport::OrTransport<dns::DnsConfig<tcp::TcpConfig>, websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>>;
+type InnerImplementation = core::transport::OrTransport<dns::DnsConfig<tcp::TcpConfig>, websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>>;
 #[cfg(all(not(target_os = "emscripten"), not(feature = "libp2p-websocket")))]
-pub type InnerImplementation = dns::DnsConfig<tcp::TcpConfig>;
+type InnerImplementation = dns::DnsConfig<tcp::TcpConfig>;
 #[cfg(target_os = "emscripten")]
-pub type InnerImplementation = websocket::BrowserWsConfig;
+type InnerImplementation = websocket::BrowserWsConfig;
 
 #[derive(Debug, Clone)]
 struct CommonTransportInner {

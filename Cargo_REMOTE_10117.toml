@@ -18,16 +18,15 @@ bytes = "0.4"
 futures = "0.1"
 multiaddr = { package = "parity-multiaddr", path = "./misc/multiaddr" }
 multihash = { package = "parity-multihash", path = "./misc/multihash" }
-libp2p-core = { version = "0.1.0", path = "./core" }
-libp2p-core-derive = { version = "0.1.0", path = "./misc/core-derive" }
+libp2p-mplex = { version = "0.1.0", path = "./muxers/mplex" }
+libp2p-identify = { version = "0.1.0", path = "./protocols/identify" }
 libp2p-kad = { version = "0.1.0", path = "./protocols/kad" }
 libp2p-floodsub = { version = "0.1.0", path = "./protocols/floodsub" }
-libp2p-gossipsub = { version = "0.1.0", path = "./protocols/gossipsub" }
-libp2p-identify = { version = "0.1.0", path = "./protocols/identify" }
-libp2p-mplex = { version = "0.1.0", path = "./muxers/mplex" }
 libp2p-ping = { version = "0.1.0", path = "./protocols/ping" }
 libp2p-plaintext = { version = "0.1.0", path = "./protocols/plaintext" }
 libp2p-ratelimit = { version = "0.1.0", path = "./transports/ratelimit" }
+libp2p-core = { version = "0.1.0", path = "./core" }
+libp2p-core-derive = { version = "0.1.0", path = "./misc/core-derive" }
 libp2p-secio = { version = "0.1.0", path = "./protocols/secio", default-features = false }
 libp2p-uds = { version = "0.1.0", path = "./transports/uds" }
 libp2p-websocket = { version = "0.1.0", path = "./transports/websocket", optional = true }
@@ -63,7 +62,6 @@ members = [
     "muxers/mplex",
     "muxers/yamux",
     "protocols/floodsub",
-    "protocols/gossipsub",
     "protocols/identify",
     "protocols/kad",
     "protocols/observed",

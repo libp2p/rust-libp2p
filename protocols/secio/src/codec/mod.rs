@@ -25,7 +25,7 @@ use self::decode::DecoderMiddleware;
 use self::encode::EncoderMiddleware;
 
 use aes_ctr::stream_cipher::StreamCipherCore;
-use algo_support::Digest;
+use crate::algo_support::Digest;
 use hmac::{self, Mac};
 use sha2::{Sha256, Sha512};
 use tokio_io::codec::length_delimited;
@@ -120,19 +120,16 @@ where
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio;
-    extern crate tokio_tcp;
-    use self::tokio::runtime::current_thread::Runtime;
-    use self::tokio_tcp::TcpListener;
-    use self::tokio_tcp::TcpStream;
-    use stream_cipher::{ctr, Cipher};
+    use tokio::runtime::current_thread::Runtime;
+    use tokio_tcp::{TcpListener, TcpStream};
+    use crate::stream_cipher::{ctr, Cipher};
     use super::full_codec;
     use super::DecoderMiddleware;
     use super::EncoderMiddleware;
     use super::Hmac;
-    use algo_support::Digest;
+    use crate::algo_support::Digest;
+    use crate::error::SecioError;
     use bytes::BytesMut;
-    use error::SecioError;
     use futures::sync::mpsc::channel;
     use futures::{Future, Sink, Stream, stream};
     use rand;

@@ -10,7 +10,7 @@ categories = ["network-programming", "asynchronous"]
 publish = false
 
 [dependencies]
-libp2p-core = { path = "../../core" }
-libp2p-secio = { path = "../../protocols/secio" }
+libp2p-core = { version = "0.1.0", path = "../../core" }
+libp2p-secio = { version = "0.1.0", path = "../../protocols/secio" }
 num_cpus = "1.8"
 rand = "0.6"

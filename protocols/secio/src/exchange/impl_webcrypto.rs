@@ -20,10 +20,10 @@
 
 //! Implementation of the key agreement process using the WebCrypto API.
 
+use crate::{KeyAgreement, SecioError};
 use futures::prelude::*;
 use futures::sync::oneshot;
 use stdweb::{self, Reference, web::ArrayBuffer, web::TypedArray};
-use {KeyAgreement, SecioError};
 
 /// Opaque private key type.
 pub type AgreementPrivateKey = Reference;

@@ -33,6 +33,7 @@ use crate::{InboundUpgrade, OutboundUpgrade, nodes::raw_swarm::ConnectedPoint};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::io::Error as IoError;
+use std::time::Duration;
 use tokio_io::{AsyncRead, AsyncWrite};
 
 pub mod and_then;
@@ -42,6 +43,7 @@ pub mod map;
 pub mod map_err;
 pub mod map_err_dial;
 pub mod memory;
+pub mod timeout;
 pub mod upgrade;
 
 pub use self::choice::OrTransport;
@@ -197,5 +199,35 @@ pub trait Transport {
         F: IntoFuture<Item = O, Error = IoError>
     {
         and_then::AndThen::new(self, upgrade)
+    }
+
+    /// Adds a timeout to the connection and upgrade steps for all the sockets created by
+    /// the transport.
+    #[inline]
+    fn with_timeout(self, timeout: Duration) -> timeout::TransportTimeout<Self>
+    where
+        Self: Sized,
+    {
+        timeout::TransportTimeout::new(self, timeout)
+    }
+
+    /// Adds a timeout to the connection and upgrade steps for all the outgoing sockets created
+    /// by the transport.
+    #[inline]
+    fn with_outbound_timeout(self, timeout: Duration) -> timeout::TransportTimeout<Self>
+    where
+        Self: Sized,
+    {
+        timeout::TransportTimeout::with_outgoing_timeout(self, timeout)
+    }
+
+    /// Adds a timeout to the connection and upgrade steps for all the incoming sockets created
+    /// by the transport.
+    #[inline]
+    fn with_inbound_timeout(self, timeout: Duration) -> timeout::TransportTimeout<Self>
+    where
+        Self: Sized,
+    {
+        timeout::TransportTimeout::with_ingoing_timeout(self, timeout)
     }
 }

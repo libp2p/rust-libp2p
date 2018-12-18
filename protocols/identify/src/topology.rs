@@ -18,47 +18,26 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Provides the `TransportExt` trait.
+use libp2p_core::{Multiaddr, PeerId};
+use libp2p_core::topology::{MemoryTopology, Topology};
 
-use ratelimit::RateLimited;
-use std::io;
-use tokio_executor::DefaultExecutor;
-use Transport;
-
-/// Trait automatically implemented on all objects that implement `Transport`. Provides some
-/// additional utilities.
-///
-/// # Example
-///
-/// ```
-/// use libp2p::TransportExt;
-/// use libp2p::tcp::TcpConfig;
-/// use std::time::Duration;
-///
-/// let _transport = TcpConfig::new()
-///     .with_rate_limit(1024 * 1024, 1024 * 1024);
-/// ```
-///
-pub trait TransportExt: Transport {
-    /// Adds a maximum transfer rate to the sockets created with the transport.
-    #[inline]
-    fn with_rate_limit(
-        self,
-        max_read_bytes_per_sec: usize,
-        max_write_bytes_per_sec: usize,
-    ) -> io::Result<RateLimited<Self>>
+/// Trait required on the topology for the identify system to store addresses.
+pub trait IdentifyTopology: Topology {
+    /// Adds to the topology an address discovered through identification.
+    ///
+    /// > **Note**: Will never be called with the local peer ID.
+    fn add_identify_discovered_addrs<TIter>(&mut self, peer: &PeerId, addr: TIter)
     where
-        Self: Sized,
-    {
-        RateLimited::new(
-            &mut DefaultExecutor::current(),
-            self,
-            max_read_bytes_per_sec,
-            max_write_bytes_per_sec,
-        )
-    }
-
-    // TODO: add methods to easily upgrade for secio/mplex/yamux
+        TIter: Iterator<Item = Multiaddr>;
 }
 
-impl<TTransport> TransportExt for TTransport where TTransport: Transport {}
+impl IdentifyTopology for MemoryTopology {
+    fn add_identify_discovered_addrs<TIter>(&mut self, peer: &PeerId, addr: TIter)
+    where
+        TIter: Iterator<Item = Multiaddr>,
+    {
+        for addr in addr {
+            self.add_address(peer.clone(), addr);
+        }
+    }
+}

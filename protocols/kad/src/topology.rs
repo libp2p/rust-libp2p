@@ -33,6 +33,8 @@ pub trait KademliaTopology: Topology {
     type GetProvidersIter: Iterator<Item = PeerId>;
 
     /// Adds an address discovered through Kademlia to the topology.
+    ///
+    /// > **Note**: Keep in mind that `peer` can the local peer.
     fn add_kad_discovered_address(&mut self, peer: PeerId, addr: Multiaddr,
                                   connection_ty: KadConnectionType);
 
@@ -40,6 +42,8 @@ pub trait KademliaTopology: Topology {
     ///
     /// The `max` parameter is the maximum number of results that we are going to use. If more
     /// than `max` elements are returned, they will be ignored.
+    ///
+    /// > **Note**: The results should include the local node.
     fn closest_peers(&mut self, target: &Multihash, max: usize) -> Self::ClosestPeersIter;
 
     /// Registers the given peer as provider of the resource with the given ID.
@@ -51,6 +55,8 @@ pub trait KademliaTopology: Topology {
     fn add_provider(&mut self, key: Multihash, peer_id: PeerId);
 
     /// Returns the list of providers that have been registered with `add_provider`.
+    ///
+    /// If the local node is a provider for `key`, our local peer ID should also be returned.
     fn get_providers(&mut self, key: &Multihash) -> Self::GetProvidersIter;
 }
 
@@ -60,7 +66,9 @@ impl KademliaTopology for MemoryTopology {
     type GetProvidersIter = vec::IntoIter<PeerId>;
 
     fn add_kad_discovered_address(&mut self, peer: PeerId, addr: Multiaddr, _: KadConnectionType) {
-        self.add_address(peer, addr)
+        if &peer != self.local_peer_id() {
+            self.add_address(peer, addr)
+        }
     }
 
     fn closest_peers(&mut self, target: &Multihash, _: usize) -> Self::ClosestPeersIter {
