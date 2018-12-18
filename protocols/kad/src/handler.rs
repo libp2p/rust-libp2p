@@ -343,6 +343,7 @@ where
 {
     type InEvent = KademliaHandlerIn<TUserData>;
     type OutEvent = KademliaHandlerEvent<TUserData>;
+    type Error = io::Error; // TODO: better error type?
     type Substream = TSubstream;
     type InboundProtocol = upgrade::EitherUpgrade<KademliaProtocolConfig, upgrade::DeniedUpgrade>;
     type OutboundProtocol = KademliaProtocolConfig;
