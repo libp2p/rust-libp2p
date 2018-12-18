@@ -33,8 +33,11 @@ use std::{fmt, io};
 use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
 
-pub struct GossipsubHandler<RawGossipsubHandler<TSubstream>,
-    FloodsubHandler<TSubstream>> {
+/// Combines the `RawGossipsubHandler` and `FloodsubHandler` into one
+/// protocol, to use as a handler for Gossipsub proper, which should be
+/// backwards-compatible with Floodsub.
+pub struct GossipsubHandler<RawGossipsubHandler,
+    FloodsubHandler> {
     gossipsub: RawGossipsubHandler<TSubstream>,
     floodsub: FloodsubHandler<TSubstream>,
 }
@@ -50,7 +53,7 @@ impl GossipsubHandler {
 }
 
 /// Protocol handler that handles communication with the remote for the
-/// gossipsub protocol (which is compatible with floodsub).
+/// gossipsub protocol.
 ///
 /// The handler will automatically open a substream with the remote for
 /// each request we make.
@@ -60,11 +63,11 @@ pub struct RawGossipsubHandler<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
-    /// Configuration for the floodsub protocol.
+    /// Configuration for the Gossipsub protocol.
     config: GossipsubConfig,
 
-    /// If true, we are trying to shut down the existing floodsub substream and should refuse any
-    /// incoming connection.
+    /// If true, we are trying to shut down the existing Gossipsub
+    /// substream and should refuse any incoming connection.
     shutting_down: bool,
 
     /// The active substreams.
@@ -84,7 +87,8 @@ where
     WaitingInput(Framed<TSubstream, GossipsubCodec>),
     /// Waiting to send a message to the remote.
     PendingSend(Framed<TSubstream, GossipsubCodec>, GossipsubRpc),
-    /// Waiting to flush the substream so that the data arrives to the remote.
+    /// Waiting to flush the substream so that the data arrives to the
+    /// remote.
     PendingFlush(Framed<TSubstream, GossipsubCodec>),
     /// The substream is being closed.
     Closing(Framed<TSubstream, GossipsubCodec>),
@@ -124,12 +128,12 @@ impl<TSubstream> ProtocolsHandler for RawGossipsubHandler<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
-    type InEvent = FloodsubRpc;
-    type OutEvent = FloodsubRpc;
+    type InEvent = GossipsubRpc;
+    type OutEvent = GossipsubRpc;
     type Substream = TSubstream;
-    type InboundProtocol = FloodsubConfig;
-    type OutboundProtocol = FloodsubConfig;
-    type OutboundOpenInfo = FloodsubRpc;
+    type InboundProtocol = GossipsubConfig;
+    type OutboundProtocol = GossipsubConfig;
+    type OutboundOpenInfo = GossipsubRpc;
 
     #[inline]
     fn listen_protocol(&self) -> Self::InboundProtocol {
@@ -158,7 +162,7 @@ where
     }
 
     #[inline]
-    fn inject_event(&mut self, message: FloodsubRpc) {
+    fn inject_event(&mut self, message: GossipsubRpc) {
         self.send_queue.push(message);
     }
 
@@ -247,12 +251,12 @@ where
     }
 }
 
-impl<TSubstream> fmt::Debug for FloodsubHandler<TSubstream>
+impl<TSubstream> fmt::Debug for RawGossipsubHandler<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        f.debug_struct("FloodsubHandler")
+        f.debug_struct("RawGossipsubHandler")
             .field("shutting_down", &self.shutting_down)
             .field("substreams", &self.substreams.len())
             .field("send_queue", &self.send_queue.len())
