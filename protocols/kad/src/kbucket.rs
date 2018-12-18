@@ -350,7 +350,7 @@ mod tests {
             ))
         };
 
-        let table = KBucketsTable::new(my_id, Duration::from_secs(5));
+        let mut table = KBucketsTable::new(my_id, Duration::from_secs(5));
         let _ = table.update(other_id.clone(), ());
 
         let res = table.find_closest(&other_id).collect::<Vec<_>>();
@@ -367,7 +367,7 @@ mod tests {
             Multihash::from_bytes(bytes).unwrap()
         };
 
-        let table = KBucketsTable::new(my_id.clone(), Duration::from_secs(5));
+        let mut table = KBucketsTable::new(my_id.clone(), Duration::from_secs(5));
         match table.update(my_id, ()) {
             UpdateOutcome::FailSelfUpdate => (),
             _ => panic!(),
@@ -393,7 +393,7 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        let table = KBucketsTable::new(my_id, Duration::from_secs(5));
+        let mut table = KBucketsTable::new(my_id, Duration::from_secs(5));
         let before_update = table.buckets().map(|b| b.last_update()).collect::<Vec<_>>();
 
         thread::sleep(Duration::from_secs(2));
@@ -434,7 +434,7 @@ mod tests {
         let first_node = fill_ids[0].clone();
         let second_node = fill_ids[1].clone();
 
-        let table = KBucketsTable::new(my_id.clone(), Duration::from_secs(1));
+        let mut table = KBucketsTable::new(my_id.clone(), Duration::from_secs(1));
 
         for (num, id) in fill_ids.drain(..MAX_NODES_PER_BUCKET).enumerate() {
             assert_eq!(table.update(id, ()), UpdateOutcome::Added);
