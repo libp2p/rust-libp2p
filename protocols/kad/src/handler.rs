@@ -19,14 +19,14 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use libp2p_core::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent};
+use libp2p_core::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr};
 use libp2p_core::{upgrade, either::EitherOutput, InboundUpgrade, OutboundUpgrade, PeerId};
 use multihash::Multihash;
 use protocol::{
     KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg,
     KademliaProtocolConfig,
 };
-use std::io;
+use std::{error, fmt, io};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Protocol handler that handles Kademlia communications with the remote.
@@ -80,7 +80,7 @@ where
     // TODO: add timeout
     OutWaitingAnswer(KadOutStreamSink<TSubstream>, TUserData),
     /// An error happened on the substream and we should report the error to the user.
-    OutReportError(io::Error, TUserData),
+    OutReportError(KademliaHandlerQueryErr, TUserData),
     /// The substream is being closed.
     OutClosing(KadOutStreamSink<TSubstream>),
     /// Waiting for a request from the remote.
@@ -168,7 +168,7 @@ pub enum KademliaHandlerEvent<TUserData> {
     /// An error happened when performing a query.
     QueryError {
         /// The error that happened.
-        error: io::Error,
+        error: KademliaHandlerQueryErr,
         /// The user data passed to the query.
         user_data: TUserData,
     },
@@ -180,6 +180,50 @@ pub enum KademliaHandlerEvent<TUserData> {
         /// Known provider for this key.
         provider_peer: KadPeer,
     },
+}
+
+/// Error that can happen when requesting an RPC query.
+#[derive(Debug)]
+pub enum KademliaHandlerQueryErr {
+    /// Error while trying to perform the query.
+    Upgrade(ProtocolsHandlerUpgrErr<io::Error>),
+    /// Received an answer that doesn't correspond to the request.
+    UnexpectedMessage,
+    /// I/O error in the substream.
+    Io(io::Error),
+}
+
+impl fmt::Display for KademliaHandlerQueryErr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            KademliaHandlerQueryErr::Upgrade(err) => {
+                write!(f, "Error while performing Kademlia query: {}", err)
+            },
+            KademliaHandlerQueryErr::UnexpectedMessage => {
+                write!(f, "Remote answered our Kademlia RPC query with the wrong message type")
+            },
+            KademliaHandlerQueryErr::Io(err) => {
+                write!(f, "I/O error during a Kademlia RPC query: {}", err)
+            },
+        }
+    }
+}
+
+impl error::Error for KademliaHandlerQueryErr {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            KademliaHandlerQueryErr::Upgrade(err) => Some(err),
+            KademliaHandlerQueryErr::UnexpectedMessage => None,
+            KademliaHandlerQueryErr::Io(err) => Some(err),
+        }
+    }
+}
+
+impl From<ProtocolsHandlerUpgrErr<io::Error>> for KademliaHandlerQueryErr {
+    #[inline]
+    fn from(err: ProtocolsHandlerUpgrErr<io::Error>) -> Self {
+        KademliaHandlerQueryErr::Upgrade(err)
+    }
 }
 
 /// Event to send to the handler.
@@ -434,13 +478,13 @@ where
     fn inject_dial_upgrade_error(
         &mut self,
         (_, user_data): Self::OutboundOpenInfo,
-        error: io::Error,
+        error: ProtocolsHandlerUpgrErr<io::Error>,
     ) {
         // TODO: cache the fact that the remote doesn't support kademlia at all, so that we don't
         //       continue trying
         if let Some(user_data) = user_data {
             self.substreams
-                .push(SubstreamState::OutReportError(error, user_data));
+                .push(SubstreamState::OutReportError(error.into(), user_data));
         }
     }
 
@@ -553,8 +597,10 @@ where
                 ),
                 Err(error) => {
                     let event = if let Some(user_data) = user_data {
-                        let ev = KademliaHandlerEvent::QueryError { error, user_data };
-                        Some(ProtocolsHandlerEvent::Custom(ev))
+                        Some(ProtocolsHandlerEvent::Custom(KademliaHandlerEvent::QueryError {
+                            error: KademliaHandlerQueryErr::Io(error),
+                            user_data
+                        }))
                     } else {
                         None
                     };
@@ -583,8 +629,10 @@ where
                 ),
                 Err(error) => {
                     let event = if let Some(user_data) = user_data {
-                        let ev = KademliaHandlerEvent::QueryError { error, user_data };
-                        Some(ProtocolsHandlerEvent::Custom(ev))
+                        Some(ProtocolsHandlerEvent::Custom(KademliaHandlerEvent::QueryError {
+                            error: KademliaHandlerQueryErr::Io(error),
+                            user_data,
+                        }))
                     } else {
                         None
                     };
@@ -609,12 +657,17 @@ where
                 false,
             ),
             Err(error) => {
-                let event = KademliaHandlerEvent::QueryError { error, user_data };
+                let event = KademliaHandlerEvent::QueryError {
+                    error: KademliaHandlerQueryErr::Io(error),
+                    user_data,
+                };
                 (None, Some(ProtocolsHandlerEvent::Custom(event)), false)
             }
             Ok(Async::Ready(None)) => {
-                let error = io::Error::new(io::ErrorKind::Other, "unexpected EOF");
-                let event = KademliaHandlerEvent::QueryError { error, user_data };
+                let event = KademliaHandlerEvent::QueryError {
+                    error: KademliaHandlerQueryErr::Io(io::ErrorKind::UnexpectedEof.into()),
+                    user_data,
+                };
                 (None, Some(ProtocolsHandlerEvent::Custom(event)), false)
             }
         },
@@ -722,12 +775,8 @@ fn process_kad_response<TUserData>(
     match event {
         KadResponseMsg::Pong => {
             // We never send out pings.
-            let err = io::Error::new(
-                io::ErrorKind::InvalidData,
-                "received unexpected PONG message",
-            );
             KademliaHandlerEvent::QueryError {
-                error: err,
+                error: KademliaHandlerQueryErr::UnexpectedMessage,
                 user_data,
             }
         }
