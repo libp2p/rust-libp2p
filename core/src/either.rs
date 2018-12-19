@@ -59,13 +59,12 @@ where
 }
 
 /// Implements `AsyncRead` and `AsyncWrite` and dispatches all method calls to
-/// either a `First` or `Second` `StreamMuxer` that is used to handle an
-/// `Output` (which is an upgraded `Substream`).
+/// either a `First` or `Second`, each of which contains arbitrary data.
 #[derive(Debug, Copy, Clone)]
 pub enum EitherOutput<A, B> {
-    /// The  first `StreamMuxer` option to handle an outbound substream.
+    /// The  first variant containing bytes.
     First(A),
-    /// The second `StreamMuxer` option.
+    /// The second variant containing bytes.
     Second(B),
 }
 
