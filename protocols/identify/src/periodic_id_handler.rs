@@ -21,7 +21,7 @@
 use crate::protocol::{RemoteInfo, IdentifyProtocolConfig};
 use futures::prelude::*;
 use libp2p_core::{
-    protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent},
+    protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
     upgrade::{DeniedUpgrade, OutboundUpgrade}
 };
 use std::{io, marker::PhantomData, time::{Duration, Instant}};
@@ -59,7 +59,7 @@ pub enum PeriodicIdHandlerEvent {
     /// We obtained identification information from the remote
     Identified(RemoteInfo),
     /// Failed to identify the remote.
-    IdentificationError(io::Error),
+    IdentificationError(ProtocolsHandlerUpgrErr<io::Error>),
 }
 
 impl<TSubstream> PeriodicIdHandler<TSubstream> {
@@ -110,7 +110,7 @@ where
     fn inject_inbound_closed(&mut self) {}
 
     #[inline]
-    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, err: io::Error) {
+    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, err: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {
         self.pending_result = Some(PeriodicIdHandlerEvent::IdentificationError(err));
         if let Some(ref mut next_id) = self.next_id {
             next_id.reset(Instant::now() + TRY_AGAIN_ON_ERR);

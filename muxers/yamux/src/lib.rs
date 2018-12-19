@@ -21,15 +21,9 @@
 //! Implements the Yamux multiplexing protocol for libp2p, see also the
 //! [specification](https://github.com/hashicorp/yamux/blob/master/spec.md).
 
-extern crate futures;
-#[macro_use]
-extern crate log;
-extern crate libp2p_core;
-extern crate tokio_io;
-extern crate yamux;
-
 use futures::{future::{self, FutureResult}, prelude::*};
 use libp2p_core::{muxing::Shutdown, upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}};
+use log::error;
 use std::{io, iter};
 use std::io::{Error as IoError};
 use tokio_io::{AsyncRead, AsyncWrite};
