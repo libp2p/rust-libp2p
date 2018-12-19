@@ -36,7 +36,7 @@
 //!
 //! An upgrade is performed in two steps:
 //!
-//! - A protocol negotiation step. The `UpgradeInfo::protocol_names` method is called to determine
+//! - A protocol negotiation step. The `UpgradeInfo::protocol_info` method is called to determine
 //!   which protocols are supported by the trait implementation. The `multistream-select` protocol
 //!   is used in order to agree on which protocol to use amongst the ones supported.
 //!
@@ -64,7 +64,6 @@ mod error;
 mod map;
 mod select;
 
-use bytes::Bytes;
 use futures::future::Future;
 
 pub use self::{
@@ -76,18 +75,28 @@ pub use self::{
     select::SelectUpgrade
 };
 
+/// Types serving as protocol names.
+pub trait ProtocolName {
+    /// The protocol name as bytes.
+    fn protocol_name(&self) -> &[u8];
+}
+
+impl<T: AsRef<[u8]>> ProtocolName for T {
+    fn protocol_name(&self) -> &[u8] {
+        self.as_ref()
+    }
+}
+
 /// Common trait for upgrades that can be applied on inbound substreams, outbound substreams,
 /// or both.
 pub trait UpgradeInfo {
     /// Opaque type representing a negotiable protocol.
-    type UpgradeId;
-    /// Iterator returned by `protocol_names`.
-    type NamesIter: Iterator<Item = (Bytes, Self::UpgradeId)>;
+    type Info: ProtocolName;
+    /// Iterator returned by `protocol_info`.
+    type InfoIter: IntoIterator<Item = Self::Info>;
 
     /// Returns the list of protocols that are supported. Used during the negotiation process.
-    ///
-    /// Each item returned by the iterator is a pair of a protocol name and an opaque identifier.
-    fn protocol_names(&self) -> Self::NamesIter;
+    fn protocol_info(&self) -> Self::InfoIter;
 }
 
 /// Possible upgrade on an inbound connection or substream.
@@ -102,8 +111,8 @@ pub trait InboundUpgrade<C>: UpgradeInfo {
     /// After we have determined that the remote supports one of the protocols we support, this
     /// method is called to start the handshake.
     ///
-    /// The `id` is the identifier of the protocol, as produced by `protocol_names()`.
-    fn upgrade_inbound(self, socket: C, id: Self::UpgradeId) -> Self::Future;
+    /// The `info` is the identifier of the protocol, as produced by `protocol_info`.
+    fn upgrade_inbound(self, socket: C, info: Self::Info) -> Self::Future;
 }
 
 /// Extension trait for `InboundUpgrade`. Automatically implemented on all types that implement
@@ -142,8 +151,8 @@ pub trait OutboundUpgrade<C>: UpgradeInfo {
     /// After we have determined that the remote supports one of the protocols we support, this
     /// method is called to start the handshake.
     ///
-    /// The `id` is the identifier of the protocol, as produced by `protocol_names()`.
-    fn upgrade_outbound(self, socket: C, id: Self::UpgradeId) -> Self::Future;
+    /// The `info` is the identifier of the protocol, as produced by `protocol_info`.
+    fn upgrade_outbound(self, socket: C, info: Self::Info) -> Self::Future;
 }
 
 /// Extention trait for `OutboundUpgrade`. Automatically implemented on all types that implement

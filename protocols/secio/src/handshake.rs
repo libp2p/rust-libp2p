@@ -18,18 +18,19 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use algo_support;
+use crate::algo_support;
 use bytes::BytesMut;
-use codec::{full_codec, FullCodec, Hmac};
-use stream_cipher::{Cipher, ctr};
+use crate::codec::{full_codec, FullCodec, Hmac};
+use crate::stream_cipher::{Cipher, ctr};
 use ed25519_dalek::{PublicKey as Ed25519PublicKey, Signature as Ed25519Signature};
-use error::SecioError;
-use exchange;
+use crate::error::SecioError;
+use crate::exchange;
 use futures::future;
 use futures::sink::Sink;
 use futures::stream::Stream;
 use futures::Future;
 use libp2p_core::PublicKey;
+use log::{debug, trace};
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
 use protobuf::Message as ProtobufMessage;
 use rand::{self, RngCore};
@@ -42,12 +43,12 @@ use secp256k1;
 use sha2::{Digest as ShaDigestTrait, Sha256, Sha512};
 use std::cmp::{self, Ordering};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use structs_proto::{Exchange, Propose};
+use crate::structs_proto::{Exchange, Propose};
 use tokio_io::codec::length_delimited;
 use tokio_io::{AsyncRead, AsyncWrite};
 #[cfg(all(feature = "ring", not(target_os = "emscripten")))]
 use untrusted::Input as UntrustedInput;
-use {KeyAgreement, SecioConfig, SecioKeyPairInner};
+use crate::{KeyAgreement, SecioConfig, SecioKeyPairInner};
 
 // This struct contains the whole context of a handshake, and is filled progressively
 // throughout the various parts of the handshake.
@@ -627,19 +628,16 @@ where ::hmac::Hmac<D>: Clone {
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio;
-    extern crate tokio_tcp;
     use bytes::BytesMut;
-    use self::tokio::runtime::current_thread::Runtime;
-    use self::tokio_tcp::TcpListener;
-    use self::tokio_tcp::TcpStream;
+    use tokio::runtime::current_thread::Runtime;
+    use tokio_tcp::{TcpListener, TcpStream};
     use crate::SecioError;
     use super::handshake;
     use super::stretch_key;
-    use algo_support::Digest;
-    use codec::Hmac;
+    use crate::algo_support::Digest;
+    use crate::codec::Hmac;
     use futures::prelude::*;
-    use {SecioConfig, SecioKeyPair};
+    use crate::{SecioConfig, SecioKeyPair};
 
     #[test]
     #[cfg(all(feature = "ring", not(target_os = "emscripten")))]

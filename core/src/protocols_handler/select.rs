@@ -19,13 +19,15 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
+    either::EitherError,
     either::EitherOutput,
-    protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent},
+    protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
     upgrade::{
         InboundUpgrade,
         OutboundUpgrade,
         EitherUpgrade,
-        SelectUpgrade
+        SelectUpgrade,
+        UpgradeError,
     }
 };
 use futures::prelude::*;
@@ -112,10 +114,44 @@ where
     }
 
     #[inline]
-    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: io::Error) {
-        match info {
-            EitherOutput::First(info) => self.proto1.inject_dial_upgrade_error(info, error),
-            EitherOutput::Second(info) => self.proto2.inject_dial_upgrade_error(info, error),
+    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {
+        match (info, error) {
+            (EitherOutput::First(info), ProtocolsHandlerUpgrErr::MuxerDeniedSubstream) => {
+                self.proto1.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::MuxerDeniedSubstream)
+            },
+            (EitherOutput::First(info), ProtocolsHandlerUpgrErr::Timer) => {
+                self.proto1.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Timer)
+            },
+            (EitherOutput::First(info), ProtocolsHandlerUpgrErr::Timeout) => {
+                self.proto1.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Timeout)
+            },
+            (EitherOutput::First(info), ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(err))) => {
+                self.proto1.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(err)))
+            },
+            (EitherOutput::First(info), ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(err)))) => {
+                self.proto1.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(err)))
+            },
+            (EitherOutput::First(_), ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(_)))) => {
+                panic!("Wrong API usage; the upgrade error doesn't match the outbound open info");
+            },
+            (EitherOutput::Second(info), ProtocolsHandlerUpgrErr::MuxerDeniedSubstream) => {
+                self.proto2.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::MuxerDeniedSubstream)
+            },
+            (EitherOutput::Second(info), ProtocolsHandlerUpgrErr::Timeout) => {
+                self.proto2.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Timeout)
+            },
+            (EitherOutput::Second(info), ProtocolsHandlerUpgrErr::Timer) => {
+                self.proto2.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Timer)
+            },
+            (EitherOutput::Second(info), ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(err))) => {
+                self.proto2.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(err)))
+            },
+            (EitherOutput::Second(info), ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(err)))) => {
+                self.proto2.inject_dial_upgrade_error(info, ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(err)))
+            },
+            (EitherOutput::Second(_), ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(_)))) => {
+                panic!("Wrong API usage; the upgrade error doesn't match the outbound open info");
+            },
         }
     }
 

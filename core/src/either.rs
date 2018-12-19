@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{muxing::{Shutdown, StreamMuxer}, Multiaddr};
+use crate::{muxing::{Shutdown, StreamMuxer}, Multiaddr, ProtocolName};
 use futures::prelude::*;
 use std::{fmt, io::{Error as IoError, Read, Write}};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -342,3 +342,14 @@ where
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum EitherName<A, B> { A(A), B(B) }
+
+impl<A: ProtocolName, B: ProtocolName> ProtocolName for EitherName<A, B> {
+    fn protocol_name(&self) -> &[u8] {
+        match self {
+            EitherName::A(a) => a.protocol_name(),
+            EitherName::B(b) => b.protocol_name()
+        }
+    }
+}

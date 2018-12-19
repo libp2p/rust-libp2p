@@ -29,19 +29,12 @@
 //! through it.
 //!
 //! ```no_run
-//! extern crate futures;
-//! extern crate tokio;
-//! extern crate tokio_io;
-//! extern crate libp2p_core;
-//! extern crate libp2p_secio;
-//! extern crate libp2p_tcp_transport;
-//!
 //! # fn main() {
 //! use futures::Future;
 //! use libp2p_secio::{SecioConfig, SecioKeyPair, SecioOutput};
 //! use libp2p_core::{Multiaddr, upgrade::apply_inbound};
 //! use libp2p_core::transport::Transport;
-//! use libp2p_tcp_transport::TcpConfig;
+//! use libp2p_tcp::TcpConfig;
 //! use tokio_io::io::write_all;
 //! use tokio::runtime::current_thread::Runtime;
 //!
@@ -82,45 +75,22 @@
 
 #![recursion_limit = "128"]
 
-extern crate aes_ctr;
-#[cfg(feature = "secp256k1")]
-extern crate asn1_der;
-extern crate bytes;
-extern crate ctr;
-extern crate ed25519_dalek;
-extern crate futures;
-extern crate hmac;
-extern crate libp2p_core;
-#[macro_use]
-extern crate log;
-extern crate protobuf;
-extern crate rand;
-#[cfg(not(target_os = "emscripten"))]
-extern crate ring;
-extern crate rw_stream_sink;
-#[cfg(feature = "secp256k1")]
-extern crate secp256k1;
-extern crate sha2;
+// TODO: unfortunately the `js!` macro of stdweb depends on tons of "private" macros, which we
+//       don't want to import manually
 #[cfg(target_os = "emscripten")]
 #[macro_use]
 extern crate stdweb;
-extern crate tokio_io;
-extern crate twofish;
-#[cfg(not(target_os = "emscripten"))]
-extern crate untrusted;
 
-#[cfg(feature = "aes-all")]
-#[macro_use]
-extern crate lazy_static;
 pub use self::error::SecioError;
 
 #[cfg(feature = "secp256k1")]
 use asn1_der::{traits::FromDerEncoded, traits::FromDerObject, DerObject};
-use bytes::{Bytes, BytesMut};
+use bytes::BytesMut;
 use ed25519_dalek::Keypair as Ed25519KeyPair;
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
 use libp2p_core::{PeerId, PublicKey, upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade}};
+use log::debug;
 #[cfg(all(feature = "rsa", not(target_os = "emscripten")))]
 use ring::signature::RSAKeyPair;
 use rw_stream_sink::RwStreamSink;
@@ -140,9 +110,9 @@ mod handshake;
 mod structs_proto;
 mod stream_cipher;
 
-pub use algo_support::Digest;
-pub use exchange::KeyAgreement;
-pub use stream_cipher::Cipher;
+pub use crate::algo_support::Digest;
+pub use crate::exchange::KeyAgreement;
+pub use crate::stream_cipher::Cipher;
 
 /// Implementation of the `ConnectionUpgrade` trait of `libp2p_core`. Automatically applies
 /// secio on any connection.
@@ -193,7 +163,7 @@ impl SecioConfig {
         self
     }
 
-    fn handshake<T>(self, socket: T, _: ()) -> impl Future<Item=SecioOutput<T>, Error=SecioError>
+    fn handshake<T>(self, socket: T) -> impl Future<Item=SecioOutput<T>, Error=SecioError>
     where
         T: AsyncRead + AsyncWrite + Send + 'static
     {
@@ -371,11 +341,11 @@ where
 }
 
 impl UpgradeInfo for SecioConfig {
-    type UpgradeId = ();
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once(("/secio/1.0.0".into(), ()))
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once(b"/secio/1.0.0")
     }
 }
 
@@ -387,8 +357,8 @@ where
     type Error = SecioError;
     type Future = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
 
-    fn upgrade_inbound(self, socket: T, id: Self::UpgradeId) -> Self::Future {
-        Box::new(self.handshake(socket, id))
+    fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
+        Box::new(self.handshake(socket))
     }
 }
 
@@ -400,8 +370,8 @@ where
     type Error = SecioError;
     type Future = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
 
-    fn upgrade_outbound(self, socket: T, id: Self::UpgradeId) -> Self::Future {
-        Box::new(self.handshake(socket, id))
+    fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
+        Box::new(self.handshake(socket))
     }
 }
 

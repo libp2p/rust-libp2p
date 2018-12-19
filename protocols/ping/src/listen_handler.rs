@@ -18,16 +18,18 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::protocol::{Ping, PingListener};
 use arrayvec::ArrayVec;
 use futures::prelude::*;
 use libp2p_core::{
     InboundUpgrade,
+    OutboundUpgrade,
     ProtocolsHandler,
     ProtocolsHandlerEvent,
+    protocols_handler::ProtocolsHandlerUpgrErr,
     upgrade::DeniedUpgrade
 };
 use log::warn;
-use protocol::{Ping, PingListener};
 use std::io;
 use tokio_io::{AsyncRead, AsyncWrite};
 use void::{Void, unreachable};
@@ -101,7 +103,7 @@ where
     fn inject_inbound_closed(&mut self) {}
 
     #[inline]
-    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: io::Error) {}
+    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {}
 
     #[inline]
     fn shutdown(&mut self) {

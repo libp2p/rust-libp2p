@@ -22,6 +22,7 @@ use crate::protocol::{FloodsubCodec, FloodsubConfig, FloodsubRpc};
 use futures::prelude::*;
 use libp2p_core::{
     ProtocolsHandler, ProtocolsHandlerEvent,
+    protocols_handler::ProtocolsHandlerUpgrErr,
     upgrade::{InboundUpgrade, OutboundUpgrade}
 };
 use smallvec::SmallVec;
@@ -144,7 +145,7 @@ where
     fn inject_inbound_closed(&mut self) {}
 
     #[inline]
-    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: io::Error) {}
+    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {}
 
     #[inline]
     fn shutdown(&mut self) {

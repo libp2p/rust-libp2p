@@ -21,7 +21,7 @@
 use muxing::StreamMuxer;
 use nodes::node::{NodeEvent, NodeStream, Substream};
 use futures::{prelude::*, stream::Fuse};
-use std::{io::Error as IoError, fmt};
+use std::{error, fmt, io};
 
 /// Handler for the substreams of a node.
 // TODO: right now it is possible for a node handler to be built, then shut down right after if we
@@ -32,6 +32,8 @@ pub trait NodeHandler {
     type InEvent;
     /// Custom event that can be produced by the handler and that will be returned by the swarm.
     type OutEvent;
+    /// Error that can happen during the processing of the node.
+    type Error;
     /// The type of the substream containing the data.
     type Substream;
     /// Information about a substream. Can be sent to the handler through a `NodeHandlerEndpoint`,
@@ -74,7 +76,7 @@ pub trait NodeHandler {
 
     /// Should behave like `Stream::poll()`. Should close if no more event can be produced and the
     /// node should be closed.
-    fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>>, IoError>;
+    fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>>, Self::Error>;
 }
 
 /// Endpoint for a received substream.
@@ -248,7 +250,7 @@ where
     THandler: NodeHandler<Substream = Substream<TMuxer>>,
 {
     type Item = THandler::OutEvent;
-    type Error = IoError;
+    type Error = HandledNodeError<THandler::Error>;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         loop {
@@ -258,7 +260,7 @@ where
 
             let mut node_not_ready = false;
 
-            match self.node.poll()? {
+            match self.node.poll().map_err(HandledNodeError::Node)? {
                 Async::NotReady => node_not_ready = true,
                 Async::Ready(Some(NodeEvent::InboundSubstream { substream })) => {
                     self.handler.inject_substream(substream, NodeHandlerEndpoint::Listener)
@@ -281,7 +283,7 @@ where
                 }
             }
 
-            match if self.handler_is_done { Async::Ready(None) } else { self.handler.poll()? } {
+            match if self.handler_is_done { Async::Ready(None) } else { self.handler.poll().map_err(HandledNodeError::Handler)? } {
                 Async::NotReady => {
                     if node_not_ready {
                         break
@@ -316,13 +318,45 @@ where
     }
 }
 
+/// Error that can happen when polling a `HandledNode`.
+#[derive(Debug)]
+pub enum HandledNodeError<THandlerErr> {
+    /// An error happend in the stream muxer.
+    // TODO: eventually this should also be a custom error
+    Node(io::Error),
+    /// An error happened in the handler of the connection to the node.
+    Handler(THandlerErr),
+}
+
+impl<THandlerErr> fmt::Display for HandledNodeError<THandlerErr>
+where THandlerErr: fmt::Display
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            HandledNodeError::Node(err) => write!(f, "{}", err),
+            HandledNodeError::Handler(err) => write!(f, "{}", err),
+        }
+    }
+}
+
+impl<THandlerErr> error::Error for HandledNodeError<THandlerErr>
+where THandlerErr: error::Error + 'static
+{
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            HandledNodeError::Node(err) => Some(err),
+            HandledNodeError::Handler(err) => Some(err),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use tokio::runtime::current_thread;
     use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
     use tests::dummy_handler::{Handler, HandlerState, InEvent, OutEvent, TestHandledNode};
-    use std::marker::PhantomData;
+    use std::{io, marker::PhantomData};
 
     struct TestBuilder {
         muxer: DummyMuxer,
@@ -389,6 +423,7 @@ mod tests {
             type InEvent = ();
             type OutEvent = ();
             type Substream = T;
+            type Error = io::Error;
             type OutboundOpenInfo = ();
             fn inject_substream(&mut self, _: Self::Substream, _: NodeHandlerEndpoint<Self::OutboundOpenInfo>) { panic!() }
             fn inject_inbound_closed(&mut self) {
@@ -405,7 +440,7 @@ mod tests {
                 assert!(self.substream_attempt_cancelled);
                 self.shutdown_called = true;
             }
-            fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<(), ()>>, IoError> {
+            fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<(), ()>>, io::Error> {
                 if self.shutdown_called {
                     Ok(Async::Ready(None))
                 } else if !self.did_substream_attempt {

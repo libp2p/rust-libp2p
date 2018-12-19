@@ -27,8 +27,8 @@
 //! Example:
 //!
 //! ```
-//! extern crate libp2p_tcp_transport;
-//! use libp2p_tcp_transport::TcpConfig;
+//! extern crate libp2p_tcp;
+//! use libp2p_tcp::TcpConfig;
 //!
 //! # fn main() {
 //! let tcp = TcpConfig::new();

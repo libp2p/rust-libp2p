@@ -30,7 +30,10 @@ use crate::{
             PeerMut as CollecPeerMut,
             ReachAttemptId
         },
-        handled_node::NodeHandler,
+        handled_node::{
+            HandledNodeError,
+            NodeHandler
+        },
         node::Substream
     },
     nodes::listeners::{ListenersEvent, ListenersStream},
@@ -39,14 +42,15 @@ use crate::{
 use fnv::FnvHashMap;
 use futures::{prelude::*, future};
 use std::{
-    fmt,
     collections::hash_map::{Entry, OccupiedEntry},
+    error,
+    fmt,
     io::{Error as IoError, ErrorKind as IoErrorKind}
 };
 
 /// Implementation of `Stream` that handles the nodes.
 #[derive(Debug)]
-pub struct RawSwarm<TTrans, TInEvent, TOutEvent, THandler>
+pub struct RawSwarm<TTrans, TInEvent, TOutEvent, THandler, THandlerErr>
 where
     TTrans: Transport,
 {
@@ -54,7 +58,7 @@ where
     listeners: ListenersStream<TTrans>,
 
     /// The nodes currently active.
-    active_nodes: CollectionStream<TInEvent, TOutEvent, THandler>,
+    active_nodes: CollectionStream<TInEvent, TOutEvent, THandler, RawSwarmReachError, THandlerErr>,
 
     /// The reach attempts of the swarm.
     /// This needs to be a separate struct in order to handle multiple mutable borrows issues.
@@ -89,7 +93,7 @@ struct OutReachAttempt {
 }
 
 /// Event that can happen on the `RawSwarm`.
-pub enum RawSwarmEvent<'a, TTrans: 'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a>
+pub enum RawSwarmEvent<'a, TTrans: 'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a, THandlerErr: 'a>
 where
     TTrans: Transport,
 {
@@ -104,7 +108,7 @@ where
     },
 
     /// A new connection arrived on a listener.
-    IncomingConnection(IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler>),
+    IncomingConnection(IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>),
 
     /// A new connection was arriving on a listener, but an error happened when negotiating it.
     ///
@@ -150,14 +154,14 @@ where
         endpoint: ConnectedPoint,
     },
 
-    /// The muxer of a node has produced an error.
+    /// The handler of a node has produced an error.
     NodeError {
         /// Identifier of the node.
         peer_id: PeerId,
         /// Endpoint we were connected to.
         endpoint: ConnectedPoint,
         /// The error that happened.
-        error: IoError,
+        error: HandledNodeError<THandlerErr>,
     },
 
     /// Failed to reach a peer that we were trying to dial.
@@ -174,7 +178,7 @@ where
         multiaddr: Multiaddr,
 
         /// The error that happened.
-        error: IoError,
+        error: RawSwarmReachError,
     },
 
     /// Failed to reach a peer that we were trying to dial.
@@ -198,10 +202,11 @@ where
     },
 }
 
-impl<'a, TTrans, TInEvent, TOutEvent, THandler> fmt::Debug for RawSwarmEvent<'a, TTrans, TInEvent, TOutEvent, THandler>
+impl<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr> fmt::Debug for RawSwarmEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>
 where
     TOutEvent: fmt::Debug,
     TTrans: Transport,
+    THandlerErr: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
@@ -274,9 +279,42 @@ where
     }
 }
 
+/// Error that can happen when trying to reach a node.
+#[derive(Debug)]
+pub enum RawSwarmReachError {
+    /// Error in the transport layer.
+    // TODO: better error type
+    Transport(IoError),
+    /// We successfully reached the peer, but there was a mismatch between the expected id and the
+    /// actual id of the peer.
+    PeerIdMismatch {
+        /// The peer id that the node reports.
+        obtained: PeerId,
+    }
+}
+
+impl fmt::Display for RawSwarmReachError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            RawSwarmReachError::Transport(err) => write!(f, "{}", err),
+            RawSwarmReachError::PeerIdMismatch { obtained } => {
+                write!(f, "Peer ID mismatch, obtained: {}", obtained.to_base58())
+            },
+        }
+    }
+}
+
+impl error::Error for RawSwarmReachError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            RawSwarmReachError::Transport(err) => Some(err),
+            RawSwarmReachError::PeerIdMismatch { .. } => None,
+        }
+    }
+}
 
 /// A new connection arrived on a listener.
-pub struct IncomingConnectionEvent<'a, TTrans: 'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a>
+pub struct IncomingConnectionEvent<'a, TTrans: 'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a, THandlerErr: 'a>
 where TTrans: Transport
 {
     /// The produced upgrade.
@@ -286,17 +324,19 @@ where TTrans: Transport
     /// Address used to send back data to the remote.
     send_back_addr: Multiaddr,
     /// Reference to the `active_nodes` field of the swarm.
-    active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent, THandler>,
+    active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent, THandler, RawSwarmReachError, THandlerErr>,
     /// Reference to the `other_reach_attempts` field of the swarm.
     other_reach_attempts: &'a mut Vec<(ReachAttemptId, ConnectedPoint)>,
 }
 
-impl<'a, TTrans, TInEvent, TOutEvent, TMuxer, THandler> IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler>
+impl<'a, TTrans, TInEvent, TOutEvent, TMuxer, THandler, THandlerErr>
+    IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>
 where
     TTrans: Transport<Output = (PeerId, TMuxer)>,
     TTrans::ListenerUpgrade: Send + 'static,
-    THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
+    THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
     THandler::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
+    THandlerErr: error::Error + Send + 'static,
     TMuxer: StreamMuxer + Send + Sync + 'static,
     TMuxer::OutboundSubstream: Send,
     TMuxer::Substream: Send,
@@ -315,7 +355,7 @@ where
     {
         let connected_point = self.to_connected_point();
         let handler = builder(&connected_point);
-        let id = self.active_nodes.add_reach_attempt(self.upgrade, handler);
+        let id = self.active_nodes.add_reach_attempt(self.upgrade.map_err(RawSwarmReachError::Transport), handler);
         self.other_reach_attempts.push((
             id,
             connected_point,
@@ -323,7 +363,7 @@ where
     }
 }
 
-impl<'a, TTrans, TInEvent, TOutEvent, THandler> IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler>
+impl<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr> IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>
 where TTrans: Transport
 {
     /// Address of the listener that received the connection.
@@ -409,13 +449,14 @@ impl ConnectedPoint {
     }
 }
 
-impl<TTrans, TInEvent, TOutEvent, TMuxer, THandler>
-    RawSwarm<TTrans, TInEvent, TOutEvent, THandler>
+impl<TTrans, TInEvent, TOutEvent, TMuxer, THandler, THandlerErr>
+    RawSwarm<TTrans, TInEvent, TOutEvent, THandler, THandlerErr>
 where
     TTrans: Transport + Clone,
     TMuxer: StreamMuxer,
-    THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
+    THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
     THandler::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
+    THandlerErr: error::Error + Send + 'static,
 {
     /// Creates a new node events stream.
     #[inline]
@@ -497,7 +538,7 @@ where
         };
 
         let connected_point = ConnectedPoint::Dialer { address: addr };
-        let reach_id = self.active_nodes.add_reach_attempt(future, handler);
+        let reach_id = self.active_nodes.add_reach_attempt(future.map_err(RawSwarmReachError::Transport), handler);
         self.reach_attempts.other_reach_attempts.push((reach_id, connected_point));
         Ok(())
     }
@@ -527,7 +568,7 @@ where
 
     /// Grants access to a struct that represents a peer.
     #[inline]
-    pub fn peer(&mut self, peer_id: PeerId) -> Peer<TTrans, TInEvent, TOutEvent, THandler> {
+    pub fn peer(&mut self, peer_id: PeerId) -> Peer<TTrans, TInEvent, TOutEvent, THandler, THandlerErr> {
         // TODO: we do `peer_mut(...).is_some()` followed with `peer_mut(...).unwrap()`, otherwise
         // the borrow checker yells at us.
 
@@ -579,20 +620,21 @@ where
         let reach_id = match self.transport().clone().dial(first.clone()) {
             Ok(fut) => {
                 let expected_peer_id = peer_id.clone();
-                let fut = fut.and_then(move |(actual_peer_id, muxer)| {
-                    if actual_peer_id == expected_peer_id {
-                        Ok((actual_peer_id, muxer))
-                    } else {
-                        let msg = format!("public key mismatch; expected = {:?}; obtained = {:?}",
-                                          expected_peer_id, actual_peer_id);
-                        Err(IoError::new(IoErrorKind::Other, msg))
-                    }
-                });
+                let fut = fut
+                    .map_err(RawSwarmReachError::Transport)
+                    .and_then(move |(actual_peer_id, muxer)| {
+                        if actual_peer_id == expected_peer_id {
+                            Ok((actual_peer_id, muxer))
+                        } else {
+                            Err(RawSwarmReachError::PeerIdMismatch { obtained: actual_peer_id })
+                        }
+                    });
                 self.active_nodes.add_reach_attempt(fut, handler)
             },
             Err((_, addr)) => {
+                // TODO: better error reporting
                 let msg = format!("unsupported multiaddr {}", addr);
-                let fut = future::err(IoError::new(IoErrorKind::Other, msg));
+                let fut = future::err(RawSwarmReachError::Transport(IoError::new(IoErrorKind::Other, msg)));
                 self.active_nodes.add_reach_attempt(fut, handler)
             },
         };
@@ -610,7 +652,7 @@ where
     }
 
     /// Provides an API similar to `Stream`, except that it cannot error.
-    pub fn poll(&mut self) -> Async<RawSwarmEvent<TTrans, TInEvent, TOutEvent, THandler>>
+    pub fn poll(&mut self) -> Async<RawSwarmEvent<TTrans, TInEvent, TOutEvent, THandler, THandlerErr>>
     where
         TTrans: Transport<Output = (PeerId, TMuxer)>,
         TTrans::Dial: Send + 'static,
@@ -620,8 +662,9 @@ where
         TMuxer::Substream: Send,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
-        THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
+        THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
         THandler::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
+        THandlerErr: error::Error + Send + 'static,
     {
         // Start by polling the listeners for events.
         match self.listeners.poll() {
@@ -737,10 +780,10 @@ impl<THandler> Default for ActionItem<THandler> {
 ///
 /// > **Note**: The event **must** have been produced by the collection of nodes, otherwise
 /// >           panics will likely happen.
-fn handle_node_reached<'a, TTrans, TMuxer, TInEvent, TOutEvent, THandler>(
+fn handle_node_reached<'a, TTrans, TMuxer, TInEvent, TOutEvent, THandler, THandlerErr>(
     reach_attempts: &mut ReachAttempts,
-    event: CollectionReachEvent<TInEvent, TOutEvent, THandler>
-) -> (ActionItem<THandler>, RawSwarmEvent<'a, TTrans, TInEvent, TOutEvent, THandler>)
+    event: CollectionReachEvent<TInEvent, TOutEvent, THandler, RawSwarmReachError, THandlerErr>
+) -> (ActionItem<THandler>, RawSwarmEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>)
 where
     TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
     TMuxer: StreamMuxer + Send + Sync + 'static,
@@ -866,12 +909,12 @@ fn has_dial_prio(local: &PeerId, other: &PeerId) -> bool {
 ///
 /// > **Note**: The event **must** have been produced by the collection of nodes, otherwise
 /// >           panics will likely happen.
-fn handle_reach_error<'a, TTrans, TInEvent, TOutEvent, THandler>(
+fn handle_reach_error<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>(
     reach_attempts: &mut ReachAttempts,
     reach_id: ReachAttemptId,
-    error: IoError,
+    error: RawSwarmReachError,
     handler: THandler,
-) -> (ActionItem<THandler>, RawSwarmEvent<'a, TTrans, TInEvent, TOutEvent, THandler>)
+) -> (ActionItem<THandler>, RawSwarmEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>)
 where TTrans: Transport
 {
     // Search for the attempt in `out_reach_attempts`.
@@ -914,6 +957,10 @@ where TTrans: Transport
         .position(|i| i.0 == reach_id)
     {
         let (_, endpoint) = reach_attempts.other_reach_attempts.swap_remove(in_pos);
+        let error = match error {
+            RawSwarmReachError::Transport(err) => err,
+            RawSwarmReachError::PeerIdMismatch { .. } => unreachable!(),    // TODO: prove
+        };
         match endpoint {
             ConnectedPoint::Dialer { address } => {
                 return (Default::default(), RawSwarmEvent::UnknownPeerDialError {
@@ -939,7 +986,7 @@ where TTrans: Transport
 }
 
 /// State of a peer in the system.
-pub enum Peer<'a, TTrans: 'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a>
+pub enum Peer<'a, TTrans: 'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a, THandlerErr: 'a>
 where
     TTrans: Transport,
 {
@@ -947,16 +994,16 @@ where
     Connected(PeerConnected<'a, TInEvent>),
 
     /// We are currently attempting to connect to this peer.
-    PendingConnect(PeerPendingConnect<'a, TInEvent, TOutEvent, THandler>),
+    PendingConnect(PeerPendingConnect<'a, TInEvent, TOutEvent, THandler, THandlerErr>),
 
     /// We are not connected to this peer at all.
     ///
     /// > **Note**: It is however possible that a pending incoming connection is being negotiated
     /// > and will connect to this peer, but we don't know it yet.
-    NotConnected(PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandler>),
+    NotConnected(PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>),
 }
 
-impl<'a, TTrans, TInEvent, TOutEvent, THandler> fmt::Debug for Peer<'a, TTrans, TInEvent, TOutEvent, THandler>
+impl<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr> fmt::Debug for Peer<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>
 where
     TTrans: Transport,
 {
@@ -983,8 +1030,8 @@ where
 }
 
 // TODO: add other similar methods that wrap to the ones of `PeerNotConnected`
-impl<'a, TTrans, TMuxer, TInEvent, TOutEvent, THandler>
-    Peer<'a, TTrans, TInEvent, TOutEvent, THandler>
+impl<'a, TTrans, TMuxer, TInEvent, TOutEvent, THandler, THandlerErr>
+    Peer<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>
 where
     TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
     TTrans::Dial: Send + 'static,
@@ -993,8 +1040,9 @@ where
     TMuxer::Substream: Send,
     TInEvent: Send + 'static,
     TOutEvent: Send + 'static,
-    THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
+    THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
     THandler::OutboundOpenInfo: Send + 'static,
+    THandlerErr: error::Error + Send + 'static,
 {
     /// If we are connected, returns the `PeerConnected`.
     #[inline]
@@ -1007,7 +1055,7 @@ where
 
     /// If a connection is pending, returns the `PeerPendingConnect`.
     #[inline]
-    pub fn as_pending_connect(self) -> Option<PeerPendingConnect<'a, TInEvent, TOutEvent, THandler>> {
+    pub fn as_pending_connect(self) -> Option<PeerPendingConnect<'a, TInEvent, TOutEvent, THandler, THandlerErr>> {
         match self {
             Peer::PendingConnect(peer) => Some(peer),
             _ => None,
@@ -1016,7 +1064,7 @@ where
 
     /// If we are not connected, returns the `PeerNotConnected`.
     #[inline]
-    pub fn as_not_connected(self) -> Option<PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandler>> {
+    pub fn as_not_connected(self) -> Option<PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>> {
         match self {
             Peer::NotConnected(peer) => Some(peer),
             _ => None,
@@ -1033,7 +1081,7 @@ where
     /// >           node.
     #[inline]
     pub fn or_connect(self, addr: Multiaddr, handler: THandler)
-        -> Result<PeerPotentialConnect<'a, TInEvent, TOutEvent, THandler>, Self>
+        -> Result<PeerPotentialConnect<'a, TInEvent, TOutEvent, THandler, THandlerErr>, Self>
     {
         self.or_connect_with(move |_| addr, handler)
     }
@@ -1049,7 +1097,7 @@ where
     /// >           node.
     #[inline]
     pub fn or_connect_with<TFn>(self, addr: TFn, handler: THandler)
-        -> Result<PeerPotentialConnect<'a, TInEvent, TOutEvent, THandler>, Self>
+        -> Result<PeerPotentialConnect<'a, TInEvent, TOutEvent, THandler, THandlerErr>, Self>
     where
         TFn: FnOnce(&PeerId) -> Multiaddr,
     {
@@ -1068,15 +1116,15 @@ where
 }
 
 /// Peer we are potentially going to connect to.
-pub enum PeerPotentialConnect<'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a> {
+pub enum PeerPotentialConnect<'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a, THandlerErr: 'a> {
     /// We are connected to this peer.
     Connected(PeerConnected<'a, TInEvent>),
 
     /// We are currently attempting to connect to this peer.
-    PendingConnect(PeerPendingConnect<'a, TInEvent, TOutEvent, THandler>),
+    PendingConnect(PeerPendingConnect<'a, TInEvent, TOutEvent, THandler, THandlerErr>),
 }
 
-impl<'a, TInEvent, TOutEvent, THandler> PeerPotentialConnect<'a, TInEvent, TOutEvent, THandler> {
+impl<'a, TInEvent, TOutEvent, THandler, THandlerErr> PeerPotentialConnect<'a, TInEvent, TOutEvent, THandler, THandlerErr> {
     /// Closes the connection or the connection attempt.
     ///
     /// If the connection was active, returns the list of outbound substream openings that were
@@ -1101,7 +1149,7 @@ impl<'a, TInEvent, TOutEvent, THandler> PeerPotentialConnect<'a, TInEvent, TOutE
 
     /// If a connection is pending, returns the `PeerPendingConnect`.
     #[inline]
-    pub fn as_pending_connect(self) -> Option<PeerPendingConnect<'a, TInEvent, TOutEvent, THandler>> {
+    pub fn as_pending_connect(self) -> Option<PeerPendingConnect<'a, TInEvent, TOutEvent, THandler, THandlerErr>> {
         match self {
             PeerPotentialConnect::PendingConnect(peer) => Some(peer),
             _ => None,
@@ -1147,12 +1195,12 @@ impl<'a, TInEvent> PeerConnected<'a, TInEvent> {
 
 /// Access to a peer we are attempting to connect to.
 #[derive(Debug)]
-pub struct PeerPendingConnect<'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a> {
+pub struct PeerPendingConnect<'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a, THandlerErr: 'a> {
     attempt: OccupiedEntry<'a, PeerId, OutReachAttempt>,
-    active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent, THandler>,
+    active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent, THandler, RawSwarmReachError, THandlerErr>,
 }
 
-impl<'a, TInEvent, TOutEvent, THandler> PeerPendingConnect<'a, TInEvent, TOutEvent, THandler> {
+impl<'a, TInEvent, TOutEvent, THandler, THandlerErr> PeerPendingConnect<'a, TInEvent, TOutEvent, THandler, THandlerErr> {
     /// Interrupt this connection attempt.
     // TODO: consider returning a PeerNotConnected; however that is really pain in terms of
     // borrows
@@ -1195,24 +1243,25 @@ impl<'a, TInEvent, TOutEvent, THandler> PeerPendingConnect<'a, TInEvent, TOutEve
 
 /// Access to a peer we're not connected to.
 #[derive(Debug)]
-pub struct PeerNotConnected<'a, TTrans: 'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a>
+pub struct PeerNotConnected<'a, TTrans: 'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a, THandlerErr: 'a>
 where
     TTrans: Transport,
 {
     peer_id: PeerId,
-    nodes: &'a mut RawSwarm<TTrans, TInEvent, TOutEvent, THandler>,
+    nodes: &'a mut RawSwarm<TTrans, TInEvent, TOutEvent, THandler, THandlerErr>,
 }
 
-impl<'a, TTrans, TInEvent, TOutEvent, TMuxer, THandler>
-    PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandler>
+impl<'a, TTrans, TInEvent, TOutEvent, TMuxer, THandler, THandlerErr>
+    PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>
 where
     TTrans: Transport<Output = (PeerId, TMuxer)> + Clone,
     TTrans::Dial: Send + 'static,
     TMuxer: StreamMuxer + Send + Sync + 'static,
     TMuxer::OutboundSubstream: Send,
     TMuxer::Substream: Send,
-    THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent> + Send + 'static,
+    THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
     THandler::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
+    THandlerErr: error::Error + Send + 'static,
     TInEvent: Send + 'static,
     TOutEvent: Send + 'static,
 {
@@ -1221,7 +1270,7 @@ where
     /// If we reach a peer but the `PeerId` doesn't correspond to the one we're expecting, then
     /// the whole connection is immediately closed.
     #[inline]
-    pub fn connect(self, addr: Multiaddr, handler: THandler) -> Result<PeerPendingConnect<'a, TInEvent, TOutEvent, THandler>, Self> {
+    pub fn connect(self, addr: Multiaddr, handler: THandler) -> Result<PeerPendingConnect<'a, TInEvent, TOutEvent, THandler, THandlerErr>, Self> {
         self.connect_inner(handler, addr, Vec::new())
     }
 
@@ -1235,7 +1284,7 @@ where
     /// the whole connection is immediately closed.
     #[inline]
     pub fn connect_iter<TIter>(self, addrs: TIter, handler: THandler)
-        -> Result<PeerPendingConnect<'a, TInEvent, TOutEvent, THandler>, Self>
+        -> Result<PeerPendingConnect<'a, TInEvent, TOutEvent, THandler, THandlerErr>, Self>
     where
         TIter: IntoIterator<Item = Multiaddr>,
     {
@@ -1250,7 +1299,7 @@ where
 
     /// Inner implementation of `connect`.
     fn connect_inner(self, handler: THandler, first: Multiaddr, rest: Vec<Multiaddr>)
-        -> Result<PeerPendingConnect<'a, TInEvent, TOutEvent, THandler>, Self>
+        -> Result<PeerPendingConnect<'a, TInEvent, TOutEvent, THandler, THandlerErr>, Self>
     {
         self.nodes.start_dial_out(self.peer_id.clone(), handler, first, rest);
         Ok(PeerPendingConnect {
@@ -1281,13 +1330,13 @@ mod tests {
     fn query_transport() {
         let transport = DummyTransport::new();
         let transport2 = transport.clone();
-        let raw_swarm = RawSwarm::<_, _, _, Handler>::new(transport, PeerId::random());
+        let raw_swarm = RawSwarm::<_, _, _, Handler, _>::new(transport, PeerId::random());
         assert_eq!(raw_swarm.transport(), &transport2);
     }
 
     #[test]
     fn starts_listening() {
-        let mut raw_swarm = RawSwarm::<_, _, _, Handler>::new(DummyTransport::new(), PeerId::random());
+        let mut raw_swarm = RawSwarm::<_, _, _, Handler, _>::new(DummyTransport::new(), PeerId::random());
         let addr = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
         let addr2 = addr.clone();
         assert!(raw_swarm.listen_on(addr).is_ok());
@@ -1300,7 +1349,7 @@ mod tests {
     fn nat_traversal_transforms_the_observed_address_according_to_the_transport_used() {
         // the DummyTransport nat_traversal increments the port number by one for Ip4 addresses
         let transport = DummyTransport::new();
-        let mut raw_swarm = RawSwarm::<_, _, _, Handler>::new(transport, PeerId::random());
+        let mut raw_swarm = RawSwarm::<_, _, _, Handler, _>::new(transport, PeerId::random());
         let addr1 = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
         // An unrelated outside address is returned as-is, no transform
         let outside_addr1 = "/memory".parse::<Multiaddr>().expect("bad multiaddr");
@@ -1328,7 +1377,7 @@ mod tests {
 
     #[test]
     fn successful_dial_reaches_a_node() {
-        let mut swarm = RawSwarm::<_, _, _, Handler>::new(DummyTransport::new(), PeerId::random());
+        let mut swarm = RawSwarm::<_, _, _, Handler, _>::new(DummyTransport::new(), PeerId::random());
         let addr = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
         let dial_res = swarm.dial(addr, Handler::default());
         assert!(dial_res.is_ok());
@@ -1366,7 +1415,7 @@ mod tests {
         // Set up listener to see an incoming connection
         transport.set_initial_listener_state(ListenerState::Ok(Async::Ready(Some((peer_id, muxer)))));
 
-        let mut swarm = RawSwarm::<_, _, _, Handler>::new(transport, PeerId::random());
+        let mut swarm = RawSwarm::<_, _, _, Handler, _>::new(transport, PeerId::random());
         swarm.listen_on("/memory".parse().unwrap()).unwrap();
 
         // no incoming yet
@@ -1391,7 +1440,7 @@ mod tests {
 
     #[test]
     fn broadcasted_events_reach_active_nodes() {
-        let mut swarm = RawSwarm::<_, _, _, Handler>::new(DummyTransport::new(), PeerId::random());
+        let mut swarm = RawSwarm::<_, _, _, Handler, _>::new(DummyTransport::new(), PeerId::random());
         let mut muxer = DummyMuxer::new();
         muxer.set_inbound_connection_state(DummyConnectionState::Pending);
         muxer.set_outbound_connection_state(DummyConnectionState::Opened);
@@ -1438,7 +1487,7 @@ mod tests {
 
     #[test]
     fn querying_for_pending_peer() {
-        let mut swarm = RawSwarm::<_, _, _, Handler>::new(DummyTransport::new(), PeerId::random());
+        let mut swarm = RawSwarm::<_, _, _, Handler, _>::new(DummyTransport::new(), PeerId::random());
         let peer_id = PeerId::random();
         let peer = swarm.peer(peer_id.clone());
         assert_matches!(peer, Peer::NotConnected(PeerNotConnected{ .. }));
@@ -1450,7 +1499,7 @@ mod tests {
 
     #[test]
     fn querying_for_unknown_peer() {
-        let mut swarm = RawSwarm::<_, _, _, Handler>::new(DummyTransport::new(), PeerId::random());
+        let mut swarm = RawSwarm::<_, _, _, Handler, _>::new(DummyTransport::new(), PeerId::random());
         let peer_id = PeerId::random();
         let peer = swarm.peer(peer_id.clone());
         assert_matches!(peer, Peer::NotConnected( PeerNotConnected { nodes: _, peer_id: node_peer_id }) => {
@@ -1460,7 +1509,7 @@ mod tests {
 
     #[test]
     fn querying_for_connected_peer() {
-        let mut swarm = RawSwarm::<_, _, _, Handler>::new(DummyTransport::new(), PeerId::random());
+        let mut swarm = RawSwarm::<_, _, _, Handler, _>::new(DummyTransport::new(), PeerId::random());
 
         // Dial a node
         let addr = "/ip4/127.0.0.1/tcp/1234".parse().expect("bad multiaddr");
@@ -1494,7 +1543,7 @@ mod tests {
         // Set up listener to be closed
         transport.set_initial_listener_state(ListenerState::Ok(Async::Ready(None)));
 
-        let mut swarm = RawSwarm::<_, _, _, Handler>::new(transport, PeerId::random());
+        let mut swarm = RawSwarm::<_, _, _, Handler, _>::new(transport, PeerId::random());
         swarm.listen_on("/memory".parse().unwrap()).unwrap();
 
         let mut rt = Runtime::new().unwrap();
@@ -1513,7 +1562,7 @@ mod tests {
     fn unknown_peer_that_is_unreachable_yields_unknown_peer_dial_error() {
         let mut transport = DummyTransport::new();
         transport.make_dial_fail();
-        let mut swarm = RawSwarm::<_, _, _, Handler>::new(transport, PeerId::random());
+        let mut swarm = RawSwarm::<_, _, _, Handler, _>::new(transport, PeerId::random());
         let addr = "/memory".parse::<Multiaddr>().expect("bad multiaddr");
         let handler = Handler::default();
         let dial_result = swarm.dial(addr, handler);
@@ -1544,7 +1593,7 @@ mod tests {
         let peer_id = PeerId::random();
         transport.set_next_peer_id(&peer_id);
         transport.make_dial_fail();
-        let swarm = Arc::new(Mutex::new(RawSwarm::<_, _, _, Handler>::new(transport, PeerId::random())));
+        let swarm = Arc::new(Mutex::new(RawSwarm::<_, _, _, Handler, _>::new(transport, PeerId::random())));
 
         {
             let swarm1 = swarm.clone();
@@ -1584,7 +1633,7 @@ mod tests {
         let mut transport = DummyTransport::new();
         let peer_id = PeerId::random();
         transport.set_next_peer_id(&peer_id);
-        let swarm = Arc::new(Mutex::new(RawSwarm::<_, _, _, Handler>::new(transport, PeerId::random())));
+        let swarm = Arc::new(Mutex::new(RawSwarm::<_, _, _, Handler, _>::new(transport, PeerId::random())));
 
         {
             // Set up an outgoing connection with a PeerId we know
@@ -1638,7 +1687,7 @@ mod tests {
         let mut transport = DummyTransport::new();
         let peer_id = PeerId::random();
         transport.set_next_peer_id(&peer_id);
-        let swarm = Arc::new(Mutex::new(RawSwarm::<_, _, _, Handler>::new(transport, PeerId::random())));
+        let swarm = Arc::new(Mutex::new(RawSwarm::<_, _, _, Handler, _>::new(transport, PeerId::random())));
 
         {
             // Set up an outgoing connection with a PeerId we know

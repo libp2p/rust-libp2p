@@ -28,7 +28,7 @@ use libp2p_core::{
     StreamMuxer,
     transport::upgrade::ListenerStream,
     muxing,
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
+    upgrade::{InboundUpgrade, OutboundUpgrade}, //, UpgradeInfo
 };
 use tokio::{
     codec::{Framed, LengthDelimitedCodec, length_delimited::Builder},
@@ -67,8 +67,8 @@ impl<U, O, E> MuxerTester<U, O, E>
 where
     U: OutboundUpgrade<TcpTransStream, Output = O, Error = E> + Send + Clone + Debug + 'static,
     U: InboundUpgrade<TcpTransStream, Output = O, Error = E>,
-    <U as UpgradeInfo>::NamesIter: Send,
-    <U as UpgradeInfo>::UpgradeId: Send,
+    // <U as UpgradeInfo>::NamesIter: Send,
+    // <U as UpgradeInfo>::UpgradeId: Send,
     <U as InboundUpgrade<TcpTransStream>>::Future: Send,
     <U as OutboundUpgrade<TcpTransStream>>::Future: Send,
     E: std::error::Error + Send + Sync + 'static,
@@ -81,7 +81,8 @@ where
     fn init() {
         INIT.call_once(|| env_logger::init())
     }
-    /// Given a `Transport` and a `MultiAddr`, returns a framed substream, either inbound or outbound according to the `inbound` param.
+    /// Given a `Transport` and a `MultiAddr`, returns a framed substream,
+    /// either inbound or outbound according to the `inbound` param.
     fn framed_dialler_fut<T>(
         transport: T,
         addr: Multiaddr,
@@ -137,8 +138,9 @@ where
                     }
                     Ok(None) => {
                         warn!("[framed_listener_fut] no error, but also no substream, inbound={:?}", inbound);
-                        // TODO: I think we're loosing an error here somewhere. Not sure where yet but it doesn't
-                        // feel right to let the Future resolve to a None here
+                        // TODO: I think we're loosing an error here somewhere.
+                        // Not sure where yet but it doesn't feel right to let
+                        // the Future resolve to a None here
                         Err(std::io::Error::new(std::io::ErrorKind::Other, "something happened but we do not know what :/"))
                     }
                 }

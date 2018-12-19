@@ -21,12 +21,12 @@
 //! Contains the `Dialer` wrapper, which allows raw communications with a listener.
 
 use bytes::Bytes;
-use futures::{prelude::*, sink, Async, AsyncSink, StartSend};
-use length_delimited::LengthDelimited;
-use protocol::DialerToListenerMessage;
-use protocol::ListenerToDialerMessage;
-use protocol::MultistreamSelectError;
-use protocol::MULTISTREAM_PROTOCOL_WITH_LF;
+use futures::{prelude::*, sink, Async, AsyncSink, StartSend, try_ready};
+use crate::length_delimited::LengthDelimited;
+use crate::protocol::DialerToListenerMessage;
+use crate::protocol::ListenerToDialerMessage;
+use crate::protocol::MultistreamSelectError;
+use crate::protocol::MULTISTREAM_PROTOCOL_WITH_LF;
 use tokio_io::{AsyncRead, AsyncWrite};
 use unsigned_varint::decode;
 
@@ -183,14 +183,12 @@ impl<T: AsyncWrite> Future for DialerFuture<T> {
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio;
-    extern crate tokio_tcp;
-    use self::tokio::runtime::current_thread::Runtime;
-    use self::tokio_tcp::{TcpListener, TcpStream};
+    use tokio::runtime::current_thread::Runtime;
+    use tokio_tcp::{TcpListener, TcpStream};
     use bytes::Bytes;
     use futures::Future;
     use futures::{Sink, Stream};
-    use protocol::{Dialer, DialerToListenerMessage, MultistreamSelectError};
+    use crate::protocol::{Dialer, DialerToListenerMessage, MultistreamSelectError};
 
     #[test]
     fn wrong_proto_name() {

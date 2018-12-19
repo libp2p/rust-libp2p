@@ -21,7 +21,7 @@
 //! This module handles the key agreement process. Typically ECDH.
 
 use futures::prelude::*;
-use SecioError;
+use crate::SecioError;
 
 #[path = "impl_ring.rs"]
 #[cfg(not(target_os = "emscripten"))]
