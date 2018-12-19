@@ -26,9 +26,9 @@ use tokio_io::{AsyncRead, AsyncWrite};
 /// A wrapper for choosing or dispatching to one or another `Error`.
 #[derive(Debug, Copy, Clone)]
 pub enum EitherError<A, B> {
-    /// The first `Error` variant or option.
+    /// The first `Error` variant.
     A(A),
-    /// The second or other `Error` variant or option.
+    /// The second `Error` variant.
     B(B)
 }
 
