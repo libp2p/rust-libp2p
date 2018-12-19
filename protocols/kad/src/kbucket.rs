@@ -43,9 +43,9 @@ pub const MAX_NODES_PER_BUCKET: usize = 20;
 pub struct KBucketsTable<Id, Val> {
     /// Peer ID of the local node.
     my_id: Id,
-    /// The actual tables.
+     /// The actual tables that store peers or values.
     tables: Vec<KBucket<Id, Val>>,
-    // The timeout when pinging the first node after which we consider that it no longer responds.
+     // The timeout when pinging the first node after which we consider it unresponsive.
     ping_timeout: Duration,
 }
 
@@ -59,7 +59,7 @@ struct KBucket<Id, Val> {
 
     /// Node received when the bucket was full. Will be added to the list if the first node doesn't
     /// respond in time to our ping. The second element is the time when the pending node was added.
-    /// If it is too much in the past, then we drop the first node and add the pending node to the
+     /// If it is too old we drop the first node and add the pending node to the
     /// end of the list.
     pending_node: Option<(Node<Id, Val>, Instant)>,
 
@@ -76,7 +76,7 @@ struct Node<Id, Val> {
 impl<Id, Val> KBucket<Id, Val> {
     /// Puts the kbucket into a coherent state.
     /// If a node is pending and the timeout has expired, removes the first element of `nodes`
-    /// and pushes back the node in `pending_node`.
+     /// and puts the node back in `pending_node`.
     fn flush(&mut self, timeout: Duration) {
         if let Some((pending_node, instant)) = self.pending_node.take() {
             if instant.elapsed() >= timeout {
