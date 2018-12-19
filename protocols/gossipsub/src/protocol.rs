@@ -260,4 +260,3 @@ pub struct ControlIHave {
     /// on request.
     pub messages: Vec<messageID>,
 }
-
