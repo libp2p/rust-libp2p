@@ -745,8 +745,8 @@ fn process_kad_request<TUserData>(
 ) -> Result<KademliaHandlerEvent<TUserData>, io::Error> {
     match event {
         KadRequestMsg::Ping => {
-            // TODO: implement ; in practice the PING message is never used, so we may consider
-            //       removing it altogether
+            // TODO: implement; although in practice the PING message is never
+            //       used, so we may consider removing it altogether
             Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "the PING Kademlia message is not implemented",

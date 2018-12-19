@@ -84,7 +84,7 @@ fn event_handler() {
 
     impl<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite> Foo<TSubstream> {
         // TODO: for some reason, the parameter cannot be the event type or we
-        //       get a compilation error ; figure out why or open an issue to Rust
+        //       get a compilation error; figure out why or open an issue to Rust
         fn foo<TTopology>(&mut self, ev: <libp2p::ping::PingListen<TSubstream> as libp2p::core::swarm::NetworkBehaviour<TTopology>>::OutEvent) {
         }
     }
