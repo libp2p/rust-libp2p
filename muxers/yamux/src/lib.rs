@@ -27,10 +27,6 @@ use log::error;
 use std::{io, iter};
 use std::io::{Error as IoError};
 use tokio_io::{AsyncRead, AsyncWrite};
-// TODO: #[cfg(test)]
-// extern crate libp2p_test_muxer;
-
-// TODO: what about? use bytes::Bytes;
 
 pub struct Yamux<C>(yamux::Connection<C>);
 
