@@ -260,3 +260,27 @@ pub struct ControlIHave {
     /// on request.
     pub messages: Vec<messageID>,
 }
+
+/// Control message that requests messages from a peer that announced them
+/// with an IHave message.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ControlWant {
+    /// List of messages that are being requested.
+    pub messages: Vec<messageID>,
+}
+
+/// Control message that grafts a mesh link; this notifies the peer that it
+/// has been added to the local mesh view of a topic.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ControlGraft {
+    /// Topic to graft a peer to.
+    pub topic: TopicHash,
+}
+
+/// Control message that prunes a mesh link; this notifies the peer that it
+/// has been removed from the local mesh view of a topic.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ControlPrune {
+    /// Topic to prune a peer from.
+    pub topic: TopicHash,
+}
