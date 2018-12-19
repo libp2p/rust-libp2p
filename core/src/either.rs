@@ -303,15 +303,17 @@ where
     }
 }
 
-/// Dispatches all method calls to either a `First` or `Second` `Future`, each
-/// of which contains `EitherOutput` that contains the `Item` of `First` or
-/// `Second`, or an `io::error::Error` of the same.
+/// Implements `Future` and dispatches all method calls to either `First` or
+/// `Second`; the `Future` yields an `EitherOutput` of the `Item` yielded by
+/// the `Future` of `First` or `Second`, or an `IoError`.
 #[derive(Debug, Copy, Clone)]
 #[must_use = "futures do nothing unless polled"]
 pub enum EitherFuture<A, B> {
-    /// The first `Future` that contains `EitherOutput` or `io::error::Error`.
+    /// The first `Future` variant, yields an arbitrary `Item` or an
+    /// `IoError`.
     First(A),
-    /// The second `Future`, contains `EitherOutput` or `io::error::Error`.
+    /// The second `Future` variant, yields an arbitrary `Item` or an
+    /// `IoError`.
     Second(B),
 }
 
@@ -332,16 +334,19 @@ where
     }
 }
 
-/// Differs to `EitherFuture` in that the `Error` also contains either an
-/// `Error` in `A` or in `B`, as well as containing an `StreamMuxer` `Item`
-/// in `A` or `B.
+/// Differs to `EitherFuture` in that the `Error` yielded by the `Future`
+/// implementation is an `EitherError` of the `Error` of `A` or `B` rather
+/// than an `IoError`, while the `Item` is the same—an `EitherOutput` of the
+/// item yielded by `A` or `B`.
 #[derive(Debug, Copy, Clone)]
 #[must_use = "futures do nothing unless polled"]
 pub enum EitherFuture2<A, B> {
-    /// The first `Future` option which contains a `StreamMuxer` `Item` or `Error` (like `B`).
+    /// The first `Future` variant which yields an arbitrary `Item` or
+    /// `Error`.
     A(A),
-    /// The second `Future` option which also contains `StreamMuxer` `Item` or `Error`.
-    B(B)
+    /// The second `Future` variant which yields an arbitrary `Item` or
+    /// `Error`.
+    B(B),
 }
 
 impl<AFut, BFut, AItem, BItem, AError, BError> Future for EitherFuture2<AFut, BFut>
