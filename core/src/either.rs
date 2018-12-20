@@ -47,10 +47,10 @@ where
     A: fmt::Debug + std::error::Error,
     B: fmt::Debug + std::error::Error
 {
-    fn cause(&self) -> Option<&dyn std::error::Error> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            EitherError::A(a) => a.cause(),
-            EitherError::B(b) => b.cause()
+            EitherError::A(a) => a.source(),
+            EitherError::B(b) => b.source()
         }
     }
 }
