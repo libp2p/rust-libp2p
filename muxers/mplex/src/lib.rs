@@ -85,6 +85,12 @@ impl MplexConfig {
         self
     }
 
+    /// Sets the frame size used when sending data
+    pub fn split_send_size(&mut self, size: usize) -> &mut Self {
+        self.split_send_size = size;
+        self
+    }
+
     #[inline]
     fn upgrade<C>(self, i: C, endpoint: Endpoint) -> Multiplex<C>
     where
