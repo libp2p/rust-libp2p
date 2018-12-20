@@ -284,3 +284,30 @@ pub struct ControlPrune {
     /// Topic to prune a peer from.
     pub topic: TopicHash,
 }
+
+/// A graft/prune received by the Gossipsub system.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct GossipsubGraftPrune {
+    /// Graft or prune action to perform.
+    pub action: GossipSubGraftPruneAction,
+    /// The topic from which to graft a peer to or prune from.
+    pub topic: TopicHash,
+}
+
+/// Action to graft or prune to/from a topic. Manages mesh membership.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum GossipSubGraftPruneAction {
+    /// The remote wants to graft to the given topic.
+    Graft,
+    /// The remote wants to prune from the given topic.
+    Prune,
+}
+
+/// The different kinds of messages transferred over a Gossipsub network.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Message {
+    /// A `GossipsubMessage` message, contains arbitrary data.
+    GossipsubMessage,
+    /// A `ControlMessage`, use to control the Gossipsub network.
+    ControlMessage,
+}
