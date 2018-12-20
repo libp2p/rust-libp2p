@@ -42,4 +42,5 @@ mod rpc_proto;
 mod topic;
 
 pub use self::layer::Floodsub;
+pub use self::protocol::{FloodsubMessage, FloodsubRpc};
 pub use self::topic::{Topic, TopicBuilder, TopicHash};
