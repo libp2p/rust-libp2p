@@ -45,16 +45,6 @@ use std::{
     thread,
 };
 
-#[macro_export]
-macro_rules! test_muxer {
-    ($test_name: ident, $config: expr) => {
-        #[test]
-        fn $test_name() {
-            $crate::MuxerTester::$test_name($config);
-        }
-    };
-}
-
 pub struct MuxerTester<U, O, E> {
     _upgrade: PhantomData<U>,
     _muxer: PhantomData<O>,
@@ -296,10 +286,8 @@ where
         let (tx, rx) = mpsc::channel();
         let listener_conf = config.clone();
         // TODO: 10Mbytes payload
-        // let payload: Vec<u8> = vec![1; 10_485_760];
         // TODO: causes buffer overflow for Yamux with default config
-        // let payload: Vec<u8> = vec![1; 1_048_576];
-        let payload = vec![1;800_000];
+        let payload: Vec<u8> = vec![1; 1024 * 1024];
         let payload_len = payload.len();
 
         let thr_builder = thread::Builder::new().name("listener thr".to_string());

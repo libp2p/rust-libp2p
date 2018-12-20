@@ -170,11 +170,33 @@ impl std::fmt::Debug for Config {
 #[cfg(test)]
 mod test {
     use super::*;
-    use libp2p_test_muxer::test_muxer;
+    use libp2p_test_muxer::MuxerTester;
 
-    test_muxer!(empty_payload, Config::default());
-    test_muxer!(bidirectional, Config::default());
-    test_muxer!(client_to_server_inbound, Config::default());
-    test_muxer!(client_to_server_outbound, Config::default());
-    test_muxer!(one_megabyte_payload, Config::default());
+    #[test]
+    fn empty_payload() {
+        MuxerTester::empty_payload(Config::default())
+    }
+
+    #[test]
+    fn bidirectional() {
+        MuxerTester::bidirectional(Config::default())
+    }
+
+    #[test]
+    fn client_to_server_inbound() {
+        MuxerTester::client_to_server_inbound(Config::default())
+    }
+
+    #[test]
+    fn client_to_server_outbound() {
+        MuxerTester::client_to_server_outbound(Config::default())
+    }
+
+    #[test]
+    fn one_megabyte_payload() {
+        let mut cfg = yamux::Config::default();
+        cfg.set_max_buffer_size(1024 * 1024 + 1);
+        let cfg = Config::new(cfg);
+        MuxerTester::one_megabyte_payload(cfg)
+    }
 }
