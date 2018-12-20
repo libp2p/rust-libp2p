@@ -57,8 +57,6 @@ impl<U, O, E> MuxerTester<U, O, E>
 where
     U: OutboundUpgrade<TcpTransStream, Output = O, Error = E> + Send + Clone + Debug + 'static,
     U: InboundUpgrade<TcpTransStream, Output = O, Error = E>,
-    // <U as UpgradeInfo>::NamesIter: Send,
-    // <U as UpgradeInfo>::UpgradeId: Send,
     <U as InboundUpgrade<TcpTransStream>>::Future: Send,
     <U as OutboundUpgrade<TcpTransStream>>::Future: Send,
     E: std::error::Error + Send + Sync + 'static,
