@@ -47,6 +47,7 @@ pub struct MplexConfig {
     /// Behaviour when the buffer size limit is reached.
     max_buffer_behaviour: MaxBufferBehaviour,
     /// When sending data, split it into frames whose maximum size is this value.
+    /// Default is 64Kbyte.
     split_send_size: usize,
 }
 
@@ -118,7 +119,7 @@ impl Default for MplexConfig {
             max_substreams: 128,
             max_buffer_len: 4096,
             max_buffer_behaviour: MaxBufferBehaviour::CloseAll,
-            split_send_size: 1024,
+            split_send_size: 1024 * 64,
         }
     }
 }
