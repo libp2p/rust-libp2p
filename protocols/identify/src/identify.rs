@@ -107,7 +107,7 @@ where
             }
             EitherOutput::First(sender) => {
                 let observed = self.observed_addresses.get(&peer_id)
-                    .expect("We only receive events from nodes we're connected to ; we insert \
+                    .expect("We only receive events from nodes we're connected to. We insert \
                              into the hashmap when we connect to a node and remove only when we \
                              disconnect; QED");
                 self.to_answer.push((sender, observed.clone()));
