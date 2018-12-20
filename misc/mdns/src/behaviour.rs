@@ -119,7 +119,6 @@ where
 
             match event {
                 MdnsPacket::Query(query) => {
-                    println!("rx q; {:?}", params.listened_addresses().cloned().collect::<Vec<_>>());
                     let _ = query.respond(
                         params.local_peer_id().clone(),
                         params.listened_addresses().cloned(),
