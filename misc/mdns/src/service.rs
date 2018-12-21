@@ -175,7 +175,7 @@ impl MdnsService {
     /// Polls the service for packets.
     pub fn poll(&mut self) -> Async<MdnsPacket> {
         // Send a query every time `query_interval` fires.
-        // Note that we don't use a loop here ; it is pretty unlikely that we need it, and there is
+        // Note that we don't use a loop here—it is pretty unlikely that we need it, and there is
         // no point in sending multiple requests in a row.
         match self.query_interval.poll() {
             Ok(Async::Ready(_)) => {
@@ -472,7 +472,7 @@ impl<'a> fmt::Debug for MdnsResponse<'a> {
 
 /// A peer discovered by the service.
 pub struct MdnsPeer<'a> {
-    /// The original packet ; will be used to determine the addresses.
+    /// The original packet which will be used to determine the addresses.
     packet: &'a Packet<'a>,
     /// Cached value of `concat(base32(peer_id), service name)`.
     record_value: String,

@@ -23,9 +23,9 @@ use crate::periodic_id_handler::{PeriodicIdHandler, PeriodicIdHandlerEvent};
 use crate::protocol::{IdentifyInfo, IdentifySender, IdentifySenderFuture};
 use crate::topology::IdentifyTopology;
 use futures::prelude::*;
-use libp2p_core::protocols_handler::{ProtocolsHandler, ProtocolsHandlerSelect};
+use libp2p_core::protocols_handler::{ProtocolsHandler, ProtocolsHandlerSelect, ProtocolsHandlerUpgrErr};
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
-use libp2p_core::{Multiaddr, PeerId, either::EitherOutput, topology::Topology};
+use libp2p_core::{Multiaddr, PeerId, either::EitherOutput};
 use smallvec::SmallVec;
 use std::{collections::HashMap, collections::VecDeque, io};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -107,7 +107,7 @@ where
             }
             EitherOutput::First(sender) => {
                 let observed = self.observed_addresses.get(&peer_id)
-                    .expect("We only receive events from nodes we're connected to ; we insert \
+                    .expect("We only receive events from nodes we're connected to. We insert \
                              into the hashmap when we connect to a node and remove only when we \
                              disconnect; QED");
                 self.to_answer.push((sender, observed.clone()));
@@ -192,6 +192,6 @@ pub enum IdentifyEvent {
         /// Peer that we fail to identify.
         peer_id: PeerId,
         /// The error that happened.
-        error: io::Error,
+        error: ProtocolsHandlerUpgrErr<io::Error>,
     },
 }

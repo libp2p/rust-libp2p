@@ -18,34 +18,22 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-extern crate bytes;
-extern crate fnv;
-#[macro_use]
-extern crate futures;
-extern crate libp2p_core as core;
-#[macro_use]
-extern crate log;
-extern crate parking_lot;
-extern crate tokio_codec;
-extern crate tokio_io;
-extern crate unsigned_varint;
-
 mod codec;
 
 use std::{cmp, iter, mem};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::sync::{atomic::AtomicUsize, atomic::Ordering, Arc};
 use bytes::Bytes;
-use core::{
+use libp2p_core::{
     Endpoint,
     StreamMuxer,
     muxing::Shutdown,
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
 };
+use log::{debug, trace};
 use parking_lot::Mutex;
 use fnv::{FnvHashMap, FnvHashSet};
-use futures::prelude::*;
-use futures::{executor, future, stream::Fuse, task};
+use futures::{prelude::*, executor, future, stream::Fuse, task, task_local, try_ready};
 use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
 

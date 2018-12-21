@@ -21,9 +21,10 @@
 use crate::upgrade::{
     InboundUpgrade,
     OutboundUpgrade,
+    UpgradeError,
 };
 use futures::prelude::*;
-use std::{io, time::Duration};
+use std::{error, fmt, io, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 pub use self::dummy::DummyProtocolsHandler;
@@ -124,7 +125,7 @@ pub trait ProtocolsHandler {
     fn inject_event(&mut self, event: Self::InEvent);
 
     /// Indicates to the handler that upgrading a substream to the given protocol has failed.
-    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: io::Error);
+    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>);
 
     /// Indicates to the handler that the inbound part of the muxer has been closed, and that
     /// therefore no more inbound substreams will be produced.
@@ -270,6 +271,53 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
                 ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info }
             }
             ProtocolsHandlerEvent::Custom(val) => ProtocolsHandlerEvent::Custom(map(val)),
+        }
+    }
+}
+
+/// Error that can happen on an outbound substream opening attempt.
+#[derive(Debug)]
+pub enum ProtocolsHandlerUpgrErr<TUpgrErr> {
+    /// The opening attempt timed out before the negotiation was fully completed.
+    Timeout,
+    /// There was an error in the timer used.
+    Timer,
+    /// The remote muxer denied the attempt to open a substream.
+    MuxerDeniedSubstream,
+    /// Error while upgrading the substream to the protocol we want.
+    Upgrade(UpgradeError<TUpgrErr>),
+}
+
+impl<TUpgrErr> fmt::Display for ProtocolsHandlerUpgrErr<TUpgrErr>
+where
+    TUpgrErr: fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ProtocolsHandlerUpgrErr::Timeout => {
+                write!(f, "Timeout error while opening a substream")
+            },
+            ProtocolsHandlerUpgrErr::Timer => {
+                write!(f, "Timer error while opening a substream")
+            },
+            ProtocolsHandlerUpgrErr::MuxerDeniedSubstream => {
+                write!(f, "Remote muxer denied our attempt to open a substream")
+            },
+            ProtocolsHandlerUpgrErr::Upgrade(err) => write!(f, "{}", err),
+        }
+    }
+}
+
+impl<TUpgrErr> error::Error for ProtocolsHandlerUpgrErr<TUpgrErr>
+where
+    TUpgrErr: error::Error + 'static
+{
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            ProtocolsHandlerUpgrErr::Timeout => None,
+            ProtocolsHandlerUpgrErr::Timer => None,
+            ProtocolsHandlerUpgrErr::MuxerDeniedSubstream => None,
+            ProtocolsHandlerUpgrErr::Upgrade(err) => Some(err),
         }
     }
 }
