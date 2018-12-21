@@ -17,10 +17,11 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
+extern crate libp2p_tcp as tcp;
 
 use bytes::Bytes;
 use env_logger;
-use log::{trace, info, warn, error};
+use log::{trace, debug, info, warn, error};
 use tcp::{TcpConfig, TcpTransStream, TcpListenStream};
 use libp2p_core::{
     Multiaddr,
@@ -135,6 +136,11 @@ where
                     }
                 }
             })
+    }
+
+    fn localhost() -> Multiaddr {
+        const LOCALHOST: &'static str = "/ip4/127.0.0.1/tcp/0";
+        LOCALHOST.parse().unwrap()
     }
 
     /// Muxer tests
@@ -335,6 +341,83 @@ where
         });
         info!("[test, writer] Running the writer future took {}, {}", elapsed, mb_per_sec(payload_len, elapsed));
         thr.join().unwrap();
+    }
+
+    pub fn one_reader_two_writers(config: U) {
+        Self::init();
+        let writer1_conf = config.clone();
+        let writer2_conf = config.clone();
+        let payload = vec![123u8; 1024*1];
+        let payload_len = payload.len();
+        info!("[test] Payload size {}", payload_len);
+
+        let transport = TcpConfig::new().with_upgrade(config);
+        let (listener, addr) = transport.listen_on(Self::localhost()).expect("can listen on localhost");
+
+        let addr1 = addr.clone();
+        let payload1 = payload.clone();
+        let thr_writer1 = thread::Builder::new().name("writer thread 1".into()).spawn(move || {
+            trace!("[test, writer1] Dialling {}", addr1);
+            let transport = TcpConfig::new().with_upgrade(writer1_conf);
+            let (elapsed, _) = measure_time(|| {
+                Runtime::new().unwrap().block_on(
+                    Self::framed_dialler_fut(transport, addr1, false)
+                        .and_then(|subs| subs.send(payload1.into()))
+                        .then(|res| {
+                            trace!("[test, writer1] send result={:?}", res);
+                            assert!(res.is_ok());
+                            Ok::<_, ()>(())
+                        })
+                ).expect("writer1 future works");
+            });
+            info!("[test, writer1] Running the writer future took {}, {}", elapsed, mb_per_sec(payload_len, elapsed));
+        }).expect("spawning writer thread 1 works");
+
+        let addr2 = addr.clone();
+        let payload2 = payload.clone();
+        let thr_writer2 = thread::Builder::new().name("writer thread 2".into()).spawn(move || {
+            trace!("[test, writer2] Dialling {}", addr2);
+            let transport = TcpConfig::new().with_upgrade(writer2_conf);
+            let (elapsed, _) = measure_time(|| {
+                Runtime::new().unwrap().block_on(
+                    Self::framed_dialler_fut(transport, addr2, false)
+                        .and_then(|subs| subs.send(payload2.into()))
+                        .then(|res| {
+                            trace!("[test, writer2] send result={:?}", res);
+                            assert!(res.is_ok());
+                            Ok::<_, ()>(())
+                        })
+                ).expect("writer2 future works");
+            });
+            info!("[test, writer2] Running the writer future took {}, {}", elapsed, mb_per_sec(payload_len, elapsed));
+        }).expect("spawning writer thread 2 works");
+
+        let mut rt = Runtime::new().unwrap();
+        let fut = listener
+            .for_each(|(muxer, _addr)| {
+                trace!("[test, reader] incoming");
+                muxer
+                    .and_then(|muxer| {
+                        trace!("[test, reader] incoming, first and_then");
+                        muxing::inbound_from_ref_and_wrap(Arc::new(muxer))
+                    })
+                    .and_then(|substream| {
+                        trace!("[test, reader] incoming, second and_then");
+                        Ok(Builder::new().new_framed(substream.unwrap()))
+                    })
+                    .and_then(|stream| stream.take(1).collect())
+                    .and_then(|msgs| {
+                        trace!("[test, reader] read {} bytes", msgs[0].len());
+                        Ok(())
+                    })
+            });
+        let (elapsed, _) = measure_time(|| {
+            rt.block_on(fut)
+        });
+        info!("[test, reader] Running the reader future took {}, {}", elapsed, mb_per_sec(payload_len, elapsed));
+
+        thr_writer1.join().expect("joining writer thread 1 works");
+        thr_writer2.join().expect("joining writer thread 2 works");
     }
 
 }
