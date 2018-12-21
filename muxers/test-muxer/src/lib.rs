@@ -289,6 +289,7 @@ where
         // TODO: causes buffer overflow for Yamux with default config
         let payload: Vec<u8> = vec![1; 1024 * 1024 * 7];
         let payload_len = payload.len();
+        info!("[test] payload size={}", payload_len);
 
         let thr_builder = thread::Builder::new().name("listener thr".to_string());
         let thr = thr_builder.spawn(move || {
@@ -315,7 +316,7 @@ where
             let (elapsed, _) = measure_time(|| {
                 Runtime::new().unwrap().block_on(future).unwrap();
             });
-            info!("[test, reader] Running the reader future took {}", elapsed);
+            info!("[test, reader] Running the reader future took {}, {}", elapsed, mb_per_sec(payload_len, elapsed));
         }).expect("thread spawn failed");
 
         let transport = TcpConfig::new().with_upgrade(config);
@@ -332,7 +333,13 @@ where
                     })
             ).expect("sender future works");
         });
-        info!("[test, writer] Running the writer future took {}", elapsed);
+        info!("[test, writer] Running the writer future took {}, {}", elapsed, mb_per_sec(payload_len, elapsed));
         thr.join().unwrap();
     }
+
+}
+fn mb_per_sec(payload_len: usize, elapsed: ElapsedDuration) -> String {
+    let bytes_per_sec = payload_len as f64/(elapsed.duration().as_secs() as f64 + elapsed.duration().subsec_nanos() as f64 * 1e-9);
+    let mb_per_sec = bytes_per_sec/(1024.0*1024.0);
+    format!("{:.1} Mbyte/sec", mb_per_sec)
 }
