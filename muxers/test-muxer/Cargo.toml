@@ -17,3 +17,4 @@ tokio = "0.1"
 bytes = "0.4"
 futures = "0.1"
 tcp  = { package = "libp2p-tcp", path = "../../transports/tcp" }
+elapsed = "0.1"

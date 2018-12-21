@@ -45,6 +45,8 @@ use std::{
     thread,
 };
 
+use elapsed::{measure_time, ElapsedDuration};
+
 pub struct MuxerTester<U, O, E> {
     _upgrade: PhantomData<U>,
     _muxer: PhantomData<O>,
@@ -285,7 +287,7 @@ where
         let listener_conf = config.clone();
         // TODO: 10Mbytes payload
         // TODO: causes buffer overflow for Yamux with default config
-        let payload: Vec<u8> = vec![1; 1024 * 1024];
+        let payload: Vec<u8> = vec![1; 1024 * 1024 * 7];
         let payload_len = payload.len();
 
         let thr_builder = thread::Builder::new().name("listener thr".to_string());
@@ -304,26 +306,33 @@ where
                         .map_err(|(err, _)| err)
                         .map(|(msg, _)| msg)
                 })
+                .inspect(|maybe_msg| trace!("[test, thr] read some={:?}", maybe_msg.is_some()))
                 .and_then(|message| {
                     assert!(message.is_some());
                     assert_eq!(message.unwrap().len(), payload_len);
                     Ok(())
                 });
-            Runtime::new().unwrap().block_on(future).unwrap();
+            let (elapsed, _) = measure_time(|| {
+                Runtime::new().unwrap().block_on(future).unwrap();
+            });
+            info!("[test, reader] Running the reader future took {}", elapsed);
         }).expect("thread spawn failed");
 
         let transport = TcpConfig::new().with_upgrade(config);
         let addr = rx.recv().unwrap();
 
-        Runtime::new().unwrap().block_on(
-            Self::framed_dialler_fut(transport, addr, false)
-                .and_then(|subs| subs.send(payload.into()))
-                .then(|res| {
-                    trace!("[test] send result={:?}", res);
-                    assert!(res.is_ok());
-                    Ok::<_, ()>(())
-                })
-        ).expect("sender future works");
+        let (elapsed, _) = measure_time(|| {
+            Runtime::new().unwrap().block_on(
+                Self::framed_dialler_fut(transport, addr, false)
+                    .and_then(|subs| subs.send(payload.into()))
+                    .then(|res| {
+                        trace!("[test] send result={:?}", res);
+                        assert!(res.is_ok());
+                        Ok::<_, ()>(())
+                    })
+            ).expect("sender future works");
+        });
+        info!("[test, writer] Running the writer future took {}", elapsed);
         thr.join().unwrap();
     }
 }
