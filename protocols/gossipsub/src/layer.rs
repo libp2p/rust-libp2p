@@ -1,17 +1,17 @@
 use cuckoofilter::CuckooFilter;
-use libp2p_floodsub::{Floodsub, Topic};
+use libp2p_floodsub::{Floodsub, Topic, TopicHash};
 use libp2p_core::{
     swarm::{NetworkBehaviour, NetworkBehaviourAction},
     PeerId,
 };
-use protocol::{GossipsubRpc, GossipsubMessage, ControlMessage};
+// use protocol::{GossipsubRpc, GossipsubMessage, ControlMessage};
 use smallvec::SmallVec;
 use std::collections::hash_map::{DefaultHasher, HashMap};
 use smallvec::SmallVec;
-use std::collections::VecDeque;
 use std::{collections::VecDeque, marker::PhantomData};
-use topic::{Topic, TopicHash};
 
+/// Contains the state needed to maintain the Gossipsub protocol.
+///
 /// We need to duplicate the same fields as `Floodsub` in order to
 /// differentiate the state of the two protocols.
 pub struct Gossibsub<TSubstream> {
@@ -150,4 +150,4 @@ impl NetworkBehaviour for Gossibsub<TSubstream> {
 ///
 /// > **Note**: as discussed in the spec, ambient peer discovery is pushed
 /// > outside the scope of the protocol.
-pub type Mesh = Map<TopicHash, Vec<PeerId>>;
+pub type Mesh = HashMap<TopicHash, Vec<PeerId>>;

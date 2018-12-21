@@ -18,20 +18,16 @@ extern crate unsigned_varint;
 
 /// Includes constants to use in a `NetworkBehaviour`.
 pub mod constants;
-/// Implements a `ProtocolHandler` for the gossipsub protocol. 2nd highest
-/// level.
-pub mod handler;
-/// Configures gossipsub and coding and decoding from `rpc_proto.rs.` 2nd
-/// lowest level, along with topic. Redefines control messages from
-/// `rpc_proto` to avoid depending on protobuf (and potentially use something
-/// else in future).
-pub mod protocol;
+
+/// Contains the `Message` types used in `Gossipsub`: messages for arbitrary
+/// data to use in applications, subscription messages, and control messages,
+/// as well as wrappers.
+pub mod message;
 
 // Implements `Gossipsub`, a high level `NetworkBehaviour`.
 mod layer;
+
 // Generated via `protoc --rust_out . rpc.proto && sudo chown $USER:$USER
 // *.rs` from rpc.proto. Rules for transport over-the-wire via protobuf.
 // Lowest level.
 mod rpc_proto;
-// Implements `Topic` for peers to publish and subscribe to.
-mod topic;
