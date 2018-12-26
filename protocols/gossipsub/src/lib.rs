@@ -24,6 +24,16 @@ pub mod constants;
 /// as well as wrappers.
 pub mod message;
 
+/// Implements a `ProtocolHandler` for the gossipsub protocol. 2nd highest
+/// level.
+pub mod handler;
+
+/// Configures gossipsub and coding and decoding from `rpc_proto.rs.` 2nd
+/// lowest level, along with topic. Redefines control messages from
+/// `rpc_proto` to avoid depending on protobuf (and potentially use something
+/// else in future).
+pub mod protocol;
+
 // Implements `Gossipsub`, a high level `NetworkBehaviour`.
 mod layer;
 
