@@ -2,99 +2,7 @@ use libp2p_floodsub::TopicHash;
 use libp2p_core::PeerId;
 use rpc_proto;
 
-/// Represents the hash of a `Message`.
-///
-/// Instead of a using the message as a whole, the API of floodsub uses a
-/// hash of the message. You only have to build the hash once, then use it
-/// everywhere.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct MessageHash {
-    hash: String,
-}
 
-impl MessageHash {
-    /// Builds a new `MessageHash` from the given hash.
-    #[inline]
-    pub fn from_raw(hash: String) -> MessageHash {
-        MessageHash { hash: hash }
-    }
-
-    /// Converts a `MessageHash` into a hash of the message as a `String`.
-    #[inline]
-    pub fn into_string(self) -> String {
-        self.hash
-    }
-}
-
-// /// The different kinds of messages transferred over a Gossipsub network.
-// #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-// pub enum Message {
-//     /// A `GossipsubMessage` message, contains arbitrary data for use in
-//     /// applications.
-//     Msg(GossipsubMessage),
-//     /// A `ControlMessage`, used to control the Gossipsub network.
-//     CtrlMsg(ControlMessage),
-//     /// A `GossipsubSubscription`, used to subscribe and unsubscribe to
-//     /// topics.
-//     Sub(GossipsubSubscription)
-// }
-
-/// Built RPC (contains all the kinds of messages we receive over a Gossipsub
-/// network)
-#[derive(Debug, Clone)]
-pub struct RPC {
-    descriptor: rpc_proto::RPC,
-    hash: MessageHash,
-}
-
-impl RPC {
-    /// Return the hash of the message.
-    #[inline]
-    pub fn hash(&self) -> &MessageHash {
-        &self.hash
-    }
-}
-
-impl AsRef<MessageHash> for Message {
-    #[inline]
-    fn as_ref(&self) -> &MessageHash {
-        &self.hash
-    }
-}
-
-/// Builder for a `MessageHash`.
-#[derive(Debug, Clone)]
-pub struct MessageBuilder {
-    builder: rpc_proto::RPC,
-}
-
-impl MessageBuilder {
-    pub fn new<S>(msg: M) -> MessageBuilder
-    where
-        M: Into<Message>,
-    {
-        let mut builder = rpc_proto::RPC::new();
-        builder.set_subscriptions(name.into());
-
-        MessageBuilder { builder: builder }
-    }
-
-    /// Turns the builder into an actual `Topic`.
-    pub fn build(self) -> Topic {
-        let bytes = self
-            .builder
-            .write_to_bytes()
-            .expect("protobuf message is always valid");
-        // TODO: https://github.com/libp2p/rust-libp2p/issues/473
-        let hash = TopicHash {
-            hash: bs58::encode(&bytes).into_string(),
-        };
-        Topic {
-            descriptor: self.builder,
-            hash,
-        }
-    }
-}
 
 /// Represents a message ID as a string.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -174,23 +82,6 @@ pub struct ControlMessage {
     graft: Vec<ControlGraft>,
     prune: Vec<ControlPrune>,
 }
-
-// A struct is used in rpc_proto, so it's probably best to use that for
-// consistency.
-// /// A message used to control the Gossipsub network.
-// #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-// pub enum ControlMessage {
-//     /// The control message for gossiping variant.
-//     IHave(ControlIHave),
-//     /// Request transmission of messages announced in a `ControlIHave`
-//     /// message.
-//     IWant(ControlIWant),
-//     /// Graft a mesh link; this notifies the peer that it has been added
-//     /// to the local mesh view.
-//     Graft(ControlGraft),
-//     /// The control message for pruning mesh links.
-//     Prune(ControlPrune),
-// }
 
 /// Gossip control message; this notifies the peer that the following
 /// messages were recently seen and are available on request.
