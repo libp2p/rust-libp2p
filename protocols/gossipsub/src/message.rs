@@ -168,20 +168,29 @@ pub enum GossipsubSubscriptionAction {
     Unsubscribe,
 }
 
-/// A message used to control the Gossipsub network.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ControlMessage {
-    /// The control message for gossiping.
-    IHave(ControlIHave),
-    /// Request transmission of messages announced in a `ControlIHave`
-    /// message.
-    IWant(ControlIWant),
-    /// Graft a mesh link; this notifies the peer that it has been added
-    /// to the local mesh view.
-    Graft(ControlGraft),
-    /// The control message for pruning mesh links.
-    Prune(ControlPrune),
+pub struct ControlMessage {
+    ihave: Vec<ControlIHave>,
+    iwant: Vec<ControlIWant>,
+    graft: Vec<ControlGraft>,
+    prune: Vec<ControlPrune>,
 }
+
+// A struct is used in rpc_proto, so it's probably best to use that for
+// consistency.
+// /// A message used to control the Gossipsub network.
+// #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+// pub enum ControlMessage {
+//     /// The control message for gossiping variant.
+//     IHave(ControlIHave),
+//     /// Request transmission of messages announced in a `ControlIHave`
+//     /// message.
+//     IWant(ControlIWant),
+//     /// Graft a mesh link; this notifies the peer that it has been added
+//     /// to the local mesh view.
+//     Graft(ControlGraft),
+//     /// The control message for pruning mesh links.
+//     Prune(ControlPrune),
+// }
 
 /// Gossip control message; this notifies the peer that the following
 /// messages were recently seen and are available on request.
