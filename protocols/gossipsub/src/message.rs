@@ -197,11 +197,17 @@ pub enum GossipsubSubscriptionAction {
     Unsubscribe,
 }
 
+/// Contains the control message for Gossipsub.
 pub struct ControlMessage {
-    ihave: Vec<ControlIHave>,
-    iwant: Vec<ControlIWant>,
-    graft: Vec<ControlGraft>,
-    prune: Vec<ControlPrune>,
+    /// The control message for gossiping
+    pub ihave: Vec<ControlIHave>,
+    /// Request transmission of messages announced in a `ControlIHave` message.
+    pub iwant: Vec<ControlIWant>,
+    /// Graft a mesh link; this notifies the peer that it has been added to
+    /// the local mesh view.
+    pub graft: Vec<ControlGraft>,
+    /// The control message for pruning mesh links.
+    pub prune: Vec<ControlPrune>,
 }
 
 /// Gossip control message; this notifies the peer that the following
