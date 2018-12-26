@@ -4,3 +4,7 @@ use message::Message;
 pub struct MessageCache {
     msgs: Vec<Impl From<MessageID>>,
 }
+
+impl MessageCache {
+    
+}

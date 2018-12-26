@@ -1,8 +1,9 @@
 use protocol::{GossipsubConfig,GossipsubRpc,GossipsubCodec};
 use futures::prelude::*;
 use libp2p_core::{
-    ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerSelect,
-    upgrade::{InboundUpgrade, OutboundUpgrade}
+    ProtocolsHandler, ProtocolsHandlerEvent,
+    upgrade::{InboundUpgrade, OutboundUpgrade},
+    protocols_handler::select::ProtocolsHandlerSelect,
 };
 use libp2p_floodsub::{
     protocol::{FloodsubConfig, FloodsubRpc},
@@ -16,19 +17,11 @@ use tokio_io::{AsyncRead, AsyncWrite};
 /// Combines the `RawGossipsubHandler` and `FloodsubHandler` into one
 /// protocol, to use as a handler for Gossipsub proper, which should be
 /// backwards-compatible with Floodsub.
-pub struct GossipsubHandler<RawGossipsubHandler,
-    FloodsubHandler> {
-    gossipsub: RawGossipsubHandler<TSubstream>,
-    floodsub: FloodsubHandler<TSubstream>,
-}
+pub struct GossipsubHandler{}
 
-impl GossipsubHandler {
-    fn new(gossipsub: RawGossipsubHandler<TSubstream>,
-        floodsub: FloodsubHandler<TSubstream>) -> Self {
-        ProtocolsHandlerSelect::new(
-            gossipsub: RawGossipsubHandler<TSubstream>,
-            floodsub: FloodsubHandler<TSubstream>
-        );
+impl ProtocolsHandlerSelect for GossipsubHandler {
+    fn new(gossipsub: RawGossipsubHandler, floodsub: FloodsubHandler) -> Self {
+        ProtocolsHandlerSelect::new(gossipsub, floodsub);
     }
 }
 
@@ -93,7 +86,7 @@ impl<TSubstream> RawGossipsubHandler<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
-    /// Builds a new `GossipsubHandler`.
+    /// Builds a new `RawGossipsubHandler`.
     pub fn new() -> Self {
         RawGossipsubHandler {
             config: GossipsubConfig::new(),
@@ -132,7 +125,8 @@ where
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output,
+        protocol: <Self::OutboundProtocol as
+            OutboundUpgrade<TSubstream>>::Output,
         message: Self::OutboundOpenInfo
     ) {
         if self.shutting_down {
@@ -150,21 +144,24 @@ where
     fn inject_inbound_closed(&mut self) {}
 
     #[inline]
-    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: io::Error) {}
+    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _:
+        io::Error) {}
 
     #[inline]
     fn shutdown(&mut self) {
         self.shutting_down = true;
         for n in (0..self.substreams.len()).rev() {
             let mut substream = self.substreams.swap_remove(n);
-            self.substreams.push(SubstreamState::Closing(substream.into_substream()));
+            self.substreams
+                .push(SubstreamState::Closing(substream.into_substream()));
         }
     }
 
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>,
+        Option<ProtocolsHandlerEvent<Self::OutboundProtocol,
+            Self::OutboundOpenInfo, Self::OutEvent>>,
         io::Error,
     > {
         if !self.send_queue.is_empty() {
@@ -181,13 +178,16 @@ where
             let mut substream = self.substreams.swap_remove(n);
             loop {
                 substream = match substream {
-                    SubstreamState::WaitingInput(mut substream) => match substream.poll() {
+                    SubstreamState::WaitingInput(mut substream)
+                    => match substream.poll() {
                         Ok(Async::Ready(Some(message))) => {
                             self.substreams
                                 .push(SubstreamState::WaitingInput(substream));
-                            return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(message))));
+                            return Ok(Async::Ready(Some
+                                (ProtocolsHandlerEvent::Custom(message))));
                         }
-                        Ok(Async::Ready(None)) => SubstreamState::Closing(substream),
+                        Ok(Async::Ready(None)) => SubstreamState::Closing
+                            (substream),
                         Ok(Async::NotReady) => {
                             self.substreams
                                 .push(SubstreamState::WaitingInput(substream));
@@ -197,28 +197,34 @@ where
                     },
                     SubstreamState::PendingSend(mut substream, message) => {
                         match substream.start_send(message)? {
-                            AsyncSink::Ready => SubstreamState::PendingFlush(substream),
+                            AsyncSink::Ready
+                                => SubstreamState::PendingFlush(substream),
                             AsyncSink::NotReady(message) => {
                                 self.substreams
-                                    .push(SubstreamState::PendingSend(substream, message));
+                                    .push(SubstreamState::PendingSend
+                                        (substream, message));
                                 return Ok(Async::NotReady);
                             }
                         }
                     }
                     SubstreamState::PendingFlush(mut substream) => {
                         match substream.poll_complete()? {
-                            Async::Ready(()) => SubstreamState::Closing(substream),
+                            Async::Ready(())
+                                => SubstreamState::Closing(substream),
                             Async::NotReady => {
                                 self.substreams
-                                    .push(SubstreamState::PendingFlush(substream));
+                                    .push(SubstreamState::PendingFlush
+                                        (substream));
                                 return Ok(Async::NotReady);
                             }
                         }
                     }
-                    SubstreamState::Closing(mut substream) => match substream.close() {
+                    SubstreamState::Closing(mut substream)
+                    => match substream.close() {
                         Ok(Async::Ready(())) => break,
                         Ok(Async::NotReady) => {
-                            self.substreams.push(SubstreamState::Closing(substream));
+                            self.substreams.push(SubstreamState::Closing
+                            (substream));
                             return Ok(Async::NotReady);
                         }
                         Err(_) => return Ok(Async::Ready(None)),
