@@ -127,18 +127,18 @@ impl<'a> From<&'a GMessage> for TopicHash {
 
 /// Represents a message ID as a string.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct MsgID {
+pub struct MsgId {
     msg_id: String,
 }
 
-impl MsgID {
-    /// Builds a new `MsgID` from the given string.
+impl MsgId {
+    /// Builds a new `MsgId` from the given string.
     #[inline]
-    pub fn from_raw(str_id: String) -> MsgID {
-        MsgID { msg_id: str_id }
+    pub fn from_raw(str_id: String) -> MsgId {
+        MsgId { msg_id: str_id }
     }
 
-    /// Converts a `MsgID` into a message ID as a `String`.
+    /// Converts a `MsgId` into a message ID as a `String`.
     #[inline]
     pub fn into_string(self) -> String {
         self.msg_id
@@ -152,11 +152,11 @@ impl From<GMessage> for MsgId {
     }
 }
 
-/// Contains either a `MsgHash` or a `MsgID`, to represent a
+/// Contains either a `MsgHash` or a `MsgId`, to represent a
 /// message.
 pub enum MsgRepEnum {
     hash(MsgHash),
-    id(MsgID),
+    id(MsgId),
 }
 
 // Not used? May delete.
@@ -169,7 +169,7 @@ pub struct MsgRep {
     /// The hash of the `GMessage`.
     pub hash: MsgHash,
     /// The `GMessage` ID.
-    pub id: MsgID,
+    pub id: MsgId,
 }
 
 impl MsgRep {
@@ -185,8 +185,8 @@ impl MsgRep {
     }
 
     /// Convenience function that sets the `id` field of `MsgRep` with
-    /// the provided `MsgID` instance.
-    pub fn set_msg_id(&mut self, id: MsgID) {
+    /// the provided `MsgId` instance.
+    pub fn set_msg_id(&mut self, id: MsgId) {
         self.id = id
     }
 }
@@ -212,23 +212,23 @@ impl<'a> From<&'a MsgRep> for MsgHash {
     }
 }
 
-impl AsRef<MsgID> for MsgRep {
+impl AsRef<MsgId> for MsgRep {
     #[inline]
-    fn as_ref(&self) -> &MsgID {
+    fn as_ref(&self) -> &MsgId {
         &self.id
     }
 }
 
-impl From<MsgRep> for MsgID {
+impl From<MsgRep> for MsgId {
     #[inline]
-    fn from(message: MsgRep) -> MsgID {
+    fn from(message: MsgRep) -> MsgId {
         message.id
     }
 }
 
-impl<'a> From<&'a MsgRep> for MsgID {
+impl<'a> From<&'a MsgRep> for MsgId {
     #[inline]
-    fn from(message: &'a GMessage) -> MsgID {
+    fn from(message: &'a GMessage) -> MsgId {
         message.id.clone()
     }
 }

@@ -14,6 +14,7 @@ use std::{
         hash_map::{DefaultHasher, HashMap},
         VecDeque
     },
+    iter,
     marker::PhantomData
 };
 /// Contains the state needed to maintain the Gossipsub protocol.
@@ -72,14 +73,14 @@ impl<TSubstream> Gossipsub<TSubstream> {
             fanout: Mesh::new(),
             mcache: MCache::new(),
             marker: PhantomData,
-            Floodsub::new(local_peer_id),
+            floodsub: Floodsub::new(local_peer_id),
         }
     }
 
     /// Convenience function that creates a `Gossipsub` with/using a previously existing `Floodsub`.
     pub fn new_w_existing_floodsub(local_peer_id: PeerId, fs: Floodsub)
     -> Self {
-        gs = Gossipsub::new(local_peer_id);
+        let mut gs = Gossipsub::new(local_peer_id);
         gs.floodsub = fs;
         gs
     }
@@ -162,7 +163,8 @@ impl<TSubstream> Gossipsub<TSubstream> {
     /// topics.
     pub fn publish_many(&mut self,
         topic: impl IntoIterator<Item = impl Into<TopicHash>>,
-        data: impl Into<Vec<u8>>) {
+        data: impl Into<Vec<u8>>,
+        control: Option<ControlMessage>) {
         let message = GMessage {
             source: self.local_peer_id.clone(),
             data: data.into(),
@@ -190,9 +192,10 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer_id.clone(),
-                event: FloodsubRpc {
+                event: GossipsubRpc {
                     subscriptions: Vec::new(),
                     messages: vec![message.clone()],
+                    control: control
                 }
             });
         }
@@ -263,6 +266,10 @@ impl<TSubstream> Gossipsub<TSubstream> {
     }
 }
 
-impl NetworkBehaviour for Gossipsub<TSubstream> {
+impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for
+    Gossipsub<TSubstream>
+where
+    TSubstream: AsyncRead + AsyncWrite,
+{
 
 }
