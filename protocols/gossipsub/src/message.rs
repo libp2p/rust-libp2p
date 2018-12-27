@@ -252,6 +252,7 @@ pub enum GossipsubSubscriptionAction {
 }
 
 /// Contains the control message for Gossipsub.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct ControlMessage {
     /// The control message for gossiping
     pub ihave: Vec<ControlIHave>,
@@ -266,7 +267,7 @@ pub struct ControlMessage {
 
 /// Gossip control message; this notifies the peer that the following
 /// messages were recently seen and are available on request.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct ControlIHave {
     /// Topic that the messages belong to.
     pub topic: TopicHash,
@@ -277,7 +278,7 @@ pub struct ControlIHave {
 
 /// Control message that requests messages from a peer that announced them
 /// with an IHave message.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct ControlIWant {
     /// List of messages that are being requested.
     pub messages: Vec<MsgRep>,
@@ -285,7 +286,7 @@ pub struct ControlIWant {
 
 /// Control message that grafts a mesh link; this notifies the peer that it
 /// has been added to the local mesh view of a topic.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct ControlGraft {
     /// Topic to graft a peer to.
     pub topic: TopicHash,
@@ -293,7 +294,7 @@ pub struct ControlGraft {
 
 /// Control message that prunes a mesh link; this notifies the peer that it
 /// has been removed from the local mesh view of a topic.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct ControlPrune {
     /// Topic to prune a peer from.
     pub topic: TopicHash,
@@ -325,5 +326,5 @@ pub struct GossipsubRpc {
     /// List of subscriptions.
     pub subscriptions: Vec<GossipsubSubscription>,
     /// Optional control message.
-    pub control: ControlMessage,
+    pub control: Option<ControlMessage>,
 }

@@ -15,17 +15,6 @@ use std::{fmt, io};
 use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
 
-/// Combines the `RawGossipsubHandler` and `FloodsubHandler` into one
-/// protocol, to use as a handler for Gossipsub proper, which should be
-/// backwards-compatible with Floodsub.
-pub struct GossipsubHandler{}
-
-impl ProtocolsHandlerSelect for GossipsubHandler {
-    fn new(gossipsub: RawGossipsubHandler, floodsub: FloodsubHandler) -> Self {
-        ProtocolsHandlerSelect::new(gossipsub, floodsub);
-    }
-}
-
 /// Protocol handler that handles communication with the remote for the
 /// gossipsub protocol.
 ///
@@ -33,7 +22,7 @@ impl ProtocolsHandlerSelect for GossipsubHandler {
 /// each request we make.
 ///
 /// It also handles requests made by the remote.
-pub struct RawGossipsubHandler<TSubstream>
+pub struct GossipsubHandler<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
@@ -83,13 +72,13 @@ where
     }
 }
 
-impl<TSubstream> RawGossipsubHandler<TSubstream>
+impl<TSubstream> GossipsubHandler<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
-    /// Builds a new `RawGossipsubHandler`.
+    /// Builds a new `GossipsubHandler`.
     pub fn new() -> Self {
-        RawGossipsubHandler {
+        GossipsubHandler {
             config: GossipsubConfig::new(),
             shutting_down: false,
             substreams: Vec::new(),
@@ -98,7 +87,7 @@ where
     }
 }
 
-impl<TSubstream> ProtocolsHandler for RawGossipsubHandler<TSubstream>
+impl<TSubstream> ProtocolsHandler for GossipsubHandler<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
@@ -238,12 +227,12 @@ where
     }
 }
 
-impl<TSubstream> fmt::Debug for RawGossipsubHandler<TSubstream>
+impl<TSubstream> fmt::Debug for GossipsubHandler<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        f.debug_struct("RawGossipsubHandler")
+        f.debug_struct("GossipsubHandler")
             .field("shutting_down", &self.shutting_down)
             .field("substreams", &self.substreams.len())
             .field("send_queue", &self.send_queue.len())
