@@ -1,6 +1,7 @@
 use libp2p_floodsub::TopicHash;
 use libp2p_core::PeerId;
 use chrono::{DateTime, Utc};
+use rpc_proto;
 
 /// Represents the hash of a `Message`.
 ///
@@ -33,30 +34,25 @@ pub struct MsgHashBuilder {
 }
 
 impl MsgHashBuilder {
-    pub fn new<M>(msg: M) -> TopicBuilder
+    pub fn new<M>(msg: M) -> Self
     where
-        S: Into<String>,
+        // In consideration of a message ID conversion to a message.
+        M: Into<GMessage>,
     {
-        let mut builder = rpc_proto::Message::new();
-        builder.set_name(name.into());
+        let mut builder = msg;
 
-        TopicBuilder { builder: builder }
+        MsgHashBuilder { builder: builder }
     }
 
-    /// Turns the builder into an actual `Topic`.
-    pub fn build(self) -> Topic {
+    /// Turns the builder into an actual `MsgHash`.
+    pub fn build(self) -> MsgHash {
         let bytes = self
             .builder
             .write_to_bytes()
             .expect("protobuf message is always valid");
-        // TODO: https://github.com/libp2p/rust-libp2p/issues/473
-        let hash = TopicHash {
+        MsgHash {
             hash: bs58::encode(&bytes).into_string(),
         };
-        Topic {
-            descriptor: self.builder,
-            hash,
-        }
     }
 }
 
