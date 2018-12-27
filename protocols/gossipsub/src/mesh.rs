@@ -1,5 +1,5 @@
 use std::collections::hash_map::HashMap;
-use libp2p_floodsub::topic::TopicHash;
+use libp2p_floodsub::TopicHash;
 use libp2p_core::PeerId;
 
 /// A soft overlay network for topics of interest, which meshes as a map
