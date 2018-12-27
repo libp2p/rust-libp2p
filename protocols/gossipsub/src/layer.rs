@@ -2,21 +2,27 @@ use cuckoofilter::CuckooFilter;
 use libp2p_floodsub::{Floodsub, Topic, TopicHash};
 use libp2p_core::{
     swarm::{NetworkBehaviour, NetworkBehaviourAction},
-    PeerId,
+    PeerId
 };
-// use protocol::{GossipsubRpc, GossipsubMessage, ControlMessage};
+use mcache::MCache;
+use mesh::Mesh;
+use message::{GossipsubRpc, GMessage, ControlMessage, GossipsubSubscription,
+    GossipsubSubscriptionAction};
 use smallvec::SmallVec;
-use std::collections::hash_map::{DefaultHasher, HashMap};
-use smallvec::SmallVec;
-use std::{collections::VecDeque, marker::PhantomData};
-
+use std::{
+    collections::{
+        hash_map::{DefaultHasher, HashMap},
+        VecDeque
+    },
+    marker::PhantomData
+};
 /// Contains the state needed to maintain the Gossipsub protocol.
 ///
 /// We need to duplicate the same fields as `Floodsub` in order to
 /// differentiate the state of the two protocols.
-pub struct Gossibsub<TSubstream> {
+pub struct Gossipsub<TSubstream> {
     /// Events that need to be yielded to the outside when polling.
-    events: VecDeque<NetworkBehaviourAction<GossipsubRpc, Message>>,
+    events: VecDeque<NetworkBehaviourAction<GossipsubRpc, GMessage>>,
 
     /// Peer id of the local node. Used for the source of the messages that we
     /// publish.
@@ -44,7 +50,7 @@ pub struct Gossibsub<TSubstream> {
     /// membership, as a map of topics to lists of peers.
     fanout: Mesh,
 
-    mcache: Vec<Message>,
+    mcache: MCache,
 
     /// Marker to pin the generics.
     marker: PhantomData<TSubstream>,
@@ -53,14 +59,146 @@ pub struct Gossibsub<TSubstream> {
     floodsub: Floodsub<TSubstream>,
 }
 
-impl<TSubstream> Gossibsub<TSubstream> {
+impl<TSubstream> Gossipsub<TSubstream> {
     /// Creates a `Gossipsub`.
     pub fn new(local_peer_id: PeerId) -> Self {
-        Gossibsub {
+        Gossipsub {
             events: VecDeque::new(),
+            local_peer_id,
+            connected_peers: HashMap::new(),
+            subscribed_topics: SmallVec::new(),
+            received: CuckooFilter::new(),
+            mesh: Mesh::new(),
+            fanout: Mesh::new(),
+            mcache: MCache::new(),
+            marker: PhantomData,
             Floodsub::new(local_peer_id),
         }
     }
+
+    /// Convenience function that creates a `Gossipsub` with/using a previously existing `Floodsub`.
+    pub fn new_w_existing_floodsub(local_peer_id: PeerId, fs: Floodsub)
+    -> Self {
+        gs = Gossipsub::new(local_peer_id);
+        gs.floodsub = fs;
+        gs
+    }
+    // ---------------------------------------------------------------------
+    // The following section is re-implemented from
+    // Floodsub. This is needed to differentiate state.
+    // TODO: write code to reduce re-implementation like this, where most code
+    // is unmodified, except for types being renamed from `Floodsub*` to
+    // `*Gossipsub`.
+
+    /// Subscribes to a topic.
+    ///
+    /// Returns true if the subscription worked. Returns false if we were
+    /// already subscribed.
+    pub fn subscribe(&mut self, topic: Topic) -> bool {
+        if self.subscribed_topics.iter().any(|t| t.hash() == topic.hash()) {
+            return false;
+        }
+
+        for peer in self.connected_peers.keys() {
+            self.events.push_back(NetworkBehaviourAction::SendEvent {
+                peer_id: peer.clone(),
+                event: GossipsubRpc {
+                    messages: Vec::new(),
+                    subscriptions: vec![GossipsubSubscription {
+                        topic: topic.hash().clone(),
+                        action: GossipsubSubscriptionAction::Subscribe,
+                    }],
+                },
+            });
+        }
+
+        self.subscribed_topics.push(topic);
+        true
+    }
+
+    /// Unsubscribes from a topic.
+    ///
+    /// Note that this only requires a `TopicHash` and not a full `Topic`.
+    ///
+    /// Returns true if we were subscribed to this topic.
+    pub fn unsubscribe(&mut self, topic: impl AsRef<TopicHash>) -> bool {
+        let topic = topic.as_ref();
+        let pos = match self.subscribed_topics.iter()
+            .position(|t| t.hash() == topic) {
+            Some(pos) => pos,
+            None => return false
+        };
+
+        self.subscribed_topics.remove(pos);
+
+        for peer in self.connected_peers.keys() {
+            self.events.push_back(NetworkBehaviourAction::SendEvent {
+                peer_id: peer.clone(),
+                event: GossipsubRpc {
+                    messages: Vec::new(),
+                    subscriptions: vec![GossipsubSubscription {
+                        topic: topic.clone(),
+                        action: GossipsubSubscriptionAction::Unsubscribe,
+                    }],
+                },
+            });
+        }
+
+        true
+    }
+
+    /// Publishes a message to the network.
+    ///
+    /// > **Note**: Doesn't do anything if we're not subscribed to the topic.
+    pub fn publish(&mut self, topic: impl Into<TopicHash>,
+        data: impl Into<Vec<u8>>) {
+        self.publish_many(iter::once(topic), data)
+    }
+
+    /// Publishes a message with multiple topics to the network, without any
+    /// authentication or encryption.
+    ///
+    /// > **Note**: Doesn't do anything if we're not subscribed to any of the
+    /// topics.
+    pub fn publish_many(&mut self,
+        topic: impl IntoIterator<Item = impl Into<TopicHash>>,
+        data: impl Into<Vec<u8>>) {
+        let message = GMessage {
+            source: self.local_peer_id.clone(),
+            data: data.into(),
+            // If the sequence numbers are predictable, then an attacker could
+            // flood the network with packets with the predetermined sequence
+            // numbers and absorb our legitimate messages. We therefore use
+            // a random number.
+            sequence_number: rand::random::<[u8; 20]>().to_vec(),
+            topics: topic.into_iter().map(|t| t.into().clone()).collect(),
+            timestamp: self.set_timestamp()
+        };
+
+        // Don't publish the message if we're not subscribed ourselves to any of the topics.
+        if !self.subscribed_topics.iter().any(|t| message.topics.iter().any(|u| t.hash() == u)) {
+            return;
+        }
+
+        self.received.add(&message);
+
+        // Send to peers we know are subscribed to the topic.
+        for (peer_id, sub_topic) in self.connected_peers.iter() {
+            if !sub_topic.iter().any(|t| message.topics.iter().any(|u| t == u)) {
+                continue;
+            }
+
+            self.events.push_back(NetworkBehaviourAction::SendEvent {
+                peer_id: peer_id.clone(),
+                event: FloodsubRpc {
+                    subscriptions: Vec::new(),
+                    messages: vec![message.clone()],
+                }
+            });
+        }
+    }
+    // End of re-implementation from `Floodsub` methods.
+    // ---------------------------------------------------------------------
 
     /// Grafts the peer to a topic. This notifies the peer that it has been /// added to the local mesh view.
     ///
@@ -125,29 +263,6 @@ impl<TSubstream> Gossibsub<TSubstream> {
     }
 }
 
-impl NetworkBehaviour for Gossibsub<TSubstream> {
+impl NetworkBehaviour for Gossipsub<TSubstream> {
 
 }
-
-/// A soft overlay network for topics of interest, which meshes as a map
-/// of topics to lists of peers. It is a randomized topic mesh as a map of a
-/// topic to a list of peers. The local peer maintains a topic view of its
-/// direct peers only, a subset of the total peers that subscribe to a topic,
-/// in order to limit bandwidth and increase decentralization, security and
-/// sustainability. Extracts from the [spec]
-/// (https://github.com/libp2p/specs/tree/master/pubsub/gossipsub),
-/// although FMI read the full spec:
-/// > The overlay is maintained by exchanging subscription control messages
-/// > whenever there is a change in the topic list. The subscription
-/// > messages are not propagated further, so each peer maintains a topic
-/// > view of its direct peers only. Whenever a peer disconnects, it is
-/// > removed from the overlay…
-/// > We can form an overlay mesh where each peer forwards to a subset of
-/// > its peers on a stable basis… Each peer maintains its own view of the
-/// > mesh for each topic, which is a list of bidirectional links to other
-/// > peers. That is, in steady state, whenever a peer A is in the mesh of
-/// > peer B, then peer B is also in the mesh of peer A.
-///
-/// > **Note**: as discussed in the spec, ambient peer discovery is pushed
-/// > outside the scope of the protocol.
-pub type Mesh = HashMap<TopicHash, Vec<PeerId>>;

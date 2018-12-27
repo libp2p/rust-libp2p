@@ -1,6 +1,6 @@
 use libp2p_floodsub::TopicHash;
 use libp2p_core::PeerId;
-use rpc_proto;
+use chrono::{DateTime, Utc};
 
 /// Represents the hash of a `Message`.
 ///
@@ -8,28 +8,61 @@ use rpc_proto;
 /// hash of the message. You only have to build the hash once, then use it
 /// everywhere.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct MessageHash {
+pub struct MsgHash {
     hash: String,
 }
 
-impl MessageHash {
-    /// Builds a new `MessageHash` from the given hash.
+impl MsgHash {
+    /// Builds a new `MsgHash` from the given hash.
     #[inline]
-    pub fn from_raw(hash: String) -> MessageHash {
-        MessageHash { hash: hash }
+    pub fn from_raw(hash: String) -> MsgHash {
+        MsgHash { hash: hash }
     }
 
-    /// Converts a `MessageHash` into a hash of the message as a `String`.
+    /// Converts a `MsgHash` into a hash of the message as a `String`.
     #[inline]
     pub fn into_string(self) -> String {
         self.hash
     }
 }
 
+/// Builder for a `MsgHash`.
+#[derive(Debug, Clone)]
+pub struct MsgHashBuilder {
+    builder: rpc_proto::Message,
+}
+
+impl MsgHashBuilder {
+    pub fn new<M>(msg: M) -> TopicBuilder
+    where
+        S: Into<String>,
+    {
+        let mut builder = rpc_proto::Message::new();
+        builder.set_name(name.into());
+
+        TopicBuilder { builder: builder }
+    }
+
+    /// Turns the builder into an actual `Topic`.
+    pub fn build(self) -> Topic {
+        let bytes = self
+            .builder
+            .write_to_bytes()
+            .expect("protobuf message is always valid");
+        // TODO: https://github.com/libp2p/rust-libp2p/issues/473
+        let hash = TopicHash {
+            hash: bs58::encode(&bytes).into_string(),
+        };
+        Topic {
+            descriptor: self.builder,
+            hash,
+        }
+    }
+}
 
 /// A message received by the Gossipsub system.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Message {
+pub struct GMessage {
     /// Id of the peer that published this message.
     pub source: PeerId,
 
@@ -44,137 +77,162 @@ pub struct Message {
     /// Each message can belong to multiple topics at once.
     pub topics: Vec<TopicHash>,
 
-    /// To use for an authentication scheme (not yet defined or implemented),
-    /// see rpc.proto for more info.
-    pub signature: Vec<u8>,
+    // To use for an authentication scheme (not yet defined or implemented),
+    // see rpc.proto for more info.
+    // TODO
+    signature: Vec<u8>,
 
-    /// To use for an encryption scheme (not yet defined or implemented),
-    /// see rpc.proto for more info.
-    pub key: Vec<u8>,
+    // To use for an encryption scheme (not yet defined or implemented),
+    // see rpc.proto for more info.
+    // TODO
+    key: Vec<u8>,
 
-    /// The hash of a `Message`.
-    // Could be part of rpc.proto.
-    pub hash: MessageHash,
+    // This should not be public as it could then be manipulated. It needs to
+    // only be modified via the `publish` method on `Gossipsub`. Used for the
+    // message cache.
+    time_sent: DateTime<Utc>,
 }
 
-impl Message {
+impl GMessage {
     /// Returns the hash of the message.
     #[inline]
-    pub fn hash(&self) -> &MessageHash {
+    pub fn hash(&self) -> &MsgHash {
+        &self.hash
+    }
+
+    // As above, used in the `publish` method on `Gossipsub` for `MCache`.
+    pub(crate) fn set_timestamp(&mut self) {
+        self.time_sent = Utc::now().expect("Utc::now() doesn't err according 
+        to 
+        https://docs.rs/chrono/0.4.6/chrono/offset/struct.Utc.html#method.now");
+    }
+}
+
+impl AsRef<MsgHash> for GMessage {
+    #[inline]
+    fn as_ref(&self) -> &MsgHash {
         &self.hash
     }
 }
 
-impl AsRef<MessageHash> for Message {
+impl From<GMessage> for MsgHash {
     #[inline]
-    fn as_ref(&self) -> &MessageHash {
-        &self.hash
-    }
-}
-
-impl From<Message> for MessageHash {
-    #[inline]
-    fn from(message: Message) -> MessageHash {
+    fn from(message: GMessage) -> MsgHash {
         message.hash
     }
 }
 
-impl<'a> From<&'a Message> for TopicHash {
+impl<'a> From<&'a GMessage> for TopicHash {
     #[inline]
-    fn from(message: &'a Message) -> MessageHash {
+    fn from(message: &'a GMessage) -> MsgHash {
         message.hash.clone()
     }
 }
 
 /// Represents a message ID as a string.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct MessageIDStr {
+pub struct MsgID {
     msg_id: String,
 }
 
-impl MessageIDStr {
-    /// Builds a new `MessageIDStr` from the given string.
+impl MsgID {
+    /// Builds a new `MsgID` from the given string.
     #[inline]
-    pub fn from_raw(str_id: String) -> MessageIDStr {
-        MessageIDStr { msg_id: str_id }
+    pub fn from_raw(str_id: String) -> MsgID {
+        MsgID { msg_id: str_id }
     }
 
-    /// Converts a `MessageIDStr` into a message ID as a `String`.
+    /// Converts a `MsgID` into a message ID as a `String`.
     #[inline]
     pub fn into_string(self) -> String {
         self.msg_id
     }
 }
 
-/// An ID to represent a message, which can be a hash of the message or a
-/// message ID as a string. It is used to query for a message.
-// This could actually be part of rpc.proto, saving the need to manually write
-// this.
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
-pub struct MessageID {
-    /// The hash of the `Message`.
-    pub hash: MessageHash,
-    /// The `Message` ID.
-    pub id: MessageIDStr,
-}
-
-impl MessageID {
+impl From<GMessage> for MsgId {
     #[inline]
-    pub fn new() -> MessageID {
-        ::std::default::Default::default()
-    }
-
-    /// Convenience function that sets the `hash` field of `MessageID`
-    /// with the provided `MessageHash` instance.
-    pub fn set_msg_hash(&mut self, hash: MessageHash) {
-        self.id = hash
-    }
-
-    /// Convenience function that sets the `id` field of `MessageID` with
-    /// the provided `MessageIDStr` instance.
-    pub fn set_msg_id(&mut self, id: MessageIDStr) {
-        self.id = id
-    }
-}
-
-impl AsRef<MessageHash> for MessageID {
-    #[inline]
-    fn as_ref(&self) -> &MessageHash {
-        &self.hash
-    }
-}
-
-impl From<MessageID> for MessageHash {
-    #[inline]
-    fn from(message: Message) -> MessageHash {
-        message.hash
-    }
-}
-
-impl<'a> From<&'a MessageID> for MessageHash {
-    #[inline]
-    fn from(message: &'a Message) -> MessageHash {
-        message.hash.clone()
-    }
-}
-
-impl AsRef<MessageIDStr> for MessageID {
-    #[inline]
-    fn as_ref(&self) -> &MessageIDStr {
-        &self.id
-    }
-}
-
-impl From<MessageID> for MessageIDStr {
-    #[inline]
-    fn from(message: MessageID) -> MessageIDStr {
+    fn from(message: GMessage) -> Self {
         message.id
     }
 }
 
-impl<'a> From<&'a MessageID> for MessageIDStr {
+/// Contains either a `MsgHash` or a `MsgID`, to represent a
+/// message.
+pub enum MsgRepEnum {
+    hash(MsgHash),
+    id(MsgID),
+}
+
+// Not used? May delete.
+/// Represents a message, which can be a hash of the message or a
+/// message ID as a string. It is used to query for a message.
+// This could actually be part of rpc.proto, saving the need to manually write
+// this.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
+pub struct MsgRep {
+    /// The hash of the `GMessage`.
+    pub hash: MsgHash,
+    /// The `GMessage` ID.
+    pub id: MsgID,
+}
+
+impl MsgRep {
     #[inline]
-    fn from(message: &'a Message) -> MessageIDStr {
+    pub fn new() -> MsgRep {
+        ::std::default::Default::default()
+    }
+
+    /// Convenience function that sets the `hash` field of `MsgRep`
+    /// with the provided `MsgHash` instance.
+    pub fn set_msg_hash(&mut self, hash: MsgHash) {
+        self.id = hash
+    }
+
+    /// Convenience function that sets the `id` field of `MsgRep` with
+    /// the provided `MsgID` instance.
+    pub fn set_msg_id(&mut self, id: MsgID) {
+        self.id = id
+    }
+}
+
+impl AsRef<MsgHash> for MsgRep {
+    #[inline]
+    fn as_ref(&self) -> &MsgHash {
+        &self.hash
+    }
+}
+
+impl From<MsgRep> for MsgHash {
+    #[inline]
+    fn from(message: GMessage) -> MsgHash {
+        message.hash
+    }
+}
+
+impl<'a> From<&'a MsgRep> for MsgHash {
+    #[inline]
+    fn from(message: &'a GMessage) -> MsgHash {
+        message.hash.clone()
+    }
+}
+
+impl AsRef<MsgID> for MsgRep {
+    #[inline]
+    fn as_ref(&self) -> &MsgID {
+        &self.id
+    }
+}
+
+impl From<MsgRep> for MsgID {
+    #[inline]
+    fn from(message: MsgRep) -> MsgID {
+        message.id
+    }
+}
+
+impl<'a> From<&'a MsgRep> for MsgID {
+    #[inline]
+    fn from(message: &'a GMessage) -> MsgID {
         message.id.clone()
     }
 }
@@ -218,7 +276,7 @@ pub struct ControlIHave {
     pub topic: TopicHash,
     /// List of messages that have been recently seen and are available
     /// on request.
-    pub messages: Vec<MessageID>,
+    pub messages: Vec<MsgRep>,
 }
 
 /// Control message that requests messages from a peer that announced them
@@ -226,7 +284,7 @@ pub struct ControlIHave {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ControlIWant {
     /// List of messages that are being requested.
-    pub messages: Vec<MessageID>,
+    pub messages: Vec<MsgRep>,
 }
 
 /// Control message that grafts a mesh link; this notifies the peer that it
@@ -261,4 +319,15 @@ pub enum GossipSubGraftPruneAction {
     Graft(ControlGraft),
     /// The remote wants to prune from the given topic.
     Prune(ControlPrune),
+}
+
+/// An RPC received by the Gossipsub system.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct GossipsubRpc {
+    /// List of messages that were part of this RPC query.
+    pub messages: Vec<GMessage>,
+    /// List of subscriptions.
+    pub subscriptions: Vec<GossipsubSubscription>,
+    /// Optional control message.
+    pub control: ControlMessage,
 }

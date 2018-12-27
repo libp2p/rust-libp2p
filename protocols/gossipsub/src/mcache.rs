@@ -1,10 +1,15 @@
-use std::collections::hash_map::HashMap;
-use message::Message;
+use message::MsgRepEnum;
 
-pub struct MessageCache {
-    msgs: Vec<Impl From<MessageID>>,
+/// The message cache used to track recently seen messages. FMI see
+/// https://github.com/libp2p/specs/tree/master/pubsub/gossipsub#router-state.
+pub struct MCache {
+    msgs: Vec<MsgRepEnum>,
 }
 
-impl MessageCache {
-    
+impl MCache {
+    pub fn new() -> Self {
+        MCache {
+            msgs: Vec::new(),
+        }
+    }
 }

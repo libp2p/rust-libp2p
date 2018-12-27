@@ -10,6 +10,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 bs58 = "0.2.0"
 bytes = "0.4"
+chrono = "0.4"
 cuckoofilter = "0.3.2"
 fnv = "1.0"
 futures = "0.1"
