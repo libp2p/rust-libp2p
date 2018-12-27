@@ -17,6 +17,8 @@ use std::{
     iter,
     marker::PhantomData
 };
+use tokio_io::{AsyncRead, AsyncWrite};
+
 /// Contains the state needed to maintain the Gossipsub protocol.
 ///
 /// We need to duplicate the same fields as `Floodsub` in order to

@@ -1,14 +1,15 @@
-use protocol::{GossipsubConfig,GossipsubRpc,GossipsubCodec};
+use protocol::{GossipsubConfig,GossipsubCodec};
 use futures::prelude::*;
 use libp2p_core::{
     ProtocolsHandler, ProtocolsHandlerEvent,
     upgrade::{InboundUpgrade, OutboundUpgrade},
-    protocols_handler::select::ProtocolsHandlerSelect,
+    protocols_handler::ProtocolsHandlerSelect,
 };
 use libp2p_floodsub::{
     protocol::{FloodsubConfig, FloodsubRpc},
     handler::FloodsubHandler,
 };
+use message::{GossipsubRpc};
 use smallvec::SmallVec;
 use std::{fmt, io};
 use tokio_codec::Framed;

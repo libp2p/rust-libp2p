@@ -4,7 +4,7 @@ use crate::rpc_proto;
 use futures::future;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, PeerId};
 use libp2p_floodsub::TopicHash;
-use message::{ControlMessage, Message, GossipsubSubscription,
+use message::{ControlMessage, GMessage, GossipsubSubscription,
     GossipsubSubscriptionAction, GossipsubRpc};
 use protobuf::Message as ProtobufMessage;
 use std::{io, iter};
@@ -146,7 +146,7 @@ impl Decoder for GossipsubCodec {
 
         let mut messages = Vec::with_capacity(rpc.get_publish().len());
         for mut publish in rpc.take_publish().into_iter() {
-            messages.push(Message {
+            messages.push(GMessage {
                 source: PeerId::from_bytes(publish.take_from()).map_err(|_| {
                     io::Error::new(io::ErrorKind::InvalidData,
                     "Invalid peer ID in message")
