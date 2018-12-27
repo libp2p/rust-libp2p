@@ -16,5 +16,6 @@ env_logger = "0.6"
 tokio = "0.1"
 bytes = "0.4"
 futures = "0.1"
-tcp  = { package = "libp2p-tcp", path = "../../transports/tcp" }
+#tcp  = { package = "libp2p-tcp", path = "../../transports/tcp" }
+libp2p-tcp = {path = "../../transports/tcp" }
 elapsed = "0.1"
