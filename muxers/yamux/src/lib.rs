@@ -194,9 +194,11 @@ mod test {
 
     #[test]
     fn one_megabyte_payload() {
-        let mut cfg = yamux::Config::default();
-        cfg.set_max_buffer_size(1024 * 1024 + 1);
-        let cfg = Config::new(cfg);
-        MuxerTester::one_megabyte_payload(cfg)
+        MuxerTester::one_megabyte_payload(Config::default())
+    }
+
+    #[test]
+    fn two_connections() {
+        MuxerTester::two_connections(Config::default())
     }
 }
