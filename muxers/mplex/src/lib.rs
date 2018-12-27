@@ -612,4 +612,9 @@ mod test {
     fn one_megabyte_payload() {
         MuxerTester::one_megabyte_payload(MplexConfig::default())
     }
+
+    #[test]
+    fn two_connections() {
+        MuxerTester::two_connections(MplexConfig::default())
+    }
 }
