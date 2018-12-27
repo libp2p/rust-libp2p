@@ -347,18 +347,20 @@ where
         thr.join().unwrap();
     }
 
+    // When two connections send data to a single receiver, the data is read in sequence.
+    // The first write to finish is the first to be read.
     pub fn two_connections(config: U) {
         Self::init();
         let writer1_conf = config.clone();
         let writer2_conf = config.clone();
-        let payload_len = 1024*1024*1 - 10;
-        let payload1 = vec![111u8; payload_len];
-        let payload2 = vec![222u8; payload_len];
+        let payload_len = 1024*50;
         info!("[test] Payload size {}", payload_len);
 
         let transport = TcpConfig::new().with_upgrade(config);
         let (listener, addr) = transport.listen_on(Self::localhost()).expect("can listen on localhost");
 
+        let (tx_wrt1, rx_wrt) = mpsc::channel();
+        let tx_wrt2 = tx_wrt1.clone();
         // Writer thread 1
         let addr1 = addr.clone();
         let thr_writer1 = thread::Builder::new().name("writer thread 1".into()).spawn(move || {
@@ -367,10 +369,11 @@ where
             let (elapsed, _) = measure_time(|| {
                 Runtime::new().unwrap().block_on(
                     Self::framed_dialler_fut(transport, addr1, false)
-                        .and_then(|subs| subs.send(payload1.into()))
+                        .and_then(|subs| subs.send(vec![111u8; payload_len].into()))
                         .then(|res| {
                             trace!("[test, writer1] send result={:?}", res.is_ok());
                             assert!(res.is_ok());
+                            tx_wrt1.send(111u8);
                             Ok::<_, ()>(())
                         })
                 ).expect("writer1 future works");
@@ -386,10 +389,11 @@ where
             let (elapsed, _) = measure_time(|| {
                 Runtime::new().unwrap().block_on(
                     Self::framed_dialler_fut(transport, addr2, false)
-                        .and_then(|subs| subs.send(payload2.into()))
+                        .and_then(|subs| subs.send(vec![222u8; payload_len].into()))
                         .then(|res| {
                             trace!("[test, writer2] send result={:?}", res.is_ok());
                             assert!(res.is_ok());
+                            tx_wrt2.send(222u8);
                             Ok::<_, ()>(())
                         })
                 ).expect("writer2 future works");
@@ -398,6 +402,7 @@ where
         }).expect("spawning writer thread 2 works");
 
         // Reader
+        let (tx, rx) = mpsc::channel();
         let mut rt = Runtime::new().unwrap();
         let fut = listener
             .take(2)
@@ -407,7 +412,9 @@ where
                     .and_then(|substream| Ok(Builder::new().new_framed(substream.unwrap())))
                     .and_then(|framed_stream| framed_stream.take(1).collect())
                     .and_then(|msgs| {
-                        trace!("[test, reader] read {} bytes", msgs[0].len());
+                        debug!("[test, reader] read {} bytes", msgs[0].len());
+                        tx.send(msgs[0][0]).unwrap();
+                        assert_eq!(msgs[0].len(), payload_len);
                         Ok(())
                     })
             });
@@ -415,6 +422,11 @@ where
             rt.block_on(fut)
         });
         info!("[test, reader] Running the reader future took {}, {}", elapsed, mb_per_sec(payload_len, elapsed));
+
+        let first_bytes_read = rx.iter().take(2).collect::<Vec<u8>>();
+        let first_bytes_written= rx_wrt.iter().take(2).collect::<Vec<u8>>();
+        // Data is read in the same order it is written; there is no interleaving of writes
+        assert_eq!(first_bytes_written, first_bytes_read);
 
         thr_writer1.join().expect("joining writer thread 1 works");
         thr_writer2.join().expect("joining writer thread 2 works");
