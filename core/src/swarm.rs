@@ -31,7 +31,7 @@ use crate::{
 };
 use futures::prelude::*;
 use smallvec::SmallVec;
-use std::{fmt, io, ops::{Deref, DerefMut}};
+use std::{fmt, io, marker::PhantomData, ops::{Deref, DerefMut}};
 
 pub use crate::nodes::raw_swarm::ConnectedPoint;
 
@@ -461,6 +461,84 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
     },
 }
 
+pub struct SwarmBuilder <TTransport, TBehaviour, TTopology>
+where TTransport: Transport,
+      TBehaviour: NetworkBehaviour<TTopology>
+{
+    max_listeners: Option<u32>,
+    topology: TTopology,
+    transport: TTransport,
+    marker: PhantomData<TBehaviour>,
+}
+
+impl<TTransport, TBehaviour, TMuxer, TTopology> SwarmBuilder<TTransport, TBehaviour, TTopology>
+where TBehaviour: NetworkBehaviour<TTopology> ,
+      TMuxer: StreamMuxer + Send + Sync + 'static,
+      <TMuxer as StreamMuxer>::OutboundSubstream: Send + 'static,
+      <TMuxer as StreamMuxer>::Substream: Send + 'static,
+      TTransport: Transport<Output = (PeerId, TMuxer)> + Clone,
+      TTransport::Listener: Send + 'static,
+      TTransport::ListenerUpgrade: Send + 'static,
+      TTransport::Dial: Send + 'static,
+      TBehaviour::ProtocolsHandler: ProtocolsHandler<Substream = Substream<TMuxer>> + Send + 'static,
+      <TBehaviour::ProtocolsHandler as ProtocolsHandler>::InEvent: Send + 'static,
+      <TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutEvent: Send + 'static,
+      <TBehaviour::ProtocolsHandler as ProtocolsHandler>::Error: Send + 'static,
+      <TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
+      <TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<Substream<TMuxer>> + Send + 'static,
+      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::Info: Send + 'static,
+      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
+      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Substream<TMuxer>>>::Error: fmt::Debug + Send + 'static,
+      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Substream<TMuxer>>>::Future: Send + 'static,
+      <TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol: OutboundUpgrade<Substream<TMuxer>> + Send + 'static,
+      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::Info: Send + 'static,
+      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
+      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<Substream<TMuxer>>>::Future: Send + 'static,
+      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<Substream<TMuxer>>>::Error: fmt::Debug + Send + 'static,
+      <NodeHandlerWrapper<TBehaviour::ProtocolsHandler> as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
+      TTopology: Topology + Clone,
+{
+    pub fn new(transport: TTransport, topology:TTopology) -> Self {
+        SwarmBuilder {
+            max_listeners: None,
+            transport: transport,
+            topology: topology,
+            marker: PhantomData,
+        }
+    }
+
+    pub fn max_listeners(&mut self, max_listeners: Option<u32>) ->
+        &mut Self
+    {
+        self.max_listeners = max_listeners;
+        self
+    }
+
+    pub fn build(&mut self, mut behaviour: TBehaviour) ->
+        Swarm<TTransport, TBehaviour, TTopology>
+    {
+        let supported_protocols = behaviour
+            .new_handler()
+            .listen_protocol()
+            .protocol_info()
+            .into_iter()
+            .map(|info| info.protocol_name().to_vec())
+            .collect();
+        let raw_swarm = RawSwarm::new(self.transport.clone(),
+            self.topology.local_peer_id().clone());
+        Swarm {
+            raw_swarm,
+            behaviour,
+            topology: self.topology.clone(),
+            supported_protocols,
+            listened_addrs: SmallVec::new(),
+            max_listeners: self.max_listeners.clone(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -473,12 +551,13 @@ mod tests {
     use smallvec::SmallVec;
     use std::marker::PhantomData;
     use super::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction,
-                PollParameters, Swarm};
+                PollParameters, Swarm, SwarmBuilder};
     use tests::dummy_transport::DummyTransport;
     use tokio_io::{AsyncRead, AsyncWrite};
     use topology::MemoryTopology;
     use void::Void;
 
+    #[derive(Clone)]
     struct DummyBehaviour<TSubstream> {
         marker: PhantomData<TSubstream>,
     }
@@ -558,4 +637,28 @@ mod tests {
         }
         assert_eq!(s.raw_swarm.listeners_len(), 4);
     }
+
+    #[test]
+    fn test_build_swarm() {
+        let id = get_random_id();
+        let transport = DummyTransport::new();
+        let topology = MemoryTopology::empty(id);
+        let behaviour = DummyBehaviour{marker: PhantomData};
+        let swarm = SwarmBuilder::new(transport, topology)
+            .max_listeners(Some(4)).build(behaviour);
+        assert_eq!(swarm.max_listeners, Some(4));
+    }
+
+    #[test]
+    fn test_build_swarm_with_max_listeners_none() {
+        let id = get_random_id();
+        let transport = DummyTransport::new();
+        let topology = MemoryTopology::empty(id);
+        let behaviour = DummyBehaviour{marker: PhantomData};
+        let swarm = SwarmBuilder::new(transport, topology).build(behaviour);
+        assert!(swarm.max_listeners.is_none())
+
+    }
+
+
 }
