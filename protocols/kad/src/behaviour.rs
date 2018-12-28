@@ -479,7 +479,7 @@ where
                 let (query, purpose, provider_peers) = self
                     .active_queries
                     .remove(&finished_query)
-                    .expect("finished_query was gathered when iterating active_queries ; qed");
+                    .expect("finished_query was gathered when iterating active_queries; QED.");
                 match purpose {
                     QueryPurpose::Initialization => {},
                     QueryPurpose::UserRequest => {
