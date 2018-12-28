@@ -30,7 +30,6 @@ use libp2p_core::{
     upgrade::DeniedUpgrade
 };
 use log::warn;
-use std::io;
 use tokio_io::{AsyncRead, AsyncWrite};
 use void::{Void, unreachable};
 
@@ -72,6 +71,7 @@ where
 {
     type InEvent = Void;
     type OutEvent = Void;
+    type Error = Void;
     type Substream = TSubstream;
     type InboundProtocol = Ping<()>;
     type OutboundProtocol = DeniedUpgrade;
@@ -118,7 +118,7 @@ where
         &mut self,
     ) -> Poll<
         Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>,
-        io::Error,
+        Self::Error,
     > {
         // Removes each substream one by one, and pushes them back if they're not ready (which
         // should be the case 99% of the time).
