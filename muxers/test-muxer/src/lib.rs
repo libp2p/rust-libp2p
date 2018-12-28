@@ -34,7 +34,7 @@ use libp2p_core::{
 };
 use tokio::{
     codec::{Framed, LengthDelimitedCodec, length_delimited::Builder},
-    runtime::current_thread::Runtime
+    runtime::current_thread::Runtime,
 };
 use futures::{
     prelude::*,
@@ -373,7 +373,7 @@ where
                         .then(|res| {
                             trace!("[test, writer1] send result={:?}", res.is_ok());
                             assert!(res.is_ok());
-                            tx_wrt1.send(111u8);
+                            tx_wrt1.send(111u8).unwrap();
                             Ok::<_, ()>(())
                         })
                 ).expect("writer1 future works");
@@ -393,7 +393,7 @@ where
                         .then(|res| {
                             trace!("[test, writer2] send result={:?}", res.is_ok());
                             assert!(res.is_ok());
-                            tx_wrt2.send(222u8);
+                            tx_wrt2.send(222u8).unwrap();
                             Ok::<_, ()>(())
                         })
                 ).expect("writer2 future works");
@@ -402,7 +402,7 @@ where
         }).expect("spawning writer thread 2 works");
 
         // Reader
-        let (tx, rx) = mpsc::channel();
+        let (tx_rd, rx_rd) = mpsc::channel();
         let mut rt = Runtime::new().unwrap();
         let fut = listener
             .take(2)
@@ -413,7 +413,7 @@ where
                     .and_then(|framed_stream| framed_stream.take(1).collect())
                     .and_then(|msgs| {
                         debug!("[test, reader] read {} bytes", msgs[0].len());
-                        tx.send(msgs[0][0]).unwrap();
+                        tx_rd.send(msgs[0][0]).unwrap();
                         assert_eq!(msgs[0].len(), payload_len);
                         Ok(())
                     })
@@ -423,7 +423,7 @@ where
         });
         info!("[test, reader] Running the reader future took {}, {}", elapsed, mb_per_sec(payload_len, elapsed));
 
-        let first_bytes_read = rx.iter().take(2).collect::<Vec<u8>>();
+        let first_bytes_read = rx_rd.iter().take(2).collect::<Vec<u8>>();
         let first_bytes_written= rx_wrt.iter().take(2).collect::<Vec<u8>>();
         // Data is read in the same order it is written; there is no interleaving of writes
         assert_eq!(first_bytes_written, first_bytes_read);
@@ -432,6 +432,105 @@ where
         thr_writer2.join().expect("joining writer thread 2 works");
     }
 
+    pub fn n_streams(config: U) {
+        Self::init();
+        let (tx, rx) = mpsc::channel();
+        let listener_conf = config.clone();
+        let payload: Vec<u8> = vec![1; 50 * 1024];
+        let payload_len = payload.len();
+        info!("[test] payload size={}", payload_len);
+
+        let thr_builder = thread::Builder::new().name("listener thr".to_string());
+        let thr = thr_builder.spawn(move || {
+            let trans = TcpConfig::new().with_upgrade(listener_conf);
+            let (listener, addr) = trans
+                .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
+                .expect("listen error");
+            // Send our address to the connecting side so they know where to find us
+            tx.send(addr).unwrap();
+            let mut rt = Runtime::new().unwrap();
+            let handle = rt.handle();
+            let future = listener
+                .take(1)
+                .for_each(|(muxer, _)| {
+                    muxer.and_then(|mx: O| {
+                        trace!("incoming connection");
+                        loop {
+                            match mx.poll_inbound() {
+                                Ok(Async::Ready(Some(mut stream))) => {
+                                    debug!("Stream {:?}", stream);
+                                    let mut buf = vec![0;7]; // Can't be an empty Vec because we'll only read to the `len()` of the buffer.
+                                    match mx.read_substream(&mut stream, &mut buf) {
+                                        Ok(Async::Ready(t)) => {
+                                            trace!("Read: {} bytes, buf: {:?}, stream: {:?}", t, buf, stream);
+                                        }
+                                        Ok(Async::NotReady) => {
+                                            trace!("Read: NotReady");
+                                        }
+                                        Err(e) => {
+                                            warn!("Error: {:?}", e);
+                                        }
+                                    }
+                                }
+                                Ok(Async::Ready(None)) => {
+                                    debug!("[listener, poll_inbound] Async::Ready(None)");
+                                    break;
+                                }
+                                Ok(Async::NotReady) => {
+                                    debug!("[listener, poll_inbound] Async::NotReady");
+                                }
+                                Err(e) => {
+                                    warn!("[listener, poll_inbound] error={:?}", e);
+                                    break;
+                                }
+                            }
+                        }
+                        trace!("incoming connection – DONE");
+                        Ok(())
+                    })
+                });
+            rt.block_on(future).unwrap();
+//            rt.block_on_all(future).unwrap();
+            rt.run().unwrap();
+//            let (elapsed, _) = measure_time(|| {
+//                Runtime::new().unwrap().block_on(future).unwrap();
+//            });
+//            info!("[test, reader] Running the reader future took {}, {}", elapsed, mb_per_sec(payload_len, elapsed));
+        }).expect("thread spawn failed");
+
+        let transport = TcpConfig::new().with_upgrade(config);
+        let addr = rx.recv().unwrap();
+
+        let sender_fut = transport.dial(addr).unwrap()
+            .and_then(|muxer| {
+                let muxer = Arc::new(muxer);
+                (
+                    muxing::outbound_from_ref_and_wrap(muxer.clone()),
+                    muxing::outbound_from_ref_and_wrap(muxer.clone()),
+                )
+            })
+            .map(|substreams| {
+                (
+                    Builder::new().new_framed(substreams.0.unwrap()),
+                    Builder::new().new_framed(substreams.1.unwrap()),
+                )
+            })
+            .and_then(|framed_substreams| {
+                (
+                    framed_substreams.0.send("abc".into()),
+                    framed_substreams.1.send("efg".into()),
+                )
+            })
+            .then(|res| {
+                trace!("[test, sender] send result={:?}", res);
+                Ok::<_, ()>(())
+            });
+
+        Runtime::new().unwrap().block_on(
+            sender_fut
+        ).expect("sender future works");
+        thr.join().unwrap();
+    }
 }
 fn mb_per_sec(payload_len: usize, elapsed: ElapsedDuration) -> String {
     let bytes_per_sec = payload_len as f64/(elapsed.duration().as_secs() as f64 + elapsed.duration().subsec_nanos() as f64 * 1e-9);
