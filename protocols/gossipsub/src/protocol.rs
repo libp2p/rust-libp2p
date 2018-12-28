@@ -1,4 +1,4 @@
-use message::ControlIHave;
+use message;
 use bytes::{BufMut, Bytes, BytesMut};
 use crate::rpc_proto;
 use futures::future;
@@ -107,11 +107,35 @@ impl Encoder for GossipsubCodec {
 
         for control in item.control.into_iter() {
             let mut ctrl = rpc_proto::ControlMessage::new();
-            ctrl.set_ihave(control.ihave.into_iter().collect());
-            ctrl.set_iwant(control.iwant.into_iter().collect());
-            ctrl.set_graft(control.graft.into_iter().collect());
-            ctrl.set_prune(control.prune.into_iter().collect());
-            proto.mut_control().push(control);
+            for control_i_have in control.ihave.into_iter() {
+                let mut ctrl_i_have = rpc_proto::ControlIHave::new();
+                ctrl_i_have.set_topicID(control_i_have.topic.into_string());
+                // For getting my head around this with seeing the return
+                // types by hovering over, uncomment if you need to
+                // do the same.
+                // let bar_into_iter = control_i_have.messages.into_iter();
+                // let map_bar_into_iter = bar_into_iter.map(|m| m.id.into_string());
+                // let collect_map_bar_into_iter = map_bar_into_iter.collect();
+                ctrl_i_have.set_messageIDs(control_i_have.messages.into_iter()
+                    .map(|m| m.id.into_string()).collect());
+                ctrl.get_ihave().to_vec().push(ctrl_i_have);
+            }
+            for control_i_want in control.iwant.into_iter() {
+                let mut ctrl_i_want = rpc_proto::ControlIWant::new();
+                ctrl_i_want.set_messageIDs(control_i_want.messages.into_iter()
+                    .map(|m| m.id.into_string()).collect());
+                ctrl.get_iwant().to_vec().push(ctrl_i_want);
+            }
+            for control_graft in control.graft.into_iter() {
+                let mut ctrl_graft = rpc_proto::ControlGraft::new();
+                ctrl_graft.set_topicID(control_graft.topic.into_string());
+                ctrl.get_graft().to_vec().push(ctrl_graft);
+            }
+            for control_prune in control.prune.into_iter() {
+                let mut ctrl_prune = rpc_proto::ControlPrune::new();
+                ctrl_prune.set_topicID(control_prune.topic.into_string());
+                ctrl.get_prune().to_vec().push(ctrl_prune);
+            }
         }
 
         let msg_size = proto.compute_size();

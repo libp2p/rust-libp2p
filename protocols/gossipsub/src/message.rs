@@ -53,10 +53,10 @@ pub struct GMessage {
     // This should not be public as it could then be manipulated. It needs to
     // only be modified via the `publish` method on `Gossipsub`. Used for the
     // message cache.
-    time_sent: DateTime<Utc>,
+    pub(crate) time_sent: DateTime<Utc>,
 
     // The hash of the message.
-    hash: MsgHash,
+    pub(crate) hash: MsgHash,
 }
 
 impl GMessage {
@@ -170,17 +170,14 @@ pub enum MsgRepEnum {
     id(MsgId),
 }
 
-// Not used? May delete.
 /// Represents a message, which can be a hash of the message or a
 /// message ID as a string. It is used to query for a message.
-// This could actually be part of rpc.proto, saving the need to manually write
-// this.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct MsgRep {
     /// The hash of the `GMessage`.
     pub hash: MsgHash,
-    /// The `GMessage` ID.
-    pub id: MsgId,
+    /// The `GMessage` ID
+    pub(crate) id: MsgId,
 }
 
 impl MsgRep {
@@ -211,15 +208,15 @@ impl AsRef<MsgHash> for MsgRep {
 
 impl From<MsgRep> for MsgHash {
     #[inline]
-    fn from(message: GMessage) -> MsgHash {
-        message.hash
+    fn from(msg_rep: MsgRep) -> MsgHash {
+        msg_rep.hash
     }
 }
 
 impl<'a> From<&'a MsgRep> for MsgHash {
     #[inline]
-    fn from(message: &'a GMessage) -> MsgHash {
-        message.hash.clone()
+    fn from(msg_rep: &'a MsgRep) -> MsgHash {
+        msg_rep.hash.clone()
     }
 }
 
