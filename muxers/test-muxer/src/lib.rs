@@ -30,11 +30,13 @@ use libp2p_core::{
     StreamMuxer,
     transport::upgrade::ListenerStream,
     muxing,
-    upgrade::{InboundUpgrade, OutboundUpgrade}, //, UpgradeInfo
+    upgrade::{InboundUpgrade, OutboundUpgrade},
+    upgrade::UpgradeInfo,
 };
 use tokio::{
     codec::{Framed, LengthDelimitedCodec, length_delimited::Builder},
     runtime::current_thread::Runtime,
+    runtime::Runtime as MtRuntime,
 };
 use futures::{
     prelude::*,
@@ -63,6 +65,7 @@ where
     U: InboundUpgrade<TcpTransStream, Output = O, Error = E>,
     <U as InboundUpgrade<TcpTransStream>>::Future: Send,
     <U as OutboundUpgrade<TcpTransStream>>::Future: Send,
+    <U as UpgradeInfo>::Info: Send,
     E: std::error::Error + Send + Sync + 'static,
     O: StreamMuxer + Send + Sync + 'static ,
     <O as StreamMuxer>::Substream: Send + Sync + Debug,
@@ -444,58 +447,44 @@ where
         let thr = thr_builder.spawn(move || {
             let trans = TcpConfig::new().with_upgrade(listener_conf);
             let (listener, addr) = trans
-                .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
-                .expect("listen error");
+                .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).expect("listen error");
             // Send our address to the connecting side so they know where to find us
             tx.send(addr).unwrap();
-            let mut rt = Runtime::new().unwrap();
-            let handle = rt.handle();
+            let rt = MtRuntime::new().unwrap();
             let future = listener
                 .take(1)
                 .for_each(|(muxer, _)| {
                     muxer.and_then(|mx: O| {
                         trace!("incoming connection");
-                        loop {
+                        use futures::future::{loop_fn, Loop};
+                        let read_loop = loop_fn((0, mx), |(count, mx)| {
+                            trace!("--> Loop {} – polling inbound", count);
                             match mx.poll_inbound() {
                                 Ok(Async::Ready(Some(mut stream))) => {
-                                    debug!("Stream {:?}", stream);
-                                    let mut buf = vec![0;7]; // Can't be an empty Vec because we'll only read to the `len()` of the buffer.
-                                    match mx.read_substream(&mut stream, &mut buf) {
-                                        Ok(Async::Ready(t)) => {
-                                            trace!("Read: {} bytes, buf: {:?}, stream: {:?}", t, buf, stream);
-                                        }
-                                        Ok(Async::NotReady) => {
-                                            trace!("Read: NotReady");
-                                        }
-                                        Err(e) => {
-                                            warn!("Error: {:?}", e);
-                                        }
+                                    let mut buf = vec![0;10]; // Can't be an empty Vec because we'll only read to the `len()` of the buffer.
+                                    if let Ok(Async::Ready(num_read)) = mx.read_substream(&mut stream, &mut buf) {
+                                        trace!("Loop {} – Read: {} bytes, buf: {:?}", count, num_read, buf.len());
                                     }
+                                    Ok(Loop::Continue((count + 1, mx)))
                                 }
+                                Ok(Async::NotReady) => { Ok(Loop::Continue((count + 1, mx))) }
                                 Ok(Async::Ready(None)) => {
-                                    debug!("[listener, poll_inbound] Async::Ready(None)");
-                                    break;
-                                }
-                                Ok(Async::NotReady) => {
-                                    debug!("[listener, poll_inbound] Async::NotReady");
+                                    debug!("[listener, poll_inbound] {} Async::Ready(None)", count);
+                                    Ok(Loop::Break(()))
                                 }
                                 Err(e) => {
-                                    warn!("[listener, poll_inbound] error={:?}", e);
-                                    break;
+                                    warn!("[listener, poll_inbound] {} error={:?}", count, e);
+//                                    Ok(Loop::Break(()))
+                                    Ok(Loop::Continue((count + 1, mx))) // Looping another turn seemed to help a little bit with lost reads
                                 }
                             }
-                        }
+                        });
+                        tokio::spawn(read_loop);
                         trace!("incoming connection – DONE");
                         Ok(())
                     })
                 });
-            rt.block_on(future).unwrap();
-//            rt.block_on_all(future).unwrap();
-            rt.run().unwrap();
-//            let (elapsed, _) = measure_time(|| {
-//                Runtime::new().unwrap().block_on(future).unwrap();
-//            });
-//            info!("[test, reader] Running the reader future took {}, {}", elapsed, mb_per_sec(payload_len, elapsed));
+            rt.block_on_all(future).unwrap();
         }).expect("thread spawn failed");
 
         let transport = TcpConfig::new().with_upgrade(config);
@@ -517,12 +506,14 @@ where
             })
             .and_then(|framed_substreams| {
                 (
-                    framed_substreams.0.send("abc".into()),
+                    framed_substreams.0.send("abcd".into()),
                     framed_substreams.1.send("efg".into()),
                 )
             })
             .then(|res| {
-                trace!("[test, sender] send result={:?}", res);
+                trace!("[test, sender] send result={:?}", res.is_ok());
+//                thread::sleep(std::time::Duration::from_millis(50));
+//                trace!("[test, sender] woke up after sleep");
                 Ok::<_, ()>(())
             });
 
