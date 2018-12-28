@@ -617,4 +617,9 @@ mod test {
     fn two_connections() {
         MuxerTester::two_connections(MplexConfig::default())
     }
+
+    #[test]
+    fn n_streams() {
+        MuxerTester::n_streams(MplexConfig::default())
+    }
 }
