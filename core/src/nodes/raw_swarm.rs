@@ -492,6 +492,12 @@ where
         self.listeners.listeners()
     }
 
+    /// Returns number of addresses that we're listening on.
+    #[inline]
+    pub fn listeners_len(&self) -> usize {
+        self.listeners.len()
+    }
+
     /// Call this function in order to know which address remotes should dial in order to access
     /// your local node.
     ///

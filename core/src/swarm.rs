@@ -61,6 +61,9 @@ where TTransport: Transport,
 
     /// List of multiaddresses we're listening on.
     listened_addrs: SmallVec<[Multiaddr; 8]>,
+
+    /// Maximum limit of number of listeners
+    max_listeners: Option<u32>,
 }
 
 impl<TTransport, TBehaviour, TTopology> Deref for Swarm<TTransport, TBehaviour, TTopology>
@@ -133,6 +136,7 @@ where TBehaviour: NetworkBehaviour<TTopology>,
             topology,
             supported_protocols,
             listened_addrs: SmallVec::new(),
+            max_listeners: None,
         }
     }
 
@@ -148,6 +152,11 @@ where TBehaviour: NetworkBehaviour<TTopology>,
     /// On success, returns an alternative version of the address.
     #[inline]
     pub fn listen_on(me: &mut Self, addr: Multiaddr) -> Result<Multiaddr, Multiaddr> {
+        if let Some(x) = me.max_listeners {
+            if me.raw_swarm.listeners_len() >= x as usize {
+                return Err(addr);
+            }
+        }
         let result = me.raw_swarm.listen_on(addr);
         if let Ok(ref addr) = result {
             me.listened_addrs.push(addr.clone());
@@ -450,4 +459,103 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
         /// The address we're being observed as.
         address: Multiaddr,
     },
+}
+
+#[cfg(test)]
+mod tests {
+
+    use futures::prelude::*;
+    use nodes::raw_swarm::RawSwarm;
+    use peer_id::PeerId;
+    use protocols_handler::{DummyProtocolsHandler, ProtocolsHandler};
+    use public_key::PublicKey;
+    use rand::random;
+    use smallvec::SmallVec;
+    use std::marker::PhantomData;
+    use super::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction,
+                PollParameters, Swarm};
+    use tests::dummy_transport::DummyTransport;
+    use tokio_io::{AsyncRead, AsyncWrite};
+    use topology::MemoryTopology;
+    use void::Void;
+
+    struct DummyBehaviour<TSubstream> {
+        marker: PhantomData<TSubstream>,
+    }
+
+    trait TSubstream: AsyncRead + AsyncWrite {}
+
+    impl <TSubstream, TTopology> NetworkBehaviour<TTopology>
+        for DummyBehaviour<TSubstream>
+        where TSubstream: AsyncRead + AsyncWrite
+    {
+        type ProtocolsHandler = DummyProtocolsHandler<TSubstream>;
+        type OutEvent = Void;
+
+        fn new_handler(&mut self) -> Self::ProtocolsHandler {
+            DummyProtocolsHandler::default()
+        }
+
+        fn inject_connected(&mut self, _: PeerId, _: ConnectedPoint) {}
+
+        fn inject_disconnected(&mut self, _: &PeerId, _: ConnectedPoint) {}
+
+        fn inject_node_event(&mut self, _: PeerId,
+            _: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent) {}
+
+        fn poll(&mut self, _:&mut PollParameters<TTopology>) ->
+            Async<NetworkBehaviourAction<<Self::ProtocolsHandler as
+            ProtocolsHandler>::InEvent, Self::OutEvent>>
+        {
+            Async::NotReady
+        }
+
+    }
+
+    fn get_random_id() -> PublicKey {
+        PublicKey::Rsa((0 .. 2048)
+            .map(|_| -> u8 { random() })
+            .collect()
+        )
+    }
+
+    #[test]
+    fn test_listen_on_no_limit() {
+        let id = get_random_id();
+        let transport = DummyTransport::new();
+        let topology = MemoryTopology::empty(id);
+        let behaviour = DummyBehaviour{marker: PhantomData};
+        let mut s = Swarm::new(transport, behaviour, topology);
+        assert!(s.max_listeners.is_none());
+        for _ in 0 .. 10 {
+            Swarm::listen_on(&mut s,
+                "/ip4/0.0.0.0/tcp/0".parse().unwrap()
+            ).unwrap();
+        }
+        assert_eq!(s.raw_swarm.listeners_len(), 10);
+    }
+
+    #[test]
+    fn test_listen_on_with_limit() {
+        let id = get_random_id();
+        let transport = DummyTransport::new();
+        let topology = MemoryTopology::empty(id.clone());
+        let behaviour = DummyBehaviour{marker: PhantomData};
+        let supported_protocols = SmallVec::new();
+        let raw_swarm = RawSwarm::new(transport, id.into_peer_id());
+        let mut s = Swarm {
+            raw_swarm,
+            behaviour,
+            topology,
+            supported_protocols,
+            listened_addrs: SmallVec::new(),
+            max_listeners: Some(4),
+        };
+        for _ in 0 .. 10 {
+            let _r = Swarm::listen_on(&mut s,
+                "/ip4/0.0.0.0/tcp/0".parse().unwrap()
+            );
+        }
+        assert_eq!(s.raw_swarm.listeners_len(), 4);
+    }
 }
