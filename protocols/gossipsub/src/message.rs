@@ -3,9 +3,99 @@ use libp2p_core::PeerId;
 use chrono::{DateTime, Utc};
 use rpc_proto;
 
+// /// Contains an incrementing sequence number.
+// #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+// pub struct SeqNo {
+//     seq_no: Vec<u8>,
+// }
+
+// impl SeqNo {
+
+// }
+
+/// A message received by the Gossipsub system.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct GMessage {
+    /// Id of the peer that published this message.
+    pub source: PeerId,
+
+    /// Content of the message. Its meaning is out of scope of this library.
+    pub data: Vec<u8>,
+
+    /// An incrementing sequence number.
+    pub seq_no: Vec<u8>,
+
+    /// List of topics this message belongs to.
+    ///
+    /// Each message can belong to multiple topics at once.
+    pub topics: Vec<TopicHash>,
+
+    // To use for an authentication scheme (not yet defined or implemented),
+    // see rpc.proto for more info.
+    // TODO
+    // signature: Vec<u8>,
+
+    // To use for an encryption scheme (not yet defined or implemented),
+    // see rpc.proto for more info.
+    // TODO
+    // key: Vec<u8>,
+
+    // This should not be public as it could then be manipulated. It needs to
+    // only be modified via the `publish` method on `Gossipsub`. Used for the
+    // message cache.
+    time_sent: DateTime<Utc>,
+}
+
+impl GMessage {
+    // /// Returns the hash of the message.
+    // #[inline]
+    // pub fn hash(&self) -> &MsgHash {
+    //     &self.hash
+    // }
+
+    // As above, used in the `publish` method on `Gossipsub` for `MCache`.
+    pub(crate) fn set_timestamp(&mut self) {
+        self.time_sent = Utc::now().expect("Utc::now() doesn't err according 
+        to 
+        https://docs.rs/chrono/0.4.6/chrono/offset/struct.Utc.html#method.now");
+    }
+}
+
+/// Contains a message ID as a string, has impls for building and converting to a `String`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct MsgId {
+    /// The message ID as a string.
+    id: String,
+}
+
+impl MsgId {
+    /// Builds a new `MsgId` from the `seq_no` and `source` of a `Message`.
+    #[inline]
+    pub fn from_raw(msg: GMessage) -> MsgId {
+        let id = format!("{}{}", String::from_utf8(msg.seq_no)
+            .expect("Found invalid UTF-8"), msg.source.to_base58());
+        MsgId {
+            id: id,
+        }
+    }
+
+    /// Converts a `MsgId` into a message ID as a `String`.
+    #[inline]
+    pub fn into_string(self) -> String {
+        self.id
+    }
+}
+
+// impl From<GMessage> for MsgId {
+//     #[inline]
+//     fn from(message: GMessage) -> Self {
+//         message.id
+//     }
+// }
+
 /// Represents the hash of a `Message`.
 ///
-/// Instead of a using the message as a whole, the API of floodsub uses a
+/// Instead of a using the message as a whole, the API of floodsub may use a
 /// hash of the message. You only have to build the hash once, then use it
 /// everywhere.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -34,10 +124,7 @@ pub struct MsgHashBuilder {
 }
 
 impl MsgHashBuilder {
-    pub fn new<M>(msg: M) -> Self
-    where
-        // In consideration of a message ID conversion to a message.
-        M: Into<GMessage>,
+    pub fn new(msg: GMessage) -> Self
     {
         let mut builder = msg;
 
@@ -52,103 +139,7 @@ impl MsgHashBuilder {
             .expect("protobuf message is always valid");
         MsgHash {
             hash: bs58::encode(&bytes).into_string(),
-        };
-    }
-}
-
-/// A message received by the Gossipsub system.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct GMessage {
-    /// Id of the peer that published this message.
-    pub source: PeerId,
-
-    /// Content of the message. Its meaning is out of scope of this library.
-    pub data: Vec<u8>,
-
-    /// An incrementing sequence number.
-    pub sequence_number: Vec<u8>,
-
-    /// List of topics this message belongs to.
-    ///
-    /// Each message can belong to multiple topics at once.
-    pub topics: Vec<TopicHash>,
-
-    // To use for an authentication scheme (not yet defined or implemented),
-    // see rpc.proto for more info.
-    // TODO
-    signature: Vec<u8>,
-
-    // To use for an encryption scheme (not yet defined or implemented),
-    // see rpc.proto for more info.
-    // TODO
-    key: Vec<u8>,
-
-    // This should not be public as it could then be manipulated. It needs to
-    // only be modified via the `publish` method on `Gossipsub`. Used for the
-    // message cache.
-    time_sent: DateTime<Utc>,
-}
-
-impl GMessage {
-    /// Returns the hash of the message.
-    #[inline]
-    pub fn hash(&self) -> &MsgHash {
-        &self.hash
-    }
-
-    // As above, used in the `publish` method on `Gossipsub` for `MCache`.
-    pub(crate) fn set_timestamp(&mut self) {
-        self.time_sent = Utc::now().expect("Utc::now() doesn't err according 
-        to 
-        https://docs.rs/chrono/0.4.6/chrono/offset/struct.Utc.html#method.now");
-    }
-}
-
-impl AsRef<MsgHash> for GMessage {
-    #[inline]
-    fn as_ref(&self) -> &MsgHash {
-        &self.hash
-    }
-}
-
-impl From<GMessage> for MsgHash {
-    #[inline]
-    fn from(message: GMessage) -> MsgHash {
-        message.hash
-    }
-}
-
-impl<'a> From<&'a GMessage> for TopicHash {
-    #[inline]
-    fn from(message: &'a GMessage) -> MsgHash {
-        message.hash.clone()
-    }
-}
-
-/// Represents a message ID as a string.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct MsgId {
-    msg_id: String,
-}
-
-impl MsgId {
-    /// Builds a new `MsgId` from the given string.
-    #[inline]
-    pub fn from_raw(str_id: String) -> MsgId {
-        MsgId { msg_id: str_id }
-    }
-
-    /// Converts a `MsgId` into a message ID as a `String`.
-    #[inline]
-    pub fn into_string(self) -> String {
-        self.msg_id
-    }
-}
-
-impl From<GMessage> for MsgId {
-    #[inline]
-    fn from(message: GMessage) -> Self {
-        message.id
+        }
     }
 }
 
