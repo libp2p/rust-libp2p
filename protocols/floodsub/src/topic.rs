@@ -26,7 +26,7 @@ use rpc_proto;
 ///
 /// Instead of a using the topic as a whole, the API of floodsub uses a hash of the topic. You only
 /// have to build the hash once, then use it everywhere.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct TopicHash {
     hash: String,
 }

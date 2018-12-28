@@ -1,8 +1,14 @@
-use libp2p_floodsub::TopicHash;
-use libp2p_core::PeerId;
-use chrono::{DateTime, Utc};
 use rpc_proto;
 
+use libp2p_floodsub::TopicHash;
+
+use libp2p_core::PeerId;
+
+use bs58;
+use chrono::{DateTime, Utc};
+use protobuf::Message;
+
+// May not be necessary.
 // /// Contains an incrementing sequence number.
 // #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 // pub struct SeqNo {
@@ -14,6 +20,8 @@ use rpc_proto;
 // }
 
 /// A message received by the Gossipsub system.
+/// > **Note**: message is unsized. FMI see
+/// > https://github.com/libp2p/specs/issues/118.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct GMessage {
     /// Id of the peer that published this message.
@@ -40,29 +48,39 @@ pub struct GMessage {
     // TODO
     // key: Vec<u8>,
 
+    // TODO: there might be interoperability issues caused by these two fields.
+
     // This should not be public as it could then be manipulated. It needs to
     // only be modified via the `publish` method on `Gossipsub`. Used for the
     // message cache.
     time_sent: DateTime<Utc>,
+
+    // The hash of the message.
+    hash: MsgHash,
 }
 
 impl GMessage {
-    // /// Returns the hash of the message.
-    // #[inline]
-    // pub fn hash(&self) -> &MsgHash {
-    //     &self.hash
-    // }
+    // Sets the hash of the message, used in `MsgHashBuilder`.
+    #[inline]
+    pub(crate) fn set_hash(&mut self, msg_hash: MsgHash) -> &mut Self {
+        self.hash = msg_hash;
+        self
+    }
+
+    /// Returns the hash of the message.
+    #[inline]
+    pub fn get_hash(&self) -> &MsgHash {
+        &self.hash
+    }
 
     // As above, used in the `publish` method on `Gossipsub` for `MCache`.
     pub(crate) fn set_timestamp(&mut self) {
-        self.time_sent = Utc::now().expect("Utc::now() doesn't err according 
-        to 
-        https://docs.rs/chrono/0.4.6/chrono/offset/struct.Utc.html#method.now");
+        self.time_sent = Utc::now();
     }
 }
 
 /// Contains a message ID as a string, has impls for building and converting to a `String`.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct MsgId {
     /// The message ID as a string.
     id: String,
@@ -98,7 +116,9 @@ impl MsgId {
 /// Instead of a using the message as a whole, the API of floodsub may use a
 /// hash of the message. You only have to build the hash once, then use it
 /// everywhere.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+///
+/// > **Note** https://github.com/libp2p/specs/issues/116#issuecomment-450107520. "A potential caveat with using hashes instead of seqnos: the peer won't be able to send identical messages (e.g. keepalives) within the timecache interval, as they will get rejected as duplicates."
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct MsgHash {
     hash: String,
 }
@@ -124,12 +144,12 @@ pub struct MsgHashBuilder {
 }
 
 impl MsgHashBuilder {
-    pub fn new(msg: GMessage) -> Self
-    {
-        let mut builder = msg;
+    // pub fn new(msg: Message) -> Self
+    // {
+    //     let mut builder = msg;
 
-        MsgHashBuilder { builder: builder }
-    }
+    //     MsgHashBuilder { builder: builder }
+    // }
 
     /// Turns the builder into an actual `MsgHash`.
     pub fn build(self) -> MsgHash {
@@ -172,7 +192,7 @@ impl MsgRep {
     /// Convenience function that sets the `hash` field of `MsgRep`
     /// with the provided `MsgHash` instance.
     pub fn set_msg_hash(&mut self, hash: MsgHash) {
-        self.id = hash
+        self.hash = hash
     }
 
     /// Convenience function that sets the `id` field of `MsgRep` with
@@ -219,7 +239,7 @@ impl From<MsgRep> for MsgId {
 
 impl<'a> From<&'a MsgRep> for MsgId {
     #[inline]
-    fn from(message: &'a GMessage) -> MsgId {
+    fn from(message: &'a MsgRep) -> MsgId {
         message.id.clone()
     }
 }

@@ -2,16 +2,19 @@ use handler::GossipsubHandler;
 use mcache::MCache;
 use mesh::Mesh;
 use message::{GossipsubRpc, GMessage, ControlMessage, GossipsubSubscription,
-    GossipsubSubscriptionAction};
+    GossipsubSubscriptionAction, MsgHash};
 
 use libp2p_floodsub::{Floodsub, Topic, TopicHash, handler::FloodsubHandler};
 use libp2p_core::{
     PeerId,
-    protocols_handler::ProtocolsHandlerSelect,
-    swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction},
+    protocols_handler::{ProtocolsHandler, ProtocolsHandlerSelect},
+    swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction,
+        PollParameters},
 };
 
+use chrono::Utc;
 use cuckoofilter::CuckooFilter;
+use futures::prelude::*;
 use smallvec::SmallVec;
 use std::{
     collections::{
@@ -181,10 +184,37 @@ impl<TSubstream> Gossipsub<TSubstream> {
             // flood the network with packets with the predetermined sequence
             // numbers and absorb our legitimate messages. We therefore use
             // a random number.
-            sequence_number: rand::random::<[u8; 20]>().to_vec(),
+            seq_no: rand::random::<[u8; 20]>().to_vec(),
             topics: topic.into_iter().map(|t| t.into().clone()).collect(),
-            timestamp: GMessage::set_timestamp()
+            time_sent: Utc::now(),
+            hash: ::std::default::Default::default(),
         };
+
+        // TODO: making a message hash seems complicated. Below I was trying to
+        // make a GossipsubRpc, then from that get an rpc_proto::Message
+        // (which I have left unfinished), then
+        // use the write_to_bytes method on that to get a hash.
+
+        // let make_g_rpc = || {
+        //     let cloned_message = message.clone();
+        //     let event = GossipsubRpc {
+        //         subscriptions: Vec::new(),
+        //         messages: vec![cloned_message],
+        //         control: control
+        //     };
+        //     let message =
+        //     match event.messages.pop() {
+
+        //     }
+        //         Some(Gmessage)
+        //     let msg_as_bytes = .write_to_bytes()
+        //         .expect("prove that this shouldn't err.").collect();
+
+        //     let msg_hash_raw = bs58::encode(&msg_as_bytes).into_string();
+        //     let msg_hash = MsgHash::from_raw(msg_hash_raw);
+        //     message.set_hash(msg_hash);
+        //     message.set_timestamp
+        // };
 
         // Don't publish the message if we're not subscribed ourselves to any of the topics.
         if !self.subscribed_topics.iter().any(|t| message.topics.iter().any(|u| t.hash() == u)) {
@@ -193,11 +223,14 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
         self.received.add(&message);
 
-        // Send to peers we know are subscribed to the topic.
+        // TODO: Send to peers that are in our message link and that we know
+        // are subscribed to the topic.
         for (peer_id, sub_topic) in self.connected_peers.iter() {
-            if !sub_topic.iter().any(|t| message.topics.iter().any(|u| t == u)) {
+            if !sub_topic.iter().any(|t| message.topics.iter().any(|u| t == u)){
                 continue;
             }
+
+            message.set_timestamp();
 
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer_id.clone(),
@@ -216,9 +249,9 @@ impl<TSubstream> Gossipsub<TSubstream> {
     ///
     /// Returns true if the graft succeeded. Returns false if we were
     /// already grafted.
-    pub fn graft(&mut self, topic: impl AsRef<TopicHash>) -> bool {
-
-    }
+    // pub fn graft(&mut self, topic: impl AsRef<TopicHash>) -> bool {
+        
+    // }
 
     /// Grafts a peer to multiple topics.
     ///
@@ -283,7 +316,7 @@ where
     type ProtocolsHandler =
         ProtocolsHandlerSelect<GossipsubHandler<TSubstream>,
         FloodsubHandler<TSubstream>>;
-    type OutEvent = GossipsubMessage;
+    type OutEvent = GMessage;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
         GossipsubHandler::new().select(FloodsubHandler::new())
@@ -296,11 +329,11 @@ where
                 peer_id: id.clone(),
                 event: GossipsubRpc {
                     messages: Vec::new(),
-                    subscriptions: vec![FloodsubSubscription {
+                    subscriptions: vec![GossipsubSubscription {
                         topic: topic.hash().clone(),
-                        action: FloodsubSubscriptionAction::Subscribe,
+                        action: GossipsubSubscriptionAction::Subscribe,
                     }],
-                    control: 
+                    control: None
                 },
             });
         }
@@ -316,20 +349,22 @@ where
     fn inject_node_event(
         &mut self,
         propagation_source: PeerId,
-        event: FloodsubRpc,
+        event: GossipsubRpc,
     ) {
         // Update connected peers topics
         for subscription in event.subscriptions {
             let mut remote_peer_topics = self.connected_peers
                 .get_mut(&propagation_source)
-                .expect("connected_peers is kept in sync with the peers we are connected to; we are guaranteed to only receive events from connected peers; QED");
+                .expect("connected_peers is kept in sync with the peers we \
+                are connected to; we are guaranteed to only receive events \
+                from connected peers; QED");
             match subscription.action {
-                FloodsubSubscriptionAction::Subscribe => {
+                GossipsubSubscriptionAction::Subscribe => {
                     if !remote_peer_topics.contains(&subscription.topic) {
                         remote_peer_topics.push(subscription.topic);
                     }
                 }
-                FloodsubSubscriptionAction::Unsubscribe => {
+                GossipsubSubscriptionAction::Unsubscribe => {
                     if let Some(pos) = remote_peer_topics.iter().position(|t| t == &subscription.topic ) {
                         remote_peer_topics.remove(pos);
                     }
@@ -338,7 +373,7 @@ where
         }
 
         // List of messages we're going to propagate on the network.
-        let mut rpcs_to_dispatch: Vec<(PeerId, FloodsubRpc)> = Vec::new();
+        let mut rpcs_to_dispatch: Vec<(PeerId, GossipsubRpc)> = Vec::new();
 
         for message in event.messages {
             // Use `self.received` to skip the messages that we have already received in the past.
@@ -365,7 +400,7 @@ where
                 if let Some(pos) = rpcs_to_dispatch.iter().position(|(p, _)| p == peer_id) {
                     rpcs_to_dispatch[pos].1.messages.push(message.clone());
                 } else {
-                    rpcs_to_dispatch.push((peer_id.clone(), FloodsubRpc {
+                    rpcs_to_dispatch.push((peer_id.clone(), GossipsubRpc {
                         subscriptions: Vec::new(),
                         messages: vec![message.clone()],
                     }));

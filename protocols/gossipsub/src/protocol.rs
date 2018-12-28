@@ -43,7 +43,7 @@ where
     type Future = future::FutureResult<Self::Output, Self::Error>;
 
     #[inline]
-    fn upgrade_inbound(self, socket: TSocket, _: Self::UpgradeId)
+    fn upgrade_inbound(self, socket: TSocket, _: Self::Info)
         -> Self::Future {
         future::ok(Framed::new(socket, GossipsubCodec {
             length_prefix: Default::default() }))
@@ -59,7 +59,7 @@ where
     type Future = future::FutureResult<Self::Output, Self::Error>;
 
     #[inline]
-    fn upgrade_outbound(self, socket: TSocket, _: Self::UpgradeId)
+    fn upgrade_outbound(self, socket: TSocket, _: Self::Info)
         -> Self::Future {
         future::ok(Framed::new(socket, GossipsubCodec {
             length_prefix: Default::default() }))
@@ -84,7 +84,7 @@ impl Encoder for GossipsubCodec {
             let mut msg = rpc_proto::Message::new();
             msg.set_from(message.source.into_bytes());
             msg.set_data(message.data);
-            msg.set_seqno(message.sequence_number);
+            msg.set_seqno(message.seq_no);
             msg.set_topicIDs(
                 message
                     .topics
@@ -92,8 +92,8 @@ impl Encoder for GossipsubCodec {
                     .map(TopicHash::into_string)
                     .collect(),
             );
-            msg.set_signature(message.signature);
-            msg.set_key(message.key);
+            // msg.set_signature(message.signature);
+            // msg.set_key(message.key);
             proto.mut_publish().push(msg);
         }
 
@@ -107,10 +107,10 @@ impl Encoder for GossipsubCodec {
 
         for control in item.control.into_iter() {
             let mut ctrl = rpc_proto::ControlMessage::new();
-            ctrl.set_ihave(control.ihave);
-            ctrl.set_iwant(control.iwant);
-            ctrl.set_graft(control.graft);
-            ctrl.set_prune(control.prune);
+            ctrl.set_ihave(control.ihave.into_iter().collect());
+            ctrl.set_iwant(control.iwant.into_iter().collect());
+            ctrl.set_graft(control.graft.into_iter().collect());
+            ctrl.set_prune(control.prune.into_iter().collect());
             proto.mut_control().push(control);
         }
 

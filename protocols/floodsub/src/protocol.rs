@@ -122,8 +122,9 @@ impl Encoder for FloodsubCodec {
         proto
             .write_length_delimited_to_writer(&mut dst.by_ref().writer())
             .expect(
-                "there is no situation in which the protobuf message can be invalid, and \
-                 writing to a BytesMut never fails as we reserved enough space beforehand",
+                "there is no situation in which the protobuf message can be \
+                invalid, and writing to a BytesMut never fails as we reserved \
+                enough space beforehand",
             );
         Ok(())
     }
