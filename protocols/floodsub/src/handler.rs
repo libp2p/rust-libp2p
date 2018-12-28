@@ -105,6 +105,7 @@ where
 {
     type InEvent = FloodsubRpc;
     type OutEvent = FloodsubRpc;
+    type Error = io::Error;
     type Substream = TSubstream;
     type InboundProtocol = FloodsubConfig;
     type OutboundProtocol = FloodsubConfig;

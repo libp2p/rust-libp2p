@@ -31,7 +31,6 @@ use crate::{
     }
 };
 use futures::prelude::*;
-use std::io;
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Implementation of `ProtocolsHandler` that combines two protocols into one.
@@ -65,6 +64,7 @@ where
 {
     type InEvent = EitherOutput<TProto1::InEvent, TProto2::InEvent>;
     type OutEvent = EitherOutput<TProto1::OutEvent, TProto2::OutEvent>;
+    type Error = EitherError<TProto1::Error, TProto2::Error>;
     type Substream = TSubstream;
     type InboundProtocol = SelectUpgrade<TProto1::InboundProtocol, TProto2::InboundProtocol>;
     type OutboundProtocol = EitherUpgrade<TProto1::OutboundProtocol, TProto2::OutboundProtocol>;
@@ -161,8 +161,8 @@ where
         self.proto2.shutdown();
     }
 
-    fn poll(&mut self) -> Poll<Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>, io::Error> {
-        match self.proto1.poll()? {
+    fn poll(&mut self) -> Poll<Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>, Self::Error> {
+        match self.proto1.poll().map_err(EitherError::A)? {
             Async::Ready(Some(ProtocolsHandlerEvent::Custom(event))) => {
                 return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(EitherOutput::First(event)))));
             },
@@ -176,7 +176,7 @@ where
             Async::NotReady => ()
         };
 
-        match self.proto2.poll()? {
+        match self.proto2.poll().map_err(EitherError::B)? {
             Async::Ready(Some(ProtocolsHandlerEvent::Custom(event))) => {
                 return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(EitherOutput::Second(event)))));
             },

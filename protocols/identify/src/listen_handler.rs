@@ -25,7 +25,6 @@ use libp2p_core::{
     upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade}
 };
 use smallvec::SmallVec;
-use std::io;
 use tokio_io::{AsyncRead, AsyncWrite};
 use void::{Void, unreachable};
 
@@ -59,6 +58,7 @@ where
 {
     type InEvent = Void;
     type OutEvent = IdentifySender<TSubstream>;
+    type Error = Void;
     type Substream = TSubstream;
     type InboundProtocol = IdentifyProtocolConfig;
     type OutboundProtocol = DeniedUpgrade;
@@ -104,7 +104,7 @@ where
                 Self::OutEvent,
             >,
         >,
-        io::Error,
+        Self::Error,
     > {
         if !self.pending_result.is_empty() {
             return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(
