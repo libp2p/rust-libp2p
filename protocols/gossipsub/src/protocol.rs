@@ -1,10 +1,9 @@
-use message;
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{BufMut, BytesMut};
 use crate::rpc_proto;
 use futures::future;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, PeerId};
 use libp2p_floodsub::TopicHash;
-use message::{ControlMessage, GMessage, GossipsubSubscription,
+use message::{GMessage, GossipsubSubscription,
     GossipsubSubscriptionAction, GossipsubRpc};
 use protobuf::Message as ProtobufMessage;
 use std::{io, iter};
@@ -38,14 +37,14 @@ impl<TSocket> InboundUpgrade<TSocket> for GossipsubConfig
 where
     TSocket: AsyncRead + AsyncWrite,
 {
-    type Output = Framed<TSocket, GossipsubCodec>;
+    type Output = Framed<TSocket, GossipsubRpcCodec>;
     type Error = io::Error;
     type Future = future::FutureResult<Self::Output, Self::Error>;
 
     #[inline]
     fn upgrade_inbound(self, socket: TSocket, _: Self::Info)
         -> Self::Future {
-        future::ok(Framed::new(socket, GossipsubCodec {
+        future::ok(Framed::new(socket, GossipsubRpcCodec {
             length_prefix: Default::default() }))
     }
 }
@@ -54,25 +53,26 @@ impl<TSocket> OutboundUpgrade<TSocket> for GossipsubConfig
 where
     TSocket: AsyncRead + AsyncWrite,
 {
-    type Output = Framed<TSocket, GossipsubCodec>;
+    type Output = Framed<TSocket, GossipsubRpcCodec>;
     type Error = io::Error;
     type Future = future::FutureResult<Self::Output, Self::Error>;
 
     #[inline]
     fn upgrade_outbound(self, socket: TSocket, _: Self::Info)
         -> Self::Future {
-        future::ok(Framed::new(socket, GossipsubCodec {
+        future::ok(Framed::new(socket, GossipsubRpcCodec {
             length_prefix: Default::default() }))
     }
 }
 
-/// Implementation of `tokio_codec::Codec`.
-pub struct GossipsubCodec {
+/// Implementation of `tokio_codec::Codec` for a `message::GossipsubRpc` to an
+/// `rpc_proto::RPC`.
+pub struct GossipsubRpcCodec {
     /// The codec for encoding/decoding the length prefix of messages.
     length_prefix: codec::UviBytes,
 }
 
-impl Encoder for GossipsubCodec {
+impl Encoder for GossipsubRpcCodec {
     type Item = GossipsubRpc;
     type Error = io::Error;
 
@@ -81,64 +81,23 @@ impl Encoder for GossipsubCodec {
         let mut proto = rpc_proto::RPC::new();
 
         for message in item.messages.into_iter() {
-            let mut msg = rpc_proto::Message::new();
-            msg.set_from(message.source.into_bytes());
-            msg.set_data(message.data);
-            msg.set_seqno(message.seq_no);
-            msg.set_topicIDs(
-                message
-                    .topics
-                    .into_iter()
-                    .map(TopicHash::into_string)
-                    .collect(),
-            );
-            // msg.set_signature(message.signature);
-            // msg.set_key(message.key);
+            let msg = rpc_proto::Message::from(message);
             proto.mut_publish().push(msg);
         }
 
-        for topic in item.subscriptions.into_iter() {
-            let mut subscription = rpc_proto::RPC_SubOpts::new();
-            subscription.set_subscribe(
-            topic.action == GossipsubSubscriptionAction::Subscribe);
-            subscription.set_topicid(topic.topic.into_string());
+        for gsub in item.subscriptions.into_iter() {
+            let mut subscription = rpc_proto::RPC_SubOpts::from(gsub);
             proto.mut_subscriptions().push(subscription);
         }
 
         for control in item.control.into_iter() {
-            let mut ctrl = rpc_proto::ControlMessage::new();
-            for control_i_have in control.ihave.into_iter() {
-                let mut ctrl_i_have = rpc_proto::ControlIHave::new();
-                ctrl_i_have.set_topicID(control_i_have.topic.into_string());
-                // For getting my head around this with seeing the return
-                // types by hovering over, uncomment if you need to
-                // do the same.
-                // let bar_into_iter = control_i_have.messages.into_iter();
-                // let map_bar_into_iter = bar_into_iter.map(|m| m.id.into_string());
-                // let collect_map_bar_into_iter = map_bar_into_iter.collect();
-                ctrl_i_have.set_messageIDs(control_i_have.messages.into_iter()
-                    .map(|m| m.id.into_string()).collect());
-                ctrl.get_ihave().to_vec().push(ctrl_i_have);
-            }
-            for control_i_want in control.iwant.into_iter() {
-                let mut ctrl_i_want = rpc_proto::ControlIWant::new();
-                ctrl_i_want.set_messageIDs(control_i_want.messages.into_iter()
-                    .map(|m| m.id.into_string()).collect());
-                ctrl.get_iwant().to_vec().push(ctrl_i_want);
-            }
-            for control_graft in control.graft.into_iter() {
-                let mut ctrl_graft = rpc_proto::ControlGraft::new();
-                ctrl_graft.set_topicID(control_graft.topic.into_string());
-                ctrl.get_graft().to_vec().push(ctrl_graft);
-            }
-            for control_prune in control.prune.into_iter() {
-                let mut ctrl_prune = rpc_proto::ControlPrune::new();
-                ctrl_prune.set_topicID(control_prune.topic.into_string());
-                ctrl.get_prune().to_vec().push(ctrl_prune);
-            }
+            let mut ctrl = rpc_proto::ControlMessage::from(control);
+
+            proto.set_control(ctrl);
         }
 
         let msg_size = proto.compute_size();
+
         // Reserve enough space for the data and the length. The length has a
         // maximum of 32 bits, which means that 5 bytes is enough for the
         // variable-length integer.
@@ -155,7 +114,7 @@ impl Encoder for GossipsubCodec {
     }
 }
 
-impl Decoder for GossipsubCodec {
+impl Decoder for GossipsubRpcCodec {
     type Item = GossipsubRpc;
     type Error = io::Error;
 
@@ -176,14 +135,14 @@ impl Decoder for GossipsubCodec {
                     "Invalid peer ID in message")
                 })?,
                 data: publish.take_data(),
-                sequence_number: publish.take_seqno(),
+                seq_no: publish.take_seqno(),
                 topics: publish
                     .take_topicIDs()
                     .into_iter()
                     .map(|topic| TopicHash::from_raw(topic))
                     .collect(),
-                signature: publish.take_signature(),
-                key: publish.take_key(),
+                // signature: publish.take_signature(),
+                // key: publish.take_key(),
             });
         }
 

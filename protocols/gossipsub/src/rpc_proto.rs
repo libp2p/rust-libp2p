@@ -3,7 +3,7 @@
 
 // https://github.com/Manishearth/rust-clippy/issues/702
 #![allow(unknown_lints)]
-#![allow(clippy)]
+#![allow(clippy::all)]
 
 #![cfg_attr(rustfmt, rustfmt_skip)]
 
@@ -516,8 +516,6 @@ pub struct Message {
     data: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     seqno: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     topicIDs: ::protobuf::RepeatedField<::std::string::String>,
-    signature: ::protobuf::SingularField<::std::vec::Vec<u8>>,
-    key: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     // special fields
     unknown_fields: ::protobuf::UnknownFields,
     cached_size: ::protobuf::CachedSize,
@@ -660,78 +658,6 @@ impl Message {
     pub fn get_topicIDs(&self) -> &[::std::string::String] {
         &self.topicIDs
     }
-
-    // optional bytes signature = 5;
-
-    pub fn clear_signature(&mut self) {
-        self.signature.clear();
-    }
-
-    pub fn has_signature(&self) -> bool {
-        self.signature.is_some()
-    }
-
-    // Param is passed by value, moved
-    pub fn set_signature(&mut self, v: ::std::vec::Vec<u8>) {
-        self.signature = ::protobuf::SingularField::some(v);
-    }
-
-    // Mutable pointer to the field.
-    // If field is not initialized, it is initialized with default value first.
-    pub fn mut_signature(&mut self) -> &mut ::std::vec::Vec<u8> {
-        if self.signature.is_none() {
-            self.signature.set_default();
-        }
-        self.signature.as_mut().unwrap()
-    }
-
-    // Take field
-    pub fn take_signature(&mut self) -> ::std::vec::Vec<u8> {
-        self.signature.take().unwrap_or_else(|| ::std::vec::Vec::new())
-    }
-
-    pub fn get_signature(&self) -> &[u8] {
-        match self.signature.as_ref() {
-            Some(v) => &v,
-            None => &[],
-        }
-    }
-
-    // optional bytes key = 6;
-
-    pub fn clear_key(&mut self) {
-        self.key.clear();
-    }
-
-    pub fn has_key(&self) -> bool {
-        self.key.is_some()
-    }
-
-    // Param is passed by value, moved
-    pub fn set_key(&mut self, v: ::std::vec::Vec<u8>) {
-        self.key = ::protobuf::SingularField::some(v);
-    }
-
-    // Mutable pointer to the field.
-    // If field is not initialized, it is initialized with default value first.
-    pub fn mut_key(&mut self) -> &mut ::std::vec::Vec<u8> {
-        if self.key.is_none() {
-            self.key.set_default();
-        }
-        self.key.as_mut().unwrap()
-    }
-
-    // Take field
-    pub fn take_key(&mut self) -> ::std::vec::Vec<u8> {
-        self.key.take().unwrap_or_else(|| ::std::vec::Vec::new())
-    }
-
-    pub fn get_key(&self) -> &[u8] {
-        match self.key.as_ref() {
-            Some(v) => &v,
-            None => &[],
-        }
-    }
 }
 
 impl ::protobuf::Message for Message {
@@ -754,12 +680,6 @@ impl ::protobuf::Message for Message {
                 },
                 4 => {
                     ::protobuf::rt::read_repeated_string_into(wire_type, is, &mut self.topicIDs)?;
-                },
-                5 => {
-                    ::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.signature)?;
-                },
-                6 => {
-                    ::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.key)?;
                 },
                 _ => {
                     ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
@@ -785,12 +705,6 @@ impl ::protobuf::Message for Message {
         for value in &self.topicIDs {
             my_size += ::protobuf::rt::string_size(4, &value);
         };
-        if let Some(ref v) = self.signature.as_ref() {
-            my_size += ::protobuf::rt::bytes_size(5, &v);
-        }
-        if let Some(ref v) = self.key.as_ref() {
-            my_size += ::protobuf::rt::bytes_size(6, &v);
-        }
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
         my_size
@@ -809,12 +723,6 @@ impl ::protobuf::Message for Message {
         for v in &self.topicIDs {
             os.write_string(4, &v)?;
         };
-        if let Some(ref v) = self.signature.as_ref() {
-            os.write_bytes(5, &v)?;
-        }
-        if let Some(ref v) = self.key.as_ref() {
-            os.write_bytes(6, &v)?;
-        }
         os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
     }
@@ -877,16 +785,6 @@ impl ::protobuf::Message for Message {
                     |m: &Message| { &m.topicIDs },
                     |m: &mut Message| { &mut m.topicIDs },
                 ));
-                fields.push(::protobuf::reflect::accessor::make_singular_field_accessor::<_, ::protobuf::types::ProtobufTypeBytes>(
-                    "signature",
-                    |m: &Message| { &m.signature },
-                    |m: &mut Message| { &mut m.signature },
-                ));
-                fields.push(::protobuf::reflect::accessor::make_singular_field_accessor::<_, ::protobuf::types::ProtobufTypeBytes>(
-                    "key",
-                    |m: &Message| { &m.key },
-                    |m: &mut Message| { &mut m.key },
-                ));
                 ::protobuf::reflect::MessageDescriptor::new::<Message>(
                     "Message",
                     fields,
@@ -913,8 +811,6 @@ impl ::protobuf::Clear for Message {
         self.clear_data();
         self.clear_seqno();
         self.clear_topicIDs();
-        self.clear_signature();
-        self.clear_key();
         self.unknown_fields.clear();
     }
 }
@@ -1974,8 +1870,6 @@ impl ::protobuf::reflect::ProtobufValue for ControlPrune {
 pub struct TopicDescriptor {
     // message fields
     name: ::protobuf::SingularField<::std::string::String>,
-    auth: ::protobuf::SingularPtrField<TopicDescriptor_AuthOpts>,
-    enc: ::protobuf::SingularPtrField<TopicDescriptor_EncOpts>,
     // special fields
     unknown_fields: ::protobuf::UnknownFields,
     cached_size: ::protobuf::CachedSize,
@@ -2021,86 +1915,10 @@ impl TopicDescriptor {
             None => "",
         }
     }
-
-    // optional .pubsub.pb.TopicDescriptor.AuthOpts auth = 2;
-
-    pub fn clear_auth(&mut self) {
-        self.auth.clear();
-    }
-
-    pub fn has_auth(&self) -> bool {
-        self.auth.is_some()
-    }
-
-    // Param is passed by value, moved
-    pub fn set_auth(&mut self, v: TopicDescriptor_AuthOpts) {
-        self.auth = ::protobuf::SingularPtrField::some(v);
-    }
-
-    // Mutable pointer to the field.
-    // If field is not initialized, it is initialized with default value first.
-    pub fn mut_auth(&mut self) -> &mut TopicDescriptor_AuthOpts {
-        if self.auth.is_none() {
-            self.auth.set_default();
-        }
-        self.auth.as_mut().unwrap()
-    }
-
-    // Take field
-    pub fn take_auth(&mut self) -> TopicDescriptor_AuthOpts {
-        self.auth.take().unwrap_or_else(|| TopicDescriptor_AuthOpts::new())
-    }
-
-    pub fn get_auth(&self) -> &TopicDescriptor_AuthOpts {
-        self.auth.as_ref().unwrap_or_else(|| TopicDescriptor_AuthOpts::default_instance())
-    }
-
-    // optional .pubsub.pb.TopicDescriptor.EncOpts enc = 3;
-
-    pub fn clear_enc(&mut self) {
-        self.enc.clear();
-    }
-
-    pub fn has_enc(&self) -> bool {
-        self.enc.is_some()
-    }
-
-    // Param is passed by value, moved
-    pub fn set_enc(&mut self, v: TopicDescriptor_EncOpts) {
-        self.enc = ::protobuf::SingularPtrField::some(v);
-    }
-
-    // Mutable pointer to the field.
-    // If field is not initialized, it is initialized with default value first.
-    pub fn mut_enc(&mut self) -> &mut TopicDescriptor_EncOpts {
-        if self.enc.is_none() {
-            self.enc.set_default();
-        }
-        self.enc.as_mut().unwrap()
-    }
-
-    // Take field
-    pub fn take_enc(&mut self) -> TopicDescriptor_EncOpts {
-        self.enc.take().unwrap_or_else(|| TopicDescriptor_EncOpts::new())
-    }
-
-    pub fn get_enc(&self) -> &TopicDescriptor_EncOpts {
-        self.enc.as_ref().unwrap_or_else(|| TopicDescriptor_EncOpts::default_instance())
-    }
 }
 
 impl ::protobuf::Message for TopicDescriptor {
     fn is_initialized(&self) -> bool {
-        for v in &self.auth {
-            if !v.is_initialized() {
-                return false;
-            }
-        };
-        for v in &self.enc {
-            if !v.is_initialized() {
-                return false;
-            }
-        };
         true
     }
 
@@ -2110,12 +1928,6 @@ impl ::protobuf::Message for TopicDescriptor {
             match field_number {
                 1 => {
                     ::protobuf::rt::read_singular_string_into(wire_type, is, &mut self.name)?;
-                },
-                2 => {
-                    ::protobuf::rt::read_singular_message_into(wire_type, is, &mut self.auth)?;
-                },
-                3 => {
-                    ::protobuf::rt::read_singular_message_into(wire_type, is, &mut self.enc)?;
                 },
                 _ => {
                     ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
@@ -2132,14 +1944,6 @@ impl ::protobuf::Message for TopicDescriptor {
         if let Some(ref v) = self.name.as_ref() {
             my_size += ::protobuf::rt::string_size(1, &v);
         }
-        if let Some(ref v) = self.auth.as_ref() {
-            let len = v.compute_size();
-            my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
-        }
-        if let Some(ref v) = self.enc.as_ref() {
-            let len = v.compute_size();
-            my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
-        }
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
         my_size
@@ -2148,16 +1952,6 @@ impl ::protobuf::Message for TopicDescriptor {
     fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
         if let Some(ref v) = self.name.as_ref() {
             os.write_string(1, &v)?;
-        }
-        if let Some(ref v) = self.auth.as_ref() {
-            os.write_tag(2, ::protobuf::wire_format::WireTypeLengthDelimited)?;
-            os.write_raw_varint32(v.get_cached_size())?;
-            v.write_to_with_cached_sizes(os)?;
-        }
-        if let Some(ref v) = self.enc.as_ref() {
-            os.write_tag(3, ::protobuf::wire_format::WireTypeLengthDelimited)?;
-            os.write_raw_varint32(v.get_cached_size())?;
-            v.write_to_with_cached_sizes(os)?;
         }
         os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
@@ -2206,16 +2000,6 @@ impl ::protobuf::Message for TopicDescriptor {
                     |m: &TopicDescriptor| { &m.name },
                     |m: &mut TopicDescriptor| { &mut m.name },
                 ));
-                fields.push(::protobuf::reflect::accessor::make_singular_ptr_field_accessor::<_, ::protobuf::types::ProtobufTypeMessage<TopicDescriptor_AuthOpts>>(
-                    "auth",
-                    |m: &TopicDescriptor| { &m.auth },
-                    |m: &mut TopicDescriptor| { &mut m.auth },
-                ));
-                fields.push(::protobuf::reflect::accessor::make_singular_ptr_field_accessor::<_, ::protobuf::types::ProtobufTypeMessage<TopicDescriptor_EncOpts>>(
-                    "enc",
-                    |m: &TopicDescriptor| { &m.enc },
-                    |m: &mut TopicDescriptor| { &mut m.enc },
-                ));
                 ::protobuf::reflect::MessageDescriptor::new::<TopicDescriptor>(
                     "TopicDescriptor",
                     fields,
@@ -2239,8 +2023,6 @@ impl ::protobuf::Message for TopicDescriptor {
 impl ::protobuf::Clear for TopicDescriptor {
     fn clear(&mut self) {
         self.clear_name();
-        self.clear_auth();
-        self.clear_enc();
         self.unknown_fields.clear();
     }
 }
@@ -2257,669 +2039,107 @@ impl ::protobuf::reflect::ProtobufValue for TopicDescriptor {
     }
 }
 
-#[derive(PartialEq,Clone,Default)]
-pub struct TopicDescriptor_AuthOpts {
-    // message fields
-    mode: ::std::option::Option<TopicDescriptor_AuthOpts_AuthMode>,
-    keys: ::protobuf::RepeatedField<::std::vec::Vec<u8>>,
-    // special fields
-    unknown_fields: ::protobuf::UnknownFields,
-    cached_size: ::protobuf::CachedSize,
-}
-
-impl TopicDescriptor_AuthOpts {
-    pub fn new() -> TopicDescriptor_AuthOpts {
-        ::std::default::Default::default()
-    }
-
-    // optional .pubsub.pb.TopicDescriptor.AuthOpts.AuthMode mode = 1;
-
-    pub fn clear_mode(&mut self) {
-        self.mode = ::std::option::Option::None;
-    }
-
-    pub fn has_mode(&self) -> bool {
-        self.mode.is_some()
-    }
-
-    // Param is passed by value, moved
-    pub fn set_mode(&mut self, v: TopicDescriptor_AuthOpts_AuthMode) {
-        self.mode = ::std::option::Option::Some(v);
-    }
-
-    pub fn get_mode(&self) -> TopicDescriptor_AuthOpts_AuthMode {
-        self.mode.unwrap_or(TopicDescriptor_AuthOpts_AuthMode::NONE)
-    }
-
-    // repeated bytes keys = 2;
-
-    pub fn clear_keys(&mut self) {
-        self.keys.clear();
-    }
-
-    // Param is passed by value, moved
-    pub fn set_keys(&mut self, v: ::protobuf::RepeatedField<::std::vec::Vec<u8>>) {
-        self.keys = v;
-    }
-
-    // Mutable pointer to the field.
-    pub fn mut_keys(&mut self) -> &mut ::protobuf::RepeatedField<::std::vec::Vec<u8>> {
-        &mut self.keys
-    }
-
-    // Take field
-    pub fn take_keys(&mut self) -> ::protobuf::RepeatedField<::std::vec::Vec<u8>> {
-        ::std::mem::replace(&mut self.keys, ::protobuf::RepeatedField::new())
-    }
-
-    pub fn get_keys(&self) -> &[::std::vec::Vec<u8>] {
-        &self.keys
-    }
-}
-
-impl ::protobuf::Message for TopicDescriptor_AuthOpts {
-    fn is_initialized(&self) -> bool {
-        true
-    }
-
-    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream) -> ::protobuf::ProtobufResult<()> {
-        while !is.eof()? {
-            let (field_number, wire_type) = is.read_tag_unpack()?;
-            match field_number {
-                1 => {
-                    ::protobuf::rt::read_proto2_enum_with_unknown_fields_into(wire_type, is, &mut self.mode, 1, &mut self.unknown_fields)?
-                },
-                2 => {
-                    ::protobuf::rt::read_repeated_bytes_into(wire_type, is, &mut self.keys)?;
-                },
-                _ => {
-                    ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
-                },
-            };
-        }
-        ::std::result::Result::Ok(())
-    }
-
-    // Compute sizes of nested messages
-    #[allow(unused_variables)]
-    fn compute_size(&self) -> u32 {
-        let mut my_size = 0;
-        if let Some(v) = self.mode {
-            my_size += ::protobuf::rt::enum_size(1, v);
-        }
-        for value in &self.keys {
-            my_size += ::protobuf::rt::bytes_size(2, &value);
-        };
-        my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
-        self.cached_size.set(my_size);
-        my_size
-    }
-
-    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
-        if let Some(v) = self.mode {
-            os.write_enum(1, v.value())?;
-        }
-        for v in &self.keys {
-            os.write_bytes(2, &v)?;
-        };
-        os.write_unknown_fields(self.get_unknown_fields())?;
-        ::std::result::Result::Ok(())
-    }
-
-    fn get_cached_size(&self) -> u32 {
-        self.cached_size.get()
-    }
-
-    fn get_unknown_fields(&self) -> &::protobuf::UnknownFields {
-        &self.unknown_fields
-    }
-
-    fn mut_unknown_fields(&mut self) -> &mut ::protobuf::UnknownFields {
-        &mut self.unknown_fields
-    }
-
-    fn as_any(&self) -> &::std::any::Any {
-        self as &::std::any::Any
-    }
-    fn as_any_mut(&mut self) -> &mut ::std::any::Any {
-        self as &mut ::std::any::Any
-    }
-    fn into_any(self: Box<Self>) -> ::std::boxed::Box<::std::any::Any> {
-        self
-    }
-
-    fn descriptor(&self) -> &'static ::protobuf::reflect::MessageDescriptor {
-        Self::descriptor_static()
-    }
-
-    fn new() -> TopicDescriptor_AuthOpts {
-        TopicDescriptor_AuthOpts::new()
-    }
-
-    fn descriptor_static() -> &'static ::protobuf::reflect::MessageDescriptor {
-        static mut descriptor: ::protobuf::lazy::Lazy<::protobuf::reflect::MessageDescriptor> = ::protobuf::lazy::Lazy {
-            lock: ::protobuf::lazy::ONCE_INIT,
-            ptr: 0 as *const ::protobuf::reflect::MessageDescriptor,
-        };
-        unsafe {
-            descriptor.get(|| {
-                let mut fields = ::std::vec::Vec::new();
-                fields.push(::protobuf::reflect::accessor::make_option_accessor::<_, ::protobuf::types::ProtobufTypeEnum<TopicDescriptor_AuthOpts_AuthMode>>(
-                    "mode",
-                    |m: &TopicDescriptor_AuthOpts| { &m.mode },
-                    |m: &mut TopicDescriptor_AuthOpts| { &mut m.mode },
-                ));
-                fields.push(::protobuf::reflect::accessor::make_repeated_field_accessor::<_, ::protobuf::types::ProtobufTypeBytes>(
-                    "keys",
-                    |m: &TopicDescriptor_AuthOpts| { &m.keys },
-                    |m: &mut TopicDescriptor_AuthOpts| { &mut m.keys },
-                ));
-                ::protobuf::reflect::MessageDescriptor::new::<TopicDescriptor_AuthOpts>(
-                    "TopicDescriptor_AuthOpts",
-                    fields,
-                    file_descriptor_proto()
-                )
-            })
-        }
-    }
-
-    fn default_instance() -> &'static TopicDescriptor_AuthOpts {
-        static mut instance: ::protobuf::lazy::Lazy<TopicDescriptor_AuthOpts> = ::protobuf::lazy::Lazy {
-            lock: ::protobuf::lazy::ONCE_INIT,
-            ptr: 0 as *const TopicDescriptor_AuthOpts,
-        };
-        unsafe {
-            instance.get(TopicDescriptor_AuthOpts::new)
-        }
-    }
-}
-
-impl ::protobuf::Clear for TopicDescriptor_AuthOpts {
-    fn clear(&mut self) {
-        self.clear_mode();
-        self.clear_keys();
-        self.unknown_fields.clear();
-    }
-}
-
-impl ::std::fmt::Debug for TopicDescriptor_AuthOpts {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-        ::protobuf::text_format::fmt(self, f)
-    }
-}
-
-impl ::protobuf::reflect::ProtobufValue for TopicDescriptor_AuthOpts {
-    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
-        ::protobuf::reflect::ProtobufValueRef::Message(self)
-    }
-}
-
-#[derive(Clone,PartialEq,Eq,Debug,Hash)]
-pub enum TopicDescriptor_AuthOpts_AuthMode {
-    NONE = 0,
-    KEY = 1,
-    WOT = 2,
-}
-
-impl ::protobuf::ProtobufEnum for TopicDescriptor_AuthOpts_AuthMode {
-    fn value(&self) -> i32 {
-        *self as i32
-    }
-
-    fn from_i32(value: i32) -> ::std::option::Option<TopicDescriptor_AuthOpts_AuthMode> {
-        match value {
-            0 => ::std::option::Option::Some(TopicDescriptor_AuthOpts_AuthMode::NONE),
-            1 => ::std::option::Option::Some(TopicDescriptor_AuthOpts_AuthMode::KEY),
-            2 => ::std::option::Option::Some(TopicDescriptor_AuthOpts_AuthMode::WOT),
-            _ => ::std::option::Option::None
-        }
-    }
-
-    fn values() -> &'static [Self] {
-        static values: &'static [TopicDescriptor_AuthOpts_AuthMode] = &[
-            TopicDescriptor_AuthOpts_AuthMode::NONE,
-            TopicDescriptor_AuthOpts_AuthMode::KEY,
-            TopicDescriptor_AuthOpts_AuthMode::WOT,
-        ];
-        values
-    }
-
-    fn enum_descriptor_static() -> &'static ::protobuf::reflect::EnumDescriptor {
-        static mut descriptor: ::protobuf::lazy::Lazy<::protobuf::reflect::EnumDescriptor> = ::protobuf::lazy::Lazy {
-            lock: ::protobuf::lazy::ONCE_INIT,
-            ptr: 0 as *const ::protobuf::reflect::EnumDescriptor,
-        };
-        unsafe {
-            descriptor.get(|| {
-                ::protobuf::reflect::EnumDescriptor::new("TopicDescriptor_AuthOpts_AuthMode", file_descriptor_proto())
-            })
-        }
-    }
-}
-
-impl ::std::marker::Copy for TopicDescriptor_AuthOpts_AuthMode {
-}
-
-impl ::protobuf::reflect::ProtobufValue for TopicDescriptor_AuthOpts_AuthMode {
-    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
-        ::protobuf::reflect::ProtobufValueRef::Enum(self.descriptor())
-    }
-}
-
-#[derive(PartialEq,Clone,Default)]
-pub struct TopicDescriptor_EncOpts {
-    // message fields
-    mode: ::std::option::Option<TopicDescriptor_EncOpts_EncMode>,
-    keyHashes: ::protobuf::RepeatedField<::std::vec::Vec<u8>>,
-    // special fields
-    unknown_fields: ::protobuf::UnknownFields,
-    cached_size: ::protobuf::CachedSize,
-}
-
-impl TopicDescriptor_EncOpts {
-    pub fn new() -> TopicDescriptor_EncOpts {
-        ::std::default::Default::default()
-    }
-
-    // optional .pubsub.pb.TopicDescriptor.EncOpts.EncMode mode = 1;
-
-    pub fn clear_mode(&mut self) {
-        self.mode = ::std::option::Option::None;
-    }
-
-    pub fn has_mode(&self) -> bool {
-        self.mode.is_some()
-    }
-
-    // Param is passed by value, moved
-    pub fn set_mode(&mut self, v: TopicDescriptor_EncOpts_EncMode) {
-        self.mode = ::std::option::Option::Some(v);
-    }
-
-    pub fn get_mode(&self) -> TopicDescriptor_EncOpts_EncMode {
-        self.mode.unwrap_or(TopicDescriptor_EncOpts_EncMode::NONE)
-    }
-
-    // repeated bytes keyHashes = 2;
-
-    pub fn clear_keyHashes(&mut self) {
-        self.keyHashes.clear();
-    }
-
-    // Param is passed by value, moved
-    pub fn set_keyHashes(&mut self, v: ::protobuf::RepeatedField<::std::vec::Vec<u8>>) {
-        self.keyHashes = v;
-    }
-
-    // Mutable pointer to the field.
-    pub fn mut_keyHashes(&mut self) -> &mut ::protobuf::RepeatedField<::std::vec::Vec<u8>> {
-        &mut self.keyHashes
-    }
-
-    // Take field
-    pub fn take_keyHashes(&mut self) -> ::protobuf::RepeatedField<::std::vec::Vec<u8>> {
-        ::std::mem::replace(&mut self.keyHashes, ::protobuf::RepeatedField::new())
-    }
-
-    pub fn get_keyHashes(&self) -> &[::std::vec::Vec<u8>] {
-        &self.keyHashes
-    }
-}
-
-impl ::protobuf::Message for TopicDescriptor_EncOpts {
-    fn is_initialized(&self) -> bool {
-        true
-    }
-
-    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream) -> ::protobuf::ProtobufResult<()> {
-        while !is.eof()? {
-            let (field_number, wire_type) = is.read_tag_unpack()?;
-            match field_number {
-                1 => {
-                    ::protobuf::rt::read_proto2_enum_with_unknown_fields_into(wire_type, is, &mut self.mode, 1, &mut self.unknown_fields)?
-                },
-                2 => {
-                    ::protobuf::rt::read_repeated_bytes_into(wire_type, is, &mut self.keyHashes)?;
-                },
-                _ => {
-                    ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
-                },
-            };
-        }
-        ::std::result::Result::Ok(())
-    }
-
-    // Compute sizes of nested messages
-    #[allow(unused_variables)]
-    fn compute_size(&self) -> u32 {
-        let mut my_size = 0;
-        if let Some(v) = self.mode {
-            my_size += ::protobuf::rt::enum_size(1, v);
-        }
-        for value in &self.keyHashes {
-            my_size += ::protobuf::rt::bytes_size(2, &value);
-        };
-        my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
-        self.cached_size.set(my_size);
-        my_size
-    }
-
-    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
-        if let Some(v) = self.mode {
-            os.write_enum(1, v.value())?;
-        }
-        for v in &self.keyHashes {
-            os.write_bytes(2, &v)?;
-        };
-        os.write_unknown_fields(self.get_unknown_fields())?;
-        ::std::result::Result::Ok(())
-    }
-
-    fn get_cached_size(&self) -> u32 {
-        self.cached_size.get()
-    }
-
-    fn get_unknown_fields(&self) -> &::protobuf::UnknownFields {
-        &self.unknown_fields
-    }
-
-    fn mut_unknown_fields(&mut self) -> &mut ::protobuf::UnknownFields {
-        &mut self.unknown_fields
-    }
-
-    fn as_any(&self) -> &::std::any::Any {
-        self as &::std::any::Any
-    }
-    fn as_any_mut(&mut self) -> &mut ::std::any::Any {
-        self as &mut ::std::any::Any
-    }
-    fn into_any(self: Box<Self>) -> ::std::boxed::Box<::std::any::Any> {
-        self
-    }
-
-    fn descriptor(&self) -> &'static ::protobuf::reflect::MessageDescriptor {
-        Self::descriptor_static()
-    }
-
-    fn new() -> TopicDescriptor_EncOpts {
-        TopicDescriptor_EncOpts::new()
-    }
-
-    fn descriptor_static() -> &'static ::protobuf::reflect::MessageDescriptor {
-        static mut descriptor: ::protobuf::lazy::Lazy<::protobuf::reflect::MessageDescriptor> = ::protobuf::lazy::Lazy {
-            lock: ::protobuf::lazy::ONCE_INIT,
-            ptr: 0 as *const ::protobuf::reflect::MessageDescriptor,
-        };
-        unsafe {
-            descriptor.get(|| {
-                let mut fields = ::std::vec::Vec::new();
-                fields.push(::protobuf::reflect::accessor::make_option_accessor::<_, ::protobuf::types::ProtobufTypeEnum<TopicDescriptor_EncOpts_EncMode>>(
-                    "mode",
-                    |m: &TopicDescriptor_EncOpts| { &m.mode },
-                    |m: &mut TopicDescriptor_EncOpts| { &mut m.mode },
-                ));
-                fields.push(::protobuf::reflect::accessor::make_repeated_field_accessor::<_, ::protobuf::types::ProtobufTypeBytes>(
-                    "keyHashes",
-                    |m: &TopicDescriptor_EncOpts| { &m.keyHashes },
-                    |m: &mut TopicDescriptor_EncOpts| { &mut m.keyHashes },
-                ));
-                ::protobuf::reflect::MessageDescriptor::new::<TopicDescriptor_EncOpts>(
-                    "TopicDescriptor_EncOpts",
-                    fields,
-                    file_descriptor_proto()
-                )
-            })
-        }
-    }
-
-    fn default_instance() -> &'static TopicDescriptor_EncOpts {
-        static mut instance: ::protobuf::lazy::Lazy<TopicDescriptor_EncOpts> = ::protobuf::lazy::Lazy {
-            lock: ::protobuf::lazy::ONCE_INIT,
-            ptr: 0 as *const TopicDescriptor_EncOpts,
-        };
-        unsafe {
-            instance.get(TopicDescriptor_EncOpts::new)
-        }
-    }
-}
-
-impl ::protobuf::Clear for TopicDescriptor_EncOpts {
-    fn clear(&mut self) {
-        self.clear_mode();
-        self.clear_keyHashes();
-        self.unknown_fields.clear();
-    }
-}
-
-impl ::std::fmt::Debug for TopicDescriptor_EncOpts {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-        ::protobuf::text_format::fmt(self, f)
-    }
-}
-
-impl ::protobuf::reflect::ProtobufValue for TopicDescriptor_EncOpts {
-    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
-        ::protobuf::reflect::ProtobufValueRef::Message(self)
-    }
-}
-
-#[derive(Clone,PartialEq,Eq,Debug,Hash)]
-pub enum TopicDescriptor_EncOpts_EncMode {
-    NONE = 0,
-    SHAREDKEY = 1,
-    WOT = 2,
-}
-
-impl ::protobuf::ProtobufEnum for TopicDescriptor_EncOpts_EncMode {
-    fn value(&self) -> i32 {
-        *self as i32
-    }
-
-    fn from_i32(value: i32) -> ::std::option::Option<TopicDescriptor_EncOpts_EncMode> {
-        match value {
-            0 => ::std::option::Option::Some(TopicDescriptor_EncOpts_EncMode::NONE),
-            1 => ::std::option::Option::Some(TopicDescriptor_EncOpts_EncMode::SHAREDKEY),
-            2 => ::std::option::Option::Some(TopicDescriptor_EncOpts_EncMode::WOT),
-            _ => ::std::option::Option::None
-        }
-    }
-
-    fn values() -> &'static [Self] {
-        static values: &'static [TopicDescriptor_EncOpts_EncMode] = &[
-            TopicDescriptor_EncOpts_EncMode::NONE,
-            TopicDescriptor_EncOpts_EncMode::SHAREDKEY,
-            TopicDescriptor_EncOpts_EncMode::WOT,
-        ];
-        values
-    }
-
-    fn enum_descriptor_static() -> &'static ::protobuf::reflect::EnumDescriptor {
-        static mut descriptor: ::protobuf::lazy::Lazy<::protobuf::reflect::EnumDescriptor> = ::protobuf::lazy::Lazy {
-            lock: ::protobuf::lazy::ONCE_INIT,
-            ptr: 0 as *const ::protobuf::reflect::EnumDescriptor,
-        };
-        unsafe {
-            descriptor.get(|| {
-                ::protobuf::reflect::EnumDescriptor::new("TopicDescriptor_EncOpts_EncMode", file_descriptor_proto())
-            })
-        }
-    }
-}
-
-impl ::std::marker::Copy for TopicDescriptor_EncOpts_EncMode {
-}
-
-impl ::protobuf::reflect::ProtobufValue for TopicDescriptor_EncOpts_EncMode {
-    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
-        ::protobuf::reflect::ProtobufValueRef::Enum(self.descriptor())
-    }
-}
-
 static file_descriptor_proto_data: &'static [u8] = b"\
     \n\trpc.proto\x12\tpubsub.pb\"\xe9\x01\n\x03RPC\x12<\n\rsubscriptions\
     \x18\x01\x20\x03(\x0b2\x16.pubsub.pb.RPC.SubOptsR\rsubscriptions\x12,\n\
     \x07publish\x18\x02\x20\x03(\x0b2\x12.pubsub.pb.MessageR\x07publish\x123\
     \n\x07control\x18\x03\x20\x01(\x0b2\x19.pubsub.pb.ControlMessageR\x07con\
     trol\x1aA\n\x07SubOpts\x12\x1c\n\tsubscribe\x18\x01\x20\x01(\x08R\tsubsc\
-    ribe\x12\x18\n\x07topicid\x18\x02\x20\x01(\tR\x07topicid\"\x93\x01\n\x07\
-    Message\x12\x12\n\x04from\x18\x01\x20\x01(\x0cR\x04from\x12\x12\n\x04dat\
-    a\x18\x02\x20\x01(\x0cR\x04data\x12\x14\n\x05seqno\x18\x03\x20\x01(\x0cR\
-    \x05seqno\x12\x1a\n\x08topicIDs\x18\x04\x20\x03(\tR\x08topicIDs\x12\x1c\
-    \n\tsignature\x18\x05\x20\x01(\x0cR\tsignature\x12\x10\n\x03key\x18\x06\
-    \x20\x01(\x0cR\x03key\"\xcc\x01\n\x0eControlMessage\x12-\n\x05ihave\x18\
-    \x01\x20\x03(\x0b2\x17.pubsub.pb.ControlIHaveR\x05ihave\x12-\n\x05iwant\
-    \x18\x02\x20\x03(\x0b2\x17.pubsub.pb.ControlIWantR\x05iwant\x12-\n\x05gr\
-    aft\x18\x03\x20\x03(\x0b2\x17.pubsub.pb.ControlGraftR\x05graft\x12-\n\
-    \x05prune\x18\x04\x20\x03(\x0b2\x17.pubsub.pb.ControlPruneR\x05prune\"H\
-    \n\x0cControlIHave\x12\x18\n\x07topicID\x18\x01\x20\x01(\tR\x07topicID\
-    \x12\x1e\n\nmessageIDs\x18\x02\x20\x03(\tR\nmessageIDs\".\n\x0cControlIW\
-    ant\x12\x1e\n\nmessageIDs\x18\x01\x20\x03(\tR\nmessageIDs\"(\n\x0cContro\
-    lGraft\x12\x18\n\x07topicID\x18\x01\x20\x01(\tR\x07topicID\"(\n\x0cContr\
-    olPrune\x12\x18\n\x07topicID\x18\x01\x20\x01(\tR\x07topicID\"\xb6\x03\n\
-    \x0fTopicDescriptor\x12\x12\n\x04name\x18\x01\x20\x01(\tR\x04name\x127\n\
-    \x04auth\x18\x02\x20\x01(\x0b2#.pubsub.pb.TopicDescriptor.AuthOptsR\x04a\
-    uth\x124\n\x03enc\x18\x03\x20\x01(\x0b2\".pubsub.pb.TopicDescriptor.EncO\
-    ptsR\x03enc\x1a\x88\x01\n\x08AuthOpts\x12@\n\x04mode\x18\x01\x20\x01(\
-    \x0e2,.pubsub.pb.TopicDescriptor.AuthOpts.AuthModeR\x04mode\x12\x12\n\
-    \x04keys\x18\x02\x20\x03(\x0cR\x04keys\"&\n\x08AuthMode\x12\x08\n\x04NON\
-    E\x10\0\x12\x07\n\x03KEY\x10\x01\x12\x07\n\x03WOT\x10\x02\x1a\x94\x01\n\
-    \x07EncOpts\x12>\n\x04mode\x18\x01\x20\x01(\x0e2*.pubsub.pb.TopicDescrip\
-    tor.EncOpts.EncModeR\x04mode\x12\x1c\n\tkeyHashes\x18\x02\x20\x03(\x0cR\
-    \tkeyHashes\"+\n\x07EncMode\x12\x08\n\x04NONE\x10\0\x12\r\n\tSHAREDKEY\
-    \x10\x01\x12\x07\n\x03WOT\x10\x02J\x93\x18\n\x06\x12\x04\x02\0M\x01\nT\n\
-    \x01\x0c\x12\x03\x02\0\x122J\x20From\x20https://github.com/libp2p/go-lib\
-    p2p-pubsub/blob/master/pb/rpc.proto\n\n\x08\n\x01\x02\x12\x03\x04\x08\
-    \x11\n\n\n\x02\x04\0\x12\x04\x06\0\x10\x01\n\n\n\x03\x04\0\x01\x12\x03\
-    \x06\x08\x0b\n\x0b\n\x04\x04\0\x02\0\x12\x03\x07\x08+\n\x0c\n\x05\x04\0\
-    \x02\0\x04\x12\x03\x07\x08\x10\n\x0c\n\x05\x04\0\x02\0\x06\x12\x03\x07\
-    \x11\x18\n\x0c\n\x05\x04\0\x02\0\x01\x12\x03\x07\x19&\n\x0c\n\x05\x04\0\
-    \x02\0\x03\x12\x03\x07)*\n\x0b\n\x04\x04\0\x02\x01\x12\x03\x08\x08%\n\
-    \x0c\n\x05\x04\0\x02\x01\x04\x12\x03\x08\x08\x10\n\x0c\n\x05\x04\0\x02\
-    \x01\x06\x12\x03\x08\x11\x18\n\x0c\n\x05\x04\0\x02\x01\x01\x12\x03\x08\
-    \x19\x20\n\x0c\n\x05\x04\0\x02\x01\x03\x12\x03\x08#$\n\x0c\n\x04\x04\0\
-    \x03\0\x12\x04\n\x08\r\t\n\x0c\n\x05\x04\0\x03\0\x01\x12\x03\n\x10\x17\n\
-    (\n\x06\x04\0\x03\0\x02\0\x12\x03\x0b\x10,\"\x19\x20subscribe\x20or\x20u\
-    nsubcribe\n\n\x0e\n\x07\x04\0\x03\0\x02\0\x04\x12\x03\x0b\x10\x18\n\x0e\
-    \n\x07\x04\0\x03\0\x02\0\x05\x12\x03\x0b\x19\x1d\n\x0e\n\x07\x04\0\x03\0\
-    \x02\0\x01\x12\x03\x0b\x1e'\n\x0e\n\x07\x04\0\x03\0\x02\0\x03\x12\x03\
-    \x0b*+\n\r\n\x06\x04\0\x03\0\x02\x01\x12\x03\x0c\x10,\n\x0e\n\x07\x04\0\
-    \x03\0\x02\x01\x04\x12\x03\x0c\x10\x18\n\x0e\n\x07\x04\0\x03\0\x02\x01\
-    \x05\x12\x03\x0c\x19\x1f\n\x0e\n\x07\x04\0\x03\0\x02\x01\x01\x12\x03\x0c\
-    \x20'\n\x0e\n\x07\x04\0\x03\0\x02\x01\x03\x12\x03\x0c*+\n\x0b\n\x04\x04\
-    \0\x02\x02\x12\x03\x0f\x08,\n\x0c\n\x05\x04\0\x02\x02\x04\x12\x03\x0f\
-    \x08\x10\n\x0c\n\x05\x04\0\x02\x02\x06\x12\x03\x0f\x11\x1f\n\x0c\n\x05\
-    \x04\0\x02\x02\x01\x12\x03\x0f\x20'\n\x0c\n\x05\x04\0\x02\x02\x03\x12\
-    \x03\x0f*+\n\n\n\x02\x04\x01\x12\x04\x12\0\x19\x01\n\n\n\x03\x04\x01\x01\
-    \x12\x03\x12\x08\x0f\n\x0b\n\x04\x04\x01\x02\0\x12\x03\x13\x08\x20\n\x0c\
-    \n\x05\x04\x01\x02\0\x04\x12\x03\x13\x08\x10\n\x0c\n\x05\x04\x01\x02\0\
-    \x05\x12\x03\x13\x11\x16\n\x0c\n\x05\x04\x01\x02\0\x01\x12\x03\x13\x17\
-    \x1b\n\x0c\n\x05\x04\x01\x02\0\x03\x12\x03\x13\x1e\x1f\n\x0b\n\x04\x04\
-    \x01\x02\x01\x12\x03\x14\x08\x20\n\x0c\n\x05\x04\x01\x02\x01\x04\x12\x03\
-    \x14\x08\x10\n\x0c\n\x05\x04\x01\x02\x01\x05\x12\x03\x14\x11\x16\n\x0c\n\
-    \x05\x04\x01\x02\x01\x01\x12\x03\x14\x17\x1b\n\x0c\n\x05\x04\x01\x02\x01\
-    \x03\x12\x03\x14\x1e\x1f\n\x0b\n\x04\x04\x01\x02\x02\x12\x03\x15\x08!\n\
-    \x0c\n\x05\x04\x01\x02\x02\x04\x12\x03\x15\x08\x10\n\x0c\n\x05\x04\x01\
-    \x02\x02\x05\x12\x03\x15\x11\x16\n\x0c\n\x05\x04\x01\x02\x02\x01\x12\x03\
-    \x15\x17\x1c\n\x0c\n\x05\x04\x01\x02\x02\x03\x12\x03\x15\x1f\x20\n\x0b\n\
-    \x04\x04\x01\x02\x03\x12\x03\x16\x08%\n\x0c\n\x05\x04\x01\x02\x03\x04\
-    \x12\x03\x16\x08\x10\n\x0c\n\x05\x04\x01\x02\x03\x05\x12\x03\x16\x11\x17\
-    \n\x0c\n\x05\x04\x01\x02\x03\x01\x12\x03\x16\x18\x20\n\x0c\n\x05\x04\x01\
-    \x02\x03\x03\x12\x03\x16#$\n\x0b\n\x04\x04\x01\x02\x04\x12\x03\x17\x08%\
-    \n\x0c\n\x05\x04\x01\x02\x04\x04\x12\x03\x17\x08\x10\n\x0c\n\x05\x04\x01\
-    \x02\x04\x05\x12\x03\x17\x11\x16\n\x0c\n\x05\x04\x01\x02\x04\x01\x12\x03\
-    \x17\x17\x20\n\x0c\n\x05\x04\x01\x02\x04\x03\x12\x03\x17#$\n\x0b\n\x04\
-    \x04\x01\x02\x05\x12\x03\x18\x08\x1f\n\x0c\n\x05\x04\x01\x02\x05\x04\x12\
-    \x03\x18\x08\x10\n\x0c\n\x05\x04\x01\x02\x05\x05\x12\x03\x18\x11\x16\n\
-    \x0c\n\x05\x04\x01\x02\x05\x01\x12\x03\x18\x17\x1a\n\x0c\n\x05\x04\x01\
-    \x02\x05\x03\x12\x03\x18\x1d\x1e\n\n\n\x02\x04\x02\x12\x04\x1b\0\x20\x01\
-    \n\n\n\x03\x04\x02\x01\x12\x03\x1b\x08\x16\n\x0b\n\x04\x04\x02\x02\0\x12\
-    \x03\x1c\x08(\n\x0c\n\x05\x04\x02\x02\0\x04\x12\x03\x1c\x08\x10\n\x0c\n\
-    \x05\x04\x02\x02\0\x06\x12\x03\x1c\x11\x1d\n\x0c\n\x05\x04\x02\x02\0\x01\
-    \x12\x03\x1c\x1e#\n\x0c\n\x05\x04\x02\x02\0\x03\x12\x03\x1c&'\n\x0b\n\
-    \x04\x04\x02\x02\x01\x12\x03\x1d\x08(\n\x0c\n\x05\x04\x02\x02\x01\x04\
-    \x12\x03\x1d\x08\x10\n\x0c\n\x05\x04\x02\x02\x01\x06\x12\x03\x1d\x11\x1d\
-    \n\x0c\n\x05\x04\x02\x02\x01\x01\x12\x03\x1d\x1e#\n\x0c\n\x05\x04\x02\
-    \x02\x01\x03\x12\x03\x1d&'\n\x0b\n\x04\x04\x02\x02\x02\x12\x03\x1e\x08(\
-    \n\x0c\n\x05\x04\x02\x02\x02\x04\x12\x03\x1e\x08\x10\n\x0c\n\x05\x04\x02\
-    \x02\x02\x06\x12\x03\x1e\x11\x1d\n\x0c\n\x05\x04\x02\x02\x02\x01\x12\x03\
-    \x1e\x1e#\n\x0c\n\x05\x04\x02\x02\x02\x03\x12\x03\x1e&'\n\x0b\n\x04\x04\
-    \x02\x02\x03\x12\x03\x1f\x08(\n\x0c\n\x05\x04\x02\x02\x03\x04\x12\x03\
-    \x1f\x08\x10\n\x0c\n\x05\x04\x02\x02\x03\x06\x12\x03\x1f\x11\x1d\n\x0c\n\
-    \x05\x04\x02\x02\x03\x01\x12\x03\x1f\x1e#\n\x0c\n\x05\x04\x02\x02\x03\
-    \x03\x12\x03\x1f&'\n\n\n\x02\x04\x03\x12\x04\"\0%\x01\n\n\n\x03\x04\x03\
-    \x01\x12\x03\"\x08\x14\n\x0b\n\x04\x04\x03\x02\0\x12\x03#\x08$\n\x0c\n\
-    \x05\x04\x03\x02\0\x04\x12\x03#\x08\x10\n\x0c\n\x05\x04\x03\x02\0\x05\
-    \x12\x03#\x11\x17\n\x0c\n\x05\x04\x03\x02\0\x01\x12\x03#\x18\x1f\n\x0c\n\
-    \x05\x04\x03\x02\0\x03\x12\x03#\"#\n\x0b\n\x04\x04\x03\x02\x01\x12\x03$\
-    \x08'\n\x0c\n\x05\x04\x03\x02\x01\x04\x12\x03$\x08\x10\n\x0c\n\x05\x04\
-    \x03\x02\x01\x05\x12\x03$\x11\x17\n\x0c\n\x05\x04\x03\x02\x01\x01\x12\
-    \x03$\x18\"\n\x0c\n\x05\x04\x03\x02\x01\x03\x12\x03$%&\n\n\n\x02\x04\x04\
-    \x12\x04'\0)\x01\n\n\n\x03\x04\x04\x01\x12\x03'\x08\x14\n\x0b\n\x04\x04\
-    \x04\x02\0\x12\x03(\x08'\n\x0c\n\x05\x04\x04\x02\0\x04\x12\x03(\x08\x10\
-    \n\x0c\n\x05\x04\x04\x02\0\x05\x12\x03(\x11\x17\n\x0c\n\x05\x04\x04\x02\
-    \0\x01\x12\x03(\x18\"\n\x0c\n\x05\x04\x04\x02\0\x03\x12\x03(%&\n\n\n\x02\
-    \x04\x05\x12\x04+\0-\x01\n\n\n\x03\x04\x05\x01\x12\x03+\x08\x14\n\x0b\n\
-    \x04\x04\x05\x02\0\x12\x03,\x08$\n\x0c\n\x05\x04\x05\x02\0\x04\x12\x03,\
-    \x08\x10\n\x0c\n\x05\x04\x05\x02\0\x05\x12\x03,\x11\x17\n\x0c\n\x05\x04\
-    \x05\x02\0\x01\x12\x03,\x18\x1f\n\x0c\n\x05\x04\x05\x02\0\x03\x12\x03,\"\
-    #\n\n\n\x02\x04\x06\x12\x04/\01\x01\n\n\n\x03\x04\x06\x01\x12\x03/\x08\
-    \x14\n\x0b\n\x04\x04\x06\x02\0\x12\x030\x08$\n\x0c\n\x05\x04\x06\x02\0\
-    \x04\x12\x030\x08\x10\n\x0c\n\x05\x04\x06\x02\0\x05\x12\x030\x11\x17\n\
-    \x0c\n\x05\x04\x06\x02\0\x01\x12\x030\x18\x1f\n\x0c\n\x05\x04\x06\x02\0\
-    \x03\x12\x030\"#\n\n\n\x02\x04\x07\x12\x043\0M\x01\n\n\n\x03\x04\x07\x01\
-    \x12\x033\x08\x17\n\x0b\n\x04\x04\x07\x02\0\x12\x034\x08!\n\x0c\n\x05\
-    \x04\x07\x02\0\x04\x12\x034\x08\x10\n\x0c\n\x05\x04\x07\x02\0\x05\x12\
-    \x034\x11\x17\n\x0c\n\x05\x04\x07\x02\0\x01\x12\x034\x18\x1c\n\x0c\n\x05\
-    \x04\x07\x02\0\x03\x12\x034\x1f\x20\n\x0b\n\x04\x04\x07\x02\x01\x12\x035\
-    \x08#\n\x0c\n\x05\x04\x07\x02\x01\x04\x12\x035\x08\x10\n\x0c\n\x05\x04\
-    \x07\x02\x01\x06\x12\x035\x11\x19\n\x0c\n\x05\x04\x07\x02\x01\x01\x12\
-    \x035\x1a\x1e\n\x0c\n\x05\x04\x07\x02\x01\x03\x12\x035!\"\n\x0b\n\x04\
-    \x04\x07\x02\x02\x12\x036\x08!\n\x0c\n\x05\x04\x07\x02\x02\x04\x12\x036\
-    \x08\x10\n\x0c\n\x05\x04\x07\x02\x02\x06\x12\x036\x11\x18\n\x0c\n\x05\
-    \x04\x07\x02\x02\x01\x12\x036\x19\x1c\n\x0c\n\x05\x04\x07\x02\x02\x03\
-    \x12\x036\x1f\x20\n\x0c\n\x04\x04\x07\x03\0\x12\x048\x08A\t\n\x0c\n\x05\
-    \x04\x07\x03\0\x01\x12\x038\x10\x18\n\r\n\x06\x04\x07\x03\0\x02\0\x12\
-    \x039\x10+\n\x0e\n\x07\x04\x07\x03\0\x02\0\x04\x12\x039\x10\x18\n\x0e\n\
-    \x07\x04\x07\x03\0\x02\0\x06\x12\x039\x19!\n\x0e\n\x07\x04\x07\x03\0\x02\
-    \0\x01\x12\x039\"&\n\x0e\n\x07\x04\x07\x03\0\x02\0\x03\x12\x039)*\n#\n\
-    \x06\x04\x07\x03\0\x02\x01\x12\x03:\x10(\"\x14\x20root\x20keys\x20to\x20\
-    trust\n\n\x0e\n\x07\x04\x07\x03\0\x02\x01\x04\x12\x03:\x10\x18\n\x0e\n\
-    \x07\x04\x07\x03\0\x02\x01\x05\x12\x03:\x19\x1e\n\x0e\n\x07\x04\x07\x03\
-    \0\x02\x01\x01\x12\x03:\x1f#\n\x0e\n\x07\x04\x07\x03\0\x02\x01\x03\x12\
-    \x03:&'\n\x0e\n\x06\x04\x07\x03\0\x04\0\x12\x04<\x10@\x11\n\x0e\n\x07\
-    \x04\x07\x03\0\x04\0\x01\x12\x03<\x15\x1d\n8\n\x08\x04\x07\x03\0\x04\0\
-    \x02\0\x12\x03=\x18!\"'\x20no\x20authentication,\x20anyone\x20can\x20pub\
-    lish\n\n\x10\n\t\x04\x07\x03\0\x04\0\x02\0\x01\x12\x03=\x18\x1c\n\x10\n\
-    \t\x04\x07\x03\0\x04\0\x02\0\x02\x12\x03=\x1f\x20\nT\n\x08\x04\x07\x03\0\
-    \x04\0\x02\x01\x12\x03>\x18\x20\"C\x20only\x20messages\x20signed\x20by\
-    \x20keys\x20in\x20the\x20topic\x20descriptor\x20are\x20accepted\n\n\x10\
-    \n\t\x04\x07\x03\0\x04\0\x02\x01\x01\x12\x03>\x18\x1b\n\x10\n\t\x04\x07\
-    \x03\0\x04\0\x02\x01\x02\x12\x03>\x1e\x1f\nM\n\x08\x04\x07\x03\0\x04\0\
-    \x02\x02\x12\x03?\x18\x20\"<\x20web\x20of\x20trust,\x20certificates\x20c\
-    an\x20allow\x20publisher\x20set\x20to\x20grow\n\n\x10\n\t\x04\x07\x03\0\
-    \x04\0\x02\x02\x01\x12\x03?\x18\x1b\n\x10\n\t\x04\x07\x03\0\x04\0\x02\
-    \x02\x02\x12\x03?\x1e\x1f\n\x0c\n\x04\x04\x07\x03\x01\x12\x04C\x08L\t\n\
-    \x0c\n\x05\x04\x07\x03\x01\x01\x12\x03C\x10\x17\n\r\n\x06\x04\x07\x03\
-    \x01\x02\0\x12\x03D\x10*\n\x0e\n\x07\x04\x07\x03\x01\x02\0\x04\x12\x03D\
-    \x10\x18\n\x0e\n\x07\x04\x07\x03\x01\x02\0\x06\x12\x03D\x19\x20\n\x0e\n\
-    \x07\x04\x07\x03\x01\x02\0\x01\x12\x03D!%\n\x0e\n\x07\x04\x07\x03\x01\
-    \x02\0\x03\x12\x03D()\n<\n\x06\x04\x07\x03\x01\x02\x01\x12\x03E\x10-\"-\
-    \x20the\x20hashes\x20of\x20the\x20shared\x20keys\x20used\x20(salted)\n\n\
-    \x0e\n\x07\x04\x07\x03\x01\x02\x01\x04\x12\x03E\x10\x18\n\x0e\n\x07\x04\
-    \x07\x03\x01\x02\x01\x05\x12\x03E\x19\x1e\n\x0e\n\x07\x04\x07\x03\x01\
-    \x02\x01\x01\x12\x03E\x1f(\n\x0e\n\x07\x04\x07\x03\x01\x02\x01\x03\x12\
-    \x03E+,\n\x0e\n\x06\x04\x07\x03\x01\x04\0\x12\x04G\x10K\x11\n\x0e\n\x07\
-    \x04\x07\x03\x01\x04\0\x01\x12\x03G\x15\x1c\n1\n\x08\x04\x07\x03\x01\x04\
-    \0\x02\0\x12\x03H\x18!\"\x20\x20no\x20encryption,\x20anyone\x20can\x20re\
-    ad\n\n\x10\n\t\x04\x07\x03\x01\x04\0\x02\0\x01\x12\x03H\x18\x1c\n\x10\n\
-    \t\x04\x07\x03\x01\x04\0\x02\0\x02\x12\x03H\x1f\x20\n9\n\x08\x04\x07\x03\
-    \x01\x04\0\x02\x01\x12\x03I\x18&\"(\x20messages\x20are\x20encrypted\x20w\
-    ith\x20shared\x20key\n\n\x10\n\t\x04\x07\x03\x01\x04\0\x02\x01\x01\x12\
-    \x03I\x18!\n\x10\n\t\x04\x07\x03\x01\x04\0\x02\x01\x02\x12\x03I$%\nM\n\
-    \x08\x04\x07\x03\x01\x04\0\x02\x02\x12\x03J\x18\x20\"<\x20web\x20of\x20t\
-    rust,\x20certificates\x20can\x20allow\x20publisher\x20set\x20to\x20grow\
-    \n\n\x10\n\t\x04\x07\x03\x01\x04\0\x02\x02\x01\x12\x03J\x18\x1b\n\x10\n\
-    \t\x04\x07\x03\x01\x04\0\x02\x02\x02\x12\x03J\x1e\x1f\
+    ribe\x12\x18\n\x07topicid\x18\x02\x20\x01(\tR\x07topicid\"c\n\x07Message\
+    \x12\x12\n\x04from\x18\x01\x20\x01(\x0cR\x04from\x12\x12\n\x04data\x18\
+    \x02\x20\x01(\x0cR\x04data\x12\x14\n\x05seqno\x18\x03\x20\x01(\x0cR\x05s\
+    eqno\x12\x1a\n\x08topicIDs\x18\x04\x20\x03(\tR\x08topicIDs\"\xcc\x01\n\
+    \x0eControlMessage\x12-\n\x05ihave\x18\x01\x20\x03(\x0b2\x17.pubsub.pb.C\
+    ontrolIHaveR\x05ihave\x12-\n\x05iwant\x18\x02\x20\x03(\x0b2\x17.pubsub.p\
+    b.ControlIWantR\x05iwant\x12-\n\x05graft\x18\x03\x20\x03(\x0b2\x17.pubsu\
+    b.pb.ControlGraftR\x05graft\x12-\n\x05prune\x18\x04\x20\x03(\x0b2\x17.pu\
+    bsub.pb.ControlPruneR\x05prune\"H\n\x0cControlIHave\x12\x18\n\x07topicID\
+    \x18\x01\x20\x01(\tR\x07topicID\x12\x1e\n\nmessageIDs\x18\x02\x20\x03(\t\
+    R\nmessageIDs\".\n\x0cControlIWant\x12\x1e\n\nmessageIDs\x18\x01\x20\x03\
+    (\tR\nmessageIDs\"(\n\x0cControlGraft\x12\x18\n\x07topicID\x18\x01\x20\
+    \x01(\tR\x07topicID\"(\n\x0cControlPrune\x12\x18\n\x07topicID\x18\x01\
+    \x20\x01(\tR\x07topicID\"%\n\x0fTopicDescriptor\x12\x12\n\x04name\x18\
+    \x01\x20\x01(\tR\x04nameJ\xd0\x0e\n\x06\x12\x04\x03\0P\x01\n\x87\x01\n\
+    \x01\x0c\x12\x03\x03\0\x122}\x20From\x20https://github.com/libp2p/go-lib\
+    p2p-pubsub/blob/master/pb/rpc.proto,\n\x20should\x20be\x20the\x20same\
+    \x20unless\x20that\x20has\x20been\x20changed.\n\n\x08\n\x01\x02\x12\x03\
+    \x05\x08\x11\n\n\n\x02\x04\0\x12\x04\x07\0\x11\x01\n\n\n\x03\x04\0\x01\
+    \x12\x03\x07\x08\x0b\n\x0b\n\x04\x04\0\x02\0\x12\x03\x08\x08+\n\x0c\n\
+    \x05\x04\0\x02\0\x04\x12\x03\x08\x08\x10\n\x0c\n\x05\x04\0\x02\0\x06\x12\
+    \x03\x08\x11\x18\n\x0c\n\x05\x04\0\x02\0\x01\x12\x03\x08\x19&\n\x0c\n\
+    \x05\x04\0\x02\0\x03\x12\x03\x08)*\n\x0b\n\x04\x04\0\x02\x01\x12\x03\t\
+    \x08%\n\x0c\n\x05\x04\0\x02\x01\x04\x12\x03\t\x08\x10\n\x0c\n\x05\x04\0\
+    \x02\x01\x06\x12\x03\t\x11\x18\n\x0c\n\x05\x04\0\x02\x01\x01\x12\x03\t\
+    \x19\x20\n\x0c\n\x05\x04\0\x02\x01\x03\x12\x03\t#$\n\x0c\n\x04\x04\0\x03\
+    \0\x12\x04\x0b\x08\x0e\t\n\x0c\n\x05\x04\0\x03\0\x01\x12\x03\x0b\x10\x17\
+    \n(\n\x06\x04\0\x03\0\x02\0\x12\x03\x0c\x10,\"\x19\x20subscribe\x20or\
+    \x20unsubcribe\n\n\x0e\n\x07\x04\0\x03\0\x02\0\x04\x12\x03\x0c\x10\x18\n\
+    \x0e\n\x07\x04\0\x03\0\x02\0\x05\x12\x03\x0c\x19\x1d\n\x0e\n\x07\x04\0\
+    \x03\0\x02\0\x01\x12\x03\x0c\x1e'\n\x0e\n\x07\x04\0\x03\0\x02\0\x03\x12\
+    \x03\x0c*+\n\r\n\x06\x04\0\x03\0\x02\x01\x12\x03\r\x10,\n\x0e\n\x07\x04\
+    \0\x03\0\x02\x01\x04\x12\x03\r\x10\x18\n\x0e\n\x07\x04\0\x03\0\x02\x01\
+    \x05\x12\x03\r\x19\x1f\n\x0e\n\x07\x04\0\x03\0\x02\x01\x01\x12\x03\r\x20\
+    '\n\x0e\n\x07\x04\0\x03\0\x02\x01\x03\x12\x03\r*+\n\x0b\n\x04\x04\0\x02\
+    \x02\x12\x03\x10\x08,\n\x0c\n\x05\x04\0\x02\x02\x04\x12\x03\x10\x08\x10\
+    \n\x0c\n\x05\x04\0\x02\x02\x06\x12\x03\x10\x11\x1f\n\x0c\n\x05\x04\0\x02\
+    \x02\x01\x12\x03\x10\x20'\n\x0c\n\x05\x04\0\x02\x02\x03\x12\x03\x10*+\n\
+    \n\n\x02\x04\x01\x12\x04\x13\0\x1b\x01\n\n\n\x03\x04\x01\x01\x12\x03\x13\
+    \x08\x0f\n\x0b\n\x04\x04\x01\x02\0\x12\x03\x14\x08\x20\n\x0c\n\x05\x04\
+    \x01\x02\0\x04\x12\x03\x14\x08\x10\n\x0c\n\x05\x04\x01\x02\0\x05\x12\x03\
+    \x14\x11\x16\n\x0c\n\x05\x04\x01\x02\0\x01\x12\x03\x14\x17\x1b\n\x0c\n\
+    \x05\x04\x01\x02\0\x03\x12\x03\x14\x1e\x1f\n\x0b\n\x04\x04\x01\x02\x01\
+    \x12\x03\x15\x08\x20\n\x0c\n\x05\x04\x01\x02\x01\x04\x12\x03\x15\x08\x10\
+    \n\x0c\n\x05\x04\x01\x02\x01\x05\x12\x03\x15\x11\x16\n\x0c\n\x05\x04\x01\
+    \x02\x01\x01\x12\x03\x15\x17\x1b\n\x0c\n\x05\x04\x01\x02\x01\x03\x12\x03\
+    \x15\x1e\x1f\n\x0b\n\x04\x04\x01\x02\x02\x12\x03\x16\x08!\n\x0c\n\x05\
+    \x04\x01\x02\x02\x04\x12\x03\x16\x08\x10\n\x0c\n\x05\x04\x01\x02\x02\x05\
+    \x12\x03\x16\x11\x16\n\x0c\n\x05\x04\x01\x02\x02\x01\x12\x03\x16\x17\x1c\
+    \n\x0c\n\x05\x04\x01\x02\x02\x03\x12\x03\x16\x1f\x20\nP\n\x04\x04\x01\
+    \x02\x03\x12\x03\x17\x08%\"C\x20TODO:\x20use\n\x20optional\x20bytes\x20s\
+    ignature\x20=\x205;\n\x20optional\x20bytes\x20key\x20=\x206;\n\n\x0c\n\
+    \x05\x04\x01\x02\x03\x04\x12\x03\x17\x08\x10\n\x0c\n\x05\x04\x01\x02\x03\
+    \x05\x12\x03\x17\x11\x17\n\x0c\n\x05\x04\x01\x02\x03\x01\x12\x03\x17\x18\
+    \x20\n\x0c\n\x05\x04\x01\x02\x03\x03\x12\x03\x17#$\n\n\n\x02\x04\x02\x12\
+    \x04\x1d\0\"\x01\n\n\n\x03\x04\x02\x01\x12\x03\x1d\x08\x16\n\x0b\n\x04\
+    \x04\x02\x02\0\x12\x03\x1e\x08(\n\x0c\n\x05\x04\x02\x02\0\x04\x12\x03\
+    \x1e\x08\x10\n\x0c\n\x05\x04\x02\x02\0\x06\x12\x03\x1e\x11\x1d\n\x0c\n\
+    \x05\x04\x02\x02\0\x01\x12\x03\x1e\x1e#\n\x0c\n\x05\x04\x02\x02\0\x03\
+    \x12\x03\x1e&'\n\x0b\n\x04\x04\x02\x02\x01\x12\x03\x1f\x08(\n\x0c\n\x05\
+    \x04\x02\x02\x01\x04\x12\x03\x1f\x08\x10\n\x0c\n\x05\x04\x02\x02\x01\x06\
+    \x12\x03\x1f\x11\x1d\n\x0c\n\x05\x04\x02\x02\x01\x01\x12\x03\x1f\x1e#\n\
+    \x0c\n\x05\x04\x02\x02\x01\x03\x12\x03\x1f&'\n\x0b\n\x04\x04\x02\x02\x02\
+    \x12\x03\x20\x08(\n\x0c\n\x05\x04\x02\x02\x02\x04\x12\x03\x20\x08\x10\n\
+    \x0c\n\x05\x04\x02\x02\x02\x06\x12\x03\x20\x11\x1d\n\x0c\n\x05\x04\x02\
+    \x02\x02\x01\x12\x03\x20\x1e#\n\x0c\n\x05\x04\x02\x02\x02\x03\x12\x03\
+    \x20&'\n\x0b\n\x04\x04\x02\x02\x03\x12\x03!\x08(\n\x0c\n\x05\x04\x02\x02\
+    \x03\x04\x12\x03!\x08\x10\n\x0c\n\x05\x04\x02\x02\x03\x06\x12\x03!\x11\
+    \x1d\n\x0c\n\x05\x04\x02\x02\x03\x01\x12\x03!\x1e#\n\x0c\n\x05\x04\x02\
+    \x02\x03\x03\x12\x03!&'\n\n\n\x02\x04\x03\x12\x04$\0'\x01\n\n\n\x03\x04\
+    \x03\x01\x12\x03$\x08\x14\n\x0b\n\x04\x04\x03\x02\0\x12\x03%\x08$\n\x0c\
+    \n\x05\x04\x03\x02\0\x04\x12\x03%\x08\x10\n\x0c\n\x05\x04\x03\x02\0\x05\
+    \x12\x03%\x11\x17\n\x0c\n\x05\x04\x03\x02\0\x01\x12\x03%\x18\x1f\n\x0c\n\
+    \x05\x04\x03\x02\0\x03\x12\x03%\"#\n\x0b\n\x04\x04\x03\x02\x01\x12\x03&\
+    \x08'\n\x0c\n\x05\x04\x03\x02\x01\x04\x12\x03&\x08\x10\n\x0c\n\x05\x04\
+    \x03\x02\x01\x05\x12\x03&\x11\x17\n\x0c\n\x05\x04\x03\x02\x01\x01\x12\
+    \x03&\x18\"\n\x0c\n\x05\x04\x03\x02\x01\x03\x12\x03&%&\n\n\n\x02\x04\x04\
+    \x12\x04)\0+\x01\n\n\n\x03\x04\x04\x01\x12\x03)\x08\x14\n\x0b\n\x04\x04\
+    \x04\x02\0\x12\x03*\x08'\n\x0c\n\x05\x04\x04\x02\0\x04\x12\x03*\x08\x10\
+    \n\x0c\n\x05\x04\x04\x02\0\x05\x12\x03*\x11\x17\n\x0c\n\x05\x04\x04\x02\
+    \0\x01\x12\x03*\x18\"\n\x0c\n\x05\x04\x04\x02\0\x03\x12\x03*%&\n\n\n\x02\
+    \x04\x05\x12\x04-\0/\x01\n\n\n\x03\x04\x05\x01\x12\x03-\x08\x14\n\x0b\n\
+    \x04\x04\x05\x02\0\x12\x03.\x08$\n\x0c\n\x05\x04\x05\x02\0\x04\x12\x03.\
+    \x08\x10\n\x0c\n\x05\x04\x05\x02\0\x05\x12\x03.\x11\x17\n\x0c\n\x05\x04\
+    \x05\x02\0\x01\x12\x03.\x18\x1f\n\x0c\n\x05\x04\x05\x02\0\x03\x12\x03.\"\
+    #\n\n\n\x02\x04\x06\x12\x041\03\x01\n\n\n\x03\x04\x06\x01\x12\x031\x08\
+    \x14\n\x0b\n\x04\x04\x06\x02\0\x12\x032\x08$\n\x0c\n\x05\x04\x06\x02\0\
+    \x04\x12\x032\x08\x10\n\x0c\n\x05\x04\x06\x02\0\x05\x12\x032\x11\x17\n\
+    \x0c\n\x05\x04\x06\x02\0\x01\x12\x032\x18\x1f\n\x0c\n\x05\x04\x06\x02\0\
+    \x03\x12\x032\"#\n\n\n\x02\x04\x07\x12\x045\0P\x01\n\n\n\x03\x04\x07\x01\
+    \x12\x035\x08\x17\nP\n\x04\x04\x07\x02\0\x12\x036\x08!\"C\x20TODO:\x20us\
+    e\n\x20optional\x20AuthOpts\x20auth\x20=\x202;\n\x20optional\x20EncOpts\
+    \x20enc\x20=\x203;\n\n\x0c\n\x05\x04\x07\x02\0\x04\x12\x036\x08\x10\n\
+    \x0c\n\x05\x04\x07\x02\0\x05\x12\x036\x11\x17\n\x0c\n\x05\x04\x07\x02\0\
+    \x01\x12\x036\x18\x1c\n\x0c\n\x05\x04\x07\x02\0\x03\x12\x036\x1f\x20\
 ";
 
 static mut file_descriptor_proto_lazy: ::protobuf::lazy::Lazy<::protobuf::descriptor::FileDescriptorProto> = ::protobuf::lazy::Lazy {

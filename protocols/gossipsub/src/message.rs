@@ -1,30 +1,30 @@
+use mcache::MCache;
 use rpc_proto;
 
-use libp2p_floodsub::TopicHash;
+use libp2p_floodsub::{TopicMap, TopicHash};
 
 use libp2p_core::PeerId;
 
 use bs58;
 use chrono::{DateTime, Utc};
 use protobuf::Message;
+use std::collections::hash_map::HashMap;
 
-// May not be necessary.
-// /// Contains an incrementing sequence number.
-// #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-// pub struct SeqNo {
-//     seq_no: Vec<u8>,
-// }
-
-// impl SeqNo {
-
-// }
+pub type MsgMap = HashMap<MsgRep, GMessage>;
 
 /// A message received by the Gossipsub system.
+///
+/// Recently seen messages are stored in `MCache`. They can be retrieved from
+/// this message cache via a `floodsub::topic::TopicMap` by querying with a `MsgRep`, which contains either
+/// a `MsgHash` or `MsgId`, where the latter is more desirable for privacy.
+/// This contains the same public fields as a
+/// `floodsub::protocol::FloodsubMessage`.
 /// > **Note**: message is unsized. FMI see
 /// > https://github.com/libp2p/specs/issues/118.
+// TODO: ^
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct GMessage {
-    /// Id of the peer that published this message.
+    /// ID of the peer that published this message.
     pub source: PeerId,
 
     /// Content of the message. Its meaning is out of scope of this library.
@@ -36,7 +36,7 @@ pub struct GMessage {
     /// List of topics this message belongs to.
     ///
     /// Each message can belong to multiple topics at once.
-    pub topics: Vec<TopicHash>,
+    pub topics: TopicMap,
 
     // To use for an authentication scheme (not yet defined or implemented),
     // see rpc.proto for more info.
@@ -49,6 +49,7 @@ pub struct GMessage {
     // key: Vec<u8>,
 
     // TODO: there might be interoperability issues caused by these two fields.
+    // They may be moved to `MCache`.
 
     // This should not be public as it could then be manipulated. It needs to
     // only be modified via the `publish` method on `Gossipsub`. Used for the
@@ -62,9 +63,8 @@ pub struct GMessage {
 impl GMessage {
     // Sets the hash of the message, used in `MsgHashBuilder`.
     #[inline]
-    pub(crate) fn set_hash(&mut self, msg_hash: MsgHash) -> &mut Self {
+    pub(crate) fn set_hash(&mut self, msg_hash: MsgHash) {
         self.hash = msg_hash;
-        self
     }
 
     /// Returns the hash of the message.
@@ -77,9 +77,35 @@ impl GMessage {
     pub(crate) fn set_timestamp(&mut self) {
         self.time_sent = Utc::now();
     }
+
+    /// Returns the timestamp of the message.
+    pub(crate) fn get_timestamp(&self) -> &DateTime<Utc> {
+        &self.time_sent
+    }
+
 }
 
-/// Contains a message ID as a string, has impls for building and converting to a `String`.
+impl From<GMessage> for rpc_proto::Message {
+    fn from(message: GMessage) -> rpc_proto::Message {
+        let mut msg = rpc_proto::Message::new();
+        msg.set_from(message.source.into_bytes());
+        msg.set_data(message.data);
+        msg.set_seqno(message.seq_no);
+        msg.set_topicIDs(
+            message
+                .topics
+                .into_iter()
+                .map(TopicHash::into_string)
+                .collect(),
+        );
+        // msg.set_signature(message.signature);
+        // msg.set_key(message.key);
+        msg
+    }
+}
+
+/// Contains a message ID as a string, has impls for building and converting
+/// to a `String`.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct MsgId {
     /// The message ID as a string.
@@ -117,13 +143,25 @@ impl MsgId {
 /// hash of the message. You only have to build the hash once, then use it
 /// everywhere.
 ///
-/// > **Note** https://github.com/libp2p/specs/issues/116#issuecomment-450107520. "A potential caveat with using hashes instead of seqnos: the peer won't be able to send identical messages (e.g. keepalives) within the timecache interval, as they will get rejected as duplicates."
+/// > **Note**
+/// > "A potential caveat with using hashes instead of seqnos: the peer won't
+/// > be able to send identical messages (e.g. keepalives) within the
+/// > timecache interval, as they will get rejected as duplicates."
+/// —https://github.com/libp2p/specs/issues/116#issuecomment-450107520
+/// > However, I think `MsgRep` enum may be a solution for this, and the
+/// > `MsgHash` is constructed from the whole message, not just the `seq_no`
+/// > and `source` fields.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct MsgHash {
     hash: String,
 }
 
 impl MsgHash {
+    /// Builds a new `MsgHash` from the message that it represents.
+    pub fn new(msg: GMessage) -> Self {
+        MsgHashBuilder::new(msg).build()
+    }
+
     /// Builds a new `MsgHash` from the given hash.
     #[inline]
     pub fn from_raw(hash: String) -> MsgHash {
@@ -144,12 +182,11 @@ pub struct MsgHashBuilder {
 }
 
 impl MsgHashBuilder {
-    // pub fn new(msg: Message) -> Self
-    // {
-    //     let mut builder = msg;
+    pub fn new(msg: GMessage) -> Self {
+        let builder = rpc_proto::Message::from(msg);
 
-    //     MsgHashBuilder { builder: builder }
-    // }
+        MsgHashBuilder { builder: builder }
+    }
 
     /// Turns the builder into an actual `MsgHash`.
     pub fn build(self) -> MsgHash {
@@ -163,82 +200,11 @@ impl MsgHashBuilder {
     }
 }
 
-/// Contains either a `MsgHash` or a `MsgId`, to represent a
-/// message.
-pub enum MsgRepEnum {
+/// Contains either a `MsgHash` or a `MsgId` to represent a message.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum MsgRep {
     hash(MsgHash),
     id(MsgId),
-}
-
-/// Represents a message, which can be a hash of the message or a
-/// message ID as a string. It is used to query for a message.
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
-pub struct MsgRep {
-    /// The hash of the `GMessage`.
-    pub hash: MsgHash,
-    /// The `GMessage` ID
-    pub(crate) id: MsgId,
-}
-
-impl MsgRep {
-    #[inline]
-    pub fn new() -> MsgRep {
-        ::std::default::Default::default()
-    }
-
-    /// Convenience function that sets the `hash` field of `MsgRep`
-    /// with the provided `MsgHash` instance.
-    pub fn set_msg_hash(&mut self, hash: MsgHash) {
-        self.hash = hash
-    }
-
-    /// Convenience function that sets the `id` field of `MsgRep` with
-    /// the provided `MsgId` instance.
-    pub fn set_msg_id(&mut self, id: MsgId) {
-        self.id = id
-    }
-}
-
-impl AsRef<MsgHash> for MsgRep {
-    #[inline]
-    fn as_ref(&self) -> &MsgHash {
-        &self.hash
-    }
-}
-
-impl From<MsgRep> for MsgHash {
-    #[inline]
-    fn from(msg_rep: MsgRep) -> MsgHash {
-        msg_rep.hash
-    }
-}
-
-impl<'a> From<&'a MsgRep> for MsgHash {
-    #[inline]
-    fn from(msg_rep: &'a MsgRep) -> MsgHash {
-        msg_rep.hash.clone()
-    }
-}
-
-impl AsRef<MsgId> for MsgRep {
-    #[inline]
-    fn as_ref(&self) -> &MsgId {
-        &self.id
-    }
-}
-
-impl From<MsgRep> for MsgId {
-    #[inline]
-    fn from(message: MsgRep) -> MsgId {
-        message.id
-    }
-}
-
-impl<'a> From<&'a MsgRep> for MsgId {
-    #[inline]
-    fn from(message: &'a MsgRep) -> MsgId {
-        message.id.clone()
-    }
 }
 
 /// A subscription message received by the Gossipsub system.
@@ -248,6 +214,16 @@ pub struct GossipsubSubscription {
     pub action: GossipsubSubscriptionAction,
     /// The topic from which to subscribe or unsubscribe.
     pub topic: TopicHash,
+}
+
+impl From<GossipsubSubscription> for rpc_proto::RPC_SubOpts {
+    fn from(gsub: GossipsubSubscription) -> rpc_proto::RPC_SubOpts {
+        let mut subscription = rpc_proto::RPC_SubOpts::new();
+        subscription.set_subscribe(gsub.action
+            == GossipsubSubscriptionAction::Subscribe);
+        subscription.set_topicid(gsub.topic.into_string());
+        subscription
+    }
 }
 
 /// Action that a subscription wants to perform.
@@ -273,6 +249,36 @@ pub struct ControlMessage {
     pub prune: Vec<ControlPrune>,
 }
 
+impl From<ControlMessage> for rpc_proto::ControlMessage {
+    fn from(control: ControlMessage) -> rpc_proto::ControlMessage {
+        let mut ctrl = rpc_proto::ControlMessage::new();
+
+        for control_i_have in control.ihave.into_iter() {
+            let mut ctrl_i_have = rpc_proto::ControlIHave
+                ::from(control_i_have);
+            ctrl.get_ihave().to_vec().push(ctrl_i_have);
+        }
+
+        for control_i_want in control.iwant.into_iter() {
+            let mut ctrl_i_want = rpc_proto::ControlIWant
+                ::from(control_i_want);
+            ctrl.get_iwant().to_vec().push(ctrl_i_want);
+        }
+
+        for control_graft in control.graft.into_iter() {
+            let mut ctrl_graft = rpc_proto::ControlGraft
+                ::from(control_graft);
+            ctrl.get_graft().to_vec().push(ctrl_graft);
+        }
+
+        for control_prune in control.prune.into_iter() {
+            let mut ctrl_prune = rpc_proto::ControlPrune
+                ::from(control_prune);
+            ctrl.get_prune().to_vec().push(ctrl_prune);
+        }
+        ctrl
+    }
+}
 /// Gossip control message; this notifies the peer that the following
 /// messages were recently seen and are available on request.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
@@ -281,7 +287,23 @@ pub struct ControlIHave {
     pub topic: TopicHash,
     /// List of messages that have been recently seen and are available
     /// on request.
-    pub messages: Vec<MsgRep>,
+    pub recent_mcache: MCache,
+}
+
+impl From<ControlIHave> for rpc_proto::ControlIHave {
+    fn from(control_i_have: ControlIHave) -> rpc_proto::ControlIHave {
+        let mut ctrl_i_have = rpc_proto::ControlIHave::new();
+        ctrl_i_have.set_topicID(control_i_have.topic.into_string());
+        // For getting my head around this with seeing the return
+        // types by hovering over, uncomment if you need to
+        // do the same.
+        // let bar_into_iter = control_i_have.recent_mcache.into_iter();
+        // let map_bar_into_iter = bar_into_iter.map(|m| m.id.into_string());
+        // let collect_map_bar_into_iter = map_bar_into_iter.collect();
+        ctrl_i_have.set_messageIDs(control_i_have.recent_mcache.into_iter()
+            .map(|m| m.id.into_string()).collect());
+        ctrl_i_have
+    }
 }
 
 /// Control message that requests messages from a peer that announced them
@@ -292,6 +314,15 @@ pub struct ControlIWant {
     pub messages: Vec<MsgRep>,
 }
 
+impl From<ControlIWant> for rpc_proto::ControlIWant {
+    fn from(control_i_want: ControlIWant) -> rpc_proto::ControlIWant {
+        let mut ctrl_i_want = rpc_proto::ControlIWant::new();
+        ctrl_i_want.set_messageIDs(control_i_want.messages.into_iter()
+            .map(|m| m.id.into_string()).collect());
+        ctrl_i_want
+    }
+}
+
 /// Control message that grafts a mesh link; this notifies the peer that it
 /// has been added to the local mesh view of a topic.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
@@ -300,12 +331,30 @@ pub struct ControlGraft {
     pub topic: TopicHash,
 }
 
+impl From<ControlGraft> for rpc_proto::ControlGraft {
+    fn from(control_graft: ControlGraft) -> rpc_proto::ControlGraft {
+        let mut ctrl_graft = rpc_proto::ControlGraft::new();
+        ctrl_graft.set_messageIDs(control_graft.messages.into_iter()
+            .map(|m| m.id.into_string()).collect());
+        ctrl_graft
+    }
+}
+
 /// Control message that prunes a mesh link; this notifies the peer that it
 /// has been removed from the local mesh view of a topic.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct ControlPrune {
     /// Topic to prune a peer from.
     pub topic: TopicHash,
+}
+
+impl From<ControlPrune> for rpc_proto::ControlPrune {
+    fn from(control_prune: ControlPrune) -> rpc_proto::ControlPrune {
+        let mut ctrl_prune = rpc_proto::ControlPrune::new();
+        ctrl_prune.set_messageIDs(control_prune.messages.into_iter()
+            .map(|m| m.id.into_string()).collect());
+        ctrl_prune
+    }
 }
 
 /// A graft/prune received by the Gossipsub system.

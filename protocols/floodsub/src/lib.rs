@@ -43,4 +43,4 @@ mod topic;
 
 pub use self::layer::Floodsub;
 pub use self::protocol::{FloodsubMessage, FloodsubRpc};
-pub use self::topic::{Topic, TopicBuilder, TopicHash};
+pub use self::topic::{TopicMap, Topic, TopicBuilder, TopicHash};

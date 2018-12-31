@@ -2,7 +2,7 @@ use handler::GossipsubHandler;
 use mcache::MCache;
 use mesh::Mesh;
 use message::{GossipsubRpc, GMessage, ControlMessage, GossipsubSubscription,
-    GossipsubSubscriptionAction, MsgHash};
+    GossipsubSubscriptionAction};
 
 use libp2p_floodsub::{Floodsub, Topic, TopicHash, handler::FloodsubHandler};
 use libp2p_core::{

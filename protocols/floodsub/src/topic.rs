@@ -18,9 +18,20 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use rpc_proto;
+
 use bs58;
 use protobuf::Message;
-use rpc_proto;
+use std::collections::hash_map::HashMap;
+
+pub type TopicMap = HashMap<TopicRep, Topic>;
+
+/// Represents a `Topic` via either a `TopicHash` or a `TopicId`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum TopicRep {
+    Hash(TopicHash),
+    Id(TopicId)
+}
 
 /// Represents the hash of a topic.
 ///
@@ -110,6 +121,21 @@ impl TopicBuilder {
         Topic {
             descriptor: self.builder,
             hash,
+        }
+    }
+}
+
+/// Contains a string that can be used to query for and thus represent a
+/// `Topic`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TopicId {
+    id: String,
+}
+
+impl TopicId {
+    pub fn new(s: &str) -> Self {
+        TopicId {
+            id: s.to_owned(),
         }
     }
 }

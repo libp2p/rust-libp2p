@@ -1,14 +1,15 @@
-use protocol::{GossipsubConfig,GossipsubCodec};
+use protocol::{GossipsubConfig, GossipsubRpcCodec};
 use futures::prelude::*;
 use libp2p_core::{
     ProtocolsHandler, ProtocolsHandlerEvent,
+    protocols_handler::ProtocolsHandlerUpgrErr,
     upgrade::{InboundUpgrade, OutboundUpgrade},
-    protocols_handler::ProtocolsHandlerSelect,
+    //*unused protocols_handler::ProtocolsHandlerSelect,*//
 };
-use libp2p_floodsub::{
-    protocol::{FloodsubConfig, FloodsubRpc},
-    handler::FloodsubHandler,
-};
+// use libp2p_floodsub::{
+//     protocol::{FloodsubConfig, FloodsubRpc},
+//     handler::FloodsubHandler,
+// };
 use message::{GossipsubRpc};
 use smallvec::SmallVec;
 use std::{fmt, io};
@@ -47,14 +48,14 @@ where
     TSubstream: AsyncRead + AsyncWrite,
 {
     /// Waiting for a message from the remote.
-    WaitingInput(Framed<TSubstream, GossipsubCodec>),
+    WaitingInput(Framed<TSubstream, GossipsubRpcCodec>),
     /// Waiting to send a message to the remote.
-    PendingSend(Framed<TSubstream, GossipsubCodec>, GossipsubRpc),
+    PendingSend(Framed<TSubstream, GossipsubRpcCodec>, GossipsubRpc),
     /// Waiting to flush the substream so that the data arrives to the
     /// remote.
-    PendingFlush(Framed<TSubstream, GossipsubCodec>),
+    PendingFlush(Framed<TSubstream, GossipsubRpcCodec>),
     /// The substream is being closed.
-    Closing(Framed<TSubstream, GossipsubCodec>),
+    Closing(Framed<TSubstream, GossipsubRpcCodec>),
 }
 
 impl<TSubstream> SubstreamState<TSubstream>
@@ -62,7 +63,7 @@ where
     TSubstream: AsyncRead + AsyncWrite,
 {
     /// Consumes this state and produces the substream.
-    fn into_substream(self) -> Framed<TSubstream, GossipsubCodec> {
+    fn into_substream(self) -> Framed<TSubstream, GossipsubRpcCodec> {
         match self {
             SubstreamState::WaitingInput(substream) => substream,
             SubstreamState::PendingSend(substream, _) => substream,
@@ -135,7 +136,8 @@ where
 
     #[inline]
     fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _:
-        io::Error) {}
+        ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as
+        OutboundUpgrade<Self::Substream>>::Error>) {}
 
     #[inline]
     fn shutdown(&mut self) {
