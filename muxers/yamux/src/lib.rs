@@ -203,7 +203,7 @@ mod test {
     }
 
     #[test]
-    fn n_streams() {
-        MuxerTester::n_streams(Config::default())
+    fn one_hundred_small_streams() {
+        MuxerTester::one_hundred_small_streams(Config::default())
     }
 }

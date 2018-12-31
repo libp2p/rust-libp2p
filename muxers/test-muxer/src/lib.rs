@@ -436,48 +436,62 @@ where
         thr_writer2.join().expect("joining writer thread 2 works");
     }
 
-    pub fn n_streams(config: U) {
+    pub fn one_hundred_small_streams(config: U) {
         Self::init();
-        const N_STREAMS : usize = 20;
+        const N_STREAMS : usize = 100;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static RX_COUNT : AtomicUsize = AtomicUsize::new(0);
+        static TX_OK_COUNT : AtomicUsize = AtomicUsize::new(0);
+        static TX_ERR_COUNT : AtomicUsize = AtomicUsize::new(0);
         let (tx, rx) = mpsc::channel();
         let listener_conf = config.clone();
-//        let payload: Vec<u8> = vec![1; 50 * 1024];
-//        let payload_len = payload.len();
-//        info!("[test] payload size={}", payload_len);
 
         let thr_builder = thread::Builder::new().name("listener thr".to_string());
         let thr = thr_builder.spawn(move || {
             let trans = TcpConfig::new().with_upgrade(listener_conf);
             let (listener, addr) = trans
                 .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).expect("listen error");
+
             // Send our address to the connecting side so they know where to find us
             tx.send(addr).unwrap();
             let rt = MtRuntime::new().unwrap();
             let future = listener
                 .take(1)
-                .for_each(|(muxer, _)| {
-                    muxer.and_then(|mx: O| {
+                .for_each(|(listener_upgrade_fut, _)| {
+                    listener_upgrade_fut.and_then(|muxer: O| {
                         trace!("Reader – incoming connection");
+                        let mx= Arc::new(muxer);
+                        // Loop-future to set up reading from each incoming stream
                         let read_loop = loop_fn((0, mx), |(count, mx)| {
                             trace!("--> Reader Loop {} – polling inbound", count);
                             match mx.poll_inbound() {
-                                Ok(Async::Ready(Some(mut stream))) => {
-                                    let mut buf = vec![0;10];
-
-                                    match mx.read_substream(&mut stream, &mut buf) {
-                                        Ok(Async::Ready(num_read)) => {
-                                            debug!("Reader Loop {} – Read: {} bytes", count, num_read);
-                                            Ok(Loop::Continue((count + 1, mx)))
+                                Ok(Async::Ready(Some(stream))) => {
+                                    // Loop-future to read all incoming data from the stream
+                                    let read_fut = loop_fn((0, stream, mx.clone()), |(read_count, mut stream, mx)| {
+                                        trace!("--––> Reader fut {} – read_substream", read_count);
+                                        let mut buf = vec![0;10];
+                                        match mx.read_substream(&mut stream, &mut buf) {
+                                            Ok(Async::Ready(num_read)) => {
+                                                if num_read == 0 {
+                                                    Ok(Loop::Break(()))
+                                                } else {
+                                                    debug!("Reader fut {} – Read {} bytes from stream", read_count, num_read);
+                                                    RX_COUNT.fetch_add(1, Ordering::SeqCst);
+                                                    Ok(Loop::Continue((read_count + 1, stream, mx)))
+                                                }
+                                            }
+                                            Ok(Async::NotReady) => {
+                                                trace!("Reader fut {} – NotReady", read_count);
+                                                Ok(Loop::Continue((read_count + 1, stream, mx)))
+                                            }
+                                            Err(e) => {
+                                                error!("Reader fut {} – error={:?}", read_count, e);
+                                                Ok(Loop::Break(()))
+                                            }
                                         }
-                                        Ok(Async::NotReady) => {
-                                            debug!("Reader Loop {} – NotReady", count);
-                                            Ok(Loop::Continue((count + 1, mx)))
-                                        }
-                                        Err(e) => {
-                                            error!("Reader Loop {} – error={:?}", count, e);
-                                            Ok(Loop::Continue((count + 1, mx)))
-                                        }
-                                    }
+                                    });
+                                    tokio::spawn(read_fut);
+                                    Ok(Loop::Continue((count + 1, mx)))
                                 }
                                 Ok(Async::NotReady) => { Ok(Loop::Continue((count + 1, mx))) }
                                 Ok(Async::Ready(None)) => {
@@ -487,6 +501,10 @@ where
                                 Err(e) => {
                                     warn!("Reader Loop {} – error={:?}", count, e);
                                     Ok(Loop::Break(()))
+                                    // TODO: does it help to loop here?
+                                    // Sometimes it seems like it does. :/
+                                    // Ok(Loop::Continue((count + 1, mx)))
+
                                 }
                             }
                         });
@@ -509,8 +527,6 @@ where
                     trace!("<–– Sender Loop {} – START", count);
                     if count >= N_STREAMS {
                         debug!("<–– Sender Loop {} – done sending.", count);
-//                        thread::sleep(std::time::Duration::from_millis(1500));
-//                        trace!("[test, sender] woke up after sleep");
                         Ok(Loop::Break(()))
                     } else {
                         let c = count;
@@ -518,7 +534,26 @@ where
                             .map(|s| Builder::new().new_framed(s.unwrap()))
                             .and_then(|framed| framed.send("abc".into()))
                             .then(move |result| {
-                                trace!("Sender Loop {} – send result={:?}", c, result.is_ok());
+                                if result.is_ok() {
+                                    trace!("Sender Loop {} – send ok, result={:?}", c, result);
+                                    TX_OK_COUNT.fetch_add(1, Ordering::SeqCst);
+                                } else {
+                                    warn!("Sender Loop {} – send was not ok. Result={:?}", c, result);
+                                    TX_ERR_COUNT.fetch_add(1, Ordering::SeqCst);
+                                }
+                                // TODO: Pausing here seems to help with rare
+                                // random read misses, probably because the
+                                // sender closes the connection before the
+                                // reader has had time to read all the data.
+                                // Find out why we miss some data every now and
+                                // then. This happens both with mplex and yamux.
+                                // For yamux the error seen on the listening
+                                // side is of different kinds and does not seem
+                                // to be relevant: "Broken Pipe", "Connection
+                                // reset by peer" and "Protocol wrong type for
+                                // socket". To repeat remove the sleep and run
+                                // the test in `--release`.
+                                thread::sleep(std::time::Duration::from_millis(80));
                                 Ok::<_, ()>(())
                             });
                         tokio::spawn(send);
@@ -526,40 +561,17 @@ where
                     }
                 });
                 tokio::spawn(send_loop);
+
                 trace!("Sender – DONE");
                 Ok(())
             });
 
-//        let sender_fut2 = transport.dial(addr).unwrap()
-//            .and_then(|muxer| {
-//                let muxer = Arc::new(muxer);
-//                (
-//                    muxing::outbound_from_ref_and_wrap(muxer.clone()),
-//                    muxing::outbound_from_ref_and_wrap(muxer.clone()),
-//                )
-//            })
-//            .map(|substreams| {
-//                (
-//                    Builder::new().new_framed(substreams.0.unwrap()),
-//                    Builder::new().new_framed(substreams.1.unwrap()),
-//                )
-//            })
-//            .and_then(|framed_substreams| {
-//                (
-//                    framed_substreams.0.send("abcd".into()),
-//                    framed_substreams.1.send("efg".into()),
-//                )
-//            })
-//            .then(|res| {
-//                trace!("[test, sender] send result={:?}", res.is_ok());
-////                thread::sleep(std::time::Duration::from_millis(50));
-////                trace!("[test, sender] woke up after sleep");
-//                Ok::<_, ()>(())
-//            });
-//
-//        Runtime::new().unwrap().block_on(sender_fut).expect("sender future works");
         let rt = MtRuntime::new().unwrap();
         rt.block_on_all(sender_fut).unwrap();
+        info!("[test, reader] read data {:?} times", RX_COUNT.load(Ordering::SeqCst));
+        info!("[test, writer] sent data {} times successfully and {} times there was an error", TX_OK_COUNT.load(Ordering::SeqCst), TX_ERR_COUNT.load(Ordering::SeqCst));
+        assert_eq!(TX_OK_COUNT.load(Ordering::SeqCst), N_STREAMS);
+        assert_eq!(RX_COUNT.load(Ordering::SeqCst), N_STREAMS);
         thr.join().unwrap();
     }
 }
