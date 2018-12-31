@@ -45,10 +45,9 @@ use futures::{
 use std::{
     fmt::Debug,
     marker::PhantomData,
-    sync::{mpsc, Arc, Once, ONCE_INIT},
+    sync::{mpsc, Arc, Once, ONCE_INIT, atomic::{AtomicUsize, Ordering}},
     thread,
 };
-
 use elapsed::{measure_time, ElapsedDuration};
 
 pub struct MuxerTester<U, O, E> {
@@ -439,7 +438,6 @@ where
     pub fn one_hundred_small_streams(config: U) {
         Self::init();
         const N_STREAMS : usize = 100;
-        use std::sync::atomic::{AtomicUsize, Ordering};
         static RX_COUNT : AtomicUsize = AtomicUsize::new(0);
         static TX_OK_COUNT : AtomicUsize = AtomicUsize::new(0);
         static TX_ERR_COUNT : AtomicUsize = AtomicUsize::new(0);
@@ -456,7 +454,7 @@ where
             tx.send(addr).unwrap();
             let rt = MtRuntime::new().unwrap();
             let future = listener
-                .take(1)
+                .take(1) // Single connection
                 .for_each(|(listener_upgrade_fut, _)| {
                     listener_upgrade_fut.and_then(|muxer: O| {
                         trace!("Reader – incoming connection");
@@ -551,9 +549,8 @@ where
                                 // side is of different kinds and does not seem
                                 // to be relevant: "Broken Pipe", "Connection
                                 // reset by peer" and "Protocol wrong type for
-                                // socket". To repeat remove the sleep and run
-                                // the test in `--release`.
-                                thread::sleep(std::time::Duration::from_millis(80));
+                                // socket". To repeat remove the sleep.
+                                thread::sleep(std::time::Duration::from_millis(10));
                                 Ok::<_, ()>(())
                             });
                         tokio::spawn(send);
@@ -568,11 +565,12 @@ where
 
         let rt = MtRuntime::new().unwrap();
         rt.block_on_all(sender_fut).unwrap();
+        thr.join().unwrap();
         info!("[test, reader] read data {:?} times", RX_COUNT.load(Ordering::SeqCst));
         info!("[test, writer] sent data {} times successfully and {} times there was an error", TX_OK_COUNT.load(Ordering::SeqCst), TX_ERR_COUNT.load(Ordering::SeqCst));
         assert_eq!(TX_OK_COUNT.load(Ordering::SeqCst), N_STREAMS);
         assert_eq!(RX_COUNT.load(Ordering::SeqCst), N_STREAMS);
-        thr.join().unwrap();
+
     }
 }
 fn mb_per_sec(payload_len: usize, elapsed: ElapsedDuration) -> String {
