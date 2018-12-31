@@ -458,7 +458,7 @@ where
                 .for_each(|(listener_upgrade_fut, _)| {
                     listener_upgrade_fut.and_then(|muxer: O| {
                         trace!("Reader – incoming connection");
-                        let mx= Arc::new(muxer);
+                        let mx = Arc::new(muxer);
                         // Loop-future to set up reading from each incoming stream
                         let read_loop = loop_fn((0, mx), |(count, mx)| {
                             trace!("--> Reader Loop {} – polling inbound", count);
@@ -570,7 +570,6 @@ where
         info!("[test, writer] sent data {} times successfully and {} times there was an error", TX_OK_COUNT.load(Ordering::SeqCst), TX_ERR_COUNT.load(Ordering::SeqCst));
         assert_eq!(TX_OK_COUNT.load(Ordering::SeqCst), N_STREAMS);
         assert_eq!(RX_COUNT.load(Ordering::SeqCst), N_STREAMS);
-
     }
 }
 fn mb_per_sec(payload_len: usize, elapsed: ElapsedDuration) -> String {
