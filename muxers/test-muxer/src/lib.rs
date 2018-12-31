@@ -40,7 +40,7 @@ use tokio::{
 };
 use futures::{
     prelude::*,
-    future::Either,
+    future::{Either, loop_fn, Loop}
 };
 use std::{
     fmt::Debug,
@@ -66,6 +66,7 @@ where
     <U as InboundUpgrade<TcpTransStream>>::Future: Send,
     <U as OutboundUpgrade<TcpTransStream>>::Future: Send,
     <U as UpgradeInfo>::Info: Send,
+    <<U as UpgradeInfo>::InfoIter as std::iter::IntoIterator>::IntoIter: Send,
     E: std::error::Error + Send + Sync + 'static,
     O: StreamMuxer + Send + Sync + 'static ,
     <O as StreamMuxer>::Substream: Send + Sync + Debug,
@@ -437,11 +438,12 @@ where
 
     pub fn n_streams(config: U) {
         Self::init();
+        const N_STREAMS : usize = 20;
         let (tx, rx) = mpsc::channel();
         let listener_conf = config.clone();
-        let payload: Vec<u8> = vec![1; 50 * 1024];
-        let payload_len = payload.len();
-        info!("[test] payload size={}", payload_len);
+//        let payload: Vec<u8> = vec![1; 50 * 1024];
+//        let payload_len = payload.len();
+//        info!("[test] payload size={}", payload_len);
 
         let thr_builder = thread::Builder::new().name("listener thr".to_string());
         let thr = thr_builder.spawn(move || {
@@ -455,32 +457,41 @@ where
                 .take(1)
                 .for_each(|(muxer, _)| {
                     muxer.and_then(|mx: O| {
-                        trace!("incoming connection");
-                        use futures::future::{loop_fn, Loop};
+                        trace!("Reader – incoming connection");
                         let read_loop = loop_fn((0, mx), |(count, mx)| {
-                            trace!("--> Loop {} – polling inbound", count);
+                            trace!("--> Reader Loop {} – polling inbound", count);
                             match mx.poll_inbound() {
                                 Ok(Async::Ready(Some(mut stream))) => {
-                                    let mut buf = vec![0;10]; // Can't be an empty Vec because we'll only read to the `len()` of the buffer.
-                                    if let Ok(Async::Ready(num_read)) = mx.read_substream(&mut stream, &mut buf) {
-                                        trace!("Loop {} – Read: {} bytes, buf: {:?}", count, num_read, buf.len());
+                                    let mut buf = vec![0;10];
+
+                                    match mx.read_substream(&mut stream, &mut buf) {
+                                        Ok(Async::Ready(num_read)) => {
+                                            debug!("Reader Loop {} – Read: {} bytes", count, num_read);
+                                            Ok(Loop::Continue((count + 1, mx)))
+                                        }
+                                        Ok(Async::NotReady) => {
+                                            debug!("Reader Loop {} – NotReady", count);
+                                            Ok(Loop::Continue((count + 1, mx)))
+                                        }
+                                        Err(e) => {
+                                            error!("Reader Loop {} – error={:?}", count, e);
+                                            Ok(Loop::Continue((count + 1, mx)))
+                                        }
                                     }
-                                    Ok(Loop::Continue((count + 1, mx)))
                                 }
                                 Ok(Async::NotReady) => { Ok(Loop::Continue((count + 1, mx))) }
                                 Ok(Async::Ready(None)) => {
-                                    debug!("[listener, poll_inbound] {} Async::Ready(None)", count);
+                                    debug!("Reader Loop {} – Async::Ready(None)", count);
                                     Ok(Loop::Break(()))
                                 }
                                 Err(e) => {
-                                    warn!("[listener, poll_inbound] {} error={:?}", count, e);
-//                                    Ok(Loop::Break(()))
-                                    Ok(Loop::Continue((count + 1, mx))) // Looping another turn seemed to help a little bit with lost reads
+                                    warn!("Reader Loop {} – error={:?}", count, e);
+                                    Ok(Loop::Break(()))
                                 }
                             }
                         });
                         tokio::spawn(read_loop);
-                        trace!("incoming connection – DONE");
+                        trace!("Reader – incoming connection – DONE");
                         Ok(())
                     })
                 });
@@ -492,34 +503,63 @@ where
 
         let sender_fut = transport.dial(addr).unwrap()
             .and_then(|muxer| {
+                trace!("Sender – START");
                 let muxer = Arc::new(muxer);
-                (
-                    muxing::outbound_from_ref_and_wrap(muxer.clone()),
-                    muxing::outbound_from_ref_and_wrap(muxer.clone()),
-                )
-            })
-            .map(|substreams| {
-                (
-                    Builder::new().new_framed(substreams.0.unwrap()),
-                    Builder::new().new_framed(substreams.1.unwrap()),
-                )
-            })
-            .and_then(|framed_substreams| {
-                (
-                    framed_substreams.0.send("abcd".into()),
-                    framed_substreams.1.send("efg".into()),
-                )
-            })
-            .then(|res| {
-                trace!("[test, sender] send result={:?}", res.is_ok());
-//                thread::sleep(std::time::Duration::from_millis(50));
-//                trace!("[test, sender] woke up after sleep");
-                Ok::<_, ()>(())
+                let send_loop = loop_fn((0, muxer), |(count, muxer)| {
+                    trace!("<–– Sender Loop {} – START", count);
+                    if count >= N_STREAMS {
+                        debug!("<–– Sender Loop {} – done sending.", count);
+//                        thread::sleep(std::time::Duration::from_millis(1500));
+//                        trace!("[test, sender] woke up after sleep");
+                        Ok(Loop::Break(()))
+                    } else {
+                        let c = count;
+                        let send = muxing::outbound_from_ref_and_wrap(muxer.clone())
+                            .map(|s| Builder::new().new_framed(s.unwrap()))
+                            .and_then(|framed| framed.send("abc".into()))
+                            .then(move |result| {
+                                trace!("Sender Loop {} – send result={:?}", c, result.is_ok());
+                                Ok::<_, ()>(())
+                            });
+                        tokio::spawn(send);
+                        Ok(Loop::Continue((count + 1, muxer)))
+                    }
+                });
+                tokio::spawn(send_loop);
+                trace!("Sender – DONE");
+                Ok(())
             });
 
-        Runtime::new().unwrap().block_on(
-            sender_fut
-        ).expect("sender future works");
+//        let sender_fut2 = transport.dial(addr).unwrap()
+//            .and_then(|muxer| {
+//                let muxer = Arc::new(muxer);
+//                (
+//                    muxing::outbound_from_ref_and_wrap(muxer.clone()),
+//                    muxing::outbound_from_ref_and_wrap(muxer.clone()),
+//                )
+//            })
+//            .map(|substreams| {
+//                (
+//                    Builder::new().new_framed(substreams.0.unwrap()),
+//                    Builder::new().new_framed(substreams.1.unwrap()),
+//                )
+//            })
+//            .and_then(|framed_substreams| {
+//                (
+//                    framed_substreams.0.send("abcd".into()),
+//                    framed_substreams.1.send("efg".into()),
+//                )
+//            })
+//            .then(|res| {
+//                trace!("[test, sender] send result={:?}", res.is_ok());
+////                thread::sleep(std::time::Duration::from_millis(50));
+////                trace!("[test, sender] woke up after sleep");
+//                Ok::<_, ()>(())
+//            });
+//
+//        Runtime::new().unwrap().block_on(sender_fut).expect("sender future works");
+        let rt = MtRuntime::new().unwrap();
+        rt.block_on_all(sender_fut).unwrap();
         thr.join().unwrap();
     }
 }
