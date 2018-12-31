@@ -620,6 +620,6 @@ mod test {
 
     #[test]
     fn one_hundred_small_streams() {
-        MuxerTester::one_hundred_small_streamss(MplexConfig::default())
+        MuxerTester::one_hundred_small_streams(MplexConfig::default())
     }
 }
