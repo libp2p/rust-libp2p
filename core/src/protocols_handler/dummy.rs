@@ -27,7 +27,7 @@ use crate::{
     }
 };
 use futures::prelude::*;
-use std::{io, marker::PhantomData};
+use std::marker::PhantomData;
 use tokio_io::{AsyncRead, AsyncWrite};
 use void::Void;
 
@@ -53,6 +53,7 @@ where
 {
     type InEvent = Void;
     type OutEvent = Void;
+    type Error = Void;
     type Substream = TSubstream;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = DeniedUpgrade;
@@ -97,7 +98,7 @@ where
         &mut self,
     ) -> Poll<
         Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>,
-        io::Error,
+        Void,
     > {
         if self.shutting_down {
             Ok(Async::Ready(None))
