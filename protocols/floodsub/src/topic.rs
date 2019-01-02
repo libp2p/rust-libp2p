@@ -24,6 +24,8 @@ use bs58;
 use protobuf::Message;
 use std::collections::hash_map::HashMap;
 
+pub type TopicHashMap = HashMap<TopicHash, Topic>;
+pub type TopicIdMap = HashMap<TopicId, Topic>;
 pub type TopicMap = HashMap<TopicRep, Topic>;
 
 /// Represents a `Topic` via either a `TopicHash` or a `TopicId`.
@@ -35,8 +37,8 @@ pub enum TopicRep {
 
 /// Represents the hash of a topic.
 ///
-/// Instead of a using the topic as a whole, the API of floodsub uses a hash of the topic. You only
-/// have to build the hash once, then use it everywhere.
+/// Instead of using the topic as a whole, the API of floodsub uses a hash of
+/// the topic. You only have to build the hash once, then use it everywhere.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct TopicHash {
     hash: String,
@@ -56,7 +58,7 @@ impl TopicHash {
 }
 
 /// Built topic.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Topic {
     descriptor: rpc_proto::TopicDescriptor,
     hash: TopicHash,

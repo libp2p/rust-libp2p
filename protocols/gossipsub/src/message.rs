@@ -1,7 +1,7 @@
 use mcache::MCache;
 use rpc_proto;
 
-use libp2p_floodsub::{TopicMap, TopicHash};
+use libp2p_floodsub::{TopicMap, TopicHash, TopicHashMap, TopicIdMap};
 
 use libp2p_core::PeerId;
 
@@ -22,7 +22,7 @@ pub type MsgMap = HashMap<MsgRep, GMessage>;
 /// > **Note**: message is unsized. FMI see
 /// > https://github.com/libp2p/specs/issues/118.
 // TODO: ^
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GMessage {
     /// ID of the peer that published this message.
     pub source: PeerId,

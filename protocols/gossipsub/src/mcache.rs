@@ -2,7 +2,7 @@ use message::{MsgMap, MsgRep, GMessage, MsgHash};
 
 use std::collections::hash_map::HashMap;
 
-use libp2p_floodsub::TopicMap;
+use libp2p_floodsub::{TopicMap, TopicIdMap, TopicHashMap};
 
 /// The message cache used to track recently seen messages. FMI see
 /// https://github.com/libp2p/specs/tree/master/pubsub/gossipsub#router-state.
@@ -41,5 +41,5 @@ impl MCache {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CacheEntry {
     msg_rep: MsgRep,
-    topics: TopicMap,
+    topics: TopicIdMap,
 }
