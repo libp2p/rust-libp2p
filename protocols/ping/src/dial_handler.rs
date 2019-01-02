@@ -33,7 +33,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_timer::Delay;
+use tokio_timer::{self, Delay};
 use void::{Void, unreachable};
 
 /// Protocol handler that handles pinging the remote at a regular period.
@@ -153,6 +153,7 @@ where
 {
     type InEvent = Void;
     type OutEvent = OutEvent;
+    type Error = io::Error; // TODO: more precise error type
     type Substream = TSubstream;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = Ping<Instant>;

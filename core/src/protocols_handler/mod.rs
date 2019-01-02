@@ -24,7 +24,7 @@ use crate::upgrade::{
     UpgradeError,
 };
 use futures::prelude::*;
-use std::{error, fmt, io, time::Duration};
+use std::{error, fmt, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 pub use self::dummy::DummyProtocolsHandler;
@@ -89,6 +89,8 @@ pub trait ProtocolsHandler {
     type InEvent;
     /// Custom event that can be produced by the handler and that will be returned to the outside.
     type OutEvent;
+    /// Error that can happen when polling.
+    type Error: error::Error;
     /// The type of the substream that contains the raw data.
     type Substream: AsyncRead + AsyncWrite;
     /// The upgrade for the protocol or protocols handled by this handler.
@@ -144,7 +146,7 @@ pub trait ProtocolsHandler {
     /// > **Note**: If this handler is combined with other handlers, as soon as `poll()` returns
     /// >           `Ok(Async::Ready(None))`, all the other handlers will receive a call to
     /// >           `shutdown()` and will eventually be closed and destroyed.
-    fn poll(&mut self) -> Poll<Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>, io::Error>;
+    fn poll(&mut self) -> Poll<Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>, Self::Error>;
 
     /// Adds a closure that turns the input event into something else.
     #[inline]

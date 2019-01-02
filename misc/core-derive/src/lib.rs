@@ -50,6 +50,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let name = &ast.ident;
     let (_, ty_generics, where_clause) = ast.generics.split_for_impl();
     let trait_to_impl = quote!{::libp2p::core::swarm::NetworkBehaviour};
+    let net_behv_event_proc = quote!{::libp2p::core::swarm::NetworkBehaviourEventProcess};
     let either_ident = quote!{::libp2p::core::either::EitherOutput};
     let network_behaviour_action = quote!{::libp2p::core::swarm::NetworkBehaviourAction};
     let protocols_handler = quote!{::libp2p::core::protocols_handler::ProtocolsHandler};
@@ -97,6 +98,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 let ty = &field.ty;
                 vec![
                     quote!{#ty: #trait_to_impl<#topology_generic>},
+                    quote!{Self: #net_behv_event_proc<<#ty as #trait_to_impl<#topology_generic>>::OutEvent>},
                     quote!{<#ty as #trait_to_impl<#topology_generic>>::ProtocolsHandler: #protocols_handler<Substream = #substream_generic>},
                     // Note: this bound is required because of https://github.com/rust-lang/rust/issues/55697
                     quote!{<<#ty as #trait_to_impl<#topology_generic>>::ProtocolsHandler as #protocols_handler>::InboundProtocol: ::libp2p::core::InboundUpgrade<#substream_generic>},
@@ -276,27 +278,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             None => quote!{ self.#field_n },
         };
 
-        let mut handler_fn: Option<Ident> = None;
-        for meta_items in field.attrs.iter().filter_map(get_meta_items) {
-            for meta_item in meta_items {
-                match meta_item {
-                    // Parse `#[behaviour(handler = "foo")]`
-                    syn::NestedMeta::Meta(syn::Meta::NameValue(ref m)) if m.ident == "handler" => {
-                        if let syn::Lit::Str(ref s) = m.lit {
-                            handler_fn = Some(syn::parse_str(&s.value()).unwrap());
-                        }
-                    }
-                    _ => ()
-                }
-            }
-        }
-
-        let handling = if let Some(handler_fn) = handler_fn {
-            quote!{self.#handler_fn(event)}
-        } else {
-            quote!{}
-        };
-
         let mut wrapped_event = if enum_n != 0 {
             quote!{ #either_ident::Second(event) }
         } else {
@@ -310,7 +291,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             loop {
                 match #field_name.poll(poll_params) {
                     Async::Ready(#network_behaviour_action::GenerateEvent(event)) => {
-                        #handling
+                        #net_behv_event_proc::inject_event(self, event)
                     }
                     Async::Ready(#network_behaviour_action::DialAddress { address }) => {
                         return Async::Ready(#network_behaviour_action::DialAddress { address });
