@@ -88,10 +88,10 @@ pub use self::protocol::KadConnectionType;
 pub use self::topology::KademliaTopology;
 
 pub mod handler;
+pub mod kbucket;
 pub mod protocol;
 
 mod behaviour;
-mod kbucket;
 mod protobuf_structs;
 mod query;
 mod topology;
