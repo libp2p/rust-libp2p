@@ -44,7 +44,7 @@
 //! The `UdsConfig` structs implements the `Transport` trait of the `core` library. See the
 //! documentation of `core` and of libp2p in general to learn how to use the `Transport` trait.
 
-#![cfg(all(unix, not(target_os = "emscripten")))]
+#![cfg(all(unix, any(target_os = "emscripten", target_os = "unknown")))]
 
 extern crate futures;
 extern crate libp2p_core;
