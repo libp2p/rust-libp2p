@@ -97,11 +97,11 @@ where
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>,
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
         Void,
     > {
         if self.shutting_down {
-            Ok(Async::Ready(None))
+            Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown))
         } else {
             Ok(Async::NotReady)
         }

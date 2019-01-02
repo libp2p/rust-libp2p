@@ -161,32 +161,36 @@ where
         self.proto2.shutdown();
     }
 
-    fn poll(&mut self) -> Poll<Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>, Self::Error> {
+    fn poll(&mut self) -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>, Self::Error> {
         match self.proto1.poll().map_err(EitherError::A)? {
-            Async::Ready(Some(ProtocolsHandlerEvent::Custom(event))) => {
-                return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(EitherOutput::First(event)))));
+            Async::Ready(ProtocolsHandlerEvent::Custom(event)) => {
+                return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(EitherOutput::First(event))));
             },
-            Async::Ready(Some(ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info})) => {
-                return Ok(Async::Ready(Some(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+            Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info}) => {
+                return Ok(Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                     upgrade: EitherUpgrade::A(upgrade),
                     info: EitherOutput::First(info),
-                })));
+                }));
             },
-            Async::Ready(None) => return Ok(Async::Ready(None)),
+            Async::Ready(ProtocolsHandlerEvent::Shutdown) => {
+                return Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown))
+            },
             Async::NotReady => ()
         };
 
         match self.proto2.poll().map_err(EitherError::B)? {
-            Async::Ready(Some(ProtocolsHandlerEvent::Custom(event))) => {
-                return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(EitherOutput::Second(event)))));
+            Async::Ready(ProtocolsHandlerEvent::Custom(event)) => {
+                return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(EitherOutput::Second(event))));
             },
-            Async::Ready(Some(ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info })) => {
-                return Ok(Async::Ready(Some(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+            Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info }) => {
+                return Ok(Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                     upgrade: EitherUpgrade::B(upgrade),
                     info: EitherOutput::Second(info),
-                })));
+                }));
             },
-            Async::Ready(None) => return Ok(Async::Ready(None)),
+            Async::Ready(ProtocolsHandlerEvent::Shutdown) => {
+                return Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown))
+            },
             Async::NotReady => ()
         };
 

@@ -126,24 +126,22 @@ where
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<
-            ProtocolsHandlerEvent<
-                Self::OutboundProtocol,
-                Self::OutboundOpenInfo,
-                PeriodicIdHandlerEvent,
-            >,
+        ProtocolsHandlerEvent<
+            Self::OutboundProtocol,
+            Self::OutboundOpenInfo,
+            PeriodicIdHandlerEvent,
         >,
         Self::Error,
     > {
         if let Some(pending_result) = self.pending_result.take() {
-            return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(
+            return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(
                 pending_result,
-            ))));
+            )));
         }
 
         let next_id = match self.next_id {
             Some(ref mut nid) => nid,
-            None => return Ok(Async::Ready(None)),
+            None => return Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown)),
         };
 
         // Poll the future that fires when we need to identify the node again.
@@ -153,7 +151,7 @@ where
                 next_id.reset(Instant::now() + DELAY_TO_NEXT_ID);
                 let upgrade = self.config.clone();
                 let ev = ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info: () };
-                Ok(Async::Ready(Some(ev)))
+                Ok(Async::Ready(ev))
             }
         }
     }

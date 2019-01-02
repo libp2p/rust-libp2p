@@ -130,12 +130,12 @@ impl NodeHandler for Handler {
     fn shutdown(&mut self) {
         self.state = Some(HandlerState::Ready(None));
     }
-    fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<usize, OutEvent>>, IoError> {
+    fn poll(&mut self) -> Poll<NodeHandlerEvent<usize, OutEvent>, IoError> {
         match self.state.take() {
             Some(ref state) => match state {
                 HandlerState::NotReady => Ok(Async::NotReady),
-                HandlerState::Ready(None) => Ok(Async::Ready(None)),
-                HandlerState::Ready(Some(event)) => Ok(Async::Ready(Some(event.clone()))),
+                HandlerState::Ready(None) => Ok(Async::Ready(NodeHandlerEvent::Shutdown)),
+                HandlerState::Ready(Some(event)) => Ok(Async::Ready(event.clone())),
                 HandlerState::Err => Err(io::Error::new(io::ErrorKind::Other, "oh noes")),
             },
             None => Ok(Async::NotReady),
