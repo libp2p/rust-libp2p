@@ -22,6 +22,7 @@ use crate::protocol::{FloodsubCodec, FloodsubConfig, FloodsubRpc};
 use futures::prelude::*;
 use libp2p_core::{
     ProtocolsHandler, ProtocolsHandlerEvent,
+    protocols_handler::ProtocolsHandlerUpgrErr,
     upgrade::{InboundUpgrade, OutboundUpgrade}
 };
 use smallvec::SmallVec;
@@ -104,6 +105,7 @@ where
 {
     type InEvent = FloodsubRpc;
     type OutEvent = FloodsubRpc;
+    type Error = io::Error;
     type Substream = TSubstream;
     type InboundProtocol = FloodsubConfig;
     type OutboundProtocol = FloodsubConfig;
@@ -144,7 +146,7 @@ where
     fn inject_inbound_closed(&mut self) {}
 
     #[inline]
-    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: io::Error) {}
+    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {}
 
     #[inline]
     fn shutdown(&mut self) {

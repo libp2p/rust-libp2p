@@ -23,12 +23,13 @@ use arrayvec::ArrayVec;
 use futures::prelude::*;
 use libp2p_core::{
     InboundUpgrade,
+    OutboundUpgrade,
     ProtocolsHandler,
     ProtocolsHandlerEvent,
+    protocols_handler::ProtocolsHandlerUpgrErr,
     upgrade::DeniedUpgrade
 };
 use log::warn;
-use std::io;
 use tokio_io::{AsyncRead, AsyncWrite};
 use void::{Void, unreachable};
 
@@ -70,6 +71,7 @@ where
 {
     type InEvent = Void;
     type OutEvent = Void;
+    type Error = Void;
     type Substream = TSubstream;
     type InboundProtocol = Ping<()>;
     type OutboundProtocol = DeniedUpgrade;
@@ -101,7 +103,7 @@ where
     fn inject_inbound_closed(&mut self) {}
 
     #[inline]
-    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: io::Error) {}
+    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {}
 
     #[inline]
     fn shutdown(&mut self) {
@@ -116,7 +118,7 @@ where
         &mut self,
     ) -> Poll<
         Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>,
-        io::Error,
+        Self::Error,
     > {
         // Removes each substream one by one, and pushes them back if they're not ready (which
         // should be the case 99% of the time).

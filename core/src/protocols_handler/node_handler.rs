@@ -20,7 +20,7 @@
 
 use crate::{
     nodes::handled_node::{NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent},
-    protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent},
+    protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
     upgrade::{
         self,
         OutboundUpgrade,
@@ -29,7 +29,7 @@ use crate::{
     }
 };
 use futures::prelude::*;
-use std::{io, time::Duration};
+use std::time::Duration;
 use tokio_timer::Timeout;
 
 /// Prototype for a `NodeHandlerWrapper`.
@@ -123,7 +123,7 @@ where
 {
     type InEvent = TProtoHandler::InEvent;
     type OutEvent = TProtoHandler::OutEvent;
-    type Error = io::Error;       // TODO: better error type
+    type Error = TProtoHandler::Error;
     type Substream = TProtoHandler::Substream;
     // The first element of the tuple is the unique upgrade identifier
     // (see `unique_dial_upgrade_id`).
@@ -185,7 +185,7 @@ where
 
         self.queued_dial_upgrades.remove(pos);
         self.handler
-            .inject_dial_upgrade_error(user_data.1, io::ErrorKind::ConnectionReset.into());
+            .inject_dial_upgrade_error(user_data.1, ProtocolsHandlerUpgrErr::MuxerDeniedSubstream);
     }
 
     #[inline]
@@ -198,7 +198,7 @@ where
         self.handler.shutdown();
     }
 
-    fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>>, io::Error> {
+    fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>>, Self::Error> {
         // Continue negotiation of newly-opened substreams on the listening side.
         // We remove each element from `negotiating_in` one by one and add them back if not ready.
         for n in (0..self.negotiating_in.len()).rev() {
@@ -224,8 +224,18 @@ where
                     self.negotiating_out.push((upgr_info, in_progress));
                 }
                 Err(err) => {
-                    let msg = format!("Error while upgrading: {:?}", err);
-                    let err = io::Error::new(io::ErrorKind::Other, msg);
+                    let err = if err.is_elapsed() {
+                        ProtocolsHandlerUpgrErr::Timeout
+                    } else if err.is_timer() {
+                        ProtocolsHandlerUpgrErr::Timer
+                    } else {
+                        debug_assert!(err.is_inner());
+                        let err = err.into_inner().expect("Timeout error is one of {elapsed, \
+                            timer, inner}; is_inner and is_elapsed are both false; error is \
+                            inner; QED");
+                        ProtocolsHandlerUpgrErr::Upgrade(err)
+                    };
+
                     self.handler.inject_dial_upgrade_error(upgr_info, err);
                 }
             }

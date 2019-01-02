@@ -18,10 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use libp2p_core::Endpoint;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::mem;
 use bytes::{BufMut, Bytes, BytesMut};
-use core::Endpoint;
 use tokio_io::codec::{Decoder, Encoder};
 use unsigned_varint::{codec, encode};
 

@@ -24,6 +24,7 @@ use libp2p_core::{
     OutboundUpgrade,
     ProtocolsHandler,
     ProtocolsHandlerEvent,
+    protocols_handler::ProtocolsHandlerUpgrErr,
     upgrade::DeniedUpgrade
 };
 use log::warn;
@@ -32,7 +33,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_timer::Delay;
+use tokio_timer::{self, Delay};
 use void::{Void, unreachable};
 
 /// Protocol handler that handles pinging the remote at a regular period.
@@ -152,6 +153,7 @@ where
 {
     type InEvent = Void;
     type OutEvent = OutEvent;
+    type Error = io::Error; // TODO: more precise error type
     type Substream = TSubstream;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = Ping<Instant>;
@@ -183,7 +185,7 @@ where
     fn inject_inbound_closed(&mut self) {}
 
     #[inline]
-    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: io::Error) {
+    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {
         // In case of error while upgrading, there's not much we can do except shut down.
         // TODO: we assume that the error is about ping not being supported, which is not
         //       necessarily the case
