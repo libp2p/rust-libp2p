@@ -23,17 +23,18 @@ use rpc_proto;
 use bs58;
 use protobuf::Message;
 use std::collections::hash_map::HashMap;
+use std::iter::Map;
 
 pub type TopicHashMap = HashMap<TopicHash, Topic>;
 pub type TopicIdMap = HashMap<TopicId, Topic>;
 // pub type TopicMap = HashMap<TopicRep, Topic>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TopicMap(HashMap<TopicRep, Topic>);
+#[derive(Debug)]
+pub struct TopicMap(Map<TopicRep, Topic>);
 
 impl TopicMap {
     fn new() -> TopicMap {
-        TopicMap(HashMap::new())
+        TopicMap(Map::new())
     }
 
     fn insert(&mut self, tr: TopicRep, t: Topic) -> Option<Topic> {
@@ -55,6 +56,33 @@ impl std::iter::FromIterator<TopicHash> for TopicMap {
     }
 }
 
+// #[derive(Debug)]
+// pub struct TopicMap(HashMap<TopicRep, Topic>);
+
+// impl TopicMap {
+//     fn new() -> TopicMap {
+//         TopicMap(HashMap::new())
+//     }
+
+//     fn insert(&mut self, tr: TopicRep, t: Topic) -> Option<Topic> {
+//         self.0.insert(tr, t)
+//     }
+// }
+
+// impl std::iter::FromIterator<TopicHash> for TopicMap {
+//     fn from_iter<I: IntoIterator<Item=TopicHash>>(iter: I) -> Self {
+//         let mut tm = TopicMap::new();
+
+//         for i in iter {
+//             let tr = TopicRep::Hash(i);
+//             let t = 
+//             tm.insert(tr, t);
+//         }
+
+//         tm
+//     }
+// }
+
 /// Represents a `Topic` via either a `TopicHash` or a `TopicId`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TopicRep {
@@ -65,7 +93,7 @@ pub enum TopicRep {
 // TODO
 // impl From<TopicRep> for Topic {
 //     pub fn from(topic_rep: TopicRep) -> Topic {
-            // for topic in global_topics
+//         for topic in 
 //     }
 // }
 
@@ -92,24 +120,22 @@ impl TopicHash {
     }
 }
 
-impl From<TopicHash> for Topic {
-    fn from(topic_hash: TopicHash) -> Topic {
-        ///
+// TODO
+// impl From<TopicHash> for Topic {
+//     fn from(topic_hash: TopicHash) -> Topic {
+        
+//     }
+// }
+
+impl From<TopicHash> for TopicRep {
+    fn from(topic_hash: TopicHash) -> TopicRep {
+        TopicRep::Hash(topic_hash);
     }
 }
+
 /// Built topic.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Topic {
-    // Adding derives for PartialEq, Eq results in the following error for
-    // this field:
-    // the trait bound `rpc_proto::TopicDescriptor: std::cmp::Eq` is not satisfied
-
-    // the trait std::cmp::Eq is not implemented for rpc_proto::TopicDescriptor
-
-    // note: required by std::cmp::AssertParamIsEqrustc(E0277)
-
-    // topic.rs(103, 5): the trait std::cmp::Eq is not implemented for rpc_proto::TopicDescriptor
-    // Related: https://github.com/stepancheg/rust-protobuf/issues/211
     descriptor: rpc_proto::TopicDescriptor,
     hash: TopicHash,
 }
@@ -189,5 +215,11 @@ impl TopicId {
         TopicId {
             id: s.to_owned(),
         }
+    }
+}
+
+impl From<TopicId> for TopicRep {
+    fn from(topic_id: TopicId) -> TopicRep {
+        TopicRep::Id(topic_id)
     }
 }

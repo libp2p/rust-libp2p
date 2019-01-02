@@ -3,8 +3,9 @@ use mcache::MCache;
 use mesh::Mesh;
 use message::{GossipsubRpc, GMessage, ControlMessage, GossipsubSubscription,
     GossipsubSubscriptionAction};
+use {Topic, TopicHash, TopicRep};
 
-use libp2p_floodsub::{Floodsub, Topic, TopicHash, handler::FloodsubHandler};
+use libp2p_floodsub::{Floodsub, handler::FloodsubHandler};
 use libp2p_core::{
     PeerId,
     protocols_handler::{ProtocolsHandler, ProtocolsHandlerSelect},
@@ -93,6 +94,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
         gs.floodsub = fs;
         gs
     }
+
     // ---------------------------------------------------------------------
     // The following section is re-implemented from
     // Floodsub. This is needed to differentiate state.
@@ -244,6 +246,20 @@ impl<TSubstream> Gossipsub<TSubstream> {
     }
     // End of re-implementation from `Floodsub` methods.
     // ---------------------------------------------------------------------
+
+    pub fn find_topic_from_hash(&self, topic_hash: TopicHash) ->
+        Option<Topic> {
+        let tr = TopicRep::from(topic_hash);
+
+        // Look first in the local peers subscribed topics.
+        for i in self.subscribed_topics.into_iter() {
+            
+        }
+
+        for i in self.mesh.into_iter() {
+
+        }
+    }
 
     /// Grafts the peer to a topic. This notifies the peer that it has been /// added to the local mesh view.
     ///

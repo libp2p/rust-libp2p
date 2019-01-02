@@ -35,7 +35,11 @@ pub struct GMessage {
 
     /// List of topics this message belongs to.
     ///
-    /// Each message can belong to multiple topics at once.
+    ///Each message can belong to multiple topics at once.
+    // Issue with using a HashMap with rust-protobuf:
+    // https://github.com/stepancheg/rust-protobuf/issues/211
+    // Deriving PartialEq and Eq on rpc_proto::TopicDescriptor gives an error.
+    // 
     pub topics: TopicMap,
 
     // To use for an authentication scheme (not yet defined or implemented),
@@ -376,7 +380,7 @@ pub enum GossipSubGraftPruneAction {
 }
 
 /// An RPC received by the Gossipsub system.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GossipsubRpc {
     /// List of messages that were part of this RPC query.
     pub messages: Vec<GMessage>,

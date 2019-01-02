@@ -48,3 +48,11 @@ mod layer;
 // *.rs` from rpc.proto. Rules for transport over-the-wire via protobuf.
 // Lowest level.
 mod rpc_proto;
+
+// Required to be re-implemented from libp2p_floodsub::topic due to
+// differences such as how to get a topic from a TopicRep.
+mod topic;
+
+pub use self::layer::Gossipsub;
+pub use self::message::{GMessage, GossipsubRpc};
+pub use self::topic::{TopicMap, TopicRep, Topic, TopicBuilder, TopicHash};
