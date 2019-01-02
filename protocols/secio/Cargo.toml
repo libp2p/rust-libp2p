@@ -17,7 +17,7 @@ libp2p-core = { version = "0.1.0", path = "../../core" }
 log = "0.4.1"
 protobuf = "2.0.2"
 rand = "0.6"
-secp256k1 = { version = "0.12", optional = true }
+secp256k1 = { version = "0.12", features = ["rand"], optional = true }
 aes-ctr = "0.1.0"
 aesni = { version = "0.4.1", features = ["nocheck"], optional = true }
 twofish = "0.1.0"

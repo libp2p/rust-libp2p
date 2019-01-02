@@ -401,7 +401,7 @@ where
                             let secp256k1 = secp256k1::Secp256k1::signing_only();
                             secp256k1
                                 .sign(&message, private)
-                                .serialize_der(&secp256k1)
+                                .serialize_der()
                         },
                     }
                 });
@@ -492,8 +492,8 @@ where
                     let message = secp256k1::Message::from_slice(data_to_verify.as_ref())
                         .expect("digest output length doesn't match secp256k1 input length");
                     let secp256k1 = secp256k1::Secp256k1::verification_only();
-                    let signature = secp256k1::Signature::from_der(&secp256k1, remote_exch.get_signature());
-                    let remote_public_key = secp256k1::key::PublicKey::from_slice(&secp256k1, remote_public_key);
+                    let signature = secp256k1::Signature::from_der(remote_exch.get_signature());
+                    let remote_public_key = secp256k1::key::PublicKey::from_slice(remote_public_key);
                     if let (Ok(signature), Ok(remote_public_key)) = (signature, remote_public_key) {
                         match secp256k1.verify(&message, &signature, &remote_public_key) {
                             Ok(()) => (),

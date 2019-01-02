@@ -241,13 +241,7 @@ impl SecioKeyPair {
     /// Generates a new random sec256k1 key pair.
     #[cfg(feature = "secp256k1")]
     pub fn secp256k1_generated() -> Result<SecioKeyPair, Box<Error + Send + Sync>> {
-        let secp = secp256k1::Secp256k1::new();
-        // TODO: This will work once 0.11.5 is released. See https://github.com/rust-bitcoin/rust-secp256k1/pull/80#pullrequestreview-172681778
-        // let private = secp256k1::key::SecretKey::new(&secp, &mut secp256k1::rand::thread_rng());
-        use rand::Rng;
-        let mut random_slice= [0u8; secp256k1::constants::SECRET_KEY_SIZE];
-        rand::thread_rng().fill(&mut random_slice[..]);
-        let private = secp256k1::key::SecretKey::from_slice(&secp, &random_slice).expect("slice has the right size");
+        let private = secp256k1::key::SecretKey::new(&mut secp256k1::rand::thread_rng());
         Ok(SecioKeyPair {
             inner: SecioKeyPairInner::Secp256k1 { private },
         })
@@ -259,8 +253,7 @@ impl SecioKeyPair {
     where
         K: AsRef<[u8]>,
     {
-        let secp = secp256k1::Secp256k1::without_caps();
-        let private = secp256k1::key::SecretKey::from_slice(&secp, key.as_ref())?;
+        let private = secp256k1::key::SecretKey::from_slice(key.as_ref())?;
 
         Ok(SecioKeyPair {
             inner: SecioKeyPairInner::Secp256k1 { private },
