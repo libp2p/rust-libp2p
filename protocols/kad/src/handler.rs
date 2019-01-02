@@ -343,6 +343,7 @@ where
 {
     type InEvent = KademliaHandlerIn<TUserData>;
     type OutEvent = KademliaHandlerEvent<TUserData>;
+    type Error = io::Error; // TODO: better error type?
     type Substream = TSubstream;
     type InboundProtocol = upgrade::EitherUpgrade<KademliaProtocolConfig, upgrade::DeniedUpgrade>;
     type OutboundProtocol = KademliaProtocolConfig;
@@ -496,9 +497,7 @@ where
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<
-            ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
-        >,
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
         io::Error,
     > {
         // Special case if shutting down.
@@ -511,7 +510,7 @@ where
             }
 
             if self.substreams.is_empty() {
-                return Ok(Async::Ready(None));
+                return Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown));
             } else {
                 return Ok(Async::NotReady);
             }
@@ -525,10 +524,10 @@ where
                 match advance_substream(substream, self.config) {
                     (Some(new_state), Some(event), _) => {
                         self.substreams.push(new_state);
-                        return Ok(Async::Ready(Some(event)));
+                        return Ok(Async::Ready(event));
                     }
                     (None, Some(event), _) => {
-                        return Ok(Async::Ready(Some(event)));
+                        return Ok(Async::Ready(event));
                     }
                     (Some(new_state), None, false) => {
                         self.substreams.push(new_state);

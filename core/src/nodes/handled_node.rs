@@ -68,7 +68,7 @@ pub trait NodeHandler {
     fn inject_event(&mut self, event: Self::InEvent);
 
     /// Indicates to the node that it should shut down. After that, it is expected that `poll()`
-    /// returns `Ready(None)` as soon as possible.
+    /// returns `Ready(NodeHandlerEvent::Shutdown)` as soon as possible.
     ///
     /// This method allows an implementation to perform a graceful shutdown of the substreams, and
     /// send back various events.
@@ -76,7 +76,7 @@ pub trait NodeHandler {
 
     /// Should behave like `Stream::poll()`. Should close if no more event can be produced and the
     /// node should be closed.
-    fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>>, Self::Error>;
+    fn poll(&mut self) -> Poll<NodeHandlerEvent<Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>;
 }
 
 /// Endpoint for a received substream.
@@ -112,6 +112,9 @@ pub enum NodeHandlerEvent<TOutboundOpenInfo, TCustom> {
     /// Require a new outbound substream to be opened with the remote.
     OutboundSubstreamRequest(TOutboundOpenInfo),
 
+    /// Gracefully shut down the connection to the node.
+    Shutdown,
+
     /// Other event.
     Custom(TCustom),
 }
@@ -127,6 +130,7 @@ impl<TOutboundOpenInfo, TCustom> NodeHandlerEvent<TOutboundOpenInfo, TCustom> {
             NodeHandlerEvent::OutboundSubstreamRequest(val) => {
                 NodeHandlerEvent::OutboundSubstreamRequest(map(val))
             },
+            NodeHandlerEvent::Shutdown => NodeHandlerEvent::Shutdown,
             NodeHandlerEvent::Custom(val) => NodeHandlerEvent::Custom(val),
         }
     }
@@ -140,6 +144,7 @@ impl<TOutboundOpenInfo, TCustom> NodeHandlerEvent<TOutboundOpenInfo, TCustom> {
             NodeHandlerEvent::OutboundSubstreamRequest(val) => {
                 NodeHandlerEvent::OutboundSubstreamRequest(val)
             },
+            NodeHandlerEvent::Shutdown => NodeHandlerEvent::Shutdown,
             NodeHandlerEvent::Custom(val) => NodeHandlerEvent::Custom(map(val)),
         }
     }
@@ -283,13 +288,13 @@ where
                 }
             }
 
-            match if self.handler_is_done { Async::Ready(None) } else { self.handler.poll().map_err(HandledNodeError::Handler)? } {
+            match if self.handler_is_done { Async::Ready(NodeHandlerEvent::Shutdown) } else { self.handler.poll().map_err(HandledNodeError::Handler)? } {
                 Async::NotReady => {
                     if node_not_ready {
                         break
                     }
                 }
-                Async::Ready(Some(NodeHandlerEvent::OutboundSubstreamRequest(user_data))) => {
+                Async::Ready(NodeHandlerEvent::OutboundSubstreamRequest(user_data)) => {
                     if self.node.get_ref().is_outbound_open() {
                         match self.node.get_mut().open_substream(user_data) {
                             Ok(()) => (),
@@ -301,10 +306,10 @@ where
                         self.handler.inject_outbound_closed(user_data);
                     }
                 }
-                Async::Ready(Some(NodeHandlerEvent::Custom(event))) => {
+                Async::Ready(NodeHandlerEvent::Custom(event)) => {
                     return Ok(Async::Ready(Some(event)));
                 }
-                Async::Ready(None) => {
+                Async::Ready(NodeHandlerEvent::Shutdown) => {
                     self.handler_is_done = true;
                     if !self.is_shutting_down {
                         self.is_shutting_down = true;
@@ -440,12 +445,12 @@ mod tests {
                 assert!(self.substream_attempt_cancelled);
                 self.shutdown_called = true;
             }
-            fn poll(&mut self) -> Poll<Option<NodeHandlerEvent<(), ()>>, io::Error> {
+            fn poll(&mut self) -> Poll<NodeHandlerEvent<(), ()>, io::Error> {
                 if self.shutdown_called {
-                    Ok(Async::Ready(None))
+                    Ok(Async::Ready(NodeHandlerEvent::Shutdown))
                 } else if !self.did_substream_attempt {
                     self.did_substream_attempt = true;
-                    Ok(Async::Ready(Some(NodeHandlerEvent::OutboundSubstreamRequest(()))))
+                    Ok(Async::Ready(NodeHandlerEvent::OutboundSubstreamRequest(())))
                 } else {
                     Ok(Async::NotReady)
                 }
