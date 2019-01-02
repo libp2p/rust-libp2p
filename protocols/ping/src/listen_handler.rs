@@ -117,7 +117,7 @@ where
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>,
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
         Self::Error,
     > {
         // Removes each substream one by one, and pushes them back if they're not ready (which
@@ -133,7 +133,7 @@ where
 
         // Special case if shutting down.
         if self.shutdown && self.ping_in_substreams.is_empty() {
-            return Ok(Async::Ready(None));
+            return Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown));
         }
 
         Ok(Async::NotReady)

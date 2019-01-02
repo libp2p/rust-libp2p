@@ -160,17 +160,17 @@ where
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>,
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
         io::Error,
     > {
         if !self.send_queue.is_empty() {
             let message = self.send_queue.remove(0);
-            return Ok(Async::Ready(Some(
+            return Ok(Async::Ready(
                 ProtocolsHandlerEvent::OutboundSubstreamRequest {
                     info: message,
                     upgrade: self.config.clone(),
                 },
-            )));
+            ));
         }
 
         for n in (0..self.substreams.len()).rev() {
@@ -181,7 +181,7 @@ where
                         Ok(Async::Ready(Some(message))) => {
                             self.substreams
                                 .push(SubstreamState::WaitingInput(substream));
-                            return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(message))));
+                            return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(message)));
                         }
                         Ok(Async::Ready(None)) => SubstreamState::Closing(substream),
                         Ok(Async::NotReady) => {
@@ -217,7 +217,7 @@ where
                             self.substreams.push(SubstreamState::Closing(substream));
                             return Ok(Async::NotReady);
                         }
-                        Err(_) => return Ok(Async::Ready(None)),
+                        Err(_) => return Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown)),
                     },
                 }
             }
