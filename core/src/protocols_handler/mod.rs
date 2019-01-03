@@ -204,7 +204,7 @@ pub trait ProtocolsHandler {
     where
         Self: Sized,
     {
-        NodeHandlerWrapperBuilder::new(self, Duration::from_secs(10), Duration::from_secs(10))
+        NodeHandlerWrapperBuilder::new(self, Duration::from_secs(10), Duration::from_secs(10), Duration::from_secs(5))
     }
 
     /// Builds an implementation of `NodeHandler` that handles this protocol exclusively.
