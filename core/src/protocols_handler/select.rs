@@ -157,7 +157,7 @@ where
 
     #[inline]
     fn connection_keep_alive(&self) -> bool {
-        self.proto1.connection_keep_alive() && self.proto2.connection_keep_alive()
+        self.proto1.connection_keep_alive() || self.proto2.connection_keep_alive()
     }
 
     #[inline]

@@ -143,7 +143,7 @@ pub trait ProtocolsHandler {
     /// On the other hand, returning `true` is only an indication and doesn't mean that the user
     /// will not call `shutdown()`.
     ///
-    /// When multiple `ProtocolsHandler` are combined together, they should use *AND* to merge the
+    /// When multiple `ProtocolsHandler` are combined together, they should use *OR* to merge the
     /// result of this method.
     ///
     /// The result of this method should be checked every time `poll()` is invoked.
