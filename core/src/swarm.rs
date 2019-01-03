@@ -61,9 +61,6 @@ where TTransport: Transport,
 
     /// List of multiaddresses we're listening on.
     listened_addrs: SmallVec<[Multiaddr; 8]>,
-
-    /// Maximum limit of number of listeners
-    max_listeners: Option<u32>,
 }
 
 impl<TTransport, TBehaviour, TTopology> Deref for Swarm<TTransport, TBehaviour, TTopology>
@@ -136,7 +133,6 @@ where TBehaviour: NetworkBehaviour<TTopology>,
             topology,
             supported_protocols,
             listened_addrs: SmallVec::new(),
-            max_listeners: None,
         }
     }
 
@@ -152,11 +148,6 @@ where TBehaviour: NetworkBehaviour<TTopology>,
     /// On success, returns an alternative version of the address.
     #[inline]
     pub fn listen_on(me: &mut Self, addr: Multiaddr) -> Result<Multiaddr, Multiaddr> {
-        if let Some(x) = me.max_listeners {
-            if me.raw_swarm.listeners_len() >= x as usize {
-                return Err(addr);
-            }
-        }
         let result = me.raw_swarm.listen_on(addr);
         if let Ok(ref addr) = result {
             me.listened_addrs.push(addr.clone());
@@ -465,7 +456,7 @@ pub struct SwarmBuilder <TTransport, TBehaviour, TTopology>
 where TTransport: Transport,
       TBehaviour: NetworkBehaviour<TTopology>
 {
-    max_listeners: Option<u32>,
+    incoming_limit: Option<u32>,
     topology: TTopology,
     transport: TTransport,
     behaviour: TBehaviour,
@@ -503,16 +494,16 @@ where TBehaviour: NetworkBehaviour<TTopology> ,
     pub fn new(transport: TTransport, behaviour: TBehaviour,
                topology:TTopology) -> Self {
         SwarmBuilder {
-            max_listeners: None,
+            incoming_limit: None,
             transport: transport,
             topology: topology,
             behaviour: behaviour,
         }
     }
 
-    pub fn max_listeners(mut self, max_listeners: Option<u32>) -> Self
+    pub fn incoming_limit(mut self, incoming_limit: Option<u32>) -> Self
     {
-        self.max_listeners = max_listeners;
+        self.incoming_limit = incoming_limit;
         self
     }
 
@@ -526,15 +517,15 @@ where TBehaviour: NetworkBehaviour<TTopology> ,
             .into_iter()
             .map(|info| info.protocol_name().to_vec())
             .collect();
-        let raw_swarm = RawSwarm::new(self.transport,
-            self.topology.local_peer_id().clone());
+        let raw_swarm = RawSwarm::new_with_incoming_limit(self.transport,
+            self.topology.local_peer_id().clone(),
+            self.incoming_limit);
         Swarm {
             raw_swarm,
             behaviour: self.behaviour,
             topology: self.topology,
             supported_protocols,
             listened_addrs: SmallVec::new(),
-            max_listeners: self.max_listeners.clone(),
         }
     }
 }
@@ -599,54 +590,14 @@ mod tests {
     }
 
     #[test]
-    fn test_listen_on_no_limit() {
-        let id = get_random_id();
-        let transport = DummyTransport::new();
-        let topology = MemoryTopology::empty(id);
-        let behaviour = DummyBehaviour{marker: PhantomData};
-        let mut s = Swarm::new(transport, behaviour, topology);
-        assert!(s.max_listeners.is_none());
-        for _ in 0 .. 10 {
-            Swarm::listen_on(&mut s,
-                "/ip4/0.0.0.0/tcp/0".parse().unwrap()
-            ).unwrap();
-        }
-        assert_eq!(s.raw_swarm.listeners_len(), 10);
-    }
-
-    #[test]
-    fn test_listen_on_with_limit() {
-        let id = get_random_id();
-        let transport = DummyTransport::new();
-        let topology = MemoryTopology::empty(id.clone());
-        let behaviour = DummyBehaviour{marker: PhantomData};
-        let supported_protocols = SmallVec::new();
-        let raw_swarm = RawSwarm::new(transport, id.into_peer_id());
-        let mut s = Swarm {
-            raw_swarm,
-            behaviour,
-            topology,
-            supported_protocols,
-            listened_addrs: SmallVec::new(),
-            max_listeners: Some(4),
-        };
-        for _ in 0 .. 10 {
-            let _r = Swarm::listen_on(&mut s,
-                "/ip4/0.0.0.0/tcp/0".parse().unwrap()
-            );
-        }
-        assert_eq!(s.raw_swarm.listeners_len(), 4);
-    }
-
-    #[test]
     fn test_build_swarm() {
         let id = get_random_id();
         let transport = DummyTransport::new();
         let topology = MemoryTopology::empty(id);
         let behaviour = DummyBehaviour{marker: PhantomData};
         let swarm = SwarmBuilder::new(transport, behaviour,
-            topology).max_listeners(Some(4)).build();
-        assert_eq!(swarm.max_listeners, Some(4));
+            topology).incoming_limit(Some(4)).build();
+        assert_eq!(swarm.raw_swarm.incoming_limit(), Some(4));
     }
 
     #[test]
@@ -657,7 +608,7 @@ mod tests {
         let behaviour = DummyBehaviour{marker: PhantomData};
         let swarm = SwarmBuilder::new(transport, behaviour, topology)
             .build();
-        assert!(swarm.max_listeners.is_none())
+        assert!(swarm.raw_swarm.incoming_limit().is_none())
 
     }
 

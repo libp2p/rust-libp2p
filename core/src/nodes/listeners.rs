@@ -179,12 +179,6 @@ where
         self.listeners.iter().map(|l| &l.address)
     }
 
-    /// Returns number of addresses that we're listening on.
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.listeners.len()
-    }
-
     /// Provides an API similar to `Stream`, except that it cannot error.
     pub fn poll(&mut self) -> Async<ListenersEvent<TTrans>> {
         // We remove each element from `listeners` one by one and add them back.

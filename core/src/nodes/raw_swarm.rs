@@ -63,6 +63,9 @@ where
     /// The reach attempts of the swarm.
     /// This needs to be a separate struct in order to handle multiple mutable borrows issues.
     reach_attempts: ReachAttempts,
+
+    /// Max numer of incoming connections.
+    incoming_limit: Option<u32>,
 }
 
 #[derive(Debug)]
@@ -471,6 +474,25 @@ where
                 other_reach_attempts: Vec::new(),
                 connected_points: Default::default(),
             },
+            incoming_limit: None,
+        }
+    }
+
+    /// Creates a new node event stream with incoming connections limit.
+    #[inline]
+    pub fn new_with_incoming_limit(transport: TTrans,
+        local_peer_id: PeerId, incoming_limit: Option<u32>) -> Self
+    {
+        RawSwarm {
+            incoming_limit,
+            listeners: ListenersStream::new(transport),
+            active_nodes: CollectionStream::new(),
+            reach_attempts: ReachAttempts {
+                local_peer_id,
+                out_reach_attempts: Default::default(),
+                other_reach_attempts: Vec::new(),
+                connected_points: Default::default(),
+            },
         }
     }
 
@@ -492,10 +514,10 @@ where
         self.listeners.listeners()
     }
 
-    /// Returns number of addresses that we're listening on.
+    /// Returns limit on incoming connections.
     #[inline]
-    pub fn listeners_len(&self) -> usize {
-        self.listeners.len()
+    pub fn incoming_limit(&self) -> Option<u32> {
+        self.incoming_limit
     }
 
     /// Call this function in order to know which address remotes should dial in order to access
@@ -676,6 +698,23 @@ where
         match self.listeners.poll() {
             Async::NotReady => (),
             Async::Ready(ListenersEvent::Incoming { upgrade, listen_addr, send_back_addr }) => {
+
+                if let Some(x) = self.incoming_limit {
+                    if self.num_incoming_negotiated() >= x as usize {
+                        drop(upgrade);
+                        return Async::Ready(
+                            RawSwarmEvent::IncomingConnectionError {
+                                listen_addr,
+                                send_back_addr,
+                                error: IoError::new(
+                                    IoErrorKind::PermissionDenied,
+                                    "Too many incoming connections"
+                                        .to_string()
+                                )
+                           }
+                        );
+                    }
+                }
                 let event = IncomingConnectionEvent {
                     upgrade,
                     listen_addr,
@@ -1750,4 +1789,50 @@ mod tests {
             assert_ne!(has_dial_prio(&a, &b), has_dial_prio(&b, &a));
         }
     }
+
+    #[test]
+    fn limit_incoming_connections() {
+        let mut transport = DummyTransport::new();
+        let peer_id = PeerId::random();
+        let muxer = DummyMuxer::new();
+        transport.set_initial_listener_state(ListenerState::Ok(Async::Ready(Some((peer_id, muxer)))));
+        let mut swarm = RawSwarm::<_, _, _, Handler, _>::new_with_incoming_limit(transport, PeerId::random(), Some(5));
+        assert_eq!(swarm.incoming_limit(), Some(5));
+        swarm.listen_on("/memory".parse().unwrap()).unwrap();
+        assert_eq!(swarm.num_incoming_negotiated(), 0);
+
+        let swarm = Arc::new(Mutex::new(swarm));
+        for i in 1..10 {
+            let mut rt = Runtime::new().unwrap();
+            let swarm_fut = swarm.clone();
+            let fut = future::poll_fn(move || -> Poll<_, ()> {
+                let mut swarm_fut = swarm_fut.lock();
+                if i <= 5 {
+                    assert_matches!(swarm_fut.poll(), Async::Ready(RawSwarmEvent::IncomingConnection(incoming)) => {
+                    incoming.accept(Handler::default());
+                    });
+                } else {
+                    assert_matches!(swarm_fut.poll(),
+                        Async::Ready(
+                            RawSwarmEvent::IncomingConnectionError{
+                                listen_addr: _,
+                                send_back_addr: _,
+                                error: _
+                            }
+                        )
+                    );
+                }
+
+                Ok(Async::Ready(()))
+            });
+            rt.block_on(fut).expect("tokio works");
+            let swarm = swarm.lock();
+            if i <= 5 {
+                assert_eq!(swarm.num_incoming_negotiated(), i);
+            } else {
+                assert_eq!(swarm.num_incoming_negotiated(), 5);
+            }
+        }
+
+     }
 }
