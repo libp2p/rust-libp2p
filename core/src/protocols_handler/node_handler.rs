@@ -29,7 +29,7 @@ use crate::{
     }
 };
 use futures::prelude::*;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio_timer::{Delay, Timeout};
 
 /// Prototype for a `NodeHandlerWrapper`.
@@ -262,7 +262,15 @@ where
 
         // Poll the handler at the end so that we see the consequences of the method calls on
         // `self.handler`.
-        match self.handler.poll()? {
+        let poll_result = self.handler.poll()?;
+
+        if self.handler.connection_keep_alive() {
+            self.connection_shutdown = None;
+        } else if self.connection_shutdown.is_none() {
+            self.connection_shutdown = Some(Delay::new(Instant::now() + self.useless_timeout));
+        }
+
+        match poll_result {
             Async::Ready(ProtocolsHandlerEvent::Custom(event)) => {
                 return Ok(Async::Ready(NodeHandlerEvent::Custom(event)));
             }
@@ -283,12 +291,10 @@ where
             Async::NotReady => (),
         };
 
-        // Close useless connections.
-        if self.negotiating_in.is_empty() &&
-            self.negotiating_out.is_empty() &&
-            !self.handler.connection_keep_alive()
-        {
-            if let Some(mut connection_shutdown) = self.connection_shutdown.take() {
+        // Check the `connection_shutdown`.
+        if let Some(mut connection_shutdown) = self.connection_shutdown.take() {
+            // If we're negotiating substreams, let's delay the closing.
+            if self.negotiating_in.is_empty() && self.negotiating_out.is_empty() {
                 match connection_shutdown.poll() {
                     Ok(Async::Ready(_)) | Err(_) => {
                         return Ok(Async::Ready(NodeHandlerEvent::Shutdown))
@@ -297,9 +303,9 @@ where
                         self.connection_shutdown = Some(connection_shutdown);
                     }
                 }
+            } else {
+                self.connection_shutdown = Some(connection_shutdown);
             }
-        } else {
-            self.connection_shutdown = None;
         }
 
         Ok(Async::NotReady)
