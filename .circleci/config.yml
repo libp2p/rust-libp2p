@@ -5,7 +5,6 @@ workflows:
   build:
     jobs:
       - test
-      - test-emscripten
       - test-wasm
       - test-win32
       - integration-test
@@ -43,34 +42,18 @@ jobs:
           paths:
             - "/cache"
 
-  test-emscripten:
-    docker:
-      - image: tomaka/rustc-emscripten
-    steps:
-      - checkout
-      - restore_cache:
-          key: test-emscripten-cache
-      - run:
-          name: Build for emscripten
-          command: cargo build --target asmjs-unknown-emscripten --package libp2p
-      - save_cache:
-          key: test-emscripten-cache
-          paths:
-            - "~/.cargo"
-            - "./target"
-
   test-wasm:
     docker:
-      - image: tomaka/rustc-emscripten
+      - image: tomaka/rustc-emscripten:try-cargo-web
     steps:
       - checkout
       - restore_cache:
           key: test-wasm-cache
       - run:
           name: Build for wasm32
-          # TODO: we use --release because of https://github.com/rust-lang/rust/issues/49467
-          # TODO: build libp2p instead of libp2p-core
-          command: cargo build --target wasm32-unknown-unknown --package libp2p-core --release
+          # TODO: also run tests but with --no-run; important to detect linking errors
+          # TODO: secp doesn't compile for wasm yet
+          command: cargo web build --no-default-features --features "libp2p-websocket"
       - save_cache:
           key: test-wasm-cache
           paths:

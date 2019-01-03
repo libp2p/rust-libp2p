@@ -16,8 +16,8 @@ secio-secp256k1 = ["libp2p-secio/secp256k1"]
 [dependencies]
 bytes = "0.4"
 futures = "0.1"
-multiaddr = { package = "parity-multiaddr", path = "./misc/multiaddr" }
-multihash = { package = "parity-multihash", path = "./misc/multihash" }
+multiaddr = { package = "parity-multiaddr", version = "0.1.0", path = "./misc/multiaddr" }
+multihash = { package = "parity-multihash", version = "0.1.0", path = "./misc/multihash" }
 libp2p-mplex = { version = "0.1.0", path = "./muxers/mplex" }
 libp2p-identify = { version = "0.1.0", path = "./protocols/identify" }
 libp2p-kad = { version = "0.1.0", path = "./protocols/kad" }
@@ -35,13 +35,13 @@ tokio-codec = "0.1"
 tokio-executor = "0.1"
 tokio-io = "0.1"
 
-[target.'cfg(not(target_os = "emscripten"))'.dependencies]
+[target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dependencies]
 libp2p-dns = { version = "0.1.0", path = "./transports/dns" }
 libp2p-mdns = { version = "0.1.0", path = "./misc/mdns" }
 libp2p-tcp = { version = "0.1.0", path = "./transports/tcp" }
 
-[target.'cfg(target_os = "emscripten")'.dependencies]
-stdweb = { version = "0.1.3", default-features = false }
+[target.'cfg(any(target_os = "emscripten", target_os = "unknown"))'.dependencies]
+stdweb = { version = "0.4", default-features = false }
 
 [dev-dependencies]
 env_logger = "0.6.0"

@@ -34,7 +34,7 @@ pub trait KademliaTopology: Topology {
 
     /// Adds an address discovered through Kademlia to the topology.
     ///
-    /// > **Note**: Keep in mind that `peer` can the local peer.
+    /// > **Note**: Keep in mind that `peer` can be the local peer.
     fn add_kad_discovered_address(&mut self, peer: PeerId, addr: Multiaddr,
                                   connection_ty: KadConnectionType);
 

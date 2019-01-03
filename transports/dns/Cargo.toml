@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 libp2p-core = { version = "0.1.0", path = "../../core" }
 log = "0.4.1"
 futures = "0.1"
-multiaddr = { package = "parity-multiaddr", path = "../../misc/multiaddr" }
+multiaddr = { package = "parity-multiaddr", version = "0.1.0", path = "../../misc/multiaddr" }
 tokio-dns-unofficial = "0.4"
 tokio-io = "0.1"
 

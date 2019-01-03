@@ -103,16 +103,17 @@ where
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>,
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
         Self::Error,
     > {
         Ok(self.inner.poll()?.map(|ev| {
-            ev.map(|ev| match ev {
+            match ev {
                 ProtocolsHandlerEvent::Custom(ev) => ProtocolsHandlerEvent::Custom((self.map)(ev)),
+                ProtocolsHandlerEvent::Shutdown => ProtocolsHandlerEvent::Shutdown,
                 ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info } => {
                     ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info }
                 }
-            })
+            }
         }))
     }
 }
