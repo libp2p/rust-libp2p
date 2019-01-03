@@ -46,7 +46,6 @@ pub trait Topology {
 }
 
 /// Topology of the network stored in memory.
-#[derive(Clone)]
 pub struct MemoryTopology {
     list: HashMap<PeerId, Vec<Multiaddr>>,
     local_peer_id: PeerId,

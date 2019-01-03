@@ -31,7 +31,7 @@ use crate::{
 };
 use futures::prelude::*;
 use smallvec::SmallVec;
-use std::{fmt, io, marker::PhantomData, ops::{Deref, DerefMut}};
+use std::{fmt, io, ops::{Deref, DerefMut}};
 
 pub use crate::nodes::raw_swarm::ConnectedPoint;
 
@@ -468,7 +468,7 @@ where TTransport: Transport,
     max_listeners: Option<u32>,
     topology: TTopology,
     transport: TTransport,
-    marker: PhantomData<TBehaviour>,
+    behaviour: TBehaviour,
 }
 
 impl<TTransport, TBehaviour, TMuxer, TTopology> SwarmBuilder<TTransport, TBehaviour, TTopology>
@@ -498,40 +498,40 @@ where TBehaviour: NetworkBehaviour<TTopology> ,
       <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<Substream<TMuxer>>>::Future: Send + 'static,
       <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<Substream<TMuxer>>>::Error: fmt::Debug + Send + 'static,
       <NodeHandlerWrapper<TBehaviour::ProtocolsHandler> as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
-      TTopology: Topology + Clone,
+      TTopology: Topology,
 {
-    pub fn new(transport: TTransport, topology:TTopology) -> Self {
+    pub fn new(transport: TTransport, behaviour: TBehaviour,
+               topology:TTopology) -> Self {
         SwarmBuilder {
             max_listeners: None,
             transport: transport,
             topology: topology,
-            marker: PhantomData,
+            behaviour: behaviour,
         }
     }
 
-    pub fn max_listeners(&mut self, max_listeners: Option<u32>) ->
-        &mut Self
+    pub fn max_listeners(mut self, max_listeners: Option<u32>) -> Self
     {
         self.max_listeners = max_listeners;
         self
     }
 
-    pub fn build(&mut self, mut behaviour: TBehaviour) ->
+    pub fn build(mut self) ->
         Swarm<TTransport, TBehaviour, TTopology>
     {
-        let supported_protocols = behaviour
+        let supported_protocols = self.behaviour
             .new_handler()
             .listen_protocol()
             .protocol_info()
             .into_iter()
             .map(|info| info.protocol_name().to_vec())
             .collect();
-        let raw_swarm = RawSwarm::new(self.transport.clone(),
+        let raw_swarm = RawSwarm::new(self.transport,
             self.topology.local_peer_id().clone());
         Swarm {
             raw_swarm,
-            behaviour,
-            topology: self.topology.clone(),
+            behaviour: self.behaviour,
+            topology: self.topology,
             supported_protocols,
             listened_addrs: SmallVec::new(),
             max_listeners: self.max_listeners.clone(),
@@ -644,8 +644,8 @@ mod tests {
         let transport = DummyTransport::new();
         let topology = MemoryTopology::empty(id);
         let behaviour = DummyBehaviour{marker: PhantomData};
-        let swarm = SwarmBuilder::new(transport, topology)
-            .max_listeners(Some(4)).build(behaviour);
+        let swarm = SwarmBuilder::new(transport, behaviour,
+            topology).max_listeners(Some(4)).build();
         assert_eq!(swarm.max_listeners, Some(4));
     }
 
@@ -655,7 +655,8 @@ mod tests {
         let transport = DummyTransport::new();
         let topology = MemoryTopology::empty(id);
         let behaviour = DummyBehaviour{marker: PhantomData};
-        let swarm = SwarmBuilder::new(transport, topology).build(behaviour);
+        let swarm = SwarmBuilder::new(transport, behaviour, topology)
+            .build();
         assert!(swarm.max_listeners.is_none())
 
     }
