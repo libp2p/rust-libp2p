@@ -38,7 +38,7 @@ use void::{Void, unreachable};
 
 /// Protocol handler that handles pinging the remote at a regular period.
 ///
-/// If the remote doesn't respond, produces `Unresponsive` and closes the connection.
+/// If the remote doesn't respond, produces an error that closes the connection.
 pub struct PeriodicPingHandler<TSubstream> {
     /// Configuration for the ping protocol.
     ping_config: Ping<Instant>,
@@ -113,9 +113,6 @@ enum OutState<TSubstream> {
 /// Event produced by the periodic pinger.
 #[derive(Debug, Copy, Clone)]
 pub enum OutEvent {
-    /// The node has been determined to be unresponsive.
-    Unresponsive,
-
     /// Started pinging the remote. This can be used to print a diagnostic message in the logs.
     PingStart,
 
@@ -262,8 +259,7 @@ where
                     },
                     Ready => {
                         self.out_state = OutState::Shutdown;
-                        let ev = OutEvent::Unresponsive;
-                        Ok(Async::Ready(ProtocolsHandlerEvent::Custom(ev)))
+                        Err(io::Error::new(io::ErrorKind::Other, "unresponsive node"))
                     },
                 }),
 
@@ -297,8 +293,7 @@ where
                     },
                     Ready => {
                         self.out_state = OutState::Shutdown;
-                        let ev = OutEvent::Unresponsive;
-                        Ok(Async::Ready(ProtocolsHandlerEvent::Custom(ev)))
+                        Err(io::Error::new(io::ErrorKind::Other, "unresponsive node"))
                     },
                 })
             }
