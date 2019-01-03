@@ -264,6 +264,14 @@ where
             Async::NotReady => (),
         };
 
+        // Close useless connections.
+        if self.negotiating_in.is_empty() &&
+            self.negotiating_out.is_empty() &&
+            !self.handler.connection_keep_alive()
+        {
+            return Ok(Async::Ready(NodeHandlerEvent::Shutdown));
+        }
+
         Ok(Async::NotReady)
     }
 }

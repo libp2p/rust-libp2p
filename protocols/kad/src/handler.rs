@@ -490,6 +490,11 @@ where
     }
 
     #[inline]
+    fn connection_keep_alive(&self) -> bool {
+        !self.substreams.is_empty()
+    }
+
+    #[inline]
     fn shutdown(&mut self) {
         self.shutting_down = true;
     }

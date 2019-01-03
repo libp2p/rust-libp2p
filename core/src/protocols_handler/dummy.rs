@@ -89,6 +89,9 @@ where
     fn inject_inbound_closed(&mut self) {}
 
     #[inline]
+    fn connection_keep_alive(&self) -> bool { false }
+
+    #[inline]
     fn shutdown(&mut self) {
         self.shutting_down = true;
     }

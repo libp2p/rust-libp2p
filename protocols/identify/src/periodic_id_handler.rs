@@ -49,6 +49,9 @@ pub struct PeriodicIdHandler<TSubstream> {
     /// shut down.
     next_id: Option<Delay>,
 
+    /// If `true`, we have started an identification of the remote at least once in the past.
+    first_id_happened: bool,
+
     /// Marker for strong typing.
     marker: PhantomData<TSubstream>,
 }
@@ -70,6 +73,7 @@ impl<TSubstream> PeriodicIdHandler<TSubstream> {
             config: IdentifyProtocolConfig,
             pending_result: None,
             next_id: Some(Delay::new(Instant::now() + DELAY_TO_FIRST_ID)),
+            first_id_happened: false,
             marker: PhantomData,
         }
     }
@@ -119,6 +123,11 @@ where
     }
 
     #[inline]
+    fn connection_keep_alive(&self) -> bool {
+        !self.first_id_happened
+    }
+
+    #[inline]
     fn shutdown(&mut self) {
         self.next_id = None;
     }
@@ -151,6 +160,7 @@ where
                 next_id.reset(Instant::now() + DELAY_TO_NEXT_ID);
                 let upgrade = self.config.clone();
                 let ev = ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info: () };
+                self.first_id_happened = true;
                 Ok(Async::Ready(ev))
             }
         }
