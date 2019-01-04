@@ -449,6 +449,15 @@ impl ConnectedPoint {
     }
 }
 
+/// Information about an incoming connection currently being negotiated.
+#[derive(Debug, Copy, Clone)]
+pub struct IncomingInfo<'a> {
+    /// Address of the listener that received the connection.
+    listen_addr: &'a Multiaddr,
+    /// Stack of protocols used to send back data to the remote.
+    send_back_addr: &'a Multiaddr,
+}
+
 impl<TTrans, TInEvent, TOutEvent, TMuxer, THandler, THandlerErr>
     RawSwarm<TTrans, TInEvent, TOutEvent, THandler, THandlerErr>
 where
@@ -548,14 +557,33 @@ where
     ///
     /// We don't know anything about these connections yet, so all we can do is know how many of
     /// them we have.
-    // TODO: thats's not true as we should be able to know their multiaddress, but that requires
-    // a lot of API changes
+    #[deprecated(note = "Use incoming_negotiated().count() instead")]
     #[inline]
     pub fn num_incoming_negotiated(&self) -> usize {
         self.reach_attempts.other_reach_attempts
             .iter()
             .filter(|&(_, endpoint)| endpoint.is_listener())
             .count()
+    }
+
+    /// Returns the list of incoming connections that are currently in the process of being
+    /// negotiated. We don't know the `PeerId` of these nodes yet.
+    #[inline]
+    pub fn incoming_negotiated(&self) -> impl Iterator<Item = IncomingInfo> {
+        self.reach_attempts
+            .other_reach_attempts
+            .iter()
+            .filter_map(|&(_, ref endpoint)| {
+                match endpoint {
+                    ConnectedPoint::Listener { listen_addr, send_back_addr } => {
+                        Some(IncomingInfo {
+                            listen_addr,
+                            send_back_addr,
+                        })
+                    },
+                    ConnectedPoint::Dialer { .. } => None,
+                }
+            })
     }
 
     /// Sends an event to all nodes.
