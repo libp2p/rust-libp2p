@@ -18,10 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::prelude::*;
+use crate::transport::Transport;
+use futures::{prelude::*, try_ready};
 use multiaddr::Multiaddr;
 use std::io::Error as IoError;
-use transport::Transport;
 
 /// See `Transport::map_err`.
 #[derive(Debug, Copy, Clone)]

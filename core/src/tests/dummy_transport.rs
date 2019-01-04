@@ -28,8 +28,8 @@ use futures::{
     stream,
 };
 use std::io;
-use {Multiaddr, PeerId, Transport};
-use tests::dummy_muxer::DummyMuxer;
+use crate::{Multiaddr, PeerId, Transport};
+use crate::tests::dummy_muxer::DummyMuxer;
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) enum ListenerState {
@@ -78,9 +78,9 @@ impl Transport for DummyTransport {
     {
         let addr2 = addr.clone();
         match self.listener_state {
-            ListenerState::Ok(async) => {
+            ListenerState::Ok(r#async) => {
                 let tupelize = move |stream| (future::ok(stream), addr.clone());
-                Ok(match async {
+                Ok(match r#async {
                     Async::NotReady => {
                         let stream = stream::poll_fn(|| Ok(Async::NotReady)).map(tupelize);
                         (Box::new(stream), addr2)

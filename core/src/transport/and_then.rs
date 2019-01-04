@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{nodes::raw_swarm::ConnectedPoint, transport::Transport};
-use futures::{future::Either, prelude::*};
+use futures::{future::Either, prelude::*, try_ready};
 use multiaddr::Multiaddr;
 use std::io;
 
