@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 proc-macro = true
 
 [dependencies]
-syn = { version = "0.15", default-features = false, features = ["derive", "parsing", "printing", "proc-macro"] }
+syn = { version = "0.15.22", default-features = false, features = ["clone-impls", "derive", "parsing", "printing", "proc-macro"] }
 quote = "0.6"
 
 [dev-dependencies]

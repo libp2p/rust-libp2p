@@ -76,18 +76,18 @@ extern crate multiaddr;
 extern crate rw_stream_sink;
 extern crate tokio_io;
 
-#[cfg(target_os = "emscripten")]
+#[cfg(any(target_os = "emscripten", target_os = "unknown"))]
 #[macro_use]
 extern crate stdweb;
-#[cfg(not(target_os = "emscripten"))]
+#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 extern crate websocket;
 
-#[cfg(target_os = "emscripten")]
+#[cfg(any(target_os = "emscripten", target_os = "unknown"))]
 mod browser;
-#[cfg(not(target_os = "emscripten"))]
+#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 mod desktop;
 
-#[cfg(target_os = "emscripten")]
+#[cfg(any(target_os = "emscripten", target_os = "unknown"))]
 pub use self::browser::{BrowserWsConfig, BrowserWsConn};
-#[cfg(not(target_os = "emscripten"))]
+#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 pub use self::desktop::WsConfig;

@@ -17,7 +17,7 @@ libp2p-core = { version = "0.1.0", path = "../../core" }
 log = "0.4.1"
 protobuf = "2.0.2"
 rand = "0.6"
-secp256k1 = {version = "0.11", optional = true }
+secp256k1 = { version = "0.12", features = ["rand"], optional = true }
 aes-ctr = "0.1.0"
 aesni = { version = "0.4.1", features = ["nocheck"], optional = true }
 twofish = "0.1.0"
@@ -29,12 +29,12 @@ sha2 = "0.7.1"
 ed25519-dalek = "0.8.0"
 hmac = "0.6.3"
 
-[target.'cfg(not(target_os = "emscripten"))'.dependencies]
+[target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dependencies]
 ring = { version = "0.12", default-features = false }
 untrusted = { version = "0.5" }
 
-[target.'cfg(target_os = "emscripten")'.dependencies]
-stdweb = { version = "0.4.8", default-features = false }
+[target.'cfg(any(target_os = "emscripten", target_os = "unknown"))'.dependencies]
+stdweb = { version = "0.4", default-features = false }
 
 [features]
 default = ["rsa", "secp256k1"]

@@ -100,6 +100,11 @@ where
     }
 
     #[inline]
+    fn connection_keep_alive(&self) -> bool {
+        self.inner.connection_keep_alive()
+    }
+
+    #[inline]
     fn shutdown(&mut self) {
         self.inner.shutdown()
     }
@@ -108,7 +113,7 @@ where
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>,
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
         Self::Error,
     > {
         self.inner.poll()

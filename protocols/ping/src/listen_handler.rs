@@ -106,6 +106,11 @@ where
     fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {}
 
     #[inline]
+    fn connection_keep_alive(&self) -> bool {
+        false
+    }
+
+    #[inline]
     fn shutdown(&mut self) {
         for ping in self.ping_in_substreams.iter_mut() {
             ping.shutdown();
@@ -117,7 +122,7 @@ where
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>,
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
         Self::Error,
     > {
         // Removes each substream one by one, and pushes them back if they're not ready (which
@@ -133,7 +138,7 @@ where
 
         // Special case if shutting down.
         if self.shutdown && self.ping_in_substreams.is_empty() {
-            return Ok(Async::Ready(None));
+            return Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown));
         }
 
         Ok(Async::NotReady)
