@@ -351,10 +351,10 @@ where
 
     /// Same as `accept`, but accepts a closure that turns a `ConnectedPoint` into a handler.
     pub fn accept_with_builder<TBuilder>(self, builder: TBuilder)
-    where TBuilder: FnOnce(&ConnectedPoint) -> THandler
+    where TBuilder: FnOnce(IncomingInfo) -> THandler
     {
         let connected_point = self.to_connected_point();
-        let handler = builder(&connected_point);
+        let handler = builder(self.info());
         let id = self.active_nodes.add_reach_attempt(self.upgrade.map_err(RawSwarmReachError::Transport), handler);
         self.other_reach_attempts.push((
             id,
@@ -366,6 +366,15 @@ where
 impl<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr> IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>
 where TTrans: Transport
 {
+    /// Returns the `IncomingInfo` corresponding to this incoming connection.
+    #[inline]
+    pub fn info(&self) -> IncomingInfo {
+        IncomingInfo {
+            listen_addr: &self.listen_addr,
+            send_back_addr: &self.send_back_addr,
+        }
+    }
+
     /// Address of the listener that received the connection.
     #[inline]
     pub fn listen_addr(&self) -> &Multiaddr {
@@ -381,10 +390,7 @@ where TTrans: Transport
     /// Builds the `ConnectedPoint` corresponding to the incoming connection.
     #[inline]
     pub fn to_connected_point(&self) -> ConnectedPoint {
-        ConnectedPoint::Listener {
-            listen_addr: self.listen_addr.clone(),
-            send_back_addr: self.send_back_addr.clone(),
-        }
+        self.info().to_connected_point()
     }
 }
 
@@ -453,9 +459,20 @@ impl ConnectedPoint {
 #[derive(Debug, Copy, Clone)]
 pub struct IncomingInfo<'a> {
     /// Address of the listener that received the connection.
-    listen_addr: &'a Multiaddr,
+    pub listen_addr: &'a Multiaddr,
     /// Stack of protocols used to send back data to the remote.
-    send_back_addr: &'a Multiaddr,
+    pub send_back_addr: &'a Multiaddr,
+}
+
+impl<'a> IncomingInfo<'a> {
+    /// Builds the `ConnectedPoint` corresponding to the incoming connection.
+    #[inline]
+    pub fn to_connected_point(&self) -> ConnectedPoint {
+        ConnectedPoint::Listener {
+            listen_addr: self.listen_addr.clone(),
+            send_back_addr: self.send_back_addr.clone(),
+        }
+    }
 }
 
 impl<TTrans, TInEvent, TOutEvent, TMuxer, THandler, THandlerErr>
