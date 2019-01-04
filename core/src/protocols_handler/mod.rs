@@ -24,7 +24,7 @@ use crate::upgrade::{
     UpgradeError,
 };
 use futures::prelude::*;
-use std::{error, fmt, io, time::Duration};
+use std::{error, fmt, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 pub use self::dummy::DummyProtocolsHandler;
@@ -62,7 +62,8 @@ mod select;
 ///
 /// Implementors of this trait should keep in mind that the connection can be closed at any time.
 /// When a connection is closed (either by us or by the remote) `shutdown()` is called and the
-/// handler continues to be processed until it produces `None`. Only then the handler is destroyed.
+/// handler continues to be processed until it produces `ProtocolsHandlerEvent::Shutdown`. Only
+/// then the handler is destroyed.
 ///
 /// This makes it possible for the handler to finish delivering events even after knowing that it
 /// is shutting down.
@@ -89,6 +90,8 @@ pub trait ProtocolsHandler {
     type InEvent;
     /// Custom event that can be produced by the handler and that will be returned to the outside.
     type OutEvent;
+    /// Error that can happen when polling.
+    type Error: error::Error;
     /// The type of the substream that contains the raw data.
     type Substream: AsyncRead + AsyncWrite;
     /// The upgrade for the protocol or protocols handled by this handler.
@@ -144,7 +147,7 @@ pub trait ProtocolsHandler {
     /// > **Note**: If this handler is combined with other handlers, as soon as `poll()` returns
     /// >           `Ok(Async::Ready(None))`, all the other handlers will receive a call to
     /// >           `shutdown()` and will eventually be closed and destroyed.
-    fn poll(&mut self) -> Poll<Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>, io::Error>;
+    fn poll(&mut self) -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>;
 
     /// Adds a closure that turns the input event into something else.
     #[inline]
@@ -209,6 +212,11 @@ pub enum ProtocolsHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom> {
         info: TOutboundOpenInfo,
     },
 
+    /// Perform a graceful shutdown of the connection to the remote.
+    ///
+    /// Should be returned after `shutdown()` has been called.
+    Shutdown,
+
     /// Other event.
     Custom(TCustom),
 }
@@ -233,6 +241,7 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
                     info: map(info),
                 }
             }
+            ProtocolsHandlerEvent::Shutdown => ProtocolsHandlerEvent::Shutdown,
             ProtocolsHandlerEvent::Custom(val) => ProtocolsHandlerEvent::Custom(val),
         }
     }
@@ -253,6 +262,7 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
                     info,
                 }
             }
+            ProtocolsHandlerEvent::Shutdown => ProtocolsHandlerEvent::Shutdown,
             ProtocolsHandlerEvent::Custom(val) => ProtocolsHandlerEvent::Custom(val),
         }
     }
@@ -270,6 +280,7 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
             ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info } => {
                 ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info }
             }
+            ProtocolsHandlerEvent::Shutdown => ProtocolsHandlerEvent::Shutdown,
             ProtocolsHandlerEvent::Custom(val) => ProtocolsHandlerEvent::Custom(map(val)),
         }
     }

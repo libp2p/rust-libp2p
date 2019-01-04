@@ -140,13 +140,11 @@ where
                         }
 
                         for addr in peer.addresses() {
-                            let to_insert = if let Some(new_addr) = params.nat_traversal(&addr, &observed) {
-                                new_addr
-                            } else {
-                                addr
-                            };
+                            if let Some(new_addr) = params.nat_traversal(&addr, &observed) {
+                                params.topology().add_mdns_discovered_address(peer.id().clone(), new_addr);
+                            }
 
-                            params.topology().add_mdns_discovered_address(peer.id().clone(), to_insert);
+                            params.topology().add_mdns_discovered_address(peer.id().clone(), addr);
                         }
 
                         if let Some(ref mut to_connect_to) = self.to_connect_to {

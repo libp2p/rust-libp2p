@@ -33,12 +33,12 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_timer::Delay;
+use tokio_timer::{self, Delay};
 use void::{Void, unreachable};
 
 /// Protocol handler that handles pinging the remote at a regular period.
 ///
-/// If the remote doesn't respond, produces `Unresponsive` and closes the connection.
+/// If the remote doesn't respond, produces an error that closes the connection.
 pub struct PeriodicPingHandler<TSubstream> {
     /// Configuration for the ping protocol.
     ping_config: Ping<Instant>,
@@ -113,9 +113,6 @@ enum OutState<TSubstream> {
 /// Event produced by the periodic pinger.
 #[derive(Debug, Copy, Clone)]
 pub enum OutEvent {
-    /// The node has been determined to be unresponsive.
-    Unresponsive,
-
     /// Started pinging the remote. This can be used to print a diagnostic message in the logs.
     PingStart,
 
@@ -153,6 +150,7 @@ where
 {
     type InEvent = Void;
     type OutEvent = OutEvent;
+    type Error = io::Error; // TODO: more precise error type
     type Substream = TSubstream;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = Ping<Instant>;
@@ -213,7 +211,7 @@ where
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>,
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
         io::Error,
     > {
         // Shortcut for polling a `tokio_timer::Delay`
@@ -233,7 +231,7 @@ where
         match mem::replace(&mut self.out_state, OutState::Poisoned) {
             OutState::Shutdown | OutState::Poisoned => {
                 // This shuts down the whole connection with the remote.
-                Ok(Async::Ready(None))
+                Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown))
             },
 
             OutState::Disabled => {
@@ -245,12 +243,12 @@ where
                 // Note that we ignore the expiration here, as it's pretty unlikely to happen.
                 // The expiration is only here to be transmitted to the `Upgrading`.
                 self.out_state = OutState::Upgrading { expires };
-                Ok(Async::Ready(Some(
+                Ok(Async::Ready(
                     ProtocolsHandlerEvent::OutboundSubstreamRequest {
                         upgrade: self.ping_config,
                         info: (),
                     },
-                )))
+                ))
             }
 
             // Waiting for the upgrade to be negotiated.
@@ -261,8 +259,7 @@ where
                     },
                     Ready => {
                         self.out_state = OutState::Shutdown;
-                        let ev = OutEvent::Unresponsive;
-                        Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(ev))))
+                        Err(io::Error::new(io::ErrorKind::Other, "unresponsive node"))
                     },
                 }),
 
@@ -277,12 +274,12 @@ where
                             next_ping: Delay::new(Instant::now() + self.delay_to_next_ping),
                         };
                         let ev = OutEvent::PingSuccess(started.elapsed());
-                        return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(ev))));
+                        return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(ev)));
                     }
                     Async::NotReady => {}
                     Async::Ready(None) => {
                         self.out_state = OutState::Shutdown;
-                        return Ok(Async::Ready(None));
+                        return Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown));
                     }
                 }
 
@@ -296,8 +293,7 @@ where
                     },
                     Ready => {
                         self.out_state = OutState::Shutdown;
-                        let ev = OutEvent::Unresponsive;
-                        Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(ev))))
+                        Err(io::Error::new(io::ErrorKind::Other, "unresponsive node"))
                     },
                 })
             }
@@ -313,7 +309,7 @@ where
                         let expires = Delay::new(Instant::now() + self.ping_timeout);
                         substream.ping(Instant::now());
                         self.out_state = OutState::WaitingForPong { substream, expires };
-                        Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(OutEvent::PingStart))))
+                        Ok(Async::Ready(ProtocolsHandlerEvent::Custom(OutEvent::PingStart)))
                     },
                 })
             }
