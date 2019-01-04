@@ -30,7 +30,7 @@ impl MCache {
     }
 
     pub fn put_with_msg_id_key(&mut self, m: GMessage) {
-        let m_id = m.get_id().expect("The message was not published with an ID,use put_with_msg_hash_key instead");
+        let m_id = m.get_id().expect("The message was not published with an ID, use put_with_msg_hash_key instead");
         // let m_id = MsgId::new(m);
         let msg_rep = MsgRep::id(m_id);
         self.msgs.insert(msg_rep, m);

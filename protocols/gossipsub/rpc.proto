@@ -52,7 +52,10 @@ enum MessageRep {
 
 message ControlIHave {
 	optional string topicID = 1;
-	repeated MessageRep = 2;
+	// We could have a repeated string messageIDs field and repeated string
+	// messageHash field here, which would be better for backwards
+	// compatibility, although hiding both behind one type has its advantages.
+	repeated MessageRep mRep = 2;
 }
 
 message ControlIWant {

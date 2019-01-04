@@ -187,7 +187,13 @@ impl MsgId {
 /// > However, I think `MsgRep` enum may be a solution for this, and the
 /// > `MsgHash` is constructed from the whole message, not just the `seq_no`
 /// > and `source` fields.
-// Since a `MsgId` is unique for every message
+// Since a `MsgId` is unique for every message, by concatenating the peer_id
+// and seq_no fields of the message, it may suffice to simply hash the MsgId,
+// rather than the whole message. However, by hashing the message we can
+// reconstruct the message from the hash, which may be useful instead of
+// searching for it within the `Gossipsub` state or `MCache`.
+// If the message needs to be private then converting a MsgHash to a GMessage
+// can be restricted from public use (including the result of the message).
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct MsgHash {
     hash: String,
