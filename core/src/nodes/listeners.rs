@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! Manage listening on multiple multiaddresses at once.
+
 use futures::prelude::*;
 use std::fmt;
 use void::Void;
