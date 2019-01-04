@@ -46,7 +46,8 @@ pub struct MplexConfig {
     max_buffer_len: usize,
     /// Behaviour when the buffer size limit is reached.
     max_buffer_behaviour: MaxBufferBehaviour,
-    /// When sending data, split it into frames whose maximum size is this value.
+    /// When sending data, split it into frames whose maximum size is this value
+    /// (max 1MByte, as per the Mplex spec).
     split_send_size: usize,
 }
 
@@ -82,6 +83,14 @@ impl MplexConfig {
     #[inline]
     pub fn max_buffer_len_behaviour(&mut self, behaviour: MaxBufferBehaviour) -> &mut Self {
         self.max_buffer_behaviour = behaviour;
+        self
+    }
+
+    /// Sets the frame size used when sending data. Capped at 1Mbyte as per the
+    /// Mplex spec.
+    pub fn split_send_size(&mut self, size: usize) -> &mut Self {
+        let size = cmp::min(size, codec::MAX_FRAME_SIZE);
+        self.split_send_size = size;
         self
     }
 
