@@ -17,3 +17,4 @@ quote = "0.6"
 
 [dev-dependencies]
 libp2p = { version = "0.1.0", path = "../.." }
+void = "1.0"
