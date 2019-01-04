@@ -2,8 +2,9 @@ use handler::GossipsubHandler;
 use mcache::MCache;
 use mesh::Mesh;
 use message::{GossipsubRpc, GMessage, ControlMessage, GossipsubSubscription,
-    GossipsubSubscriptionAction};
+    GossipsubSubscriptionAction, MsgHash, MsgId};
 use {Topic, TopicHash, TopicRep};
+use rpc_proto;
 
 use libp2p_floodsub::{Floodsub, handler::FloodsubHandler};
 use libp2p_core::{
@@ -16,6 +17,7 @@ use libp2p_core::{
 use chrono::Utc;
 use cuckoofilter::CuckooFilter;
 use futures::prelude::*;
+use protobuf::Message;
 use smallvec::SmallVec;
 use std::{
     collections::{
@@ -161,24 +163,30 @@ impl<TSubstream> Gossipsub<TSubstream> {
         true
     }
 
-    /// Publishes a message to the network.
+    /// Publishes a message to the network, optionally choosing to set
+    /// a message ID.
     ///
     /// > **Note**: Doesn't do anything if we're not subscribed to the topic.
-    pub fn publish(&mut self, topic: impl Into<TopicHash>,
+    pub fn publish(&mut self, topic: impl Into<Topic>,
         data: impl Into<Vec<u8>>,
-        control: Option<ControlMessage>) {
-        self.publish_many(iter::once(topic), data, control)
+        control: Option<ControlMessage>,
+        msg_id: bool) {
+        self.publish_many(iter::once(topic), data, control, msg_id)
     }
 
     /// Publishes a message with multiple topics to the network, without any
     /// authentication or encryption.
     ///
+    /// Optionally add a message ID.
+    ///
     /// > **Note**: Doesn't do anything if we're not subscribed to any of the
     /// topics.
     pub fn publish_many(&mut self,
-        topic: impl IntoIterator<Item = impl Into<TopicHash>>,
+        topics: impl IntoIterator<Item = impl Into<Topic>>,
         data: impl Into<Vec<u8>>,
-        control: Option<ControlMessage>) {
+        control: Option<ControlMessage>,
+        message_id: bool) {
+
         let message = GMessage {
             source: self.local_peer_id.clone(),
             data: data.into(),
@@ -187,39 +195,30 @@ impl<TSubstream> Gossipsub<TSubstream> {
             // numbers and absorb our legitimate messages. We therefore use
             // a random number.
             seq_no: rand::random::<[u8; 20]>().to_vec(),
-            topics: topic.into_iter().map(|t| t.into().clone()).collect(),
+            topics: topics.into_iter().map(|t| t.into().clone()).collect(),
             time_sent: Utc::now(),
             hash: ::std::default::Default::default(),
+            id: ::std::default::Default::default(),
         };
 
-        // TODO: making a message hash seems complicated. Below I was trying to
-        // make a GossipsubRpc, then from that get an rpc_proto::Message
-        // (which I have left unfinished), then
-        // use the write_to_bytes method on that to get a hash.
+        if message_id {
+            let m_id = MsgId::new(message);
+            message.id = m_id;
+        }
 
-        // let make_g_rpc = || {
-        //     let cloned_message = message.clone();
-        //     let event = GossipsubRpc {
-        //         subscriptions: Vec::new(),
-        //         messages: vec![cloned_message],
-        //         control: control
-        //     };
-        //     let message =
-        //     match event.messages.pop() {
+        let msg_hash = MsgHash::new(message);
 
-        //     }
-        //         Some(Gmessage)
-        //     let msg_as_bytes = .write_to_bytes()
-        //         .expect("prove that this shouldn't err.").collect();
+        message.set_hash(msg_hash);
 
-        //     let msg_hash_raw = bs58::encode(&msg_as_bytes).into_string();
-        //     let msg_hash = MsgHash::from_raw(msg_hash_raw);
-        //     message.set_hash(msg_hash);
-        //     message.set_timestamp
-        // };
+        let proto_msg = rpc_proto::Message::from(message);
+        // Check that the message size is less than or equal to 1 MiB.
+        // TODO: test
+        assert!(proto_msg.compute_size() <= 1048576);
 
-        // Don't publish the message if we're not subscribed ourselves to any of the topics.
-        if !self.subscribed_topics.iter().any(|t| message.topics.iter().any(|u| t.hash() == u)) {
+        // Don't publish the message if we're not subscribed ourselves to any
+        // of the topics.
+        if !self.subscribed_topics.iter().any(|t| message.topics.iter()
+            .any(|u| t.hash() == u)) {
             return;
         }
 

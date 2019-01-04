@@ -1,7 +1,7 @@
 use mcache::MCache;
 use rpc_proto;
 
-use libp2p_floodsub::{TopicMap, TopicHash, TopicHashMap, TopicIdMap};
+use {TopicMap, TopicHash};
 
 use libp2p_core::PeerId;
 
@@ -15,13 +15,13 @@ pub type MsgMap = HashMap<MsgRep, GMessage>;
 /// A message received by the Gossipsub system.
 ///
 /// Recently seen messages are stored in `MCache`. They can be retrieved from
-/// this message cache via a `floodsub::topic::TopicMap` by querying with a `MsgRep`, which contains either
+/// this message cache via a `gossipsub::TopicMap` by querying with a `MsgRep`,
+/// which contains either
 /// a `MsgHash` or `MsgId`, where the latter is more desirable for privacy.
 /// This contains the same public fields as a
 /// `floodsub::protocol::FloodsubMessage`.
-/// > **Note**: message is unsized. FMI see
-/// > https://github.com/libp2p/specs/issues/118.
-// TODO: ^
+/// The message is limited to 1 MiB, which is enforced by a check when
+/// publishing the message.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GMessage {
     /// ID of the peer that published this message.
@@ -35,11 +35,10 @@ pub struct GMessage {
 
     /// List of topics this message belongs to.
     ///
-    ///Each message can belong to multiple topics at once.
+    /// Each message can belong to multiple topics at once.
     // Issue with using a HashMap with rust-protobuf:
     // https://github.com/stepancheg/rust-protobuf/issues/211
-    // Deriving PartialEq and Eq on rpc_proto::TopicDescriptor gives an error.
-    // 
+    // See also the note on the descriptor field of the Topic struct.
     pub topics: TopicMap,
 
     // To use for an authentication scheme (not yet defined or implemented),
@@ -62,6 +61,8 @@ pub struct GMessage {
 
     // The hash of the message.
     pub(crate) hash: MsgHash,
+
+    pub(crate) id: MsgId,
 }
 
 impl GMessage {
@@ -83,8 +84,18 @@ impl GMessage {
     }
 
     /// Returns the timestamp of the message.
-    pub(crate) fn get_timestamp(&self) -> &DateTime<Utc> {
+    pub fn get_timestamp(&self) -> &DateTime<Utc> {
         &self.time_sent
+    }
+
+    // As above, used in the `publish` method on `Gossipsub` for `MCache`.
+    pub(crate) fn set_id(&mut self, msg_id: MsgId) {
+        self.id = msg_id;
+    }
+
+    /// Returns the timestamp of the message.
+    pub fn get_id(&self) -> &MsgId {
+        &self.id
     }
 
 }
@@ -108,6 +119,18 @@ impl From<GMessage> for rpc_proto::Message {
     }
 }
 
+impl From<GMessage> for MsgHash {
+    fn from(message: GMessage) -> MsgHash {
+        message.hash
+    }
+}
+
+impl From<GMessage> for MsgId {
+    fn from(message: GMessage) -> MsgId {
+        message.id
+    }
+}
+
 /// Contains a message ID as a string, has impls for building and converting
 /// to a `String`.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
@@ -119,7 +142,7 @@ pub struct MsgId {
 impl MsgId {
     /// Builds a new `MsgId` from the `seq_no` and `source` of a `Message`.
     #[inline]
-    pub fn from_raw(msg: GMessage) -> MsgId {
+    pub fn new(msg: GMessage) -> MsgId {
         let id = format!("{}{}", String::from_utf8(msg.seq_no)
             .expect("Found invalid UTF-8"), msg.source.to_base58());
         MsgId {
@@ -285,7 +308,7 @@ impl From<ControlMessage> for rpc_proto::ControlMessage {
 }
 /// Gossip control message; this notifies the peer that the following
 /// messages were recently seen and are available on request.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ControlIHave {
     /// Topic that the messages belong to.
     pub topic: TopicHash,

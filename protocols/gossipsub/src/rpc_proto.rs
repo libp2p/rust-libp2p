@@ -1866,7 +1866,7 @@ impl ::protobuf::reflect::ProtobufValue for ControlPrune {
     }
 }
 
-#[derive(PartialEq,Clone,Default)]
+#[derive(PartialEq,Eq,Clone,Default)]
 pub struct TopicDescriptor {
     // message fields
     name: ::protobuf::SingularField<::std::string::String>,

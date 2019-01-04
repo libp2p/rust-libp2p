@@ -1,12 +1,12 @@
-use message::{MsgMap, MsgRep, GMessage, MsgHash};
+use message::{MsgMap, MsgRep, GMessage, MsgHash, MsgId};
 
 use std::collections::hash_map::HashMap;
 
-use libp2p_floodsub::{TopicMap, TopicIdMap, TopicHashMap};
+use libp2p_floodsub::TopicMap;
 
 /// The message cache used to track recently seen messages. FMI see
 /// https://github.com/libp2p/specs/tree/master/pubsub/gossipsub#router-state.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MCache {
     msgs: MsgMap,
     history: Vec<CacheEntry>,
@@ -29,6 +29,11 @@ impl MCache {
         self.msgs.insert(msg_rep, m);
     }
 
+    pub fn put_with_msg_id_key(&mut self, m: GMessage) {
+        let mid = MsgId::new(m);
+        let msg_rep = MsgRep::id(mid);
+        self.msgs.insert(msg_rep, m);
+    }
     // TODO: methods for get, window, shift
     // mcache.get(id): retrieves a message from the cache by its ID, if it is still present.
     // mcache.window(): retrieves the message IDs for messages in the current history window.
@@ -41,5 +46,5 @@ impl MCache {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CacheEntry {
     msg_rep: MsgRep,
-    topics: TopicIdMap,
+    topics: TopicMap,
 }

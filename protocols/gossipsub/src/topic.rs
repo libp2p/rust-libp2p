@@ -23,18 +23,17 @@ use rpc_proto;
 use bs58;
 use protobuf::Message;
 use std::collections::hash_map::HashMap;
-use std::iter::Map;
 
-pub type TopicHashMap = HashMap<TopicHash, Topic>;
-pub type TopicIdMap = HashMap<TopicId, Topic>;
+// pub type TopicHashMap = HashMap<TopicHash, Topic>;
+// pub type TopicIdMap = HashMap<TopicId, Topic>;
 // pub type TopicMap = HashMap<TopicRep, Topic>;
 
-#[derive(Debug)]
-pub struct TopicMap(Map<TopicRep, Topic>);
+#[derive(Debug, Clone)]
+pub struct TopicMap(HashMap<TopicRep, Topic>);
 
 impl TopicMap {
     fn new() -> TopicMap {
-        TopicMap(Map::new())
+        TopicMap(HashMap::new())
     }
 
     fn insert(&mut self, tr: TopicRep, t: Topic) -> Option<Topic> {
@@ -48,40 +47,13 @@ impl std::iter::FromIterator<TopicHash> for TopicMap {
 
         for i in iter {
             let tr = TopicRep::Hash(i);
-            let t = 
+            let t = Topic::from(i);
             tm.insert(tr, t);
         }
 
         tm
     }
 }
-
-// #[derive(Debug)]
-// pub struct TopicMap(HashMap<TopicRep, Topic>);
-
-// impl TopicMap {
-//     fn new() -> TopicMap {
-//         TopicMap(HashMap::new())
-//     }
-
-//     fn insert(&mut self, tr: TopicRep, t: Topic) -> Option<Topic> {
-//         self.0.insert(tr, t)
-//     }
-// }
-
-// impl std::iter::FromIterator<TopicHash> for TopicMap {
-//     fn from_iter<I: IntoIterator<Item=TopicHash>>(iter: I) -> Self {
-//         let mut tm = TopicMap::new();
-
-//         for i in iter {
-//             let tr = TopicRep::Hash(i);
-//             let t = 
-//             tm.insert(tr, t);
-//         }
-
-//         tm
-//     }
-// }
 
 /// Represents a `Topic` via either a `TopicHash` or a `TopicId`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -120,22 +92,49 @@ impl TopicHash {
     }
 }
 
-// TODO
-// impl From<TopicHash> for Topic {
-//     fn from(topic_hash: TopicHash) -> Topic {
-        
-//     }
-// }
+// TODO: test
+impl From<TopicHash> for Topic {
+    fn from(topic_hash: TopicHash) -> Topic {
+        let decoded_hash = bs58::decode(topic_hash.hash.into_vec().unwrap());
+        let parsed = protobuf::parse_from_bytes::<rpc_proto::TopicDescriptor>
+            (decoded_hash).unwrap();
+        Topic {
+            descriptor: parsed,
+            topic_hash,
+        }
+    }
+}
 
 impl From<TopicHash> for TopicRep {
     fn from(topic_hash: TopicHash) -> TopicRep {
-        TopicRep::Hash(topic_hash);
+        TopicRep::Hash(topic_hash)
     }
 }
 
 /// Built topic.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Topic {
+    // Adding `PartialEq` and `Eq` as derived traits on this struct causes the
+    // following compiler error for this field:
+        // the trait bound `rpc_proto::TopicDescriptor: std::cmp::Eq` is not satisfied
+
+        // the trait std::cmp::Eq is not implemented for rpc_proto::TopicDescriptor
+
+        // note: required by std::cmp::AssertParamIsEqrustc(E0277)
+
+        // topic.rs(138, 5): the trait std::cmp::Eq is not implemented for rpc_proto::TopicDescriptor
+    // To fix this error it seems that rust-protobuf needs to change to be able
+    // to add a derived trait to a struct in the generated code (specifically
+    // `TopicDescriptor` in this case). Of the fields in
+    // `TopicDescriptor`, name is a
+    // `::protobuf::SingularField<::std::string::String>`, where
+    // `SingularField<T>` implements Eq or any other traits, while
+    // `String` also does.
+    // https://doc.rust-lang.org/src/alloc/string.rs.html#292
+    // `UnknownFields` also implements `Eq`.
+    // https://github.com/stepancheg/rust-protobuf/blob/2d79549c42504f768ab942d5802cf231f4912587/protobuf/src/unknown.rs#L122
+    // CachedSize does implement Eq,
+    // https://github.com/stepancheg/rust-protobuf/blob/2d79549c42504f768ab942d5802cf231f4912587/protobuf/src/cached_size.rs#L38.
     descriptor: rpc_proto::TopicDescriptor,
     hash: TopicHash,
 }
@@ -222,4 +221,9 @@ impl From<TopicId> for TopicRep {
     fn from(topic_id: TopicId) -> TopicRep {
         TopicRep::Id(topic_id)
     }
+}
+
+#[cfg(test)]
+mod tests {
+    
 }
