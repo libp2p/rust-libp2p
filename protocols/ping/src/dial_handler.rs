@@ -193,6 +193,11 @@ where
         }
     }
 
+    #[inline]
+    fn connection_keep_alive(&self) -> bool {
+        false
+    }
+
     fn shutdown(&mut self) {
         // Put `Shutdown` in `self.out_state` if we don't have any substream open.
         // Otherwise, keep the state as it is but call `shutdown()` on the substream. This
