@@ -24,16 +24,19 @@ impl MCache {
     /// key.
     // TODO: should also add to the current window
     pub fn put_with_msg_hash_key(&mut self, m: GMessage) {
-        let mhash = MsgHash::new(m);
-        let msg_rep = MsgRep::hash(mhash);
+        let m_hash = MsgHash::new(m);
+        let msg_rep = MsgRep::hash(m_hash);
         self.msgs.insert(msg_rep, m);
     }
 
     pub fn put_with_msg_id_key(&mut self, m: GMessage) {
-        let mid = MsgId::new(m);
-        let msg_rep = MsgRep::id(mid);
+        let m_id = m.get_id().expect("The message was not published with an ID,use put_with_msg_hash_key instead");
+        // let m_id = MsgId::new(m);
+        let msg_rep = MsgRep::id(m_id);
         self.msgs.insert(msg_rep, m);
     }
+
+    pub fn get()
     // TODO: methods for get, window, shift
     // mcache.get(id): retrieves a message from the cache by its ID, if it is still present.
     // mcache.window(): retrieves the message IDs for messages in the current history window.

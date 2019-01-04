@@ -3,6 +3,13 @@
 
 syntax = "proto2";
 
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.EnumValueOptions {
+	optional string type= 51234;
+	optional string code= 51235;
+  }
+
 package pubsub.pb;
 
 message RPC {
@@ -34,13 +41,22 @@ message ControlMessage {
 	repeated ControlPrune prune = 4;
 }
 
+
+// While this may not be strictly necessary as a messageID and a messageHash
+// are both strings, it would be useful to differentiate between them in the
+// protobuf file, e.g. due to the accessors and for clarity.
+enum MessageRep {
+	ID = 0 [(type) = "ID", (code) = 'I'];
+	HASH = 1 [(type) = "HSH", (code) = 'H'];
+}
+
 message ControlIHave {
 	optional string topicID = 1;
-	repeated string messageIDs = 2;
+	repeated MessageRep = 2;
 }
 
 message ControlIWant {
-	repeated string messageIDs = 1;
+	repeated string MessageRep = 1;
 }
 
 message ControlGraft {

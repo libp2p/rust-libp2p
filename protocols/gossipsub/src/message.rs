@@ -9,6 +9,7 @@ use bs58;
 use chrono::{DateTime, Utc};
 use protobuf::Message;
 use std::collections::hash_map::HashMap;
+use std::iter::IntoIterator;
 
 pub type MsgMap = HashMap<MsgRep, GMessage>;
 
@@ -62,7 +63,7 @@ pub struct GMessage {
     // The hash of the message.
     pub(crate) hash: MsgHash,
 
-    pub(crate) id: MsgId,
+    pub(crate) id: Option<MsgId>,
 }
 
 impl GMessage {
@@ -90,11 +91,11 @@ impl GMessage {
 
     // As above, used in the `publish` method on `Gossipsub` for `MCache`.
     pub(crate) fn set_id(&mut self, msg_id: MsgId) {
-        self.id = msg_id;
+        self.id = Some(msg_id);
     }
 
-    /// Returns the timestamp of the message.
-    pub fn get_id(&self) -> &MsgId {
+    /// Returns the id of the message, if it has been set.
+    pub fn get_id(&self) -> &Option<MsgId> {
         &self.id
     }
 
@@ -125,11 +126,19 @@ impl From<GMessage> for MsgHash {
     }
 }
 
-impl From<GMessage> for MsgId {
-    fn from(message: GMessage) -> MsgId {
-        message.id
-    }
-}
+// It seems that we can't actually impl this since a message might not contain
+// a message ID.
+// impl From<GMessage> for MsgId {
+//     fn from(message: GMessage) -> MsgId {
+//         let m_id = message.get_id();
+//         if m_id.is_some() {
+//             return m_id.expect("We checked m_id with `is_some`.")
+//         } else {
+            
+//         }
+
+//     }
+// }
 
 /// Contains a message ID as a string, has impls for building and converting
 /// to a `String`.
@@ -178,6 +187,7 @@ impl MsgId {
 /// > However, I think `MsgRep` enum may be a solution for this, and the
 /// > `MsgHash` is constructed from the whole message, not just the `seq_no`
 /// > and `source` fields.
+// Since a `MsgId` is unique for every message
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct MsgHash {
     hash: String,
@@ -201,6 +211,11 @@ impl MsgHash {
         self.hash
     }
 }
+
+// implementing From<MsgHash> for GMessage {} could be an issue for privacy
+// since we would be able to get the data, etc., from the MsgHash. However,
+// perhaps privacy needs to be ensured in another way, e.g. with ZK-S(N/T)ARKs,
+// if this method or its result was publicly accessible.
 
 /// Builder for a `MsgHash`.
 #[derive(Debug, Clone)]
