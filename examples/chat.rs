@@ -90,10 +90,12 @@ fn main() {
         }
     }
 
-    impl<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite> libp2p::core::swarm::NetworkBehaviourEventProcess<libp2p::floodsub::FloodsubMessage> for MyBehaviour<TSubstream> {
+    impl<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite> libp2p::core::swarm::NetworkBehaviourEventProcess<libp2p::floodsub::FloodsubEvent> for MyBehaviour<TSubstream> {
         // Called when `floodsub` produces an event.
-        fn inject_event(&mut self, message: libp2p::floodsub::FloodsubMessage) {
-            println!("Received: '{:?}' from {:?}", String::from_utf8_lossy(&message.data), message.source);
+        fn inject_event(&mut self, message: libp2p::floodsub::FloodsubEvent) {
+            if let libp2p::floodsub::FloodsubEvent::Message(message) = message {
+                println!("Received: '{:?}' from {:?}", String::from_utf8_lossy(&message.data), message.source);
+            }
         }
     }
 
