@@ -20,14 +20,11 @@
 
 //! Handles entering a connection with a peer.
 //!
-//! The two main elements of this module are the `Transport` and `ConnectionUpgrade` traits.
-//! `Transport` is implemented on objects that allow dialing and listening. `ConnectionUpgrade` is
-//! implemented on objects that make it possible to upgrade a connection (for example by adding an
-//! encryption middleware to the connection).
+//! The main element of this module is the `Transport` trait. It is implemented on objects that
+//! allow dialing and listening.
 //!
-//! Thanks to the `Transport::or_transport`, `Transport::with_upgrade` and
-//! `UpgradedNode::or_upgrade` methods, you can combine multiple transports and/or upgrades
-//! together in a complex chain of protocols negotiation.
+//! The rest of the module holds combinators that allow tweaking an implementation of `Transport`,
+//! combine multiple transports together, or combine a transport with an upgrade.
 
 use crate::{InboundUpgrade, OutboundUpgrade, nodes::raw_swarm::ConnectedPoint};
 use futures::prelude::*;

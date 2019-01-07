@@ -18,6 +18,19 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! A *network topology* is a collection of nodes that are part of the network or that we think
+//! are part of the network. In other words, it is essentially a container whose layout is
+//! optimized for certain operations.
+//!
+//! In libp2p, a *topology* is any struct that implements at least the `Topology` trait. In order
+//! to build a `Swarm`, you have to give to it ownership of a type that implements this trait.
+//!
+//! In order to use some protocols defined outside of `libp2p-core` (such as Kademlia) in your
+//! `Swarm`, you will have to implement additional traits on your topology.
+//!
+//! While the `MemoryTopology` is provided as a ready-to-go topology that is suitable for quick
+//! prototyping, it shouldn't be used in an actual high-performance production software.
+
 use std::collections::HashMap;
 use crate::{Multiaddr, PeerId, PublicKey};
 
