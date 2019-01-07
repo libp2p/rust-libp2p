@@ -45,7 +45,7 @@ pub struct Gossipsub<TSubstream> {
     /// subscribed to.
     // TODO: filter out peers that don't support gossipsub, so that we avoid
     //       hammering them with opened substreams
-    connected_peers: HashMap<PeerId, SmallVec<[TopicHash; 8]>>,
+    connected_peers: HashMap<PeerId, SmallVec<[TopicRep; 8]>>,
 
     // List of topics we're subscribed to. Necessary to filter out messages
     // that we receive erroneously.
@@ -203,7 +203,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
         if message_id {
             let m_id = MsgId::new(message);
-            message.id = m_id;
+            message.id = Some(m_id);
         }
 
         let msg_hash = MsgHash::new(message);
@@ -217,8 +217,8 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
         // Don't publish the message if we're not subscribed ourselves to any
         // of the topics.
-        if !self.subscribed_topics.iter().any(|t| message.topics.iter()
-            .any(|u| t.hash() == u)) {
+        if !self.subscribed_topics.iter().any(|t| message.topics.values()
+            .any(|u| t == u)) {
             return;
         }
 
@@ -227,7 +227,8 @@ impl<TSubstream> Gossipsub<TSubstream> {
         // TODO: Send to peers that are in our message link and that we know
         // are subscribed to the topic.
         for (peer_id, sub_topic) in self.connected_peers.iter() {
-            if !sub_topic.iter().any(|t| message.topics.iter().any(|u| t == u)){
+            if !sub_topic.iter().any(|t| message.topics.values()
+                .any(|u| Topic::from(t) == u)){
                 continue;
             }
 
@@ -245,20 +246,6 @@ impl<TSubstream> Gossipsub<TSubstream> {
     }
     // End of re-implementation from `Floodsub` methods.
     // ---------------------------------------------------------------------
-
-    pub fn find_topic_from_hash(&self, topic_hash: TopicHash) ->
-        Option<Topic> {
-        let tr = TopicRep::from(topic_hash);
-
-        // Look first in the local peers subscribed topics.
-        for i in self.subscribed_topics.into_iter() {
-            
-        }
-
-        for i in self.mesh.into_iter() {
-
-        }
-    }
 
     /// Grafts the peer to a topic. This notifies the peer that it has been /// added to the local mesh view.
     ///

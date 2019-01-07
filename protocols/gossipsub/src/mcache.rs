@@ -1,12 +1,11 @@
-use message::{MsgMap, MsgRep, GMessage, MsgHash, MsgId};
-
-use std::collections::hash_map::HashMap;
+use message::{MsgMap, MsgRep, GMessage, MsgHash};
 
 use libp2p_floodsub::TopicMap;
 
 /// The message cache used to track recently seen messages. FMI see
 /// https://github.com/libp2p/specs/tree/master/pubsub/gossipsub#router-state.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+// MCache is used in `ControlIHave`.
+// #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MCache {
     msgs: MsgMap,
     history: Vec<CacheEntry>,
@@ -15,7 +14,7 @@ pub struct MCache {
 impl MCache {
     pub fn new() -> Self {
         MCache {
-            msgs: HashMap::new(),
+            msgs: MsgMap::new(),
             history: Vec::new(),
         }
     }
@@ -36,7 +35,10 @@ impl MCache {
         self.msgs.insert(msg_rep, m);
     }
 
-    pub fn get()
+    /// Retrieves a message from the cache by its ID, if it is still present.
+    pub fn get(&self, mr: MsgRep) -> Option<&GMessage> {
+        self.msgs.get(mr)
+    }
     // TODO: methods for get, window, shift
     // mcache.get(id): retrieves a message from the cache by its ID, if it is still present.
     // mcache.window(): retrieves the message IDs for messages in the current history window.
@@ -46,7 +48,7 @@ impl MCache {
     // is vague.
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+// #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CacheEntry {
     msg_rep: MsgRep,
     topics: TopicMap,

@@ -8,10 +8,33 @@ use libp2p_core::PeerId;
 use bs58;
 use chrono::{DateTime, Utc};
 use protobuf::Message;
-use std::collections::hash_map::HashMap;
-use std::iter::IntoIterator;
+use std::{
+    borrow::Borrow,
+    collections::hash_map::HashMap,
+    hash::Hash,
+    iter::IntoIterator,
+};
 
-pub type MsgMap = HashMap<MsgRep, GMessage>;
+// #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct MsgMap(HashMap<MsgRep, GMessage>);
+
+impl MsgMap {
+    pub fn new() -> Self {
+        MsgMap(HashMap::new())
+    }
+
+    pub fn insert(&mut self, mr: MsgRep, m: GMessage) -> Option<GMessage> {
+        self.0.insert(mr, m)
+    }
+
+    pub fn get<Q: ?Sized>(&self, k: &Q) -> Option<&GMessage>
+    where
+        MsgRep: Borrow<Q>,
+        Q: Hash + Eq,
+    {
+        self.0.get(k)
+    }
+}
 
 /// A message received by the Gossipsub system.
 ///
@@ -23,7 +46,9 @@ pub type MsgMap = HashMap<MsgRep, GMessage>;
 /// `floodsub::protocol::FloodsubMessage`.
 /// The message is limited to 1 MiB, which is enforced by a check when
 /// publishing the message.
-#[derive(Debug, Clone, PartialEq, Eq)]
+// The hash derive is needed for the add method, passing a `MsgHash`, to a
+// Gossipsub.received.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct GMessage {
     /// ID of the peer that published this message.
     pub source: PeerId,
@@ -140,6 +165,7 @@ impl From<GMessage> for MsgHash {
 //     }
 // }
 
+// See note below.
 /// Contains a message ID as a string, has impls for building and converting
 /// to a `String`.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
@@ -166,6 +192,19 @@ impl MsgId {
     }
 }
 
+// Unlike a `MsgHash`, we can't rebuild a `GMessage` from a `MsgId`(or
+// at least it isn't as easy).
+// We have to fetch it from somewhere it is stored. In this context,
+// this would be the `MCache`, although messages are only stored for a
+// few seconds / heartbeat intervals, hence implementing `From` won't work.
+// Using `TryFrom` also adds complications.
+// An alternative is to reconstruct a `GMessage` from a `MsgId` by searching
+// for a message that has the same seq_no and peer ID in all the state, but
+// this is resource-intensive. Why do that when it seems simpler to just use
+// a `MsgHash`? It is therefore recommended to do that: just use a MsgHash,
+// and not use and probably remove a `MsgId` and `MsgRep`, which will also
+// simplify implementation.
+//     fn try_from(t_id: TopicId) -> Result<Self, Self::Error> {
 // impl From<GMessage> for MsgId {
 //     #[inline]
 //     fn from(message: GMessage) -> Self {
@@ -248,6 +287,7 @@ impl MsgHashBuilder {
     }
 }
 
+// See note on MsgId above.
 /// Contains either a `MsgHash` or a `MsgId` to represent a message.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum MsgRep {
@@ -329,7 +369,7 @@ impl From<ControlMessage> for rpc_proto::ControlMessage {
 }
 /// Gossip control message; this notifies the peer that the following
 /// messages were recently seen and are available on request.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+// #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ControlIHave {
     /// Topic that the messages belong to.
     pub topic: TopicHash,

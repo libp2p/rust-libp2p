@@ -18,12 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::convert::TryFrom;
 use rpc_proto;
 
 use bs58;
 use protobuf::Message;
-use std::collections::HashMap;
-use std::collections::hash_map::IntoIter;
+use std::{
+    collections::{HashMap, hash_map::{IntoIter, Iter, Values}},
+    iter::FromIterator,
+};
 
 // pub type TopicHashMap = HashMap<TopicHash, Topic>;
 // pub type TopicIdMap = HashMap<TopicId, Topic>;
@@ -33,16 +36,24 @@ use std::collections::hash_map::IntoIter;
 pub struct TopicMap(HashMap<TopicRep, Topic>);
 
 impl TopicMap {
-    fn new() -> TopicMap {
+    pub fn new() -> TopicMap {
         TopicMap(HashMap::new())
     }
 
-    fn insert(&mut self, tr: TopicRep, t: Topic) -> Option<Topic> {
+    pub fn insert(&mut self, tr: TopicRep, t: Topic) -> Option<Topic> {
         self.0.insert(tr, t)
+    }
+
+    pub fn values(&self) -> Values<TopicRep, Topic> {
+        self.0.values()
+    }
+
+    pub fn iter(&self) -> Iter<TopicRep, Topic> {
+        self.0.iter()
     }
 }
 
-impl std::iter::FromIterator<TopicRep> for TopicMap {
+impl FromIterator<TopicRep> for TopicMap {
     fn from_iter<I: IntoIterator<Item=TopicRep>>(iter: I) -> Self {
         let mut tm = TopicMap::new();
 
@@ -64,19 +75,38 @@ impl IntoIterator for TopicMap {
     }
 }
 
+impl FromIterator<Topic> for TopicMap {
+    fn from_iter<I: IntoIterator<Item=Topic>>(iter: I) -> Self {
+        let mut tm = TopicMap::new();
+
+        for t in iter {
+            let th = TopicHash::from(t);
+            let tr = TopicRep::from(th);
+            tm.insert(tr, t);
+        }
+
+        tm
+    }
+}
+
 /// Represents a `Topic` via either a `TopicHash` or a `TopicId`.
+// Due to the added difficulty of converting a `TopicId` to a `Topic`
+// it is suggested to just use a `TopicHash`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TopicRep {
     Hash(TopicHash),
     Id(TopicId)
 }
 
-impl From<TopicRep> for Topic {
-    fn from(topic_rep: TopicRep) -> Topic {
-        match topic_rep {
-            TopicRep::Hash(TopicHash) => Topic::from(topic_rep),
-            TopicRep::Id(TopicId) => Topic::from(topic_rep),
-        }
+impl From<TopicHash> for TopicRep {
+    fn from(topic_hash: TopicHash) -> Self {
+        TopicRep::Hash(topic_hash)
+    }
+}
+
+impl From<TopicId> for TopicRep {
+    fn from(topic_id: TopicId) -> Self {
+        TopicRep::Id(topic_id)
     }
 }
 
@@ -103,23 +133,17 @@ impl TopicHash {
     }
 }
 
-// TODO: test
-impl From<TopicHash> for Topic {
-    fn from(topic_hash: TopicHash) -> Topic {
-        let decoded_hash: &[u8]
-            = bs58::decode(topic_hash.hash).into_vec().unwrap().as_ref();
-        let parsed = protobuf::parse_from_bytes::<rpc_proto::TopicDescriptor>
-            (decoded_hash).unwrap();
-        Topic {
-            descriptor: parsed,
-            hash: topic_hash,
-        }
+impl From<Topic> for TopicHash {
+    #[inline]
+    fn from(topic: Topic) -> Self {
+        topic.hash
     }
 }
 
-impl From<TopicHash> for TopicRep {
-    fn from(topic_hash: TopicHash) -> TopicRep {
-        TopicRep::Hash(topic_hash)
+impl<'a> From<&'a Topic> for TopicHash {
+    #[inline]
+    fn from(topic: &'a Topic) -> Self {
+        topic.hash.clone()
     }
 }
 
@@ -166,19 +190,62 @@ impl AsRef<TopicHash> for Topic {
     }
 }
 
-impl From<Topic> for TopicHash {
-    #[inline]
-    fn from(topic: Topic) -> TopicHash {
-        topic.hash
+impl From<TopicRep> for Topic {
+    fn from(topic_rep: TopicRep) -> Self {
+        match topic_rep {
+            TopicRep::Hash(TopicHash) => Topic::from(topic_rep),
+            TopicRep::Id(TopicId) => Topic::from(topic_rep),
+        }
     }
 }
 
-impl<'a> From<&'a Topic> for TopicHash {
-    #[inline]
-    fn from(topic: &'a Topic) -> TopicHash {
-        topic.hash.clone()
+impl<'a> From<&'a TopicRep> for Topic {
+    fn from(topic_rep: &'a TopicRep) -> Self {
+        match topic_rep {
+            TopicRep::Hash(TopicHash) => Topic::from(topic_rep),
+            TopicRep::Id(TopicId) => Topic::from(topic_rep),
+        }
     }
 }
+
+// TODO: test
+impl From<TopicHash> for Topic {
+    fn from(topic_hash: TopicHash) -> Self {
+        let decoded_hash: &[u8]
+            = bs58::decode(topic_hash.hash).into_vec().unwrap().as_ref();
+        let parsed = protobuf::parse_from_bytes::<rpc_proto::TopicDescriptor>
+            (decoded_hash).unwrap();
+        Topic {
+            descriptor: parsed,
+            hash: topic_hash,
+        }
+    }
+}
+
+impl<'a> From<&'a TopicHash> for Topic {
+    fn from(topic_hash: &'a TopicHash) -> Self {
+        let decoded_hash: &[u8]
+            = bs58::decode(topic_hash.hash).into_vec().unwrap().as_ref();
+        let parsed = protobuf::parse_from_bytes::<rpc_proto::TopicDescriptor>
+            (decoded_hash).unwrap();
+        Topic {
+            descriptor: parsed,
+            hash: *topic_hash,
+        }
+    }
+}
+
+// Nightly experimental API.
+// https://github.com/rust-lang/rust/issues/33417
+// impl TryFrom<TopicId> for Topic {
+    // Unlike a `TopicHash`, we can't rebuild a `Topic` from a `TopicId`,
+    // we have to fetch it from somewhere it is stored. In this context,
+    // this would be the `MCache`, although messages are only stored for a
+    // few seconds / heartbeat intervals, hence implementing `Try` won't work.
+//     fn try_from(t_id: TopicId) -> Result<Self, Self::Error> {
+
+//     }
+// }
 
 /// Builder for a `TopicHash`.
 #[derive(Debug, Clone)]
@@ -226,12 +293,6 @@ impl TopicId {
         TopicId {
             id: s.to_owned(),
         }
-    }
-}
-
-impl From<TopicId> for TopicRep {
-    fn from(topic_id: TopicId) -> TopicRep {
-        TopicRep::Id(topic_id)
     }
 }
 
