@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::collections::HashMap;
-use {Multiaddr, PeerId, PublicKey};
+use crate::{Multiaddr, PeerId, PublicKey};
 
 /// Storage for the network topology.
 ///

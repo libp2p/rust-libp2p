@@ -24,8 +24,8 @@ use std::io::{self, Error as IoError};
 
 use super::dummy_muxer::DummyMuxer;
 use futures::prelude::*;
-use muxing::SubstreamRef;
-use nodes::handled_node::{HandledNode, NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent};
+use crate::muxing::SubstreamRef;
+use crate::nodes::handled_node::{HandledNode, NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent};
 use std::sync::Arc;
 
 #[derive(Debug, PartialEq, Clone)]
