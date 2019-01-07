@@ -52,6 +52,14 @@
 //!   how to handle incoming substreams, which protocols are supported, when to open a new
 //!   outbound substream, etc. See the `protocols_handler` trait.
 //!
+//! # High-level APIs vs low-level APIs
+//!
+//! This crate provides two sets of APIs:
+//!
+//! - The low-level APIs are contained within the `nodes` module. See the documentation for more
+//!   information.
+//! - The high-level APIs include the concepts of `Swarm`, `ProtocolsHandler`, `NetworkBehaviour`
+//!   and `Topology`.
 
 
 /// Multi-address re-export.

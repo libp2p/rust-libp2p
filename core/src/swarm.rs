@@ -18,6 +18,29 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! High level manager of the network.
+//!
+//! The `Swarm` struct contains the state of the network as a whole. The entire behaviour of a
+//! libp2p network can be controlled through the `Swarm`.
+//!
+//! # Initializing a Swarm
+//!
+//! Creating a `Swarm` requires three things:
+//! 
+//! - An implementation of the `Transport` trait. This is the type that will be used in order to
+//!   reach nodes on the network based on their address. See the `transport` module for more
+//!   information.
+//! - An implementation of the `NetworkBehaviour` trait. This is a state machine that defines how
+//!   the swarm should behave once it is connected to a node.
+//! - An implementation of the `Topology` trait. This is a container that holds the list of nodes
+//!   that we think are part of the network. See the `topology` module for more information.
+//!
+//! # Network behaviour
+//!
+//! The `NetworkBehaviour` trait is implemented on types that indicate to the swarm how it should
+//! behave. This includes which protocols are supported and which nodes to try to connect to.
+//!
+
 use crate::{
     Transport, Multiaddr, PublicKey, PeerId, InboundUpgrade, OutboundUpgrade, UpgradeInfo, ProtocolName,
     muxing::StreamMuxer,
@@ -347,7 +370,7 @@ pub trait NetworkBehaviourEventProcess<TEvent> {
     fn inject_event(&mut self, event: TEvent);
 }
 
-/// Parameters passed to `poll()` that the `NetworkBehaviour` has access to.
+/// Parameters passed to `poll()`, that the `NetworkBehaviour` has access to.
 // TODO: #[derive(Debug)]
 pub struct PollParameters<'a, TTopology: 'a> {
     topology: &'a mut TTopology,
