@@ -22,7 +22,8 @@ use rpc_proto;
 
 use bs58;
 use protobuf::Message;
-use std::collections::hash_map::HashMap;
+use std::collections::HashMap;
+use std::collections::hash_map::IntoIter;
 
 // pub type TopicHashMap = HashMap<TopicHash, Topic>;
 // pub type TopicIdMap = HashMap<TopicId, Topic>;
@@ -41,17 +42,25 @@ impl TopicMap {
     }
 }
 
-impl std::iter::FromIterator<TopicHash> for TopicMap {
-    fn from_iter<I: IntoIterator<Item=TopicHash>>(iter: I) -> Self {
+impl std::iter::FromIterator<TopicRep> for TopicMap {
+    fn from_iter<I: IntoIterator<Item=TopicRep>>(iter: I) -> Self {
         let mut tm = TopicMap::new();
 
-        for i in iter {
-            let tr = TopicRep::Hash(i);
-            let t = Topic::from(i);
+        for tr in iter {
+            let t = Topic::from(tr);
             tm.insert(tr, t);
         }
 
         tm
+    }
+}
+
+impl IntoIterator for TopicMap {
+    type Item = (TopicRep, Topic);
+    type IntoIter = IntoIter<TopicRep, Topic>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
     }
 }
 
@@ -62,12 +71,14 @@ pub enum TopicRep {
     Id(TopicId)
 }
 
-// TODO
-// impl From<TopicRep> for Topic {
-//     pub fn from(topic_rep: TopicRep) -> Topic {
-//         for topic in 
-//     }
-// }
+impl From<TopicRep> for Topic {
+    fn from(topic_rep: TopicRep) -> Topic {
+        match topic_rep {
+            TopicRep::Hash(TopicHash) => Topic::from(topic_rep),
+            TopicRep::Id(TopicId) => Topic::from(topic_rep),
+        }
+    }
+}
 
 /// Represents the hash of a topic.
 ///
@@ -95,12 +106,13 @@ impl TopicHash {
 // TODO: test
 impl From<TopicHash> for Topic {
     fn from(topic_hash: TopicHash) -> Topic {
-        let decoded_hash = bs58::decode(topic_hash.hash.into_vec().unwrap());
+        let decoded_hash: &[u8]
+            = bs58::decode(topic_hash.hash).into_vec().unwrap().as_ref();
         let parsed = protobuf::parse_from_bytes::<rpc_proto::TopicDescriptor>
             (decoded_hash).unwrap();
         Topic {
             descriptor: parsed,
-            topic_hash,
+            hash: topic_hash,
         }
     }
 }
