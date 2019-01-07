@@ -52,7 +52,7 @@
 //! implementation of `StreamMuxer` to control everything that happens on the wire.
 
 use fnv::FnvHashMap;
-use futures::{future, prelude::*};
+use futures::{future, prelude::*, try_ready};
 use parking_lot::Mutex;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind, Read, Write};
 use std::ops::Deref;

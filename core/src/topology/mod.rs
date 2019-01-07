@@ -32,7 +32,7 @@
 //! prototyping, it shouldn't be used in an actual high-performance production software.
 
 use std::collections::HashMap;
-use {Multiaddr, PeerId, PublicKey};
+use crate::{Multiaddr, PeerId, PublicKey};
 
 /// Storage for the network topology.
 ///

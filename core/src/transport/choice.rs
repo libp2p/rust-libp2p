@@ -18,9 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use either::{EitherListenStream, EitherOutput, EitherFuture};
+use crate::either::{EitherListenStream, EitherOutput, EitherFuture};
 use multiaddr::Multiaddr;
-use transport::Transport;
+use crate::transport::Transport;
 
 /// Struct returned by `or_transport()`.
 #[derive(Debug, Copy, Clone)]

@@ -61,37 +61,6 @@
 //! - The high-level APIs include the concepts of `Swarm`, `ProtocolsHandler`, `NetworkBehaviour`
 //!   and `Topology`.
 
-extern crate bs58;
-extern crate bytes;
-extern crate fnv;
-#[macro_use]
-extern crate futures;
-#[macro_use]
-extern crate log;
-extern crate multihash;
-extern crate multistream_select;
-extern crate parking_lot;
-extern crate protobuf;
-#[macro_use]
-extern crate quick_error;
-extern crate rw_stream_sink;
-extern crate smallvec;
-extern crate tokio_executor;
-extern crate tokio_io;
-extern crate tokio_timer;
-extern crate void;
-
-#[cfg(test)]
-extern crate rand;
-#[cfg(test)]
-extern crate tokio;
-#[cfg(test)]
-extern crate tokio_codec;
-#[cfg(test)]
-#[macro_use]
-extern crate assert_matches;
-#[cfg(test)]
-extern crate tokio_mock_task;
 
 /// Multi-address re-export.
 pub extern crate multiaddr;
