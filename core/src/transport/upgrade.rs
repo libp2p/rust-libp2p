@@ -18,8 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{future::Either, prelude::*};
-use multiaddr::Multiaddr;
 use crate::{
     transport::Transport,
     upgrade::{
@@ -32,6 +30,8 @@ use crate::{
         InboundUpgradeApply
     }
 };
+use futures::{future::Either, prelude::*, try_ready};
+use multiaddr::Multiaddr;
 use tokio_io::{AsyncRead, AsyncWrite};
 
 #[derive(Debug, Copy, Clone)]

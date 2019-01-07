@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::prelude::*;
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use futures::{prelude::*, try_ready};
 
 /// Wraps around an upgrade and applies a closure to the output.
 #[derive(Debug, Clone)]

@@ -925,7 +925,7 @@ where TTrans: Transport
         .find(|(_, a)| a.id == reach_id)
         .map(|(p, _)| p.clone());
     if let Some(peer_id) = out_reach_peer_id {
-        let mut attempt = reach_attempts.out_reach_attempts.remove(&peer_id)
+        let attempt = reach_attempts.out_reach_attempts.remove(&peer_id)
             .expect("out_reach_peer_id is a key that is grabbed from out_reach_attempts");
 
         let num_remain = attempt.next_attempts.len();
@@ -1317,14 +1317,15 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
+    use crate::tests::dummy_transport::DummyTransport;
+    use crate::tests::dummy_handler::{Handler, HandlerState, InEvent, OutEvent};
+    use crate::tests::dummy_transport::ListenerState;
+    use crate::tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
+    use crate::nodes::NodeHandlerEvent;
+    use assert_matches::assert_matches;
     use parking_lot::Mutex;
+    use std::sync::Arc;
     use tokio::runtime::{Builder, Runtime};
-    use tests::dummy_transport::DummyTransport;
-    use tests::dummy_handler::{Handler, HandlerState, InEvent, OutEvent};
-    use tests::dummy_transport::ListenerState;
-    use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
-    use nodes::NodeHandlerEvent;
 
     #[test]
     fn query_transport() {

@@ -21,7 +21,7 @@
 use futures::prelude::*;
 use std::fmt;
 use void::Void;
-use {Multiaddr, Transport};
+use crate::{Multiaddr, Transport};
 use std::collections::VecDeque;
 
 /// Implementation of `futures::Stream` that allows listening on multiaddresses.
@@ -277,13 +277,14 @@ mod tests {
     extern crate libp2p_tcp;
 
     use super::*;
-    use transport;
+    use crate::transport;
+    use assert_matches::assert_matches;
     use tokio::runtime::current_thread::Runtime;
     use std::io;
     use futures::{future::{self}, stream};
-    use tests::dummy_transport::{DummyTransport, ListenerState};
-    use tests::dummy_muxer::DummyMuxer;
-    use PeerId;
+    use crate::tests::dummy_transport::{DummyTransport, ListenerState};
+    use crate::tests::dummy_muxer::DummyMuxer;
+    use crate::PeerId;
 
     fn set_listener_state(ls: &mut ListenersStream<DummyTransport>, idx: usize, state: ListenerState) {
         let l = &mut ls.listeners[idx];
@@ -293,8 +294,8 @@ mod tests {
                     let stream = stream::poll_fn(|| future::err(io::Error::new(io::ErrorKind::Other, "oh noes")).poll() );
                     Box::new(stream)
                 }
-                ListenerState::Ok(async) => {
-                    match async {
+                ListenerState::Ok(r#async) => {
+                    match r#async {
                         Async::NotReady => {
                             let stream = stream::poll_fn(|| Ok(Async::NotReady));
                             Box::new(stream)

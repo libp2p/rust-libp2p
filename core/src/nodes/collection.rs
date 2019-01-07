@@ -518,12 +518,13 @@ impl<'a, TInEvent> PeerMut<'a, TInEvent> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::future::{self};
-    use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
-    use tests::dummy_handler::{Handler, InEvent, OutEvent, HandlerState};
+    use assert_matches::assert_matches;
+    use futures::future;
+    use crate::tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
+    use crate::tests::dummy_handler::{Handler, InEvent, OutEvent, HandlerState};
     use tokio::runtime::current_thread::Runtime;
     use tokio::runtime::Builder;
-    use nodes::NodeHandlerEvent;
+    use crate::nodes::NodeHandlerEvent;
     use std::{io, sync::Arc};
     use parking_lot::Mutex;
 

@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use muxing::StreamMuxer;
-use nodes::node::{NodeEvent, NodeStream, Substream};
+use crate::muxing::StreamMuxer;
+use crate::nodes::node::{NodeEvent, NodeStream, Substream};
 use futures::{prelude::*, stream::Fuse};
 use std::{error, fmt, io};
 
@@ -358,9 +358,10 @@ where THandlerErr: error::Error + 'static
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert_matches::assert_matches;
     use tokio::runtime::current_thread;
-    use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
-    use tests::dummy_handler::{Handler, HandlerState, InEvent, OutEvent, TestHandledNode};
+    use crate::tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
+    use crate::tests::dummy_handler::{Handler, HandlerState, InEvent, OutEvent, TestHandledNode};
     use std::{io, marker::PhantomData};
 
     struct TestBuilder {
