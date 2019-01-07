@@ -498,15 +498,16 @@ mod tests {
 
     use std::io;
 
+    use assert_matches::assert_matches;
     use futures::future::{self, FutureResult};
     use futures::sync::mpsc::{UnboundedReceiver, UnboundedSender};
-    use nodes::handled_node::NodeHandlerEvent;
-    use tests::dummy_handler::{Handler, HandlerState, InEvent, OutEvent, TestHandledNode};
-    use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
+    use crate::nodes::handled_node::NodeHandlerEvent;
+    use crate::tests::dummy_handler::{Handler, HandlerState, InEvent, OutEvent, TestHandledNode};
+    use crate::tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
     use tokio::runtime::Builder;
     use tokio::runtime::current_thread::Runtime;
     use void::Void;
-    use PeerId;
+    use crate::PeerId;
 
     type TestNodeTask = NodeTask<
         FutureResult<(PeerId, DummyMuxer), io::Error>,
