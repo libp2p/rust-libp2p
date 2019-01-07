@@ -349,12 +349,12 @@ where
         self.accept_with_builder(|_| handler)
     }
 
-    /// Same as `accept`, but accepts a closure that turns a `ConnectedPoint` into a handler.
+    /// Same as `accept`, but accepts a closure that turns a `IncomingInfo` into a handler.
     pub fn accept_with_builder<TBuilder>(self, builder: TBuilder)
-    where TBuilder: FnOnce(&ConnectedPoint) -> THandler
+    where TBuilder: FnOnce(IncomingInfo) -> THandler
     {
         let connected_point = self.to_connected_point();
-        let handler = builder(&connected_point);
+        let handler = builder(self.info());
         let id = self.active_nodes.add_reach_attempt(self.upgrade.map_err(RawSwarmReachError::Transport), handler);
         self.other_reach_attempts.push((
             id,
@@ -366,6 +366,15 @@ where
 impl<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr> IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>
 where TTrans: Transport
 {
+    /// Returns the `IncomingInfo` corresponding to this incoming connection.
+    #[inline]
+    pub fn info(&self) -> IncomingInfo {
+        IncomingInfo {
+            listen_addr: &self.listen_addr,
+            send_back_addr: &self.send_back_addr,
+        }
+    }
+
     /// Address of the listener that received the connection.
     #[inline]
     pub fn listen_addr(&self) -> &Multiaddr {
@@ -381,10 +390,7 @@ where TTrans: Transport
     /// Builds the `ConnectedPoint` corresponding to the incoming connection.
     #[inline]
     pub fn to_connected_point(&self) -> ConnectedPoint {
-        ConnectedPoint::Listener {
-            listen_addr: self.listen_addr.clone(),
-            send_back_addr: self.send_back_addr.clone(),
-        }
+        self.info().to_connected_point()
     }
 }
 
@@ -445,6 +451,26 @@ impl ConnectedPoint {
         match *self {
             ConnectedPoint::Dialer { .. } => false,
             ConnectedPoint::Listener { .. } => true,
+        }
+    }
+}
+
+/// Information about an incoming connection currently being negotiated.
+#[derive(Debug, Copy, Clone)]
+pub struct IncomingInfo<'a> {
+    /// Address of the listener that received the connection.
+    pub listen_addr: &'a Multiaddr,
+    /// Stack of protocols used to send back data to the remote.
+    pub send_back_addr: &'a Multiaddr,
+}
+
+impl<'a> IncomingInfo<'a> {
+    /// Builds the `ConnectedPoint` corresponding to the incoming connection.
+    #[inline]
+    pub fn to_connected_point(&self) -> ConnectedPoint {
+        ConnectedPoint::Listener {
+            listen_addr: self.listen_addr.clone(),
+            send_back_addr: self.send_back_addr.clone(),
         }
     }
 }
@@ -548,14 +574,33 @@ where
     ///
     /// We don't know anything about these connections yet, so all we can do is know how many of
     /// them we have.
-    // TODO: thats's not true as we should be able to know their multiaddress, but that requires
-    // a lot of API changes
+    #[deprecated(note = "Use incoming_negotiated().count() instead")]
     #[inline]
     pub fn num_incoming_negotiated(&self) -> usize {
         self.reach_attempts.other_reach_attempts
             .iter()
             .filter(|&(_, endpoint)| endpoint.is_listener())
             .count()
+    }
+
+    /// Returns the list of incoming connections that are currently in the process of being
+    /// negotiated. We don't know the `PeerId` of these nodes yet.
+    #[inline]
+    pub fn incoming_negotiated(&self) -> impl Iterator<Item = IncomingInfo> {
+        self.reach_attempts
+            .other_reach_attempts
+            .iter()
+            .filter_map(|&(_, ref endpoint)| {
+                match endpoint {
+                    ConnectedPoint::Listener { listen_addr, send_back_addr } => {
+                        Some(IncomingInfo {
+                            listen_addr,
+                            send_back_addr,
+                        })
+                    },
+                    ConnectedPoint::Dialer { .. } => None,
+                }
+            })
     }
 
     /// Sends an event to all nodes.
