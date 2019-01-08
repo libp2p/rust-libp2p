@@ -50,7 +50,8 @@ use crate::{
         raw_swarm::{RawSwarm, RawSwarmEvent}
     },
     protocols_handler::{NodeHandlerWrapper, ProtocolsHandler},
-    topology::Topology
+    topology::Topology,
+    transport::TransportError,
 };
 use futures::prelude::*;
 use smallvec::SmallVec;
@@ -114,6 +115,7 @@ where TBehaviour: NetworkBehaviour<TTopology>,
       <TMuxer as StreamMuxer>::OutboundSubstream: Send + 'static,
       <TMuxer as StreamMuxer>::Substream: Send + 'static,
       TTransport: Transport<Output = (PeerId, TMuxer)> + Clone,
+      TTransport::Error: Send + 'static,
       TTransport::Listener: Send + 'static,
       TTransport::ListenerUpgrade: Send + 'static,
       TTransport::Dial: Send + 'static,
@@ -170,7 +172,7 @@ where TBehaviour: NetworkBehaviour<TTopology>,
     /// Returns an error if the address is not supported.
     /// On success, returns an alternative version of the address.
     #[inline]
-    pub fn listen_on(me: &mut Self, addr: Multiaddr) -> Result<Multiaddr, Multiaddr> {
+    pub fn listen_on(me: &mut Self, addr: Multiaddr) -> Result<Multiaddr, TransportError<TTransport::Error>> {
         let result = me.raw_swarm.listen_on(addr);
         if let Ok(ref addr) = result {
             me.listened_addrs.push(addr.clone());
@@ -182,7 +184,7 @@ where TBehaviour: NetworkBehaviour<TTopology>,
     ///
     /// Returns an error if the address is not supported.
     #[inline]
-    pub fn dial_addr(me: &mut Self, addr: Multiaddr) -> Result<(), Multiaddr> {
+    pub fn dial_addr(me: &mut Self, addr: Multiaddr) -> Result<(), TransportError<TTransport::Error>> {
         let handler = me.behaviour.new_handler();
         me.raw_swarm.dial(addr, handler.into_node_handler())
     }
@@ -231,6 +233,7 @@ where TBehaviour: NetworkBehaviour<TTopology>,
       <TMuxer as StreamMuxer>::OutboundSubstream: Send + 'static,
       <TMuxer as StreamMuxer>::Substream: Send + 'static,
       TTransport: Transport<Output = (PeerId, TMuxer)> + Clone,
+      TTransport::Error: Send + 'static,
       TTransport::Listener: Send + 'static,
       TTransport::ListenerUpgrade: Send + 'static,
       TTransport::Dial: Send + 'static,

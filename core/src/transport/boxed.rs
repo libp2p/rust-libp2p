@@ -18,16 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::transport::{Transport, TransportError};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
-use std::fmt;
-use std::io::Error as IoError;
-use std::sync::Arc;
-use crate::transport::Transport;
+use std::{error, fmt, sync::Arc};
 
 /// See the `Transport::boxed` method.
 #[inline]
-pub fn boxed<T>(transport: T) -> Boxed<T::Output>
+pub fn boxed<T>(transport: T) -> Boxed<T::Output, T::Error>
 where
     T: Transport + Clone + Send + Sync + 'static,
     T::Dial: Send + 'static,
@@ -39,37 +37,34 @@ where
     }
 }
 
-pub type Dial<O> = Box<Future<Item = O, Error = IoError> + Send>;
-pub type Listener<O> = Box<Stream<Item = (ListenerUpgrade<O>, Multiaddr), Error = IoError> + Send>;
-pub type ListenerUpgrade<O> = Box<Future<Item = O, Error = IoError> + Send>;
-pub type Incoming<O> = Box<Future<Item = (IncomingUpgrade<O>, Multiaddr), Error = IoError> + Send>;
-pub type IncomingUpgrade<O> = Box<Future<Item = O, Error = IoError> + Send>;
+pub type Dial<O, E> = Box<Future<Item = O, Error = E> + Send>;
+pub type Listener<O, E> = Box<Stream<Item = (ListenerUpgrade<O, E>, Multiaddr), Error = E> + Send>;
+pub type ListenerUpgrade<O, E> = Box<Future<Item = O, Error = E> + Send>;
 
-trait Abstract<O> {
-    fn listen_on(&self, addr: Multiaddr) -> Result<(Listener<O>, Multiaddr), Multiaddr>;
-    fn dial(&self, addr: Multiaddr) -> Result<Dial<O>, Multiaddr>;
+trait Abstract<O, E> {
+    fn listen_on(&self, addr: Multiaddr) -> Result<(Listener<O, E>, Multiaddr), TransportError<E>>;
+    fn dial(&self, addr: Multiaddr) -> Result<Dial<O, E>, TransportError<E>>;
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
 }
 
-impl<T, O> Abstract<O> for T
+impl<T, O, E> Abstract<O, E> for T
 where
-    T: Transport<Output = O> + Clone + 'static,
+    T: Transport<Output = O, Error = E> + Clone + 'static,
+    E: error::Error,
     T::Dial: Send + 'static,
     T::Listener: Send + 'static,
     T::ListenerUpgrade: Send + 'static,
 {
-    fn listen_on(&self, addr: Multiaddr) -> Result<(Listener<O>, Multiaddr), Multiaddr> {
-        let (listener, new_addr) =
-            Transport::listen_on(self.clone(), addr).map_err(|(_, addr)| addr)?;
+    fn listen_on(&self, addr: Multiaddr) -> Result<(Listener<O, E>, Multiaddr), TransportError<E>> {
+        let (listener, new_addr) = Transport::listen_on(self.clone(), addr)?;
         let fut = listener.map(|(upgrade, addr)| {
-            (Box::new(upgrade) as ListenerUpgrade<O>, addr)
+            (Box::new(upgrade) as ListenerUpgrade<O, E>, addr)
         });
         Ok((Box::new(fut) as Box<_>, new_addr))
     }
 
-    fn dial(&self, addr: Multiaddr) -> Result<Dial<O>, Multiaddr> {
-        let fut = Transport::dial(self.clone(), addr)
-            .map_err(|(_, addr)| addr)?;
+    fn dial(&self, addr: Multiaddr) -> Result<Dial<O, E>, TransportError<E>> {
+        let fut = Transport::dial(self.clone(), addr)?;
         Ok(Box::new(fut) as Box<_>)
     }
 
@@ -80,17 +75,17 @@ where
 }
 
 /// See the `Transport::boxed` method.
-pub struct Boxed<O> {
-    inner: Arc<Abstract<O> + Send + Sync>,
+pub struct Boxed<O, E> {
+    inner: Arc<Abstract<O, E> + Send + Sync>,
 }
 
-impl<O> fmt::Debug for Boxed<O> {
+impl<O, E> fmt::Debug for Boxed<O, E> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "BoxedTransport")
     }
 }
 
-impl<O> Clone for Boxed<O> {
+impl<O, E> Clone for Boxed<O, E> {
     #[inline]
     fn clone(&self) -> Self {
         Boxed {
@@ -99,26 +94,23 @@ impl<O> Clone for Boxed<O> {
     }
 }
 
-impl<O> Transport for Boxed<O> {
+impl<O, E> Transport for Boxed<O, E>
+where E: error::Error,
+{
     type Output = O;
-    type Listener = Listener<O>;
-    type ListenerUpgrade = ListenerUpgrade<O>;
-    type Dial = Dial<O>;
+    type Error = E;
+    type Listener = Listener<O, E>;
+    type ListenerUpgrade = ListenerUpgrade<O, E>;
+    type Dial = Dial<O, E>;
 
     #[inline]
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        match self.inner.listen_on(addr) {
-            Ok(listen) => Ok(listen),
-            Err(addr) => Err((self, addr)),
-        }
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+        self.inner.listen_on(addr)
     }
 
     #[inline]
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-        match self.inner.dial(addr) {
-            Ok(dial) => Ok(dial),
-            Err(addr) => Err((self, addr)),
-        }
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.inner.dial(addr)
     }
 
     #[inline]

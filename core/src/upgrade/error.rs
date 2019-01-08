@@ -30,15 +30,6 @@ pub enum UpgradeError<E> {
     Apply(E),
 }
 
-impl<E> UpgradeError<E>
-where
-    E: std::error::Error + Send + Sync + 'static
-{
-    pub fn into_io_error(self) -> std::io::Error {
-        std::io::Error::new(std::io::ErrorKind::Other, self)
-    }
-}
-
 impl<E> UpgradeError<E> {
     pub fn map_err<F, T>(self, f: F) -> UpgradeError<T>
     where
