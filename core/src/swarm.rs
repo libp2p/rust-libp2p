@@ -50,7 +50,8 @@ use crate::{
         raw_swarm::{RawSwarm, RawSwarmEvent}
     },
     protocols_handler::{NodeHandlerWrapper, ProtocolsHandler},
-    topology::Topology
+    topology::Topology,
+    topology::DisconnectReason,
 };
 use futures::prelude::*;
 use smallvec::SmallVec;
@@ -271,13 +272,16 @@ where TBehaviour: NetworkBehaviour<TTopology>,
                     self.topology.set_connected(&peer_id, &endpoint);
                     self.behaviour.inject_connected(peer_id, endpoint);
                 },
-                Async::Ready(RawSwarmEvent::NodeClosed { peer_id, endpoint }) |
+                Async::Ready(RawSwarmEvent::NodeClosed { peer_id, endpoint }) => {
+                    self.topology.set_disconnected(&peer_id, &endpoint, DisconnectReason::Graceful);
+                    self.behaviour.inject_disconnected(&peer_id, endpoint);
+                },
                 Async::Ready(RawSwarmEvent::NodeError { peer_id, endpoint, .. }) => {
-                    self.topology.set_disconnected(&peer_id, &endpoint);
+                    self.topology.set_disconnected(&peer_id, &endpoint, DisconnectReason::Error);
                     self.behaviour.inject_disconnected(&peer_id, endpoint);
                 },
                 Async::Ready(RawSwarmEvent::Replaced { peer_id, closed_endpoint, endpoint }) => {
-                    self.topology.set_disconnected(&peer_id, &closed_endpoint);
+                    self.topology.set_disconnected(&peer_id, &closed_endpoint, DisconnectReason::Replaced);
                     self.topology.set_connected(&peer_id, &endpoint);
                     self.behaviour.inject_disconnected(&peer_id, closed_endpoint);
                     self.behaviour.inject_connected(peer_id, endpoint);

@@ -63,10 +63,18 @@ pub trait Topology {
 
     /// Indicates to the topology that we have been disconnected from the given address with the
     /// given `PeerId`.
-    fn set_disconnected(&mut self, _peer_id: &PeerId, _addr: &ConnectedPoint) {}
+    fn set_disconnected(&mut self, _peer_id: &PeerId, _addr: &ConnectedPoint, _reason: DisconnectReason) {}
 
     /// Indicates to the topology that we have failed to reach the given address.
     fn set_unreachable(&mut self, _addr: &Multiaddr) {}
+}
+
+/// Reason why the peer has been disconnected.
+#[derive(Debug, Copy, Clone)]
+pub enum DisconnectReason {
+    Error,
+    Graceful,
+    Replaced,
 }
 
 /// Topology of the network stored in memory.
