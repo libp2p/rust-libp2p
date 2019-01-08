@@ -268,13 +268,17 @@ where TBehaviour: NetworkBehaviour<TTopology>,
                     self.behaviour.inject_node_event(peer_id, event);
                 },
                 Async::Ready(RawSwarmEvent::Connected { peer_id, endpoint }) => {
+                    self.topology.set_connected(&peer_id, &endpoint);
                     self.behaviour.inject_connected(peer_id, endpoint);
                 },
                 Async::Ready(RawSwarmEvent::NodeClosed { peer_id, endpoint }) |
                 Async::Ready(RawSwarmEvent::NodeError { peer_id, endpoint, .. }) => {
+                    self.topology.set_disconnected(&peer_id, &endpoint);
                     self.behaviour.inject_disconnected(&peer_id, endpoint);
                 },
                 Async::Ready(RawSwarmEvent::Replaced { peer_id, closed_endpoint, endpoint }) => {
+                    self.topology.set_disconnected(&peer_id, &closed_endpoint);
+                    self.topology.set_connected(&peer_id, &endpoint);
                     self.behaviour.inject_disconnected(&peer_id, closed_endpoint);
                     self.behaviour.inject_connected(peer_id, endpoint);
                 },
@@ -284,8 +288,12 @@ where TBehaviour: NetworkBehaviour<TTopology>,
                 },
                 Async::Ready(RawSwarmEvent::ListenerClosed { .. }) => {},
                 Async::Ready(RawSwarmEvent::IncomingConnectionError { .. }) => {},
-                Async::Ready(RawSwarmEvent::DialError { .. }) => {},
-                Async::Ready(RawSwarmEvent::UnknownPeerDialError { .. }) => {},
+                Async::Ready(RawSwarmEvent::DialError { multiaddr, .. }) => {
+                    self.topology.set_unreachable(&multiaddr);
+                },
+                Async::Ready(RawSwarmEvent::UnknownPeerDialError { multiaddr, .. }) => {
+                    self.topology.set_unreachable(&multiaddr);
+                },
             }
 
             let behaviour_poll = {
