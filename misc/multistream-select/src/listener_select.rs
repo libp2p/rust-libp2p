@@ -21,9 +21,13 @@
 //! Contains the `listener_select_proto` code, which allows selecting a protocol thanks to
 //! `multistream-select` for the listener.
 
-use bytes::Bytes;
 use futures::{prelude::*, sink, stream::StreamFuture};
-use crate::protocol::{DialerToListenerMessage, Listener, ListenerFuture, ListenerToDialerMessage};
+use crate::protocol::{
+    DialerToListenerMessage,
+    Listener,
+    ListenerFuture,
+    ListenerToDialerMessage
+};
 use log::{debug, trace};
 use std::mem;
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -58,27 +62,31 @@ where
 }
 
 /// Future, returned by `listener_select_proto` which selects a protocol among the ones supported.
-pub struct ListenerSelectFuture<R: AsyncRead + AsyncWrite, I, X>
+pub struct ListenerSelectFuture<R, I, X>
 where
-    for<'a> &'a I: IntoIterator<Item = X>
+    R: AsyncRead + AsyncWrite,
+    for<'a> &'a I: IntoIterator<Item = X>,
+    X: AsRef<[u8]>
 {
     inner: ListenerSelectState<R, I, X>
 }
 
-enum ListenerSelectState<R: AsyncRead + AsyncWrite, I, X>
+enum ListenerSelectState<R, I, X>
 where
-    for<'a> &'a I: IntoIterator<Item = X>
+    R: AsyncRead + AsyncWrite,
+    for<'a> &'a I: IntoIterator<Item = X>,
+    X: AsRef<[u8]>
 {
     AwaitListener {
-        listener_fut: ListenerFuture<R>,
+        listener_fut: ListenerFuture<R, X>,
         protocols: I
     },
     Incoming {
-        stream: StreamFuture<Listener<R>>,
+        stream: StreamFuture<Listener<R, X>>,
         protocols: I
     },
     Outgoing {
-        sender: sink::Send<Listener<R>>,
+        sender: sink::Send<Listener<R, X>>,
         protocols: I,
         outcome: Option<X>
     },
@@ -87,9 +95,9 @@ where
 
 impl<R, I, X> Future for ListenerSelectFuture<R, I, X>
 where
-    for<'a> &'a I: IntoIterator<Item = X>,
     R: AsyncRead + AsyncWrite,
-    X: AsRef<[u8]>
+    for<'a> &'a I: IntoIterator<Item = X>,
+    X: AsRef<[u8]> + Clone
 {
     type Item = (X, R, I);
     type Error = ProtocolChoiceError;
@@ -119,10 +127,12 @@ where
                     };
                     match msg {
                         Some(DialerToListenerMessage::ProtocolsListRequest) => {
-                            let msg = ListenerToDialerMessage::ProtocolsListResponse {
-                                list: protocols.into_iter().map(|x| Bytes::from(x.as_ref())).collect(),
-                            };
-                            trace!("protocols list response: {:?}", msg);
+                            trace!("protocols list response: {:?}", protocols
+                                   .into_iter()
+                                   .map(|p| p.as_ref().into())
+                                   .collect::<Vec<Vec<u8>>>());
+                            let list = protocols.into_iter().collect();
+                            let msg = ListenerToDialerMessage::ProtocolsListResponse { list };
                             let sender = listener.send(msg);
                             self.inner = ListenerSelectState::Outgoing {
                                 sender,
@@ -135,12 +145,14 @@ where
                             let mut send_back = ListenerToDialerMessage::NotAvailable;
                             for supported in &protocols {
                                 if name.as_ref() == supported.as_ref() {
-                                    send_back = ListenerToDialerMessage::ProtocolAck {name: name.clone()};
+                                    send_back = ListenerToDialerMessage::ProtocolAck {
+                                        name: supported.clone()
+                                    };
                                     outcome = Some(supported);
                                     break;
                                 }
                             }
-                            trace!("requested: {:?}, response: {:?}", name, send_back);
+                            trace!("requested: {:?}, supported: {}", name, outcome.is_some());
                             let sender = listener.send(send_back);
                             self.inner = ListenerSelectState::Outgoing { sender, protocols, outcome }
                         }
