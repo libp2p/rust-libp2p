@@ -301,7 +301,7 @@ impl ::protobuf::reflect::ProtobufValue for RPC {
 pub struct RPC_SubOpts {
     // message fields
     subscribe: ::std::option::Option<bool>,
-    topicid: ::protobuf::SingularField<::std::string::String>,
+    topic_hash: ::protobuf::SingularField<::std::string::String>,
     // special fields
     unknown_fields: ::protobuf::UnknownFields,
     cached_size: ::protobuf::CachedSize,
@@ -331,37 +331,37 @@ impl RPC_SubOpts {
         self.subscribe.unwrap_or(false)
     }
 
-    // optional string topicid = 2;
+    // optional string topic_hash = 2;
 
-    pub fn clear_topicid(&mut self) {
-        self.topicid.clear();
+    pub fn clear_topic_hash(&mut self) {
+        self.topic_hash.clear();
     }
 
-    pub fn has_topicid(&self) -> bool {
-        self.topicid.is_some()
+    pub fn has_topic_hash(&self) -> bool {
+        self.topic_hash.is_some()
     }
 
     // Param is passed by value, moved
-    pub fn set_topicid(&mut self, v: ::std::string::String) {
-        self.topicid = ::protobuf::SingularField::some(v);
+    pub fn set_topic_hash(&mut self, v: ::std::string::String) {
+        self.topic_hash = ::protobuf::SingularField::some(v);
     }
 
     // Mutable pointer to the field.
     // If field is not initialized, it is initialized with default value first.
-    pub fn mut_topicid(&mut self) -> &mut ::std::string::String {
-        if self.topicid.is_none() {
-            self.topicid.set_default();
+    pub fn mut_topic_hash(&mut self) -> &mut ::std::string::String {
+        if self.topic_hash.is_none() {
+            self.topic_hash.set_default();
         }
-        self.topicid.as_mut().unwrap()
+        self.topic_hash.as_mut().unwrap()
     }
 
     // Take field
-    pub fn take_topicid(&mut self) -> ::std::string::String {
-        self.topicid.take().unwrap_or_else(|| ::std::string::String::new())
+    pub fn take_topic_hash(&mut self) -> ::std::string::String {
+        self.topic_hash.take().unwrap_or_else(|| ::std::string::String::new())
     }
 
-    pub fn get_topicid(&self) -> &str {
-        match self.topicid.as_ref() {
+    pub fn get_topic_hash(&self) -> &str {
+        match self.topic_hash.as_ref() {
             Some(v) => &v,
             None => "",
         }
@@ -385,7 +385,7 @@ impl ::protobuf::Message for RPC_SubOpts {
                     self.subscribe = ::std::option::Option::Some(tmp);
                 },
                 2 => {
-                    ::protobuf::rt::read_singular_string_into(wire_type, is, &mut self.topicid)?;
+                    ::protobuf::rt::read_singular_string_into(wire_type, is, &mut self.topic_hash)?;
                 },
                 _ => {
                     ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
@@ -402,7 +402,7 @@ impl ::protobuf::Message for RPC_SubOpts {
         if let Some(v) = self.subscribe {
             my_size += 2;
         }
-        if let Some(ref v) = self.topicid.as_ref() {
+        if let Some(ref v) = self.topic_hash.as_ref() {
             my_size += ::protobuf::rt::string_size(2, &v);
         }
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
@@ -414,7 +414,7 @@ impl ::protobuf::Message for RPC_SubOpts {
         if let Some(v) = self.subscribe {
             os.write_bool(1, v)?;
         }
-        if let Some(ref v) = self.topicid.as_ref() {
+        if let Some(ref v) = self.topic_hash.as_ref() {
             os.write_string(2, &v)?;
         }
         os.write_unknown_fields(self.get_unknown_fields())?;
@@ -465,9 +465,9 @@ impl ::protobuf::Message for RPC_SubOpts {
                     |m: &mut RPC_SubOpts| { &mut m.subscribe },
                 ));
                 fields.push(::protobuf::reflect::accessor::make_singular_field_accessor::<_, ::protobuf::types::ProtobufTypeString>(
-                    "topicid",
-                    |m: &RPC_SubOpts| { &m.topicid },
-                    |m: &mut RPC_SubOpts| { &mut m.topicid },
+                    "topic_hash",
+                    |m: &RPC_SubOpts| { &m.topic_hash },
+                    |m: &mut RPC_SubOpts| { &mut m.topic_hash },
                 ));
                 ::protobuf::reflect::MessageDescriptor::new::<RPC_SubOpts>(
                     "RPC_SubOpts",
@@ -492,7 +492,7 @@ impl ::protobuf::Message for RPC_SubOpts {
 impl ::protobuf::Clear for RPC_SubOpts {
     fn clear(&mut self) {
         self.clear_subscribe();
-        self.clear_topicid();
+        self.clear_topic_hash();
         self.unknown_fields.clear();
     }
 }
@@ -515,7 +515,7 @@ pub struct Message {
     from: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     data: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     seqno: ::protobuf::SingularField<::std::vec::Vec<u8>>,
-    topicIDs: ::protobuf::RepeatedField<::std::string::String>,
+    topic_hashes: ::protobuf::RepeatedField<::std::string::String>,
     // special fields
     unknown_fields: ::protobuf::UnknownFields,
     cached_size: ::protobuf::CachedSize,
@@ -634,29 +634,29 @@ impl Message {
         }
     }
 
-    // repeated string topicIDs = 4;
+    // repeated string topic_hashes = 4;
 
-    pub fn clear_topicIDs(&mut self) {
-        self.topicIDs.clear();
+    pub fn clear_topic_hashes(&mut self) {
+        self.topic_hashes.clear();
     }
 
     // Param is passed by value, moved
-    pub fn set_topicIDs(&mut self, v: ::protobuf::RepeatedField<::std::string::String>) {
-        self.topicIDs = v;
+    pub fn set_topic_hashes(&mut self, v: ::protobuf::RepeatedField<::std::string::String>) {
+        self.topic_hashes = v;
     }
 
     // Mutable pointer to the field.
-    pub fn mut_topicIDs(&mut self) -> &mut ::protobuf::RepeatedField<::std::string::String> {
-        &mut self.topicIDs
+    pub fn mut_topic_hashes(&mut self) -> &mut ::protobuf::RepeatedField<::std::string::String> {
+        &mut self.topic_hashes
     }
 
     // Take field
-    pub fn take_topicIDs(&mut self) -> ::protobuf::RepeatedField<::std::string::String> {
-        ::std::mem::replace(&mut self.topicIDs, ::protobuf::RepeatedField::new())
+    pub fn take_topic_hashes(&mut self) -> ::protobuf::RepeatedField<::std::string::String> {
+        ::std::mem::replace(&mut self.topic_hashes, ::protobuf::RepeatedField::new())
     }
 
-    pub fn get_topicIDs(&self) -> &[::std::string::String] {
-        &self.topicIDs
+    pub fn get_topic_hashes(&self) -> &[::std::string::String] {
+        &self.topic_hashes
     }
 }
 
@@ -679,7 +679,7 @@ impl ::protobuf::Message for Message {
                     ::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.seqno)?;
                 },
                 4 => {
-                    ::protobuf::rt::read_repeated_string_into(wire_type, is, &mut self.topicIDs)?;
+                    ::protobuf::rt::read_repeated_string_into(wire_type, is, &mut self.topic_hashes)?;
                 },
                 _ => {
                     ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
@@ -702,7 +702,7 @@ impl ::protobuf::Message for Message {
         if let Some(ref v) = self.seqno.as_ref() {
             my_size += ::protobuf::rt::bytes_size(3, &v);
         }
-        for value in &self.topicIDs {
+        for value in &self.topic_hashes {
             my_size += ::protobuf::rt::string_size(4, &value);
         };
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
@@ -720,7 +720,7 @@ impl ::protobuf::Message for Message {
         if let Some(ref v) = self.seqno.as_ref() {
             os.write_bytes(3, &v)?;
         }
-        for v in &self.topicIDs {
+        for v in &self.topic_hashes {
             os.write_string(4, &v)?;
         };
         os.write_unknown_fields(self.get_unknown_fields())?;
@@ -781,9 +781,9 @@ impl ::protobuf::Message for Message {
                     |m: &mut Message| { &mut m.seqno },
                 ));
                 fields.push(::protobuf::reflect::accessor::make_repeated_field_accessor::<_, ::protobuf::types::ProtobufTypeString>(
-                    "topicIDs",
-                    |m: &Message| { &m.topicIDs },
-                    |m: &mut Message| { &mut m.topicIDs },
+                    "topic_hashes",
+                    |m: &Message| { &m.topic_hashes },
+                    |m: &mut Message| { &mut m.topic_hashes },
                 ));
                 ::protobuf::reflect::MessageDescriptor::new::<Message>(
                     "Message",
@@ -810,7 +810,7 @@ impl ::protobuf::Clear for Message {
         self.clear_from();
         self.clear_data();
         self.clear_seqno();
-        self.clear_topicIDs();
+        self.clear_topic_hashes();
         self.unknown_fields.clear();
     }
 }
@@ -1147,8 +1147,8 @@ impl ::protobuf::reflect::ProtobufValue for ControlMessage {
 #[derive(PartialEq,Clone,Default)]
 pub struct ControlIHave {
     // message fields
-    topicID: ::protobuf::SingularField<::std::string::String>,
-    mRep: ::std::vec::Vec<MessageRep>,
+    topic_hash: ::protobuf::SingularField<::std::string::String>,
+    message_hashes: ::protobuf::RepeatedField<::std::string::String>,
     // special fields
     unknown_fields: ::protobuf::UnknownFields,
     cached_size: ::protobuf::CachedSize,
@@ -1159,65 +1159,65 @@ impl ControlIHave {
         ::std::default::Default::default()
     }
 
-    // optional string topicID = 1;
+    // optional string topic_hash = 1;
 
-    pub fn clear_topicID(&mut self) {
-        self.topicID.clear();
+    pub fn clear_topic_hash(&mut self) {
+        self.topic_hash.clear();
     }
 
-    pub fn has_topicID(&self) -> bool {
-        self.topicID.is_some()
+    pub fn has_topic_hash(&self) -> bool {
+        self.topic_hash.is_some()
     }
 
     // Param is passed by value, moved
-    pub fn set_topicID(&mut self, v: ::std::string::String) {
-        self.topicID = ::protobuf::SingularField::some(v);
+    pub fn set_topic_hash(&mut self, v: ::std::string::String) {
+        self.topic_hash = ::protobuf::SingularField::some(v);
     }
 
     // Mutable pointer to the field.
     // If field is not initialized, it is initialized with default value first.
-    pub fn mut_topicID(&mut self) -> &mut ::std::string::String {
-        if self.topicID.is_none() {
-            self.topicID.set_default();
+    pub fn mut_topic_hash(&mut self) -> &mut ::std::string::String {
+        if self.topic_hash.is_none() {
+            self.topic_hash.set_default();
         }
-        self.topicID.as_mut().unwrap()
+        self.topic_hash.as_mut().unwrap()
     }
 
     // Take field
-    pub fn take_topicID(&mut self) -> ::std::string::String {
-        self.topicID.take().unwrap_or_else(|| ::std::string::String::new())
+    pub fn take_topic_hash(&mut self) -> ::std::string::String {
+        self.topic_hash.take().unwrap_or_else(|| ::std::string::String::new())
     }
 
-    pub fn get_topicID(&self) -> &str {
-        match self.topicID.as_ref() {
+    pub fn get_topic_hash(&self) -> &str {
+        match self.topic_hash.as_ref() {
             Some(v) => &v,
             None => "",
         }
     }
 
-    // repeated .pubsub.pb.MessageRep mRep = 2;
+    // repeated string message_hashes = 2;
 
-    pub fn clear_mRep(&mut self) {
-        self.mRep.clear();
+    pub fn clear_message_hashes(&mut self) {
+        self.message_hashes.clear();
     }
 
     // Param is passed by value, moved
-    pub fn set_mRep(&mut self, v: ::std::vec::Vec<MessageRep>) {
-        self.mRep = v;
+    pub fn set_message_hashes(&mut self, v: ::protobuf::RepeatedField<::std::string::String>) {
+        self.message_hashes = v;
     }
 
     // Mutable pointer to the field.
-    pub fn mut_mRep(&mut self) -> &mut ::std::vec::Vec<MessageRep> {
-        &mut self.mRep
+    pub fn mut_message_hashes(&mut self) -> &mut ::protobuf::RepeatedField<::std::string::String> {
+        &mut self.message_hashes
     }
 
     // Take field
-    pub fn take_mRep(&mut self) -> ::std::vec::Vec<MessageRep> {
-        ::std::mem::replace(&mut self.mRep, ::std::vec::Vec::new())
+    pub fn take_message_hashes(&mut self) -> ::protobuf::RepeatedField<::std::string::String> {
+        ::std::mem::replace(&mut self.message_hashes, ::protobuf::RepeatedField::new())
     }
 
-    pub fn get_mRep(&self) -> &[MessageRep] {
-        &self.mRep
+    pub fn get_message_hashes(&self) -> &[::std::string::String] {
+        &self.message_hashes
     }
 }
 
@@ -1231,10 +1231,10 @@ impl ::protobuf::Message for ControlIHave {
             let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
                 1 => {
-                    ::protobuf::rt::read_singular_string_into(wire_type, is, &mut self.topicID)?;
+                    ::protobuf::rt::read_singular_string_into(wire_type, is, &mut self.topic_hash)?;
                 },
                 2 => {
-                    ::protobuf::rt::read_repeated_enum_with_unknown_fields_into(wire_type, is, &mut self.mRep, 2, &mut self.unknown_fields)?
+                    ::protobuf::rt::read_repeated_string_into(wire_type, is, &mut self.message_hashes)?;
                 },
                 _ => {
                     ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
@@ -1248,11 +1248,11 @@ impl ::protobuf::Message for ControlIHave {
     #[allow(unused_variables)]
     fn compute_size(&self) -> u32 {
         let mut my_size = 0;
-        if let Some(ref v) = self.topicID.as_ref() {
+        if let Some(ref v) = self.topic_hash.as_ref() {
             my_size += ::protobuf::rt::string_size(1, &v);
         }
-        for value in &self.mRep {
-            my_size += ::protobuf::rt::enum_size(2, *value);
+        for value in &self.message_hashes {
+            my_size += ::protobuf::rt::string_size(2, &value);
         };
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
@@ -1260,11 +1260,11 @@ impl ::protobuf::Message for ControlIHave {
     }
 
     fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
-        if let Some(ref v) = self.topicID.as_ref() {
+        if let Some(ref v) = self.topic_hash.as_ref() {
             os.write_string(1, &v)?;
         }
-        for v in &self.mRep {
-            os.write_enum(2, v.value())?;
+        for v in &self.message_hashes {
+            os.write_string(2, &v)?;
         };
         os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
@@ -1309,14 +1309,14 @@ impl ::protobuf::Message for ControlIHave {
             descriptor.get(|| {
                 let mut fields = ::std::vec::Vec::new();
                 fields.push(::protobuf::reflect::accessor::make_singular_field_accessor::<_, ::protobuf::types::ProtobufTypeString>(
-                    "topicID",
-                    |m: &ControlIHave| { &m.topicID },
-                    |m: &mut ControlIHave| { &mut m.topicID },
+                    "topic_hash",
+                    |m: &ControlIHave| { &m.topic_hash },
+                    |m: &mut ControlIHave| { &mut m.topic_hash },
                 ));
-                fields.push(::protobuf::reflect::accessor::make_vec_accessor::<_, ::protobuf::types::ProtobufTypeEnum<MessageRep>>(
-                    "mRep",
-                    |m: &ControlIHave| { &m.mRep },
-                    |m: &mut ControlIHave| { &mut m.mRep },
+                fields.push(::protobuf::reflect::accessor::make_repeated_field_accessor::<_, ::protobuf::types::ProtobufTypeString>(
+                    "message_hashes",
+                    |m: &ControlIHave| { &m.message_hashes },
+                    |m: &mut ControlIHave| { &mut m.message_hashes },
                 ));
                 ::protobuf::reflect::MessageDescriptor::new::<ControlIHave>(
                     "ControlIHave",
@@ -1340,8 +1340,8 @@ impl ::protobuf::Message for ControlIHave {
 
 impl ::protobuf::Clear for ControlIHave {
     fn clear(&mut self) {
-        self.clear_topicID();
-        self.clear_mRep();
+        self.clear_topic_hash();
+        self.clear_message_hashes();
         self.unknown_fields.clear();
     }
 }
@@ -1361,7 +1361,7 @@ impl ::protobuf::reflect::ProtobufValue for ControlIHave {
 #[derive(PartialEq,Clone,Default)]
 pub struct ControlIWant {
     // message fields
-    MessageRep: ::protobuf::RepeatedField<::std::string::String>,
+    message_hashes: ::protobuf::RepeatedField<::std::string::String>,
     // special fields
     unknown_fields: ::protobuf::UnknownFields,
     cached_size: ::protobuf::CachedSize,
@@ -1372,29 +1372,29 @@ impl ControlIWant {
         ::std::default::Default::default()
     }
 
-    // repeated string MessageRep = 1;
+    // repeated string message_hashes = 1;
 
-    pub fn clear_MessageRep(&mut self) {
-        self.MessageRep.clear();
+    pub fn clear_message_hashes(&mut self) {
+        self.message_hashes.clear();
     }
 
     // Param is passed by value, moved
-    pub fn set_MessageRep(&mut self, v: ::protobuf::RepeatedField<::std::string::String>) {
-        self.MessageRep = v;
+    pub fn set_message_hashes(&mut self, v: ::protobuf::RepeatedField<::std::string::String>) {
+        self.message_hashes = v;
     }
 
     // Mutable pointer to the field.
-    pub fn mut_MessageRep(&mut self) -> &mut ::protobuf::RepeatedField<::std::string::String> {
-        &mut self.MessageRep
+    pub fn mut_message_hashes(&mut self) -> &mut ::protobuf::RepeatedField<::std::string::String> {
+        &mut self.message_hashes
     }
 
     // Take field
-    pub fn take_MessageRep(&mut self) -> ::protobuf::RepeatedField<::std::string::String> {
-        ::std::mem::replace(&mut self.MessageRep, ::protobuf::RepeatedField::new())
+    pub fn take_message_hashes(&mut self) -> ::protobuf::RepeatedField<::std::string::String> {
+        ::std::mem::replace(&mut self.message_hashes, ::protobuf::RepeatedField::new())
     }
 
-    pub fn get_MessageRep(&self) -> &[::std::string::String] {
-        &self.MessageRep
+    pub fn get_message_hashes(&self) -> &[::std::string::String] {
+        &self.message_hashes
     }
 }
 
@@ -1408,7 +1408,7 @@ impl ::protobuf::Message for ControlIWant {
             let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
                 1 => {
-                    ::protobuf::rt::read_repeated_string_into(wire_type, is, &mut self.MessageRep)?;
+                    ::protobuf::rt::read_repeated_string_into(wire_type, is, &mut self.message_hashes)?;
                 },
                 _ => {
                     ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
@@ -1422,7 +1422,7 @@ impl ::protobuf::Message for ControlIWant {
     #[allow(unused_variables)]
     fn compute_size(&self) -> u32 {
         let mut my_size = 0;
-        for value in &self.MessageRep {
+        for value in &self.message_hashes {
             my_size += ::protobuf::rt::string_size(1, &value);
         };
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
@@ -1431,7 +1431,7 @@ impl ::protobuf::Message for ControlIWant {
     }
 
     fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
-        for v in &self.MessageRep {
+        for v in &self.message_hashes {
             os.write_string(1, &v)?;
         };
         os.write_unknown_fields(self.get_unknown_fields())?;
@@ -1477,9 +1477,9 @@ impl ::protobuf::Message for ControlIWant {
             descriptor.get(|| {
                 let mut fields = ::std::vec::Vec::new();
                 fields.push(::protobuf::reflect::accessor::make_repeated_field_accessor::<_, ::protobuf::types::ProtobufTypeString>(
-                    "MessageRep",
-                    |m: &ControlIWant| { &m.MessageRep },
-                    |m: &mut ControlIWant| { &mut m.MessageRep },
+                    "message_hashes",
+                    |m: &ControlIWant| { &m.message_hashes },
+                    |m: &mut ControlIWant| { &mut m.message_hashes },
                 ));
                 ::protobuf::reflect::MessageDescriptor::new::<ControlIWant>(
                     "ControlIWant",
@@ -1503,7 +1503,7 @@ impl ::protobuf::Message for ControlIWant {
 
 impl ::protobuf::Clear for ControlIWant {
     fn clear(&mut self) {
-        self.clear_MessageRep();
+        self.clear_message_hashes();
         self.unknown_fields.clear();
     }
 }
@@ -1523,7 +1523,7 @@ impl ::protobuf::reflect::ProtobufValue for ControlIWant {
 #[derive(PartialEq,Clone,Default)]
 pub struct ControlGraft {
     // message fields
-    topicID: ::protobuf::SingularField<::std::string::String>,
+    topic_hash: ::protobuf::SingularField<::std::string::String>,
     // special fields
     unknown_fields: ::protobuf::UnknownFields,
     cached_size: ::protobuf::CachedSize,
@@ -1534,37 +1534,37 @@ impl ControlGraft {
         ::std::default::Default::default()
     }
 
-    // optional string topicID = 1;
+    // optional string topic_hash = 1;
 
-    pub fn clear_topicID(&mut self) {
-        self.topicID.clear();
+    pub fn clear_topic_hash(&mut self) {
+        self.topic_hash.clear();
     }
 
-    pub fn has_topicID(&self) -> bool {
-        self.topicID.is_some()
+    pub fn has_topic_hash(&self) -> bool {
+        self.topic_hash.is_some()
     }
 
     // Param is passed by value, moved
-    pub fn set_topicID(&mut self, v: ::std::string::String) {
-        self.topicID = ::protobuf::SingularField::some(v);
+    pub fn set_topic_hash(&mut self, v: ::std::string::String) {
+        self.topic_hash = ::protobuf::SingularField::some(v);
     }
 
     // Mutable pointer to the field.
     // If field is not initialized, it is initialized with default value first.
-    pub fn mut_topicID(&mut self) -> &mut ::std::string::String {
-        if self.topicID.is_none() {
-            self.topicID.set_default();
+    pub fn mut_topic_hash(&mut self) -> &mut ::std::string::String {
+        if self.topic_hash.is_none() {
+            self.topic_hash.set_default();
         }
-        self.topicID.as_mut().unwrap()
+        self.topic_hash.as_mut().unwrap()
     }
 
     // Take field
-    pub fn take_topicID(&mut self) -> ::std::string::String {
-        self.topicID.take().unwrap_or_else(|| ::std::string::String::new())
+    pub fn take_topic_hash(&mut self) -> ::std::string::String {
+        self.topic_hash.take().unwrap_or_else(|| ::std::string::String::new())
     }
 
-    pub fn get_topicID(&self) -> &str {
-        match self.topicID.as_ref() {
+    pub fn get_topic_hash(&self) -> &str {
+        match self.topic_hash.as_ref() {
             Some(v) => &v,
             None => "",
         }
@@ -1581,7 +1581,7 @@ impl ::protobuf::Message for ControlGraft {
             let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
                 1 => {
-                    ::protobuf::rt::read_singular_string_into(wire_type, is, &mut self.topicID)?;
+                    ::protobuf::rt::read_singular_string_into(wire_type, is, &mut self.topic_hash)?;
                 },
                 _ => {
                     ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
@@ -1595,7 +1595,7 @@ impl ::protobuf::Message for ControlGraft {
     #[allow(unused_variables)]
     fn compute_size(&self) -> u32 {
         let mut my_size = 0;
-        if let Some(ref v) = self.topicID.as_ref() {
+        if let Some(ref v) = self.topic_hash.as_ref() {
             my_size += ::protobuf::rt::string_size(1, &v);
         }
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
@@ -1604,7 +1604,7 @@ impl ::protobuf::Message for ControlGraft {
     }
 
     fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
-        if let Some(ref v) = self.topicID.as_ref() {
+        if let Some(ref v) = self.topic_hash.as_ref() {
             os.write_string(1, &v)?;
         }
         os.write_unknown_fields(self.get_unknown_fields())?;
@@ -1650,9 +1650,9 @@ impl ::protobuf::Message for ControlGraft {
             descriptor.get(|| {
                 let mut fields = ::std::vec::Vec::new();
                 fields.push(::protobuf::reflect::accessor::make_singular_field_accessor::<_, ::protobuf::types::ProtobufTypeString>(
-                    "topicID",
-                    |m: &ControlGraft| { &m.topicID },
-                    |m: &mut ControlGraft| { &mut m.topicID },
+                    "topic_hash",
+                    |m: &ControlGraft| { &m.topic_hash },
+                    |m: &mut ControlGraft| { &mut m.topic_hash },
                 ));
                 ::protobuf::reflect::MessageDescriptor::new::<ControlGraft>(
                     "ControlGraft",
@@ -1676,7 +1676,7 @@ impl ::protobuf::Message for ControlGraft {
 
 impl ::protobuf::Clear for ControlGraft {
     fn clear(&mut self) {
-        self.clear_topicID();
+        self.clear_topic_hash();
         self.unknown_fields.clear();
     }
 }
@@ -1696,7 +1696,7 @@ impl ::protobuf::reflect::ProtobufValue for ControlGraft {
 #[derive(PartialEq,Clone,Default)]
 pub struct ControlPrune {
     // message fields
-    topicID: ::protobuf::SingularField<::std::string::String>,
+    topic_hash: ::protobuf::SingularField<::std::string::String>,
     // special fields
     unknown_fields: ::protobuf::UnknownFields,
     cached_size: ::protobuf::CachedSize,
@@ -1707,37 +1707,37 @@ impl ControlPrune {
         ::std::default::Default::default()
     }
 
-    // optional string topicID = 1;
+    // optional string topic_hash = 1;
 
-    pub fn clear_topicID(&mut self) {
-        self.topicID.clear();
+    pub fn clear_topic_hash(&mut self) {
+        self.topic_hash.clear();
     }
 
-    pub fn has_topicID(&self) -> bool {
-        self.topicID.is_some()
+    pub fn has_topic_hash(&self) -> bool {
+        self.topic_hash.is_some()
     }
 
     // Param is passed by value, moved
-    pub fn set_topicID(&mut self, v: ::std::string::String) {
-        self.topicID = ::protobuf::SingularField::some(v);
+    pub fn set_topic_hash(&mut self, v: ::std::string::String) {
+        self.topic_hash = ::protobuf::SingularField::some(v);
     }
 
     // Mutable pointer to the field.
     // If field is not initialized, it is initialized with default value first.
-    pub fn mut_topicID(&mut self) -> &mut ::std::string::String {
-        if self.topicID.is_none() {
-            self.topicID.set_default();
+    pub fn mut_topic_hash(&mut self) -> &mut ::std::string::String {
+        if self.topic_hash.is_none() {
+            self.topic_hash.set_default();
         }
-        self.topicID.as_mut().unwrap()
+        self.topic_hash.as_mut().unwrap()
     }
 
     // Take field
-    pub fn take_topicID(&mut self) -> ::std::string::String {
-        self.topicID.take().unwrap_or_else(|| ::std::string::String::new())
+    pub fn take_topic_hash(&mut self) -> ::std::string::String {
+        self.topic_hash.take().unwrap_or_else(|| ::std::string::String::new())
     }
 
-    pub fn get_topicID(&self) -> &str {
-        match self.topicID.as_ref() {
+    pub fn get_topic_hash(&self) -> &str {
+        match self.topic_hash.as_ref() {
             Some(v) => &v,
             None => "",
         }
@@ -1754,7 +1754,7 @@ impl ::protobuf::Message for ControlPrune {
             let (field_number, wire_type) = is.read_tag_unpack()?;
             match field_number {
                 1 => {
-                    ::protobuf::rt::read_singular_string_into(wire_type, is, &mut self.topicID)?;
+                    ::protobuf::rt::read_singular_string_into(wire_type, is, &mut self.topic_hash)?;
                 },
                 _ => {
                     ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
@@ -1768,7 +1768,7 @@ impl ::protobuf::Message for ControlPrune {
     #[allow(unused_variables)]
     fn compute_size(&self) -> u32 {
         let mut my_size = 0;
-        if let Some(ref v) = self.topicID.as_ref() {
+        if let Some(ref v) = self.topic_hash.as_ref() {
             my_size += ::protobuf::rt::string_size(1, &v);
         }
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
@@ -1777,7 +1777,7 @@ impl ::protobuf::Message for ControlPrune {
     }
 
     fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream) -> ::protobuf::ProtobufResult<()> {
-        if let Some(ref v) = self.topicID.as_ref() {
+        if let Some(ref v) = self.topic_hash.as_ref() {
             os.write_string(1, &v)?;
         }
         os.write_unknown_fields(self.get_unknown_fields())?;
@@ -1823,9 +1823,9 @@ impl ::protobuf::Message for ControlPrune {
             descriptor.get(|| {
                 let mut fields = ::std::vec::Vec::new();
                 fields.push(::protobuf::reflect::accessor::make_singular_field_accessor::<_, ::protobuf::types::ProtobufTypeString>(
-                    "topicID",
-                    |m: &ControlPrune| { &m.topicID },
-                    |m: &mut ControlPrune| { &mut m.topicID },
+                    "topic_hash",
+                    |m: &ControlPrune| { &m.topic_hash },
+                    |m: &mut ControlPrune| { &mut m.topic_hash },
                 ));
                 ::protobuf::reflect::MessageDescriptor::new::<ControlPrune>(
                     "ControlPrune",
@@ -1849,7 +1849,7 @@ impl ::protobuf::Message for ControlPrune {
 
 impl ::protobuf::Clear for ControlPrune {
     fn clear(&mut self) {
-        self.clear_topicID();
+        self.clear_topic_hash();
         self.unknown_fields.clear();
     }
 }
@@ -2039,195 +2039,123 @@ impl ::protobuf::reflect::ProtobufValue for TopicDescriptor {
     }
 }
 
-#[derive(Clone,PartialEq,Eq,Debug,Hash)]
-pub enum MessageRep {
-    ID = 0,
-    HASH = 1,
-}
-
-impl ::protobuf::ProtobufEnum for MessageRep {
-    fn value(&self) -> i32 {
-        *self as i32
-    }
-
-    fn from_i32(value: i32) -> ::std::option::Option<MessageRep> {
-        match value {
-            0 => ::std::option::Option::Some(MessageRep::ID),
-            1 => ::std::option::Option::Some(MessageRep::HASH),
-            _ => ::std::option::Option::None
-        }
-    }
-
-    fn values() -> &'static [Self] {
-        static values: &'static [MessageRep] = &[
-            MessageRep::ID,
-            MessageRep::HASH,
-        ];
-        values
-    }
-
-    fn enum_descriptor_static() -> &'static ::protobuf::reflect::EnumDescriptor {
-        static mut descriptor: ::protobuf::lazy::Lazy<::protobuf::reflect::EnumDescriptor> = ::protobuf::lazy::Lazy {
-            lock: ::protobuf::lazy::ONCE_INIT,
-            ptr: 0 as *const ::protobuf::reflect::EnumDescriptor,
-        };
-        unsafe {
-            descriptor.get(|| {
-                ::protobuf::reflect::EnumDescriptor::new("MessageRep", file_descriptor_proto())
-            })
-        }
-    }
-}
-
-impl ::std::marker::Copy for MessageRep {
-}
-
-impl ::protobuf::reflect::ProtobufValue for MessageRep {
-    fn as_ref(&self) -> ::protobuf::reflect::ProtobufValueRef {
-        ::protobuf::reflect::ProtobufValueRef::Enum(self.descriptor())
-    }
-}
-
-pub mod exts {
-    use protobuf::Message as Message_imported_for_functions;
-
-    pub const type: ::protobuf::ext::ExtFieldOptional<::protobuf::descriptor::EnumValueOptions, ::protobuf::types::ProtobufTypeString> = ::protobuf::ext::ExtFieldOptional { field_number: 51234, phantom: ::std::marker::PhantomData };
-
-    pub const code: ::protobuf::ext::ExtFieldOptional<::protobuf::descriptor::EnumValueOptions, ::protobuf::types::ProtobufTypeString> = ::protobuf::ext::ExtFieldOptional { field_number: 51235, phantom: ::std::marker::PhantomData };
-}
-
 static file_descriptor_proto_data: &'static [u8] = b"\
-    \n\trpc.proto\x12\tpubsub.pb\x1a\x20google/protobuf/descriptor.proto\"\
-    \xe9\x01\n\x03RPC\x12<\n\rsubscriptions\x18\x01\x20\x03(\x0b2\x16.pubsub\
-    .pb.RPC.SubOptsR\rsubscriptions\x12,\n\x07publish\x18\x02\x20\x03(\x0b2\
-    \x12.pubsub.pb.MessageR\x07publish\x123\n\x07control\x18\x03\x20\x01(\
-    \x0b2\x19.pubsub.pb.ControlMessageR\x07control\x1aA\n\x07SubOpts\x12\x1c\
-    \n\tsubscribe\x18\x01\x20\x01(\x08R\tsubscribe\x12\x18\n\x07topicid\x18\
-    \x02\x20\x01(\tR\x07topicid\"c\n\x07Message\x12\x12\n\x04from\x18\x01\
-    \x20\x01(\x0cR\x04from\x12\x12\n\x04data\x18\x02\x20\x01(\x0cR\x04data\
-    \x12\x14\n\x05seqno\x18\x03\x20\x01(\x0cR\x05seqno\x12\x1a\n\x08topicIDs\
-    \x18\x04\x20\x03(\tR\x08topicIDs\"\xcc\x01\n\x0eControlMessage\x12-\n\
-    \x05ihave\x18\x01\x20\x03(\x0b2\x17.pubsub.pb.ControlIHaveR\x05ihave\x12\
-    -\n\x05iwant\x18\x02\x20\x03(\x0b2\x17.pubsub.pb.ControlIWantR\x05iwant\
-    \x12-\n\x05graft\x18\x03\x20\x03(\x0b2\x17.pubsub.pb.ControlGraftR\x05gr\
-    aft\x12-\n\x05prune\x18\x04\x20\x03(\x0b2\x17.pubsub.pb.ControlPruneR\
-    \x05prune\"S\n\x0cControlIHave\x12\x18\n\x07topicID\x18\x01\x20\x01(\tR\
-    \x07topicID\x12)\n\x04mRep\x18\x02\x20\x03(\x0e2\x15.pubsub.pb.MessageRe\
-    pR\x04mRep\".\n\x0cControlIWant\x12\x1e\n\nMessageRep\x18\x01\x20\x03(\t\
-    R\nMessageRep\"(\n\x0cControlGraft\x12\x18\n\x07topicID\x18\x01\x20\x01(\
-    \tR\x07topicID\"(\n\x0cControlPrune\x12\x18\n\x07topicID\x18\x01\x20\x01\
-    (\tR\x07topicID\"%\n\x0fTopicDescriptor\x12\x12\n\x04name\x18\x01\x20\
-    \x01(\tR\x04name*9\n\nMessageRep\x12\x13\n\x02ID\x10\0\x1a\x0b\x9a\x82\
-    \x19\x01I\x92\x82\x19\x02ID\x12\x16\n\x04HASH\x10\x01\x1a\x0c\x92\x82\
-    \x19\x03HSH\x9a\x82\x19\x01H:7\n\x04type\x18\xa2\x90\x03\x20\x01(\t\x12!\
-    .google.protobuf.EnumValueOptionsR\x04type:7\n\x04code\x18\xa3\x90\x03\
-    \x20\x01(\t\x12!.google.protobuf.EnumValueOptionsR\x04codeJ\xe3\x14\n\
-    \x06\x12\x04\x03\0c\x01\n\x87\x01\n\x01\x0c\x12\x03\x03\0\x122}\x20From\
-    \x20https://github.com/libp2p/go-libp2p-pubsub/blob/master/pb/rpc.proto,\
-    \n\x20should\x20be\x20the\x20same\x20unless\x20that\x20has\x20been\x20ch\
-    anged.\n\n\t\n\x02\x03\0\x12\x03\x05\x07)\n\t\n\x01\x07\x12\x04\x07\0\n\
-    \x03\n\t\n\x02\x07\0\x12\x03\x08\x08$\n\n\n\x03\x07\0\x02\x12\x03\x07\
-    \x07'\n\n\n\x03\x07\0\x04\x12\x03\x08\x08\x10\n\n\n\x03\x07\0\x05\x12\
-    \x03\x08\x11\x17\n\n\n\x03\x07\0\x01\x12\x03\x08\x18\x1c\n\n\n\x03\x07\0\
-    \x03\x12\x03\x08\x1e#\n\t\n\x02\x07\x01\x12\x03\t\x08$\n\n\n\x03\x07\x01\
-    \x02\x12\x03\x07\x07'\n\n\n\x03\x07\x01\x04\x12\x03\t\x08\x10\n\n\n\x03\
-    \x07\x01\x05\x12\x03\t\x11\x17\n\n\n\x03\x07\x01\x01\x12\x03\t\x18\x1c\n\
-    \n\n\x03\x07\x01\x03\x12\x03\t\x1e#\n\x08\n\x01\x02\x12\x03\x0c\x08\x11\
-    \n\n\n\x02\x04\0\x12\x04\x0e\0\x18\x01\n\n\n\x03\x04\0\x01\x12\x03\x0e\
-    \x08\x0b\n\x0b\n\x04\x04\0\x02\0\x12\x03\x0f\x08+\n\x0c\n\x05\x04\0\x02\
-    \0\x04\x12\x03\x0f\x08\x10\n\x0c\n\x05\x04\0\x02\0\x06\x12\x03\x0f\x11\
-    \x18\n\x0c\n\x05\x04\0\x02\0\x01\x12\x03\x0f\x19&\n\x0c\n\x05\x04\0\x02\
-    \0\x03\x12\x03\x0f)*\n\x0b\n\x04\x04\0\x02\x01\x12\x03\x10\x08%\n\x0c\n\
-    \x05\x04\0\x02\x01\x04\x12\x03\x10\x08\x10\n\x0c\n\x05\x04\0\x02\x01\x06\
-    \x12\x03\x10\x11\x18\n\x0c\n\x05\x04\0\x02\x01\x01\x12\x03\x10\x19\x20\n\
-    \x0c\n\x05\x04\0\x02\x01\x03\x12\x03\x10#$\n\x0c\n\x04\x04\0\x03\0\x12\
-    \x04\x12\x08\x15\t\n\x0c\n\x05\x04\0\x03\0\x01\x12\x03\x12\x10\x17\n(\n\
-    \x06\x04\0\x03\0\x02\0\x12\x03\x13\x10,\"\x19\x20subscribe\x20or\x20unsu\
-    bcribe\n\n\x0e\n\x07\x04\0\x03\0\x02\0\x04\x12\x03\x13\x10\x18\n\x0e\n\
-    \x07\x04\0\x03\0\x02\0\x05\x12\x03\x13\x19\x1d\n\x0e\n\x07\x04\0\x03\0\
-    \x02\0\x01\x12\x03\x13\x1e'\n\x0e\n\x07\x04\0\x03\0\x02\0\x03\x12\x03\
-    \x13*+\n\r\n\x06\x04\0\x03\0\x02\x01\x12\x03\x14\x10,\n\x0e\n\x07\x04\0\
-    \x03\0\x02\x01\x04\x12\x03\x14\x10\x18\n\x0e\n\x07\x04\0\x03\0\x02\x01\
-    \x05\x12\x03\x14\x19\x1f\n\x0e\n\x07\x04\0\x03\0\x02\x01\x01\x12\x03\x14\
-    \x20'\n\x0e\n\x07\x04\0\x03\0\x02\x01\x03\x12\x03\x14*+\n\x0b\n\x04\x04\
-    \0\x02\x02\x12\x03\x17\x08,\n\x0c\n\x05\x04\0\x02\x02\x04\x12\x03\x17\
-    \x08\x10\n\x0c\n\x05\x04\0\x02\x02\x06\x12\x03\x17\x11\x1f\n\x0c\n\x05\
-    \x04\0\x02\x02\x01\x12\x03\x17\x20'\n\x0c\n\x05\x04\0\x02\x02\x03\x12\
-    \x03\x17*+\n\n\n\x02\x04\x01\x12\x04\x1a\0\"\x01\n\n\n\x03\x04\x01\x01\
-    \x12\x03\x1a\x08\x0f\n\x0b\n\x04\x04\x01\x02\0\x12\x03\x1b\x08\x20\n\x0c\
-    \n\x05\x04\x01\x02\0\x04\x12\x03\x1b\x08\x10\n\x0c\n\x05\x04\x01\x02\0\
-    \x05\x12\x03\x1b\x11\x16\n\x0c\n\x05\x04\x01\x02\0\x01\x12\x03\x1b\x17\
-    \x1b\n\x0c\n\x05\x04\x01\x02\0\x03\x12\x03\x1b\x1e\x1f\n\x0b\n\x04\x04\
-    \x01\x02\x01\x12\x03\x1c\x08\x20\n\x0c\n\x05\x04\x01\x02\x01\x04\x12\x03\
-    \x1c\x08\x10\n\x0c\n\x05\x04\x01\x02\x01\x05\x12\x03\x1c\x11\x16\n\x0c\n\
-    \x05\x04\x01\x02\x01\x01\x12\x03\x1c\x17\x1b\n\x0c\n\x05\x04\x01\x02\x01\
-    \x03\x12\x03\x1c\x1e\x1f\n\x0b\n\x04\x04\x01\x02\x02\x12\x03\x1d\x08!\n\
-    \x0c\n\x05\x04\x01\x02\x02\x04\x12\x03\x1d\x08\x10\n\x0c\n\x05\x04\x01\
-    \x02\x02\x05\x12\x03\x1d\x11\x16\n\x0c\n\x05\x04\x01\x02\x02\x01\x12\x03\
-    \x1d\x17\x1c\n\x0c\n\x05\x04\x01\x02\x02\x03\x12\x03\x1d\x1f\x20\nP\n\
-    \x04\x04\x01\x02\x03\x12\x03\x1e\x08%\"C\x20TODO:\x20use\n\x20optional\
-    \x20bytes\x20signature\x20=\x205;\n\x20optional\x20bytes\x20key\x20=\x20\
-    6;\n\n\x0c\n\x05\x04\x01\x02\x03\x04\x12\x03\x1e\x08\x10\n\x0c\n\x05\x04\
-    \x01\x02\x03\x05\x12\x03\x1e\x11\x17\n\x0c\n\x05\x04\x01\x02\x03\x01\x12\
-    \x03\x1e\x18\x20\n\x0c\n\x05\x04\x01\x02\x03\x03\x12\x03\x1e#$\n\n\n\x02\
-    \x04\x02\x12\x04$\0)\x01\n\n\n\x03\x04\x02\x01\x12\x03$\x08\x16\n\x0b\n\
-    \x04\x04\x02\x02\0\x12\x03%\x08(\n\x0c\n\x05\x04\x02\x02\0\x04\x12\x03%\
-    \x08\x10\n\x0c\n\x05\x04\x02\x02\0\x06\x12\x03%\x11\x1d\n\x0c\n\x05\x04\
-    \x02\x02\0\x01\x12\x03%\x1e#\n\x0c\n\x05\x04\x02\x02\0\x03\x12\x03%&'\n\
-    \x0b\n\x04\x04\x02\x02\x01\x12\x03&\x08(\n\x0c\n\x05\x04\x02\x02\x01\x04\
-    \x12\x03&\x08\x10\n\x0c\n\x05\x04\x02\x02\x01\x06\x12\x03&\x11\x1d\n\x0c\
-    \n\x05\x04\x02\x02\x01\x01\x12\x03&\x1e#\n\x0c\n\x05\x04\x02\x02\x01\x03\
-    \x12\x03&&'\n\x0b\n\x04\x04\x02\x02\x02\x12\x03'\x08(\n\x0c\n\x05\x04\
-    \x02\x02\x02\x04\x12\x03'\x08\x10\n\x0c\n\x05\x04\x02\x02\x02\x06\x12\
-    \x03'\x11\x1d\n\x0c\n\x05\x04\x02\x02\x02\x01\x12\x03'\x1e#\n\x0c\n\x05\
-    \x04\x02\x02\x02\x03\x12\x03'&'\n\x0b\n\x04\x04\x02\x02\x03\x12\x03(\x08\
-    (\n\x0c\n\x05\x04\x02\x02\x03\x04\x12\x03(\x08\x10\n\x0c\n\x05\x04\x02\
-    \x02\x03\x06\x12\x03(\x11\x1d\n\x0c\n\x05\x04\x02\x02\x03\x01\x12\x03(\
-    \x1e#\n\x0c\n\x05\x04\x02\x02\x03\x03\x12\x03(&'\n\xde\x01\n\x02\x05\0\
-    \x12\x04/\02\x01\x1a\xd1\x01\x20While\x20this\x20may\x20not\x20be\x20str\
-    ictly\x20necessary\x20as\x20a\x20messageID\x20and\x20a\x20messageHash\n\
-    \x20are\x20both\x20strings,\x20it\x20would\x20be\x20useful\x20to\x20diff\
-    erentiate\x20between\x20them\x20in\x20the\n\x20protobuf\x20file,\x20e.g.\
-    \x20due\x20to\x20the\x20accessors\x20and\x20for\x20clarity.\n\n\n\n\x03\
-    \x05\0\x01\x12\x03/\x05\x0f\n\x0b\n\x04\x05\0\x02\0\x12\x030\x08-\n\x0c\
-    \n\x05\x05\0\x02\0\x01\x12\x030\x08\n\n\x0c\n\x05\x05\0\x02\0\x02\x12\
-    \x030\r\x0e\n\x0c\n\x05\x05\0\x02\0\x03\x12\x030\x0f,\n\x0f\n\x08\x05\0\
-    \x02\0\x03\xa2\x90\x03\x12\x030\x10\x1d\n\x0f\n\x08\x05\0\x02\0\x03\xa3\
-    \x90\x03\x12\x030\x1f+\n\x0b\n\x04\x05\0\x02\x01\x12\x031\x080\n\x0c\n\
-    \x05\x05\0\x02\x01\x01\x12\x031\x08\x0c\n\x0c\n\x05\x05\0\x02\x01\x02\
-    \x12\x031\x0f\x10\n\x0c\n\x05\x05\0\x02\x01\x03\x12\x031\x11/\n\x0f\n\
-    \x08\x05\0\x02\x01\x03\xa2\x90\x03\x12\x031\x12\x20\n\x0f\n\x08\x05\0\
-    \x02\x01\x03\xa3\x90\x03\x12\x031\".\n\n\n\x02\x04\x03\x12\x044\0:\x01\n\
-    \n\n\x03\x04\x03\x01\x12\x034\x08\x14\n\x0b\n\x04\x04\x03\x02\0\x12\x035\
-    \x08$\n\x0c\n\x05\x04\x03\x02\0\x04\x12\x035\x08\x10\n\x0c\n\x05\x04\x03\
-    \x02\0\x05\x12\x035\x11\x17\n\x0c\n\x05\x04\x03\x02\0\x01\x12\x035\x18\
-    \x1f\n\x0c\n\x05\x04\x03\x02\0\x03\x12\x035\"#\n\xda\x01\n\x04\x04\x03\
-    \x02\x01\x12\x039\x08%\x1a\xcc\x01\x20We\x20could\x20have\x20a\x20repeat\
-    ed\x20string\x20messageIDs\x20field\x20and\x20repeated\x20string\n\x20me\
-    ssageHash\x20field\x20here,\x20which\x20would\x20be\x20better\x20for\x20\
-    backwards\n\x20compatibility,\x20although\x20hiding\x20both\x20behind\
-    \x20one\x20type\x20has\x20its\x20advantages.\n\n\x0c\n\x05\x04\x03\x02\
-    \x01\x04\x12\x039\x08\x10\n\x0c\n\x05\x04\x03\x02\x01\x06\x12\x039\x11\
-    \x1b\n\x0c\n\x05\x04\x03\x02\x01\x01\x12\x039\x1c\x20\n\x0c\n\x05\x04\
-    \x03\x02\x01\x03\x12\x039#$\n\n\n\x02\x04\x04\x12\x04<\0>\x01\n\n\n\x03\
-    \x04\x04\x01\x12\x03<\x08\x14\n\x0b\n\x04\x04\x04\x02\0\x12\x03=\x08'\n\
-    \x0c\n\x05\x04\x04\x02\0\x04\x12\x03=\x08\x10\n\x0c\n\x05\x04\x04\x02\0\
-    \x05\x12\x03=\x11\x17\n\x0c\n\x05\x04\x04\x02\0\x01\x12\x03=\x18\"\n\x0c\
-    \n\x05\x04\x04\x02\0\x03\x12\x03=%&\n\n\n\x02\x04\x05\x12\x04@\0B\x01\n\
-    \n\n\x03\x04\x05\x01\x12\x03@\x08\x14\n\x0b\n\x04\x04\x05\x02\0\x12\x03A\
-    \x08$\n\x0c\n\x05\x04\x05\x02\0\x04\x12\x03A\x08\x10\n\x0c\n\x05\x04\x05\
-    \x02\0\x05\x12\x03A\x11\x17\n\x0c\n\x05\x04\x05\x02\0\x01\x12\x03A\x18\
-    \x1f\n\x0c\n\x05\x04\x05\x02\0\x03\x12\x03A\"#\n\n\n\x02\x04\x06\x12\x04\
-    D\0F\x01\n\n\n\x03\x04\x06\x01\x12\x03D\x08\x14\n\x0b\n\x04\x04\x06\x02\
-    \0\x12\x03E\x08$\n\x0c\n\x05\x04\x06\x02\0\x04\x12\x03E\x08\x10\n\x0c\n\
-    \x05\x04\x06\x02\0\x05\x12\x03E\x11\x17\n\x0c\n\x05\x04\x06\x02\0\x01\
-    \x12\x03E\x18\x1f\n\x0c\n\x05\x04\x06\x02\0\x03\x12\x03E\"#\n\n\n\x02\
-    \x04\x07\x12\x04H\0c\x01\n\n\n\x03\x04\x07\x01\x12\x03H\x08\x17\nP\n\x04\
-    \x04\x07\x02\0\x12\x03I\x08!\"C\x20TODO:\x20use\n\x20optional\x20AuthOpt\
-    s\x20auth\x20=\x202;\n\x20optional\x20EncOpts\x20enc\x20=\x203;\n\n\x0c\
-    \n\x05\x04\x07\x02\0\x04\x12\x03I\x08\x10\n\x0c\n\x05\x04\x07\x02\0\x05\
-    \x12\x03I\x11\x17\n\x0c\n\x05\x04\x07\x02\0\x01\x12\x03I\x18\x1c\n\x0c\n\
-    \x05\x04\x07\x02\0\x03\x12\x03I\x1f\x20\
+    \n\trpc.proto\x12\tpubsub.pb\"\xee\x01\n\x03RPC\x12<\n\rsubscriptions\
+    \x18\x01\x20\x03(\x0b2\x16.pubsub.pb.RPC.SubOptsR\rsubscriptions\x12,\n\
+    \x07publish\x18\x02\x20\x03(\x0b2\x12.pubsub.pb.MessageR\x07publish\x123\
+    \n\x07control\x18\x03\x20\x01(\x0b2\x19.pubsub.pb.ControlMessageR\x07con\
+    trol\x1aF\n\x07SubOpts\x12\x1c\n\tsubscribe\x18\x01\x20\x01(\x08R\tsubsc\
+    ribe\x12\x1d\n\ntopic_hash\x18\x02\x20\x01(\tR\ttopicHash\"j\n\x07Messag\
+    e\x12\x12\n\x04from\x18\x01\x20\x01(\x0cR\x04from\x12\x12\n\x04data\x18\
+    \x02\x20\x01(\x0cR\x04data\x12\x14\n\x05seqno\x18\x03\x20\x01(\x0cR\x05s\
+    eqno\x12!\n\x0ctopic_hashes\x18\x04\x20\x03(\tR\x0btopicHashes\"\xcc\x01\
+    \n\x0eControlMessage\x12-\n\x05ihave\x18\x01\x20\x03(\x0b2\x17.pubsub.pb\
+    .ControlIHaveR\x05ihave\x12-\n\x05iwant\x18\x02\x20\x03(\x0b2\x17.pubsub\
+    .pb.ControlIWantR\x05iwant\x12-\n\x05graft\x18\x03\x20\x03(\x0b2\x17.pub\
+    sub.pb.ControlGraftR\x05graft\x12-\n\x05prune\x18\x04\x20\x03(\x0b2\x17.\
+    pubsub.pb.ControlPruneR\x05prune\"T\n\x0cControlIHave\x12\x1d\n\ntopic_h\
+    ash\x18\x01\x20\x01(\tR\ttopicHash\x12%\n\x0emessage_hashes\x18\x02\x20\
+    \x03(\tR\rmessageHashes\"5\n\x0cControlIWant\x12%\n\x0emessage_hashes\
+    \x18\x01\x20\x03(\tR\rmessageHashes\"-\n\x0cControlGraft\x12\x1d\n\ntopi\
+    c_hash\x18\x01\x20\x01(\tR\ttopicHash\"-\n\x0cControlPrune\x12\x1d\n\nto\
+    pic_hash\x18\x01\x20\x01(\tR\ttopicHash\"%\n\x0fTopicDescriptor\x12\x12\
+    \n\x04name\x18\x01\x20\x01(\tR\x04nameJ\xc0\x14\n\x06\x12\x04\x03\0c\x01\
+    \n\x87\x01\n\x01\x0c\x12\x03\x03\0\x122}\x20From\x20https://github.com/l\
+    ibp2p/go-libp2p-pubsub/blob/master/pb/rpc.proto,\n\x20should\x20be\x20th\
+    e\x20same\x20unless\x20that\x20has\x20been\x20changed.\n\n\xa6\x01\n\x01\
+    \x02\x12\x03\x0c\x08\x112,\x20import\x20\"google/protobuf/descriptor.pro\
+    to\";\n2n\x20extend\x20google.protobuf.EnumValueOptions\x20{\n\x20\topti\
+    onal\x20string\x20type=\x2051234;\n\x20\toptional\x20string\x20code=\x20\
+    51235;\n\x20\x20\x20}\n\n\n\n\x02\x04\0\x12\x04\x0e\0\x18\x01\n\n\n\x03\
+    \x04\0\x01\x12\x03\x0e\x08\x0b\n\x0b\n\x04\x04\0\x02\0\x12\x03\x0f\x08+\
+    \n\x0c\n\x05\x04\0\x02\0\x04\x12\x03\x0f\x08\x10\n\x0c\n\x05\x04\0\x02\0\
+    \x06\x12\x03\x0f\x11\x18\n\x0c\n\x05\x04\0\x02\0\x01\x12\x03\x0f\x19&\n\
+    \x0c\n\x05\x04\0\x02\0\x03\x12\x03\x0f)*\n\x0b\n\x04\x04\0\x02\x01\x12\
+    \x03\x10\x08%\n\x0c\n\x05\x04\0\x02\x01\x04\x12\x03\x10\x08\x10\n\x0c\n\
+    \x05\x04\0\x02\x01\x06\x12\x03\x10\x11\x18\n\x0c\n\x05\x04\0\x02\x01\x01\
+    \x12\x03\x10\x19\x20\n\x0c\n\x05\x04\0\x02\x01\x03\x12\x03\x10#$\n\x0c\n\
+    \x04\x04\0\x03\0\x12\x04\x12\x08\x15\t\n\x0c\n\x05\x04\0\x03\0\x01\x12\
+    \x03\x12\x10\x17\n(\n\x06\x04\0\x03\0\x02\0\x12\x03\x13\x10,\"\x19\x20su\
+    bscribe\x20or\x20unsubcribe\n\n\x0e\n\x07\x04\0\x03\0\x02\0\x04\x12\x03\
+    \x13\x10\x18\n\x0e\n\x07\x04\0\x03\0\x02\0\x05\x12\x03\x13\x19\x1d\n\x0e\
+    \n\x07\x04\0\x03\0\x02\0\x01\x12\x03\x13\x1e'\n\x0e\n\x07\x04\0\x03\0\
+    \x02\0\x03\x12\x03\x13*+\n\r\n\x06\x04\0\x03\0\x02\x01\x12\x03\x14\x10/\
+    \n\x0e\n\x07\x04\0\x03\0\x02\x01\x04\x12\x03\x14\x10\x18\n\x0e\n\x07\x04\
+    \0\x03\0\x02\x01\x05\x12\x03\x14\x19\x1f\n\x0e\n\x07\x04\0\x03\0\x02\x01\
+    \x01\x12\x03\x14\x20*\n\x0e\n\x07\x04\0\x03\0\x02\x01\x03\x12\x03\x14-.\
+    \n\x0b\n\x04\x04\0\x02\x02\x12\x03\x17\x08,\n\x0c\n\x05\x04\0\x02\x02\
+    \x04\x12\x03\x17\x08\x10\n\x0c\n\x05\x04\0\x02\x02\x06\x12\x03\x17\x11\
+    \x1f\n\x0c\n\x05\x04\0\x02\x02\x01\x12\x03\x17\x20'\n\x0c\n\x05\x04\0\
+    \x02\x02\x03\x12\x03\x17*+\n\n\n\x02\x04\x01\x12\x04\x1a\0\"\x01\n\n\n\
+    \x03\x04\x01\x01\x12\x03\x1a\x08\x0f\n\x0b\n\x04\x04\x01\x02\0\x12\x03\
+    \x1b\x08\x20\n\x0c\n\x05\x04\x01\x02\0\x04\x12\x03\x1b\x08\x10\n\x0c\n\
+    \x05\x04\x01\x02\0\x05\x12\x03\x1b\x11\x16\n\x0c\n\x05\x04\x01\x02\0\x01\
+    \x12\x03\x1b\x17\x1b\n\x0c\n\x05\x04\x01\x02\0\x03\x12\x03\x1b\x1e\x1f\n\
+    \x0b\n\x04\x04\x01\x02\x01\x12\x03\x1c\x08\x20\n\x0c\n\x05\x04\x01\x02\
+    \x01\x04\x12\x03\x1c\x08\x10\n\x0c\n\x05\x04\x01\x02\x01\x05\x12\x03\x1c\
+    \x11\x16\n\x0c\n\x05\x04\x01\x02\x01\x01\x12\x03\x1c\x17\x1b\n\x0c\n\x05\
+    \x04\x01\x02\x01\x03\x12\x03\x1c\x1e\x1f\n\x0b\n\x04\x04\x01\x02\x02\x12\
+    \x03\x1d\x08!\n\x0c\n\x05\x04\x01\x02\x02\x04\x12\x03\x1d\x08\x10\n\x0c\
+    \n\x05\x04\x01\x02\x02\x05\x12\x03\x1d\x11\x16\n\x0c\n\x05\x04\x01\x02\
+    \x02\x01\x12\x03\x1d\x17\x1c\n\x0c\n\x05\x04\x01\x02\x02\x03\x12\x03\x1d\
+    \x1f\x20\nP\n\x04\x04\x01\x02\x03\x12\x03\x1e\x08)\"C\x20TODO:\x20use\n\
+    \x20optional\x20bytes\x20signature\x20=\x205;\n\x20optional\x20bytes\x20\
+    key\x20=\x206;\n\n\x0c\n\x05\x04\x01\x02\x03\x04\x12\x03\x1e\x08\x10\n\
+    \x0c\n\x05\x04\x01\x02\x03\x05\x12\x03\x1e\x11\x17\n\x0c\n\x05\x04\x01\
+    \x02\x03\x01\x12\x03\x1e\x18$\n\x0c\n\x05\x04\x01\x02\x03\x03\x12\x03\
+    \x1e'(\n\n\n\x02\x04\x02\x12\x04$\0)\x01\n\n\n\x03\x04\x02\x01\x12\x03$\
+    \x08\x16\n\x0b\n\x04\x04\x02\x02\0\x12\x03%\x08(\n\x0c\n\x05\x04\x02\x02\
+    \0\x04\x12\x03%\x08\x10\n\x0c\n\x05\x04\x02\x02\0\x06\x12\x03%\x11\x1d\n\
+    \x0c\n\x05\x04\x02\x02\0\x01\x12\x03%\x1e#\n\x0c\n\x05\x04\x02\x02\0\x03\
+    \x12\x03%&'\n\x0b\n\x04\x04\x02\x02\x01\x12\x03&\x08(\n\x0c\n\x05\x04\
+    \x02\x02\x01\x04\x12\x03&\x08\x10\n\x0c\n\x05\x04\x02\x02\x01\x06\x12\
+    \x03&\x11\x1d\n\x0c\n\x05\x04\x02\x02\x01\x01\x12\x03&\x1e#\n\x0c\n\x05\
+    \x04\x02\x02\x01\x03\x12\x03&&'\n\x0b\n\x04\x04\x02\x02\x02\x12\x03'\x08\
+    (\n\x0c\n\x05\x04\x02\x02\x02\x04\x12\x03'\x08\x10\n\x0c\n\x05\x04\x02\
+    \x02\x02\x06\x12\x03'\x11\x1d\n\x0c\n\x05\x04\x02\x02\x02\x01\x12\x03'\
+    \x1e#\n\x0c\n\x05\x04\x02\x02\x02\x03\x12\x03'&'\n\x0b\n\x04\x04\x02\x02\
+    \x03\x12\x03(\x08(\n\x0c\n\x05\x04\x02\x02\x03\x04\x12\x03(\x08\x10\n\
+    \x0c\n\x05\x04\x02\x02\x03\x06\x12\x03(\x11\x1d\n\x0c\n\x05\x04\x02\x02\
+    \x03\x01\x12\x03(\x1e#\n\x0c\n\x05\x04\x02\x02\x03\x03\x12\x03(&'\n\x8a\
+    \x03\n\x02\x04\x03\x12\x044\0:\x012\xfd\x02\x20Using\x20an\x20ID\x20does\
+    n't\x20seem\x20to\x20be\x20worth\x20it\x20compared\x20to\x20using\x20a\
+    \x20hash.\n\x20While\x20this\x20may\x20not\x20be\x20strictly\x20necessar\
+    y\x20as\x20a\x20messageID\x20and\x20a\x20messageHash\n\x20are\x20both\
+    \x20strings,\x20it\x20would\x20be\x20useful\x20to\x20differentiate\x20be\
+    tween\x20them\x20in\x20the\n\x20protobuf\x20file,\x20e.g.\x20due\x20to\
+    \x20the\x20accessors\x20and\x20for\x20clarity.\n\x20enum\x20MessageRep\
+    \x20{\n\x20\tID\x20=\x200\x20[(type)\x20=\x20\"ID\",\x20(code)\x20=\x20'\
+    I'];\n\x20\tHASH\x20=\x201\x20[(type)\x20=\x20\"HSH\",\x20(code)\x20=\
+    \x20'H'];\n\x20}\n\n\n\n\x03\x04\x03\x01\x12\x034\x08\x14\n\x0b\n\x04\
+    \x04\x03\x02\0\x12\x035\x08'\n\x0c\n\x05\x04\x03\x02\0\x04\x12\x035\x08\
+    \x10\n\x0c\n\x05\x04\x03\x02\0\x05\x12\x035\x11\x17\n\x0c\n\x05\x04\x03\
+    \x02\0\x01\x12\x035\x18\"\n\x0c\n\x05\x04\x03\x02\0\x03\x12\x035%&\n\xda\
+    \x01\n\x04\x04\x03\x02\x01\x12\x039\x08+\x1a\xcc\x01\x20We\x20could\x20h\
+    ave\x20a\x20repeated\x20string\x20messageIDs\x20field\x20and\x20repeated\
+    \x20string\n\x20messageHash\x20field\x20here,\x20which\x20would\x20be\
+    \x20better\x20for\x20backwards\n\x20compatibility,\x20although\x20hiding\
+    \x20both\x20behind\x20one\x20type\x20has\x20its\x20advantages.\n\n\x0c\n\
+    \x05\x04\x03\x02\x01\x04\x12\x039\x08\x10\n\x0c\n\x05\x04\x03\x02\x01\
+    \x05\x12\x039\x11\x17\n\x0c\n\x05\x04\x03\x02\x01\x01\x12\x039\x18&\n\
+    \x0c\n\x05\x04\x03\x02\x01\x03\x12\x039)*\n\n\n\x02\x04\x04\x12\x04<\0>\
+    \x01\n\n\n\x03\x04\x04\x01\x12\x03<\x08\x14\n\x0b\n\x04\x04\x04\x02\0\
+    \x12\x03=\x08+\n\x0c\n\x05\x04\x04\x02\0\x04\x12\x03=\x08\x10\n\x0c\n\
+    \x05\x04\x04\x02\0\x05\x12\x03=\x11\x17\n\x0c\n\x05\x04\x04\x02\0\x01\
+    \x12\x03=\x18&\n\x0c\n\x05\x04\x04\x02\0\x03\x12\x03=)*\n\n\n\x02\x04\
+    \x05\x12\x04@\0B\x01\n\n\n\x03\x04\x05\x01\x12\x03@\x08\x14\n\x0b\n\x04\
+    \x04\x05\x02\0\x12\x03A\x08'\n\x0c\n\x05\x04\x05\x02\0\x04\x12\x03A\x08\
+    \x10\n\x0c\n\x05\x04\x05\x02\0\x05\x12\x03A\x11\x17\n\x0c\n\x05\x04\x05\
+    \x02\0\x01\x12\x03A\x18\"\n\x0c\n\x05\x04\x05\x02\0\x03\x12\x03A%&\n\n\n\
+    \x02\x04\x06\x12\x04D\0F\x01\n\n\n\x03\x04\x06\x01\x12\x03D\x08\x14\n\
+    \x0b\n\x04\x04\x06\x02\0\x12\x03E\x08'\n\x0c\n\x05\x04\x06\x02\0\x04\x12\
+    \x03E\x08\x10\n\x0c\n\x05\x04\x06\x02\0\x05\x12\x03E\x11\x17\n\x0c\n\x05\
+    \x04\x06\x02\0\x01\x12\x03E\x18\"\n\x0c\n\x05\x04\x06\x02\0\x03\x12\x03E\
+    %&\n\n\n\x02\x04\x07\x12\x04H\0c\x01\n\n\n\x03\x04\x07\x01\x12\x03H\x08\
+    \x17\nP\n\x04\x04\x07\x02\0\x12\x03I\x08!\"C\x20TODO:\x20use\n\x20option\
+    al\x20AuthOpts\x20auth\x20=\x202;\n\x20optional\x20EncOpts\x20enc\x20=\
+    \x203;\n\n\x0c\n\x05\x04\x07\x02\0\x04\x12\x03I\x08\x10\n\x0c\n\x05\x04\
+    \x07\x02\0\x05\x12\x03I\x11\x17\n\x0c\n\x05\x04\x07\x02\0\x01\x12\x03I\
+    \x18\x1c\n\x0c\n\x05\x04\x07\x02\0\x03\x12\x03I\x1f\x20\
 ";
 
 static mut file_descriptor_proto_lazy: ::protobuf::lazy::Lazy<::protobuf::descriptor::FileDescriptorProto> = ::protobuf::lazy::Lazy {

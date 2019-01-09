@@ -3,12 +3,12 @@
 
 syntax = "proto2";
 
-import "google/protobuf/descriptor.proto";
+// import "google/protobuf/descriptor.proto";
 
-extend google.protobuf.EnumValueOptions {
-	optional string type= 51234;
-	optional string code= 51235;
-  }
+// extend google.protobuf.EnumValueOptions {
+// 	optional string type= 51234;
+// 	optional string code= 51235;
+//   }
 
 package pubsub.pb;
 
@@ -18,7 +18,7 @@ message RPC {
 
 	message SubOpts {
 		optional bool subscribe = 1; // subscribe or unsubcribe
-		optional string topicid = 2;
+		optional string topic_hash = 2;
 	}
 
 	optional ControlMessage control = 3;
@@ -28,7 +28,7 @@ message Message {
 	optional bytes from = 1;
 	optional bytes data = 2;
 	optional bytes seqno = 3;
-	repeated string topicIDs = 4;
+	repeated string topic_hashes = 4;
 	// TODO: use
 	// optional bytes signature = 5;
 	// optional bytes key = 6;
@@ -41,33 +41,33 @@ message ControlMessage {
 	repeated ControlPrune prune = 4;
 }
 
-
+// Using an ID doesn't seem to be worth it compared to using a hash.
 // While this may not be strictly necessary as a messageID and a messageHash
 // are both strings, it would be useful to differentiate between them in the
 // protobuf file, e.g. due to the accessors and for clarity.
-enum MessageRep {
-	ID = 0 [(type) = "ID", (code) = 'I'];
-	HASH = 1 [(type) = "HSH", (code) = 'H'];
-}
+// enum MessageRep {
+// 	ID = 0 [(type) = "ID", (code) = 'I'];
+// 	HASH = 1 [(type) = "HSH", (code) = 'H'];
+// }
 
 message ControlIHave {
-	optional string topicID = 1;
+	optional string topic_hash = 1;
 	// We could have a repeated string messageIDs field and repeated string
 	// messageHash field here, which would be better for backwards
 	// compatibility, although hiding both behind one type has its advantages.
-	repeated MessageRep mRep = 2;
+	repeated string message_hashes = 2;
 }
 
 message ControlIWant {
-	repeated string MessageRep = 1;
+	repeated string message_hashes = 1;
 }
 
 message ControlGraft {
-	optional string topicID = 1;
+	optional string topic_hash = 1;
 }
 
 message ControlPrune {
-	optional string topicID = 1;
+	optional string topic_hash = 1;
 }
 
 message TopicDescriptor {

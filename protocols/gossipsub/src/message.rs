@@ -15,25 +15,27 @@ use std::{
     iter::IntoIterator,
 };
 
-// #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct MsgMap(HashMap<MsgRep, GMessage>);
+/// Used in MCache.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MsgMap(HashMap<MsgHash, GMessage>);
 
 impl MsgMap {
     pub fn new() -> Self {
         MsgMap(HashMap::new())
     }
 
-    pub fn insert(&mut self, mr: MsgRep, m: GMessage) -> Option<GMessage> {
-        self.0.insert(mr, m)
+    pub fn insert(&mut self, mh: MsgHash, m: GMessage) -> Option<GMessage> {
+        self.0.insert(mh, m)
     }
 
     pub fn get<Q: ?Sized>(&self, k: &Q) -> Option<&GMessage>
     where
-        MsgRep: Borrow<Q>,
+        MsgHash: Borrow<Q>,
         Q: Hash + Eq,
     {
         self.0.get(k)
     }
+
 }
 
 /// A message received by the Gossipsub system.
@@ -47,7 +49,7 @@ impl MsgMap {
 /// The message is limited to 1 MiB, which is enforced by a check when
 /// publishing the message.
 // The hash derive is needed for the add method, passing a `MsgHash`, to a
-// Gossipsub.received.
+// Gossipsub.received, and to hash the message to make a `MsgHash`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct GMessage {
     /// ID of the peer that published this message.
@@ -80,49 +82,54 @@ pub struct GMessage {
     // TODO: there might be interoperability issues caused by these two fields.
     // They may be moved to `MCache`.
 
+    // Fields that are not in rpc_proto::RPC should not be included here
+    // without including them there, otherwise there will be an unresolvable
+    // compiler error for uninitialized fields when trying to decode it.
     // This should not be public as it could then be manipulated. It needs to
     // only be modified via the `publish` method on `Gossipsub`. Used for the
     // message cache.
-    pub(crate) time_sent: DateTime<Utc>,
+    // Therefore further thought is needed for where to store the time_sent
+    // and hash. The hash is not an issue since it can be converted to a topic
+    // via construction and reverse construction. Experiment with storing both
+    // in `MCache` or `Gossipsub`.
+    // pub(crate) time_sent: DateTime<Utc>,
 
-    // The hash of the message.
-    pub(crate) hash: MsgHash,
-
-    pub(crate) id: Option<MsgId>,
+    // // The hash of the message.
+    // pub(crate) hash: MsgHash,
 }
 
 impl GMessage {
-    // Sets the hash of the message, used in `MsgHashBuilder`.
-    #[inline]
-    pub(crate) fn set_hash(&mut self, msg_hash: MsgHash) {
-        self.hash = msg_hash;
-    }
+    // // Sets the hash of the message, used in `MsgHashBuilder`.
+    // #[inline]
+    // pub(crate) fn set_hash(&mut self, msg_hash: MsgHash) {
+    //     self.hash = msg_hash;
+    // }
 
-    /// Returns the hash of the message.
-    #[inline]
-    pub fn get_hash(&self) -> &MsgHash {
-        &self.hash
-    }
+    // /// Returns the hash of the message.
+    // #[inline]
+    // pub fn get_hash(&self) -> &MsgHash {
+    //     &self.hash
+    // }
 
-    // As above, used in the `publish` method on `Gossipsub` for `MCache`.
-    pub(crate) fn set_timestamp(&mut self) {
-        self.time_sent = Utc::now();
-    }
+    // // As above, used in the `publish` method on `Gossipsub` for `MCache`.
+    // pub(crate) fn set_timestamp(&mut self) {
+    //     self.time_sent = Utc::now();
+    // }
 
-    /// Returns the timestamp of the message.
-    pub fn get_timestamp(&self) -> &DateTime<Utc> {
-        &self.time_sent
-    }
+    // /// Returns the timestamp of the message.
+    // pub fn get_timestamp(&self) -> &DateTime<Utc> {
+    //     &self.time_sent
+    // }
 
-    // As above, used in the `publish` method on `Gossipsub` for `MCache`.
-    pub(crate) fn set_id(&mut self, msg_id: MsgId) {
-        self.id = Some(msg_id);
-    }
+    // // As above, used in the `publish` method on `Gossipsub` for `MCache`.
+    // pub(crate) fn set_id(&mut self, msg_id: MsgId) {
+    //     self.id = Some(msg_id);
+    // }
 
-    /// Returns the id of the message, if it has been set.
-    pub fn get_id(&self) -> &Option<MsgId> {
-        &self.id
-    }
+    // /// Returns the id of the message, if it has been set.
+    // pub fn get_id(&self) -> &Option<MsgId> {
+    //     &self.id
+    // }
 
 }
 
@@ -132,24 +139,22 @@ impl From<GMessage> for rpc_proto::Message {
         msg.set_from(message.source.into_bytes());
         msg.set_data(message.data);
         msg.set_seqno(message.seq_no);
-        msg.set_topicIDs(
-            message
-                .topics
-                .into_iter()
-                .map(TopicHash::into_string)
-                .collect(),
-        );
+
+        let mut t_hashes = ::protobuf::RepeatedField::new();
+        for t_hash in message.topics.keys() {
+            t_hashes.push((*t_hash).into_string());
+        }
+        msg.set_topic_hashes(t_hashes);
         // msg.set_signature(message.signature);
         // msg.set_key(message.key);
         msg
     }
 }
 
-impl From<GMessage> for MsgHash {
-    fn from(message: GMessage) -> MsgHash {
-        message.hash
-    }
-}
+// impl From<GMessage> for MsgHash {
+//     fn from(message: GMessage) -> MsgHash {
+//     }
+// }
 
 // It seems that we can't actually impl this since a message might not contain
 // a message ID.
@@ -159,7 +164,7 @@ impl From<GMessage> for MsgHash {
 //         if m_id.is_some() {
 //             return m_id.expect("We checked m_id with `is_some`.")
 //         } else {
-            
+
 //         }
 
 //     }
@@ -309,7 +314,7 @@ impl From<GossipsubSubscription> for rpc_proto::RPC_SubOpts {
         let mut subscription = rpc_proto::RPC_SubOpts::new();
         subscription.set_subscribe(gsub.action
             == GossipsubSubscriptionAction::Subscribe);
-        subscription.set_topicid(gsub.topic.into_string());
+        subscription.set_topic_hash(gsub.topic.into_string());
         subscription
     }
 }
@@ -324,17 +329,19 @@ pub enum GossipsubSubscriptionAction {
 }
 
 /// Contains the control message for Gossipsub.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+///
+/// Included in `GossipsubRpc`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ControlMessage {
     /// The control message for gossiping
-    pub ihave: Vec<ControlIHave>,
+    pub(crate) ihave: Vec<ControlIHave>,
     /// Request transmission of messages announced in a `ControlIHave` message.
-    pub iwant: Vec<ControlIWant>,
+    pub(crate) iwant: Vec<ControlIWant>,
     /// Graft a mesh link; this notifies the peer that it has been added to
     /// the local mesh view.
-    pub graft: Vec<ControlGraft>,
+    pub(crate) graft: Vec<ControlGraft>,
     /// The control message for pruning mesh links.
-    pub prune: Vec<ControlPrune>,
+    pub(crate) prune: Vec<ControlPrune>,
 }
 
 impl From<ControlMessage> for rpc_proto::ControlMessage {
@@ -367,12 +374,26 @@ impl From<ControlMessage> for rpc_proto::ControlMessage {
         ctrl
     }
 }
+
+impl From<rpc_proto::ControlMessage> for ControlMessage {
+    fn from(ctrl: rpc_proto::ControlMessage) -> ControlMessage {
+        let mut control = ControlMessage::default();
+
+        for ctrl_i_have in ctrl.get_ihave().into_iter() {
+            let mut control_i_have = ControlIHave::from(ctrl_i_have);
+            control.ihave.push(control_i_have)
+        }
+
+        control
+    }
+}
+
 /// Gossip control message; this notifies the peer that the following
 /// messages were recently seen and are available on request.
-// #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ControlIHave {
-    /// Topic that the messages belong to.
-    pub topic: TopicHash,
+    /// Topic that the messages belong to, represented by `TopicHash`.
+    pub t_hash: TopicHash,
     /// List of messages that have been recently seen and are available
     /// on request.
     pub recent_mcache: MCache,
@@ -381,16 +402,28 @@ pub struct ControlIHave {
 impl From<ControlIHave> for rpc_proto::ControlIHave {
     fn from(control_i_have: ControlIHave) -> rpc_proto::ControlIHave {
         let mut ctrl_i_have = rpc_proto::ControlIHave::new();
-        ctrl_i_have.set_topicID(control_i_have.topic.into_string());
+        ctrl_i_have.set_topic_hash(control_i_have.topic.into_string());
         // For getting my head around this with seeing the return
         // types by hovering over, uncomment if you need to
         // do the same.
         // let bar_into_iter = control_i_have.recent_mcache.into_iter();
         // let map_bar_into_iter = bar_into_iter.map(|m| m.id.into_string());
         // let collect_map_bar_into_iter = map_bar_into_iter.collect();
-        ctrl_i_have.set_messageIDs(control_i_have.recent_mcache.into_iter()
+        ctrl_i_have.set_message_hashes(control_i_have.recent_mcache.into_iter()
             .map(|m| m.id.into_string()).collect());
         ctrl_i_have
+    }
+}
+
+impl From<rpc_proto::ControlIHave> for ControlIHave {
+    fn from(ctrl_i_have: rpc_proto::ControlIHave) -> ControlIHave {
+        let mut control_i_have = ControlIHave::default();
+        control_i_have.t_hash = TopicHash::from_raw(ctrl_i_have
+            .get_topic_hash().to_string());
+        control_i_have.recent_mcache.put_many_via_hashes
+            (ctrl_i_have.get_message_hashes().into_iter()
+                .map(|mh| MsgHash::from_raw(mh.to_string())).collect());
+        control_i_have
     }
 }
 
@@ -399,14 +432,14 @@ impl From<ControlIHave> for rpc_proto::ControlIHave {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct ControlIWant {
     /// List of messages that are being requested.
-    pub messages: Vec<MsgRep>,
+    pub messages: Vec<MsgHash>,
 }
 
 impl From<ControlIWant> for rpc_proto::ControlIWant {
     fn from(control_i_want: ControlIWant) -> rpc_proto::ControlIWant {
         let mut ctrl_i_want = rpc_proto::ControlIWant::new();
-        ctrl_i_want.set_messageIDs(control_i_want.messages.into_iter()
-            .map(|m| m.id.into_string()).collect());
+        ctrl_i_want.set_message_hashes(control_i_want.messages.into_iter()
+            .into_string().collect());
         ctrl_i_want
     }
 }
@@ -422,8 +455,7 @@ pub struct ControlGraft {
 impl From<ControlGraft> for rpc_proto::ControlGraft {
     fn from(control_graft: ControlGraft) -> rpc_proto::ControlGraft {
         let mut ctrl_graft = rpc_proto::ControlGraft::new();
-        ctrl_graft.set_messageIDs(control_graft.messages.into_iter()
-            .map(|m| m.id.into_string()).collect());
+        ctrl_graft.set_topic_hash(control_graft.topic.into_string());
         ctrl_graft
     }
 }
@@ -439,8 +471,7 @@ pub struct ControlPrune {
 impl From<ControlPrune> for rpc_proto::ControlPrune {
     fn from(control_prune: ControlPrune) -> rpc_proto::ControlPrune {
         let mut ctrl_prune = rpc_proto::ControlPrune::new();
-        ctrl_prune.set_messageIDs(control_prune.messages.into_iter()
-            .map(|m| m.id.into_string()).collect());
+        ctrl_prune.set_topic_hash(control_prune.topic.into_string());
         ctrl_prune
     }
 }
@@ -464,6 +495,7 @@ pub enum GossipSubGraftPruneAction {
 }
 
 /// An RPC received by the Gossipsub system.
+/// Included e.g. in the events field of `Gossipsub`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GossipsubRpc {
     /// List of messages that were part of this RPC query.

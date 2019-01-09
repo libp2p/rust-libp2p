@@ -18,43 +18,54 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::convert::TryFrom;
 use rpc_proto;
 
 use bs58;
 use protobuf::Message;
 use std::{
-    collections::{HashMap, hash_map::{IntoIter, Iter, Values}},
+    collections::{HashMap, hash_map::{IntoIter, Iter, Values, Keys}},
+    hash::{Hash, Hasher},
     iter::FromIterator,
 };
 
-// pub type TopicHashMap = HashMap<TopicHash, Topic>;
-// pub type TopicIdMap = HashMap<TopicId, Topic>;
-// pub type TopicMap = HashMap<TopicRep, Topic>;
+/// Used in `GMessage`, thus the `Hash` derive is required.
+///
+/// Seems like PartialEq, Eq and Hash need to be implemented manually, since
+/// Compiler errors result if they are just derived (e.g. when used in
+/// `CacheEntry`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TopicMap(HashMap<TopicHash, Topic>);
 
-#[derive(Debug, Clone)]
-pub struct TopicMap(HashMap<TopicRep, Topic>);
+// impl Hash for TopicMap {
+//     fn hash<H: Hasher>(&self, state: &mut H) {
+//         self.0.hash(state)
+//     }
+// }
 
 impl TopicMap {
     pub fn new() -> TopicMap {
         TopicMap(HashMap::new())
     }
 
-    pub fn insert(&mut self, tr: TopicRep, t: Topic) -> Option<Topic> {
+    pub fn insert(&mut self, tr: TopicHash, t: Topic) -> Option<Topic> {
         self.0.insert(tr, t)
     }
 
-    pub fn values(&self) -> Values<TopicRep, Topic> {
+    pub fn values(&self) -> Values<TopicHash, Topic> {
         self.0.values()
     }
 
-    pub fn iter(&self) -> Iter<TopicRep, Topic> {
+    pub fn iter(&self) -> Iter<TopicHash, Topic> {
         self.0.iter()
+    }
+
+    pub fn keys(&self) -> Keys<TopicHash, Topic> {
+        self.0.keys()
     }
 }
 
-impl FromIterator<TopicRep> for TopicMap {
-    fn from_iter<I: IntoIterator<Item=TopicRep>>(iter: I) -> Self {
+impl FromIterator<TopicHash> for TopicMap {
+    fn from_iter<I: IntoIterator<Item=TopicHash>>(iter: I) -> Self {
         let mut tm = TopicMap::new();
 
         for tr in iter {
@@ -67,8 +78,8 @@ impl FromIterator<TopicRep> for TopicMap {
 }
 
 impl IntoIterator for TopicMap {
-    type Item = (TopicRep, Topic);
-    type IntoIter = IntoIter<TopicRep, Topic>;
+    type Item = (TopicHash, Topic);
+    type IntoIter = IntoIter<TopicHash, Topic>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
@@ -81,8 +92,7 @@ impl FromIterator<Topic> for TopicMap {
 
         for t in iter {
             let th = TopicHash::from(t);
-            let tr = TopicRep::from(th);
-            tm.insert(tr, t);
+            tm.insert(th, t);
         }
 
         tm
@@ -90,8 +100,8 @@ impl FromIterator<Topic> for TopicMap {
 }
 
 /// Represents a `Topic` via either a `TopicHash` or a `TopicId`.
-// Due to the added difficulty of converting a `TopicId` to a `Topic`
-// it is suggested to just use a `TopicHash`.
+/// Due to the added difficulty of converting a `TopicId` to a `Topic`
+/// it is suggested to just use a `TopicHash`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TopicRep {
     Hash(TopicHash),
@@ -112,8 +122,10 @@ impl From<TopicId> for TopicRep {
 
 /// Represents the hash of a topic.
 ///
-/// Instead of using the topic as a whole, the API of floodsub uses a hash of
+/// Instead of using the topic as a whole, the API of gossipsub uses a hash of
 /// the topic. You only have to build the hash once, then use it everywhere.
+/// Needs to derive `Eq` and `Hash` e.g. because it is used as a key in
+/// `HashMap` of `TopicMap`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct TopicHash {
     hash: String,
@@ -283,6 +295,7 @@ impl TopicBuilder {
 
 /// Contains a string that can be used to query for and thus represent a
 /// `Topic`.
+/// Not used
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TopicId {
     id: String,
@@ -298,5 +311,5 @@ impl TopicId {
 
 #[cfg(test)]
 mod tests {
-    
+
 }

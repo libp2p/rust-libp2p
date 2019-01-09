@@ -1,10 +1,11 @@
+use message::{GMessage, GossipsubSubscription,
+    GossipsubSubscriptionAction, GossipsubRpc, ControlMessage};
+use {TopicHash};
+
 use bytes::{BufMut, BytesMut};
 use crate::rpc_proto;
 use futures::future;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, PeerId};
-use libp2p_floodsub::TopicHash;
-use message::{GMessage, GossipsubSubscription,
-    GossipsubSubscriptionAction, GossipsubRpc};
 use protobuf::Message as ProtobufMessage;
 use std::{io, iter};
 use tokio_codec::{Decoder, Encoder, Framed};
@@ -137,7 +138,7 @@ impl Decoder for GossipsubRpcCodec {
                 data: publish.take_data(),
                 seq_no: publish.take_seqno(),
                 topics: publish
-                    .take_topicIDs()
+                    .take_topic_hashes()
                     .into_iter()
                     .map(|topic| TopicHash::from_raw(topic))
                     .collect(),
@@ -157,9 +158,10 @@ impl Decoder for GossipsubRpcCodec {
                     } else {
                         GossipsubSubscriptionAction::Unsubscribe
                     },
-                    topic: TopicHash::from_raw(sub.take_topicid()),
+                    topic: TopicHash::from_raw(sub.take_topic_hash()),
                 })
                 .collect(),
+            control: Some(ControlMessage::from(rpc.take_control())),
         }))
     }
 }

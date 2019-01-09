@@ -61,7 +61,8 @@ where
 
     #[inline]
     fn upgrade_inbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
-        future::ok(Framed::new(socket, FloodsubCodec { length_prefix: Default::default() }))
+        future::ok(Framed::new(socket, FloodsubCodec {
+            length_prefix: Default::default() }))
     }
 }
 

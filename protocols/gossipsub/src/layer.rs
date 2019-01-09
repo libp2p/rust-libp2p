@@ -3,7 +3,7 @@ use mcache::MCache;
 use mesh::Mesh;
 use message::{GossipsubRpc, GMessage, ControlMessage, GossipsubSubscription,
     GossipsubSubscriptionAction, MsgHash, MsgId};
-use {Topic, TopicHash, TopicRep};
+use {Topic, TopicHash};
 use rpc_proto;
 
 use libp2p_floodsub::{Floodsub, handler::FloodsubHandler};
@@ -45,7 +45,7 @@ pub struct Gossipsub<TSubstream> {
     /// subscribed to.
     // TODO: filter out peers that don't support gossipsub, so that we avoid
     //       hammering them with opened substreams
-    connected_peers: HashMap<PeerId, SmallVec<[TopicRep; 8]>>,
+    connected_peers: HashMap<PeerId, SmallVec<[TopicHash; 8]>>,
 
     // List of topics we're subscribed to. Necessary to filter out messages
     // that we receive erroneously.
@@ -64,6 +64,8 @@ pub struct Gossipsub<TSubstream> {
     fanout: Mesh,
 
     mcache: MCache,
+
+    
 
     /// Marker to pin the generics.
     marker: PhantomData<TSubstream>,
@@ -90,8 +92,8 @@ impl<TSubstream> Gossipsub<TSubstream> {
     }
 
     /// Convenience function that creates a `Gossipsub` with/using a previously existing `Floodsub`.
-    pub fn new_w_existing_floodsub(local_peer_id: PeerId, fs: Floodsub<TSubstream>)
-    -> Self {
+    pub fn new_w_existing_floodsub(local_peer_id: PeerId,
+        fs: Floodsub<TSubstream>) -> Self {
         let mut gs = Gossipsub::new(local_peer_id);
         gs.floodsub = fs;
         gs
@@ -196,19 +198,17 @@ impl<TSubstream> Gossipsub<TSubstream> {
             // a random number.
             seq_no: rand::random::<[u8; 20]>().to_vec(),
             topics: topics.into_iter().map(|t| t.into().clone()).collect(),
-            time_sent: Utc::now(),
-            hash: ::std::default::Default::default(),
-            id: ::std::default::Default::default(),
+            // time_sent: Utc::now(),
+            // hash: ::std::default::Default::default(),
+            // id: ::std::default::Default::default(),
         };
 
-        if message_id {
-            let m_id = MsgId::new(message);
-            message.id = Some(m_id);
-        }
+        // if message_id {
+        //     let m_id = MsgId::new(message);
+        //     message.id = Some(m_id);
+        // }
 
-        let msg_hash = MsgHash::new(message);
-
-        message.set_hash(msg_hash);
+        self.mcache.put(message);
 
         let proto_msg = rpc_proto::Message::from(message);
         // Check that the message size is less than or equal to 1 MiB.
@@ -228,7 +228,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
         // are subscribed to the topic.
         for (peer_id, sub_topic) in self.connected_peers.iter() {
             if !sub_topic.iter().any(|t| message.topics.values()
-                .any(|u| Topic::from(t) == u)){
+                .any(|u| Topic::from(t) == *u)){
                 continue;
             }
 
@@ -252,7 +252,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
     /// Returns true if the graft succeeded. Returns false if we were
     /// already grafted.
     // pub fn graft(&mut self, topic: impl AsRef<TopicHash>) -> bool {
-        
+
     // }
 
     /// Grafts a peer to multiple topics.

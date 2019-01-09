@@ -55,4 +55,4 @@ mod topic;
 
 pub use self::layer::Gossipsub;
 pub use self::message::{GMessage, GossipsubRpc};
-pub use self::topic::{TopicMap, TopicRep, Topic, TopicBuilder, TopicHash};
+pub use self::topic::{TopicMap, Topic, TopicBuilder, TopicHash};
