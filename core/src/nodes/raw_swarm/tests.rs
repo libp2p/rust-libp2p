@@ -51,6 +51,13 @@ fn starts_listening() {
 }
 
 #[test]
+fn local_node_peer() {
+    let peer_id = PeerId::random();
+    let mut raw_swarm = RawSwarm::<_, _, _, Handler, _>::new(DummyTransport::new(), peer_id.clone());
+    assert_matches!(raw_swarm.peer(peer_id), Peer::LocalNode);
+}
+
+#[test]
 fn nat_traversal_transforms_the_observed_address_according_to_the_transport_used() {
     // the DummyTransport nat_traversal increments the port number by one for Ip4 addresses
     let transport = DummyTransport::new();

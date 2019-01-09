@@ -616,6 +616,10 @@ where
     /// Grants access to a struct that represents a peer.
     #[inline]
     pub fn peer(&mut self, peer_id: PeerId) -> Peer<TTrans, TInEvent, TOutEvent, THandler, THandlerErr> {
+        if peer_id == self.reach_attempts.local_peer_id {
+            return Peer::LocalNode;
+        }
+
         // TODO: we do `peer_mut(...).is_some()` followed with `peer_mut(...).unwrap()`, otherwise
         // the borrow checker yells at us.
 
@@ -1048,6 +1052,9 @@ where
     /// > **Note**: It is however possible that a pending incoming connection is being negotiated
     /// > and will connect to this peer, but we don't know it yet.
     NotConnected(PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>),
+
+    /// The requested peer is the local node.
+    LocalNode,
 }
 
 impl<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr> fmt::Debug for Peer<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>
@@ -1070,6 +1077,10 @@ where
             Peer::NotConnected(PeerNotConnected { ref peer_id, .. }) => {
                 f.debug_struct("NotConnected")
                     .field("peer_id", peer_id)
+                    .finish()
+            }
+            Peer::LocalNode => {
+                f.debug_struct("LocalNode")
                     .finish()
             }
         }
@@ -1142,6 +1153,7 @@ where
     /// > **Note**: It is possible that the attempt reaches a node that doesn't have the peer id
     /// >           that we are expecting, in which case the handler will be used for this "wrong"
     /// >           node.
+    // TODO: add comment about LocalNode; conflicts with other PR
     #[inline]
     pub fn or_connect_with<TFn>(self, addr: TFn, handler: THandler)
         -> Result<PeerPotentialConnect<'a, TInEvent, TOutEvent, THandler, THandlerErr>, Self>
@@ -1151,6 +1163,7 @@ where
         match self {
             Peer::Connected(peer) => Ok(PeerPotentialConnect::Connected(peer)),
             Peer::PendingConnect(peer) => Ok(PeerPotentialConnect::PendingConnect(peer)),
+            Peer::LocalNode => Err(Peer::LocalNode),
             Peer::NotConnected(peer) => {
                 let addr = addr(&peer.peer_id);
                 match peer.connect(addr, handler) {
