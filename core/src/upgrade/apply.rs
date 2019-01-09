@@ -224,6 +224,7 @@ type NameWrapIter<I> =
     std::iter::Map<I, fn(<I as Iterator>::Item) -> NameWrap<<I as Iterator>::Item>>;
 
 /// Wrapper type to expose an `AsRef<[u8]>` impl for all types implementing `ProtocolName`.
+#[derive(Clone)]
 struct NameWrap<N>(N);
 
 impl<N: ProtocolName> AsRef<[u8]> for NameWrap<N> {
