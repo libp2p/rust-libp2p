@@ -23,7 +23,9 @@ use rpc_proto;
 use bs58;
 use protobuf::Message;
 use std::{
-    collections::{HashMap, hash_map::{IntoIter, Iter, Values, Keys}},
+    collections::{HashMap,
+        hash_map::{IntoIter, Iter, Values, Keys, RandomState}
+    },
     hash::{Hash, Hasher},
     iter::FromIterator,
 };
@@ -32,13 +34,13 @@ use std::{
 ///
 /// Seems like PartialEq, Eq and Hash need to be implemented manually, since
 /// Compiler errors result if they are just derived (e.g. when used in
-/// `CacheEntry`).
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// `CacheEntry`). Not sure why Hash can't be derived (I get a compiler error
+/// for `HashMap`).
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TopicMap(HashMap<TopicHash, Topic>);
 
-// impl Hash for TopicMap {
+// impl Hash for HashMap<TopicHash, Topic> {
 //     fn hash<H: Hasher>(&self, state: &mut H) {
-//         self.0.hash(state)
 //     }
 // }
 
@@ -126,7 +128,7 @@ impl From<TopicId> for TopicRep {
 /// the topic. You only have to build the hash once, then use it everywhere.
 /// Needs to derive `Eq` and `Hash` e.g. because it is used as a key in
 /// `HashMap` of `TopicMap`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TopicHash {
     hash: String,
 }
@@ -156,6 +158,12 @@ impl<'a> From<&'a Topic> for TopicHash {
     #[inline]
     fn from(topic: &'a Topic) -> Self {
         topic.hash.clone()
+    }
+}
+
+impl Hash for TopicHash {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.hash.hash(state)
     }
 }
 

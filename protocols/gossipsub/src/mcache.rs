@@ -1,6 +1,8 @@
+use constants::GOSSIP_HIST_LEN;
 use message::{MsgMap, GMessage, MsgHash};
-
 use TopicMap;
+
+use std::collections::hash_map::Keys;
 
 /// The message cache used to track recently seen messages. FMI see
 /// https://github.com/libp2p/specs/tree/master/pubsub/gossipsub#router-state.
@@ -15,7 +17,7 @@ impl MCache {
     pub fn new() -> Self {
         MCache {
             msgs: MsgMap::new(),
-            history: Vec::new(),
+            history: Vec::with_capacity(GOSSIP_HIST_LEN as usize),
         }
     }
 
@@ -50,6 +52,10 @@ impl MCache {
     /// Retrieves a message from the cache by its ID, if it is still present.
     pub fn get(&self, mh: MsgHash) -> Option<&GMessage> {
         self.msgs.get(&mh)
+    }
+
+    pub fn msgs_keys(&self) -> Keys<MsgHash, GMessage> {
+        self.msgs.keys()
     }
 
     // TODO: methods for window, shift

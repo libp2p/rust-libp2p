@@ -1,13 +1,23 @@
 // Overlay parameters
+
+/// The target number of peers in the mesh to gossip to and from.
 pub const TARGET_MESH_DEGREE: u32 = 6;
-pub const LOW_WM_MESH_DEGREE: u32 = 4;      // low water mark for mesh degree
-pub const HIGH_WM_MESH_DEGREE: u32 = 12;    // high water mark for mesh degree
+/// Low water mark for the mesh degree, any lower and it could take longer to
+/// find messages.
+pub const LOW_WM_MESH_DEGREE: u32 = 4;
+/// High water mark for the mesh degree, any higher and it could be too
+/// much for bandwidth (particularly for low-end devices).
+pub const HIGH_WM_MESH_DEGREE: u32 = 12;
 
 // Gossip parameters
-pub const GOSSIP_HIST_LEN: u32 = 5;         // length of gossip history
+/// length of gossip history
+pub const GOSSIP_HIST_LEN: u32 = 5;
+/// This is the last index in the `MCache's` history window. We get
+/// message IDs from up to this index.
 pub const HISTORY_GOSSIP: u32 = 3;
 
-pub const MSG_HIST_LEN: u32 = 120;          // length of total message history
+/// length of total message history
+pub const MSG_HIST_LEN: u32 = 120;
 pub const SEEN_MSGS_CACHE: u32 = 120;
 
 // hearbeat interval

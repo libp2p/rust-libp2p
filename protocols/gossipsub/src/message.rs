@@ -6,12 +6,12 @@ use {TopicMap, TopicHash};
 use libp2p_core::PeerId;
 
 use bs58;
-use chrono::{DateTime, Utc};
+// use chrono::{DateTime, Utc};
 use protobuf::Message;
 use std::{
     borrow::Borrow,
-    collections::hash_map::HashMap,
-    hash::Hash,
+    collections::hash_map::{HashMap, Keys},
+    hash::{Hash, Hasher},
     iter::IntoIterator,
 };
 
@@ -36,6 +36,9 @@ impl MsgMap {
         self.0.get(k)
     }
 
+    pub fn keys(&self) -> Keys<MsgHash, GMessage> {
+        self.0.keys()
+    }
 }
 
 /// A message received by the Gossipsub system.
@@ -48,9 +51,12 @@ impl MsgMap {
 /// `floodsub::protocol::FloodsubMessage`.
 /// The message is limited to 1 MiB, which is enforced by a check when
 /// publishing the message.
-// The hash derive is needed for the add method, passing a `MsgHash`, to a
-// Gossipsub.received, and to hash the message to make a `MsgHash`.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+// It seems that `Hash` needs to be implemented manually, as `TopicMap` is a
+// `HashMap` tuple struct, and `Hash` shouldn't/can't be implemented/derived
+// for a `HashMap`.
+// The add method passes a `MsgHash` to a Gossipsub.received, and the compiler
+// complains if `Hash` isn't implemented.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GMessage {
     /// ID of the peer that published this message.
     pub source: PeerId,
@@ -98,6 +104,13 @@ pub struct GMessage {
     // pub(crate) hash: MsgHash,
 }
 
+impl Hash for GMessage {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.source.hash(state);
+        self.data.hash(state);
+        self.seq_no.hash(state);
+    }
+}
 impl GMessage {
     // // Sets the hash of the message, used in `MsgHashBuilder`.
     // #[inline]
@@ -380,7 +393,7 @@ impl From<rpc_proto::ControlMessage> for ControlMessage {
         let mut control = ControlMessage::default();
 
         for ctrl_i_have in ctrl.get_ihave().into_iter() {
-            let mut control_i_have = ControlIHave::from(ctrl_i_have);
+            let mut control_i_have = ControlIHave::from(*ctrl_i_have);
             control.ihave.push(control_i_have)
         }
 
@@ -402,15 +415,15 @@ pub struct ControlIHave {
 impl From<ControlIHave> for rpc_proto::ControlIHave {
     fn from(control_i_have: ControlIHave) -> rpc_proto::ControlIHave {
         let mut ctrl_i_have = rpc_proto::ControlIHave::new();
-        ctrl_i_have.set_topic_hash(control_i_have.topic.into_string());
+        ctrl_i_have.set_topic_hash(control_i_have.t_hash.into_string());
         // For getting my head around this with seeing the return
         // types by hovering over, uncomment if you need to
         // do the same.
         // let bar_into_iter = control_i_have.recent_mcache.into_iter();
         // let map_bar_into_iter = bar_into_iter.map(|m| m.id.into_string());
         // let collect_map_bar_into_iter = map_bar_into_iter.collect();
-        ctrl_i_have.set_message_hashes(control_i_have.recent_mcache.into_iter()
-            .map(|m| m.id.into_string()).collect());
+        ctrl_i_have.set_message_hashes(control_i_have.recent_mcache.msgs_keys()
+            .map(|m| m.into_string()).collect());
         ctrl_i_have
     }
 }
@@ -431,15 +444,15 @@ impl From<rpc_proto::ControlIHave> for ControlIHave {
 /// with an IHave message.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct ControlIWant {
-    /// List of messages that are being requested.
-    pub messages: Vec<MsgHash>,
+    /// A vector of message hashes, which are used to get messages.
+    pub m_hashes: Vec<MsgHash>,
 }
 
 impl From<ControlIWant> for rpc_proto::ControlIWant {
     fn from(control_i_want: ControlIWant) -> rpc_proto::ControlIWant {
         let mut ctrl_i_want = rpc_proto::ControlIWant::new();
-        ctrl_i_want.set_message_hashes(control_i_want.messages.into_iter()
-            .into_string().collect());
+        ctrl_i_want.set_message_hashes(control_i_want.m_hashes.into_iter()
+            .map(|mh| mh.into_string()).collect());
         ctrl_i_want
     }
 }

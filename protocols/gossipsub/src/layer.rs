@@ -14,7 +14,7 @@ use libp2p_core::{
         PollParameters},
 };
 
-use chrono::Utc;
+// use chrono::Utc;
 use cuckoofilter::CuckooFilter;
 use futures::prelude::*;
 use protobuf::Message;
@@ -64,8 +64,6 @@ pub struct Gossipsub<TSubstream> {
     fanout: Mesh,
 
     mcache: MCache,
-
-    
 
     /// Marker to pin the generics.
     marker: PhantomData<TSubstream>,
@@ -232,7 +230,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 continue;
             }
 
-            message.set_timestamp();
+            // message.set_timestamp();
 
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer_id.clone(),
