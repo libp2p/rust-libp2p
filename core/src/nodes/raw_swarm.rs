@@ -1160,13 +1160,9 @@ where
     ///
     /// If we reach a peer but the `PeerId` doesn't correspond to the one we're expecting, then
     /// the whole connection is immediately closed.
-    ///
-    /// > **Note**: It is possible that the attempt reaches a node that doesn't have the peer id
-    /// >           that we are expecting, in which case the handler will be used for this "wrong"
-    /// >           node.
     #[inline]
     pub fn or_connect(self, addr: Multiaddr, handler: THandler)
-        -> Result<PeerPotentialConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>, Self>
+        -> PeerPotentialConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>
     {
         self.or_connect_with(move |_| addr, handler)
     }
@@ -1176,25 +1172,18 @@ where
     ///
     /// If we reach a peer but the `PeerId` doesn't correspond to the one we're expecting, then
     /// the whole connection is immediately closed.
-    ///
-    /// > **Note**: It is possible that the attempt reaches a node that doesn't have the peer id
-    /// >           that we are expecting, in which case the handler will be used for this "wrong"
-    /// >           node.
     #[inline]
     pub fn or_connect_with<TFn>(self, addr: TFn, handler: THandler)
-        -> Result<PeerPotentialConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>, Self>
+        -> PeerPotentialConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>
     where
         TFn: FnOnce(&PeerId) -> Multiaddr,
     {
         match self {
-            Peer::Connected(peer) => Ok(PeerPotentialConnect::Connected(peer)),
-            Peer::PendingConnect(peer) => Ok(PeerPotentialConnect::PendingConnect(peer)),
+            Peer::Connected(peer) => PeerPotentialConnect::Connected(peer),
+            Peer::PendingConnect(peer) => PeerPotentialConnect::PendingConnect(peer),
             Peer::NotConnected(peer) => {
                 let addr = addr(&peer.peer_id);
-                match peer.connect(addr, handler) {
-                    Ok(peer) => Ok(PeerPotentialConnect::PendingConnect(peer)),
-                    Err(peer) => Err(Peer::NotConnected(peer)),
-                }
+                PeerPotentialConnect::PendingConnect(peer.connect(addr, handler))
             }
         }
     }
@@ -1370,7 +1359,7 @@ where
     /// the whole connection is immediately closed.
     #[inline]
     pub fn connect(self, addr: Multiaddr, handler: THandler)
-        -> Result<PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>, Self>
+        -> PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>
     {
         self.connect_inner(handler, addr, Vec::new())
     }
@@ -1379,7 +1368,7 @@ where
     ///
     /// The multiaddresses passed as parameter will be tried one by one.
     ///
-    /// If the iterator is empty, TODO: what to do? at the moment we unwrap
+    /// Returns an error if the iterator is empty.
     ///
     /// If we reach a peer but the `PeerId` doesn't correspond to the one we're expecting, then
     /// the whole connection is immediately closed.
@@ -1395,15 +1384,15 @@ where
             None => return Err(self)
         };
         let rest = addrs.collect();
-        self.connect_inner(handler, first, rest)
+        Ok(self.connect_inner(handler, first, rest))
     }
 
     /// Inner implementation of `connect`.
     fn connect_inner(self, handler: THandler, first: Multiaddr, rest: Vec<Multiaddr>)
-        -> Result<PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>, Self>
+        -> PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>
     {
         self.nodes.start_dial_out(self.peer_id.clone(), handler, first, rest);
-        Ok(PeerPendingConnect {
+        PeerPendingConnect {
             attempt: match self.nodes.reach_attempts.out_reach_attempts.entry(self.peer_id) {
                 Entry::Occupied(e) => e,
                 Entry::Vacant(_) => {
@@ -1411,7 +1400,7 @@ where
                 },
             },
             active_nodes: &mut self.nodes.active_nodes,
-        })
+        }
     }
 }
 
@@ -1595,8 +1584,7 @@ mod tests {
         assert_matches!(peer, Peer::NotConnected(PeerNotConnected{ .. }));
         let addr = "/memory".parse().expect("bad multiaddr");
         let pending_peer = peer.as_not_connected().unwrap().connect(addr, Handler::default());
-        assert!(pending_peer.is_ok());
-        assert_matches!(pending_peer, Ok(PeerPendingConnect { .. } ));
+        assert_matches!(pending_peer, PeerPendingConnect { .. });
     }
 
     #[test]
@@ -1704,8 +1692,7 @@ mod tests {
             assert_matches!(peer, Peer::NotConnected(PeerNotConnected{ .. }));
             let addr = "/memory".parse::<Multiaddr>().expect("bad multiaddr");
             let pending_peer = peer.as_not_connected().unwrap().connect(addr, Handler::default());
-            assert!(pending_peer.is_ok());
-            assert_matches!(pending_peer, Ok(PeerPendingConnect { .. } ));
+            assert_matches!(pending_peer, PeerPendingConnect { .. });
         }
         let mut rt = Runtime::new().unwrap();
         // Drive it forward until we hear back from the node.
@@ -1746,7 +1733,7 @@ mod tests {
             let mut handler = Handler::default();
             // Force an error
             handler.next_states = vec![ HandlerState::Err ];
-            peer.as_not_connected().unwrap().connect(addr, handler).expect("can connect unconnected peer");
+            peer.as_not_connected().unwrap().connect(addr, handler);
         }
 
         // Ensure we run on a single thread
@@ -1800,7 +1787,7 @@ mod tests {
             let mut handler = Handler::default();
             // Force handler to close
             handler.next_states = vec![ HandlerState::Ready(None) ];
-            peer.as_not_connected().unwrap().connect(addr, handler).expect("can connect unconnected peer");
+            peer.as_not_connected().unwrap().connect(addr, handler);
         }
 
         // Ensure we run on a single thread
