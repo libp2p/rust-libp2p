@@ -25,11 +25,6 @@ extern crate libp2p_core;
 extern crate multiaddr;
 extern crate net2;
 extern crate rand;
-extern crate tokio_reactor;
-extern crate tokio_timer;
-extern crate tokio_udp;
-
-#[cfg(test)]
 extern crate tokio;
 
 use crate::{SERVICE_NAME, META_QUERY_SERVICE, dns};
@@ -38,9 +33,9 @@ use futures::{prelude::*, task};
 use libp2p_core::{Multiaddr, PeerId};
 use multiaddr::Protocol;
 use std::{fmt, io, net::Ipv4Addr, net::SocketAddr, str, time::Duration, time::Instant};
-use tokio_reactor::Handle;
-use tokio_timer::Interval;
-use tokio_udp::UdpSocket;
+use tokio::reactor::Handle;
+use tokio::timer::Interval;
+use tokio::net::udp::UdpSocket;
 
 pub use dns::MdnsResponseError;
 
@@ -48,7 +43,7 @@ pub use dns::MdnsResponseError;
 /// the local network.
 ///
 /// # Usage
-/// 
+///
 /// In order to use mDNS to discover peers on the local network, use the `MdnsService`. This is
 /// done by creating a `MdnsService` then polling it in the same way as you would poll a stream.
 ///
@@ -185,7 +180,7 @@ impl MdnsService {
                 }
             }
             Ok(Async::NotReady) => (),
-            _ => unreachable!("A tokio_timer::Interval never errors"), // TODO: is that true?
+            _ => unreachable!("A tokio::timer::Interval never errors"), // TODO: is that true?
         };
 
         // Flush the send buffer of the main socket.

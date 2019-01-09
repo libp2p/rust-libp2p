@@ -35,7 +35,7 @@
 //! use libp2p_core::{Multiaddr, upgrade::apply_inbound};
 //! use libp2p_core::transport::Transport;
 //! use libp2p_tcp::TcpConfig;
-//! use tokio_io::io::write_all;
+//! use tokio::io::write_all;
 //! use tokio::runtime::current_thread::Runtime;
 //!
 //! let dialer = TcpConfig::new()
@@ -85,7 +85,7 @@ pub use self::error::SecioError;
 
 #[cfg(feature = "secp256k1")]
 use asn1_der::{traits::FromDerEncoded, traits::FromDerObject, DerObject};
-use bytes::BytesMut;
+use bytes::Bytes;
 use ed25519_dalek::Keypair as Ed25519KeyPair;
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
@@ -98,7 +98,7 @@ use std::error::Error;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use std::sync::Arc;
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 #[cfg(all(feature = "rsa", not(any(target_os = "emscripten", target_os = "unknown"))))]
 use untrusted::Input;
 
@@ -404,7 +404,7 @@ impl<S> Sink for SecioMiddleware<S>
 where
     S: AsyncRead + AsyncWrite,
 {
-    type SinkItem = BytesMut;
+    type SinkItem = Bytes;
     type SinkError = IoError;
 
     #[inline]

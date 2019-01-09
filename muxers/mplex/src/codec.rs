@@ -22,7 +22,7 @@ use libp2p_core::Endpoint;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::mem;
 use bytes::{BufMut, Bytes, BytesMut};
-use tokio_io::codec::{Decoder, Encoder};
+use tokio::codec::{Decoder, Encoder};
 use unsigned_varint::{codec, encode};
 
 // Maximum size for a packet: 1MB as per the spec.

@@ -74,7 +74,7 @@ extern crate libp2p_core as swarm;
 extern crate log;
 extern crate multiaddr;
 extern crate rw_stream_sink;
-extern crate tokio_io;
+extern crate tokio;
 
 #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
 #[macro_use]

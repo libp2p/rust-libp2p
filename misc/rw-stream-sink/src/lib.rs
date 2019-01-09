@@ -29,7 +29,7 @@
 
 extern crate bytes;
 extern crate futures;
-extern crate tokio_io;
+extern crate tokio;
 
 use bytes::{Buf, IntoBuf};
 use futures::{Async, AsyncSink, Poll, Sink, Stream};
@@ -37,7 +37,7 @@ use std::cmp;
 use std::io::Error as IoError;
 use std::io::ErrorKind as IoErrorKind;
 use std::io::{Read, Write};
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 /// Wraps around a `Stream + Sink` whose items are buffers. Implements `AsyncRead` and `AsyncWrite`.
 pub struct RwStreamSink<S>

@@ -26,8 +26,7 @@ use libp2p_core::{muxing::Shutdown, upgrade::{InboundUpgrade, OutboundUpgrade, U
 use log::error;
 use std::{io, iter};
 use std::io::{Error as IoError};
-use tokio_io::{AsyncRead, AsyncWrite};
-
+use tokio::io::{AsyncRead, AsyncWrite};
 
 pub struct Yamux<C>(yamux::Connection<C>);
 

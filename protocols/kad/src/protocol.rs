@@ -34,8 +34,8 @@ use protobuf::{self, Message};
 use protobuf_structs;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
-use tokio_codec::Framed;
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::codec::Framed;
+use tokio::io::{AsyncRead, AsyncWrite};
 use unsigned_varint::codec;
 
 /// Status of our connection to a node reported by the Kademlia protocol.
@@ -454,7 +454,6 @@ fn proto_to_resp_msg(
 #[cfg(test)]
 mod tests {
     extern crate libp2p_tcp;
-    extern crate tokio;
 
     /*// TODO: restore
     use self::libp2p_tcp::TcpConfig;

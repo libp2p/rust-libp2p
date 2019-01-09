@@ -30,7 +30,7 @@ use libp2p_core::PeerId;
 use multihash::Multihash;
 use smallvec::SmallVec;
 use std::time::{Duration, Instant};
-use tokio_timer::Delay;
+use tokio::timer::Delay;
 
 /// State of a query iterative process.
 ///

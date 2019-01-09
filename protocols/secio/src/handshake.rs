@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::algo_support;
-use bytes::BytesMut;
+use bytes::{Bytes, BytesMut};
 use crate::codec::{full_codec, FullCodec, Hmac};
 use crate::stream_cipher::{Cipher, ctr};
 use ed25519_dalek::{PublicKey as Ed25519PublicKey, Signature as Ed25519Signature};
@@ -44,8 +44,8 @@ use sha2::{Digest as ShaDigestTrait, Sha256, Sha512};
 use std::cmp::{self, Ordering};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use crate::structs_proto::{Exchange, Propose};
-use tokio_io::codec::length_delimited;
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::codec::length_delimited;
+use tokio::io::{AsyncRead, AsyncWrite};
 #[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
 use untrusted::Input as UntrustedInput;
 use crate::{KeyAgreement, SecioConfig, SecioKeyPairInner};
@@ -328,7 +328,7 @@ where
         })
         .and_then(|context| {
             trace!("sending proposition to remote");
-            socket.send(BytesMut::from(context.state.proposition_bytes.clone()))
+            socket.send(Bytes::from(context.state.proposition_bytes.clone()))
                 .from_err()
                 .map(|s| (s, context))
         })
@@ -408,7 +408,7 @@ where
                 exchange
             };
             let local_exch = exchange.write_to_bytes()?;
-            Ok((BytesMut::from(local_exch), socket, context))
+            Ok((Bytes::from(local_exch), socket, context))
         })
         // Send our local `Exchange`.
         .and_then(|(local_exch, socket, context)| {
@@ -583,7 +583,7 @@ where
         .and_then(|(codec, context)| {
             let remote_nonce = context.state.remote.nonce.clone();
             trace!("checking encryption by sending back remote's nonce");
-            codec.send(BytesMut::from(remote_nonce))
+            codec.send(Bytes::from(remote_nonce))
                 .map(|s| (s, context.state.remote.public_key, context.state.local_tmp_pub_key))
                 .from_err()
         })
@@ -628,9 +628,9 @@ where ::hmac::Hmac<D>: Clone {
 
 #[cfg(test)]
 mod tests {
-    use bytes::BytesMut;
+    use bytes::Bytes;
     use tokio::runtime::current_thread::Runtime;
-    use tokio_tcp::{TcpListener, TcpStream};
+    use tokio::net::tcp::{TcpListener, TcpStream};
     use crate::SecioError;
     use super::handshake;
     use super::stretch_key;
@@ -693,7 +693,7 @@ mod tests {
                 let (sink, stream) = connec.split();
                 stream
                     .filter(|v| !v.is_empty())
-                    .forward(sink.with(|v| Ok::<_, SecioError>(BytesMut::from(v))))
+                    .forward(sink.with(|v| Ok::<_, SecioError>(Bytes::from(v))))
             });
 
         let client = TcpStream::connect(&listener_addr)

@@ -16,8 +16,7 @@ futures = "0.1"
 libp2p-core = { version = "0.1.0", path = "../../core" }
 log = "0.4"
 parking_lot = "0.7"
-tokio-codec = "0.1"
-tokio-io = "0.1"
+tokio = { version = "0.1.14", default-features = false, features = ["codec", "io"] }
 unsigned-varint = { version = "0.2.1", features = ["codec"] }
 
 [dev-dependencies]

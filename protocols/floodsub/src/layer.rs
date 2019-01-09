@@ -28,7 +28,7 @@ use rand;
 use smallvec::SmallVec;
 use std::{collections::VecDeque, iter, marker::PhantomData};
 use std::collections::hash_map::{DefaultHasher, HashMap};
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 use topic::{Topic, TopicHash};
 
 /// Network behaviour that automatically identifies nodes periodically, and returns information

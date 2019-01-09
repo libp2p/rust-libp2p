@@ -25,8 +25,8 @@ use libp2p_core::{
     upgrade::{DeniedUpgrade, OutboundUpgrade}
 };
 use std::{io, marker::PhantomData, time::{Duration, Instant}};
-use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_timer::{self, Delay};
+use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::timer::Delay;
 use void::{Void, unreachable};
 
 /// Delay between the moment we connect and the first time we identify.
@@ -85,7 +85,7 @@ where
 {
     type InEvent = Void;
     type OutEvent = PeriodicIdHandlerEvent;
-    type Error = tokio_timer::Error;
+    type Error = tokio::timer::Error;
     type Substream = TSubstream;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = IdentifyProtocolConfig;

@@ -39,7 +39,6 @@ extern crate libp2p_core as swarm;
 extern crate log;
 extern crate multiaddr;
 extern crate tokio_dns;
-extern crate tokio_io;
 
 use futures::{future::{self, Either, FutureResult, JoinAll}, prelude::*, try_ready};
 use log::Level;

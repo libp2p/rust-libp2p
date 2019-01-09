@@ -28,7 +28,7 @@ use crate::{
 };
 use futures::prelude::*;
 use std::marker::PhantomData;
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 use void::Void;
 
 /// Implementation of `ProtocolsHandler` that doesn't handle anything.

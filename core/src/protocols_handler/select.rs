@@ -31,7 +31,7 @@ use crate::{
     }
 };
 use futures::prelude::*;
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 /// Implementation of `ProtocolsHandler` that combines two protocols into one.
 #[derive(Debug, Clone)]

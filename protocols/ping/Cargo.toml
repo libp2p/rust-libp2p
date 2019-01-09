@@ -19,12 +19,9 @@ multistream-select = { version = "0.1.0", path = "../../misc/multistream-select"
 futures = "0.1"
 parking_lot = "0.7"
 rand = "0.6"
-tokio-codec = "0.1"
-tokio-io = "0.1"
-tokio-timer = "0.2.6"
+tokio = { version = "0.1.14", default-features = false, features = ["codec", "io", "timer"] }
 void = "1.0"
 
 [dev-dependencies]
 libp2p-tcp = { version = "0.1.0", path = "../../transports/tcp" }
 tokio = "0.1"
-tokio-tcp = "0.1"

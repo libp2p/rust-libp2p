@@ -75,9 +75,7 @@ extern crate multiaddr;
 extern crate parking_lot;
 extern crate protobuf;
 extern crate smallvec;
-extern crate tokio_codec;
-extern crate tokio_io;
-extern crate tokio_timer;
+extern crate tokio;
 extern crate unsigned_varint;
 extern crate void;
 

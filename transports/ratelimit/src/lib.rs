@@ -25,14 +25,14 @@ extern crate libp2p_core;
 #[macro_use]
 extern crate log;
 extern crate tokio_executor;
-extern crate tokio_io;
+extern crate tokio;
 
 use aio_limited::{Limited, Limiter};
 use futures::prelude::*;
 use libp2p_core::{Multiaddr, Transport};
 use std::io;
+use tokio::io::{AsyncRead, AsyncWrite, ReadHalf, WriteHalf};
 use tokio_executor::Executor;
-use tokio_io::{AsyncRead, AsyncWrite, io::{ReadHalf, WriteHalf}};
 
 #[derive(Clone)]
 pub struct RateLimited<T> {

@@ -30,7 +30,7 @@ use libp2p_core::{
     upgrade::DeniedUpgrade
 };
 use log::warn;
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 use void::{Void, unreachable};
 
 /// Handler for handling pings received from a remote.

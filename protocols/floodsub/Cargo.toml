@@ -18,6 +18,5 @@ libp2p-core = { version = "0.1.0", path = "../../core" }
 protobuf = "2.0.2"
 rand = "0.6"
 smallvec = "0.6.5"
-tokio-codec = "0.1"
-tokio-io = "0.1"
+tokio = { version = "0.1.14", default-features = false, features = ["codec", "io"] }
 unsigned-varint = { version = "0.2.1", features = ["codec"] }

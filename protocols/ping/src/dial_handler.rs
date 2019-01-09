@@ -32,8 +32,8 @@ use std::{
     io, mem,
     time::{Duration, Instant},
 };
-use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_timer::{self, Delay};
+use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::timer::Delay;
 use void::{Void, unreachable};
 
 /// Protocol handler that handles pinging the remote at a regular period.
@@ -219,7 +219,7 @@ where
         ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
         io::Error,
     > {
-        // Shortcut for polling a `tokio_timer::Delay`
+        // Shortcut for polling a `tokio::timer::Delay`
         macro_rules! poll_delay {
             ($delay:expr => { NotReady => $notready:expr, Ready => $ready:expr, }) => (
                 match $delay.poll() {

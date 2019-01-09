@@ -27,8 +27,8 @@ use libp2p_core::{
 };
 use smallvec::SmallVec;
 use std::{fmt, io};
-use tokio_codec::Framed;
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::codec::Framed;
+use tokio::io::{AsyncRead, AsyncWrite};
 
 /// Protocol handler that handles communication with the remote for the floodsub protocol.
 ///

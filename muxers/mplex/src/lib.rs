@@ -34,8 +34,8 @@ use log::{debug, trace};
 use parking_lot::Mutex;
 use fnv::{FnvHashMap, FnvHashSet};
 use futures::{prelude::*, executor, future, stream::Fuse, task, task_local, try_ready};
-use tokio_codec::Framed;
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::codec::Framed;
+use tokio::io::{AsyncRead, AsyncWrite};
 
 /// Configuration for the multiplexer.
 #[derive(Debug, Clone)]

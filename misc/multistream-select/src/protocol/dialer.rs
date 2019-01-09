@@ -28,8 +28,8 @@ use crate::protocol::MultistreamSelectError;
 use crate::protocol::MULTISTREAM_PROTOCOL_WITH_LF;
 use futures::{prelude::*, sink, Async, StartSend, try_ready};
 use std::io;
-use tokio_codec::Encoder;
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::codec::Encoder;
+use tokio::io::{AsyncRead, AsyncWrite};
 use unsigned_varint::{decode, codec::Uvi};
 
 /// Wraps around a `AsyncRead+AsyncWrite`.
@@ -206,7 +206,7 @@ impl<N: AsRef<[u8]>> Encoder for MessageEncoder<N> {
 mod tests {
     use crate::protocol::{Dialer, DialerToListenerMessage, MultistreamSelectError};
     use tokio::runtime::current_thread::Runtime;
-    use tokio_tcp::{TcpListener, TcpStream};
+    use tokio::net::tcp::{TcpListener, TcpStream};
     use futures::Future;
     use futures::{Sink, Stream};
 

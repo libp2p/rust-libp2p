@@ -14,7 +14,6 @@ log = "0.4.1"
 futures = "0.1"
 multiaddr = { package = "parity-multiaddr", version = "0.1.0", path = "../../misc/multiaddr" }
 tokio-dns-unofficial = "0.4"
-tokio-io = "0.1"
 
 [dev-dependencies]
 libp2p-tcp = { version = "0.1.0", path = "../../transports/tcp" }

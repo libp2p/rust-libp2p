@@ -29,8 +29,8 @@ use query::{QueryConfig, QueryState, QueryStatePollOut, QueryTarget};
 use rand;
 use smallvec::SmallVec;
 use std::{cmp::Ordering, marker::PhantomData, time::Duration, time::Instant};
-use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_timer::Interval;
+use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::timer::Interval;
 use topology::KademliaTopology;
 
 /// Network behaviour that handles Kademlia.

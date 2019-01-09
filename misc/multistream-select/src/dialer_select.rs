@@ -30,7 +30,7 @@ use crate::protocol::{
 };
 use log::trace;
 use std::mem;
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 use crate::ProtocolChoiceError;
 
 /// Future, returned by `dialer_select_proto`, which selects a protocol and dialer

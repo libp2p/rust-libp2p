@@ -40,7 +40,7 @@ use crate::upgrade::{
 };
 use futures::prelude::*;
 use std::{error, fmt, time::Duration};
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 pub use self::dummy::DummyProtocolsHandler;
 pub use self::map_in::MapInEvent;

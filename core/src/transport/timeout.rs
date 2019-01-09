@@ -28,8 +28,7 @@ use futures::{try_ready, Async, Future, Poll, Stream};
 use log::debug;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::time::Duration;
-use tokio_timer::Timeout;
-use tokio_timer::timeout::Error as TimeoutError;
+use tokio::timer::{Timeout, timeout::Error as TimeoutError};
 
 /// Wraps around a `Transport` and adds a timeout to all the incoming and outgoing connections.
 ///

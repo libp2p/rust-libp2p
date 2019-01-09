@@ -30,7 +30,7 @@ use crate::{
 };
 use futures::prelude::*;
 use std::time::{Duration, Instant};
-use tokio_timer::{Delay, Timeout};
+use tokio::timer::{Delay, Timeout};
 
 /// Prototype for a `NodeHandlerWrapper`.
 pub struct NodeHandlerWrapperBuilder<TProtoHandler>

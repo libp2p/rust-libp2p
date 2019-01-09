@@ -24,16 +24,15 @@
 extern crate bytes;
 extern crate futures;
 extern crate libp2p_core;
-extern crate tokio_codec;
-extern crate tokio_io;
+extern crate tokio;
 extern crate unsigned_varint;
 
 use bytes::Bytes;
 use futures::{future, prelude::*};
 use libp2p_core::{Multiaddr, upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}};
 use std::{io, iter};
-use tokio_codec::{FramedRead, FramedWrite};
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::codec::{FramedRead, FramedWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 use unsigned_varint::codec::UviBytes;
 
 /// The connection upgrade type to retrieve or report externally visible addresses.
@@ -107,8 +106,6 @@ impl<C: AsyncWrite> Sender<C> {
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio;
-
     use libp2p_core::{Multiaddr, upgrade::{InboundUpgrade, OutboundUpgrade}};
     use self::tokio::runtime::current_thread;
     use self::tokio::net::{TcpListener, TcpStream};

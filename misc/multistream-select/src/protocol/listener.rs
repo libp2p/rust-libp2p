@@ -29,8 +29,8 @@ use crate::protocol::MULTISTREAM_PROTOCOL_WITH_LF;
 use futures::{prelude::*, sink, stream::StreamFuture};
 use log::{debug, trace};
 use std::{io, mem};
-use tokio_codec::Encoder;
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::codec::Encoder;
+use tokio::io::{AsyncRead, AsyncWrite};
 use unsigned_varint::{encode, codec::Uvi};
 
 /// Wraps around a `AsyncRead+AsyncWrite`. Assumes that we're on the listener's side. Produces and
@@ -243,7 +243,7 @@ impl<N: AsRef<[u8]>> Encoder for MessageEncoder<N> {
 #[cfg(test)]
 mod tests {
     use tokio::runtime::current_thread::Runtime;
-    use tokio_tcp::{TcpListener, TcpStream};
+    use tokio::net::tcp::{TcpListener, TcpStream};
     use bytes::Bytes;
     use futures::Future;
     use futures::{Sink, Stream};

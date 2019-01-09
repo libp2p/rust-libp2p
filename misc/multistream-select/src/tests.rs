@@ -28,7 +28,7 @@ use crate::protocol::{Dialer, DialerToListenerMessage, Listener, ListenerToDiale
 use crate::{dialer_select_proto, listener_select_proto};
 use futures::prelude::*;
 use tokio::runtime::current_thread::Runtime;
-use tokio_tcp::{TcpListener, TcpStream};
+use tokio::net::tcp::{TcpListener, TcpStream};
 
 /// Holds a `Vec` and satifies the iterator requirements of `listener_select_proto`.
 struct VecRefIntoIter<T>(Vec<T>);

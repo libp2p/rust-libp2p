@@ -51,14 +51,10 @@ extern crate libp2p_core;
 #[macro_use]
 extern crate log;
 extern crate multiaddr;
-extern crate tokio_uds;
+extern crate tokio;
 
 #[cfg(test)]
 extern crate tempfile;
-#[cfg(test)]
-extern crate tokio_io;
-#[cfg(test)]
-extern crate tokio;
 
 use futures::{future::{self, FutureResult}, prelude::*, try_ready};
 use futures::stream::Stream;
@@ -66,7 +62,7 @@ use multiaddr::{Protocol, Multiaddr};
 use std::io::Error as IoError;
 use std::path::PathBuf;
 use libp2p_core::Transport;
-use tokio_uds::{UnixListener, UnixStream};
+use tokio::net::uds::{UnixListener, UnixStream};
 
 /// Represents the configuration for a Unix domain sockets transport capability for libp2p.
 ///
@@ -86,9 +82,9 @@ impl UdsConfig {
 
 impl Transport for UdsConfig {
     type Output = UnixStream;
-    type Listener = ListenerStream<tokio_uds::Incoming>;
+    type Listener = ListenerStream<tokio::net::uds::Incoming>;
     type ListenerUpgrade = FutureResult<Self::Output, IoError>;
-    type Dial = tokio_uds::ConnectFuture;
+    type Dial = tokio::net::uds::ConnectFuture;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
         if let Ok(path) = multiaddr_to_path(&addr) {
@@ -187,7 +183,6 @@ mod tests {
     use std::{self, borrow::Cow, path::Path};
     use libp2p_core::Transport;
     use tempfile;
-    use tokio_io;
 
     #[test]
     fn multiaddr_to_path_conversion() {
@@ -223,7 +218,7 @@ mod tests {
                 sock.and_then(|sock| {
                     // Define what to do with the socket that just connected to us
                     // Which in this case is read 3 bytes
-                    let handle_conn = tokio_io::io::read_exact(sock, [0; 3])
+                    let handle_conn = tokio::io::read_exact(sock, [0; 3])
                         .map(|(_, buf)| assert_eq!(buf, [1, 2, 3]))
                         .map_err(|err| panic!("IO error {:?}", err));
 

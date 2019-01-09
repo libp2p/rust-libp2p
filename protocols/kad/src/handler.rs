@@ -27,7 +27,7 @@ use protocol::{
     KademliaProtocolConfig,
 };
 use std::{error, fmt, io};
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 /// Protocol handler that handles Kademlia communications with the remote.
 ///

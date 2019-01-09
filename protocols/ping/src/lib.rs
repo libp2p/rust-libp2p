@@ -40,7 +40,7 @@ use libp2p_core::either::EitherOutput;
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use libp2p_core::{protocols_handler::ProtocolsHandler, protocols_handler::ProtocolsHandlerSelect, PeerId};
 use std::{marker::PhantomData, time::Duration};
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 /// Network behaviour that handles receiving pings sent by other nodes and periodically pings the
 /// nodes we are connected to.

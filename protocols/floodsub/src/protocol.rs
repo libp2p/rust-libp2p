@@ -24,8 +24,8 @@ use futures::future;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, PeerId};
 use protobuf::Message as ProtobufMessage;
 use std::{io, iter};
-use tokio_codec::{Decoder, Encoder, Framed};
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::codec::{Decoder, Encoder, Framed};
+use tokio::io::{AsyncRead, AsyncWrite};
 use topic::TopicHash;
 use unsigned_varint::codec;
 

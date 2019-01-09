@@ -47,7 +47,7 @@ fn one_field() {
         }
     }
 
-    fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
+    fn foo<TSubstream: libp2p::tokio::io::AsyncRead + libp2p::tokio::io::AsyncWrite>() {
         require_net_behaviour::<Foo<TSubstream>>();
     }
 }
@@ -71,7 +71,7 @@ fn two_fields() {
         }
     }
 
-    fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
+    fn foo<TSubstream: libp2p::tokio::io::AsyncRead + libp2p::tokio::io::AsyncWrite>() {
         require_net_behaviour::<Foo<TSubstream>>();
     }
 }
@@ -103,7 +103,7 @@ fn three_fields() {
         }
     }
 
-    fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
+    fn foo<TSubstream: libp2p::tokio::io::AsyncRead + libp2p::tokio::io::AsyncWrite>() {
         require_net_behaviour::<Foo<TSubstream>>();
     }
 }
@@ -132,7 +132,7 @@ fn custom_polling() {
         fn foo<T>(&mut self) -> libp2p::futures::Async<libp2p::core::swarm::NetworkBehaviourAction<T, ()>> { libp2p::futures::Async::NotReady }
     }
 
-    fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
+    fn foo<TSubstream: libp2p::tokio::io::AsyncRead + libp2p::tokio::io::AsyncWrite>() {
         require_net_behaviour::<Foo<TSubstream>>();
     }
 }
@@ -157,7 +157,7 @@ fn custom_event_no_polling() {
         }
     }
 
-    fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
+    fn foo<TSubstream: libp2p::tokio::io::AsyncRead + libp2p::tokio::io::AsyncWrite>() {
         require_net_behaviour::<Foo<TSubstream>>();
     }
 }
@@ -186,7 +186,7 @@ fn custom_event_and_polling() {
         fn foo<T>(&mut self) -> libp2p::futures::Async<libp2p::core::swarm::NetworkBehaviourAction<T, String>> { libp2p::futures::Async::NotReady }
     }
 
-    fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
+    fn foo<TSubstream: libp2p::tokio::io::AsyncRead + libp2p::tokio::io::AsyncWrite>() {
         require_net_behaviour::<Foo<TSubstream>>();
     }
 }

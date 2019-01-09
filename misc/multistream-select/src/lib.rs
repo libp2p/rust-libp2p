@@ -46,7 +46,7 @@
 //! use bytes::Bytes;
 //! use multistream_select::dialer_select_proto;
 //! use futures::{Future, Sink, Stream};
-//! use tokio_tcp::TcpStream;
+//! use tokio::net::tcp::TcpStream;
 //! use tokio::runtime::current_thread::Runtime;
 //!
 //! #[derive(Debug, Copy, Clone)]

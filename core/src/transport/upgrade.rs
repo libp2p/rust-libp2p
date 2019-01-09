@@ -32,7 +32,7 @@ use crate::{
 };
 use futures::{future::Either, prelude::*, try_ready};
 use multiaddr::Multiaddr;
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 #[derive(Debug, Copy, Clone)]
 pub struct Upgrade<T, U> { inner: T, upgrade: U }

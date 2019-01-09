@@ -30,8 +30,7 @@ extern crate libp2p_core;
 extern crate protobuf;
 extern crate rand;
 extern crate smallvec;
-extern crate tokio_codec;
-extern crate tokio_io;
+extern crate tokio;
 extern crate unsigned_varint;
 
 pub mod handler;

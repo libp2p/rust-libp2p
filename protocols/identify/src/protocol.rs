@@ -31,8 +31,8 @@ use protobuf::RepeatedField;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use structs_proto;
-use tokio_codec::Framed;
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::codec::Framed;
+use tokio::io::{AsyncRead, AsyncWrite};
 use unsigned_varint::codec;
 
 /// Configuration for an upgrade to the identity protocol.
@@ -253,11 +253,10 @@ fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> 
 #[cfg(test)]
 mod tests {
     extern crate libp2p_tcp;
-    extern crate tokio;
 
     use crate::protocol::{IdentifyInfo, RemoteInfo, IdentifyProtocolConfig};
-    use self::tokio::runtime::current_thread::Runtime;
     use self::libp2p_tcp::TcpConfig;
+    use tokio::runtime::current_thread::Runtime;
     use futures::{Future, Stream};
     use libp2p_core::{PublicKey, Transport, upgrade::{apply_outbound, apply_inbound}};
     use std::sync::mpsc;

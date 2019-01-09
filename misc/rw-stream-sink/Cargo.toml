@@ -11,4 +11,4 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 bytes = "0.4"
 futures = "0.1"
-tokio-io = "0.1"
+tokio = { version = "0.1.14", default-features = false, features = ["io"] }

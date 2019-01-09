@@ -107,8 +107,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             })
             .collect::<Vec<_>>();
 
-        additional.push(quote!{#substream_generic: ::libp2p::tokio_io::AsyncRead});
-        additional.push(quote!{#substream_generic: ::libp2p::tokio_io::AsyncWrite});
+        additional.push(quote!{#substream_generic: ::libp2p::tokio::io::AsyncRead});
+        additional.push(quote!{#substream_generic: ::libp2p::tokio::io::AsyncWrite});
 
         if let Some(where_clause) = where_clause {
             Some(quote!{#where_clause #(#additional),*})

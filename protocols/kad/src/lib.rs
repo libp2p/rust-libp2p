@@ -73,14 +73,9 @@ extern crate parking_lot;
 extern crate protobuf;
 extern crate rand;
 extern crate smallvec;
-extern crate tokio_codec;
-extern crate tokio_io;
-extern crate tokio_timer;
+extern crate tokio;
 extern crate unsigned_varint;
 extern crate void;
-
-#[cfg(test)]
-extern crate tokio;
 
 pub use self::behaviour::{Kademlia, KademliaOut};
 pub use self::kbucket::KBucketsPeerId;

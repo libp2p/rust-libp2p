@@ -38,14 +38,8 @@ extern crate multiaddr;
 extern crate net2;
 extern crate rand;
 extern crate smallvec;
-extern crate tokio_io;
-extern crate tokio_reactor;
-extern crate tokio_timer;
-extern crate tokio_udp;
-extern crate void;
-
-#[cfg(test)]
 extern crate tokio;
+extern crate void;
 
 /// Hardcoded name of the mDNS service. Part of the mDNS libp2p specifications.
 const SERVICE_NAME: &'static [u8] = b"_p2p._udp.local";

@@ -26,8 +26,8 @@ use rand::{distributions::Standard, prelude::*, rngs::EntropyRng};
 use std::collections::VecDeque;
 use std::io::Error as IoError;
 use std::{iter, marker::PhantomData, mem};
-use tokio_codec::{Decoder, Encoder, Framed};
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::codec::{Decoder, Encoder, Framed};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 /// Represents a prototype for an upgrade to handle the ping protocol.
 ///
@@ -320,7 +320,7 @@ impl Encoder for Codec {
 
 #[cfg(test)]
 mod tests {
-    use tokio_tcp::{TcpListener, TcpStream};
+    use tokio::net::tcp::{TcpListener, TcpStream};
     use super::Ping;
     use futures::{Future, Stream};
     use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade};

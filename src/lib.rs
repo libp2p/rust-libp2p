@@ -109,7 +109,7 @@
 //! The `Swarm` struct contains all active and pending connections to remotes and manages the
 //! state of all the substreams that have been opened, and all the upgrades that were built upon
 //! these substreams.
-//! 
+//!
 //! It combines a `Transport`, a `NetworkBehaviour` and a `Topology` together.
 //!
 //! See the documentation of the `libp2p-core` crate for more details about creating a swarm.
@@ -133,8 +133,7 @@ pub extern crate bytes;
 pub extern crate futures;
 pub extern crate multiaddr;
 pub extern crate multihash;
-pub extern crate tokio_io;
-pub extern crate tokio_codec;
+pub extern crate tokio;
 
 extern crate libp2p_core_derive;
 extern crate tokio_executor;

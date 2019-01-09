@@ -31,9 +31,8 @@ libp2p-secio = { version = "0.1.0", path = "./protocols/secio", default-features
 libp2p-uds = { version = "0.1.0", path = "./transports/uds" }
 libp2p-websocket = { version = "0.1.0", path = "./transports/websocket", optional = true }
 libp2p-yamux = { version = "0.1.0", path = "./muxers/yamux" }
-tokio-codec = "0.1"
+tokio = { version = "0.1.14", default-features = false, features = ["codec", "io"] }
 tokio-executor = "0.1"
-tokio-io = "0.1"
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dependencies]
 libp2p-dns = { version = "0.1.0", path = "./transports/dns" }

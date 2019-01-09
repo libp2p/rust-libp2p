@@ -30,7 +30,7 @@ use crate::protocol::{
 };
 use log::{debug, trace};
 use std::mem;
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 use crate::ProtocolChoiceError;
 
 /// Helps selecting a protocol amongst the ones supported.

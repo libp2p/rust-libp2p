@@ -28,7 +28,7 @@ use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourActio
 use libp2p_core::{Multiaddr, PeerId, either::EitherOutput};
 use smallvec::SmallVec;
 use std::{collections::HashMap, collections::VecDeque, io};
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 use void::Void;
 
 /// Network behaviour that automatically identifies nodes periodically, returns information

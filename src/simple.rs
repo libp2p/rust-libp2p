@@ -22,7 +22,7 @@ use bytes::Bytes;
 use core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use futures::{future::FromErr, prelude::*};
 use std::{iter, io::Error as IoError, sync::Arc};
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 /// Implementation of `ConnectionUpgrade`. Convenient to use with small protocols.
 #[derive(Debug)]

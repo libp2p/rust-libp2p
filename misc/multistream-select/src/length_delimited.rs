@@ -22,8 +22,8 @@ use bytes::Bytes;
 use futures::{Async, Poll, Sink, StartSend, Stream};
 use smallvec::SmallVec;
 use std::{io, u16};
-use tokio_codec::{Encoder, FramedWrite};
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::codec::{Encoder, FramedWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 use unsigned_varint::decode;
 
 /// `Stream` and `Sink` wrapping some `AsyncRead + AsyncWrite` object to read

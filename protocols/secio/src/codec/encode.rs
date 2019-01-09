@@ -20,7 +20,7 @@
 
 //! Individual messages encoding.
 
-use bytes::BytesMut;
+use bytes::{Bytes, BytesMut};
 use super::{Hmac, StreamCipher};
 use futures::prelude::*;
 
@@ -35,7 +35,7 @@ pub struct EncoderMiddleware<S> {
     cipher_state: StreamCipher,
     hmac: Hmac,
     raw_sink: S,
-    pending: Option<BytesMut> // buffer encrypted data which can not be sent right away
+    pending: Option<Bytes> // buffer encrypted data which can not be sent right away
 }
 
 impl<S> EncoderMiddleware<S> {
@@ -51,24 +51,25 @@ impl<S> EncoderMiddleware<S> {
 
 impl<S> Sink for EncoderMiddleware<S>
 where
-    S: Sink<SinkItem = BytesMut>,
+    S: Sink<SinkItem = Bytes>,
 {
-    type SinkItem = BytesMut;
+    type SinkItem = Bytes;
     type SinkError = S::SinkError;
 
-    fn start_send(&mut self, mut data_buf: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
+    fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
         if let Some(data) = self.pending.take() {
             if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data)? {
                 self.pending = Some(data);
-                return Ok(AsyncSink::NotReady(data_buf))
+                return Ok(AsyncSink::NotReady(item))
             }
         }
         debug_assert!(self.pending.is_none());
         // TODO if SinkError gets refactor to SecioError, then use try_apply_keystream
-        self.cipher_state.apply_keystream(&mut data_buf[..]);
-        let signature = self.hmac.sign(&data_buf[..]);
-        data_buf.extend_from_slice(signature.as_ref());
-        if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data_buf)? {
+        let mut data = BytesMut::from(item); // cheap if `item` is not shared
+        self.cipher_state.apply_keystream(&mut data[..]);
+        let signature = self.hmac.sign(&data[..]);
+        data.extend_from_slice(signature.as_ref());
+        if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data.freeze())? {
             self.pending = Some(data)
         }
         Ok(AsyncSink::Ready)

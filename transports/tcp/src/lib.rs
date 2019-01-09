@@ -44,8 +44,7 @@ extern crate libp2p_core as swarm;
 extern crate log;
 extern crate multiaddr;
 extern crate tk_listen;
-extern crate tokio_io;
-extern crate tokio_tcp;
+extern crate tokio;
 
 use futures::{future, future::FutureResult, prelude::*, Async, Poll};
 use multiaddr::{Protocol, Multiaddr, ToMultiaddr};
@@ -55,8 +54,8 @@ use std::net::SocketAddr;
 use std::time::Duration;
 use swarm::Transport;
 use tk_listen::{ListenExt, SleepOnError};
-use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_tcp::{ConnectFuture, Incoming, TcpListener, TcpStream};
+use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::net::tcp::{ConnectFuture, Incoming, TcpListener, TcpStream};
 
 /// Represents the configuration for a TCP/IP transport capability for libp2p.
 ///
@@ -391,8 +390,7 @@ impl Drop for TcpTransStream {
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio;
-    use self::tokio::runtime::current_thread::Runtime;
+    use tokio::runtime::current_thread::Runtime;
     use super::{multiaddr_to_socketaddr, TcpConfig};
     use futures::stream::Stream;
     use futures::Future;
@@ -400,7 +398,6 @@ mod tests {
     use std;
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use swarm::Transport;
-    use tokio_io;
 
     #[test]
     fn multiaddr_to_tcp_conversion() {
@@ -464,7 +461,7 @@ mod tests {
                 sock.and_then(|sock| {
                     // Define what to do with the socket that just connected to us
                     // Which in this case is read 3 bytes
-                    let handle_conn = tokio_io::io::read_exact(sock, [0; 3])
+                    let handle_conn = tokio::io::read_exact(sock, [0; 3])
                         .map(|(_, buf)| assert_eq!(buf, [1, 2, 3]))
                         .map_err(|err| panic!("IO error {:?}", err));
 

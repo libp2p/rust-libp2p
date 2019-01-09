@@ -18,9 +18,7 @@ multiaddr = { package = "parity-multiaddr", version = "0.1.0", path = "../../mis
 parking_lot = "0.7"
 protobuf = "2.0.2"
 smallvec = "0.6"
-tokio-codec = "0.1"
-tokio-io = "0.1.0"
-tokio-timer = "0.2.6"
+tokio = { version = "0.1.14", default-features = false, features = ["codec", "io", "timer"] }
 unsigned-varint = { version = "0.2.1", features = ["codec"] }
 void = "1.0"
 

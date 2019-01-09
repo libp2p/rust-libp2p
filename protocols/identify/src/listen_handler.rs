@@ -25,7 +25,7 @@ use libp2p_core::{
     upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade}
 };
 use smallvec::SmallVec;
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 use void::{Void, unreachable};
 
 /// Protocol handler that identifies the remote at a regular period.

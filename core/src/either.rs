@@ -21,7 +21,7 @@
 use crate::{muxing::{Shutdown, StreamMuxer}, Multiaddr, ProtocolName};
 use futures::prelude::*;
 use std::{fmt, io::{Error as IoError, Read, Write}};
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 #[derive(Debug, Copy, Clone)]
 pub enum EitherError<A, B> {

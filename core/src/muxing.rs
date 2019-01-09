@@ -58,7 +58,7 @@ use std::io::{Error as IoError, ErrorKind as IoErrorKind, Read, Write};
 use std::ops::Deref;
 use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 /// Ways to shutdown a substream or stream muxer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

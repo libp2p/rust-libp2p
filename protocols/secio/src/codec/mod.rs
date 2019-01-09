@@ -28,14 +28,14 @@ use aes_ctr::stream_cipher::StreamCipherCore;
 use crate::algo_support::Digest;
 use hmac::{self, Mac};
 use sha2::{Sha256, Sha512};
-use tokio_io::codec::length_delimited;
-use tokio_io::{AsyncRead, AsyncWrite};
+use tokio::codec::{Framed, LengthDelimitedCodec};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 mod decode;
 mod encode;
 
 /// Type returned by `full_codec`.
-pub type FullCodec<S> = DecoderMiddleware<EncoderMiddleware<length_delimited::Framed<S>>>;
+pub type FullCodec<S> = DecoderMiddleware<EncoderMiddleware<Framed<S, LengthDelimitedCodec>>>;
 
 pub type StreamCipher = Box<dyn StreamCipherCore + Send>;
 
@@ -104,7 +104,7 @@ impl Hmac {
 /// The conversion between the stream/sink items and the socket is done with the given cipher and
 /// hash algorithm (which are generally decided during the handshake).
 pub fn full_codec<S>(
-    socket: length_delimited::Framed<S>,
+    socket: Framed<S, LengthDelimitedCodec>,
     cipher_encoding: StreamCipher,
     encoding_hmac: Hmac,
     cipher_decoder: StreamCipher,
@@ -121,7 +121,7 @@ where
 #[cfg(test)]
 mod tests {
     use tokio::runtime::current_thread::Runtime;
-    use tokio_tcp::{TcpListener, TcpStream};
+    use tokio::net::tcp::{TcpListener, TcpStream};
     use crate::stream_cipher::{ctr, Cipher};
     use super::full_codec;
     use super::DecoderMiddleware;
@@ -129,18 +129,18 @@ mod tests {
     use super::Hmac;
     use crate::algo_support::Digest;
     use crate::error::SecioError;
-    use bytes::BytesMut;
+    use bytes::{Bytes, BytesMut};
     use futures::sync::mpsc::channel;
     use futures::{Future, Sink, Stream, stream};
     use rand;
     use std::io::Error as IoError;
-    use tokio_io::codec::length_delimited::Framed;
+    use tokio::codec::length_delimited;
 
     const NULL_IV : [u8; 16] = [0;16];
 
     #[test]
     fn raw_encode_then_decode() {
-        let (data_tx, data_rx) = channel::<BytesMut>(256);
+        let (data_tx, data_rx) = channel::<Bytes>(256);
         let data_tx = data_tx.sink_map_err::<_, IoError>(|_| panic!());
         let data_rx = data_rx.map_err::<IoError, _>(|_| panic!());
 
@@ -154,7 +154,7 @@ mod tests {
             Hmac::from_key(Digest::Sha256, &hmac_key),
         );
         let decoder = DecoderMiddleware::new(
-            data_rx,
+            data_rx.map(BytesMut::from),
             ctr(Cipher::Aes256, &cipher_key, &NULL_IV[..]),
             Hmac::from_key(Digest::Sha256, &hmac_key),
             Vec::new()
@@ -162,7 +162,7 @@ mod tests {
 
         let data = b"hello world";
 
-        let data_sent = encoder.send(BytesMut::from(data.to_vec())).from_err();
+        let data_sent = encoder.send(Bytes::from(data.to_vec())).from_err();
         let data_received = decoder.into_future().map(|(n, _)| n).map_err(|(e, _)| e);
         let mut rt = Runtime::new().unwrap();
 
@@ -191,7 +191,7 @@ mod tests {
             .map_err(|(e, _)| e)
             .map(move |(connec, _)| {
                 full_codec(
-                    Framed::new(connec.unwrap()),
+                    length_delimited::Builder::new().new_framed(connec.unwrap()),
                     ctr(cipher, &cipher_key[..key_size], &NULL_IV[..]),
                     Hmac::from_key(Digest::Sha256, &hmac_key),
                     ctr(cipher, &cipher_key[..key_size], &NULL_IV[..]),
@@ -205,7 +205,7 @@ mod tests {
             .map_err(|e| e.into())
             .map(move |stream| {
                 full_codec(
-                    Framed::new(stream),
+                    length_delimited::Builder::new().new_framed(stream),
                     ctr(cipher, &cipher_key_clone[..key_size], &NULL_IV[..]),
                     Hmac::from_key(Digest::Sha256, &hmac_key_clone),
                     ctr(cipher, &cipher_key_clone[..key_size], &NULL_IV[..]),
