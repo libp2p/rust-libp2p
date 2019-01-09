@@ -91,9 +91,9 @@ where TErr: fmt::Display
 }
 
 impl<TErr> error::Error for RateLimitedErr<TErr>
-where TErr: error::Error
+where TErr: error::Error + 'static
 {
-    fn cause(&self) -> Option<&dyn error::Error> {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             RateLimitedErr::LimiterError(err) => Some(err),
             RateLimitedErr::Underlying(err) => Some(err),
@@ -188,7 +188,8 @@ where
 impl<T> Transport for RateLimited<T>
 where
     T: Transport,
-    T::Output: AsyncRead + AsyncWrite
+    T::Output: AsyncRead + AsyncWrite,
+    T::Error: 'static,
 {
     type Output = Connection<T::Output>;
     type Error = RateLimitedErr<T::Error>;

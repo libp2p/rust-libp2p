@@ -60,6 +60,7 @@ impl<TTrans> IdentifyTransport<TTrans> {
 impl<TTrans, TMuxer> Transport for IdentifyTransport<TTrans>
 where
     TTrans: Transport<Output = TMuxer>,
+    TTrans::Error: 'static,
     TMuxer: muxing::StreamMuxer + Send + Sync + 'static,      // TODO: remove unnecessary bounds
     TMuxer::Substream: Send + Sync + 'static,      // TODO: remove unnecessary bounds
 {

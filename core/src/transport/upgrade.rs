@@ -49,6 +49,7 @@ impl<D, U, O, TUpgrErr> Transport for Upgrade<D, U>
 where
     D: Transport,
     D::Output: AsyncRead + AsyncWrite,
+    D::Error: 'static,
     U: InboundUpgrade<D::Output, Output = O, Error = TUpgrErr>,
     U: OutboundUpgrade<D::Output, Output = O, Error = TUpgrErr> + Clone,
     TUpgrErr: std::error::Error + Send + Sync + 'static     // TODO: remove bounds
@@ -103,10 +104,10 @@ where
 
 impl<TTransErr, TUpgrErr> error::Error for TransportUpgradeError<TTransErr, TUpgrErr>
 where
-    TTransErr: error::Error,
-    TUpgrErr: error::Error,
+    TTransErr: error::Error + 'static,
+    TUpgrErr: error::Error + 'static,
 {
-    fn cause(&self) -> Option<&dyn error::Error> {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             TransportUpgradeError::Transport(e) => Some(e),
             TransportUpgradeError::Upgrade(e) => Some(e),

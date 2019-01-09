@@ -92,7 +92,8 @@ where
 
 impl<T> Transport for DnsConfig<T>
 where
-    T: Transport
+    T: Transport,
+    T::Error: 'static,
 {
     type Output = T::Output;
     type Error = DnsErr<T::Error>;
@@ -207,9 +208,9 @@ where TErr: fmt::Display
 }
 
 impl<TErr> error::Error for DnsErr<TErr>
-where TErr: error::Error
+where TErr: error::Error + 'static
 {
-    fn cause(&self) -> Option<&dyn error::Error> {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             DnsErr::Underlying(err) => Some(err),
             DnsErr::ResolveFail(_) => None,

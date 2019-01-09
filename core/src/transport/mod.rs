@@ -255,9 +255,9 @@ where TErr: fmt::Display,
 }
 
 impl<TErr> error::Error for TransportError<TErr>
-where TErr: error::Error,
+where TErr: error::Error + 'static,
 {
-    fn cause(&self) -> Option<&dyn error::Error> {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             TransportError::MultiaddrNotSupported(_) => None,
             TransportError::Other(err) => Some(err),

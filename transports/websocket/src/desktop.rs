@@ -222,9 +222,9 @@ where TErr: fmt::Display
 }
 
 impl<TErr> error::Error for WsError<TErr>
-where TErr: error::Error
+where TErr: error::Error + 'static
 {
-    fn cause(&self) -> Option<&dyn error::Error> {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             WsError::WebSocket(err) => Some(&**err),
             WsError::Underlying(err) => Some(err),

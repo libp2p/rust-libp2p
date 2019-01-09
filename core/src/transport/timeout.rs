@@ -76,6 +76,7 @@ impl<InnerTrans> TransportTimeout<InnerTrans> {
 impl<InnerTrans> Transport for TransportTimeout<InnerTrans>
 where
     InnerTrans: Transport,
+    InnerTrans::Error: 'static,
 {
     type Output = InnerTrans::Output;
     type Error = TransportTimeoutError<InnerTrans::Error>;
@@ -192,9 +193,9 @@ where TErr: fmt::Display,
 }
 
 impl<TErr> error::Error for TransportTimeoutError<TErr>
-where TErr: error::Error,
+where TErr: error::Error + 'static,
 {
-    fn cause(&self) -> Option<&dyn error::Error> {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             TransportTimeoutError::Timeout => None,
             TransportTimeoutError::TimerError => None,
