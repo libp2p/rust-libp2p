@@ -201,7 +201,7 @@ where
         let w = self.wlimiter;
         self.value
             .listen_on(addr)
-            .map_err(|err| err.map_other(RateLimitedErr::Underlying))
+            .map_err(|err| err.map(RateLimitedErr::Underlying))
             .map(|(listener, a)| {
                 (
                     Listener(RateLimited::from_parts(listener, r.clone(), w.clone())),
@@ -213,7 +213,7 @@ where
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let r = self.rlimiter;
         let w = self.wlimiter;
-        let dial = self.value.dial(addr).map_err(|err| err.map_other(RateLimitedErr::Underlying))?;
+        let dial = self.value.dial(addr).map_err(|err| err.map(RateLimitedErr::Underlying))?;
         Ok(DialFuture { r, w, f: dial })
     }
 

@@ -61,7 +61,7 @@ where
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let outbound = self.inner.dial(addr.clone())
-            .map_err(|err| err.map_other(TransportUpgradeError::Transport))?;
+            .map_err(|err| err.map(TransportUpgradeError::Transport))?;
         Ok(DialUpgradeFuture {
             future: outbound,
             upgrade: Either::A(Some(self.upgrade))
@@ -70,7 +70,7 @@ where
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
         let (inbound, addr) = self.inner.listen_on(addr)
-            .map_err(|err| err.map_other(TransportUpgradeError::Transport))?;
+            .map_err(|err| err.map(TransportUpgradeError::Transport))?;
         Ok((ListenerStream { stream: inbound, upgrade: self.upgrade }, addr))
     }
 

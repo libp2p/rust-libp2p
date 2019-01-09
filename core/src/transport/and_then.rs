@@ -51,7 +51,7 @@ where
     #[inline]
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
         let (listening_stream, new_addr) = self.transport.listen_on(addr)
-            .map_err(|err| err.map_other(EitherError::A))?;
+            .map_err(|err| err.map(EitherError::A))?;
 
         // Try to negotiate the protocol.
         // Note that failing to negotiate a protocol will never produce a future with an error.
@@ -69,7 +69,7 @@ where
     #[inline]
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let dialed_fut = self.transport.dial(addr.clone())
-            .map_err(|err| err.map_other(EitherError::A))?;
+            .map_err(|err| err.map(EitherError::A))?;
 
         let connected_point = ConnectedPoint::Dialer { address: addr };
 

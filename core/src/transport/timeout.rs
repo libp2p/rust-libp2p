@@ -85,7 +85,7 @@ where
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
         let (listener, addr) = self.inner.listen_on(addr)
-            .map_err(|err| err.map_other(TransportTimeoutError::Other))?;
+            .map_err(|err| err.map(TransportTimeoutError::Other))?;
 
         let listener = TimeoutListener {
             inner: listener,
@@ -97,7 +97,7 @@ where
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let dial = self.inner.dial(addr)
-            .map_err(|err| err.map_other(TransportTimeoutError::Other))?;
+            .map_err(|err| err.map(TransportTimeoutError::Other))?;
         Ok(TokioTimerMapErr {
             inner: Timeout::new(dial, self.outgoing_timeout),
         })

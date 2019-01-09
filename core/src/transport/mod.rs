@@ -235,7 +235,7 @@ pub enum TransportError<TErr> {
 impl<TErr> TransportError<TErr> {
     /// Applies a map to the `Other` variant.
     #[inline]
-    pub fn map_other<TNewErr>(self, map: impl FnOnce(TErr) -> TNewErr) -> TransportError<TNewErr> {
+    pub fn map<TNewErr>(self, map: impl FnOnce(TErr) -> TNewErr) -> TransportError<TNewErr> {
         match self {
             TransportError::MultiaddrNotSupported(addr) => TransportError::MultiaddrNotSupported(addr),
             TransportError::Other(err) => TransportError::Other(map(err)),

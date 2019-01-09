@@ -82,7 +82,7 @@ where
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         // We dial a first time the node.
         let dial = self.transport.dial(addr)
-            .map_err(|err| err.map_other(TransportUpgradeError::Transport))?;
+            .map_err(|err| err.map(TransportUpgradeError::Transport))?;
         Ok(dial.map_err::<fn(_) -> _, _>(TransportUpgradeError::Transport).and_then(|muxer| {
             IdRetriever::new(muxer, IdentifyProtocolConfig).map_err(TransportUpgradeError::Upgrade)
         }))

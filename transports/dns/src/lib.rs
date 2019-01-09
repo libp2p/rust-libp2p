@@ -111,7 +111,7 @@ where
     #[inline]
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
         let (listener, new_addr) = self.inner.listen_on(addr)
-            .map_err(|err| err.map_other(DnsErr::Underlying))?;
+            .map_err(|err| err.map(DnsErr::Underlying))?;
         let listener = listener
             .map::<_, fn(_) -> _>(|(upgr, multiaddr)| (upgr.map_err::<fn(_) -> _, _>(DnsErr::Underlying), multiaddr))
             .map_err::<_, fn(_) -> _>(DnsErr::Underlying);
@@ -127,7 +127,7 @@ where
 
         if !contains_dns {
             trace!("Pass-through address without DNS: {}", addr);
-            let inner_dial = self.inner.dial(addr).map_err(|err| err.map_other(DnsErr::Underlying))?;
+            let inner_dial = self.inner.dial(addr).map_err(|err| err.map(DnsErr::Underlying))?;
             return Ok(Either::A(inner_dial.map_err(DnsErr::Underlying)));
         }
 

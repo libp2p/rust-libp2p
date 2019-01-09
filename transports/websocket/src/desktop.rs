@@ -84,7 +84,7 @@ where
         };
 
         let (inner_listen, mut new_addr) = self.transport.listen_on(inner_addr)
-            .map_err(|err| err.map_other(WsError::Underlying))?;
+            .map_err(|err| err.map(WsError::Underlying))?;
         new_addr.append(Protocol::Ws);
         debug!("Listening on {}", new_addr);
 
@@ -160,7 +160,7 @@ where
         let ws_addr = client_addr_to_ws(&inner_addr, is_wss);
 
         let inner_dial = self.transport.dial(inner_addr)
-            .map_err(|err| err.map_other(WsError::Underlying))?;
+            .map_err(|err| err.map(WsError::Underlying))?;
 
         let dial = inner_dial
             .map_err(WsError::Underlying)
