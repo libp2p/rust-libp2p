@@ -24,7 +24,8 @@
 // TODO: add example
 
 use crate::{Multiaddr, Transport};
-use futures::{Async, Future, Poll, Stream};
+use futures::{try_ready, Async, Future, Poll, Stream};
+use log::debug;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::time::Duration;
 use tokio_timer::Timeout;

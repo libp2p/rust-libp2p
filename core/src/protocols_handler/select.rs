@@ -156,6 +156,11 @@ where
     }
 
     #[inline]
+    fn connection_keep_alive(&self) -> bool {
+        self.proto1.connection_keep_alive() || self.proto2.connection_keep_alive()
+    }
+
+    #[inline]
     fn shutdown(&mut self) {
         self.proto1.shutdown();
         self.proto2.shutdown();

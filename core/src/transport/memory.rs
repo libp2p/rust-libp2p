@@ -24,7 +24,7 @@ use multiaddr::{Protocol, Multiaddr};
 use parking_lot::Mutex;
 use rw_stream_sink::RwStreamSink;
 use std::{io, sync::Arc};
-use Transport;
+use crate::Transport;
 
 /// Builds a new pair of `Transport`s. The dialer can reach the listener by dialing `/memory`.
 #[inline]

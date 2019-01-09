@@ -18,6 +18,21 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! Once we are connected to a node, a *protocols handler* handles one or more specific protocols
+//! on this connection.
+//!
+//! This includes: how to handle incoming substreams, which protocols are supported, when to open
+//! a new outbound substream, and so on.
+//!
+//! Each implementation of the `ProtocolsHandler` trait handles one or more specific protocols.
+//! Two `ProtocolsHandler`s can be combined together with the `select()` method in order to build
+//! a `ProtocolsHandler` that combines both. This can be repeated multiple times in order to create
+//! a handler that handles all the protocols that you wish.
+//!
+//! > **Note**: A `ProtocolsHandler` handles one or more protocols in relation to a specific
+//! >           connection with a remote. In order to handle a protocol that requires knowledge of
+//! >           the network as a whole, see the `NetworkBehaviour` trait.
+
 use crate::upgrade::{
     InboundUpgrade,
     OutboundUpgrade,
@@ -49,14 +64,15 @@ mod select;
 /// Communication with a remote over a set of protocols opened in two different ways:
 ///
 /// - Dialing, which is a voluntary process. In order to do so, make `poll()` return an
-///   `OutboundSubstreamRequest` variant containing the connection upgrade to use to start using a protocol.
+///   `OutboundSubstreamRequest` variant containing the connection upgrade to use to start using a
+///   protocol.
 /// - Listening, which is used to determine which protocols are supported when the remote wants
 ///   to open a substream. The `listen_protocol()` method should return the upgrades supported when
 ///   listening.
 ///
 /// The upgrade when dialing and the upgrade when listening have to be of the same type, but you
-/// are free to return for example an `OrUpgrade` enum, or an enum of your own, containing the upgrade
-/// you want depending on the situation.
+/// are free to return for example an `OrUpgrade` enum, or an enum of your own, containing the
+/// upgrade you want depending on the situation.
 ///
 /// # Shutting down
 ///
@@ -72,19 +88,6 @@ mod select;
 /// might already be closed or unresponsive. They should therefore not rely on being able to
 /// deliver messages.
 ///
-/// # Relationship with `NodeHandler`.
-///
-/// This trait is very similar to the `NodeHandler` trait. The fundamental differences are:
-///
-/// - The `NodeHandler` trait gives you more control and is therefore more difficult to implement.
-/// - The `NodeHandler` trait is designed to have exclusive ownership of the connection to a
-///   node, while the `ProtocolsHandler` trait is designed to handle only a specific set of
-///   protocols. Two or more implementations of `ProtocolsHandler` can be combined into one that
-///   supports all the protocols together, which is not possible with `NodeHandler`.
-///
-// TODO: add a "blocks connection closing" system, so that we can gracefully close a connection
-//       when it's no longer needed, and so that for example the periodic pinging system does not
-//       keep the connection alive forever
 pub trait ProtocolsHandler {
     /// Custom event that can be received from the outside.
     type InEvent;
@@ -134,8 +137,25 @@ pub trait ProtocolsHandler {
     /// therefore no more inbound substreams will be produced.
     fn inject_inbound_closed(&mut self);
 
+    /// Returns whether the connection should be kept alive.
+    ///
+    /// If returns `false`, that indicates that this connection is not important and the user may
+    /// invoke `shutdown()` if they think that they will no longer need the connection in the
+    /// future.
+    ///
+    /// On the other hand, returning `true` is only an indication and doesn't mean that the user
+    /// will not call `shutdown()`.
+    ///
+    /// When multiple `ProtocolsHandler` are combined together, they should use *OR* to merge the
+    /// result of this method.
+    ///
+    /// The result of this method should be checked every time `poll()` is invoked.
+    ///
+    /// After `shutdown()` is called, the result of this method doesn't matter anymore.
+    fn connection_keep_alive(&self) -> bool;
+
     /// Indicates to the node that it should shut down. After that, it is expected that `poll()`
-    /// returns `Ready(None)` as soon as possible.
+    /// returns `Ready(ProtocolsHandlerEvent::Shutdown)` as soon as possible.
     ///
     /// This method allows an implementation to perform a graceful shutdown of the substreams, and
     /// send back various events.
@@ -145,8 +165,9 @@ pub trait ProtocolsHandler {
     /// node should be closed.
     ///
     /// > **Note**: If this handler is combined with other handlers, as soon as `poll()` returns
-    /// >           `Ok(Async::Ready(None))`, all the other handlers will receive a call to
-    /// >           `shutdown()` and will eventually be closed and destroyed.
+    /// >           `Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown))`, all the other handlers
+    /// >           will receive a call to `shutdown()` and will eventually be closed and
+    /// >           destroyed.
     fn poll(&mut self) -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>;
 
     /// Adds a closure that turns the input event into something else.
@@ -186,7 +207,7 @@ pub trait ProtocolsHandler {
     where
         Self: Sized,
     {
-        NodeHandlerWrapperBuilder::new(self, Duration::from_secs(10), Duration::from_secs(10))
+        NodeHandlerWrapperBuilder::new(self, Duration::from_secs(10), Duration::from_secs(10), Duration::from_secs(5))
     }
 
     /// Builds an implementation of `NodeHandler` that handles this protocol exclusively.

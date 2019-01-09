@@ -29,8 +29,8 @@ use crate::{
     }
 };
 use futures::prelude::*;
-use std::time::Duration;
-use tokio_timer::Timeout;
+use std::time::{Duration, Instant};
+use tokio_timer::{Delay, Timeout};
 
 /// Prototype for a `NodeHandlerWrapper`.
 pub struct NodeHandlerWrapperBuilder<TProtoHandler>
@@ -43,6 +43,8 @@ where
     in_timeout: Duration,
     /// Timeout for outgoing substreams negotiation.
     out_timeout: Duration,
+    /// Time after which a useless connection will be closed.
+    useless_timeout: Duration,
 }
 
 impl<TProtoHandler> NodeHandlerWrapperBuilder<TProtoHandler>
@@ -51,11 +53,12 @@ where
 {
     /// Builds a `NodeHandlerWrapperBuilder`.
     #[inline]
-    pub(crate) fn new(handler: TProtoHandler, in_timeout: Duration, out_timeout: Duration) -> Self {
+    pub(crate) fn new(handler: TProtoHandler, in_timeout: Duration, out_timeout: Duration, useless_timeout: Duration) -> Self {
         NodeHandlerWrapperBuilder {
             handler,
             in_timeout,
             out_timeout,
+            useless_timeout,
         }
     }
 
@@ -73,6 +76,14 @@ where
         self
     }
 
+    /// Sets the timeout between the moment `connection_keep_alive()` returns `false` on the
+    /// `ProtocolsHandler`, and the moment the connection is closed.
+    #[inline]
+    pub fn with_useless_timeout(mut self, timeout: Duration) -> Self {
+        self.useless_timeout = timeout;
+        self
+    }
+
     /// Builds the `NodeHandlerWrapper`.
     #[inline]
     pub fn build(self) -> NodeHandlerWrapper<TProtoHandler> {
@@ -84,6 +95,8 @@ where
             out_timeout: self.out_timeout,
             queued_dial_upgrades: Vec::new(),
             unique_dial_upgrade_id: 0,
+            connection_shutdown: None,
+            useless_timeout: self.useless_timeout,
         }
     }
 }
@@ -114,6 +127,12 @@ where
     queued_dial_upgrades: Vec<(u64, TProtoHandler::OutboundProtocol)>,
     /// Unique identifier assigned to each queued dial upgrade.
     unique_dial_upgrade_id: u64,
+    /// When a connection has been deemed useless, will contain `Some` with a `Delay` to when it
+    /// should be shut down.
+    connection_shutdown: Option<Delay>,
+    ///  Timeout after which a useless connection is closed. When the `connection_shutdown` is set
+    /// to `Some`, this is the value that is being used.
+    useless_timeout: Duration,
 }
 
 impl<TProtoHandler> NodeHandler for NodeHandlerWrapper<TProtoHandler>
@@ -243,7 +262,15 @@ where
 
         // Poll the handler at the end so that we see the consequences of the method calls on
         // `self.handler`.
-        match self.handler.poll()? {
+        let poll_result = self.handler.poll()?;
+
+        if self.handler.connection_keep_alive() {
+            self.connection_shutdown = None;
+        } else if self.connection_shutdown.is_none() {
+            self.connection_shutdown = Some(Delay::new(Instant::now() + self.useless_timeout));
+        }
+
+        match poll_result {
             Async::Ready(ProtocolsHandlerEvent::Custom(event)) => {
                 return Ok(Async::Ready(NodeHandlerEvent::Custom(event)));
             }
@@ -263,6 +290,23 @@ where
             },
             Async::NotReady => (),
         };
+
+        // Check the `connection_shutdown`.
+        if let Some(mut connection_shutdown) = self.connection_shutdown.take() {
+            // If we're negotiating substreams, let's delay the closing.
+            if self.negotiating_in.is_empty() && self.negotiating_out.is_empty() {
+                match connection_shutdown.poll() {
+                    Ok(Async::Ready(_)) | Err(_) => {
+                        return Ok(Async::Ready(NodeHandlerEvent::Shutdown))
+                    },
+                    Ok(Async::NotReady) => {
+                        self.connection_shutdown = Some(connection_shutdown);
+                    }
+                }
+            } else {
+                self.connection_shutdown = Some(connection_shutdown);
+            }
+        }
 
         Ok(Async::NotReady)
     }
