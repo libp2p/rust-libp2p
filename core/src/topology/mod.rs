@@ -32,7 +32,7 @@
 //! prototyping, it shouldn't be used in an actual high-performance production software.
 
 use std::collections::HashMap;
-use crate::{Multiaddr, PeerId, PublicKey};
+use crate::{swarm::ConnectedPoint, Multiaddr, PeerId, PublicKey};
 
 /// Storage for the network topology.
 ///
@@ -44,6 +44,12 @@ pub trait Topology {
     /// > **Note**: Keep in mind that `peer` can be the local node.
     fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr>;
 
+    /// Returns the `PeerId` of the local node.
+    fn local_peer_id(&self) -> &PeerId;
+
+    /// Returns the public key of the local node.
+    fn local_public_key(&self) -> &PublicKey;
+
     /// Adds an address that other nodes can use to connect to our local node.
     ///
     /// > **Note**: Should later be returned when calling `addresses_of_peer()` with the `PeerId`
@@ -51,11 +57,24 @@ pub trait Topology {
     fn add_local_external_addrs<TIter>(&mut self, addrs: TIter)
     where TIter: Iterator<Item = Multiaddr>;
 
-    /// Returns the `PeerId` of the local node.
-    fn local_peer_id(&self) -> &PeerId;
+    /// Indicates to the topology that we have successfully connected to the given address with the
+    /// given `PeerId`.
+    fn set_connected(&mut self, _peer_id: &PeerId, _addr: &ConnectedPoint) {}
 
-    /// Returns the public key of the local node.
-    fn local_public_key(&self) -> &PublicKey;
+    /// Indicates to the topology that we have been disconnected from the given address with the
+    /// given `PeerId`.
+    fn set_disconnected(&mut self, _peer_id: &PeerId, _addr: &ConnectedPoint, _reason: DisconnectReason) {}
+
+    /// Indicates to the topology that we have failed to reach the given address.
+    fn set_unreachable(&mut self, _addr: &Multiaddr) {}
+}
+
+/// Reason why the peer has been disconnected.
+#[derive(Debug, Copy, Clone)]
+pub enum DisconnectReason {
+    Error,
+    Graceful,
+    Replaced,
 }
 
 /// Topology of the network stored in memory.
