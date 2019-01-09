@@ -106,7 +106,7 @@ where
         proto_name: I::Item,
         protocols: I
     },
-    SendProtocol {
+    FlushProtocol {
         dialer: Dialer<R, I::Item>,
         proto_name: I::Item,
         protocols: I
@@ -153,7 +153,7 @@ where
                     };
                     match dialer.start_send(req)? {
                         AsyncSink::Ready => {
-                            self.inner = DialerSelectSeqState::SendProtocol {
+                            self.inner = DialerSelectSeqState::FlushProtocol {
                                 dialer,
                                 proto_name,
                                 protocols
@@ -169,7 +169,7 @@ where
                         }
                     }
                 }
-                DialerSelectSeqState::SendProtocol { mut dialer, proto_name, protocols } => {
+                DialerSelectSeqState::FlushProtocol { mut dialer, proto_name, protocols } => {
                     match dialer.poll_complete()? {
                         Async::Ready(()) => {
                             let stream = dialer.into_future();
@@ -180,7 +180,7 @@ where
                             }
                         }
                         Async::NotReady => {
-                            self.inner = DialerSelectSeqState::SendProtocol {
+                            self.inner = DialerSelectSeqState::FlushProtocol {
                                 dialer,
                                 proto_name,
                                 protocols
@@ -271,7 +271,7 @@ where
         dialer: Dialer<R, I::Item>,
         protocols: I
     },
-    SendListRequest {
+    FlushListRequest {
         dialer: Dialer<R, I::Item>,
         protocols: I
     },
@@ -283,7 +283,7 @@ where
         dialer: Dialer<R, I::Item>,
         proto_name: I::Item
     },
-    SendProtocol {
+    FlushProtocol {
         dialer: Dialer<R, I::Item>,
         proto_name: I::Item
     },
@@ -321,7 +321,7 @@ where
                     trace!("requesting protocols list");
                     match dialer.start_send(DialerToListenerMessage::ProtocolsListRequest)? {
                         AsyncSink::Ready => {
-                            self.inner = DialerSelectParState::SendListRequest {
+                            self.inner = DialerSelectParState::FlushListRequest {
                                 dialer,
                                 protocols
                             }
@@ -332,7 +332,7 @@ where
                         }
                     }
                 }
-                DialerSelectParState::SendListRequest { mut dialer, protocols } => {
+                DialerSelectParState::FlushListRequest { mut dialer, protocols } => {
                     match dialer.poll_complete()? {
                         Async::Ready(()) => {
                             self.inner = DialerSelectParState::AwaitListResponse {
@@ -341,7 +341,7 @@ where
                             }
                         }
                         Async::NotReady => {
-                            self.inner = DialerSelectParState::SendListRequest {
+                            self.inner = DialerSelectParState::FlushListRequest {
                                 dialer,
                                 protocols
                             };
@@ -387,7 +387,7 @@ where
                     };
                     match dialer.start_send(req)? {
                         AsyncSink::Ready => {
-                            self.inner = DialerSelectParState::SendProtocol { dialer, proto_name }
+                            self.inner = DialerSelectParState::FlushProtocol { dialer, proto_name }
                         }
                         AsyncSink::NotReady(_) => {
                             self.inner = DialerSelectParState::Protocol { dialer, proto_name };
@@ -395,7 +395,7 @@ where
                         }
                     }
                 }
-                DialerSelectParState::SendProtocol { mut dialer, proto_name } => {
+                DialerSelectParState::FlushProtocol { mut dialer, proto_name } => {
                     match dialer.poll_complete()? {
                         Async::Ready(()) => {
                             self.inner = DialerSelectParState::AwaitProtocol {
@@ -404,7 +404,7 @@ where
                             }
                         }
                         Async::NotReady => {
-                            self.inner = DialerSelectParState::SendProtocol { dialer, proto_name };
+                            self.inner = DialerSelectParState::FlushProtocol { dialer, proto_name };
                             return Ok(Async::NotReady)
                         }
                     }
