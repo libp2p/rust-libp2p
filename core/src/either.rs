@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{muxing::{Shutdown, StreamMuxer}, Multiaddr};
+use crate::{muxing::{Shutdown, StreamMuxer}, Multiaddr, ProtocolName};
 use futures::prelude::*;
 use std::{fmt, io::{Error as IoError, Read, Write}};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -47,10 +47,10 @@ where
     A: fmt::Debug + std::error::Error,
     B: fmt::Debug + std::error::Error
 {
-    fn cause(&self) -> Option<&dyn std::error::Error> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            EitherError::A(a) => a.cause(),
-            EitherError::B(b) => b.cause()
+            EitherError::A(a) => a.source(),
+            EitherError::B(b) => b.source()
         }
     }
 }
@@ -342,3 +342,14 @@ where
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum EitherName<A, B> { A(A), B(B) }
+
+impl<A: ProtocolName, B: ProtocolName> ProtocolName for EitherName<A, B> {
+    fn protocol_name(&self) -> &[u8] {
+        match self {
+            EitherName::A(a) => a.protocol_name(),
+            EitherName::B(b) => b.protocol_name()
+        }
+    }
+}

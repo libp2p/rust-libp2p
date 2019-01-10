@@ -26,7 +26,7 @@
 //! The `Stream` component is used to poll the underlying transport, and the `Sink` component is
 //! used to send messages.
 
-use bytes::{Bytes, BytesMut};
+use bytes::BytesMut;
 use futures::{future, sink, stream, Sink, Stream};
 use libp2p_core::{InboundUpgrade, Multiaddr, OutboundUpgrade, PeerId, UpgradeInfo};
 use multihash::Multihash;
@@ -136,12 +136,12 @@ impl Into<protobuf_structs::dht::Message_Peer> for KadPeer {
 pub struct KademliaProtocolConfig;
 
 impl UpgradeInfo for KademliaProtocolConfig {
-    type NamesIter = iter::Once<(Bytes, ())>;
-    type UpgradeId = ();
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
     #[inline]
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once(("/ipfs/kad/1.0.0".into(), ()))
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once(b"/ipfs/kad/1.0.0")
     }
 }
 
@@ -154,7 +154,7 @@ where
     type Error = IoError;
 
     #[inline]
-    fn upgrade_inbound(self, incoming: C, _: ()) -> Self::Future {
+    fn upgrade_inbound(self, incoming: C, _: Self::Info) -> Self::Future {
         future::ok(
             Framed::new(incoming, codec::UviBytes::default())
                 .from_err::<IoError>()
@@ -180,7 +180,7 @@ where
     type Error = IoError;
 
     #[inline]
-    fn upgrade_outbound(self, incoming: C, _: ()) -> Self::Future {
+    fn upgrade_outbound(self, incoming: C, _: Self::Info) -> Self::Future {
         future::ok(
             Framed::new(incoming, codec::UviBytes::default())
                 .from_err::<IoError>()
@@ -315,7 +315,6 @@ fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> protobuf_structs::dht::Message 
             msg
         }
         KadResponseMsg::FindNode { closer_peers } => {
-            assert!(!closer_peers.is_empty());
             let mut msg = protobuf_structs::dht::Message::new();
             msg.set_field_type(protobuf_structs::dht::Message_MessageType::FIND_NODE);
             msg.set_clusterLevelRaw(9);
@@ -328,7 +327,6 @@ fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> protobuf_structs::dht::Message 
             closer_peers,
             provider_peers,
         } => {
-            assert!(!closer_peers.is_empty());
             let mut msg = protobuf_structs::dht::Message::new();
             msg.set_field_type(protobuf_structs::dht::Message_MessageType::GET_PROVIDERS);
             msg.set_clusterLevelRaw(9);
@@ -455,10 +453,11 @@ fn proto_to_resp_msg(
 
 #[cfg(test)]
 mod tests {
-    extern crate libp2p_tcp_transport;
+    extern crate libp2p_tcp;
     extern crate tokio;
 
-    use self::libp2p_tcp_transport::TcpConfig;
+    /*// TODO: restore
+    use self::libp2p_tcp::TcpConfig;
     use self::tokio::runtime::current_thread::Runtime;
     use futures::{Future, Sink, Stream};
     use libp2p_core::{PeerId, PublicKey, Transport};
@@ -467,7 +466,6 @@ mod tests {
     use std::sync::mpsc;
     use std::thread;
 
-    /*// TODO: restore
     #[test]
     fn correct_transfer() {
         // We open a server and a client, send a message between the two, and check that they were

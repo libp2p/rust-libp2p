@@ -42,12 +42,6 @@
 //! For a dialer:
 //!
 //! ```no_run
-//! extern crate bytes;
-//! extern crate futures;
-//! extern crate multistream_select;
-//! extern crate tokio;
-//! extern crate tokio_tcp;
-//!
 //! # fn main() {
 //! use bytes::Bytes;
 //! use multistream_select::dialer_select_proto;
@@ -61,31 +55,16 @@
 //! let client = TcpStream::connect(&"127.0.0.1:10333".parse().unwrap())
 //!     .from_err()
 //!     .and_then(move |connec| {
-//!         let protos = vec![
-//!             (Bytes::from("/echo/1.0.0"), <Bytes as PartialEq>::eq, MyProto::Echo),
-//!             (Bytes::from("/hello/2.5.0"), <Bytes as PartialEq>::eq, MyProto::Hello),
-//!         ]
-//!                         .into_iter();
+//!         let protos = vec![b"/echo/1.0.0", b"/echo/2.5.0"];
 //!         dialer_select_proto(connec, protos).map(|r| r.0)
 //!     });
 //!
 //! let mut rt = Runtime::new().unwrap();
-//! let negotiated_protocol: MyProto = rt.block_on(client)
-//!     .expect("failed to find a protocol");
+//! let negotiated_protocol = rt.block_on(client).expect("failed to find a protocol");
 //! println!("negotiated: {:?}", negotiated_protocol);
 //! # }
 //! ```
 //!
-
-extern crate bytes;
-#[macro_use]
-extern crate futures;
-#[macro_use]
-extern crate log;
-extern crate smallvec;
-extern crate tokio_codec;
-extern crate tokio_io;
-extern crate unsigned_varint;
 
 mod dialer_select;
 mod error;

@@ -60,7 +60,6 @@ extern crate arrayvec;
 extern crate bigint;
 extern crate bs58;
 extern crate bytes;
-extern crate datastore;
 extern crate fnv;
 #[cfg_attr(test, macro_use)]
 extern crate futures;
@@ -89,10 +88,10 @@ pub use self::protocol::KadConnectionType;
 pub use self::topology::KademliaTopology;
 
 pub mod handler;
+pub mod kbucket;
 pub mod protocol;
 
 mod behaviour;
-mod kbucket;
 mod protobuf_structs;
 mod query;
 mod topology;

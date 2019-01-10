@@ -33,16 +33,16 @@ use topic::{Topic, TopicHash};
 
 /// Network behaviour that automatically identifies nodes periodically, and returns information
 /// about them.
-pub struct FloodsubBehaviour<TSubstream> {
+pub struct Floodsub<TSubstream> {
     /// Events that need to be yielded to the outside when polling.
-    events: VecDeque<NetworkBehaviourAction<FloodsubRpc, FloodsubMessage>>,
+    events: VecDeque<NetworkBehaviourAction<FloodsubRpc, FloodsubEvent>>,
 
     /// Peer id of the local node. Used for the source of the messages that we publish.
     local_peer_id: PeerId,
 
     /// List of peers the network is connected to, and the topics that they're subscribed to.
     // TODO: filter out peers that don't support floodsub, so that we avoid hammering them with
-    //       opened substream
+    //       opened substreams
     connected_peers: HashMap<PeerId, SmallVec<[TopicHash; 8]>>,
 
     // List of topics we're subscribed to. Necessary to filter out messages that we receive
@@ -57,10 +57,10 @@ pub struct FloodsubBehaviour<TSubstream> {
     marker: PhantomData<TSubstream>,
 }
 
-impl<TSubstream> FloodsubBehaviour<TSubstream> {
-    /// Creates a `FloodsubBehaviour`.
+impl<TSubstream> Floodsub<TSubstream> {
+    /// Creates a `Floodsub`.
     pub fn new(local_peer_id: PeerId) -> Self {
-        FloodsubBehaviour {
+        Floodsub {
             events: VecDeque::new(),
             local_peer_id,
             connected_peers: HashMap::new(),
@@ -71,7 +71,7 @@ impl<TSubstream> FloodsubBehaviour<TSubstream> {
     }
 }
 
-impl<TSubstream> FloodsubBehaviour<TSubstream> {
+impl<TSubstream> Floodsub<TSubstream> {
     /// Subscribes to a topic.
     ///
     /// Returns true if the subscription worked. Returns false if we were already subscribed.
@@ -172,12 +172,12 @@ impl<TSubstream> FloodsubBehaviour<TSubstream> {
     }
 }
 
-impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for FloodsubBehaviour<TSubstream>
+impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for Floodsub<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
     type ProtocolsHandler = FloodsubHandler<TSubstream>;
-    type OutEvent = FloodsubMessage;
+    type OutEvent = FloodsubEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
         FloodsubHandler::new()
@@ -219,13 +219,21 @@ where
             match subscription.action {
                 FloodsubSubscriptionAction::Subscribe => {
                     if !remote_peer_topics.contains(&subscription.topic) {
-                        remote_peer_topics.push(subscription.topic);
+                        remote_peer_topics.push(subscription.topic.clone());
                     }
+                    self.events.push_back(NetworkBehaviourAction::GenerateEvent(FloodsubEvent::Subscribed {
+                        peer_id: propagation_source.clone(),
+                        topic: subscription.topic,
+                    }));
                 }
                 FloodsubSubscriptionAction::Unsubscribe => {
                     if let Some(pos) = remote_peer_topics.iter().position(|t| t == &subscription.topic ) {
                         remote_peer_topics.remove(pos);
                     }
+                    self.events.push_back(NetworkBehaviourAction::GenerateEvent(FloodsubEvent::Unsubscribed {
+                        peer_id: propagation_source.clone(),
+                        topic: subscription.topic,
+                    }));
                 }
             }
         }
@@ -242,7 +250,8 @@ where
 
             // Add the message to be dispatched to the user.
             if self.subscribed_topics.iter().any(|t| message.topics.iter().any(|u| t.hash() == u)) {
-                self.events.push_back(NetworkBehaviourAction::GenerateEvent(message.clone()));
+                let event = FloodsubEvent::Message(message.clone());
+                self.events.push_back(NetworkBehaviourAction::GenerateEvent(event));
             }
 
             // Propagate the message to everyone else who is subscribed to any of the topics.
@@ -289,4 +298,27 @@ where
 
         Async::NotReady
     }
+}
+
+/// Event that can happen on the floodsub behaviour.
+#[derive(Debug)]
+pub enum FloodsubEvent {
+    /// A message has been received.
+    Message(FloodsubMessage),
+
+    /// A remote subscribed to a topic.
+    Subscribed {
+        /// Remote that has subscribed.
+        peer_id: PeerId,
+        /// The topic it has subscribed to.
+        topic: TopicHash,
+    },
+
+    /// A remote unsubscribed from a topic.
+    Unsubscribed {
+        /// Remote that has unsubscribed.
+        peer_id: PeerId,
+        /// The topic it has subscribed from.
+        topic: TopicHash,
+    },
 }

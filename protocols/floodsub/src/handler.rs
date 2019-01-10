@@ -22,6 +22,7 @@ use crate::protocol::{FloodsubCodec, FloodsubConfig, FloodsubRpc};
 use futures::prelude::*;
 use libp2p_core::{
     ProtocolsHandler, ProtocolsHandlerEvent,
+    protocols_handler::ProtocolsHandlerUpgrErr,
     upgrade::{InboundUpgrade, OutboundUpgrade}
 };
 use smallvec::SmallVec;
@@ -104,6 +105,7 @@ where
 {
     type InEvent = FloodsubRpc;
     type OutEvent = FloodsubRpc;
+    type Error = io::Error;
     type Substream = TSubstream;
     type InboundProtocol = FloodsubConfig;
     type OutboundProtocol = FloodsubConfig;
@@ -144,7 +146,12 @@ where
     fn inject_inbound_closed(&mut self) {}
 
     #[inline]
-    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: io::Error) {}
+    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {}
+
+    #[inline]
+    fn connection_keep_alive(&self) -> bool {
+        !self.substreams.is_empty()
+    }
 
     #[inline]
     fn shutdown(&mut self) {
@@ -158,17 +165,17 @@ where
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>,
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
         io::Error,
     > {
         if !self.send_queue.is_empty() {
             let message = self.send_queue.remove(0);
-            return Ok(Async::Ready(Some(
+            return Ok(Async::Ready(
                 ProtocolsHandlerEvent::OutboundSubstreamRequest {
                     info: message,
                     upgrade: self.config.clone(),
                 },
-            )));
+            ));
         }
 
         for n in (0..self.substreams.len()).rev() {
@@ -179,7 +186,7 @@ where
                         Ok(Async::Ready(Some(message))) => {
                             self.substreams
                                 .push(SubstreamState::WaitingInput(substream));
-                            return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(message))));
+                            return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(message)));
                         }
                         Ok(Async::Ready(None)) => SubstreamState::Closing(substream),
                         Ok(Async::NotReady) => {
@@ -215,7 +222,7 @@ where
                             self.substreams.push(SubstreamState::Closing(substream));
                             return Ok(Async::NotReady);
                         }
-                        Err(_) => return Ok(Async::Ready(None)),
+                        Err(_) => return Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown)),
                     },
                 }
             }

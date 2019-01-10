@@ -18,34 +18,22 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-extern crate bytes;
-extern crate fnv;
-#[macro_use]
-extern crate futures;
-extern crate libp2p_core as core;
-#[macro_use]
-extern crate log;
-extern crate parking_lot;
-extern crate tokio_codec;
-extern crate tokio_io;
-extern crate unsigned_varint;
-
 mod codec;
 
 use std::{cmp, iter, mem};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::sync::{atomic::AtomicUsize, atomic::Ordering, Arc};
 use bytes::Bytes;
-use core::{
+use libp2p_core::{
     Endpoint,
     StreamMuxer,
     muxing::Shutdown,
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
 };
+use log::{debug, trace};
 use parking_lot::Mutex;
 use fnv::{FnvHashMap, FnvHashSet};
-use futures::prelude::*;
-use futures::{executor, future, stream::Fuse, task};
+use futures::{prelude::*, executor, future, stream::Fuse, task, task_local, try_ready};
 use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -58,7 +46,8 @@ pub struct MplexConfig {
     max_buffer_len: usize,
     /// Behaviour when the buffer size limit is reached.
     max_buffer_behaviour: MaxBufferBehaviour,
-    /// When sending data, split it into frames whose maximum size is this value.
+    /// When sending data, split it into frames whose maximum size is this value
+    /// (max 1MByte, as per the Mplex spec).
     split_send_size: usize,
 }
 
@@ -94,6 +83,14 @@ impl MplexConfig {
     #[inline]
     pub fn max_buffer_len_behaviour(&mut self, behaviour: MaxBufferBehaviour) -> &mut Self {
         self.max_buffer_behaviour = behaviour;
+        self
+    }
+
+    /// Sets the frame size used when sending data. Capped at 1Mbyte as per the
+    /// Mplex spec.
+    pub fn split_send_size(&mut self, size: usize) -> &mut Self {
+        let size = cmp::min(size, codec::MAX_FRAME_SIZE);
+        self.split_send_size = size;
         self
     }
 
@@ -148,12 +145,12 @@ pub enum MaxBufferBehaviour {
 }
 
 impl UpgradeInfo for MplexConfig {
-    type UpgradeId = ();
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
     #[inline]
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once((Bytes::from("/mplex/6.7.0"), ()))
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once(b"/mplex/6.7.0")
     }
 }
 
@@ -165,7 +162,7 @@ where
     type Error = IoError;
     type Future = future::FutureResult<Self::Output, IoError>;
 
-    fn upgrade_inbound(self, socket: C, _: Self::UpgradeId) -> Self::Future {
+    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
         future::ok(self.upgrade(socket, Endpoint::Listener))
     }
 }
@@ -178,7 +175,7 @@ where
     type Error = IoError;
     type Future = future::FutureResult<Self::Output, IoError>;
 
-    fn upgrade_outbound(self, socket: C, _: Self::UpgradeId) -> Self::Future {
+    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
         future::ok(self.upgrade(socket, Endpoint::Dialer))
     }
 }

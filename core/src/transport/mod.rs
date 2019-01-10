@@ -20,19 +20,17 @@
 
 //! Handles entering a connection with a peer.
 //!
-//! The two main elements of this module are the `Transport` and `ConnectionUpgrade` traits.
-//! `Transport` is implemented on objects that allow dialing and listening. `ConnectionUpgrade` is
-//! implemented on objects that make it possible to upgrade a connection (for example by adding an
-//! encryption middleware to the connection).
+//! The main element of this module is the `Transport` trait. It is implemented on objects that
+//! allow dialing and listening.
 //!
-//! Thanks to the `Transport::or_transport`, `Transport::with_upgrade` and
-//! `UpgradedNode::or_upgrade` methods, you can combine multiple transports and/or upgrades
-//! together in a complex chain of protocols negotiation.
+//! The rest of the module holds combinators that allow tweaking an implementation of `Transport`,
+//! combine multiple transports together, or combine a transport with an upgrade.
 
 use crate::{InboundUpgrade, OutboundUpgrade, nodes::raw_swarm::ConnectedPoint};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::io::Error as IoError;
+use std::time::Duration;
 use tokio_io::{AsyncRead, AsyncWrite};
 
 pub mod and_then;
@@ -42,6 +40,7 @@ pub mod map;
 pub mod map_err;
 pub mod map_err_dial;
 pub mod memory;
+pub mod timeout;
 pub mod upgrade;
 
 pub use self::choice::OrTransport;
@@ -197,5 +196,35 @@ pub trait Transport {
         F: IntoFuture<Item = O, Error = IoError>
     {
         and_then::AndThen::new(self, upgrade)
+    }
+
+    /// Adds a timeout to the connection and upgrade steps for all the sockets created by
+    /// the transport.
+    #[inline]
+    fn with_timeout(self, timeout: Duration) -> timeout::TransportTimeout<Self>
+    where
+        Self: Sized,
+    {
+        timeout::TransportTimeout::new(self, timeout)
+    }
+
+    /// Adds a timeout to the connection and upgrade steps for all the outgoing sockets created
+    /// by the transport.
+    #[inline]
+    fn with_outbound_timeout(self, timeout: Duration) -> timeout::TransportTimeout<Self>
+    where
+        Self: Sized,
+    {
+        timeout::TransportTimeout::with_outgoing_timeout(self, timeout)
+    }
+
+    /// Adds a timeout to the connection and upgrade steps for all the incoming sockets created
+    /// by the transport.
+    #[inline]
+    fn with_inbound_timeout(self, timeout: Duration) -> timeout::TransportTimeout<Self>
+    where
+        Self: Sized,
+    {
+        timeout::TransportTimeout::with_ingoing_timeout(self, timeout)
     }
 }

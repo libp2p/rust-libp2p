@@ -23,15 +23,9 @@
 //! The timeout includes the upgrading process.
 // TODO: add example
 
-#[macro_use]
-extern crate futures;
-extern crate libp2p_core;
-#[macro_use]
-extern crate log;
-extern crate tokio_timer;
-
-use futures::{Async, Future, Poll, Stream};
-use libp2p_core::{Multiaddr, Transport};
+use crate::{Multiaddr, Transport};
+use futures::{try_ready, Async, Future, Poll, Stream};
+use log::debug;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::time::Duration;
 use tokio_timer::Timeout;

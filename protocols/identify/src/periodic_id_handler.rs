@@ -18,15 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{RemoteInfo, IdentifyProtocolConfig};
+use crate::protocol::{RemoteInfo, IdentifyProtocolConfig};
 use futures::prelude::*;
 use libp2p_core::{
-    protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent},
+    protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
     upgrade::{DeniedUpgrade, OutboundUpgrade}
 };
 use std::{io, marker::PhantomData, time::{Duration, Instant}};
 use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_timer::Delay;
+use tokio_timer::{self, Delay};
 use void::{Void, unreachable};
 
 /// Delay between the moment we connect and the first time we identify.
@@ -37,17 +37,20 @@ const DELAY_TO_NEXT_ID: Duration = Duration::from_secs(5 * 60);
 const TRY_AGAIN_ON_ERR: Duration = Duration::from_secs(60 * 60);
 
 /// Protocol handler that identifies the remote at a regular period.
-pub struct PeriodicIdentification<TSubstream> {
+pub struct PeriodicIdHandler<TSubstream> {
     /// Configuration for the protocol.
     config: IdentifyProtocolConfig,
 
-    /// If `Some`, we successfully generated an `PeriodicIdentificationEvent` and we will produce
+    /// If `Some`, we successfully generated an `PeriodicIdHandlerEvent` and we will produce
     /// it the next time `poll()` is invoked.
-    pending_result: Option<PeriodicIdentificationEvent>,
+    pending_result: Option<PeriodicIdHandlerEvent>,
 
     /// Future that fires when we need to identify the node again. If `None`, means that we should
     /// shut down.
     next_id: Option<Delay>,
+
+    /// If `true`, we have started an identification of the remote at least once in the past.
+    first_id_happened: bool,
 
     /// Marker for strong typing.
     marker: PhantomData<TSubstream>,
@@ -55,32 +58,34 @@ pub struct PeriodicIdentification<TSubstream> {
 
 /// Event produced by the periodic identifier.
 #[derive(Debug)]
-pub enum PeriodicIdentificationEvent {
+pub enum PeriodicIdHandlerEvent {
     /// We obtained identification information from the remote
     Identified(RemoteInfo),
     /// Failed to identify the remote.
-    IdentificationError(io::Error),
+    IdentificationError(ProtocolsHandlerUpgrErr<io::Error>),
 }
 
-impl<TSubstream> PeriodicIdentification<TSubstream> {
-    /// Builds a new `PeriodicIdentification`.
+impl<TSubstream> PeriodicIdHandler<TSubstream> {
+    /// Builds a new `PeriodicIdHandler`.
     #[inline]
     pub fn new() -> Self {
-        PeriodicIdentification {
+        PeriodicIdHandler {
             config: IdentifyProtocolConfig,
             pending_result: None,
             next_id: Some(Delay::new(Instant::now() + DELAY_TO_FIRST_ID)),
+            first_id_happened: false,
             marker: PhantomData,
         }
     }
 }
 
-impl<TSubstream> ProtocolsHandler for PeriodicIdentification<TSubstream>
+impl<TSubstream> ProtocolsHandler for PeriodicIdHandler<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
     type InEvent = Void;
-    type OutEvent = PeriodicIdentificationEvent;
+    type OutEvent = PeriodicIdHandlerEvent;
+    type Error = tokio_timer::Error;
     type Substream = TSubstream;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = IdentifyProtocolConfig;
@@ -100,7 +105,7 @@ where
         protocol: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output,
         _info: Self::OutboundOpenInfo,
     ) {
-        self.pending_result = Some(PeriodicIdentificationEvent::Identified(protocol))
+        self.pending_result = Some(PeriodicIdHandlerEvent::Identified(protocol))
     }
 
     #[inline]
@@ -110,11 +115,16 @@ where
     fn inject_inbound_closed(&mut self) {}
 
     #[inline]
-    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, err: io::Error) {
-        self.pending_result = Some(PeriodicIdentificationEvent::IdentificationError(err));
+    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, err: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {
+        self.pending_result = Some(PeriodicIdHandlerEvent::IdentificationError(err));
         if let Some(ref mut next_id) = self.next_id {
             next_id.reset(Instant::now() + TRY_AGAIN_ON_ERR);
         }
+    }
+
+    #[inline]
+    fn connection_keep_alive(&self) -> bool {
+        !self.first_id_happened
     }
 
     #[inline]
@@ -125,36 +135,34 @@ where
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<
-            ProtocolsHandlerEvent<
-                Self::OutboundProtocol,
-                Self::OutboundOpenInfo,
-                PeriodicIdentificationEvent,
-            >,
+        ProtocolsHandlerEvent<
+            Self::OutboundProtocol,
+            Self::OutboundOpenInfo,
+            PeriodicIdHandlerEvent,
         >,
-        io::Error,
+        Self::Error,
     > {
         if let Some(pending_result) = self.pending_result.take() {
-            return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(
+            return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(
                 pending_result,
-            ))));
+            )));
         }
 
         let next_id = match self.next_id {
             Some(ref mut nid) => nid,
-            None => return Ok(Async::Ready(None)),
+            None => return Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown)),
         };
 
         // Poll the future that fires when we need to identify the node again.
-        match next_id.poll() {
-            Ok(Async::NotReady) => Ok(Async::NotReady),
-            Ok(Async::Ready(())) => {
+        match next_id.poll()? {
+            Async::NotReady => Ok(Async::NotReady),
+            Async::Ready(()) => {
                 next_id.reset(Instant::now() + DELAY_TO_NEXT_ID);
                 let upgrade = self.config.clone();
                 let ev = ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info: () };
-                Ok(Async::Ready(Some(ev)))
+                self.first_id_happened = true;
+                Ok(Async::Ready(ev))
             }
-            Err(err) => Err(io::Error::new(io::ErrorKind::Other, err)),
         }
     }
 }

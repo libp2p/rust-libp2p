@@ -92,8 +92,8 @@ enum QueryStage {
     Iterating {
         /// Number of successful query results in a row that didn't find any closer node.
         // TODO: this is not great, because we don't necessarily receive responses in the order
-        //       we made the queries ; it is possible that we query multiple far-away nodes in a
-        //       row, and obtain results before the result of the closest nodes
+        //       we made the queries. It is possible that we query multiple far-away nodes in a
+        //       row, and obtain results before the result of the closest nodes.
         no_closer_in_a_row: usize,
     },
 
@@ -268,7 +268,7 @@ impl QueryState {
                 _ => (),
             };
 
-            // We have enough results ; the query is done.
+            // We have enough results; the query is done.
             if succeeded_counter
                 .as_ref()
                 .map(|&c| c >= num_results)

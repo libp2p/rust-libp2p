@@ -18,32 +18,25 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-extern crate bytes;
-extern crate futures;
-#[macro_use]
-extern crate log;
-extern crate libp2p_core;
-extern crate parking_lot;
-extern crate tokio_io;
-extern crate yamux;
+//! Implements the Yamux multiplexing protocol for libp2p, see also the
+//! [specification](https://github.com/hashicorp/yamux/blob/master/spec.md).
 
-use bytes::Bytes;
 use futures::{future::{self, FutureResult}, prelude::*};
 use libp2p_core::{muxing::Shutdown, upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}};
-use parking_lot::Mutex;
+use log::error;
 use std::{io, iter};
 use std::io::{Error as IoError};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 
-pub struct Yamux<C>(Mutex<yamux::Connection<C>>);
+pub struct Yamux<C>(yamux::Connection<C>);
 
 impl<C> Yamux<C>
 where
     C: AsyncRead + AsyncWrite + 'static
 {
     pub fn new(c: C, cfg: yamux::Config, mode: yamux::Mode) -> Self {
-        Yamux(Mutex::new(yamux::Connection::new(c, cfg, mode)))
+        Yamux(yamux::Connection::new(c, cfg, mode))
     }
 }
 
@@ -56,7 +49,7 @@ where
 
     #[inline]
     fn poll_inbound(&self) -> Poll<Option<Self::Substream>, IoError> {
-        match self.0.lock().poll() {
+        match self.0.poll() {
             Err(e) => {
                 error!("connection error: {}", e);
                 Err(io::Error::new(io::ErrorKind::Other, e))
@@ -69,7 +62,7 @@ where
 
     #[inline]
     fn open_outbound(&self) -> Self::OutboundSubstream {
-        let stream = self.0.lock().open_stream().map_err(|e| io::Error::new(io::ErrorKind::Other, e));
+        let stream = self.0.open_stream().map_err(|e| io::Error::new(io::ErrorKind::Other, e));
         future::result(stream)
     }
 
@@ -108,12 +101,12 @@ where
 
     #[inline]
     fn shutdown(&self, _: Shutdown) -> Poll<(), IoError> {
-        self.0.lock().shutdown()
+        self.0.shutdown()
     }
 
     #[inline]
     fn flush_all(&self) -> Poll<(), IoError> {
-        self.0.lock().flush()
+        self.0.flush()
     }
 }
 
@@ -135,11 +128,11 @@ impl Default for Config {
 }
 
 impl UpgradeInfo for Config {
-    type UpgradeId = ();
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once((Bytes::from("/yamux/1.0.0"), ()))
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once(b"/yamux/1.0.0")
     }
 }
 
@@ -151,7 +144,7 @@ where
     type Error = io::Error;
     type Future = FutureResult<Yamux<C>, io::Error>;
 
-    fn upgrade_inbound(self, i: C, _: Self::UpgradeId) -> Self::Future {
+    fn upgrade_inbound(self, i: C, _: Self::Info) -> Self::Future {
         future::ok(Yamux::new(i, self.0, yamux::Mode::Server))
     }
 }
@@ -164,7 +157,7 @@ where
     type Error = io::Error;
     type Future = FutureResult<Yamux<C>, io::Error>;
 
-    fn upgrade_outbound(self, i: C, _: Self::UpgradeId) -> Self::Future {
+    fn upgrade_outbound(self, i: C, _: Self::Info) -> Self::Future {
         future::ok(Yamux::new(i, self.0, yamux::Mode::Client))
     }
 }

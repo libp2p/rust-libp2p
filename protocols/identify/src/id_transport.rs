@@ -20,7 +20,7 @@
 
 //! Contains the `IdentifyTransport` type.
 
-use futures::prelude::*;
+use futures::{future, prelude::*, stream, AndThen, MapErr};
 use libp2p_core::{
     Multiaddr, PeerId, PublicKey, muxing, Transport,
     upgrade::{self, OutboundUpgradeApply, UpgradeError}
@@ -56,21 +56,20 @@ impl<TTrans> IdentifyTransport<TTrans> {
     }
 }
 
-// TODO: don't use boxes
 impl<TTrans, TMuxer> Transport for IdentifyTransport<TTrans>
 where
     TTrans: Transport<Output = TMuxer>,
     TMuxer: muxing::StreamMuxer + Send + Sync + 'static,      // TODO: remove unnecessary bounds
     TMuxer::Substream: Send + Sync + 'static,      // TODO: remove unnecessary bounds
-    TMuxer::OutboundSubstream: Send + 'static,      // TODO: remove unnecessary bounds
-    TTrans::Dial: Send + Sync + 'static,
-    TTrans::Listener: Send + 'static,
-    TTrans::ListenerUpgrade: Send + 'static,
 {
     type Output = (PeerId, TMuxer);
-    type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError> + Send>;
-    type ListenerUpgrade = Box<Future<Item = Self::Output, Error = IoError> + Send>;
-    type Dial = Box<Future<Item = Self::Output, Error = IoError> + Send>;
+    type Listener = stream::Empty<(Self::ListenerUpgrade, Multiaddr), IoError>;
+    type ListenerUpgrade = future::Empty<Self::Output, IoError>;
+    type Dial = AndThen<
+        TTrans::Dial,
+        MapErr<IdRetriever<TMuxer>, fn(UpgradeError<IoError>) -> IoError>,
+        fn(TMuxer) -> MapErr<IdRetriever<TMuxer>, fn(UpgradeError<IoError>) -> IoError>
+    >;
 
     #[inline]
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
@@ -90,11 +89,9 @@ where
             }
         };
 
-        let dial = dial.and_then(move |muxer| {
+        Ok(dial.and_then(|muxer| {
             IdRetriever::new(muxer, IdentifyProtocolConfig).map_err(|e| e.into_io_error())
-        });
-
-        Ok(Box::new(dial) as Box<_>)
+        }))
     }
 
     #[inline]
@@ -105,7 +102,7 @@ where
 
 /// Implementation of `Future` that asks the remote of its `PeerId`.
 // TODO: remove unneeded bounds
-struct IdRetriever<TMuxer>
+pub struct IdRetriever<TMuxer>
 where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
       TMuxer::Substream: Send,
 {
@@ -187,9 +184,9 @@ where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
                     // Here is a tricky part: we need to get back the muxer in order to return
                     // it, but it is in an `Arc`.
                     let unwrapped = Arc::try_unwrap(muxer).unwrap_or_else(|_| {
-                        panic!("we clone the Arc only to put it into substreams ; once in the \
-                                Finishing state, no substream or upgrade exists anymore ; \
-                                therefore there exists only one instance of the Arc; QED")
+                        panic!("We clone the Arc only to put it into substreams. Once in the \
+                                Finishing state, no substream or upgrade exists anymore. \
+                                Therefore, there exists only one instance of the Arc. QED")
                     });
 
                     // We leave `Poisoned` as the state when returning.

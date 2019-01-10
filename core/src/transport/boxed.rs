@@ -23,7 +23,7 @@ use multiaddr::Multiaddr;
 use std::fmt;
 use std::io::Error as IoError;
 use std::sync::Arc;
-use transport::Transport;
+use crate::transport::Transport;
 
 /// See the `Transport::boxed` method.
 #[inline]

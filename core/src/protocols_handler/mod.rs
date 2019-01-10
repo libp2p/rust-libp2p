@@ -18,12 +18,28 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! Once we are connected to a node, a *protocols handler* handles one or more specific protocols
+//! on this connection.
+//!
+//! This includes: how to handle incoming substreams, which protocols are supported, when to open
+//! a new outbound substream, and so on.
+//!
+//! Each implementation of the `ProtocolsHandler` trait handles one or more specific protocols.
+//! Two `ProtocolsHandler`s can be combined together with the `select()` method in order to build
+//! a `ProtocolsHandler` that combines both. This can be repeated multiple times in order to create
+//! a handler that handles all the protocols that you wish.
+//!
+//! > **Note**: A `ProtocolsHandler` handles one or more protocols in relation to a specific
+//! >           connection with a remote. In order to handle a protocol that requires knowledge of
+//! >           the network as a whole, see the `NetworkBehaviour` trait.
+
 use crate::upgrade::{
     InboundUpgrade,
     OutboundUpgrade,
+    UpgradeError,
 };
 use futures::prelude::*;
-use std::{io, time::Duration};
+use std::{error, fmt, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 pub use self::dummy::DummyProtocolsHandler;
@@ -48,20 +64,22 @@ mod select;
 /// Communication with a remote over a set of protocols opened in two different ways:
 ///
 /// - Dialing, which is a voluntary process. In order to do so, make `poll()` return an
-///   `OutboundSubstreamRequest` variant containing the connection upgrade to use to start using a protocol.
+///   `OutboundSubstreamRequest` variant containing the connection upgrade to use to start using a
+///   protocol.
 /// - Listening, which is used to determine which protocols are supported when the remote wants
 ///   to open a substream. The `listen_protocol()` method should return the upgrades supported when
 ///   listening.
 ///
 /// The upgrade when dialing and the upgrade when listening have to be of the same type, but you
-/// are free to return for example an `OrUpgrade` enum, or an enum of your own, containing the upgrade
-/// you want depending on the situation.
+/// are free to return for example an `OrUpgrade` enum, or an enum of your own, containing the
+/// upgrade you want depending on the situation.
 ///
 /// # Shutting down
 ///
 /// Implementors of this trait should keep in mind that the connection can be closed at any time.
 /// When a connection is closed (either by us or by the remote) `shutdown()` is called and the
-/// handler continues to be processed until it produces `None`. Only then the handler is destroyed.
+/// handler continues to be processed until it produces `ProtocolsHandlerEvent::Shutdown`. Only
+/// then the handler is destroyed.
 ///
 /// This makes it possible for the handler to finish delivering events even after knowing that it
 /// is shutting down.
@@ -70,24 +88,13 @@ mod select;
 /// might already be closed or unresponsive. They should therefore not rely on being able to
 /// deliver messages.
 ///
-/// # Relationship with `NodeHandler`.
-///
-/// This trait is very similar to the `NodeHandler` trait. The fundamental differences are:
-///
-/// - The `NodeHandler` trait gives you more control and is therefore more difficult to implement.
-/// - The `NodeHandler` trait is designed to have exclusive ownership of the connection to a
-///   node, while the `ProtocolsHandler` trait is designed to handle only a specific set of
-///   protocols. Two or more implementations of `ProtocolsHandler` can be combined into one that
-///   supports all the protocols together, which is not possible with `NodeHandler`.
-///
-// TODO: add a "blocks connection closing" system, so that we can gracefully close a connection
-//       when it's no longer needed, and so that for example the periodic pinging system does not
-//       keep the connection alive forever
 pub trait ProtocolsHandler {
     /// Custom event that can be received from the outside.
     type InEvent;
     /// Custom event that can be produced by the handler and that will be returned to the outside.
     type OutEvent;
+    /// Error that can happen when polling.
+    type Error: error::Error;
     /// The type of the substream that contains the raw data.
     type Substream: AsyncRead + AsyncWrite;
     /// The upgrade for the protocol or protocols handled by this handler.
@@ -124,14 +131,31 @@ pub trait ProtocolsHandler {
     fn inject_event(&mut self, event: Self::InEvent);
 
     /// Indicates to the handler that upgrading a substream to the given protocol has failed.
-    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: io::Error);
+    fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>);
 
     /// Indicates to the handler that the inbound part of the muxer has been closed, and that
     /// therefore no more inbound substreams will be produced.
     fn inject_inbound_closed(&mut self);
 
+    /// Returns whether the connection should be kept alive.
+    ///
+    /// If returns `false`, that indicates that this connection is not important and the user may
+    /// invoke `shutdown()` if they think that they will no longer need the connection in the
+    /// future.
+    ///
+    /// On the other hand, returning `true` is only an indication and doesn't mean that the user
+    /// will not call `shutdown()`.
+    ///
+    /// When multiple `ProtocolsHandler` are combined together, they should use *OR* to merge the
+    /// result of this method.
+    ///
+    /// The result of this method should be checked every time `poll()` is invoked.
+    ///
+    /// After `shutdown()` is called, the result of this method doesn't matter anymore.
+    fn connection_keep_alive(&self) -> bool;
+
     /// Indicates to the node that it should shut down. After that, it is expected that `poll()`
-    /// returns `Ready(None)` as soon as possible.
+    /// returns `Ready(ProtocolsHandlerEvent::Shutdown)` as soon as possible.
     ///
     /// This method allows an implementation to perform a graceful shutdown of the substreams, and
     /// send back various events.
@@ -141,9 +165,10 @@ pub trait ProtocolsHandler {
     /// node should be closed.
     ///
     /// > **Note**: If this handler is combined with other handlers, as soon as `poll()` returns
-    /// >           `Ok(Async::Ready(None))`, all the other handlers will receive a call to
-    /// >           `shutdown()` and will eventually be closed and destroyed.
-    fn poll(&mut self) -> Poll<Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>, io::Error>;
+    /// >           `Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown))`, all the other handlers
+    /// >           will receive a call to `shutdown()` and will eventually be closed and
+    /// >           destroyed.
+    fn poll(&mut self) -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>, Self::Error>;
 
     /// Adds a closure that turns the input event into something else.
     #[inline]
@@ -182,7 +207,7 @@ pub trait ProtocolsHandler {
     where
         Self: Sized,
     {
-        NodeHandlerWrapperBuilder::new(self, Duration::from_secs(10), Duration::from_secs(10))
+        NodeHandlerWrapperBuilder::new(self, Duration::from_secs(10), Duration::from_secs(10), Duration::from_secs(5))
     }
 
     /// Builds an implementation of `NodeHandler` that handles this protocol exclusively.
@@ -208,6 +233,11 @@ pub enum ProtocolsHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom> {
         info: TOutboundOpenInfo,
     },
 
+    /// Perform a graceful shutdown of the connection to the remote.
+    ///
+    /// Should be returned after `shutdown()` has been called.
+    Shutdown,
+
     /// Other event.
     Custom(TCustom),
 }
@@ -232,6 +262,7 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
                     info: map(info),
                 }
             }
+            ProtocolsHandlerEvent::Shutdown => ProtocolsHandlerEvent::Shutdown,
             ProtocolsHandlerEvent::Custom(val) => ProtocolsHandlerEvent::Custom(val),
         }
     }
@@ -252,6 +283,7 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
                     info,
                 }
             }
+            ProtocolsHandlerEvent::Shutdown => ProtocolsHandlerEvent::Shutdown,
             ProtocolsHandlerEvent::Custom(val) => ProtocolsHandlerEvent::Custom(val),
         }
     }
@@ -269,7 +301,55 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
             ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info } => {
                 ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info }
             }
+            ProtocolsHandlerEvent::Shutdown => ProtocolsHandlerEvent::Shutdown,
             ProtocolsHandlerEvent::Custom(val) => ProtocolsHandlerEvent::Custom(map(val)),
+        }
+    }
+}
+
+/// Error that can happen on an outbound substream opening attempt.
+#[derive(Debug)]
+pub enum ProtocolsHandlerUpgrErr<TUpgrErr> {
+    /// The opening attempt timed out before the negotiation was fully completed.
+    Timeout,
+    /// There was an error in the timer used.
+    Timer,
+    /// The remote muxer denied the attempt to open a substream.
+    MuxerDeniedSubstream,
+    /// Error while upgrading the substream to the protocol we want.
+    Upgrade(UpgradeError<TUpgrErr>),
+}
+
+impl<TUpgrErr> fmt::Display for ProtocolsHandlerUpgrErr<TUpgrErr>
+where
+    TUpgrErr: fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ProtocolsHandlerUpgrErr::Timeout => {
+                write!(f, "Timeout error while opening a substream")
+            },
+            ProtocolsHandlerUpgrErr::Timer => {
+                write!(f, "Timer error while opening a substream")
+            },
+            ProtocolsHandlerUpgrErr::MuxerDeniedSubstream => {
+                write!(f, "Remote muxer denied our attempt to open a substream")
+            },
+            ProtocolsHandlerUpgrErr::Upgrade(err) => write!(f, "{}", err),
+        }
+    }
+}
+
+impl<TUpgrErr> error::Error for ProtocolsHandlerUpgrErr<TUpgrErr>
+where
+    TUpgrErr: error::Error + 'static
+{
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            ProtocolsHandlerUpgrErr::Timeout => None,
+            ProtocolsHandlerUpgrErr::Timer => None,
+            ProtocolsHandlerUpgrErr::MuxerDeniedSubstream => None,
+            ProtocolsHandlerUpgrErr::Upgrade(err) => Some(err),
         }
     }
 }

@@ -18,10 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! Manage listening on multiple multiaddresses at once.
+
 use futures::prelude::*;
 use std::fmt;
 use void::Void;
-use {Multiaddr, Transport};
+use crate::{Multiaddr, Transport};
 use std::collections::VecDeque;
 
 /// Implementation of `futures::Stream` that allows listening on multiaddresses.
@@ -41,13 +43,13 @@ use std::collections::VecDeque;
 /// ```no_run
 /// # extern crate futures;
 /// # extern crate libp2p_core;
-/// # extern crate libp2p_tcp_transport;
+/// # extern crate libp2p_tcp;
 /// # extern crate tokio;
 /// # fn main() {
 /// use futures::prelude::*;
 /// use libp2p_core::nodes::listeners::{ListenersEvent, ListenersStream};
 ///
-/// let mut listeners = ListenersStream::new(libp2p_tcp_transport::TcpConfig::new());
+/// let mut listeners = ListenersStream::new(libp2p_tcp::TcpConfig::new());
 ///
 /// // Ask the `listeners` to start listening on the given multiaddress.
 /// listeners.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
@@ -274,16 +276,17 @@ where
 
 #[cfg(test)]
 mod tests {
-    extern crate libp2p_tcp_transport;
+    extern crate libp2p_tcp;
 
     use super::*;
-    use transport;
+    use crate::transport;
+    use assert_matches::assert_matches;
     use tokio::runtime::current_thread::Runtime;
     use std::io;
     use futures::{future::{self}, stream};
-    use tests::dummy_transport::{DummyTransport, ListenerState};
-    use tests::dummy_muxer::DummyMuxer;
-    use PeerId;
+    use crate::tests::dummy_transport::{DummyTransport, ListenerState};
+    use crate::tests::dummy_muxer::DummyMuxer;
+    use crate::PeerId;
 
     fn set_listener_state(ls: &mut ListenersStream<DummyTransport>, idx: usize, state: ListenerState) {
         let l = &mut ls.listeners[idx];
@@ -293,8 +296,8 @@ mod tests {
                     let stream = stream::poll_fn(|| future::err(io::Error::new(io::ErrorKind::Other, "oh noes")).poll() );
                     Box::new(stream)
                 }
-                ListenerState::Ok(async) => {
-                    match async {
+                ListenerState::Ok(r#async) => {
+                    match r#async {
                         Async::NotReady => {
                             let stream = stream::poll_fn(|| Ok(Async::NotReady));
                             Box::new(stream)

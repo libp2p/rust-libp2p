@@ -21,13 +21,13 @@
 //! This module handles the key agreement process. Typically ECDH.
 
 use futures::prelude::*;
-use SecioError;
+use crate::SecioError;
 
 #[path = "impl_ring.rs"]
-#[cfg(not(target_os = "emscripten"))]
+#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 mod platform;
 #[path = "impl_webcrypto.rs"]
-#[cfg(target_os = "emscripten")]
+#[cfg(any(target_os = "emscripten", target_os = "unknown"))]
 mod platform;
 
 /// Possible key agreement algorithms.

@@ -18,25 +18,26 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-extern crate bytes;
-extern crate futures;
-extern crate libp2p_peerstore as peerstore;
-extern crate libp2p_core;
-extern crate log;
-extern crate multiaddr;
-extern crate protobuf;
-extern crate rand;
-extern crate tokio_codec;
-extern crate tokio_io;
-extern crate unsigned_varint;
-extern crate void;
+use libp2p_core::{Multiaddr, PeerId};
+use libp2p_core::topology::{MemoryTopology, Topology};
 
-mod copy;
-mod error;
-mod message;
-mod protocol;
-mod transport;
-mod utility;
+/// Trait required on the topology for the identify system to store addresses.
+pub trait IdentifyTopology: Topology {
+    /// Adds to the topology an address discovered through identification.
+    ///
+    /// > **Note**: Will never be called with the local peer ID.
+    fn add_identify_discovered_addrs<TIter>(&mut self, peer: &PeerId, addr: TIter)
+    where
+        TIter: Iterator<Item = Multiaddr>;
+}
 
-pub use protocol::{Output, RelayConfig};
-pub use transport::RelayTransport;
+impl IdentifyTopology for MemoryTopology {
+    fn add_identify_discovered_addrs<TIter>(&mut self, peer: &PeerId, addr: TIter)
+    where
+        TIter: Iterator<Item = Multiaddr>,
+    {
+        for addr in addr {
+            self.add_address(peer.clone(), addr);
+        }
+    }
+}

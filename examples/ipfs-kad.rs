@@ -30,29 +30,20 @@ extern crate tokio;
 
 use futures::prelude::*;
 use libp2p::{
-    Transport,
     core::PublicKey,
-    core::upgrade::{self, OutboundUpgradeExt},
     secio,
-    mplex,
 };
 
 fn main() {
     // Create a random key for ourselves.
     let local_key = secio::SecioKeyPair::ed25519_generated().unwrap();
-    let local_peer_id = local_key.to_peer_id();
+    let local_pub_key = local_key.to_public_key();
 
     // Set up a an encrypted DNS-enabled TCP Transport over the Mplex protocol
-    let transport = libp2p::CommonTransport::new()
-        .with_upgrade(secio::SecioConfig::new(local_key))
-        .and_then(move |out, _| {
-            let peer_id = out.remote_key.into_peer_id();
-            let upgrade = mplex::MplexConfig::new().map_outbound(move |muxer| (peer_id, muxer) );
-            upgrade::apply_outbound(out.stream, upgrade).map_err(|e| e.into_io_error())
-        });
+    let transport = libp2p::build_development_transport(local_key);
 
     // Create the topology of the network with the IPFS bootstrap nodes.
-    let mut topology = libp2p::core::topology::MemoryTopology::empty();
+    let mut topology = libp2p::core::topology::MemoryTopology::empty(local_pub_key.clone());
     topology.add_address("QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ".parse().unwrap(), "/ip4/104.131.131.82/tcp/4001".parse().unwrap());
     topology.add_address("QmSoLPppuBtQSGwKDZT2M73ULpjvfd3aZ6ha4oFGL1KrGM".parse().unwrap(), "/ip4/104.236.179.241/tcp/4001".parse().unwrap());
     topology.add_address("QmSoLV4Bbm51jM9C4gDYZQ9Cy3U6aXMJDAbzgu2fzaDs64".parse().unwrap(), "/ip4/104.236.76.40/tcp/4001".parse().unwrap());
@@ -70,7 +61,7 @@ fn main() {
         // to insert our local node in the DHT. However here we use `without_init` because this
         // example is very ephemeral and we don't want to pollute the DHT. In a real world
         // application, you want to use `new` instead.
-        let mut behaviour = libp2p::kad::Kademlia::without_init(local_peer_id);
+        let mut behaviour = libp2p::kad::Kademlia::without_init(local_pub_key.into_peer_id());
         libp2p::core::Swarm::new(transport, behaviour, topology)
     };
 

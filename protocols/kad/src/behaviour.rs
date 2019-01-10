@@ -161,10 +161,10 @@ impl<TSubstream> Kademlia<TSubstream> {
     }
 
     /// Builds a `KadPeer` structure corresponding to the local node.
-    fn build_local_kad_peer<'a>(&self, local_addrs: impl IntoIterator<Item = &'a Multiaddr>) -> KadPeer {
+    fn build_local_kad_peer(&self, local_addrs: impl IntoIterator<Item = Multiaddr>) -> KadPeer {
         KadPeer {
             node_id: self.local_peer_id.clone(),
-            multiaddrs: local_addrs.into_iter().cloned().collect(),
+            multiaddrs: local_addrs.into_iter().collect(),
             connection_ty: KadConnectionType::Connected,
         }
     }
@@ -479,7 +479,7 @@ where
                 let (query, purpose, provider_peers) = self
                     .active_queries
                     .remove(&finished_query)
-                    .expect("finished_query was gathered when iterating active_queries ; qed");
+                    .expect("finished_query was gathered when iterating active_queries; QED.");
                 match purpose {
                     QueryPurpose::Initialization => {},
                     QueryPurpose::UserRequest => {

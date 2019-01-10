@@ -104,7 +104,7 @@ impl fmt::Display for Multiaddr {
     /// # Examples
     ///
     /// ```
-    /// use multiaddr::Multiaddr;
+    /// use parity_multiaddr::Multiaddr;
     ///
     /// let address: Multiaddr = "/ip4/127.0.0.1/udt".parse().unwrap();
     /// assert_eq!(address.to_string(), "/ip4/127.0.0.1/udt");
@@ -158,7 +158,7 @@ impl Multiaddr {
     /// # Examples
     ///
     /// ```
-    /// use multiaddr::Multiaddr;
+    /// use parity_multiaddr::Multiaddr;
     ///
     /// let address: Multiaddr = "/ip4/127.0.0.1".parse().unwrap();
     /// let nested = address.encapsulate("/udt").unwrap();
@@ -177,7 +177,7 @@ impl Multiaddr {
     /// # Examples
     ///
     /// ```
-    /// use multiaddr::{Multiaddr, Protocol};
+    /// use parity_multiaddr::{Multiaddr, Protocol};
     ///
     /// let mut address: Multiaddr = "/ip4/127.0.0.1".parse().unwrap();
     /// address.append(Protocol::Tcp(10000));
@@ -197,7 +197,7 @@ impl Multiaddr {
     /// # Examples
     ///
     /// ```
-    /// use multiaddr::{Multiaddr, ToMultiaddr};
+    /// use parity_multiaddr::{Multiaddr, ToMultiaddr};
     ///
     /// let address: Multiaddr = "/ip4/127.0.0.1/udt/sctp/5678".parse().unwrap();
     /// let unwrapped = address.decapsulate("/udt").unwrap();
@@ -212,7 +212,7 @@ impl Multiaddr {
     /// Returns the original if the passed in address is not found
     ///
     /// ```
-    /// use multiaddr::ToMultiaddr;
+    /// use parity_multiaddr::ToMultiaddr;
     ///
     /// let address = "/ip4/127.0.0.1/udt/sctp/5678".to_multiaddr().unwrap();
     /// let unwrapped = address.decapsulate("/ip4/127.0.1.1").unwrap();
@@ -256,7 +256,7 @@ impl Multiaddr {
     ///
     /// ```
     /// use std::net::Ipv4Addr;
-    /// use multiaddr::{Multiaddr, Protocol};
+    /// use parity_multiaddr::{Multiaddr, Protocol};
     ///
     /// let address: Multiaddr = "/ip4/127.0.0.1/udt/sctp/5678".parse().unwrap();
     ///
@@ -273,7 +273,7 @@ impl Multiaddr {
 
     /// Pops the last `Protocol` of this multiaddr, or `None` if the multiaddr is empty.
     /// ```
-    /// use multiaddr::{Multiaddr, Protocol};
+    /// use parity_multiaddr::{Multiaddr, Protocol};
     ///
     /// let mut address: Multiaddr = "/ip4/127.0.0.1/udt/sctp/5678".parse().unwrap();
     ///
