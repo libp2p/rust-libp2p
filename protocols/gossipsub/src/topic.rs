@@ -39,11 +39,6 @@ use std::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TopicMap(HashMap<TopicHash, Topic>);
 
-// impl Hash for HashMap<TopicHash, Topic> {
-//     fn hash<H: Hasher>(&self, state: &mut H) {
-//     }
-// }
-
 impl TopicMap {
     pub fn new() -> TopicMap {
         TopicMap(HashMap::new())
@@ -158,12 +153,6 @@ impl<'a> From<&'a Topic> for TopicHash {
     #[inline]
     fn from(topic: &'a Topic) -> Self {
         topic.hash.clone()
-    }
-}
-
-impl Hash for TopicHash {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.hash.hash(state)
     }
 }
 
