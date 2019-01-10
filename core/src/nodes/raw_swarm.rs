@@ -122,7 +122,7 @@ where
         /// Address used to send back data to the remote.
         send_back_addr: Multiaddr,
         /// The error that happened.
-        error: RawSwarmIncError<TTrans::Error>,
+        error: IncomingError<TTrans::Error>,
     },
 
     /// A new connection to a peer has been opened.
@@ -322,7 +322,7 @@ where TTransErr: error::Error + 'static
 
 /// Error that can happen on an incoming connection.
 #[derive(Debug)]
-pub enum RawSwarmIncError<TTransErr> {
+pub enum IncomingError<TTransErr> {
     /// Error in the transport layer.
     // TODO: just TTransError should be enough?
     Transport(TransportError<TTransErr>),
@@ -331,26 +331,26 @@ pub enum RawSwarmIncError<TTransErr> {
     DeniedLowerPriority,
 }
 
-impl<TTransErr> fmt::Display for RawSwarmIncError<TTransErr>
+impl<TTransErr> fmt::Display for IncomingError<TTransErr>
 where TTransErr: fmt::Display
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            RawSwarmIncError::Transport(err) => write!(f, "{}", err),
-            RawSwarmIncError::DeniedLowerPriority => {
+            IncomingError::Transport(err) => write!(f, "{}", err),
+            IncomingError::DeniedLowerPriority => {
                 write!(f, "Denied because of lower priority")
             },
         }
     }
 }
 
-impl<TTransErr> error::Error for RawSwarmIncError<TTransErr>
+impl<TTransErr> error::Error for IncomingError<TTransErr>
 where TTransErr: error::Error + 'static
 {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
-            RawSwarmIncError::Transport(err) => Some(err),
-            RawSwarmIncError::DeniedLowerPriority => None,
+            IncomingError::Transport(err) => Some(err),
+            IncomingError::DeniedLowerPriority => None,
         }
     }
 }
@@ -895,7 +895,7 @@ where
                     return (Default::default(), RawSwarmEvent::IncomingConnectionError {
                         listen_addr,
                         send_back_addr,
-                        error: RawSwarmIncError::DeniedLowerPriority,
+                        error: IncomingError::DeniedLowerPriority,
                     });
                 }
             }
@@ -1055,7 +1055,7 @@ where TTrans: Transport
                 });
             }
             ConnectedPoint::Listener { listen_addr, send_back_addr } => {
-                let error = RawSwarmIncError::Transport(error);
+                let error = IncomingError::Transport(error);
                 return (Default::default(), RawSwarmEvent::IncomingConnectionError { listen_addr, send_back_addr, error });
             }
         }
