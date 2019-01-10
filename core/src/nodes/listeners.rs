@@ -20,11 +20,10 @@
 
 //! Manage listening on multiple multiaddresses at once.
 
+use crate::{Multiaddr, Transport, transport::TransportError};
 use futures::prelude::*;
-use std::fmt;
+use std::{collections::VecDeque, fmt};
 use void::Void;
-use crate::{Multiaddr, Transport};
-use std::collections::VecDeque;
 
 /// Implementation of `futures::Stream` that allows listening on multiaddresses.
 ///
@@ -151,15 +150,14 @@ where
     /// Start listening on a multiaddress.
     ///
     /// Returns an error if the transport doesn't support the given multiaddress.
-    pub fn listen_on(&mut self, addr: Multiaddr) -> Result<Multiaddr, Multiaddr>
+    pub fn listen_on(&mut self, addr: Multiaddr) -> Result<Multiaddr, TransportError<TTrans::Error>>
     where
         TTrans: Clone,
     {
         let (listener, new_addr) = self
             .transport
             .clone()
-            .listen_on(addr)
-            .map_err(|(_, addr)| addr)?;
+            .listen_on(addr)?;
 
         self.listeners.push_back(Listener {
             listener,
@@ -324,7 +322,7 @@ mod tests {
         let mut listeners = ListenersStream::new(rx);
         listeners.listen_on("/memory".parse().unwrap()).unwrap();
 
-        let dial = tx.dial("/memory".parse().unwrap()).unwrap_or_else(|_| panic!());
+        let dial = tx.dial("/memory".parse().unwrap()).unwrap();
 
         let future = listeners
             .into_future()

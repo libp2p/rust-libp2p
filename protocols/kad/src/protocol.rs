@@ -536,7 +536,7 @@ mod tests {
 
             let future = transport
                 .dial(rx.recv().unwrap())
-                .unwrap_or_else(|_| panic!())
+                .unwrap()
                 .and_then(|proto| proto.send(msg_client))
                 .map(|_| ());
             let mut rt = Runtime::new().unwrap();

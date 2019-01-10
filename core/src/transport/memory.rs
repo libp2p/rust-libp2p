@@ -18,13 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::{Transport, transport::TransportError};
 use bytes::{Bytes, IntoBuf};
 use futures::{future::{self, FutureResult}, prelude::*, stream, sync::mpsc};
 use multiaddr::{Protocol, Multiaddr};
 use parking_lot::Mutex;
 use rw_stream_sink::RwStreamSink;
-use std::{io, sync::Arc};
-use crate::Transport;
+use std::{error, fmt, sync::Arc};
 
 /// Builds a new pair of `Transport`s. The dialer can reach the listener by dialing `/memory`.
 #[inline]
@@ -52,17 +52,18 @@ impl<T> Clone for Dialer<T> {
 
 impl<T: IntoBuf + Send + 'static> Transport for Dialer<T> {
     type Output = Channel<T>;
-    type Listener = Box<Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=io::Error> + Send>;
-    type ListenerUpgrade = FutureResult<Self::Output, io::Error>;
-    type Dial = Box<Future<Item=Self::Output, Error=io::Error> + Send>;
+    type Error = MemoryTransportError;
+    type Listener = Box<Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=MemoryTransportError> + Send>;
+    type ListenerUpgrade = FutureResult<Self::Output, MemoryTransportError>;
+    type Dial = Box<Future<Item=Self::Output, Error=MemoryTransportError> + Send>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        Err((self, addr))
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+        Err(TransportError::MultiaddrNotSupported(addr))
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         if !is_memory_addr(&addr) {
-            return Err((self, addr))
+            return Err(TransportError::MultiaddrNotSupported(addr))
         }
         let (a_tx, a_rx) = mpsc::unbounded();
         let (b_tx, b_rx) = mpsc::unbounded();
@@ -70,7 +71,7 @@ impl<T: IntoBuf + Send + 'static> Transport for Dialer<T> {
         let b = Chan { incoming: b_rx, outgoing: a_tx };
         let future = self.0.send(b)
             .map(move |_| a.into())
-            .map_err(|_| io::ErrorKind::ConnectionRefused.into());
+            .map_err(|_| MemoryTransportError::RemoteClosed);
         Ok(Box::new(future))
     }
 
@@ -83,6 +84,24 @@ impl<T: IntoBuf + Send + 'static> Transport for Dialer<T> {
     }
 }
 
+/// Error that can be produced from the `MemoryTransport`.
+#[derive(Debug, Copy, Clone)]
+pub enum MemoryTransportError {
+    /// The other side of the transport has been closed earlier.
+    RemoteClosed,
+}
+
+impl fmt::Display for MemoryTransportError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            MemoryTransportError::RemoteClosed => 
+                write!(f, "The other side of the memory transport has been closed."),
+        }
+    }
+}
+
+impl error::Error for MemoryTransportError {}
+
 /// Receiving end of the memory transport.
 pub struct Listener<T = Bytes>(Arc<Mutex<mpsc::UnboundedReceiver<Chan<T>>>>);
 
@@ -94,13 +113,14 @@ impl<T> Clone for Listener<T> {
 
 impl<T: IntoBuf + Send + 'static> Transport for Listener<T> {
     type Output = Channel<T>;
-    type Listener = Box<Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=io::Error> + Send>;
-    type ListenerUpgrade = FutureResult<Self::Output, io::Error>;
-    type Dial = Box<Future<Item=Self::Output, Error=io::Error> + Send>;
+    type Error = MemoryTransportError;
+    type Listener = Box<Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=MemoryTransportError> + Send>;
+    type ListenerUpgrade = FutureResult<Self::Output, MemoryTransportError>;
+    type Dial = Box<Future<Item=Self::Output, Error=MemoryTransportError> + Send>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
         if !is_memory_addr(&addr) {
-            return Err((self, addr))
+            return Err(TransportError::MultiaddrNotSupported(addr));
         }
         let addr2 = addr.clone();
         let receiver = self.0.clone();
@@ -113,8 +133,8 @@ impl<T: IntoBuf + Send + 'static> Transport for Listener<T> {
     }
 
     #[inline]
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-        Err((self, addr))
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        Err(TransportError::MultiaddrNotSupported(addr))
     }
 
     #[inline]
@@ -154,31 +174,31 @@ pub struct Chan<T = Bytes> {
 
 impl<T> Stream for Chan<T> {
     type Item = T;
-    type Error = io::Error;
+    type Error = MemoryTransportError;
 
     #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        self.incoming.poll().map_err(|()| io::ErrorKind::ConnectionReset.into())
+        self.incoming.poll().map_err(|()| MemoryTransportError::RemoteClosed)
     }
 }
 
 impl<T> Sink for Chan<T> {
     type SinkItem = T;
-    type SinkError = io::Error;
+    type SinkError = MemoryTransportError;
 
     #[inline]
     fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
-        self.outgoing.start_send(item).map_err(|_| io::ErrorKind::ConnectionReset.into())
+        self.outgoing.start_send(item).map_err(|_| MemoryTransportError::RemoteClosed)
     }
 
     #[inline]
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
-        self.outgoing.poll_complete().map_err(|_| io::ErrorKind::ConnectionReset.into())
+        self.outgoing.poll_complete().map_err(|_| MemoryTransportError::RemoteClosed)
     }
 
     #[inline]
     fn close(&mut self) -> Poll<(), Self::SinkError> {
-        self.outgoing.close().map_err(|_| io::ErrorKind::ConnectionReset.into())
+        self.outgoing.close().map_err(|_| MemoryTransportError::RemoteClosed)
     }
 }
 

@@ -23,11 +23,10 @@
 //! The timeout includes the upgrading process.
 // TODO: add example
 
-use crate::{Multiaddr, Transport};
+use crate::{Multiaddr, Transport, transport::TransportError};
 use futures::{try_ready, Async, Future, Poll, Stream};
 use log::debug;
-use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use std::time::Duration;
+use std::{error, fmt, time::Duration};
 use tokio_timer::Timeout;
 use tokio_timer::timeout::Error as TimeoutError;
 
@@ -77,49 +76,32 @@ impl<InnerTrans> TransportTimeout<InnerTrans> {
 impl<InnerTrans> Transport for TransportTimeout<InnerTrans>
 where
     InnerTrans: Transport,
+    InnerTrans::Error: 'static,
 {
     type Output = InnerTrans::Output;
+    type Error = TransportTimeoutError<InnerTrans::Error>;
     type Listener = TimeoutListener<InnerTrans::Listener>;
     type ListenerUpgrade = TokioTimerMapErr<Timeout<InnerTrans::ListenerUpgrade>>;
     type Dial = TokioTimerMapErr<Timeout<InnerTrans::Dial>>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        match self.inner.listen_on(addr) {
-            Ok((listener, addr)) => {
-                let listener = TimeoutListener {
-                    inner: listener,
-                    timeout: self.incoming_timeout,
-                };
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+        let (listener, addr) = self.inner.listen_on(addr)
+            .map_err(|err| err.map(TransportTimeoutError::Other))?;
 
-                Ok((listener, addr))
-            }
-            Err((inner, addr)) => {
-                let transport = TransportTimeout {
-                    inner,
-                    outgoing_timeout: self.outgoing_timeout,
-                    incoming_timeout: self.incoming_timeout,
-                };
+        let listener = TimeoutListener {
+            inner: listener,
+            timeout: self.incoming_timeout,
+        };
 
-                Err((transport, addr))
-            }
-        }
+        Ok((listener, addr))
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-        match self.inner.dial(addr) {
-            Ok(dial) => Ok(TokioTimerMapErr {
-                inner: Timeout::new(dial, self.outgoing_timeout),
-            }),
-            Err((inner, addr)) => {
-                let transport = TransportTimeout {
-                    inner,
-                    outgoing_timeout: self.outgoing_timeout,
-                    incoming_timeout: self.incoming_timeout,
-                };
-
-                Err((transport, addr))
-            }
-        }
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let dial = self.inner.dial(addr)
+            .map_err(|err| err.map(TransportTimeoutError::Other))?;
+        Ok(TokioTimerMapErr {
+            inner: Timeout::new(dial, self.outgoing_timeout),
+        })
     }
 
     #[inline]
@@ -140,10 +122,10 @@ where
     InnerStream: Stream<Item = (O, Multiaddr)>,
 {
     type Item = (TokioTimerMapErr<Timeout<O>>, Multiaddr);
-    type Error = InnerStream::Error;
+    type Error = TransportTimeoutError<InnerStream::Error>;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let poll_out = try_ready!(self.inner.poll());
+        let poll_out = try_ready!(self.inner.poll().map_err(TransportTimeoutError::Other));
         if let Some((inner_fut, addr)) = poll_out {
             let fut = TokioTimerMapErr {
                 inner: Timeout::new(inner_fut, self.timeout),
@@ -155,7 +137,8 @@ where
     }
 }
 
-/// Wraps around a `Future`. Turns the error type from `TimeoutError<IoError>` to `IoError`.
+/// Wraps around a `Future`. Turns the error type from `TimeoutError<Err>` to
+/// `TransportTimeoutError<Err>`.
 // TODO: can be replaced with `impl Future` once `impl Trait` are fully stable in Rust
 //       (https://github.com/rust-lang/rust/issues/34511)
 #[must_use = "futures do nothing unless polled"]
@@ -163,26 +146,60 @@ pub struct TokioTimerMapErr<InnerFut> {
     inner: InnerFut,
 }
 
-impl<InnerFut> Future for TokioTimerMapErr<InnerFut>
+impl<InnerFut, TErr> Future for TokioTimerMapErr<InnerFut>
 where
-    InnerFut: Future<Error = TimeoutError<IoError>>,
+    InnerFut: Future<Error = TimeoutError<TErr>>,
 {
     type Item = InnerFut::Item;
-    type Error = IoError;
+    type Error = TransportTimeoutError<TErr>;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        self.inner.poll().map_err(|err: TimeoutError<IoError>| {
+        self.inner.poll().map_err(|err: TimeoutError<TErr>| {
             if err.is_inner() {
-                err.into_inner().expect("ensured by is_inner()")
+                TransportTimeoutError::Other(err.into_inner().expect("ensured by is_inner()"))
             } else if err.is_elapsed() {
                 debug!("timeout elapsed for connection");
-                IoErrorKind::TimedOut.into()
+                TransportTimeoutError::Timeout
             } else {
                 assert!(err.is_timer());
                 debug!("tokio timer error in timeout wrapper");
-                let err = err.into_timer().expect("ensure by is_timer()");
-                IoError::new(IoErrorKind::Other, err)
+                TransportTimeoutError::TimerError
             }
         })
+    }
+}
+
+/// Error that can be produced by the `TransportTimeout` layer.
+#[derive(Debug, Copy, Clone)]
+pub enum TransportTimeoutError<TErr> {
+    /// The transport timed out.
+    Timeout,
+    /// An error happened in the timer.
+    TimerError,
+    /// Other kind of error.
+    Other(TErr),
+}
+
+impl<TErr> fmt::Display for TransportTimeoutError<TErr>
+where TErr: fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            TransportTimeoutError::Timeout => write!(f, "Timeout has been reached"),
+            TransportTimeoutError::TimerError => write!(f, "Error in the timer"),
+            TransportTimeoutError::Other(err) => write!(f, "{}", err),
+        }
+    }
+}
+
+impl<TErr> error::Error for TransportTimeoutError<TErr>
+where TErr: error::Error + 'static,
+{
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            TransportTimeoutError::Timeout => None,
+            TransportTimeoutError::TimerError => None,
+            TransportTimeoutError::Other(err) => Some(err),
+        }
     }
 }

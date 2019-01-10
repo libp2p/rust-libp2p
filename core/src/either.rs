@@ -275,19 +275,21 @@ pub enum EitherListenStream<A, B> {
 
 impl<AStream, BStream, AInner, BInner> Stream for EitherListenStream<AStream, BStream>
 where
-    AStream: Stream<Item = (AInner, Multiaddr), Error = IoError>,
-    BStream: Stream<Item = (BInner, Multiaddr), Error = IoError>,
+    AStream: Stream<Item = (AInner, Multiaddr)>,
+    BStream: Stream<Item = (BInner, Multiaddr)>,
 {
     type Item = (EitherFuture<AInner, BInner>, Multiaddr);
-    type Error = IoError;
+    type Error = EitherError<AStream::Error, BStream::Error>;
 
     #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         match self {
             EitherListenStream::First(a) => a.poll()
-                .map(|i| (i.map(|v| (v.map(|(o, addr)| (EitherFuture::First(o), addr)))))),
+                .map(|i| (i.map(|v| (v.map(|(o, addr)| (EitherFuture::First(o), addr))))))
+                .map_err(EitherError::A),
             EitherListenStream::Second(a) => a.poll()
-                .map(|i| (i.map(|v| (v.map(|(o, addr)| (EitherFuture::Second(o), addr)))))),
+                .map(|i| (i.map(|v| (v.map(|(o, addr)| (EitherFuture::Second(o), addr))))))
+                .map_err(EitherError::B),
         }
     }
 }
@@ -302,17 +304,17 @@ pub enum EitherFuture<A, B> {
 
 impl<AFuture, BFuture, AInner, BInner> Future for EitherFuture<AFuture, BFuture>
 where
-    AFuture: Future<Item = AInner, Error = IoError>,
-    BFuture: Future<Item = BInner, Error = IoError>,
+    AFuture: Future<Item = AInner>,
+    BFuture: Future<Item = BInner>,
 {
     type Item = EitherOutput<AInner, BInner>;
-    type Error = IoError;
+    type Error = EitherError<AFuture::Error, BFuture::Error>;
 
     #[inline]
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self {
-            EitherFuture::First(a) => a.poll().map(|v| v.map(EitherOutput::First)),
-            EitherFuture::Second(a) => a.poll().map(|v| v.map(EitherOutput::Second)),
+            EitherFuture::First(a) => a.poll().map(|v| v.map(EitherOutput::First)).map_err(EitherError::A),
+            EitherFuture::Second(a) => a.poll().map(|v| v.map(EitherOutput::Second)).map_err(EitherError::B),
         }
     }
 }

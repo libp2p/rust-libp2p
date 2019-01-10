@@ -165,6 +165,7 @@ pub mod simple;
 
 pub use self::core::{
     Transport, PeerId, Swarm,
+    transport::TransportError,
     upgrade::{InboundUpgrade, InboundUpgradeExt, OutboundUpgrade, OutboundUpgradeExt}
 };
 pub use libp2p_core_derive::NetworkBehaviour;
@@ -173,7 +174,7 @@ pub use self::simple::SimpleProtocol;
 pub use self::transport_ext::TransportExt;
 
 use futures::prelude::*;
-use std::time::Duration;
+use std::{error, time::Duration};
 
 /// Builds a `Transport` that supports the most commonly-used protocols that libp2p supports.
 ///
@@ -181,7 +182,7 @@ use std::time::Duration;
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
 #[inline]
 pub fn build_development_transport(local_private_key: secio::SecioKeyPair)
-    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync), Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
+    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
 {
      build_tcp_ws_secio_mplex_yamux(local_private_key)
 }
@@ -193,7 +194,7 @@ pub fn build_development_transport(local_private_key: secio::SecioKeyPair)
 ///
 /// > **Note**: If you ever need to express the type of this `Transport`.
 pub fn build_tcp_ws_secio_mplex_yamux(local_private_key: secio::SecioKeyPair)
-    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync), Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
+    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
 {
     CommonTransport::new()
         .with_upgrade(secio::SecioConfig::new(local_private_key))
@@ -207,7 +208,6 @@ pub fn build_tcp_ws_secio_mplex_yamux(local_private_key: secio::SecioKeyPair)
 
             core::upgrade::apply(out.stream, upgrade, endpoint)
                 .map(|(id, muxer)| (id, core::muxing::StreamMuxerBox::new(muxer)))
-                .map_err(|e| e.into_io_error())
         })
         .with_timeout(Duration::from_secs(20))
 }
@@ -265,30 +265,19 @@ impl CommonTransport {
 
 impl Transport for CommonTransport {
     type Output = <InnerImplementation as Transport>::Output;
+    type Error = <InnerImplementation as Transport>::Error;
     type Listener = <InnerImplementation as Transport>::Listener;
     type ListenerUpgrade = <InnerImplementation as Transport>::ListenerUpgrade;
     type Dial = <InnerImplementation as Transport>::Dial;
 
     #[inline]
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        match self.inner.inner.listen_on(addr) {
-            Ok(res) => Ok(res),
-            Err((inner, addr)) => {
-                let trans = CommonTransport { inner: CommonTransportInner { inner: inner } };
-                Err((trans, addr))
-            }
-        }
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+        self.inner.inner.listen_on(addr)
     }
 
     #[inline]
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-        match self.inner.inner.dial(addr) {
-            Ok(res) => Ok(res),
-            Err((inner, addr)) => {
-                let trans = CommonTransport { inner: CommonTransportInner { inner: inner } };
-                Err((trans, addr))
-            }
-        }
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.inner.inner.dial(addr)
     }
 
     #[inline]

@@ -51,7 +51,8 @@
 //!     .map(|out: SecioOutput<_>, _| out.stream);
 //!
 //! let future = dialer.dial("/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap())
-//!     .unwrap_or_else(|_| panic!("Unable to dial node"))
+//!     .unwrap()
+//!     .map_err(|e| panic!("error: {:?}", e))
 //!     .and_then(|connection| {
 //!         // Sends "hello world" on the connection, will be encrypted.
 //!         write_all(connection, "hello world")

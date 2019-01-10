@@ -18,10 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::Transport;
-use futures::{prelude::*, try_ready};
+use crate::transport::{Transport, TransportError};
+use futures::prelude::*;
 use multiaddr::Multiaddr;
-use std::io::Error as IoError;
+use std::error;
 
 /// See `Transport::map_err`.
 #[derive(Debug, Copy, Clone)]
@@ -38,17 +38,19 @@ impl<T, F> MapErr<T, F> {
     }
 }
 
-impl<T, F> Transport for MapErr<T, F>
+impl<T, F, TErr> Transport for MapErr<T, F>
 where
     T: Transport,
-    F: FnOnce(IoError) -> IoError + Clone,
+    F: FnOnce(T::Error) -> TErr + Clone,
+    TErr: error::Error,
 {
     type Output = T::Output;
+    type Error = TErr;
     type Listener = MapErrListener<T, F>;
     type ListenerUpgrade = MapErrListenerUpgrade<T, F>;
     type Dial = MapErrDial<T, F>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
         let map = self.map;
 
         match self.transport.listen_on(addr) {
@@ -56,16 +58,16 @@ where
                 let stream = MapErrListener { inner: stream, map };
                 Ok((stream, listen_addr))
             }
-            Err((transport, addr)) => Err((MapErr { transport, map }, addr)),
+            Err(err) => Err(err.map(move |err| map(err))),
         }
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let map = self.map;
 
         match self.transport.dial(addr) {
             Ok(future) => Ok(MapErrDial { inner: future, map: Some(map) }),
-            Err((transport, addr)) => Err((MapErr { transport, map }, addr)),
+            Err(err) => Err(err.map(move |err| map(err))),
         }
     }
 
@@ -82,19 +84,22 @@ where T: Transport {
     map: F,
 }
 
-impl<T, F> Stream for MapErrListener<T, F>
+impl<T, F, TErr> Stream for MapErrListener<T, F>
 where T: Transport,
-    F: FnOnce(IoError) -> IoError + Clone,
+    F: FnOnce(T::Error) -> TErr + Clone,
+    TErr: error::Error,
 {
     type Item = (MapErrListenerUpgrade<T, F>, Multiaddr);
-    type Error = IoError;
+    type Error = TErr;
 
     #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        match try_ready!(self.inner.poll()) {
-            Some((value, addr)) => Ok(Async::Ready(
+        match self.inner.poll() {
+            Ok(Async::Ready(Some((value, addr)))) => Ok(Async::Ready(
                 Some((MapErrListenerUpgrade { inner: value, map: Some(self.map.clone()) }, addr)))),
-            None => Ok(Async::Ready(None))
+            Ok(Async::Ready(None)) => Ok(Async::Ready(None)),
+            Ok(Async::NotReady) => Ok(Async::NotReady),
+            Err(err) => Err((self.map.clone())(err)),
         }
     }
 }
@@ -106,12 +111,12 @@ where T: Transport {
     map: Option<F>,
 }
 
-impl<T, F> Future for MapErrListenerUpgrade<T, F>
+impl<T, F, TErr> Future for MapErrListenerUpgrade<T, F>
 where T: Transport,
-    F: FnOnce(IoError) -> IoError,
+    F: FnOnce(T::Error) -> TErr,
 {
     type Item = T::Output;
-    type Error = IoError;
+    type Error = TErr;
 
     #[inline]
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -130,19 +135,18 @@ where T: Transport,
 
 /// Dialing future for `MapErr`.
 pub struct MapErrDial<T, F>
-where T: Transport,
-    F: FnOnce(IoError) -> IoError,
+where T: Transport
 {
     inner: T::Dial,
     map: Option<F>,
 }
 
-impl<T, F> Future for MapErrDial<T, F>
+impl<T, F, TErr> Future for MapErrDial<T, F>
 where T: Transport,
-    F: FnOnce(IoError) -> IoError,
+    F: FnOnce(T::Error) -> TErr,
 {
     type Item = T::Output;
-    type Error = IoError;
+    type Error = TErr;
 
     #[inline]
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
