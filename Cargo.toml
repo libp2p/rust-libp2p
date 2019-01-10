@@ -46,7 +46,9 @@ stdweb = { version = "0.4", default-features = false }
 
 [dev-dependencies]
 env_logger = "0.6.0"
+quicli = "0.4"
 rand = "0.6"
+structopt = "0.2"
 tokio = "0.1"
 tokio-stdin-stdout = "0.1"
 void = "1.0"

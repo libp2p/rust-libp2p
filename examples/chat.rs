@@ -20,7 +20,7 @@
 
 //! A basic chat application demonstrating libp2p and the mDNS and floodsub protocols.
 //!
-//! Using two terminal windows, start two instances. If you local network allows mDNS, 
+//! Using two terminal windows, start two instances. If you local network allows mDNS,
 //! they will automatically connect. Type a message in either terminal and hit return: the
 //! message is sent and printed in the other terminal. Close with Ctrl-c.
 //!
@@ -47,31 +47,43 @@
 //! cargo run --example chat -- /ip4/127.0.0.1/tcp/24915
 //! ```
 //!
-//! The two nodes then connect. 
+//! The two nodes then connect.
 
 extern crate env_logger;
 extern crate futures;
 extern crate libp2p;
 extern crate tokio;
 extern crate void;
+extern crate quicli;
+extern crate structopt;
 
 use futures::prelude::*;
-use libp2p::{
-    NetworkBehaviour,
-    secio,
-    tokio_codec::{FramedRead, LinesCodec}
-};
+use libp2p::{NetworkBehaviour, tokio_codec::{FramedRead, LinesCodec}};
+use quicli::prelude::*;
+use structopt::StructOpt;
+use std::io;
 
-fn main() {
+#[derive(Debug, StructOpt)]
+struct Cli {
+    #[structopt(long = "key", short = "k")]
+    key: String,
+
+    #[structopt(long = "dial", short = "d")]
+    dial: Option<String>
+}
+
+fn main() -> CliResult {
     env_logger::init();
 
-    // Create a random PeerId
-    let local_key = secio::SecioKeyPair::ed25519_generated().unwrap();
-    let local_pub_key = local_key.to_public_key();
-    println!("Local peer id: {:?}", local_pub_key.clone().into_peer_id());
+    let args = Cli::from_args();
+
+    let private_key = libp2p_quic::SecretKey::pem(read_file(&args.key)?.as_bytes())?;
+    let public_key = private_key.public_key()?;
+
+    let rt = tokio::runtime::Runtime::new()?;
 
     // Set up a an encrypted DNS-enabled TCP Transport over the Mplex and Yamux protocols
-    let transport = libp2p::build_development_transport(local_key);
+    let transport = libp2p_quic::QuicConfig::new(rt.executor(), private_key);
 
     // Create a Floodsub topic
     let floodsub_topic = libp2p::floodsub::TopicBuilder::new("chat").build();
@@ -102,20 +114,20 @@ fn main() {
     // Create a Swarm to manage peers and events
     let mut swarm = {
         let mut behaviour = MyBehaviour {
-            floodsub: libp2p::floodsub::Floodsub::new(local_pub_key.clone().into_peer_id()),
-            mdns: libp2p::mdns::Mdns::new().expect("Failed to create mDNS service"),
+            floodsub: libp2p::floodsub::Floodsub::new(public_key.clone().into_peer_id()),
+            mdns: libp2p::mdns::Mdns::new()?
         };
 
         behaviour.floodsub.subscribe(floodsub_topic.clone());
-        libp2p::Swarm::new(transport, behaviour, libp2p::core::topology::MemoryTopology::empty(local_pub_key))
+        libp2p::Swarm::new(transport, behaviour, libp2p::core::topology::MemoryTopology::empty(public_key))
     };
 
     // Listen on all interfaces and whatever port the OS assigns
-    let addr = libp2p::Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
+    let addr = libp2p::Swarm::listen_on(&mut swarm, "/ip4/127.0.0.1/udp/0/quic".parse()?)?;
     println!("Listening on {:?}", addr);
 
     // Reach out to another node if specified
-    if let Some(to_dial) = std::env::args().nth(1) {
+    if let Some(to_dial) = args.dial {
         let dialing = to_dial.clone();
         match to_dial.parse() {
             Ok(to_dial) => {
@@ -133,24 +145,25 @@ fn main() {
     let mut framed_stdin = FramedRead::new(stdin, LinesCodec::new());
 
     // Kick it off
-    tokio::run(futures::future::poll_fn(move || -> Result<_, ()> {
+    rt.block_on_all(futures::future::poll_fn(move || {
         loop {
-            match framed_stdin.poll().expect("Error while polling stdin") {
+            match framed_stdin.poll()? {
                 Async::Ready(Some(line)) => swarm.floodsub.publish(&floodsub_topic, line.as_bytes()),
-                Async::Ready(None) => panic!("Stdin closed"),
+                Async::Ready(None) => return Err(io::Error::new(io::ErrorKind::Other, "stdin closed")),
                 Async::NotReady => break,
             };
         }
 
         loop {
-            match swarm.poll().expect("Error while polling swarm") {
-                Async::Ready(Some(_)) => {
-                    
-                },
-                Async::Ready(None) | Async::NotReady => break,
+            match swarm.poll()? {
+                Async::Ready(Some(_)) => {}
+                Async::Ready(None) | Async::NotReady => break
             }
         }
 
         Ok(Async::NotReady)
-    }));
+    }))?;
+
+    Ok(())
 }
+
