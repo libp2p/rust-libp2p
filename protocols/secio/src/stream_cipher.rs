@@ -85,12 +85,12 @@ pub fn ctr(key_size: Cipher, key: &[u8], iv: &[u8]) -> StreamCipher {
 
 #[cfg(all(feature = "aes-all", any(target_arch = "x86_64", target_arch = "x86")))]
 mod aes_alt {
-    extern crate aesni;
-    use ::codec::StreamCipher;
+    use crate::codec::StreamCipher;
     use ctr::Ctr128;
-    use self::aesni::{Aes128, Aes256};
+    use aesni::{Aes128, Aes256};
     use ctr::stream_cipher::NewFixStreamCipher;
     use ctr::stream_cipher::generic_array::GenericArray;
+    use lazy_static::lazy_static;
     use twofish::Twofish;
     use super::{Cipher, NullCipher};
 

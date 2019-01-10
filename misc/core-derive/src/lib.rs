@@ -40,8 +40,8 @@ pub fn hello_macro_derive(input: TokenStream) -> TokenStream {
 fn build(ast: &DeriveInput) -> TokenStream {
     match ast.data {
         Data::Struct(ref s) => build_struct(ast, s),
-        Data::Enum(_) => unimplemented!("Deriving NetworkBehavior is not implemented for enums"),
-        Data::Union(_) => unimplemented!("Deriving NetworkBehavior is not implemented for unions"),
+        Data::Enum(_) => unimplemented!("Deriving NetworkBehaviour is not implemented for enums"),
+        Data::Union(_) => unimplemented!("Deriving NetworkBehaviour is not implemented for unions"),
     }
 }
 
@@ -49,13 +49,14 @@ fn build(ast: &DeriveInput) -> TokenStream {
 fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let name = &ast.ident;
     let (_, ty_generics, where_clause) = ast.generics.split_for_impl();
-    let trait_to_impl = quote!{::libp2p::core::nodes::swarm::NetworkBehavior};
+    let trait_to_impl = quote!{::libp2p::core::swarm::NetworkBehaviour};
+    let net_behv_event_proc = quote!{::libp2p::core::swarm::NetworkBehaviourEventProcess};
     let either_ident = quote!{::libp2p::core::either::EitherOutput};
-    let network_behaviour_action = quote!{::libp2p::core::nodes::swarm::NetworkBehaviorAction};
+    let network_behaviour_action = quote!{::libp2p::core::swarm::NetworkBehaviourAction};
     let protocols_handler = quote!{::libp2p::core::protocols_handler::ProtocolsHandler};
     let proto_select_ident = quote!{::libp2p::core::protocols_handler::ProtocolsHandlerSelect};
     let peer_id = quote!{::libp2p::core::PeerId};
-    let connected_point = quote!{::libp2p::core::nodes::ConnectedPoint};
+    let connected_point = quote!{::libp2p::core::swarm::ConnectedPoint};
 
     // Name of the type parameter that represents the substream.
     let substream_generic = {
@@ -68,41 +69,40 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         quote!{#n}
     };
 
-    let output_types = {
-        let mut start = 1;
+    // Name of the type parameter that represents the topology.
+    let topology_generic = {
+        let mut n = "TTopology".to_string();
         // Avoid collisions.
-        while ast.generics.type_params().any(|tp| tp.ident.to_string() == format!("TOut{}", start)) {
-            start += 1;
+        while ast.generics.type_params().any(|tp| tp.ident.to_string() == n) {
+            n.push('1');
         }
-        data_struct.fields.iter()
-            .filter(|x| !is_ignored(x))
-            .enumerate()
-            .map(move |(i, _)| Ident::new(&format!("TOut{}", start + i), name.span()))
-            .collect::<Vec<_>>()
+        let n = Ident::new(&n, name.span());
+        quote!{#n}
     };
+
+    let poll_parameters = quote!{::libp2p::core::swarm::PollParameters<#topology_generic>};
 
     // Build the generics.
     let impl_generics = {
         let tp = ast.generics.type_params();
         let lf = ast.generics.lifetimes();
         let cst = ast.generics.const_params();
-        let out = output_types.clone();
-        quote!{<#(#lf,)* #(#tp,)* #(#cst,)* #substream_generic, #(#out),*>}
+        quote!{<#(#lf,)* #(#tp,)* #(#cst,)* #topology_generic, #substream_generic>}
     };
 
     // Build the `where ...` clause of the trait implementation.
     let where_clause = {
         let mut additional = data_struct.fields.iter()
             .filter(|x| !is_ignored(x))
-            .zip(output_types)
-            .flat_map(|(field, out)| {
+            .flat_map(|field| {
                 let ty = &field.ty;
                 vec![
-                    quote!{#ty: #trait_to_impl},
-                    quote!{<#ty as #trait_to_impl>::ProtocolsHandler: #protocols_handler<Substream = #substream_generic>},
+                    quote!{#ty: #trait_to_impl<#topology_generic>},
+                    quote!{Self: #net_behv_event_proc<<#ty as #trait_to_impl<#topology_generic>>::OutEvent>},
+                    quote!{<#ty as #trait_to_impl<#topology_generic>>::ProtocolsHandler: #protocols_handler<Substream = #substream_generic>},
                     // Note: this bound is required because of https://github.com/rust-lang/rust/issues/55697
-                    quote!{<<#ty as #trait_to_impl>::ProtocolsHandler as #protocols_handler>::InboundProtocol: ::libp2p::core::InboundUpgrade<#substream_generic, Output = #out>},
-                    quote!{<<#ty as #trait_to_impl>::ProtocolsHandler as #protocols_handler>::OutboundProtocol: ::libp2p::core::OutboundUpgrade<#substream_generic, Output = #out>},
+                    quote!{<<#ty as #trait_to_impl<#topology_generic>>::ProtocolsHandler as #protocols_handler>::InboundProtocol: ::libp2p::core::InboundUpgrade<#substream_generic>},
+                    quote!{<<#ty as #trait_to_impl<#topology_generic>>::ProtocolsHandler as #protocols_handler>::OutboundProtocol: ::libp2p::core::OutboundUpgrade<#substream_generic>},
                 ]
             })
             .collect::<Vec<_>>();
@@ -111,7 +111,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         additional.push(quote!{#substream_generic: ::libp2p::tokio_io::AsyncWrite});
 
         if let Some(where_clause) = where_clause {
-            Some(quote!{#where_clause, #(#additional),*})
+            Some(quote!{#where_clause #(#additional),*})
         } else {
             Some(quote!{where #(#additional),*})
         }
@@ -211,7 +211,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 continue;
             }
             let ty = &field.ty;
-            let field_info = quote!{ <#ty as #trait_to_impl>::ProtocolsHandler };
+            let field_info = quote!{ <#ty as #trait_to_impl<#topology_generic>>::ProtocolsHandler };
             match ph_ty {
                 Some(ev) => ph_ty = Some(quote!{ #proto_select_ident<#ev, #field_info> }),
                 ref mut ev @ None => *ev = Some(field_info),
@@ -278,27 +278,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             None => quote!{ self.#field_n },
         };
 
-        let mut handler_fn: Option<Ident> = None;
-        for meta_items in field.attrs.iter().filter_map(get_meta_items) {
-            for meta_item in meta_items {
-                match meta_item {
-                    // Parse `#[behaviour(handler = "foo")]`
-                    syn::NestedMeta::Meta(syn::Meta::NameValue(ref m)) if m.ident == "handler" => {
-                        if let syn::Lit::Str(ref s) = m.lit {
-                            handler_fn = Some(syn::parse_str(&s.value()).unwrap());
-                        }
-                    }
-                    _ => ()
-                }
-            }
-        }
-
-        let handling = if let Some(handler_fn) = handler_fn {
-            quote!{self.#handler_fn(event)}
-        } else {
-            quote!{}
-        };
-
         let mut wrapped_event = if enum_n != 0 {
             quote!{ #either_ident::Second(event) }
         } else {
@@ -310,9 +289,9 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
         Some(quote!{
             loop {
-                match #field_name.poll() {
+                match #field_name.poll(poll_params) {
                     Async::Ready(#network_behaviour_action::GenerateEvent(event)) => {
-                        #handling
+                        #net_behv_event_proc::inject_event(self, event)
                     }
                     Async::Ready(#network_behaviour_action::DialAddress { address }) => {
                         return Async::Ready(#network_behaviour_action::DialAddress { address });
@@ -326,6 +305,9 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                             event: #wrapped_event,
                         });
                     }
+                    Async::Ready(#network_behaviour_action::ReportObservedAddr { address }) => {
+                        return Async::Ready(#network_behaviour_action::ReportObservedAddr { address });
+                    }
                     Async::NotReady => break,
                 }
             }
@@ -334,7 +316,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Now the magic happens.
     let final_quote = quote!{
-        impl #impl_generics #trait_to_impl for #name #ty_generics
+        impl #impl_generics #trait_to_impl<#topology_generic> for #name #ty_generics
         #where_clause
         {
             type ProtocolsHandler = #protocols_handler_ty;
@@ -367,7 +349,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 }
             }
 
-            fn poll(&mut self) -> ::libp2p::futures::Async<#network_behaviour_action<<Self::ProtocolsHandler as #protocols_handler>::InEvent, Self::OutEvent>> {
+            fn poll(&mut self, poll_params: &mut #poll_parameters) -> ::libp2p::futures::Async<#network_behaviour_action<<Self::ProtocolsHandler as #protocols_handler>::InEvent, Self::OutEvent>> {
                 use libp2p::futures::prelude::*;
                 #(#poll_stmts)*
                 let f: ::libp2p::futures::Async<#network_behaviour_action<<Self::ProtocolsHandler as #protocols_handler>::InEvent, Self::OutEvent>> = #poll_method;

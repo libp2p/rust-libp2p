@@ -22,9 +22,7 @@
 
 use ratelimit::RateLimited;
 use std::io;
-use std::time::Duration;
 use tokio_executor::DefaultExecutor;
-use transport_timeout::TransportTimeout;
 use Transport;
 
 /// Trait automatically implemented on all objects that implement `Transport`. Provides some
@@ -38,41 +36,10 @@ use Transport;
 /// use std::time::Duration;
 ///
 /// let _transport = TcpConfig::new()
-///     .with_timeout(Duration::from_secs(20))
 ///     .with_rate_limit(1024 * 1024, 1024 * 1024);
 /// ```
 ///
 pub trait TransportExt: Transport {
-    /// Adds a timeout to the connection and upgrade steps for all the sockets created by
-    /// the transport.
-    #[inline]
-    fn with_timeout(self, timeout: Duration) -> TransportTimeout<Self>
-    where
-        Self: Sized,
-    {
-        TransportTimeout::new(self, timeout)
-    }
-
-    /// Adds a timeout to the connection and upgrade steps for all the outgoing sockets created
-    /// by the transport.
-    #[inline]
-    fn with_outbound_timeout(self, timeout: Duration) -> TransportTimeout<Self>
-    where
-        Self: Sized,
-    {
-        TransportTimeout::with_outgoing_timeout(self, timeout)
-    }
-
-    /// Adds a timeout to the connection and upgrade steps for all the incoming sockets created
-    /// by the transport.
-    #[inline]
-    fn with_inbound_timeout(self, timeout: Duration) -> TransportTimeout<Self>
-    where
-        Self: Sized,
-    {
-        TransportTimeout::with_ingoing_timeout(self, timeout)
-    }
-
     /// Adds a maximum transfer rate to the sockets created with the transport.
     #[inline]
     fn with_rate_limit(

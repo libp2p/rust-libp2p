@@ -18,29 +18,30 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::protocol::{Ping, PingDialer};
 use futures::prelude::*;
 use libp2p_core::{
     OutboundUpgrade,
     ProtocolsHandler,
     ProtocolsHandlerEvent,
-    upgrade::{self, DeniedUpgrade}
+    protocols_handler::ProtocolsHandlerUpgrErr,
+    upgrade::DeniedUpgrade
 };
 use log::warn;
-use protocol::{Ping, PingDialer};
 use std::{
     io, mem,
     time::{Duration, Instant},
 };
 use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_timer::Delay;
+use tokio_timer::{self, Delay};
 use void::{Void, unreachable};
 
 /// Protocol handler that handles pinging the remote at a regular period.
 ///
-/// If the remote doesn't respond, produces `Unresponsive` and closes the connection.
+/// If the remote doesn't respond, produces an error that closes the connection.
 pub struct PeriodicPingHandler<TSubstream> {
     /// Configuration for the ping protocol.
-    ping_config: upgrade::Toggleable<Ping<Instant>>,
+    ping_config: Ping<Instant>,
 
     /// State of the outgoing ping.
     out_state: OutState<TSubstream>,
@@ -112,9 +113,6 @@ enum OutState<TSubstream> {
 /// Event produced by the periodic pinger.
 #[derive(Debug, Copy, Clone)]
 pub enum OutEvent {
-    /// The node has been determined to be unresponsive.
-    Unresponsive,
-
     /// Started pinging the remote. This can be used to print a diagnostic message in the logs.
     PingStart,
 
@@ -128,7 +126,7 @@ impl<TSubstream> PeriodicPingHandler<TSubstream> {
         let ping_timeout = Duration::from_secs(30);
 
         PeriodicPingHandler {
-            ping_config: upgrade::toggleable(Default::default()),
+            ping_config: Default::default(),
             out_state: OutState::NeedToOpen {
                 expires: Delay::new(Instant::now() + ping_timeout),
             },
@@ -152,19 +150,15 @@ where
 {
     type InEvent = Void;
     type OutEvent = OutEvent;
+    type Error = io::Error; // TODO: more precise error type
     type Substream = TSubstream;
     type InboundProtocol = DeniedUpgrade;
-    type OutboundProtocol = upgrade::Toggleable<Ping<Instant>>;
+    type OutboundProtocol = Ping<Instant>;
     type OutboundOpenInfo = ();
 
     #[inline]
     fn listen_protocol(&self) -> Self::InboundProtocol {
         DeniedUpgrade
-    }
-
-    #[inline]
-    fn dialer_protocol(&self) -> Self::OutboundProtocol {
-        self.ping_config
     }
 
     fn inject_fully_negotiated_inbound(&mut self, protocol: Void) {
@@ -176,13 +170,10 @@ where
         mut substream: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output,
         _info: Self::OutboundOpenInfo
     ) {
-        match mem::replace(&mut self.out_state, OutState::Poisoned) {
-            OutState::Upgrading { expires } => {
-                // We always upgrade with the intent of immediately pinging.
-                substream.ping(Instant::now());
-                self.out_state = OutState::WaitingForPong { substream, expires };
-            }
-            _ => (),
+        if let OutState::Upgrading { expires } = mem::replace(&mut self.out_state, OutState::Poisoned) {
+            // We always upgrade with the intent of immediately pinging.
+            substream.ping(Instant::now());
+            self.out_state = OutState::WaitingForPong { substream, expires }
         }
     }
 
@@ -191,7 +182,7 @@ where
     fn inject_inbound_closed(&mut self) {}
 
     #[inline]
-    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: io::Error) {
+    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {
         // In case of error while upgrading, there's not much we can do except shut down.
         // TODO: we assume that the error is about ping not being supported, which is not
         //       necessarily the case
@@ -200,6 +191,11 @@ where
         } else {
             self.out_state = OutState::Shutdown;
         }
+    }
+
+    #[inline]
+    fn connection_keep_alive(&self) -> bool {
+        false
     }
 
     fn shutdown(&mut self) {
@@ -220,7 +216,7 @@ where
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>,
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
         io::Error,
     > {
         // Shortcut for polling a `tokio_timer::Delay`
@@ -237,100 +233,90 @@ where
             )
         }
 
-        loop {
-            match mem::replace(&mut self.out_state, OutState::Poisoned) {
-                OutState::Shutdown | OutState::Poisoned => {
-                    // This shuts down the whole connection with the remote.
-                    return Ok(Async::Ready(None));
-                },
+        match mem::replace(&mut self.out_state, OutState::Poisoned) {
+            OutState::Shutdown | OutState::Poisoned => {
+                // This shuts down the whole connection with the remote.
+                Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown))
+            },
 
-                OutState::Disabled => {
-                    return Ok(Async::NotReady);
+            OutState::Disabled => {
+                Ok(Async::NotReady)
+            }
+
+            // Need to open an outgoing substream.
+            OutState::NeedToOpen { expires } => {
+                // Note that we ignore the expiration here, as it's pretty unlikely to happen.
+                // The expiration is only here to be transmitted to the `Upgrading`.
+                self.out_state = OutState::Upgrading { expires };
+                Ok(Async::Ready(
+                    ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                        upgrade: self.ping_config,
+                        info: (),
+                    },
+                ))
+            }
+
+            // Waiting for the upgrade to be negotiated.
+            OutState::Upgrading { mut expires } => poll_delay!(expires => {
+                    NotReady => {
+                        self.out_state = OutState::Upgrading { expires };
+                        Ok(Async::NotReady)
+                    },
+                    Ready => {
+                        self.out_state = OutState::Shutdown;
+                        Err(io::Error::new(io::ErrorKind::Other, "unresponsive node"))
+                    },
+                }),
+
+            // Waiting for the pong.
+            OutState::WaitingForPong { mut substream, mut expires } => {
+                // We start by dialing the substream, leaving one last chance for it to
+                // produce the pong even if the expiration happened.
+                match substream.poll()? {
+                    Async::Ready(Some(started)) => {
+                        self.out_state = OutState::Idle {
+                            substream,
+                            next_ping: Delay::new(Instant::now() + self.delay_to_next_ping),
+                        };
+                        let ev = OutEvent::PingSuccess(started.elapsed());
+                        return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(ev)));
+                    }
+                    Async::NotReady => {}
+                    Async::Ready(None) => {
+                        self.out_state = OutState::Shutdown;
+                        return Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown));
+                    }
                 }
 
-                // Need to open an outgoing substream.
-                OutState::NeedToOpen { expires } => {
-                    // Note that we ignore the expiration here, as it's pretty unlikely to happen.
-                    // The expiration is only here to be transmitted to the `Upgrading`.
-                    self.out_state = OutState::Upgrading { expires };
-                    return Ok(Async::Ready(Some(
-                        ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                            upgrade: self.ping_config,
-                            info: (),
-                        },
-                    )));
-                }
+                // Check the expiration.
+                poll_delay!(expires => {
+                    NotReady => {
+                        self.out_state = OutState::WaitingForPong { substream, expires };
+                        // Both `substream` and `expires` and not ready, so it's fine to return
+                        // not ready.
+                        Ok(Async::NotReady)
+                    },
+                    Ready => {
+                        self.out_state = OutState::Shutdown;
+                        Err(io::Error::new(io::ErrorKind::Other, "unresponsive node"))
+                    },
+                })
+            }
 
-                // Waiting for the upgrade to be negotiated.
-                OutState::Upgrading { mut expires } => poll_delay!(expires => {
-                        NotReady => {
-                            self.out_state = OutState::Upgrading { expires };
-                            return Ok(Async::NotReady);
-                        },
-                        Ready => {
-                            self.out_state = OutState::Shutdown;
-                            let ev = OutEvent::Unresponsive;
-                            return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(ev))));
-                        },
-                    }),
-
-                // Waiting for the pong.
-                OutState::WaitingForPong {
-                    mut substream,
-                    mut expires,
-                } => {
-                    // We start by dialing the substream, leaving one last chance for it to
-                    // produce the pong even if the expiration happened.
-                    match substream.poll()? {
-                        Async::Ready(Some(started)) => {
-                            self.out_state = OutState::Idle {
-                                substream,
-                                next_ping: Delay::new(Instant::now() + self.delay_to_next_ping),
-                            };
-                            let ev = OutEvent::PingSuccess(started.elapsed());
-                            return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(ev))));
-                        }
-                        Async::NotReady => {}
-                        Async::Ready(None) => {
-                            self.out_state = OutState::Shutdown;
-                            return Ok(Async::Ready(None));
-                        }
-                    };
-
-                    // Check the expiration.
-                    poll_delay!(expires => {
-                        NotReady => {
-                            self.out_state = OutState::WaitingForPong { substream, expires };
-                            // Both `substream` and `expires` and not ready, so it's fine to return
-                            // not ready.
-                            return Ok(Async::NotReady);
-                        },
-                        Ready => {
-                            self.out_state = OutState::Shutdown;
-                            let ev = OutEvent::Unresponsive;
-                            return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(ev))));
-                        },
-                    })
-                }
-
-                OutState::Idle {
-                    mut substream,
-                    mut next_ping,
-                } => {
-                    // Poll the future that fires when we need to ping the node again.
-                    poll_delay!(next_ping => {
-                        NotReady => {
-                            self.out_state = OutState::Idle { substream, next_ping };
-                            return Ok(Async::NotReady);
-                        },
-                        Ready => {
-                            let expires = Delay::new(Instant::now() + self.ping_timeout);
-                            substream.ping(Instant::now());
-                            self.out_state = OutState::WaitingForPong { substream, expires };
-                            return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(OutEvent::PingStart))));
-                        },
-                    })
-                }
+            OutState::Idle { mut substream, mut next_ping } => {
+                // Poll the future that fires when we need to ping the node again.
+                poll_delay!(next_ping => {
+                    NotReady => {
+                        self.out_state = OutState::Idle { substream, next_ping };
+                        Ok(Async::NotReady)
+                    },
+                    Ready => {
+                        let expires = Delay::new(Instant::now() + self.ping_timeout);
+                        substream.ping(Instant::now());
+                        self.out_state = OutState::WaitingForPong { substream, expires };
+                        Ok(Async::Ready(ProtocolsHandlerEvent::Custom(OutEvent::PingStart)))
+                    },
+                })
             }
         }
     }

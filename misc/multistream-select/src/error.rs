@@ -20,7 +20,7 @@
 
 //! Main `ProtocolChoiceError` error.
 
-use protocol::MultistreamSelectError;
+use crate::protocol::MultistreamSelectError;
 use std::error;
 use std::fmt;
 use std::io::Error as IoError;

@@ -18,36 +18,37 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use algo_support;
+use crate::algo_support;
 use bytes::BytesMut;
-use codec::{full_codec, FullCodec, Hmac};
-use stream_cipher::{Cipher, ctr};
+use crate::codec::{full_codec, FullCodec, Hmac};
+use crate::stream_cipher::{Cipher, ctr};
 use ed25519_dalek::{PublicKey as Ed25519PublicKey, Signature as Ed25519Signature};
-use error::SecioError;
-use exchange;
+use crate::error::SecioError;
+use crate::exchange;
 use futures::future;
 use futures::sink::Sink;
 use futures::stream::Stream;
 use futures::Future;
 use libp2p_core::PublicKey;
+use log::{debug, trace};
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
 use protobuf::Message as ProtobufMessage;
 use rand::{self, RngCore};
-#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+#[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
 use ring::signature::{RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256, verify as ring_verify};
-#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+#[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
 use ring::rand::SystemRandom;
 #[cfg(feature = "secp256k1")]
 use secp256k1;
 use sha2::{Digest as ShaDigestTrait, Sha256, Sha512};
 use std::cmp::{self, Ordering};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use structs_proto::{Exchange, Propose};
+use crate::structs_proto::{Exchange, Propose};
 use tokio_io::codec::length_delimited;
 use tokio_io::{AsyncRead, AsyncWrite};
-#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+#[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
 use untrusted::Input as UntrustedInput;
-use {KeyAgreement, SecioConfig, SecioKeyPairInner};
+use crate::{KeyAgreement, SecioConfig, SecioKeyPairInner};
 
 // This struct contains the whole context of a handshake, and is filled progressively
 // throughout the various parts of the handshake.
@@ -307,10 +308,8 @@ impl HandshakeContext<Ephemeral> {
 /// On success, returns an object that implements the `Sink` and `Stream` trait whose items are
 /// buffers of data, plus the public key of the remote, plus the ephemeral public key used during
 /// negotiation.
-pub fn handshake<'a, S: 'a>(
-    socket: S,
-    config: SecioConfig
-) -> Box<Future<Item = (FullCodec<S>, PublicKey, Vec<u8>), Error = SecioError> + Send + 'a>
+pub fn handshake<'a, S: 'a>(socket: S, config: SecioConfig)
+    -> impl Future<Item = (FullCodec<S>, PublicKey, Vec<u8>), Error = SecioError>
 where
     S: AsyncRead + AsyncWrite + Send,
 {
@@ -320,7 +319,7 @@ where
         .length_field_length(4)
         .new_framed(socket);
 
-    let future = future::ok::<_, SecioError>(HandshakeContext::new(config))
+    future::ok::<_, SecioError>(HandshakeContext::new(config))
         .and_then(|context| {
             // Generate our nonce.
             let context = context.with_local()?;
@@ -369,7 +368,7 @@ where
                 exchange.set_epubkey(tmp_pub_key);
                 exchange.set_signature({
                     match context.config.key.inner {
-                        #[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+                        #[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
                         SecioKeyPairInner::Rsa { ref private, .. } => {
                             let mut state = match RSASigningState::new(private.clone()) {
                                 Ok(s) => s,
@@ -402,7 +401,7 @@ where
                             let secp256k1 = secp256k1::Secp256k1::signing_only();
                             secp256k1
                                 .sign(&message, private)
-                                .serialize_der(&secp256k1)
+                                .serialize_der()
                         },
                     }
                 });
@@ -453,7 +452,7 @@ where
             data_to_verify.extend_from_slice(remote_exch.get_epubkey());
 
             match context.state.remote.public_key {
-                #[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+                #[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
                 PublicKey::Rsa(ref remote_public_key) => {
                     // TODO: The ring library doesn't like some stuff in our DER public key,
                     //       therefore we scrap the first 24 bytes of the key. A proper fix would
@@ -493,8 +492,8 @@ where
                     let message = secp256k1::Message::from_slice(data_to_verify.as_ref())
                         .expect("digest output length doesn't match secp256k1 input length");
                     let secp256k1 = secp256k1::Secp256k1::verification_only();
-                    let signature = secp256k1::Signature::from_der(&secp256k1, remote_exch.get_signature());
-                    let remote_public_key = secp256k1::key::PublicKey::from_slice(&secp256k1, remote_public_key);
+                    let signature = secp256k1::Signature::from_der(remote_exch.get_signature());
+                    let remote_public_key = secp256k1::key::PublicKey::from_slice(remote_public_key);
                     if let (Ok(signature), Ok(remote_public_key)) = (signature, remote_public_key) {
                         match secp256k1.verify(&message, &signature, &remote_public_key) {
                             Ok(()) => (),
@@ -508,7 +507,7 @@ where
                         return Err(SecioError::SignatureVerificationFailed)
                     }
                 },
-                #[cfg(not(all(feature = "ring", not(target_os = "emscripten"))))]
+                #[cfg(not(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown")))))]
                 PublicKey::Rsa(_) => {
                     debug!("support for RSA was disabled at compile-time");
                     return Err(SecioError::SignatureVerificationFailed);
@@ -570,7 +569,14 @@ where
                 (cipher, hmac)
             };
 
-            let codec = full_codec(socket, encoding_cipher, encoding_hmac, decoding_cipher, decoding_hmac);
+            let codec = full_codec(
+                socket,
+                encoding_cipher,
+                encoding_hmac,
+                decoding_cipher,
+                decoding_hmac,
+                context.state.remote.local.nonce.to_vec()
+            );
             Ok((codec, context))
         })
         // We send back their nonce to check if the connection works.
@@ -578,32 +584,9 @@ where
             let remote_nonce = context.state.remote.nonce.clone();
             trace!("checking encryption by sending back remote's nonce");
             codec.send(BytesMut::from(remote_nonce))
-                .map(|s| (s, context))
+                .map(|s| (s, context.state.remote.public_key, context.state.local_tmp_pub_key))
                 .from_err()
         })
-        // Check that the received nonce is correct.
-        .and_then(|(codec, context)| {
-            codec.into_future()
-                .map_err(|(e, _)| e)
-                .and_then(move |(nonce, rest)| {
-                    match nonce {
-                        Some(ref n) if n == &context.state.remote.local.nonce => {
-                            trace!("secio handshake success");
-                            Ok((rest, context.state.remote.public_key, context.state.local_tmp_pub_key))
-                        },
-                        None => {
-                            debug!("unexpected eof during nonce check");
-                            Err(IoError::new(IoErrorKind::BrokenPipe, "unexpected eof").into())
-                        },
-                        _ => {
-                            debug!("failed nonce verification with remote");
-                            Err(SecioError::NonceVerificationFailed)
-                        }
-                    }
-                })
-        });
-
-    Box::new(future)
 }
 
 /// Custom algorithm translated from reference implementations. Needs to be the same algorithm
@@ -645,21 +628,19 @@ where ::hmac::Hmac<D>: Clone {
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio;
-    extern crate tokio_tcp;
-    use self::tokio::runtime::current_thread::Runtime;
-    use self::tokio_tcp::TcpListener;
-    use self::tokio_tcp::TcpStream;
+    use bytes::BytesMut;
+    use tokio::runtime::current_thread::Runtime;
+    use tokio_tcp::{TcpListener, TcpStream};
+    use crate::SecioError;
     use super::handshake;
     use super::stretch_key;
-    use algo_support::Digest;
-    use codec::Hmac;
-    use futures::Future;
-    use futures::Stream;
-    use {SecioConfig, SecioKeyPair};
+    use crate::algo_support::Digest;
+    use crate::codec::Hmac;
+    use futures::prelude::*;
+    use crate::{SecioConfig, SecioKeyPair};
 
     #[test]
-    #[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+    #[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
     fn handshake_with_self_succeeds_rsa() {
         let key1 = {
             let private = include_bytes!("../tests/test-rsa-private-key.pk8");
@@ -707,11 +688,29 @@ mod tests {
             .incoming()
             .into_future()
             .map_err(|(e, _)| e.into())
-            .and_then(move |(connec, _)| handshake(connec.unwrap(), key1));
+            .and_then(move |(connec, _)| handshake(connec.unwrap(), key1))
+            .and_then(|(connec, _, _)| {
+                let (sink, stream) = connec.split();
+                stream
+                    .filter(|v| !v.is_empty())
+                    .forward(sink.with(|v| Ok::<_, SecioError>(BytesMut::from(v))))
+            });
 
         let client = TcpStream::connect(&listener_addr)
             .map_err(|e| e.into())
-            .and_then(move |stream| handshake(stream, key2));
+            .and_then(move |stream| handshake(stream, key2))
+            .and_then(|(connec, _, _)| {
+                connec.send("hello".into())
+                    .from_err()
+                    .and_then(|connec| {
+                        connec.filter(|v| !v.is_empty())
+                            .into_future()
+                            .map(|(v, _)| v)
+                            .map_err(|(e, _)| e)
+                    })
+                    .map(|v| assert_eq!(b"hello", &v.unwrap()[..]))
+            });
+
         let mut rt = Runtime::new().unwrap();
         let _ = rt.block_on(server.join(client)).unwrap();
     }

@@ -29,7 +29,7 @@
 //! A `Multiaddr` is a way to reach a node. Examples:
 //!
 //! * `/ip4/80.123.90.4/tcp/5432`
-//! * `/ip6/[::1]/udp/10560`
+//! * `/ip6/[::1]/udp/10560/quic`
 //! * `/unix//path/to/socket`
 //!
 //! ## Transport
@@ -46,21 +46,21 @@
 //!
 //! ```rust
 //! use libp2p::{Multiaddr, Transport, tcp::TcpConfig};
-//! let tcp_transport = TcpConfig::new();
+//! let tcp = TcpConfig::new();
 //! let addr: Multiaddr = "/ip4/98.97.96.95/tcp/20500".parse().expect("invalid multiaddr");
-//! let _outgoing_connec = tcp_transport.dial(addr);
+//! let _outgoing_connec = tcp.dial(addr);
 //! // Note that `_outgoing_connec` is a `Future`, and therefore doesn't do anything by itself
 //! // unless it is run through a tokio runtime.
 //! ```
 //!
-//! The easiest way to create a transport is to use the `CommonTransport` struct. This struct
-//! provides support for the most common protocols.
+//! The easiest way to create a transport is to use the `build_development_transport` function.
+//! This function provides support for the most common protocols.
 //!
 //! Example:
 //!
 //! ```rust
-//! use libp2p::CommonTransport;
-//! let _transport = CommonTransport::new();
+//! let key = libp2p::secio::SecioKeyPair::ed25519_generated().unwrap();
+//! let _transport = libp2p::build_development_transport(key);
 //! // _transport.dial(...);
 //! ```
 //!
@@ -69,31 +69,17 @@
 //! # Connection upgrades
 //!
 //! Once a connection has been opened with a remote through a `Transport`, it can be *upgraded*.
-//! This consists in negotiating a protocol with the remote (through the `multistream-select`
-//! protocol), and applying that protocol on the socket.
-//!
-//! Example upgrades:
-//!
-//! - Adding a security layer on top of the connection.
-//! - Applying multiplexing, so that a connection can be split into multiple substreams.
-//! - Negotiating a specific protocol, such as *ping* or *kademlia*.
-//!
-//! A potential connection upgrade is represented with the `ConnectionUpgrade` trait. The trait
-//! consists in a protocol name plus a method that turns the socket into an `Output` object whose
-//! nature and type is specific to each upgrade. For example, if you upgrade a connection with a
-//! security layer, the output might contain an encrypted stream and the public key of the remote.
-//!
-//! You can combine a `Transport` with a compatible `ConnectionUpgrade` in order to obtain another
-//! `Transport` that yields the output of the upgrade.
+//! This consists in negotiating a protocol with the remote (through a negotiation protocol
+//! `multistream-select`), and applying that protocol on the socket.
 //!
 //! Example:
 //!
 //! ```rust
-//! # #[cfg(all(not(target_os = "emscripten"), feature = "libp2p-secio"))] {
+//! # #[cfg(all(any(target_os = "emscripten", target_os = "unknown"), feature = "libp2p-secio"))] {
 //! use libp2p::{Transport, tcp::TcpConfig, secio::{SecioConfig, SecioKeyPair}};
-//! let tcp_transport = TcpConfig::new();
+//! let tcp = TcpConfig::new();
 //! let secio_upgrade = SecioConfig::new(SecioKeyPair::ed25519_generated().unwrap());
-//! let with_security = tcp_transport.with_upgrade(secio_upgrade);
+//! let with_security = tcp.with_upgrade(secio_upgrade);
 //! // let _ = with_security.dial(...);
 //! // `with_security` also implements the `Transport` trait, and all the connections opened
 //! // through it will automatically negotiate the `secio` protocol.
@@ -102,12 +88,29 @@
 //!
 //! See the documentation of the `libp2p-core` crate for more details about upgrades.
 //!
+//! ## Topology
+//!
+//! The `Topology` trait is implemented for types that hold the layout of a network. When other
+//! components need the network layout to operate, they are passed an instance of a `Topology`.
+//!
+//! The most basic implementation of `Topology` is the `MemoryTopology`, which is essentially a
+//! `HashMap`. Creating your own `Topology` makes it possible to add for example a reputation
+//! system.
+//!
+//! ## Network behaviour
+//!
+//! The `NetworkBehaviour` trait is implemented on types that provide some capability to the
+//! network. Examples of network behaviours include: periodically ping the nodes we are connected
+//! to, periodically ask for information from the nodes we are connected to, connect to a DHT and
+//! make queries to it, propagate messages to the nodes we are connected to (pubsub), and so on.
+//!
 //! ## Swarm
 //!
-//! Once you have created an object that implements the `Transport` trait, you can put it in a
-//! *swarm*. This is done by calling the `swarm()` freestanding function with the transport
-//! alongside with a function or a closure that will turn the output of the upgrade (usually an
-//! actual protocol, as explained above) into a `Future` producing `()`.
+//! The `Swarm` struct contains all active and pending connections to remotes and manages the
+//! state of all the substreams that have been opened, and all the upgrades that were built upon
+//! these substreams.
+//!
+//! It combines a `Transport`, a `NetworkBehaviour` and a `Topology` together.
 //!
 //! See the documentation of the `libp2p-core` crate for more details about creating a swarm.
 //!
@@ -119,15 +122,11 @@
 //!
 //! - Create a *base* implementation of `Transport` that combines all the protocols you want and
 //!   the upgrades you want, such as the security layer and multiplexing.
-//! - Create structs that implement the `ConnectionUpgrade` trait for the protocols you want to
-//!   create, or use the protocols provided by the `libp2p` crate.
-//! - Create a swarm that combines your base transport and all the upgrades and that handles the
-//!   behaviour that happens.
-//! - Use this swarm to dial and listen.
-//!
-//! You probably also want to have some sort of nodes discovery mechanism, so that you
-//! automatically connect to nodes of the network. The details of this haven't been fleshed out
-//! in libp2p and will be written later.
+//! - Create a struct that implements the `NetworkBehaviour` trait and that combines all the
+//!   network behaviours that you want.
+//! - Create and implement the `Topology` trait that to store the topology of the network.
+//! - Create a swarm that combines your base transport, the network behaviour, and the topology.
+//! - This swarm can now be polled with the `tokio` library in order to start the network.
 //!
 
 pub extern crate bytes;
@@ -141,21 +140,22 @@ extern crate libp2p_core_derive;
 extern crate tokio_executor;
 
 pub extern crate libp2p_core as core;
-#[cfg(not(target_os = "emscripten"))]
+#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 pub extern crate libp2p_dns as dns;
 pub extern crate libp2p_identify as identify;
 pub extern crate libp2p_kad as kad;
 pub extern crate libp2p_floodsub as floodsub;
 pub extern crate libp2p_mplex as mplex;
-pub extern crate libp2p_peerstore as peerstore;
+#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+pub extern crate libp2p_mdns as mdns;
 pub extern crate libp2p_ping as ping;
+#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 pub extern crate libp2p_quic as quic;
+pub extern crate libp2p_plaintext as plaintext;
 pub extern crate libp2p_ratelimit as ratelimit;
-pub extern crate libp2p_relay as relay;
 pub extern crate libp2p_secio as secio;
-#[cfg(not(target_os = "emscripten"))]
-pub extern crate libp2p_tcp_transport as tcp;
-pub extern crate libp2p_transport_timeout as transport_timeout;
+#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+pub extern crate libp2p_tcp as tcp;
 pub extern crate libp2p_uds as uds;
 #[cfg(feature = "libp2p-websocket")]
 pub extern crate libp2p_websocket as websocket;
@@ -166,31 +166,70 @@ mod transport_ext;
 pub mod simple;
 
 pub use self::core::{
-    Transport, PeerId,
+    Transport, PeerId, Swarm,
+    transport::TransportError,
     upgrade::{InboundUpgrade, InboundUpgradeExt, OutboundUpgrade, OutboundUpgradeExt}
 };
 pub use libp2p_core_derive::NetworkBehaviour;
 pub use self::multiaddr::Multiaddr;
 pub use self::simple::SimpleProtocol;
 pub use self::transport_ext::TransportExt;
-pub use self::transport_timeout::TransportTimeout;
+
+use futures::prelude::*;
+use std::{error, time::Duration};
+
+/// Builds a `Transport` that supports the most commonly-used protocols that libp2p supports.
+///
+/// > **Note**: This `Transport` is not suitable for production usage, as its implementation
+/// >           reserves the right to support additional protocols or remove deprecated protocols.
+#[inline]
+pub fn build_development_transport(local_private_key: secio::SecioKeyPair)
+    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
+{
+     build_tcp_ws_secio_mplex_yamux(local_private_key)
+}
+
+/// Builds an implementation of `Transport` that is suitable for usage with the `Swarm`.
+///
+/// The implementation supports TCP/IP, WebSockets over TCP/IP, secio as the encryption layer,
+/// and mplex or yamux as the multiplexing layer.
+///
+/// > **Note**: If you ever need to express the type of this `Transport`.
+pub fn build_tcp_ws_secio_mplex_yamux(local_private_key: secio::SecioKeyPair)
+    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
+{
+    CommonTransport::new()
+        .with_upgrade(secio::SecioConfig::new(local_private_key))
+        .and_then(move |out, endpoint| {
+            let peer_id = out.remote_key.into_peer_id();
+            let peer_id2 = peer_id.clone();
+            let upgrade = core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new())
+                // TODO: use a single `.map` instead of two maps
+                .map_inbound(move |muxer| (peer_id, muxer))
+                .map_outbound(move |muxer| (peer_id2, muxer));
+
+            core::upgrade::apply(out.stream, upgrade, endpoint)
+                .map(|(id, muxer)| (id, core::muxing::StreamMuxerBox::new(muxer)))
+        })
+        .with_timeout(Duration::from_secs(20))
+}
 
 /// Implementation of `Transport` that supports the most common protocols.
 ///
 /// The list currently is TCP/IP, DNS, and WebSockets. However this list could change in the
 /// future to get new transports.
 #[derive(Debug, Clone)]
-pub struct CommonTransport {
+struct CommonTransport {
     // The actual implementation of everything.
     inner: CommonTransportInner
 }
 
-#[cfg(all(not(target_os = "emscripten"), feature = "libp2p-websocket"))]
-pub type InnerImplementation = core::transport::OrTransport<dns::DnsConfig<tcp::TcpConfig>, websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>>;
-#[cfg(all(not(target_os = "emscripten"), not(feature = "libp2p-websocket")))]
-pub type InnerImplementation = dns::DnsConfig<tcp::TcpConfig>;
-#[cfg(target_os = "emscripten")]
-pub type InnerImplementation = websocket::BrowserWsConfig;
+#[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "libp2p-websocket"))]
+type InnerImplementation = core::transport::OrTransport<dns::DnsConfig<tcp::TcpConfig>, websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>>;
+#[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), not(feature = "libp2p-websocket")))]
+type InnerImplementation = dns::DnsConfig<tcp::TcpConfig>;
+#[cfg(any(target_os = "emscripten", target_os = "unknown"))]
+type InnerImplementation = websocket::BrowserWsConfig;
 
 #[derive(Debug, Clone)]
 struct CommonTransportInner {
@@ -200,7 +239,7 @@ struct CommonTransportInner {
 impl CommonTransport {
     /// Initializes the `CommonTransport`.
     #[inline]
-    #[cfg(not(target_os = "emscripten"))]
+    #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
     pub fn new() -> CommonTransport {
         let transport = tcp::TcpConfig::new();
         let transport = dns::DnsConfig::new(transport);
@@ -217,7 +256,7 @@ impl CommonTransport {
 
     /// Initializes the `CommonTransport`.
     #[inline]
-    #[cfg(target_os = "emscripten")]
+    #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
     pub fn new() -> CommonTransport {
         let inner = websocket::BrowserWsConfig::new();
         CommonTransport {
@@ -228,30 +267,19 @@ impl CommonTransport {
 
 impl Transport for CommonTransport {
     type Output = <InnerImplementation as Transport>::Output;
+    type Error = <InnerImplementation as Transport>::Error;
     type Listener = <InnerImplementation as Transport>::Listener;
     type ListenerUpgrade = <InnerImplementation as Transport>::ListenerUpgrade;
     type Dial = <InnerImplementation as Transport>::Dial;
 
     #[inline]
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        match self.inner.inner.listen_on(addr) {
-            Ok(res) => Ok(res),
-            Err((inner, addr)) => {
-                let trans = CommonTransport { inner: CommonTransportInner { inner: inner } };
-                Err((trans, addr))
-            }
-        }
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+        self.inner.inner.listen_on(addr)
     }
 
     #[inline]
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-        match self.inner.inner.dial(addr) {
-            Ok(res) => Ok(res),
-            Err((inner, addr)) => {
-                let trans = CommonTransport { inner: CommonTransportInner { inner: inner } };
-                Err((trans, addr))
-            }
-        }
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.inner.inner.dial(addr)
     }
 
     #[inline]

@@ -25,7 +25,7 @@ use self::decode::DecoderMiddleware;
 use self::encode::EncoderMiddleware;
 
 use aes_ctr::stream_cipher::StreamCipherCore;
-use algo_support::Digest;
+use crate::algo_support::Digest;
 use hmac::{self, Mac};
 use sha2::{Sha256, Sha512};
 use tokio_io::codec::length_delimited;
@@ -109,31 +109,29 @@ pub fn full_codec<S>(
     encoding_hmac: Hmac,
     cipher_decoder: StreamCipher,
     decoding_hmac: Hmac,
+    remote_nonce: Vec<u8>
 ) -> FullCodec<S>
 where
     S: AsyncRead + AsyncWrite,
 {
     let encoder = EncoderMiddleware::new(socket, cipher_encoding, encoding_hmac);
-    DecoderMiddleware::new(encoder, cipher_decoder, decoding_hmac)
+    DecoderMiddleware::new(encoder, cipher_decoder, decoding_hmac, remote_nonce)
 }
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio;
-    extern crate tokio_tcp;
-    use self::tokio::runtime::current_thread::Runtime;
-    use self::tokio_tcp::TcpListener;
-    use self::tokio_tcp::TcpStream;
-    use stream_cipher::{ctr, Cipher};
+    use tokio::runtime::current_thread::Runtime;
+    use tokio_tcp::{TcpListener, TcpStream};
+    use crate::stream_cipher::{ctr, Cipher};
     use super::full_codec;
     use super::DecoderMiddleware;
     use super::EncoderMiddleware;
     use super::Hmac;
-    use algo_support::Digest;
+    use crate::algo_support::Digest;
+    use crate::error::SecioError;
     use bytes::BytesMut;
-    use error::SecioError;
     use futures::sync::mpsc::channel;
-    use futures::{Future, Sink, Stream};
+    use futures::{Future, Sink, Stream, stream};
     use rand;
     use std::io::Error as IoError;
     use tokio_io::codec::length_delimited::Framed;
@@ -159,6 +157,7 @@ mod tests {
             data_rx,
             ctr(Cipher::Aes256, &cipher_key, &NULL_IV[..]),
             Hmac::from_key(Digest::Sha256, &hmac_key),
+            Vec::new()
         );
 
         let data = b"hello world";
@@ -181,20 +180,23 @@ mod tests {
         let hmac_key_clone = hmac_key.clone();
         let data = b"hello world";
         let data_clone = data.clone();
+        let nonce = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
         let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap();
         let listener_addr = listener.local_addr().unwrap();
 
-        let server = listener.incoming().into_future().map_err(|(e, _)| e).map(
-            move |(connec, _)| {
-                let connec = Framed::new(connec.unwrap());
-
+        let nonce2 = nonce.clone();
+        let server = listener.incoming()
+            .into_future()
+            .map_err(|(e, _)| e)
+            .map(move |(connec, _)| {
                 full_codec(
-                    connec,
+                    Framed::new(connec.unwrap()),
                     ctr(cipher, &cipher_key[..key_size], &NULL_IV[..]),
                     Hmac::from_key(Digest::Sha256, &hmac_key),
                     ctr(cipher, &cipher_key[..key_size], &NULL_IV[..]),
                     Hmac::from_key(Digest::Sha256, &hmac_key),
+                    nonce2
                 )
             },
         );
@@ -202,14 +204,13 @@ mod tests {
         let client = TcpStream::connect(&listener_addr)
             .map_err(|e| e.into())
             .map(move |stream| {
-                let stream = Framed::new(stream);
-
                 full_codec(
-                    stream,
+                    Framed::new(stream),
                     ctr(cipher, &cipher_key_clone[..key_size], &NULL_IV[..]),
                     Hmac::from_key(Digest::Sha256, &hmac_key_clone),
                     ctr(cipher, &cipher_key_clone[..key_size], &NULL_IV[..]),
                     Hmac::from_key(Digest::Sha256, &hmac_key_clone),
+                    Vec::new()
                 )
             });
 
@@ -218,12 +219,11 @@ mod tests {
             .from_err::<SecioError>()
             .and_then(|(server, client)| {
                 client
-                    .send(BytesMut::from(&data_clone[..]))
+                    .send_all(stream::iter_ok::<_, IoError>(vec![nonce.into(), data_clone[..].into()]))
                     .map(move |_| server)
                     .from_err()
             })
-            .and_then(|server| server.into_future().map_err(|(e, _)| e.into()))
-            .map(|recved| recved.0.unwrap().to_vec());
+            .and_then(|server| server.concat2().from_err());
 
         let mut rt = Runtime::new().unwrap();
         let received = rt.block_on(fin).unwrap();

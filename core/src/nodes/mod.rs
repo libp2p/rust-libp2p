@@ -18,15 +18,21 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! Low-level networking primitives.
+//!
+//! Contains structs that are aiming at providing very precise control over what happens over the
+//! network.
+//!
+//! The more complete and highest-level struct is the `RawSwarm`. The `RawSwarm` directly or
+//! indirectly uses all the other structs of this module.
+
 pub mod collection;
 pub mod handled_node;
 pub mod handled_node_tasks;
 pub mod listeners;
 pub mod node;
 pub mod raw_swarm;
-pub mod swarm;
 
 pub use self::node::Substream;
 pub use self::handled_node::{NodeHandlerEvent, NodeHandlerEndpoint};
 pub use self::raw_swarm::{ConnectedPoint, Peer, RawSwarm, RawSwarmEvent};
-pub use self::swarm::{Swarm, NetworkBehavior, NetworkBehaviorAction};

@@ -23,12 +23,14 @@
 use bytes::BytesMut;
 use super::{Hmac, StreamCipher};
 
-use error::SecioError;
+use crate::error::SecioError;
 use futures::sink::Sink;
 use futures::stream::Stream;
 use futures::Async;
 use futures::Poll;
 use futures::StartSend;
+use log::debug;
+use std::cmp::min;
 
 /// Wraps around a `Stream<Item = BytesMut>`. The buffers produced by the underlying stream
 /// are decoded using the cipher and hmac.
@@ -42,19 +44,21 @@ pub struct DecoderMiddleware<S> {
     cipher_state: StreamCipher,
     hmac: Hmac,
     raw_stream: S,
+    nonce: Vec<u8>
 }
 
 impl<S> DecoderMiddleware<S> {
+    /// Create a new decoder for the given stream, using the provided cipher and HMAC.
+    ///
+    /// The `nonce` parameter denotes a sequence of bytes which are expected to be found at the
+    /// beginning of the stream and are checked for equality.
     #[inline]
-    pub fn new(
-        raw_stream: S,
-        cipher: StreamCipher,
-        hmac: Hmac,
-    ) -> DecoderMiddleware<S> {
+    pub fn new(raw_stream: S, cipher: StreamCipher, hmac: Hmac, nonce: Vec<u8>) -> DecoderMiddleware<S> {
         DecoderMiddleware {
             cipher_state: cipher,
             hmac,
             raw_stream,
+            nonce
         }
     }
 }
@@ -96,6 +100,15 @@ where
         self.cipher_state
             .try_apply_keystream(&mut data_buf)
             .map_err::<SecioError,_>(|e|e.into())?;
+
+        if !self.nonce.is_empty() {
+            let n = min(data_buf.len(), self.nonce.len());
+            if &data_buf[.. n] != &self.nonce[.. n] {
+                return Err(SecioError::NonceVerificationFailed)
+            }
+            self.nonce.drain(.. n);
+            data_buf.drain(.. n);
+        }
 
         Ok(Async::Ready(Some(data_buf)))
     }

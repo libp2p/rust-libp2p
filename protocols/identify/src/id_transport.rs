@@ -20,9 +20,10 @@
 
 //! Contains the `IdentifyTransport` type.
 
-use futures::prelude::*;
+use futures::{future, prelude::*, stream, AndThen, MapErr};
 use libp2p_core::{
     Multiaddr, PeerId, PublicKey, muxing, Transport,
+    transport::{TransportError, upgrade::TransportUpgradeError},
     upgrade::{self, OutboundUpgradeApply, UpgradeError}
 };
 use protocol::{RemoteInfo, IdentifyProtocolConfig};
@@ -56,45 +57,36 @@ impl<TTrans> IdentifyTransport<TTrans> {
     }
 }
 
-// TODO: don't use boxes
 impl<TTrans, TMuxer> Transport for IdentifyTransport<TTrans>
 where
     TTrans: Transport<Output = TMuxer>,
+    TTrans::Error: 'static,
     TMuxer: muxing::StreamMuxer + Send + Sync + 'static,      // TODO: remove unnecessary bounds
     TMuxer::Substream: Send + Sync + 'static,      // TODO: remove unnecessary bounds
-    TMuxer::OutboundSubstream: Send + 'static,      // TODO: remove unnecessary bounds
-    TTrans::Dial: Send + Sync + 'static,
-    TTrans::Listener: Send + 'static,
-    TTrans::ListenerUpgrade: Send + 'static,
 {
     type Output = (PeerId, TMuxer);
-    type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError> + Send>;
-    type ListenerUpgrade = Box<Future<Item = Self::Output, Error = IoError> + Send>;
-    type Dial = Box<Future<Item = Self::Output, Error = IoError> + Send>;
+    type Error = TransportUpgradeError<TTrans::Error, IoError>;     // TODO: better than IoError
+    type Listener = stream::Empty<(Self::ListenerUpgrade, Multiaddr), Self::Error>;
+    type ListenerUpgrade = future::Empty<Self::Output, Self::Error>;
+    type Dial = AndThen<
+        MapErr<TTrans::Dial, fn(TTrans::Error) -> Self::Error>,
+        MapErr<IdRetriever<TMuxer>, fn(UpgradeError<IoError>) -> Self::Error>,
+        fn(TMuxer) -> MapErr<IdRetriever<TMuxer>, fn(UpgradeError<IoError>) -> Self::Error>
+    >;
 
     #[inline]
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        Err((self, addr))
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+        Err(TransportError::MultiaddrNotSupported(addr))
     }
 
     #[inline]
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         // We dial a first time the node.
-        let dial = match self.transport.dial(addr.clone()) {
-            Ok(d) => d,
-            Err((transport, addr)) => {
-                let id = IdentifyTransport {
-                    transport,
-                };
-                return Err((id, addr));
-            }
-        };
-
-        let dial = dial.and_then(move |muxer| {
-            IdRetriever::new(muxer, IdentifyProtocolConfig).map_err(|e| e.into_io_error())
-        });
-
-        Ok(Box::new(dial) as Box<_>)
+        let dial = self.transport.dial(addr)
+            .map_err(|err| err.map(TransportUpgradeError::Transport))?;
+        Ok(dial.map_err::<fn(_) -> _, _>(TransportUpgradeError::Transport).and_then(|muxer| {
+            IdRetriever::new(muxer, IdentifyProtocolConfig).map_err(TransportUpgradeError::Upgrade)
+        }))
     }
 
     #[inline]
@@ -105,7 +97,7 @@ where
 
 /// Implementation of `Future` that asks the remote of its `PeerId`.
 // TODO: remove unneeded bounds
-struct IdRetriever<TMuxer>
+pub struct IdRetriever<TMuxer>
 where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
       TMuxer::Substream: Send,
 {
@@ -187,9 +179,9 @@ where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
                     // Here is a tricky part: we need to get back the muxer in order to return
                     // it, but it is in an `Arc`.
                     let unwrapped = Arc::try_unwrap(muxer).unwrap_or_else(|_| {
-                        panic!("we clone the Arc only to put it into substreams ; once in the \
-                                Finishing state, no substream or upgrade exists anymore ; \
-                                therefore there exists only one instance of the Arc ; qed")
+                        panic!("We clone the Arc only to put it into substreams. Once in the \
+                                Finishing state, no substream or upgrade exists anymore. \
+                                Therefore, there exists only one instance of the Arc. QED")
                     });
 
                     // We leave `Poisoned` as the state when returning.
