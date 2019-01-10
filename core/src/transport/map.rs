@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{nodes::raw_swarm::ConnectedPoint, transport::Transport};
+use crate::{nodes::raw_swarm::ConnectedPoint, transport::Transport, transport::TransportError};
 use futures::{prelude::*, try_ready};
 use multiaddr::Multiaddr;
 
@@ -39,35 +39,28 @@ where
     F: FnOnce(T::Output, ConnectedPoint) -> D + Clone
 {
     type Output = D;
+    type Error = T::Error;
     type Listener = MapStream<T::Listener, F>;
     type ListenerUpgrade = MapFuture<T::ListenerUpgrade, F>;
     type Dial = MapFuture<T::Dial, F>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        match self.transport.listen_on(addr) {
-            Ok((stream, listen_addr)) => {
-                let stream = MapStream {
-                    stream,
-                    listen_addr: listen_addr.clone(),
-                    fun: self.fun
-                };
-                Ok((stream, listen_addr))
-            }
-            Err((transport, addr)) => Err((Map { transport, fun: self.fun }, addr)),
-        }
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+        let (stream, listen_addr) = self.transport.listen_on(addr)?;
+        let stream = MapStream {
+            stream,
+            listen_addr: listen_addr.clone(),
+            fun: self.fun
+        };
+        Ok((stream, listen_addr))
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-        match self.transport.dial(addr.clone()) {
-            Ok(future) => {
-                let p = ConnectedPoint::Dialer { address: addr };
-                Ok(MapFuture {
-                    inner: future,
-                    args: Some((self.fun, p))
-                })
-            }
-            Err((transport, addr)) => Err((Map { transport, fun: self.fun }, addr)),
-        }
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let future = self.transport.dial(addr.clone())?;
+        let p = ConnectedPoint::Dialer { address: addr };
+        Ok(MapFuture {
+            inner: future,
+            args: Some((self.fun, p))
+        })
     }
 
     #[inline]

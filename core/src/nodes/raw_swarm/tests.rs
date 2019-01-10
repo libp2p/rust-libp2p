@@ -198,8 +198,7 @@ fn querying_for_pending_peer() {
     assert_matches!(peer, Peer::NotConnected(PeerNotConnected{ .. }));
     let addr = "/memory".parse().expect("bad multiaddr");
     let pending_peer = peer.as_not_connected().unwrap().connect(addr, Handler::default());
-    assert!(pending_peer.is_ok());
-    assert_matches!(pending_peer, Ok(PeerPendingConnect { .. } ));
+    assert_matches!(pending_peer, PeerPendingConnect { .. });
 }
 
 #[test]
@@ -307,8 +306,7 @@ fn known_peer_that_is_unreachable_yields_dial_error() {
         assert_matches!(peer, Peer::NotConnected(PeerNotConnected{ .. }));
         let addr = "/memory".parse::<Multiaddr>().expect("bad multiaddr");
         let pending_peer = peer.as_not_connected().unwrap().connect(addr, Handler::default());
-        assert!(pending_peer.is_ok());
-        assert_matches!(pending_peer, Ok(PeerPendingConnect { .. } ));
+        assert_matches!(pending_peer, PeerPendingConnect { .. });
     }
     let mut rt = Runtime::new().unwrap();
     // Drive it forward until we hear back from the node.
@@ -349,7 +347,7 @@ fn yields_node_error_when_there_is_an_error_after_successful_connect() {
         let mut handler = Handler::default();
         // Force an error
         handler.next_states = vec![ HandlerState::Err ];
-        peer.as_not_connected().unwrap().connect(addr, handler).expect("can connect unconnected peer");
+        peer.as_not_connected().unwrap().connect(addr, handler);
     }
 
     // Ensure we run on a single thread
@@ -403,7 +401,7 @@ fn yields_node_closed_when_the_node_closes_after_successful_connect() {
         let mut handler = Handler::default();
         // Force handler to close
         handler.next_states = vec![ HandlerState::Ready(None) ];
-        peer.as_not_connected().unwrap().connect(addr, handler).expect("can connect unconnected peer");
+        peer.as_not_connected().unwrap().connect(addr, handler);
     }
 
     // Ensure we run on a single thread

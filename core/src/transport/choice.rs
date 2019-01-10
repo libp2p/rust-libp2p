@@ -18,9 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::either::{EitherListenStream, EitherOutput, EitherFuture};
+use crate::either::{EitherListenStream, EitherOutput, EitherError, EitherFuture};
+use crate::transport::{Transport, TransportError};
 use multiaddr::Multiaddr;
-use crate::transport::Transport;
 
 /// Struct returned by `or_transport()`.
 #[derive(Debug, Copy, Clone)]
@@ -34,36 +34,45 @@ impl<A, B> OrTransport<A, B> {
 
 impl<A, B> Transport for OrTransport<A, B>
 where
-    A: Transport,
     B: Transport,
+    A: Transport,
 {
     type Output = EitherOutput<A::Output, B::Output>;
+    type Error = EitherError<A::Error, B::Error>;
     type Listener = EitherListenStream<A::Listener, B::Listener>;
     type ListenerUpgrade = EitherFuture<A::ListenerUpgrade, B::ListenerUpgrade>;
     type Dial = EitherFuture<A::Dial, B::Dial>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        let (first, addr) = match self.0.listen_on(addr) {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+        let addr = match self.0.listen_on(addr) {
             Ok((connec, addr)) => return Ok((EitherListenStream::First(connec), addr)),
-            Err(err) => err,
+            Err(TransportError::MultiaddrNotSupported(addr)) => addr,
+            Err(TransportError::Other(err)) => return Err(TransportError::Other(EitherError::A(err))),
         };
 
-        match self.1.listen_on(addr) {
-            Ok((connec, addr)) => Ok((EitherListenStream::Second(connec), addr)),
-            Err((second, addr)) => Err((OrTransport(first, second), addr)),
-        }
+        let addr = match self.1.listen_on(addr) {
+            Ok((connec, addr)) => return Ok((EitherListenStream::Second(connec), addr)),
+            Err(TransportError::MultiaddrNotSupported(addr)) => addr,
+            Err(TransportError::Other(err)) => return Err(TransportError::Other(EitherError::B(err))),
+        };
+
+        Err(TransportError::MultiaddrNotSupported(addr))
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-        let (first, addr) = match self.0.dial(addr) {
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let addr = match self.0.dial(addr) {
             Ok(connec) => return Ok(EitherFuture::First(connec)),
-            Err(err) => err,
+            Err(TransportError::MultiaddrNotSupported(addr)) => addr,
+            Err(TransportError::Other(err)) => return Err(TransportError::Other(EitherError::A(err))),
         };
 
-        match self.1.dial(addr) {
-            Ok(connec) => Ok(EitherFuture::Second(connec)),
-            Err((second, addr)) => Err((OrTransport(first, second), addr)),
-        }
+        let addr = match self.1.dial(addr) {
+            Ok(connec) => return Ok(EitherFuture::Second(connec)),
+            Err(TransportError::MultiaddrNotSupported(addr)) => addr,
+            Err(TransportError::Other(err)) => return Err(TransportError::Other(EitherError::B(err))),
+        };
+
+        Err(TransportError::MultiaddrNotSupported(addr))
     }
 
     #[inline]

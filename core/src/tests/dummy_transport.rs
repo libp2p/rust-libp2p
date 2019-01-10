@@ -28,7 +28,7 @@ use futures::{
     stream,
 };
 use std::io;
-use crate::{Multiaddr, PeerId, Transport};
+use crate::{Multiaddr, PeerId, Transport, transport::TransportError};
 use crate::tests::dummy_muxer::DummyMuxer;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -68,11 +68,12 @@ impl DummyTransport {
 }
 impl Transport for DummyTransport {
     type Output = (PeerId, DummyMuxer);
+    type Error = io::Error;
     type Listener = Box<Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=io::Error> + Send>;
     type ListenerUpgrade = FutureResult<Self::Output, io::Error>;
     type Dial = Box<Future<Item = Self::Output, Error = io::Error> + Send>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)>
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>>
     where
         Self: Sized,
     {
@@ -95,11 +96,11 @@ impl Transport for DummyTransport {
                     }
                 })
             }
-            ListenerState::Error => Err((self, addr2)),
+            ListenerState::Error => Err(TransportError::MultiaddrNotSupported(addr)),
         }
     }
 
-    fn dial(self, _addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)>
+    fn dial(self, _addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>>
     where
         Self: Sized,
     {
