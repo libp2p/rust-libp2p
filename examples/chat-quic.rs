@@ -18,60 +18,91 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! A basic chat application demonstrating libp2p and the mDNS and floodsub protocols.
-//!
-//! Using two terminal windows, start two instances. If you local network allows mDNS, 
-//! they will automatically connect. Type a message in either terminal and hit return: the
-//! message is sent and printed in the other terminal. Close with Ctrl-c.
-//!
-//! You can of course open more terminal windows and add more participants.
-//! Dialing any of the other peers will propagate the new participant to all
-//! chat members and everyone will receive all messages.
-//!
-//! # If they don't automatically connect
-//!
-//! If the nodes don't automatically connect, take note of the listening address of the first
-//! instance and start the second with this address as the first argument. In the first terminal
-//! window, run:
-//!
-//! ```sh
-//! cargo run --example chat
-//! ```
-//!
-//! It will print the PeerId and the listening address, e.g. `Listening on
-//! "/ip4/0.0.0.0/tcp/24915"`
-//!
-//! In the second terminal window, start a new instance of the example with:
-//!
-//! ```sh
-//! cargo run --example chat -- /ip4/127.0.0.1/tcp/24915
-//! ```
-//!
-//! The two nodes then connect. 
-
 extern crate env_logger;
 extern crate futures;
 extern crate libp2p;
+extern crate openssl;
+extern crate quicli;
+extern crate structopt;
 extern crate tokio;
 extern crate void;
 
 use futures::prelude::*;
-use libp2p::{
-    NetworkBehaviour,
-    secio,
-    tokio_codec::{FramedRead, LinesCodec}
-};
+use libp2p::{NetworkBehaviour, core::PublicKey, tokio_codec::{FramedRead, LinesCodec}};
+use openssl::{rsa::Rsa, x509::X509};
+use quicli::prelude::*;
+use structopt::StructOpt;
+use std::io;
 
-fn main() {
+
+// Brief usage instructions:
+//
+// 1. Generate a private RSA key and self-signed certificate for the listener:
+//     $ openssl req -newkey rsa:4096 -nodes -keyout serverkey.pem -x509 -out servercert.pem
+//
+// 2. Generate a private RSA key and self-signed certificate for the dialer:
+//     $ openssl req -newkey rsa:4096 -nodes -keyout clientkey.pem -x509 -out clientcert.pem
+//
+// 3. Get the PeerId of the listener:
+//     $ cargo run --example chat-quic -- peer -c servercert.pem
+//
+// 4. Start the listener:
+//     $ cargo run --example chat-quic -- run -k serverkey.pem -c servercert.pem
+//
+// 5. Notice the listen port in the output of 4. and start the dialer:
+//     $ cargo run --example chat-quic -- run -k clientkey.pem -c clientcert.pem -d "/ip4/127.0.0.1/udp/<port>/quic/p2p/<peer-id>"
+
+#[derive(Debug, StructOpt)]
+enum Cli {
+    #[structopt(name = "peer")]
+    PeerId(PeerId),
+    #[structopt(name = "run")]
+    Run(Run)
+}
+
+#[derive(Debug, StructOpt)]
+struct PeerId {
+    #[structopt(long = "cert", short = "c")]
+    cert: String
+}
+
+#[derive(Debug, StructOpt)]
+struct Run {
+    #[structopt(long = "key", short = "k")]
+    key: String,
+
+    #[structopt(long = "cert", short = "c")]
+    cert: String,
+
+    #[structopt(long = "dial", short = "d")]
+    dial: Option<String>
+}
+
+fn main() -> CliResult {
     env_logger::init();
 
-    // Create a random PeerId
-    let local_key = secio::SecioKeyPair::ed25519_generated().unwrap();
-    let local_pub_key = local_key.to_public_key();
-    println!("Local peer id: {:?}", local_pub_key.clone().into_peer_id());
+    match Cli::from_args() {
+        Cli::PeerId(args) => peerid(args),
+        Cli::Run(args) => run(args)
+    }
+}
+
+fn peerid(args: PeerId) -> CliResult {
+    let certificate = X509::from_pem(read_file(&args.cert)?.as_bytes())?;
+    let public_key = PublicKey::Rsa(certificate.public_key()?.public_key_to_der()?);
+    println!("Peer ID: {}", public_key.into_peer_id().to_base58());
+    Ok(())
+}
+
+fn run(args: Run) -> CliResult {
+    let private_key = Rsa::private_key_from_pem(read_file(&args.key)?.as_bytes())?;
+    let certificate = X509::from_pem(read_file(&args.cert)?.as_bytes())?;
+    let public_key = PublicKey::Rsa(certificate.public_key()?.public_key_to_der()?);
+
+    let rt = tokio::runtime::Runtime::new()?;
 
     // Set up a an encrypted DNS-enabled TCP Transport over the Mplex and Yamux protocols
-    let transport = libp2p::build_development_transport(local_key);
+    let transport = libp2p_quic::QuicConfig::new(rt.executor(), &private_key, &certificate)?;
 
     // Create a Floodsub topic
     let floodsub_topic = libp2p::floodsub::TopicBuilder::new("chat").build();
@@ -81,7 +112,7 @@ fn main() {
     #[derive(NetworkBehaviour)]
     struct MyBehaviour<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite> {
         floodsub: libp2p::floodsub::Floodsub<TSubstream>,
-        mdns: libp2p::mdns::Mdns<TSubstream>,
+        //mdns: libp2p::mdns::Mdns<TSubstream>,
     }
 
     impl<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite> libp2p::core::swarm::NetworkBehaviourEventProcess<void::Void> for MyBehaviour<TSubstream> {
@@ -102,20 +133,20 @@ fn main() {
     // Create a Swarm to manage peers and events
     let mut swarm = {
         let mut behaviour = MyBehaviour {
-            floodsub: libp2p::floodsub::Floodsub::new(local_pub_key.clone().into_peer_id()),
-            mdns: libp2p::mdns::Mdns::new().expect("Failed to create mDNS service"),
+            floodsub: libp2p::floodsub::Floodsub::new(public_key.clone().into_peer_id()),
+            //mdns: libp2p::mdns::Mdns::new()?
         };
 
         behaviour.floodsub.subscribe(floodsub_topic.clone());
-        libp2p::Swarm::new(transport, behaviour, libp2p::core::topology::MemoryTopology::empty(local_pub_key))
+        libp2p::Swarm::new(transport, behaviour, libp2p::core::topology::MemoryTopology::empty(public_key))
     };
 
     // Listen on all interfaces and whatever port the OS assigns
-    let addr = libp2p::Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
+    let addr = libp2p::Swarm::listen_on(&mut swarm, "/ip4/127.0.0.1/udp/0/quic".parse()?)?;
     println!("Listening on {:?}", addr);
 
     // Reach out to another node if specified
-    if let Some(to_dial) = std::env::args().nth(1) {
+    if let Some(to_dial) = args.dial {
         let dialing = to_dial.clone();
         match to_dial.parse() {
             Ok(to_dial) => {
@@ -133,24 +164,25 @@ fn main() {
     let mut framed_stdin = FramedRead::new(stdin, LinesCodec::new());
 
     // Kick it off
-    tokio::run(futures::future::poll_fn(move || -> Result<_, ()> {
+    rt.block_on_all(futures::future::poll_fn(move || {
         loop {
-            match framed_stdin.poll().expect("Error while polling stdin") {
+            match framed_stdin.poll()? {
                 Async::Ready(Some(line)) => swarm.floodsub.publish(&floodsub_topic, line.as_bytes()),
-                Async::Ready(None) => panic!("Stdin closed"),
+                Async::Ready(None) => return Err(io::Error::new(io::ErrorKind::Other, "stdin closed")),
                 Async::NotReady => break,
             };
         }
 
         loop {
-            match swarm.poll().expect("Error while polling swarm") {
-                Async::Ready(Some(_)) => {
-                    
-                },
-                Async::Ready(None) | Async::NotReady => break,
+            match swarm.poll()? {
+                Async::Ready(Some(_)) => {}
+                Async::Ready(None) | Async::NotReady => break
             }
         }
 
         Ok(Async::NotReady)
-    }));
+    }))?;
+
+    Ok(())
 }
+
