@@ -18,9 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#![feature(test)]
-extern crate test;
-
+use criterion::{Bencher, Criterion, criterion_main, criterion_group};
 use futures::prelude::*;
 use libp2p_core::Transport;
 use tokio::{
@@ -28,7 +26,7 @@ use tokio::{
     runtime::current_thread::Runtime
 };
 
-fn secio_and_send_data(bench: &mut test::Bencher, data: &[u8]) {
+fn secio_and_send_data(bench: &mut Bencher, data: &[u8]) {
     let key = libp2p_secio::SecioKeyPair::ed25519_generated().unwrap();
     let transport =
         libp2p_tcp::TcpConfig::new().with_upgrade(libp2p_secio::SecioConfig::new(key));
@@ -68,7 +66,7 @@ fn secio_and_send_data(bench: &mut test::Bencher, data: &[u8]) {
     })
 }
 
-fn raw_tcp_connect_and_send_data(bench: &mut test::Bencher, data: &[u8]) {
+fn raw_tcp_connect_and_send_data(bench: &mut Bencher, data: &[u8]) {
     let transport = libp2p_tcp::TcpConfig::new();
     let data_vec = data.to_vec();
 
@@ -105,48 +103,17 @@ fn raw_tcp_connect_and_send_data(bench: &mut test::Bencher, data: &[u8]) {
     })
 }
 
-#[bench]
-fn secio_connect_and_send_hello(bench: &mut test::Bencher) {
-    secio_and_send_data(bench, b"hello world")
-}
-
-#[bench]
-fn raw_tcp_connect_and_send_hello(bench: &mut test::Bencher) {
-    raw_tcp_connect_and_send_data(bench, b"hello world")
-}
-
-#[bench]
-fn secio_connect_and_send_one_kb(bench: &mut test::Bencher) {
+fn criterion_benchmarks(bench: &mut Criterion) {
     let data = (0 .. 1024).map(|_| rand::random::<u8>()).collect::<Vec<_>>();
-    secio_and_send_data(bench, &data)
+    bench.bench_function("secio_connect_and_send_hello", move |b| secio_and_send_data(b, b"hello world"));
+    bench.bench_function("raw_tcp_connect_and_send_hello", move |b| raw_tcp_connect_and_send_data(b, b"hello world"));
+    bench.bench_function("secio_connect_and_send_one_kb", { let data = data.clone(); move |b| secio_and_send_data(b, &data) });
+    bench.bench_function("raw_tcp_connect_and_send_one_kb", { let data = data.clone(); move |b| raw_tcp_connect_and_send_data(b, &data) });
+    bench.bench_function("secio_connect_and_send_one_mb", { let data = data.clone(); move |b| secio_and_send_data(b, &data) });
+    bench.bench_function("raw_tcp_connect_and_send_one_mb", { let data = data.clone(); move |b| raw_tcp_connect_and_send_data(b, &data) });
+    bench.bench_function("secio_connect_and_send_two_mb", { let data = data.clone(); move |b| secio_and_send_data(b, &data) });
+    bench.bench_function("raw_tcp_connect_and_send_two_mb", { let data = data.clone(); move |b| raw_tcp_connect_and_send_data(b, &data) });
 }
 
-#[bench]
-fn raw_tcp_connect_and_send_one_kb(bench: &mut test::Bencher) {
-    let data = (0 .. 1024).map(|_| rand::random::<u8>()).collect::<Vec<_>>();
-    raw_tcp_connect_and_send_data(bench, &data)
-}
-
-#[bench]
-fn secio_connect_and_send_one_mb(bench: &mut test::Bencher) {
-    let data = (0 .. 1024 * 1024).map(|_| rand::random::<u8>()).collect::<Vec<_>>();
-    secio_and_send_data(bench, &data)
-}
-
-#[bench]
-fn raw_tcp_connect_and_send_one_mb(bench: &mut test::Bencher) {
-    let data = (0 .. 1024 * 1024).map(|_| rand::random::<u8>()).collect::<Vec<_>>();
-    raw_tcp_connect_and_send_data(bench, &data)
-}
-
-#[bench]
-fn secio_connect_and_send_two_mb(bench: &mut test::Bencher) {
-    let data = (0 .. 2 * 1024 * 1024).map(|_| rand::random::<u8>()).collect::<Vec<_>>();
-    secio_and_send_data(bench, &data)
-}
-
-#[bench]
-fn raw_tcp_connect_and_send_two_mb(bench: &mut test::Bencher) {
-    let data = (0 .. 2 * 1024 * 1024).map(|_| rand::random::<u8>()).collect::<Vec<_>>();
-    raw_tcp_connect_and_send_data(bench, &data)
-}
+criterion_group!(benches, criterion_benchmarks);
+criterion_main!(benches);
