@@ -655,6 +655,10 @@ where
     /// Grants access to a struct that represents a peer.
     #[inline]
     pub fn peer(&mut self, peer_id: PeerId) -> Peer<TTrans, TInEvent, TOutEvent, THandler, THandlerErr> {
+        if peer_id == self.reach_attempts.local_peer_id {
+            return Peer::LocalNode;
+        }
+
         // TODO: we do `peer_mut(...).is_some()` followed with `peer_mut(...).unwrap()`, otherwise
         // the borrow checker yells at us.
 
@@ -1087,6 +1091,9 @@ where
     /// > **Note**: It is however possible that a pending incoming connection is being negotiated
     /// > and will connect to this peer, but we don't know it yet.
     NotConnected(PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>),
+
+    /// The requested peer is the local node.
+    LocalNode,
 }
 
 impl<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr> fmt::Debug for Peer<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>
@@ -1109,6 +1116,10 @@ where
             Peer::NotConnected(PeerNotConnected { ref peer_id, .. }) => {
                 f.debug_struct("NotConnected")
                     .field("peer_id", peer_id)
+                    .finish()
+            }
+            Peer::LocalNode => {
+                f.debug_struct("LocalNode")
                     .finish()
             }
         }
@@ -1162,9 +1173,11 @@ where
     ///
     /// If we reach a peer but the `PeerId` doesn't correspond to the one we're expecting, then
     /// the whole connection is immediately closed.
+    ///
+    /// Returns an error if we are `LocalNode`.
     #[inline]
     pub fn or_connect(self, addr: Multiaddr, handler: THandler)
-        -> PeerPotentialConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>
+        -> Result<PeerPotentialConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>, Self>
     {
         self.or_connect_with(move |_| addr, handler)
     }
@@ -1174,19 +1187,22 @@ where
     ///
     /// If we reach a peer but the `PeerId` doesn't correspond to the one we're expecting, then
     /// the whole connection is immediately closed.
+    ///
+    /// Returns an error if we are `LocalNode`.
     #[inline]
     pub fn or_connect_with<TFn>(self, addr: TFn, handler: THandler)
-        -> PeerPotentialConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>
+        -> Result<PeerPotentialConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr>, Self>
     where
         TFn: FnOnce(&PeerId) -> Multiaddr,
     {
         match self {
-            Peer::Connected(peer) => PeerPotentialConnect::Connected(peer),
-            Peer::PendingConnect(peer) => PeerPotentialConnect::PendingConnect(peer),
+            Peer::Connected(peer) => Ok(PeerPotentialConnect::Connected(peer)),
+            Peer::PendingConnect(peer) => Ok(PeerPotentialConnect::PendingConnect(peer)),
             Peer::NotConnected(peer) => {
                 let addr = addr(&peer.peer_id);
-                PeerPotentialConnect::PendingConnect(peer.connect(addr, handler))
-            }
+                Ok(PeerPotentialConnect::PendingConnect(peer.connect(addr, handler)))
+            },
+            Peer::LocalNode => Err(Peer::LocalNode),
         }
     }
 }
@@ -1209,9 +1225,6 @@ where
     TTrans: Transport
 {
     /// Closes the connection or the connection attempt.
-    ///
-    /// If the connection was active, returns the list of outbound substream openings that were
-    /// closed in the process.
     // TODO: consider returning a `PeerNotConnected`
     #[inline]
     pub fn close(self) {
