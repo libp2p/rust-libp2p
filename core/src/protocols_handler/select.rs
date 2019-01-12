@@ -19,9 +19,15 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
+    PeerId,
     either::EitherError,
     either::EitherOutput,
-    protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
+    protocols_handler::{
+        IntoProtocolsHandler,
+        ProtocolsHandler,
+        ProtocolsHandlerEvent,
+        ProtocolsHandlerUpgrErr,
+    },
     upgrade::{
         InboundUpgrade,
         OutboundUpgrade,
@@ -32,6 +38,46 @@ use crate::{
 };
 use futures::prelude::*;
 use tokio_io::{AsyncRead, AsyncWrite};
+
+/// Implementation of `IntoProtocolsHandler` that combines two protocols into one.
+#[derive(Debug, Clone)]
+pub struct IntoProtocolsHandlerSelect<TProto1, TProto2> {
+    proto1: TProto1,
+    proto2: TProto2,
+}
+
+impl<TProto1, TProto2> IntoProtocolsHandlerSelect<TProto1, TProto2> {
+    /// Builds a `IntoProtocolsHandlerSelect`.
+    #[inline]
+    pub(crate) fn new(proto1: TProto1, proto2: TProto2) -> Self {
+        IntoProtocolsHandlerSelect {
+            proto1,
+            proto2,
+        }
+    }
+}
+
+impl<TProto1, TProto2, TSubstream> IntoProtocolsHandler for IntoProtocolsHandlerSelect<TProto1, TProto2>
+where
+    TProto1: IntoProtocolsHandler,
+    TProto2: IntoProtocolsHandler,
+    TProto1::Handler: ProtocolsHandler<Substream = TSubstream>,
+    TProto2::Handler: ProtocolsHandler<Substream = TSubstream>,
+    TSubstream: AsyncRead + AsyncWrite,
+    <TProto1::Handler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<TSubstream>,
+    <TProto2::Handler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<TSubstream>,
+    <TProto1::Handler as ProtocolsHandler>::OutboundProtocol: OutboundUpgrade<TSubstream>,
+    <TProto2::Handler as ProtocolsHandler>::OutboundProtocol: OutboundUpgrade<TSubstream>
+{
+    type Handler = ProtocolsHandlerSelect<TProto1::Handler, TProto2::Handler>;
+
+    fn into_handler(self, remote_peer_id: &PeerId) -> Self::Handler {
+        ProtocolsHandlerSelect {
+            proto1: self.proto1.into_handler(remote_peer_id),
+            proto2: self.proto2.into_handler(remote_peer_id),
+        }
+    }
+}
 
 /// Implementation of `ProtocolsHandler` that combines two protocols into one.
 #[derive(Debug, Clone)]
