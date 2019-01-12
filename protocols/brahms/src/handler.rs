@@ -25,15 +25,35 @@ use crate::protocol::{
 use futures::prelude::*;
 use libp2p_core::{
     either::{EitherError, EitherOutput},
+    protocols_handler::IntoProtocolsHandler,
     protocols_handler::ProtocolsHandlerUpgrErr,
     upgrade::{EitherUpgrade, InboundUpgrade, OutboundUpgrade},
     Multiaddr, PeerId, ProtocolsHandler, ProtocolsHandlerEvent,
 };
 use smallvec::SmallVec;
-use std::{error, fmt, io};
+use std::{error, fmt, io, marker::PhantomData};
 use tokio_io::{AsyncRead, AsyncWrite};
 
+/// Per-connection handler for the Brahms protocol.
 pub struct BrahmsHandler<TSubstream> {
+    /// PeerId of the local node.
+    local_peer_id: PeerId,
+    /// Required difficulty of the proof of work.
+    pow_difficulty: u8,
+    /// Holds the generics in place.
+    marker: PhantomData<TSubstream>,
+}
+
+pub struct BrahmsHandlerInner<TSubstream> {
+    /// PeerId of the local node.
+    local_peer_id: PeerId,
+
+    /// PeerId of the remote node.
+    remote_peer_id: PeerId,
+
+    /// Required difficulty of the proof of work.
+    pow_difficulty: u8,
+
     /// If true, we are trying to shut down the existing floodsub substream and should refuse any
     /// incoming connection.
     shutting_down: bool,
@@ -69,15 +89,43 @@ pub enum BrahmsHandlerIn {
 
 #[derive(Debug, Clone)]
 pub enum BrahmsHandlerEvent {
-    Push { addresses: Vec<Multiaddr> },
+    Push {
+        /// Id of the local peer.
+        local_peer_id: PeerId,
+        /// Id of the peer we're going to send this message to. The message is only valid for this
+        /// specific peer.
+        remote_peer_id: PeerId,
+        /// Addresses we're listening on.
+        addresses: Vec<Multiaddr>,
+        /// Difficulty of the proof of work.
+        pow_difficulty: u8,
+    },
     PullRequest,
     PullResult { list: Vec<(PeerId, Vec<Multiaddr>)> },
 }
 
 impl<TSubstream> BrahmsHandler<TSubstream> {
     /// Builds a new `BrahmsHandler`.
-    pub fn new() -> Self {
+    pub fn new(local_peer_id: PeerId, pow_difficulty: u8) -> Self {
         BrahmsHandler {
+            local_peer_id,
+            pow_difficulty,
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<TSubstream> IntoProtocolsHandler for BrahmsHandler<TSubstream>
+where
+    TSubstream: AsyncRead + AsyncWrite,
+{
+    type Handler = BrahmsHandlerInner<TSubstream>;
+
+    fn into_handler(self, remote_peer_id: &PeerId) -> Self::Handler {
+        BrahmsHandlerInner {
+            local_peer_id: self.local_peer_id,
+            remote_peer_id: remote_peer_id.clone(),
+            pow_difficulty: self.pow_difficulty,
             shutting_down: false,
             send_queue: SmallVec::new(),
             connection_keep_alive: false,
@@ -87,7 +135,7 @@ impl<TSubstream> BrahmsHandler<TSubstream> {
     }
 }
 
-impl<TSubstream> ProtocolsHandler for BrahmsHandler<TSubstream>
+impl<TSubstream> ProtocolsHandler for BrahmsHandlerInner<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
@@ -101,7 +149,11 @@ where
 
     #[inline]
     fn listen_protocol(&self) -> Self::InboundProtocol {
-        BrahmsListen::default()
+        BrahmsListen {
+            local_peer_id: self.local_peer_id.clone(),
+            remote_peer_id: self.remote_peer_id.clone(),
+            pow_difficulty: self.pow_difficulty,
+        }
     }
 
     fn inject_fully_negotiated_inbound(
@@ -113,6 +165,9 @@ where
                 self.send_queue
                     .push(ProtocolsHandlerEvent::Custom(BrahmsHandlerEvent::Push {
                         addresses,
+                        local_peer_id: self.local_peer_id.clone(),
+                        remote_peer_id: self.remote_peer_id.clone(),
+                        pow_difficulty: self.pow_difficulty,
                     }));
             }
             BrahmsListenOut::PullRequest(request) => {
@@ -142,10 +197,15 @@ where
     #[inline]
     fn inject_event(&mut self, message: BrahmsHandlerIn) {
         match message {
-            BrahmsHandlerIn::Event(BrahmsHandlerEvent::Push { addresses }) => {
+            BrahmsHandlerIn::Event(BrahmsHandlerEvent::Push { addresses, local_peer_id, remote_peer_id, pow_difficulty }) => {
                 self.send_queue
                     .push(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                        upgrade: EitherUpgrade::A(BrahmsPushRequest { addresses }),
+                        upgrade: EitherUpgrade::A(BrahmsPushRequest {
+                            addresses,
+                            local_peer_id,
+                            remote_peer_id,
+                            pow_difficulty,
+                        }),
                         info: (),
                     });
             }
@@ -219,12 +279,12 @@ where
     }
 }
 
-impl<TSubstream> fmt::Debug for BrahmsHandler<TSubstream>
+impl<TSubstream> fmt::Debug for BrahmsHandlerInner<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        f.debug_struct("BrahmsHandler")
+        f.debug_struct("BrahmsHandlerInner")
             .field("shutting_down", &self.shutting_down)
             .field("send_queue", &self.send_queue.len())
             .field("ongoing_pull_request", &self.ongoing_pull_request.is_some())

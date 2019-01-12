@@ -22,6 +22,7 @@
 //! potential response, and `BrahmsListen` upgrade that accepts a request from the remote.
 
 use crate::codec::{Codec, RawMessage};
+use crate::pow::Pow;
 use futures::{prelude::*, try_ready};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_core::{Multiaddr, PeerId};
@@ -32,8 +33,15 @@ use tokio_io::{AsyncRead, AsyncWrite};
 /// Request that can be sent to a peer.
 #[derive(Debug, Clone)]
 pub struct BrahmsPushRequest {
+    /// Id of the local peer.
+    pub local_peer_id: PeerId,
+    /// Id of the peer we're going to send this message to. The message is only valid for this
+    /// specific peer.
+    pub remote_peer_id: PeerId,
     /// Addresses we're listening on.
     pub addresses: Vec<Multiaddr>,
+    /// Difficulty of the proof of work.
+    pub pow_difficulty: u8,
 }
 
 impl UpgradeInfo for BrahmsPushRequest {
@@ -60,7 +68,8 @@ where
             .into_iter()
             .map(Multiaddr::into_bytes)
             .collect();
-        let message = RawMessage::Push(addrs);
+        let pow = Pow::generate(&self.local_peer_id, &self.remote_peer_id, self.pow_difficulty).unwrap();   // TODO:
+        let message = RawMessage::Push(addrs, pow.nonce());
         // TODO: what if lots of addrs? https://github.com/libp2p/rust-libp2p/issues/760
         BrahmsPushRequestFlush {
             inner: Framed::new(socket, Codec::default()),
@@ -190,7 +199,7 @@ where
                 }
                 Ok(Async::Ready(out))
             }
-            Some(RawMessage::Push(_)) | Some(RawMessage::PullRequest) | None => {
+            Some(RawMessage::Push(_, _)) | Some(RawMessage::PullRequest) | None => {
                 Err("Invalid remote request".to_string().into())
             }
         }
@@ -198,8 +207,15 @@ where
 }
 
 /// Upgrade that listens for a request from the remote, and allows answering it.
-#[derive(Debug, Clone, Default)]
-pub struct BrahmsListen {}
+#[derive(Debug, Clone)]
+pub struct BrahmsListen {
+    /// Id of the local peer. Messages not received by this id can be invalid.
+    pub local_peer_id: PeerId,
+    /// Id of the peer that sends us messages. Messages not sent by this id can be invalid.
+    pub remote_peer_id: PeerId,
+    /// Required difficulty of the proof of work.
+    pub pow_difficulty: u8,
+}
 
 impl UpgradeInfo for BrahmsListen {
     type Info = &'static [u8];
@@ -222,6 +238,9 @@ where
     fn upgrade_inbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
         BrahmsListenFuture {
             inner: Some(Framed::new(socket, Codec::default())),
+            local_peer_id: self.local_peer_id,
+            remote_peer_id: self.remote_peer_id,
+            pow_difficulty: self.pow_difficulty,
         }
     }
 }
@@ -232,6 +251,13 @@ where
 pub struct BrahmsListenFuture<TSocket> {
     /// The stream to the remote.
     inner: Option<Framed<TSocket, Codec>>,
+    /// Id of the local peer. The message is only valid for this specific peer.
+    local_peer_id: PeerId,
+    /// Id of the peer we're going to send this message to. The message is only valid for this
+    /// specific peer.
+    remote_peer_id: PeerId,
+    /// Required difficulty of the proof of work.
+    pow_difficulty: u8,
 }
 
 impl<TSocket> Future for BrahmsListenFuture<TSocket>
@@ -248,7 +274,10 @@ where
             .expect("Future is already finished")
             .poll())
         {
-            Some(RawMessage::Push(addrs)) => {
+            Some(RawMessage::Push(addrs, nonce)) => {
+                if Pow::verify(&self.local_peer_id, &self.remote_peer_id, nonce, self.pow_difficulty).is_err() {
+                    return Err(io::Error::new(io::ErrorKind::Other, "invalid PoW").into());
+                }
                 let mut addrs_parsed = Vec::with_capacity(addrs.len());
                 for addr in addrs {
                     addrs_parsed.push(Multiaddr::from_bytes(addr)?);

@@ -73,8 +73,12 @@ impl Decoder for Codec {
 /// Message that can be transmitted over a stream.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RawMessage {
-    /// Pushes the sender to a remote. Contains the addresses it's listening on.
-    Push(Vec<Vec<u8>>),
+    /// Pushes the sender to a remote. Contains the addresses it's listening on, and a nonce.
+    ///
+    /// The message is valid only if
+    /// `leading_zero_bits(sha256(sender_id | receiver_id | nonce)) < difficulty`, where
+    /// `difficulty` is a parameter in the protocol configuration.
+    Push(Vec<Vec<u8>>, u32),
 
     /// Sender requests the remote to send back their view of the network.
     PullRequest,

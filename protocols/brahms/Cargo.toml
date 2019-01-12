@@ -28,7 +28,12 @@ tokio-timer = "0.2.6"
 unsigned-varint = { version = "0.2.1", features = ["codec"] }
 
 [dev-dependencies]
+criterion = "0.2"
 libp2p-mplex = { version = "0.2.0", path = "../../muxers/mplex" }
 libp2p-secio = { version = "0.2.0", path = "../secio" }
 libp2p-tcp = { version = "0.2.0", path = "../../transports/tcp" }
 tokio = "0.1"
+
+[[bench]]
+name = "pow"
+harness = false

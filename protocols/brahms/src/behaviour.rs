@@ -44,14 +44,23 @@ use tokio_timer::Interval;
 pub struct BrahmsConfig {
     /// Number of elements in the view that are the result of pushes. Must not be 0.
     pub alpha: u32,
+
     /// Number of elements in the view that are the result of pulls. Must not be 0.
     pub beta: u32,
+
     /// Number of elements in the view that are the result of sampling.
     pub gamma: u32,
+
     /// Duration of a round.
     pub round_duration: Duration,
+
     /// Number of samplers. The more the better, but the more CPU-intensive the algorithm is.
     pub num_samplers: u32,
+
+    /// Number of leading zero bytes that are required in the proof-of-work calculation used to
+    /// prevent DDoS attacks. The higher the value, the more resistant we are, but the more
+    /// CPU-intensive the code is.
+    pub difficulty: u8,
 }
 
 impl Default for BrahmsConfig {
@@ -63,6 +72,7 @@ impl Default for BrahmsConfig {
             gamma: 4,
             round_duration: Duration::from_secs(10),
             num_samplers: 32,
+            difficulty: 10,
         }
     }
 }
@@ -71,6 +81,8 @@ impl Default for BrahmsConfig {
 pub struct Brahms<TSubstream> {
     /// The way the algorithm is configured.
     config: BrahmsConfig,
+    /// PeerId of the local node. // TODO: shoudn't be necessary
+    local_peer_id: PeerId,
 
     /// List of elements to add to the topology as soon as we have access to it.
     add_to_topology: SmallVec<[(PeerId, Multiaddr); 32]>,
@@ -126,13 +138,14 @@ impl AsRef<[u8]> for PeerIdAdapter {
 
 impl<TSubstream> Brahms<TSubstream> {
     /// Initializes the Brahms state.
-    pub fn new(config: BrahmsConfig) -> Self {
+    pub fn new(config: BrahmsConfig, local_peer_id: PeerId) -> Self {
         let max_view_len = config.alpha + config.beta + config.gamma;
         let sampler = Sampler::with_len(config.num_samplers);
         let round_advance = Interval::new(Instant::now(), config.round_duration);
 
         Brahms {
             config,
+            local_peer_id,
             add_to_topology: SmallVec::new(),
             sampler,
             round_advance,
@@ -154,6 +167,7 @@ impl<TSubstream> Brahms<TSubstream> {
 
     /// Modifies the configuration of `BRAHMS`.
     // TODO: update after next round only?
+    // TODO: PoW difficulty must not change
     pub fn set_config(&mut self, config: BrahmsConfig) {
         self.config = config;
 
@@ -311,7 +325,7 @@ where
     type OutEvent = BrahmsEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        BrahmsHandler::new()
+        BrahmsHandler::new(self.local_peer_id.clone(), self.config.difficulty)
     }
 
     fn inject_connected(&mut self, peer_id: PeerId, _: ConnectedPoint) {
@@ -326,7 +340,7 @@ where
 
     fn inject_node_event(&mut self, peer_id: PeerId, event: BrahmsHandlerEvent) {
         match event {
-            BrahmsHandlerEvent::Push { addresses } => {
+            BrahmsHandlerEvent::Push { addresses, .. } => {
                 for addr in addresses {
                     self.add_to_topology.push((peer_id.clone(), addr));
                 }
@@ -400,13 +414,16 @@ where
             let peer_id = self.pending_pushes.remove(0);
             let external_addresses = parameters.external_addresses().collect::<Vec<_>>();
             return Async::Ready(NetworkBehaviourAction::SendEvent {
-                peer_id,
+                peer_id: peer_id.clone(),
                 event: BrahmsHandlerIn::Event(BrahmsHandlerEvent::Push {
                     addresses: parameters
                         .listened_addresses()
                         .cloned()
                         .chain(external_addresses)
                         .collect(),
+                    local_peer_id: parameters.local_peer_id().clone(),
+                    remote_peer_id: peer_id.clone(),
+                    pow_difficulty: self.config.difficulty,
                 }),
             });
         }

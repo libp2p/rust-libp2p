@@ -23,12 +23,12 @@ use libp2p_brahms::{Brahms, BrahmsConfig};
 use libp2p_core::{
     topology::MemoryTopology, upgrade, upgrade::OutboundUpgradeExt, Swarm, Transport,
 };
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// Spawns 10 nodes and tests whether they discover each other.
 #[test]
 fn topology_filled() {
-    const NUM_SWARMS: usize = 4;
+    const NUM_SWARMS: usize = 2;
 
     let brahms_config = BrahmsConfig {
         alpha: 14,
@@ -36,6 +36,7 @@ fn topology_filled() {
         gamma: 4,
         round_duration: Duration::from_secs(1),
         num_samplers: 32,
+        difficulty: 1,
     };
 
     let mut swarms = Vec::with_capacity(NUM_SWARMS);
@@ -54,14 +55,14 @@ fn topology_filled() {
             });
 
         // Each swarm contains the address of the previous swarm in its topology.
-        let mut topology = MemoryTopology::empty(local_public_key);
+        let mut topology = MemoryTopology::empty(local_public_key.clone());
         if let Some(prev_swarm) = swarms.last_mut() {
             let addr =
                 Swarm::listen_on(prev_swarm, "/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
             topology.add_address(Swarm::local_peer_id(&prev_swarm).clone(), addr)
         }
 
-        let brahms = Brahms::new(brahms_config.clone());
+        let brahms = Brahms::new(brahms_config, local_public_key.into_peer_id());
         swarms.push(Swarm::new(transport, brahms, topology));
     }
 
@@ -71,7 +72,7 @@ fn topology_filled() {
     )
     .unwrap();
 
-    let mut test_stop = tokio::timer::Delay::new(Instant::now() + Duration::from_secs(6));
+    let mut test_stop = tokio::timer::Interval::new_interval(Duration::from_secs(1));
 
     tokio::runtime::Runtime::new()
         .unwrap()
@@ -84,7 +85,9 @@ fn topology_filled() {
                 Async::NotReady => Ok::<_, ()>(Async::NotReady),
                 Async::Ready(_) => {
                     for swarm in &swarms {
-                        assert_eq!(Swarm::topology(swarm).peers().count(), NUM_SWARMS - 1);
+                        if Swarm::topology(swarm).peers().count() != NUM_SWARMS - 1 {
+                            return Ok(Async::NotReady)
+                        }
                     }
 
                     Ok(Async::Ready(()))
