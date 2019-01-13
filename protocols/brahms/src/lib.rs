@@ -59,10 +59,11 @@ pub mod topology;
 
 mod behaviour;
 mod codec;
-mod sampler;
 
-// This module shouldn't be public, but we want to access its content from the `benches` directory.
-// Ideally the benchmarks of `pow` would be inside `pow` itself, but that isn't possible on the
-// stable Rust channel as of January 2019.
+// These modules shouldn't be public, but we want to access their content from the `benches`
+// directory. Ideally the benchmarks of `pow` and `sampler` would be inside `pow` and `sampler`
+// themselves, but that isn't possible on the stable Rust channel as of January 2019.
 #[doc(hidden)]
 pub mod pow;
+#[doc(hidden)]
+pub mod sampler;

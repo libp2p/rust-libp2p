@@ -37,3 +37,7 @@ tokio = "0.1"
 [[bench]]
 name = "pow"
 harness = false
+
+[[bench]]
+name = "sampler"
+harness = false
