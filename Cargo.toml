@@ -1,5 +1,6 @@
 [package]
 name = "libp2p"
+edition = "2018"
 description = "Peer-to-peer networking library"
 version = "0.2.0"
 authors = ["Parity Technologies <admin@parity.io>"]
