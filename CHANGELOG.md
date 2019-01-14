@@ -1,4 +1,8 @@
-# Version 0.2
+# Version 0.2.1 (2019-01-14)
+
+- Added the `IntoNodeHandler` and `IntoProtocolsHandler` traits, allowing node handlers and protocol handlers to know the `PeerId` of the node they are interacting with.
+
+# Version 0.2 (2019-01-10)
 
 - The `Transport` trait now has an `Error` associated type instead of always using `std::io::Error`.
 - Merged `PeriodicPing` and `PingListen` into one `Ping` behaviour.
