@@ -30,7 +30,7 @@ ed25519-dalek = "0.8.0"
 hmac = "0.6.3"
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dependencies]
-ring = { version = "0.13", default-features = false }
+ring = { version = "0.13", features = ["use_heap"], default-features = false }
 untrusted = { version = "0.6" }
 
 [target.'cfg(any(target_os = "emscripten", target_os = "unknown"))'.dependencies]
@@ -42,6 +42,11 @@ rsa = ["ring/rsa_signing"]
 aes-all = ["aesni", "lazy_static"]
 
 [dev-dependencies]
+criterion = "0.2"
 libp2p-tcp = { version = "0.2.0", path = "../../transports/tcp" }
 tokio = "0.1"
 tokio-tcp = "0.1"
+
+[[bench]]
+name = "bench"
+harness = false
