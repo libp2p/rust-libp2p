@@ -59,13 +59,7 @@ pub struct BrahmsHandlerInner<TSubstream> {
     shutting_down: bool,
 
     /// Queue of values that `poll` should produces.
-    send_queue: SmallVec<
-        [ProtocolsHandlerEvent<
-            EitherUpgrade<BrahmsPushRequest, BrahmsPullRequestRequest>,
-            (),
-            BrahmsHandlerEvent,
-        >; 16],
-    >,
+    send_queue: SmallVec<[OutEvent; 16]>,
 
     /// Whether or not we should force the connection alive.
     connection_keep_alive: bool,
@@ -76,6 +70,12 @@ pub struct BrahmsHandlerInner<TSubstream> {
     /// Futures that flush pull responses.
     pull_response_flushes: SmallVec<[BrahmsListenPullRequestFlush<TSubstream>; 4]>,
 }
+
+type OutEvent = ProtocolsHandlerEvent<
+    EitherUpgrade<BrahmsPushRequest, BrahmsPullRequestRequest>,
+    (),
+    BrahmsHandlerEvent,
+>;
 
 #[derive(Debug, Clone)]
 pub enum BrahmsHandlerIn {
@@ -251,7 +251,7 @@ where
     fn poll(
         &mut self,
     ) -> Poll<
-        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
+        OutEvent,
         Self::Error,
     > {
         if self.shutting_down {

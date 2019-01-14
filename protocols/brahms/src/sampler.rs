@@ -89,7 +89,7 @@ where
             let new_value_hash = new_value_hasher.result();
 
             let replace = match sampler.cur_value_hash {
-                Some(ref h) if &new_value_hash < h => true,
+                Some(ref h) if new_value_hash < *h => true,
                 None => true,
                 _ => false,
             };
