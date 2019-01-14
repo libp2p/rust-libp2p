@@ -109,7 +109,7 @@
 //! The `Swarm` struct contains all active and pending connections to remotes and manages the
 //! state of all the substreams that have been opened, and all the upgrades that were built upon
 //! these substreams.
-//! 
+//!
 //! It combines a `Transport`, a `NetworkBehaviour` and a `Topology` together.
 //!
 //! See the documentation of the `libp2p-core` crate for more details about creating a swarm.
@@ -129,6 +129,9 @@
 //! - This swarm can now be polled with the `tokio` library in order to start the network.
 //!
 
+#![doc(html_logo_url = "https://libp2p.io/img/logo_small.png")]
+#![doc(html_favicon_url = "https://libp2p.io/img/favicon.png")]
+
 pub extern crate bytes;
 pub extern crate futures;
 pub extern crate multiaddr;
@@ -139,25 +142,40 @@ pub extern crate tokio_codec;
 extern crate libp2p_core_derive;
 extern crate tokio_executor;
 
-pub extern crate libp2p_core as core;
+#[doc(inline)]
+pub use libp2p_core as core;
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-pub extern crate libp2p_dns as dns;
-pub extern crate libp2p_identify as identify;
-pub extern crate libp2p_kad as kad;
-pub extern crate libp2p_floodsub as floodsub;
-pub extern crate libp2p_mplex as mplex;
+#[doc(inline)]
+pub use libp2p_dns as dns;
+#[doc(inline)]
+pub use libp2p_identify as identify;
+#[doc(inline)]
+pub use libp2p_kad as kad;
+#[doc(inline)]
+pub use libp2p_floodsub as floodsub;
+#[doc(inline)]
+pub use libp2p_mplex as mplex;
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-pub extern crate libp2p_mdns as mdns;
-pub extern crate libp2p_ping as ping;
-pub extern crate libp2p_plaintext as plaintext;
-pub extern crate libp2p_ratelimit as ratelimit;
-pub extern crate libp2p_secio as secio;
+#[doc(inline)]
+pub use libp2p_mdns as mdns;
+#[doc(inline)]
+pub use libp2p_ping as ping;
+#[doc(inline)]
+pub use libp2p_plaintext as plaintext;
+#[doc(inline)]
+pub use libp2p_ratelimit as ratelimit;
+#[doc(inline)]
+pub use libp2p_secio as secio;
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-pub extern crate libp2p_tcp as tcp;
-pub extern crate libp2p_uds as uds;
+#[doc(inline)]
+pub use libp2p_tcp as tcp;
+#[doc(inline)]
+pub use libp2p_uds as uds;
 #[cfg(feature = "libp2p-websocket")]
-pub extern crate libp2p_websocket as websocket;
-pub extern crate libp2p_yamux as yamux;
+#[doc(inline)]
+pub use libp2p_websocket as websocket;
+#[doc(inline)]
+pub use libp2p_yamux as yamux;
 
 mod transport_ext;
 
