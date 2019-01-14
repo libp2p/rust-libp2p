@@ -2,7 +2,7 @@ use handler::GossipsubHandler;
 use mcache::MCache;
 use mesh::Mesh;
 use message::{GossipsubRpc, GMessage, ControlMessage, GossipsubSubscription,
-    GossipsubSubscriptionAction, MsgHash, MsgId};
+    GossipsubSubscriptionAction, GOutEvents};
 use {Topic, TopicHash};
 use rpc_proto;
 
@@ -35,7 +35,9 @@ use tokio_io::{AsyncRead, AsyncWrite};
 /// differentiate the state of the two protocols.
 pub struct Gossipsub<TSubstream> {
     /// Events that need to be yielded to the outside when polling.
-    events: VecDeque<NetworkBehaviourAction<GossipsubRpc, GMessage>>,
+    /// `TInEvent = GossipsubRpc`, `TOutEvent = GOutEvents` (the latter is
+    /// either a `GMessage` or a `ControlMessage`).
+    events: VecDeque<NetworkBehaviourAction<GossipsubRpc, GOutEvents>>,
 
     /// Peer id of the local node. Used for the source of the messages that we
     /// publish.
@@ -69,7 +71,8 @@ pub struct Gossipsub<TSubstream> {
     marker: PhantomData<TSubstream>,
 
     /// For backwards-compatibility.
-    floodsub: Floodsub<TSubstream>,
+    // May not work, test.
+    floodsub: Option<Floodsub<TSubstream>>,
 }
 
 impl<TSubstream> Gossipsub<TSubstream> {
@@ -85,7 +88,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
             fanout: Mesh::new(),
             mcache: MCache::new(),
             marker: PhantomData,
-            floodsub: Floodsub::new(local_peer_id),
+            floodsub: None,
         }
     }
 
@@ -93,7 +96,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
     pub fn new_w_existing_floodsub(local_peer_id: PeerId,
         fs: Floodsub<TSubstream>) -> Self {
         let mut gs = Gossipsub::new(local_peer_id);
-        gs.floodsub = fs;
+        gs.floodsub = Some(fs);
         gs
     }
 
@@ -259,7 +262,6 @@ impl<TSubstream> Gossipsub<TSubstream> {
     /// > topics.
     pub fn graft_many<'a, I>(&self, topics: impl IntoIterator<Item = impl AsRef<TopicHash>>)
     {
-        
     }
 
     /// Prunes the peer from a topic.
@@ -313,13 +315,17 @@ impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
-    type ProtocolsHandler =
-        ProtocolsHandlerSelect<GossipsubHandler<TSubstream>,
-        FloodsubHandler<TSubstream>>;
-    type OutEvent = GMessage;
+    type ProtocolsHandler = GossipsubHandler<TSubstream>;
+    // TODO: this seems rather complicated to implement instead of the above
+    // e.g. with inject_node_event—the event input, etc.
+    // type ProtocolsHandler =
+    //     ProtocolsHandlerSelect<GossipsubHandler<TSubstream>,
+    //     FloodsubHandler<TSubstream>>;
+    type OutEvent = GOutEvents;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        GossipsubHandler::new().select(FloodsubHandler::new())
+        GossipsubHandler::new()
+        //.select(FloodsubHandler::new())
     }
 
     fn inject_connected(&mut self, id: PeerId, _: ConnectedPoint) {
@@ -365,7 +371,8 @@ where
                     }
                 }
                 GossipsubSubscriptionAction::Unsubscribe => {
-                    if let Some(pos) = remote_peer_topics.iter().position(|t| t == &subscription.topic ) {
+                    if let Some(pos) = remote_peer_topics.iter()
+                        .position(|t| t == &subscription.topic) {
                         remote_peer_topics.remove(pos);
                     }
                 }
@@ -376,33 +383,73 @@ where
         let mut rpcs_to_dispatch: Vec<(PeerId, GossipsubRpc)> = Vec::new();
 
         for message in event.messages {
-            // Use `self.received` to skip the messages that we have already received in the past.
-            // Note that this can false positive.
+            // Use `self.received` to skip the messages that we have already
+            // received in the past.
+            // Note that this can be a false positive.
             if !self.received.test_and_add(&message) {
                 continue;
             }
 
-            // Add the message to be dispatched to the user.
-            if self.subscribed_topics.iter().any(|t| message.topics.iter().any(|u| t.hash() == u)) {
-                self.events.push_back(NetworkBehaviourAction::GenerateEvent(message.clone()));
+            // Add the message to be dispatched to the user, if they're
+            // subscribed to the topic.
+            if self.subscribed_topics.iter().any(|t| message.topics.iter()
+                .any(|u| t == u.1)) {
+                self.events.push_back(NetworkBehaviourAction::GenerateEvent
+                    (GOutEvents::GMsg(message.clone())));
             }
 
-            // Propagate the message to everyone else who is subscribed to any of the topics.
+            // Propagate the message to everyone else who is subscribed to any
+            // of the topics.
             for (peer_id, subscr_topics) in self.connected_peers.iter() {
                 if peer_id == &propagation_source {
                     continue;
                 }
 
-                if !subscr_topics.iter().any(|t| message.topics.iter().any(|u| t == u)) {
+                if !subscr_topics.iter().any(|t| message.topics.iter()
+                    .any(|u| t == u.0)) {
                     continue;
                 }
 
-                if let Some(pos) = rpcs_to_dispatch.iter().position(|(p, _)| p == peer_id) {
+                if let Some(pos) = rpcs_to_dispatch.iter()
+                    .position(|(p, _)| p == peer_id) {
                     rpcs_to_dispatch[pos].1.messages.push(message.clone());
                 } else {
                     rpcs_to_dispatch.push((peer_id.clone(), GossipsubRpc {
                         subscriptions: Vec::new(),
                         messages: vec![message.clone()],
+                        control: None,
+                    }));
+                }
+            }
+        }
+        let mut ctrl = event.control;
+        if let Some(ctrl) = event.control {
+            // Add the control message to be dispatched to the user. We should
+            // only get a control message for a topic if we are subscribed to
+            // it, IIUIC. If this were not the case, we would have to check
+            // each topic in the control message to see that we are subscribed
+            // to it.
+            self.events.push_back(NetworkBehaviourAction::GenerateEvent
+                (GOutEvents::CtrlMsg(ctrl)));
+
+            // Propagate the control message to everyone else who is
+            // subscribed to any of the topics.
+            for (peer_id, subscr_topics) in self.connected_peers.iter() {
+                if peer_id == &propagation_source {
+                    continue;
+                }
+
+                // Again, I'm assuming that the peer is already subscribed to // any topics in the control message.
+                // TODO: double-check this.
+
+                if let Some(pos) = rpcs_to_dispatch.iter()
+                    .position(|(p, _)| p == peer_id) {
+                    rpcs_to_dispatch[pos].1.control = Some(ctrl);
+                } else {
+                    rpcs_to_dispatch.push((peer_id.clone(), GossipsubRpc {
+                        subscriptions: Vec::new(),
+                        messages: Vec::new(),
+                        control: Some(ctrl),
                     }));
                 }
             }

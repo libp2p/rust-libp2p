@@ -96,39 +96,22 @@ impl FromIterator<Topic> for TopicMap {
     }
 }
 
-/// Represents a `Topic` via either a `TopicHash` or a `TopicId`.
-/// Due to the added difficulty of converting a `TopicId` to a `Topic`
-/// it is suggested to just use a `TopicHash`.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum TopicRep {
-    Hash(TopicHash),
-    Id(TopicId)
-}
-
-impl From<TopicHash> for TopicRep {
-    fn from(topic_hash: TopicHash) -> Self {
-        TopicRep::Hash(topic_hash)
-    }
-}
-
-impl From<TopicId> for TopicRep {
-    fn from(topic_id: TopicId) -> Self {
-        TopicRep::Id(topic_id)
-    }
-}
-
 /// Represents the hash of a topic.
 ///
 /// Instead of using the topic as a whole, the API of gossipsub uses a hash of
 /// the topic. You only have to build the hash once, then use it everywhere.
 /// Needs to derive `Eq` and `Hash` e.g. because it is used as a key in
 /// `HashMap` of `TopicMap`.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct TopicHash {
     hash: String,
 }
 
 impl TopicHash {
+    pub(crate) fn new() -> Self {
+        TopicHash { hash: String::new() }
+    }
+
     /// Builds a new `TopicHash` from the given hash.
     #[inline]
     pub fn from_raw(hash: String) -> TopicHash {
@@ -199,24 +182,6 @@ impl AsRef<TopicHash> for Topic {
     }
 }
 
-impl From<TopicRep> for Topic {
-    fn from(topic_rep: TopicRep) -> Self {
-        match topic_rep {
-            TopicRep::Hash(TopicHash) => Topic::from(topic_rep),
-            TopicRep::Id(TopicId) => Topic::from(topic_rep),
-        }
-    }
-}
-
-impl<'a> From<&'a TopicRep> for Topic {
-    fn from(topic_rep: &'a TopicRep) -> Self {
-        match topic_rep {
-            TopicRep::Hash(TopicHash) => Topic::from(topic_rep),
-            TopicRep::Id(TopicId) => Topic::from(topic_rep),
-        }
-    }
-}
-
 // TODO: test
 impl From<TopicHash> for Topic {
     fn from(topic_hash: TopicHash) -> Self {
@@ -240,6 +205,24 @@ impl<'a> From<&'a TopicHash> for Topic {
         Topic {
             descriptor: parsed,
             hash: *topic_hash,
+        }
+    }
+}
+
+impl From<TopicRep> for Topic {
+    fn from(topic_rep: TopicRep) -> Self {
+        match topic_rep {
+            TopicRep::Hash(TopicHash) => Topic::from(topic_rep),
+            TopicRep::Id(TopicId) => Topic::from(topic_rep),
+        }
+    }
+}
+
+impl<'a> From<&'a TopicRep> for Topic {
+    fn from(topic_rep: &'a TopicRep) -> Self {
+        match topic_rep {
+            TopicRep::Hash(TopicHash) => Topic::from(topic_rep),
+            TopicRep::Id(TopicId) => Topic::from(topic_rep),
         }
     }
 }
@@ -287,6 +270,27 @@ impl TopicBuilder {
             descriptor: self.builder,
             hash,
         }
+    }
+}
+
+/// Represents a `Topic` via either a `TopicHash` or a `TopicId`.
+/// Due to the added difficulty of converting a `TopicId` to a `Topic`
+/// it is suggested to just use a `TopicHash`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum TopicRep {
+    Hash(TopicHash),
+    Id(TopicId)
+}
+
+impl From<TopicHash> for TopicRep {
+    fn from(topic_hash: TopicHash) -> Self {
+        TopicRep::Hash(topic_hash)
+    }
+}
+
+impl From<TopicId> for TopicRep {
+    fn from(topic_id: TopicId) -> Self {
+        TopicRep::Id(topic_id)
     }
 }
 

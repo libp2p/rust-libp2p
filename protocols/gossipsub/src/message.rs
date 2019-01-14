@@ -39,6 +39,14 @@ impl MsgMap {
     pub fn keys(&self) -> Keys<MsgHash, GMessage> {
         self.0.keys()
     }
+
+    pub fn remove<Q: ?Sized>(&self, k: &Q) -> Option<GMessage>
+    where
+        MsgHash: Borrow<Q>,
+        Q: Hash + Eq,
+    {
+        self.0.remove(k)
+    }
 }
 
 /// A message received by the Gossipsub system.
@@ -59,13 +67,13 @@ impl MsgMap {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GMessage {
     /// ID of the peer that published this message.
-    pub source: PeerId,
+    pub(crate) from: PeerId,
 
     /// Content of the message. Its meaning is out of scope of this library.
-    pub data: Vec<u8>,
+    pub(crate) data: Vec<u8>,
 
     /// An incrementing sequence number.
-    pub seq_no: Vec<u8>,
+    pub(crate) seq_no: Vec<u8>,
 
     /// List of topics this message belongs to.
     ///
@@ -73,7 +81,7 @@ pub struct GMessage {
     // Issue with using a HashMap with rust-protobuf:
     // https://github.com/stepancheg/rust-protobuf/issues/211
     // See also the note on the descriptor field of the Topic struct.
-    pub topics: TopicMap,
+    pub(crate) topics: TopicMap,
 
     // To use for an authentication scheme (not yet defined or implemented),
     // see rpc.proto for more info.
@@ -112,6 +120,10 @@ impl Hash for GMessage {
     }
 }
 impl GMessage {
+    pub fn get_topic_map(&self) -> TopicMap {
+        self.topics
+    }
+
     // // Sets the hash of the message, used in `MsgHashBuilder`.
     // #[inline]
     // pub(crate) fn set_hash(&mut self, msg_hash: MsgHash) {
@@ -145,6 +157,29 @@ impl GMessage {
     // }
 
 }
+
+impl From<MsgHash> for GMessage {
+    fn from(m_hash: MsgHash) -> Self {
+        let decoded_hash: &[u8]
+            = bs58::decode(m_hash.hash).into_vec().unwrap().as_ref();
+        let rpc_msg = protobuf::parse_from_bytes::<rpc_proto::Message>
+            (decoded_hash).unwrap();
+        GMessage::from(rpc_msg)
+    }
+}
+
+impl From<rpc_proto::Message> for GMessage {
+    fn from (p_msg: rpc_proto::Message) -> GMessage {
+        GMessage {
+            from: p_msg.get_from(),
+            data: p_msg.get_data(),
+            seq_no: p_msg.get_seqno(),
+            topics: p_msg.get_topic_hashes(),
+        }
+    }
+}
+
+
 
 impl From<GMessage> for rpc_proto::Message {
     fn from(message: GMessage) -> rpc_proto::Message {
@@ -275,11 +310,6 @@ impl MsgHash {
     }
 }
 
-// implementing From<MsgHash> for GMessage {} could be an issue for privacy
-// since we would be able to get the data, etc., from the MsgHash. However,
-// perhaps privacy needs to be ensured in another way, e.g. with ZK-S(N/T)ARKs,
-// if this method or its result was publicly accessible.
-
 /// Builder for a `MsgHash`.
 #[derive(Debug, Clone)]
 pub struct MsgHashBuilder {
@@ -357,6 +387,12 @@ pub struct ControlMessage {
     pub(crate) prune: Vec<ControlPrune>,
 }
 
+impl ControlMessage {
+    fn new() -> Self {
+        ControlMessage::default()
+    }
+}
+
 impl From<ControlMessage> for rpc_proto::ControlMessage {
     fn from(control: ControlMessage) -> rpc_proto::ControlMessage {
         let mut ctrl = rpc_proto::ControlMessage::new();
@@ -412,6 +448,14 @@ pub struct ControlIHave {
     pub recent_mcache: MCache,
 }
 
+impl ControlIHave {
+    fn new() -> Self {
+        ControlIHave {
+            t_hash: TopicHash::new(),
+            recent_mcache: MCache::new(),
+        }
+    }
+}
 impl From<ControlIHave> for rpc_proto::ControlIHave {
     fn from(control_i_have: ControlIHave) -> rpc_proto::ControlIHave {
         let mut ctrl_i_have = rpc_proto::ControlIHave::new();
@@ -433,9 +477,10 @@ impl From<rpc_proto::ControlIHave> for ControlIHave {
         let mut control_i_have = ControlIHave::default();
         control_i_have.t_hash = TopicHash::from_raw(ctrl_i_have
             .get_topic_hash().to_string());
-        control_i_have.recent_mcache.put_many_via_hashes
+        control_i_have.recent_mcache.put_many
             (ctrl_i_have.get_message_hashes().into_iter()
-                .map(|mh| MsgHash::from_raw(mh.to_string())).collect());
+                .map(|mh| MsgHash::from_raw(mh.to_string())).collect()
+                    as MsgHash);
         control_i_have
     }
 }
@@ -446,6 +491,12 @@ impl From<rpc_proto::ControlIHave> for ControlIHave {
 pub struct ControlIWant {
     /// A vector of message hashes, which are used to get messages.
     pub m_hashes: Vec<MsgHash>,
+}
+
+impl ControlIWant {
+    fn new() -> Self {
+        ControlIWant { m_hashes: vec!(MsgHash::default())}
+    }
 }
 
 impl From<ControlIWant> for rpc_proto::ControlIWant {
@@ -517,4 +568,15 @@ pub struct GossipsubRpc {
     pub subscriptions: Vec<GossipsubSubscription>,
     /// Optional control message.
     pub control: Option<ControlMessage>,
+}
+
+/// Contains the different types of events that we yield to the outside when
+/// polling, which are `GMessage` and `message::ControlMessage`. Used in
+/// the events field of `layer::Gossipsub`  as the `TOutEvent` for the
+/// `NetworkBehaviourAction`.
+pub enum GOutEvents {
+    /// The `GMessage` to send.
+    GMsg(GMessage),
+    /// The `ControlMessage` to send.
+    CtrlMsg(ControlMessage),
 }

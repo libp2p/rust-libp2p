@@ -10,13 +10,13 @@ pub const LOW_WM_MESH_DEGREE: u32 = 4;
 pub const HIGH_WM_MESH_DEGREE: u32 = 12;
 
 // Gossip parameters
-/// length of gossip history
+/// Length of gossip history
 pub const GOSSIP_HIST_LEN: u32 = 5;
-/// This is the last index in the `MCache's` history window. We get
-/// message IDs from up to this index.
+/// We get message IDs from up to (but not including) this index in the
+/// `MCache's` history window.
 pub const HISTORY_GOSSIP: u32 = 3;
 
-/// length of total message history
+/// The length of the total message history.
 pub const MSG_HIST_LEN: u32 = 120;
 pub const SEEN_MSGS_CACHE: u32 = 120;
 

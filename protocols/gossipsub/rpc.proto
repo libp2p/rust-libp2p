@@ -52,9 +52,6 @@ message ControlMessage {
 
 message ControlIHave {
 	optional string topic_hash = 1;
-	// We could have a repeated string messageIDs field and repeated string
-	// messageHash field here, which would be better for backwards
-	// compatibility, although hiding both behind one type has its advantages.
 	repeated string message_hashes = 2;
 }
 

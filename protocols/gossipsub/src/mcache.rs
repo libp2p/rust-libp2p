@@ -1,8 +1,11 @@
-use constants::GOSSIP_HIST_LEN;
+use {TopicMap, TopicHash};
+use constants::{GOSSIP_HIST_LEN, HISTORY_GOSSIP};
 use message::{MsgMap, GMessage, MsgHash};
-use TopicMap;
 
-use std::collections::hash_map::Keys;
+use std::{
+    collections::hash_map::Keys,
+    iter,
+};
 
 /// The message cache used to track recently seen messages. FMI see
 /// https://github.com/libp2p/specs/tree/master/pubsub/gossipsub#router-state.
@@ -10,7 +13,7 @@ use std::collections::hash_map::Keys;
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MCache {
     msgs: MsgMap,
-    history: Vec<CacheEntry>,
+    history: Vec<Vec<CacheEntry>>,
 }
 
 impl MCache {
@@ -23,51 +26,80 @@ impl MCache {
 
     /// Adds a message to the cache after constructing a `MsgHash` to use as a
     /// key.
-    // TODO: should also add to the current window
     pub fn put(&mut self, m: GMessage) {
-        let m_hash = MsgHash::new(m);
-        self.msgs.insert(m_hash, m);
+        self.put_many(iter::once(m))
     }
 
-    pub fn put_many_via_hashes(&mut self,
-    mhs: impl IntoIterator<Item = impl Into<GMessage>>) {
-        for mh in mhs.into_iter() {
-            let m = mh.into();
-            // TODO: This is potentially wasteful if `mh` is a `MsgHash`, but
-            // I haven't put much thought into how to convert `mh` to a
-            // `MsgHash`.
+    /// Adds many messages to the cache, passing the messages and optionally
+    /// the corresponding `MsgHash`es, in the same order.
+    pub fn put_many(&mut self, msgs: impl IntoIterator<Item = GMessage>) {
+        for m in msgs {
             let m_hash = MsgHash::new(m);
             self.msgs.insert(m_hash, m);
+            self.history[0].push(CacheEntry { m_hash: m_hash,
+                topics: m.get_topic_map() })
         }
     }
-
-    // pub fn put_with_msg_id_key(&mut self, m: GMessage) {
-    //     let m_id = m.get_id().expect("The message was not published with an \
-    //         ID, use put_with_msg_hash_key instead");
-    //     // let m_id = MsgId::new(m);
-    //     let msg_rep = MsgRep::id(m_id);
-    //     self.msgs.insert(msg_rep, m);
-    // }
 
     /// Retrieves a message from the cache by its ID, if it is still present.
     pub fn get(&self, mh: MsgHash) -> Option<&GMessage> {
         self.msgs.get(&mh)
     }
 
+    /// Gets all the `MsgHash`es in self.msgs.
     pub fn msgs_keys(&self) -> Keys<MsgHash, GMessage> {
         self.msgs.keys()
     }
 
-    // TODO: methods for window, shift
-    // mcache.window(): retrieves the message IDs for messages in the current history window.
-    // mcache.shift(): shifts the current window, discarding messages older than the history length of the cache.
-    // Consult https://github.com/libp2p/go-libp2p-pubsub/blob/master/mcache.go
+    /// Gets the `MsgHash`es in the history window, up to the `HISTORY_GOSSIP`
+    /// index.
+    // Due to the spec missing details, there is a lot of similarity here to
+    // https://github.com/libp2p/go-libp2p-pubsub/blob/master/mcache.go#L37.
+    // I haven't given much thought to whether there is a more idiomatic or
+    // better way to write this.
+    pub fn get_recent_msg_hashes_in_hist(&self, t_hash: TopicHash)
+        -> Vec<MsgHash> {
+        let m_hashes = Vec::new();
+        for entries in &self.history[..(HISTORY_GOSSIP as usize)] {
+            for entry in entries {
+                for (th, _) in entry.topics {
+                    if th == t_hash {
+                        m_hashes.push(entry.m_hash);
+                        break;
+                    }
+                }
+            }
+        }
+        m_hashes
+    }
+
+    /// Retrieves all of the message IDs for messages in the current history
+    /// window.
+    // pub fn window(&self) -> Vec<MsgHash> {
+    //     self.history.iter().map(|h| h.m_hash).collect()
+    // }
+
+    /// Shifts the current window, discarding messages older than the history
+    /// length of the cache.
+    pub fn shift(&mut self) {
+        let hist = self.history;
+        let last = hist[hist.len()-1];
+        for entry in last {
+            self.msgs.remove(&entry.m_hash);
+        }
+        hist.insert(0, Vec::new());
+    }
+
+    // Consulted https://github.com/libp2p/go-libp2p-pubsub/blob/master/mcache.go
     // as https://github.com/libp2p/specs/tree/master/pubsub/gossipsub
     // is vague.
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CacheEntry {
     m_hash: MsgHash,
     topics: TopicMap,
+}
+
+impl CacheEntry {
 }

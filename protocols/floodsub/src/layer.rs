@@ -130,7 +130,8 @@ impl<TSubstream> Floodsub<TSubstream> {
     /// Publishes a message to the network.
     ///
     /// > **Note**: Doesn't do anything if we're not subscribed to the topic.
-    pub fn publish(&mut self, topic: impl Into<TopicHash>, data: impl Into<Vec<u8>>) {
+    pub fn publish(&mut self, topic: impl Into<TopicHash>,
+        data: impl Into<Vec<u8>>) {
         self.publish_many(iter::once(topic), data)
     }
 
