@@ -1,3 +1,7 @@
+# Version 0.2.2 (2019-01-14)
+
+- Fixed improper dependencies versions causing deriving `NetworkBehaviour` to generate an error.
+
 # Version 0.2.1 (2019-01-14)
 
 - Added the `IntoNodeHandler` and `IntoProtocolsHandler` traits, allowing node handlers and protocol handlers to know the `PeerId` of the node they are interacting with.
