@@ -34,6 +34,7 @@ use crate::{
             HandledNodeError,
             NodeHandler
         },
+        handled_node_tasks::IntoNodeHandler,
         node::Substream
     },
     nodes::listeners::{ListenersEvent, ListenersStream},
@@ -377,8 +378,9 @@ where
     TTrans: Transport<Output = (PeerId, TMuxer)>,
     TTrans::Error: Send + 'static,
     TTrans::ListenerUpgrade: Send + 'static,
-    THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
-    THandler::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
+    THandler: IntoNodeHandler + Send + 'static,
+    THandler::Handler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
+    <THandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
     THandlerErr: error::Error + Send + 'static,
     TMuxer: StreamMuxer + Send + Sync + 'static,
     TMuxer::OutboundSubstream: Send,
@@ -523,8 +525,9 @@ impl<TTrans, TInEvent, TOutEvent, TMuxer, THandler, THandlerErr>
 where
     TTrans: Transport + Clone,
     TMuxer: StreamMuxer,
-    THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
-    THandler::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
+    THandler: IntoNodeHandler + Send + 'static,
+    THandler::Handler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
+    <THandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
     THandlerErr: error::Error + Send + 'static,
 {
     /// Creates a new node events stream.
@@ -752,8 +755,9 @@ where
         TMuxer::Substream: Send,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
-        THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
-        THandler::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
+        THandler: IntoNodeHandler + Send + 'static,
+        THandler::Handler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
+        <THandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
         THandlerErr: error::Error + Send + 'static,
     {
         // Start by polling the listeners for events.
@@ -1138,8 +1142,9 @@ where
     TMuxer::Substream: Send,
     TInEvent: Send + 'static,
     TOutEvent: Send + 'static,
-    THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
-    THandler::OutboundOpenInfo: Send + 'static,
+    THandler: IntoNodeHandler + Send + 'static,
+    THandler::Handler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
+    <THandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
     THandlerErr: error::Error + Send + 'static,
 {
     /// If we are connected, returns the `PeerConnected`.
@@ -1362,8 +1367,9 @@ where
     TMuxer: StreamMuxer + Send + Sync + 'static,
     TMuxer::OutboundSubstream: Send,
     TMuxer::Substream: Send,
-    THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
-    THandler::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
+    THandler: IntoNodeHandler + Send + 'static,
+    THandler::Handler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
+    <THandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
     THandlerErr: error::Error + Send + 'static,
     TInEvent: Send + 'static,
     TOutEvent: Send + 'static,

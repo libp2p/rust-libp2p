@@ -24,7 +24,7 @@ use crate::{
     nodes::{
         node::Substream,
         handled_node_tasks::{HandledNodesEvent, HandledNodesTasks, TaskClosedEvent},
-        handled_node_tasks::{Task as HandledNodesTask, TaskId},
+        handled_node_tasks::{IntoNodeHandler, Task as HandledNodesTask, TaskId},
         handled_node::{HandledNodeError, NodeHandler}
     }
 };
@@ -285,12 +285,13 @@ impl<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> CollectionStream<TIn
         -> ReachAttemptId
     where
         TFut: Future<Item = (PeerId, TMuxer), Error = TReachErr> + Send + 'static,
-        THandler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
+        THandler: IntoNodeHandler + Send + 'static,
+        THandler::Handler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
+        <THandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static,     // TODO: shouldn't be required?
         TReachErr: error::Error + Send + 'static,
         THandlerErr: error::Error + Send + 'static,
         TInEvent: Send + 'static,
         TOutEvent: Send + 'static,
-        THandler::OutboundOpenInfo: Send + 'static,     // TODO: shouldn't be required?
         TMuxer: StreamMuxer + Send + Sync + 'static,  // TODO: Send + Sync + 'static shouldn't be required
         TMuxer::OutboundSubstream: Send + 'static,  // TODO: shouldn't be required
     {
@@ -459,7 +460,7 @@ impl<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> CollectionStream<TIn
     }
 }
 
-/// Reach attempt interrupt errors. 
+/// Reach attempt interrupt errors.
 #[derive(Debug)]
 pub enum InterruptError {
     /// An invalid reach attempt has been used to try to interrupt. The task
@@ -475,7 +476,7 @@ pub enum InterruptError {
 impl fmt::Display for InterruptError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            InterruptError::ReachAttemptNotFound => 
+            InterruptError::ReachAttemptNotFound =>
                 write!(f, "The reach attempt could not be found."),
             InterruptError::AlreadyReached =>
                 write!(f, "The reach attempt has already completed or reached the node."),

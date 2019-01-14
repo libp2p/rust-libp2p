@@ -33,6 +33,7 @@
 //! >           connection with a remote. In order to handle a protocol that requires knowledge of
 //! >           the network as a whole, see the `NetworkBehaviour` trait.
 
+use crate::PeerId;
 use crate::upgrade::{
     InboundUpgrade,
     OutboundUpgrade,
@@ -46,7 +47,7 @@ pub use self::dummy::DummyProtocolsHandler;
 pub use self::map_in::MapInEvent;
 pub use self::map_out::MapOutEvent;
 pub use self::node_handler::{NodeHandlerWrapper, NodeHandlerWrapperBuilder};
-pub use self::select::ProtocolsHandlerSelect;
+pub use self::select::{IntoProtocolsHandlerSelect, ProtocolsHandlerSelect};
 
 mod dummy;
 mod map_in;
@@ -207,17 +208,19 @@ pub trait ProtocolsHandler {
     where
         Self: Sized,
     {
-        NodeHandlerWrapperBuilder::new(self, Duration::from_secs(10), Duration::from_secs(10), Duration::from_secs(5))
+        IntoProtocolsHandler::into_node_handler_builder(self)
     }
 
     /// Builds an implementation of `NodeHandler` that handles this protocol exclusively.
     ///
     /// > **Note**: This is a shortcut for `self.into_node_handler_builder().build()`.
     #[inline]
+    #[deprecated(note = "Use into_node_handler_builder instead")]
     fn into_node_handler(self) -> NodeHandlerWrapper<Self>
     where
         Self: Sized,
     {
+        #![allow(deprecated)]
         self.into_node_handler_builder().build()
     }
 }
@@ -351,5 +354,47 @@ where
             ProtocolsHandlerUpgrErr::MuxerDeniedSubstream => None,
             ProtocolsHandlerUpgrErr::Upgrade(err) => Some(err),
         }
+    }
+}
+
+/// Prototype for a `ProtocolsHandler`.
+pub trait IntoProtocolsHandler {
+    /// The protocols handler.
+    type Handler: ProtocolsHandler;
+
+    /// Builds the protocols handler.
+    ///
+    /// The `PeerId` is the id of the node the handler is going to handle.
+    fn into_handler(self, remote_peer_id: &PeerId) -> Self::Handler;
+
+    /// Builds an implementation of `IntoProtocolsHandler` that handles both this protocol and the
+    /// other one together.
+    #[inline]
+    fn select<TProto2>(self, other: TProto2) -> IntoProtocolsHandlerSelect<Self, TProto2>
+    where
+        Self: Sized,
+    {
+        IntoProtocolsHandlerSelect::new(self, other)
+    }
+
+    /// Creates a builder that will allow creating a `NodeHandler` that handles this protocol
+    /// exclusively.
+    #[inline]
+    fn into_node_handler_builder(self) -> NodeHandlerWrapperBuilder<Self>
+    where
+        Self: Sized,
+    {
+        NodeHandlerWrapperBuilder::new(self, Duration::from_secs(10), Duration::from_secs(10), Duration::from_secs(5))
+    }
+}
+
+impl<T> IntoProtocolsHandler for T
+where T: ProtocolsHandler
+{
+    type Handler = Self;
+
+    #[inline]
+    fn into_handler(self, _: &PeerId) -> Self {
+        self
     }
 }
