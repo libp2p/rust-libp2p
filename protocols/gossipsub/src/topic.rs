@@ -145,32 +145,18 @@ impl<'a> From<&'a Topic> for TopicHash {
 }
 
 /// Built topic.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Topic {
-    // Adding `PartialEq` and `Eq` as derived traits on this struct causes the
-    // following compiler error for this field:
-        // the trait bound `rpc_proto::TopicDescriptor: std::cmp::Eq` is not satisfied
-
-        // the trait std::cmp::Eq is not implemented for rpc_proto::TopicDescriptor
-
-        // note: required by std::cmp::AssertParamIsEqrustc(E0277)
-
-        // topic.rs(138, 5): the trait std::cmp::Eq is not implemented for rpc_proto::TopicDescriptor
-    // To fix this error it seems that rust-protobuf needs to change to be able
-    // to add a derived trait to a struct in the generated code (specifically
-    // `TopicDescriptor` in this case). Of the fields in
-    // `TopicDescriptor`, name is a
-    // `::protobuf::SingularField<::std::string::String>`, where
-    // `SingularField<T>` implements Eq or any other traits, while
-    // `String` also does.
-    // https://doc.rust-lang.org/src/alloc/string.rs.html#292
-    // `UnknownFields` also implements `Eq`.
-    // https://github.com/stepancheg/rust-protobuf/blob/2d79549c42504f768ab942d5802cf231f4912587/protobuf/src/unknown.rs#L122
-    // CachedSize does implement Eq,
-    // https://github.com/stepancheg/rust-protobuf/blob/2d79549c42504f768ab942d5802cf231f4912587/protobuf/src/cached_size.rs#L38.
     descriptor: rpc_proto::TopicDescriptor,
     hash: TopicHash,
 }
+
+impl PartialEq for Topic {
+    fn eq(&self, other: &Topic) -> bool {
+        self.hash == other.hash
+    }
+}
+impl Eq for Topic {}
 
 impl Topic {
     /// Returns the hash of the topic.

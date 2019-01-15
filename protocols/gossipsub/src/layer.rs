@@ -6,15 +6,13 @@ use message::{GossipsubRpc, GMessage, ControlMessage, GossipsubSubscription,
 use {Topic, TopicHash};
 use rpc_proto;
 
-use libp2p_floodsub::{Floodsub, handler::FloodsubHandler};
+use libp2p_floodsub::Floodsub;
 use libp2p_core::{
     PeerId,
-    protocols_handler::{ProtocolsHandler, ProtocolsHandlerSelect},
+    protocols_handler::ProtocolsHandler,
     swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction,
         PollParameters},
 };
-
-// use chrono::Utc;
 use cuckoofilter::CuckooFilter;
 use futures::prelude::*;
 use protobuf::Message;
