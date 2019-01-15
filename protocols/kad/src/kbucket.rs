@@ -142,7 +142,7 @@ where
     // Returns `None` if out of range, which happens if `id` is the same as the local peer id.
     #[inline]
     fn bucket_num(&self, id: &Id) -> Option<usize> {
-        (Id::max_distance() - 1).checked_sub(self.my_id.distance_with(id) as usize)
+        (self.my_id.distance_with(id) as usize).checked_sub(1)
     }
 
     /// Returns an iterator to all the buckets of this table.
