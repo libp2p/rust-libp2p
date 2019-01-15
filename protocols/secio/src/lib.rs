@@ -90,6 +90,7 @@ use bytes::BytesMut;
 use ed25519_dalek::Keypair as Ed25519KeyPair;
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
+use lazy_static::lazy_static;
 use libp2p_core::{PeerId, PublicKey, upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade}};
 use log::debug;
 #[cfg(all(feature = "rsa", not(any(target_os = "emscripten", target_os = "unknown"))))]
@@ -114,6 +115,12 @@ mod stream_cipher;
 pub use crate::algo_support::Digest;
 pub use crate::exchange::KeyAgreement;
 pub use crate::stream_cipher::Cipher;
+
+// Cached `Secp256k1` context, to avoid recreating it every time.
+#[cfg(feature = "secp256k1")]
+lazy_static! {
+    static ref SECP256K1: secp256k1::Secp256k1<secp256k1::All> = secp256k1::Secp256k1::new();
+}
 
 /// Implementation of the `ConnectionUpgrade` trait of `libp2p_core`. Automatically applies
 /// secio on any connection.
@@ -288,8 +295,7 @@ impl SecioKeyPair {
             }
             #[cfg(feature = "secp256k1")]
             SecioKeyPairInner::Secp256k1 { ref private } => {
-                let secp = secp256k1::Secp256k1::signing_only();
-                let pubkey = secp256k1::key::PublicKey::from_secret_key(&secp, private);
+                let pubkey = secp256k1::key::PublicKey::from_secret_key(&SECP256K1, private);
                 PublicKey::Secp256k1(pubkey.serialize().to_vec())
             }
         }
