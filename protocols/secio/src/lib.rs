@@ -117,6 +117,7 @@ pub use crate::exchange::KeyAgreement;
 pub use crate::stream_cipher::Cipher;
 
 // Cached `Secp256k1` context, to avoid recreating it every time.
+#[cfg(feature = "secp256k1")]
 lazy_static! {
     static ref SECP256K1: secp256k1::Secp256k1<secp256k1::All> = secp256k1::Secp256k1::new();
 }

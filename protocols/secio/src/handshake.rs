@@ -48,7 +48,9 @@ use tokio_io::codec::length_delimited;
 use tokio_io::{AsyncRead, AsyncWrite};
 #[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
 use untrusted::Input as UntrustedInput;
-use crate::{SECP256K1, KeyAgreement, SecioConfig, SecioKeyPairInner};
+use crate::{KeyAgreement, SecioConfig, SecioKeyPairInner};
+#[cfg(feature = "secp256k1")]
+use crate::SECP256K1;
 
 // This struct contains the whole context of a handshake, and is filled progressively
 // throughout the various parts of the handshake.
