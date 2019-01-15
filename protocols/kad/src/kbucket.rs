@@ -109,7 +109,7 @@ impl KBucketsPeerId for Multihash {
         let my_hash = U512::from(self.digest());
         let other_hash = U512::from(other.digest());
         let xor = my_hash ^ other_hash;
-        xor.leading_zeros()
+        512 - xor.leading_zeros()
     }
 
     #[inline]
@@ -323,8 +323,8 @@ impl<'a, Id: 'a, Val: 'a> Bucket<'a, Id, Val> {
 mod tests {
     extern crate rand;
     use self::rand::random;
-    use kbucket::{KBucketsTable, UpdateOutcome, MAX_NODES_PER_BUCKET};
-    use multihash::Multihash;
+    use kbucket::{KBucketsPeerId, KBucketsTable, UpdateOutcome, MAX_NODES_PER_BUCKET};
+    use multihash::{Multihash, Hash};
     use std::thread;
     use std::time::Duration;
 
@@ -467,5 +467,19 @@ mod tests {
             table.update(fill_ids.remove(0), ()),
             UpdateOutcome::NeedPing(second_node)
         );
+    }
+
+    #[test]
+    fn self_distance_zero() {
+        let a = Multihash::random(Hash::SHA2256);
+        assert_eq!(a.distance_with(&a), 0);
+    }
+
+    #[test]
+    fn distance_correct_order() {
+        let a = Multihash::random(Hash::SHA2256);
+        let b = Multihash::random(Hash::SHA2256);
+        assert!(a.distance_with(&a) < b.distance_with(&a));
+        assert!(a.distance_with(&b) > b.distance_with(&b));
     }
 }
