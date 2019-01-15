@@ -131,7 +131,7 @@ impl Decoder for GossipsubRpcCodec {
         let mut messages = Vec::with_capacity(rpc.get_publish().len());
         for mut publish in rpc.take_publish().into_iter() {
             messages.push(GMessage {
-                source: PeerId::from_bytes(publish.take_from()).map_err(|_| {
+                from: PeerId::from_bytes(publish.take_from()).map_err(|_| {
                     io::Error::new(io::ErrorKind::InvalidData,
                     "Invalid peer ID in message")
                 })?,

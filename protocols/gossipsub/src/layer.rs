@@ -191,7 +191,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
         message_id: bool) {
 
         let message = GMessage {
-            source: self.local_peer_id.clone(),
+            from: self.local_peer_id.clone(),
             data: data.into(),
             // If the sequence numbers are predictable, then an attacker could
             // flood the network with packets with the predetermined sequence

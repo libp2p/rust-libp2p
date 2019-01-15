@@ -1,7 +1,7 @@
 use mcache::MCache;
 use rpc_proto;
 
-use {TopicMap, TopicHash};
+use {Topic, TopicMap, TopicHash};
 
 use libp2p_core::PeerId;
 
@@ -12,7 +12,8 @@ use std::{
     borrow::Borrow,
     collections::hash_map::{HashMap, Keys},
     hash::{Hash, Hasher},
-    iter::IntoIterator,
+    io,
+    iter::{Iterator, IntoIterator},
 };
 
 /// Used in MCache.
@@ -64,6 +65,7 @@ impl MsgMap {
 // for a `HashMap`.
 // The add method passes a `MsgHash` to a Gossipsub.received, and the compiler
 // complains if `Hash` isn't implemented.
+// Better to use accessors for the fields.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GMessage {
     /// ID of the peer that published this message.
@@ -114,15 +116,28 @@ pub struct GMessage {
 
 impl Hash for GMessage {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.source.hash(state);
+        self.from.hash(state);
         self.data.hash(state);
         self.seq_no.hash(state);
     }
 }
 impl GMessage {
+    pub fn get_from(&self) -> PeerId {
+        self.from
+    }
+
+    pub fn get_data(&self) -> Vec<u8> {
+        self.data
+    }
+
+    pub fn get_seq_no(&self) -> Vec<u8> {
+        self.seq_no
+    }
+
     pub fn get_topic_map(&self) -> TopicMap {
         self.topics
     }
+
 
     // // Sets the hash of the message, used in `MsgHashBuilder`.
     // #[inline]
@@ -156,35 +171,63 @@ impl GMessage {
     //     &self.id
     // }
 
-}
+    pub fn from_proto_msg(p_msg: rpc_proto::Message)
+        -> Result<GMessage, io::Error> {
+        let from = PeerId::from_bytes(p_msg.get_from().to_vec()).expect("The from field of rpc_proto is not a valid peer ID");
+        let topic_hashes = p_msg.get_topic_hashes().to_vec().iter();
+        let topic_map = TopicMap::new();
+        for th_str in topic_hashes {
+            let th = TopicHash::from_raw(th_str.to_string());
+            let topic = Topic::from(th);
+            topic_map.insert(th, topic);
+        }
 
-impl From<MsgHash> for GMessage {
-    fn from(m_hash: MsgHash) -> Self {
+        Ok(GMessage {
+            from: from,
+            data: p_msg.get_data().to_vec(),
+            seq_no: p_msg.get_seqno().to_vec(),
+            topics: topic_map,
+        })
+    }
+
+    pub fn from_msg_hash(m_hash: MsgHash) -> Result<GMessage, io::Error> {
         let decoded_hash: &[u8]
             = bs58::decode(m_hash.hash).into_vec().unwrap().as_ref();
-        let rpc_msg = protobuf::parse_from_bytes::<rpc_proto::Message>
-            (decoded_hash).unwrap();
-        GMessage::from(rpc_msg)
+        let rpc_msg = protobuf::parse_from_bytes::<rpc_proto::Message>(
+            decoded_hash).unwrap();
+        GMessage::from_proto_msg(rpc_msg)
     }
 }
 
-impl From<rpc_proto::Message> for GMessage {
-    fn from (p_msg: rpc_proto::Message) -> GMessage {
-        GMessage {
-            from: p_msg.get_from(),
-            data: p_msg.get_data(),
-            seq_no: p_msg.get_seqno(),
-            topics: p_msg.get_topic_hashes(),
-        }
-    }
-}
+// This should be TryFrom, but this is nightly.
+// impl From<MsgHash> for GMessage {
+//     fn from(m_hash: MsgHash) -> Self {
+//         let decoded_hash: &[u8]
+//             = bs58::decode(m_hash.hash).into_vec().unwrap().as_ref();
+//         let rpc_msg = protobuf::parse_from_bytes::<rpc_proto::Message>
+//             (decoded_hash).unwrap();
+//         GMessage::from(rpc_msg)
+//     }
+// }
 
-
+// Incomplete: TryFrom is a nightly only experimental API.
+// impl TryFrom<rpc_proto::Message> for GMessage {
+//     type Error = TryFromMsgError;
+//     fn try_from(p_msg: rpc_proto::Message)
+//         -> Result<GMessage, TryFromMsgError> {
+//         GMessage {
+//             from: PeerId::from_bytes(p_msg.get_from()).map_err(|e| ),
+//             data: p_msg.get_data(),
+//             seq_no: p_msg.get_seqno(),
+//             topics: p_msg.get_topic_hashes(),
+//         }
+//     }
+// }
 
 impl From<GMessage> for rpc_proto::Message {
     fn from(message: GMessage) -> rpc_proto::Message {
         let mut msg = rpc_proto::Message::new();
-        msg.set_from(message.source.into_bytes());
+        msg.set_from(message.from.into_bytes());
         msg.set_data(message.data);
         msg.set_seqno(message.seq_no);
 
@@ -232,7 +275,7 @@ impl MsgId {
     #[inline]
     pub fn new(msg: GMessage) -> MsgId {
         let id = format!("{}{}", String::from_utf8(msg.seq_no)
-            .expect("Found invalid UTF-8"), msg.source.to_base58());
+            .expect("Found invalid UTF-8"), msg.from.to_base58());
         MsgId {
             id: id,
         }
@@ -479,8 +522,10 @@ impl From<rpc_proto::ControlIHave> for ControlIHave {
             .get_topic_hash().to_string());
         control_i_have.recent_mcache.put_many
             (ctrl_i_have.get_message_hashes().into_iter()
-                .map(|mh| MsgHash::from_raw(mh.to_string())).collect()
-                    as MsgHash);
+                .map(|mh| GMessage::from_msg_hash(
+                    MsgHash::from_raw(mh.to_string()))
+                    .expect("Error converting `MsgHash` to `GMessage`"))
+                .collect::<Vec<_>>());
         control_i_have
     }
 }

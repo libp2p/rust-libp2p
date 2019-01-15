@@ -113,6 +113,11 @@ impl TopicHash {
     }
 
     /// Builds a new `TopicHash` from the given hash.
+    // TODO: check if the TopicHash matches that of an existing `Topic`?
+    // Use impl From<TopicHash> for Topic. Would need to search through topics
+    // in the network until one is found, or return an error.
+    // Not sure if there would be any use case for constructing a new `Topic`
+    // from a raw `String` (via a `TopicHash`).
     #[inline]
     pub fn from_raw(hash: String) -> TopicHash {
         TopicHash { hash: hash }
