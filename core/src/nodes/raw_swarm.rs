@@ -694,36 +694,26 @@ where
         THandler::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
         THandlerErr: error::Error + Send + 'static,
     {
-        // Start by polling the listeners for events.
+        // Start by polling the listeners for events, but only
+        // if numer of incoming connection does not exceed the limit.
         match self.listeners.poll() {
             Async::NotReady => (),
             Async::Ready(ListenersEvent::Incoming { upgrade, listen_addr, send_back_addr }) => {
-
-                if let Some(x) = self.incoming_limit {
-                    if self.num_incoming_negotiated() >= x as usize {
-                        drop(upgrade);
-                        return Async::Ready(
-                            RawSwarmEvent::IncomingConnectionError {
-                                listen_addr,
-                                send_back_addr,
-                                error: IoError::new(
-                                    IoErrorKind::PermissionDenied,
-                                    "Too many incoming connections"
-                                        .to_string()
-                                )
-                           }
-                        );
-                    }
+                match self.incoming_limit {
+                    Some(x) if self.num_incoming_negotiated() >= (x as usize)
+                        => (),
+                    _ => {
+                        let event = IncomingConnectionEvent {
+                            upgrade,
+                            listen_addr,
+                            send_back_addr,
+                            active_nodes: &mut self.active_nodes,
+                            other_reach_attempts: &mut self.reach_attempts.other_reach_attempts,
+                        };
+                        return Async::Ready(RawSwarmEvent::IncomingConnection(event));
+                     }
                 }
-                let event = IncomingConnectionEvent {
-                    upgrade,
-                    listen_addr,
-                    send_back_addr,
-                    active_nodes: &mut self.active_nodes,
-                    other_reach_attempts: &mut self.reach_attempts.other_reach_attempts,
-                };
-                return Async::Ready(RawSwarmEvent::IncomingConnection(event));
-            }
+            },
             Async::Ready(ListenersEvent::Closed { listen_addr, listener, result }) => {
                 return Async::Ready(RawSwarmEvent::ListenerClosed {
                     listen_addr,
@@ -1795,44 +1785,41 @@ mod tests {
         let mut transport = DummyTransport::new();
         let peer_id = PeerId::random();
         let muxer = DummyMuxer::new();
+        let limit = 1;
         transport.set_initial_listener_state(ListenerState::Ok(Async::Ready(Some((peer_id, muxer)))));
-        let mut swarm = RawSwarm::<_, _, _, Handler, _>::new_with_incoming_limit(transport, PeerId::random(), Some(5));
-        assert_eq!(swarm.incoming_limit(), Some(5));
+        let mut swarm = RawSwarm::<_, _, _, Handler, _>::new_with_incoming_limit(transport, PeerId::random(), Some(limit));
+        assert_eq!(swarm.incoming_limit(), Some(limit));
         swarm.listen_on("/memory".parse().unwrap()).unwrap();
         assert_eq!(swarm.num_incoming_negotiated(), 0);
 
         let swarm = Arc::new(Mutex::new(swarm));
+        let mut rt = Runtime::new().unwrap();
         for i in 1..10 {
-            let mut rt = Runtime::new().unwrap();
             let swarm_fut = swarm.clone();
             let fut = future::poll_fn(move || -> Poll<_, ()> {
                 let mut swarm_fut = swarm_fut.lock();
-                if i <= 5 {
-                    assert_matches!(swarm_fut.poll(), Async::Ready(RawSwarmEvent::IncomingConnection(incoming)) => {
-                    incoming.accept(Handler::default());
+                if i <= limit {
+                   assert_matches!(swarm_fut.poll(), Async::Ready(RawSwarmEvent::IncomingConnection(incoming)) => {
+                       incoming.accept(Handler::default());
                     });
                 } else {
-                    assert_matches!(swarm_fut.poll(),
-                        Async::Ready(
-                            RawSwarmEvent::IncomingConnectionError{
-                                listen_addr: _,
-                                send_back_addr: _,
-                                error: _
+                    match swarm_fut.poll() {
+                        Async::NotReady => (),
+                        Async::Ready(x) => {
+                            match x {
+                                RawSwarmEvent::IncomingConnection(_) => (),
+                                RawSwarmEvent::Connected { .. } => (),
+                                _ => { panic!("Not expected event") },
                             }
-                        )
-                    );
+                        },
+                    }
                 }
 
                 Ok(Async::Ready(()))
             });
             rt.block_on(fut).expect("tokio works");
             let swarm = swarm.lock();
-            if i <= 5 {
-                assert_eq!(swarm.num_incoming_negotiated(), i);
-            } else {
-                assert_eq!(swarm.num_incoming_negotiated(), 5);
-            }
+            assert!(swarm.num_incoming_negotiated() <= (limit as usize));
         }
-
      }
 }
