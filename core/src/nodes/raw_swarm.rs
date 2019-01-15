@@ -794,7 +794,7 @@ where
             Async::NotReady => (),
             Async::Ready(ListenersEvent::Incoming { upgrade, listen_addr, send_back_addr }) => {
                 match self.incoming_limit {
-                    Some(x) if self.num_incoming_negotiated() >= (x as usize)
+                    Some(x) if self.incoming_negotiated().count() >= (x as usize)
                         => (),
                     _ => {
                         let event = IncomingConnectionEvent {
@@ -1458,47 +1458,4 @@ where
             active_nodes: &mut self.nodes.active_nodes,
         }
     }
-
-    #[test]
-    fn limit_incoming_connections() {
-        let mut transport = DummyTransport::new();
-        let peer_id = PeerId::random();
-        let muxer = DummyMuxer::new();
-        let limit = 1;
-        transport.set_initial_listener_state(ListenerState::Ok(Async::Ready(Some((peer_id, muxer)))));
-        let mut swarm = RawSwarm::<_, _, _, Handler, _>::new_with_incoming_limit(transport, PeerId::random(), Some(limit));
-        assert_eq!(swarm.incoming_limit(), Some(limit));
-        swarm.listen_on("/memory".parse().unwrap()).unwrap();
-        assert_eq!(swarm.num_incoming_negotiated(), 0);
-
-        let swarm = Arc::new(Mutex::new(swarm));
-        let mut rt = Runtime::new().unwrap();
-        for i in 1..10 {
-            let swarm_fut = swarm.clone();
-            let fut = future::poll_fn(move || -> Poll<_, ()> {
-                let mut swarm_fut = swarm_fut.lock();
-                if i <= limit {
-                   assert_matches!(swarm_fut.poll(), Async::Ready(RawSwarmEvent::IncomingConnection(incoming)) => {
-                       incoming.accept(Handler::default());
-                    });
-                } else {
-                    match swarm_fut.poll() {
-                        Async::NotReady => (),
-                        Async::Ready(x) => {
-                            match x {
-                                RawSwarmEvent::IncomingConnection(_) => (),
-                                RawSwarmEvent::Connected { .. } => (),
-                                _ => { panic!("Not expected event") },
-                            }
-                        },
-                    }
-                }
-
-                Ok(Async::Ready(()))
-            });
-            rt.block_on(fut).expect("tokio works");
-            let swarm = swarm.lock();
-            assert!(swarm.num_incoming_negotiated() <= (limit as usize));
-        }
-     }
 }
