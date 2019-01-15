@@ -22,6 +22,7 @@ libp2p-mplex = { version = "0.3.0", path = "./muxers/mplex" }
 libp2p-identify = { version = "0.3.0", path = "./protocols/identify" }
 libp2p-kad = { version = "0.3.0", path = "./protocols/kad" }
 libp2p-floodsub = { version = "0.3.0", path = "./protocols/floodsub" }
+libp2p-gossipsub = { version = "0.1.0", path = "./protocols/gossipsub" }
 libp2p-ping = { version = "0.3.0", path = "./protocols/ping" }
 libp2p-plaintext = { version = "0.3.0", path = "./protocols/plaintext" }
 libp2p-ratelimit = { version = "0.3.0", path = "./transports/ratelimit" }
@@ -64,6 +65,7 @@ members = [
     "muxers/mplex",
     "muxers/yamux",
     "protocols/floodsub",
+    "protocols/gossipsub",
     "protocols/identify",
     "protocols/kad",
     "protocols/noise",

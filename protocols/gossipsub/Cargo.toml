@@ -1,0 +1,25 @@
+[package]
+name = "libp2p-gossipsub"
+version = "0.1.0"
+authors = ["Age Manning <age@agemanning.com>"]
+license = "MIT"
+
+[dependencies]
+libp2p-core = { path = "../../core" }
+libp2p-floodsub = { path = "../floodsub" }
+bs58 = ""
+bytes = ""
+cuckoofilter = ""
+fnv = ""
+futures = ""
+protobuf = ""
+rand = ""
+smallvec = ""
+tokio-codec = ""
+tokio-io = ""
+unsigned-varint = ""
+
+[dev-dependencies]
+libp2p = { path = "../../" }
+tokio = "0.1"
+tokio-stdin-stdout = "0.1"
