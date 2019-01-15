@@ -95,6 +95,11 @@ where
     }
 
     #[inline]
+    fn connection_keep_alive(&self) -> bool {
+        self.inner.connection_keep_alive()
+    }
+
+    #[inline]
     fn shutdown(&mut self) {
         self.inner.shutdown()
     }

@@ -18,11 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{stream, Future, IntoFuture, Sink, Stream};
+use futures::{Future, IntoFuture, Sink, Stream};
 use multiaddr::{Protocol, Multiaddr};
 use rw_stream_sink::RwStreamSink;
+use std::{error, fmt};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use swarm::Transport;
+use swarm::{Transport, transport::TransportError};
 use tokio_io::{AsyncRead, AsyncWrite};
 use websocket::client::builder::ClientBuilder;
 use websocket::message::OwnedMessage;
@@ -59,6 +60,7 @@ impl<T> Transport for WsConfig<T>
 where
     // TODO: this 'static is pretty arbitrary and is necessary because of the websocket library
     T: Transport + 'static,
+    T::Error: Send,
     T::Dial: Send,
     T::Listener: Send,
     T::ListenerUpgrade: Send,
@@ -66,55 +68,42 @@ where
     T::Output: AsyncRead + AsyncWrite + Send,
 {
     type Output = Box<AsyncStream + Send>;
-    type Listener =
-        stream::Map<T::Listener, fn((<T as Transport>::ListenerUpgrade, Multiaddr)) -> (Self::ListenerUpgrade, Multiaddr)>;
-    type ListenerUpgrade = Box<Future<Item = Self::Output, Error = IoError> + Send>;
-    type Dial = Box<Future<Item = Self::Output, Error = IoError> + Send>;
+    type Error = WsError<T::Error>;
+    type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = Self::Error> + Send>;
+    type ListenerUpgrade = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
+    type Dial = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
 
     fn listen_on(
         self,
         original_addr: Multiaddr,
-    ) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+    ) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
         let mut inner_addr = original_addr.clone();
         match inner_addr.pop() {
             Some(Protocol::Ws) => {}
-            _ => return Err((self, original_addr)),
+            _ => return Err(TransportError::MultiaddrNotSupported(original_addr)),
         };
 
-        let (inner_listen, new_addr) = match self.transport.listen_on(inner_addr) {
-            Ok((listen, mut new_addr)) => {
-                // Need to suffix `/ws` to the listening address.
-                new_addr.append(Protocol::Ws);
-                (listen, new_addr)
-            }
-            Err((transport, _)) => {
-                return Err((
-                    WsConfig {
-                        transport: transport,
-                    },
-                    original_addr,
-                ));
-            }
-        };
-
+        let (inner_listen, mut new_addr) = self.transport.listen_on(inner_addr)
+            .map_err(|err| err.map(WsError::Underlying))?;
+        new_addr.append(Protocol::Ws);
         debug!("Listening on {}", new_addr);
 
-        let listen = inner_listen.map::<_, fn(_) -> _>(|(stream, mut client_addr)| {
+        let listen = inner_listen.map_err(WsError::Underlying).map(|(stream, mut client_addr)| {
             // Need to suffix `/ws` to each client address.
             client_addr.append(Protocol::Ws);
 
             // Upgrade the listener to websockets like the websockets library requires us to do.
-            let upgraded = stream.and_then(move |stream| {
+            let upgraded = stream.map_err(WsError::Underlying).and_then(move |stream| {
                 debug!("Incoming connection");
 
                 stream
                     .into_ws()
-                    .map_err(|e| IoError::new(IoErrorKind::Other, e.3))
+                    .map_err(|e| WsError::WebSocket(Box::new(e.3)))
                     .and_then(|stream| {
                         // Accept the next incoming connection.
                         stream
                             .accept()
-                            .map_err(|err| IoError::new(IoErrorKind::Other, err))
+                            .map_err(|e| WsError::WebSocket(Box::new(e)))
                             .map(|(client, _http_headers)| {
                                 debug!("Upgraded incoming connection to websockets");
 
@@ -149,10 +138,10 @@ where
             (Box::new(upgraded) as Box<Future<Item = _, Error = _> + Send>, client_addr)
         });
 
-        Ok((listen, new_addr))
+        Ok((Box::new(listen) as Box<_>, new_addr))
     }
 
-    fn dial(self, original_addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+    fn dial(self, original_addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let mut inner_addr = original_addr.clone();
         let is_wss = match inner_addr.pop() {
             Some(Protocol::Ws) => false,
@@ -162,7 +151,7 @@ where
                     "Ignoring dial attempt for {} because it is not a websocket multiaddr",
                     original_addr
                 );
-                return Err((self, original_addr));
+                return Err(TransportError::MultiaddrNotSupported(original_addr));
             }
         };
 
@@ -170,29 +159,17 @@ where
 
         let ws_addr = client_addr_to_ws(&inner_addr, is_wss);
 
-        let inner_dial = match self.transport.dial(inner_addr) {
-            Ok(d) => d,
-            Err((transport, old_addr)) => {
-                debug!(
-                    "Failed to dial {} because {} is not supported by the underlying transport",
-                    original_addr, old_addr
-                );
-                return Err((
-                    WsConfig {
-                        transport: transport,
-                    },
-                    original_addr,
-                ));
-            }
-        };
+        let inner_dial = self.transport.dial(inner_addr)
+            .map_err(|err| err.map(WsError::Underlying))?;
 
         let dial = inner_dial
+            .map_err(WsError::Underlying)
             .into_future()
             .and_then(move |connec| {
                 ClientBuilder::new(&ws_addr)
                     .expect("generated ws address is always valid")
                     .async_connect_on(connec)
-                    .map_err(|err| IoError::new(IoErrorKind::Other, err))
+                    .map_err(|e| WsError::WebSocket(Box::new(e)))
                     .map(|(client, _)| {
                         debug!("Upgraded outgoing connection to websockets");
 
@@ -221,6 +198,37 @@ where
 
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         self.transport.nat_traversal(server, observed)
+    }
+}
+
+/// Error in WebSockets.
+#[derive(Debug)]
+pub enum WsError<TErr> {
+    /// Error in the WebSocket layer.
+    WebSocket(Box<dyn error::Error + Send + Sync>),
+    /// Error in the transport layer underneath.
+    Underlying(TErr),
+}
+
+impl<TErr> fmt::Display for WsError<TErr>
+where TErr: fmt::Display
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            WsError::WebSocket(err) => write!(f, "{}", err),
+            WsError::Underlying(err) => write!(f, "{}", err),
+        }
+    }
+}
+
+impl<TErr> error::Error for WsError<TErr>
+where TErr: error::Error + 'static
+{
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            WsError::WebSocket(err) => Some(&**err),
+            WsError::Underlying(err) => Some(err),
+        }
     }
 }
 

@@ -44,7 +44,7 @@
 //! The `UdsConfig` structs implements the `Transport` trait of the `core` library. See the
 //! documentation of `core` and of libp2p in general to learn how to use the `Transport` trait.
 
-#![cfg(all(unix, any(target_os = "emscripten", target_os = "unknown")))]
+#![cfg(all(unix, not(any(target_os = "emscripten", target_os = "unknown"))))]
 
 extern crate futures;
 extern crate libp2p_core;
@@ -63,9 +63,8 @@ extern crate tokio;
 use futures::{future::{self, FutureResult}, prelude::*, try_ready};
 use futures::stream::Stream;
 use multiaddr::{Protocol, Multiaddr};
-use std::io::Error as IoError;
-use std::path::PathBuf;
-use libp2p_core::Transport;
+use std::{io, path::PathBuf};
+use libp2p_core::{Transport, transport::TransportError};
 use tokio_uds::{UnixListener, UnixStream};
 
 /// Represents the configuration for a Unix domain sockets transport capability for libp2p.
@@ -86,11 +85,12 @@ impl UdsConfig {
 
 impl Transport for UdsConfig {
     type Output = UnixStream;
+    type Error = io::Error;
     type Listener = ListenerStream<tokio_uds::Incoming>;
-    type ListenerUpgrade = FutureResult<Self::Output, IoError>;
+    type ListenerUpgrade = FutureResult<Self::Output, io::Error>;
     type Dial = tokio_uds::ConnectFuture;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
         if let Ok(path) = multiaddr_to_path(&addr) {
             let listener = UnixListener::bind(&path);
             // We need to build the `Multiaddr` to return from this function. If an error happened,
@@ -104,19 +104,19 @@ impl Transport for UdsConfig {
                     };
                     Ok((future, addr))
                 }
-                Err(_) => return Err((self, addr)),
+                Err(_) => return Err(TransportError::MultiaddrNotSupported(addr)),
             }
         } else {
-            Err((self, addr))
+            Err(TransportError::MultiaddrNotSupported(addr))
         }
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         if let Ok(path) = multiaddr_to_path(&addr) {
             debug!("Dialing {}", addr);
             Ok(UnixStream::connect(&path))
         } else {
-            Err((self, addr))
+            Err(TransportError::MultiaddrNotSupported(addr))
         }
     }
 

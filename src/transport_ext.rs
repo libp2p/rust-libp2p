@@ -20,10 +20,9 @@
 
 //! Provides the `TransportExt` trait.
 
-use ratelimit::RateLimited;
+use crate::{ratelimit::RateLimited, Transport};
 use std::io;
 use tokio_executor::DefaultExecutor;
-use Transport;
 
 /// Trait automatically implemented on all objects that implement `Transport`. Provides some
 /// additional utilities.

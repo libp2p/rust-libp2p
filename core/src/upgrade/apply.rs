@@ -21,6 +21,7 @@
 use crate::nodes::ConnectedPoint;
 use crate::upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade, UpgradeError, ProtocolName};
 use futures::{future::Either, prelude::*};
+use log::debug;
 use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
 use std::mem;
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -223,6 +224,7 @@ type NameWrapIter<I> =
     std::iter::Map<I, fn(<I as Iterator>::Item) -> NameWrap<<I as Iterator>::Item>>;
 
 /// Wrapper type to expose an `AsRef<[u8]>` impl for all types implementing `ProtocolName`.
+#[derive(Clone)]
 struct NameWrap<N>(N);
 
 impl<N: ProtocolName> AsRef<[u8]> for NameWrap<N> {

@@ -335,14 +335,13 @@ mod tests {
         let server = listener
             .incoming()
             .into_future()
-            .map_err(|(e, _)| e.into())
+            .map_err(|(e, _)| e)
             .and_then(|(c, _)| {
                 Ping::<()>::default().upgrade_inbound(c.unwrap(), b"/ipfs/ping/1.0.0")
             })
             .flatten();
 
         let client = TcpStream::connect(&listener_addr)
-            .map_err(|e| e.into())
             .and_then(|c| {
                 Ping::<()>::default().upgrade_outbound(c, b"/ipfs/ping/1.0.0")
             })
@@ -365,14 +364,13 @@ mod tests {
         let server = listener
             .incoming()
             .into_future()
-            .map_err(|(e, _)| e.into())
+            .map_err(|(e, _)| e)
             .and_then(|(c, _)| {
                 Ping::<u32>::default().upgrade_inbound(c.unwrap(), b"/ipfs/ping/1.0.0")
             })
             .flatten();
 
         let client = TcpStream::connect(&listener_addr)
-            .map_err(|e| e.into())
             .and_then(|c| {
                 Ping::<u32>::default().upgrade_outbound(c, b"/ipfs/ping/1.0.0")
             })

@@ -23,63 +23,13 @@
 //!
 //! # Usage
 //!
-//! Create a `Ping` struct, which implements the `ConnectionUpgrade` trait. When used as a
-//! connection upgrade, it will produce a tuple of type `(Pinger, impl Future<Item = ()>)` which
-//! are named the *pinger* and the *ponger*.
+//! The `Ping` struct implements the `NetworkBehaviour` trait. When used, it will automatically
+//! send a periodic ping to nodes we are connected to. If a remote doesn't answer in time, it gets
+//! automatically disconnected.
 //!
-//! The *pinger* has a method named `ping` which will send a ping to the remote, while the *ponger*
-//! is a future that will process the data received on the socket and will be signalled only when
-//! the connection closes.
+//! The `Ping` struct is also what handles answering to the pings sent by remotes.
 //!
-//! # About timeouts
-//!
-//! For technical reasons, this crate doesn't handle timeouts. The action of pinging returns a
-//! future that is signalled only when the remote answers. If the remote is not responsive, the
-//! future will never be signalled.
-//!
-//! For implementation reasons, resources allocated for a ping are only ever fully reclaimed after
-//! a pong has been received by the remote. Therefore if you repeatedly ping a non-responsive
-//! remote you will end up using more and more memory (albeit the amount is very very small every
-//! time), even if you destroy the future returned by `ping`.
-//!
-//! This is probably not a problem in practice, because the nature of the ping protocol is to
-//! determine whether a remote is still alive, and any reasonable user of this crate will close
-//! connections to non-responsive remotes.
-//!
-//! # Example
-//!
-//! ```no_run
-//! extern crate futures;
-//! extern crate libp2p_ping;
-//! extern crate libp2p_core;
-//! extern crate libp2p_tcp;
-//! extern crate tokio;
-//!
-//! use futures::{Future, Stream};
-//! use libp2p_core::{transport::Transport, upgrade::apply_outbound};
-//! use libp2p_ping::protocol::Ping;
-//! use tokio::runtime::current_thread::Runtime;
-//!
-//! # fn main() {
-//! let ping_dialer = libp2p_tcp::TcpConfig::new()
-//!     .and_then(|socket, _| {
-//!         apply_outbound(socket, Ping::default()).map_err(|e| e.into_io_error())
-//!     })
-//!     .dial("/ip4/127.0.0.1/tcp/12345".parse::<libp2p_core::Multiaddr>().unwrap()).unwrap_or_else(|_| panic!())
-//!     .and_then(|mut pinger| {
-//!         pinger.ping(());
-//!         let f = pinger.into_future()
-//!             .map(|_| println!("received pong"))
-//!             .map_err(|(e, _)| e);
-//!         Box::new(f) as Box<Future<Item = _, Error = _> + Send>
-//!     });
-//!
-//! // Runs until the ping arrives.
-//! let mut rt = Runtime::new().unwrap();
-//! let _ = rt.block_on(ping_dialer).unwrap();
-//! # }
-//! ```
-//!
+//! When a ping succeeds, a `PingSuccess` event is generated, indicating the time the ping took.
 
 pub mod dial_handler;
 pub mod listen_handler;
@@ -93,7 +43,9 @@ use std::{marker::PhantomData, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Network behaviour that handles receiving pings sent by other nodes and periodically pings the
-/// nodes we connect to.
+/// nodes we are connected to.
+///
+/// See the crate root documentation for more information.
 pub struct Ping<TSubstream> {
     /// Marker to pin the generics.
     marker: PhantomData<TSubstream>,
@@ -150,14 +102,11 @@ where
         source: PeerId,
         event: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
     ) {
-        match event {
-            EitherOutput::Second(dial_handler::OutEvent::PingSuccess(time)) => {
-                self.events.push(PingEvent::PingSuccess {
-                    peer: source,
-                    time,
-                })
-            },
-            _ => ()
+        if let EitherOutput::Second(dial_handler::OutEvent::PingSuccess(time)) = event {
+            self.events.push(PingEvent::PingSuccess {
+                peer: source,
+                time,
+            })
         }
     }
 

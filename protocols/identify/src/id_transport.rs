@@ -23,6 +23,7 @@
 use futures::{future, prelude::*, stream, AndThen, MapErr};
 use libp2p_core::{
     Multiaddr, PeerId, PublicKey, muxing, Transport,
+    transport::{TransportError, upgrade::TransportUpgradeError},
     upgrade::{self, OutboundUpgradeApply, UpgradeError}
 };
 use protocol::{RemoteInfo, IdentifyProtocolConfig};
@@ -59,38 +60,32 @@ impl<TTrans> IdentifyTransport<TTrans> {
 impl<TTrans, TMuxer> Transport for IdentifyTransport<TTrans>
 where
     TTrans: Transport<Output = TMuxer>,
+    TTrans::Error: 'static,
     TMuxer: muxing::StreamMuxer + Send + Sync + 'static,      // TODO: remove unnecessary bounds
     TMuxer::Substream: Send + Sync + 'static,      // TODO: remove unnecessary bounds
 {
     type Output = (PeerId, TMuxer);
-    type Listener = stream::Empty<(Self::ListenerUpgrade, Multiaddr), IoError>;
-    type ListenerUpgrade = future::Empty<Self::Output, IoError>;
+    type Error = TransportUpgradeError<TTrans::Error, IoError>;     // TODO: better than IoError
+    type Listener = stream::Empty<(Self::ListenerUpgrade, Multiaddr), Self::Error>;
+    type ListenerUpgrade = future::Empty<Self::Output, Self::Error>;
     type Dial = AndThen<
-        TTrans::Dial,
-        MapErr<IdRetriever<TMuxer>, fn(UpgradeError<IoError>) -> IoError>,
-        fn(TMuxer) -> MapErr<IdRetriever<TMuxer>, fn(UpgradeError<IoError>) -> IoError>
+        MapErr<TTrans::Dial, fn(TTrans::Error) -> Self::Error>,
+        MapErr<IdRetriever<TMuxer>, fn(UpgradeError<IoError>) -> Self::Error>,
+        fn(TMuxer) -> MapErr<IdRetriever<TMuxer>, fn(UpgradeError<IoError>) -> Self::Error>
     >;
 
     #[inline]
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        Err((self, addr))
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+        Err(TransportError::MultiaddrNotSupported(addr))
     }
 
     #[inline]
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         // We dial a first time the node.
-        let dial = match self.transport.dial(addr.clone()) {
-            Ok(d) => d,
-            Err((transport, addr)) => {
-                let id = IdentifyTransport {
-                    transport,
-                };
-                return Err((id, addr));
-            }
-        };
-
-        Ok(dial.and_then(|muxer| {
-            IdRetriever::new(muxer, IdentifyProtocolConfig).map_err(|e| e.into_io_error())
+        let dial = self.transport.dial(addr)
+            .map_err(|err| err.map(TransportUpgradeError::Transport))?;
+        Ok(dial.map_err::<fn(_) -> _, _>(TransportUpgradeError::Transport).and_then(|muxer| {
+            IdRetriever::new(muxer, IdentifyProtocolConfig).map_err(TransportUpgradeError::Upgrade)
         }))
     }
 

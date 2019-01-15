@@ -23,7 +23,7 @@
 //! desired way when testing other components.
 
 use futures::prelude::*;
-use muxing::{Shutdown, StreamMuxer};
+use crate::muxing::{Shutdown, StreamMuxer};
 use std::io::Error as IoError;
 
 /// Substream type

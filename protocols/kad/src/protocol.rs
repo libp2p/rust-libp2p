@@ -315,7 +315,6 @@ fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> protobuf_structs::dht::Message 
             msg
         }
         KadResponseMsg::FindNode { closer_peers } => {
-            assert!(!closer_peers.is_empty());
             let mut msg = protobuf_structs::dht::Message::new();
             msg.set_field_type(protobuf_structs::dht::Message_MessageType::FIND_NODE);
             msg.set_clusterLevelRaw(9);
@@ -328,7 +327,6 @@ fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> protobuf_structs::dht::Message 
             closer_peers,
             provider_peers,
         } => {
-            assert!(!closer_peers.is_empty());
             let mut msg = protobuf_structs::dht::Message::new();
             msg.set_field_type(protobuf_structs::dht::Message_MessageType::GET_PROVIDERS);
             msg.set_clusterLevelRaw(9);
@@ -538,7 +536,7 @@ mod tests {
 
             let future = transport
                 .dial(rx.recv().unwrap())
-                .unwrap_or_else(|_| panic!())
+                .unwrap()
                 .and_then(|proto| proto.send(msg_client))
                 .map(|_| ());
             let mut rt = Runtime::new().unwrap();

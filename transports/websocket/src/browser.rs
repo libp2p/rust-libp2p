@@ -29,7 +29,7 @@ use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use stdweb::web::TypedArray;
 use stdweb::{self, Reference};
-use swarm::Transport;
+use swarm::{Transport, transport::TransportError};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Represents the configuration for a websocket transport capability for libp2p.
@@ -53,17 +53,18 @@ impl BrowserWsConfig {
 
 impl Transport for BrowserWsConfig {
     type Output = BrowserWsConn;
+    type Error = IoError;   // TODO: better error type?
     type Listener = stream::Empty<(Self::ListenerUpgrade, Multiaddr), IoError>;
     type ListenerUpgrade = future::Empty<Self::Output, IoError>;
     type Dial = Box<Future<Item = Self::Output, Error = IoError> + Send>;
 
     #[inline]
-    fn listen_on(self, a: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+    fn listen_on(self, a: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
         // Listening is never supported.
-        Err((self, a))
+        Err(TransportError::MultiaddrNotSupported(a))
     }
 
-    fn dial(self, original_addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+    fn dial(self, original_addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         // Making sure we are initialized before we dial. Initialization is protected by a simple
         // boolean static variable, so it's not a problem to call it multiple times and the cost
         // is negligible.
@@ -73,7 +74,7 @@ impl Transport for BrowserWsConfig {
         // a string) on success.
         let inner_addr = match multiaddr_to_target(&original_addr) {
             Ok(a) => a,
-            Err(_) => return Err((self, original_addr)),
+            Err(_) => return Err(TransportError::MultiaddrNotSupported(original_addr)),
         };
 
         debug!("Dialing {}", original_addr);
@@ -89,7 +90,8 @@ impl Transport for BrowserWsConfig {
             };
             match val.into_reference() {
                 Some(ws) => ws,
-                None => return Err((self, original_addr)), // `false` was returned by `js!`
+                // TODO: more descriptive error
+                None => return Err(TransportError::Other(IoErrorKind::Other.into())), // `false` was returned by `js!`
             }
         };
 

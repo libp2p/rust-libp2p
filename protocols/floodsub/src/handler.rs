@@ -149,6 +149,11 @@ where
     fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {}
 
     #[inline]
+    fn connection_keep_alive(&self) -> bool {
+        !self.substreams.is_empty()
+    }
+
+    #[inline]
     fn shutdown(&mut self) {
         self.shutting_down = true;
         for n in (0..self.substreams.len()).rev() {

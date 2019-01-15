@@ -109,7 +109,7 @@
 //! The `Swarm` struct contains all active and pending connections to remotes and manages the
 //! state of all the substreams that have been opened, and all the upgrades that were built upon
 //! these substreams.
-//! 
+//!
 //! It combines a `Transport`, a `NetworkBehaviour` and a `Topology` together.
 //!
 //! See the documentation of the `libp2p-core` crate for more details about creating a swarm.
@@ -129,6 +129,9 @@
 //! - This swarm can now be polled with the `tokio` library in order to start the network.
 //!
 
+#![doc(html_logo_url = "https://libp2p.io/img/logo_small.png")]
+#![doc(html_favicon_url = "https://libp2p.io/img/favicon.png")]
+
 pub extern crate bytes;
 pub extern crate futures;
 pub extern crate multiaddr;
@@ -139,25 +142,40 @@ pub extern crate tokio_codec;
 extern crate libp2p_core_derive;
 extern crate tokio_executor;
 
-pub extern crate libp2p_core as core;
+#[doc(inline)]
+pub use libp2p_core as core;
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-pub extern crate libp2p_dns as dns;
-pub extern crate libp2p_identify as identify;
-pub extern crate libp2p_kad as kad;
-pub extern crate libp2p_floodsub as floodsub;
-pub extern crate libp2p_mplex as mplex;
+#[doc(inline)]
+pub use libp2p_dns as dns;
+#[doc(inline)]
+pub use libp2p_identify as identify;
+#[doc(inline)]
+pub use libp2p_kad as kad;
+#[doc(inline)]
+pub use libp2p_floodsub as floodsub;
+#[doc(inline)]
+pub use libp2p_mplex as mplex;
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-pub extern crate libp2p_mdns as mdns;
-pub extern crate libp2p_ping as ping;
-pub extern crate libp2p_plaintext as plaintext;
-pub extern crate libp2p_ratelimit as ratelimit;
-pub extern crate libp2p_secio as secio;
+#[doc(inline)]
+pub use libp2p_mdns as mdns;
+#[doc(inline)]
+pub use libp2p_ping as ping;
+#[doc(inline)]
+pub use libp2p_plaintext as plaintext;
+#[doc(inline)]
+pub use libp2p_ratelimit as ratelimit;
+#[doc(inline)]
+pub use libp2p_secio as secio;
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-pub extern crate libp2p_tcp as tcp;
-pub extern crate libp2p_uds as uds;
+#[doc(inline)]
+pub use libp2p_tcp as tcp;
+#[doc(inline)]
+pub use libp2p_uds as uds;
 #[cfg(feature = "libp2p-websocket")]
-pub extern crate libp2p_websocket as websocket;
-pub extern crate libp2p_yamux as yamux;
+#[doc(inline)]
+pub use libp2p_websocket as websocket;
+#[doc(inline)]
+pub use libp2p_yamux as yamux;
 
 mod transport_ext;
 
@@ -165,6 +183,7 @@ pub mod simple;
 
 pub use self::core::{
     Transport, PeerId, Swarm,
+    transport::TransportError,
     upgrade::{InboundUpgrade, InboundUpgradeExt, OutboundUpgrade, OutboundUpgradeExt}
 };
 pub use libp2p_core_derive::NetworkBehaviour;
@@ -173,7 +192,7 @@ pub use self::simple::SimpleProtocol;
 pub use self::transport_ext::TransportExt;
 
 use futures::prelude::*;
-use std::time::Duration;
+use std::{error, time::Duration};
 
 /// Builds a `Transport` that supports the most commonly-used protocols that libp2p supports.
 ///
@@ -181,7 +200,7 @@ use std::time::Duration;
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
 #[inline]
 pub fn build_development_transport(local_private_key: secio::SecioKeyPair)
-    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync), Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
+    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
 {
      build_tcp_ws_secio_mplex_yamux(local_private_key)
 }
@@ -193,7 +212,7 @@ pub fn build_development_transport(local_private_key: secio::SecioKeyPair)
 ///
 /// > **Note**: If you ever need to express the type of this `Transport`.
 pub fn build_tcp_ws_secio_mplex_yamux(local_private_key: secio::SecioKeyPair)
-    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync), Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
+    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
 {
     CommonTransport::new()
         .with_upgrade(secio::SecioConfig::new(local_private_key))
@@ -207,7 +226,6 @@ pub fn build_tcp_ws_secio_mplex_yamux(local_private_key: secio::SecioKeyPair)
 
             core::upgrade::apply(out.stream, upgrade, endpoint)
                 .map(|(id, muxer)| (id, core::muxing::StreamMuxerBox::new(muxer)))
-                .map_err(|e| e.into_io_error())
         })
         .with_timeout(Duration::from_secs(20))
 }
@@ -265,30 +283,19 @@ impl CommonTransport {
 
 impl Transport for CommonTransport {
     type Output = <InnerImplementation as Transport>::Output;
+    type Error = <InnerImplementation as Transport>::Error;
     type Listener = <InnerImplementation as Transport>::Listener;
     type ListenerUpgrade = <InnerImplementation as Transport>::ListenerUpgrade;
     type Dial = <InnerImplementation as Transport>::Dial;
 
     #[inline]
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
-        match self.inner.inner.listen_on(addr) {
-            Ok(res) => Ok(res),
-            Err((inner, addr)) => {
-                let trans = CommonTransport { inner: CommonTransportInner { inner: inner } };
-                Err((trans, addr))
-            }
-        }
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+        self.inner.inner.listen_on(addr)
     }
 
     #[inline]
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
-        match self.inner.inner.dial(addr) {
-            Ok(res) => Ok(res),
-            Err((inner, addr)) => {
-                let trans = CommonTransport { inner: CommonTransportInner { inner: inner } };
-                Err((trans, addr))
-            }
-        }
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.inner.inner.dial(addr)
     }
 
     #[inline]
