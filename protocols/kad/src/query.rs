@@ -106,17 +106,22 @@ impl QueryState {
     ///
     /// You should call `poll()` this function returns in order to know what to do.
     pub fn new(config: QueryConfig<impl IntoIterator<Item = PeerId>>) -> QueryState {
+        let mut closest_peers: SmallVec<[_; 32]> = config
+            .known_closest_peers
+            .into_iter()
+            .map(|peer_id| (peer_id, QueryPeerState::NotContacted))
+            .take(config.num_results)
+            .collect();
+        let target = config.target;
+        closest_peers.sort_by_key(|e| target.as_hash().distance_with(e.0.as_ref()));
+        closest_peers.dedup_by(|a, b| a.0 == b.0);
+
         QueryState {
-            target: config.target,
+            target,
             stage: QueryStage::Iterating {
                 no_closer_in_a_row: 0,
             },
-            closest_peers: config
-                .known_closest_peers
-                .into_iter()
-                .map(|peer_id| (peer_id, QueryPeerState::NotContacted))
-                .take(config.num_results)
-                .collect(),
+            closest_peers,
             parallelism: config.parallelism,
             num_results: config.num_results,
             rpc_timeout: config.rpc_timeout,
@@ -160,27 +165,45 @@ impl QueryState {
 
             for elem_to_add in closer_peers {
                 let target = &self.target;
-                let insert_pos = self.closest_peers.iter().position(|(id, _)| {
-                    let a = target.as_hash().distance_with(id.as_ref());
-                    let b = target.as_hash().distance_with(elem_to_add.as_ref());
-                    a >= b
+                let elem_to_add_distance = target.as_hash().distance_with(elem_to_add.as_ref());
+                let insert_pos_start = self.closest_peers.iter().position(|(id, _)| {
+                    target.as_hash().distance_with(id.as_ref()) >= elem_to_add_distance
                 });
 
-                if let Some(insert_pos) = insert_pos {
+                if let Some(insert_pos_start) = insert_pos_start {
+                    // We need to insert the element between `insert_pos_start` and
+                    // `insert_pos_start + insert_pos_size`.
+                    let insert_pos_size = self.closest_peers.iter()
+                        .skip(insert_pos_start)
+                        .position(|(id, _)| {
+                            target.as_hash().distance_with(id.as_ref()) > elem_to_add_distance
+                        });
+
                     // Make sure we don't insert duplicates.
-                    if self.closest_peers[insert_pos].0 != elem_to_add {
-                        if insert_pos == 0 {
+                    let duplicate = if let Some(insert_pos_size) = insert_pos_size {
+                        self.closest_peers.iter().skip(insert_pos_start).take(insert_pos_size).any(|e| e.0 == elem_to_add)
+                    } else {
+                        self.closest_peers.iter().skip(insert_pos_start).any(|e| e.0 == elem_to_add)
+                    };
+
+                    if !duplicate {
+                        if insert_pos_start == 0 {
                             *no_closer_in_a_row = 0;
                         }
+                        debug_assert!(self.closest_peers.iter().all(|e| e.0 != elem_to_add));
                         self.closest_peers
-                            .insert(insert_pos, (elem_to_add, QueryPeerState::NotContacted));
+                            .insert(insert_pos_start, (elem_to_add, QueryPeerState::NotContacted));
                     }
                 } else if self.closest_peers.len() < self.num_results {
+                    debug_assert!(self.closest_peers.iter().all(|e| e.0 != elem_to_add));
                     self.closest_peers
                         .push((elem_to_add, QueryPeerState::NotContacted));
                 }
             }
         }
+
+        // Check for duplicates in `closest_peers`.
+        debug_assert!(self.closest_peers.windows(2).all(|w| w[0].0 != w[1].0));
 
         // Handle if `no_closer_in_a_row` is too high.
         let freeze = if let QueryStage::Iterating { no_closer_in_a_row } = self.stage {
