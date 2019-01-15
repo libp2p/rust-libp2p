@@ -330,25 +330,8 @@ mod tests {
 
     #[test]
     fn basic_closest() {
-        let my_id = {
-            let mut bytes = vec![random(); 34];
-            bytes[0] = 18;
-            bytes[1] = 32;
-            Multihash::from_bytes(bytes.clone()).expect(&format!(
-                "creating `my_id` Multihash from bytes {:#?} failed",
-                bytes
-            ))
-        };
-
-        let other_id = {
-            let mut bytes = vec![random(); 34];
-            bytes[0] = 18;
-            bytes[1] = 32;
-            Multihash::from_bytes(bytes.clone()).expect(&format!(
-                "creating `other_id` Multihash from bytes {:#?} failed",
-                bytes
-            ))
-        };
+        let my_id = Multihash::random(Hash::SHA2256);
+        let other_id = Multihash::random(Hash::SHA2256);
 
         let mut table = KBucketsTable::new(my_id, Duration::from_secs(5));
         let _ = table.update(other_id.clone(), ());
@@ -360,12 +343,7 @@ mod tests {
 
     #[test]
     fn update_local_id_fails() {
-        let my_id = {
-            let mut bytes = vec![random(); 34];
-            bytes[0] = 18;
-            bytes[1] = 32;
-            Multihash::from_bytes(bytes).unwrap()
-        };
+        let my_id = Multihash::random(Hash::SHA2256);
 
         let mut table = KBucketsTable::new(my_id.clone(), Duration::from_secs(5));
         match table.update(my_id, ()) {
@@ -376,12 +354,7 @@ mod tests {
 
     #[test]
     fn update_time_last_refresh() {
-        let my_id = {
-            let mut bytes = vec![random(); 34];
-            bytes[0] = 18;
-            bytes[1] = 32;
-            Multihash::from_bytes(bytes).unwrap()
-        };
+        let my_id = Multihash::random(Hash::SHA2256);
 
         // Generate some other IDs varying by just one bit.
         let other_ids = (0..random::<usize>() % 20)
@@ -414,12 +387,7 @@ mod tests {
 
     #[test]
     fn full_kbucket() {
-        let my_id = {
-            let mut bytes = vec![random(); 34];
-            bytes[0] = 18;
-            bytes[1] = 32;
-            Multihash::from_bytes(bytes).unwrap()
-        };
+        let my_id = Multihash::random(Hash::SHA2256);
 
         assert!(MAX_NODES_PER_BUCKET <= 251); // Test doesn't work otherwise.
         let mut fill_ids = (0..MAX_NODES_PER_BUCKET + 3)
