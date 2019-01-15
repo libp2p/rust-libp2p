@@ -19,8 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
+    PeerId,
     nodes::handled_node::{NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent},
-    protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
+    nodes::handled_node_tasks::IntoNodeHandler,
+    protocols_handler::{ProtocolsHandler, IntoProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
     upgrade::{
         self,
         OutboundUpgrade,
@@ -33,12 +35,9 @@ use std::time::{Duration, Instant};
 use tokio_timer::{Delay, Timeout};
 
 /// Prototype for a `NodeHandlerWrapper`.
-pub struct NodeHandlerWrapperBuilder<TProtoHandler>
-where
-    TProtoHandler: ProtocolsHandler,
-{
+pub struct NodeHandlerWrapperBuilder<TIntoProtoHandler> {
     /// The underlying handler.
-    handler: TProtoHandler,
+    handler: TIntoProtoHandler,
     /// Timeout for incoming substreams negotiation.
     in_timeout: Duration,
     /// Timeout for outgoing substreams negotiation.
@@ -47,13 +46,13 @@ where
     useless_timeout: Duration,
 }
 
-impl<TProtoHandler> NodeHandlerWrapperBuilder<TProtoHandler>
+impl<TIntoProtoHandler> NodeHandlerWrapperBuilder<TIntoProtoHandler>
 where
-    TProtoHandler: ProtocolsHandler
+    TIntoProtoHandler: IntoProtocolsHandler
 {
     /// Builds a `NodeHandlerWrapperBuilder`.
     #[inline]
-    pub(crate) fn new(handler: TProtoHandler, in_timeout: Duration, out_timeout: Duration, useless_timeout: Duration) -> Self {
+    pub(crate) fn new(handler: TIntoProtoHandler, in_timeout: Duration, out_timeout: Duration, useless_timeout: Duration) -> Self {
         NodeHandlerWrapperBuilder {
             handler,
             in_timeout,
@@ -85,10 +84,37 @@ where
     }
 
     /// Builds the `NodeHandlerWrapper`.
+    #[deprecated(note = "Pass the NodeHandlerWrapperBuilder directly")]
     #[inline]
-    pub fn build(self) -> NodeHandlerWrapper<TProtoHandler> {
+    pub fn build(self) -> NodeHandlerWrapper<TIntoProtoHandler>
+    where TIntoProtoHandler: ProtocolsHandler
+    {
         NodeHandlerWrapper {
             handler: self.handler,
+            negotiating_in: Vec::new(),
+            negotiating_out: Vec::new(),
+            in_timeout: self.in_timeout,
+            out_timeout: self.out_timeout,
+            queued_dial_upgrades: Vec::new(),
+            unique_dial_upgrade_id: 0,
+            connection_shutdown: None,
+            useless_timeout: self.useless_timeout,
+        }
+    }
+}
+
+impl<TIntoProtoHandler, TProtoHandler> IntoNodeHandler for NodeHandlerWrapperBuilder<TIntoProtoHandler>
+where
+    TIntoProtoHandler: IntoProtocolsHandler<Handler = TProtoHandler>,
+    TProtoHandler: ProtocolsHandler,
+    // TODO: meh for Debug
+    <TProtoHandler::OutboundProtocol as OutboundUpgrade<<TProtoHandler as ProtocolsHandler>::Substream>>::Error: std::fmt::Debug
+{
+    type Handler = NodeHandlerWrapper<TIntoProtoHandler::Handler>;
+
+    fn into_handler(self, remote_peer_id: &PeerId) -> Self::Handler {
+        NodeHandlerWrapper {
+            handler: self.handler.into_handler(remote_peer_id),
             negotiating_in: Vec::new(),
             negotiating_out: Vec::new(),
             in_timeout: self.in_timeout,
@@ -138,6 +164,7 @@ where
 impl<TProtoHandler> NodeHandler for NodeHandlerWrapper<TProtoHandler>
 where
     TProtoHandler: ProtocolsHandler,
+    // TODO: meh for Debug
     <TProtoHandler::OutboundProtocol as OutboundUpgrade<<TProtoHandler as ProtocolsHandler>::Substream>>::Error: std::fmt::Debug
 {
     type InEvent = TProtoHandler::InEvent;

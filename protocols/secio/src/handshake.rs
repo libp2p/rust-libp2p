@@ -49,6 +49,8 @@ use tokio_io::{AsyncRead, AsyncWrite};
 #[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
 use untrusted::Input as UntrustedInput;
 use crate::{KeyAgreement, SecioConfig, SecioKeyPairInner};
+#[cfg(feature = "secp256k1")]
+use crate::SECP256K1;
 
 // This struct contains the whole context of a handshake, and is filled progressively
 // throughout the various parts of the handshake.
@@ -398,8 +400,7 @@ where
                             let data_to_sign = Sha256::digest(&data_to_sign);
                             let message = secp256k1::Message::from_slice(data_to_sign.as_ref())
                                 .expect("digest output length doesn't match secp256k1 input length");
-                            let secp256k1 = secp256k1::Secp256k1::signing_only();
-                            secp256k1
+                            SECP256K1
                                 .sign(&message, private)
                                 .serialize_der()
                         },
@@ -491,11 +492,10 @@ where
                     let data_to_verify = Sha256::digest(&data_to_verify);
                     let message = secp256k1::Message::from_slice(data_to_verify.as_ref())
                         .expect("digest output length doesn't match secp256k1 input length");
-                    let secp256k1 = secp256k1::Secp256k1::verification_only();
                     let signature = secp256k1::Signature::from_der(remote_exch.get_signature());
                     let remote_public_key = secp256k1::key::PublicKey::from_slice(remote_public_key);
                     if let (Ok(signature), Ok(remote_public_key)) = (signature, remote_public_key) {
-                        match secp256k1.verify(&message, &signature, &remote_public_key) {
+                        match SECP256K1.verify(&message, &signature, &remote_public_key) {
                             Ok(()) => (),
                             Err(_) => {
                                 debug!("failed to verify the remote's signature");

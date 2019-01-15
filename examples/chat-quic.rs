@@ -18,22 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-extern crate env_logger;
-extern crate futures;
-extern crate libp2p;
-extern crate openssl;
-extern crate quicli;
-extern crate structopt;
-extern crate tokio;
-extern crate void;
-
+use env_logger;
 use futures::prelude::*;
-use libp2p::{NetworkBehaviour, core::PublicKey, tokio_codec::{FramedRead, LinesCodec}};
+use libp2p::{self, NetworkBehaviour, core::PublicKey, tokio_codec::{FramedRead, LinesCodec}};
 use openssl::{rsa::Rsa, x509::X509};
 use quicli::prelude::*;
 use structopt::StructOpt;
 use std::io;
-
+use void;
 
 // Brief usage instructions:
 //
