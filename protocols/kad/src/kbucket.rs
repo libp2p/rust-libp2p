@@ -109,7 +109,7 @@ impl KBucketsPeerId for Multihash {
         let my_hash = U512::from(self.digest());
         let other_hash = U512::from(other.digest());
         let xor = my_hash ^ other_hash;
-        xor.leading_zeros()
+        512 - xor.leading_zeros()
     }
 
     #[inline]
@@ -142,7 +142,7 @@ where
     // Returns `None` if out of range, which happens if `id` is the same as the local peer id.
     #[inline]
     fn bucket_num(&self, id: &Id) -> Option<usize> {
-        (Id::max_distance() - 1).checked_sub(self.my_id.distance_with(id) as usize)
+        (self.my_id.distance_with(id) as usize).checked_sub(1)
     }
 
     /// Returns an iterator to all the buckets of this table.
@@ -323,32 +323,15 @@ impl<'a, Id: 'a, Val: 'a> Bucket<'a, Id, Val> {
 mod tests {
     extern crate rand;
     use self::rand::random;
-    use kbucket::{KBucketsTable, UpdateOutcome, MAX_NODES_PER_BUCKET};
-    use multihash::Multihash;
+    use kbucket::{KBucketsPeerId, KBucketsTable, UpdateOutcome, MAX_NODES_PER_BUCKET};
+    use multihash::{Multihash, Hash};
     use std::thread;
     use std::time::Duration;
 
     #[test]
     fn basic_closest() {
-        let my_id = {
-            let mut bytes = vec![random(); 34];
-            bytes[0] = 18;
-            bytes[1] = 32;
-            Multihash::from_bytes(bytes.clone()).expect(&format!(
-                "creating `my_id` Multihash from bytes {:#?} failed",
-                bytes
-            ))
-        };
-
-        let other_id = {
-            let mut bytes = vec![random(); 34];
-            bytes[0] = 18;
-            bytes[1] = 32;
-            Multihash::from_bytes(bytes.clone()).expect(&format!(
-                "creating `other_id` Multihash from bytes {:#?} failed",
-                bytes
-            ))
-        };
+        let my_id = Multihash::random(Hash::SHA2256);
+        let other_id = Multihash::random(Hash::SHA2256);
 
         let mut table = KBucketsTable::new(my_id, Duration::from_secs(5));
         let _ = table.update(other_id.clone(), ());
@@ -360,12 +343,7 @@ mod tests {
 
     #[test]
     fn update_local_id_fails() {
-        let my_id = {
-            let mut bytes = vec![random(); 34];
-            bytes[0] = 18;
-            bytes[1] = 32;
-            Multihash::from_bytes(bytes).unwrap()
-        };
+        let my_id = Multihash::random(Hash::SHA2256);
 
         let mut table = KBucketsTable::new(my_id.clone(), Duration::from_secs(5));
         match table.update(my_id, ()) {
@@ -376,12 +354,7 @@ mod tests {
 
     #[test]
     fn update_time_last_refresh() {
-        let my_id = {
-            let mut bytes = vec![random(); 34];
-            bytes[0] = 18;
-            bytes[1] = 32;
-            Multihash::from_bytes(bytes).unwrap()
-        };
+        let my_id = Multihash::random(Hash::SHA2256);
 
         // Generate some other IDs varying by just one bit.
         let other_ids = (0..random::<usize>() % 20)
@@ -414,12 +387,7 @@ mod tests {
 
     #[test]
     fn full_kbucket() {
-        let my_id = {
-            let mut bytes = vec![random(); 34];
-            bytes[0] = 18;
-            bytes[1] = 32;
-            Multihash::from_bytes(bytes).unwrap()
-        };
+        let my_id = Multihash::random(Hash::SHA2256);
 
         assert!(MAX_NODES_PER_BUCKET <= 251); // Test doesn't work otherwise.
         let mut fill_ids = (0..MAX_NODES_PER_BUCKET + 3)
@@ -467,5 +435,19 @@ mod tests {
             table.update(fill_ids.remove(0), ()),
             UpdateOutcome::NeedPing(second_node)
         );
+    }
+
+    #[test]
+    fn self_distance_zero() {
+        let a = Multihash::random(Hash::SHA2256);
+        assert_eq!(a.distance_with(&a), 0);
+    }
+
+    #[test]
+    fn distance_correct_order() {
+        let a = Multihash::random(Hash::SHA2256);
+        let b = Multihash::random(Hash::SHA2256);
+        assert!(a.distance_with(&a) < b.distance_with(&a));
+        assert!(a.distance_with(&b) > b.distance_with(&b));
     }
 }
