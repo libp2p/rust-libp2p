@@ -18,11 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! Manage listening on multiple multiaddresses at once.
+
+use crate::{Multiaddr, Transport, transport::TransportError};
 use futures::prelude::*;
-use std::fmt;
+use std::{collections::VecDeque, fmt};
 use void::Void;
-use {Multiaddr, Transport};
-use std::collections::VecDeque;
 
 /// Implementation of `futures::Stream` that allows listening on multiaddresses.
 ///
@@ -149,15 +150,14 @@ where
     /// Start listening on a multiaddress.
     ///
     /// Returns an error if the transport doesn't support the given multiaddress.
-    pub fn listen_on(&mut self, addr: Multiaddr) -> Result<Multiaddr, Multiaddr>
+    pub fn listen_on(&mut self, addr: Multiaddr) -> Result<Multiaddr, TransportError<TTrans::Error>>
     where
         TTrans: Clone,
     {
         let (listener, new_addr) = self
             .transport
             .clone()
-            .listen_on(addr)
-            .map_err(|(_, addr)| addr)?;
+            .listen_on(addr)?;
 
         self.listeners.push_back(Listener {
             listener,
@@ -277,13 +277,14 @@ mod tests {
     extern crate libp2p_tcp;
 
     use super::*;
-    use transport;
+    use crate::transport;
+    use assert_matches::assert_matches;
     use tokio::runtime::current_thread::Runtime;
     use std::io;
     use futures::{future::{self}, stream};
-    use tests::dummy_transport::{DummyTransport, ListenerState};
-    use tests::dummy_muxer::DummyMuxer;
-    use PeerId;
+    use crate::tests::dummy_transport::{DummyTransport, ListenerState};
+    use crate::tests::dummy_muxer::DummyMuxer;
+    use crate::PeerId;
 
     fn set_listener_state(ls: &mut ListenersStream<DummyTransport>, idx: usize, state: ListenerState) {
         let l = &mut ls.listeners[idx];
@@ -293,8 +294,8 @@ mod tests {
                     let stream = stream::poll_fn(|| future::err(io::Error::new(io::ErrorKind::Other, "oh noes")).poll() );
                     Box::new(stream)
                 }
-                ListenerState::Ok(async) => {
-                    match async {
+                ListenerState::Ok(r#async) => {
+                    match r#async {
                         Async::NotReady => {
                             let stream = stream::poll_fn(|| Ok(Async::NotReady));
                             Box::new(stream)
@@ -321,7 +322,7 @@ mod tests {
         let mut listeners = ListenersStream::new(rx);
         listeners.listen_on("/memory".parse().unwrap()).unwrap();
 
-        let dial = tx.dial("/memory".parse().unwrap()).unwrap_or_else(|_| panic!());
+        let dial = tx.dial("/memory".parse().unwrap()).unwrap();
 
         let future = listeners
             .into_future()

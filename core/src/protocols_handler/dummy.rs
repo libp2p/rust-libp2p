@@ -89,6 +89,9 @@ where
     fn inject_inbound_closed(&mut self) {}
 
     #[inline]
+    fn connection_keep_alive(&self) -> bool { false }
+
+    #[inline]
     fn shutdown(&mut self) {
         self.shutting_down = true;
     }
@@ -97,11 +100,11 @@ where
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>,
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
         Void,
     > {
         if self.shutting_down {
-            Ok(Async::Ready(None))
+            Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown))
         } else {
             Ok(Async::NotReady)
         }

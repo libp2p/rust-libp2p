@@ -49,6 +49,9 @@ pub struct PeriodicIdHandler<TSubstream> {
     /// shut down.
     next_id: Option<Delay>,
 
+    /// If `true`, we have started an identification of the remote at least once in the past.
+    first_id_happened: bool,
+
     /// Marker for strong typing.
     marker: PhantomData<TSubstream>,
 }
@@ -70,6 +73,7 @@ impl<TSubstream> PeriodicIdHandler<TSubstream> {
             config: IdentifyProtocolConfig,
             pending_result: None,
             next_id: Some(Delay::new(Instant::now() + DELAY_TO_FIRST_ID)),
+            first_id_happened: false,
             marker: PhantomData,
         }
     }
@@ -119,6 +123,11 @@ where
     }
 
     #[inline]
+    fn connection_keep_alive(&self) -> bool {
+        !self.first_id_happened
+    }
+
+    #[inline]
     fn shutdown(&mut self) {
         self.next_id = None;
     }
@@ -126,24 +135,22 @@ where
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<
-            ProtocolsHandlerEvent<
-                Self::OutboundProtocol,
-                Self::OutboundOpenInfo,
-                PeriodicIdHandlerEvent,
-            >,
+        ProtocolsHandlerEvent<
+            Self::OutboundProtocol,
+            Self::OutboundOpenInfo,
+            PeriodicIdHandlerEvent,
         >,
         Self::Error,
     > {
         if let Some(pending_result) = self.pending_result.take() {
-            return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(
+            return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(
                 pending_result,
-            ))));
+            )));
         }
 
         let next_id = match self.next_id {
             Some(ref mut nid) => nid,
-            None => return Ok(Async::Ready(None)),
+            None => return Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown)),
         };
 
         // Poll the future that fires when we need to identify the node again.
@@ -153,7 +160,8 @@ where
                 next_id.reset(Instant::now() + DELAY_TO_NEXT_ID);
                 let upgrade = self.config.clone();
                 let ev = ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info: () };
-                Ok(Async::Ready(Some(ev)))
+                self.first_id_happened = true;
+                Ok(Async::Ready(ev))
             }
         }
     }

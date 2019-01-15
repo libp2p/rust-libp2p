@@ -91,7 +91,7 @@ impl<T: AsRef<[u8]>> ProtocolName for T {
 /// or both.
 pub trait UpgradeInfo {
     /// Opaque type representing a negotiable protocol.
-    type Info: ProtocolName;
+    type Info: ProtocolName + Clone;
     /// Iterator returned by `protocol_info`.
     type InfoIter: IntoIterator<Item = Self::Info>;
 
