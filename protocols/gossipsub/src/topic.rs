@@ -66,7 +66,7 @@ impl FromIterator<TopicHash> for TopicMap {
         let mut tm = TopicMap::new();
 
         for tr in iter {
-            let t = Topic::from(tr);
+            let t = Topic::from(&tr);
             tm.insert(tr, t);
         }
 
@@ -88,7 +88,7 @@ impl FromIterator<Topic> for TopicMap {
         let mut tm = TopicMap::new();
 
         for t in iter {
-            let th = TopicHash::from(t);
+            let th = TopicHash::from(&t);
             tm.insert(th, t);
         }
 
@@ -176,26 +176,30 @@ impl AsRef<TopicHash> for Topic {
 // TODO: test
 impl From<TopicHash> for Topic {
     fn from(topic_hash: TopicHash) -> Self {
-        let decoded_hash: &[u8]
-            = bs58::decode(topic_hash.hash).into_vec().unwrap().as_ref();
-        let parsed = protobuf::parse_from_bytes::<rpc_proto::TopicDescriptor>
-            (decoded_hash).unwrap();
+        let t_hash = topic_hash.clone();
+        let vec_from_hash = bs58::decode(topic_hash.hash).into_vec().unwrap();
+        let bytes_from_hash: &[u8] = vec_from_hash.as_ref();
+        let descriptor =
+            protobuf::parse_from_bytes::<rpc_proto::TopicDescriptor>(
+                bytes_from_hash).unwrap();
         Topic {
-            descriptor: parsed,
-            hash: topic_hash,
+            descriptor: descriptor,
+            hash: t_hash,
         }
     }
 }
 
 impl<'a> From<&'a TopicHash> for Topic {
     fn from(topic_hash: &'a TopicHash) -> Self {
-        let decoded_hash: &[u8]
-            = bs58::decode(topic_hash.hash).into_vec().unwrap().as_ref();
-        let parsed = protobuf::parse_from_bytes::<rpc_proto::TopicDescriptor>
-            (decoded_hash).unwrap();
+        let t_hash = topic_hash.clone();
+        let vec_from_hash = bs58::decode(topic_hash.hash).into_vec().unwrap();
+        let bytes_from_hash: &[u8] = vec_from_hash.as_ref();
+        let descriptor =
+            protobuf::parse_from_bytes::<rpc_proto::TopicDescriptor>(
+                bytes_from_hash).unwrap();
         Topic {
-            descriptor: parsed,
-            hash: *topic_hash,
+            descriptor: descriptor,
+            hash: t_hash,
         }
     }
 }
