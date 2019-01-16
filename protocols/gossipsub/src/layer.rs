@@ -1,3 +1,4 @@
+use errors ::GError;
 use handler::GossipsubHandler;
 use mcache::MCache;
 use mesh::Mesh;
@@ -31,6 +32,7 @@ use tokio_io::{AsyncRead, AsyncWrite};
 ///
 /// We need to duplicate the same fields as `Floodsub` in order to
 /// differentiate the state of the two protocols.
+// Doesn't derive `Debug` because `CuckooFilter` doesn't.
 pub struct Gossipsub<TSubstream> {
     /// Events that need to be yielded to the outside when polling.
     /// `TInEvent = GossipsubRpc`, `TOutEvent = GOutEvents` (the latter is
@@ -103,7 +105,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
     // Floodsub. This is needed to differentiate state.
     // TODO: write code to reduce re-implementation like this, where most code
     // is unmodified, except for types being renamed from `Floodsub*` to
-    // `*Gossipsub`.
+    // `Gossipsub*`.
 
     /// Subscribes to a topic.
     ///
@@ -207,9 +209,9 @@ impl<TSubstream> Gossipsub<TSubstream> {
         //     message.id = Some(m_id);
         // }
 
-        self.mcache.put(message);
+        self.mcache.put(message.clone());
 
-        let proto_msg = rpc_proto::Message::from(message);
+        let proto_msg = rpc_proto::Message::from(&message);
         // Check that the message size is less than or equal to 1 MiB.
         // TODO: test
         assert!(proto_msg.compute_size() <= 1048576);
@@ -250,16 +252,35 @@ impl<TSubstream> Gossipsub<TSubstream> {
     ///
     /// Returns true if the graft succeeded. Returns false if we were
     /// already grafted.
-    // pub fn graft(&mut self, topic: impl AsRef<TopicHash>) -> bool {
+    pub fn graft(&mut self, t_hash: impl AsRef<TopicHash>)
+        -> Result<(), GError> {
+        self.graft_many(iter::once(t_hash))
+    }
 
-    // }
+    // TODO: finish writing these methods.
 
     /// Grafts a peer to multiple topics.
     ///
-    /// > **Note**: Doesn't do anything if we're already grafted to such
+    /// > **Note**: Doesn't do anything if we're already grafted to any of the
     /// > topics.
-    pub fn graft_many<'a, I>(&self, topics: impl IntoIterator<Item = impl AsRef<TopicHash>>)
-    {
+    pub fn graft_many(&mut self, t_hashes: impl IntoIterator<Item = impl
+        AsRef<TopicHash>>) -> Result<(), GError> {
+        let m = &self.mesh;
+        for t_hash in t_hashes {
+            let th = t_hash.as_ref();
+            let th_str = th.clone().into_string();
+            let peer = self.local_peer_id;
+            let peer_str = peer.to_base58();
+            if self.subscribed_topics.iter().any(|t| t.hash() == th) {
+                return Err(GError::NotSubscribedToTopic(th_str, peer_str));
+            }
+            let opt_p_ids = m.remove(th);
+            match opt_p_ids {
+                Some(ref ps) => ps.push(peer),
+                None => return Err(GError::TopicNotInMesh(th_str, peer_str))
+            }
+        }
+        Ok(())
     }
 
     /// Prunes the peer from a topic.

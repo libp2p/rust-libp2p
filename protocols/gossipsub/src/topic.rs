@@ -24,7 +24,7 @@ use bs58;
 use protobuf::Message;
 use std::{
     collections::{HashMap,
-        hash_map::{IntoIter, Iter, Values, Keys, RandomState}
+        hash_map::{IntoIter, Iter, Values, Keys}
     },
     hash::{Hash, Hasher},
     iter::FromIterator,
@@ -192,7 +192,7 @@ impl From<TopicHash> for Topic {
 impl<'a> From<&'a TopicHash> for Topic {
     fn from(topic_hash: &'a TopicHash) -> Self {
         let t_hash = topic_hash.clone();
-        let vec_from_hash = bs58::decode(topic_hash.hash).into_vec().unwrap();
+        let vec_from_hash = bs58::decode(topic_hash.clone().hash).into_vec().unwrap();
         let bytes_from_hash: &[u8] = vec_from_hash.as_ref();
         let descriptor =
             protobuf::parse_from_bytes::<rpc_proto::TopicDescriptor>(
@@ -204,14 +204,14 @@ impl<'a> From<&'a TopicHash> for Topic {
     }
 }
 
-impl From<TopicRep> for Topic {
-    fn from(topic_rep: TopicRep) -> Self {
-        match topic_rep {
-            TopicRep::Hash(TopicHash) => Topic::from(topic_rep),
-            TopicRep::Id(TopicId) => Topic::from(topic_rep),
-        }
-    }
-}
+// impl From<TopicRep> for Topic {
+//     fn from(topic_rep: TopicRep) -> Self {
+//         match topic_rep {
+//             TopicRep::Hash(TopicHash) => Topic::from(topic_rep),
+//             TopicRep::Id(TopicId) => Topic::from(topic_rep),
+//         }
+//     }
+// }
 
 impl<'a> From<&'a TopicRep> for Topic {
     fn from(topic_rep: &'a TopicRep) -> Self {

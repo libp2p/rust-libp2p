@@ -41,7 +41,7 @@ impl MsgMap {
         self.0.keys()
     }
 
-    pub fn remove<Q: ?Sized>(&self, k: &Q) -> Option<GMessage>
+    pub fn remove<Q: ?Sized>(&mut self, k: &Q) -> Option<GMessage>
     where
         MsgHash: Borrow<Q>,
         Q: Hash + Eq,
@@ -123,19 +123,19 @@ impl Hash for GMessage {
 }
 impl GMessage {
     pub fn get_from(&self) -> PeerId {
-        self.from
+        self.clone().from
     }
 
     pub fn get_data(&self) -> Vec<u8> {
-        self.data
+        self.clone().data
     }
 
     pub fn get_seq_no(&self) -> Vec<u8> {
-        self.seq_no
+        self.clone().seq_no
     }
 
     pub fn get_topic_map(&self) -> TopicMap {
-        self.topics
+        self.clone().topics
     }
 
 
@@ -226,6 +226,24 @@ impl GMessage {
 
 impl From<GMessage> for rpc_proto::Message {
     fn from(message: GMessage) -> rpc_proto::Message {
+        let mut msg = rpc_proto::Message::new();
+        msg.set_from(message.from.into_bytes());
+        msg.set_data(message.data);
+        msg.set_seqno(message.seq_no);
+
+        let mut t_hashes = ::protobuf::RepeatedField::new();
+        for t_hash in message.topics.keys() {
+            t_hashes.push((*t_hash).into_string());
+        }
+        msg.set_topic_hashes(t_hashes);
+        // msg.set_signature(message.signature);
+        // msg.set_key(message.key);
+        msg
+    }
+}
+
+impl From<&GMessage> for rpc_proto::Message {
+    fn from(message: &GMessage) -> rpc_proto::Message {
         let mut msg = rpc_proto::Message::new();
         msg.set_from(message.from.into_bytes());
         msg.set_data(message.data);
@@ -619,6 +637,7 @@ pub struct GossipsubRpc {
 /// polling, which are `GMessage` and `message::ControlMessage`. Used in
 /// the events field of `layer::Gossipsub`  as the `TOutEvent` for the
 /// `NetworkBehaviourAction`.
+#[derive(Debug)]
 pub enum GOutEvents {
     /// The `GMessage` to send.
     GMsg(GMessage),

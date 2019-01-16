@@ -24,6 +24,8 @@ pub mod constants;
 /// level.
 pub mod handler;
 
+pub mod errors;
+
 /// Contains `Mesh`.
 pub mod mesh;
 

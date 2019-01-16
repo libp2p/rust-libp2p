@@ -1,6 +1,12 @@
-use std::collections::hash_map::HashMap;
-use libp2p_core::PeerId;
 use TopicHash;
+
+use libp2p_core::PeerId;
+
+use std::{
+    borrow::Borrow,
+    hash::Hash,
+    collections::hash_map::HashMap
+    };
 
 /// A soft overlay network for topics of interest, which meshes as a map
 /// of topics to lists of peers. It is a randomized topic mesh as a map of a
@@ -23,12 +29,29 @@ use TopicHash;
 ///
 /// > **Note**: as discussed in the spec, ambient peer discovery is pushed
 /// > outside the scope of the protocol.
-pub struct Mesh { mesh: HashMap<TopicHash, Vec<PeerId>> }
+#[derive(Debug)]
+pub struct Mesh { m: HashMap<TopicHash, Vec<PeerId>> }
 
 impl Mesh {
+    /// Creates a new `Mesh`.
     pub fn new() -> Self {
         Mesh {
-            mesh: HashMap::new(),
+            m: HashMap::new(),
         }
+    }
+
+    pub fn insert(&mut self, k: TopicHash, v: Vec<PeerId>)
+        -> Option<Vec<PeerId>> {
+        self.m.insert(k, v)
+    }
+
+    pub fn get_mut(&mut self, ) {}
+
+    pub fn remove<Q: ?Sized>(&mut self, k: &Q) -> Option<Vec<PeerId>>
+    where
+        TopicHash: Borrow<Q>,
+        Q: Hash + Eq,
+    {
+        self.m.remove(k)
     }
 }
