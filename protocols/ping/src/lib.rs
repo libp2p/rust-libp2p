@@ -37,7 +37,7 @@ pub mod protocol;
 
 use futures::prelude::*;
 use libp2p_core::either::EitherOutput;
-use libp2p_core::swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters, SwarmEvent};
+use libp2p_core::swarm::{NetworkBehaviour, PollParameters, SwarmEvent};
 use libp2p_core::{protocols_handler::ProtocolsHandler, protocols_handler::ProtocolsHandlerSelect, PeerId};
 use std::{marker::PhantomData, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -94,18 +94,13 @@ where
         &mut self,
         event: SwarmEvent<<Self::ProtocolsHandler as ProtocolsHandler>::OutEvent>,
         _: &mut PollParameters<TTopology, <Self::ProtocolsHandler as ProtocolsHandler>::InEvent>,
-    ) -> Async<
-        NetworkBehaviourAction<
-            <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
-            Self::OutEvent,
-        >,
-    > {
+    ) -> Async<PingEvent> {
         match event {
             SwarmEvent::ProtocolsHandlerEvent { peer_id, event: EitherOutput::Second(dial_handler::OutEvent::PingSuccess(time)) } => {
-                Async::Ready(NetworkBehaviourAction::GenerateEvent(PingEvent::PingSuccess {
+                Async::Ready(PingEvent::PingSuccess {
                     peer: peer_id,
                     time,
-                }))
+                })
             },
             _ => Async::NotReady
         }

@@ -21,7 +21,7 @@
 use fnv::{FnvHashMap, FnvHashSet};
 use futures::{prelude::*, stream};
 use handler::{KademliaHandler, KademliaHandlerEvent, KademliaHandlerIn, KademliaRequestId};
-use libp2p_core::swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters, SwarmEvent};
+use libp2p_core::swarm::{NetworkBehaviour, PollParameters, SwarmEvent};
 use libp2p_core::{protocols_handler::ProtocolsHandler, topology::Topology, Multiaddr, PeerId};
 use multihash::Multihash;
 use protocol::{KadConnectionType, KadPeer};
@@ -77,8 +77,8 @@ pub struct Kademlia<TSubstream> {
     /// Timeout for each individual RPC query.
     rpc_timeout: Duration,
 
-    /// Events to return when polling.
-    queued_events: SmallVec<[NetworkBehaviourAction<KademliaHandlerIn<QueryId>, KademliaOut>; 32]>,
+    /// Events to send to the protocols handler.
+    queued_events: SmallVec<[(PeerId, KademliaHandlerIn<QueryId>); 32]>,
 
     /// Marker to pin the generics.
     marker: PhantomData<TSubstream>,
@@ -279,20 +279,12 @@ where
         &mut self,
         event: SwarmEvent<KademliaHandlerEvent<QueryId>>,
         parameters: &mut PollParameters<TTopology, <Self::ProtocolsHandler as ProtocolsHandler>::InEvent>,
-    ) -> Async<
-        NetworkBehaviourAction<
-            <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
-            Self::OutEvent,
-        >,
-    > {
+    ) -> Async<Self::OutEvent> {
         match event {
             SwarmEvent::Connected { peer_id, .. } => {
                 if let Some(pos) = self.pending_rpcs.iter().position(|(p, _)| p == peer_id) {
                     let (_, rpc) = self.pending_rpcs.remove(pos);
-                    self.queued_events.push(NetworkBehaviourAction::SendEvent {
-                        peer_id: peer_id.clone(),
-                        event: rpc,
-                    });
+                    self.queued_events.push((peer_id.clone(), rpc));
                 }
 
                 self.connected_peers.insert(peer_id.clone());
@@ -400,16 +392,14 @@ where
         if !self.remote_requests.is_empty() {
             let (peer_id, request_id, query) = self.remote_requests.remove(0);
             let result = self.build_result(query, request_id, parameters);
-            return Async::Ready(NetworkBehaviourAction::SendEvent {
-                peer_id,
-                event: result,
-            });
+            parameters.send_event(peer_id, result);
         }
 
         loop {
             // Handle events queued by other parts of this struct
             if !self.queued_events.is_empty() {
-                return Async::Ready(self.queued_events.remove(0));
+                let (peer_id, event) = self.queued_events.remove(0);
+                parameters.send_event(peer_id, event);
             }
             self.queued_events.shrink_to_fit();
 
@@ -429,15 +419,10 @@ where
                         }) => {
                             let rpc = query_target.to_rpc_request(query_id);
                             if self.connected_peers.contains(&peer_id) {
-                                return Async::Ready(NetworkBehaviourAction::SendEvent {
-                                    peer_id: peer_id.clone(),
-                                    event: rpc,
-                                });
+                                parameters.send_event(peer_id.clone(), rpc);
                             } else {
                                 self.pending_rpcs.push((peer_id.clone(), rpc));
-                                return Async::Ready(NetworkBehaviourAction::DialPeer {
-                                    peer_id: peer_id.clone(),
-                                });
+                                parameters.dial(peer_id.clone());
                             }
                         }
                         Async::Ready(QueryStatePollOut::CancelRpc { peer_id }) => {
@@ -474,19 +459,16 @@ where
                             },
                         };
 
-                        break Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
+                        break Async::Ready(event);
                     },
                     QueryPurpose::AddProvider(key) => {
                         for closest in query.into_closest_peers() {
-                            let event = NetworkBehaviourAction::SendEvent {
-                                peer_id: closest,
-                                event: KademliaHandlerIn::AddProvider {
-                                    key: key.clone(),
-                                    provider_peer: self.build_local_kad_peer(parameters.external_addresses()),
-                                },
-                            };
-
-                            self.queued_events.push(event);
+                            let external_addrs = parameters.external_addresses()
+                                .collect::<Vec<_>>();
+                            parameters.send_event(closest, KademliaHandlerIn::AddProvider {
+                                key: key.clone(),
+                                provider_peer: self.build_local_kad_peer(external_addrs),
+                            });
                         }
                     },
                 }

@@ -350,19 +350,8 @@ where TBehaviour: NetworkBehaviour<TTopology>,
             match behaviour_poll {
                 Async::NotReady if raw_swarm_not_ready => return Ok(Async::NotReady),
                 Async::NotReady => (),
-                Async::Ready(NetworkBehaviourAction::GenerateEvent(event)) => {
+                Async::Ready(event) => {
                     return Ok(Async::Ready(Some(event)));
-                },
-                Async::Ready(NetworkBehaviourAction::DialAddress { address }) => {
-                    let _ = Swarm::dial_addr(self, address);
-                },
-                Async::Ready(NetworkBehaviourAction::DialPeer { peer_id }) => {
-                    Swarm::dial(self, peer_id)
-                },
-                Async::Ready(NetworkBehaviourAction::SendEvent { peer_id, event }) => {
-                    if let Some(mut peer) = self.raw_swarm.peer(peer_id).as_connected() {
-                        peer.send_event(event);
-                    }
                 },
             }
         }
@@ -388,7 +377,7 @@ pub trait NetworkBehaviour<TTopology> {
     ///
     /// The swarm will continue calling this method repeatedly until `event` is `SwarmEvent::None`
     /// and this function returned `NotReady`.
-    fn poll(&mut self, event: SwarmEvent<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent>, topology: &mut PollParameters<TTopology, <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent>) -> Async<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
+    fn poll(&mut self, event: SwarmEvent<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent>, topology: &mut PollParameters<TTopology, <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent>) -> Async<Self::OutEvent>;
 }
 
 /// Event passed from the swarm to the `NetworkBehaviour`.
@@ -544,36 +533,4 @@ impl<'a, TTopology, TEvent> PollParameters<'a, TTopology, TEvent> {
             events_to_send: Box::new(move |dst, ev| events_to_send(dst, map(ev))),
         }
     }
-}
-
-/// Action to perform.
-#[derive(Debug, Clone)]
-pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
-    /// Generate an event for the outside.
-    GenerateEvent(TOutEvent),
-
-    // TODO: report new raw connection for usage after intercepting an address dial
-
-    /// Instructs the swarm to dial the given multiaddress without any expectation of a peer id.
-    DialAddress {
-        /// The address to dial.
-        address: Multiaddr,
-    },
-
-    /// Instructs the swarm to try reach the given peer.
-    DialPeer {
-        /// The peer to try reach.
-        peer_id: PeerId,
-    },
-
-    /// If we're connected to the given peer, sends a message to the protocol handler.
-    ///
-    /// If we're not connected to this peer, does nothing. If necessary, the implementation of
-    /// `NetworkBehaviour` is supposed to track which peers we are connected to.
-    SendEvent {
-        /// The peer which to send the message to.
-        peer_id: PeerId,
-        /// Event to send to the peer.
-        event: TInEvent,
-    },
 }

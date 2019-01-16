@@ -21,7 +21,7 @@
 use cuckoofilter::CuckooFilter;
 use futures::prelude::*;
 use handler::FloodsubHandler;
-use libp2p_core::swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters, SwarmEvent};
+use libp2p_core::swarm::{NetworkBehaviour, PollParameters, SwarmEvent};
 use libp2p_core::{protocols_handler::ProtocolsHandler, PeerId};
 use protocol::{FloodsubMessage, FloodsubRpc, FloodsubSubscription, FloodsubSubscriptionAction};
 use rand;
@@ -35,7 +35,10 @@ use topic::{Topic, TopicHash};
 /// about them.
 pub struct Floodsub<TSubstream> {
     /// Events that need to be yielded to the outside when polling.
-    events: VecDeque<NetworkBehaviourAction<FloodsubRpc, FloodsubEvent>>,
+    events: VecDeque<FloodsubEvent>,
+
+    /// Events to send to the protocols handler.
+    to_send: VecDeque<(PeerId, FloodsubRpc)>,
 
     /// Peer id of the local node. Used for the source of the messages that we publish.
     local_peer_id: PeerId,
@@ -62,6 +65,7 @@ impl<TSubstream> Floodsub<TSubstream> {
     pub fn new(local_peer_id: PeerId) -> Self {
         Floodsub {
             events: VecDeque::new(),
+            to_send: VecDeque::new(),
             local_peer_id,
             connected_peers: HashMap::new(),
             subscribed_topics: SmallVec::new(),
@@ -81,16 +85,13 @@ impl<TSubstream> Floodsub<TSubstream> {
         }
 
         for peer in self.connected_peers.keys() {
-            self.events.push_back(NetworkBehaviourAction::SendEvent {
-                peer_id: peer.clone(),
-                event: FloodsubRpc {
-                    messages: Vec::new(),
-                    subscriptions: vec![FloodsubSubscription {
-                        topic: topic.hash().clone(),
-                        action: FloodsubSubscriptionAction::Subscribe,
-                    }],
-                },
-            });
+            self.to_send.push_back((peer.clone(), FloodsubRpc {
+                messages: Vec::new(),
+                subscriptions: vec![FloodsubSubscription {
+                    topic: topic.hash().clone(),
+                    action: FloodsubSubscriptionAction::Subscribe,
+                }],
+            }));
         }
 
         self.subscribed_topics.push(topic);
@@ -112,16 +113,13 @@ impl<TSubstream> Floodsub<TSubstream> {
         self.subscribed_topics.remove(pos);
 
         for peer in self.connected_peers.keys() {
-            self.events.push_back(NetworkBehaviourAction::SendEvent {
-                peer_id: peer.clone(),
-                event: FloodsubRpc {
-                    messages: Vec::new(),
-                    subscriptions: vec![FloodsubSubscription {
-                        topic: topic.clone(),
-                        action: FloodsubSubscriptionAction::Unsubscribe,
-                    }],
-                },
-            });
+            self.to_send.push_back((peer.clone(), FloodsubRpc {
+                messages: Vec::new(),
+                subscriptions: vec![FloodsubSubscription {
+                    topic: topic.clone(),
+                    action: FloodsubSubscriptionAction::Unsubscribe,
+                }]
+            }));
         }
 
         true
@@ -161,13 +159,10 @@ impl<TSubstream> Floodsub<TSubstream> {
                 continue;
             }
 
-            self.events.push_back(NetworkBehaviourAction::SendEvent {
-                peer_id: peer_id.clone(),
-                event: FloodsubRpc {
-                    subscriptions: Vec::new(),
-                    messages: vec![message.clone()],
-                }
-            });
+            self.to_send.push_back((peer_id.clone(), FloodsubRpc {
+                subscriptions: Vec::new(),
+                messages: vec![message.clone()],
+            }));
         }
     }
 
@@ -186,19 +181,19 @@ impl<TSubstream> Floodsub<TSubstream> {
                     if !remote_peer_topics.contains(&subscription.topic) {
                         remote_peer_topics.push(subscription.topic.clone());
                     }
-                    self.events.push_back(NetworkBehaviourAction::GenerateEvent(FloodsubEvent::Subscribed {
+                    self.events.push_back(FloodsubEvent::Subscribed {
                         peer_id: propagation_source.clone(),
                         topic: subscription.topic,
-                    }));
+                    });
                 }
                 FloodsubSubscriptionAction::Unsubscribe => {
                     if let Some(pos) = remote_peer_topics.iter().position(|t| t == &subscription.topic ) {
                         remote_peer_topics.remove(pos);
                     }
-                    self.events.push_back(NetworkBehaviourAction::GenerateEvent(FloodsubEvent::Unsubscribed {
+                    self.events.push_back(FloodsubEvent::Unsubscribed {
                         peer_id: propagation_source.clone(),
                         topic: subscription.topic,
-                    }));
+                    });
                 }
             }
         }
@@ -216,7 +211,7 @@ impl<TSubstream> Floodsub<TSubstream> {
             // Add the message to be dispatched to the user.
             if self.subscribed_topics.iter().any(|t| message.topics.iter().any(|u| t.hash() == u)) {
                 let event = FloodsubEvent::Message(message.clone());
-                self.events.push_back(NetworkBehaviourAction::GenerateEvent(event));
+                self.events.push_back(event);
             }
 
             // Propagate the message to everyone else who is subscribed to any of the topics.
@@ -241,10 +236,7 @@ impl<TSubstream> Floodsub<TSubstream> {
         }
 
         for (peer_id, rpc) in rpcs_to_dispatch {
-            self.events.push_back(NetworkBehaviourAction::SendEvent {
-                peer_id,
-                event: rpc,
-            });
+            self.to_send.push_back((peer_id, rpc));
         }
     }
 }
@@ -263,26 +255,22 @@ where
     fn poll(
         &mut self,
         event: SwarmEvent<FloodsubRpc>,
-        _: &mut PollParameters<TTopology, FloodsubRpc>,
-    ) -> Async<
-        NetworkBehaviourAction<
-            <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
-            Self::OutEvent,
-        >,
-    > {
+        params: &mut PollParameters<TTopology, FloodsubRpc>,
+    ) -> Async<FloodsubEvent> {
+        if let Some((peer_id, event)) = self.to_send.pop_front() {
+            params.send_event(peer_id, event);
+        }
+
         match event {
             SwarmEvent::Connected { peer_id, .. } => {
                 // We need to send our subscriptions to the newly-connected node.
                 for topic in self.subscribed_topics.iter() {
-                    self.events.push_back(NetworkBehaviourAction::SendEvent {
-                        peer_id: peer_id.clone(),
-                        event: FloodsubRpc {
-                            messages: Vec::new(),
-                            subscriptions: vec![FloodsubSubscription {
-                                topic: topic.hash().clone(),
-                                action: FloodsubSubscriptionAction::Subscribe,
-                            }],
-                        },
+                    params.send_event(peer_id.clone(), FloodsubRpc {
+                        messages: Vec::new(),
+                        subscriptions: vec![FloodsubSubscription {
+                            topic: topic.hash().clone(),
+                            action: FloodsubSubscriptionAction::Subscribe,
+                        }],
                     });
                 }
 

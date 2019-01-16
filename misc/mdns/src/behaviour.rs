@@ -21,7 +21,7 @@
 use crate::service::{MdnsService, MdnsPacket};
 use futures::prelude::*;
 use libp2p_core::protocols_handler::{DummyProtocolsHandler, ProtocolsHandler};
-use libp2p_core::swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters, SwarmEvent};
+use libp2p_core::swarm::{NetworkBehaviour, PollParameters, SwarmEvent};
 use libp2p_core::{Multiaddr, PeerId, multiaddr::Protocol, topology::MemoryTopology, topology::Topology};
 use smallvec::SmallVec;
 use std::{fmt, io, iter, marker::PhantomData, time::Duration};
@@ -85,17 +85,12 @@ where
         &mut self,
         _: SwarmEvent<<Self::ProtocolsHandler as ProtocolsHandler>::OutEvent>,
         params: &mut PollParameters<TTopology, Void>,
-    ) -> Async<
-        NetworkBehaviourAction<
-            <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
-            Self::OutEvent,
-        >,
-    > {
+    ) -> Async<Void> {
         loop {
             if let Some(ref mut to_connect_to) = self.to_connect_to {
                 if !to_connect_to.is_empty() {
                     let peer_id = to_connect_to.remove(0);
-                    return Async::Ready(NetworkBehaviourAction::DialPeer { peer_id });
+                    params.dial(peer_id);
                 } else {
                     to_connect_to.shrink_to_fit();
                 }

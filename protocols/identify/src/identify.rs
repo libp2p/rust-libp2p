@@ -24,7 +24,7 @@ use crate::protocol::{IdentifyInfo, IdentifySenderFuture};
 use crate::topology::IdentifyTopology;
 use futures::prelude::*;
 use libp2p_core::protocols_handler::{ProtocolsHandler, ProtocolsHandlerSelect, ProtocolsHandlerUpgrErr};
-use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters, SwarmEvent};
+use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, PollParameters, SwarmEvent};
 use libp2p_core::{Multiaddr, PeerId, either::EitherOutput};
 use smallvec::SmallVec;
 use std::{collections::HashMap, io};
@@ -71,12 +71,7 @@ where
         &mut self,
         event: SwarmEvent<<Self::ProtocolsHandler as ProtocolsHandler>::OutEvent>,
         params: &mut PollParameters<TTopology, <Self::ProtocolsHandler as ProtocolsHandler>::InEvent>,
-    ) -> Async<
-        NetworkBehaviourAction<
-            <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
-            Self::OutEvent,
-        >,
-    > {
+    ) -> Async<IdentifyEvent> {
         match event {
             SwarmEvent::Connected { peer_id, endpoint } => {
                 let observed = match endpoint {
@@ -90,16 +85,13 @@ where
                 self.observed_addresses.remove(peer_id);
             },
             SwarmEvent::ProtocolsHandlerEvent { peer_id, event: EitherOutput::Second(PeriodicIdHandlerEvent::Identified(remote)) } => {
-                let iter = remote.info.listen_addrs.iter().cloned();
-                params.topology().add_identify_discovered_addrs(&peer_id, iter);
+                params.topology().add_identify_discovered_addrs(&peer_id, remote.info.listen_addrs.iter().cloned());
                 params.report_observed_address(&remote.observed_addr);
-                // TODO:
-                /*self.events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(IdentifyEvent::Identified {
-                        peer_id,
-                        info: remote.info,
-                        observed_addr: remote.observed_addr.clone(),
-                    }));*/
+                return Async::Ready(IdentifyEvent::Identified {
+                    peer_id,
+                    info: remote.info,
+                    observed_addr: remote.observed_addr.clone(),
+                });
             },
             SwarmEvent::ProtocolsHandlerEvent { peer_id, event: EitherOutput::First(sender) } => {
                 let observed = self.observed_addresses.get(&peer_id)
@@ -126,10 +118,10 @@ where
                 self.futures.push(future);
             },
             SwarmEvent::ProtocolsHandlerEvent { peer_id, event: EitherOutput::Second(PeriodicIdHandlerEvent::IdentificationError(err)) } => {
-                return Async::Ready(NetworkBehaviourAction::GenerateEvent(IdentifyEvent::Error {
+                return Async::Ready(IdentifyEvent::Error {
                     peer_id,
                     error: err,
-                }));
+                });
             },
             SwarmEvent::None => {},
         }
