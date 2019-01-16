@@ -389,9 +389,6 @@ fn gen_field_wrap(
                     event: #wrapped_event,
                 });
             }
-            Async::Ready(#network_behaviour_action::ReportObservedAddr { address }) => {
-                return Async::Ready(#network_behaviour_action::ReportObservedAddr { address });
-            }
             Async::NotReady => (),
         }
     }

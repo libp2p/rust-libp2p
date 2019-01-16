@@ -343,9 +343,6 @@ where TBehaviour: NetworkBehaviour<TTopology>,
                         peer.send_event(event);
                     }
                 },
-                Async::Ready(NetworkBehaviourAction::ReportObservedAddr { address }) => {
-                    self.topology.add_local_external_addrs(self.raw_swarm.nat_traversal(&address));
-                },
             }
         }
     }
@@ -473,6 +470,19 @@ impl<'a, TTopology> PollParameters<'a, TTopology> {
     pub fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         (self.nat_traversal)(server, observed)
     }
+
+    /// Notifies that a new address has been observed for us.
+    pub fn report_observed_address(&mut self, address: &Multiaddr)
+    where TTopology: Topology
+    {
+        let nat_traversal = &self.nat_traversal;
+        let iter = self.listened_addrs.iter()
+            .filter_map(move |server| {
+                nat_traversal(server, address)
+            });
+
+        self.topology.add_local_external_addrs(iter);
+    }
 }
 
 /// Action to perform.
@@ -504,13 +514,5 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
         peer_id: PeerId,
         /// Event to send to the peer.
         event: TInEvent,
-    },
-
-    /// Reports that a remote observes us as this address.
-    ///
-    /// The swarm will pass this address through the transport's NAT traversal.
-    ReportObservedAddr {
-        /// The address we're being observed as.
-        address: Multiaddr,
     },
 }

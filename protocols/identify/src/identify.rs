@@ -92,17 +92,14 @@ where
             SwarmEvent::ProtocolsHandlerEvent { peer_id, event: EitherOutput::Second(PeriodicIdHandlerEvent::Identified(remote)) } => {
                 let iter = remote.info.listen_addrs.iter().cloned();
                 params.topology().add_identify_discovered_addrs(&peer_id, iter);
+                params.report_observed_address(&remote.observed_addr);
                 // TODO:
                 /*self.events
                     .push_back(NetworkBehaviourAction::GenerateEvent(IdentifyEvent::Identified {
                         peer_id,
                         info: remote.info,
                         observed_addr: remote.observed_addr.clone(),
-                    }));
-                self.events
-                    .push_back(NetworkBehaviourAction::ReportObservedAddr {
-                        address: remote.observed_addr,
-                    });*/
+                    }));*/
             },
             SwarmEvent::ProtocolsHandlerEvent { peer_id, event: EitherOutput::First(sender) } => {
                 let observed = self.observed_addresses.get(&peer_id)
