@@ -269,6 +269,10 @@ where TBehaviour: NetworkBehaviour<TTopology>,
         loop {
             let mut raw_swarm_not_ready = false;
 
+            let mut addrs_to_dial = SmallVec::new();
+            let mut peers_to_dial = SmallVec::new();
+            let mut events_to_send: SmallVec<[(_, _); 4]> = SmallVec::new();
+
             macro_rules! poll_behaviour {
                 ($me:expr, $event:expr) => {{
                     let transport = $me.raw_swarm.transport();
@@ -277,6 +281,9 @@ where TBehaviour: NetworkBehaviour<TTopology>,
                         supported_protocols: &$me.supported_protocols,
                         listened_addrs: &$me.listened_addrs,
                         nat_traversal: &move |a, b| transport.nat_traversal(a, b),
+                        addrs_to_dial: &mut addrs_to_dial,
+                        peers_to_dial: &mut peers_to_dial,
+                        events_to_send: Box::new(|dst, ev| events_to_send.push((dst, ev))),
                     };
                     $me.behaviour.poll($event, &mut parameters)
                 }};
@@ -326,6 +333,20 @@ where TBehaviour: NetworkBehaviour<TTopology>,
                 },
             };
 
+            for addr in addrs_to_dial {
+                let _ = Swarm::dial_addr(self, addr);
+            }
+
+            for peer in peers_to_dial {
+                Swarm::dial(self, peer);
+            }
+
+            for (dst, event) in events_to_send {
+                if let Some(mut peer) = self.raw_swarm.peer(dst).as_connected() {
+                    peer.send_event(event);
+                }
+            }
+
             match behaviour_poll {
                 Async::NotReady if raw_swarm_not_ready => return Ok(Async::NotReady),
                 Async::NotReady => (),
@@ -367,7 +388,7 @@ pub trait NetworkBehaviour<TTopology> {
     ///
     /// The swarm will continue calling this method repeatedly until `event` is `SwarmEvent::None`
     /// and this function returned `NotReady`.
-    fn poll(&mut self, event: SwarmEvent<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent>, topology: &mut PollParameters<TTopology>) -> Async<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
+    fn poll(&mut self, event: SwarmEvent<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent>, topology: &mut PollParameters<TTopology, <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent>) -> Async<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
 }
 
 /// Event passed from the swarm to the `NetworkBehaviour`.
@@ -409,14 +430,17 @@ pub trait NetworkBehaviourEventProcess<TEvent> {
 
 /// Parameters passed to `poll()`, that the `NetworkBehaviour` has access to.
 // TODO: #[derive(Debug)]
-pub struct PollParameters<'a, TTopology: 'a> {
+pub struct PollParameters<'a, TTopology: 'a, TEvent: 'a> {
     topology: &'a mut TTopology,
     supported_protocols: &'a [Vec<u8>],
     listened_addrs: &'a [Multiaddr],
     nat_traversal: &'a dyn Fn(&Multiaddr, &Multiaddr) -> Option<Multiaddr>,
+    addrs_to_dial: &'a mut SmallVec<[Multiaddr; 4]>,
+    peers_to_dial: &'a mut SmallVec<[PeerId; 4]>,
+    events_to_send: Box<dyn FnMut(PeerId, TEvent) + 'a>,
 }
 
-impl<'a, TTopology> PollParameters<'a, TTopology> {
+impl<'a, TTopology, TEvent> PollParameters<'a, TTopology, TEvent> {
     /// Returns a reference to the topology of the network.
     #[inline]
     pub fn topology(&mut self) -> &mut TTopology {
@@ -482,6 +506,43 @@ impl<'a, TTopology> PollParameters<'a, TTopology> {
             });
 
         self.topology.add_local_external_addrs(iter);
+    }
+
+    /// Start dialing an address without knowing the `PeerId` of the destination.
+    // TODO: add proper return type as a `Result`? Complicated because we don't know the type
+    //       of the `Transport`
+    pub fn dial_address(&mut self, address: Multiaddr) {
+        self.addrs_to_dial.push(address);
+    }
+
+    /// Start dialing a peer.
+    // TODO: add proper return type as a `Result`? Complicated because we don't know the type
+    //       of the `Transport`
+    pub fn dial(&mut self, peer_id: PeerId) {
+        self.peers_to_dial.push(peer_id);
+    }
+
+    /// Send an event to a peer.
+    // TODO: add proper return type as a `Result`? Complicated because we don't know the type
+    //       of the `Transport`
+    pub fn send_event(&mut self, peer_id: PeerId, event: TEvent) {
+        (self.events_to_send)(peer_id, event);
+    }
+
+    /// This method is a hack for the custom derive to work.
+    #[doc(hidden)]
+    pub fn with_event_map<TNewEv>(&mut self, mut map: impl FnMut(TNewEv) -> TEvent + 'a) -> PollParameters<TTopology, TNewEv> {
+        let events_to_send = &mut self.events_to_send;
+
+        PollParameters {
+            topology: &mut self.topology,
+            supported_protocols: self.supported_protocols,
+            listened_addrs: self.listened_addrs,
+            nat_traversal: self.nat_traversal,
+            addrs_to_dial: &mut self.addrs_to_dial,
+            peers_to_dial: &mut self.peers_to_dial,
+            events_to_send: Box::new(move |dst, ev| events_to_send(dst, map(ev))),
+        }
     }
 }
 

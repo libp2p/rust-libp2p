@@ -82,7 +82,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         quote!{#n}
     };
 
-    let poll_parameters = quote!{::libp2p::core::swarm::PollParameters<#topology_generic>};
+    let poll_parameters = quote!{::libp2p::core::swarm::PollParameters<#topology_generic, <<Self::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::InEvent>};
 
     // Build the generics.
     let impl_generics = {
@@ -214,11 +214,13 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
         Some(match field.ident {
             Some(ref i) => {
-                let ev = quote!{ self.#i.poll(#swarm_event::None, poll_params) };
+                let closure = gen_field_unwrap(field_n, enum_n, data_struct);
+                let ev = quote!{ self.#i.poll(#swarm_event::None, &mut poll_params.with_event_map(#closure)) };
                 gen_field_wrap(ev, field_n, enum_n, data_struct)
             },
             None => {
-                let ev = quote!{ self.#field_n.poll(#swarm_event::None, poll_params) };
+                let closure = gen_field_unwrap(field_n, enum_n, data_struct);
+                let ev = quote!{ self.#field_n.poll(#swarm_event::None, &mut poll_params.with_event_map(#closure)) };
                 gen_field_wrap(ev, field_n, enum_n, data_struct)
             },
         })
@@ -232,11 +234,13 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
         Some(match field.ident {
             Some(ref i) => {
-                let ev = quote!{ self.#i.poll(#swarm_event::Connected { peer_id, endpoint }, poll_params) };
+                let closure = gen_field_unwrap(field_n, enum_n, data_struct);
+                let ev = quote!{ self.#i.poll(#swarm_event::Connected { peer_id, endpoint }, &mut poll_params.with_event_map(#closure)) };
                 gen_field_wrap(ev, field_n, enum_n, data_struct)
             }
             None => {
-                let ev = quote!{ self.#field_n.poll(#swarm_event::Connected { peer_id, endpoint }, poll_params) };
+                let closure = gen_field_unwrap(field_n, enum_n, data_struct);
+                let ev = quote!{ self.#field_n.poll(#swarm_event::Connected { peer_id, endpoint }, &mut poll_params.with_event_map(#closure)) };
                 gen_field_wrap(ev, field_n, enum_n, data_struct)
             }
         })
@@ -250,11 +254,13 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
         Some(match field.ident {
             Some(ref i) => {
-                let ev = quote!{ self.#i.poll(#swarm_event::Disconnected { peer_id, endpoint }, poll_params) };
+                let closure = gen_field_unwrap(field_n, enum_n, data_struct);
+                let ev = quote!{ self.#i.poll(#swarm_event::Disconnected { peer_id, endpoint }, &mut poll_params.with_event_map(#closure)) };
                 gen_field_wrap(ev, field_n, enum_n, data_struct)
             }
             None => {
-                let ev = quote!{ self.#field_n.poll(#swarm_event::Disconnected { peer_id, endpoint }, poll_params) };
+                let closure = gen_field_unwrap(field_n, enum_n, data_struct);
+                let ev = quote!{ self.#field_n.poll(#swarm_event::Disconnected { peer_id, endpoint }, &mut poll_params.with_event_map(#closure)) };
                 gen_field_wrap(ev, field_n, enum_n, data_struct)
             }
         })
@@ -279,12 +285,14 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
         Some(match field.ident {
             Some(ref i) => {
-                let ev = quote!{ self.#i.poll(#swarm_event::ProtocolsHandlerEvent { peer_id, event: ev }, poll_params) };
+                let closure = gen_field_unwrap(field_n, enum_n, data_struct);
+                let ev = quote!{ self.#i.poll(#swarm_event::ProtocolsHandlerEvent { peer_id, event: ev }, &mut poll_params.with_event_map(#closure)) };
                 let stmt = gen_field_wrap(ev, field_n, enum_n, data_struct);
                 quote!{ #elem => { #stmt; } }
             },
             None => {
-                let ev = quote!{ self.#field_n.poll(#swarm_event::ProtocolsHandlerEvent { peer_id, event: ev }, poll_params) };
+                let closure = gen_field_unwrap(field_n, enum_n, data_struct);
+                let ev = quote!{ self.#field_n.poll(#swarm_event::ProtocolsHandlerEvent { peer_id, event: ev }, &mut poll_params.with_event_map(#closure)) };
                 let stmt = gen_field_wrap(ev, field_n, enum_n, data_struct);
                 quote!{ #elem => { #stmt; } }
             },
@@ -392,6 +400,27 @@ fn gen_field_wrap(
             Async::NotReady => (),
         }
     }
+}
+
+/// Generates a closure block that converts from the combined `InEvent` of the type we're deriving
+/// to the `InEvent` of a sub-field.
+fn gen_field_unwrap(
+    field_n: usize,
+    enum_n: usize,
+    data_struct: &syn::DataStruct,
+) -> syn::export::TokenStream2 {
+    let either_ident = quote!{::libp2p::core::either::EitherOutput};
+
+    let mut wrapped_event = if enum_n != 0 {
+        quote!{ #either_ident::Second(event) }
+    } else {
+        quote!{ event }
+    };
+    for _ in 0 .. data_struct.fields.iter().filter(|f| !is_ignored(f)).count() - 1 - field_n {
+        wrapped_event = quote!{ #either_ident::First(#wrapped_event) };
+    }
+
+    quote!{|event| #wrapped_event}
 }
 
 /// Returns true if a field is marked as ignored by the user.

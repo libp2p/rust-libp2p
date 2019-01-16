@@ -263,7 +263,7 @@ where
     fn poll(
         &mut self,
         event: SwarmEvent<FloodsubRpc>,
-        _: &mut PollParameters<TTopology>,
+        _: &mut PollParameters<TTopology, FloodsubRpc>,
     ) -> Async<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,

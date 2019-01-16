@@ -70,7 +70,7 @@ where
     fn poll(
         &mut self,
         event: SwarmEvent<<Self::ProtocolsHandler as ProtocolsHandler>::OutEvent>,
-        params: &mut PollParameters<TTopology>,
+        params: &mut PollParameters<TTopology, <Self::ProtocolsHandler as ProtocolsHandler>::InEvent>,
     ) -> Async<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,

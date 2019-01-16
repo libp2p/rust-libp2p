@@ -162,7 +162,7 @@ impl<TSubstream> Kademlia<TSubstream> {
     }
 
     /// Builds the answer to a request.
-    fn build_result<TUserData, TTopology>(&self, query: QueryTarget, request_id: KademliaRequestId, parameters: &mut PollParameters<TTopology>)
+    fn build_result<TUserData, TTopology>(&self, query: QueryTarget, request_id: KademliaRequestId, parameters: &mut PollParameters<TTopology, KademliaHandlerIn<TUserData>>)
         -> KademliaHandlerIn<TUserData>
     where TTopology: KademliaTopology
     {
@@ -278,7 +278,7 @@ where
     fn poll(
         &mut self,
         event: SwarmEvent<KademliaHandlerEvent<QueryId>>,
-        parameters: &mut PollParameters<TTopology>,
+        parameters: &mut PollParameters<TTopology, <Self::ProtocolsHandler as ProtocolsHandler>::InEvent>,
     ) -> Async<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
