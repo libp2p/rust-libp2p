@@ -15,6 +15,7 @@ pub enum ErrorKind {
     PicoQuic,
     OpenSsl,
     InvalidPeerId,
+    PeerIdMismatch,
     #[doc(hidden)]
     __Nonexhaustive
 }
@@ -32,6 +33,7 @@ impl fmt::Display for QuicError {
             ErrorKind::PicoQuic => write!(f, "picoquic: {:?}", self.source),
             ErrorKind::OpenSsl => write!(f, "openssl: {:?}", self.source),
             ErrorKind::InvalidPeerId => f.write_str("invalid peer ID"),
+            ErrorKind::PeerIdMismatch => f.write_str("peer IDs do not match"),
             ErrorKind::__Nonexhaustive => f.write_str("__Nonexhaustive")
         }
     }

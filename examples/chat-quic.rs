@@ -25,7 +25,6 @@ use openssl::{rsa::Rsa, x509::X509};
 use quicli::prelude::*;
 use structopt::StructOpt;
 use std::io;
-use void;
 
 // Brief usage instructions:
 //

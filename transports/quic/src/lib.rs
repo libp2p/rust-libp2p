@@ -24,7 +24,6 @@ mod error;
 
 use bytes::BytesMut;
 use crate::error::{QuicError, ErrorKind};
-use fnv::FnvHashMap;
 use futures::{future::{self, FutureResult}, prelude::*};
 use libp2p_core::{muxing::Shutdown, PeerId, PublicKey, StreamMuxer, Transport, TransportError};
 use log::{debug, trace, warn};
@@ -34,7 +33,9 @@ use openssl::{error::ErrorStack, pkey::Private, rsa::Rsa, stack::StackRef, x509:
 use parking_lot::Mutex;
 use picoquic;
 use std::{
-    cmp, fmt, io, iter,
+    cmp,
+    collections::HashMap,
+    fmt, io, iter,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
     sync::Arc
 };
@@ -43,16 +44,21 @@ use tokio_executor::{Executor, SpawnError};
 /// Represents the configuration for a QUIC transport capability for libp2p.
 #[derive(Clone)]
 pub struct QuicConfig {
+    /// task executor
     executor: Exec,
-    /// RSA private key.
+    /// RSA private key
     private_key: Vec<u8>,
-    /// Self-signed ceritficate.
+    /// self-signed ceritficate
     certificates: Vec<Vec<u8>>,
     /// Address to use when establishing an outgoing IPv4 connection. Port can be 0 for "any port".
     /// If the port is 0, it will be different for each outgoing connection.
     ipv4_src_addr: SocketAddrV4,
     /// Equivalent for `ipv4_src_addr` for IPv6.
     ipv6_src_addr: SocketAddrV6,
+    /// picoquic context used for dialing (lazily initialised)
+    dialing_context: Arc<Mutex<Option<picoquic::Context>>>,
+    /// The certificate verifier puts the public key of a dialed connection in here.
+    public_keys: Arc<Mutex<HashMap<picoquic::ConnectionId, PublicKey>>>,
 }
 
 impl fmt::Debug for QuicConfig {
@@ -76,6 +82,8 @@ impl QuicConfig {
             certificates: vec![cert.to_der()?],
             ipv4_src_addr: SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0),
             ipv6_src_addr: SocketAddrV6::new(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0), 0, 0, 0),
+            dialing_context: Arc::new(Mutex::new(None)),
+            public_keys: Arc::new(Mutex::new(Default::default()))
         })
     }
 
@@ -86,6 +94,23 @@ impl QuicConfig {
         self.ipv4_src_addr.set_port(port);
         self.ipv6_src_addr.set_port(port);
         self
+    }
+
+    fn set_dialing_context(&self, a: &SocketAddr) -> Result<(), QuicError> {
+        if self.dialing_context.lock().is_some() {
+            return Ok(())
+        }
+
+        let mut config = picoquic::Config::new();
+        config.set_private_key(self.private_key.clone(), picoquic::FileFormat::DER);
+        config.set_certificate_chain(self.certificates.clone(), picoquic::FileFormat::DER);
+        config.enable_client_authentication();
+        config.set_verify_certificate_handler(PublicKeySaver(self.public_keys.clone()));
+
+        *self.dialing_context.lock() =
+            Some(picoquic::Context::new(&a, self.executor.clone(), config)?);
+
+        Ok(())
     }
 }
 
@@ -106,13 +131,13 @@ impl Transport for QuicConfig {
 
         let public_keys = Arc::new(Mutex::new(Default::default()));
 
-        let mut quic_config = picoquic::Config::new();
-        quic_config.set_private_key(self.private_key.clone(), picoquic::FileFormat::DER);
-        quic_config.set_certificate_chain(self.certificates.clone(), picoquic::FileFormat::DER);
-        quic_config.enable_client_authentication();
-        quic_config.set_verify_certificate_handler(ListenCertifVerifier(public_keys.clone()));
+        let mut config = picoquic::Config::new();
+        config.set_private_key(self.private_key.clone(), picoquic::FileFormat::DER);
+        config.set_certificate_chain(self.certificates.clone(), picoquic::FileFormat::DER);
+        config.enable_client_authentication();
+        config.set_verify_certificate_handler(PublicKeySaver(public_keys.clone()));
 
-        let context = picoquic::Context::new(&listen_addr, self.executor.clone(), quic_config)
+        let context = picoquic::Context::new(&listen_addr, self.executor.clone(), config)
             .map_err(|e| TransportError::Other(e.into()))?;
 
         let actual_addr = socket_addr_to_quic(context.local_addr());
@@ -123,19 +148,9 @@ impl Transport for QuicConfig {
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let (target_addr, hash) =
-            if let Ok(sa) = multiaddr_to_socketaddr(&addr) {
-                sa
-            } else {
-                return Err(TransportError::MultiaddrNotSupported(addr))
-            };
-
-        let peer_id =
-            if let Some(h) = hash {
-                Some(PeerId::from_multihash(h).map_err(|_| {
-                    TransportError::Other(ErrorKind::InvalidPeerId.into())
-                })?)
-            } else {
-                None
+            match multiaddr_to_socketaddr(&addr) {
+                Ok((sa, Some(h))) => (sa, h),
+                Ok((_, None)) | Err(_) => return Err(TransportError::MultiaddrNotSupported(addr))
             };
 
         // As an optimization, we check that the address is not of the form `0.0.0.0`.
@@ -145,27 +160,26 @@ impl Transport for QuicConfig {
             return Err(TransportError::MultiaddrNotSupported(addr))
         }
 
-        debug!("Dialing {}", addr);
-
         let listen_addr = if target_addr.is_ipv4() {
             SocketAddr::from(self.ipv4_src_addr.clone())
         } else {
             SocketAddr::from(self.ipv6_src_addr.clone())
         };
 
-        let public_key = Arc::new((peer_id, Mutex::new(None)));
+        let peer_id = PeerId::from_multihash(hash).map_err(|_| {
+            TransportError::Other(ErrorKind::InvalidPeerId.into())
+        })?;
 
-        let mut quic_config = picoquic::Config::new();
-        quic_config.set_private_key(self.private_key.clone(), picoquic::FileFormat::DER);
-        quic_config.set_certificate_chain(self.certificates.clone(), picoquic::FileFormat::DER);
-        quic_config.set_verify_certificate_handler(DialCertifVerifier(public_key.clone()));
+        self.set_dialing_context(&listen_addr).map_err(TransportError::Other)?;
 
-        let mut context = picoquic::Context::new(&listen_addr, self.executor.clone(), quic_config)
-            .map_err(|e| TransportError::Other(e.into()))?;
+        let connection = self.dialing_context.lock()
+            .as_mut()
+            .expect("dialing context has been set one line above")
+            .new_connection(target_addr, String::new());
 
-        let connec = context.new_connection(target_addr, String::new());
+        debug!("Dialing {}", addr);
 
-        Ok(QuicDialFut { context: Some(context), inner: connec, public_key })
+        Ok(QuicDialFut { peer_id, connection, public_keys: self.public_keys.clone() })
     }
 
     fn nat_traversal(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
@@ -188,7 +202,6 @@ impl Executor for Exec {
 
 /// An open connection. Implements `StreamMuxer`.
 pub struct QuicMuxer {
-    _context: Option<picoquic::Context>, // kept here to not drop the connection
     inner: Mutex<picoquic::Connection>
 }
 
@@ -336,14 +349,14 @@ fn socket_addr_to_quic(addr: SocketAddr) -> Multiaddr {
 /// Future that dials an address.
 #[must_use = "futures do nothing unless polled"]
 pub struct QuicDialFut {
-    context: Option<picoquic::Context>,
-    inner: picoquic::NewConnectionFuture,
-    public_key: Arc<(Option<PeerId>, Mutex<Option<PublicKey>>)>,
+    peer_id: PeerId,
+    connection: picoquic::NewConnectionFuture,
+    public_keys: Arc<Mutex<HashMap<picoquic::ConnectionId, PublicKey>>>
 }
 
 impl fmt::Debug for QuicDialFut {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "QuicDialFut")
+        f.debug_struct("QuicDialFut").field("peer_id", &self.peer_id).finish()
     }
 }
 
@@ -352,19 +365,20 @@ impl Future for QuicDialFut {
     type Error = QuicError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match self.inner.poll() {
+        match self.connection.poll() {
             Ok(Async::Ready(stream)) => {
-                let public_key = self.public_key.1.lock().take().expect(
-                    "The certificate validator is guaranteed to be called by picoquic \
-                     and stores the public key in itself",
-                );
+                let public_key = self.public_keys.lock()
+                    .remove(&stream.id())
+                    .expect("picoquic calls certificate validator which saves the public key");
                 let peer_id = public_key.into_peer_id();
-                trace!("outgoing connection to {:?}", peer_id);
-                let muxer = QuicMuxer {
-                    _context: self.context.take(),
-                    inner: Mutex::new(stream),
-                };
-                Ok(Async::Ready((peer_id, muxer)))
+                if self.peer_id == peer_id {
+                    trace!("outgoing connection to {:?}", peer_id);
+                    let muxer = QuicMuxer { inner: Mutex::new(stream) };
+                    Ok(Async::Ready((peer_id, muxer)))
+                } else {
+                    warn!("peer id mismatch: {:?} != {:?}", self.peer_id, peer_id);
+                    Err(ErrorKind::PeerIdMismatch.into())
+                }
             }
             Ok(Async::NotReady) => Ok(Async::NotReady),
             Err(e) => {
@@ -379,7 +393,7 @@ impl Future for QuicDialFut {
 #[must_use = "futures do nothing unless polled"]
 pub struct QuicListenStream {
     inner: picoquic::Context,
-    public_keys: Arc<Mutex<FnvHashMap<picoquic::ConnectionId, PublicKey>>>,
+    public_keys: Arc<Mutex<HashMap<picoquic::ConnectionId, PublicKey>>>,
 }
 
 impl fmt::Debug for QuicListenStream {
@@ -389,27 +403,19 @@ impl fmt::Debug for QuicListenStream {
 }
 
 impl Stream for QuicListenStream {
-    type Item = (
-        future::FutureResult<(PeerId, QuicMuxer), QuicError>,
-        Multiaddr,
-    );
+    type Item = (FutureResult<(PeerId, QuicMuxer), QuicError>, Multiaddr);
     type Error = QuicError;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         match self.inner.poll() {
             Ok(Async::Ready(Some(stream))) => {
-                let public_key = self.public_keys.lock().remove(&stream.id()).expect(
-                    "The certificate validator is guaranteed to be called by picoquic \
-                     and stores the public key in itself",
-                );
-
+                let public_key = self.public_keys.lock()
+                    .remove(&stream.id())
+                    .expect("picoquic calls certificate validator which saves the public key");
                 let peer_id = public_key.into_peer_id();
                 trace!("incoming connection to {:?}", peer_id);
                 let addr = socket_addr_to_quic(stream.peer_addr());
-                let muxer = QuicMuxer {
-                    _context: None,
-                    inner: Mutex::new(stream),
-                };
+                let muxer = QuicMuxer { inner: Mutex::new(stream) };
                 Ok(Async::Ready(Some((future::ok((peer_id, muxer)), addr))))
             }
             Ok(Async::Ready(None)) => Ok(Async::Ready(None)),
@@ -422,46 +428,19 @@ impl Stream for QuicListenStream {
     }
 }
 
-/// Implements `picoquic::VerifyCertificate`. Automatically accepts whatever certificate it
-/// receives, and stores the public key in its inner variable.
-struct DialCertifVerifier(Arc<(Option<PeerId>, Mutex<Option<PublicKey>>)>);
+/// Implementation of `picoquic::VerifyCertificate` thas just saves the
+/// peer ID of the given connection.
+struct PublicKeySaver(Arc<Mutex<HashMap<picoquic::ConnectionId, PublicKey>>>);
 
-impl picoquic::VerifyCertificate for DialCertifVerifier {
-    fn verify(
-        &mut self,
-        _: picoquic::ConnectionId,
-        _: picoquic::ConnectionType,
-        cert: &X509Ref,
-        _: &StackRef<X509>,
-    ) -> Result<bool, ErrorStack> {
-        let public_key = PublicKey::Rsa(cert.public_key()?.public_key_to_der()?);
-        if let Some(peer_id) = (self.0).0.as_ref() {
-            if *peer_id == PeerId::from_public_key(public_key.clone()) {
-                *(self.0).1.lock() = Some(public_key);
-                Ok(true)
-            } else {
-                warn!("Public key does not match peer ID.");
-                Ok(false)
-            }
-        } else {
-            *(self.0).1.lock() = Some(public_key);
-            Ok(true)
-        }
-    }
-}
-
-/// Implements `picoquic::VerifyCertificate`. Automatically accepts whatever certificate it
-/// receives, and stores the public key in its inner variable.
-struct ListenCertifVerifier(Arc<Mutex<FnvHashMap<picoquic::ConnectionId, PublicKey>>>);
-
-impl picoquic::VerifyCertificate for ListenCertifVerifier {
+impl picoquic::VerifyCertificate for PublicKeySaver {
     fn verify(
         &mut self,
         id: picoquic::ConnectionId,
         _: picoquic::ConnectionType,
         cert: &X509Ref,
-        _: &StackRef<X509>,
-    ) -> Result<bool, ErrorStack> {
+        _: &StackRef<X509>
+    ) -> Result<bool, ErrorStack>
+    {
         let public_key = PublicKey::Rsa(cert.public_key()?.public_key_to_der()?);
         self.0.lock().insert(id, public_key);
         Ok(true)
