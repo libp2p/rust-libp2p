@@ -26,14 +26,40 @@ use libp2p_core::swarm::{
 };
 use libp2p_core::{protocols_handler::ProtocolsHandler, PeerId};
 use libp2p_floodsub::{Topic, TopicHash};
+use mcache::MessageCache;
 use protocol::{
     GossipsubMessage, GossipsubRpc, GossipsubSubscription, GossipsubSubscriptionAction,
 };
 use rand;
 use smallvec::SmallVec;
 use std::collections::hash_map::{DefaultHasher, HashMap};
+use std::time::Duration;
 use std::{collections::VecDeque, iter, marker::PhantomData};
 use tokio_io::{AsyncRead, AsyncWrite};
+
+// potentially rename this struct - due to clashes
+/// Configuration parameters that define the performance of the gossipsub network
+pub struct GossipsubConfig {
+    /// Overlay network parameters
+    /// Number of heartbeats to keep in the memcache
+    history_length: usize,
+    /// Number of past heartbeats to gossip about
+    history_gossip: usize,
+
+    /// Target number of peers for the mesh network
+    mesh_n: usize,
+    /// Minimum number of peers in mesh network before adding more
+    mesh_n_low: usize,
+    /// Maximum number of peers in mesh network before removing some
+    mesh_n_high: usize,
+
+    /// Initial delay in each heartbeat
+    heartbeat_initial_delay: Duration,
+    /// Time between each heartbeat
+    heartbeat_interval: Duration,
+    /// Time to live for fanout peers
+    fanout_ttl: Duration,
+}
 
 /// Network behaviour that automatically identifies nodes periodically, and returns information
 /// about them.
@@ -44,32 +70,50 @@ pub struct Gossipsub<TSubstream> {
     /// Peer id of the local node. Used for the source of the messages that we publish.
     local_peer_id: PeerId,
 
+    // These data structures may be combined in later revisions - kept for ease of iteration
     /// List of peers the network is connected to, and the topics that they're subscribed to.
-    // TODO: filter out peers that don't support gossipsub so that we avoid hammering them with
-    //       opened substream
-    connected_peers: HashMap<PeerId, SmallVec<[TopicHash; 8]>>,
+    peers_topic: HashMap<PeerId, SmallVec<[TopicHash; 8]>>,
+    /// Inverse hashmap of connected_peers - maps a topic to a tuple which contains a list of
+    /// gossipsub peers and floodsub peers. Used to efficiently look up peers per topic.
+    topic_peers: HashMap<TopicHash, (Vec<PeerId>, Vec<PeerId>)>,
 
-    // List of topics we're subscribed to. Necessary to filter out messages that we receive
-    // erroneously.
-    subscribed_topics: SmallVec<[Topic; 16]>,
+    /* use topic_peers instead of two hashmaps
+    /// Map of topics to connected gossipsub peers
+    gossipsub_peers: HashMap<TopicHash, Vec<PeerId>>,
+    /// Map of topics to connected floodsub peers
+    floodsub_peers: HashMap<TopicHash, Vec<PeerId>>,
+    */
+    /// Overlay network of connected peers - Maps topics to connected gossipsub peers
+    mesh: HashMap<TopicHash, Vec<PeerId>>,
+
+    /// Map of topics to list of peers that we publish to, but don't subscribe to
+    fanout: HashMap<TopicHash, Vec<PeerId>>,
+
+    /// Message cache for the last few heartbeats
+    mcache: MessageCache,
 
     // We keep track of the messages we received (in the format `hash(source ID, seq_no)`) so that
     // we don't dispatch the same message twice if we receive it twice on the network.
     received: CuckooFilter<DefaultHasher>,
 
+    subscribed_topics: SmallVec<[Topic; 16]>,
     /// Marker to pin the generics.
     marker: PhantomData<TSubstream>,
 }
 
 impl<TSubstream> Gossipsub<TSubstream> {
     /// Creates a `Gossipsub`.
-    pub fn new(local_peer_id: PeerId) -> Self {
+    pub fn new(local_peer_id: PeerId, gs_config: GossipsubConfig) -> Self {
         Gossipsub {
             events: VecDeque::new(),
             local_peer_id,
-            connected_peers: HashMap::new(),
-            subscribed_topics: SmallVec::new(),
+            peers_topic: HashMap::new(),
+            topic_peers: HashMap::new(),
+            mesh: HashMap::new(),
+            fanout: HashMap::new(),
+            mcache: MessageCache::new(gs_config.history_gossip, gs_config.history_length),
             received: CuckooFilter::new(),
+            subscribed_topics: SmallVec::new(),
             marker: PhantomData,
         }
     }
@@ -78,6 +122,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
     ///
     /// Returns true if the subscription worked. Returns false if we were already subscribed.
     pub fn subscribe(&mut self, topic: Topic) -> bool {
+        // TODO: Can simply check if topic is in the mesh
         if self
             .subscribed_topics
             .iter()
@@ -86,7 +131,8 @@ impl<TSubstream> Gossipsub<TSubstream> {
             return false;
         }
 
-        for peer in self.connected_peers.keys() {
+        // send subscription request to all floodsub and gossipsub peers
+        for peer in self.peers_topic.keys() {
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer.clone(),
                 event: GossipsubRpc {
@@ -99,7 +145,11 @@ impl<TSubstream> Gossipsub<TSubstream> {
             });
         }
 
-        self.subscribed_topics.push(topic);
+        self.subscribed_topics.push(topic.clone());
+
+        // call JOIN(topic)
+        self.join(topic);
+
         true
     }
 
@@ -109,11 +159,12 @@ impl<TSubstream> Gossipsub<TSubstream> {
     ///
     /// Returns true if we were subscribed to this topic.
     pub fn unsubscribe(&mut self, topic: impl AsRef<TopicHash>) -> bool {
-        let topic = topic.as_ref();
+        let topic_hash = topic.as_ref();
+        // TODO: Check the mesh if we are subscribed
         let pos = match self
             .subscribed_topics
             .iter()
-            .position(|t| t.hash() == topic)
+            .position(|t| t.hash() == topic_hash)
         {
             Some(pos) => pos,
             None => return false,
@@ -121,22 +172,27 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
         self.subscribed_topics.remove(pos);
 
-        for peer in self.connected_peers.keys() {
+        // announce to all floodsub and gossipsub peers
+        for peer in self.peers_topic.keys() {
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer.clone(),
                 event: GossipsubRpc {
                     messages: Vec::new(),
                     subscriptions: vec![GossipsubSubscription {
-                        topic: topic.clone(),
+                        topic: topic_hash.clone(),
                         action: GossipsubSubscriptionAction::Unsubscribe,
                     }],
                 },
             });
         }
 
+        // call LEAVE(topic)
+        self.leave(&topic);
+
         true
     }
 
+    //TODO: Update publish for gossipsub
     /// Publishes a message to the network.
     ///
     /// > **Note**: Doesn't do anything if we're not subscribed to the topic.
@@ -162,19 +218,22 @@ impl<TSubstream> Gossipsub<TSubstream> {
             topics: topic.into_iter().map(|t| t.into().clone()).collect(),
         };
 
-        // Don't publish the message if we're not subscribed ourselves to any of the topics.
+        // If we are not subscribed to the topic, forward to fanout peers
+        // TODO: Can check mesh
         if !self
             .subscribed_topics
             .iter()
             .any(|t| message.topics.iter().any(|u| t.hash() == u))
         {
+            //TODO: Send to fanout peers if exist - add fanout logic
+            // loop through topics etc
             return;
         }
 
         self.received.add(&message);
 
         // Send to peers we know are subscribed to the topic.
-        for (peer_id, sub_topic) in self.connected_peers.iter() {
+        for (peer_id, sub_topic) in self.peers_topic.iter() {
             if !sub_topic
                 .iter()
                 .any(|t| message.topics.iter().any(|u| t == u))
@@ -192,6 +251,10 @@ impl<TSubstream> Gossipsub<TSubstream> {
             });
         }
     }
+
+    fn join(&mut self, topic: impl AsRef<TopicHash>) {}
+
+    fn leave(&mut self, topic: impl AsRef<TopicHash>) {}
 }
 
 impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for Gossipsub<TSubstream>
@@ -220,18 +283,18 @@ where
             });
         }
 
-        self.connected_peers.insert(id.clone(), SmallVec::new());
+        self.peers_topic.insert(id.clone(), SmallVec::new());
     }
 
     fn inject_disconnected(&mut self, id: &PeerId, _: ConnectedPoint) {
-        let was_in = self.connected_peers.remove(id);
+        let was_in = self.peers_topic.remove(id);
         debug_assert!(was_in.is_some());
     }
 
     fn inject_node_event(&mut self, propagation_source: PeerId, event: GossipsubRpc) {
         // Update connected peers topics
         for subscription in event.subscriptions {
-            let mut remote_peer_topics = self.connected_peers
+            let mut remote_peer_topics = self.peers_topic
                 .get_mut(&propagation_source)
                 .expect("connected_peers is kept in sync with the peers we are connected to; we are guaranteed to only receive events from connected peers; QED");
             match subscription.action {
@@ -285,7 +348,7 @@ where
             }
 
             // Propagate the message to everyone else who is subscribed to any of the topics.
-            for (peer_id, subscr_topics) in self.connected_peers.iter() {
+            for (peer_id, subscr_topics) in self.peers_topic.iter() {
                 if peer_id == &propagation_source {
                     continue;
                 }

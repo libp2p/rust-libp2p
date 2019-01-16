@@ -1,7 +1,7 @@
 extern crate fnv;
 
-use super::rpc_proto::{Message};
-use fnv::{FnvHashMap};
+use super::rpc_proto::Message;
+use fnv::FnvHashMap;
 
 /// CacheEntry stored in the history
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -15,13 +15,13 @@ pub struct CacheEntry {
 pub struct MessageCache {
     msgs: FnvHashMap<String, Message>,
     history: Vec<Vec<CacheEntry>>,
-    gossip : usize,
+    gossip: usize,
 }
 
 /// Implementation of the MessageCache
 impl MessageCache {
     pub fn new(gossip: usize, history_capacity: usize) -> MessageCache {
-        MessageCache{
+        MessageCache {
             gossip,
             msgs: FnvHashMap::default(),
             history: vec![Vec::new(); history_capacity],
@@ -33,7 +33,7 @@ impl MessageCache {
         let message_id = msg_id(&msg)?;
         let cache_entry = CacheEntry {
             mid: message_id.clone(),
-            topics: msg.get_topicIDs().to_vec()
+            topics: msg.get_topicIDs().to_vec(),
         };
 
         self.msgs.insert(message_id, msg);
@@ -49,30 +49,31 @@ impl MessageCache {
 
     /// Get a list of GossipIds for a given topic
     pub fn get_gossip_ids(&self, topic: &str) -> Vec<String> {
-
         self.history[..self.gossip]
-            .iter().fold(vec![], |mut current_entries, entries| {
-                    // search for entries with desired topic
-                    let mut found_entries: Vec<String> =
-                    entries.iter().filter_map(|entry| {
+            .iter()
+            .fold(vec![], |mut current_entries, entries| {
+                // search for entries with desired topic
+                let mut found_entries: Vec<String> = entries
+                    .iter()
+                    .filter_map(|entry| {
                         if entry.topics.iter().any(|t| *t == topic) {
                             Some(entry.mid.clone())
-                        }
-                        else {
+                        } else {
                             None
                         }
-                     }).collect();
-
-                    // generate the list
-                    current_entries.append(&mut found_entries);
-                    current_entries
                     })
+                    .collect();
+
+                // generate the list
+                current_entries.append(&mut found_entries);
+                current_entries
+            })
     }
 
     /// Shift the history array down one and delete messages associated with the
     /// last entry
     pub fn shift(&mut self) {
-        let last_index = self.history.len()-1;
+        let last_index = self.history.len() - 1;
         for entry in &self.history[last_index] {
             self.msgs.remove(&entry.mid);
         }
@@ -89,18 +90,14 @@ impl MessageCache {
         // }
         // self.history[0] = Vec::new();
     }
-
 }
-
 
 // Functions to be refactored later
 /// Gets a unique message id.
 /// Returns an error if the message has non-utf from or seqno values
 fn msg_id(pmsg: &Message) -> Result<String, MsgError> {
-    let from =
-        String::from_utf8(pmsg.get_from().to_vec()).or(Err(MsgError::InvalidMessage))?;
-    let seqno =
-        String::from_utf8(pmsg.get_seqno().to_vec()).or(Err(MsgError::InvalidMessage))?;
+    let from = String::from_utf8(pmsg.get_from().to_vec()).or(Err(MsgError::InvalidMessage))?;
+    let seqno = String::from_utf8(pmsg.get_seqno().to_vec()).or(Err(MsgError::InvalidMessage))?;
     Ok(from + &seqno)
 }
 
@@ -109,11 +106,10 @@ pub enum MsgError {
     InvalidMessage,
 }
 
-
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::protobuf;
+    use super::*;
 
     fn gen_testm(x: usize, topics: Vec<String>) -> Message {
         let u8x: u8 = x as u8;
@@ -149,7 +145,10 @@ mod tests {
     fn test_put_get_one() {
         let mut mc = MessageCache::new(10, 15);
 
-        let m = gen_testm(10 as usize, vec![String::from("hello"), String::from("world")]);
+        let m = gen_testm(
+            10 as usize,
+            vec![String::from("hello"), String::from("world")],
+        );
 
         let res = mc.put(m.clone());
         assert_eq!(res.is_err(), false);
@@ -162,7 +161,7 @@ mod tests {
 
         let fetched = match mid.ok() {
             Some(id) => mc.get(&id),
-            _ => None
+            _ => None,
         };
 
         assert_eq!(fetched.is_none(), false);
@@ -171,7 +170,7 @@ mod tests {
         // Make sure it is the same fetched message
         match fetched {
             Some(x) => assert_eq!(*x, m),
-            _ => assert!(false)
+            _ => assert!(false),
         }
     }
 
@@ -181,7 +180,10 @@ mod tests {
         let mut mc = MessageCache::new(10, 15);
 
         // Build the message
-        let m = gen_testm(1 as usize, vec![String::from("hello"), String::from("world")]);
+        let m = gen_testm(
+            1 as usize,
+            vec![String::from("hello"), String::from("world")],
+        );
 
         let res = mc.put(m.clone());
         assert_eq!(res.is_err(), false);
@@ -195,7 +197,6 @@ mod tests {
         let fetched = mc.get(&wrong_string);
         assert_eq!(fetched.is_none(), true);
     }
-
 
     #[test]
     /// Test attempting to 'get' empty message cache
@@ -223,13 +224,13 @@ mod tests {
         let mid = msg_id(&m.clone());
         let fetched = match mid.ok() {
             Some(id) => mc.get(&id),
-            _ => None
+            _ => None,
         };
 
         // Make sure it is the same fetched message
         match fetched {
             Some(x) => assert_eq!(*x, m),
-            _ => assert!(false)
+            _ => assert!(false),
         }
     }
 
@@ -240,7 +241,10 @@ mod tests {
 
         // Build the message
         for i in 0..10 {
-            let m = gen_testm(i as usize, vec![String::from("hello"), String::from("world")]);
+            let m = gen_testm(
+                i as usize,
+                vec![String::from("hello"), String::from("world")],
+            );
             let res = mc.put(m.clone());
             assert_eq!(res.is_err(), false);
         }
@@ -262,7 +266,10 @@ mod tests {
 
         // Build the message
         for i in 0..10 {
-            let m = gen_testm(i as usize, vec![String::from("hello"), String::from("world")]);
+            let m = gen_testm(
+                i as usize,
+                vec![String::from("hello"), String::from("world")],
+            );
             let res = mc.put(m.clone());
             assert_eq!(res.is_err(), false);
         }
@@ -283,11 +290,13 @@ mod tests {
     #[test]
     /// Test shift to see if the last history messages are removed
     fn test_remove_last_from_shift() {
-
         let mut mc = MessageCache::new(4, 5);
 
         for i in 0..10 {
-            let m = gen_testm(i as usize, vec![String::from("hello"), String::from("world")]);
+            let m = gen_testm(
+                i as usize,
+                vec![String::from("hello"), String::from("world")],
+            );
             let res = mc.put(m.clone());
             assert_eq!(res.is_err(), false);
         }
@@ -307,5 +316,3 @@ mod tests {
         assert_eq!(mc.msgs.len(), 0);
     }
 }
-
-
