@@ -50,6 +50,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let name = &ast.ident;
     let (_, ty_generics, where_clause) = ast.generics.split_for_impl();
     let trait_to_impl = quote!{::libp2p::core::swarm::NetworkBehaviour};
+    let swarm_event = quote!{::libp2p::core::swarm::SwarmEvent};
     let net_behv_event_proc = quote!{::libp2p::core::swarm::NetworkBehaviourEventProcess};
     let either_ident = quote!{::libp2p::core::either::EitherOutput};
     let network_behaviour_action = quote!{::libp2p::core::swarm::NetworkBehaviourAction};
@@ -139,71 +140,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         out
     };
 
-    // Build the list of statements to put in the body of `inject_connected()`.
-    let inject_connected_stmts = {
-        let num_fields = data_struct.fields.iter().filter(|f| !is_ignored(f)).count();
-        data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
-            if is_ignored(&field) {
-                return None;
-            }
-
-            Some(if field_n == num_fields - 1 {
-                match field.ident {
-                    Some(ref i) => quote!{ self.#i.inject_connected(peer_id, endpoint); },
-                    None => quote!{ self.#field_n.inject_connected(peer_id, endpoint); },
-                }
-            } else {
-                match field.ident {
-                    Some(ref i) => quote!{ self.#i.inject_connected(peer_id.clone(), endpoint.clone()); },
-                    None => quote!{ self.#field_n.inject_connected(peer_id.clone(), endpoint.clone()); },
-                }
-            })
-        })
-    };
-
-    // Build the list of statements to put in the body of `inject_disconnected()`.
-    let inject_disconnected_stmts = {
-        let num_fields = data_struct.fields.iter().filter(|f| !is_ignored(f)).count();
-        data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
-            if is_ignored(&field) {
-                return None;
-            }
-
-            Some(if field_n == num_fields - 1 {
-                match field.ident {
-                    Some(ref i) => quote!{ self.#i.inject_disconnected(peer_id, endpoint); },
-                    None => quote!{ self.#field_n.inject_disconnected(peer_id, endpoint); },
-                }
-            } else {
-                match field.ident {
-                    Some(ref i) => quote!{ self.#i.inject_disconnected(peer_id, endpoint.clone()); },
-                    None => quote!{ self.#field_n.inject_disconnected(peer_id, endpoint.clone()); },
-                }
-            })
-        })
-    };
-
-    // Build the list of variants to put in the body of `inject_node_event()`.
-    //
-    // The event type is a construction of nested `#either_ident`s of the events of the children.
-    // We call `inject_node_event` on the corresponding child.
-    let inject_node_event_stmts = data_struct.fields.iter().enumerate().filter(|f| !is_ignored(&f.1)).enumerate().map(|(enum_n, (field_n, field))| {
-        let mut elem = if enum_n != 0 {
-            quote!{ #either_ident::Second(ev) }
-        } else {
-            quote!{ ev }
-        };
-
-        for _ in 0 .. data_struct.fields.iter().filter(|f| !is_ignored(f)).count() - 1 - field_n {
-            elem = quote!{ #either_ident::First(#elem) };
-        }
-
-        Some(match field.ident {
-            Some(ref i) => quote!{ #elem => self.#i.inject_node_event(peer_id, ev) },
-            None => quote!{ #elem => self.#field_n.inject_node_event(peer_id, ev) },
-        })
-    });
-
     // The `ProtocolsHandler` associated type.
     let protocols_handler_ty = {
         let mut ph_ty = None;
@@ -270,48 +206,88 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         poll_method
     };
 
-    // List of statements to put in `poll()`.
-    //
-    // We poll each child one by one and wrap around the output.
-    let poll_stmts = data_struct.fields.iter().enumerate().filter(|f| !is_ignored(&f.1)).enumerate().map(|(enum_n, (field_n, field))| {
-        let field_name = match field.ident {
-            Some(ref i) => quote!{ self.#i },
-            None => quote!{ self.#field_n },
-        };
-
-        let mut wrapped_event = if enum_n != 0 {
-            quote!{ #either_ident::Second(event) }
-        } else {
-            quote!{ event }
-        };
-        for _ in 0 .. data_struct.fields.iter().filter(|f| !is_ignored(f)).count() - 1 - field_n {
-            wrapped_event = quote!{ #either_ident::First(#wrapped_event) };
+    // Build the list of statements for when we have a `None` event.
+    let none_stmts = data_struct.fields.iter().enumerate().filter(|f| !is_ignored(&f.1)).enumerate().map(|(enum_n, (field_n, field))| {
+        if is_ignored(&field) {
+            return None;
         }
 
-        Some(quote!{
-            loop {
-                match #field_name.poll(poll_params) {
-                    Async::Ready(#network_behaviour_action::GenerateEvent(event)) => {
-                        #net_behv_event_proc::inject_event(self, event)
-                    }
-                    Async::Ready(#network_behaviour_action::DialAddress { address }) => {
-                        return Async::Ready(#network_behaviour_action::DialAddress { address });
-                    }
-                    Async::Ready(#network_behaviour_action::DialPeer { peer_id }) => {
-                        return Async::Ready(#network_behaviour_action::DialPeer { peer_id });
-                    }
-                    Async::Ready(#network_behaviour_action::SendEvent { peer_id, event }) => {
-                        return Async::Ready(#network_behaviour_action::SendEvent {
-                            peer_id,
-                            event: #wrapped_event,
-                        });
-                    }
-                    Async::Ready(#network_behaviour_action::ReportObservedAddr { address }) => {
-                        return Async::Ready(#network_behaviour_action::ReportObservedAddr { address });
-                    }
-                    Async::NotReady => break,
-                }
+        Some(match field.ident {
+            Some(ref i) => {
+                let ev = quote!{ self.#i.poll(#swarm_event::None, poll_params) };
+                gen_field_wrap(ev, field_n, enum_n, data_struct)
+            },
+            None => {
+                let ev = quote!{ self.#field_n.poll(#swarm_event::None, poll_params) };
+                gen_field_wrap(ev, field_n, enum_n, data_struct)
+            },
+        })
+    });
+
+    // Build the list of statements for when we have a `Connected` event.
+    let connected_stmts = data_struct.fields.iter().enumerate().filter(|f| !is_ignored(&f.1)).enumerate().map(|(enum_n, (field_n, field))| {
+        if is_ignored(&field) {
+            return None;
+        }
+
+        Some(match field.ident {
+            Some(ref i) => {
+                let ev = quote!{ self.#i.poll(#swarm_event::Connected { peer_id, endpoint }, poll_params) };
+                gen_field_wrap(ev, field_n, enum_n, data_struct)
             }
+            None => {
+                let ev = quote!{ self.#field_n.poll(#swarm_event::Connected { peer_id, endpoint }, poll_params) };
+                gen_field_wrap(ev, field_n, enum_n, data_struct)
+            }
+        })
+    });
+
+    // Build the list of statements for when we have a `Disconnected` event.
+    let disconnected_stmts = data_struct.fields.iter().enumerate().filter(|f| !is_ignored(&f.1)).enumerate().map(|(enum_n, (field_n, field))| {
+        if is_ignored(&field) {
+            return None;
+        }
+
+        Some(match field.ident {
+            Some(ref i) => {
+                let ev = quote!{ self.#i.poll(#swarm_event::Disconnected { peer_id, endpoint }, poll_params) };
+                gen_field_wrap(ev, field_n, enum_n, data_struct)
+            }
+            None => {
+                let ev = quote!{ self.#field_n.poll(#swarm_event::Disconnected { peer_id, endpoint }, poll_params) };
+                gen_field_wrap(ev, field_n, enum_n, data_struct)
+            }
+        })
+    });
+
+    // Build the list of variants to put in the body of `inject_node_event()`.
+    //
+    // The event type is a construction of nested `#either_ident`s of the events of the children.
+    // We call `inject_node_event` on the corresponding child.
+    let events_stmts = data_struct.fields.iter().enumerate().filter(|f| !is_ignored(&f.1)).enumerate().map(|(enum_n, (field_n, field))| {
+        let mut elem = if enum_n != 0 {
+            quote!{ #either_ident::Second(ev) }
+        } else {
+            quote!{ ev }
+        };
+
+        for _ in 0 .. data_struct.fields.iter().filter(|f| !is_ignored(f)).count() - 1 - field_n {
+            elem = quote!{ #either_ident::First(#elem) };
+        }
+
+        let elem = quote!{ #swarm_event::ProtocolsHandlerEvent { peer_id, event: #elem } };
+
+        Some(match field.ident {
+            Some(ref i) => {
+                let ev = quote!{ self.#i.poll(#swarm_event::ProtocolsHandlerEvent { peer_id, event: ev }, poll_params) };
+                let stmt = gen_field_wrap(ev, field_n, enum_n, data_struct);
+                quote!{ #elem => { #stmt; } }
+            },
+            None => {
+                let ev = quote!{ self.#field_n.poll(#swarm_event::ProtocolsHandlerEvent { peer_id, event: ev }, poll_params) };
+                let stmt = gen_field_wrap(ev, field_n, enum_n, data_struct);
+                quote!{ #elem => { #stmt; } }
+            },
         })
     });
 
@@ -329,30 +305,28 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 #new_handler
             }
 
-            #[inline]
-            fn inject_connected(&mut self, peer_id: #peer_id, endpoint: #connected_point) {
-                #(#inject_connected_stmts);*
-            }
-
-            #[inline]
-            fn inject_disconnected(&mut self, peer_id: &#peer_id, endpoint: #connected_point) {
-                #(#inject_disconnected_stmts);*
-            }
-
-            #[inline]
-            fn inject_node_event(
-                &mut self,
-                peer_id: #peer_id,
-                event: <<Self::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::OutEvent
-            ) {
-                match event {
-                    #(#inject_node_event_stmts),*
-                }
-            }
-
-            fn poll(&mut self, poll_params: &mut #poll_parameters) -> ::libp2p::futures::Async<#network_behaviour_action<<<Self::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::InEvent, Self::OutEvent>> {
+            fn poll(&mut self, event: #swarm_event<<<Self::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::OutEvent>, poll_params: &mut #poll_parameters) -> ::libp2p::futures::Async<#network_behaviour_action<<<Self::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::InEvent, Self::OutEvent>> {
                 use libp2p::futures::prelude::*;
-                #(#poll_stmts)*
+
+                let mut event = Some(event);
+                loop {
+                    let mut none_ready = true;
+                    let poll_result = match event.take().unwrap_or(#swarm_event::None) {
+                        #swarm_event::None => {
+                            #(#none_stmts)*
+                        },
+                        #swarm_event::Connected { peer_id, endpoint } => {
+                            #(#connected_stmts)*
+                        },
+                        #swarm_event::Disconnected { peer_id, endpoint } => {
+                            #(#disconnected_stmts)*
+                        },
+                        #(#events_stmts),*
+                    };
+                    if none_ready {
+                        break;
+                    }
+                }
                 let f: ::libp2p::futures::Async<#network_behaviour_action<<<Self::ProtocolsHandler as #into_protocols_handler>::Handler as #protocols_handler>::InEvent, Self::OutEvent>> = #poll_method;
                 f
             }
@@ -372,6 +346,54 @@ fn get_meta_items(attr: &syn::Attribute) -> Option<Vec<syn::NestedMeta>> {
         }
     } else {
         None
+    }
+}
+
+/// Generates a `match` block that converts between the output of `poll()` of a sub-field, and
+/// the output of the `poll()` of the type we're deriving.
+fn gen_field_wrap(
+    event: syn::export::TokenStream2,
+    field_n: usize,
+    enum_n: usize,
+    data_struct: &syn::DataStruct,
+) -> syn::export::TokenStream2 {
+    let net_behv_event_proc = quote!{::libp2p::core::swarm::NetworkBehaviourEventProcess};
+    let either_ident = quote!{::libp2p::core::either::EitherOutput};
+    let network_behaviour_action = quote!{::libp2p::core::swarm::NetworkBehaviourAction};
+
+    let mut wrapped_event = if enum_n != 0 {
+        quote!{ #either_ident::Second(event) }
+    } else {
+        quote!{ event }
+    };
+    for _ in 0 .. data_struct.fields.iter().filter(|f| !is_ignored(f)).count() - 1 - field_n {
+        wrapped_event = quote!{ #either_ident::First(#wrapped_event) };
+    }
+
+    // TODO: wrong, because we shouldn't return from here; we're in the middle of an event process
+    // and it hasn't been dispatched to all the fields
+    quote!{
+        match #event {
+            Async::Ready(#network_behaviour_action::GenerateEvent(event)) => {
+                #net_behv_event_proc::inject_event(self, event)
+            }
+            Async::Ready(#network_behaviour_action::DialAddress { address }) => {
+                return Async::Ready(#network_behaviour_action::DialAddress { address });
+            }
+            Async::Ready(#network_behaviour_action::DialPeer { peer_id }) => {
+                return Async::Ready(#network_behaviour_action::DialPeer { peer_id });
+            }
+            Async::Ready(#network_behaviour_action::SendEvent { peer_id, event }) => {
+                return Async::Ready(#network_behaviour_action::SendEvent {
+                    peer_id,
+                    event: #wrapped_event,
+                });
+            }
+            Async::Ready(#network_behaviour_action::ReportObservedAddr { address }) => {
+                return Async::Ready(#network_behaviour_action::ReportObservedAddr { address });
+            }
+            Async::NotReady => (),
+        }
     }
 }
 

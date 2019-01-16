@@ -20,16 +20,15 @@
 
 use crate::listen_handler::IdentifyListenHandler;
 use crate::periodic_id_handler::{PeriodicIdHandler, PeriodicIdHandlerEvent};
-use crate::protocol::{IdentifyInfo, IdentifySender, IdentifySenderFuture};
+use crate::protocol::{IdentifyInfo, IdentifySenderFuture};
 use crate::topology::IdentifyTopology;
 use futures::prelude::*;
 use libp2p_core::protocols_handler::{ProtocolsHandler, ProtocolsHandlerSelect, ProtocolsHandlerUpgrErr};
-use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters, SwarmEvent};
 use libp2p_core::{Multiaddr, PeerId, either::EitherOutput};
 use smallvec::SmallVec;
-use std::{collections::HashMap, collections::VecDeque, io};
+use std::{collections::HashMap, io};
 use tokio_io::{AsyncRead, AsyncWrite};
-use void::Void;
 
 /// Network behaviour that automatically identifies nodes periodically, returns information
 /// about them, and answers identify queries from other nodes.
@@ -40,12 +39,8 @@ pub struct Identify<TSubstream> {
     agent_version: String,
     /// For each peer we're connected to, the observed address to send back to it.
     observed_addresses: HashMap<PeerId, Multiaddr>,
-    /// List of senders to answer, with the observed multiaddr.
-    to_answer: SmallVec<[(IdentifySender<TSubstream>, Multiaddr); 4]>,
     /// List of futures that send back information back to remotes.
     futures: SmallVec<[IdentifySenderFuture<TSubstream>; 4]>,
-    /// Events that need to be produced outside when polling..
-    events: VecDeque<NetworkBehaviourAction<EitherOutput<Void, Void>, IdentifyEvent>>,
 }
 
 impl<TSubstream> Identify<TSubstream> {
@@ -55,9 +50,7 @@ impl<TSubstream> Identify<TSubstream> {
             protocol_version,
             agent_version,
             observed_addresses: HashMap::new(),
-            to_answer: SmallVec::new(),
             futures: SmallVec::new(),
-            events: VecDeque::new(),
         }
     }
 }
@@ -74,27 +67,33 @@ where
         IdentifyListenHandler::new().select(PeriodicIdHandler::new())
     }
 
-    fn inject_connected(&mut self, peer_id: PeerId, endpoint: ConnectedPoint) {
-        let observed = match endpoint {
-            ConnectedPoint::Dialer { address } => address,
-            ConnectedPoint::Listener { send_back_addr, .. } => send_back_addr,
-        };
-
-        self.observed_addresses.insert(peer_id, observed);
-    }
-
-    fn inject_disconnected(&mut self, peer_id: &PeerId, _: ConnectedPoint) {
-        self.observed_addresses.remove(peer_id);
-    }
-
-    fn inject_node_event(
+    fn poll(
         &mut self,
-        peer_id: PeerId,
-        event: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
-    ) {
+        event: SwarmEvent<<Self::ProtocolsHandler as ProtocolsHandler>::OutEvent>,
+        params: &mut PollParameters<TTopology>,
+    ) -> Async<
+        NetworkBehaviourAction<
+            <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
+            Self::OutEvent,
+        >,
+    > {
         match event {
-            EitherOutput::Second(PeriodicIdHandlerEvent::Identified(remote)) => {
-                self.events
+            SwarmEvent::Connected { peer_id, endpoint } => {
+                let observed = match endpoint {
+                    ConnectedPoint::Dialer { address } => address.clone(),
+                    ConnectedPoint::Listener { send_back_addr, .. } => send_back_addr.clone(),
+                };
+
+                self.observed_addresses.insert(peer_id.clone(), observed);
+            },
+            SwarmEvent::Disconnected { peer_id, .. } => {
+                self.observed_addresses.remove(peer_id);
+            },
+            SwarmEvent::ProtocolsHandlerEvent { peer_id, event: EitherOutput::Second(PeriodicIdHandlerEvent::Identified(remote)) } => {
+                let iter = remote.info.listen_addrs.iter().cloned();
+                params.topology().add_identify_discovered_addrs(&peer_id, iter);
+                // TODO:
+                /*self.events
                     .push_back(NetworkBehaviourAction::GenerateEvent(IdentifyEvent::Identified {
                         peer_id,
                         info: remote.info,
@@ -103,62 +102,39 @@ where
                 self.events
                     .push_back(NetworkBehaviourAction::ReportObservedAddr {
                         address: remote.observed_addr,
-                    });
-            }
-            EitherOutput::First(sender) => {
+                    });*/
+            },
+            SwarmEvent::ProtocolsHandlerEvent { peer_id, event: EitherOutput::First(sender) } => {
                 let observed = self.observed_addresses.get(&peer_id)
                     .expect("We only receive events from nodes we're connected to. We insert \
                              into the hashmap when we connect to a node and remove only when we \
                              disconnect; QED");
-                self.to_answer.push((sender, observed.clone()));
-            }
-            EitherOutput::Second(PeriodicIdHandlerEvent::IdentificationError(err)) => {
-                self.events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(IdentifyEvent::Error {
-                        peer_id,
-                        error: err,
-                    }));
-            }
-        }
-    }
 
-    fn poll(
-        &mut self,
-        params: &mut PollParameters<TTopology>,
-    ) -> Async<
-        NetworkBehaviourAction<
-            <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
-            Self::OutEvent,
-        >,
-    > {
-        if let Some(event) = self.events.pop_front() {
-            // We intercept identified events in order to insert the addresses in the topology.
-            if let NetworkBehaviourAction::GenerateEvent(IdentifyEvent::Identified { ref peer_id, ref info, .. }) = event {
-                let iter = info.listen_addrs.iter().cloned();
-                params.topology().add_identify_discovered_addrs(peer_id, iter);
-            }
+                // The protocol names can be bytes, but the identify protocol except UTF-8 strings.
+                // There's not much we can do to solve this conflict except strip non-UTF-8 characters.
+                let protocols = params
+                    .supported_protocols()
+                    .map(|p| String::from_utf8_lossy(p).to_string())
+                    .collect();
 
-            return Async::Ready(event);
-        }
+                let send_back_info = IdentifyInfo {
+                    public_key: params.local_public_key().clone(),
+                    protocol_version: self.protocol_version.clone(),
+                    agent_version: self.agent_version.clone(),
+                    listen_addrs: params.listened_addresses().cloned().collect(),
+                    protocols,
+                };
 
-        for (sender, observed) in self.to_answer.drain() {
-            // The protocol names can be bytes, but the identify protocol except UTF-8 strings.
-            // There's not much we can do to solve this conflict except strip non-UTF-8 characters.
-            let protocols = params
-                .supported_protocols()
-                .map(|p| String::from_utf8_lossy(p).to_string())
-                .collect();
-
-            let send_back_info = IdentifyInfo {
-                public_key: params.local_public_key().clone(),
-                protocol_version: self.protocol_version.clone(),
-                agent_version: self.agent_version.clone(),
-                listen_addrs: params.listened_addresses().cloned().collect(),
-                protocols,
-            };
-
-            let future = sender.send(send_back_info, &observed);
-            self.futures.push(future);
+                let future = sender.send(send_back_info, &observed);
+                self.futures.push(future);
+            },
+            SwarmEvent::ProtocolsHandlerEvent { peer_id, event: EitherOutput::Second(PeriodicIdHandlerEvent::IdentificationError(err)) } => {
+                return Async::Ready(NetworkBehaviourAction::GenerateEvent(IdentifyEvent::Error {
+                    peer_id,
+                    error: err,
+                }));
+            },
+            SwarmEvent::None => {},
         }
 
         // Removes each future one by one, and pushes them back if they're not ready.

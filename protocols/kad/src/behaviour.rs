@@ -21,7 +21,7 @@
 use fnv::{FnvHashMap, FnvHashSet};
 use futures::{prelude::*, stream};
 use handler::{KademliaHandler, KademliaHandlerEvent, KademliaHandlerIn, KademliaRequestId};
-use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use libp2p_core::swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters, SwarmEvent};
 use libp2p_core::{protocols_handler::ProtocolsHandler, topology::Topology, Multiaddr, PeerId};
 use multihash::Multihash;
 use protocol::{KadConnectionType, KadPeer};
@@ -80,12 +80,6 @@ pub struct Kademlia<TSubstream> {
     /// Events to return when polling.
     queued_events: SmallVec<[NetworkBehaviourAction<KademliaHandlerIn<QueryId>, KademliaOut>; 32]>,
 
-    /// List of addresses to add to the topology as soon as we are in `poll()`.
-    add_to_topology: SmallVec<[(PeerId, Multiaddr, KadConnectionType); 32]>,
-
-    /// List of providers to add to the topology as soon as we are in `poll()`.
-    add_provider: SmallVec<[(Multihash, PeerId); 32]>,
-
     /// Marker to pin the generics.
     marker: PhantomData<TSubstream>,
 }
@@ -139,8 +133,6 @@ impl<TSubstream> Kademlia<TSubstream> {
             parallelism,
             num_results: 20,
             rpc_timeout: Duration::from_secs(8),
-            add_to_topology: SmallVec::new(),
-            add_provider: SmallVec::new(),
             marker: PhantomData,
         };
 
@@ -283,62 +275,65 @@ where
         KademliaHandler::dial_and_listen()
     }
 
-    fn inject_connected(&mut self, id: PeerId, _: ConnectedPoint) {
-        if let Some(pos) = self.pending_rpcs.iter().position(|(p, _)| p == &id) {
-            let (_, rpc) = self.pending_rpcs.remove(pos);
-            self.queued_events.push(NetworkBehaviourAction::SendEvent {
-                peer_id: id.clone(),
-                event: rpc,
-            });
-        }
-
-        self.connected_peers.insert(id);
-    }
-
-    fn inject_disconnected(&mut self, id: &PeerId, _: ConnectedPoint) {
-        let was_in = self.connected_peers.remove(id);
-        debug_assert!(was_in);
-
-        for (query, _, _) in self.active_queries.values_mut() {
-            query.inject_rpc_error(id);
-        }
-    }
-
-    fn inject_node_event(&mut self, source: PeerId, event: KademliaHandlerEvent<QueryId>) {
+    fn poll(
+        &mut self,
+        event: SwarmEvent<KademliaHandlerEvent<QueryId>>,
+        parameters: &mut PollParameters<TTopology>,
+    ) -> Async<
+        NetworkBehaviourAction<
+            <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
+            Self::OutEvent,
+        >,
+    > {
         match event {
-            KademliaHandlerEvent::FindNodeReq { key, request_id } => {
-                self.remote_requests.push((source, request_id, QueryTarget::FindPeer(key)));
-                return;
+            SwarmEvent::Connected { peer_id, .. } => {
+                if let Some(pos) = self.pending_rpcs.iter().position(|(p, _)| p == peer_id) {
+                    let (_, rpc) = self.pending_rpcs.remove(pos);
+                    self.queued_events.push(NetworkBehaviourAction::SendEvent {
+                        peer_id: peer_id.clone(),
+                        event: rpc,
+                    });
+                }
+
+                self.connected_peers.insert(peer_id.clone());
+            },
+            SwarmEvent::Disconnected { peer_id, .. } => {
+                let was_in = self.connected_peers.remove(peer_id);
+                debug_assert!(was_in);
+
+                for (query, _, _) in self.active_queries.values_mut() {
+                    query.inject_rpc_error(peer_id);
+                }
+            },
+            SwarmEvent::ProtocolsHandlerEvent { peer_id, event: KademliaHandlerEvent::FindNodeReq { key, request_id } } => {
+                self.remote_requests.push((peer_id, request_id, QueryTarget::FindPeer(key)));
             }
-            KademliaHandlerEvent::FindNodeRes {
+            SwarmEvent::ProtocolsHandlerEvent { peer_id, event: KademliaHandlerEvent::FindNodeRes {
                 closer_peers,
                 user_data,
-            } => {
+            }} => {
                 // It is possible that we obtain a response for a query that has finished, which is
                 // why we may not find an entry in `self.active_queries`.
                 for peer in closer_peers.iter() {
                     for addr in peer.multiaddrs.iter() {
-                        self.add_to_topology
-                            .push((peer.node_id.clone(), addr.clone(), peer.connection_ty));
+                        parameters.topology().add_kad_discovered_address(peer.node_id.clone(), addr.clone(), peer.connection_ty);
                     }
                 }
                 if let Some((query, _, _)) = self.active_queries.get_mut(&user_data) {
-                    query.inject_rpc_result(&source, closer_peers.into_iter().map(|kp| kp.node_id))
+                    query.inject_rpc_result(&peer_id, closer_peers.into_iter().map(|kp| kp.node_id))
                 }
             }
-            KademliaHandlerEvent::GetProvidersReq { key, request_id } => {
-                self.remote_requests.push((source, request_id, QueryTarget::GetProviders(key)));
-                return;
+            SwarmEvent::ProtocolsHandlerEvent { peer_id, event: KademliaHandlerEvent::GetProvidersReq { key, request_id } } => {
+                self.remote_requests.push((peer_id, request_id, QueryTarget::GetProviders(key)));
             }
-            KademliaHandlerEvent::GetProvidersRes {
+            SwarmEvent::ProtocolsHandlerEvent { peer_id, event: KademliaHandlerEvent::GetProvidersRes {
                 closer_peers,
                 provider_peers,
                 user_data,
-            } => {
+            }} => {
                 for peer in closer_peers.iter().chain(provider_peers.iter()) {
                     for addr in peer.multiaddrs.iter() {
-                        self.add_to_topology
-                            .push((peer.node_id.clone(), addr.clone(), peer.connection_ty));
+                        parameters.topology().add_kad_discovered_address(peer.node_id.clone(), addr.clone(), peer.connection_ty);
                     }
                 }
                 // It is possible that we obtain a response for a query that has finished, which is
@@ -347,45 +342,24 @@ where
                     for peer in provider_peers {
                         providers.push(peer.node_id);
                     }
-                    query.inject_rpc_result(&source, closer_peers.into_iter().map(|kp| kp.node_id))
+                    query.inject_rpc_result(&peer_id, closer_peers.into_iter().map(|kp| kp.node_id))
                 }
             }
-            KademliaHandlerEvent::QueryError { user_data, .. } => {
+            SwarmEvent::ProtocolsHandlerEvent { peer_id, event: KademliaHandlerEvent::QueryError { user_data, .. } } => {
                 // It is possible that we obtain a response for a query that has finished, which is
                 // why we may not find an entry in `self.active_queries`.
                 if let Some((query, _, _)) = self.active_queries.get_mut(&user_data) {
-                    query.inject_rpc_error(&source)
+                    query.inject_rpc_error(&peer_id)
                 }
             }
-            KademliaHandlerEvent::AddProvider { key, provider_peer } => {
+            SwarmEvent::ProtocolsHandlerEvent { event: KademliaHandlerEvent::AddProvider { key, provider_peer }, .. } => {
                 for addr in provider_peer.multiaddrs.iter() {
-                    self.add_to_topology
-                        .push((provider_peer.node_id.clone(), addr.clone(), provider_peer.connection_ty));
+                    parameters.topology().add_kad_discovered_address(provider_peer.node_id.clone(), addr.clone(), provider_peer.connection_ty);
                 }
-                self.add_provider.push((key, provider_peer.node_id));
-                return;
+                parameters.topology().add_provider(key, provider_peer.node_id);
             }
-        };
-    }
-
-    fn poll(
-        &mut self,
-        parameters: &mut PollParameters<TTopology>,
-    ) -> Async<
-        NetworkBehaviourAction<
-            <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
-            Self::OutEvent,
-        >,
-    > {
-        // Flush the changes to the topology that we want to make.
-        for (peer_id, addr, connection_ty) in self.add_to_topology.drain() {
-            parameters.topology().add_kad_discovered_address(peer_id, addr, connection_ty);
+            SwarmEvent::None => (),
         }
-        self.add_to_topology.shrink_to_fit();
-        for (key, provider) in self.add_provider.drain() {
-            parameters.topology().add_provider(key, provider);
-        }
-        self.add_provider.shrink_to_fit();
 
         // Handle `refresh_add_providers`.
         match self.refresh_add_providers.poll() {

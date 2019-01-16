@@ -269,52 +269,61 @@ where TBehaviour: NetworkBehaviour<TTopology>,
         loop {
             let mut raw_swarm_not_ready = false;
 
-            match self.raw_swarm.poll() {
-                Async::NotReady => raw_swarm_not_ready = true,
+            macro_rules! poll_behaviour {
+                ($me:expr, $event:expr) => {{
+                    let transport = $me.raw_swarm.transport();
+                    let mut parameters = PollParameters {
+                        topology: &mut $me.topology,
+                        supported_protocols: &$me.supported_protocols,
+                        listened_addrs: &$me.listened_addrs,
+                        nat_traversal: &move |a, b| transport.nat_traversal(a, b),
+                    };
+                    $me.behaviour.poll($event, &mut parameters)
+                }};
+            }
+
+            let behaviour_poll = match self.raw_swarm.poll() {
+                Async::NotReady => {
+                    raw_swarm_not_ready = true;
+                    poll_behaviour!(self, SwarmEvent::None)
+                },
                 Async::Ready(RawSwarmEvent::NodeEvent { peer_id, event }) => {
-                    self.behaviour.inject_node_event(peer_id, event);
+                    poll_behaviour!(self, SwarmEvent::ProtocolsHandlerEvent { peer_id, event })
                 },
                 Async::Ready(RawSwarmEvent::Connected { peer_id, endpoint }) => {
                     self.topology.set_connected(&peer_id, &endpoint);
-                    self.behaviour.inject_connected(peer_id, endpoint);
+                    poll_behaviour!(self, SwarmEvent::Connected { peer_id: &peer_id, endpoint: &endpoint })
                 },
                 Async::Ready(RawSwarmEvent::NodeClosed { peer_id, endpoint }) => {
                     self.topology.set_disconnected(&peer_id, &endpoint, DisconnectReason::Graceful);
-                    self.behaviour.inject_disconnected(&peer_id, endpoint);
+                    poll_behaviour!(self, SwarmEvent::Disconnected { peer_id: &peer_id, endpoint: &endpoint })
                 },
                 Async::Ready(RawSwarmEvent::NodeError { peer_id, endpoint, .. }) => {
                     self.topology.set_disconnected(&peer_id, &endpoint, DisconnectReason::Error);
-                    self.behaviour.inject_disconnected(&peer_id, endpoint);
+                    poll_behaviour!(self, SwarmEvent::Disconnected { peer_id: &peer_id, endpoint: &endpoint })
                 },
                 Async::Ready(RawSwarmEvent::Replaced { peer_id, closed_endpoint, endpoint }) => {
                     self.topology.set_disconnected(&peer_id, &closed_endpoint, DisconnectReason::Replaced);
                     self.topology.set_connected(&peer_id, &endpoint);
-                    self.behaviour.inject_disconnected(&peer_id, closed_endpoint);
-                    self.behaviour.inject_connected(peer_id, endpoint);
+                    // TODO: poll_behaviour!(self, SwarmEvent::Connected { peer_id: &peer_id, endpoint: &endpoint });
+                    // TODO: poll_behaviour!(self, SwarmEvent::Disconnected { peer_id: &peer_id, endpoint: &endpoint });
+                    poll_behaviour!(self, SwarmEvent::None)
                 },
                 Async::Ready(RawSwarmEvent::IncomingConnection(incoming)) => {
                     let handler = self.behaviour.new_handler();
                     incoming.accept(handler.into_node_handler_builder());
+                    poll_behaviour!(self, SwarmEvent::None)
                 },
-                Async::Ready(RawSwarmEvent::ListenerClosed { .. }) => {},
-                Async::Ready(RawSwarmEvent::IncomingConnectionError { .. }) => {},
+                Async::Ready(RawSwarmEvent::ListenerClosed { .. }) => poll_behaviour!(self, SwarmEvent::None),
+                Async::Ready(RawSwarmEvent::IncomingConnectionError { .. }) => poll_behaviour!(self, SwarmEvent::None),
                 Async::Ready(RawSwarmEvent::DialError { multiaddr, .. }) => {
                     self.topology.set_unreachable(&multiaddr);
+                    poll_behaviour!(self, SwarmEvent::None)
                 },
                 Async::Ready(RawSwarmEvent::UnknownPeerDialError { multiaddr, .. }) => {
                     self.topology.set_unreachable(&multiaddr);
+                    poll_behaviour!(self, SwarmEvent::None)
                 },
-            }
-
-            let behaviour_poll = {
-                let transport = self.raw_swarm.transport();
-                let mut parameters = PollParameters {
-                    topology: &mut self.topology,
-                    supported_protocols: &self.supported_protocols,
-                    listened_addrs: &self.listened_addrs,
-                    nat_traversal: &move |a, b| transport.nat_traversal(a, b),
-                };
-                self.behaviour.poll(&mut parameters)
             };
 
             match behaviour_poll {
@@ -355,28 +364,41 @@ pub trait NetworkBehaviour<TTopology> {
     /// Builds a new `ProtocolsHandler`.
     fn new_handler(&mut self) -> Self::ProtocolsHandler;
 
-    /// Indicates the behaviour that we connected to the node with the given peer id through the
-    /// given endpoint.
-    fn inject_connected(&mut self, peer_id: PeerId, endpoint: ConnectedPoint);
-
-    /// Indicates the behaviour that we disconnected from the node with the given peer id. The
-    /// endpoint is the one we used to be connected to.
-    fn inject_disconnected(&mut self, peer_id: &PeerId, endpoint: ConnectedPoint);
-
-    /// Indicates the behaviour that the node with the given peer id has generated an event for
-    /// us.
-    ///
-    /// > **Note**: This method is only called for events generated by the protocols handler.
-    fn inject_node_event(
-        &mut self,
-        peer_id: PeerId,
-        event: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent
-    );
-
     /// Polls for things that swarm should do.
     ///
     /// This API mimics the API of the `Stream` trait.
-    fn poll(&mut self, topology: &mut PollParameters<TTopology>) -> Async<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
+    ///
+    /// The swarm will continue calling this method repeatedly until `event` is `SwarmEvent::None`
+    /// and this function returned `NotReady`.
+    fn poll(&mut self, event: SwarmEvent<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent>, topology: &mut PollParameters<TTopology>) -> Async<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
+}
+
+/// Event passed from the swarm to the `NetworkBehaviour`.
+#[derive(Debug)]
+pub enum SwarmEvent<'a, TProtoOutEv> {
+    /// The swarm has connected to a node.
+    Connected {
+        /// Id of the node that was connected.
+        peer_id: &'a PeerId,
+        /// How we are connected to this node.
+        endpoint: &'a ConnectedPoint,
+    },
+    /// The swarm has disconnected from a node.
+    Disconnected {
+        /// Id of the node that has disconnected.
+        peer_id: &'a PeerId,
+        /// How we were connected to this node (but no longer are).
+        endpoint: &'a ConnectedPoint,
+    },
+    /// An event has been generated by the protocols handler.
+    ProtocolsHandlerEvent {
+        /// Id of the node that generated the event.
+        peer_id: PeerId,
+        /// Event that has been generated.
+        event: TProtoOutEv,
+    },
+    /// Nothing happened on the swarm.
+    None,
 }
 
 /// Used when deriving `NetworkBehaviour`. When deriving `NetworkBehaviour`, must be implemented

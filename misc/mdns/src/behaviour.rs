@@ -21,12 +21,12 @@
 use crate::service::{MdnsService, MdnsPacket};
 use futures::prelude::*;
 use libp2p_core::protocols_handler::{DummyProtocolsHandler, ProtocolsHandler};
-use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use libp2p_core::swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters, SwarmEvent};
 use libp2p_core::{Multiaddr, PeerId, multiaddr::Protocol, topology::MemoryTopology, topology::Topology};
 use smallvec::SmallVec;
 use std::{fmt, io, iter, marker::PhantomData, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
-use void::{self, Void};
+use void::Void;
 
 /// A `NetworkBehaviour` for mDNS. Automatically discovers peers on the local network and adds
 /// them to the topology.
@@ -81,20 +81,9 @@ where
         DummyProtocolsHandler::default()
     }
 
-    fn inject_connected(&mut self, _: PeerId, _: ConnectedPoint) {}
-
-    fn inject_disconnected(&mut self, _: &PeerId, _: ConnectedPoint) {}
-
-    fn inject_node_event(
-        &mut self,
-        _: PeerId,
-        _ev: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
-    ) {
-        void::unreachable(_ev)
-    }
-
     fn poll(
         &mut self,
+        _: SwarmEvent<<Self::ProtocolsHandler as ProtocolsHandler>::OutEvent>,
         params: &mut PollParameters<TTopology>,
     ) -> Async<
         NetworkBehaviourAction<

@@ -21,7 +21,7 @@
 use cuckoofilter::CuckooFilter;
 use futures::prelude::*;
 use handler::FloodsubHandler;
-use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use libp2p_core::swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters, SwarmEvent};
 use libp2p_core::{protocols_handler::ProtocolsHandler, PeerId};
 use protocol::{FloodsubMessage, FloodsubRpc, FloodsubSubscription, FloodsubSubscriptionAction};
 use rand;
@@ -170,43 +170,8 @@ impl<TSubstream> Floodsub<TSubstream> {
             });
         }
     }
-}
 
-impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for Floodsub<TSubstream>
-where
-    TSubstream: AsyncRead + AsyncWrite,
-{
-    type ProtocolsHandler = FloodsubHandler<TSubstream>;
-    type OutEvent = FloodsubEvent;
-
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        FloodsubHandler::new()
-    }
-
-    fn inject_connected(&mut self, id: PeerId, _: ConnectedPoint) {
-        // We need to send our subscriptions to the newly-connected node.
-        for topic in self.subscribed_topics.iter() {
-            self.events.push_back(NetworkBehaviourAction::SendEvent {
-                peer_id: id.clone(),
-                event: FloodsubRpc {
-                    messages: Vec::new(),
-                    subscriptions: vec![FloodsubSubscription {
-                        topic: topic.hash().clone(),
-                        action: FloodsubSubscriptionAction::Subscribe,
-                    }],
-                },
-            });
-        }
-
-        self.connected_peers.insert(id.clone(), SmallVec::new());
-    }
-
-    fn inject_disconnected(&mut self, id: &PeerId, _: ConnectedPoint) {
-        let was_in = self.connected_peers.remove(id);
-        debug_assert!(was_in.is_some());
-    }
-
-    fn inject_node_event(
+    fn process_node_event(
         &mut self,
         propagation_source: PeerId,
         event: FloodsubRpc,
@@ -282,9 +247,22 @@ where
             });
         }
     }
+}
+
+impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for Floodsub<TSubstream>
+where
+    TSubstream: AsyncRead + AsyncWrite,
+{
+    type ProtocolsHandler = FloodsubHandler<TSubstream>;
+    type OutEvent = FloodsubEvent;
+
+    fn new_handler(&mut self) -> Self::ProtocolsHandler {
+        FloodsubHandler::new()
+    }
 
     fn poll(
         &mut self,
+        event: SwarmEvent<FloodsubRpc>,
         _: &mut PollParameters<TTopology>,
     ) -> Async<
         NetworkBehaviourAction<
@@ -292,6 +270,34 @@ where
             Self::OutEvent,
         >,
     > {
+        match event {
+            SwarmEvent::Connected { peer_id, .. } => {
+                // We need to send our subscriptions to the newly-connected node.
+                for topic in self.subscribed_topics.iter() {
+                    self.events.push_back(NetworkBehaviourAction::SendEvent {
+                        peer_id: peer_id.clone(),
+                        event: FloodsubRpc {
+                            messages: Vec::new(),
+                            subscriptions: vec![FloodsubSubscription {
+                                topic: topic.hash().clone(),
+                                action: FloodsubSubscriptionAction::Subscribe,
+                            }],
+                        },
+                    });
+                }
+
+                self.connected_peers.insert(peer_id.clone(), SmallVec::new());
+            }
+            SwarmEvent::Disconnected { peer_id, .. } => {
+                let was_in = self.connected_peers.remove(peer_id);
+                debug_assert!(was_in.is_some());
+            }
+            SwarmEvent::ProtocolsHandlerEvent { peer_id, event } => {
+                self.process_node_event(peer_id, event);
+            },
+            SwarmEvent::None => (),
+        }
+
         if let Some(event) = self.events.pop_front() {
             return Async::Ready(event);
         }
