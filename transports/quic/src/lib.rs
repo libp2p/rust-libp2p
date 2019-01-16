@@ -24,6 +24,7 @@ mod error;
 
 use bytes::BytesMut;
 use crate::error::{QuicError, ErrorKind};
+use fnv::FnvHashMap;
 use futures::{future::{self, FutureResult}, prelude::*};
 use libp2p_core::{muxing::Shutdown, PeerId, PublicKey, StreamMuxer, Transport, TransportError};
 use log::{debug, trace, warn};
@@ -34,7 +35,6 @@ use parking_lot::Mutex;
 use picoquic;
 use std::{
     cmp,
-    collections::HashMap,
     fmt, io, iter,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
     sync::Arc
@@ -58,7 +58,7 @@ pub struct QuicConfig {
     /// picoquic context used for dialing (lazily initialised)
     dialing_context: Arc<Mutex<Option<picoquic::Context>>>,
     /// The certificate verifier puts the public key of a dialed connection in here.
-    public_keys: Arc<Mutex<HashMap<picoquic::ConnectionId, PublicKey>>>,
+    public_keys: Arc<Mutex<FnvHashMap<picoquic::ConnectionId, PublicKey>>>,
 }
 
 impl fmt::Debug for QuicConfig {
@@ -104,7 +104,6 @@ impl QuicConfig {
         let mut config = picoquic::Config::new();
         config.set_private_key(self.private_key.clone(), picoquic::FileFormat::DER);
         config.set_certificate_chain(self.certificates.clone(), picoquic::FileFormat::DER);
-        config.enable_client_authentication();
         config.set_verify_certificate_handler(PublicKeySaver(self.public_keys.clone()));
 
         *self.dialing_context.lock() =
@@ -351,7 +350,7 @@ fn socket_addr_to_quic(addr: SocketAddr) -> Multiaddr {
 pub struct QuicDialFut {
     peer_id: PeerId,
     connection: picoquic::NewConnectionFuture,
-    public_keys: Arc<Mutex<HashMap<picoquic::ConnectionId, PublicKey>>>
+    public_keys: Arc<Mutex<FnvHashMap<picoquic::ConnectionId, PublicKey>>>
 }
 
 impl fmt::Debug for QuicDialFut {
@@ -393,7 +392,7 @@ impl Future for QuicDialFut {
 #[must_use = "futures do nothing unless polled"]
 pub struct QuicListenStream {
     inner: picoquic::Context,
-    public_keys: Arc<Mutex<HashMap<picoquic::ConnectionId, PublicKey>>>,
+    public_keys: Arc<Mutex<FnvHashMap<picoquic::ConnectionId, PublicKey>>>,
 }
 
 impl fmt::Debug for QuicListenStream {
@@ -430,7 +429,7 @@ impl Stream for QuicListenStream {
 
 /// Implementation of `picoquic::VerifyCertificate` thas just saves the
 /// peer ID of the given connection.
-struct PublicKeySaver(Arc<Mutex<HashMap<picoquic::ConnectionId, PublicKey>>>);
+struct PublicKeySaver(Arc<Mutex<FnvHashMap<picoquic::ConnectionId, PublicKey>>>);
 
 impl picoquic::VerifyCertificate for PublicKeySaver {
     fn verify(
