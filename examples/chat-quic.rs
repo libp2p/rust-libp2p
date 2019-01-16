@@ -41,7 +41,7 @@ use void;
 // 4. Start the listener:
 //     $ cargo run --example chat-quic -- run -k serverkey.pem -c servercert.pem
 //
-// 5. Notice the listen port in the output of 4. and start the dialer:
+// 5. Notice the listen port in the output of 4. and start the dialer by using the peer ID from 3.
 //     $ cargo run --example chat-quic -- run -k clientkey.pem -c clientcert.pem -d "/ip4/127.0.0.1/udp/<port>/quic/p2p/<peer-id>"
 
 #[derive(Debug, StructOpt)]
@@ -93,24 +93,13 @@ fn run(args: Run) -> CliResult {
 
     let rt = tokio::runtime::Runtime::new()?;
 
-    // Set up a an encrypted DNS-enabled TCP Transport over the Mplex and Yamux protocols
     let transport = libp2p_quic::QuicConfig::new(rt.executor(), &private_key, &certificate)?;
 
-    // Create a Floodsub topic
     let floodsub_topic = libp2p::floodsub::TopicBuilder::new("chat").build();
 
-    // We create a custom network behaviour that combines floodsub and mDNS.
-    // In the future, we want to improve libp2p to make this easier to do.
     #[derive(NetworkBehaviour)]
     struct MyBehaviour<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite> {
-        floodsub: libp2p::floodsub::Floodsub<TSubstream>,
-        //mdns: libp2p::mdns::Mdns<TSubstream>,
-    }
-
-    impl<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite> libp2p::core::swarm::NetworkBehaviourEventProcess<void::Void> for MyBehaviour<TSubstream> {
-        fn inject_event(&mut self, _ev: void::Void) {
-            void::unreachable(_ev)
-        }
+        floodsub: libp2p::floodsub::Floodsub<TSubstream>
     }
 
     impl<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite> libp2p::core::swarm::NetworkBehaviourEventProcess<libp2p::floodsub::FloodsubEvent> for MyBehaviour<TSubstream> {
@@ -125,29 +114,25 @@ fn run(args: Run) -> CliResult {
     // Create a Swarm to manage peers and events
     let mut swarm = {
         let mut behaviour = MyBehaviour {
-            floodsub: libp2p::floodsub::Floodsub::new(public_key.clone().into_peer_id()),
-            //mdns: libp2p::mdns::Mdns::new()?
+            floodsub: libp2p::floodsub::Floodsub::new(public_key.clone().into_peer_id())
         };
-
         behaviour.floodsub.subscribe(floodsub_topic.clone());
         libp2p::Swarm::new(transport, behaviour, libp2p::core::topology::MemoryTopology::empty(public_key))
     };
 
-    // Listen on all interfaces and whatever port the OS assigns
-    let addr = libp2p::Swarm::listen_on(&mut swarm, "/ip4/127.0.0.1/udp/0/quic".parse()?)?;
+    let addr = libp2p::Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/udp/0/quic".parse()?)?;
     println!("Listening on {:?}", addr);
 
     // Reach out to another node if specified
     if let Some(to_dial) = args.dial {
-        let dialing = to_dial.clone();
         match to_dial.parse() {
-            Ok(to_dial) => {
-                match libp2p::Swarm::dial_addr(&mut swarm, to_dial) {
-                    Ok(_) => println!("Dialed {:?}", dialing),
-                    Err(e) => println!("Dial {:?} failed: {:?}", dialing, e)
+            Ok(addr) => {
+                match libp2p::Swarm::dial_addr(&mut swarm, addr) {
+                    Ok(_) => println!("Dialed {:?}", to_dial),
+                    Err(e) => println!("Dial {:?} failed: {:?}", to_dial, e)
                 }
-            },
-            Err(err) => println!("Failed to parse address to dial: {:?}", err),
+            }
+            Err(err) => println!("Failed to parse address to dial: {:?}", err)
         }
     }
 
@@ -161,7 +146,7 @@ fn run(args: Run) -> CliResult {
             match framed_stdin.poll()? {
                 Async::Ready(Some(line)) => swarm.floodsub.publish(&floodsub_topic, line.as_bytes()),
                 Async::Ready(None) => return Err(io::Error::new(io::ErrorKind::Other, "stdin closed")),
-                Async::NotReady => break,
+                Async::NotReady => break
             };
         }
 

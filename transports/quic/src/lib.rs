@@ -1,4 +1,4 @@
-// Copyright 2018 Parity Technologies (UK) Ltd.
+// Copyright 2019 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -20,8 +20,10 @@
 
 //! Implementation of the libp2p `Transport` trait for QUIC over UDP.
 
+mod error;
+
 use bytes::BytesMut;
-use failure::{Compat, Fail};
+use crate::error::{QuicError, ErrorKind};
 use fnv::FnvHashMap;
 use futures::{future::{self, FutureResult}, prelude::*};
 use libp2p_core::{muxing::Shutdown, PeerId, PublicKey, StreamMuxer, Transport, TransportError};
@@ -44,7 +46,7 @@ pub struct QuicConfig {
     executor: Exec,
     /// RSA private key.
     private_key: Vec<u8>,
-    /// Certificate signed with private_key.
+    /// Self-signed ceritficate.
     certificates: Vec<Vec<u8>>,
     /// Address to use when establishing an outgoing IPv4 connection. Port can be 0 for "any port".
     /// If the port is 0, it will be different for each outgoing connection.
@@ -64,13 +66,13 @@ impl fmt::Debug for QuicConfig {
 
 impl QuicConfig {
     /// Creates a new configuration object for QUIC.
-    pub fn new<E>(e: E, private_key: &Rsa<Private>, cert: &X509) -> Result<Self, QuicError>
+    pub fn new<E>(e: E, key: &Rsa<Private>, cert: &X509) -> Result<Self, QuicError>
     where
         E: Executor + Send + 'static
     {
         Ok(QuicConfig {
             executor: Exec { inner: Arc::new(Mutex::new(e))},
-            private_key: private_key.private_key_to_der()?,
+            private_key: key.private_key_to_der()?,
             certificates: vec![cert.to_der()?],
             ipv4_src_addr: SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0),
             ipv6_src_addr: SocketAddrV6::new(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0), 0, 0, 0),
@@ -129,7 +131,9 @@ impl Transport for QuicConfig {
 
         let peer_id =
             if let Some(h) = hash {
-                Some(PeerId::from_multihash(h).map_err(|_| TransportError::Other(QuicError::InvalidPeerId))?)
+                Some(PeerId::from_multihash(h).map_err(|_| {
+                    TransportError::Other(ErrorKind::InvalidPeerId.into())
+                })?)
             } else {
                 None
             };
@@ -288,7 +292,6 @@ impl StreamMuxer for QuicMuxer {
     }
 
     fn flush_all(&self) -> Poll<(), io::Error> {
-        // TODO: ?
         Ok(Async::Ready(()))
     }
 }
@@ -469,57 +472,5 @@ impl picoquic::VerifyCertificate for ListenCertifVerifier {
 // TODO: eventually remove ; this is bad design
 fn convert_err(error: picoquic::Error) -> io::Error {
     io::Error::new(io::ErrorKind::Other, error.to_string())
-}
-
-#[derive(Debug)]
-pub enum QuicError {
-    Io(io::Error),
-    PicoQuic(Compat<picoquic::Error>),
-    OpenSsl(ErrorStack),
-    InvalidPeerId,
-    #[doc(hidden)]
-    __Nonexhaustive
-}
-
-impl fmt::Display for QuicError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            QuicError::Io(e) => write!(f, "i/o: {}", e),
-            QuicError::PicoQuic(e) => write!(f, "picoquic: {}", e),
-            QuicError::OpenSsl(e) => write!(f, "openssl: {}", e),
-            QuicError::InvalidPeerId => f.write_str("invalid peer ID"),
-            QuicError::__Nonexhaustive => f.write_str("__Nonexhaustive")
-        }
-    }
-}
-
-impl std::error::Error for QuicError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            QuicError::Io(e) => Some(e),
-            QuicError::PicoQuic(e) => Some(e),
-            QuicError::OpenSsl(e) => Some(e),
-            QuicError::InvalidPeerId => None,
-            QuicError::__Nonexhaustive => None
-        }
-    }
-}
-
-impl From<io::Error> for QuicError {
-    fn from(e: io::Error) -> Self {
-        QuicError::Io(e)
-    }
-}
-
-impl From<ErrorStack> for QuicError {
-    fn from(e: ErrorStack) -> Self {
-        QuicError::OpenSsl(e)
-    }
-}
-
-impl From<picoquic::Error> for QuicError {
-    fn from(e: picoquic::Error) -> Self {
-        QuicError::PicoQuic(e.compat())
-    }
 }
 
