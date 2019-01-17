@@ -309,11 +309,12 @@ impl<TSubstream> Gossipsub<TSubstream> {
         }
     }
 
+    /// Gossipsub JOIN(topic) - adds topic peers to mesh and sends them GRAFT msgs
     fn join(&mut self, topic: impl AsRef<TopicHash>) {
         let topic_hash = topic.as_ref();
 
         // if we are already in the mesh, return
-        if let Some(_) = self.mesh.get(topic_hash) {
+        if self.mesh.contains_key(topic_hash) {
             return;
         }
 
@@ -340,7 +341,19 @@ impl<TSubstream> Gossipsub<TSubstream> {
         }
     }
 
-    fn leave(&mut self, topic: impl AsRef<TopicHash>) {}
+    /// Gossipsub LEAVE(topic) - Notifies mesh[topic] peers with PRUNE msgs
+    fn leave(&mut self, topic: impl AsRef<TopicHash>) {
+        let topic_hash = topic.as_ref();
+
+        // if our mesh contains the topic, send prune to peers and delete it from the mesh
+        if let Some((_, peers)) = self.mesh.remove_entry(topic_hash) {
+            for peer_id in peers {
+                // prune peers
+                //TODO: Send prune message
+                //TODO: untag Peer
+            }
+        }
+    }
 
     /// Helper function to get a set of `n` random gossipsub peers for a topic
     fn get_random_peers(&mut self, topic: impl AsRef<TopicHash>, n: usize) -> Vec<PeerId> {
