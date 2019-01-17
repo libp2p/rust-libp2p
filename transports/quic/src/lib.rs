@@ -202,7 +202,12 @@ impl Transport for QuicConfig {
 
         debug!("Dialing {}", addr);
 
-        Ok(QuicDialFut { peer_id, connection, public_keys: self.public_keys.clone() })
+        Ok(QuicDialFut {
+            peer_id,
+            context: Some(self.dialing_context.clone()),
+            connection,
+            public_keys: self.public_keys.clone()
+        })
     }
 
     fn nat_traversal(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
@@ -225,6 +230,7 @@ impl Executor for Exec {
 
 /// An open connection. Implements `StreamMuxer`.
 pub struct QuicMuxer {
+    _context: Option<Arc<Mutex<Option<picoquic::Context>>>>,
     inner: Mutex<picoquic::Connection>
 }
 
@@ -373,6 +379,7 @@ fn socket_addr_to_quic(addr: SocketAddr) -> Multiaddr {
 #[must_use = "futures do nothing unless polled"]
 pub struct QuicDialFut {
     peer_id: Option<PeerId>,
+    context: Option<Arc<Mutex<Option<picoquic::Context>>>>,
     connection: picoquic::NewConnectionFuture,
     public_keys: Arc<Mutex<FnvHashMap<picoquic::ConnectionId, PublicKey>>>
 }
@@ -401,7 +408,10 @@ impl Future for QuicDialFut {
                     }
                 }
                 trace!("outgoing connection to {:?}", peer_id);
-                let muxer = QuicMuxer { inner: Mutex::new(stream) };
+                let muxer = QuicMuxer {
+                    _context: self.context.take(),
+                    inner: Mutex::new(stream)
+                };
                 Ok(Async::Ready((peer_id, muxer)))
             }
             Ok(Async::NotReady) => Ok(Async::NotReady),
@@ -439,7 +449,10 @@ impl Stream for QuicListenStream {
                 let peer_id = public_key.into_peer_id();
                 trace!("incoming connection to {:?}", peer_id);
                 let addr = socket_addr_to_quic(stream.peer_addr());
-                let muxer = QuicMuxer { inner: Mutex::new(stream) };
+                let muxer = QuicMuxer {
+                    _context: None,
+                    inner: Mutex::new(stream)
+                };
                 Ok(Async::Ready(Some((future::ok((peer_id, muxer)), addr))))
             }
             Ok(Async::Ready(None)) => Ok(Async::Ready(None)),
