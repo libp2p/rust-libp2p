@@ -1,4 +1,4 @@
-// Copyright 2018 Parity Technologies (UK) Ltd.
+// Copyright 2019 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -77,6 +77,7 @@ type OutEvent = ProtocolsHandlerEvent<
     BrahmsHandlerEvent,
 >;
 
+/// Event that can be sent to the handler.
 #[derive(Debug, Clone)]
 pub enum BrahmsHandlerIn {
     /// Marks this connection as "keep alive". We will not disconnect.
@@ -87,6 +88,7 @@ pub enum BrahmsHandlerIn {
     Event(BrahmsHandlerEvent),
 }
 
+// TODO: document
 #[derive(Debug, Clone)]
 pub enum BrahmsHandlerEvent {
     Push {

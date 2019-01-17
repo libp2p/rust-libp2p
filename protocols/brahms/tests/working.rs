@@ -1,4 +1,4 @@
-// Copyright 2018 Parity Technologies (UK) Ltd.
+// Copyright 2019 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use libp2p_brahms::{Brahms, BrahmsConfig};
+use libp2p_brahms::{Brahms, BrahmsConfig, BrahmsViewSize};
 use libp2p_core::{
     topology::MemoryTopology, upgrade, upgrade::OutboundUpgradeExt, Swarm, Transport,
 };
@@ -28,12 +28,14 @@ use std::time::Duration;
 /// Spawns 10 nodes and tests whether they discover each other.
 #[test]
 fn topology_filled() {
-    const NUM_SWARMS: usize = 2;
+    const NUM_SWARMS: usize = 10;
 
     let brahms_config = BrahmsConfig {
-        alpha: 14,
-        beta: 14,
-        gamma: 4,
+        view_size: BrahmsViewSize {
+            alpha: 14,
+            beta: 14,
+            gamma: 4,
+        },
         round_duration: Duration::from_secs(1),
         num_samplers: 32,
         difficulty: 1,

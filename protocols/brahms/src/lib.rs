@@ -1,4 +1,4 @@
-// Copyright 2018 Parity Technologies (UK) Ltd.
+// Copyright 2019 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -39,18 +39,32 @@
 //! dispatches messages to the nodes of the view, then you won't have to pay the price of
 //! connecting to the nodes to send the messages to.
 //!
+//! # How it works
+//!
+//! Brahms works by round delimited in time. During each round:
+//!
+//! - We send *push* messages to a random subset of the nodes of our view, containing our identity.
+//! - We query a random subset of nodes of our view for their view.
+//!
+//! At the end of each round, we update the view by randomly combining the results.
+//!
+//! A few other mechanisms, namely a sampling system and a proof-of-work system, exist in order to
+//! guarantee the strength of the system.
+//!
 //! # View size
 //!
 //! The Brahms algorithm does not define how large the size of the view as to be, but indicates
 //! that it should be around `∛n`, where `n` is the number of nodes connected to the network.
 //!
-//! Creating a `Brahms` struct requires passing a `BrahmsConfig` that contains the size of the view.
+//! Creating a `Brahms` struct requires passing and then updating a `BrahmsConfig` that contains
+//! the size of the view.
+//!
 //! In situation where you don't know in advance the size of the network (which is usually the
 //! case), or if this size is very flexible, then you should use a mechanism that yields an
 //! estimate of the size and regularly adjust the size of Brahm's view in order to reflect this
 //! size. The network size estimation mechanism is out of scope of this crate.
 
-pub use self::behaviour::{Brahms, BrahmsConfig};
+pub use self::behaviour::{Brahms, BrahmsConfig, BrahmsViewSize};
 pub use self::topology::BrahmsTopology;
 
 pub mod handler;

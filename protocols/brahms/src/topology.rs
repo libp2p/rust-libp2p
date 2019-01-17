@@ -1,4 +1,4 @@
-// Copyright 2018 Parity Technologies (UK) Ltd.
+// Copyright 2019 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -30,12 +30,14 @@ pub trait BrahmsTopology: Topology {
     ///
     /// > **Warning**: Keep in mind that the peer id and address are untrusted. They don't
     /// >              necessarily match, and in fact don't necessarily correspond to anything
-    /// >              at all.
-    // TODO: can it be called with the local peer id?
+    /// >              that is guaranteed to exist.
+    ///
+    /// > **Note**: The value of `peer` can never be the ID of the local peer.
     fn add_brahms_discovered_address(&mut self, peer: PeerId, addr: Multiaddr);
 
     /// Returns the initial view of the network. `max` is the maximum number of elements that the
-    /// iterator has to return. Any additional element will be ignored.
+    /// iterator has to return. The method can return more entries, but any additional element
+    /// will be ignored.
     ///
     /// The list of nodes in the initial view is pretty important for the safety of the network,
     /// as all the nodes that are discovered by Brahms afterwards will be derived from this initial
@@ -56,8 +58,9 @@ impl BrahmsTopology for MemoryTopology {
 
     #[inline]
     fn initial_view(&self, max: usize) -> Self::InitialViewIter {
-        // TODO: type of the the iterator returned by `peers()` cannot be expressed, so we collect
-        //       into a Vec, which is inefficient
+        // TODO: type of the the iterator returned by `peers()` cannot be expressed because Rust
+        //       doesn't have the `type T = impl Trait;` syntax yet, so we collect into a Vec,
+        //       which is inefficient
         self.peers()
             .cloned()
             .take(max)

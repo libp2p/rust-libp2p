@@ -1,4 +1,4 @@
-// Copyright 2018 Parity Technologies (UK) Ltd.
+// Copyright 2019 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -21,6 +21,7 @@
 //! Contains the `Sampler` struct. See the doc-comment of this struct for more info.
 
 use rand;
+use smallvec::SmallVec;
 use sha2::digest::{generic_array::GenericArray, BlockInput};
 use sha2::{Digest, Sha256};
 
@@ -33,8 +34,7 @@ use sha2::{Digest, Sha256};
 /// to produce `B`, and 33% chances to produce `C`.
 pub struct Sampler<TValue, TDigest: Digest + BlockInput = Sha256> {
     /// All the individual samplers. Each sampler holds one value.
-    // TODO: use an unsized raw array eventually
-    samplers: Vec<IndivSampler<TValue, TDigest>>,
+    samplers: SmallVec<[IndivSampler<TValue, TDigest>; 32]>,
 }
 
 struct IndivSampler<TValue, TDigest: Digest + BlockInput> {
@@ -59,7 +59,7 @@ where
     pub fn with_len(num_samplers: u32) -> Self {
         // Note that `rand` doesn't support our array type, so we first put 0s everywhere, then we
         // fill the arrays with random values.
-        let mut samplers: Vec<_> = (0..num_samplers as usize)
+        let mut samplers: SmallVec<[_; 32]> = (0..num_samplers as usize)
             .map(|_| IndivSampler {
                 xor: Default::default(),
                 cur_value: None,
@@ -126,11 +126,22 @@ where
 
     /// Gets a random element from the sampler. Returns `None` if the sampler is empty
     /// (ie. `insert()` has never been called).
-    // FIXME: wrong! if we invalidate, then None can be returned! what to do?
     #[inline]
     pub fn sample(&self) -> Option<&TValue> {
-        let sampler = rand::random::<usize>() % self.samplers.len();
-        self.samplers[sampler].cur_value.as_ref()
+        let mut iter = rand::random::<usize>() % self.samplers.len();
+        let end_num = iter.wrapping_sub(1) % self.samplers.len();
+
+        loop {
+            if let Some(value) = self.samplers[iter].cur_value.as_ref() {
+                return Some(value);
+            }
+
+            if iter == end_num {
+                return None;
+            }
+
+            iter = iter.wrapping_add(1) % self.samplers.len();
+        }
     }
 }
 
@@ -142,13 +153,17 @@ mod tests {
     #[test]
     fn empty() {
         let sampler = Sampler::<_, Sha256>::with_len(32);
-        assert_eq!(sampler.sample(), None::<&Vec<u8>>);
+        // Try multiple times because randomness is involved.
+        for _ in 0 .. 300 {
+            assert_eq!(sampler.sample(), None::<&Vec<u8>>);
+        }
     }
 
     #[test]
     fn one_value() {
         let mut sampler = Sampler::<_, Sha256>::with_len(32);
         sampler.insert(vec![0]);
+        // Try multiple times because randomness is involved.
         for _ in 0..1000 {
             assert_eq!(sampler.sample().unwrap(), &[0]);
         }
@@ -177,7 +192,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // FIXME: samplers will contain None after invalidation
     fn invalidate_one() {
         let mut sampler = Sampler::<_, Sha256>::with_len(32);
         sampler.insert(vec![1]);

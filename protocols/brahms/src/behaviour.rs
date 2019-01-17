@@ -1,4 +1,4 @@
-// Copyright 2018 Parity Technologies (UK) Ltd.
+// Copyright 2019 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -29,29 +29,18 @@ use libp2p_core::swarm::{
 use libp2p_core::{Multiaddr, PeerId};
 use rand::distributions::{Distribution, Range};
 use smallvec::SmallVec;
-use std::{cmp, iter, marker::PhantomData, time::Duration, time::Instant};
+use std::{cmp, iter, marker::PhantomData, mem, time::Duration, time::Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_timer::Interval;
 
-/// TODO: document
-///
-/// The maximum number of elements in the view will be `alpha + beta + gamma`.
-///
-/// Note that if a node receives receives more than `alpha` pushes, it will assume that the network
-/// is under attack. It is therefore important that the configuration is the same throughout the
-/// network, most notably the value of `alpha`.
+/// Configuration for the Brahms discovery mechanism.
 #[derive(Debug, Copy, Clone)]
 pub struct BrahmsConfig {
-    /// Number of elements in the view that are the result of pushes. Must not be 0.
-    pub alpha: u32,
+    /// Configuration for the size of the view.
+    pub view_size: BrahmsViewSize,
 
-    /// Number of elements in the view that are the result of pulls. Must not be 0.
-    pub beta: u32,
-
-    /// Number of elements in the view that are the result of sampling.
-    pub gamma: u32,
-
-    /// Duration of a round.
+    /// Duration of a round. Should be at least twice the maximum expected latency between two
+    /// nodes, plus the time to generate `alpha` proofs of work.
     pub round_duration: Duration,
 
     /// Number of samplers. The more the better, but the more CPU-intensive the algorithm is.
@@ -60,16 +49,46 @@ pub struct BrahmsConfig {
     /// Number of leading zero bytes that are required in the proof-of-work calculation used to
     /// prevent DDoS attacks. The higher the value, the more resistant we are, but the more
     /// CPU-intensive the code is.
+    ///
+    /// The correct value to use here depends on the round duration, the size of the view, and the
+    /// speed of CPUs. We need to generate `alpha` proofs in less than `round_duration - latency`.
+    ///
+    /// As an example, on a modern machine, with a value of 16 it takes around 1ms to create a
+    /// proof.
     pub difficulty: u8,
+}
+
+/// Configuration for the view size of the Brahms discovery mechanism.
+///
+/// The maximum number of elements in the view will be `alpha + beta + gamma`.
+///
+/// Note that if a node receives receives more than `alpha` pushes, it will assume that the network
+/// is under attack. It is therefore important that the configuration is the same throughout the
+/// network, most notably the value of `alpha`.
+#[derive(Debug, Copy, Clone)]
+pub struct BrahmsViewSize {
+    /// Number of elements in the view that are the result of pushes. Must not be 0. Typically
+    /// 45% of the size of the view.
+    pub alpha: u32,
+
+    /// Number of elements in the view that are the result of pulls. Must not be 0. Typically
+    /// 45% of the size of the view.
+    pub beta: u32,
+
+    /// Number of elements in the view that are the result of sampling. Typically 10% of the size
+    /// of the view.
+    pub gamma: u32,
 }
 
 impl Default for BrahmsConfig {
     #[inline]
     fn default() -> Self {
         BrahmsConfig {
-            alpha: 14,
-            beta: 14,
-            gamma: 4,
+            view_size: BrahmsViewSize {
+                alpha: 14,
+                beta: 14,
+                gamma: 4,
+            },
             round_duration: Duration::from_secs(10),
             num_samplers: 32,
             difficulty: 10,
@@ -81,7 +100,11 @@ impl Default for BrahmsConfig {
 pub struct Brahms<TSubstream> {
     /// The way the algorithm is configured.
     config: BrahmsConfig,
-    /// PeerId of the local node. // TODO: shoudn't be necessary
+    /// Configuration to use for the next round. Copied into `config` at the beginning of each
+    /// round.
+    next_round_view_size: BrahmsViewSize,
+    /// PeerId of the local node.
+    // TODO: field can be removed after a rework of NetworkBehaviour
     local_peer_id: PeerId,
 
     /// List of elements to add to the topology as soon as we have access to it.
@@ -139,19 +162,20 @@ impl AsRef<[u8]> for PeerIdAdapter {
 impl<TSubstream> Brahms<TSubstream> {
     /// Initializes the Brahms state.
     pub fn new(config: BrahmsConfig, local_peer_id: PeerId) -> Self {
-        let max_view_len = config.alpha + config.beta + config.gamma;
         let sampler = Sampler::with_len(config.num_samplers);
         let round_advance = Interval::new(Instant::now(), config.round_duration);
 
         Brahms {
             config,
+            next_round_view_size: config.view_size,
             local_peer_id,
             add_to_topology: SmallVec::new(),
             sampler,
             round_advance,
-            view: FnvHashSet::with_capacity_and_hasher(max_view_len as usize, Default::default()),
+            // We set the capacity right before filling the view.
+            view: Default::default(),
             push_list: FnvHashSet::with_capacity_and_hasher(
-                config.alpha as usize,
+                config.view_size.alpha as usize,
                 Default::default(),
             ),
             pull_list: FnvHashSet::default(),
@@ -165,11 +189,9 @@ impl<TSubstream> Brahms<TSubstream> {
         }
     }
 
-    /// Modifies the configuration of `BRAHMS`.
-    // TODO: update after next round only?
-    // TODO: PoW difficulty must not change
-    pub fn set_config(&mut self, config: BrahmsConfig) {
-        self.config = config;
+    /// Modifies the configuration of Brahms. Only starts applying after the next round.
+    pub fn set_config(&mut self, config: BrahmsViewSize) {
+        self.next_round_view_size = config;
 
         if self.push_list.len() < config.alpha as usize {
             self.push_list.reserve(config.alpha as usize - self.push_list.len());
@@ -179,14 +201,13 @@ impl<TSubstream> Brahms<TSubstream> {
     /// Returns the local view of the network.
     ///
     /// Contains a maximum of `alpha + beta + gamma` elements (where `alpha`, `beta` and `gamma`
-    /// come from the configuration).
+    /// come from the configuration). Never contains any duplicate.
     ///
     /// Assuming that the whole network uses Brahms, there should be a direct or indirect link
     /// between every single node of the network and at least one of the nodes returned by
     /// `view()`.
     ///
     /// The list of nodes that are returned can change after you call `poll()`.
-    // TODO: can it contain duplicates? document
     #[inline]
     pub fn view(&self) -> impl Iterator<Item = &PeerId> {
         self.view.iter()
@@ -201,15 +222,21 @@ impl<TSubstream> Brahms<TSubstream> {
         // Update the view if necessary.
         if !self.push_list.is_empty() &&
             // !self.pull_list.is_empty() &&        // TODO: figure out bootstrapping
-            self.push_list.len() <= self.config.alpha as usize
+            self.push_list.len() <= self.config.view_size.alpha as usize
         {
-            self.view.clear();
+            // Clear `self.view` and put the former view in `old_view`.
+            let old_view = {
+                // We don't just copy the capacity of `self.view` because the view size can be
+                // changed by the user.
+                let view_size = self.config.view_size.alpha + self.config.view_size.beta + self.config.view_size.gamma;
+                mem::replace(&mut self.view, FnvHashSet::with_capacity_and_hasher(view_size as usize, Default::default()))
+            };
 
             // Move elements from `push_list` to `self.view`.
             let mut push_to_view = FnvHashSet::default();
             let push_range = Range::new(0, self.push_list.len());
             let desired_push_to_view_len =
-                cmp::min(self.config.alpha as usize, self.push_list.len());
+                cmp::min(self.config.view_size.alpha as usize, self.push_list.len());
             while push_to_view.len() < desired_push_to_view_len {
                 let index = push_range.sample(&mut rand::thread_rng());
                 let elem = self
@@ -220,19 +247,18 @@ impl<TSubstream> Brahms<TSubstream> {
                 push_to_view.insert(elem.clone());
             }
             for elem in push_to_view.drain() {
+                // It is possible that a node incorrectly pushes our own identity to us.
                 if &elem != parameters.local_peer_id() {
-                    // TODO: can this happen? isn't that incorrect?
                     self.view.insert(elem.clone());
                 }
             }
 
             // Move elements from `pull_list` to `self.view`.
             if !self.pull_list.is_empty() {
-                // TODO: remove
                 let mut pull_to_view = FnvHashSet::default();
                 let pull_range = Range::new(0, self.pull_list.len());
                 let desired_pull_to_view_len =
-                    cmp::min(self.config.beta as usize, self.pull_list.len());
+                    cmp::min(self.config.view_size.beta as usize, self.pull_list.len());
                 while pull_to_view.len() < desired_pull_to_view_len {
                     let index = pull_range.sample(&mut rand::thread_rng());
                     let elem = self
@@ -249,9 +275,18 @@ impl<TSubstream> Brahms<TSubstream> {
                 }
             }
 
-            for _ in 0..self.config.gamma {
+            // Move elements from the sampler.
+            for _ in 0..self.config.view_size.gamma {
                 if let Some(elem) = self.sampler.sample() {
                     self.view.insert(elem.0.clone());
+                }
+            }
+
+            // TODO: for each element in `self.view` not in `old_view`, we send a "keep-alive enable"
+            // message.
+            for peer in self.view.iter() {
+                if !old_view.contains(peer) {
+
                 }
             }
         }
@@ -259,13 +294,14 @@ impl<TSubstream> Brahms<TSubstream> {
         // Reset for next round.
         self.push_list.clear();
         self.pull_list.clear();
+        self.config.view_size = self.next_round_view_size;
 
         // Since we can't do anything if the view is empty, set it to something.
         // Normally this should only ever happen once at initialization, but if `initial_view()`
         // returns nothing then the view will remain empty and we will call this again every round
         // until something is returned.
         if self.view.is_empty() {
-            let max = (self.config.alpha + self.config.beta + self.config.gamma) as usize;
+            let max = (self.config.view_size.alpha + self.config.view_size.beta + self.config.view_size.gamma) as usize;
             self.view = parameters.topology().initial_view(max).take(max).collect();
         }
 
@@ -278,7 +314,7 @@ impl<TSubstream> Brahms<TSubstream> {
             let range = Range::new(0, self.view.len());
 
             // Send push requests.
-            let wanted_push_len = cmp::min(self.config.alpha as usize, self.view.len());
+            let wanted_push_len = cmp::min(self.config.view_size.alpha as usize, self.view.len());
             while self.pending_pushes.len() + self.push_pending_connects.len() < wanted_push_len {
                 let index = range.sample(&mut rand::thread_rng());
                 let elem = self
@@ -296,7 +332,7 @@ impl<TSubstream> Brahms<TSubstream> {
             }
 
             // Send pull requests.
-            let wanted_pull_len = cmp::min(self.config.beta as usize, self.view.len());
+            let wanted_pull_len = cmp::min(self.config.view_size.beta as usize, self.view.len());
             while self.pending_pulls.len() + self.pull_pending_connects.len() < wanted_pull_len {
                 let index = range.sample(&mut rand::thread_rng());
                 let elem = self
@@ -370,6 +406,7 @@ where
             if &peer_id == parameters.local_peer_id() {
                 continue;
             }
+
             parameters
                 .topology()
                 .add_brahms_discovered_address(peer_id, addr);
