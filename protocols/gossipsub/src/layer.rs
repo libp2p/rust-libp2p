@@ -179,16 +179,12 @@ impl<TSubstream> Gossipsub<TSubstream> {
     ///
     /// Returns true if the subscription worked. Returns false if we were already subscribed.
     pub fn subscribe(&mut self, topic: Topic) -> bool {
-        // TODO: Can simply check if topic is in the mesh
-        if self
-            .subscribed_topics
-            .iter()
-            .any(|t| t.hash() == topic.hash())
-        {
+        if self.mesh.get(&topic.hash()).is_some() {
             return false;
         }
 
         // send subscription request to all floodsub and gossipsub peers
+        // TODO: Consolidate hashmap of peers
         for peer in self.peer_topics.keys() {
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer.clone(),
@@ -202,9 +198,8 @@ impl<TSubstream> Gossipsub<TSubstream> {
             });
         }
 
-        self.subscribed_topics.push(topic.clone());
-
         // call JOIN(topic)
+        // this will add new peers to the mesh for the topic
         self.join(topic);
 
         true
@@ -217,17 +212,11 @@ impl<TSubstream> Gossipsub<TSubstream> {
     /// Returns true if we were subscribed to this topic.
     pub fn unsubscribe(&mut self, topic: impl AsRef<TopicHash>) -> bool {
         let topic_hash = topic.as_ref();
-        // TODO: Check the mesh if we are subscribed
-        let pos = match self
-            .subscribed_topics
-            .iter()
-            .position(|t| t.hash() == topic_hash)
-        {
-            Some(pos) => pos,
-            None => return false,
-        };
 
-        self.subscribed_topics.remove(pos);
+        if self.mesh.get(topic_hash).is_none() {
+            // we are not subscribed
+            return false;
+        }
 
         // announce to all floodsub and gossipsub peers
         for peer in self.peer_topics.keys() {
@@ -244,6 +233,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
         }
 
         // call LEAVE(topic)
+        // this will remove the topic from the mesh
         self.leave(&topic);
 
         true
