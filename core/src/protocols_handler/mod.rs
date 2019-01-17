@@ -47,12 +47,14 @@ pub use self::dummy::DummyProtocolsHandler;
 pub use self::map_in::MapInEvent;
 pub use self::map_out::MapOutEvent;
 pub use self::node_handler::{NodeHandlerWrapper, NodeHandlerWrapperBuilder};
+pub use self::one_shot::OneShotHandler;
 pub use self::select::{IntoProtocolsHandlerSelect, ProtocolsHandlerSelect};
 
 mod dummy;
 mod map_in;
 mod map_out;
 mod node_handler;
+mod one_shot;
 mod select;
 
 /// Handler for a set of protocols for a specific connection with a remote.
