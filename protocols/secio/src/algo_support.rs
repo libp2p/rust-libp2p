@@ -23,12 +23,12 @@
 //! One important part of the SECIO handshake is negotiating algorithms. This is what this module
 //! helps you with.
 
-use error::SecioError;
-#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+use crate::error::SecioError;
+#[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
 use ring::digest;
 use std::cmp::Ordering;
-use stream_cipher::Cipher;
-use KeyAgreement;
+use crate::stream_cipher::Cipher;
+use crate::KeyAgreement;
 
 const ECDH_P256: &str = "P-256";
 const ECDH_P384: &str = "P-384";
@@ -204,7 +204,7 @@ pub fn select_digest(r: Ordering, ours: &str, theirs: &str) -> Result<Digest, Se
     Err(SecioError::NoSupportIntersection)
 }
 
-#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+#[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
 impl Into<&'static digest::Algorithm> for Digest {
     #[inline]
     fn into(self) -> &'static digest::Algorithm {

@@ -28,17 +28,6 @@ pub enum UpgradeError<E> {
     Select(ProtocolChoiceError),
     /// Error during the post-negotiation handshake.
     Apply(E),
-    #[doc(hidden)]
-    __Nonexhaustive
-}
-
-impl<E> UpgradeError<E>
-where
-    E: std::error::Error + Send + Sync + 'static
-{
-    pub fn into_io_error(self) -> std::io::Error {
-        std::io::Error::new(std::io::ErrorKind::Other, self)
-    }
 }
 
 impl<E> UpgradeError<E> {
@@ -49,7 +38,6 @@ impl<E> UpgradeError<E> {
         match self {
             UpgradeError::Select(e) => UpgradeError::Select(e),
             UpgradeError::Apply(e) => UpgradeError::Apply(f(e)),
-            UpgradeError::__Nonexhaustive => UpgradeError::__Nonexhaustive
         }
     }
 
@@ -69,20 +57,18 @@ where
         match self {
             UpgradeError::Select(e) => write!(f, "select error: {}", e),
             UpgradeError::Apply(e) => write!(f, "upgrade apply error: {}", e),
-            UpgradeError::__Nonexhaustive => f.write_str("__Nonexhaustive")
         }
     }
 }
 
 impl<E> std::error::Error for UpgradeError<E>
 where
-    E: std::error::Error
+    E: std::error::Error + 'static
 {
-    fn cause(&self) -> Option<&dyn std::error::Error> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             UpgradeError::Select(e) => Some(e),
             UpgradeError::Apply(e) => Some(e),
-            UpgradeError::__Nonexhaustive => None
         }
     }
 }

@@ -7,9 +7,9 @@ license = "MIT"
 [dependencies]
 bytes = "0.4"
 futures = "0.1"
-libp2p-core = { path = "../../core" }
+libp2p-core = { version = "0.2.0", path = "../../core" }
 log = "0.4"
-multiaddr = { path = "../../misc/multiaddr" }
+multiaddr = { package = "parity-multiaddr", version = "0.1", path = "../../misc/multiaddr" }
 protobuf = "2.0.2"
 rand = "0.6"
 tokio-codec = "0.1"

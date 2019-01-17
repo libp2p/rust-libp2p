@@ -18,22 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-extern crate bytes;
-extern crate futures;
-extern crate libp2p_mplex as multiplex;
-extern crate libp2p_core as swarm;
-extern crate libp2p_tcp_transport as tcp;
-extern crate tokio;
-extern crate tokio_io;
-
-use futures::future::Future;
-use futures::{Sink, Stream};
+use libp2p_core::{muxing, Transport};
+use libp2p_tcp::TcpConfig;
+use futures::prelude::*;
 use std::sync::{Arc, mpsc};
 use std::thread;
-use swarm::{muxing, Transport};
-use tcp::TcpConfig;
-use tokio_io::codec::length_delimited::Framed;
-use tokio::runtime::current_thread::Runtime;
+use tokio::{
+    codec::length_delimited::Builder,
+    runtime::current_thread::Runtime
+};
 
 #[test]
 fn client_to_server_outbound() {
@@ -43,7 +36,7 @@ fn client_to_server_outbound() {
 
     let bg_thread = thread::spawn(move || {
         let transport =
-            TcpConfig::new().with_upgrade(multiplex::MplexConfig::new());
+            TcpConfig::new().with_upgrade(libp2p_mplex::MplexConfig::new());
 
         let (listener, addr) = transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -52,10 +45,11 @@ fn client_to_server_outbound() {
 
         let future = listener
             .into_future()
-            .map_err(|(err, _)| err)
+            .map_err(|(err, _)| panic!("{:?}", err))
             .and_then(|(client, _)| client.unwrap().0)
+            .map_err(|err| panic!("{:?}", err))
             .and_then(|client| muxing::outbound_from_ref_and_wrap(Arc::new(client)))
-            .map(|client| Framed::<_, bytes::BytesMut>::new(client.unwrap()))
+            .map(|client| Builder::new().new_read(client.unwrap()))
             .and_then(|client| {
                 client
                     .into_future()
@@ -72,13 +66,14 @@ fn client_to_server_outbound() {
         let _ = rt.block_on(future).unwrap();
     });
 
-    let transport = TcpConfig::new().with_upgrade(multiplex::MplexConfig::new());
+    let transport = TcpConfig::new().with_upgrade(libp2p_mplex::MplexConfig::new());
 
     let future = transport
         .dial(rx.recv().unwrap())
         .unwrap()
+        .map_err(|err| panic!("{:?}", err))
         .and_then(|client| muxing::inbound_from_ref_and_wrap(Arc::new(client)))
-        .map(|server| Framed::<_, bytes::BytesMut>::new(server.unwrap()))
+        .map(|server| Builder::new().new_write(server.unwrap()))
         .and_then(|server| server.send("hello world".into()))
         .map(|_| ());
 
@@ -95,7 +90,7 @@ fn client_to_server_inbound() {
 
     let bg_thread = thread::spawn(move || {
         let transport =
-            TcpConfig::new().with_upgrade(multiplex::MplexConfig::new());
+            TcpConfig::new().with_upgrade(libp2p_mplex::MplexConfig::new());
 
         let (listener, addr) = transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -104,10 +99,11 @@ fn client_to_server_inbound() {
 
         let future = listener
             .into_future()
-            .map_err(|(err, _)| err)
+            .map_err(|(err, _)| panic!("{:?}", err))
             .and_then(|(client, _)| client.unwrap().0)
+            .map_err(|err| panic!("{:?}", err))
             .and_then(|client| muxing::inbound_from_ref_and_wrap(Arc::new(client)))
-            .map(|client| Framed::<_, bytes::BytesMut>::new(client.unwrap()))
+            .map(|client| Builder::new().new_read(client.unwrap()))
             .and_then(|client| {
                 client
                     .into_future()
@@ -124,13 +120,14 @@ fn client_to_server_inbound() {
         let _ = rt.block_on(future).unwrap();
     });
 
-    let transport = TcpConfig::new().with_upgrade(multiplex::MplexConfig::new());
+    let transport = TcpConfig::new().with_upgrade(libp2p_mplex::MplexConfig::new());
 
     let future = transport
         .dial(rx.recv().unwrap())
         .unwrap()
+        .map_err(|err| panic!("{:?}", err))
         .and_then(|client| muxing::outbound_from_ref_and_wrap(Arc::new(client)))
-        .map(|server| Framed::<_, bytes::BytesMut>::new(server.unwrap()))
+        .map(|server| Builder::new().new_write(server.unwrap()))
         .and_then(|server| server.send("hello world".into()))
         .map(|_| ());
 

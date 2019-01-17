@@ -18,36 +18,39 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use algo_support;
+use crate::algo_support;
 use bytes::BytesMut;
-use codec::{full_codec, FullCodec, Hmac};
-use stream_cipher::{Cipher, ctr};
+use crate::codec::{full_codec, FullCodec, Hmac};
+use crate::stream_cipher::{Cipher, ctr};
 use ed25519_dalek::{PublicKey as Ed25519PublicKey, Signature as Ed25519Signature};
-use error::SecioError;
-use exchange;
+use crate::error::SecioError;
+use crate::exchange;
 use futures::future;
 use futures::sink::Sink;
 use futures::stream::Stream;
 use futures::Future;
 use libp2p_core::PublicKey;
+use log::{debug, trace};
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
 use protobuf::Message as ProtobufMessage;
 use rand::{self, RngCore};
-#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+#[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
 use ring::signature::{RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256, verify as ring_verify};
-#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+#[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
 use ring::rand::SystemRandom;
 #[cfg(feature = "secp256k1")]
 use secp256k1;
 use sha2::{Digest as ShaDigestTrait, Sha256, Sha512};
 use std::cmp::{self, Ordering};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use structs_proto::{Exchange, Propose};
+use crate::structs_proto::{Exchange, Propose};
 use tokio_io::codec::length_delimited;
 use tokio_io::{AsyncRead, AsyncWrite};
-#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+#[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
 use untrusted::Input as UntrustedInput;
-use {KeyAgreement, SecioConfig, SecioKeyPairInner};
+use crate::{KeyAgreement, SecioConfig, SecioKeyPairInner};
+#[cfg(feature = "secp256k1")]
+use crate::SECP256K1;
 
 // This struct contains the whole context of a handshake, and is filled progressively
 // throughout the various parts of the handshake.
@@ -367,7 +370,7 @@ where
                 exchange.set_epubkey(tmp_pub_key);
                 exchange.set_signature({
                     match context.config.key.inner {
-                        #[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+                        #[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
                         SecioKeyPairInner::Rsa { ref private, .. } => {
                             let mut state = match RSASigningState::new(private.clone()) {
                                 Ok(s) => s,
@@ -397,10 +400,9 @@ where
                             let data_to_sign = Sha256::digest(&data_to_sign);
                             let message = secp256k1::Message::from_slice(data_to_sign.as_ref())
                                 .expect("digest output length doesn't match secp256k1 input length");
-                            let secp256k1 = secp256k1::Secp256k1::signing_only();
-                            secp256k1
+                            SECP256K1
                                 .sign(&message, private)
-                                .serialize_der(&secp256k1)
+                                .serialize_der()
                         },
                     }
                 });
@@ -451,7 +453,7 @@ where
             data_to_verify.extend_from_slice(remote_exch.get_epubkey());
 
             match context.state.remote.public_key {
-                #[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+                #[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
                 PublicKey::Rsa(ref remote_public_key) => {
                     // TODO: The ring library doesn't like some stuff in our DER public key,
                     //       therefore we scrap the first 24 bytes of the key. A proper fix would
@@ -490,11 +492,10 @@ where
                     let data_to_verify = Sha256::digest(&data_to_verify);
                     let message = secp256k1::Message::from_slice(data_to_verify.as_ref())
                         .expect("digest output length doesn't match secp256k1 input length");
-                    let secp256k1 = secp256k1::Secp256k1::verification_only();
-                    let signature = secp256k1::Signature::from_der(&secp256k1, remote_exch.get_signature());
-                    let remote_public_key = secp256k1::key::PublicKey::from_slice(&secp256k1, remote_public_key);
+                    let signature = secp256k1::Signature::from_der(remote_exch.get_signature());
+                    let remote_public_key = secp256k1::key::PublicKey::from_slice(remote_public_key);
                     if let (Ok(signature), Ok(remote_public_key)) = (signature, remote_public_key) {
-                        match secp256k1.verify(&message, &signature, &remote_public_key) {
+                        match SECP256K1.verify(&message, &signature, &remote_public_key) {
                             Ok(()) => (),
                             Err(_) => {
                                 debug!("failed to verify the remote's signature");
@@ -506,7 +507,7 @@ where
                         return Err(SecioError::SignatureVerificationFailed)
                     }
                 },
-                #[cfg(not(all(feature = "ring", not(target_os = "emscripten"))))]
+                #[cfg(not(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown")))))]
                 PublicKey::Rsa(_) => {
                     debug!("support for RSA was disabled at compile-time");
                     return Err(SecioError::SignatureVerificationFailed);
@@ -627,22 +628,19 @@ where ::hmac::Hmac<D>: Clone {
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio;
-    extern crate tokio_tcp;
     use bytes::BytesMut;
-    use self::tokio::runtime::current_thread::Runtime;
-    use self::tokio_tcp::TcpListener;
-    use self::tokio_tcp::TcpStream;
+    use tokio::runtime::current_thread::Runtime;
+    use tokio_tcp::{TcpListener, TcpStream};
     use crate::SecioError;
     use super::handshake;
     use super::stretch_key;
-    use algo_support::Digest;
-    use codec::Hmac;
+    use crate::algo_support::Digest;
+    use crate::codec::Hmac;
     use futures::prelude::*;
-    use {SecioConfig, SecioKeyPair};
+    use crate::{SecioConfig, SecioKeyPair};
 
     #[test]
-    #[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+    #[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
     fn handshake_with_self_succeeds_rsa() {
         let key1 = {
             let private = include_bytes!("../tests/test-rsa-private-key.pk8");

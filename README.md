@@ -6,8 +6,8 @@
 
 This repository is the central place for Rust development of the [libp2p](https://libp2p.io) spec.
 
-**This readme will be more fleshed out the closer the project gets to completion.
-Right now everything including the crate organization is very much Work in Progress.**
+**Warning**: While we are trying our best to be compatible with other lib2p implementations, we
+cannot guarantee that this is the case considering the lack of a precise libp2p specifications.
 
 ## Documentation
 
