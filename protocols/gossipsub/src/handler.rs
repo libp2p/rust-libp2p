@@ -1,18 +1,21 @@
+use errors::GError;
 use protocol::{GossipsubConfig, GossipsubRpcCodec};
+use message::{GossipsubRpc};
+
 use futures::prelude::*;
 use libp2p_core::{
-    ProtocolsHandler, ProtocolsHandlerEvent,
+    ProtocolsHandler,
     protocols_handler::ProtocolsHandlerUpgrErr,
     upgrade::{InboundUpgrade, OutboundUpgrade},
-    //*unused protocols_handler::ProtocolsHandlerSelect,*//
+    //*unused ProtocolsHandlerEvent, protocols_handler::ProtocolsHandlerSelect,*//
 };
 // use libp2p_floodsub::{
 //     protocol::{FloodsubConfig, FloodsubRpc},
 //     handler::FloodsubHandler,
 // };
-use message::{GossipsubRpc};
+
 use smallvec::SmallVec;
-use std::{fmt, io};
+use std::fmt;
 use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -94,6 +97,7 @@ where
 {
     type InEvent = GossipsubRpc;
     type OutEvent = GossipsubRpc;
+    type Error = GError;
     type Substream = TSubstream;
     type InboundProtocol = GossipsubConfig;
     type OutboundProtocol = GossipsubConfig;
@@ -140,6 +144,11 @@ where
         OutboundUpgrade<Self::Substream>>::Error>) {}
 
     #[inline]
+    fn connection_keep_alive(&self) -> bool {
+        !self.substreams.is_empty()
+    }
+
+    #[inline]
     fn shutdown(&mut self) {
         self.shutting_down = true;
         for n in (0..self.substreams.len()).rev() {
@@ -152,9 +161,9 @@ where
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<ProtocolsHandlerEvent<Self::OutboundProtocol,
-            Self::OutboundOpenInfo, Self::OutEvent>>,
-        io::Error,
+        ProtocolsHandlerEvent<Self::OutboundProtocol,
+        Self::OutboundOpenInfo, Self::OutEvent>,
+        GError
     > {
         if !self.send_queue.is_empty() {
             let message = self.send_queue.remove(0);

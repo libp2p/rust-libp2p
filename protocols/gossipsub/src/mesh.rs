@@ -1,4 +1,5 @@
 use TopicHash;
+use errors::GError;
 
 use libp2p_core::PeerId;
 
@@ -69,36 +70,38 @@ impl Mesh {
 
     pub fn get_mut(&mut self, ) {}
 
-    pub fn remove<Q: ?Sized>(&mut self, k: &Q) -> Option<Vec<PeerId>>
-    where
-        TopicHash: Borrow<Q>,
-        Q: Hash + Eq,
+    pub fn remove(&mut self, th: &TopicHash) -> Result<Vec<PeerId>, GError>
     {
-        self.m.remove(k)
+        match self.m.remove(th) {
+            Some(peers) => peers,
+            None => return Err(GError::TopicNotInMesh(th_str, "Tried to remove the topic with topic hash '{th_str}' from the mesh."))
+        }
     }
 
-    pub fn remove_peer_from_topic<Q: ?Sized>(&mut self, th: &Q, p: &PeerId)
-        -> Result<(), GError>
-    where
-        TopicHash: Borrow<Q>,
-        Q: Hash + Eq,
+    pub fn remove_peer_from_topic(&mut self, th: &TopicHash,
+        p: &PeerId) -> Result<(), GError>
     {
-        let peers = self.remove(th);
+        match self.remove(th) {
+            peers => peers,
+            GError::TopicNotInMesh => return GError::TopicNotInMesh,
+            _ => _,
+        }
+
         // TODO: use remove_item when stable:
         // https://github.com/rust-lang/rust/issues/40062
         for (pos, peer) in peers.iter().enumerate() {
-            if peer = *p {
+            if peer == *p {
                 peers.remove(pos);
                 // Assume that the same peer ID cannot exist more than once in
                 // the vector.
-                break;
+                return Ok(())
             } else {
-                let peer_str = peer.to_base58();
-                let th_str = th.clone().into_string();
+                let peer_str = peer.to_base58()
                 return Err(GError::NotGraftedToTopic(th_str, peer,
                     "Tried to remove the peer '{peer_str}' from the topic \
                     with topic hash '{th_str}'."))
             }
         }
+        Ok(())
     }
 }

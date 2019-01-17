@@ -275,14 +275,13 @@ impl<TSubstream> Gossipsub<TSubstream> {
                     "Tried to graft the peer '{peer_str}' to the topic with \
                     topic hash '{th_str}'."));
             }
-            let opt_p_ids = m.remove(th);
-            match opt_p_ids {
-                Some(ref ps) => {
+            match m.remove(th) {
+                Ok(ps) => {
                     ps.push(peer);
-                    m.insert(th, ps).unwrap();
+                    m.insert(th.clone(), ps);
                 },
-                None => {m.insert(th, vec!(peer))},
-                //None => return Err(GError::TopicNotInMesh(th_str, peer_str)),
+                Err(GError::TopicNotInMesh(_))
+                     => {m.insert(th.clone(), vec!(peer));},
             }
         }
         Ok(())
@@ -291,8 +290,8 @@ impl<TSubstream> Gossipsub<TSubstream> {
     /// Prunes the peer from a topic.
     ///
     /// Returns true if the peer is grafted to this topic.
-    pub fn prune(&mut self, t_hash: impl AsRef<TopicHash>) {
-        self.prune_many(iter::once, t_hash)
+    pub fn prune(&mut self, t_hash: impl AsRef<TopicHash>) -> Result<(), GError> {
+        self.prune_many(iter::once(t_hash))
     }
 
     /// Prunes the peer from multiple topics.
@@ -301,19 +300,20 @@ impl<TSubstream> Gossipsub<TSubstream> {
     pub fn prune_many<'a, I>(&mut self, t_hashes: impl IntoIterator<Item = impl
         AsRef<TopicHash>>) -> Result<(), GError> {
         let p = &self.local_peer_id;
-        let m = mut self.mesh;
+        let m = &mut self.mesh;
         for t_hash in t_hashes {
             let th = t_hash.as_ref();
-            if None = m.get_peer_from_topic(t_hash, p) {
+            if None == m.get_peer_from_topic(t_hash, p) {
                 let th_str = th.clone().into_string();
                 let p_str = p.clone().to_base58();
                 return Err(GError::NotGraftedToTopic(t_hash, p,
                     "Tried to prune the peer '{p_str}' to the topic with \
                     topic hash '{t_hash}'."))
             } else {
-                m.remove_peer_from_topic(th, p)
+                m.remove_peer_from_topic(th, p);
             }
         }
+        Ok(())
     }
 
     /// gossip; this notifies the peer that the following messages were
