@@ -86,6 +86,14 @@ impl PeerId {
         }
     }
 
+    /// Encode arbitrary data as a peer ID.
+    pub fn encode(data: &[u8]) -> PeerId {
+        PeerId {
+            multihash: multihash::encode(multihash::Hash::SHA2256, data)
+                .expect("sha2-256 is always supported")
+        }
+    }
+
     /// Returns a raw bytes representation of this `PeerId`.
     ///
     /// Note that this is not the same as the public key of the peer.

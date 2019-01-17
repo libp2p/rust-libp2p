@@ -36,6 +36,7 @@ const UNIX: u32 = 400;
 const UTP: u32 = 302;
 const WS: u32 = 477;
 const WSS: u32 = 478;
+const CURVE_25519: u32 = 25519;
 
 /// `Protocol` describes all possible multiaddress protocols.
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -65,7 +66,8 @@ pub enum Protocol<'a> {
     Unix(Cow<'a, str>),
     Utp,
     Ws,
-    Wss
+    Wss,
+    Curve25519(Cow<'a, [u8; 32]>)
 }
 
 impl<'a> Protocol<'a> {
@@ -138,6 +140,14 @@ impl<'a> Protocol<'a> {
             "p2p-webrtc-direct" => Ok(Protocol::P2pWebRtcDirect),
             "p2p-circuit" => Ok(Protocol::P2pCircuit),
             "memory" => Ok(Protocol::Memory),
+            "curve25519" => {
+                let s = iter.next().ok_or(Error::InvalidProtocolString)?;
+                let mut k = [0; 32];
+                if 32 != bs58::decode(s).into(&mut k)? {
+                    return Err(Error::InvalidProtocolString)
+                }
+                Ok(Protocol::Curve25519(Cow::Owned(k)))
+            }
             _ => Err(Error::UnknownProtocolString)
         }
     }
@@ -238,6 +248,10 @@ impl<'a> Protocol<'a> {
             UTP => Ok((Protocol::Utp, input)),
             WS => Ok((Protocol::Ws, input)),
             WSS => Ok((Protocol::Wss, input)),
+            CURVE_25519 => {
+                let (data, rest) = split_at(32, input)?;
+                Ok((Protocol::Curve25519(Cow::Borrowed(array_ref!(data, 0, 32))), rest))
+            }
             _ => Err(Error::UnknownProtocolId(id))
         }
     }
@@ -302,6 +316,10 @@ impl<'a> Protocol<'a> {
                 w.write_all(addr.as_ref())?;
                 w.write_u16::<BigEndian>(*port)?
             }
+            Protocol::Curve25519(key) => {
+                w.write_all(encode::u32(CURVE_25519, &mut buf))?;
+                w.write_all(key.as_ref())?
+            }
             Protocol::Quic => w.write_all(encode::u32(QUIC, &mut buf))?,
             Protocol::Utp => w.write_all(encode::u32(UTP, &mut buf))?,
             Protocol::Udt => w.write_all(encode::u32(UDT, &mut buf))?,
@@ -344,7 +362,8 @@ impl<'a> Protocol<'a> {
             Unix(cow) => Unix(Cow::Owned(cow.into_owned())),
             Utp => Utp,
             Ws => Ws,
-            Wss => Wss
+            Wss => Wss,
+            Curve25519(k) => Curve25519(Cow::Owned(k.into_owned()))
         }
     }
 }
@@ -379,6 +398,7 @@ impl<'a> fmt::Display for Protocol<'a> {
             Utp => f.write_str("/utp"),
             Ws => f.write_str("/ws"),
             Wss => f.write_str("/wss"),
+            Curve25519(k) => write!(f, "/curve25519/{}", bs58::encode(k.as_ref()).into_string())
         }
     }
 }

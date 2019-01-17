@@ -59,7 +59,7 @@ struct Proto(Protocol<'static>);
 impl Arbitrary for Proto {
     fn arbitrary<G: Gen>(g: &mut G) -> Self {
         use Protocol::*;
-        match g.gen_range(0, 23) { // TODO: Add Protocol::Quic
+        match g.gen_range(0, 24) { // TODO: Add Protocol::Quic
              0 => Proto(Dccp(g.gen())),
              1 => Proto(Dns4(Cow::Owned(SubString::arbitrary(g).0))),
              2 => Proto(Dns6(Cow::Owned(SubString::arbitrary(g).0))),
@@ -87,6 +87,11 @@ impl Arbitrary for Proto {
                 let mut a = [0; 10];
                 g.fill(&mut a);
                 Proto(Onion(Cow::Owned(a), g.gen()))
+            }
+            23 => {
+                let mut a = [0; 32];
+                g.fill(&mut a);
+                Proto(Curve25519(Cow::Owned(a)))
             }
              _ => panic!("outside range")
         }
