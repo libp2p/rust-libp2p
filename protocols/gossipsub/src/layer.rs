@@ -151,7 +151,6 @@ pub struct Gossipsub<TSubstream> {
     // we don't dispatch the same message twice if we receive it twice on the network.
     received: CuckooFilter<DefaultHasher>,
 
-    subscribed_topics: SmallVec<[Topic; 16]>,
     /// Marker to pin the generics.
     marker: PhantomData<TSubstream>,
 }
@@ -170,7 +169,6 @@ impl<TSubstream> Gossipsub<TSubstream> {
             fanout_last_pub: HashMap::new(),
             mcache: MessageCache::new(gs_config.history_gossip, gs_config.history_length),
             received: CuckooFilter::new(),
-            subscribed_topics: SmallVec::new(),
             marker: PhantomData,
         }
     }
@@ -408,23 +406,26 @@ where
 
     fn inject_connected(&mut self, id: PeerId, _: ConnectedPoint) {
         // We need to send our subscriptions to the newly-connected node.
-        for topic in self.subscribed_topics.iter() {
+        for topic in self.mesh.keys() {
+            //TODO: Build a list of subscriptions
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: id.clone(),
                 event: GossipsubRpc {
                     messages: Vec::new(),
                     subscriptions: vec![GossipsubSubscription {
-                        topic: topic.hash().clone(),
+                        topic: topic.clone(),
                         action: GossipsubSubscriptionAction::Subscribe,
                     }],
                 },
             });
         }
 
+        // TODO: Handle the peer addition
         self.peer_topics.insert(id.clone(), SmallVec::new());
     }
 
     fn inject_disconnected(&mut self, id: &PeerId, _: ConnectedPoint) {
+        // TODO: Handle peer diconnection
         let was_in = self.peer_topics.remove(id);
         debug_assert!(was_in.is_some());
     }
@@ -440,6 +441,7 @@ where
                     if !remote_peer_topics.contains(&subscription.topic) {
                         remote_peer_topics.push(subscription.topic.clone());
                     }
+                    // generates a subscription event to be polled
                     self.events.push_back(NetworkBehaviourAction::GenerateEvent(
                         GossipsubEvent::Subscribed {
                             peer_id: propagation_source.clone(),
@@ -467,6 +469,7 @@ where
         // List of messages we're going to propagate on the network.
         let mut rpcs_to_dispatch: Vec<(PeerId, GossipsubRpc)> = Vec::new();
 
+        //TODO: Update for gossipsub
         for message in event.messages {
             // Use `self.received` to skip the messages that we have already received in the past.
             // Note that this can be a false positive.
@@ -475,6 +478,7 @@ where
             }
 
             // Add the message to be dispatched to the user.
+            /*
             if self
                 .subscribed_topics
                 .iter()
@@ -484,7 +488,9 @@ where
                 self.events
                     .push_back(NetworkBehaviourAction::GenerateEvent(event));
             }
+            */
 
+            //TODO: Update for gossipsub
             // Propagate the message to everyone else who is subscribed to any of the topics.
             for (peer_id, subscr_topics) in self.peer_topics.iter() {
                 if peer_id == &propagation_source {
