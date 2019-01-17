@@ -31,17 +31,17 @@ use unsigned_varint::codec;
 
 /// Implementation of the `ConnectionUpgrade` for the Gossipsub protocol.
 #[derive(Debug, Clone)]
-pub struct GossipsubConfig {}
+pub struct ProtocolConfig {}
 
-impl GossipsubConfig {
-    /// Builds a new `GossipsubConfig`.
+impl ProtocolConfig {
+    /// Builds a new `ProtocolConfig`.
     #[inline]
-    pub fn new() -> GossipsubConfig {
-        GossipsubConfig {}
+    pub fn new() -> ProtocolConfig {
+        ProtocolConfig {}
     }
 }
 
-impl UpgradeInfo for GossipsubConfig {
+impl UpgradeInfo for ProtocolConfig {
     type Info = &'static [u8];
     type InfoIter = iter::Once<Self::Info>;
 
@@ -51,7 +51,7 @@ impl UpgradeInfo for GossipsubConfig {
     }
 }
 
-impl<TSocket> InboundUpgrade<TSocket> for GossipsubConfig
+impl<TSocket> InboundUpgrade<TSocket> for ProtocolConfig
 where
     TSocket: AsyncRead + AsyncWrite,
 {
@@ -70,7 +70,7 @@ where
     }
 }
 
-impl<TSocket> OutboundUpgrade<TSocket> for GossipsubConfig
+impl<TSocket> OutboundUpgrade<TSocket> for ProtocolConfig
 where
     TSocket: AsyncRead + AsyncWrite,
 {

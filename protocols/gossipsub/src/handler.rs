@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{GossipsubCodec, GossipsubConfig, GossipsubRpc};
+use crate::protocol::{GossipsubCodec, GossipsubRpc, ProtocolConfig};
 use futures::prelude::*;
 use libp2p_core::{
     protocols_handler::ProtocolsHandlerUpgrErr,
@@ -40,7 +40,7 @@ where
     TSubstream: AsyncRead + AsyncWrite,
 {
     /// Configuration for the gossipsub protocol.
-    config: GossipsubConfig,
+    config: ProtocolConfig,
 
     /// If true, we are trying to shut down the existing gossipsub substream and should refuse any
     /// incoming connection.
