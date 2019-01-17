@@ -271,7 +271,9 @@ impl<TSubstream> Gossipsub<TSubstream> {
             let peer = self.local_peer_id.clone();
             let peer_str = peer.to_base58();
             if self.subscribed_topics.iter().any(|t| t.hash() == th) {
-                return Err(GError::NotSubscribedToTopic(th_str, peer_str));
+                return Err(GError::NotSubscribedToTopic(th_str, peer_str,
+                    "Tried to graft the peer '{peer_str}' to the topic with \
+                    topic hash '{th_str}'."));
             }
             let opt_p_ids = m.remove(th);
             match opt_p_ids {
@@ -290,18 +292,26 @@ impl<TSubstream> Gossipsub<TSubstream> {
     ///
     /// Returns true if the peer is grafted to this topic.
     pub fn prune(&mut self, t_hash: impl AsRef<TopicHash>) {
-        
+        self.prune_many(iter::once, t_hash)
     }
 
     /// Prunes the peer from multiple topics.
     ///
     /// Note that this only works if the peer is grafted to such topics.
-    pub fn prune_many<'a, I>(&self, t_hashes: impl IntoIterator<Item = impl
-        AsRef<TopicHash>>) {
+    pub fn prune_many<'a, I>(&mut self, t_hashes: impl IntoIterator<Item = impl
+        AsRef<TopicHash>>) -> Result<(), GError> {
+        let p = &self.local_peer_id;
+        let m = mut self.mesh;
         for t_hash in t_hashes {
-            if None = self.mesh.get_peer_id_from_topic(t_hash,
-                self.local_peer_id) {
-                return Err(GError::)
+            let th = t_hash.as_ref();
+            if None = m.get_peer_from_topic(t_hash, p) {
+                let th_str = th.clone().into_string();
+                let p_str = p.clone().to_base58();
+                return Err(GError::NotGraftedToTopic(t_hash, p,
+                    "Tried to prune the peer '{p_str}' to the topic with \
+                    topic hash '{t_hash}'."))
+            } else {
+                m.remove_peer_from_topic(th, p)
             }
         }
     }

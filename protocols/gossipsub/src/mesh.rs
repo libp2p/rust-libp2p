@@ -30,7 +30,7 @@ use std::{
 /// > **Note**: as discussed in the spec, ambient peer discovery is pushed
 /// > outside the scope of the protocol.
 #[derive(Debug)]
-pub struct Mesh { m: HashMap<TopicHash, HashMap<PeerId>> }
+pub struct Mesh { m: HashMap<TopicHash, Vec<PeerId>> }
 
 impl Mesh {
     /// Creates a new `Mesh`.
@@ -45,7 +45,7 @@ impl Mesh {
         self.m.insert(k, v)
     }
 
-    pub fn get<Q: ?Sized>(&self, k: &Q) -> Option<Vec<PeerId>>
+    pub fn get_peers_from_topic<Q: ?Sized>(&self, k: &Q) -> Option<Vec<PeerId>>
     where
         TopicHash: Borrow<Q>,
         Q: Hash + Eq,
@@ -53,14 +53,14 @@ impl Mesh {
         self.m.get(k)
     }
 
-    pub fn get_peer_id_from_topic(&self, k: &Q, p: PeerId) -> Option<PeerId>
+    pub fn get_peer_from_topic(&self, k: &Q, p: &PeerId) -> Option<PeerId>
     where
         TopicHash: Borrow<Q>,
         Q: Hash + Eq,
     {
         let peers = self.get(k);
         for peer in peers {
-            if peer = p {
+            if peer = *p {
                 return Some(peer)
             }
         }
@@ -75,5 +75,30 @@ impl Mesh {
         Q: Hash + Eq,
     {
         self.m.remove(k)
+    }
+
+    pub fn remove_peer_from_topic<Q: ?Sized>(&mut self, th: &Q, p: &PeerId)
+        -> Result<(), GError>
+    where
+        TopicHash: Borrow<Q>,
+        Q: Hash + Eq,
+    {
+        let peers = self.remove(th);
+        // TODO: use remove_item when stable:
+        // https://github.com/rust-lang/rust/issues/40062
+        for (pos, peer) in peers.iter().enumerate() {
+            if peer = *p {
+                peers.remove(pos);
+                // Assume that the same peer ID cannot exist more than once in
+                // the vector.
+                break;
+            } else {
+                let peer_str = peer.to_base58();
+                let th_str = th.clone().into_string();
+                return Err(GError::NotGraftedToTopic(th_str, peer,
+                    "Tried to remove the peer '{peer_str}' from the topic \
+                    with topic hash '{th_str}'."))
+            }
+        }
     }
 }

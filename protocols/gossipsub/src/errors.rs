@@ -2,12 +2,12 @@ use custom_error;
 
 custom_error!(GError
     Io(source: io::Error) = "Input/output error",
-    NotSubscribedToTopic(t_hash: String, peer_id: String, err: Option<String>)
+    NotSubscribedToTopic(t_hash: String, peer_id: String, err: String)
         = "The topic with topic hash '{t_hash}' is not in the subscribed \
         topics of the peer with peer id '{peer_id}'.'{err}'",
-    NotGraftedToTopic(t_hash: String, peer_id: String, err: Option<String>)
+    NotGraftedToTopic(t_hash: String, peer_id: String, err: String)
         = "The peer with peer id '{peer_id}' is not grafted to the topic.\
-        '{err}'"
+        '{err}'",
 )
 
 // use std::{error, fmt, io};
