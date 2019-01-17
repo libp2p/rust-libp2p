@@ -10,7 +10,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-asn1_der = "0.5"
+asn1_der = "0.6.1"
 bytes = "0.4"
 futures = "0.1"
 libp2p-core = { version = "0.2.0", path = "../../core" }
@@ -18,10 +18,10 @@ log = "0.4.1"
 protobuf = "2.0.2"
 rand = "0.6"
 secp256k1 = { version = "0.12", features = ["rand"], optional = true }
-aes-ctr = "0.1.0"
-aesni = { version = "0.4.1", features = ["nocheck"], optional = true }
-twofish = "0.1.0"
-ctr = "0.1"
+aes-ctr = "0.3"
+aesni = { version = "0.6", features = ["nocheck"], optional = true }
+twofish = "0.2.0"
+ctr = "0.3"
 lazy_static = "1.2.0"
 rw-stream-sink = { version = "0.1.0", path = "../../misc/rw-stream-sink" }
 tokio-io = "0.1.0"

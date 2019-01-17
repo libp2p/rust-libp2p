@@ -24,7 +24,7 @@
 use self::decode::DecoderMiddleware;
 use self::encode::EncoderMiddleware;
 
-use aes_ctr::stream_cipher::StreamCipherCore;
+use aes_ctr::stream_cipher;
 use crate::algo_support::Digest;
 use hmac::{self, Mac};
 use sha2::{Sha256, Sha512};
@@ -37,7 +37,7 @@ mod encode;
 /// Type returned by `full_codec`.
 pub type FullCodec<S> = DecoderMiddleware<EncoderMiddleware<length_delimited::Framed<S>>>;
 
-pub type StreamCipher = Box<dyn StreamCipherCore + Send>;
+pub type StreamCipher = Box<dyn stream_cipher::StreamCipher + Send>;
 
 #[derive(Debug, Clone)]
 pub enum Hmac {
