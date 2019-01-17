@@ -59,6 +59,8 @@ pub struct QuicConfig {
     dialing_context: Arc<Mutex<Option<picoquic::Context>>>,
     /// The certificate verifier puts the public key of a dialed connection in here.
     public_keys: Arc<Mutex<FnvHashMap<picoquic::ConnectionId, PublicKey>>>,
+    /// Should the peer ID be verified.
+    verify_peer_id: bool
 }
 
 impl fmt::Debug for QuicConfig {
@@ -83,7 +85,8 @@ impl QuicConfig {
             ipv4_src_addr: SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0),
             ipv6_src_addr: SocketAddrV6::new(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0), 0, 0, 0),
             dialing_context: Arc::new(Mutex::new(None)),
-            public_keys: Arc::new(Mutex::new(Default::default()))
+            public_keys: Arc::new(Mutex::new(Default::default())),
+            verify_peer_id: true
         })
     }
 
@@ -93,6 +96,18 @@ impl QuicConfig {
     pub fn source_port(mut self, port: u16) -> Self {
         self.ipv4_src_addr.set_port(port);
         self.ipv6_src_addr.set_port(port);
+        self
+    }
+
+    /// Disable or enable peer ID verification.
+    ///
+    /// By default this setting is enabled and requires multi-addresses to end
+    /// whith `/p2p/<base58 encoded public key hash>`. If disabled, there is no
+    /// such requirement but the public key received from remote will not be
+    /// verified in any way, so there is no guarantee it actually is the public
+    /// key of the peer.
+    pub fn verify_peer_id(mut self, value: bool) -> Self {
+        self.verify_peer_id = value;
         self
     }
 
@@ -148,8 +163,8 @@ impl Transport for QuicConfig {
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let (target_addr, hash) =
             match multiaddr_to_socketaddr(&addr) {
-                Ok((sa, Some(h))) => (sa, h),
-                Ok((_, None)) | Err(_) => return Err(TransportError::MultiaddrNotSupported(addr))
+                Ok(val) => val,
+                Err(_) => return Err(TransportError::MultiaddrNotSupported(addr))
             };
 
         // As an optimization, we check that the address is not of the form `0.0.0.0`.
@@ -165,9 +180,18 @@ impl Transport for QuicConfig {
             SocketAddr::from(self.ipv6_src_addr.clone())
         };
 
-        let peer_id = PeerId::from_multihash(hash).map_err(|_| {
-            TransportError::Other(ErrorKind::InvalidPeerId.into())
-        })?;
+        let peer_id =
+            if self.verify_peer_id {
+                if let Some(h) = hash {
+                    Some(PeerId::from_multihash(h).map_err(|_| {
+                        TransportError::Other(ErrorKind::InvalidPeerId.into())
+                    })?)
+                } else {
+                    return Err(TransportError::Other(ErrorKind::InvalidPeerId.into()))
+                }
+            } else {
+                None
+            };
 
         self.set_dialing_context(&listen_addr).map_err(TransportError::Other)?;
 
@@ -348,7 +372,7 @@ fn socket_addr_to_quic(addr: SocketAddr) -> Multiaddr {
 /// Future that dials an address.
 #[must_use = "futures do nothing unless polled"]
 pub struct QuicDialFut {
-    peer_id: PeerId,
+    peer_id: Option<PeerId>,
     connection: picoquic::NewConnectionFuture,
     public_keys: Arc<Mutex<FnvHashMap<picoquic::ConnectionId, PublicKey>>>
 }
@@ -370,14 +394,15 @@ impl Future for QuicDialFut {
                     .remove(&stream.id())
                     .expect("picoquic calls certificate validator which saves the public key");
                 let peer_id = public_key.into_peer_id();
-                if self.peer_id == peer_id {
-                    trace!("outgoing connection to {:?}", peer_id);
-                    let muxer = QuicMuxer { inner: Mutex::new(stream) };
-                    Ok(Async::Ready((peer_id, muxer)))
-                } else {
-                    warn!("peer id mismatch: {:?} != {:?}", self.peer_id, peer_id);
-                    Err(ErrorKind::PeerIdMismatch.into())
+                if let Some(ref id) = self.peer_id {
+                    if id != &peer_id {
+                        warn!("peer id mismatch: {:?} != {:?}", self.peer_id, peer_id);
+                        return Err(ErrorKind::PeerIdMismatch.into())
+                    }
                 }
+                trace!("outgoing connection to {:?}", peer_id);
+                let muxer = QuicMuxer { inner: Mutex::new(stream) };
+                Ok(Async::Ready((peer_id, muxer)))
             }
             Ok(Async::NotReady) => Ok(Async::NotReady),
             Err(e) => {
