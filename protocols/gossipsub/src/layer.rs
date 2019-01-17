@@ -1,4 +1,4 @@
-use errors ::GError;
+use errors::GError;
 use handler::GossipsubHandler;
 use mcache::MCache;
 use mesh::Mesh;
@@ -240,7 +240,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 event: GossipsubRpc {
                     subscriptions: Vec::new(),
                     messages: vec![message.clone()],
-                    control: control
+                    control: control.clone()
                 }
             });
         }
@@ -257,27 +257,30 @@ impl<TSubstream> Gossipsub<TSubstream> {
         self.graft_many(iter::once(t_hash))
     }
 
-    // TODO: finish writing these methods.
+    // TODO: finish writing these methods
+    // TODO: avoid excessive cloning.
 
-    /// Grafts a peer to multiple topics.
-    ///
-    /// > **Note**: Doesn't do anything if we're already grafted to any of the
-    /// > topics.
+    /// Grafts a peer to multiple topics, if they are subscribed to all of
+    /// them. If the topic is not in the mesh it adds it and grafts the peer.
     pub fn graft_many(&mut self, t_hashes: impl IntoIterator<Item = impl
         AsRef<TopicHash>>) -> Result<(), GError> {
-        let m = &self.mesh;
+        let m = &mut self.mesh;
         for t_hash in t_hashes {
             let th = t_hash.as_ref();
             let th_str = th.clone().into_string();
-            let peer = self.local_peer_id;
+            let peer = self.local_peer_id.clone();
             let peer_str = peer.to_base58();
             if self.subscribed_topics.iter().any(|t| t.hash() == th) {
                 return Err(GError::NotSubscribedToTopic(th_str, peer_str));
             }
             let opt_p_ids = m.remove(th);
             match opt_p_ids {
-                Some(ref ps) => ps.push(peer),
-                None => return Err(GError::TopicNotInMesh(th_str, peer_str))
+                Some(ref ps) => {
+                    ps.push(peer);
+                    m.insert(th, ps).unwrap();
+                },
+                None => {m.insert(th, vec!(peer))},
+                //None => return Err(GError::TopicNotInMesh(th_str, peer_str)),
             }
         }
         Ok(())
@@ -286,16 +289,21 @@ impl<TSubstream> Gossipsub<TSubstream> {
     /// Prunes the peer from a topic.
     ///
     /// Returns true if the peer is grafted to this topic.
-    pub fn prune(&mut self, topic: impl AsRef<TopicHash>) {
-
+    pub fn prune(&mut self, t_hash: impl AsRef<TopicHash>) {
+        
     }
 
     /// Prunes the peer from multiple topics.
     ///
     /// Note that this only works if the peer is grafted to such topics.
-    pub fn prune_many<'a, I>(&self, topics: impl IntoIterator<Item = impl AsRef<TopicHash>>)
-    {
-
+    pub fn prune_many<'a, I>(&self, t_hashes: impl IntoIterator<Item = impl
+        AsRef<TopicHash>>) {
+        for t_hash in t_hashes {
+            if None = self.mesh.get_peer_id_from_topic(t_hash,
+                self.local_peer_id) {
+                return Err(GError::)
+            }
+        }
     }
 
     /// gossip; this notifies the peer that the following messages were

@@ -30,7 +30,7 @@ use std::{
 /// > **Note**: as discussed in the spec, ambient peer discovery is pushed
 /// > outside the scope of the protocol.
 #[derive(Debug)]
-pub struct Mesh { m: HashMap<TopicHash, Vec<PeerId>> }
+pub struct Mesh { m: HashMap<TopicHash, HashMap<PeerId>> }
 
 impl Mesh {
     /// Creates a new `Mesh`.
@@ -43,6 +43,28 @@ impl Mesh {
     pub fn insert(&mut self, k: TopicHash, v: Vec<PeerId>)
         -> Option<Vec<PeerId>> {
         self.m.insert(k, v)
+    }
+
+    pub fn get<Q: ?Sized>(&self, k: &Q) -> Option<Vec<PeerId>>
+    where
+        TopicHash: Borrow<Q>,
+        Q: Hash + Eq,
+    {
+        self.m.get(k)
+    }
+
+    pub fn get_peer_id_from_topic(&self, k: &Q, p: PeerId) -> Option<PeerId>
+    where
+        TopicHash: Borrow<Q>,
+        Q: Hash + Eq,
+    {
+        let peers = self.get(k);
+        for peer in peers {
+            if peer = p {
+                return Some(peer)
+            }
+        }
+        None
     }
 
     pub fn get_mut(&mut self, ) {}
