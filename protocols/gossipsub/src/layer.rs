@@ -249,17 +249,12 @@ impl<TSubstream> Gossipsub<TSubstream> {
         true
     }
 
-    //TODO: Update publish for gossipsub
     /// Publishes a message to the network.
-    ///
-    /// > **Note**: Doesn't do anything if we're not subscribed to the topic.
     pub fn publish(&mut self, topic: impl Into<TopicHash>, data: impl Into<Vec<u8>>) {
         self.publish_many(iter::once(topic), data)
     }
 
     /// Publishes a message with multiple topics to the network.
-    ///
-    /// > **Note**: Doesn't do anything if we're not subscribed to any of the topics.
     pub fn publish_many(
         &mut self,
         topic: impl IntoIterator<Item = impl Into<TopicHash>>,
@@ -275,29 +270,64 @@ impl<TSubstream> Gossipsub<TSubstream> {
             topics: topic.into_iter().map(|t| t.into().clone()).collect(),
         };
 
-        // If we are not subscribed to the topic, forward to fanout peers
-        // TODO: Can check mesh
-        if !self
-            .subscribed_topics
-            .iter()
-            .any(|t| message.topics.iter().any(|u| t.hash() == u))
-        {
-            //TODO: Send to fanout peers if exist - add fanout logic
-            // loop through topics etc
-            return;
+        // build a list of peers to forward the message to
+        let mut recipient_peers: Vec<PeerId> = vec![];
+
+        for t in message.topics.iter() {
+            // floodsub peers in the topic - add them to recipient_peers
+            if let Some((_, floodsub_peers)) = self.topic_peers.get(t) {
+                for peer_id in floodsub_peers {
+                    if !recipient_peers.contains(peer_id) {
+                        recipient_peers.push(peer_id.clone());
+                    }
+                }
+            }
+
+            // gossipsub peers in the mesh
+            match self.mesh.get(t) {
+                // we are in the mesh, add the gossip peers to recipient_peers
+                Some(gossip_peers) => {
+                    for peer_id in gossip_peers {
+                        if !recipient_peers.contains(peer_id) {
+                            recipient_peers.push(peer_id.clone());
+                        }
+                    }
+                }
+                // not in the mesh, use fanout peers
+                None => {
+                    if self.fanout.contains_key(t) {
+                        // we have fanout peers. Add them to recipient_peers
+                        if let Some(fanout_peers) = self.fanout.get(t) {
+                            for peer_id in fanout_peers {
+                                if !recipient_peers.contains(peer_id) {
+                                    recipient_peers.push(peer_id.clone());
+                                }
+                            }
+                        }
+                    } else {
+                        // TODO: Ensure fanout key never contains an empty set
+                        // we have no fanout peers, select mesh_n of them and add them to the fanout
+                        let mesh_n = self.config.mesh_n;
+                        let new_peers = self.get_random_peers(t, mesh_n);
+                        // add the new peers to the fanout and recipient peers
+                        self.fanout.insert(t.clone(), new_peers.clone());
+                        for peer_id in new_peers {
+                            if !recipient_peers.contains(&peer_id) {
+                                recipient_peers.push(peer_id.clone());
+                            }
+                        }
+                    }
+                    // we are publishing to fanout peers - update the time we published
+                    self.fanout_last_pub.insert(t.clone(), Instant::now());
+                }
+            }
         }
 
+        // add published message to our received cache
         self.received.add(&message);
 
         // Send to peers we know are subscribed to the topic.
-        for (peer_id, sub_topic) in self.peer_topics.iter() {
-            if !sub_topic
-                .iter()
-                .any(|t| message.topics.iter().any(|u| t == u))
-            {
-                continue;
-            }
-
+        for peer_id in recipient_peers {
             println!("peers subscribed? {:?}", peer_id);
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer_id.clone(),
@@ -329,7 +359,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
         } else {
             // no peers in fanout[topic] - select mesh_n at random
             let mesh_n = self.config.mesh_n;
-            peers = self.get_random_peers(&topic, mesh_n);
+            peers = self.get_random_peers(topic_hash, mesh_n);
             // put them in the mesh
             self.mesh.insert(topic_hash.clone(), peers.clone());
         }
@@ -356,9 +386,8 @@ impl<TSubstream> Gossipsub<TSubstream> {
     }
 
     /// Helper function to get a set of `n` random gossipsub peers for a topic
-    fn get_random_peers(&mut self, topic: impl AsRef<TopicHash>, n: usize) -> Vec<PeerId> {
-        let topic = topic.as_ref();
-        let mut gossip_peers = match self.topic_peers.get(topic) {
+    fn get_random_peers(&self, topic_hash: &TopicHash, n: usize) -> Vec<PeerId> {
+        let mut gossip_peers = match self.topic_peers.get(topic_hash) {
             Some((gossip_peers, _)) => gossip_peers.clone(),
             None => Vec::new(),
         };
@@ -555,26 +584,26 @@ mod tests {
         let mut gs: Gossipsub<usize> = Gossipsub::new(PeerId::random(), gs_config);
 
         // create a topic and fill it with some peers
-        let topic = TopicBuilder::new("Test").build();
-        let topic_hash = topic.hash().clone();
+        let topic_hash = TopicBuilder::new("Test").build().hash().clone();
         let mut peers = vec![];
         for _ in 0..20 {
             peers.push(PeerId::random())
         }
 
-        gs.topic_peers.insert(topic_hash, (peers.clone(), vec![]));
+        gs.topic_peers
+            .insert(topic_hash.clone(), (peers.clone(), vec![]));
 
         println!("Peers: {:?}", peers);
 
-        let random_peers = gs.get_random_peers(&topic, 5);
+        let random_peers = gs.get_random_peers(&topic_hash, 5);
         assert!(random_peers.len() == 5, "Expected 5 peers to be returned");
-        let random_peers = gs.get_random_peers(&topic, 30);
+        let random_peers = gs.get_random_peers(&topic_hash, 30);
         assert!(random_peers.len() == 20, "Expected 20 peers to be returned");
         assert!(random_peers == peers, "Expected no shuffling");
-        let random_peers = gs.get_random_peers(&topic, 20);
+        let random_peers = gs.get_random_peers(&topic_hash, 20);
         assert!(random_peers.len() == 20, "Expected 20 peers to be returned");
         assert!(random_peers == peers, "Expected no shuffling");
-        let random_peers = gs.get_random_peers(&topic, 0);
+        let random_peers = gs.get_random_peers(&topic_hash, 0);
         assert!(random_peers.len() == 0, "Expected 0 peers to be returned");
     }
 
