@@ -27,7 +27,7 @@ use crate::{
     }
 };
 use futures::prelude::*;
-use std::{io, marker::PhantomData};
+use std::marker::PhantomData;
 use tokio_io::{AsyncRead, AsyncWrite};
 use void::Void;
 
@@ -53,6 +53,7 @@ where
 {
     type InEvent = Void;
     type OutEvent = Void;
+    type Error = Void;
     type Substream = TSubstream;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = DeniedUpgrade;
@@ -88,6 +89,9 @@ where
     fn inject_inbound_closed(&mut self) {}
 
     #[inline]
+    fn connection_keep_alive(&self) -> bool { false }
+
+    #[inline]
     fn shutdown(&mut self) {
         self.shutting_down = true;
     }
@@ -96,11 +100,11 @@ where
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>,
-        io::Error,
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
+        Void,
     > {
         if self.shutting_down {
-            Ok(Async::Ready(None))
+            Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown))
         } else {
             Ok(Async::NotReady)
         }

@@ -51,7 +51,8 @@
 //!     .map(|out: SecioOutput<_>, _| out.stream);
 //!
 //! let future = dialer.dial("/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap())
-//!     .unwrap_or_else(|_| panic!("Unable to dial node"))
+//!     .unwrap()
+//!     .map_err(|e| panic!("error: {:?}", e))
 //!     .and_then(|connection| {
 //!         // Sends "hello world" on the connection, will be encrypted.
 //!         write_all(connection, "hello world")
@@ -77,7 +78,7 @@
 
 // TODO: unfortunately the `js!` macro of stdweb depends on tons of "private" macros, which we
 //       don't want to import manually
-#[cfg(target_os = "emscripten")]
+#[cfg(any(target_os = "emscripten", target_os = "unknown"))]
 #[macro_use]
 extern crate stdweb;
 
@@ -89,9 +90,10 @@ use bytes::BytesMut;
 use ed25519_dalek::Keypair as Ed25519KeyPair;
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
+use lazy_static::lazy_static;
 use libp2p_core::{PeerId, PublicKey, upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade}};
 use log::debug;
-#[cfg(all(feature = "rsa", not(target_os = "emscripten")))]
+#[cfg(all(feature = "rsa", not(any(target_os = "emscripten", target_os = "unknown"))))]
 use ring::signature::RSAKeyPair;
 use rw_stream_sink::RwStreamSink;
 use std::error::Error;
@@ -99,7 +101,7 @@ use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use std::sync::Arc;
 use tokio_io::{AsyncRead, AsyncWrite};
-#[cfg(all(feature = "rsa", not(target_os = "emscripten")))]
+#[cfg(all(feature = "rsa", not(any(target_os = "emscripten", target_os = "unknown"))))]
 use untrusted::Input;
 
 mod algo_support;
@@ -113,6 +115,12 @@ mod stream_cipher;
 pub use crate::algo_support::Digest;
 pub use crate::exchange::KeyAgreement;
 pub use crate::stream_cipher::Cipher;
+
+// Cached `Secp256k1` context, to avoid recreating it every time.
+#[cfg(feature = "secp256k1")]
+lazy_static! {
+    static ref SECP256K1: secp256k1::Secp256k1<secp256k1::All> = secp256k1::Secp256k1::new();
+}
 
 /// Implementation of the `ConnectionUpgrade` trait of `libp2p_core`. Automatically applies
 /// secio on any connection.
@@ -209,7 +217,7 @@ pub struct SecioKeyPair {
 
 impl SecioKeyPair {
     /// Builds a `SecioKeyPair` from a PKCS8 private key and public key.
-    #[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+    #[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
     pub fn rsa_from_pkcs8<P>(
         private: &[u8],
         public: P,
@@ -229,7 +237,7 @@ impl SecioKeyPair {
 
     /// Generates a new Ed25519 key pair and uses it.
     pub fn ed25519_generated() -> Result<SecioKeyPair, Box<Error + Send + Sync>> {
-        let mut csprng = rand::rngs::OsRng::new()?;
+        let mut csprng = rand::thread_rng();
         let keypair: Ed25519KeyPair = Ed25519KeyPair::generate::<sha2::Sha512, _>(&mut csprng);
         Ok(SecioKeyPair {
             inner: SecioKeyPairInner::Ed25519 {
@@ -241,13 +249,7 @@ impl SecioKeyPair {
     /// Generates a new random sec256k1 key pair.
     #[cfg(feature = "secp256k1")]
     pub fn secp256k1_generated() -> Result<SecioKeyPair, Box<Error + Send + Sync>> {
-        let secp = secp256k1::Secp256k1::new();
-        // TODO: This will work once 0.11.5 is released. See https://github.com/rust-bitcoin/rust-secp256k1/pull/80#pullrequestreview-172681778
-        // let private = secp256k1::key::SecretKey::new(&secp, &mut secp256k1::rand::thread_rng());
-        use rand::Rng;
-        let mut random_slice= [0u8; secp256k1::constants::SECRET_KEY_SIZE];
-        rand::thread_rng().fill(&mut random_slice[..]);
-        let private = secp256k1::key::SecretKey::from_slice(&secp, &random_slice).expect("slice has the right size");
+        let private = secp256k1::key::SecretKey::new(&mut secp256k1::rand::thread_rng());
         Ok(SecioKeyPair {
             inner: SecioKeyPairInner::Secp256k1 { private },
         })
@@ -259,8 +261,7 @@ impl SecioKeyPair {
     where
         K: AsRef<[u8]>,
     {
-        let secp = secp256k1::Secp256k1::without_caps();
-        let private = secp256k1::key::SecretKey::from_slice(&secp, key.as_ref())?;
+        let private = secp256k1::key::SecretKey::from_slice(key.as_ref())?;
 
         Ok(SecioKeyPair {
             inner: SecioKeyPairInner::Secp256k1 { private },
@@ -287,15 +288,14 @@ impl SecioKeyPair {
     /// Returns the public key corresponding to this key pair.
     pub fn to_public_key(&self) -> PublicKey {
         match self.inner {
-            #[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+            #[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
             SecioKeyPairInner::Rsa { ref public, .. } => PublicKey::Rsa(public.clone()),
             SecioKeyPairInner::Ed25519 { ref key_pair } => {
                 PublicKey::Ed25519(key_pair.public.as_bytes().to_vec())
             }
             #[cfg(feature = "secp256k1")]
             SecioKeyPairInner::Secp256k1 { ref private } => {
-                let secp = secp256k1::Secp256k1::signing_only();
-                let pubkey = secp256k1::key::PublicKey::from_secret_key(&secp, private);
+                let pubkey = secp256k1::key::PublicKey::from_secret_key(&SECP256K1, private);
                 PublicKey::Secp256k1(pubkey.serialize().to_vec())
             }
         }
@@ -313,7 +313,7 @@ impl SecioKeyPair {
 // Inner content of `SecioKeyPair`.
 #[derive(Clone)]
 enum SecioKeyPairInner {
-    #[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+    #[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
     Rsa {
         public: Vec<u8>,
         // We use an `Arc` so that we can clone the enum.

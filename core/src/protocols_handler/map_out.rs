@@ -26,7 +26,6 @@ use crate::{
     }
 };
 use futures::prelude::*;
-use std::io;
 
 /// Wrapper around a protocol handler that turns the output event into something else.
 pub struct MapOutEvent<TProtoHandler, TMap> {
@@ -52,6 +51,7 @@ where
 {
     type InEvent = TProtoHandler::InEvent;
     type OutEvent = TNewOut;
+    type Error = TProtoHandler::Error;
     type Substream = TProtoHandler::Substream;
     type InboundProtocol = TProtoHandler::InboundProtocol;
     type OutboundProtocol = TProtoHandler::OutboundProtocol;
@@ -95,6 +95,11 @@ where
     }
 
     #[inline]
+    fn connection_keep_alive(&self) -> bool {
+        self.inner.connection_keep_alive()
+    }
+
+    #[inline]
     fn shutdown(&mut self) {
         self.inner.shutdown()
     }
@@ -103,16 +108,17 @@ where
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>,
-        io::Error,
+        ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
+        Self::Error,
     > {
         Ok(self.inner.poll()?.map(|ev| {
-            ev.map(|ev| match ev {
+            match ev {
                 ProtocolsHandlerEvent::Custom(ev) => ProtocolsHandlerEvent::Custom((self.map)(ev)),
+                ProtocolsHandlerEvent::Shutdown => ProtocolsHandlerEvent::Shutdown,
                 ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info } => {
                     ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info }
                 }
-            })
+            }
         }))
     }
 }

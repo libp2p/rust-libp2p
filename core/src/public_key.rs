@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use PeerId;
-use keys_proto;
+use crate::{keys_proto, PeerId};
+use log::debug;
 use protobuf::{self, Message};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 
@@ -97,7 +97,7 @@ impl PublicKey {
 #[cfg(test)]
 mod tests {
     use rand::random;
-    use PublicKey;
+    use crate::PublicKey;
 
     #[test]
     fn key_into_protobuf_then_back() {

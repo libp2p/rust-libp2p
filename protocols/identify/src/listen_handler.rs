@@ -25,7 +25,6 @@ use libp2p_core::{
     upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade}
 };
 use smallvec::SmallVec;
-use std::io;
 use tokio_io::{AsyncRead, AsyncWrite};
 use void::{Void, unreachable};
 
@@ -59,6 +58,7 @@ where
 {
     type InEvent = Void;
     type OutEvent = IdentifySender<TSubstream>;
+    type Error = Void;
     type Substream = TSubstream;
     type InboundProtocol = IdentifyProtocolConfig;
     type OutboundProtocol = DeniedUpgrade;
@@ -90,6 +90,11 @@ where
     fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {}
 
     #[inline]
+    fn connection_keep_alive(&self) -> bool {
+        false
+    }
+
+    #[inline]
     fn shutdown(&mut self) {
         self.shutdown = true;
     }
@@ -97,23 +102,21 @@ where
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<
-            ProtocolsHandlerEvent<
-                Self::OutboundProtocol,
-                Self::OutboundOpenInfo,
-                Self::OutEvent,
-            >,
+        ProtocolsHandlerEvent<
+            Self::OutboundProtocol,
+            Self::OutboundOpenInfo,
+            Self::OutEvent,
         >,
-        io::Error,
+        Self::Error,
     > {
         if !self.pending_result.is_empty() {
-            return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(
+            return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(
                 self.pending_result.remove(0),
-            ))));
+            )));
         }
 
         if self.shutdown {
-            Ok(Async::Ready(None))
+            Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown))
         } else {
             Ok(Async::NotReady)
         }

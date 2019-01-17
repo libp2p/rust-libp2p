@@ -26,7 +26,7 @@ use libp2p_core::{
 };
 use std::{io, marker::PhantomData, time::{Duration, Instant}};
 use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_timer::Delay;
+use tokio_timer::{self, Delay};
 use void::{Void, unreachable};
 
 /// Delay between the moment we connect and the first time we identify.
@@ -49,6 +49,9 @@ pub struct PeriodicIdHandler<TSubstream> {
     /// shut down.
     next_id: Option<Delay>,
 
+    /// If `true`, we have started an identification of the remote at least once in the past.
+    first_id_happened: bool,
+
     /// Marker for strong typing.
     marker: PhantomData<TSubstream>,
 }
@@ -70,6 +73,7 @@ impl<TSubstream> PeriodicIdHandler<TSubstream> {
             config: IdentifyProtocolConfig,
             pending_result: None,
             next_id: Some(Delay::new(Instant::now() + DELAY_TO_FIRST_ID)),
+            first_id_happened: false,
             marker: PhantomData,
         }
     }
@@ -81,6 +85,7 @@ where
 {
     type InEvent = Void;
     type OutEvent = PeriodicIdHandlerEvent;
+    type Error = tokio_timer::Error;
     type Substream = TSubstream;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = IdentifyProtocolConfig;
@@ -118,6 +123,11 @@ where
     }
 
     #[inline]
+    fn connection_keep_alive(&self) -> bool {
+        !self.first_id_happened
+    }
+
+    #[inline]
     fn shutdown(&mut self) {
         self.next_id = None;
     }
@@ -125,36 +135,34 @@ where
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<
-            ProtocolsHandlerEvent<
-                Self::OutboundProtocol,
-                Self::OutboundOpenInfo,
-                PeriodicIdHandlerEvent,
-            >,
+        ProtocolsHandlerEvent<
+            Self::OutboundProtocol,
+            Self::OutboundOpenInfo,
+            PeriodicIdHandlerEvent,
         >,
-        io::Error,
+        Self::Error,
     > {
         if let Some(pending_result) = self.pending_result.take() {
-            return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(
+            return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(
                 pending_result,
-            ))));
+            )));
         }
 
         let next_id = match self.next_id {
             Some(ref mut nid) => nid,
-            None => return Ok(Async::Ready(None)),
+            None => return Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown)),
         };
 
         // Poll the future that fires when we need to identify the node again.
-        match next_id.poll() {
-            Ok(Async::NotReady) => Ok(Async::NotReady),
-            Ok(Async::Ready(())) => {
+        match next_id.poll()? {
+            Async::NotReady => Ok(Async::NotReady),
+            Async::Ready(()) => {
                 next_id.reset(Instant::now() + DELAY_TO_NEXT_ID);
                 let upgrade = self.config.clone();
                 let ev = ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info: () };
-                Ok(Async::Ready(Some(ev)))
+                self.first_id_happened = true;
+                Ok(Async::Ready(ev))
             }
-            Err(err) => Err(io::Error::new(io::ErrorKind::Other, err)),
         }
     }
 }
