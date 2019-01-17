@@ -85,7 +85,7 @@ extern crate stdweb;
 pub use self::error::SecioError;
 
 #[cfg(feature = "secp256k1")]
-use asn1_der::{traits::FromDerEncoded, traits::FromDerObject, DerObject};
+use asn1_der::{FromDerObject, DerObject};
 use bytes::BytesMut;
 use ed25519_dalek::Keypair as Ed25519KeyPair;
 use futures::stream::MapErr as StreamMapErr;
@@ -276,7 +276,7 @@ impl SecioKeyPair {
     {
         // See ECPrivateKey in https://tools.ietf.org/html/rfc5915
         let obj: Vec<DerObject> =
-            FromDerEncoded::with_der_encoded(key.as_ref()).map_err(|err| err.to_string())?;
+            FromDerObject::deserialize(key.as_ref().iter()).map_err(|err| err.to_string())?;
         let priv_key_obj = obj.into_iter()
             .nth(1)
             .ok_or_else(|| "Not enough elements in DER".to_string())?;

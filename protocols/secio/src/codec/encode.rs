@@ -65,7 +65,7 @@ where
         }
         debug_assert!(self.pending.is_none());
         // TODO if SinkError gets refactor to SecioError, then use try_apply_keystream
-        self.cipher_state.apply_keystream(&mut data_buf[..]);
+        self.cipher_state.encrypt(&mut data_buf[..]);
         let signature = self.hmac.sign(&data_buf[..]);
         data_buf.extend_from_slice(signature.as_ref());
         if let AsyncSink::NotReady(data) = self.raw_sink.start_send(data_buf)? {
