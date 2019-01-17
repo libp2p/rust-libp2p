@@ -91,7 +91,7 @@ where
     /// Builds a new `GossipsubHandler`.
     pub fn new() -> Self {
         GossipsubHandler {
-            config: GossipsubConfig::new(),
+            config: ProtocolConfig::new(),
             shutting_down: false,
             substreams: Vec::new(),
             send_queue: SmallVec::new(),
@@ -107,8 +107,8 @@ where
     type OutEvent = GossipsubRpc;
     type Error = io::Error;
     type Substream = TSubstream;
-    type InboundProtocol = GossipsubConfig;
-    type OutboundProtocol = GossipsubConfig;
+    type InboundProtocol = ProtocolConfig;
+    type OutboundProtocol = ProtocolConfig;
     type OutboundOpenInfo = GossipsubRpc;
 
     #[inline]

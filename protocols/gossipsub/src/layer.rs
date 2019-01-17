@@ -28,7 +28,8 @@ use libp2p_core::{protocols_handler::ProtocolsHandler, PeerId};
 use libp2p_floodsub::{Topic, TopicHash};
 use mcache::MessageCache;
 use protocol::{
-    GossipsubMessage, GossipsubRpc, GossipsubSubscription, GossipsubSubscriptionAction,
+    GossipsubControl, GossipsubMessage, GossipsubRpc, GossipsubSubscription,
+    GossipsubSubscriptionAction,
 };
 use rand;
 use rand::{seq::SliceRandom, thread_rng};
@@ -192,6 +193,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
                         topic: topic.hash().clone(),
                         action: GossipsubSubscriptionAction::Subscribe,
                     }],
+                    control_msg: GossipsubControl::new(),
                 },
             });
         }
@@ -226,6 +228,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
                         topic: topic_hash.clone(),
                         action: GossipsubSubscriptionAction::Unsubscribe,
                     }],
+                    control_msg: GossipsubControl::new(),
                 },
             });
         }
@@ -322,6 +325,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 event: GossipsubRpc {
                     subscriptions: Vec::new(),
                     messages: vec![message.clone()],
+                    control_msg: GossipsubControl::new(),
                 },
             });
         }
@@ -416,6 +420,7 @@ where
                         topic: topic.clone(),
                         action: GossipsubSubscriptionAction::Subscribe,
                     }],
+                    control_msg: GossipsubControl::new(),
                 },
             });
         }
@@ -512,6 +517,7 @@ where
                         GossipsubRpc {
                             subscriptions: Vec::new(),
                             messages: vec![message.clone()],
+                            control_msg: GossipsubControl::new(),
                         },
                     ));
                 }
