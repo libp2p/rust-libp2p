@@ -190,3 +190,24 @@ fn custom_event_and_polling() {
         require_net_behaviour::<Foo<TSubstream>>();
     }
 }
+
+#[test]
+fn where_clause() {
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    struct Foo<TSubstream> where TSubstream: std::fmt::Debug {
+        ping: libp2p::ping::Ping<TSubstream>,
+    }
+
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    struct Bar<TSubstream: std::fmt::Debug> {
+        ping: libp2p::ping::Ping<TSubstream>,
+    }
+
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    struct Qux<TSubstream: std::fmt::Debug> where TSubstream: Clone {
+        ping: libp2p::ping::Ping<TSubstream>,
+    }
+}
