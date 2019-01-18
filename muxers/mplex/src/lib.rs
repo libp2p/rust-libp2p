@@ -382,7 +382,8 @@ where C: AsyncRead + AsyncWrite
         // Assign a substream ID now.
         let substream_id = {
             let n = inner.next_outbound_stream_id;
-            inner.next_outbound_stream_id += 1;
+            inner.next_outbound_stream_id = inner.next_outbound_stream_id.checked_add(1)
+                .expect("Mplex substream ID overflowed");
             n
         };
 
