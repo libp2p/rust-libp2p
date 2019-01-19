@@ -100,7 +100,7 @@ impl BrahmsViewSize {
     /// Builds a view size.
     pub fn from_network_size(size: u64) -> Self {
         let cubic_root = (0u64..).find(|&n| n.saturating_mul(n).saturating_mul(n) >= size)
-            .expect("We always find a value whose cube power is superior of equal to size; QED") - 1;
+            .expect("We always find a value whose cube power is superior of equal to size; QED");
         let alpha_beta = 45 * cubic_root / 100;
         let gamma = cubic_root / 10;
 
