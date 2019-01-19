@@ -32,9 +32,9 @@ fn topology_filled() {
 
     let brahms_config = BrahmsConfig {
         view_size: BrahmsViewSize::from_network_size(NUM_SWARMS as u64),
-        round_duration: Duration::from_secs(1),
+        round_duration: Duration::from_secs(2),
         num_samplers: 32,
-        difficulty: 10,
+        difficulty: 6,
     };
 
     let mut swarms = Vec::with_capacity(NUM_SWARMS);
