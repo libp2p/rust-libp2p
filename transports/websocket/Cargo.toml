@@ -1,3 +1,5 @@
+cargo-features = ["rename-dependency"]
+
 [package]
 name = "libp2p-websocket"
 description = "WebSocket transport for libp2p"

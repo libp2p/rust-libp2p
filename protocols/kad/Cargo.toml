@@ -1,3 +1,5 @@
+cargo-features = ["rename-dependency"]
+
 [package]
 name = "libp2p-kad"
 description = "Kademlia protocol for libp2p"

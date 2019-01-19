@@ -1,3 +1,5 @@
+cargo-features = ["rename-dependency"]
+
 [package]
 name = "libp2p-tcp"
 description = "TCP/IP transport protocol for libp2p"
