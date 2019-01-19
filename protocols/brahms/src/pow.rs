@@ -108,7 +108,7 @@ fn slices_leading_zeros(slice: &[u8]) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use crate::pow::Pow;
+    use crate::pow::{Pow, slices_leading_zeros};
     use libp2p_core::PeerId;
 
     #[test]
@@ -145,5 +145,24 @@ mod tests {
             let id2 = PeerId::random();
             assert!(Pow::verify(&id1, &id2, rand::random(), DIFFICULTY).is_err());
         }
+    }
+
+    #[test]
+    fn correct_slices_leading_zeros() {
+        assert_eq!(slices_leading_zeros(&[]), 0);
+        assert_eq!(slices_leading_zeros(&[0xff]), 0);
+        assert_eq!(slices_leading_zeros(&[0x80]), 0);
+        assert_eq!(slices_leading_zeros(&[0x40]), 1);
+        assert_eq!(slices_leading_zeros(&[0x40, 0x0, 0x0]), 1);
+        assert_eq!(slices_leading_zeros(&[0x3f]), 2);
+        assert_eq!(slices_leading_zeros(&[0x0]), 8);
+        assert_eq!(slices_leading_zeros(&[0x0, 0x40]), 9);
+        assert_eq!(slices_leading_zeros(&[0x0, 0x1]), 15);
+        assert_eq!(slices_leading_zeros(&[0x0, 0x0]), 16);
+        assert_eq!(slices_leading_zeros(&[0x0, 0x0, 0xff]), 16);
+        assert_eq!(slices_leading_zeros(&[0x0, 0x0, 0x7f]), 17);
+        assert_eq!(slices_leading_zeros(&[0x0, 0x0, 0x40]), 17);
+        assert_eq!(slices_leading_zeros(&[0x0, 0x0, 0x40, 0x0]), 17);
+        assert_eq!(slices_leading_zeros(&[0x0, 0x0, 0x7f, 0xff]), 17);
     }
 }
