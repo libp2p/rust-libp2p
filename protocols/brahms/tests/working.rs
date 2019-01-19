@@ -25,20 +25,20 @@ use libp2p_core::{
 };
 use std::time::Duration;
 
-/// Spawns 10 nodes and tests whether they discover each other.
 #[test]
 fn topology_filled() {
-    const NUM_SWARMS: usize = 10;
+    /// Spawns a lot of nodes and test whether they discover each other.
+    const NUM_SWARMS: usize = 15;
 
     let brahms_config = BrahmsConfig {
         view_size: BrahmsViewSize {
-            alpha: 14,
-            beta: 14,
-            gamma: 4,
+            alpha: 2,
+            beta: 2,
+            gamma: 1,
         },
         round_duration: Duration::from_secs(1),
         num_samplers: 32,
-        difficulty: 1,
+        difficulty: 10,
     };
 
     let mut swarms = Vec::with_capacity(NUM_SWARMS);
@@ -87,7 +87,7 @@ fn topology_filled() {
                 Async::NotReady => Ok::<_, ()>(Async::NotReady),
                 Async::Ready(_) => {
                     for swarm in &swarms {
-                        if Swarm::topology(swarm).peers().count() != NUM_SWARMS - 1 {
+                        if dbg!(Swarm::topology(swarm).peers().count()) != NUM_SWARMS - 1 {
                             return Ok(Async::NotReady)
                         }
                     }

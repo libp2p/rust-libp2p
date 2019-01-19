@@ -275,7 +275,9 @@ where
             .poll())
         {
             Some(RawMessage::Push(addrs, nonce)) => {
-                if Pow::verify(&self.local_peer_id, &self.remote_peer_id, nonce, self.pow_difficulty).is_err() {
+                // We swap the remote and local peer IDs, as the parameters are from the point
+                // of view of the remote.
+                if Pow::verify(&self.remote_peer_id, &self.local_peer_id, nonce, self.pow_difficulty).is_err() {
                     return Err(io::Error::new(io::ErrorKind::Other, "invalid PoW").into());
                 }
                 let mut addrs_parsed = Vec::with_capacity(addrs.len());

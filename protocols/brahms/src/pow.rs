@@ -34,6 +34,9 @@ impl Pow {
     }
 
     /// Verifies that the `nonce` satisfies a proof of work.
+    ///
+    /// > **Note**: Keep in mind that if a remote sends you a proof of work, the "local" and
+    /// >           "remote" `PeerId`s will be reversed.
     pub fn verify(local_peer_id: &PeerId, remote_peer_id: &PeerId, nonce: u32, leading_zeros: u8) -> Result<Self, ()> {
         let mut base = Sha256::new();
         base.input(local_peer_id.as_ref().as_bytes());
