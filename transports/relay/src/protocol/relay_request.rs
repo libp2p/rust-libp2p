@@ -63,12 +63,12 @@ impl RelayProxyRequest {
 }
 
 impl upgrade::UpgradeInfo for RelayProxyRequest {
-    type UpgradeId = ();
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
     #[inline]
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once((Bytes::from("/libp2p/relay/circuit/0.1.0"), ()))
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once("/libp2p/relay/circuit/0.1.0")
     }
 }
 
@@ -81,7 +81,7 @@ where
     type Future = RelayProxyRequestFuture<TSubstream>;
 
     #[inline]
-    fn upgrade_outbound(self, conn: TSubstream, _: ()) -> Self::Future {
+    fn upgrade_outbound(self, conn: TSubstream, _: Self::Info) -> Self::Future {
         let framed = Framed::new(conn, Codec::new());
         RelayProxyRequestFuture {
             stream: framed,

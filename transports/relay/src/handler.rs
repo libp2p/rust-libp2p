@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use libp2p_core::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent};
-use libp2p_core::{Multiaddr, PeerId, either, upgrade};
+use libp2p_core::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr};
+use libp2p_core::{Multiaddr, PeerId, either, upgrade, upgrade::OutboundUpgrade};
 use protocol;
 use std::{error, io, marker::PhantomData};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -157,6 +157,7 @@ where
 {
     type InEvent = RelayHandlerIn<TSubstream, TDestSubstream, TSrcSubstream>;
     type OutEvent = RelayHandlerEvent<TSubstream>;
+    type Error = io::Error;
     type Substream = TSubstream;
     type InboundProtocol = protocol::RelayListen;
     type OutboundProtocol = upgrade::EitherUpgrade<protocol::RelayProxyRequest, protocol::RelayTargetOpen>;
@@ -219,8 +220,13 @@ where
     fn inject_inbound_closed(&mut self) {}
 
     #[inline]
-    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: io::Error) {
+    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {
         // TODO: report?
+    }
+
+    #[inline]
+    fn connection_keep_alive(&self) -> bool {
+        true // TODO:
     }
 
     #[inline]
@@ -231,28 +237,26 @@ where
     fn poll(
         &mut self,
     ) -> Poll<
-        Option<
-            ProtocolsHandlerEvent<
-                Self::OutboundProtocol,
-                Self::OutboundOpenInfo,
-                RelayHandlerEvent<TSubstream>,
-            >,
+        ProtocolsHandlerEvent<
+            Self::OutboundProtocol,
+            Self::OutboundOpenInfo,
+            RelayHandlerEvent<TSubstream>,
         >,
         io::Error,
     > {
         // Open substreams if necessary.
         if !self.relay_requests.is_empty() {
             let rq = self.relay_requests.remove(0);
-            return Ok(Async::Ready(Some(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+            return Ok(Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                 info: rq,
                 upgrade: self.config.clone(),
-            })));
+            }));
         }
 
         // Report the queued events.
         if !self.queued_events.is_empty() {
             let event = self.queued_events.remove(0);
-            return Ok(Async::Ready(Some(ProtocolsHandlerEvent::Custom(event))));
+            return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(event)));
         }
 
         // We remove each element from `active_futures` one by one and add them back.
@@ -268,7 +272,7 @@ where
         // Shut down process.
         if self.shutdown {
             self.active_futures.clear();     // TODO: not a proper shutdown
-            return Ok(Async::Ready(None));
+            return Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown));
         }
 
         Ok(Async::NotReady)

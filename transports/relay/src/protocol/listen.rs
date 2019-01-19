@@ -50,11 +50,12 @@ impl RelayListen {
 }
 
 impl upgrade::UpgradeInfo for RelayListen {
-    type UpgradeId = ();
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once((Bytes::from("/libp2p/relay/circuit/0.1.0"), ()))
+    #[inline]
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once("/libp2p/relay/circuit/0.1.0")
     }
 }
 
@@ -66,7 +67,7 @@ where
     type Error = RelayListenError;
     type Future = RelayListenFuture<TSubstream>;
 
-    fn upgrade_inbound(self, conn: TSubstream, _: ()) -> Self::Future {
+    fn upgrade_inbound(self, conn: TSubstream, _: Self::Info) -> Self::Future {
         let inner = Framed::new(conn, Codec::new());
         RelayListenFuture {
             inner: Some(inner)
