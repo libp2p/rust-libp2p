@@ -31,11 +31,7 @@ fn topology_filled() {
     const NUM_SWARMS: usize = 15;
 
     let brahms_config = BrahmsConfig {
-        view_size: BrahmsViewSize {
-            alpha: 2,
-            beta: 2,
-            gamma: 1,
-        },
+        view_size: BrahmsViewSize::from_network_size(NUM_SWARMS as u64),
         round_duration: Duration::from_secs(1),
         num_samplers: 32,
         difficulty: 10,
@@ -87,7 +83,7 @@ fn topology_filled() {
                 Async::NotReady => Ok::<_, ()>(Async::NotReady),
                 Async::Ready(_) => {
                     for swarm in &swarms {
-                        if dbg!(Swarm::topology(swarm).peers().count()) != NUM_SWARMS - 1 {
+                        if Swarm::topology(swarm).peers().count() != NUM_SWARMS - 1 {
                             return Ok(Async::NotReady)
                         }
                     }

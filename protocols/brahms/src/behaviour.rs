@@ -96,6 +96,27 @@ impl Default for BrahmsConfig {
     }
 }
 
+impl BrahmsViewSize {
+    /// Builds a view size.
+    pub fn from_network_size(size: u64) -> Self {
+        let cubic_root = (0u64..).find(|&n| n.saturating_mul(n).saturating_mul(n) >= size)
+            .expect("We always find a value whose cube power is superior of equal to size; QED") - 1;
+        let alpha_beta = 45 * cubic_root / 100;
+        let gamma = cubic_root / 10;
+
+        debug_assert!(alpha_beta < u64::from(u32::max_value()));
+        let alpha_beta = cmp::max(1, alpha_beta as u32);
+        debug_assert!(gamma < u64::from(u32::max_value()));
+        let gamma = cmp::max(1, gamma as u32);
+
+        BrahmsViewSize {
+            alpha: alpha_beta,
+            beta: alpha_beta,
+            gamma,
+        }
+    }
+}
+
 /// Brahms discovery algorithm behaviour.
 pub struct Brahms<TSubstream> {
     /// The way the algorithm is configured.
