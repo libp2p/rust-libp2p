@@ -157,7 +157,7 @@ where
     fn shutdown(&mut self) {
         self.shutting_down = true;
         for n in (0..self.substreams.len()).rev() {
-            let mut substream = self.substreams.swap_remove(n);
+            let substream = self.substreams.swap_remove(n);
             self.substreams.push(SubstreamState::Closing(substream.into_substream()));
         }
     }
