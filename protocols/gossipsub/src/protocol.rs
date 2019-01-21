@@ -146,14 +146,14 @@ impl Encoder for GossipsubCodec {
                     }
                     control_msg.mut_iwant().push(rpc_iwant);
                 }
-                GossipsubControlAction::Graft { topic } => {
+                GossipsubControlAction::Graft { topic_hash } => {
                     let mut rpc_graft = rpc_proto::ControlGraft::new();
-                    rpc_graft.set_topicID(topic.into_string());
+                    rpc_graft.set_topicID(topic_hash.into_string());
                     control_msg.mut_graft().push(rpc_graft);
                 }
-                GossipsubControlAction::Prune { topic } => {
+                GossipsubControlAction::Prune { topic_hash } => {
                     let mut rpc_prune = rpc_proto::ControlPrune::new();
-                    rpc_prune.set_topicID(topic.into_string());
+                    rpc_prune.set_topicID(topic_hash.into_string());
                     control_msg.mut_prune().push(rpc_prune);
                 }
             }
@@ -234,7 +234,7 @@ impl Decoder for GossipsubCodec {
             .take_graft()
             .into_iter()
             .map(|mut graft| GossipsubControlAction::Graft {
-                topic: TopicHash::from_raw(graft.take_topicID()),
+                topic_hash: TopicHash::from_raw(graft.take_topicID()),
             })
             .collect();
 
@@ -242,7 +242,7 @@ impl Decoder for GossipsubCodec {
             .take_prune()
             .into_iter()
             .map(|mut prune| GossipsubControlAction::Prune {
-                topic: TopicHash::from_raw(prune.take_topicID()),
+                topic_hash: TopicHash::from_raw(prune.take_topicID()),
             })
             .collect();
 
@@ -352,11 +352,11 @@ pub enum GossipsubControlAction {
     /// The node has been added to the mesh - Graft control message.
     Graft {
         /// The mesh topic the peer should be added to.
-        topic: TopicHash,
+        topic_hash: TopicHash,
     },
     /// The node has been removed from the mesh - Prune control message.
     Prune {
         /// The mesh topic the peer should be removed from.
-        topic: TopicHash,
+        topic_hash: TopicHash,
     },
 }
