@@ -790,13 +790,15 @@ where
     {
         // Start by polling the listeners for events, but only
         // if numer of incoming connection does not exceed the limit.
-        match self.listeners.poll() {
-            Async::NotReady => (),
-            Async::Ready(ListenersEvent::Incoming { upgrade, listen_addr, send_back_addr }) => {
-                match self.incoming_limit {
-                    Some(x) if self.incoming_negotiated().count() >= (x as usize)
-                        => (),
-                    _ => {
+        match self.incoming_limit {
+            Some(x) if self.incoming_negotiated().count() >= (x as usize)
+                => (),
+            _ => {
+                match self.listeners.poll() {
+                    Async::NotReady => (),
+                    Async::Ready(ListenersEvent::Incoming {
+                        upgrade, listen_addr, send_back_addr }) =>
+                    {
                         let event = IncomingConnectionEvent {
                             upgrade,
                             listen_addr,
@@ -805,15 +807,18 @@ where
                             other_reach_attempts: &mut self.reach_attempts.other_reach_attempts,
                         };
                         return Async::Ready(RawSwarmEvent::IncomingConnection(event));
-                     }
+                     },
+                    Async::Ready(ListenersEvent::Closed {
+                        listen_addr, listener, result }) =>
+                    {
+                        return Async::Ready(RawSwarmEvent::ListenerClosed {
+                            listen_addr,
+                            listener,
+                            result,
+                        });
+                    }
+
                 }
-            },
-            Async::Ready(ListenersEvent::Closed { listen_addr, listener, result }) => {
-                return Async::Ready(RawSwarmEvent::ListenerClosed {
-                    listen_addr,
-                    listener,
-                    result,
-                });
             }
         }
 
