@@ -23,9 +23,9 @@
 //! This allows one to create queries that iterate on the DHT on nodes that become closer and
 //! closer to the target.
 
+use crate::handler::KademliaHandlerIn;
+use crate::kbucket::KBucketsPeerId;
 use futures::prelude::*;
-use handler::KademliaHandlerIn;
-use kbucket::KBucketsPeerId;
 use libp2p_core::PeerId;
 use multihash::Multihash;
 use smallvec::SmallVec;

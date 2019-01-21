@@ -1,5 +1,6 @@
 [package]
 name = "libp2p-floodsub"
+edition = "2018"
 description = "Floodsub protocol for libp2p"
 version = "0.2.0"
 authors = ["Parity Technologies <admin@parity.io>"]
