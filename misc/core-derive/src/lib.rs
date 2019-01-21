@@ -112,7 +112,11 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         additional.push(quote!{#substream_generic: ::libp2p::tokio_io::AsyncWrite});
 
         if let Some(where_clause) = where_clause {
-            Some(quote!{#where_clause, #(#additional),*})
+            if where_clause.predicates.trailing_punct() {
+                Some(quote!{#where_clause #(#additional),*})
+            } else {
+                Some(quote!{#where_clause, #(#additional),*})
+            }
         } else {
             Some(quote!{where #(#additional),*})
         }
