@@ -18,18 +18,18 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::handler::FloodsubHandler;
+use crate::protocol::{FloodsubMessage, FloodsubRpc, FloodsubSubscription, FloodsubSubscriptionAction};
+use crate::topic::{Topic, TopicHash};
 use cuckoofilter::CuckooFilter;
 use futures::prelude::*;
-use handler::FloodsubHandler;
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use libp2p_core::{protocols_handler::ProtocolsHandler, PeerId};
-use protocol::{FloodsubMessage, FloodsubRpc, FloodsubSubscription, FloodsubSubscriptionAction};
 use rand;
 use smallvec::SmallVec;
 use std::{collections::VecDeque, iter, marker::PhantomData};
 use std::collections::hash_map::{DefaultHasher, HashMap};
 use tokio_io::{AsyncRead, AsyncWrite};
-use topic::{Topic, TopicHash};
 
 /// Network behaviour that automatically identifies nodes periodically, and returns information
 /// about them.
@@ -213,7 +213,7 @@ where
     ) {
         // Update connected peers topics
         for subscription in event.subscriptions {
-            let mut remote_peer_topics = self.connected_peers
+            let remote_peer_topics = self.connected_peers
                 .get_mut(&propagation_source)
                 .expect("connected_peers is kept in sync with the peers we are connected to; we are guaranteed to only receive events from connected peers; QED");
             match subscription.action {

@@ -327,7 +327,7 @@ mod tests {
     use futures::future;
     use swarm::{Transport, transport::TransportError};
     use multiaddr::{Protocol, Multiaddr};
-    use DnsConfig;
+    use super::DnsConfig;
 
     #[test]
     fn basic_resolve() {
