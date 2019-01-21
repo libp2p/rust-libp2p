@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//TODO: Remove this handler and replace with OneShotHandler once PR #868 is merged
+
 use crate::protocol::{GossipsubCodec, GossipsubRpc, ProtocolConfig};
 use futures::prelude::*;
 use libp2p_core::{
