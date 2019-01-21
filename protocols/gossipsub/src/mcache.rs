@@ -1,19 +1,20 @@
 extern crate fnv;
 
-use super::rpc_proto::Message;
 use fnv::FnvHashMap;
+use libp2p_floodsub::TopicHash;
+use protocol::GossipsubMessage;
 
 /// CacheEntry stored in the history
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CacheEntry {
     mid: String,
-    topics: Vec<String>,
+    topics: Vec<TopicHash>,
 }
 
 /// MessageCache struct holding history of messages
 #[derive(Debug, Clone, PartialEq)]
 pub struct MessageCache {
-    msgs: FnvHashMap<String, Message>,
+    msgs: FnvHashMap<String, GossipsubMessage>,
     history: Vec<Vec<CacheEntry>>,
     gossip: usize,
 }
@@ -29,26 +30,25 @@ impl MessageCache {
     }
 
     /// Put a message into the memory cache
-    pub fn put(&mut self, msg: Message) -> Result<(), MsgError> {
-        let message_id = msg_id(&msg)?;
+    pub fn put(&mut self, msg: GossipsubMessage) {
+        let message_id = msg.msg_id();
         let cache_entry = CacheEntry {
             mid: message_id.clone(),
-            topics: msg.get_topicIDs().to_vec(),
+            topics: msg.topics.clone(),
         };
 
         self.msgs.insert(message_id, msg);
 
         self.history[0].push(cache_entry);
-        Ok(())
     }
 
     /// Get a message with `message_id`
-    pub fn get(&self, message_id: &str) -> Option<&Message> {
+    pub fn get(&self, message_id: &str) -> Option<&GossipsubMessage> {
         self.msgs.get(message_id)
     }
 
     /// Get a list of GossipIds for a given topic
-    pub fn get_gossip_ids(&self, topic: &str) -> Vec<String> {
+    pub fn get_gossip_ids(&self, topic: &TopicHash) -> Vec<String> {
         self.history[..self.gossip]
             .iter()
             .fold(vec![], |mut current_entries, entries| {
@@ -56,7 +56,7 @@ impl MessageCache {
                 let mut found_entries: Vec<String> = entries
                     .iter()
                     .filter_map(|entry| {
-                        if entry.topics.iter().any(|t| *t == topic) {
+                        if entry.topics.iter().any(|t| t == topic) {
                             Some(entry.mid.clone())
                         } else {
                             None
@@ -92,42 +92,24 @@ impl MessageCache {
     }
 }
 
-// Functions to be refactored later
-/// Gets a unique message id.
-/// Returns an error if the message has non-utf from or seqno values
-fn msg_id(pmsg: &Message) -> Result<String, MsgError> {
-    let from = String::from_utf8(pmsg.get_from().to_vec()).or(Err(MsgError::InvalidMessage))?;
-    let seqno = String::from_utf8(pmsg.get_seqno().to_vec()).or(Err(MsgError::InvalidMessage))?;
-    Ok(from + &seqno)
-}
-
-#[derive(Debug)]
-pub enum MsgError {
-    InvalidMessage,
-}
-
 #[cfg(test)]
 mod tests {
-    use super::super::protobuf;
     use super::*;
+    use libp2p_core::PeerId;
+    use libp2p_floodsub::{TopicBuilder, TopicHash};
 
-    fn gen_testm(x: usize, topics: Vec<String>) -> Message {
+    fn gen_testm(x: usize, topics: Vec<TopicHash>) -> GossipsubMessage {
         let u8x: u8 = x as u8;
-        let from: Vec<u8> = vec![u8x];
+        let source = PeerId::random();
         let data: Vec<u8> = vec![u8x];
-        let seqno: Vec<u8> = vec![u8x];
-        let mut tids = protobuf::RepeatedField::new();
+        let sequence_number: Vec<u8> = vec![u8x];
 
-        for topic in topics {
-            tids.push(topic);
-        }
-
-        let mut m = Message::new();
-        m.set_from(from.clone());
-        m.set_data(data);
-        m.set_seqno(seqno);
-        m.set_topicIDs(tids);
-
+        let m = GossipsubMessage {
+            source,
+            data,
+            sequence_number,
+            topics,
+        };
         m
     }
 
@@ -145,24 +127,16 @@ mod tests {
     fn test_put_get_one() {
         let mut mc = MessageCache::new(10, 15);
 
-        let m = gen_testm(
-            10 as usize,
-            vec![String::from("hello"), String::from("world")],
-        );
+        let topic1_hash = TopicBuilder::new("topic1").build().hash().clone();
+        let topic2_hash = TopicBuilder::new("topic2").build().hash().clone();
 
-        let res = mc.put(m.clone());
-        assert_eq!(res.is_err(), false);
-        assert_eq!(res.ok(), Some(()));
+        let m = gen_testm(10 as usize, vec![topic1_hash, topic2_hash]);
+
+        mc.put(m.clone());
 
         assert!(mc.history[0].len() == 1);
 
-        let mid = msg_id(&m.clone());
-        assert_eq!(mid.is_err(), false);
-
-        let fetched = match mid.ok() {
-            Some(id) => mc.get(&id),
-            _ => None,
-        };
+        let fetched = mc.get(&m.msg_id());
 
         assert_eq!(fetched.is_none(), false);
         assert_eq!(fetched.is_some(), true);
@@ -179,22 +153,16 @@ mod tests {
     fn test_get_wrong() {
         let mut mc = MessageCache::new(10, 15);
 
-        // Build the message
-        let m = gen_testm(
-            1 as usize,
-            vec![String::from("hello"), String::from("world")],
-        );
+        let topic1_hash = TopicBuilder::new("topic1").build().hash().clone();
+        let topic2_hash = TopicBuilder::new("topic2").build().hash().clone();
 
-        let res = mc.put(m.clone());
-        assert_eq!(res.is_err(), false);
-        assert_eq!(res.ok(), Some(()));
+        let m = gen_testm(10 as usize, vec![topic1_hash, topic2_hash]);
 
-        let mid = msg_id(&m.clone());
-        assert_eq!(mid.is_err(), false);
+        mc.put(m.clone());
 
         // Try to get an incorrect ID
-        let wrong_string = String::from("wrongid");
-        let fetched = mc.get(&wrong_string);
+        let wrong_msg_id = String::from("wrongid");
+        let fetched = mc.get(&wrong_msg_id);
         assert_eq!(fetched.is_none(), true);
     }
 
@@ -216,16 +184,9 @@ mod tests {
 
         // Build the message
         let m = gen_testm(1 as usize, vec![]);
+        mc.put(m.clone());
 
-        let res = mc.put(m.clone());
-        assert_eq!(res.is_err(), false);
-        assert_eq!(res.ok(), Some(()));
-
-        let mid = msg_id(&m.clone());
-        let fetched = match mid.ok() {
-            Some(id) => mc.get(&id),
-            _ => None,
-        };
+        let fetched = mc.get(&m.msg_id());
 
         // Make sure it is the same fetched message
         match fetched {
@@ -239,14 +200,12 @@ mod tests {
     fn test_shift() {
         let mut mc = MessageCache::new(1, 5);
 
+        let topic1_hash = TopicBuilder::new("topic1").build().hash().clone();
+        let topic2_hash = TopicBuilder::new("topic2").build().hash().clone();
         // Build the message
         for i in 0..10 {
-            let m = gen_testm(
-                i as usize,
-                vec![String::from("hello"), String::from("world")],
-            );
-            let res = mc.put(m.clone());
-            assert_eq!(res.is_err(), false);
+            let m = gen_testm(i as usize, vec![topic1_hash.clone(), topic2_hash.clone()]);
+            mc.put(m.clone());
         }
 
         mc.shift();
@@ -264,14 +223,12 @@ mod tests {
     fn test_empty_shift() {
         let mut mc = MessageCache::new(1, 5);
 
+        let topic1_hash = TopicBuilder::new("topic1").build().hash().clone();
+        let topic2_hash = TopicBuilder::new("topic2").build().hash().clone();
         // Build the message
         for i in 0..10 {
-            let m = gen_testm(
-                i as usize,
-                vec![String::from("hello"), String::from("world")],
-            );
-            let res = mc.put(m.clone());
-            assert_eq!(res.is_err(), false);
+            let m = gen_testm(i as usize, vec![topic1_hash.clone(), topic2_hash.clone()]);
+            mc.put(m.clone());
         }
 
         mc.shift();
@@ -292,13 +249,12 @@ mod tests {
     fn test_remove_last_from_shift() {
         let mut mc = MessageCache::new(4, 5);
 
+        let topic1_hash = TopicBuilder::new("topic1").build().hash().clone();
+        let topic2_hash = TopicBuilder::new("topic2").build().hash().clone();
+        // Build the message
         for i in 0..10 {
-            let m = gen_testm(
-                i as usize,
-                vec![String::from("hello"), String::from("world")],
-            );
-            let res = mc.put(m.clone());
-            assert_eq!(res.is_err(), false);
+            let m = gen_testm(i as usize, vec![topic1_hash.clone(), topic2_hash.clone()]);
+            mc.put(m.clone());
         }
 
         // Shift right until deleting messages
