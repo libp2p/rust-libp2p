@@ -23,7 +23,7 @@ use crate::topic::{Topic, TopicHash};
 use cuckoofilter::CuckooFilter;
 use futures::prelude::*;
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
-use libp2p_core::{protocols_handler::ProtocolsHandler, protocols_handler::OneShotHandler, PeerId};
+use libp2p_core::{protocols_handler::ProtocolsHandler, protocols_handler::OneShotHandler, Multiaddr, PeerId};
 use rand;
 use smallvec::SmallVec;
 use std::{collections::VecDeque, iter, marker::PhantomData};
@@ -171,7 +171,7 @@ impl<TSubstream> Floodsub<TSubstream> {
     }
 }
 
-impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for Floodsub<TSubstream>
+impl<TSubstream> NetworkBehaviour for Floodsub<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
@@ -180,6 +180,10 @@ where
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
         Default::default()
+    }
+
+    fn addresses_of_peer(&self, peer_id: &PeerId) -> Vec<Multiaddr> {
+        Vec::new()      // TODO: no
     }
 
     fn inject_connected(&mut self, id: PeerId, _: ConnectedPoint) {
@@ -290,7 +294,7 @@ where
 
     fn poll(
         &mut self,
-        _: &mut PollParameters<TTopology>,
+        _: &mut PollParameters,
     ) -> Async<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,

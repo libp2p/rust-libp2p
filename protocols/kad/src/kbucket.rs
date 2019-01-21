@@ -29,6 +29,7 @@
 
 use arrayvec::ArrayVec;
 use bigint::U512;
+use libp2p_core::PeerId;
 use multihash::Multihash;
 use std::mem;
 use std::slice::IterMut as SliceIterMut;
@@ -90,15 +91,39 @@ impl<Id, Val> KBucket<Id, Val> {
 }
 
 /// Trait that must be implemented on types that can be used as an identifier in a k-bucket.
-pub trait KBucketsPeerId: Eq + Clone {
+pub trait KBucketsPeerId<TOther = Self>: PartialEq<TOther> + Clone {
     /// Computes the XOR of this value and another one. The lower the closer.
-    fn distance_with(&self, other: &Self) -> u32;
+    fn distance_with(&self, other: &TOther) -> u32;
 
     /// Returns then number of bits that are necessary to store the distance between peer IDs.
     /// Used for pre-allocations.
     ///
     /// > **Note**: Returning 0 would lead to a panic.
     fn max_distance() -> usize;
+}
+
+impl KBucketsPeerId for PeerId {
+    #[inline]
+    fn distance_with(&self, other: &Self) -> u32 {
+        Multihash::distance_with(self.as_ref(), other.as_ref())
+    }
+
+    #[inline]
+    fn max_distance() -> usize {
+        <Multihash as KBucketsPeerId>::max_distance()
+    }
+}
+
+impl KBucketsPeerId<Multihash> for PeerId {
+    #[inline]
+    fn distance_with(&self, other: &Multihash) -> u32 {
+        Multihash::distance_with(self.as_ref(), other)
+    }
+
+    #[inline]
+    fn max_distance() -> usize {
+        <Multihash as KBucketsPeerId>::max_distance()
+    }
 }
 
 impl KBucketsPeerId for Multihash {
@@ -161,9 +186,9 @@ where
     }
 
     /// Finds the `num` nodes closest to `id`, ordered by distance.
-    pub fn find_closest(&mut self, id: &Id) -> VecIntoIter<Id>
+    pub fn find_closest<TOther>(&mut self, id: &TOther) -> VecIntoIter<Id>
     where
-        Id: Clone,
+        Id: Clone + KBucketsPeerId<TOther>,
     {
         // TODO: optimize
         let mut out = Vec::new();
@@ -181,15 +206,15 @@ where
     }
 
     /// Same as `find_closest`, but includes the local peer as well.
-    pub fn find_closest_with_self(&mut self, id: &Id) -> VecIntoIter<Id>
+    pub fn find_closest_with_self<TOther>(&mut self, id: &TOther) -> VecIntoIter<Id>
     where
-        Id: Clone,
+        Id: Clone + KBucketsPeerId<TOther>,
     {
         // TODO: optimize
-        let mut intermediate: Vec<_> = self.find_closest(&id).collect();
+        let mut intermediate: Vec<_> = self.find_closest(id).collect();
         if let Some(pos) = intermediate
             .iter()
-            .position(|e| e.distance_with(&id) >= self.my_id.distance_with(&id))
+            .position(|e| e.distance_with(id) >= self.my_id.distance_with(id))
         {
             if intermediate[pos] != self.my_id {
                 intermediate.insert(pos, self.my_id.clone());

@@ -1,5 +1,6 @@
 [package]
 name = "libp2p-mdns"
+edition = "2018"
 version = "0.2.0"
 description = "Implementation of the libp2p mDNS discovery method"
 authors = ["Parity Technologies <admin@parity.io>"]
