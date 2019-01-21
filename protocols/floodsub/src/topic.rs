@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bs58;
+use crate::rpc_proto;
 use protobuf::Message;
-use rpc_proto;
 
 /// Represents the hash of a topic.
 ///

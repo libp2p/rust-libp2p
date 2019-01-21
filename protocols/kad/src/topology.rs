@@ -18,10 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use kbucket::KBucketsPeerId;
+use crate::kbucket::KBucketsPeerId;
+use crate::protocol::KadConnectionType;
 use libp2p_core::{Multiaddr, PeerId, topology::MemoryTopology, topology::Topology};
 use multihash::Multihash;
-use protocol::KadConnectionType;
 use std::vec;
 
 /// Trait allowing retreival of information necessary for the Kadmelia system to work.

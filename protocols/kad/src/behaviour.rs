@@ -18,20 +18,20 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::handler::{KademliaHandler, KademliaHandlerEvent, KademliaHandlerIn, KademliaRequestId};
+use crate::protocol::{KadConnectionType, KadPeer};
+use crate::query::{QueryConfig, QueryState, QueryStatePollOut, QueryTarget};
+use crate::topology::KademliaTopology;
 use fnv::{FnvHashMap, FnvHashSet};
 use futures::{prelude::*, stream};
-use handler::{KademliaHandler, KademliaHandlerEvent, KademliaHandlerIn, KademliaRequestId};
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use libp2p_core::{protocols_handler::ProtocolsHandler, topology::Topology, Multiaddr, PeerId};
 use multihash::Multihash;
-use protocol::{KadConnectionType, KadPeer};
-use query::{QueryConfig, QueryState, QueryStatePollOut, QueryTarget};
 use rand;
 use smallvec::SmallVec;
 use std::{cmp::Ordering, marker::PhantomData, time::Duration, time::Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_timer::Interval;
-use topology::KademliaTopology;
 
 /// Network behaviour that handles Kademlia.
 pub struct Kademlia<TSubstream> {
@@ -178,7 +178,7 @@ impl<TSubstream> Kademlia<TSubstream> {
 
         match query {
             QueryTarget::FindPeer(key) => {
-                let mut topology = parameters.topology();
+                let topology = parameters.topology();
                 // TODO: insert local_kad_peer somewhere?
                 let closer_peers = topology
                     .closest_peers(key.as_ref(), self.num_results)
@@ -191,7 +191,7 @@ impl<TSubstream> Kademlia<TSubstream> {
                 }
             },
             QueryTarget::GetProviders(key) => {
-                let mut topology = parameters.topology();
+                let topology = parameters.topology();
                 // TODO: insert local_kad_peer somewhere?
                 let closer_peers = topology
                     .closest_peers(&key, self.num_results)
