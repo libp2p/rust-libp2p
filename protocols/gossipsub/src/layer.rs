@@ -463,37 +463,50 @@ impl<TSubstream> Gossipsub<TSubstream> {
         }
     }
 
-    /// Handles a GRAFT control message. If subscribed to the topic, adds the peer to mesh, if not responds
-    /// with PRUNE message.
-    //TODO: Update this to handle multiple messages per peer.
-    fn handle_graft(&mut self, peer_id: PeerId, topic: &TopicHash) {
-        if let Some(peers) = self.mesh.get_mut(topic) {
-            // if we are subscribed, add peer to the mesh
-            println!("GRAFT: Mesh link added from {:?}", peer_id);
-            peers.push(peer_id);
-        //TODO: tagPeer
-        } else {
-            // We are not subscribed, send a PRUNE message to the peer.
+    /// Handles GRAFT control messages. If subscribed to the topic, adds the peer to mesh, if not, responds
+    /// with PRUNE messages.
+    fn handle_graft(&mut self, peer_id: PeerId, topics: Vec<TopicHash>) {
+        let mut to_prune_topics = HashMap::new();
+        for topic in topics {
+            if let Some(peers) = self.mesh.get_mut(&topic) {
+                // if we are subscribed, add peer to the mesh
+                println!("GRAFT: Mesh link added from {:?}", peer_id);
+                peers.push(peer_id.clone());
+            //TODO: tagPeer
+            } else {
+                to_prune_topics.insert(topic.clone(), ());
+            }
+        }
+
+        if !to_prune_topics.is_empty() {
+            // build the prune messages to send
+            let prune_messages = to_prune_topics
+                .keys()
+                .map(|topic| GossipsubControlAction::Prune {
+                    topic: topic.clone(),
+                })
+                .collect();
+            // Send the prune messages to the peer
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer_id.clone(),
                 event: GossipsubRpc {
                     subscriptions: Vec::new(),
                     messages: Vec::new(),
-                    control_msgs: vec![GossipsubControlAction::Prune {
-                        topic: topic.clone(),
-                    }],
+                    control_msgs: prune_messages,
                 },
             });
         }
     }
 
-    /// Handles a PRUNE control message. Removes peer from the mesh.
-    //TODO: Update this to handle multiple messages per peer.
-    fn handle_prune(&mut self, peer_id: PeerId, topic: &TopicHash) {
-        if let Some(peers) = self.mesh.get_mut(topic) {
-            // remove the peer if it exists in the mesh
-            if let Some(pos) = peers.iter().position(|p| p == &peer_id) {
-                peers.remove(pos);
+    /// Handles PRUNE control messages. Removes peer from the mesh.
+    fn handle_prune(&mut self, peer_id: PeerId, topics: Vec<TopicHash>) {
+        for topic in topics {
+            if let Some(peers) = self.mesh.get_mut(&topic) {
+                // remove the peer if it exists in the mesh
+                if let Some(pos) = peers.iter().position(|p| p == &peer_id) {
+                    peers.remove(pos);
+                    //TODO: untagPeer
+                }
             }
         }
     }
