@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 extern crate bs58;
+extern crate byteorder;
 extern crate bytes;
 extern crate cuckoofilter;
 extern crate fnv;

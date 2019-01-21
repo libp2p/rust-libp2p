@@ -9,6 +9,7 @@ libp2p-core = { path = "../../core" }
 libp2p-floodsub = { path = "../floodsub" }
 bs58 = ""
 bytes = ""
+byteorder = ""
 cuckoofilter = ""
 fnv = ""
 futures = ""

@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::rpc_proto;
+use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, BytesMut};
 use futures::future;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
@@ -296,6 +297,23 @@ pub struct GossipsubMessage {
     ///
     /// Each message can belong to multiple topics at once.
     pub topics: Vec<TopicHash>,
+}
+
+impl GossipsubMessage {
+    /// Converts message into a message_id.
+    // To be compatible with the go implementation
+    pub fn msg_id(&self) -> String {
+        let mut source_string = self.source.to_base58();
+        // the sequence number is a big endian uint64 (as per go implementation)
+        // avoid a potential panic by setting the seqno to 0 if it is not long enough.
+        // TODO: Check that this doesn't introduce a vulnerability or issue
+        let mut seqno = 0;
+        if self.sequence_number.len() >= 8 {
+            seqno = BigEndian::read_u64(&self.sequence_number);
+        }
+        source_string.push_str(&seqno.to_string());
+        source_string
+    }
 }
 
 /// A subscription received by the gossipsub system.
