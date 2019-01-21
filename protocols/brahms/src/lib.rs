@@ -64,7 +64,7 @@
 //! estimate of the size and regularly adjust the size of Brahm's view in order to reflect this
 //! size. The network size estimation mechanism is out of scope of this crate.
 
-pub use self::behaviour::{Brahms, BrahmsConfig, BrahmsViewSize};
+pub use self::behaviour::{Brahms, BrahmsConfig, BrahmsEvent, BrahmsViewSize};
 pub use self::topology::BrahmsTopology;
 
 pub mod handler;
