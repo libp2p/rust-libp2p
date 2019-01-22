@@ -159,6 +159,8 @@ pub use libp2p_mplex as mplex;
 #[doc(inline)]
 pub use libp2p_mdns as mdns;
 #[doc(inline)]
+pub use libp2p_noise as noise;
+#[doc(inline)]
 pub use libp2p_ping as ping;
 #[doc(inline)]
 pub use libp2p_plaintext as plaintext;

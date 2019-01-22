@@ -22,6 +22,7 @@ libp2p-mplex = { version = "0.2.0", path = "./muxers/mplex" }
 libp2p-identify = { version = "0.2.0", path = "./protocols/identify" }
 libp2p-kad = { version = "0.2.0", path = "./protocols/kad" }
 libp2p-floodsub = { version = "0.2.0", path = "./protocols/floodsub" }
+libp2p-noise = { version = "0.1.0", path = "./protocols/noise" }
 libp2p-ping = { version = "0.2.0", path = "./protocols/ping" }
 libp2p-plaintext = { version = "0.2.0", path = "./protocols/plaintext" }
 libp2p-ratelimit = { version = "0.2.0", path = "./transports/ratelimit" }
@@ -45,7 +46,9 @@ stdweb = { version = "0.4", default-features = false }
 
 [dev-dependencies]
 env_logger = "0.6.0"
+quicli = "0.4"
 rand = "0.6"
+structopt = "0.2"
 tokio = "0.1"
 tokio-stdin-stdout = "0.1"
 void = "1.0"
@@ -65,6 +68,7 @@ members = [
     "protocols/floodsub",
     "protocols/identify",
     "protocols/kad",
+    "protocols/noise",
     "protocols/observed",
     "protocols/ping",
     "protocols/plaintext",
