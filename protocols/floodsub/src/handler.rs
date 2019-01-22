@@ -182,36 +182,43 @@ where
             let mut substream = self.substreams.swap_remove(n);
             loop {
                 substream = match substream {
-                    SubstreamState::WaitingInput(mut substream) => match substream.poll() {
+                    SubstreamState::WaitingInput(mut substream)
+                    => match substream.poll() {
                         Ok(Async::Ready(Some(message))) => {
                             self.substreams
                                 .push(SubstreamState::WaitingInput(substream));
-                            return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(message)));
-                        }
-                        Ok(Async::Ready(None)) => SubstreamState::Closing(substream),
+                            return Ok(Async::Ready(
+                                ProtocolsHandlerEvent::Custom(message)));
+                        },
+                        Ok(Async::Ready(None)) => SubstreamState::Closing(
+                            substream),
                         Ok(Async::NotReady) => {
                             self.substreams
                                 .push(SubstreamState::WaitingInput(substream));
                             return Ok(Async::NotReady);
-                        }
+                        },
                         Err(_) => SubstreamState::Closing(substream),
                     },
                     SubstreamState::PendingSend(mut substream, message) => {
                         match substream.start_send(message)? {
-                            AsyncSink::Ready => SubstreamState::PendingFlush(substream),
+                            AsyncSink::Ready => SubstreamState::PendingFlush(
+                                substream),
                             AsyncSink::NotReady(message) => {
                                 self.substreams
-                                    .push(SubstreamState::PendingSend(substream, message));
+                                    .push(SubstreamState::PendingSend(
+                                        substream, message));
                                 return Ok(Async::NotReady);
                             }
                         }
                     }
                     SubstreamState::PendingFlush(mut substream) => {
                         match substream.poll_complete()? {
-                            Async::Ready(()) => SubstreamState::Closing(substream),
+                            Async::Ready(()) => SubstreamState::Closing(
+                                substream),
                             Async::NotReady => {
                                 self.substreams
-                                    .push(SubstreamState::PendingFlush(substream));
+                                    .push(SubstreamState::PendingFlush(
+                                        substream));
                                 return Ok(Async::NotReady);
                             }
                         }

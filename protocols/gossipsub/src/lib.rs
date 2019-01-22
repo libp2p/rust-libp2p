@@ -12,6 +12,7 @@ extern crate fnv;
 extern crate futures;
 extern crate libp2p_core;
 extern crate libp2p_floodsub;
+extern crate lru_time_cache;
 extern crate protobuf;
 extern crate rand;
 extern crate smallvec;

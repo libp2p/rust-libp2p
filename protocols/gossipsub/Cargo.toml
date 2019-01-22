@@ -17,6 +17,7 @@ fnv = "1.0"
 futures = "0.1"
 libp2p-core = { path = "../../core" }
 libp2p-floodsub = { path = "../floodsub" }
+lru_time_cache = "0.8.1"
 protobuf = "2.0.2"
 rand = "0.6"
 smallvec = "0.6.5"

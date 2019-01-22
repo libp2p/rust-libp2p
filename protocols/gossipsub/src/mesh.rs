@@ -4,8 +4,6 @@ use errors::GError;
 use libp2p_core::PeerId;
 
 use std::{
-    borrow::Borrow,
-    hash::Hash,
     collections::hash_map::HashMap
     };
 
@@ -41,67 +39,95 @@ impl Mesh {
         }
     }
 
+    /// Inserts a topic via it's `TopicHash` and grafted peers to the mesh.
     pub fn insert(&mut self, k: TopicHash, v: Vec<PeerId>)
         -> Option<Vec<PeerId>> {
         self.m.insert(k, v)
     }
 
-    pub fn get_peers_from_topic<Q: ?Sized>(&self, k: &Q) -> Option<Vec<PeerId>>
-    where
-        TopicHash: Borrow<Q>,
-        Q: Hash + Eq,
+    /// Gets all the peers that are grafted to a topic in the mesh, or returns
+    /// None if the topic is not in the mesh.
+    pub fn get_peers_from_topic(&self, th: &TopicHash)
+        -> Result<Vec<PeerId>, GError>
     {
-        self.m.get(k)
+        let th_str = th.into_string();
+        match self.m.get(th) {
+            Some(peers) => {return Ok(peers.to_vec());},
+            None => {return Err(GError::TopicNotInMesh{t_hash: th_str,
+                err: "Tried to get peers from the topic with topic hash /
+                '{th_str}' but this topic is not found in the mesh."
+                .to_string()});}
+        }
     }
 
-    pub fn get_peer_from_topic(&self, k: &Q, p: &PeerId) -> Option<PeerId>
-    where
-        TopicHash: Borrow<Q>,
-        Q: Hash + Eq,
-    {
-        let peers = self.get(k);
-        for peer in peers {
-            if peer = *p {
-                return Some(peer)
+    /// Gets a peer that is grafted to a topic in the mesh, or returns a
+    /// `GError` if the peer or topic is not in the mesh.
+    pub fn get_peer_from_topic(&self, th: &TopicHash, p: &PeerId)
+        -> Result<PeerId, GError> {
+        let get_result = self.get_peers_from_topic(th).map(|peers| {
+            for peer in peers {
+                if peer == *p {
+                    return Ok(peer);
+                }
             }
+            let th_str = th.into_string();
+            Err(GError::NotGraftedToTopic{t_hash: th_str,
+                peer_id: p.clone().to_base58(),
+                err: "Tried to get peer '{p}' but it was not found \
+                in the peers that are grafted to the topic with topic hash \
+                '{th_str}'.".to_string()})
+        });
+        match get_result {
+            Ok(result) => result,
+            Err(err) => Err(err),
         }
-        None
     }
 
     pub fn get_mut(&mut self, ) {}
 
     pub fn remove(&mut self, th: &TopicHash) -> Result<Vec<PeerId>, GError>
     {
-        match self.m.remove(th) {
-            Some(peers) => peers,
-            None => return Err(GError::TopicNotInMesh(th_str, "Tried to remove the topic with topic hash '{th_str}' from the mesh."))
+        if let Some(peers) = self.m.remove(th) {
+            Ok(peers)
+        } else {
+            let th_str = th.into_string();
+            Err(GError::TopicNotInMesh{t_hash: th_str,
+            err: "Tried to remove the topic with topic hash '{th_str}' from \
+            the mesh.".to_string()})
         }
     }
 
     pub fn remove_peer_from_topic(&mut self, th: &TopicHash,
         p: &PeerId) -> Result<(), GError>
     {
+        let peer_str = &(*p.to_base58());
+        let th_str = th.into_string();
         match self.remove(th) {
-            peers => peers,
-            GError::TopicNotInMesh => return GError::TopicNotInMesh,
-            _ => _,
-        }
-
-        // TODO: use remove_item when stable:
-        // https://github.com/rust-lang/rust/issues/40062
-        for (pos, peer) in peers.iter().enumerate() {
-            if peer == *p {
-                peers.remove(pos);
-                // Assume that the same peer ID cannot exist more than once in
-                // the vector.
-                return Ok(())
-            } else {
-                let peer_str = peer.to_base58()
-                return Err(GError::NotGraftedToTopic(th_str, peer,
+            Ok(peers) => {
+                // TODO: use remove_item when stable:
+                // https://github.com/rust-lang/rust/issues/40062
+                for (pos, peer) in peers.iter().enumerate() {
+                    if peer == p {
+                        peers.remove(pos);
+                        // The same peer ID cannot exist more than
+                        // once in the vector, since we check if the peer
+                        // already exists before adding it in `layer::graft_many`.
+                        return Ok(());
+                    }
+                }
+                return Err(GError::NotGraftedToTopic{
+                    t_hash: th_str, peer_id: peer_str.to_string(), err:
                     "Tried to remove the peer '{peer_str}' from the topic \
-                    with topic hash '{th_str}'."))
-            }
+                    with topic hash '{th_str}'.".to_string()});
+            },
+            Err(GError::TopicNotInMesh{t_hash: th_str,
+                err: "Tried to remove the topic with topic hash '{th_str}' \
+                from the mesh.".to_string()}) => {
+                return Err(GError::TopicNotInMesh{t_hash: th_str,
+                err: "Tried to remove the peer with id '{peer_str}' from the \
+                topic with topic hash '{th_str}' from the mesh, but the \
+                topic was not found.".to_string()})
+            },
         }
-        Ok(())
     }
 }

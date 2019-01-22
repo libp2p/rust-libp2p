@@ -270,18 +270,28 @@ impl<TSubstream> Gossipsub<TSubstream> {
             let th_str = th.clone().into_string();
             let peer = self.local_peer_id.clone();
             let peer_str = peer.to_base58();
-            if self.subscribed_topics.iter().any(|t| t.hash() == th) {
-                return Err(GError::NotSubscribedToTopic(th_str, peer_str,
-                    "Tried to graft the peer '{peer_str}' to the topic with \
-                    topic hash '{th_str}'."));
+            if !self.subscribed_topics.iter().any(|t| t.hash() == th) {
+                return Err(GError::NotSubscribedToTopic{t_hash: th_str,
+                peer_id: peer_str, err: "Tried to graft the peer \
+                '{peer_str}' to the topic with topic hash '{th_str}'."
+                .to_string()});
             }
+
             match m.remove(th) {
                 Ok(ps) => {
-                    ps.push(peer);
-                    m.insert(th.clone(), ps);
+                    match m.get_peer_from_topic(th, &peer) {
+                        Ok(peer) => return Err(GError::AlreadyGrafted{
+                            t_hash: th_str, peer_id: peer_str,
+                            err: "".to_string()}),
+                        Err(GError::NotGraftedToTopic{t_hash: th_str,
+                            peer_id: peer_str, err}) => {
+                                ps.push(peer);
+                                m.insert(th.clone(), ps);
+                            },
+                        Err(GError::TopicNotInMesh{t_hash, err})
+                        => {m.insert(th.clone(), vec!(peer));},
+                    }
                 },
-                Err(GError::TopicNotInMesh(_))
-                     => {m.insert(th.clone(), vec!(peer));},
             }
         }
         Ok(())
@@ -303,14 +313,24 @@ impl<TSubstream> Gossipsub<TSubstream> {
         let m = &mut self.mesh;
         for t_hash in t_hashes {
             let th = t_hash.as_ref();
-            if None == m.get_peer_from_topic(t_hash, p) {
-                let th_str = th.clone().into_string();
-                let p_str = p.clone().to_base58();
-                return Err(GError::NotGraftedToTopic(t_hash, p,
-                    "Tried to prune the peer '{p_str}' to the topic with \
-                    topic hash '{t_hash}'."))
-            } else {
-                m.remove_peer_from_topic(th, p);
+            let th_str = th.clone().into_string();
+            let p_str = p.clone().to_base58();
+
+            match m.get_peer_from_topic(th, p) {
+                Ok(PeerId) => {
+                    m.remove_peer_from_topic(th, p);
+                },
+                Err(GError::NotGraftedToTopic{t_hash: th_str, peer_id: p_str,
+                err: get_err}) => {
+                    return Err(GError::NotGraftedToTopic{t_hash: th_str,
+                    peer_id: p_str,
+                    err: "{get_err} Tried to prune the peer '{p_str}' to the \
+                    topic with topic hash '{th_str}'.".to_string()});
+                },
+                Err(GError::TopicNotInMesh{t_hash, err})
+                => {return Err(GError::TopicNotInMesh{t_hash,
+                    err: "{err} Tried to prune the peer '{p_str}' to the \
+                    topic with topic hash '{th_str}'.".to_string()});},
             }
         }
         Ok(())
@@ -320,7 +340,6 @@ impl<TSubstream> Gossipsub<TSubstream> {
     /// recently seen and are available on request. Checks the seen set and
     /// requests unknown messages with an IWANT message.
     pub fn ihave(&mut self, topics: impl AsRef<TopicHash>) {
-
     }
 
     /// Request transmission of messages announced in an IHAVE message.
