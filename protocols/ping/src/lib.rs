@@ -31,14 +31,12 @@
 //!
 //! When a ping succeeds, a `PingSuccess` event is generated, indicating the time the ping took.
 
-pub mod dial_handler;
-pub mod listen_handler;
 pub mod protocol;
 
 use futures::prelude::*;
-use libp2p_core::either::EitherOutput;
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
-use libp2p_core::{protocols_handler::ProtocolsHandler, protocols_handler::ProtocolsHandlerSelect, PeerId};
+use libp2p_core::protocols_handler::{OneShotHandler, ProtocolsHandler};
+use libp2p_core::PeerId;
 use std::{marker::PhantomData, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -85,12 +83,11 @@ impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for Ping<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
-    type ProtocolsHandler = ProtocolsHandlerSelect<listen_handler::PingListenHandler<TSubstream>, dial_handler::PeriodicPingHandler<TSubstream>>;
+    type ProtocolsHandler = OneShotHandler<TSubstream, protocol::Ping, protocol::Ping, protocol::PingOutput>;
     type OutEvent = PingEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        listen_handler::PingListenHandler::new()
-            .select(dial_handler::PeriodicPingHandler::new())
+        OneShotHandler::default()
     }
 
     fn inject_connected(&mut self, _: PeerId, _: ConnectedPoint) {}
@@ -102,7 +99,7 @@ where
         source: PeerId,
         event: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent,
     ) {
-        if let EitherOutput::Second(dial_handler::OutEvent::PingSuccess(time)) = event {
+        if let protocol::PingOutput::Ping(time) = event {
             self.events.push(PingEvent::PingSuccess {
                 peer: source,
                 time,
