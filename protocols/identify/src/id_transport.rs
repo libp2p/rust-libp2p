@@ -20,13 +20,13 @@
 
 //! Contains the `IdentifyTransport` type.
 
+use crate::protocol::{RemoteInfo, IdentifyProtocolConfig};
 use futures::{future, prelude::*, stream, AndThen, MapErr};
 use libp2p_core::{
     Multiaddr, PeerId, PublicKey, muxing, Transport,
     transport::{TransportError, upgrade::TransportUpgradeError},
     upgrade::{self, OutboundUpgradeApply, UpgradeError}
 };
-use protocol::{RemoteInfo, IdentifyProtocolConfig};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::mem;
 use std::sync::Arc;

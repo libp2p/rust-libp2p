@@ -66,6 +66,9 @@ where
     /// The reach attempts of the swarm.
     /// This needs to be a separate struct in order to handle multiple mutable borrows issues.
     reach_attempts: ReachAttempts,
+
+    /// Max numer of incoming connections.
+    incoming_limit: Option<u32>,
 }
 
 #[derive(Debug)]
@@ -637,6 +640,25 @@ where
                 other_reach_attempts: Vec::new(),
                 connected_points: Default::default(),
             },
+            incoming_limit: None,
+        }
+    }
+
+    /// Creates a new node event stream with incoming connections limit.
+    #[inline]
+    pub fn new_with_incoming_limit(transport: TTrans,
+        local_peer_id: PeerId, incoming_limit: Option<u32>) -> Self
+    {
+        RawSwarm {
+            incoming_limit,
+            listeners: ListenersStream::new(transport),
+            active_nodes: CollectionStream::new(),
+            reach_attempts: ReachAttempts {
+                local_peer_id,
+                out_reach_attempts: Default::default(),
+                other_reach_attempts: Vec::new(),
+                connected_points: Default::default(),
+            },
         }
     }
 
@@ -656,6 +678,12 @@ where
     #[inline]
     pub fn listeners(&self) -> impl Iterator<Item = &Multiaddr> {
         self.listeners.listeners()
+    }
+
+    /// Returns limit on incoming connections.
+    #[inline]
+    pub fn incoming_limit(&self) -> Option<u32> {
+        self.incoming_limit
     }
 
     /// Call this function in order to know which address remotes should dial in order to access
@@ -863,26 +891,39 @@ where
         <THandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
         THandlerErr: error::Error + Send + 'static,
     {
-        // Start by polling the listeners for events.
-        match self.listeners.poll() {
-            Async::NotReady => (),
-            Async::Ready(ListenersEvent::Incoming { upgrade, listen_addr, send_back_addr }) => {
-                let event = IncomingConnectionEvent {
-                    upgrade,
-                    local_peer_id: self.reach_attempts.local_peer_id.clone(),
-                    listen_addr,
-                    send_back_addr,
-                    active_nodes: &mut self.active_nodes,
-                    other_reach_attempts: &mut self.reach_attempts.other_reach_attempts,
-                };
-                return Async::Ready(RawSwarmEvent::IncomingConnection(event));
-            }
-            Async::Ready(ListenersEvent::Closed { listen_addr, listener, result }) => {
-                return Async::Ready(RawSwarmEvent::ListenerClosed {
-                    listen_addr,
-                    listener,
-                    result,
-                });
+        // Start by polling the listeners for events, but only
+        // if numer of incoming connection does not exceed the limit.
+        match self.incoming_limit {
+            Some(x) if self.incoming_negotiated().count() >= (x as usize)
+                => (),
+            _ => {
+                match self.listeners.poll() {
+                    Async::NotReady => (),
+                    Async::Ready(ListenersEvent::Incoming {
+                        upgrade, listen_addr, send_back_addr }) =>
+                    {
+                        let event = IncomingConnectionEvent {
+                            upgrade,
+                            local_peer_id:
+                                self.reach_attempts.local_peer_id.clone(),
+                            listen_addr,
+                            send_back_addr,
+                            active_nodes: &mut self.active_nodes,
+                            other_reach_attempts: &mut self.reach_attempts.other_reach_attempts,
+                        };
+                        return Async::Ready(RawSwarmEvent::IncomingConnection(event));
+                     },
+                    Async::Ready(ListenersEvent::Closed {
+                        listen_addr, listener, result }) =>
+                    {
+                        return Async::Ready(RawSwarmEvent::ListenerClosed {
+                            listen_addr,
+                            listener,
+                            result,
+                        });
+                    }
+
+                }
             }
         }
 
