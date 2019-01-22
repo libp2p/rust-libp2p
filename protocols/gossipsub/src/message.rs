@@ -174,11 +174,12 @@ impl GMessage {
     pub fn from_proto_msg(p_msg: rpc_proto::Message)
         -> Result<GMessage, io::Error> {
         let from = PeerId::from_bytes(p_msg.get_from().to_vec()).expect("The from field of rpc_proto is not a valid peer ID");
-        let topic_hashes = p_msg.get_topic_hashes().to_vec().iter();
-        let topic_map = TopicMap::new();
+        let p_t_hashes = p_msg.get_topic_hashes().to_vec();
+        let topic_hashes = p_t_hashes.iter();
+        let mut topic_map = TopicMap::new();
         for th_str in topic_hashes {
             let th = TopicHash::from_raw(th_str.to_string());
-            let topic = Topic::from(th);
+            let topic = Topic::from(&th);
             topic_map.insert(th, topic);
         }
 
@@ -191,10 +192,11 @@ impl GMessage {
     }
 
     pub fn from_msg_hash(m_hash: MsgHash) -> Result<GMessage, io::Error> {
-        let decoded_hash: &[u8]
-            = bs58::decode(m_hash.hash).into_vec().unwrap().as_ref();
+        let decoded_hash_vec = bs58::decode(m_hash.hash).into_vec().unwrap();
+        let decoded_hash_bytes: &[u8]
+            = decoded_hash_vec.as_ref();
         let rpc_msg = protobuf::parse_from_bytes::<rpc_proto::Message>(
-            decoded_hash).unwrap();
+            decoded_hash_bytes).unwrap();
         GMessage::from_proto_msg(rpc_msg)
     }
 }
@@ -233,7 +235,7 @@ impl From<GMessage> for rpc_proto::Message {
 
         let mut t_hashes = ::protobuf::RepeatedField::new();
         for t_hash in message.topics.keys() {
-            t_hashes.push((*t_hash).into_string());
+            t_hashes.push(t_hash.clone().into_string());
         }
         msg.set_topic_hashes(t_hashes);
         // msg.set_signature(message.signature);
@@ -245,13 +247,13 @@ impl From<GMessage> for rpc_proto::Message {
 impl From<&GMessage> for rpc_proto::Message {
     fn from(message: &GMessage) -> rpc_proto::Message {
         let mut msg = rpc_proto::Message::new();
-        msg.set_from(message.from.into_bytes());
-        msg.set_data(message.data);
-        msg.set_seqno(message.seq_no);
+        msg.set_from(message.clone().from.into_bytes());
+        msg.set_data(message.clone().data);
+        msg.set_seqno(message.clone().seq_no);
 
         let mut t_hashes = ::protobuf::RepeatedField::new();
         for t_hash in message.topics.keys() {
-            t_hashes.push((*t_hash).into_string());
+            t_hashes.push(t_hash.clone().into_string());
         }
         msg.set_topic_hashes(t_hashes);
         // msg.set_signature(message.signature);
@@ -490,7 +492,7 @@ impl From<rpc_proto::ControlMessage> for ControlMessage {
         let mut control = ControlMessage::default();
 
         for ctrl_i_have in ctrl.get_ihave().into_iter() {
-            let mut control_i_have = ControlIHave::from(*ctrl_i_have);
+            let mut control_i_have = ControlIHave::from(ctrl_i_have.clone());
             control.ihave.push(control_i_have)
         }
 
@@ -528,7 +530,7 @@ impl From<ControlIHave> for rpc_proto::ControlIHave {
         // let map_bar_into_iter = bar_into_iter.map(|m| m.id.into_string());
         // let collect_map_bar_into_iter = map_bar_into_iter.collect();
         ctrl_i_have.set_message_hashes(control_i_have.recent_mcache.msgs_keys()
-            .map(|m| m.into_string()).collect());
+            .map(|m| m.clone().into_string()).collect());
         ctrl_i_have
     }
 }

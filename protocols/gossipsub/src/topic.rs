@@ -204,6 +204,7 @@ impl<'a> From<&'a TopicHash> for Topic {
     }
 }
 
+// Not used
 // impl From<TopicRep> for Topic {
 //     fn from(topic_rep: TopicRep) -> Self {
 //         match topic_rep {
@@ -213,14 +214,14 @@ impl<'a> From<&'a TopicHash> for Topic {
 //     }
 // }
 
-impl<'a> From<&'a TopicRep> for Topic {
-    fn from(topic_rep: &'a TopicRep) -> Self {
-        match topic_rep {
-            TopicRep::Hash(TopicHash) => Topic::from(topic_rep),
-            TopicRep::Id(TopicId) => Topic::from(topic_rep),
-        }
-    }
-}
+// impl<'a> From<&'a TopicRep> for Topic {
+//     fn from(topic_rep: &'a TopicRep) -> Self {
+//         match topic_rep {
+//             TopicRep::Hash(TopicHash) => Topic::from(topic_rep),
+//             TopicRep::Id(TopicId) => Topic::from(topic_rep),
+//         }
+//     }
+// }
 
 // Nightly experimental API.
 // https://github.com/rust-lang/rust/issues/33417

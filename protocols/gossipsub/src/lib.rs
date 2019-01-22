@@ -1,6 +1,10 @@
 //! A gossiping and subscribing p2p messaging protocol, dials and listens on
 //! a random subset of peers in a mesh network. For more details, see the [gossipsub
 //! spec](https://github.com/libp2p/specs/tree/master/pubsub/gossipsub).
+// TODO: many clones are used, do optimizations wherever feasible.
+
+// TODO: remove before stabilization.
+#![allow(unused)]
 
 extern crate custom_error;
 

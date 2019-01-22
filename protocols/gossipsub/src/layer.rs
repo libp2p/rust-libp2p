@@ -188,7 +188,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
         topics: impl IntoIterator<Item = impl Into<Topic>>,
         data: impl Into<Vec<u8>>,
         control: Option<ControlMessage>,
-        message_id: bool) {
+        _message_id: bool) {
 
         let message = GMessage {
             from: self.local_peer_id.clone(),
@@ -278,20 +278,22 @@ impl<TSubstream> Gossipsub<TSubstream> {
             }
 
             match m.remove(th) {
-                Ok(ps) => {
+                Ok(mut ps) => {
                     match m.get_peer_from_topic(th, &peer) {
-                        Ok(peer) => return Err(GError::AlreadyGrafted{
+                        Ok(_peer) => return Err(GError::AlreadyGrafted{
                             t_hash: th_str, peer_id: peer_str,
                             err: "".to_string()}),
-                        Err(GError::NotGraftedToTopic{t_hash: th_str,
-                            peer_id: peer_str, err}) => {
+                        Err(GError::NotGraftedToTopic{t_hash: _th_str,
+                            peer_id: _peer_str, err: _err}) => {
                                 ps.push(peer);
                                 m.insert(th.clone(), ps);
                             },
-                        Err(GError::TopicNotInMesh{t_hash, err})
+                        Err(GError::TopicNotInMesh{t_hash: _t_hash, err: _err})
                         => {m.insert(th.clone(), vec!(peer));},
+                        Err(err) => {return Err(err);} // Shouldn't happen.
                     }
                 },
+                Err(err) => {return Err(err);} // Shouldn't happen.
             }
         }
         Ok(())
@@ -307,30 +309,31 @@ impl<TSubstream> Gossipsub<TSubstream> {
     /// Prunes the peer from multiple topics.
     ///
     /// Note that this only works if the peer is grafted to such topics.
-    pub fn prune_many<'a, I>(&mut self, t_hashes: impl IntoIterator<Item = impl
+    pub fn prune_many(&mut self, t_hashes: impl IntoIterator<Item = impl
         AsRef<TopicHash>>) -> Result<(), GError> {
         let p = &self.local_peer_id;
         let m = &mut self.mesh;
         for t_hash in t_hashes {
             let th = t_hash.as_ref();
-            let th_str = th.clone().into_string();
-            let p_str = p.clone().to_base58();
+            let _th_str = th.clone().into_string();
+            let _p_str = p.clone().to_base58();
 
             match m.get_peer_from_topic(th, p) {
-                Ok(PeerId) => {
+                Ok(_peer) => {
                     m.remove_peer_from_topic(th, p);
                 },
                 Err(GError::NotGraftedToTopic{t_hash: th_str, peer_id: p_str,
-                err: get_err}) => {
+                err: _err}) => {
                     return Err(GError::NotGraftedToTopic{t_hash: th_str,
                     peer_id: p_str,
                     err: "{get_err} Tried to prune the peer '{p_str}' to the \
                     topic with topic hash '{th_str}'.".to_string()});
                 },
-                Err(GError::TopicNotInMesh{t_hash, err})
+                Err(GError::TopicNotInMesh{t_hash, err: _err})
                 => {return Err(GError::TopicNotInMesh{t_hash,
                     err: "{err} Tried to prune the peer '{p_str}' to the \
                     topic with topic hash '{th_str}'.".to_string()});},
+                Err(err) => {return Err(err);} // Shouldn't happen.
             }
         }
         Ok(())
@@ -478,7 +481,7 @@ where
                 }
             }
         }
-        let mut ctrl = event.control;
+        // let mut ctrl = event.control;
         if let Some(ctrl) = event.control {
             // Add the control message to be dispatched to the user. We should
             // only get a control message for a topic if we are subscribed to
@@ -486,7 +489,7 @@ where
             // each topic in the control message to see that we are subscribed
             // to it.
             self.events.push_back(NetworkBehaviourAction::GenerateEvent
-                (GOutEvents::CtrlMsg(ctrl)));
+                (GOutEvents::CtrlMsg(ctrl.clone())));
 
             // Propagate the control message to everyone else who is
             // subscribed to any of the topics.
@@ -500,12 +503,12 @@ where
 
                 if let Some(pos) = rpcs_to_dispatch.iter()
                     .position(|(p, _)| p == peer_id) {
-                    rpcs_to_dispatch[pos].1.control = Some(ctrl);
+                    rpcs_to_dispatch[pos].1.control = Some(ctrl.clone());
                 } else {
                     rpcs_to_dispatch.push((peer_id.clone(), GossipsubRpc {
                         subscriptions: Vec::new(),
                         messages: Vec::new(),
-                        control: Some(ctrl),
+                        control: Some(ctrl.clone()),
                     }));
                 }
             }

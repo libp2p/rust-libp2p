@@ -50,12 +50,12 @@ impl Mesh {
     pub fn get_peers_from_topic(&self, th: &TopicHash)
         -> Result<Vec<PeerId>, GError>
     {
-        let th_str = th.into_string();
+        let th_str = th.clone().into_string();
         match self.m.get(th) {
             Some(peers) => {return Ok(peers.to_vec());},
             None => {return Err(GError::TopicNotInMesh{t_hash: th_str,
                 err: "Tried to get peers from the topic with topic hash /
-                '{th_str}' but this topic is not found in the mesh."
+                '{&th_str}' but this topic is not found in the mesh."
                 .to_string()});}
         }
     }
@@ -70,12 +70,12 @@ impl Mesh {
                     return Ok(peer);
                 }
             }
-            let th_str = th.into_string();
+            let th_str = th.clone().into_string();
             Err(GError::NotGraftedToTopic{t_hash: th_str,
                 peer_id: p.clone().to_base58(),
                 err: "Tried to get peer '{p}' but it was not found \
                 in the peers that are grafted to the topic with topic hash \
-                '{th_str}'.".to_string()})
+                '{&th_str}'.".to_string()})
         });
         match get_result {
             Ok(result) => result,
@@ -90,9 +90,9 @@ impl Mesh {
         if let Some(peers) = self.m.remove(th) {
             Ok(peers)
         } else {
-            let th_str = th.into_string();
+            let th_str = th.clone().into_string();
             Err(GError::TopicNotInMesh{t_hash: th_str,
-            err: "Tried to remove the topic with topic hash '{th_str}' from \
+            err: "Tried to remove the topic with topic hash '{&th_str}' from \
             the mesh.".to_string()})
         }
     }
@@ -101,12 +101,15 @@ impl Mesh {
         p: &PeerId) -> Result<(), GError>
     {
         let peer_str = &(*p.to_base58());
-        let th_str = th.into_string();
+        let th_str = th.clone().into_string();
+        let no_t = GError::TopicNotInMesh{t_hash: th_str.clone(),
+                err: "Tried to remove the topic with topic hash '{&th_str}' \
+                from the mesh.".to_string()};
         match self.remove(th) {
-            Ok(peers) => {
+            Ok(mut peers) => {
                 // TODO: use remove_item when stable:
                 // https://github.com/rust-lang/rust/issues/40062
-                for (pos, peer) in peers.iter().enumerate() {
+                for (pos, peer) in peers.clone().iter().enumerate() {
                     if peer == p {
                         peers.remove(pos);
                         // The same peer ID cannot exist more than
@@ -116,16 +119,14 @@ impl Mesh {
                     }
                 }
                 return Err(GError::NotGraftedToTopic{
-                    t_hash: th_str, peer_id: peer_str.to_string(), err:
+                    t_hash: th_str.clone(), peer_id: peer_str.to_string(), err:
                     "Tried to remove the peer '{peer_str}' from the topic \
-                    with topic hash '{th_str}'.".to_string()});
+                    with topic hash '{&th_str}'.".to_string()});
             },
-            Err(GError::TopicNotInMesh{t_hash: th_str,
-                err: "Tried to remove the topic with topic hash '{th_str}' \
-                from the mesh.".to_string()}) => {
-                return Err(GError::TopicNotInMesh{t_hash: th_str,
-                err: "Tried to remove the peer with id '{peer_str}' from the \
-                topic with topic hash '{th_str}' from the mesh, but the \
+            Err(no_t) => {
+                return Err(GError::TopicNotInMesh{t_hash: th_str.clone(),
+                err: "Tried to remove the peer with id '{&peer_str}' from the \
+                topic with topic hash '{&th_str}' from the mesh, but the \
                 topic was not found.".to_string()})
             },
         }

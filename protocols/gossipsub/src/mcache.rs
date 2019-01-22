@@ -34,10 +34,10 @@ impl MCache {
     /// the corresponding `MsgHash`es, in the same order.
     pub fn put_many(&mut self, msgs: impl IntoIterator<Item = GMessage>) {
         for m in msgs {
-            let m_hash = MsgHash::new(m);
-            self.msgs.insert(m_hash, m);
+            let m_hash = MsgHash::new(m.clone());
+            self.msgs.insert(m_hash.clone(), m.clone());
             self.history[0].push(CacheEntry { m_hash: m_hash,
-                topics: m.get_topic_map() })
+                topics: m.clone().get_topic_map() })
         }
     }
 
@@ -59,12 +59,12 @@ impl MCache {
     // better way to write this.
     pub fn get_recent_msg_hashes_in_hist(&self, t_hash: TopicHash)
         -> Vec<MsgHash> {
-        let m_hashes = Vec::new();
+        let mut m_hashes = Vec::new();
         for entries in &self.history[..(HISTORY_GOSSIP as usize)] {
             for entry in entries {
-                for (th, _) in entry.topics {
+                for (th, _) in entry.clone().topics {
                     if th == t_hash {
-                        m_hashes.push(entry.m_hash);
+                        m_hashes.push(entry.m_hash.clone());
                         break;
                     }
                 }
@@ -82,12 +82,12 @@ impl MCache {
     /// Shifts the current window, discarding messages older than the history
     /// length of the cache.
     pub fn shift(&mut self) {
-        let hist = self.history;
-        let last = hist[hist.len()-1];
+        let hist = &mut self.history;
+        let last = &hist[hist.len()-1];
         for entry in last {
             self.msgs.remove(&entry.m_hash);
         }
-        hist.insert(0, Vec::new());
+        hist.clone().insert(0, Vec::new());
     }
 
     // Consulted https://github.com/libp2p/go-libp2p-pubsub/blob/master/mcache.go
