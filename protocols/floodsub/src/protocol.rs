@@ -20,13 +20,13 @@
 
 use bytes::{BufMut, BytesMut};
 use crate::rpc_proto;
+use crate::topic::TopicHash;
 use futures::future;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, PeerId};
 use protobuf::Message as ProtobufMessage;
 use std::{io, iter};
 use tokio_codec::{Decoder, Encoder, Framed};
 use tokio_io::{AsyncRead, AsyncWrite};
-use topic::TopicHash;
 use unsigned_varint::codec;
 
 /// Implementation of `ConnectionUpgrade` for the floodsub protocol.

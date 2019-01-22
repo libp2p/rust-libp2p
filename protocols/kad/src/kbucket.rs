@@ -323,7 +323,8 @@ impl<'a, Id: 'a, Val: 'a> Bucket<'a, Id, Val> {
 mod tests {
     extern crate rand;
     use self::rand::random;
-    use kbucket::{KBucketsPeerId, KBucketsTable, UpdateOutcome, MAX_NODES_PER_BUCKET};
+    use crate::kbucket::{KBucketsPeerId, KBucketsTable};
+    use crate::kbucket::{UpdateOutcome, MAX_NODES_PER_BUCKET};
     use multihash::{Multihash, Hash};
     use std::thread;
     use std::time::Duration;

@@ -20,7 +20,7 @@
 
 use super::codec::StreamCipher;
 use aes_ctr::stream_cipher::generic_array::GenericArray;
-use aes_ctr::stream_cipher::{NewFixStreamCipher, LoopError, StreamCipherCore};
+use aes_ctr::stream_cipher::{NewStreamCipher, LoopError, SyncStreamCipher};
 use aes_ctr::{Aes128Ctr, Aes256Ctr};
 use ctr::Ctr128;
 use twofish::Twofish;
@@ -60,7 +60,7 @@ impl Cipher {
 #[derive(Clone, Copy, Debug)]
 pub struct NullCipher;
 
-impl StreamCipherCore for NullCipher {
+impl SyncStreamCipher for NullCipher {
     fn try_apply_keystream(&mut self, _data: &mut [u8]) -> Result<(), LoopError> {
         Ok(())
     }
@@ -71,7 +71,7 @@ impl StreamCipherCore for NullCipher {
 pub fn ctr(key_size: Cipher, key: &[u8], iv: &[u8]) -> StreamCipher {
     ctr_int(key_size, key, iv)
 }
- 
+
 /// Returns your stream cipher depending on `Cipher`.
 #[cfg(all(feature = "aes-all", any(target_arch = "x86_64", target_arch = "x86")))]
 pub fn ctr(key_size: Cipher, key: &[u8], iv: &[u8]) -> StreamCipher {
@@ -88,7 +88,7 @@ mod aes_alt {
     use crate::codec::StreamCipher;
     use ctr::Ctr128;
     use aesni::{Aes128, Aes256};
-    use ctr::stream_cipher::NewFixStreamCipher;
+    use ctr::stream_cipher::NewStreamCipher;
     use ctr::stream_cipher::generic_array::GenericArray;
     use lazy_static::lazy_static;
     use twofish::Twofish;
@@ -147,7 +147,7 @@ fn ctr_int(key_size: Cipher, key: &[u8], iv: &[u8]) -> StreamCipher {
 }
 
 #[cfg(all(
-        feature = "aes-all", 
+        feature = "aes-all",
         any(target_arch = "x86_64", target_arch = "x86"),
 ))]
 #[cfg(test)]
@@ -159,18 +159,17 @@ mod tests {
         // this test is for asserting aes unsuported opcode does not break on old cpu
         let key = [0;16];
         let iv = [0;16];
-     
+
         let mut aes = ctr(Cipher::Aes128, &key, &iv);
         let mut content = [0;16];
-        assert!(aes
-                .try_apply_keystream(&mut content).is_ok());
-         
+        aes.encrypt(&mut content);
+
     }
 }
 
 // aesni compile check for aes-all (aes-all import aesni through aes_ctr only if those checks pass)
 #[cfg(all(
-    feature = "aes-all", 
+    feature = "aes-all",
     any(target_arch = "x86_64", target_arch = "x86"),
     any(target_feature = "aes", target_feature = "ssse3"),
 ))]
