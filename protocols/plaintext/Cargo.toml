@@ -1,5 +1,6 @@
 [package]
 name = "libp2p-plaintext"
+edition = "2018"
 description = "Plaintext encryption dummy protocol for libp2p"
 version = "0.2.0"
 authors = ["Parity Technologies <admin@parity.io>"]

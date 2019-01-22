@@ -18,18 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::protocol::{FloodsubConfig, FloodsubMessage, FloodsubRpc, FloodsubSubscription, FloodsubSubscriptionAction};
+use crate::topic::{Topic, TopicHash};
 use cuckoofilter::CuckooFilter;
 use futures::prelude::*;
-use handler::FloodsubHandler;
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
-use libp2p_core::{protocols_handler::ProtocolsHandler, PeerId};
-use protocol::{FloodsubMessage, FloodsubRpc, FloodsubSubscription, FloodsubSubscriptionAction};
+use libp2p_core::{protocols_handler::ProtocolsHandler, protocols_handler::OneShotHandler, PeerId};
 use rand;
 use smallvec::SmallVec;
 use std::{collections::VecDeque, iter, marker::PhantomData};
 use std::collections::hash_map::{DefaultHasher, HashMap};
 use tokio_io::{AsyncRead, AsyncWrite};
-use topic::{Topic, TopicHash};
 
 /// Network behaviour that automatically identifies nodes periodically, and returns information
 /// about them.
@@ -176,11 +175,11 @@ impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for Floodsub<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
-    type ProtocolsHandler = FloodsubHandler<TSubstream>;
+    type ProtocolsHandler = OneShotHandler<TSubstream, FloodsubConfig, FloodsubRpc, InnerMessage>;
     type OutEvent = FloodsubEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        FloodsubHandler::new()
+        Default::default()
     }
 
     fn inject_connected(&mut self, id: PeerId, _: ConnectedPoint) {
@@ -209,11 +208,17 @@ where
     fn inject_node_event(
         &mut self,
         propagation_source: PeerId,
-        event: FloodsubRpc,
+        event: InnerMessage,
     ) {
+        // We ignore successful sends event.
+        let event = match event {
+            InnerMessage::Rx(event) => event,
+            InnerMessage::Sent => return,
+        };
+
         // Update connected peers topics
         for subscription in event.subscriptions {
-            let mut remote_peer_topics = self.connected_peers
+            let remote_peer_topics = self.connected_peers
                 .get_mut(&propagation_source)
                 .expect("connected_peers is kept in sync with the peers we are connected to; we are guaranteed to only receive events from connected peers; QED");
             match subscription.action {
@@ -297,6 +302,28 @@ where
         }
 
         Async::NotReady
+    }
+}
+
+/// Transmission between the `OneShotHandler` and the `FloodsubHandler`.
+pub enum InnerMessage {
+    /// We received an RPC from a remote.
+    Rx(FloodsubRpc),
+    /// We successfully sent an RPC request.
+    Sent,
+}
+
+impl From<FloodsubRpc> for InnerMessage {
+    #[inline]
+    fn from(rpc: FloodsubRpc) -> InnerMessage {
+        InnerMessage::Rx(rpc)
+    }
+}
+
+impl From<()> for InnerMessage {
+    #[inline]
+    fn from(_: ()) -> InnerMessage {
+        InnerMessage::Sent
     }
 }
 
