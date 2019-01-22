@@ -34,7 +34,6 @@ extern crate tokio_codec;
 extern crate tokio_io;
 extern crate unsigned_varint;
 
-pub mod handler;
 pub mod protocol;
 
 mod layer;
