@@ -20,12 +20,14 @@
 
 use crate::service::{MdnsService, MdnsPacket};
 use futures::prelude::*;
+use log::warn;
 use libp2p_core::protocols_handler::{DummyProtocolsHandler, ProtocolsHandler};
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use libp2p_core::{Multiaddr, PeerId, multiaddr::Protocol};
 use smallvec::SmallVec;
 use std::{cmp, fmt, io, iter, marker::PhantomData, time::Duration, time::Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
+use tokio_timer::Delay;
 
 /// A `NetworkBehaviour` for mDNS. Automatically discovers peers on the local network and adds
 /// them to the topology.
@@ -39,10 +41,10 @@ pub struct Mdns<TSubstream> {
     /// can appear multiple times.
     discovered_nodes: SmallVec<[(PeerId, Multiaddr, Instant); 8]>,
 
-    /// If `Some`, then we automatically connect to nodes we discover and this is the list of nodes
-    /// to connect to. Drained in `poll()`.
-    /// If `None`, then we don't automatically connect.
-    to_connect_to: Option<SmallVec<[PeerId; 8]>>,
+    /// Future that fires when the TTL at least one node in `discovered_nodes` expires.
+    ///
+    /// `None` if `discovered_nodes` is empty.
+    closest_expiration: Option<Delay>,
 
     /// Marker to pin the generic.
     marker: PhantomData<TSubstream>,
@@ -54,7 +56,7 @@ impl<TSubstream> Mdns<TSubstream> {
         Ok(Mdns {
             service: MdnsService::new()?,
             discovered_nodes: SmallVec::new(),
-            to_connect_to: Some(SmallVec::new()),
+            closest_expiration: None,
             marker: PhantomData,
         })
     }
@@ -64,16 +66,71 @@ impl<TSubstream> Mdns<TSubstream> {
 #[derive(Debug)]
 pub enum MdnsEvent {
     /// Discovered nodes through mDNS.
-    Discovered(Vec<MdnsDiscovered>),
+    Discovered(DiscoveredAddrsIter),
+
+    /// The given combinations of `PeerId` and `Multiaddr` have expired.
+    ///
+    /// Each discovered record has a time-to-live. When this TTL expires and the address hasn't
+    /// been refreshed, we remove it from the list emit it as an `Expired` event.
+    Expired(ExpiredAddrsIter),
 }
 
-/// One node discovered by mDNS.
-#[derive(Debug)]
-pub struct MdnsDiscovered {
-    /// Id of the peer that has been discovered.
-    pub peer_id: PeerId,
-    /// Addresses of the peer that has been discovered.
-    pub addresses: Vec<Multiaddr>,
+/// Iterator that produces the list of addresses that have been discovered.
+pub struct DiscoveredAddrsIter {
+    inner: smallvec::IntoIter<[(PeerId, Multiaddr); 4]>
+}
+
+impl Iterator for DiscoveredAddrsIter {
+    type Item = (PeerId, Multiaddr);
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
+    }
+}
+
+impl ExactSizeIterator for DiscoveredAddrsIter {
+}
+
+impl fmt::Debug for DiscoveredAddrsIter {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_struct("DiscoveredAddrsIter")
+            .finish()
+    }
+}
+
+/// Iterator that produces the list of addresses that have expired.
+pub struct ExpiredAddrsIter {
+    inner: smallvec::IntoIter<[(PeerId, Multiaddr); 4]>
+}
+
+impl Iterator for ExpiredAddrsIter {
+    type Item = (PeerId, Multiaddr);
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
+    }
+}
+
+impl ExactSizeIterator for ExpiredAddrsIter {
+}
+
+impl fmt::Debug for ExpiredAddrsIter {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_struct("ExpiredAddrsIter")
+            .finish()
+    }
 }
 
 impl<TSubstream> NetworkBehaviour for Mdns<TSubstream>
@@ -118,21 +175,31 @@ where
         >,
     > {
         // Remove expired peers.
-        {
-            let now = Instant::now();
-            self.discovered_nodes.retain(move |(_, _, expires)| *expires > now);
+        if let Some(ref mut closest_expiration) = self.closest_expiration {
+            match closest_expiration.poll() {
+                Ok(Async::Ready(())) => {
+                    let now = Instant::now();
+                    let mut expired = SmallVec::<[(PeerId, Multiaddr); 4]>::new();
+                    while let Some(pos) = self.discovered_nodes.iter().position(|(_, _, exp)| *exp < now) {
+                        let (peer_id, addr, _) = self.discovered_nodes.remove(pos);
+                        expired.push((peer_id, addr));
+                    }
+
+                    if !expired.is_empty() {
+                        let event = MdnsEvent::Expired(ExpiredAddrsIter {
+                            inner: expired.into_iter(),
+                        });
+
+                        return Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
+                    }
+                },
+                Ok(Async::NotReady) => (),
+                Err(err) => warn!("tokio timer has errored: {:?}", err),
+            }
         }
 
-        loop {
-            if let Some(ref mut to_connect_to) = self.to_connect_to {
-                if !to_connect_to.is_empty() {
-                    let peer_id = to_connect_to.remove(0);
-                    return Async::Ready(NetworkBehaviourAction::DialPeer { peer_id });
-                } else {
-                    to_connect_to.shrink_to_fit();
-                }
-            }
-
+        // Polling the mDNS service, and obtain the list of nodes discovered this round.
+        let discovered = loop {
             let event = match self.service.poll() {
                 Async::Ready(ev) => ev,
                 Async::NotReady => return Async::NotReady,
@@ -155,7 +222,7 @@ where
                         .chain(iter::once(obs_port))
                         .collect();
 
-                    let mut discovered = Vec::new();
+                    let mut discovered: SmallVec<[_; 4]> = SmallVec::new();
                     for peer in response.discovered_peers() {
                         if peer.id() == params.local_peer_id() {
                             continue;
@@ -171,33 +238,36 @@ where
                             addrs.push(addr);
                         }
 
-                        for addr in &addrs {
+                        for addr in addrs {
                             if let Some((_, _, cur_expires)) = self.discovered_nodes.iter_mut()
-                                .find(|(p, a, _)| p == peer.id() && a == addr)
+                                .find(|(p, a, _)| p == peer.id() && *a == addr)
                             {
                                 *cur_expires = cmp::max(*cur_expires, new_expiration);
                             } else {
                                 self.discovered_nodes.push((peer.id().clone(), addr.clone(), new_expiration));
                             }
-                        }
 
-                        discovered.push(MdnsDiscovered {
-                            peer_id: peer.id().clone(),
-                            addresses: addrs,
-                        });
-
-                        if let Some(ref mut to_connect_to) = self.to_connect_to {
-                            to_connect_to.push(peer.id().clone());
+                            discovered.push((peer.id().clone(), addr));
                         }
                     }
 
-                    return Async::Ready(NetworkBehaviourAction::GenerateEvent(MdnsEvent::Discovered(discovered)));
+                    break discovered;
                 },
                 MdnsPacket::ServiceDiscovery(disc) => {
                     disc.respond(Duration::from_secs(5 * 60));
                 },
             }
-        }
+        };
+
+        // As the final step, we need to refresh `closest_expiration`.
+        self.closest_expiration = self.discovered_nodes.iter()
+            .fold(None, |exp, &(_, _, elem_exp)| {
+                Some(exp.map(|exp| cmp::min(exp, elem_exp)).unwrap_or(elem_exp))
+            })
+            .map(Delay::new);
+        Async::Ready(NetworkBehaviourAction::GenerateEvent(MdnsEvent::Discovered(DiscoveredAddrsIter {
+            inner: discovered.into_iter(),
+        })))
     }
 }
 

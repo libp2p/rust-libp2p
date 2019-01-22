@@ -75,10 +75,11 @@ fn main() {
     tokio::run(futures::future::poll_fn(move || -> Result<_, ()> {
         loop {
             match swarm.poll().expect("Error while polling swarm") {
-                Async::Ready(Some(event)) => {
-                    println!("Result: {:#?}", event);
+                Async::Ready(Some(ev @ libp2p::kad::KademliaOut::FindNodeResult { .. })) => {
+                    println!("Result: {:#?}", ev);
                     return Ok(Async::Ready(()));
                 },
+                Async::Ready(Some(_)) => (),
                 Async::Ready(None) | Async::NotReady => break,
             }
         }

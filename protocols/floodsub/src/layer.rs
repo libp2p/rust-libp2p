@@ -21,6 +21,7 @@
 use crate::protocol::{FloodsubConfig, FloodsubMessage, FloodsubRpc, FloodsubSubscription, FloodsubSubscriptionAction};
 use crate::topic::{Topic, TopicHash};
 use cuckoofilter::CuckooFilter;
+use fnv::FnvHashSet;
 use futures::prelude::*;
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use libp2p_core::{protocols_handler::ProtocolsHandler, protocols_handler::OneShotHandler, Multiaddr, PeerId};
@@ -38,6 +39,10 @@ pub struct Floodsub<TSubstream> {
 
     /// Peer id of the local node. Used for the source of the messages that we publish.
     local_peer_id: PeerId,
+
+    /// List of peers to send messages to.
+    // TODO: unused
+    target_peers: FnvHashSet<PeerId>,
 
     /// List of peers the network is connected to, and the topics that they're subscribed to.
     // TODO: filter out peers that don't support floodsub, so that we avoid hammering them with
@@ -62,11 +67,24 @@ impl<TSubstream> Floodsub<TSubstream> {
         Floodsub {
             events: VecDeque::new(),
             local_peer_id,
+            target_peers: FnvHashSet::default(),
             connected_peers: HashMap::new(),
             subscribed_topics: SmallVec::new(),
             received: CuckooFilter::new(),
             marker: PhantomData,
         }
+    }
+
+    /// Add a node to the list of nodes to propagate messages to.
+    #[inline]
+    pub fn add_node_to_partial_view(&mut self, peer_id: PeerId) {
+        self.target_peers.insert(peer_id);
+    }
+
+    /// Remove a node from the list of nodes to propagate messages to.
+    #[inline]
+    pub fn remove_node_from_partial_view(&mut self, peer_id: &PeerId) {
+        self.target_peers.remove(&peer_id);
     }
 }
 
@@ -182,8 +200,8 @@ where
         Default::default()
     }
 
-    fn addresses_of_peer(&self, peer_id: &PeerId) -> Vec<Multiaddr> {
-        Vec::new()      // TODO: no
+    fn addresses_of_peer(&self, _: &PeerId) -> Vec<Multiaddr> {
+        Vec::new()
     }
 
     fn inject_connected(&mut self, id: PeerId, _: ConnectedPoint) {

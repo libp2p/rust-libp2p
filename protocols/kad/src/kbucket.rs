@@ -31,7 +31,6 @@ use arrayvec::ArrayVec;
 use bigint::U512;
 use libp2p_core::PeerId;
 use multihash::Multihash;
-use std::mem;
 use std::slice::IterMut as SliceIterMut;
 use std::time::{Duration, Instant};
 use std::vec::IntoIter as VecIntoIter;
@@ -185,6 +184,42 @@ where
         &self.my_id
     }
 
+    /// Returns the value associated to a node, if any is present.
+    ///
+    /// Does **not** include pending nodes.
+    pub fn get(&self, id: &Id) -> Option<&Val> {
+        let table = match self.bucket_num(&id) {
+            Some(n) => &self.tables[n],
+            None => return None,
+        };
+
+        for elem in &table.nodes {
+            if elem.id == *id {
+                return Some(&elem.value);
+            }
+        }
+
+        None
+    }
+
+    /// Returns the value associated to a node, if any is present.
+    ///
+    /// Does **not** include pending nodes.
+    pub fn get_mut(&mut self, id: &Id) -> Option<&mut Val> {
+        let table = match self.bucket_num(&id) {
+            Some(n) => &mut self.tables[n],
+            None => return None,
+        };
+
+        for elem in &mut table.nodes {
+            if elem.id == *id {
+                return Some(&mut elem.value);
+            }
+        }
+
+        None
+    }
+
     /// Finds the `num` nodes closest to `id`, ordered by distance.
     pub fn find_closest<TOther>(&mut self, id: &TOther) -> VecIntoIter<Id>
     where
@@ -227,70 +262,160 @@ where
 
     /// Marks the node as "most recent" in its bucket and modifies the value associated to it.
     /// This function should be called whenever we receive a communication from a node.
-    pub fn update(&mut self, id: Id, value: Val) -> UpdateOutcome<Id, Val> {
+    pub fn update(&mut self, id: Id) -> Update<Id, Val> {
         let table = match self.bucket_num(&id) {
             Some(n) => &mut self.tables[n],
-            None => return UpdateOutcome::FailSelfUpdate,
+            None => return Update::FailSelfUpdate,
         };
 
         table.flush(self.ping_timeout);
 
         if let Some(pos) = table.nodes.iter().position(|n| n.id == id) {
             // Node is already in the bucket.
-            let mut existing = table.nodes.remove(pos);
-            let old_val = mem::replace(&mut existing.value, value);
-            if pos == 0 {
-                // If it's the first node of the bucket that we update, then we drop the node that
-                // was waiting for a ping.
-                table.nodes.truncate(MAX_NODES_PER_BUCKET - 1);
-                table.pending_node = None;
+            if pos != table.nodes.len() - 1 {
+                let existing = table.nodes.remove(pos);
+                if pos == 0 {
+                    // If it's the oldest node of the bucket that we update, then we drop the node that
+                    // was waiting for a ping.
+                    table.nodes.truncate(MAX_NODES_PER_BUCKET - 1);
+                    table.pending_node = None;
+                }
+                table.nodes.push(existing);
             }
-            table.nodes.push(existing);
             table.last_update = Instant::now();
-            UpdateOutcome::Refreshed(old_val)
+            Update::Refreshed(UpdateRefresh {
+                value: &mut table.nodes.last_mut()
+                    .expect("nodes is not empty since the value is in it; QED").value,
+            })
+
         } else if table.nodes.len() < MAX_NODES_PER_BUCKET {
             // Node not yet in the bucket, but there's plenty of space.
-            table.nodes.push(Node {
-                id: id,
-                value: value,
-            });
-            table.last_update = Instant::now();
-            UpdateOutcome::Added
+            Update::Add(UpdateAdd {
+                table,
+                id,
+            })
+
         } else {
             // Not enough space to put the node, but we can add it to the end as "pending". We
             // then need to tell the caller that we want it to ping the node at the top of the
             // list.
             if table.pending_node.is_none() {
-                table.pending_node = Some((
-                    Node {
-                        id: id,
-                        value: value,
-                    },
-                    Instant::now(),
-                ));
-                UpdateOutcome::NeedPing(table.nodes[0].id.clone())
+                let to_ping = table.nodes[0].id.clone();
+                Update::AddPending(UpdateAddPending {
+                    table,
+                    id,
+                    to_ping,
+                })
             } else {
-                UpdateOutcome::Discarded
+                Update::Discarded
             }
         }
     }
 }
 
 /// Return value of the `update()` method.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 #[must_use]
-pub enum UpdateOutcome<Id, Val> {
-    /// The node has been added to the bucket.
-    Added,
+pub enum Update<'a, Id, Val> {
+    /// The node can be added to the bucket.
+    Add(UpdateAdd<'a, Id, Val>),
     /// The node was already in the bucket and has been refreshed.
-    Refreshed(Val),
-    /// The node wasn't added. Instead we need to ping the node passed as parameter, and call
+    Refreshed(UpdateRefresh<'a, Val>),
+    /// The node can be added as pending. We need to ping the node passed as parameter, and call
     /// `update` if it responds.
-    NeedPing(Id),
+    AddPending(UpdateAddPending<'a, Id, Val>),
     /// The node wasn't added at all because a node was already pending.
     Discarded,
     /// Tried to update the local peer ID. This is an invalid operation.
     FailSelfUpdate,
+}
+
+impl<'a, Id, Val> Update<'a, Id, Val> {
+    /// Writes the given value in the table.
+    #[inline]
+    pub fn write(self, value: Val) {
+        match self {
+            Update::Add(add) => add.add(value),
+            Update::Refreshed(refresh) => *refresh.into_mut() = value,
+            Update::AddPending(add) => add.add(value),
+            Update::Discarded => (),
+            Update::FailSelfUpdate => (),
+        }
+    }
+}
+
+/// The node can be added to the bucket.
+#[derive(Debug)]
+#[must_use]
+pub struct UpdateAdd<'a, Id, Val> {
+    /// Where to insert the value.
+    table: &'a mut KBucket<Id, Val>,
+    /// The ID to insert.
+    id: Id,
+}
+
+impl<'a, Id, Val> UpdateAdd<'a, Id, Val> {
+    /// Insert the node in the kbuckets with the given value.
+    pub fn add(self, value: Val) {
+        self.table.last_update = Instant::now();
+        self.table.nodes.push(Node {
+            id: self.id,
+            value,
+        });
+    }
+}
+
+/// The node is already in the kbucket.
+#[derive(Debug)]
+pub struct UpdateRefresh<'a, Val> {
+    /// The value in the k-buckets.
+    value: &'a mut Val,
+}
+
+impl<'a, Val> UpdateRefresh<'a, Val> {
+    /// Returns a mutable reference to the value.
+    #[inline]
+    pub fn get_mut(&mut self) -> &mut Val {
+        &mut self.value
+    }
+
+    /// Returns a mutable reference to the value.
+    #[inline]
+    pub fn into_mut(self) -> &'a mut Val {
+        self.value
+    }
+}
+
+/// The node can be added as pending. We need to ping the node passed as parameter, and call
+/// `update` if it responds.
+#[derive(Debug)]
+#[must_use]
+pub struct UpdateAddPending<'a, Id, Val> {
+    /// Where to insert the value.
+    table: &'a mut KBucket<Id, Val>,
+    /// The ID to insert.
+    id: Id,
+    /// Id of the node to ping.
+    to_ping: Id,
+}
+
+impl<'a, Id, Val> UpdateAddPending<'a, Id, Val> {
+    /// The node we heard from the latest, and that we should ping.
+    #[inline]
+    pub fn node_to_ping(&self) -> &Id {
+        &self.to_ping
+    }
+
+    /// Insert the node in the kbuckets with the given value.
+    pub fn add(self, value: Val) {
+        self.table.pending_node = Some((
+            Node {
+                id: self.id,
+                value,
+            },
+            Instant::now(),
+        ));
+    }
 }
 
 /// Iterator giving access to a bucket.
@@ -348,8 +473,7 @@ impl<'a, Id: 'a, Val: 'a> Bucket<'a, Id, Val> {
 mod tests {
     extern crate rand;
     use self::rand::random;
-    use crate::kbucket::{KBucketsPeerId, KBucketsTable};
-    use crate::kbucket::{UpdateOutcome, MAX_NODES_PER_BUCKET};
+    use crate::kbucket::{KBucketsPeerId, KBucketsTable, Update, MAX_NODES_PER_BUCKET};
     use multihash::{Multihash, Hash};
     use std::thread;
     use std::time::Duration;
@@ -360,7 +484,7 @@ mod tests {
         let other_id = Multihash::random(Hash::SHA2256);
 
         let mut table = KBucketsTable::new(my_id, Duration::from_secs(5));
-        let _ = table.update(other_id.clone(), ());
+        let _ = table.update(other_id.clone()).write(());
 
         let res = table.find_closest(&other_id).collect::<Vec<_>>();
         assert_eq!(res.len(), 1);
@@ -371,9 +495,9 @@ mod tests {
     fn update_local_id_fails() {
         let my_id = Multihash::random(Hash::SHA2256);
 
-        let mut table = KBucketsTable::new(my_id.clone(), Duration::from_secs(5));
-        match table.update(my_id, ()) {
-            UpdateOutcome::FailSelfUpdate => (),
+        let mut table = KBucketsTable::<_, ()>::new(my_id.clone(), Duration::from_secs(5));
+        match table.update(my_id) {
+            Update::FailSelfUpdate => (),
             _ => panic!(),
         }
     }
@@ -397,7 +521,7 @@ mod tests {
 
         thread::sleep(Duration::from_secs(2));
         for &(ref id, _) in &other_ids {
-            let _ = table.update(id.clone(), ());
+            let _ = table.update(id.clone()).write(());
         }
 
         let after_update = table.buckets().map(|b| b.last_update()).collect::<Vec<_>>();
@@ -431,7 +555,10 @@ mod tests {
         let mut table = KBucketsTable::new(my_id.clone(), Duration::from_secs(1));
 
         for (num, id) in fill_ids.drain(..MAX_NODES_PER_BUCKET).enumerate() {
-            assert_eq!(table.update(id, ()), UpdateOutcome::Added);
+            match table.update(id) {
+                Update::Add(add) => add.add(()),
+                _ => panic!()
+            }
             assert_eq!(table.buckets().nth(255).unwrap().num_entries(), num + 1);
         }
 
@@ -440,27 +567,33 @@ mod tests {
             MAX_NODES_PER_BUCKET
         );
         assert!(!table.buckets().nth(255).unwrap().has_pending());
-        assert_eq!(
-            table.update(fill_ids.remove(0), ()),
-            UpdateOutcome::NeedPing(first_node)
-        );
+        match table.update(fill_ids.remove(0)) {
+            Update::AddPending(add) => {
+                assert_eq!(*add.node_to_ping(), first_node);
+                add.add(());
+            },
+            _ => ()
+        }
 
         assert_eq!(
             table.buckets().nth(255).unwrap().num_entries(),
             MAX_NODES_PER_BUCKET
         );
         assert!(table.buckets().nth(255).unwrap().has_pending());
-        assert_eq!(
-            table.update(fill_ids.remove(0), ()),
-            UpdateOutcome::Discarded
-        );
+        match table.update(fill_ids.remove(0)) {
+            Update::Discarded => (),
+            _ => ()
+        }
 
         thread::sleep(Duration::from_secs(2));
         assert!(!table.buckets().nth(255).unwrap().has_pending());
-        assert_eq!(
-            table.update(fill_ids.remove(0), ()),
-            UpdateOutcome::NeedPing(second_node)
-        );
+        match table.update(fill_ids.remove(0)) {
+            Update::AddPending(add) => {
+                assert_eq!(*add.node_to_ping(), second_node);
+                add.add(());
+            },
+            _ => panic!()
+        }
     }
 
     #[test]

@@ -88,7 +88,9 @@ fn main() {
         fn inject_event(&mut self, event: libp2p::mdns::MdnsEvent) {
             match event {
                 libp2p::mdns::MdnsEvent::Discovered(list) => {
-                    // TODO:
+                    for peer in list {
+                        self.floodsub.add_node_to_partial_view(peer.peer_id.clone());
+                    }
                 },
             }
         }
