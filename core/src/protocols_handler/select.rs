@@ -246,8 +246,10 @@ where
                     }));
                 },
                 Async::Ready(ProtocolsHandlerEvent::Shutdown) => {
-                    self.proto1.shutdown();
-                    continue;
+                    if !self.proto1.is_shutdown() {
+                        self.proto1.shutdown();
+                        continue;
+                    }
                 },
                 Async::NotReady => ()
             };

@@ -155,7 +155,7 @@ where
                 poll
             }
         } else {
-            Ok(Async::NotReady)
+            Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown))
         }
     }
 }
