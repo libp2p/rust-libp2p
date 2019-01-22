@@ -118,11 +118,12 @@ impl Encoder for GossipsubCodec {
             proto.mut_publish().push(msg);
         }
 
-        for topic in item.subscriptions.into_iter() {
-            let mut subscription = rpc_proto::RPC_SubOpts::new();
-            subscription.set_subscribe(topic.action == GossipsubSubscriptionAction::Subscribe);
-            subscription.set_topicid(topic.topic.into_string());
-            proto.mut_subscriptions().push(subscription);
+        for subscription in item.subscriptions.into_iter() {
+            let mut rpc_subscription = rpc_proto::RPC_SubOpts::new();
+            rpc_subscription
+                .set_subscribe(subscription.action == GossipsubSubscriptionAction::Subscribe);
+            rpc_subscription.set_topicid(subscription.topic_hash.into_string());
+            proto.mut_subscriptions().push(rpc_subscription);
         }
 
         // gossipsub control messages
@@ -131,9 +132,12 @@ impl Encoder for GossipsubCodec {
         for action in item.control_msgs {
             match action {
                 // collect all ihave messages
-                GossipsubControlAction::IHave { topic, message_ids } => {
+                GossipsubControlAction::IHave {
+                    topic_hash,
+                    message_ids,
+                } => {
                     let mut rpc_ihave = rpc_proto::ControlIHave::new();
-                    rpc_ihave.set_topicID(topic.into_string());
+                    rpc_ihave.set_topicID(topic_hash.into_string());
                     for msg_id in message_ids {
                         rpc_ihave.mut_messageIDs().push(msg_id);
                     }
@@ -212,7 +216,7 @@ impl Decoder for GossipsubCodec {
             .into_iter()
             .map(|mut ihave| {
                 GossipsubControlAction::IHave {
-                    topic: TopicHash::from_raw(ihave.take_topicID()),
+                    topic_hash: TopicHash::from_raw(ihave.take_topicID()),
                     // TODO: Potentially format the message ids better
                     message_ids: ihave.take_messageIDs().into_vec(),
                 }
@@ -262,7 +266,7 @@ impl Decoder for GossipsubCodec {
                     } else {
                         GossipsubSubscriptionAction::Unsubscribe
                     },
-                    topic: TopicHash::from_raw(sub.take_topicid()),
+                    topic_hash: TopicHash::from_raw(sub.take_topicid()),
                 })
                 .collect(),
             control_msgs,
@@ -322,7 +326,7 @@ pub struct GossipsubSubscription {
     /// Action to perform.
     pub action: GossipsubSubscriptionAction,
     /// The topic from which to subscribe or unsubscribe.
-    pub topic: TopicHash,
+    pub topic_hash: TopicHash,
 }
 
 /// Action that a subscription wants to perform.
@@ -340,7 +344,7 @@ pub enum GossipsubControlAction {
     /// Node broadcasts known messages per topic - IHave control message.
     IHave {
         /// The topic of the message.
-        topic: TopicHash,
+        topic_hash: TopicHash,
         /// A list of known message ids (peer_id + sequence _number) as a string.
         message_ids: Vec<String>,
     },
