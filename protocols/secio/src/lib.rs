@@ -93,15 +93,15 @@ use futures::{Future, Poll, Sink, StartSend, Stream};
 use lazy_static::lazy_static;
 use libp2p_core::{PeerId, PublicKey, upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade}};
 use log::debug;
-#[cfg(all(feature = "rsa", not(any(target_os = "emscripten", target_os = "unknown"))))]
-use ring::signature::RSAKeyPair;
+#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+use ring::signature::RsaKeyPair;
 use rw_stream_sink::RwStreamSink;
 use std::error::Error;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use std::sync::Arc;
 use tokio_io::{AsyncRead, AsyncWrite};
-#[cfg(all(feature = "rsa", not(any(target_os = "emscripten", target_os = "unknown"))))]
+#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 use untrusted::Input;
 
 mod algo_support;
@@ -217,7 +217,7 @@ pub struct SecioKeyPair {
 
 impl SecioKeyPair {
     /// Builds a `SecioKeyPair` from a PKCS8 private key and public key.
-    #[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
+    #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
     pub fn rsa_from_pkcs8<P>(
         private: &[u8],
         public: P,
@@ -225,7 +225,7 @@ impl SecioKeyPair {
     where
         P: Into<Vec<u8>>,
     {
-        let private = RSAKeyPair::from_pkcs8(Input::from(&private[..])).map_err(Box::new)?;
+        let private = RsaKeyPair::from_pkcs8(Input::from(&private[..])).map_err(Box::new)?;
 
         Ok(SecioKeyPair {
             inner: SecioKeyPairInner::Rsa {
@@ -288,7 +288,7 @@ impl SecioKeyPair {
     /// Returns the public key corresponding to this key pair.
     pub fn to_public_key(&self) -> PublicKey {
         match self.inner {
-            #[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
+            #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
             SecioKeyPairInner::Rsa { ref public, .. } => PublicKey::Rsa(public.clone()),
             SecioKeyPairInner::Ed25519 { ref key_pair } => {
                 PublicKey::Ed25519(key_pair.public.as_bytes().to_vec())
@@ -313,11 +313,11 @@ impl SecioKeyPair {
 // Inner content of `SecioKeyPair`.
 #[derive(Clone)]
 enum SecioKeyPairInner {
-    #[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
+    #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
     Rsa {
         public: Vec<u8>,
         // We use an `Arc` so that we can clone the enum.
-        private: Arc<RSAKeyPair>,
+        private: Arc<RsaKeyPair>,
     },
     Ed25519 {
         // We use an `Arc` so that we can clone the enum.
