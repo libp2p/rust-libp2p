@@ -59,6 +59,9 @@ pub struct GossipsubConfig {
     /// Maximum number of peers in mesh network before removing some (D_high in the spec).
     mesh_n_high: usize,
 
+    /// Number of peers to emit gossip to during a heartbeat (D_lazy in the spec).
+    gossip_lazy: usize,
+
     /// Initial delay in each heartbeat.
     heartbeat_initial_delay: Duration,
     /// Time between each heartbeat.
@@ -75,6 +78,7 @@ impl Default for GossipsubConfig {
             mesh_n: 6,
             mesh_n_low: 4,
             mesh_n_high: 12,
+            gossip_lazy: 6, // default to mesh_n
             heartbeat_initial_delay: Duration::from_millis(100),
             heartbeat_interval: Duration::from_secs(1),
             fanout_ttl: Duration::from_secs(60),
@@ -89,6 +93,7 @@ impl GossipsubConfig {
         mesh_n: usize,
         mesh_n_low: usize,
         mesh_n_high: usize,
+        gossip_lazy: usize,
         heartbeat_initial_delay: Duration,
         heartbeat_interval: Duration,
         fanout_ttl: Duration,
@@ -107,6 +112,7 @@ impl GossipsubConfig {
             mesh_n,
             mesh_n_low,
             mesh_n_high,
+            gossip_lazy,
             heartbeat_initial_delay,
             heartbeat_interval,
             fanout_ttl,
@@ -304,7 +310,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
                         // TODO: Ensure fanout key never contains an empty set
                         // we have no fanout peers, select mesh_n of them and add them to the fanout
                         let mesh_n = self.config.mesh_n;
-                        let new_peers = self.get_random_peers(t, mesh_n);
+                        let new_peers = self.get_random_peers(t, mesh_n, { |_| true });
                         // add the new peers to the fanout and recipient peers
                         self.fanout.insert(t.clone(), new_peers.clone());
                         for peer_id in new_peers {
@@ -357,7 +363,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
         } else {
             // no peers in fanout[topic] - select mesh_n at random
             let mesh_n = self.config.mesh_n;
-            peers = self.get_random_peers(topic_hash, mesh_n);
+            peers = self.get_random_peers(topic_hash, mesh_n, { |_| true });
             // put them in the mesh
             self.mesh.insert(topic_hash.clone(), peers.clone());
         }
@@ -655,10 +661,199 @@ impl<TSubstream> Gossipsub<TSubstream> {
         }
     }
 
-    /// Helper function to get a set of `n` random gossipsub peers for a topic
-    fn get_random_peers(&self, topic_hash: &TopicHash, n: usize) -> Vec<PeerId> {
+    /// Heartbeat function which shifts the memcache and updates the mesh
+    fn heartbeat(&mut self) {
+        //TODO: Clean up any state from last heartbeat.
+
+        let mut to_graft = HashMap::new();
+        let mut to_prune = HashMap::new();
+
+        // maintain the mesh for each topic
+        for (topic_hash, peers) in self.mesh.clone().iter_mut() {
+            // too little peers - add some
+            if peers.len() < self.config.mesh_n_low {
+                // not enough peers - get mesh_n - current_length more
+                let desired_peers = self.config.mesh_n - peers.len();
+                let peer_list = self
+                    .get_random_peers(topic_hash, desired_peers, { |peer| !peers.contains(peer) });
+                for peer in peer_list {
+                    peers.push(peer.clone());
+                    // TODO: tagPeer
+                    let current_topic = to_graft.entry(peer).or_insert(Vec::new());
+                    current_topic.push(topic_hash.clone());
+                }
+                // update the mesh
+                self.mesh.insert(topic_hash.clone(), peers.clone());
+            }
+
+            // too many peers - remove some
+            if peers.len() > self.config.mesh_n_high {
+                let excess_peer_no = peers.len() - self.config.mesh_n;
+                // shuffle the peers
+                let mut rng = thread_rng();
+                peers.shuffle(&mut rng);
+                // remove the first excess_peer_no peers adding them to to_prune
+                for _ in 0..excess_peer_no {
+                    let peer = peers
+                        .pop()
+                        .expect("There should always be enough peers to remove");
+                    let current_topic = to_prune.entry(peer).or_insert(vec![]);
+                    current_topic.push(topic_hash.clone());
+                    //TODO: untagPeer
+                }
+                // update the mesh
+                self.mesh.insert(topic_hash.clone(), peers.clone());
+            }
+
+            // emit gossip
+            self.emit_gossip(topic_hash.clone(), peers.clone());
+        }
+
+        // remove expired fanout topics
+        {
+            let fanout = &mut self.fanout; // help the borrow checker
+            let fanout_ttl = self.config.fanout_ttl;
+            self.fanout_last_pub.retain(|topic_hash, last_pub_time| {
+                if *last_pub_time + fanout_ttl < Instant::now() {
+                    fanout.remove(&topic_hash);
+                    return false;
+                }
+                true
+            });
+        }
+
+        // maintain fanout
+        // check if our peers are still apart of the topic
+        for (topic_hash, peers) in self.fanout.clone().iter_mut() {
+            peers.retain(|peer| {
+                // is the peer still subscribed to the topic?
+                if !self
+                    .peer_topics
+                    .get(peer)
+                    .expect("Peer should exist")
+                    .0
+                    .contains(&topic_hash)
+                {
+                    return false;
+                }
+                true
+            });
+
+            // not enough peers
+            if peers.len() < self.config.mesh_n {
+                let needed_peers = self.config.mesh_n - peers.len();
+                let mut new_peers =
+                    self.get_random_peers(topic_hash, needed_peers, |peer| !peers.contains(peer));
+                peers.append(&mut new_peers);
+            }
+            // update the entry
+            self.fanout.insert(topic_hash.clone(), peers.to_vec());
+
+            self.emit_gossip(topic_hash.clone(), peers.clone());
+        }
+
+        // send graft/prunes
+        self.send_graft_prune(to_graft, to_prune);
+
+        // shift the memcache
+        self.mcache.shift();
+    }
+
+    /// Emits gossip - Send IHAVE messages to a random set of gossip peers that are not in the mesh, but are subscribed to the `topic`.
+    fn emit_gossip(&mut self, topic_hash: TopicHash, peers: Vec<PeerId>) {
+        let message_ids = self.mcache.get_gossip_ids(&topic_hash);
+        if message_ids.is_empty() {
+            return;
+        }
+
+        // get gossip_lazy random peers
+        let to_msg_peers = self.get_random_peers(&topic_hash, self.config.gossip_lazy, |peer| {
+            !peers.contains(peer)
+        });
+        for peer in to_msg_peers {
+            // send an IHAVE message
+            self.events.push_back(NetworkBehaviourAction::SendEvent {
+                peer_id: peer,
+                event: GossipsubRpc {
+                    subscriptions: Vec::new(),
+                    messages: Vec::new(),
+                    control_msgs: vec![GossipsubControlAction::IHave {
+                        topic_hash: topic_hash.clone(),
+                        message_ids: message_ids.clone(),
+                    }],
+                },
+            });
+        }
+    }
+
+    /// Handles multiple GRAFT/PRUNE messages and coalesces them into chunked gossip control
+    /// messages.
+    fn send_graft_prune(
+        &mut self,
+        to_graft: HashMap<PeerId, Vec<TopicHash>>,
+        mut to_prune: HashMap<PeerId, Vec<TopicHash>>,
+    ) {
+        // handle the grafts and overlapping prunes
+        for (peer, topics) in to_graft.iter() {
+            let mut grafts: Vec<GossipsubControlAction> = topics
+                .iter()
+                .map(|topic_hash| {
+                    return GossipsubControlAction::Graft {
+                        topic_hash: topic_hash.clone(),
+                    };
+                })
+                .collect();
+            let mut prunes: Vec<GossipsubControlAction> = to_prune
+                .remove(&peer)
+                .unwrap_or_else(|| vec![])
+                .iter()
+                .map(|topic_hash| GossipsubControlAction::Prune {
+                    topic_hash: topic_hash.clone(),
+                })
+                .collect();
+            grafts.append(&mut prunes);
+
+            // send the control messages
+            self.events.push_back(NetworkBehaviourAction::SendEvent {
+                peer_id: peer.clone(),
+                event: GossipsubRpc {
+                    subscriptions: Vec::new(),
+                    messages: Vec::new(),
+                    control_msgs: grafts,
+                },
+            });
+        }
+
+        // handle the remaining prunes
+        for (peer, topics) in to_prune.iter() {
+            let remaining_prunes = topics
+                .iter()
+                .map(|topic_hash| GossipsubControlAction::Prune {
+                    topic_hash: topic_hash.clone(),
+                })
+                .collect();
+            self.events.push_back(NetworkBehaviourAction::SendEvent {
+                peer_id: peer.clone(),
+                event: GossipsubRpc {
+                    subscriptions: Vec::new(),
+                    messages: Vec::new(),
+                    control_msgs: remaining_prunes,
+                },
+            });
+        }
+    }
+
+    /// Helper function to get a set of `n` random gossipsub peers for a `topic_hash`
+    /// filtered by the function `f`.
+    fn get_random_peers(
+        &self,
+        topic_hash: &TopicHash,
+        n: usize,
+        mut f: impl FnMut(&PeerId) -> bool,
+    ) -> Vec<PeerId> {
         let mut gossip_peers = match self.topic_peers.get(topic_hash) {
-            Some((gossip_peers, _)) => gossip_peers.clone(),
+            // if they exist, filter the peers by `f`
+            Some((gossip_peers, _)) => gossip_peers.iter().cloned().filter(|p| f(p)).collect(),
             None => Vec::new(),
         };
 
@@ -894,15 +1089,15 @@ mod tests {
         gs.topic_peers
             .insert(topic_hash.clone(), (peers.clone(), vec![]));
 
-        let random_peers = gs.get_random_peers(&topic_hash, 5);
+        let random_peers = gs.get_random_peers(&topic_hash, 5, { |_| true });
         assert!(random_peers.len() == 5, "Expected 5 peers to be returned");
-        let random_peers = gs.get_random_peers(&topic_hash, 30);
+        let random_peers = gs.get_random_peers(&topic_hash, 30, { |_| true });
         assert!(random_peers.len() == 20, "Expected 20 peers to be returned");
         assert!(random_peers == peers, "Expected no shuffling");
-        let random_peers = gs.get_random_peers(&topic_hash, 20);
+        let random_peers = gs.get_random_peers(&topic_hash, 20, { |_| true });
         assert!(random_peers.len() == 20, "Expected 20 peers to be returned");
         assert!(random_peers == peers, "Expected no shuffling");
-        let random_peers = gs.get_random_peers(&topic_hash, 0);
+        let random_peers = gs.get_random_peers(&topic_hash, 0, { |_| true });
         assert!(random_peers.len() == 0, "Expected 0 peers to be returned");
     }
 
