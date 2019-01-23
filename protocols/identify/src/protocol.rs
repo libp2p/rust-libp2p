@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::BytesMut;
+use crate::structs_proto;
 use futures::{future::{self, FutureResult}, Async, AsyncSink, Future, Poll, Sink, Stream};
 use libp2p_core::{
     Multiaddr, PublicKey,
@@ -30,7 +31,6 @@ use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
 use protobuf::RepeatedField;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
-use structs_proto;
 use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
 use unsigned_varint::codec;

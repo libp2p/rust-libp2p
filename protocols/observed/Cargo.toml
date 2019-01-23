@@ -1,5 +1,6 @@
 [package]
 name = "libp2p-observed-address"
+edition = "2018"
 description = "Observed addresses protocol for libp2p"
 version = "0.2.0"
 authors = ["Parity Technologies <admin@parity.io>"]
