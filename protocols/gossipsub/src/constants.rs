@@ -18,10 +18,13 @@ pub const HISTORY_GOSSIP: u32 = 3;
 
 /// The length of the total message history.
 pub const MSG_HIST_LEN: u32 = 120;
+/// The duration of messages in the seen cache, in seconds.
 pub const SEEN_MSGS_CACHE: u32 = 120;
 
-// hearbeat interval
-pub const HEARTBEAT_INITIAL_DELAY: u32 = 100; // milliseconds
-pub const HEARTBEAT_INTERVAL: u32 = 1;   // seconds.
+/// In milliseconds
+pub const HEARTBEAT_INITIAL_DELAY: u32 = 100;
+/// The interval at which to run the heartbeat procedure, in seconds
+pub const HEARTBEAT_INTERVAL: u32 = 1;
 
-pub const FANOUT_TTL: u32 = 60; // seconds
+/// The time to live for fanout in seconds.
+pub const FANOUT_TTL: u32 = 60;

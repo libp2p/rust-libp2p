@@ -349,7 +349,7 @@ impl MsgId {
 // searching for it within the `Gossipsub` state or `MCache`.
 // If the message needs to be private then converting a MsgHash to a GMessage
 // can be restricted from public use (including the result of the message).
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, Ord, PartialOrd, PartialEq, Eq, Hash)]
 pub struct MsgHash {
     hash: String,
 }
@@ -399,12 +399,13 @@ impl MsgHashBuilder {
 }
 
 // See note on MsgId above.
-/// Contains either a `MsgHash` or a `MsgId` to represent a message.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum MsgRep {
-    hash(MsgHash),
-    id(MsgId),
-}
+// /// Contains either a `MsgHash` or a `MsgId` to represent a message.
+// Unused
+// #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+// pub enum MsgRep {
+//     hash(MsgHash),
+//     id(MsgId),
+// }
 
 /// A subscription message received by the Gossipsub system.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -437,7 +438,9 @@ pub enum GossipsubSubscriptionAction {
 /// Contains the control message for Gossipsub.
 ///
 /// Included in `GossipsubRpc`.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+// Debug, Default, PartialEq, Eq can't be derived for `LruCache` in `MCache` in
+// `ControlIHave`.
+#[derive(Clone)]
 pub struct ControlMessage {
     /// The control message for gossiping
     pub(crate) ihave: Vec<ControlIHave>,
@@ -452,7 +455,12 @@ pub struct ControlMessage {
 
 impl ControlMessage {
     fn new() -> Self {
-        ControlMessage::default()
+        ControlMessage {
+            ihave: Vec::new(),
+            iwant: Vec::new(),
+            graft: Vec::new(),
+            prune: Vec::new(),
+        }
     }
 }
 
@@ -489,7 +497,7 @@ impl From<ControlMessage> for rpc_proto::ControlMessage {
 
 impl From<rpc_proto::ControlMessage> for ControlMessage {
     fn from(ctrl: rpc_proto::ControlMessage) -> ControlMessage {
-        let mut control = ControlMessage::default();
+        let mut control = ControlMessage::new();
 
         for ctrl_i_have in ctrl.get_ihave().into_iter() {
             let mut control_i_have = ControlIHave::from(ctrl_i_have.clone());
@@ -502,7 +510,8 @@ impl From<rpc_proto::ControlMessage> for ControlMessage {
 
 /// Gossip control message; this notifies the peer that the following
 /// messages were recently seen and are available on request.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+// Debug, Default, PartialEq, Eq can't be derived for LruCache in MCache.
+#[derive(Clone)]
 pub struct ControlIHave {
     /// Topic that the messages belong to, represented by `TopicHash`.
     pub t_hash: TopicHash,
@@ -537,7 +546,7 @@ impl From<ControlIHave> for rpc_proto::ControlIHave {
 
 impl From<rpc_proto::ControlIHave> for ControlIHave {
     fn from(ctrl_i_have: rpc_proto::ControlIHave) -> ControlIHave {
-        let mut control_i_have = ControlIHave::default();
+        let mut control_i_have = ControlIHave::new();
         control_i_have.t_hash = TopicHash::from_raw(ctrl_i_have
             .get_topic_hash().to_string());
         control_i_have.recent_mcache.put_many
@@ -625,7 +634,8 @@ pub enum GossipSubGraftPruneAction {
 
 /// An RPC received by the Gossipsub system.
 /// Included e.g. in the events field of `Gossipsub`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+// PartialEq, Eq don't work with Option<ControlMessage>.
+#[derive(Clone)]
 pub struct GossipsubRpc {
     /// List of messages that were part of this RPC query.
     pub messages: Vec<GMessage>,
@@ -639,7 +649,6 @@ pub struct GossipsubRpc {
 /// polling, which are `GMessage` and `message::ControlMessage`. Used in
 /// the events field of `layer::Gossipsub`  as the `TOutEvent` for the
 /// `NetworkBehaviourAction`.
-#[derive(Debug)]
 pub enum GOutEvents {
     /// The `GMessage` to send.
     GMsg(GMessage),

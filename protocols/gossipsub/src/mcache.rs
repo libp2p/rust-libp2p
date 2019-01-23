@@ -1,26 +1,51 @@
 use {TopicMap, TopicHash};
-use constants::{GOSSIP_HIST_LEN, HISTORY_GOSSIP};
+use constants::{GOSSIP_HIST_LEN, HISTORY_GOSSIP, SEEN_MSGS_CACHE};
 use message::{MsgMap, GMessage, MsgHash};
 
 use std::{
     collections::hash_map::Keys,
+    fmt,
     iter,
+    time::Duration,
 };
+
+use lru_time_cache::LruCache;
 
 /// The message cache used to track recently seen messages. FMI see
 /// https://github.com/libp2p/specs/tree/master/pubsub/gossipsub#router-state.
 /// MCache is used in `ControlIHave`.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+// Debug, Default, PartialEq, Eq can't be derived for LruCache.
+#[derive(Clone)]
 pub struct MCache {
     msgs: MsgMap,
     history: Vec<Vec<CacheEntry>>,
+    seen: LruCache<MsgHash, CacheEntry>,
 }
+
+// Doesn't work, seen doesn't implement debug
+// impl fmt::Debug for MCache {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//         write!(f, "MCache {{ msgs: {:?}, history: {:?}, seen: {:?} }}",
+//             self.msgs, self.history, self.seen)
+//     }
+// }
+
+// All fields don't implement display.
+// impl fmt::Display for MCache {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//         write!(f, "MCache {{ msgs: {}, history: {}, seen: {} }}",
+//             self.msgs, self.history, self.seen)
+//     }
+// }
 
 impl MCache {
     pub fn new() -> Self {
+        let time_to_live = Duration::from_secs(SEEN_MSGS_CACHE as u64);
         MCache {
             msgs: MsgMap::new(),
             history: Vec::with_capacity(GOSSIP_HIST_LEN as usize),
+            seen: LruCache::<MsgHash, CacheEntry>::with_expiry_duration(
+                time_to_live)
         }
     }
 
