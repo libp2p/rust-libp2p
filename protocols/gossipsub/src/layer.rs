@@ -271,66 +271,43 @@ impl<TSubstream> Gossipsub<TSubstream> {
             topics: topic.into_iter().map(|t| t.into().clone()).collect(),
         };
 
-        // build a list of peers to forward the message to
-        // TODO: Potentially use a hashmap - efficiency in checking for duplicates
-        let mut recipient_peers: Vec<PeerId> = vec![];
+        // forward the message to mesh and floodsub peers
+        let local_peer_id = self.local_peer_id.clone();
+        self.forward_msg(message.clone(), local_peer_id);
 
-        for t in message.topics.iter() {
-            // floodsub peers in the topic - add them to recipient_peers
-            if let Some((_, floodsub_peers)) = self.topic_peers.get(t) {
-                for peer_id in floodsub_peers {
-                    if !recipient_peers.contains(peer_id) {
-                        recipient_peers.push(peer_id.clone());
+        let mut recipient_peers = HashMap::new();
+        for topic_hash in &message.topics {
+            // if not subscribed to the topic, use fanout peers
+            if self.mesh.get(&topic_hash).is_none() {
+                // build a list of peers to forward the message to
+                // if we have fanout peers add them to the map
+                if let Some(fanout_peers) = self.fanout.get(&topic_hash) {
+                    for peer in fanout_peers {
+                        recipient_peers.insert(peer.clone(), ());
                     }
+                }
+            } else {
+                // TODO: Ensure fanout key never contains an empty set
+                // we have no fanout peers, select mesh_n of them and add them to the fanout
+                let mesh_n = self.config.mesh_n;
+                let new_peers = self.get_random_peers(&topic_hash, mesh_n, { |_| true });
+                // add the new peers to the fanout and recipient peers
+                self.fanout.insert(topic_hash.clone(), new_peers.clone());
+                for peer in new_peers {
+                    recipient_peers.insert(peer.clone(), ());
                 }
             }
-
-            // gossipsub peers in the mesh
-            match self.mesh.get(t) {
-                // we are in the mesh, add the gossip peers to recipient_peers
-                Some(gossip_peers) => {
-                    for peer_id in gossip_peers {
-                        if !recipient_peers.contains(peer_id) {
-                            recipient_peers.push(peer_id.clone());
-                        }
-                    }
-                }
-                // not in the mesh, use fanout peers
-                None => {
-                    if self.fanout.contains_key(t) {
-                        // we have fanout peers. Add them to recipient_peers
-                        if let Some(fanout_peers) = self.fanout.get(t) {
-                            for peer_id in fanout_peers {
-                                if !recipient_peers.contains(peer_id) {
-                                    recipient_peers.push(peer_id.clone());
-                                }
-                            }
-                        }
-                    } else {
-                        // TODO: Ensure fanout key never contains an empty set
-                        // we have no fanout peers, select mesh_n of them and add them to the fanout
-                        let mesh_n = self.config.mesh_n;
-                        let new_peers = self.get_random_peers(t, mesh_n, { |_| true });
-                        // add the new peers to the fanout and recipient peers
-                        self.fanout.insert(t.clone(), new_peers.clone());
-                        for peer_id in new_peers {
-                            if !recipient_peers.contains(&peer_id) {
-                                recipient_peers.push(peer_id.clone());
-                            }
-                        }
-                    }
-                    // we are publishing to fanout peers - update the time we published
-                    self.fanout_last_pub.insert(t.clone(), Instant::now());
-                }
-            }
+            // we are publishing to fanout peers - update the time we published
+            self.fanout_last_pub
+                .insert(topic_hash.clone(), Instant::now());
         }
 
-        // add published message to our received cache
-        // TODO: Add to memcache
+        // add published message to our received caches
+        self.mcache.put(message.clone());
         self.received.add(&message.msg_id());
 
         // Send to peers we know are subscribed to the topic.
-        for peer_id in recipient_peers {
+        for peer_id in recipient_peers.keys() {
             println!("peers subscribed? {:?}", peer_id);
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer_id.clone(),
@@ -340,6 +317,46 @@ impl<TSubstream> Gossipsub<TSubstream> {
                     control_msgs: Vec::new(),
                 },
             });
+        }
+    }
+
+    /// Helper function to publish and forward messages to floodsub[topic] and mesh[topic] peers.
+    fn forward_msg(&mut self, message: GossipsubMessage, source: PeerId) {
+        let mut recipient_peers = HashMap::new();
+
+        // add floodsub and mesh peers
+        for topic in &message.topics {
+            // floodsub
+            if let Some((_, floodsub_peers)) = self.topic_peers.get(&topic) {
+                for peer_id in floodsub_peers {
+                    if *peer_id != source {
+                        recipient_peers.insert(peer_id.clone(), ());
+                    }
+                }
+            }
+
+            // mesh
+            if let Some(mesh_peers) = self.mesh.get(&topic) {
+                for peer_id in mesh_peers {
+                    if *peer_id != source {
+                        recipient_peers.insert(peer_id.clone(), ());
+                    }
+                }
+            }
+        }
+
+        // forward the message to peers
+        if !recipient_peers.is_empty() {
+            for peer in recipient_peers.keys() {
+                self.events.push_back(NetworkBehaviourAction::SendEvent {
+                    peer_id: peer.clone(),
+                    event: GossipsubRpc {
+                        subscriptions: Vec::new(),
+                        messages: vec![message.clone()],
+                        control_msgs: Vec::new(),
+                    },
+                });
+            }
         }
     }
 
@@ -529,6 +546,9 @@ impl<TSubstream> Gossipsub<TSubstream> {
             return;
         }
 
+        // add to the memcache
+        self.mcache.put(msg.clone());
+
         // dispatch the message to the user
         if self.mesh.keys().any(|t| msg.topics.iter().any(|u| t == u)) {
             self.events.push_back(NetworkBehaviourAction::GenerateEvent(
@@ -536,43 +556,8 @@ impl<TSubstream> Gossipsub<TSubstream> {
             ));
         }
 
-        // peers to forward the message to
-        let mut recipient_peers = HashMap::new();
-
-        // add floodsub and mesh peers
-        for topic in &msg.topics {
-            // floodsub
-            if let Some((_, floodsub_peers)) = self.topic_peers.get(&topic) {
-                for peer_id in floodsub_peers {
-                    if peer_id != propagation_source {
-                        recipient_peers.insert(peer_id.clone(), ());
-                    }
-                }
-            }
-
-            // mesh
-            if let Some(mesh_peers) = self.mesh.get(&topic) {
-                for peer_id in mesh_peers {
-                    if peer_id != propagation_source {
-                        recipient_peers.insert(peer_id.clone(), ());
-                    }
-                }
-            }
-        }
-
-        // forward the message to peers
-        if !recipient_peers.is_empty() {
-            for peer in recipient_peers.keys() {
-                self.events.push_back(NetworkBehaviourAction::SendEvent {
-                    peer_id: peer.clone(),
-                    event: GossipsubRpc {
-                        subscriptions: Vec::new(),
-                        messages: vec![msg.clone()],
-                        control_msgs: Vec::new(),
-                    },
-                });
-            }
-        }
+        // forward the message to floodsub and mesh peers
+        self.forward_msg(msg, propagation_source.clone());
     }
 
     /// Handles received subscriptions.
