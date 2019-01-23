@@ -34,9 +34,9 @@ use log::{debug, trace};
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
 use protobuf::Message as ProtobufMessage;
 use rand::{self, RngCore};
-#[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
-use ring::signature::{RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256, verify as ring_verify};
-#[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
+#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+use ring::signature::{RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256, verify as ring_verify};
+#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 use ring::rand::SystemRandom;
 #[cfg(feature = "secp256k1")]
 use secp256k1;
@@ -46,7 +46,7 @@ use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use crate::structs_proto::{Exchange, Propose};
 use tokio_io::codec::length_delimited;
 use tokio_io::{AsyncRead, AsyncWrite};
-#[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
+#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 use untrusted::Input as UntrustedInput;
 use crate::{KeyAgreement, SecioConfig, SecioKeyPairInner};
 #[cfg(feature = "secp256k1")]
@@ -370,18 +370,11 @@ where
                 exchange.set_epubkey(tmp_pub_key);
                 exchange.set_signature({
                     match context.config.key.inner {
-                        #[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
+                        #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
                         SecioKeyPairInner::Rsa { ref private, .. } => {
-                            let mut state = match RSASigningState::new(private.clone()) {
-                                Ok(s) => s,
-                                Err(_) => {
-                                    debug!("failed to sign local exchange");
-                                    return Err(SecioError::SigningFailure);
-                                },
-                            };
                             let mut signature = vec![0; private.public_modulus_len()];
                             let rng = SystemRandom::new();
-                            match state.sign(&RSA_PKCS1_SHA256, &rng, &data_to_sign, &mut signature) {
+                            match private.sign(&RSA_PKCS1_SHA256, &rng, &data_to_sign, &mut signature) {
                                 Ok(_) => (),
                                 Err(_) => {
                                     debug!("failed to sign local exchange");
@@ -453,7 +446,7 @@ where
             data_to_verify.extend_from_slice(remote_exch.get_epubkey());
 
             match context.state.remote.public_key {
-                #[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
+                #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
                 PublicKey::Rsa(ref remote_public_key) => {
                     // TODO: The ring library doesn't like some stuff in our DER public key,
                     //       therefore we scrap the first 24 bytes of the key. A proper fix would
@@ -507,7 +500,7 @@ where
                         return Err(SecioError::SignatureVerificationFailed)
                     }
                 },
-                #[cfg(not(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown")))))]
+                #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
                 PublicKey::Rsa(_) => {
                     debug!("support for RSA was disabled at compile-time");
                     return Err(SecioError::SignatureVerificationFailed);
@@ -640,7 +633,7 @@ mod tests {
     use crate::{SecioConfig, SecioKeyPair};
 
     #[test]
-    #[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
+    #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
     fn handshake_with_self_succeeds_rsa() {
         let key1 = {
             let private = include_bytes!("../tests/test-rsa-private-key.pk8");
