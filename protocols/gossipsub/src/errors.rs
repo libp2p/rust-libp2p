@@ -15,8 +15,13 @@ custom_error!{pub GError
         = "The topic with topic hash '{t_hash}' was not found. '{err}'",
     AlreadyGrafted{t_hash: String, peer_id: String, err: String}
         = "Tried to graft the peer with peer_id '{peer_id}' to the topic \
-        with topic hash '{t_hash}' in the mesh, but it is already grafted."
+        with topic hash '{t_hash}' in the mesh, but it is already grafted.",
+    InvalidPeerId{from_data: String}
+        = "The from field '{from_data}' of an instance of rpc_proto::Message \
+        could not be converted to a valid peer ID."
 }
+
+pub type Result<T> = std::result::Result<T, GError>;
 
 // use std::{error, fmt, io};
 

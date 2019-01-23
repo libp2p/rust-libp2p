@@ -1,3 +1,4 @@
+use errors::{GError, Result as GResult};
 use mcache::MCache;
 use rpc_proto;
 
@@ -172,26 +173,38 @@ impl GMessage {
     // }
 
     pub fn from_proto_msg(p_msg: rpc_proto::Message)
-        -> Result<GMessage, io::Error> {
-        let from = PeerId::from_bytes(p_msg.get_from().to_vec()).expect("The from field of rpc_proto is not a valid peer ID");
-        let p_t_hashes = p_msg.get_topic_hashes().to_vec();
-        let topic_hashes = p_t_hashes.iter();
-        let mut topic_map = TopicMap::new();
-        for th_str in topic_hashes {
-            let th = TopicHash::from_raw(th_str.to_string());
-            let topic = Topic::from(&th);
-            topic_map.insert(th, topic);
-        }
+        -> GResult<GMessage> {
+        let pmf_slice_of_bytes = p_msg.get_from();
+        let pmf_vec_of_bytes = pmf_slice_of_bytes.to_vec();
+        let result_from_p_msg = PeerId::from_bytes(pmf_vec_of_bytes);
+        match result_from_p_msg {
+            Ok(from) => {
+                let p_t_hashes = p_msg.get_topic_hashes().to_vec();
+                let topic_hashes = p_t_hashes.iter();
+                let mut topic_map = TopicMap::new();
+                for th_str in topic_hashes {
+                    let th = TopicHash::from_raw(th_str.to_string());
+                    let topic = Topic::from(&th);
+                    topic_map.insert(th, topic);
+                }
 
-        Ok(GMessage {
-            from: from,
-            data: p_msg.get_data().to_vec(),
-            seq_no: p_msg.get_seqno().to_vec(),
-            topics: topic_map,
-        })
+                Ok(GMessage {
+                    from: from,
+                    data: p_msg.get_data().to_vec(),
+                    seq_no: p_msg.get_seqno().to_vec(),
+                    topics: topic_map,
+                })
+            },
+            Err(pmf_invalid_vec_of_bytes) => {
+                let invalid_slice_of_bytes_as_string = String::from_utf8_lossy(
+                    pmf_slice_of_bytes).to_string();
+                return Err(GError::InvalidPeerId{from_data:
+                    invalid_slice_of_bytes_as_string});
+            }
+        }
     }
 
-    pub fn from_msg_hash(m_hash: MsgHash) -> Result<GMessage, io::Error> {
+    pub fn from_msg_hash(m_hash: MsgHash) -> GResult<GMessage> {
         let decoded_hash_vec = bs58::decode(m_hash.hash).into_vec().unwrap();
         let decoded_hash_bytes: &[u8]
             = decoded_hash_vec.as_ref();
@@ -568,7 +581,7 @@ pub struct ControlIWant {
 }
 
 impl ControlIWant {
-    fn new() -> Self {
+    pub fn new() -> Self {
         ControlIWant { m_hashes: vec!(MsgHash::default())}
     }
 }

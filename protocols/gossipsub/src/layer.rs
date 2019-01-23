@@ -1,9 +1,10 @@
-use errors::GError;
+use errors::{GError, Result as GResult};
 use handler::GossipsubHandler;
 use mcache::MCache;
 use mesh::Mesh;
-use message::{ControlIHave, ControlMessage, GMessage, GossipsubRpc,
-    GossipsubSubscription, GossipsubSubscriptionAction, GOutEvents, MsgHash};
+use message::{ControlIHave, ControlIWant, ControlMessage, GMessage,
+    GossipsubRpc, GossipsubSubscription, GossipsubSubscriptionAction,
+    GOutEvents, MsgHash, MsgMap};
 use {Topic, TopicHash};
 use rpc_proto;
 
@@ -191,10 +192,10 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
     /// Publishes a message with multiple topics to the network, without any
     /// authentication or encryption.
     ///
-    /// Optionally add a message ID.
-    ///
     /// > **Note**: Doesn't do anything if we're not subscribed to any of the
     /// topics.
+    //
+    // Optionally add a message ID.
     pub fn publish_many(&mut self,
         topics: impl IntoIterator<Item = impl Into<Topic>>,
         data: impl Into<Vec<u8>>,
@@ -264,7 +265,7 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
     /// Returns true if the graft succeeded. Returns false if we were
     /// already grafted.
     pub fn graft(&mut self, t_hash: impl AsRef<TopicHash>)
-        -> Result<(), GError> {
+        -> GResult<()> {
         self.graft_many(iter::once(t_hash))
     }
 
@@ -274,33 +275,33 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
     /// Grafts a peer to multiple topics, if they are subscribed to all of
     /// them. If the topic is not in the mesh it adds it and grafts the peer.
     pub fn graft_many(&mut self, t_hashes: impl IntoIterator<Item = impl
-        AsRef<TopicHash>>) -> Result<(), GError> {
+        AsRef<TopicHash>>) -> GResult<()> {
         let m = &mut self.mesh;
         for t_hash in t_hashes {
-            let th = t_hash.as_ref();
-            let th_str = th.clone().into_string();
+            let thr = t_hash.as_ref();
+            let th_str = thr.clone().into_string();
             let peer = self.local_peer_id.clone();
             let peer_str = peer.to_base58();
-            if !self.subscribed_topics.iter().any(|t| t.hash() == th) {
+            if !self.subscribed_topics.iter().any(|t| t.hash() == thr) {
                 return Err(GError::NotSubscribedToTopic{t_hash: th_str,
                 peer_id: peer_str, err: "Tried to graft the peer \
                 '{peer_str}' to the topic with topic hash '{th_str}'."
                 .to_string()});
             }
 
-            match m.remove(th) {
+            match m.remove(thr) {
                 Ok(mut ps) => {
-                    match m.get_peer_from_topic(th, &peer) {
+                    match m.get_peer_from_topic(thr, &peer) {
                         Ok(_peer) => return Err(GError::AlreadyGrafted{
                             t_hash: th_str, peer_id: peer_str,
                             err: "".to_string()}),
                         Err(GError::NotGraftedToTopic{t_hash: _th_str,
                             peer_id: _peer_str, err: _err}) => {
                                 ps.push(peer);
-                                m.insert(th.clone(), ps);
+                                m.insert(thr.clone(), ps);
                             },
                         Err(GError::TopicNotInMesh{t_hash: _t_hash, err: _err})
-                        => {m.insert(th.clone(), vec!(peer));},
+                        => {m.insert(thr.clone(), vec!(peer));},
                         Err(err) => {return Err(err);} // Shouldn't happen.
                     }
                 },
@@ -313,7 +314,7 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
     /// Prunes the peer from a topic.
     ///
     /// Returns true if the peer is grafted to this topic.
-    pub fn prune(&mut self, t_hash: impl AsRef<TopicHash>) -> Result<(), GError> {
+    pub fn prune(&mut self, t_hash: impl AsRef<TopicHash>) -> GResult<()> {
         self.prune_many(iter::once(t_hash))
     }
 
@@ -321,17 +322,18 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
     ///
     /// Note that this only works if the peer is grafted to such topics.
     pub fn prune_many(&mut self, t_hashes: impl IntoIterator<Item = impl
-        AsRef<TopicHash>>) -> Result<(), GError> {
+        AsRef<TopicHash>>) -> GResult<()> {
         let p = &self.local_peer_id;
         let m = &mut self.mesh;
         for t_hash in t_hashes {
-            let th = t_hash.as_ref();
-            let _th_str = th.clone().into_string();
+            let thr = t_hash.as_ref();
+            let th = thr.clone();
+            let _th_str = th.into_string();
             let _p_str = p.clone().to_base58();
 
-            match m.get_peer_from_topic(th, p) {
+            match m.get_peer_from_topic(thr, p) {
                 Ok(_peer) => {
-                    m.remove_peer_from_topic(th, p);
+                    m.remove_peer_from_topic(thr, p);
                 },
                 Err(GError::NotGraftedToTopic{t_hash: th_str, peer_id: p_str,
                 err: _err}) => {
@@ -350,19 +352,37 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
         Ok(())
     }
 
-    /// gossip: this notifies the peer that the following messages of the
+    /// gossip: this notifies the peer that the input messages
     /// were recently seen and are available on request.
     /// Checks the seen set and requests unknown messages with an IWANT
     /// message.
-    pub fn ihave(&mut self, topics: impl AsRef<MsgHash>) {
-        
+    pub fn i_have(&mut self,
+        msg_hashes: impl IntoIterator<Item = impl AsRef<MsgHash>>) {
+        let i_want = ControlIWant::new();
     }
 
-    /// Request transmission of messages announced in an IHAVE message.
+    /// Requests transmission of messages announced in an IHAVE message.
     /// Forwards all request messages that are present in mcache to the
-    /// requesting peer.
-    pub fn iwant(&mut self, topics: impl AsRef<MsgHash>) {
-
+    /// requesting peer, as well as (unlike the spec and Go impl) returning
+    /// those that are not, via reconstructing them from the message hashes.
+    pub fn i_want(&mut self,
+        msg_hashes: impl IntoIterator<Item = impl AsRef<MsgHash>>)
+            -> GResult<(MsgMap, MsgMap)> {
+        let mut return_msgs = MsgMap::new();
+        let mut not_found = MsgMap::new();
+        for msg_hash in msg_hashes {
+            let mhr = msg_hash.as_ref();
+            // let mh = |mhr: &MsgHash| {mhr.clone()};
+            if let Some(msg) = self.mcache.get(mhr.clone()) {
+                return_msgs.insert(mhr.clone(), msg.clone());
+            } else {
+                match GMessage::from_msg_hash(mhr.clone()) {
+                    Ok(m) => {not_found.insert(mhr.clone(), m);},
+                    Err(err) => {return Err(err);}
+                }
+            }
+        }
+        Ok((return_msgs, not_found))
     }
 
     pub fn join(&mut self, topic: impl AsRef<TopicHash>) {

@@ -115,6 +115,9 @@ impl MCache {
         hist.clone().insert(0, Vec::new());
     }
 
+    pub fn get_seen(&self) -> &LruCache<MsgHash, CacheEntry> {
+        &self.seen
+    }
     // Consulted https://github.com/libp2p/go-libp2p-pubsub/blob/master/mcache.go
     // as https://github.com/libp2p/specs/tree/master/pubsub/gossipsub
     // is vague.

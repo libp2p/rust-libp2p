@@ -1,5 +1,5 @@
 use TopicHash;
-use errors::GError;
+use errors::{GError, Result as GResult};
 
 use libp2p_core::PeerId;
 
@@ -48,7 +48,7 @@ impl Mesh {
     /// Gets all the peers that are grafted to a topic in the mesh, or returns
     /// None if the topic is not in the mesh.
     pub fn get_peers_from_topic(&self, th: &TopicHash)
-        -> Result<Vec<PeerId>, GError>
+        -> GResult<Vec<PeerId>>
     {
         let th_str = th.clone().into_string();
         match self.m.get(th) {
@@ -63,7 +63,7 @@ impl Mesh {
     /// Gets a peer that is grafted to a topic in the mesh, or returns a
     /// `GError` if the peer or topic is not in the mesh.
     pub fn get_peer_from_topic(&self, th: &TopicHash, p: &PeerId)
-        -> Result<PeerId, GError> {
+        -> GResult<PeerId> {
         let get_result = self.get_peers_from_topic(th).map(|peers| {
             for peer in peers {
                 if peer == *p {
@@ -85,7 +85,7 @@ impl Mesh {
 
     pub fn get_mut(&mut self, ) {}
 
-    pub fn remove(&mut self, th: &TopicHash) -> Result<Vec<PeerId>, GError>
+    pub fn remove(&mut self, th: &TopicHash) -> GResult<Vec<PeerId>>
     {
         if let Some(peers) = self.m.remove(th) {
             Ok(peers)
@@ -98,7 +98,7 @@ impl Mesh {
     }
 
     pub fn remove_peer_from_topic(&mut self, th: &TopicHash,
-        p: &PeerId) -> Result<(), GError>
+        p: &PeerId) -> GResult<()>
     {
         let peer_str = &(*p.to_base58());
         let th_str = th.clone().into_string();
