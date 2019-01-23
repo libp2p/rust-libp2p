@@ -1,5 +1,6 @@
 [package]
 name = "rw-stream-sink"
+edition = "2018"
 description = "Adaptator between Stream/Sink and AsyncRead/AsyncWrite"
 version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
