@@ -2,8 +2,8 @@ use errors::GError;
 use handler::GossipsubHandler;
 use mcache::MCache;
 use mesh::Mesh;
-use message::{GossipsubRpc, GMessage, ControlMessage, GossipsubSubscription,
-    GossipsubSubscriptionAction, GOutEvents};
+use message::{ControlIHave, ControlMessage, GMessage, GossipsubRpc,
+    GossipsubSubscription, GossipsubSubscriptionAction, GOutEvents, MsgHash};
 use {Topic, TopicHash};
 use rpc_proto;
 
@@ -33,7 +33,7 @@ use tokio_io::{AsyncRead, AsyncWrite};
 /// We need to duplicate the same fields as `Floodsub` in order to
 /// differentiate the state of the two protocols.
 // Doesn't derive `Debug` because `CuckooFilter` doesn't.
-pub struct Gossipsub<TSubstream> {
+pub struct Gossipsub<'a, TSubstream> {
     /// Events that need to be yielded to the outside when polling.
     /// `TInEvent = GossipsubRpc`, `TOutEvent = GOutEvents` (the latter is
     /// either a `GMessage` or a `ControlMessage`).
@@ -67,6 +67,14 @@ pub struct Gossipsub<TSubstream> {
 
     mcache: MCache,
 
+    last_pub: HashMap<TopicHash, i64>,
+
+    /// Pending gossips.
+    gossip: HashMap<PeerId, Vec<&'a ControlIHave>>,
+
+    /// Pending control messages.
+    control: HashMap<PeerId, Vec<&'a ControlMessage>>,
+
     /// Marker to pin the generics.
     marker: PhantomData<TSubstream>,
 
@@ -75,7 +83,7 @@ pub struct Gossipsub<TSubstream> {
     floodsub: Option<Floodsub<TSubstream>>,
 }
 
-impl<TSubstream> Gossipsub<TSubstream> {
+impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
     /// Creates a `Gossipsub`.
     pub fn new(local_peer_id: PeerId) -> Self {
         Gossipsub {
@@ -87,6 +95,9 @@ impl<TSubstream> Gossipsub<TSubstream> {
             mesh: Mesh::new(),
             fanout: Mesh::new(),
             mcache: MCache::new(),
+            last_pub: HashMap::new(),
+            gossip: HashMap::new(),
+            control: HashMap::new(),
             marker: PhantomData,
             floodsub: None,
         }
@@ -339,16 +350,18 @@ impl<TSubstream> Gossipsub<TSubstream> {
         Ok(())
     }
 
-    /// gossip; this notifies the peer that the following messages were
-    /// recently seen and are available on request. Checks the seen set and
-    /// requests unknown messages with an IWANT message.
-    pub fn ihave(&mut self, topics: impl AsRef<TopicHash>) {
+    /// gossip: this notifies the peer that the following messages of the
+    /// were recently seen and are available on request.
+    /// Checks the seen set and requests unknown messages with an IWANT
+    /// message.
+    pub fn ihave(&mut self, topics: impl AsRef<MsgHash>) {
+        
     }
 
     /// Request transmission of messages announced in an IHAVE message.
     /// Forwards all request messages that are present in mcache to the
     /// requesting peer.
-    pub fn iwant(&mut self, topics: impl AsRef<TopicHash>) {
+    pub fn iwant(&mut self, topics: impl AsRef<MsgHash>) {
 
     }
 
@@ -369,8 +382,8 @@ impl<TSubstream> Gossipsub<TSubstream> {
     }
 }
 
-impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for
-    Gossipsub<TSubstream>
+impl<'a, TSubstream, TTopology> NetworkBehaviour<TTopology> for
+    Gossipsub<'a, TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
