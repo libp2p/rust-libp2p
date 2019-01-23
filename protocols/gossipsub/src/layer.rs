@@ -41,6 +41,7 @@ use std::collections::hash_map::{DefaultHasher, HashMap};
 use std::time::{Duration, Instant};
 use std::{collections::VecDeque, iter, marker::PhantomData};
 use tokio_io::{AsyncRead, AsyncWrite};
+use tokio_timer::Interval;
 
 // potentially rename this struct - due to clashes
 /// Configuration parameters that define the performance of the gossipsub network.
@@ -62,8 +63,9 @@ pub struct GossipsubConfig {
     /// Number of peers to emit gossip to during a heartbeat (D_lazy in the spec).
     gossip_lazy: usize,
 
-    /// Initial delay in each heartbeat.
-    heartbeat_initial_delay: Duration,
+    //    Not applicable right now
+    //    /// Initial delay in each heartbeat.
+    //    heartbeat_initial_delay: Duration,
     /// Time between each heartbeat.
     heartbeat_interval: Duration,
     /// Time to live for fanout peers.
@@ -79,7 +81,7 @@ impl Default for GossipsubConfig {
             mesh_n_low: 4,
             mesh_n_high: 12,
             gossip_lazy: 6, // default to mesh_n
-            heartbeat_initial_delay: Duration::from_millis(100),
+            //            heartbeat_initial_delay: Duration::from_millis(100),
             heartbeat_interval: Duration::from_secs(1),
             fanout_ttl: Duration::from_secs(60),
         }
@@ -94,7 +96,7 @@ impl GossipsubConfig {
         mesh_n_low: usize,
         mesh_n_high: usize,
         gossip_lazy: usize,
-        heartbeat_initial_delay: Duration,
+        //        heartbeat_initial_delay: Duration,
         heartbeat_interval: Duration,
         fanout_ttl: Duration,
     ) -> GossipsubConfig {
@@ -113,7 +115,7 @@ impl GossipsubConfig {
             mesh_n_low,
             mesh_n_high,
             gossip_lazy,
-            heartbeat_initial_delay,
+            // heartbeat_initial_delay,
             heartbeat_interval,
             fanout_ttl,
         }
@@ -123,7 +125,7 @@ impl GossipsubConfig {
 /// Network behaviour that automatically identifies nodes periodically, and returns information
 /// about them.
 pub struct Gossipsub<TSubstream> {
-    /// Configuration providing gossipsub performance parameters
+    /// Configuration providing gossipsub performance parameters.
     config: GossipsubConfig,
 
     /// Events that need to be yielded to the outside when polling.
@@ -140,28 +142,31 @@ pub struct Gossipsub<TSubstream> {
     // This is used to efficiently keep track of all currently connected nodes and their type
     peer_topics: HashMap<PeerId, (SmallVec<[TopicHash; 16]>, NodeType)>,
 
-    /// Overlay network of connected peers - Maps topics to connected gossipsub peers
+    /// Overlay network of connected peers - Maps topics to connected gossipsub peers.
     mesh: HashMap<TopicHash, Vec<PeerId>>,
 
-    /// Map of topics to list of peers that we publish to, but don't subscribe to
+    /// Map of topics to list of peers that we publish to, but don't subscribe to.
     fanout: HashMap<TopicHash, Vec<PeerId>>,
 
-    /// The last publish time for fanout topics
+    /// The last publish time for fanout topics.
     fanout_last_pub: HashMap<TopicHash, Instant>,
 
-    /// Message cache for the last few heartbeats
+    /// Message cache for the last few heartbeats.
     mcache: MessageCache,
 
     // We keep track of the messages we received (in the format `string(source ID, seq_no)`) so that
     // we don't dispatch the same message twice if we receive it twice on the network.
     received: CuckooFilter<DefaultHasher>,
 
+    /// Heartbeat interval stream.
+    heartbeat: Interval,
+
     /// Marker to pin the generics.
     marker: PhantomData<TSubstream>,
 }
 
 impl<TSubstream> Gossipsub<TSubstream> {
-    /// Creates a `Gossipsub`.
+    /// Creates a `Gossipsub` struct given a set of parameters specified by `gs_config`.
     pub fn new(local_peer_id: PeerId, gs_config: GossipsubConfig) -> Self {
         Gossipsub {
             config: gs_config.clone(),
@@ -174,6 +179,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
             fanout_last_pub: HashMap::new(),
             mcache: MessageCache::new(gs_config.history_gossip, gs_config.history_length),
             received: CuckooFilter::new(),
+            heartbeat: Interval::new_interval(gs_config.heartbeat_interval),
             marker: PhantomData,
         }
     }
@@ -317,46 +323,6 @@ impl<TSubstream> Gossipsub<TSubstream> {
                     control_msgs: Vec::new(),
                 },
             });
-        }
-    }
-
-    /// Helper function to publish and forward messages to floodsub[topic] and mesh[topic] peers.
-    fn forward_msg(&mut self, message: GossipsubMessage, source: PeerId) {
-        let mut recipient_peers = HashMap::new();
-
-        // add floodsub and mesh peers
-        for topic in &message.topics {
-            // floodsub
-            if let Some((_, floodsub_peers)) = self.topic_peers.get(&topic) {
-                for peer_id in floodsub_peers {
-                    if *peer_id != source {
-                        recipient_peers.insert(peer_id.clone(), ());
-                    }
-                }
-            }
-
-            // mesh
-            if let Some(mesh_peers) = self.mesh.get(&topic) {
-                for peer_id in mesh_peers {
-                    if *peer_id != source {
-                        recipient_peers.insert(peer_id.clone(), ());
-                    }
-                }
-            }
-        }
-
-        // forward the message to peers
-        if !recipient_peers.is_empty() {
-            for peer in recipient_peers.keys() {
-                self.events.push_back(NetworkBehaviourAction::SendEvent {
-                    peer_id: peer.clone(),
-                    event: GossipsubRpc {
-                        subscriptions: Vec::new(),
-                        messages: vec![message.clone()],
-                        control_msgs: Vec::new(),
-                    },
-                });
-            }
         }
     }
 
@@ -828,6 +794,46 @@ impl<TSubstream> Gossipsub<TSubstream> {
         }
     }
 
+    /// Helper function to publish and forward messages to floodsub[topic] and mesh[topic] peers.
+    fn forward_msg(&mut self, message: GossipsubMessage, source: PeerId) {
+        let mut recipient_peers = HashMap::new();
+
+        // add floodsub and mesh peers
+        for topic in &message.topics {
+            // floodsub
+            if let Some((_, floodsub_peers)) = self.topic_peers.get(&topic) {
+                for peer_id in floodsub_peers {
+                    if *peer_id != source {
+                        recipient_peers.insert(peer_id.clone(), ());
+                    }
+                }
+            }
+
+            // mesh
+            if let Some(mesh_peers) = self.mesh.get(&topic) {
+                for peer_id in mesh_peers {
+                    if *peer_id != source {
+                        recipient_peers.insert(peer_id.clone(), ());
+                    }
+                }
+            }
+        }
+
+        // forward the message to peers
+        if !recipient_peers.is_empty() {
+            for peer in recipient_peers.keys() {
+                self.events.push_back(NetworkBehaviourAction::SendEvent {
+                    peer_id: peer.clone(),
+                    event: GossipsubRpc {
+                        subscriptions: Vec::new(),
+                        messages: vec![message.clone()],
+                        control_msgs: Vec::new(),
+                    },
+                });
+            }
+        }
+    }
+
     /// Helper function to get a set of `n` random gossipsub peers for a `topic_hash`
     /// filtered by the function `f`.
     fn get_random_peers(
@@ -1016,6 +1022,12 @@ where
         if let Some(event) = self.events.pop_front() {
             return Async::Ready(event);
         }
+
+        match self.heartbeat.poll() {
+            // heartbeat ready
+            Ok(Async::Ready(Some(_))) => self.heartbeat(),
+            _ => {}
+        };
 
         Async::NotReady
     }

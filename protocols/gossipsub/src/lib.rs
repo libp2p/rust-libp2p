@@ -31,6 +31,7 @@ extern crate rand;
 extern crate smallvec;
 extern crate tokio_codec;
 extern crate tokio_io;
+extern crate tokio_timer;
 extern crate unsigned_varint;
 
 pub mod handler;

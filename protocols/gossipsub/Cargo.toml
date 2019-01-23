@@ -18,6 +18,7 @@ rand = ""
 smallvec = ""
 tokio-codec = ""
 tokio-io = ""
+tokio-timer = ""
 unsigned-varint = ""
 
 [dev-dependencies]
