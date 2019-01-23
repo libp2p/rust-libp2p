@@ -42,5 +42,5 @@ mod mcache;
 mod rpc_proto;
 
 pub use self::handler::GossipsubHandler;
-pub use self::layer::Gossipsub;
+pub use self::layer::{Gossipsub, GossipsubConfig, GossipsubEvent};
 pub use self::protocol::*;
