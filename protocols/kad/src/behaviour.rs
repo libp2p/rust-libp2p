@@ -198,7 +198,7 @@ impl<TSubstream> Kademlia<TSubstream> {
                     .map(|peer_id| build_kad_peer(peer_id, topology, &self.connected_peers))
                     .collect();
 
-                let local_node_is_providing = self.providing_keys.iter().any(|k| k.as_ref() == &key);
+                let local_node_is_providing = self.providing_keys.iter().any(|k| k == &key);
 
                 let provider_peers = topology
                     .get_providers(&key)
@@ -258,7 +258,7 @@ impl<TSubstream> Kademlia<TSubstream> {
     /// There doesn't exist any "remove provider" message to broadcast on the network, therefore we
     /// will still be registered as a provider in the DHT for as long as the timeout doesn't expire.
     pub fn remove_providing(&mut self, key: &Multihash) {
-        if let Some(position) = self.providing_keys.iter().position(|k| k.as_ref() == key) {
+        if let Some(position) = self.providing_keys.iter().position(|k| k == key) {
             self.providing_keys.remove(position);
         }
     }
@@ -392,7 +392,7 @@ where
             Ok(Async::NotReady) => {},
             Ok(Async::Ready(Some(_))) => {
                 for provided in self.providing_keys.clone().into_iter() {
-                    let purpose = QueryPurpose::AddProvider(provided.as_ref().clone());
+                    let purpose = QueryPurpose::AddProvider(provided.clone().into());
                     self.start_query(QueryTarget::FindPeer(provided), purpose);
                 }
             },
