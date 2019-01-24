@@ -88,10 +88,16 @@ fn main() {
         fn inject_event(&mut self, event: libp2p::mdns::MdnsEvent) {
             match event {
                 libp2p::mdns::MdnsEvent::Discovered(list) => {
-                    for peer in list {
-                        self.floodsub.add_node_to_partial_view(peer.peer_id.clone());
+                    for (peer, _) in list {
+                        self.floodsub.add_node_to_partial_view(peer);
                     }
                 },
+                libp2p::mdns::MdnsEvent::Expired(list) => {
+                    for (peer, _) in list {
+                        // TODO: wrong if multiple addresses per peer
+                        self.floodsub.remove_node_from_partial_view(&peer);
+                    }
+                }
             }
         }
     }
