@@ -47,10 +47,13 @@ fn main() -> CliResult {
 
     let args = Cli::from_args();
 
-    let (transport, public_key) = {
-        let keypair = libp2p::noise::Keypair::gen_curve25519();
-        let pubkey = keypair.public().clone();
-        let transport = libp2p::tcp::TcpConfig::new()
+    let keypair = libp2p::noise::Keypair::gen_ed25519();
+    let public_key = PublicKey::Ed25519(keypair.public().as_ref().into());
+
+    let transport = {
+        let (s, p) = keypair.into();
+        let keypair = libp2p::noise::Keypair::new(s, p.into_curve_25519());
+        libp2p::tcp::TcpConfig::new()
             .with_upgrade(libp2p::noise::NoiseConfig::xx(keypair))
             .and_then(|(remote_pub, conn), endpoint| {
                 let fake_peer1 = PublicKey::Ed25519(remote_pub.as_ref().into()).into_peer_id(); // FIXME
@@ -62,8 +65,7 @@ fn main() -> CliResult {
                     .map_outbound(move |muxer| (fake_peer2, muxer));
                 libp2p::core::upgrade::apply(conn, upgrade, endpoint)
                     .map(|(id, muxer)| (id, libp2p::core::muxing::StreamMuxerBox::new(muxer)))
-            });
-        (transport, pubkey)
+            })
     };
 
     let floodsub_topic = libp2p::floodsub::TopicBuilder::new("chat").build();
@@ -82,15 +84,13 @@ fn main() -> CliResult {
         }
     }
 
-    let fake = PublicKey::Ed25519(public_key.as_ref().into()); // FIXME
-
     // Create a Swarm to manage peers and events
     let mut swarm = {
         let mut behaviour = MyBehaviour {
-            floodsub: libp2p::floodsub::Floodsub::new(fake.clone().into_peer_id())
+            floodsub: libp2p::floodsub::Floodsub::new(public_key.clone().into_peer_id())
         };
         behaviour.floodsub.subscribe(floodsub_topic.clone());
-        libp2p::Swarm::new(transport, behaviour, libp2p::core::topology::MemoryTopology::empty(fake))
+        libp2p::Swarm::new(transport, behaviour, libp2p::core::topology::MemoryTopology::empty(public_key))
     };
 
     let addr = libp2p::Swarm::listen_on(&mut swarm, "/ip4/0.0.0.0/tcp/0".parse()?)?;

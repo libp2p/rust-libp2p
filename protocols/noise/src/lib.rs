@@ -113,7 +113,7 @@ impl UpgradeInfo for NoiseConfig<IX> {
     type InfoIter = std::iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        std::iter::once(b"/noise/ix/0.1.0")
+        std::iter::once(b"/noise/ix/25519/chachapoly/sha256/0.1.0")
     }
 }
 
@@ -150,7 +150,7 @@ impl UpgradeInfo for NoiseConfig<XX> {
     type InfoIter = std::iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        std::iter::once(b"/noise/xx/0.1.0")
+        std::iter::once(b"/noise/xx/25519/chachapoly/sha256/0.1.0")
     }
 }
 
@@ -187,7 +187,7 @@ impl UpgradeInfo for NoiseConfig<IK> {
     type InfoIter = std::iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        std::iter::once(b"/noise/ik/0.1.0")
+        std::iter::once(b"/noise/ik/25519/chachapoly/sha256/0.1.0")
     }
 }
 
@@ -196,7 +196,7 @@ impl UpgradeInfo for NoiseConfig<IK, PublicKey<Curve25519>> {
     type InfoIter = std::iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        std::iter::once(b"/noise/ik/0.1.0")
+        std::iter::once(b"/noise/ik/25519/chachapoly/sha256/0.1.0")
     }
 }
 

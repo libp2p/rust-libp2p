@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::NoiseError;
+use crate::{keys::{Curve25519, Keypair, SecretKey, PublicKey}, NoiseError};
 use rand::FromEntropy;
 
 pub(crate) fn to_array(bytes: &[u8]) -> Result<[u8; 32], NoiseError> {
@@ -40,7 +40,7 @@ impl snow::resolvers::CryptoResolver for Resolver {
 
     fn resolve_dh(&self, choice: &snow::params::DHChoice) -> Option<Box<dyn snow::types::Dh>> {
         if let snow::params::DHChoice::Curve25519 = choice {
-            Some(Box::new(X25519::default()))
+            Some(Box::new(X25519 { keypair: Keypair::gen_curve25519() }))
         } else {
             None
         }
@@ -81,10 +81,8 @@ impl rand::CryptoRng for Rng {}
 impl snow::types::Random for Rng {}
 
 /// X25519 Diffie-Hellman key agreement.
-#[derive(Default)]
 struct X25519 {
-    secret: [u8; 32],
-    public: [u8; 32]
+    keypair: Keypair<Curve25519>
 }
 
 impl snow::types::Dh for X25519 {
@@ -94,24 +92,35 @@ impl snow::types::Dh for X25519 {
 
     fn priv_len(&self) -> usize { 32 }
 
-    fn pubkey(&self) -> &[u8] { &self.public }
+    fn pubkey(&self) -> &[u8] {
+        &self.keypair.public().as_ref()
+    }
 
-    fn privkey(&self) -> &[u8] { &self.secret }
+    fn privkey(&self) -> &[u8] {
+        &self.keypair.secret().as_ref()
+    }
 
     fn set(&mut self, privkey: &[u8]) {
-        self.secret.copy_from_slice(privkey);
-        self.public = x25519_dalek::x25519(self.secret, x25519_dalek::X25519_BASEPOINT_BYTES);
+        let mut s = [0; 32];
+        s.copy_from_slice(privkey);
+        let secret = SecretKey::new(s);
+        let public = secret.public();
+        self.keypair = Keypair::new(secret, public)
     }
 
     fn generate(&mut self, rng: &mut snow::types::Random) {
-        rng.fill_bytes(&mut self.secret);
-        self.public = x25519_dalek::x25519(self.secret, x25519_dalek::X25519_BASEPOINT_BYTES);
+        let mut s = [0; 32];
+        rng.fill_bytes(&mut s);
+        let secret = SecretKey::new(s);
+        let public = secret.public();
+        self.keypair = Keypair::new(secret, public)
     }
 
     fn dh(&self, pubkey: &[u8], out: &mut [u8]) -> Result<(), ()> {
-        let mut public = [0; 32];
-        public.copy_from_slice(&pubkey[.. 32]);
-        let result = x25519_dalek::x25519(self.secret, public);
+        let mut p = [0; 32];
+        p.copy_from_slice(&pubkey[.. 32]);
+        let public = PublicKey::new(p);
+        let result = self.keypair.secret().ecdh(&public);
         out[.. 32].copy_from_slice(&result[..]);
         Ok(())
     }

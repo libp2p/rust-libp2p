@@ -98,7 +98,7 @@ where
                             .and_then(to_array)?;
                         let io = NoiseOutput { session: s, .. io };
                         self.0 = InboundState::Done;
-                        return Ok(Async::Ready((PublicKey::from(m), io)))
+                        return Ok(Async::Ready((PublicKey::new(m), io)))
                     } else {
                         self.0 = InboundState::RecvHandshake2(io);
                         return Ok(Async::NotReady)
@@ -185,7 +185,7 @@ where
                             .and_then(to_array)?;
                         let io = NoiseOutput { session: s, .. io };
                         self.0 = OutboundState::Done;
-                        return Ok(Async::Ready((PublicKey::from(m), io)))
+                        return Ok(Async::Ready((PublicKey::new(m), io)))
                     } else {
                         self.0 = OutboundState::Flush2(io);
                         return Ok(Async::NotReady)

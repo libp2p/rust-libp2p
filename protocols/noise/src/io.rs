@@ -24,17 +24,18 @@ use snow;
 use std::{fmt, io};
 use tokio_io::{AsyncRead, AsyncWrite};
 
+const MAX_NOISE_PKG_LEN: usize = 65535;
 const MAX_WRITE_BUF_LEN: usize = 16384;
 
 pub struct NoiseOutput<T> {
     pub(super) io: T,
     pub(super) session: snow::Session,
     // incoming (encrypted) frames:
-    pub(super) read_buf: Box<[u8; 65535]>,
+    pub(super) read_buf: Box<[u8; MAX_NOISE_PKG_LEN]>,
     // buffering data before encrypting & flushing:
     pub(super) write_buf: Box<[u8; MAX_WRITE_BUF_LEN]>,
     // decrypted `read_buf` data goes in here:
-    pub(super) read_crypto_buf: Box<[u8; 65535]>,
+    pub(super) read_crypto_buf: Box<[u8; MAX_NOISE_PKG_LEN]>,
     // encrypted `write_buf` data goes in here:
     pub(super) write_crypto_buf: Box<[u8; 2 * MAX_WRITE_BUF_LEN]>,
     pub(super) read_state: ReadState,
@@ -54,9 +55,9 @@ impl<T> NoiseOutput<T> {
     pub(super) fn new(io: T, session: snow::Session) -> Self {
         NoiseOutput {
             io, session,
-            read_buf: Box::new([0; 65535]),
+            read_buf: Box::new([0; MAX_NOISE_PKG_LEN]),
             write_buf: Box::new([0; MAX_WRITE_BUF_LEN]),
-            read_crypto_buf: Box::new([0; 65535]),
+            read_crypto_buf: Box::new([0; MAX_NOISE_PKG_LEN]),
             write_crypto_buf: Box::new([0; 2 * MAX_WRITE_BUF_LEN]),
             read_state: ReadState::Init,
             write_state: WriteState::Init
