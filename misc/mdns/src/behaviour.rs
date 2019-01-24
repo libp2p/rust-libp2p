@@ -60,6 +60,11 @@ impl<TSubstream> Mdns<TSubstream> {
             marker: PhantomData,
         })
     }
+
+    /// Returns true if the given `PeerId` is in the list of nodes discovered through mDNS.
+    pub fn has_node(&self, peer_id: &PeerId) -> bool {
+        self.discovered_nodes.iter().any(|(p, _, _)| p == peer_id)
+    }
 }
 
 /// Event that can be produced by the `Mdns` behaviour.

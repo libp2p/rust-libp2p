@@ -78,7 +78,25 @@ impl<TSubstream> Floodsub<TSubstream> {
     /// Add a node to the list of nodes to propagate messages to.
     #[inline]
     pub fn add_node_to_partial_view(&mut self, peer_id: PeerId) {
-        self.target_peers.insert(peer_id);
+        // Send our topics to this node if we're already connected to it.
+        if self.connected_peers.contains_key(&peer_id) {
+            for topic in self.subscribed_topics.iter() {
+                self.events.push_back(NetworkBehaviourAction::SendEvent {
+                    peer_id: peer_id.clone(),
+                    event: FloodsubRpc {
+                        messages: Vec::new(),
+                        subscriptions: vec![FloodsubSubscription {
+                            topic: topic.hash().clone(),
+                            action: FloodsubSubscriptionAction::Subscribe,
+                        }],
+                    },
+                });
+            }
+        }
+
+        if self.target_peers.insert(peer_id.clone()) {
+            self.events.push_back(NetworkBehaviourAction::DialPeer { peer_id });
+        }
     }
 
     /// Remove a node from the list of nodes to propagate messages to.
@@ -206,17 +224,19 @@ where
 
     fn inject_connected(&mut self, id: PeerId, _: ConnectedPoint) {
         // We need to send our subscriptions to the newly-connected node.
-        for topic in self.subscribed_topics.iter() {
-            self.events.push_back(NetworkBehaviourAction::SendEvent {
-                peer_id: id.clone(),
-                event: FloodsubRpc {
-                    messages: Vec::new(),
-                    subscriptions: vec![FloodsubSubscription {
-                        topic: topic.hash().clone(),
-                        action: FloodsubSubscriptionAction::Subscribe,
-                    }],
-                },
-            });
+        if self.target_peers.contains(&id) {
+            for topic in self.subscribed_topics.iter() {
+                self.events.push_back(NetworkBehaviourAction::SendEvent {
+                    peer_id: id.clone(),
+                    event: FloodsubRpc {
+                        messages: Vec::new(),
+                        subscriptions: vec![FloodsubSubscription {
+                            topic: topic.hash().clone(),
+                            action: FloodsubSubscriptionAction::Subscribe,
+                        }],
+                    },
+                });
+            }
         }
 
         self.connected_peers.insert(id.clone(), SmallVec::new());
@@ -225,6 +245,12 @@ where
     fn inject_disconnected(&mut self, id: &PeerId, _: ConnectedPoint) {
         let was_in = self.connected_peers.remove(id);
         debug_assert!(was_in.is_some());
+
+        // We can be disconnected by the remote in case of inactivity for example, so we always
+        // try to reconnect.
+        if self.target_peers.contains(id) {
+            self.events.push_back(NetworkBehaviourAction::DialPeer { peer_id: id.clone() });
+        }
     }
 
     fn inject_node_event(
@@ -319,6 +345,12 @@ where
             Self::OutEvent,
         >,
     > {
+        for peer in &self.target_peers {
+            if !self.connected_peers.contains_key(peer) {
+
+            }
+        }
+
         if let Some(event) = self.events.pop_front() {
             return Async::Ready(event);
         }

@@ -94,8 +94,9 @@ fn main() {
                 },
                 libp2p::mdns::MdnsEvent::Expired(list) => {
                     for (peer, _) in list {
-                        // TODO: wrong if multiple addresses per peer
-                        self.floodsub.remove_node_from_partial_view(&peer);
+                        if !self.mdns.has_node(&peer) {
+                            self.floodsub.remove_node_from_partial_view(&peer);
+                        }
                     }
                 }
             }

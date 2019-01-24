@@ -28,7 +28,7 @@ use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourActio
 use libp2p_core::{protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
 use multihash::Multihash;
 use rand;
-use smallvec::{smallvec, SmallVec};
+use smallvec::SmallVec;
 use std::{cmp::Ordering, marker::PhantomData, time::Duration, time::Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_timer::Interval;
@@ -36,7 +36,6 @@ use tokio_timer::Interval;
 /// Network behaviour that handles Kademlia.
 pub struct Kademlia<TSubstream> {
     /// Storage for the nodes. Contains the known multiaddresses for this node.
-    // TODO: consider storing whether we're connected to a node in the kbuckets table
     kbuckets: KBucketsTable<PeerId, SmallVec<[Multiaddr; 4]>>,
 
     /// All the iterative queries we are currently performing, with their ID. The last parameter
@@ -125,12 +124,8 @@ impl<TSubstream> Kademlia<TSubstream> {
 
     /// Adds a known address for the given `PeerId`.
     pub fn add_address(&mut self, peer_id: &PeerId, address: Multiaddr) {
-        match self.kbuckets.update(peer_id.clone()) {
-            Update::Add(add) => add.add(smallvec![address]),
-            Update::AddPending(add) => add.add(smallvec![address]),
-            Update::Refreshed(refresh) => refresh.into_mut().push(address),
-            Update::Discarded => (),
-            Update::FailSelfUpdate => (),
+        if let Some(list) = self.kbuckets.entry_mut(peer_id) {
+            list.push(address);
         }
     }
 
@@ -303,6 +298,15 @@ where
             });
         }
 
+        match self.kbuckets.set_connected(&id) {
+            Update::Pending(to_ping) => {
+                self.queued_events.push(NetworkBehaviourAction::DialPeer {
+                    peer_id: to_ping.clone(),
+                })
+            },
+            _ => ()
+        }
+
         self.connected_peers.insert(id);
     }
 
@@ -328,12 +332,8 @@ where
                 // It is possible that we obtain a response for a query that has finished, which is
                 // why we may not find an entry in `self.active_queries`.
                 for peer in closer_peers.iter() {
-                    match self.kbuckets.update(peer.node_id.clone()) {
-                        Update::Add(add) => add.add(peer.multiaddrs.iter().cloned().collect()),
-                        Update::AddPending(add) => add.add(peer.multiaddrs.iter().cloned().collect()),
-                        Update::Refreshed(refresh) => refresh.into_mut().extend(peer.multiaddrs.iter().cloned()),
-                        Update::Discarded => (),
-                        Update::FailSelfUpdate => (),
+                    if let Some(entry) = self.kbuckets.entry_mut(&peer.node_id) {
+                        entry.extend(peer.multiaddrs.iter().cloned());
                     }
 
                     self.queued_events.push(NetworkBehaviourAction::GenerateEvent(KademliaOut::Discovered {
@@ -356,12 +356,8 @@ where
                 user_data,
             } => {
                 for peer in closer_peers.iter().chain(provider_peers.iter()) {
-                    match self.kbuckets.update(peer.node_id.clone()) {
-                        Update::Add(add) => add.add(peer.multiaddrs.iter().cloned().collect()),
-                        Update::AddPending(add) => add.add(peer.multiaddrs.iter().cloned().collect()),
-                        Update::Refreshed(refresh) => refresh.into_mut().extend(peer.multiaddrs.iter().cloned()),
-                        Update::Discarded => (),
-                        Update::FailSelfUpdate => (),
+                    if let Some(entry) = self.kbuckets.entry_mut(&peer.node_id) {
+                        entry.extend(peer.multiaddrs.iter().cloned());
                     }
 
                     self.queued_events.push(NetworkBehaviourAction::GenerateEvent(KademliaOut::Discovered {
@@ -388,12 +384,8 @@ where
                 }
             }
             KademliaHandlerEvent::AddProvider { key, provider_peer } => {
-                match self.kbuckets.update(provider_peer.node_id.clone()) {
-                    Update::Add(add) => add.add(provider_peer.multiaddrs.iter().cloned().collect()),
-                    Update::AddPending(add) => add.add(provider_peer.multiaddrs.iter().cloned().collect()),
-                    Update::Refreshed(refresh) => refresh.into_mut().extend(provider_peer.multiaddrs.iter().cloned()),
-                    Update::Discarded => (),
-                    Update::FailSelfUpdate => (),
+                if let Some(entry) = self.kbuckets.entry_mut(&provider_peer.node_id) {
+                    entry.extend(provider_peer.multiaddrs.iter().cloned());
                 }
                 self.queued_events.push(NetworkBehaviourAction::GenerateEvent(KademliaOut::Discovered {
                     peer_id: provider_peer.node_id.clone(),
