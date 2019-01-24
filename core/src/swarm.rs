@@ -510,14 +510,13 @@ where TBehaviour: NetworkBehaviour,
 
 #[cfg(test)]
 mod tests {
-
     use crate::nodes::raw_swarm::RawSwarm;
     use crate::peer_id::PeerId;
     use crate::protocols_handler::{DummyProtocolsHandler, ProtocolsHandler};
     use crate::public_key::PublicKey;
     use crate::tests::dummy_transport::DummyTransport;
-    use crate::topology::MemoryTopology;
     use futures::prelude::*;
+    use multiaddr::Multiaddr;
     use rand::random;
     use smallvec::SmallVec;
     use std::marker::PhantomData;
@@ -533,7 +532,7 @@ mod tests {
 
     trait TSubstream: AsyncRead + AsyncWrite {}
 
-    impl <TSubstream, TTopology> NetworkBehaviour<TTopology>
+    impl<TSubstream> NetworkBehaviour
         for DummyBehaviour<TSubstream>
         where TSubstream: AsyncRead + AsyncWrite
     {
@@ -544,6 +543,10 @@ mod tests {
             DummyProtocolsHandler::default()
         }
 
+        fn addresses_of_peer(&self, _: &PeerId) -> Vec<Multiaddr> {
+            Vec::new()
+        }
+
         fn inject_connected(&mut self, _: PeerId, _: ConnectedPoint) {}
 
         fn inject_disconnected(&mut self, _: &PeerId, _: ConnectedPoint) {}
@@ -551,7 +554,7 @@ mod tests {
         fn inject_node_event(&mut self, _: PeerId,
             _: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent) {}
 
-        fn poll(&mut self, _:&mut PollParameters<TTopology>) ->
+        fn poll(&mut self, _: &mut PollParameters) ->
             Async<NetworkBehaviourAction<<Self::ProtocolsHandler as
             ProtocolsHandler>::InEvent, Self::OutEvent>>
         {
@@ -571,10 +574,9 @@ mod tests {
     fn test_build_swarm() {
         let id = get_random_id();
         let transport = DummyTransport::new();
-        let topology = MemoryTopology::empty(id);
         let behaviour = DummyBehaviour{marker: PhantomData};
         let swarm = SwarmBuilder::new(transport, behaviour,
-            topology).incoming_limit(Some(4)).build();
+            id.into_peer_id()).incoming_limit(Some(4)).build();
         assert_eq!(swarm.raw_swarm.incoming_limit(), Some(4));
     }
 
@@ -582,9 +584,8 @@ mod tests {
     fn test_build_swarm_with_max_listeners_none() {
         let id = get_random_id();
         let transport = DummyTransport::new();
-        let topology = MemoryTopology::empty(id);
         let behaviour = DummyBehaviour{marker: PhantomData};
-        let swarm = SwarmBuilder::new(transport, behaviour, topology)
+        let swarm = SwarmBuilder::new(transport, behaviour, id.into_peer_id())
             .build();
         assert!(swarm.raw_swarm.incoming_limit().is_none())
 
