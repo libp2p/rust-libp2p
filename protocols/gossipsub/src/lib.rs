@@ -28,6 +28,8 @@ extern crate libp2p_core;
 extern crate libp2p_floodsub;
 extern crate protobuf;
 extern crate rand;
+#[macro_use]
+extern crate log;
 extern crate smallvec;
 extern crate tokio_codec;
 extern crate tokio_io;

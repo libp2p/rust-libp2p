@@ -188,13 +188,16 @@ impl<TSubstream> Gossipsub<TSubstream> {
     ///
     /// Returns true if the subscription worked. Returns false if we were already subscribed.
     pub fn subscribe(&mut self, topic: Topic) -> bool {
+        debug!("Subscribing to topic: {:?}", topic);
         if self.mesh.get(&topic.hash()).is_some() {
+            debug!("Topic: {:?} is already in the mesh.", topic);
             return false;
         }
 
         // send subscription request to all floodsub and gossipsub peers
         for (flood_peers, gossip_peers) in self.topic_peers.values() {
             for peer in flood_peers.iter().chain(gossip_peers) {
+                debug!("Sending SUBSCRIBE to peer: {:?}", peer);
                 self.events.push_back(NetworkBehaviourAction::SendEvent {
                     peer_id: peer.clone(),
                     event: GossipsubRpc {
@@ -211,8 +214,8 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
         // call JOIN(topic)
         // this will add new peers to the mesh for the topic
-        self.join(topic);
-
+        self.join(topic.clone());
+        info!("Subscribed to topic: {:?}", topic);
         true
     }
 
@@ -223,8 +226,10 @@ impl<TSubstream> Gossipsub<TSubstream> {
     /// Returns true if we were subscribed to this topic.
     pub fn unsubscribe(&mut self, topic: impl AsRef<TopicHash>) -> bool {
         let topic_hash = topic.as_ref();
+        debug!("Unsubscribing from topic: {:?}", topic_hash);
 
         if self.mesh.get(topic_hash).is_none() {
+            debug!("Already unsubscribed to topic: {:?}", topic_hash);
             // we are not subscribed
             return false;
         }
@@ -232,6 +237,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
         // announce to all floodsub and gossipsub peers
         for (flood_peers, gossip_peers) in self.topic_peers.values() {
             for peer in flood_peers.iter().chain(gossip_peers) {
+                debug!("Sending UNSUBSCRIBE to peer: {:?}", peer);
                 self.events.push_back(NetworkBehaviourAction::SendEvent {
                     peer_id: peer.clone(),
                     event: GossipsubRpc {
@@ -250,6 +256,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
         // this will remove the topic from the mesh
         self.leave(&topic);
 
+        info!("Unsubscribed from topic: {:?}", topic_hash);
         true
     }
 
@@ -277,6 +284,8 @@ impl<TSubstream> Gossipsub<TSubstream> {
             topics: topic.into_iter().map(|t| t.into().clone()).collect(),
         };
 
+        debug!("Publishing message: {:?}", message.msg_id());
+
         // forward the message to mesh and floodsub peers
         let local_peer_id = self.local_peer_id.clone();
         self.forward_msg(message.clone(), local_peer_id);
@@ -285,6 +294,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
         for topic_hash in &message.topics {
             // if not subscribed to the topic, use fanout peers
             if self.mesh.get(&topic_hash).is_none() {
+                debug!("Topic: {:?} not in the mesh", topic_hash);
                 // build a list of peers to forward the message to
                 // if we have fanout peers add them to the map
                 if let Some(fanout_peers) = self.fanout.get(&topic_hash) {
@@ -300,6 +310,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 // add the new peers to the fanout and recipient peers
                 self.fanout.insert(topic_hash.clone(), new_peers.clone());
                 for peer in new_peers {
+                    debug!("Peer added to fanout: {:?}", peer);
                     recipient_peers.insert(peer.clone(), ());
                 }
             }
@@ -314,7 +325,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
         // Send to peers we know are subscribed to the topic.
         for peer_id in recipient_peers.keys() {
-            println!("peers subscribed? {:?}", peer_id);
+            debug!("Sending message to peer: {:?}", peer_id);
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer_id.clone(),
                 event: GossipsubRpc {
@@ -324,14 +335,17 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 },
             });
         }
+        info!("Published message: {:?}", message.msg_id());
     }
 
     /// Gossipsub JOIN(topic) - adds topic peers to mesh and sends them GRAFT messages.
     fn join(&mut self, topic: impl AsRef<TopicHash>) {
         let topic_hash = topic.as_ref();
+        debug!("Running JOIN for topic: {:?}", topic_hash);
 
         // if we are already in the mesh, return
         if self.mesh.contains_key(topic_hash) {
+            info!("JOIN: The topic is already in the mesh, ignoring JOIN");
             return;
         }
 
@@ -339,6 +353,10 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
         // check if we have peers in fanout[topic] and remove them if we do
         if let Some((_, peers)) = self.fanout.remove_entry(topic_hash) {
+            debug!(
+                "JOIN: Removing peers from the fanout for topic: {:?}",
+                topic_hash
+            );
             // add them to the mesh
             self.mesh.insert(topic_hash.clone(), peers.clone());
             // remove the last published time
@@ -348,12 +366,16 @@ impl<TSubstream> Gossipsub<TSubstream> {
             let mesh_n = self.config.mesh_n;
             peers = self.get_random_peers(topic_hash, mesh_n, { |_| true });
             // put them in the mesh
+            debug!(
+                "JOIN: Inserting {:?} random peers into the mesh",
+                peers.len()
+            );
             self.mesh.insert(topic_hash.clone(), peers.clone());
         }
 
         for peer_id in peers {
             // Send a GRAFT control message
-            println!("Graft message sent to peer: {:?}", peer_id);
+            info!("JOIN: Sending Graft message to peer: {:?}", peer_id);
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer_id.clone(),
                 event: GossipsubRpc {
@@ -366,19 +388,21 @@ impl<TSubstream> Gossipsub<TSubstream> {
             });
             //TODO: tagPeer
         }
+        debug!("Completed JOIN for topic: {:?}", topic_hash);
     }
 
     /// Gossipsub LEAVE(topic) - Notifies mesh[topic] peers with PRUNE messages.
     fn leave(&mut self, topic: impl AsRef<TopicHash>) {
         let topic_hash = topic.as_ref();
+        debug!("Running LEAVE for topic {:?}", topic_hash);
 
         // if our mesh contains the topic, send prune to peers and delete it from the mesh
         if let Some((_, peers)) = self.mesh.remove_entry(topic_hash) {
-            for peer_id in peers {
+            for peer in peers {
                 // Send a PRUNE control message
-                println!("Prune message sent to peer: {:?}", peer_id);
+                info!("LEAVE: Sending PRUNE to peer: {:?}", peer);
                 self.events.push_back(NetworkBehaviourAction::SendEvent {
-                    peer_id: peer_id.clone(),
+                    peer_id: peer.clone(),
                     event: GossipsubRpc {
                         subscriptions: Vec::new(),
                         messages: Vec::new(),
@@ -390,17 +414,23 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 //TODO: untag Peer
             }
         }
+        debug!("Completed LEAVE for topic: {:?}", topic_hash);
     }
 
     /// Handles an IHAVE control message. Checks our cache of messages. If the message is unknown,
     /// requests it with an IWANT control message.
     fn handle_ihave(&mut self, peer_id: &PeerId, ihave_msgs: Vec<(TopicHash, Vec<String>)>) {
+        debug!("Handling IHAVE for peer: {:?}", peer_id);
         // use a hashmap to avoid duplicates efficiently
         let mut iwant_msg_ids = HashMap::new();
 
         for (topic, msg_ids) in ihave_msgs {
             // only process the message if we are subscribed
             if !self.mesh.contains_key(&topic) {
+                info!(
+                    "IHAVE: Ignoring IHAVE - Not subscribed to topic: {:?}",
+                    topic
+                );
                 return; // continue
             }
 
@@ -414,22 +444,25 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
         if !iwant_msg_ids.is_empty() {
             // Send the list of IWANT control messages
+            info!("IHAVE: Sending IWANT message");
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer_id.clone(),
                 event: GossipsubRpc {
                     subscriptions: Vec::new(),
                     messages: Vec::new(),
                     control_msgs: vec![GossipsubControlAction::IWant {
-                        message_ids: iwant_msg_ids.keys().map(|msg_id| msg_id.clone()).collect(),
+                        message_ids: iwant_msg_ids.keys().cloned().collect(),
                     }],
                 },
             });
         }
+        debug!("Completed IHAVE handling for peer: {:?}", peer_id);
     }
 
     /// Handles an IWANT control message. Checks our cache of messages. If the message exists it is
     /// forwarded to the requesting peer.
     fn handle_iwant(&mut self, peer_id: &PeerId, iwant_msgs: Vec<String>) {
+        debug!("Handling IWANT for peer: {:?}", peer_id);
         // build a hashmap of available messages
         let mut cached_messages = HashMap::new();
 
@@ -441,8 +474,9 @@ impl<TSubstream> Gossipsub<TSubstream> {
         }
 
         if !cached_messages.is_empty() {
+            info!("IWANT: Sending cached messages to peer: {:?}", peer_id);
             // Send the messages to the peer
-            let message_list = cached_messages.values().map(|msg| msg.clone()).collect();
+            let message_list = cached_messages.values().cloned().collect();
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer_id.clone(),
                 event: GossipsubRpc {
@@ -452,16 +486,22 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 },
             });
         }
+        debug!("Completed IWANT handling for peer: {:?}", peer_id);
     }
 
     /// Handles GRAFT control messages. If subscribed to the topic, adds the peer to mesh, if not, responds
     /// with PRUNE messages.
     fn handle_graft(&mut self, peer_id: &PeerId, topics: Vec<TopicHash>) {
+        debug!("Handling GRAFT message for peer: {:?}", peer_id);
+
         let mut to_prune_topics = HashMap::new();
         for topic_hash in topics {
             if let Some(peers) = self.mesh.get_mut(&topic_hash) {
                 // if we are subscribed, add peer to the mesh
-                println!("GRAFT: Mesh link added from {:?}", peer_id);
+                info!(
+                    "GRAFT: Mesh link added for peer: {:?} in topic: {:?}",
+                    peer_id, topic_hash
+                );
                 peers.push(peer_id.clone());
             //TODO: tagPeer
             } else {
@@ -473,11 +513,15 @@ impl<TSubstream> Gossipsub<TSubstream> {
             // build the prune messages to send
             let prune_messages = to_prune_topics
                 .keys()
-                .map(|topic_hash| GossipsubControlAction::Prune {
-                    topic_hash: topic_hash.clone(),
+                .map(|t| GossipsubControlAction::Prune {
+                    topic_hash: t.clone(),
                 })
                 .collect();
             // Send the prune messages to the peer
+            info!(
+                "GRAFT: Not subscribed to topics -  Sending PRUNE to peer: {:?}",
+                peer_id
+            );
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer_id.clone(),
                 event: GossipsubRpc {
@@ -487,28 +531,42 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 },
             });
         }
+        debug!("Completed GRAFT handling for peer: {:?}", peer_id);
     }
 
     /// Handles PRUNE control messages. Removes peer from the mesh.
     fn handle_prune(&mut self, peer_id: &PeerId, topics: Vec<TopicHash>) {
+        debug!("Handling PRUNE message for peer: {:?}", peer_id);
         for topic_hash in topics {
             if let Some(peers) = self.mesh.get_mut(&topic_hash) {
                 // remove the peer if it exists in the mesh
-                if let Some(pos) = peers.iter().position(|p| p == peer_id) {
-                    peers.remove(pos);
-                    //TODO: untagPeer
-                }
+                info!(
+                    "PRUNE: Removing peer: {:?} from the mesh for topic: {:?}",
+                    peer_id, topic_hash
+                );
+                peers.retain(|p| p != peer_id);
+                //TODO: untagPeer
             }
         }
+        debug!("Completed PRUNE handling for peer: {:?}", peer_id);
     }
 
     /// Handles a newly received GossipsubMessage.
     /// Forwards the message to all floodsub peers and peers in the mesh.
     fn handle_received_message(&mut self, msg: GossipsubMessage, propagation_source: &PeerId) {
+        debug!(
+            "Handling message: {:?} from peer: {:?}",
+            msg.msg_id(),
+            propagation_source
+        );
         // if we have seen this message, ignore it
         // there's a 3% chance this is a false positive
         // TODO: Check this has no significant emergent behaviour
         if !self.received.test_and_add(&msg.msg_id()) {
+            info!(
+                "Message already received, ignoring. Message: {:?}",
+                msg.msg_id()
+            );
             return;
         }
 
@@ -517,13 +575,15 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
         // dispatch the message to the user
         if self.mesh.keys().any(|t| msg.topics.iter().any(|u| t == u)) {
+            debug!("Sending received message to poll");
             self.events.push_back(NetworkBehaviourAction::GenerateEvent(
                 GossipsubEvent::Message(msg.clone()),
             ));
         }
 
         // forward the message to floodsub and mesh peers
-        self.forward_msg(msg, propagation_source.clone());
+        self.forward_msg(msg.clone(), propagation_source.clone());
+        debug!("Completed message handling for message: {:?}", msg.msg_id());
     }
 
     /// Handles received subscriptions.
@@ -532,13 +592,14 @@ impl<TSubstream> Gossipsub<TSubstream> {
         subscriptions: Vec<GossipsubSubscription>,
         propagation_source: &PeerId,
     ) {
+        debug!(
+            "Handling subscriptions from source: {:?}",
+            propagation_source
+        );
         let (subscribed_topics, node_type) = match self.peer_topics.get_mut(&propagation_source) {
             Some((topics, node_type)) => (topics, node_type),
             None => {
-                println!(
-                    "ERROR: Subscription by unknown peer: {:?}",
-                    &propagation_source
-                );
+                error!("Subscription by unknown peer: {:?}", &propagation_source);
                 return;
             }
         };
@@ -555,17 +616,23 @@ impl<TSubstream> Gossipsub<TSubstream> {
                     match node_type {
                         NodeType::Floodsub => {
                             if !flood_peers.contains(&propagation_source) {
+                                debug!("SUBSCRIPTION: topic_peer: Adding floodsub peer: {:?} to topic: {:?}", propagation_source, subscription.topic_hash);
                                 flood_peers.push(propagation_source.clone());
                             }
                         }
                         NodeType::Gossipsub => {
                             if !gossip_peers.contains(&propagation_source) {
+                                debug!("SUBSCRIPTION: topic_peer: Adding gossip peer: {:?} to topic: {:?}", propagation_source, subscription.topic_hash);
                                 gossip_peers.push(propagation_source.clone());
                             }
                         }
                     }
                     // add to the peer_topics mapping
                     if !subscribed_topics.contains(&subscription.topic_hash) {
+                        info!(
+                            "SUBSCRIPTION: Adding peer: {:?} to topic: {:?}",
+                            propagation_source, subscription.topic_hash
+                        );
                         subscribed_topics.push(subscription.topic_hash.clone());
                     }
                     // generates a subscription event to be polled
@@ -582,6 +649,10 @@ impl<TSubstream> Gossipsub<TSubstream> {
                             if let Some(pos) =
                                 flood_peers.iter().position(|p| p == propagation_source)
                             {
+                                info!(
+                                    "SUBSCRIPTION: Removing floodsub peer: {:?} from topic: {:?}",
+                                    propagation_source, subscription.topic_hash
+                                );
                                 flood_peers.remove(pos);
                             }
                         }
@@ -589,6 +660,10 @@ impl<TSubstream> Gossipsub<TSubstream> {
                             if let Some(pos) =
                                 gossip_peers.iter().position(|p| p == propagation_source)
                             {
+                                info!(
+                                    "SUBSCRIPTION: Removing gossip peer: {:?} from topic: {:?}",
+                                    propagation_source, subscription.topic_hash
+                                );
                                 gossip_peers.remove(pos);
                             }
                         }
@@ -610,10 +685,16 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 }
             }
         }
+        debug!(
+            "Completed handling subscriptions from source: {:?}",
+            propagation_source
+        );
     }
 
     /// Heartbeat function which shifts the memcache and updates the mesh
     fn heartbeat(&mut self) {
+        debug!("Starting heartbeat");
+
         //TODO: Clean up any state from last heartbeat.
 
         let mut to_graft = HashMap::new();
@@ -623,6 +704,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
         for (topic_hash, peers) in self.mesh.clone().iter_mut() {
             // too little peers - add some
             if peers.len() < self.config.mesh_n_low {
+                debug!("HEARTBEAT: Mesh low");
                 // not enough peers - get mesh_n - current_length more
                 let desired_peers = self.config.mesh_n - peers.len();
                 let peer_list = self
@@ -639,6 +721,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
             // too many peers - remove some
             if peers.len() > self.config.mesh_n_high {
+                debug!("HEARTBEAT: Mesh high");
                 let excess_peer_no = peers.len() - self.config.mesh_n;
                 // shuffle the peers
                 let mut rng = thread_rng();
@@ -666,6 +749,10 @@ impl<TSubstream> Gossipsub<TSubstream> {
             let fanout_ttl = self.config.fanout_ttl;
             self.fanout_last_pub.retain(|topic_hash, last_pub_time| {
                 if *last_pub_time + fanout_ttl < Instant::now() {
+                    debug!(
+                        "HEARTBEAT: Fanout topic removed due to timeout. Topic: {:?}",
+                        topic_hash
+                    );
                     fanout.remove(&topic_hash);
                     return false;
                 }
@@ -685,6 +772,10 @@ impl<TSubstream> Gossipsub<TSubstream> {
                     .0
                     .contains(&topic_hash)
                 {
+                    debug!(
+                        "HEARTBEAT: Peer removed from fanout for topic: {:?}",
+                        topic_hash
+                    );
                     return false;
                 }
                 true
@@ -692,6 +783,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
             // not enough peers
             if peers.len() < self.config.mesh_n {
+                debug!("HEARTBEAT: Fanout low peers");
                 let needed_peers = self.config.mesh_n - peers.len();
                 let mut new_peers =
                     self.get_random_peers(topic_hash, needed_peers, |peer| !peers.contains(peer));
@@ -707,11 +799,14 @@ impl<TSubstream> Gossipsub<TSubstream> {
         self.send_graft_prune(to_graft, to_prune);
 
         // shift the memcache
+        debug!("HEARTBEAT: Memcache shifted");
         self.mcache.shift();
+        debug!("Completed Heartbeat");
     }
 
     /// Emits gossip - Send IHAVE messages to a random set of gossip peers that are not in the mesh, but are subscribed to the `topic`.
     fn emit_gossip(&mut self, topic_hash: TopicHash, peers: Vec<PeerId>) {
+        debug!("Started gossip");
         let message_ids = self.mcache.get_gossip_ids(&topic_hash);
         if message_ids.is_empty() {
             return;
@@ -735,6 +830,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 },
             });
         }
+        debug!("Completed gossip");
     }
 
     /// Handles multiple GRAFT/PRUNE messages and coalesces them into chunked gossip control
@@ -792,10 +888,12 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 },
             });
         }
+        debug!("Completed gossip");
     }
 
     /// Helper function to publish and forward messages to floodsub[topic] and mesh[topic] peers.
     fn forward_msg(&mut self, message: GossipsubMessage, source: PeerId) {
+        debug!("Forwarding message: {:?}", message.msg_id());
         let mut recipient_peers = HashMap::new();
 
         // add floodsub and mesh peers
@@ -822,6 +920,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
         // forward the message to peers
         if !recipient_peers.is_empty() {
             for peer in recipient_peers.keys() {
+                debug!("Sending message: {:?} to peer {:?}", message.msg_id(), peer);
                 self.events.push_back(NetworkBehaviourAction::SendEvent {
                     peer_id: peer.clone(),
                     event: GossipsubRpc {
@@ -832,6 +931,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 });
             }
         }
+        debug!("Completed forwarding message");
     }
 
     /// Helper function to get a set of `n` random gossipsub peers for a `topic_hash`
@@ -850,12 +950,15 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
         // if we have less than needed, return them
         if gossip_peers.len() <= n {
+            debug!("RANDOM PEERS: Got {:?} peers", gossip_peers.len());
             return gossip_peers.to_vec();
         }
 
         // we have more peers than needed, shuffle them and return n of them
         let mut rng = thread_rng();
         gossip_peers.partial_shuffle(&mut rng, n);
+
+        debug!("RANDOM PEERS: Got {:?} peers", gossip_peers.len());
 
         return gossip_peers[..n].to_vec();
     }
