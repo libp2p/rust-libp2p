@@ -36,13 +36,11 @@ extern crate tokio_io;
 extern crate tokio_timer;
 extern crate unsigned_varint;
 
-pub mod handler;
 pub mod protocol;
 
 mod layer;
 mod mcache;
 mod rpc_proto;
 
-pub use self::handler::GossipsubHandler;
 pub use self::layer::{Gossipsub, GossipsubConfig, GossipsubEvent};
 pub use self::protocol::*;

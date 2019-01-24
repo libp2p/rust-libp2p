@@ -20,18 +20,18 @@
 
 use crate::rpc_proto;
 use byteorder::{BigEndian, ByteOrder};
-use bytes::{BufMut, BytesMut};
-use futures::future;
+use bytes::BytesMut;
+use futures::{future, stream, Future, Stream};
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
 use libp2p_floodsub::TopicHash;
 use protobuf::Message as ProtobufMessage;
 use std::{io, iter};
-use tokio_codec::{Decoder, Encoder, Framed};
+use tokio_codec::{Decoder, FramedRead};
 use tokio_io::{AsyncRead, AsyncWrite};
 use unsigned_varint::codec;
 
 /// Implementation of the `ConnectionUpgrade` for the Gossipsub protocol.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ProtocolConfig {}
 
 impl ProtocolConfig {
@@ -54,39 +54,35 @@ impl UpgradeInfo for ProtocolConfig {
 
 impl<TSocket> InboundUpgrade<TSocket> for ProtocolConfig
 where
-    TSocket: AsyncRead + AsyncWrite,
+    TSocket: AsyncRead,
 {
-    type Output = Framed<TSocket, GossipsubCodec>;
+    type Output = GossipsubRpc;
     type Error = io::Error;
-    type Future = future::FutureResult<Self::Output, Self::Error>;
+    type Future = future::MapErr<
+        future::AndThen<
+            stream::StreamFuture<FramedRead<TSocket, GossipsubCodec>>,
+            Result<GossipsubRpc, (io::Error, FramedRead<TSocket, GossipsubCodec>)>,
+            fn(
+                (Option<GossipsubRpc>, FramedRead<TSocket, GossipsubCodec>),
+            )
+                -> Result<GossipsubRpc, (io::Error, FramedRead<TSocket, GossipsubCodec>)>,
+        >,
+        fn((io::Error, FramedRead<TSocket, GossipsubCodec>)) -> io::Error,
+    >;
 
     #[inline]
     fn upgrade_inbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
-        future::ok(Framed::new(
+        FramedRead::new(
             socket,
             GossipsubCodec {
                 length_prefix: Default::default(),
             },
-        ))
-    }
-}
-
-impl<TSocket> OutboundUpgrade<TSocket> for ProtocolConfig
-where
-    TSocket: AsyncRead + AsyncWrite,
-{
-    type Output = Framed<TSocket, GossipsubCodec>;
-    type Error = io::Error;
-    type Future = future::FutureResult<Self::Output, Self::Error>;
-
-    #[inline]
-    fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
-        future::ok(Framed::new(
-            socket,
-            GossipsubCodec {
-                length_prefix: Default::default(),
-            },
-        ))
+        )
+        .into_future()
+        .and_then::<fn(_) -> _, _>(|(val, socket)| {
+            val.ok_or_else(move || (io::ErrorKind::UnexpectedEof.into(), socket))
+        })
+        .map_err(|(err, _)| err)
     }
 }
 
@@ -94,90 +90,6 @@ where
 pub struct GossipsubCodec {
     /// The codec for encoding/decoding the length prefix of messages.
     length_prefix: codec::UviBytes,
-}
-
-impl Encoder for GossipsubCodec {
-    type Item = GossipsubRpc;
-    type Error = io::Error;
-
-    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        let mut proto = rpc_proto::RPC::new();
-
-        for message in item.messages.into_iter() {
-            let mut msg = rpc_proto::Message::new();
-            msg.set_from(message.source.into_bytes());
-            msg.set_data(message.data);
-            msg.set_seqno(message.sequence_number);
-            msg.set_topicIDs(
-                message
-                    .topics
-                    .into_iter()
-                    .map(TopicHash::into_string)
-                    .collect(),
-            );
-            proto.mut_publish().push(msg);
-        }
-
-        for subscription in item.subscriptions.into_iter() {
-            let mut rpc_subscription = rpc_proto::RPC_SubOpts::new();
-            rpc_subscription
-                .set_subscribe(subscription.action == GossipsubSubscriptionAction::Subscribe);
-            rpc_subscription.set_topicid(subscription.topic_hash.into_string());
-            proto.mut_subscriptions().push(rpc_subscription);
-        }
-
-        // gossipsub control messages
-        let mut control_msg = rpc_proto::ControlMessage::new();
-
-        for action in item.control_msgs {
-            match action {
-                // collect all ihave messages
-                GossipsubControlAction::IHave {
-                    topic_hash,
-                    message_ids,
-                } => {
-                    let mut rpc_ihave = rpc_proto::ControlIHave::new();
-                    rpc_ihave.set_topicID(topic_hash.into_string());
-                    for msg_id in message_ids {
-                        rpc_ihave.mut_messageIDs().push(msg_id);
-                    }
-                    control_msg.mut_ihave().push(rpc_ihave);
-                }
-                GossipsubControlAction::IWant { message_ids } => {
-                    let mut rpc_iwant = rpc_proto::ControlIWant::new();
-                    for msg_id in message_ids {
-                        rpc_iwant.mut_messageIDs().push(msg_id);
-                    }
-                    control_msg.mut_iwant().push(rpc_iwant);
-                }
-                GossipsubControlAction::Graft { topic_hash } => {
-                    let mut rpc_graft = rpc_proto::ControlGraft::new();
-                    rpc_graft.set_topicID(topic_hash.into_string());
-                    control_msg.mut_graft().push(rpc_graft);
-                }
-                GossipsubControlAction::Prune { topic_hash } => {
-                    let mut rpc_prune = rpc_proto::ControlPrune::new();
-                    rpc_prune.set_topicID(topic_hash.into_string());
-                    control_msg.mut_prune().push(rpc_prune);
-                }
-            }
-        }
-
-        proto.set_control(control_msg);
-
-        let msg_size = proto.compute_size();
-        // Reserve enough space for the data and the length. The length has a maximum of 32 bits,
-        // which means that 5 bytes is enough for the variable-length integer.
-        dst.reserve(msg_size as usize + 5);
-
-        proto
-            .write_length_delimited_to_writer(&mut dst.by_ref().writer())
-            .expect(
-                "there is no situation in which the protobuf message can be invalid, and \
-                 writing to a BytesMut never fails as we reserved enough space beforehand",
-            );
-        Ok(())
-    }
 }
 
 impl Decoder for GossipsubCodec {
@@ -203,7 +115,7 @@ impl Decoder for GossipsubCodec {
                 topics: publish
                     .take_topicIDs()
                     .into_iter()
-                    .map(|topic| TopicHash::from_raw(topic))
+                    .map(TopicHash::from_raw)
                     .collect(),
             });
         }
@@ -283,6 +195,113 @@ pub struct GossipsubRpc {
     pub subscriptions: Vec<GossipsubSubscription>,
     /// List of Gossipsub control messages.
     pub control_msgs: Vec<GossipsubControlAction>,
+}
+
+impl UpgradeInfo for GossipsubRpc {
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
+
+    #[inline]
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once(b"/meshsub/1.0.0")
+    }
+}
+
+impl<TSocket> OutboundUpgrade<TSocket> for GossipsubRpc
+where
+    TSocket: AsyncWrite,
+{
+    type Output = ();
+    type Error = io::Error;
+    type Future = future::Map<
+        future::AndThen<
+            tokio_io::io::WriteAll<TSocket, Vec<u8>>,
+            tokio_io::io::Shutdown<TSocket>,
+            fn((TSocket, Vec<u8>)) -> tokio_io::io::Shutdown<TSocket>,
+        >,
+        fn(TSocket) -> (),
+    >;
+
+    #[inline]
+    fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
+        let bytes = self.into_length_delimited_bytes();
+        tokio_io::io::write_all(socket, bytes)
+            .and_then::<fn(_) -> _, _>(|(socket, _)| tokio_io::io::shutdown(socket))
+            .map(|_| ())
+    }
+}
+
+impl GossipsubRpc {
+    /// Turns this `GossipsubRpc` into a message that can be sent to a substream.
+    fn into_length_delimited_bytes(self) -> Vec<u8> {
+        let mut proto = rpc_proto::RPC::new();
+
+        for message in self.messages.into_iter() {
+            let mut msg = rpc_proto::Message::new();
+            msg.set_from(message.source.into_bytes());
+            msg.set_data(message.data);
+            msg.set_seqno(message.sequence_number);
+            msg.set_topicIDs(
+                message
+                    .topics
+                    .into_iter()
+                    .map(TopicHash::into_string)
+                    .collect(),
+            );
+            proto.mut_publish().push(msg);
+        }
+
+        for subscription in self.subscriptions.into_iter() {
+            let mut rpc_subscription = rpc_proto::RPC_SubOpts::new();
+            rpc_subscription
+                .set_subscribe(subscription.action == GossipsubSubscriptionAction::Subscribe);
+            rpc_subscription.set_topicid(subscription.topic_hash.into_string());
+            proto.mut_subscriptions().push(rpc_subscription);
+        }
+
+        // gossipsub control messages
+        let mut control_msg = rpc_proto::ControlMessage::new();
+
+        for action in self.control_msgs {
+            match action {
+                // collect all ihave messages
+                GossipsubControlAction::IHave {
+                    topic_hash,
+                    message_ids,
+                } => {
+                    let mut rpc_ihave = rpc_proto::ControlIHave::new();
+                    rpc_ihave.set_topicID(topic_hash.into_string());
+                    for msg_id in message_ids {
+                        rpc_ihave.mut_messageIDs().push(msg_id);
+                    }
+                    control_msg.mut_ihave().push(rpc_ihave);
+                }
+                GossipsubControlAction::IWant { message_ids } => {
+                    let mut rpc_iwant = rpc_proto::ControlIWant::new();
+                    for msg_id in message_ids {
+                        rpc_iwant.mut_messageIDs().push(msg_id);
+                    }
+                    control_msg.mut_iwant().push(rpc_iwant);
+                }
+                GossipsubControlAction::Graft { topic_hash } => {
+                    let mut rpc_graft = rpc_proto::ControlGraft::new();
+                    rpc_graft.set_topicID(topic_hash.into_string());
+                    control_msg.mut_graft().push(rpc_graft);
+                }
+                GossipsubControlAction::Prune { topic_hash } => {
+                    let mut rpc_prune = rpc_proto::ControlPrune::new();
+                    rpc_prune.set_topicID(topic_hash.into_string());
+                    control_msg.mut_prune().push(rpc_prune);
+                }
+            }
+        }
+
+        proto.set_control(control_msg);
+
+        proto
+            .write_length_delimited_to_bytes()
+            .expect("there is no situation in which the protobuf message can be invalid")
+    }
 }
 
 /// A message received by the gossipsub system.
