@@ -61,7 +61,7 @@ fn main() {
         // to insert our local node in the DHT. However here we use `without_init` because this
         // example is very ephemeral and we don't want to pollute the DHT. In a real world
         // application, you want to use `new` instead.
-        let mut behaviour = libp2p::kad::Kademlia::without_init(local_pub_key.into_peer_id());
+        let behaviour = libp2p::kad::Kademlia::without_init(local_pub_key.into_peer_id());
         libp2p::core::Swarm::new(transport, behaviour, topology)
     };
 

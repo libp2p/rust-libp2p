@@ -549,7 +549,7 @@ where
             let (encoding_cipher, encoding_hmac) = {
                 let (iv, rest) = local_infos.split_at(iv_size);
                 let (cipher_key, mac_key) = rest.split_at(cipher_key_size);
-                let hmac = Hmac::from_key(context.state.remote.chosen_hash.into(), mac_key);
+                let hmac = Hmac::from_key(context.state.remote.chosen_hash, mac_key);
                 let cipher = ctr(chosen_cipher, cipher_key, iv);
                 (cipher, hmac)
             };
@@ -557,7 +557,7 @@ where
             let (decoding_cipher, decoding_hmac) = {
                 let (iv, rest) = remote_infos.split_at(iv_size);
                 let (cipher_key, mac_key) = rest.split_at(cipher_key_size);
-                let hmac = Hmac::from_key(context.state.remote.chosen_hash.into(), mac_key);
+                let hmac = Hmac::from_key(context.state.remote.chosen_hash, mac_key);
                 let cipher = ctr(chosen_cipher, cipher_key, iv);
                 (cipher, hmac)
             };

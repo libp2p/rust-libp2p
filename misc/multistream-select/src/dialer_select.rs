@@ -75,7 +75,7 @@ where
 {
     let protocols = protocols.into_iter();
     DialerSelectSeq {
-        inner: DialerSelectSeqState::AwaitDialer { dialer_fut: Dialer::new(inner), protocols }
+        inner: DialerSelectSeqState::AwaitDialer { dialer_fut: Dialer::dial(inner), protocols }
     }
 }
 
@@ -240,7 +240,7 @@ where
 {
     let protocols = protocols.into_iter();
     DialerSelectPar {
-        inner: DialerSelectParState::AwaitDialer { dialer_fut: Dialer::new(inner), protocols }
+        inner: DialerSelectParState::AwaitDialer { dialer_fut: Dialer::dial(inner), protocols }
     }
 }
 

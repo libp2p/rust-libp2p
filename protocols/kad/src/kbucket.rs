@@ -125,7 +125,7 @@ where
     /// Builds a new routing table.
     pub fn new(my_id: Id, ping_timeout: Duration) -> Self {
         KBucketsTable {
-            my_id: my_id,
+            my_id,
             tables: (0..Id::max_distance())
                 .map(|_| KBucket {
                     nodes: ArrayVec::new(),
@@ -133,7 +133,7 @@ where
                     last_update: Instant::now(),
                 })
                 .collect(),
-            ping_timeout: ping_timeout,
+            ping_timeout
         }
     }
 
@@ -226,8 +226,8 @@ where
         } else if table.nodes.len() < MAX_NODES_PER_BUCKET {
             // Node not yet in the bucket, but there's plenty of space.
             table.nodes.push(Node {
-                id: id,
-                value: value,
+                id,
+                value
             });
             table.last_update = Instant::now();
             UpdateOutcome::Added
@@ -238,8 +238,8 @@ where
             if table.pending_node.is_none() {
                 table.pending_node = Some((
                     Node {
-                        id: id,
-                        value: value,
+                        id,
+                        value
                     },
                     Instant::now(),
                 ));
@@ -315,7 +315,7 @@ impl<'a, Id: 'a, Val: 'a> Bucket<'a, Id, Val> {
     /// If the bucket is empty, this returns the time when the whole table was created.
     #[inline]
     pub fn last_update(&self) -> Instant {
-        self.0.last_update.clone()
+        self.0.last_update
     }
 }
 

@@ -276,7 +276,7 @@ impl CommonTransport {
     pub fn new() -> CommonTransport {
         let inner = websocket::BrowserWsConfig::new();
         CommonTransport {
-            inner: CommonTransportInner { inner: inner }
+            inner: CommonTransportInner { inner }
         }
     }
 }

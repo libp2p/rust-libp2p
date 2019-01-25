@@ -200,7 +200,7 @@ where TBehaviour: NetworkBehaviour<TTopology>,
     pub fn dial(me: &mut Self, peer_id: PeerId) {
         let addrs = me.topology.addresses_of_peer(&peer_id);
         let handler = me.behaviour.new_handler().into_node_handler_builder();
-        if let Some(peer) = me.raw_swarm.peer(peer_id).as_not_connected() {
+        if let Some(peer) = me.raw_swarm.peer(peer_id).into_not_connected() {
             let _ = peer.connect_iter(addrs, handler);
         }
     }
@@ -330,7 +330,7 @@ where TBehaviour: NetworkBehaviour<TTopology>,
                     Swarm::dial(self, peer_id)
                 },
                 Async::Ready(NetworkBehaviourAction::SendEvent { peer_id, event }) => {
-                    if let Some(mut peer) = self.raw_swarm.peer(peer_id).as_connected() {
+                    if let Some(mut peer) = self.raw_swarm.peer(peer_id).into_connected() {
                         peer.send_event(event);
                     }
                 },
@@ -539,9 +539,9 @@ where TBehaviour: NetworkBehaviour<TTopology>,
                topology:TTopology) -> Self {
         SwarmBuilder {
             incoming_limit: None,
-            transport: transport,
-            topology: topology,
-            behaviour: behaviour,
+            transport,
+            topology,
+            behaviour
         }
     }
 
@@ -577,8 +577,6 @@ where TBehaviour: NetworkBehaviour<TTopology>,
 
 #[cfg(test)]
 mod tests {
-
-    use crate::nodes::raw_swarm::RawSwarm;
     use crate::peer_id::PeerId;
     use crate::protocols_handler::{DummyProtocolsHandler, ProtocolsHandler};
     use crate::public_key::PublicKey;
@@ -586,10 +584,9 @@ mod tests {
     use crate::topology::MemoryTopology;
     use futures::prelude::*;
     use rand::random;
-    use smallvec::SmallVec;
     use std::marker::PhantomData;
     use super::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction,
-                PollParameters, Swarm, SwarmBuilder};
+                PollParameters, SwarmBuilder};
     use tokio_io::{AsyncRead, AsyncWrite};
     use void::Void;
 

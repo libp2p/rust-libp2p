@@ -112,9 +112,9 @@ impl KadPeer {
         let connection_ty = peer.get_connection().into();
 
         Ok(KadPeer {
-            node_id: node_id,
+            node_id,
             multiaddrs: addrs,
-            connection_ty: connection_ty,
+            connection_ty
         })
     }
 }

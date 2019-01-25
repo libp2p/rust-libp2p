@@ -248,7 +248,7 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
-            RawSwarmEvent::ListenerClosed { ref listen_addr, listener: _, ref result } => {
+            RawSwarmEvent::ListenerClosed { ref listen_addr, ref result, .. } => {
                 f.debug_struct("ListenerClosed")
                     .field("listen_addr", listen_addr)
                     .field("result", result)
@@ -1327,7 +1327,7 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
-            Peer::Connected( PeerConnected { peer: _, ref peer_id, ref connected_points }) => {
+            Peer::Connected( PeerConnected { ref peer_id, ref connected_points, .. }) => {
                 f.debug_struct("Connected")
                     .field("peer_id", peer_id)
                     .field("connected_points", connected_points)
@@ -1371,7 +1371,7 @@ where
 {
     /// If we are connected, returns the `PeerConnected`.
     #[inline]
-    pub fn as_connected(self) -> Option<PeerConnected<'a, TInEvent, TPeerId>> {
+    pub fn into_connected(self) -> Option<PeerConnected<'a, TInEvent, TPeerId>> {
         match self {
             Peer::Connected(peer) => Some(peer),
             _ => None,
@@ -1380,7 +1380,7 @@ where
 
     /// If a connection is pending, returns the `PeerPendingConnect`.
     #[inline]
-    pub fn as_pending_connect(self) -> Option<PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TPeerId>> {
+    pub fn into_pending_connect(self) -> Option<PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TPeerId>> {
         match self {
             Peer::PendingConnect(peer) => Some(peer),
             _ => None,
@@ -1389,7 +1389,7 @@ where
 
     /// If we are not connected, returns the `PeerNotConnected`.
     #[inline]
-    pub fn as_not_connected(self) -> Option<PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TPeerId>> {
+    pub fn into_not_connected(self) -> Option<PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TPeerId>> {
         match self {
             Peer::NotConnected(peer) => Some(peer),
             _ => None,
@@ -1464,7 +1464,7 @@ where
 
     /// If we are connected, returns the `PeerConnected`.
     #[inline]
-    pub fn as_connected(self) -> Option<PeerConnected<'a, TInEvent, TPeerId>> {
+    pub fn into_connected(self) -> Option<PeerConnected<'a, TInEvent, TPeerId>> {
         match self {
             PeerPotentialConnect::Connected(peer) => Some(peer),
             _ => None,
@@ -1473,7 +1473,7 @@ where
 
     /// If a connection is pending, returns the `PeerPendingConnect`.
     #[inline]
-    pub fn as_pending_connect(self) -> Option<PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TPeerId>> {
+    pub fn into_pending_connect(self) -> Option<PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TPeerId>> {
         match self {
             PeerPotentialConnect::PendingConnect(peer) => Some(peer),
             _ => None,

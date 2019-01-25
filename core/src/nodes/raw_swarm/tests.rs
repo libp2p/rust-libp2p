@@ -131,7 +131,7 @@ fn num_incoming_negotiated() {
     swarm.listen_on("/memory".parse().unwrap()).unwrap();
 
     // no incoming yet
-    assert_eq!(swarm.num_incoming_negotiated(), 0);
+    assert_eq!(swarm.incoming_negotiated().count(), 0);
 
     let mut rt = Runtime::new().unwrap();
     let swarm = Arc::new(Mutex::new(swarm));
@@ -147,7 +147,7 @@ fn num_incoming_negotiated() {
     rt.block_on(fut).expect("tokio works");
     let swarm = swarm.lock();
     // Now there's an incoming connection
-    assert_eq!(swarm.num_incoming_negotiated(), 1);
+    assert_eq!(swarm.incoming_negotiated().count(), 1);
 }
 
 #[test]
@@ -204,7 +204,7 @@ fn querying_for_pending_peer() {
     let peer = swarm.peer(peer_id.clone());
     assert_matches!(peer, Peer::NotConnected(PeerNotConnected{ .. }));
     let addr = "/memory".parse().expect("bad multiaddr");
-    let pending_peer = peer.as_not_connected().unwrap().connect(addr, Handler::default());
+    let pending_peer = peer.into_not_connected().unwrap().connect(addr, Handler::default());
     assert_matches!(pending_peer, PeerPendingConnect { .. });
 }
 
@@ -312,7 +312,7 @@ fn known_peer_that_is_unreachable_yields_dial_error() {
         let peer = swarm1.peer(peer_id.clone());
         assert_matches!(peer, Peer::NotConnected(PeerNotConnected{ .. }));
         let addr = "/memory".parse::<Multiaddr>().expect("bad multiaddr");
-        let pending_peer = peer.as_not_connected().unwrap().connect(addr, Handler::default());
+        let pending_peer = peer.into_not_connected().unwrap().connect(addr, Handler::default());
         assert_matches!(pending_peer, PeerPendingConnect { .. });
     }
     let mut rt = Runtime::new().unwrap();
@@ -354,7 +354,7 @@ fn yields_node_error_when_there_is_an_error_after_successful_connect() {
         let mut handler = Handler::default();
         // Force an error
         handler.next_states = vec![ HandlerState::Err ];
-        peer.as_not_connected().unwrap().connect(addr, handler);
+        peer.into_not_connected().unwrap().connect(addr, handler);
     }
 
     // Ensure we run on a single thread
@@ -408,7 +408,7 @@ fn yields_node_closed_when_the_node_closes_after_successful_connect() {
         let mut handler = Handler::default();
         // Force handler to close
         handler.next_states = vec![ HandlerState::Ready(None) ];
-        peer.as_not_connected().unwrap().connect(addr, handler);
+        peer.into_not_connected().unwrap().connect(addr, handler);
     }
 
     // Ensure we run on a single thread

@@ -265,7 +265,7 @@ impl<TSubstream> Kademlia<TSubstream> {
 
     /// Internal function that starts a query.
     fn start_query(&mut self, target: QueryTarget, purpose: QueryPurpose) {
-        let query_id = self.next_query_id.clone();
+        let query_id = self.next_query_id;
         self.next_query_id.0 += 1;
         self.queries_to_starts.push((query_id, target, purpose));
     }

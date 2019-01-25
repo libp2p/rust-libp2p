@@ -106,7 +106,7 @@ impl MemoryTopology {
     /// Adds an address to the topology.
     #[inline]
     pub fn add_address(&mut self, peer: PeerId, addr: Multiaddr) {
-        let addrs = self.list.entry(peer).or_insert_with(|| Vec::new());
+        let addrs = self.list.entry(peer).or_insert_with(Vec::new);
         if addrs.iter().all(|a| a != &addr) {
             addrs.push(addr);
         }
@@ -127,7 +127,7 @@ impl MemoryTopology {
 
 impl Topology for MemoryTopology {
     fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
-        self.list.get(peer).map(|v| v.clone()).unwrap_or(Vec::new())
+        self.list.get(peer).cloned().unwrap_or_default()
     }
 
     fn add_local_external_addrs<TIter>(&mut self, addrs: TIter)

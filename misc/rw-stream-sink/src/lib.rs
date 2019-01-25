@@ -57,10 +57,7 @@ where
     /// Wraps around `inner`.
     #[inline]
     pub fn new(inner: S) -> RwStreamSink<S> {
-        RwStreamSink {
-            inner: inner,
-            current_item: None,
-        }
+        RwStreamSink { inner, current_item: None }
     }
 }
 
