@@ -23,7 +23,7 @@
 
 use crate::codec::{Codec, RawMessage};
 use crate::pow::Pow;
-use futures::{prelude::*, try_ready};
+use futures::{future, prelude::*, try_ready};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_core::{Multiaddr, PeerId};
 use std::{error, io, iter};
@@ -59,7 +59,7 @@ where
 {
     type Output = ();
     type Error = io::Error;
-    type Future = BrahmsPushRequestFlush<TSocket>;
+    type Future = future::Map<future::AndThen<tokio_io::io::WriteAll<TSocket, Vec<u8>>, tokio_io::io::Shutdown<TSocket>, fn((TSocket, Vec<u8>)) -> tokio_io::io::Shutdown<TSocket>>, fn(TSocket) -> ()>;
 
     #[inline]
     fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
@@ -68,46 +68,12 @@ where
             .into_iter()
             .map(Multiaddr::into_bytes)
             .collect();
+        // TODO: what if lots of addrs? https://github.com/libp2p/rust-libp2p/issues/760
         let pow = Pow::generate(&self.local_peer_id, &self.remote_peer_id, self.pow_difficulty).unwrap();   // TODO:
         let message = RawMessage::Push(addrs, pow.nonce());
-        // TODO: what if lots of addrs? https://github.com/libp2p/rust-libp2p/issues/760
-        BrahmsPushRequestFlush {
-            inner: Framed::new(socket, Codec::default()),
-            message: Some(message),
-        }
-    }
-}
-
-/// Future that sends a push request to the remote.
-#[derive(Debug)]
-#[must_use = "futures do nothing unless polled"]
-pub struct BrahmsPushRequestFlush<TSocket> {
-    /// The stream to the remote.
-    inner: Framed<TSocket, Codec>,
-    /// The message to send back to the remote.
-    message: Option<RawMessage>,
-}
-
-impl<TSocket> Future for BrahmsPushRequestFlush<TSocket>
-where
-    TSocket: AsyncRead + AsyncWrite,
-{
-    type Item = ();
-    type Error = io::Error;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        if let Some(message) = self.message.take() {
-            match self.inner.start_send(message)? {
-                AsyncSink::Ready => (),
-                AsyncSink::NotReady(message) => {
-                    self.message = Some(message);
-                    return Ok(Async::NotReady);
-                }
-            }
-        }
-
-        try_ready!(self.inner.poll_complete());
-        Ok(Async::Ready(()))
+        tokio_io::io::write_all(socket, message.into_bytes())
+            .and_then::<fn(_) -> _, _>(|(socket, _)| tokio_io::io::shutdown(socket))
+            .map::<fn(_) -> _, _>(|_| ())
     }
 }
 

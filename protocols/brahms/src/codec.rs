@@ -71,7 +71,7 @@ impl Decoder for Codec {
 }
 
 /// Message that can be transmitted over a stream.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RawMessage {
     /// Pushes the sender to a remote. Contains the addresses it's listening on, and a nonce.
     ///
@@ -85,4 +85,43 @@ pub enum RawMessage {
 
     /// Response to a `PullRequest`. Contains the peers and addresses how to reach them.
     PullResponse(Vec<(Vec<u8>, Vec<Vec<u8>>)>),
+}
+
+impl RawMessage {
+    /// Turns this message into raw bytes that can be sent over the network.
+    #[inline]
+    pub(crate) fn into_bytes(self) -> Vec<u8> {
+        serde_cbor::to_vec(&self).expect("encoding with serde_cbor cannot fail; QED")
+    }
+
+    /// Parses bytes into a `RawMessages`.
+    #[inline]
+    pub(crate) fn from_bytes(bytes: &[u8]) -> Self {
+        serde_cbor::from_slice(bytes).unwrap()  // TODO: don't panic
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RawMessage;
+
+    #[test]
+    fn push_ser_de() {
+        let message = {
+            let data = (0..rand::random::<usize>() % 30)
+                .map(|_| {
+                    (0..rand::random::<usize>() % 30).map(|_| rand::random::<u8>()).collect()
+                })
+                .collect::<Vec<_>>();
+            RawMessage::Push(data, rand::random())
+        };
+
+        assert_eq!(RawMessage::from_bytes(&message.clone().into_bytes()), message);
+    }
+
+    #[test]
+    fn pull_rq_ser_de() {
+        let message = RawMessage::PullRequest;
+        assert_eq!(RawMessage::from_bytes(&message.clone().into_bytes()), message);
+    }
 }
