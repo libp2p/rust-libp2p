@@ -40,8 +40,6 @@ use void::Void;
 
 mod tests;
 
-// TODO: make generic over PeerId
-
 // Implementor notes
 // =================
 //
@@ -59,7 +57,7 @@ mod tests;
 // conditions in the user's code. See similar comments in the documentation of `NodeStream`.
 
 /// Implementation of `Stream` that handles a collection of nodes.
-pub struct HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr> {
+pub struct HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId = PeerId> {
     /// A map between active tasks to an unbounded sender, used to control the task. Closing the sender interrupts
     /// the task. It is possible that we receive messages from tasks that used to be in this list
     /// but no longer are, in which case we should ignore them.
@@ -73,12 +71,14 @@ pub struct HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THand
     to_spawn: SmallVec<[Box<Future<Item = (), Error = ()> + Send>; 8]>,
 
     /// Sender to emit events to the outside. Meant to be cloned and sent to tasks.
-    events_tx: mpsc::UnboundedSender<(InToExtMessage<TOutEvent, TIntoHandler, TReachErr, THandlerErr>, TaskId)>,
+    events_tx: mpsc::UnboundedSender<(InToExtMessage<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>, TaskId)>,
     /// Receiver side for the events.
-    events_rx: mpsc::UnboundedReceiver<(InToExtMessage<TOutEvent, TIntoHandler, TReachErr, THandlerErr>, TaskId)>,
+    events_rx: mpsc::UnboundedReceiver<(InToExtMessage<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>, TaskId)>,
 }
 
-impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr> fmt::Debug for HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr> {
+impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId> fmt::Debug for
+    HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         f.debug_list()
             .entries(self.tasks.keys().cloned())
@@ -122,30 +122,30 @@ where
 }
 
 /// Prototype for a `NodeHandler`.
-pub trait IntoNodeHandler {
+pub trait IntoNodeHandler<TPeerId = PeerId> {
     /// The node handler.
     type Handler: NodeHandler;
 
     /// Builds the node handler.
     ///
-    /// The `PeerId` is the id of the node the handler is going to handle.
-    fn into_handler(self, remote_peer_id: &PeerId) -> Self::Handler;
+    /// The `TPeerId` is the id of the node the handler is going to handle.
+    fn into_handler(self, remote_peer_id: &TPeerId) -> Self::Handler;
 }
 
-impl<T> IntoNodeHandler for T
+impl<T, TPeerId> IntoNodeHandler<TPeerId> for T
 where T: NodeHandler
 {
     type Handler = Self;
 
     #[inline]
-    fn into_handler(self, _: &PeerId) -> Self {
+    fn into_handler(self, _: &TPeerId) -> Self {
         self
     }
 }
 
 /// Event that can happen on the `HandledNodesTasks`.
 #[derive(Debug)]
-pub enum HandledNodesEvent<TOutEvent, TIntoHandler, TReachErr, THandlerErr> {
+pub enum HandledNodesEvent<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId = PeerId> {
     /// A task has been closed.
     ///
     /// This happens once the node handler closes or an error happens.
@@ -165,7 +165,7 @@ pub enum HandledNodesEvent<TOutEvent, TIntoHandler, TReachErr, THandlerErr> {
         /// Identifier of the task that succeeded.
         id: TaskId,
         /// Identifier of the node.
-        peer_id: PeerId,
+        peer_id: TPeerId,
     },
 
     /// A task has produced an event.
@@ -181,7 +181,9 @@ pub enum HandledNodesEvent<TOutEvent, TIntoHandler, TReachErr, THandlerErr> {
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TaskId(usize);
 
-impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr> HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr> {
+impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>
+    HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>
+{
     /// Creates a new empty collection.
     #[inline]
     pub fn new() -> Self {
@@ -202,8 +204,8 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr> HandledNodesTask
     /// events.
     pub fn add_reach_attempt<TFut, TMuxer>(&mut self, future: TFut, handler: TIntoHandler) -> TaskId
     where
-        TFut: Future<Item = (PeerId, TMuxer), Error = TReachErr> + Send + 'static,
-        TIntoHandler: IntoNodeHandler + Send + 'static,
+        TFut: Future<Item = (TPeerId, TMuxer), Error = TReachErr> + Send + 'static,
+        TIntoHandler: IntoNodeHandler<TPeerId> + Send + 'static,
         TIntoHandler::Handler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
         TReachErr: error::Error + Send + 'static,
         THandlerErr: error::Error + Send + 'static,
@@ -212,6 +214,7 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr> HandledNodesTask
         <TIntoHandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static,     // TODO: shouldn't be required?
         TMuxer: StreamMuxer + Send + Sync + 'static,  // TODO: Send + Sync + 'static shouldn't be required
         TMuxer::OutboundSubstream: Send + 'static,  // TODO: shouldn't be required
+        TPeerId: Send + 'static,
     {
         let task_id = self.next_task_id;
         self.next_task_id.0 += 1;
@@ -264,7 +267,7 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr> HandledNodesTask
     }
 
     /// Provides an API similar to `Stream`, except that it cannot produce an error.
-    pub fn poll(&mut self) -> Async<HandledNodesEvent<TOutEvent, TIntoHandler, TReachErr, THandlerErr>> {
+    pub fn poll(&mut self) -> Async<HandledNodesEvent<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>> {
         for to_spawn in self.to_spawn.drain() {
             tokio_executor::spawn(to_spawn);
         }
@@ -350,8 +353,10 @@ impl<'a, TInEvent> fmt::Debug for Task<'a, TInEvent> {
     }
 }
 
-impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr> Stream for HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr> {
-    type Item = HandledNodesEvent<TOutEvent, TIntoHandler, TReachErr, THandlerErr>;
+impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId> Stream for
+    HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>
+{
+    type Item = HandledNodesEvent<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>;
     type Error = Void; // TODO: use ! once stable
 
     #[inline]
@@ -362,9 +367,9 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr> Stream for Handl
 
 /// Message to transmit from a task to the public API.
 #[derive(Debug)]
-enum InToExtMessage<TOutEvent, TIntoHandler, TReachErr, THandlerErr> {
+enum InToExtMessage<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId> {
     /// A connection to a node has succeeded.
-    NodeReached(PeerId),
+    NodeReached(TPeerId),
     /// The task closed.
     TaskClosed(Result<(), TaskClosedEvent<TReachErr, THandlerErr>>, Option<TIntoHandler>),
     /// An event from the node.
@@ -373,26 +378,26 @@ enum InToExtMessage<TOutEvent, TIntoHandler, TReachErr, THandlerErr> {
 
 /// Implementation of `Future` that handles a single node, and all the communications between
 /// the various components of the `HandledNodesTasks`.
-struct NodeTask<TFut, TMuxer, TIntoHandler, TInEvent, TOutEvent, TReachErr>
+struct NodeTask<TFut, TMuxer, TIntoHandler, TInEvent, TOutEvent, TReachErr, TPeerId>
 where
     TMuxer: StreamMuxer,
-    TIntoHandler: IntoNodeHandler,
+    TIntoHandler: IntoNodeHandler<TPeerId>,
     TIntoHandler::Handler: NodeHandler<Substream = Substream<TMuxer>>,
 {
     /// Sender to transmit events to the outside.
-    events_tx: mpsc::UnboundedSender<(InToExtMessage<TOutEvent, TIntoHandler, TReachErr, <TIntoHandler::Handler as NodeHandler>::Error>, TaskId)>,
+    events_tx: mpsc::UnboundedSender<(InToExtMessage<TOutEvent, TIntoHandler, TReachErr, <TIntoHandler::Handler as NodeHandler>::Error, TPeerId>, TaskId)>,
     /// Receiving end for events sent from the main `HandledNodesTasks`.
     in_events_rx: stream::Fuse<mpsc::UnboundedReceiver<TInEvent>>,
     /// Inner state of the `NodeTask`.
-    inner: NodeTaskInner<TFut, TMuxer, TIntoHandler, TInEvent>,
+    inner: NodeTaskInner<TFut, TMuxer, TIntoHandler, TInEvent, TPeerId>,
     /// Identifier of the attempt.
     id: TaskId,
 }
 
-enum NodeTaskInner<TFut, TMuxer, TIntoHandler, TInEvent>
+enum NodeTaskInner<TFut, TMuxer, TIntoHandler, TInEvent, TPeerId>
 where
     TMuxer: StreamMuxer,
-    TIntoHandler: IntoNodeHandler,
+    TIntoHandler: IntoNodeHandler<TPeerId>,
     TIntoHandler::Handler: NodeHandler<Substream = Substream<TMuxer>>,
 {
     /// Future to resolve to connect to the node.
@@ -414,12 +419,12 @@ where
     Poisoned,
 }
 
-impl<TFut, TMuxer, TIntoHandler, TInEvent, TOutEvent, TReachErr> Future for
-    NodeTask<TFut, TMuxer, TIntoHandler, TInEvent, TOutEvent, TReachErr>
+impl<TFut, TMuxer, TIntoHandler, TInEvent, TOutEvent, TReachErr, TPeerId> Future for
+    NodeTask<TFut, TMuxer, TIntoHandler, TInEvent, TOutEvent, TReachErr, TPeerId>
 where
     TMuxer: StreamMuxer,
-    TFut: Future<Item = (PeerId, TMuxer), Error = TReachErr>,
-    TIntoHandler: IntoNodeHandler,
+    TFut: Future<Item = (TPeerId, TMuxer), Error = TReachErr>,
+    TIntoHandler: IntoNodeHandler<TPeerId>,
     TIntoHandler::Handler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent>,
 {
     type Item = ();

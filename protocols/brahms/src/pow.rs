@@ -39,8 +39,8 @@ impl Pow {
     /// >           "remote" `PeerId`s will be reversed.
     pub fn verify(local_peer_id: &PeerId, remote_peer_id: &PeerId, nonce: u32, leading_zeros: u8) -> Result<Self, ()> {
         let mut base = Sha256::new();
-        base.input(local_peer_id.as_ref().as_bytes());
-        base.input(remote_peer_id.as_ref().as_bytes());
+        base.input(local_peer_id.as_bytes());
+        base.input(remote_peer_id.as_bytes());
         base.input(&[
             ((nonce >> 24) & 0xff) as u8,
             ((nonce >> 16) & 0xff) as u8,
@@ -65,8 +65,8 @@ impl Pow {
         let leading_zeros = u32::from(leading_zeros);
 
         let mut base = Sha256::new();
-        base.input(local_peer_id.as_ref().as_bytes());
-        base.input(remote_peer_id.as_ref().as_bytes());
+        base.input(local_peer_id.as_bytes());
+        base.input(remote_peer_id.as_bytes());
 
         let mut nonce: u32 = rand::random();
         let nonce_end = nonce.wrapping_sub(1);
