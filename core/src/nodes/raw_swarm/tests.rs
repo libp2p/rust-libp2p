@@ -454,3 +454,48 @@ fn local_prio_equivalence_relation() {
         assert_ne!(has_dial_prio(&a, &b), has_dial_prio(&b, &a));
     }
 }
+
+#[test]
+fn limit_incoming_connections() {
+    let mut transport = DummyTransport::new();
+    let peer_id = PeerId::random();
+    let muxer = DummyMuxer::new();
+    let limit = 1;
+    transport.set_initial_listener_state(ListenerState::Ok(Async::Ready(
+        Some((peer_id, muxer)))));
+    let mut swarm = RawSwarm::<_, _, _, Handler, _>::new_with_incoming_limit(
+        transport, PeerId::random(), Some(limit));
+    assert_eq!(swarm.incoming_limit(), Some(limit));
+    swarm.listen_on("/memory".parse().unwrap()).unwrap();
+    assert_eq!(swarm.incoming_negotiated().count(), 0);
+
+    let swarm = Arc::new(Mutex::new(swarm));
+    let mut rt = Runtime::new().unwrap();
+    for i in 1..10 {
+        let swarm_fut = swarm.clone();
+        let fut = future::poll_fn(move || -> Poll<_, ()> {
+            let mut swarm_fut = swarm_fut.lock();
+            if i <= limit {
+                assert_matches!(swarm_fut.poll(),
+                    Async::Ready(RawSwarmEvent::IncomingConnection(incoming)) => {
+                        incoming.accept(Handler::default());
+                });
+            } else {
+                match swarm_fut.poll() {
+                    Async::NotReady => (),
+                    Async::Ready(x) => {
+                        match x {
+                            RawSwarmEvent::IncomingConnection(_) => (),
+                            RawSwarmEvent::Connected { .. } => (),
+                            _ => { panic!("Not expected event") },
+                        }
+                    },
+                }
+             }
+            Ok(Async::Ready(()))
+        });
+        rt.block_on(fut).expect("tokio works");
+        let swarm = swarm.lock();
+        assert!(swarm.incoming_negotiated().count() <= (limit as usize));
+    }
+}
