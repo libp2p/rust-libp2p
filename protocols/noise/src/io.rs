@@ -74,7 +74,8 @@ pub(super) enum ReadState {
     /// copy decrypted frame data
     CopyData { len: usize, off: usize },
     /// end of file has been reached (terminal state)
-    Eof,
+    /// The associated result signals if the EOF was unexpected or not.
+    Eof(Result<(), ()>),
     /// decryption error (terminal state)
     DecErr
 }
@@ -97,17 +98,22 @@ pub(super) enum WriteState {
 
 impl<T: io::Read> io::Read for NoiseOutput<T> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        use byteorder::{BigEndian, ReadBytesExt};
         loop {
             trace!("read state: {:?}", self.read_state);
             match self.read_state {
                 ReadState::Init => {
-                    let n = self.io.read_u16::<BigEndian>()?;
+                    let n = match read_frame_len(&mut self.io)? {
+                        Some(n) => n,
+                        None => {
+                            trace!("read: eof");
+                            self.read_state = ReadState::Eof(Ok(()));
+                            return Ok(0)
+                        }
+                    };
                     trace!("read: next frame len = {}", n);
                     if n == 0 {
-                        trace!("read: eof");
-                        self.read_state = ReadState::Eof;
-                        return Ok(0)
+                        trace!("read: empty frame");
+                        continue
                     }
                     self.read_state = ReadState::ReadData { len: usize::from(n), off: 0 }
                 }
@@ -116,8 +122,8 @@ impl<T: io::Read> io::Read for NoiseOutput<T> {
                     trace!("read: read {}/{} bytes", *off + n, len);
                     if n == 0 {
                         trace!("read: eof");
-                        self.read_state = ReadState::Eof;
-                        return Ok(0)
+                        self.read_state = ReadState::Eof(Err(()));
+                        return Err(io::ErrorKind::UnexpectedEof.into())
                     }
                     *off += n;
                     if len == *off {
@@ -142,9 +148,13 @@ impl<T: io::Read> io::Read for NoiseOutput<T> {
                     }
                     return Ok(n)
                 }
-                ReadState::Eof => {
+                ReadState::Eof(Ok(())) => {
                     trace!("read: eof");
                     return Ok(0)
+                }
+                ReadState::Eof(Err(())) => {
+                    trace!("read: eof (unexpected)");
+                    return Err(io::ErrorKind::UnexpectedEof.into())
                 }
                 ReadState::DecErr => return Err(io::ErrorKind::InvalidData.into())
             }
@@ -154,7 +164,6 @@ impl<T: io::Read> io::Read for NoiseOutput<T> {
 
 impl<T: io::Write> io::Write for NoiseOutput<T> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        use byteorder::{BigEndian, WriteBytesExt};
         loop {
             trace!("write state: {:?}", self.write_state);
             match self.write_state {
@@ -181,7 +190,11 @@ impl<T: io::Write> io::Write for NoiseOutput<T> {
                 }
                 WriteState::WriteLen { len } => {
                     trace!("write: writing len ({})", len);
-                    self.io.write_u16::<BigEndian>(len as u16)?;
+                    if !write_frame_len(&mut self.io, len as u16)? {
+                        trace!("write: eof");
+                        self.write_state = WriteState::Eof;
+                        return Err(io::ErrorKind::WriteZero.into())
+                    }
                     self.write_state = WriteState::WriteData { len, off: 0 }
                 }
                 WriteState::WriteData { len, ref mut off } => {
@@ -190,7 +203,7 @@ impl<T: io::Write> io::Write for NoiseOutput<T> {
                     if n == 0 {
                         trace!("write: eof");
                         self.write_state = WriteState::Eof;
-                        return Ok(0)
+                        return Err(io::ErrorKind::WriteZero.into())
                     }
                     *off += n;
                     if len == *off {
@@ -200,7 +213,7 @@ impl<T: io::Write> io::Write for NoiseOutput<T> {
                 }
                 WriteState::Eof => {
                     trace!("write: eof");
-                    return Ok(0)
+                    return Err(io::ErrorKind::WriteZero.into())
                 }
                 WriteState::EncErr => return Err(io::ErrorKind::InvalidData.into())
             }
@@ -208,7 +221,6 @@ impl<T: io::Write> io::Write for NoiseOutput<T> {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        use byteorder::{BigEndian, WriteBytesExt};
         loop {
             match self.write_state {
                 WriteState::Init => return Ok(()),
@@ -225,7 +237,11 @@ impl<T: io::Write> io::Write for NoiseOutput<T> {
                 }
                 WriteState::WriteLen { len } => {
                     trace!("flush: writing len ({})", len);
-                    self.io.write_u16::<BigEndian>(len as u16)?;
+                    if !write_frame_len(&mut self.io, len as u16)? {
+                        trace!("write: eof");
+                        self.write_state = WriteState::Eof;
+                        return Err(io::ErrorKind::WriteZero.into())
+                    }
                     self.write_state = WriteState::WriteData { len, off: 0 }
                 }
                 WriteState::WriteData { len, ref mut off } => {
@@ -234,7 +250,7 @@ impl<T: io::Write> io::Write for NoiseOutput<T> {
                     if n == 0 {
                         trace!("flush: eof");
                         self.write_state = WriteState::Eof;
-                        return Ok(())
+                        return Err(io::ErrorKind::WriteZero.into())
                     }
                     *off += n;
                     if len == *off {
@@ -245,7 +261,7 @@ impl<T: io::Write> io::Write for NoiseOutput<T> {
                 }
                 WriteState::Eof => {
                     trace!("flush: eof");
-                    return Ok(())
+                    return Err(io::ErrorKind::WriteZero.into())
                 }
                 WriteState::EncErr => return Err(io::ErrorKind::InvalidData.into())
             }
@@ -260,3 +276,34 @@ impl<T: AsyncWrite> AsyncWrite for NoiseOutput<T> {
         self.io.shutdown()
     }
 }
+
+fn read_frame_len<R: io::Read>(io: &mut R) -> io::Result<Option<u16>> {
+    let mut buf = [0, 0];
+    let mut off = 0;
+    loop {
+        let n = io.read(&mut buf[off ..])?;
+        if n == 0 {
+            return Ok(None)
+        }
+        off += n;
+        if off == 2 {
+            return Ok(Some(u16::from_be_bytes(buf)))
+        }
+    }
+}
+
+fn write_frame_len<W: io::Write>(io: &mut W, len: u16) -> io::Result<bool> {
+    let buf = len.to_be_bytes();
+    let mut off = 0;
+    loop {
+        let n = io.write(&buf[off ..])?;
+        if n == 0 {
+            return Ok(false)
+        }
+        off += n;
+        if off == 2 {
+            return Ok(true)
+        }
+    }
+}
+
