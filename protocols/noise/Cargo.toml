@@ -10,7 +10,6 @@ edition = "2018"
 [dependencies]
 bs58 = "0.2"
 bytes = "0.4"
-byteorder = "1"
 curve25519-dalek = "1"
 futures = "0.1"
 lazy_static = "1.2"
@@ -25,3 +24,7 @@ rev = "7210d14bdd3cba940bd595ad697f4b85bd6c6354"
 default-features = false
 features = ["ring-resolver"]
 
+[dev-dependencies]
+env_logger = "0.6"
+libp2p-tcp = { version = "0.2.0", path = "../../transports/tcp" }
+tokio = "0.1"
