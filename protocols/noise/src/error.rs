@@ -33,8 +33,8 @@ pub enum NoiseError {
 impl fmt::Display for NoiseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            NoiseError::Io(e) => write!(f, "i/o: {:?}", e),
-            NoiseError::Noise(e) => write!(f, "noise: {:?}", e),
+            NoiseError::Io(e) => write!(f, "{}", e),
+            NoiseError::Noise(e) => write!(f, "{}", e),
             NoiseError::InvalidKey => f.write_str("invalid public key"),
             NoiseError::__Nonexhaustive => f.write_str("__Nonexhaustive")
         }
