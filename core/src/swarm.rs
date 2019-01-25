@@ -80,6 +80,10 @@ where TTransport: Transport,
 
     /// List of multiaddresses we're listening on.
     listened_addrs: SmallVec<[Multiaddr; 8]>,
+
+    /// List of multiaddresses we're listening on, after account for external IP addresses and
+    /// similar mechanisms.
+    external_addrs: SmallVec<[Multiaddr; 8]>,
 }
 
 impl<TTransport, TBehaviour> Deref for Swarm<TTransport, TBehaviour>
@@ -267,6 +271,7 @@ where TBehaviour: NetworkBehaviour,
                     local_peer_id: &mut self.raw_swarm.local_peer_id(),
                     supported_protocols: &self.supported_protocols,
                     listened_addrs: &self.listened_addrs,
+                    external_addrs: &self.external_addrs,
                     nat_traversal: &move |a, b| transport.nat_traversal(a, b),
                 };
                 self.behaviour.poll(&mut parameters)
@@ -290,7 +295,9 @@ where TBehaviour: NetworkBehaviour,
                     }
                 },
                 Async::Ready(NetworkBehaviourAction::ReportObservedAddr { address }) => {
-                    // TODO: self.topology.add_local_external_addrs(self.raw_swarm.nat_traversal(&address));
+                    for addr in self.raw_swarm.nat_traversal(&address) {
+                        self.external_addrs.push(addr);
+                    }
                 },
             }
         }
@@ -353,6 +360,7 @@ pub struct PollParameters<'a: 'a> {
     local_peer_id: &'a PeerId,
     supported_protocols: &'a [Vec<u8>],
     listened_addrs: &'a [Multiaddr],
+    external_addrs: &'a [Multiaddr],
     nat_traversal: &'a dyn Fn(&Multiaddr, &Multiaddr) -> Option<Multiaddr>,
 }
 
@@ -375,11 +383,10 @@ impl<'a> PollParameters<'a> {
     }
 
     /// Returns the list of the addresses nodes can use to reach us.
+    // TODO: should return references
     #[inline]
     pub fn external_addresses<'b>(&'b mut self) -> impl ExactSizeIterator<Item = Multiaddr> + 'b {
-        /*let local_peer_id = self.topology.local_peer_id().clone();
-        self.topology.addresses_of_peer(&self.local_peer_id).into_iter()*/
-        std::iter::empty()  // TODO: ?
+        self.external_addrs.iter().cloned()
     }
 
     /// Returns the peer id of the local node.
@@ -504,6 +511,7 @@ where TBehaviour: NetworkBehaviour,
             behaviour: self.behaviour,
             supported_protocols,
             listened_addrs: SmallVec::new(),
+            external_addrs: SmallVec::new(),
         }
     }
 }
