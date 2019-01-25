@@ -41,7 +41,6 @@ pub struct Floodsub<TSubstream> {
     local_peer_id: PeerId,
 
     /// List of peers to send messages to.
-    // TODO: unused
     target_peers: FnvHashSet<PeerId>,
 
     /// List of peers the network is connected to, and the topics that they're subscribed to.
@@ -345,12 +344,6 @@ where
             Self::OutEvent,
         >,
     > {
-        for peer in &self.target_peers {
-            if !self.connected_peers.contains_key(peer) {
-
-            }
-        }
-
         if let Some(event) = self.events.pop_front() {
             return Async::Ready(event);
         }
