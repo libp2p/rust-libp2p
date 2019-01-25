@@ -175,7 +175,7 @@ impl<TSubstream> Kademlia<TSubstream> {
         match query {
             QueryTarget::FindPeer(key) => {
                 let closer_peers = self.kbuckets
-                    .find_closest_with_self(key.as_ref())
+                    .find_closest_with_self(&key)
                     .take(self.num_results)
                     .map(|peer_id| build_kad_peer(peer_id, parameters, &self.kbuckets, &self.connected_peers))
                     .collect();
@@ -234,7 +234,7 @@ impl<TSubstream> Kademlia<TSubstream> {
     /// The actual meaning of *providing* the value of a key is not defined, and is specific to
     /// the value whose key is the hash.
     pub fn add_providing(&mut self, key: PeerId) {
-        self.providing_keys.insert(key.as_ref().clone());
+        self.providing_keys.insert(key.clone().into());
         let providers = self.values_providers.entry(key.into()).or_insert_with(Default::default);
         let my_id = self.kbuckets.my_id();
         if !providers.iter().any(|k| k == my_id) {
@@ -257,7 +257,7 @@ impl<TSubstream> Kademlia<TSubstream> {
             None => return,
         };
 
-        if let Some(position) = providers.iter().position(|k| k.as_ref() == key) {
+        if let Some(position) = providers.iter().position(|k| k == key) {
             providers.remove(position);
             providers.shrink_to_fit();
         }
