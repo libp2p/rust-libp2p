@@ -36,13 +36,16 @@ pub mod errors;
 /// Contains `Mesh`.
 pub mod mesh;
 
-/// Contains `MessageCache`
+/// Contains `MessageCache`.
 pub mod mcache;
 
 /// Contains the `Message` types used in `Gossipsub`: messages for arbitrary
 /// data to use in applications, subscription messages, and control messages,
 /// as well as wrappers.
 pub mod message;
+
+/// Contains the `Peers` struct which contains gossipsub and floodsub peers.
+pub mod peers;
 
 /// Configures gossipsub and coding and decoding from `rpc_proto.rs.` 2nd
 /// lowest level, along with topic. Redefines control messages from

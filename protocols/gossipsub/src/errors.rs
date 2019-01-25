@@ -4,7 +4,7 @@ use std::io;
 
 custom_error!{pub GError
     Io{source: io::Error} = "Input/output error",
-    // Note that when combined with the err arguments passed elsewhere e.g. in mesh, these are repetitive, but avoids ambiguity.
+    // Note that when combined with the err arguments passed elsewhere e.g. in mesh and layer, these are repetitive, but avoids ambiguity.
     NotSubscribedToTopic{t_hash: String, peer_id: String, err: String}
         = "The topic with topic hash '{t_hash}' is not in the subscribed \
         topics of the peer with peer id '{peer_id}'.'{err}'",
@@ -18,7 +18,12 @@ custom_error!{pub GError
         with topic hash '{t_hash}' in the mesh, but it is already grafted.",
     InvalidPeerId{from_data: String}
         = "The from field '{from_data}' of an instance of rpc_proto::Message \
-        could not be converted to a valid peer ID."
+        could not be converted to a valid peer ID.",
+    NotConnectedToPeer{peer: String, err: String}
+        = "The remote peer {peer} was not found in the \
+        `connected_peers.gossipsub` of the local peer.",
+    // NotEnoughPeers{err: String}
+    //     = "The local peer is not connected to enough peers.",
 }
 
 pub type Result<T> = std::result::Result<T, GError>;

@@ -46,7 +46,7 @@ impl Mesh {
     }
 
     /// Gets all the peers that are grafted to a topic in the mesh, or returns
-    /// None if the topic is not in the mesh.
+    /// an error if the topic is not in the mesh.
     pub fn get_peers_from_topic(&self, th: &TopicHash)
         -> GResult<Vec<PeerId>>
     {
