@@ -112,7 +112,8 @@ where T: AsyncWrite
             }
         }
 
-        try_ready!(self.inner.poll_complete());
+        // A call to `close()` implies flushing.
+        try_ready!(self.inner.close());
         Ok(Async::Ready(()))
     }
 }
@@ -169,6 +170,7 @@ where
     fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
         IdentifyOutboundFuture {
             inner: Framed::new(socket, codec::UviBytes::<BytesMut>::default()),
+            shutdown: false,
         }
     }
 }
@@ -176,15 +178,22 @@ where
 /// Future returned by `OutboundUpgrade::upgrade_outbound`.
 pub struct IdentifyOutboundFuture<T> {
     inner: Framed<T, codec::UviBytes<BytesMut>>,
+    /// If true, we have finished shutting down the writing part of `inner`.
+    shutdown: bool,
 }
 
 impl<T> Future for IdentifyOutboundFuture<T>
-where T: AsyncRead
+where T: AsyncRead + AsyncWrite,
 {
     type Item = RemoteInfo;
     type Error = IoError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        if !self.shutdown {
+            try_ready!(self.inner.close());
+            self.shutdown = true;
+        }
+
         let msg = match try_ready!(self.inner.poll()) {
             Some(i) => i,
             None => {
