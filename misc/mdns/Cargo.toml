@@ -1,5 +1,6 @@
 [package]
 name = "libp2p-mdns"
+edition = "2018"
 version = "0.2.0"
 description = "Implementation of the libp2p mDNS discovery method"
 authors = ["Parity Technologies <admin@parity.io>"]
@@ -13,6 +14,7 @@ data-encoding = "2.0"
 dns-parser = "0.8"
 futures = "0.1"
 libp2p-core = { version = "0.2.0", path = "../../core" }
+log = "0.4"
 multiaddr = { package = "parity-multiaddr", version = "0.1.0", path = "../multiaddr" }
 net2 = "0.2"
 rand = "0.6"

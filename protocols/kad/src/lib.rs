@@ -85,7 +85,6 @@ extern crate tokio;
 pub use self::behaviour::{Kademlia, KademliaOut};
 pub use self::kbucket::KBucketsPeerId;
 pub use self::protocol::KadConnectionType;
-pub use self::topology::KademliaTopology;
 
 pub mod handler;
 pub mod kbucket;
@@ -94,4 +93,3 @@ pub mod protocol;
 mod behaviour;
 mod protobuf_structs;
 mod query;
-mod topology;

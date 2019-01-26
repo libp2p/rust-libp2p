@@ -52,7 +52,7 @@ const SERVICE_NAME: &'static [u8] = b"_p2p._udp.local";
 /// Hardcoded name of the service used for DNS-SD.
 const META_QUERY_SERVICE: &'static [u8] = b"_services._dns-sd._udp.local";
 
-pub use self::behaviour::{Mdns, MdnsTopology};
+pub use self::behaviour::{Mdns, MdnsEvent};
 pub use self::service::MdnsService;
 
 mod behaviour;
