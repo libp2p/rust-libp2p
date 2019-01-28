@@ -116,9 +116,8 @@ where
     }
 }
 
-/// Reads a message from the given socket, then applies a transformation on it. Only one message
-/// is processed and the socket is dropped, because we assume that the socket will not send
-/// anything more.
+/// Reads a message from the given socket. Only one message is processed and the socket is dropped,
+/// because we assume that the socket will not send anything more.
 ///
 /// The `max_size` parameter is the maximum size in bytes of the message that we accept. This is
 /// necessary in order to avoid DoS attacks where the remote sends us a message of several
@@ -127,30 +126,26 @@ where
 /// > **Note**: Assumes that a variable-length prefix indicates the length of the message. This is
 /// >           compatible with what `write_one` does.
 #[inline]
-pub fn read_one<TSocket, TThen, TOut, TErr>(
+pub fn read_one<TSocket>(
     socket: TSocket,
     max_size: usize,
-    then: TThen,
-) -> ReadOne<TSocket, TThen>
-where
-    TThen: FnOnce(Vec<u8>) -> Result<TOut, TErr>,
+) -> ReadOne<TSocket>
 {
     ReadOne {
         inner: ReadOneInner::ReadLen {
             socket,
             len_buf: Cursor::new([0; 10]),
             max_size,
-            then,
         },
     }
 }
 
 /// Future that makes `read_one` work.
-pub struct ReadOne<TSocket, TThen> {
-    inner: ReadOneInner<TSocket, TThen>,
+pub struct ReadOne<TSocket> {
+    inner: ReadOneInner<TSocket>,
 }
 
-enum ReadOneInner<TSocket, TThen> {
+enum ReadOneInner<TSocket> {
     // We need to read the data length from the socket.
     ReadLen {
         socket: TSocket,
@@ -158,22 +153,19 @@ enum ReadOneInner<TSocket, TThen> {
         /// length of the actual packet.
         len_buf: Cursor<[u8; 10]>,
         max_size: usize,
-        then: TThen,
     },
     // We need to read the actual data from the socket.
-    ReadRest(io::ReadExact<TSocket, io::Window<Vec<u8>>>, TThen),
+    ReadRest(io::ReadExact<TSocket, io::Window<Vec<u8>>>),
     /// A problem happened during the processing.
     Poisoned,
 }
 
-impl<TSocket, TThen, TOut, TErr> Future for ReadOne<TSocket, TThen>
+impl<TSocket> Future for ReadOne<TSocket>
 where
     TSocket: AsyncRead,
-    TThen: FnOnce(Vec<u8>) -> Result<TOut, TErr>,
-    ReadOneError: Into<TErr>,
 {
-    type Item = TOut;
-    type Error = TErr;
+    type Item = Vec<u8>;
+    type Error = ReadOneError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
@@ -182,19 +174,14 @@ where
                     mut socket,
                     mut len_buf,
                     max_size,
-                    then,
                 } => {
-                    match socket
-                        .read_buf(&mut len_buf)
-                        .map_err(|err| ReadOneError::Io(err).into())?
-                    {
+                    match socket.read_buf(&mut len_buf)? {
                         Async::Ready(num_read) => {
                             // Reaching EOF before finishing to read the length is an error.
                             if num_read == 0 {
                                 return Err(ReadOneError::Io(
                                     std::io::ErrorKind::UnexpectedEof.into(),
-                                )
-                                .into());
+                                ));
                             }
 
                             let len_buf_with_data =
@@ -206,8 +193,7 @@ where
                                     return Err(ReadOneError::TooLarge {
                                         requested: len,
                                         max: max_size,
-                                    }
-                                    .into());
+                                    });
                                 }
 
                                 // Create `data_buf` containing the start of the data that was
@@ -218,13 +204,12 @@ where
                                 let mut data_buf = io::Window::new(data_buf);
                                 data_buf.set_start(data_start.len());
                                 self.inner =
-                                    ReadOneInner::ReadRest(io::read_exact(socket, data_buf), then);
+                                    ReadOneInner::ReadRest(io::read_exact(socket, data_buf));
                             } else {
                                 self.inner = ReadOneInner::ReadLen {
                                     socket,
                                     len_buf,
                                     max_size,
-                                    then,
                                 };
                             }
                         }
@@ -233,19 +218,17 @@ where
                                 socket,
                                 len_buf,
                                 max_size,
-                                then,
                             };
                         }
                     }
                 }
-                ReadOneInner::ReadRest(mut inner, then) => {
-                    match inner.poll().map_err(|err| ReadOneError::Io(err).into())? {
+                ReadOneInner::ReadRest(mut inner) => {
+                    match inner.poll()? {
                         Async::Ready((_, data)) => {
-                            let out = then(data.into_inner())?;
-                            return Ok(Async::Ready(out));
+                            return Ok(Async::Ready(data.into_inner()));
                         }
                         Async::NotReady => {
-                            self.inner = ReadOneInner::ReadRest(inner, then);
+                            self.inner = ReadOneInner::ReadRest(inner);
                         }
                     }
                 }
@@ -294,6 +277,50 @@ impl error::Error for ReadOneError {
     }
 }
 
+/// Similar to `read_one`, but applies a transformation on the output buffer.
+#[inline]
+pub fn read_one_then<TSocket, TThen, TOut, TErr>(
+    socket: TSocket,
+    max_size: usize,
+    then: TThen,
+) -> ReadOneThen<TSocket, TThen>
+where
+    TSocket: AsyncRead + AsyncWrite,
+    TThen: FnOnce(Vec<u8>) -> Result<TOut, TErr>,
+    TErr: From<ReadOneError>,
+{
+    ReadOneThen {
+        inner: read_one(socket, max_size),
+        then: Some(then),
+    }
+}
+
+/// Future that makes `read_one_then` work.
+pub struct ReadOneThen<TSocket, TThen> {
+    inner: ReadOne<TSocket>,
+    then: Option<TThen>,
+}
+
+impl<TSocket, TThen, TOut, TErr> Future for ReadOneThen<TSocket, TThen>
+where
+    TSocket: AsyncRead,
+    TThen: FnOnce(Vec<u8>) -> Result<TOut, TErr>,
+    TErr: From<ReadOneError>,
+{
+    type Item = TOut;
+    type Error = TErr;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        match self.inner.poll()? {
+            Async::Ready(buffer) => {
+                let then = self.then.take().expect("Future was polled after it was finished");
+                Ok(Async::Ready(then(buffer)?))
+            },
+            Async::NotReady => Ok(Async::NotReady),
+        }
+    }
+}
+
 /// Send a message to the given socket, then shuts down the writing side, then reads an answer.
 ///
 /// This combines `write_one` followed with `read_one`.
@@ -323,7 +350,7 @@ enum RequestResponseInner<TSocket, TData, TThen> {
     // We need to write data to the socket.
     Write(WriteOneInner<TSocket, TData>, usize, TThen),
     // We need to read the message.
-    Read(ReadOne<TSocket, TThen>),
+    Read(ReadOneThen<TSocket, TThen>),
     // An error happened during the processing.
     Poisoned,
 }
@@ -333,7 +360,7 @@ where
     TSocket: AsyncRead + AsyncWrite,
     TData: AsRef<[u8]>,
     TThen: FnOnce(Vec<u8>) -> Result<TOut, TErr>,
-    ReadOneError: Into<TErr>,
+    TErr: From<ReadOneError>,
 {
     type Item = TOut;
     type Error = TErr;
@@ -342,10 +369,10 @@ where
         loop {
             match mem::replace(&mut self.inner, RequestResponseInner::Poisoned) {
                 RequestResponseInner::Write(mut inner, max_size, then) => {
-                    match inner.poll().map_err(|err| ReadOneError::Io(err).into())? {
+                    match inner.poll().map_err(ReadOneError::Io)? {
                         Async::Ready(socket) => {
                             self.inner =
-                                RequestResponseInner::Read(read_one(socket, max_size, then));
+                                RequestResponseInner::Read(read_one_then(socket, max_size, then));
                         }
                         Async::NotReady => {
                             self.inner = RequestResponseInner::Write(inner, max_size, then);
@@ -397,7 +424,7 @@ mod tests {
         let mut in_buffer = len_buf.to_vec();
         in_buffer.extend_from_slice(&original_data);
 
-        let future = read_one(Cursor::new(in_buffer), 10_000, move |out| -> Result<_, ReadOneError> {
+        let future = read_one_then(Cursor::new(in_buffer), 10_000, move |out| -> Result<_, ReadOneError> {
             assert_eq!(out, original_data);
             Ok(())
         });
@@ -407,7 +434,7 @@ mod tests {
 
     #[test]
     fn read_one_zero_len() {
-        let future = read_one(Cursor::new(vec![0]), 10_000, move |out| -> Result<_, ReadOneError> {
+        let future = read_one_then(Cursor::new(vec![0]), 10_000, move |out| -> Result<_, ReadOneError> {
             assert!(out.is_empty());
             Ok(())
         });
@@ -423,7 +450,7 @@ mod tests {
         let mut in_buffer = len_buf.to_vec();
         in_buffer.extend((0..5000).map(|_| 0));
 
-        let future = read_one(Cursor::new(in_buffer), 100, move |_| -> Result<_, ReadOneError> {
+        let future = read_one_then(Cursor::new(in_buffer), 100, move |_| -> Result<_, ReadOneError> {
             Ok(())
         });
 
