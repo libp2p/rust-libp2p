@@ -65,9 +65,8 @@ pub struct GossipsubConfig {
     /// Number of peers to emit gossip to during a heartbeat (D_lazy in the spec).
     gossip_lazy: usize,
 
-    //    Not applicable right now
-    //    /// Initial delay in each heartbeat.
-    //    heartbeat_initial_delay: Duration,
+    /// Initial delay in each heartbeat.
+    heartbeat_initial_delay: Duration,
     /// Time between each heartbeat.
     heartbeat_interval: Duration,
     /// Time to live for fanout peers.
@@ -83,7 +82,7 @@ impl Default for GossipsubConfig {
             mesh_n_low: 4,
             mesh_n_high: 12,
             gossip_lazy: 6, // default to mesh_n
-            //            heartbeat_initial_delay: Duration::from_millis(100),
+            heartbeat_initial_delay: Duration::from_secs(5),
             heartbeat_interval: Duration::from_secs(1),
             fanout_ttl: Duration::from_secs(60),
         }
@@ -98,7 +97,7 @@ impl GossipsubConfig {
         mesh_n_low: usize,
         mesh_n_high: usize,
         gossip_lazy: usize,
-        //        heartbeat_initial_delay: Duration,
+        heartbeat_initial_delay: Duration,
         heartbeat_interval: Duration,
         fanout_ttl: Duration,
     ) -> GossipsubConfig {
@@ -117,7 +116,7 @@ impl GossipsubConfig {
             mesh_n_low,
             mesh_n_high,
             gossip_lazy,
-            // heartbeat_initial_delay,
+            heartbeat_initial_delay,
             heartbeat_interval,
             fanout_ttl,
         }
@@ -181,7 +180,10 @@ impl<TSubstream> Gossipsub<TSubstream> {
             fanout_last_pub: HashMap::new(),
             mcache: MessageCache::new(gs_config.history_gossip, gs_config.history_length),
             received: CuckooFilter::new(),
-            heartbeat: Interval::new_interval(gs_config.heartbeat_interval),
+            heartbeat: Interval::new(
+                Instant::now() + gs_config.heartbeat_initial_delay,
+                gs_config.heartbeat_interval,
+            ),
             marker: PhantomData,
         }
     }
@@ -706,7 +708,12 @@ impl<TSubstream> Gossipsub<TSubstream> {
         for (topic_hash, peers) in self.mesh.clone().iter_mut() {
             // too little peers - add some
             if peers.len() < self.config.mesh_n_low {
-                debug!("HEARTBEAT: Mesh low");
+                debug!(
+                    "HEARTBEAT: Mesh low. Topic: {:?} Contains: {:?} needs: {:?}",
+                    topic_hash.clone().into_string(),
+                    peers.len(),
+                    self.config.mesh_n_low
+                );
                 // not enough peers - get mesh_n - current_length more
                 let desired_peers = self.config.mesh_n - peers.len();
                 let peer_list = self
@@ -723,7 +730,12 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
             // too many peers - remove some
             if peers.len() > self.config.mesh_n_high {
-                debug!("HEARTBEAT: Mesh high");
+                debug!(
+                    "HEARTBEAT: Mesh high. Topic: {:?} Contains: {:?} needs: {:?}",
+                    topic_hash,
+                    peers.len(),
+                    self.config.mesh_n_high
+                );
                 let excess_peer_no = peers.len() - self.config.mesh_n;
                 // shuffle the peers
                 let mut rng = thread_rng();
@@ -785,7 +797,11 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
             // not enough peers
             if peers.len() < self.config.mesh_n {
-                debug!("HEARTBEAT: Fanout low peers");
+                debug!(
+                    "HEARTBEAT: Fanout low. Contains: {:?} needs: {:?}",
+                    peers.len(),
+                    self.config.mesh_n
+                );
                 let needed_peers = self.config.mesh_n - peers.len();
                 let mut new_peers =
                     self.get_random_peers(topic_hash, needed_peers, |peer| !peers.contains(peer));
@@ -798,10 +814,11 @@ impl<TSubstream> Gossipsub<TSubstream> {
         }
 
         // send graft/prunes
-        self.send_graft_prune(to_graft, to_prune);
+        if !to_graft.is_empty() | !to_prune.is_empty() {
+            self.send_graft_prune(to_graft, to_prune);
+        }
 
         // shift the memcache
-        debug!("HEARTBEAT: Memcache shifted");
         self.mcache.shift();
         debug!("Completed Heartbeat");
     }
@@ -890,7 +907,6 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 },
             });
         }
-        debug!("Completed gossip");
     }
 
     /// Helper function to publish and forward messages to floodsub[topic] and mesh[topic] peers.
@@ -1133,11 +1149,13 @@ where
             return Async::Ready(event);
         }
 
-        match self.heartbeat.poll() {
-            // heartbeat ready
-            Ok(Async::Ready(Some(_))) => self.heartbeat(),
-            _ => {}
-        };
+        loop {
+            match self.heartbeat.poll() {
+                // heartbeat ready
+                Ok(Async::Ready(Some(_))) => self.heartbeat(),
+                _ => break,
+            };
+        }
 
         Async::NotReady
     }
@@ -1199,7 +1217,102 @@ pub enum NodeType {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use libp2p_core::topology::MemoryTopology;
     use libp2p_floodsub::TopicBuilder;
+
+    // helper functions for testing
+
+    fn build_and_inject_nodes(
+        peer_no: usize,
+        topics: Vec<String>,
+    ) -> (Vec<PeerId>, Gossipsub<tokio::net::TcpStream>) {
+        // generate a default GossipsubConfig
+        let gs_config = GossipsubConfig::default();
+        // create a gossipsub struct
+        let mut gs: Gossipsub<tokio::net::TcpStream> = Gossipsub::new(PeerId::random(), gs_config);
+
+        // subscribe to the topics
+        for t in topics {
+            let topic = TopicBuilder::new(t).build();
+            gs.subscribe(topic.clone());
+        }
+
+        // build and connect peer_no random peers
+        let mut peers = vec![];
+        let dummy_connected_point = ConnectedPoint::Dialer {
+            address: "/ip4/0.0.0.0/tcp/0".parse().unwrap(),
+        };
+        for _ in 0..20 {
+            let peer = PeerId::random();
+            peers.push(peer.clone());
+            <Gossipsub<tokio::net::TcpStream> as NetworkBehaviour<MemoryTopology>>::inject_connected(&mut gs,
+                peer,
+                dummy_connected_point.clone(),
+            );
+        }
+
+        return (peers.clone(), gs);
+    }
+
+    #[test]
+    /// Test the gossipsub NetworkBehaviour peer connection logic.
+    fn test_inject_connected() {
+        let (peers, gs) =
+            build_and_inject_nodes(20, vec![String::from("topic1"), String::from("topic2")]);
+
+        // check that our subscriptions are sent to each of the peers
+        // collect all the SendEvents
+        let send_events: Vec<&NetworkBehaviourAction<GossipsubRpc, GossipsubEvent>> = gs
+            .events
+            .iter()
+            .filter(|e| match e {
+                NetworkBehaviourAction::SendEvent {
+                    peer_id: _,
+                    event: _,
+                } => true,
+                _ => false,
+            })
+            .collect();
+
+        // check that there are two subscriptions sent to each peer
+        for sevent in send_events.clone() {
+            match sevent {
+                NetworkBehaviourAction::SendEvent { peer_id: _, event } => {
+                    assert!(
+                        event.subscriptions.len() == 2,
+                        "There should be two subscriptions sent to each peer (1 for each topic)."
+                    );
+                }
+                _ => {}
+            };
+        }
+
+        // check that there are 20 send events created
+        assert!(
+            send_events.len() == 20,
+            "There should be a subscription event sent to each peer."
+        );
+
+        // verify internal structures
+
+        // should add the new peers to `peer_topics` with an empty vec as a gossipsub node
+        for peer in peers {
+            let known_topics = &gs.peer_topics.get(&peer).unwrap().0;
+            let node_type = &gs.peer_topics.get(&peer).unwrap().1;
+            assert!(
+                known_topics == &SmallVec::<[TopicHash; 16]>::new(),
+                "The topics for each node should be empty"
+            );
+            // TODO: Update this for handling floodsub nodes
+            assert!(
+                match node_type {
+                    NodeType::Gossipsub => true,
+                    _ => false,
+                },
+                "All peers should be added as a gossipsub node"
+            );
+        }
+    }
 
     #[test]
     /// Test Gossipsub.get_random_peers() function

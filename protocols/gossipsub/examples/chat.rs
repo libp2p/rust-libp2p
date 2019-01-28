@@ -11,6 +11,7 @@ use libp2p::{
     gossipsub, secio,
     tokio_codec::{FramedRead, LinesCodec},
 };
+use std::time::Duration;
 
 fn main() {
     Builder::from_env(Env::default().default_filter_or("debug")).init();
@@ -20,7 +21,7 @@ fn main() {
     let local_pub_key = local_key.to_public_key();
     println!("Local peer id: {:?}", local_pub_key.clone().into_peer_id());
 
-    // Set up a an encrypted DNS-enabled TCP Transport over the Mplex and Yamux protocols
+    // Set up an encrypted TCP Transport over the Mplex and Yamux protocols
     let transport = libp2p::build_development_transport(local_key);
 
     // Create a Floodsub/Gossipsub topic
@@ -29,7 +30,19 @@ fn main() {
     // Create a Swarm to manage peers and events
     let mut swarm = {
         // set default parameters for gossipsub
-        let gossipsub_config = gossipsub::GossipsubConfig::default();
+        //let gossipsub_config = gossipsub::GossipsubConfig::default();
+        // set custom gossipsub
+        let gossipsub_config = gossipsub::GossipsubConfig::new(
+            5,
+            3,
+            6,
+            4,
+            12,
+            6,
+            Duration::from_secs(10),
+            Duration::from_secs(10),
+            Duration::from_secs(60),
+        );
         // build a gossipsub network behaviour
         let mut gossipsub =
             gossipsub::Gossipsub::new(local_pub_key.clone().into_peer_id(), gossipsub_config);
