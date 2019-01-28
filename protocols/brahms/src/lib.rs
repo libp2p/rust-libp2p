@@ -65,11 +65,9 @@
 //! size. The network size estimation mechanism is out of scope of this crate.
 
 pub use self::behaviour::{Brahms, BrahmsConfig, BrahmsEvent, BrahmsViewSize};
-pub use self::topology::BrahmsTopology;
 
 pub mod handler;
 pub mod protocol;
-pub mod topology;
 
 mod behaviour;
 mod codec;

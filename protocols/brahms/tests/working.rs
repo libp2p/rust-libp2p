@@ -21,7 +21,7 @@
 use futures::prelude::*;
 use libp2p_brahms::{Brahms, BrahmsConfig, BrahmsViewSize};
 use libp2p_core::{
-    topology::MemoryTopology, upgrade, upgrade::OutboundUpgradeExt, Swarm, Transport,
+    upgrade, upgrade::OutboundUpgradeExt, Swarm, Transport,
 };
 use std::time::Duration;
 
@@ -29,13 +29,6 @@ use std::time::Duration;
 fn topology_filled() {
     /// Spawns a lot of nodes and test whether they discover each other.
     const NUM_SWARMS: usize = 15;
-
-    let brahms_config = BrahmsConfig {
-        view_size: BrahmsViewSize::from_network_size(NUM_SWARMS as u64),
-        round_duration: Duration::from_secs(2),
-        num_samplers: 32,
-        difficulty: 6,
-    };
 
     let mut swarms = Vec::with_capacity(NUM_SWARMS);
     for _ in 0..NUM_SWARMS {
@@ -52,16 +45,25 @@ fn topology_filled() {
                 upgrade::apply_outbound(out.stream, upgrade)
             });
 
-        // Each swarm contains the address of the previous swarm in its topology.
-        let mut topology = MemoryTopology::empty(local_public_key.clone());
-        if let Some(prev_swarm) = swarms.last_mut() {
+        // Each swarm contains the address of the previous swarm as its initial view.
+        let initial_view = if let Some(prev_swarm) = swarms.last_mut() {
             let addr =
                 Swarm::listen_on(prev_swarm, "/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
-            topology.add_address(Swarm::local_peer_id(&prev_swarm).clone(), addr)
-        }
+            vec![(Swarm::local_peer_id(&prev_swarm).clone(), addr)].into_iter()
+        } else {
+            Vec::new().into_iter()
+        };
 
-        let brahms = Brahms::new(brahms_config, local_public_key.into_peer_id());
-        swarms.push(Swarm::new(transport, brahms, topology));
+        let brahms_config = BrahmsConfig {
+            view_size: BrahmsViewSize::from_network_size(NUM_SWARMS as u64),
+            round_duration: Duration::from_secs(2),
+            num_samplers: 32,
+            difficulty: 6,
+            initial_view,
+        };
+
+        let brahms = Brahms::new(brahms_config, local_public_key.clone().into_peer_id());
+        swarms.push(Swarm::new(transport, brahms, local_public_key.into_peer_id()));
     }
 
     Swarm::listen_on(
@@ -83,7 +85,7 @@ fn topology_filled() {
                 Async::NotReady => Ok::<_, ()>(Async::NotReady),
                 Async::Ready(_) => {
                     for swarm in &swarms {
-                        if Swarm::topology(swarm).peers().count() != NUM_SWARMS - 1 {
+                        if swarm.view().count() != NUM_SWARMS - 1 {
                             return Ok(Async::NotReady)
                         }
                     }

@@ -20,8 +20,7 @@
 
 use crate::handler::{BrahmsHandler, BrahmsHandlerEvent, BrahmsHandlerIn};
 use crate::sampler::Sampler;
-use crate::topology::BrahmsTopology;
-use fnv::FnvHashSet;
+use fnv::{FnvHashMap, FnvHashSet};
 use futures::prelude::*;
 use libp2p_core::swarm::{
     ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
@@ -35,7 +34,7 @@ use tokio_timer::Interval;
 
 /// Configuration for the Brahms discovery mechanism.
 #[derive(Debug, Copy, Clone)]
-pub struct BrahmsConfig {
+pub struct BrahmsConfig<TInitViewIter> {
     /// Configuration for the size of the view.
     pub view_size: BrahmsViewSize,
 
@@ -56,6 +55,17 @@ pub struct BrahmsConfig {
     /// As an example, on a modern machine, with a value of 16 it takes around 1ms to create a
     /// proof.
     pub difficulty: u8,
+
+    /// Iterator containing the nodes of the initial view. Only the first `alpha + beta + gamma`
+    /// elements will be taken into account.
+    ///
+    /// The list of nodes in the initial view is pretty important for the safety of the network,
+    /// as all the nodes that are discovered by Brahms afterwards will be derived from this initial
+    /// view. In other words, if all the nodes of the initial view are malicious, then Brahms may
+    /// only ever discover malicious nodes. However Brahms is designed so that a single
+    /// well-behaving node is enough for the entire network of well-behaving nodes to be
+    /// discovered.
+    pub initial_view: TInitViewIter,
 }
 
 /// Configuration for the view size of the Brahms discovery mechanism.
@@ -80,9 +90,9 @@ pub struct BrahmsViewSize {
     pub gamma: u32,
 }
 
-impl Default for BrahmsConfig {
-    #[inline]
-    fn default() -> Self {
+impl<TInitViewIter> BrahmsConfig<TInitViewIter> {
+    /// Builds a "default" BrahmsConfig from an initial list of nodes.
+    pub fn default_from_initial_view(initial_view: TInitViewIter) -> Self {
         BrahmsConfig {
             view_size: BrahmsViewSize {
                 alpha: 14,
@@ -92,6 +102,7 @@ impl Default for BrahmsConfig {
             round_duration: Duration::from_secs(10),
             num_samplers: 32,
             difficulty: 10,
+            initial_view,
         }
     }
 }
@@ -119,8 +130,11 @@ impl BrahmsViewSize {
 
 /// Brahms discovery algorithm behaviour.
 pub struct Brahms<TSubstream> {
-    /// The way the algorithm is configured.
-    config: BrahmsConfig,
+    /// Same value as in the configuration. Never modified.
+    difficulty: u8,
+
+    /// Configuration for the size of the view.
+    view_size: BrahmsViewSize,
     /// Configuration to use for the next round. Copied into `config` at the beginning of each
     /// round.
     next_round_view_size: BrahmsViewSize,
@@ -128,11 +142,8 @@ pub struct Brahms<TSubstream> {
     // TODO: field can be removed after a rework of NetworkBehaviour
     local_peer_id: PeerId,
 
-    /// List of elements to add to the topology as soon as we have access to it.
-    add_to_topology: SmallVec<[(PeerId, Multiaddr); 32]>,
-
-    /// The view contains our local view of the whole network. This is public.
-    view: FnvHashSet<PeerId>,
+    /// The view contains our local view of the whole network. This is public over the network.
+    view: FnvHashMap<PeerId, SmallVec<[Multiaddr; 8]>>,
 
     /// Contains the peers we know about.
     sampler: Sampler<PeerIdAdapter>,
@@ -141,9 +152,9 @@ pub struct Brahms<TSubstream> {
     round_advance: Interval,
 
     /// List of values that other nodes have spontaneously pushed to us.
-    push_list: FnvHashSet<PeerId>,
+    push_list: FnvHashMap<PeerId, SmallVec<[Multiaddr; 8]>>,
     /// List of values that we pulled from other nodes.
-    pull_list: FnvHashSet<PeerId>,
+    pull_list: FnvHashMap<PeerId, SmallVec<[Multiaddr; 8]>>,
 
     /// List of all nodes we're connected to.
     connected_peers: FnvHashSet<PeerId>,
@@ -182,24 +193,30 @@ impl AsRef<[u8]> for PeerIdAdapter {
 
 impl<TSubstream> Brahms<TSubstream> {
     /// Initializes the Brahms state.
-    pub fn new(config: BrahmsConfig, local_peer_id: PeerId) -> Self {
+    pub fn new(config: BrahmsConfig<impl IntoIterator<Item = (PeerId, Multiaddr)>>, local_peer_id: PeerId) -> Self {
         let sampler = Sampler::with_len(config.num_samplers);
         let round_advance = Interval::new(Instant::now(), config.round_duration);
 
         Brahms {
-            config,
+            difficulty: config.difficulty,
+            view_size: config.view_size,
             next_round_view_size: config.view_size,
             local_peer_id,
-            add_to_topology: SmallVec::new(),
             sampler,
             round_advance,
             // We set the capacity right before filling the view.
-            view: Default::default(),
-            push_list: FnvHashSet::with_capacity_and_hasher(
+            view: {
+                let mut view = FnvHashMap::<PeerId, SmallVec<[_; 8]>>::default();   // TODO: capacity
+                for (peer_id, addr) in config.initial_view { // TODO: filter out local peer
+                    view.entry(peer_id).or_default().push(addr);
+                }
+                view
+            },
+            push_list: FnvHashMap::with_capacity_and_hasher(
                 config.view_size.alpha as usize,
                 Default::default(),
             ),
-            pull_list: FnvHashSet::default(),
+            pull_list: FnvHashMap::default(),
             connected_peers: FnvHashSet::default(),
             push_pending_connects: SmallVec::new(),
             pull_pending_connects: SmallVec::new(),
@@ -231,33 +248,30 @@ impl<TSubstream> Brahms<TSubstream> {
     /// The list of nodes that are returned can change after you call `poll()`.
     #[inline]
     pub fn view(&self) -> impl Iterator<Item = &PeerId> {
-        self.view.iter()
+        self.view.keys()
     }
 
     /// Internal function. Called at a regular interval. Updates the view with the previous round's
     /// responses and advances to the next round.
-    fn advance_round<TTopology>(&mut self, parameters: &mut PollParameters<TTopology>)
-    where
-        TTopology: BrahmsTopology,
-    {
+    fn advance_round(&mut self, parameters: &mut PollParameters) {
         // Update the view if necessary.
         if !self.push_list.is_empty() &&
             // !self.pull_list.is_empty() &&        // TODO: figure out bootstrapping
-            self.push_list.len() <= self.config.view_size.alpha as usize
+            self.push_list.len() <= self.view_size.alpha as usize
         {
             // Clear `self.view` and put the former view in `old_view`.
-            let old_view = {
+            let mut old_view = {
                 // We don't just copy the capacity of `self.view` because the view size can be
                 // changed by the user.
-                let view_size = self.config.view_size.alpha + self.config.view_size.beta + self.config.view_size.gamma;
-                mem::replace(&mut self.view, FnvHashSet::with_capacity_and_hasher(view_size as usize, Default::default()))
+                let view_size = self.view_size.alpha + self.view_size.beta + self.view_size.gamma;
+                mem::replace(&mut self.view, FnvHashMap::with_capacity_and_hasher(view_size as usize, Default::default()))
             };
 
             // Move elements from `push_list` to `self.view`.
-            let mut push_to_view = FnvHashSet::default();
+            let mut push_to_view = FnvHashMap::<PeerId, SmallVec<[Multiaddr; 8]>>::default();
             let push_range = Range::new(0, self.push_list.len());
             let desired_push_to_view_len =
-                cmp::min(self.config.view_size.alpha as usize, self.push_list.len());
+                cmp::min(self.view_size.alpha as usize, self.push_list.len());
             while push_to_view.len() < desired_push_to_view_len {
                 let index = push_range.sample(&mut rand::thread_rng());
                 let elem = self
@@ -265,21 +279,24 @@ impl<TSubstream> Brahms<TSubstream> {
                     .iter()
                     .nth(index)
                     .expect("The index is always valid; QED");
-                push_to_view.insert(elem.clone());
+                push_to_view.entry(elem.0.clone())
+                    .or_default()
+                    .extend(elem.1.iter().cloned());
             }
             for elem in push_to_view.drain() {
                 // It is possible that a node incorrectly pushes our own identity to us.
-                if &elem != parameters.local_peer_id() {
-                    self.view.insert(elem.clone());
+                if &elem.0 != parameters.local_peer_id() {
+                    let old_value = self.view.insert(elem.0, elem.1);
+                    assert!(old_value.is_none());
                 }
             }
 
             // Move elements from `pull_list` to `self.view`.
             if !self.pull_list.is_empty() {
-                let mut pull_to_view = FnvHashSet::default();
+                let mut pull_to_view = FnvHashMap::<PeerId, SmallVec<[Multiaddr; 8]>>::default();
                 let pull_range = Range::new(0, self.pull_list.len());
                 let desired_pull_to_view_len =
-                    cmp::min(self.config.view_size.beta as usize, self.pull_list.len());
+                    cmp::min(self.view_size.beta as usize, self.pull_list.len());
                 while pull_to_view.len() < desired_pull_to_view_len {
                     let index = pull_range.sample(&mut rand::thread_rng());
                     let elem = self
@@ -287,26 +304,33 @@ impl<TSubstream> Brahms<TSubstream> {
                         .iter()
                         .nth(index)
                         .expect("The index is always valid; QED");
-                    pull_to_view.insert(elem.clone());
+                    pull_to_view.entry(elem.0.clone())
+                        .or_default()
+                        .extend(elem.1.iter().cloned());
                 }
                 for elem in pull_to_view.drain() {
-                    if &elem != parameters.local_peer_id() {
-                        self.view.insert(elem.clone());
+                    if &elem.0 != parameters.local_peer_id() {
+                        self.view.entry(elem.0).or_default().extend(elem.1);
                     }
                 }
             }
 
             // Move elements from the sampler.
-            for _ in 0..self.config.view_size.gamma {
+            for _ in 0..self.view_size.gamma {
                 if let Some(elem) = self.sampler.sample() {
-                    self.view.insert(elem.0.clone());
+                    let entry = self.view
+                        .entry(elem.0.clone())
+                        .or_default();
+                    if let Some(addresses) = old_view.get_mut(&elem.0) {
+                        entry.extend(addresses.drain());
+                    }
                 }
             }
 
             // TODO: for each element in `self.view` not in `old_view`, we send a "keep-alive enable"
             // message.
-            for peer in self.view.iter() {
-                if !old_view.contains(peer) {
+            for peer in self.view.keys() {
+                if !old_view.contains_key(peer) {
 
                 }
             }
@@ -315,19 +339,10 @@ impl<TSubstream> Brahms<TSubstream> {
         // Reset for next round.
         self.push_list.clear();
         self.pull_list.clear();
-        self.config.view_size = self.next_round_view_size;
-
-        // Since we can't do anything if the view is empty, set it to something.
-        // Normally this should only ever happen once at initialization, but if `initial_view()`
-        // returns nothing then the view will remain empty and we will call this again every round
-        // until something is returned.
-        if self.view.is_empty() {
-            let max = (self.config.view_size.alpha + self.config.view_size.beta + self.config.view_size.gamma) as usize;
-            self.view = parameters.topology().initial_view(max).take(max).collect();
-        }
+        self.view_size = self.next_round_view_size;
 
         // Update the samplers.
-        for elem in self.view.iter() {
+        for elem in self.view.keys() {
             self.sampler.insert(PeerIdAdapter(elem.clone()));
         }
 
@@ -335,12 +350,12 @@ impl<TSubstream> Brahms<TSubstream> {
             let range = Range::new(0, self.view.len());
 
             // Send push requests.
-            let wanted_push_len = cmp::min(self.config.view_size.alpha as usize, self.view.len());
+            let wanted_push_len = cmp::min(self.view_size.alpha as usize, self.view.len());
             while self.pending_pushes.len() + self.push_pending_connects.len() < wanted_push_len {
                 let index = range.sample(&mut rand::thread_rng());
                 let elem = self
                     .view
-                    .iter()
+                    .keys()
                     .nth(index)
                     .expect("The index is always valid; QED");
                 if self.connected_peers.contains(elem) {
@@ -353,12 +368,12 @@ impl<TSubstream> Brahms<TSubstream> {
             }
 
             // Send pull requests.
-            let wanted_pull_len = cmp::min(self.config.view_size.beta as usize, self.view.len());
+            let wanted_pull_len = cmp::min(self.view_size.beta as usize, self.view.len());
             while self.pending_pulls.len() + self.pull_pending_connects.len() < wanted_pull_len {
                 let index = range.sample(&mut rand::thread_rng());
                 let elem = self
                     .view
-                    .iter()
+                    .keys()
                     .nth(index)
                     .expect("The index is always valid; QED");
                 if self.connected_peers.contains(elem) {
@@ -373,16 +388,19 @@ impl<TSubstream> Brahms<TSubstream> {
     }
 }
 
-impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for Brahms<TSubstream>
+impl<TSubstream> NetworkBehaviour for Brahms<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
-    TTopology: BrahmsTopology,
 {
     type ProtocolsHandler = BrahmsHandler<TSubstream>;
     type OutEvent = BrahmsEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        BrahmsHandler::new(self.local_peer_id.clone(), self.config.difficulty)
+        BrahmsHandler::new(self.local_peer_id.clone(), self.difficulty)
+    }
+
+    fn addresses_of_peer(&self, peer_id: &PeerId) -> Vec<Multiaddr> {
+        self.view.get(peer_id).map(|list| list.to_vec()).unwrap_or_default()
     }
 
     fn inject_connected(&mut self, peer_id: PeerId, _: ConnectedPoint) {
@@ -398,20 +416,14 @@ where
     fn inject_node_event(&mut self, peer_id: PeerId, event: BrahmsHandlerEvent) {
         match event {
             BrahmsHandlerEvent::Push { addresses, .. } => {
-                for addr in addresses {
-                    self.add_to_topology.push((peer_id.clone(), addr));
-                }
-                self.push_list.insert(peer_id);
+                self.push_list.entry(peer_id).or_default().extend(addresses);
             }
             BrahmsHandlerEvent::PullRequest => {
                 self.pull_requests_to_respond.push(peer_id);
             }
             BrahmsHandlerEvent::PullResult { list } => {
-                for (peer, addresses) in list {
-                    for addr in addresses {
-                        self.add_to_topology.push((peer.clone(), addr));
-                    }
-                    self.pull_list.insert(peer);
+                for (peer_id, addresses) in list {
+                    self.pull_list.entry(peer_id).or_default().extend(addresses);
                 }
             }
         }
@@ -419,19 +431,9 @@ where
 
     fn poll(
         &mut self,
-        parameters: &mut PollParameters<TTopology>,
+        parameters: &mut PollParameters,
     ) -> Async<NetworkBehaviourAction<BrahmsHandlerIn, Self::OutEvent>> {
         // TODO: we need to send BrahmsHandlerIn::Enable/DisableKeepAlive
-
-        for (peer_id, addr) in self.add_to_topology.drain() {
-            if &peer_id == parameters.local_peer_id() {
-                continue;
-            }
-
-            parameters
-                .topology()
-                .add_brahms_discovered_address(peer_id, addr);
-        }
 
         if !self.pull_requests_to_respond.is_empty() {
             let peer_id = self.pull_requests_to_respond.remove(0);
@@ -445,7 +447,7 @@ where
             let response = self
                 .view
                 .iter()
-                .map(|p| (p.clone(), parameters.topology().addresses_of_peer(p)))
+                .map(|(peer_id, addrs)| (peer_id.clone(), addrs.to_vec()))
                 .chain(iter::once((local_peer_id, local_addresses)))
                 .collect();
             return Async::Ready(
@@ -468,8 +470,8 @@ where
             return Async::Ready(NetworkBehaviourAction::DialPeer { peer_id });
         }
 
-        if !self.pending_pushes.is_empty() {
-            let peer_id = self.pending_pushes.remove(0);
+        if let Some(pos) = self.pending_pushes.iter().position(|p| self.connected_peers.contains(p)) {
+            let peer_id = self.pending_pushes.remove(pos);
             let external_addresses = parameters.external_addresses().collect::<Vec<_>>();
             return Async::Ready(NetworkBehaviourAction::SendEvent {
                 peer_id: peer_id.clone(),
@@ -481,13 +483,13 @@ where
                         .collect(),
                     local_peer_id: parameters.local_peer_id().clone(),
                     remote_peer_id: peer_id.clone(),
-                    pow_difficulty: self.config.difficulty,
+                    pow_difficulty: self.difficulty,
                 }),
             });
         }
 
-        if !self.pending_pulls.is_empty() {
-            let peer_id = self.pending_pulls.remove(0);
+        if let Some(pos) = self.pending_pulls.iter().position(|p| self.connected_peers.contains(p)) {
+            let peer_id = self.pending_pulls.remove(pos);
             return Async::Ready(NetworkBehaviourAction::SendEvent {
                 peer_id,
                 event: BrahmsHandlerIn::Event(BrahmsHandlerEvent::PullRequest),
