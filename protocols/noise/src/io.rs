@@ -21,23 +21,47 @@
 use futures::Poll;
 use log::{debug, trace};
 use snow;
+use static_assertions::const_assert_eq;
 use std::{fmt, io};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 const MAX_NOISE_PKG_LEN: usize = 65535;
 const MAX_WRITE_BUF_LEN: usize = 16384;
 
+// Buffer indices ///////////////////////////////////////////////////////////
+
+// Read buffer: [0, 65535)
+const READ_BEGIN: usize = 0;
+const READ_END: usize = READ_BEGIN + MAX_NOISE_PKG_LEN;
+
+// Decryption buffer for data read: [65535, 131070)
+const READ_CRYPTO_BEGIN: usize = READ_END;
+const READ_CRYPTO_END: usize = READ_CRYPTO_BEGIN + MAX_NOISE_PKG_LEN;
+
+// Write buffer: [131070, 147454)
+const WRITE_BEGIN: usize = READ_CRYPTO_END;
+const WRITE_END: usize = WRITE_BEGIN + MAX_WRITE_BUF_LEN;
+
+// Encryption buffer for data to write: [147454, 180222)
+const WRITE_CRYPTO_BEGIN: usize = WRITE_END;
+const WRITE_CRYPTO_END: usize = WRITE_CRYPTO_BEGIN + 2 * MAX_WRITE_BUF_LEN;
+
+const TOTAL_BUFFER_LEN: usize = WRITE_CRYPTO_END;
+
+// Static invariants ////////////////////////////////////////////////////////
+
+const_assert_eq!(A; READ_END - READ_BEGIN, MAX_NOISE_PKG_LEN);
+const_assert_eq!(B; READ_CRYPTO_END - READ_CRYPTO_BEGIN, MAX_NOISE_PKG_LEN);
+const_assert_eq!(C; WRITE_END - WRITE_BEGIN, MAX_WRITE_BUF_LEN);
+const_assert_eq!(D; WRITE_CRYPTO_END - WRITE_CRYPTO_BEGIN, 2 * MAX_WRITE_BUF_LEN);
+const_assert_eq!(E; 180222, TOTAL_BUFFER_LEN);
+const_assert_eq!(F; 0, READ_CRYPTO_BEGIN - READ_END); // read crypto buffer follows read buffer
+const_assert_eq!(G; 0, WRITE_CRYPTO_BEGIN - WRITE_END); // write crypto buffer follows write buffer
+
 pub struct NoiseOutput<T> {
     pub(super) io: T,
     pub(super) session: snow::Session,
-    // incoming (encrypted) frames:
-    pub(super) read_buf: Box<[u8; MAX_NOISE_PKG_LEN]>,
-    // buffering data before encrypting & flushing:
-    pub(super) write_buf: Box<[u8; MAX_WRITE_BUF_LEN]>,
-    // decrypted `read_buf` data goes in here:
-    pub(super) read_crypto_buf: Box<[u8; MAX_NOISE_PKG_LEN]>,
-    // encrypted `write_buf` data goes in here:
-    pub(super) write_crypto_buf: Box<[u8; 2 * MAX_WRITE_BUF_LEN]>,
+    pub(super) buffer: Box<[u8; TOTAL_BUFFER_LEN]>,
     pub(super) read_state: ReadState,
     pub(super) write_state: WriteState
 }
@@ -55,10 +79,7 @@ impl<T> NoiseOutput<T> {
     pub(super) fn new(io: T, session: snow::Session) -> Self {
         NoiseOutput {
             io, session,
-            read_buf: Box::new([0; MAX_NOISE_PKG_LEN]),
-            write_buf: Box::new([0; MAX_WRITE_BUF_LEN]),
-            read_crypto_buf: Box::new([0; MAX_NOISE_PKG_LEN]),
-            write_crypto_buf: Box::new([0; 2 * MAX_WRITE_BUF_LEN]),
+            buffer: Box::new([0; TOTAL_BUFFER_LEN]),
             read_state: ReadState::Init,
             write_state: WriteState::Init
         }
@@ -118,7 +139,7 @@ impl<T: io::Read> io::Read for NoiseOutput<T> {
                     self.read_state = ReadState::ReadData { len: usize::from(n), off: 0 }
                 }
                 ReadState::ReadData { len, ref mut off } => {
-                    let n = self.io.read(&mut self.read_buf[*off .. len])?;
+                    let n = self.io.read(&mut self.buffer[READ_BEGIN + *off .. READ_BEGIN + len])?;
                     trace!("read: read {}/{} bytes", *off + n, len);
                     if n == 0 {
                         trace!("read: eof");
@@ -128,7 +149,11 @@ impl<T: io::Read> io::Read for NoiseOutput<T> {
                     *off += n;
                     if len == *off {
                         trace!("read: decrypting {} bytes", len);
-                        if let Ok(n) = self.session.read_message(&self.read_buf[.. len], &mut self.read_crypto_buf[..]) {
+                        let (read, crypto) = {
+                            let (r, c) = self.buffer.split_at_mut(READ_END);
+                            (&r[READ_BEGIN .. READ_BEGIN + len], &mut c[.. READ_CRYPTO_END - READ_END])
+                        };
+                        if let Ok(n) = self.session.read_message(read, crypto) {
                             trace!("read: payload len = {} bytes", n);
                             self.read_state = ReadState::CopyData { len: n, off: 0 }
                         } else {
@@ -140,7 +165,8 @@ impl<T: io::Read> io::Read for NoiseOutput<T> {
                 }
                 ReadState::CopyData { len, ref mut off } => {
                     let n = std::cmp::min(len - *off, buf.len());
-                    buf[.. n].copy_from_slice(&self.read_crypto_buf[*off .. *off + n]);
+                    let src = &self.buffer[READ_CRYPTO_BEGIN + *off .. READ_CRYPTO_BEGIN + *off + n];
+                    buf[.. n].copy_from_slice(src);
                     trace!("read: copied {}/{} bytes", *off + n, len);
                     *off += n;
                     if len == *off {
@@ -172,12 +198,17 @@ impl<T: io::Write> io::Write for NoiseOutput<T> {
                 }
                 WriteState::BufferData { ref mut off } => {
                     let n = std::cmp::min(MAX_WRITE_BUF_LEN - *off, buf.len());
-                    self.write_buf[*off .. *off + n].copy_from_slice(&buf[.. n]);
+                    self.buffer[WRITE_BEGIN + *off .. WRITE_BEGIN + *off + n]
+                        .copy_from_slice(&buf[.. n]);
                     trace!("write: buffered {} bytes", *off + n);
                     *off += n;
                     if *off == MAX_WRITE_BUF_LEN {
                         trace!("write: encrypting {} bytes", *off);
-                        if let Ok(n) = self.session.write_message(&self.write_buf[.. *off], &mut self.write_crypto_buf[..]) {
+                        let (write, crypto) = {
+                            let (w, c) = self.buffer.split_at_mut(WRITE_END);
+                            (&w[WRITE_BEGIN ..], &mut c[.. WRITE_CRYPTO_END - WRITE_END])
+                        };
+                        if let Ok(n) = self.session.write_message(write, crypto) {
                             trace!("write: cipher text len = {} bytes", n);
                             self.write_state = WriteState::WriteLen { len: n }
                         } else {
@@ -198,7 +229,10 @@ impl<T: io::Write> io::Write for NoiseOutput<T> {
                     self.write_state = WriteState::WriteData { len, off: 0 }
                 }
                 WriteState::WriteData { len, ref mut off } => {
-                    let n = self.io.write(&self.write_crypto_buf[*off .. len])?;
+                    let n = {
+                        let src = &self.buffer[WRITE_CRYPTO_BEGIN + *off .. WRITE_CRYPTO_BEGIN + len];
+                        self.io.write(src)?
+                    };
                     trace!("write: wrote {}/{} bytes", *off + n, len);
                     if n == 0 {
                         trace!("write: eof");
@@ -226,7 +260,11 @@ impl<T: io::Write> io::Write for NoiseOutput<T> {
                 WriteState::Init => return Ok(()),
                 WriteState::BufferData { off } => {
                     trace!("flush: encrypting {} bytes", off);
-                    if let Ok(n) = self.session.write_message(&self.write_buf[.. off], &mut self.write_crypto_buf[..]) {
+                    let (write, crypto) = {
+                        let (w, c) = self.buffer.split_at_mut(WRITE_END);
+                        (&w[WRITE_BEGIN .. WRITE_BEGIN + off], &mut c[.. WRITE_CRYPTO_END - WRITE_END])
+                    };
+                    if let Ok(n) = self.session.write_message(write, crypto) {
                         trace!("flush: cipher text len = {} bytes", n);
                         self.write_state = WriteState::WriteLen { len: n }
                     } else {
@@ -245,7 +283,10 @@ impl<T: io::Write> io::Write for NoiseOutput<T> {
                     self.write_state = WriteState::WriteData { len, off: 0 }
                 }
                 WriteState::WriteData { len, ref mut off } => {
-                    let n = self.io.write(&self.write_crypto_buf[*off .. len])?;
+                    let n = {
+                        let src = &self.buffer[WRITE_CRYPTO_BEGIN + *off .. WRITE_CRYPTO_BEGIN + len];
+                        self.io.write(src)?
+                    };
                     trace!("flush: wrote {}/{} bytes", *off + n, len);
                     if n == 0 {
                         trace!("flush: eof");
