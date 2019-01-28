@@ -70,8 +70,11 @@ where
             .collect();
         // TODO: what if lots of addrs? https://github.com/libp2p/rust-libp2p/issues/760
         let pow = Pow::generate(&self.local_peer_id, &self.remote_peer_id, self.pow_difficulty).unwrap();   // TODO:
-        let message = RawMessage::Push(addrs, pow.nonce());
-        tokio_io::io::write_all(socket, message.into_bytes())
+        let message = RawMessage::Push(addrs, pow.nonce()).into_bytes();
+        let mut len_buf = unsigned_varint::encode::usize_buffer();
+        let len = unsigned_varint::encode::usize(message.len(), &mut len_buf);
+        let message = len.iter().cloned().chain(message.into_iter()).collect::<Vec<u8>>();
+        tokio_io::io::write_all(socket, message)
             .and_then::<fn(_) -> _, _>(|(socket, _)| tokio_io::io::shutdown(socket))
             .map::<fn(_) -> _, _>(|_| ())
     }
@@ -139,7 +142,7 @@ where
         }
 
         if !self.flushed {
-            try_ready!(self.inner.poll_complete());
+            try_ready!(self.inner.close());
             self.flushed = true;
         }
 
