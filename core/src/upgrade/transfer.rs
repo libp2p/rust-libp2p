@@ -43,7 +43,7 @@ where
 /// Builds a buffer that contains the given integer encoded as variable-length.
 fn build_int_buffer(num: usize) -> io::Window<[u8; 10]> {
     let mut len_data = [0; 10];
-    let encoded_len = unsigned_varint::encode::usize(num, &mut len_data).len();
+    let encoded_len = unsigned_varint::encode::u64(num as u64, &mut len_data).len();
     let mut len_data = io::Window::new(len_data);
     len_data.set_end(encoded_len);
     len_data
@@ -418,8 +418,8 @@ mod tests {
 
     #[test]
     fn read_checks_length() {
-        let mut len_buf = unsigned_varint::encode::usize_buffer();
-        let len_buf = unsigned_varint::encode::usize(5_000, &mut len_buf);
+        let mut len_buf = unsigned_varint::encode::u64_buffer();
+        let len_buf = unsigned_varint::encode::u64(5_000, &mut len_buf);
 
         let mut in_buffer = len_buf.to_vec();
         in_buffer.extend((0..5000).map(|_| 0));
