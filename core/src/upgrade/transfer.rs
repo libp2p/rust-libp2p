@@ -398,9 +398,9 @@ mod tests {
         let mut in_buffer = len_buf.to_vec();
         in_buffer.extend_from_slice(&original_data);
 
-        let future = read_one(Cursor::new(in_buffer), 10_000, move |out| {
+        let future = read_one(Cursor::new(in_buffer), 10_000, move |out| -> Result<_, ReadOneError> {
             assert_eq!(out, original_data);
-            Result::<_, ReadOneError>::Ok(())
+            Ok(())
         });
 
         Runtime::new().unwrap().block_on(future).unwrap();
@@ -408,9 +408,9 @@ mod tests {
 
     #[test]
     fn read_one_zero_len() {
-        let future = read_one(Cursor::new(vec![0]), 10_000, move |out| {
+        let future = read_one(Cursor::new(vec![0]), 10_000, move |out| -> Result<_, ReadOneError> {
             assert!(out.is_empty());
-            Result::<_, ReadOneError>::Ok(())
+            Ok(())
         });
 
         Runtime::new().unwrap().block_on(future).unwrap();
@@ -424,8 +424,8 @@ mod tests {
         let mut in_buffer = len_buf.to_vec();
         in_buffer.extend((0..5000).map(|_| 0));
 
-        let future = read_one(Cursor::new(in_buffer), 100, move |_| {
-            Result::<_, ReadOneError>::Ok(())
+        let future = read_one(Cursor::new(in_buffer), 100, move |_| -> Result<_, ReadOneError> {
+            Ok(())
         });
 
         match Runtime::new().unwrap().block_on(future) {
