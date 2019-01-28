@@ -246,6 +246,24 @@ impl SecioKeyPair {
         })
     }
 
+    /// Builds a `SecioKeyPair` from a raw ed25519 32 bytes private key.
+    ///
+    /// Returns an error if the slice doesn't have the correct length.
+    pub fn ed25519_raw_key(key: impl AsRef<[u8]>) -> Result<SecioKeyPair, Box<Error + Send + Sync>> {
+        let secret = ed25519_dalek::SecretKey::from_bytes(key.as_ref())
+            .map_err(|err| err.to_string())?;
+        let public = ed25519_dalek::PublicKey::from_secret::<sha2::Sha512>(&secret);
+
+        Ok(SecioKeyPair {
+            inner: SecioKeyPairInner::Ed25519 {
+                key_pair: Arc::new(Ed25519KeyPair {
+                    secret,
+                    public,
+                }),
+            }
+        })
+    }
+
     /// Generates a new random sec256k1 key pair.
     #[cfg(feature = "secp256k1")]
     pub fn secp256k1_generated() -> Result<SecioKeyPair, Box<Error + Send + Sync>> {

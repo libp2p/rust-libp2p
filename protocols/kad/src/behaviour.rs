@@ -19,13 +19,13 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{KademliaHandler, KademliaHandlerEvent, KademliaHandlerIn, KademliaRequestId};
+use crate::kbucket::{KBucketsTable, Update};
 use crate::protocol::{KadConnectionType, KadPeer};
 use crate::query::{QueryConfig, QueryState, QueryStatePollOut, QueryTarget};
-use crate::topology::KademliaTopology;
 use fnv::{FnvHashMap, FnvHashSet};
 use futures::{prelude::*, stream};
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
-use libp2p_core::{protocols_handler::ProtocolsHandler, topology::Topology, Multiaddr, PeerId};
+use libp2p_core::{protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
 use multihash::Multihash;
 use rand;
 use smallvec::SmallVec;
@@ -35,8 +35,8 @@ use tokio_timer::Interval;
 
 /// Network behaviour that handles Kademlia.
 pub struct Kademlia<TSubstream> {
-    /// Peer ID of the local node.
-    local_peer_id: PeerId,
+    /// Storage for the nodes. Contains the known multiaddresses for this node.
+    kbuckets: KBucketsTable<PeerId, SmallVec<[Multiaddr; 4]>>,
 
     /// All the iterative queries we are currently performing, with their ID. The last parameter
     /// is the list of accumulated providers for `GET_PROVIDERS` queries.
@@ -58,11 +58,15 @@ pub struct Kademlia<TSubstream> {
     /// Requests received by a remote that we should fulfill as soon as possible.
     remote_requests: SmallVec<[(PeerId, KademliaRequestId, QueryTarget); 4]>,
 
-    /// List of multihashes that we're providing.
+    /// List of values and peers that are providing them.
     ///
-    /// Note that we use a `PeerId` so that we know that it uses SHA-256. The question as to how to
-    /// handle more hashes should eventually be resolved.
-    providing_keys: SmallVec<[PeerId; 8]>,
+    /// Our local peer ID can be in this container.
+    // TODO: Note that in reality the value is a SHA-256 of the actual value (https://github.com/libp2p/rust-libp2p/issues/694)
+    values_providers: FnvHashMap<Multihash, SmallVec<[PeerId; 20]>>,
+
+    /// List of values that we are providing ourselves. Must be kept in sync with
+    /// `values_providers`.
+    providing_keys: FnvHashSet<Multihash>,
 
     /// Interval to send `ADD_PROVIDER` messages to everyone.
     refresh_add_providers: stream::Fuse<Interval>,
@@ -79,9 +83,6 @@ pub struct Kademlia<TSubstream> {
 
     /// Events to return when polling.
     queued_events: SmallVec<[NetworkBehaviourAction<KademliaHandlerIn<QueryId>, KademliaOut>; 32]>,
-
-    /// List of addresses to add to the topology as soon as we are in `poll()`.
-    add_to_topology: SmallVec<[(PeerId, Multiaddr, KadConnectionType); 32]>,
 
     /// List of providers to add to the topology as soon as we are in `poll()`.
     add_provider: SmallVec<[(Multihash, PeerId); 32]>,
@@ -121,12 +122,19 @@ impl<TSubstream> Kademlia<TSubstream> {
         Self::new_inner(local_peer_id, false)
     }
 
+    /// Adds a known address for the given `PeerId`.
+    pub fn add_address(&mut self, peer_id: &PeerId, address: Multiaddr) {
+        if let Some(list) = self.kbuckets.entry_mut(peer_id) {
+            list.push(address);
+        }
+    }
+
     /// Inner implementation of the constructors.
     fn new_inner(local_peer_id: PeerId, initialize: bool) -> Self {
         let parallelism = 3;
 
         let mut behaviour = Kademlia {
-            local_peer_id: local_peer_id.clone(),
+            kbuckets: KBucketsTable::new(local_peer_id, Duration::from_secs(60)),   // TODO: constant
             queued_events: SmallVec::new(),
             queries_to_starts: SmallVec::new(),
             active_queries: Default::default(),
@@ -134,12 +142,12 @@ impl<TSubstream> Kademlia<TSubstream> {
             pending_rpcs: SmallVec::with_capacity(parallelism),
             next_query_id: QueryId(0),
             remote_requests: SmallVec::new(),
-            providing_keys: SmallVec::new(),
+            values_providers: FnvHashMap::default(),
+            providing_keys: FnvHashSet::default(),
             refresh_add_providers: Interval::new_interval(Duration::from_secs(60)).fuse(),     // TODO: constant
             parallelism,
             num_results: 20,
             rpc_timeout: Duration::from_secs(8),
-            add_to_topology: SmallVec::new(),
             add_provider: SmallVec::new(),
             marker: PhantomData,
         };
@@ -148,7 +156,7 @@ impl<TSubstream> Kademlia<TSubstream> {
             // As part of the initialization process, we start one `FIND_NODE` for each bit of the
             // possible range of peer IDs.
             for n in 0..256 {
-                let peer_id = match gen_random_id(&local_peer_id, n) {
+                let peer_id = match gen_random_id(behaviour.kbuckets.my_id(), n) {
                     Ok(p) => p,
                     Err(()) => continue,
                 };
@@ -160,29 +168,16 @@ impl<TSubstream> Kademlia<TSubstream> {
         behaviour
     }
 
-    /// Builds a `KadPeer` structure corresponding to the local node.
-    fn build_local_kad_peer(&self, local_addrs: impl IntoIterator<Item = Multiaddr>) -> KadPeer {
-        KadPeer {
-            node_id: self.local_peer_id.clone(),
-            multiaddrs: local_addrs.into_iter().collect(),
-            connection_ty: KadConnectionType::Connected,
-        }
-    }
-
     /// Builds the answer to a request.
-    fn build_result<TUserData, TTopology>(&self, query: QueryTarget, request_id: KademliaRequestId, parameters: &mut PollParameters<TTopology>)
+    fn build_result<TUserData>(&mut self, query: QueryTarget, request_id: KademliaRequestId, parameters: &mut PollParameters)
         -> KademliaHandlerIn<TUserData>
-    where TTopology: KademliaTopology
     {
-        let local_kad_peer = self.build_local_kad_peer(parameters.external_addresses());
-
         match query {
             QueryTarget::FindPeer(key) => {
-                let topology = parameters.topology();
-                // TODO: insert local_kad_peer somewhere?
-                let closer_peers = topology
-                    .closest_peers(key.as_ref(), self.num_results)
-                    .map(|peer_id| build_kad_peer(peer_id, topology, &self.connected_peers))
+                let closer_peers = self.kbuckets
+                    .find_closest_with_self(&key)
+                    .take(self.num_results)
+                    .map(|peer_id| build_kad_peer(peer_id, parameters, &self.kbuckets, &self.connected_peers))
                     .collect();
 
                 KademliaHandlerIn::FindNodeRes {
@@ -191,23 +186,17 @@ impl<TSubstream> Kademlia<TSubstream> {
                 }
             },
             QueryTarget::GetProviders(key) => {
-                let topology = parameters.topology();
-                // TODO: insert local_kad_peer somewhere?
-                let closer_peers = topology
-                    .closest_peers(&key, self.num_results)
-                    .map(|peer_id| build_kad_peer(peer_id, topology, &self.connected_peers))
+                let closer_peers = self.kbuckets
+                    .find_closest_with_self(&key)
+                    .take(self.num_results)
+                    .map(|peer_id| build_kad_peer(peer_id, parameters, &self.kbuckets, &self.connected_peers))
                     .collect();
 
-                let local_node_is_providing = self.providing_keys.iter().any(|k| k == &key);
-
-                let provider_peers = topology
-                    .get_providers(&key)
-                    .map(|peer_id| build_kad_peer(peer_id, topology, &self.connected_peers))
-                    .chain(if local_node_is_providing {
-                        Some(local_kad_peer)
-                    } else {
-                        None
-                    }.into_iter())
+                let provider_peers = self.values_providers
+                    .get(&key)
+                    .into_iter()
+                    .flat_map(|peers| peers)
+                    .map(|peer_id| build_kad_peer(peer_id.clone(), parameters, &self.kbuckets, &self.connected_peers))
                     .collect();
 
                 KademliaHandlerIn::GetProvidersRes {
@@ -245,8 +234,11 @@ impl<TSubstream> Kademlia<TSubstream> {
     /// The actual meaning of *providing* the value of a key is not defined, and is specific to
     /// the value whose key is the hash.
     pub fn add_providing(&mut self, key: PeerId) {
-        if !self.providing_keys.iter().any(|k| k == &key) {
-            self.providing_keys.push(key);
+        self.providing_keys.insert(key.clone().into());
+        let providers = self.values_providers.entry(key.into()).or_insert_with(Default::default);
+        let my_id = self.kbuckets.my_id();
+        if !providers.iter().any(|k| k == my_id) {
+            providers.push(my_id.clone());
         }
 
         // Trigger the next refresh now.
@@ -258,29 +250,43 @@ impl<TSubstream> Kademlia<TSubstream> {
     /// There doesn't exist any "remove provider" message to broadcast on the network, therefore we
     /// will still be registered as a provider in the DHT for as long as the timeout doesn't expire.
     pub fn remove_providing(&mut self, key: &Multihash) {
-        if let Some(position) = self.providing_keys.iter().position(|k| k == key) {
-            self.providing_keys.remove(position);
+        self.providing_keys.remove(key);
+
+        let providers = match self.values_providers.get_mut(key) {
+            Some(p) => p,
+            None => return,
+        };
+
+        if let Some(position) = providers.iter().position(|k| k == key) {
+            providers.remove(position);
+            providers.shrink_to_fit();
         }
     }
 
     /// Internal function that starts a query.
     fn start_query(&mut self, target: QueryTarget, purpose: QueryPurpose) {
-        let query_id = self.next_query_id.clone();
+        let query_id = self.next_query_id;
         self.next_query_id.0 += 1;
         self.queries_to_starts.push((query_id, target, purpose));
     }
 }
 
-impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for Kademlia<TSubstream>
+impl<TSubstream> NetworkBehaviour for Kademlia<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
-    TTopology: KademliaTopology,
 {
     type ProtocolsHandler = KademliaHandler<TSubstream, QueryId>;
     type OutEvent = KademliaOut;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
         KademliaHandler::dial_and_listen()
+    }
+
+    fn addresses_of_peer(&self, peer_id: &PeerId) -> Vec<Multiaddr> {
+        self.kbuckets
+            .get(peer_id)
+            .map(|l| l.iter().cloned().collect::<Vec<_>>())
+            .unwrap_or_else(Vec::new)
     }
 
     fn inject_connected(&mut self, id: PeerId, _: ConnectedPoint) {
@@ -290,6 +296,15 @@ where
                 peer_id: id.clone(),
                 event: rpc,
             });
+        }
+
+        match self.kbuckets.set_connected(&id) {
+            Update::Pending(to_ping) => {
+                self.queued_events.push(NetworkBehaviourAction::DialPeer {
+                    peer_id: to_ping.clone(),
+                })
+            },
+            _ => ()
         }
 
         self.connected_peers.insert(id);
@@ -317,10 +332,15 @@ where
                 // It is possible that we obtain a response for a query that has finished, which is
                 // why we may not find an entry in `self.active_queries`.
                 for peer in closer_peers.iter() {
-                    for addr in peer.multiaddrs.iter() {
-                        self.add_to_topology
-                            .push((peer.node_id.clone(), addr.clone(), peer.connection_ty));
+                    if let Some(entry) = self.kbuckets.entry_mut(&peer.node_id) {
+                        entry.extend(peer.multiaddrs.iter().cloned());
                     }
+
+                    self.queued_events.push(NetworkBehaviourAction::GenerateEvent(KademliaOut::Discovered {
+                        peer_id: peer.node_id.clone(),
+                        addresses: peer.multiaddrs.clone(),
+                        ty: peer.connection_ty,
+                    }));
                 }
                 if let Some((query, _, _)) = self.active_queries.get_mut(&user_data) {
                     query.inject_rpc_result(&source, closer_peers.into_iter().map(|kp| kp.node_id))
@@ -336,11 +356,17 @@ where
                 user_data,
             } => {
                 for peer in closer_peers.iter().chain(provider_peers.iter()) {
-                    for addr in peer.multiaddrs.iter() {
-                        self.add_to_topology
-                            .push((peer.node_id.clone(), addr.clone(), peer.connection_ty));
+                    if let Some(entry) = self.kbuckets.entry_mut(&peer.node_id) {
+                        entry.extend(peer.multiaddrs.iter().cloned());
                     }
+
+                    self.queued_events.push(NetworkBehaviourAction::GenerateEvent(KademliaOut::Discovered {
+                        peer_id: peer.node_id.clone(),
+                        addresses: peer.multiaddrs.clone(),
+                        ty: peer.connection_ty,
+                    }));
                 }
+
                 // It is possible that we obtain a response for a query that has finished, which is
                 // why we may not find an entry in `self.active_queries`.
                 if let Some((query, _, providers)) = self.active_queries.get_mut(&user_data) {
@@ -358,10 +384,14 @@ where
                 }
             }
             KademliaHandlerEvent::AddProvider { key, provider_peer } => {
-                for addr in provider_peer.multiaddrs.iter() {
-                    self.add_to_topology
-                        .push((provider_peer.node_id.clone(), addr.clone(), provider_peer.connection_ty));
+                if let Some(entry) = self.kbuckets.entry_mut(&provider_peer.node_id) {
+                    entry.extend(provider_peer.multiaddrs.iter().cloned());
                 }
+                self.queued_events.push(NetworkBehaviourAction::GenerateEvent(KademliaOut::Discovered {
+                    peer_id: provider_peer.node_id.clone(),
+                    addresses: provider_peer.multiaddrs.clone(),
+                    ty: provider_peer.connection_ty,
+                }));
                 self.add_provider.push((key, provider_peer.node_id));
                 return;
             }
@@ -370,7 +400,7 @@ where
 
     fn poll(
         &mut self,
-        parameters: &mut PollParameters<TTopology>,
+        parameters: &mut PollParameters,
     ) -> Async<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
@@ -378,12 +408,15 @@ where
         >,
     > {
         // Flush the changes to the topology that we want to make.
-        for (peer_id, addr, connection_ty) in self.add_to_topology.drain() {
-            parameters.topology().add_kad_discovered_address(peer_id, addr, connection_ty);
-        }
-        self.add_to_topology.shrink_to_fit();
         for (key, provider) in self.add_provider.drain() {
-            parameters.topology().add_provider(key, provider);
+            // Don't add ourselves to the providers.
+            if provider == *self.kbuckets.my_id() {
+                continue;
+            }
+            let providers = self.values_providers.entry(key).or_insert_with(Default::default);
+            if !providers.iter().any(|k| k == &provider) {
+                providers.push(provider);
+            }
         }
         self.add_provider.shrink_to_fit();
 
@@ -392,8 +425,11 @@ where
             Ok(Async::NotReady) => {},
             Ok(Async::Ready(Some(_))) => {
                 for provided in self.providing_keys.clone().into_iter() {
-                    let purpose = QueryPurpose::AddProvider(provided.clone().into());
-                    self.start_query(QueryTarget::FindPeer(provided), purpose);
+                    let purpose = QueryPurpose::AddProvider(provided.clone());
+                    // TODO: messy because of the PeerId/Multihash division
+                    if let Ok(key_as_peer) = PeerId::from_multihash(provided) {
+                        self.start_query(QueryTarget::FindPeer(key_as_peer), purpose);
+                    }
                 }
             },
             // Ignore errors.
@@ -402,9 +438,9 @@ where
 
         // Start queries that are waiting to start.
         for (query_id, query_target, query_purpose) in self.queries_to_starts.drain() {
-            let known_closest_peers = parameters
-                .topology()
-                .closest_peers(query_target.as_hash(), self.num_results);
+            let known_closest_peers = self.kbuckets
+                .find_closest(query_target.as_hash())
+                .take(self.num_results);
             self.active_queries.insert(
                 query_id,
                 (
@@ -508,7 +544,7 @@ where
                                 peer_id: closest,
                                 event: KademliaHandlerIn::AddProvider {
                                     key: key.clone(),
-                                    provider_peer: self.build_local_kad_peer(parameters.external_addresses()),
+                                    provider_peer: build_kad_peer(parameters.local_peer_id().clone(), parameters, &self.kbuckets, &self.connected_peers),
                                 },
                             };
 
@@ -526,6 +562,16 @@ where
 /// Output event of the `Kademlia` behaviour.
 #[derive(Debug, Clone)]
 pub enum KademliaOut {
+    /// We have discovered a node.
+    Discovered {
+        /// Id of the node that was discovered.
+        peer_id: PeerId,
+        /// Addresses of the node.
+        addresses: Vec<Multiaddr>,
+        /// How the reporter is connected to the reported.
+        ty: KadConnectionType,
+    },
+
     /// Result of a `FIND_NODE` iterative query.
     FindNodeResult {
         /// The key that we looked for in the query.
@@ -579,15 +625,33 @@ fn gen_random_id(my_id: &PeerId, bucket_num: usize) -> Result<PeerId, ()> {
 }
 
 /// Builds a `KadPeer` struct corresponding to the given `PeerId`.
+/// The `PeerId` can be the same as the local one.
 ///
 /// > **Note**: This is just a convenience function that doesn't do anything note-worthy.
-fn build_kad_peer<TTopology>(peer_id: PeerId, topology: &mut TTopology, connected_peers: &FnvHashSet<PeerId>) -> KadPeer
-where TTopology: Topology
-{
-    let multiaddrs = topology.addresses_of_peer(&peer_id);
+fn build_kad_peer(
+    peer_id: PeerId,
+    parameters: &mut PollParameters,
+    kbuckets: &KBucketsTable<PeerId, SmallVec<[Multiaddr; 4]>>,
+    connected_peers: &FnvHashSet<PeerId>
+) -> KadPeer {
+    let is_self = peer_id == *parameters.local_peer_id();
+
+    let multiaddrs = if is_self {
+        let mut addrs = parameters
+            .listened_addresses()
+            .cloned()
+            .collect::<Vec<_>>();
+        addrs.extend(parameters.external_addresses());
+        addrs
+    } else {
+        kbuckets
+            .get(&peer_id)
+            .map(|addrs| addrs.iter().cloned().collect())
+            .unwrap_or_else(Vec::new)
+    };
 
     // TODO: implement the other possibilities correctly
-    let connection_ty = if connected_peers.contains(&peer_id) {
+    let connection_ty = if is_self || connected_peers.contains(&peer_id) {
         KadConnectionType::Connected
     } else {
         KadConnectionType::NotConnected

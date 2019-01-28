@@ -21,11 +21,11 @@
 //! Contains methods that handle the DNS encoding and decoding capabilities not available in the
 //! `dns_parser` library.
 
+use crate::{META_QUERY_SERVICE, SERVICE_NAME};
 use data_encoding;
 use libp2p_core::{Multiaddr, PeerId};
 use rand;
 use std::{borrow::Cow, cmp, error, fmt, str, time::Duration};
-use {META_QUERY_SERVICE, SERVICE_NAME};
 
 /// Decodes a `<character-string>` (as defined by RFC1035) into a `Vec` of ASCII characters.
 // TODO: better error type?
