@@ -1,6 +1,11 @@
 
+use TopicHash;
+use libp2p_core::PeerId;
 use custom_error::custom_error;
-use std::io;
+use std::{
+    collections::hash_map::HashMap,
+    io,
+};
 
 custom_error!{pub GError
     Io{source: io::Error} = "Input/output error",
@@ -19,35 +24,102 @@ custom_error!{pub GError
     InvalidPeerId{from_data: String}
         = "The from field '{from_data}' of an instance of rpc_proto::Message \
         could not be converted to a valid peer ID.",
-    NotConnectedToPeer{peer: String, err: String}
-        = "The remote peer {peer} was not found in the \
-        `connected_peers.gossipsub` of the local peer.",
+    // NotConnectedToPeer{peer: String, err: String}
+    //     = "The remote peer {peer} was not found in the \
+    //     `connected_peers.gossipsub` of the local peer.",
     // NotEnoughPeers{err: String}
     //     = "The local peer is not connected to enough peers.",
 }
 
 pub type Result<T> = std::result::Result<T, GError>;
 
-// use std::{error, fmt, io};
+pub(crate) struct GraftErrors {
+    // Topics that remote peers are not subscribed to (they need to be
+    // as a prerequisite to grafting them).
+    topics_not_subscribed: Option<HashMap<PeerId, TopicHash>>,
+    // Topics that are not in the local peer's mesh view.
+    topics_not_in_mesh: Option<Vec<TopicHash>>,
+    // Remote peers that are not connected to the local peer.
+    r_peers_not_connected: Option<Vec<PeerId>>,
+    // Topics that the local peer is already grafted to.
+    topics_already_grafted: Option<Vec<TopicHash>>,
+    // Whether any of the above are a Some(value).
+    has_errors: bool,
+}
 
-// #[derive(Debug)]
-// pub enum GError {
-//     Io(io::Error),
-//     NotSubscribedToTopic(String, String),
+// pub(crate) struct GraftErrorsForPeer {
 
-//     // TopicNotInMesh(String, String),
 // }
 
-// impl fmt::Display for GError {
-//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-//         match *self {
-//             GError::Io(ref err) => write!(f, "IO error: {}", err),
-//             GError::NotSubscribedToTopic(ref th, ref peer) => write!(f,
-//                 "TopicNotInSubTopics: topic hash: {}, peer_id: {}", th, peer),
-//             // GError::TopicNotInMesh(ref th, ref peer) => write!(f,
-//             //     "TopicNotInMesh: topic hash: {}, peer_id: {}", th, peer),
-//         }
-//     }
-// }
-
-// impl error::Error for GError {}
+impl GraftErrors {
+    pub fn new() -> Self {
+        GraftErrors {
+            topics_not_subscribed: None,
+            topics_not_in_mesh: None,
+            r_peers_not_connected: None,
+            topics_already_grafted: None,
+            has_errors: false,
+        }
+    }
+    pub fn is_empty(&self) -> bool {
+        if self.has_errors == true {
+            return true;
+        } else {
+            return false;
+        }
+    }
+    pub fn new_with_not_connected(r_peers_not_connected:
+        Vec<PeerId>) -> Self {
+        GraftErrors {
+            topics_not_subscribed: None,
+            topics_not_in_mesh: None,
+            r_peers_not_connected: Some(r_peers_not_connected),
+            topics_already_grafted: None,
+        }
+    }
+    pub fn new_with_not_subscribed(
+        topics_not_subscribed: HashMap<PeerId, TopicHash>) -> Self
+    {
+        GraftErrors {
+            topics_not_subscribed: Some(topics_not_subscribed),
+            topics_not_in_mesh: None,
+            r_peers_not_connected: None,
+            topics_already_grafted: None,
+        }
+    }
+    pub fn new_with_not_in_mesh(
+        topics_not_in_mesh: Vec<TopicHash>) -> Self
+    {
+        GraftErrors {
+            topics_not_subscribed: None,
+            topics_not_in_mesh: Some(topics_not_in_mesh),
+            r_peers_not_connected: None,
+            topics_already_grafted: None,
+        }
+    }
+    pub fn new_with_not_in_mesh_and_not_subscribed(
+        topics_not_subscribed: HashMap<PeerId, TopicHash>,
+        topics_not_in_mesh: Vec<TopicHash>,
+    ) -> Self {
+        GraftErrors {
+            topics_not_subscribed: Some(topics_not_subscribed),
+            topics_not_in_mesh: Some(topics_not_in_mesh),
+            r_peers_not_connected: None,
+            topics_already_grafted: None,
+        }
+    }
+    pub fn add_topics_not_subscribed(&mut self,
+        topics_not_subscribed: HashMap<PeerId, TopicHash>) {
+        self.topics_not_subscribed = Some(topics_not_subscribed);
+    }
+    pub fn add_topics_not_in_mesh(&mut self,
+        topics_not_in_mesh: Vec<TopicHash>) {
+        self.topics_not_in_mesh = Some(topics_not_in_mesh);
+    }
+    pub fn add_topics_not_in_mesh_and_not_subscribed(&mut self,
+        topics_not_in_mesh: Vec<TopicHash>,
+        topics_not_subscribed: HashMap<PeerId, TopicHash>) {
+        self.topics_not_in_mesh = Some(topics_not_in_mesh);
+        self.topics_not_subscribed = Some(topics_not_subscribed);
+    }
+}
