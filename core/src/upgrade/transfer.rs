@@ -285,7 +285,7 @@ pub fn read_one_then<TSocket, TThen, TOut, TErr>(
     then: TThen,
 ) -> ReadOneThen<TSocket, TThen>
 where
-    TSocket: AsyncRead + AsyncWrite,
+    TSocket: AsyncRead,
     TThen: FnOnce(Vec<u8>) -> Result<TOut, TErr>,
     TErr: From<ReadOneError>,
 {
