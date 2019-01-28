@@ -68,58 +68,59 @@ impl GraftErrors {
             return true;
         }
     }
-    pub fn new_with_not_connected(r_peers_not_connected:
-        Vec<PeerId>) -> Self {
-        GraftErrors {
-            topics_not_subscribed: None,
-            topics_not_in_mesh: None,
-            r_peers_not_connected: Some(r_peers_not_connected),
-            topics_already_grafted: None,
-        }
-    }
-    pub fn new_with_not_subscribed(
-        topics_not_subscribed: HashMap<PeerId, TopicHash>) -> Self
-    {
-        GraftErrors {
-            topics_not_subscribed: Some(topics_not_subscribed),
-            topics_not_in_mesh: None,
-            r_peers_not_connected: None,
-            topics_already_grafted: None,
-        }
-    }
-    pub fn new_with_not_in_mesh(
-        topics_not_in_mesh: Vec<TopicHash>) -> Self
-    {
-        GraftErrors {
-            topics_not_subscribed: None,
-            topics_not_in_mesh: Some(topics_not_in_mesh),
-            r_peers_not_connected: None,
-            topics_already_grafted: None,
-        }
-    }
-    pub fn new_with_not_in_mesh_and_not_subscribed(
-        topics_not_subscribed: HashMap<PeerId, TopicHash>,
-        topics_not_in_mesh: Vec<TopicHash>,
-    ) -> Self {
-        GraftErrors {
-            topics_not_subscribed: Some(topics_not_subscribed),
-            topics_not_in_mesh: Some(topics_not_in_mesh),
-            r_peers_not_connected: None,
-            topics_already_grafted: None,
-        }
-    }
-    pub fn add_topics_not_subscribed(&mut self,
-        topics_not_subscribed: HashMap<PeerId, TopicHash>) {
-        self.topics_not_subscribed = Some(topics_not_subscribed);
-    }
-    pub fn add_topics_not_in_mesh(&mut self,
-        topics_not_in_mesh: Vec<TopicHash>) {
-        self.topics_not_in_mesh = Some(topics_not_in_mesh);
-    }
-    pub fn add_topics_not_in_mesh_and_not_subscribed(&mut self,
-        topics_not_in_mesh: Vec<TopicHash>,
-        topics_not_subscribed: HashMap<PeerId, TopicHash>) {
-        self.topics_not_in_mesh = Some(topics_not_in_mesh);
-        self.topics_not_subscribed = Some(topics_not_subscribed);
-    }
+    // Not used
+    // pub fn new_with_not_connected(r_peers_not_connected:
+    //     Vec<PeerId>) -> Self {
+    //     GraftErrors {
+    //         topics_not_subscribed: None,
+    //         topics_not_in_mesh: None,
+    //         r_peers_not_connected: Some(r_peers_not_connected),
+    //         topics_already_grafted: None,
+    //     }
+    // }
+    // pub fn new_with_not_subscribed(
+    //     topics_not_subscribed: HashMap<PeerId, TopicHash>) -> Self
+    // {
+    //     GraftErrors {
+    //         topics_not_subscribed: Some(topics_not_subscribed),
+    //         topics_not_in_mesh: None,
+    //         r_peers_not_connected: None,
+    //         topics_already_grafted: None,
+    //     }
+    // }
+    // pub fn new_with_not_in_mesh(
+    //     topics_not_in_mesh: Vec<TopicHash>) -> Self
+    // {
+    //     GraftErrors {
+    //         topics_not_subscribed: None,
+    //         topics_not_in_mesh: Some(topics_not_in_mesh),
+    //         r_peers_not_connected: None,
+    //         topics_already_grafted: None,
+    //     }
+    // }
+    // pub fn new_with_not_in_mesh_and_not_subscribed(
+    //     topics_not_subscribed: HashMap<PeerId, TopicHash>,
+    //     topics_not_in_mesh: Vec<TopicHash>,
+    // ) -> Self {
+    //     GraftErrors {
+    //         topics_not_subscribed: Some(topics_not_subscribed),
+    //         topics_not_in_mesh: Some(topics_not_in_mesh),
+    //         r_peers_not_connected: None,
+    //         topics_already_grafted: None,
+    //     }
+    // }
+    // pub fn add_topics_not_subscribed(&mut self,
+    //     topics_not_subscribed: HashMap<PeerId, TopicHash>) {
+    //     self.topics_not_subscribed = Some(topics_not_subscribed);
+    // }
+    // pub fn add_topics_not_in_mesh(&mut self,
+    //     topics_not_in_mesh: Vec<TopicHash>) {
+    //     self.topics_not_in_mesh = Some(topics_not_in_mesh);
+    // }
+    // pub fn add_topics_not_in_mesh_and_not_subscribed(&mut self,
+    //     topics_not_in_mesh: Vec<TopicHash>,
+    //     topics_not_subscribed: HashMap<PeerId, TopicHash>) {
+    //     self.topics_not_in_mesh = Some(topics_not_in_mesh);
+    //     self.topics_not_subscribed = Some(topics_not_subscribed);
+    // }
 }
