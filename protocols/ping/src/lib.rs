@@ -36,7 +36,7 @@ pub mod protocol;
 use futures::prelude::*;
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use libp2p_core::protocols_handler::{OneShotHandler, ProtocolsHandler};
-use libp2p_core::PeerId;
+use libp2p_core::{Multiaddr, PeerId};
 use std::{marker::PhantomData, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -79,7 +79,7 @@ impl<TSubstream> Default for Ping<TSubstream> {
     }
 }
 
-impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for Ping<TSubstream>
+impl<TSubstream> NetworkBehaviour for Ping<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
@@ -88,6 +88,10 @@ where
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
         OneShotHandler::default()
+    }
+
+    fn addresses_of_peer(&self, _peer_id: &PeerId) -> Vec<Multiaddr> {
+        Vec::new()
     }
 
     fn inject_connected(&mut self, _: PeerId, _: ConnectedPoint) {}
@@ -109,7 +113,7 @@ where
 
     fn poll(
         &mut self,
-        _: &mut PollParameters<TTopology>,
+        _: &mut PollParameters,
     ) -> Async<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,

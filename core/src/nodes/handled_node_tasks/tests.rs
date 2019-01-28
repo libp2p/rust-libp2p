@@ -42,6 +42,7 @@ type TestNodeTask = NodeTask<
     InEvent,
     OutEvent,
     io::Error,
+    PeerId,
 >;
 
 struct NodeTaskTestBuilder {
@@ -75,9 +76,9 @@ impl NodeTaskTestBuilder {
     fn node_task(&mut self) -> (
         TestNodeTask,
         UnboundedSender<InEvent>,
-        UnboundedReceiver<(InToExtMessage<OutEvent, Handler, io::Error, io::Error>, TaskId)>,
+        UnboundedReceiver<(InToExtMessage<OutEvent, Handler, io::Error, io::Error, PeerId>, TaskId)>,
     ) {
-        let (events_from_node_task_tx, events_from_node_task_rx) = mpsc::unbounded::<(InToExtMessage<OutEvent, Handler, _, _>, TaskId)>();
+        let (events_from_node_task_tx, events_from_node_task_rx) = mpsc::unbounded::<(InToExtMessage<OutEvent, Handler, _, _, _>, TaskId)>();
         let (events_to_node_task_tx, events_to_node_task_rx) = mpsc::unbounded::<InEvent>();
         let inner = if self.inner_node.is_some() {
             NodeTaskInner::Node(self.inner_node.take().unwrap())
@@ -285,7 +286,7 @@ fn iterate_over_all_tasks() {
 
 #[test]
 fn add_reach_attempt_prepares_a_new_task() {
-    let mut handled_nodes = HandledNodesTasks::new();
+    let mut handled_nodes: HandledNodesTasks<_, _, _, _, _> = HandledNodesTasks::new();
     assert_eq!(handled_nodes.tasks().count(), 0);
     assert_eq!(handled_nodes.to_spawn.len(), 0);
 

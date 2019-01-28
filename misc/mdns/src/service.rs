@@ -48,7 +48,7 @@ pub use dns::MdnsResponseError;
 /// the local network.
 ///
 /// # Usage
-/// 
+///
 /// In order to use mDNS to discover peers on the local network, use the `MdnsService`. This is
 /// done by creating a `MdnsService` then polling it in the same way as you would poll a stream.
 ///
@@ -451,6 +451,7 @@ impl<'a> MdnsResponse<'a> {
                 packet,
                 record_value,
                 peer_id,
+                ttl: record.ttl,
             })
         })
     }
@@ -478,6 +479,8 @@ pub struct MdnsPeer<'a> {
     record_value: String,
     /// Id of the peer.
     peer_id: PeerId,
+    /// TTL of the record in seconds.
+    ttl: u32,
 }
 
 impl<'a> MdnsPeer<'a> {
@@ -485,6 +488,12 @@ impl<'a> MdnsPeer<'a> {
     #[inline]
     pub fn id(&self) -> &PeerId {
         &self.peer_id
+    }
+
+    /// Returns the requested time-to-live for the record.
+    #[inline]
+    pub fn ttl(&self) -> Duration {
+        Duration::from_secs(u64::from(self.ttl))
     }
 
     /// Returns the list of addresses the peer says it is listening on.

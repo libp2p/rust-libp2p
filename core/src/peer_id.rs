@@ -155,6 +155,13 @@ impl AsRef<multihash::Multihash> for PeerId {
     }
 }
 
+impl AsRef<[u8]> for PeerId {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
 impl Into<multihash::Multihash> for PeerId {
     #[inline]
     fn into(self) -> multihash::Multihash {
