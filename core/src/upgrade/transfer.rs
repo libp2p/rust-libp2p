@@ -42,7 +42,7 @@ where
 
 /// Builds a buffer that contains the given integer encoded as variable-length.
 fn build_int_buffer(num: usize) -> io::Window<[u8; 10]> {
-    let mut len_data = [0; 10];
+    let mut len_data = unsigned_varint::encode::u64_buffer();
     let encoded_len = unsigned_varint::encode::u64(num as u64, &mut len_data).len();
     let mut len_data = io::Window::new(len_data);
     len_data.set_end(encoded_len);
@@ -212,10 +212,9 @@ where
 
                                 // Create `data_buf` containing the start of the data that was
                                 // already in `len_buf`.
-                                let data_start = &data_start[..cmp::min(data_start.len(), len)];
+                                let n = cmp::min(data_start.len(), len);
                                 let mut data_buf = vec![0; len];
-                                std::io::Write::write_all(&mut data_buf.as_mut_slice(), data_start)
-                                    .expect("Writing to a &mut [u8] never errors; QED");
+                                data_buf[.. n].copy_from_slice(&data_start[.. n]);
                                 let mut data_buf = io::Window::new(data_buf);
                                 data_buf.set_start(data_start.len());
                                 self.inner =
