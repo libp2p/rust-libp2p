@@ -593,7 +593,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
     /// Handles received subscriptions.
     fn handle_received_subscriptions(
         &mut self,
-        subscriptions: Vec<GossipsubSubscription>,
+        subscriptions: &Vec<GossipsubSubscription>,
         propagation_source: &PeerId,
     ) {
         debug!(
@@ -643,7 +643,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
                     self.events.push_back(NetworkBehaviourAction::GenerateEvent(
                         GossipsubEvent::Subscribed {
                             peer_id: propagation_source.clone(),
-                            topic: subscription.topic_hash,
+                            topic: subscription.topic_hash.clone(),
                         },
                     ));
                 }
@@ -683,7 +683,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
                     self.events.push_back(NetworkBehaviourAction::GenerateEvent(
                         GossipsubEvent::Unsubscribed {
                             peer_id: propagation_source.clone(),
-                            topic: subscription.topic_hash,
+                            topic: subscription.topic_hash.clone(),
                         },
                     ));
                 }
@@ -1097,7 +1097,7 @@ where
         };
         // Handle subscriptions
         // Update connected peers topics
-        self.handle_received_subscriptions(event.subscriptions, &propagation_source);
+        self.handle_received_subscriptions(&event.subscriptions, &propagation_source);
 
         // Handle messages
         for message in event.messages {
@@ -1225,16 +1225,22 @@ mod tests {
     fn build_and_inject_nodes(
         peer_no: usize,
         topics: Vec<String>,
-    ) -> (Vec<PeerId>, Gossipsub<tokio::net::TcpStream>) {
+    ) -> (
+        Gossipsub<tokio::net::TcpStream>,
+        Vec<PeerId>,
+        Vec<TopicHash>,
+    ) {
         // generate a default GossipsubConfig
         let gs_config = GossipsubConfig::default();
         // create a gossipsub struct
         let mut gs: Gossipsub<tokio::net::TcpStream> = Gossipsub::new(PeerId::random(), gs_config);
 
+        let mut topic_hashes = vec![];
         // subscribe to the topics
         for t in topics {
             let topic = TopicBuilder::new(t).build();
             gs.subscribe(topic.clone());
+            topic_hashes.push(topic.hash().clone());
         }
 
         // build and connect peer_no random peers
@@ -1251,13 +1257,79 @@ mod tests {
             );
         }
 
-        return (peers.clone(), gs);
+        return (gs, peers, topic_hashes);
+    }
+
+    #[test]
+    /// Test local node subscribing to a topic
+    fn test_subscribe() {
+        // The node should:
+        // - Create an empty vector in mesh[topic]
+        // - Send subscription request to all peers
+        // - run JOIN(topic)
+
+        let subscribe_topic = vec![String::from("test_subscribe")];
+        let (gs, _, topic_hashes) = build_and_inject_nodes(20, subscribe_topic);
+
+        assert!(
+            *gs.mesh.get(&topic_hashes[0]).expect("Mesh should exist") == Vec::<PeerId>::new(),
+            "Subscribe should add a new entry to the mesh[topic] hashmap"
+        );
+
+        // collect all the SendEvents
+        let subscriptions =
+            gs.events
+                .iter()
+                .fold(vec![], |mut collected_subscriptions, e| match e {
+                    NetworkBehaviourAction::SendEvent { peer_id: _, event } => {
+                        for s in &event.subscriptions {
+                            match s.action {
+                                GossipsubSubscriptionAction::Subscribe => {
+                                    collected_subscriptions.push(s.clone())
+                                }
+                                _ => {}
+                            };
+                        }
+                        collected_subscriptions
+                    }
+                    _ => collected_subscriptions,
+                });
+
+        // we sent a subscribe to all known peers
+        assert!(
+            subscriptions.len() == 20,
+            "Should send a subscription to all known peers"
+        );
+
+        // there should be mesh_n GRAFT messages (test JOIN more thoroughly in separate test)
+        let graft_messages = gs
+            .events
+            .iter()
+            .fold(vec![], |mut collected_grafts, e| match e {
+                NetworkBehaviourAction::SendEvent { peer_id: _, event } => {
+                    for c in &event.control_msgs {
+                        match c {
+                            GossipsubControlAction::Graft { topic_hash: _ } => {
+                                collected_grafts.push(c.clone())
+                            }
+                            _ => {}
+                        };
+                    }
+                    collected_grafts
+                }
+                _ => collected_grafts,
+            });
+
+        assert!(
+            graft_messages.len() == 6,
+            "There should be 6 grafts messages sent to peers"
+        );
     }
 
     #[test]
     /// Test the gossipsub NetworkBehaviour peer connection logic.
     fn test_inject_connected() {
-        let (peers, gs) =
+        let (gs, peers, _) =
             build_and_inject_nodes(20, vec![String::from("topic1"), String::from("topic2")]);
 
         // check that our subscriptions are sent to each of the peers
@@ -1315,6 +1387,92 @@ mod tests {
     }
 
     #[test]
+    /// Test subscription handling
+    fn test_handle_received_subscriptions() {
+        // For every subscription:
+        // SUBSCRIBE:   - Add subscribed topic to peer_topics for peer.
+        //              - Add peer to topics_peer.
+        // UNSUBSCRIBE  - Remove topic from peer_topics for peer.
+        //              - Remove peer from topic_peers.
+
+        let topics = vec!["topic1", "topic2", "topic3", "topic4"]
+            .iter()
+            .map(|&t| String::from(t))
+            .collect();
+        let (mut gs, peers, topic_hashes) = build_and_inject_nodes(20, topics);
+
+        // The first peer sends 3 subscriptions and 1 unsubscription
+        let mut subscriptions = topic_hashes[..3]
+            .iter()
+            .map(|topic_hash| GossipsubSubscription {
+                action: GossipsubSubscriptionAction::Subscribe,
+                topic_hash: topic_hash.clone(),
+            })
+            .collect::<Vec<GossipsubSubscription>>();
+
+        subscriptions.push(GossipsubSubscription {
+            action: GossipsubSubscriptionAction::Unsubscribe,
+            topic_hash: topic_hashes[topic_hashes.len() - 1].clone(),
+        });
+
+        let unknown_peer = PeerId::random();
+        // process the subscriptions
+        // first and second peers send subscriptions
+        gs.handle_received_subscriptions(&subscriptions, &peers[0]);
+        gs.handle_received_subscriptions(&subscriptions, &peers[1]);
+        // unknown peer sends the same subscriptions
+        gs.handle_received_subscriptions(&subscriptions, &unknown_peer);
+
+        // verify the result
+
+        let peer_topics = gs.peer_topics.get(&peers[0]).unwrap().0.clone();
+        assert!(
+            peer_topics == SmallVec::<[TopicHash; 16]>::from_vec(topic_hashes[..3].to_vec()),
+            "First peer should be subscribed to three topics"
+        );
+        let peer_topics = gs.peer_topics.get(&peers[1]).unwrap().0.clone();
+        assert!(
+            peer_topics == SmallVec::<[TopicHash; 16]>::from_vec(topic_hashes[..3].to_vec()),
+            "Second peer should be subscribed to three topics"
+        );
+
+        assert!(
+            gs.peer_topics.get(&unknown_peer).is_none(),
+            "Unknown peer should not have been added"
+        );
+
+        for topic_hash in topic_hashes[..3].iter() {
+            let topic_peers = gs.topic_peers.get(topic_hash).unwrap().1.clone(); // only gossipsub at the moment
+            assert!(
+                topic_peers == peers[..2].to_vec(),
+                "Two peers should be added to the first three topics"
+            );
+        }
+
+        // Peer 0 unsubscribes from the first topic
+
+        gs.handle_received_subscriptions(
+            &vec![GossipsubSubscription {
+                action: GossipsubSubscriptionAction::Unsubscribe,
+                topic_hash: topic_hashes[0].clone(),
+            }],
+            &peers[0],
+        );
+
+        let peer_topics = gs.peer_topics.get(&peers[0]).unwrap().0.clone();
+        assert!(
+            peer_topics == SmallVec::<[TopicHash; 16]>::from_vec(topic_hashes[1..3].to_vec()),
+            "Peer should be subscribed to two topics"
+        );
+
+        let topic_peers = gs.topic_peers.get(&topic_hashes[0]).unwrap().1.clone(); // only gossipsub at the moment
+        assert!(
+            topic_peers == peers[1..2].to_vec(),
+            "Only the second peers should be in the first topic"
+        );
+    }
+
+    #[test]
     /// Test Gossipsub.get_random_peers() function
     fn test_get_random_peers() {
         // generate a default GossipsubConfig
@@ -1342,6 +1500,11 @@ mod tests {
         assert!(random_peers == peers, "Expected no shuffling");
         let random_peers = gs.get_random_peers(&topic_hash, 0, { |_| true });
         assert!(random_peers.len() == 0, "Expected 0 peers to be returned");
+        // test the filter
+        let random_peers = gs.get_random_peers(&topic_hash, 5, { |_| false });
+        assert!(random_peers.len() == 0, "Expected 0 peers to be returned");
+        let random_peers = gs.get_random_peers(&topic_hash, 10, { |peer| peers.contains(peer) });
+        assert!(random_peers.len() == 10, "Expected 10 peers to be returned");
     }
 
 }
