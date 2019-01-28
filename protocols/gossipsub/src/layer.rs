@@ -272,9 +272,9 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
     /// This notifies the peer that it has been added to the local mesh view.
     /// Returns true if the graft succeeded. Returns false if we were
     /// already grafted.
-    pub fn graft(&mut self, peer: &PeerId, t_hash: impl AsRef<TopicHash>)
+    pub fn graft(&mut self, r_peer_ref: impl AsRef<PeerId>, t_hash: impl AsRef<TopicHash>)
         -> GResult<GraftErrors> {
-        self.graft_many(peer, iter::once(t_hash))
+        self.graft_many(iter::once(r_peer_ref), iter::once(t_hash));
     }
 
     // TODO: finish writing these methods
@@ -291,6 +291,8 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
         t_hashes: impl IntoIterator<Item = impl AsRef<TopicHash>>)
         -> GResult<Option<GraftErrors>> {
         graft_peers_many(iter::once(r_peer_ref), t_hashes);
+
+        // Delete once tested.
         // let r_peer = r_peer_ref.clone();
         // let r_peer_str = r_peer.to_base58();
         // assert!(r_peer != self.local_peer_id);
@@ -371,7 +373,9 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
     pub fn graft_peers(&mut self,
         r_peer_args: impl IntoIterator<Item = impl AsRef<PeerId>>,
         t_hash: impl AsRef<TopicHash>
-    ) -> GResult<Option<GraftErrors>> {}
+    ) -> GResult<Option<GraftErrors>> {
+        graft_peers_many(r_peer_args, iter::once(t_hash));
+    }
 
     // TODO: graft_peers_many and graft_peers to graft peers to multiple
     // topics and a single topic, respectively. Same for prune.
@@ -383,7 +387,6 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
         r_peer_args: impl IntoIterator<Item = impl AsRef<PeerId>>,
         t_hashes: impl IntoIterator<Item = impl AsRef<TopicHash>>
     ) -> GResult<Option<GraftErrors>> {
-        let mut non_connected_peers = Vec::new();
         let mut topics_not_in_mesh = Vec::new();
         let mut graft_errs = GraftErrors::new();
         let t_hashes_vec = t_hashes.into_iter();
@@ -468,8 +471,11 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
         if !ts_already_grafted.is_empty() {
             graft_errs.topics_already_grafted = Some(ts_already_grafted);
             graft_errs.has_errors = true;
+        }
         if !graft_errs.is_empty() {
             return Ok(Some(graft_errs));
+        } else {
+            return Ok(None);
         }
     }
 

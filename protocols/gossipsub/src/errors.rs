@@ -63,9 +63,9 @@ impl GraftErrors {
     }
     pub fn is_empty(&self) -> bool {
         if self.has_errors == true {
-            return true;
-        } else {
             return false;
+        } else {
+            return true;
         }
     }
     pub fn new_with_not_connected(r_peers_not_connected:
