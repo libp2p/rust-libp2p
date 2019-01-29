@@ -31,7 +31,7 @@ impl MessageCache {
 
     /// Put a message into the memory cache
     pub fn put(&mut self, msg: GossipsubMessage) {
-        let message_id = msg.msg_id();
+        let message_id = msg.id();
         let cache_entry = CacheEntry {
             mid: message_id.clone(),
             topics: msg.topics.clone(),
@@ -136,7 +136,7 @@ mod tests {
 
         assert!(mc.history[0].len() == 1);
 
-        let fetched = mc.get(&m.msg_id());
+        let fetched = mc.get(&m.id());
 
         assert_eq!(fetched.is_none(), false);
         assert_eq!(fetched.is_some(), true);
@@ -161,8 +161,8 @@ mod tests {
         mc.put(m.clone());
 
         // Try to get an incorrect ID
-        let wrong_msg_id = String::from("wrongid");
-        let fetched = mc.get(&wrong_msg_id);
+        let wrong_id = String::from("wrongid");
+        let fetched = mc.get(&wrong_id);
         assert_eq!(fetched.is_none(), true);
     }
 
@@ -186,7 +186,7 @@ mod tests {
         let m = gen_testm(1 as usize, vec![]);
         mc.put(m.clone());
 
-        let fetched = mc.get(&m.msg_id());
+        let fetched = mc.get(&m.id());
 
         // Make sure it is the same fetched message
         match fetched {

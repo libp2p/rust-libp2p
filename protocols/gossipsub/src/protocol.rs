@@ -325,7 +325,7 @@ pub struct GossipsubMessage {
 impl GossipsubMessage {
     /// Converts message into a message_id.
     // To be compatible with the go implementation
-    pub fn msg_id(&self) -> String {
+    pub fn id(&self) -> String {
         let mut source_string = self.source.to_base58();
         // the sequence number is a big endian uint64 (as per go implementation)
         // avoid a potential panic by setting the seqno to 0 if it is not long enough.
