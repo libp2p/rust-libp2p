@@ -512,7 +512,7 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
             let mut joined = false;
             let mut peers_to_add = Vec::new();
             let mut inner_loop_for_peer = |peer: &PeerId| {
-                peers_to_add.clone().push(peer.clone());
+                peers_to_add.push(peer.clone());
                 peer_count += 1;
                 // If it already has `TARGET_MESH_DEGREE` peers from the
                 // `fanout` peers of a topic, then it adds them to

@@ -162,6 +162,11 @@ impl Into<multihash::Multihash> for PeerId {
     }
 }
 
+impl AsRef<PeerId> for PeerId {
+    fn as_ref(&self) -> &PeerId {
+        &self
+    }
+}
 quick_error! {
     #[derive(Debug)]
     pub enum ParseError {
