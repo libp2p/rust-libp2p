@@ -18,8 +18,8 @@ fn main() {
 
     // Create a random PeerId
     let local_key = secio::SecioKeyPair::ed25519_generated().unwrap();
-    let local_pub_key = local_key.to_public_key();
-    println!("Local peer id: {:?}", local_pub_key.clone().into_peer_id());
+    let local_peer_id = local_key.to_peer_id();
+    println!("Local peer id: {:?}", local_peer_id);
 
     // Set up an encrypted TCP Transport over the Mplex and Yamux protocols
     let transport = libp2p::build_development_transport(local_key);
@@ -44,14 +44,9 @@ fn main() {
             Duration::from_secs(60),
         );
         // build a gossipsub network behaviour
-        let mut gossipsub =
-            gossipsub::Gossipsub::new(local_pub_key.clone().into_peer_id(), gossipsub_config);
+        let mut gossipsub = gossipsub::Gossipsub::new(local_peer_id.clone(), gossipsub_config);
         gossipsub.subscribe(topic.clone());
-        libp2p::Swarm::new(
-            transport,
-            gossipsub,
-            libp2p::core::topology::MemoryTopology::empty(local_pub_key),
-        )
+        libp2p::Swarm::new(transport, gossipsub, local_peer_id)
     };
 
     // Listen on all interfaces and whatever port the OS assigns

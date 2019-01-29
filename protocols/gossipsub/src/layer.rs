@@ -28,7 +28,7 @@ use libp2p_core::swarm::{
 };
 use libp2p_core::{
     protocols_handler::{OneShotHandler, ProtocolsHandler},
-    PeerId,
+    Multiaddr, PeerId,
 };
 use libp2p_floodsub::{Topic, TopicHash};
 use mcache::MessageCache;
@@ -999,7 +999,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
     }
 }
 
-impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for Gossipsub<TSubstream>
+impl<TSubstream> NetworkBehaviour for Gossipsub<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
@@ -1008,6 +1008,10 @@ where
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
         Default::default()
+    }
+
+    fn addresses_of_peer(&self, _: &PeerId) -> Vec<Multiaddr> {
+        Vec::new()
     }
 
     fn inject_connected(&mut self, id: PeerId, _: ConnectedPoint) {
@@ -1104,6 +1108,8 @@ where
         // remove peer from peer_topics
         let was_in = self.peer_topics.remove(id);
         debug_assert!(was_in.is_some());
+
+        //TODO: Reconnect due to inactivity
     }
 
     fn inject_node_event(&mut self, propagation_source: PeerId, event: InnerMessage) {
@@ -1155,7 +1161,7 @@ where
 
     fn poll(
         &mut self,
-        _: &mut PollParameters<TTopology>,
+        _: &mut PollParameters,
     ) -> Async<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
@@ -1234,7 +1240,6 @@ pub enum NodeType {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use libp2p_core::topology::MemoryTopology;
     use libp2p_floodsub::TopicBuilder;
 
     // helper functions for testing
@@ -1273,7 +1278,8 @@ mod tests {
         for _ in 0..peer_no {
             let peer = PeerId::random();
             peers.push(peer.clone());
-            <Gossipsub<tokio::net::TcpStream> as NetworkBehaviour<MemoryTopology>>::inject_connected(&mut gs,
+            <Gossipsub<tokio::net::TcpStream> as NetworkBehaviour>::inject_connected(
+                &mut gs,
                 peer.clone(),
                 dummy_connected_point.clone(),
             );
