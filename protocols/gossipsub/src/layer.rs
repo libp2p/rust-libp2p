@@ -491,7 +491,7 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
     /// `join_many()`.
     pub fn join(&mut self, topic_hash: impl AsRef<TopicHash>)
         -> GResult<Option<Vec<TopicHash>>> {
-        self.join_many(iter::once(topic_hash))
+        self.join_many(&mut iter::once(topic_hash))
     }
 
     /// Joins the peer to many topics.
