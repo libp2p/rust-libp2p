@@ -58,10 +58,30 @@ const_assert_eq!(E; 180222, TOTAL_BUFFER_LEN);
 const_assert_eq!(F; 0, READ_CRYPTO_BEGIN - READ_END); // read crypto buffer follows read buffer
 const_assert_eq!(G; 0, WRITE_CRYPTO_BEGIN - WRITE_END); // write crypto buffer follows write buffer
 
+pub(super) struct Buffer {
+    inner: Box<[u8; TOTAL_BUFFER_LEN]>
+}
+
+impl Buffer {
+    fn borrow_mut(&mut self) -> BufferBorrow {
+        let (r, w) = self.inner.split_at_mut(WRITE_BEGIN);
+        let (read, read_crypto) = r.split_at_mut(READ_CRYPTO_BEGIN);
+        let (write, write_crypto) = w.split_at_mut(WRITE_CRYPTO_BEGIN - WRITE_BEGIN);
+        BufferBorrow { read, read_crypto, write, write_crypto }
+    }
+}
+
+struct BufferBorrow<'a> {
+    read: &'a mut [u8],
+    read_crypto: &'a mut [u8],
+    write: &'a mut [u8],
+    write_crypto: &'a mut [u8]
+}
+
 pub struct NoiseOutput<T> {
     pub(super) io: T,
     pub(super) session: snow::Session,
-    pub(super) buffer: Box<[u8; TOTAL_BUFFER_LEN]>,
+    pub(super) buffer: Buffer,
     pub(super) read_state: ReadState,
     pub(super) write_state: WriteState
 }
@@ -79,7 +99,7 @@ impl<T> NoiseOutput<T> {
     pub(super) fn new(io: T, session: snow::Session) -> Self {
         NoiseOutput {
             io, session,
-            buffer: Box::new([0; TOTAL_BUFFER_LEN]),
+            buffer: Buffer { inner: Box::new([0; TOTAL_BUFFER_LEN]) },
             read_state: ReadState::Init,
             write_state: WriteState::Init
         }
@@ -119,6 +139,7 @@ pub(super) enum WriteState {
 
 impl<T: io::Read> io::Read for NoiseOutput<T> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let buffer = self.buffer.borrow_mut();
         loop {
             trace!("read state: {:?}", self.read_state);
             match self.read_state {
@@ -139,7 +160,7 @@ impl<T: io::Read> io::Read for NoiseOutput<T> {
                     self.read_state = ReadState::ReadData { len: usize::from(n), off: 0 }
                 }
                 ReadState::ReadData { len, ref mut off } => {
-                    let n = self.io.read(&mut self.buffer[READ_BEGIN + *off .. READ_BEGIN + len])?;
+                    let n = self.io.read(&mut buffer.read[*off .. len])?;
                     trace!("read: read {}/{} bytes", *off + n, len);
                     if n == 0 {
                         trace!("read: eof");
@@ -149,11 +170,7 @@ impl<T: io::Read> io::Read for NoiseOutput<T> {
                     *off += n;
                     if len == *off {
                         trace!("read: decrypting {} bytes", len);
-                        let (read, crypto) = {
-                            let (r, c) = self.buffer.split_at_mut(READ_END);
-                            (&r[READ_BEGIN .. READ_BEGIN + len], &mut c[.. READ_CRYPTO_END - READ_END])
-                        };
-                        if let Ok(n) = self.session.read_message(read, crypto) {
+                        if let Ok(n) = self.session.read_message(&buffer.read[.. len], buffer.read_crypto) {
                             trace!("read: payload len = {} bytes", n);
                             self.read_state = ReadState::CopyData { len: n, off: 0 }
                         } else {
@@ -165,8 +182,7 @@ impl<T: io::Read> io::Read for NoiseOutput<T> {
                 }
                 ReadState::CopyData { len, ref mut off } => {
                     let n = std::cmp::min(len - *off, buf.len());
-                    let src = &self.buffer[READ_CRYPTO_BEGIN + *off .. READ_CRYPTO_BEGIN + *off + n];
-                    buf[.. n].copy_from_slice(src);
+                    buf[.. n].copy_from_slice(&buffer.read_crypto[*off .. *off + n]);
                     trace!("read: copied {}/{} bytes", *off + n, len);
                     *off += n;
                     if len == *off {
@@ -190,6 +206,7 @@ impl<T: io::Read> io::Read for NoiseOutput<T> {
 
 impl<T: io::Write> io::Write for NoiseOutput<T> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let buffer = self.buffer.borrow_mut();
         loop {
             trace!("write state: {:?}", self.write_state);
             match self.write_state {
@@ -198,17 +215,12 @@ impl<T: io::Write> io::Write for NoiseOutput<T> {
                 }
                 WriteState::BufferData { ref mut off } => {
                     let n = std::cmp::min(MAX_WRITE_BUF_LEN - *off, buf.len());
-                    self.buffer[WRITE_BEGIN + *off .. WRITE_BEGIN + *off + n]
-                        .copy_from_slice(&buf[.. n]);
+                    buffer.write[*off .. *off + n].copy_from_slice(&buf[.. n]);
                     trace!("write: buffered {} bytes", *off + n);
                     *off += n;
                     if *off == MAX_WRITE_BUF_LEN {
                         trace!("write: encrypting {} bytes", *off);
-                        let (write, crypto) = {
-                            let (w, c) = self.buffer.split_at_mut(WRITE_END);
-                            (&w[WRITE_BEGIN ..], &mut c[.. WRITE_CRYPTO_END - WRITE_END])
-                        };
-                        if let Ok(n) = self.session.write_message(write, crypto) {
+                        if let Ok(n) = self.session.write_message(buffer.write, buffer.write_crypto) {
                             trace!("write: cipher text len = {} bytes", n);
                             self.write_state = WriteState::WriteLen { len: n }
                         } else {
@@ -229,10 +241,7 @@ impl<T: io::Write> io::Write for NoiseOutput<T> {
                     self.write_state = WriteState::WriteData { len, off: 0 }
                 }
                 WriteState::WriteData { len, ref mut off } => {
-                    let n = {
-                        let src = &self.buffer[WRITE_CRYPTO_BEGIN + *off .. WRITE_CRYPTO_BEGIN + len];
-                        self.io.write(src)?
-                    };
+                    let n = self.io.write(&buffer.write_crypto[*off .. len])?;
                     trace!("write: wrote {}/{} bytes", *off + n, len);
                     if n == 0 {
                         trace!("write: eof");
@@ -255,16 +264,13 @@ impl<T: io::Write> io::Write for NoiseOutput<T> {
     }
 
     fn flush(&mut self) -> io::Result<()> {
+        let buffer = self.buffer.borrow_mut();
         loop {
             match self.write_state {
                 WriteState::Init => return Ok(()),
                 WriteState::BufferData { off } => {
                     trace!("flush: encrypting {} bytes", off);
-                    let (write, crypto) = {
-                        let (w, c) = self.buffer.split_at_mut(WRITE_END);
-                        (&w[WRITE_BEGIN .. WRITE_BEGIN + off], &mut c[.. WRITE_CRYPTO_END - WRITE_END])
-                    };
-                    if let Ok(n) = self.session.write_message(write, crypto) {
+                    if let Ok(n) = self.session.write_message(&buffer.write[.. off], buffer.write_crypto) {
                         trace!("flush: cipher text len = {} bytes", n);
                         self.write_state = WriteState::WriteLen { len: n }
                     } else {
@@ -283,10 +289,7 @@ impl<T: io::Write> io::Write for NoiseOutput<T> {
                     self.write_state = WriteState::WriteData { len, off: 0 }
                 }
                 WriteState::WriteData { len, ref mut off } => {
-                    let n = {
-                        let src = &self.buffer[WRITE_CRYPTO_BEGIN + *off .. WRITE_CRYPTO_BEGIN + len];
-                        self.io.write(src)?
-                    };
+                    let n = self.io.write(&buffer.write_crypto[*off .. len])?;
                     trace!("flush: wrote {}/{} bytes", *off + n, len);
                     if n == 0 {
                         trace!("flush: eof");
