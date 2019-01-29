@@ -502,11 +502,11 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
     /// hash. If a topic is not in the local mesh view, it still tries to join
     /// via connected peers that are subscribed to the topic.
     pub fn join_many(&mut self,
-        topic_hashes: &mut impl IntoIterator<Item = impl AsRef<TopicHash>>)
+        topic_hashes: &mut(impl IntoIterator<Item = impl AsRef<TopicHash>>))
         -> GResult<Option<Vec<TopicHash>>> {
         let mut topics_not_joined = Vec::new();
         for mut topic_hash in topic_hashes.clone() {
-            let mut th = (&topic_hash).clone().as_ref();
+            let mut th = (&mut topic_hash).clone().as_ref();
             let mut fanout_peers = &mut self.fanout.get_peers_from_topic(th);
             let mut peer_count = 0;
             let mut joined = false;
