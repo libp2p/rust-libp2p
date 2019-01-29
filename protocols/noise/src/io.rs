@@ -18,57 +18,19 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::{NoiseError, keys::{PublicKey, Curve25519}, util::to_array};
 use futures::Poll;
 use log::{debug, trace};
 use snow;
-use static_assertions::const_assert_eq;
 use std::{fmt, io};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 const MAX_NOISE_PKG_LEN: usize = 65535;
 const MAX_WRITE_BUF_LEN: usize = 16384;
+const TOTAL_BUFFER_LEN: usize = 2 * MAX_NOISE_PKG_LEN + 3 * MAX_WRITE_BUF_LEN;
 
-// Buffer indices ///////////////////////////////////////////////////////////
-
-// Read buffer: [0, 65535)
-const READ_BEGIN: usize = 0;
-const READ_END: usize = READ_BEGIN + MAX_NOISE_PKG_LEN;
-
-// Decryption buffer for data read: [65535, 131070)
-const READ_CRYPTO_BEGIN: usize = READ_END;
-const READ_CRYPTO_END: usize = READ_CRYPTO_BEGIN + MAX_NOISE_PKG_LEN;
-
-// Write buffer: [131070, 147454)
-const WRITE_BEGIN: usize = READ_CRYPTO_END;
-const WRITE_END: usize = WRITE_BEGIN + MAX_WRITE_BUF_LEN;
-
-// Encryption buffer for data to write: [147454, 180222)
-const WRITE_CRYPTO_BEGIN: usize = WRITE_END;
-const WRITE_CRYPTO_END: usize = WRITE_CRYPTO_BEGIN + 2 * MAX_WRITE_BUF_LEN;
-
-const TOTAL_BUFFER_LEN: usize = WRITE_CRYPTO_END;
-
-// Static invariants ////////////////////////////////////////////////////////
-
-const_assert_eq!(A; READ_END - READ_BEGIN, MAX_NOISE_PKG_LEN);
-const_assert_eq!(B; READ_CRYPTO_END - READ_CRYPTO_BEGIN, MAX_NOISE_PKG_LEN);
-const_assert_eq!(C; WRITE_END - WRITE_BEGIN, MAX_WRITE_BUF_LEN);
-const_assert_eq!(D; WRITE_CRYPTO_END - WRITE_CRYPTO_BEGIN, 2 * MAX_WRITE_BUF_LEN);
-const_assert_eq!(E; 180222, TOTAL_BUFFER_LEN);
-const_assert_eq!(F; 0, READ_CRYPTO_BEGIN - READ_END); // read crypto buffer follows read buffer
-const_assert_eq!(G; 0, WRITE_CRYPTO_BEGIN - WRITE_END); // write crypto buffer follows write buffer
-
-pub(super) struct Buffer {
+struct Buffer {
     inner: Box<[u8; TOTAL_BUFFER_LEN]>
-}
-
-impl Buffer {
-    fn borrow_mut(&mut self) -> BufferBorrow {
-        let (r, w) = self.inner.split_at_mut(WRITE_BEGIN);
-        let (read, read_crypto) = r.split_at_mut(READ_CRYPTO_BEGIN);
-        let (write, write_crypto) = w.split_at_mut(WRITE_CRYPTO_BEGIN - WRITE_BEGIN);
-        BufferBorrow { read, read_crypto, write, write_crypto }
-    }
 }
 
 struct BufferBorrow<'a> {
@@ -78,12 +40,52 @@ struct BufferBorrow<'a> {
     write_crypto: &'a mut [u8]
 }
 
+impl Buffer {
+    fn borrow_mut(&mut self) -> BufferBorrow {
+        let (r, w) = self.inner.split_at_mut(2 * MAX_NOISE_PKG_LEN);
+        let (read, read_crypto) = r.split_at_mut(MAX_NOISE_PKG_LEN);
+        let (write, write_crypto) = w.split_at_mut(2 * MAX_WRITE_BUF_LEN);
+        BufferBorrow { read, read_crypto, write, write_crypto }
+    }
+}
+
+pub(super) struct Handshake<T>(NoiseOutput<T>);
+
+impl<T> Handshake<T> {
+    pub(super) fn new(io: T, session: snow::Session) -> Self {
+        Handshake(NoiseOutput::new(io, session))
+    }
+}
+
+impl<T: AsyncRead + AsyncWrite> Handshake<T> {
+    pub(super) fn send(&mut self) -> Poll<(), io::Error> {
+        Ok(self.0.poll_write(&[])?.map(|_| ()))
+    }
+
+    pub(super) fn flush(&mut self) -> Poll<(), io::Error> {
+        self.0.poll_flush()
+    }
+
+    pub(super) fn receive(&mut self) -> Poll<(), io::Error> {
+        Ok(self.0.poll_read(&mut [])?.map(|_| ()))
+    }
+
+    pub(super) fn finish(self) -> Result<(PublicKey<Curve25519>, NoiseOutput<T>), NoiseError> {
+        let s = self.0.session.into_transport_mode()?;
+        let p = s.get_remote_static()
+            .ok_or(NoiseError::InvalidKey)
+            .and_then(to_array)
+            .map(PublicKey::new)?;
+        Ok((p, NoiseOutput { session: s, .. self.0 }))
+    }
+}
+
 pub struct NoiseOutput<T> {
-    pub(super) io: T,
-    pub(super) session: snow::Session,
-    pub(super) buffer: Buffer,
-    pub(super) read_state: ReadState,
-    pub(super) write_state: WriteState
+    io: T,
+    session: snow::Session,
+    buffer: Buffer,
+    read_state: ReadState,
+    write_state: WriteState
 }
 
 impl<T> fmt::Debug for NoiseOutput<T> {
@@ -96,7 +98,7 @@ impl<T> fmt::Debug for NoiseOutput<T> {
 }
 
 impl<T> NoiseOutput<T> {
-    pub(super) fn new(io: T, session: snow::Session) -> Self {
+    fn new(io: T, session: snow::Session) -> Self {
         NoiseOutput {
             io, session,
             buffer: Buffer { inner: Box::new([0; TOTAL_BUFFER_LEN]) },
@@ -107,7 +109,7 @@ impl<T> NoiseOutput<T> {
 }
 
 #[derive(Debug)]
-pub(super) enum ReadState {
+enum ReadState {
     /// initial state
     Init,
     /// read encrypted frame data
@@ -122,7 +124,7 @@ pub(super) enum ReadState {
 }
 
 #[derive(Debug)]
-pub(super) enum WriteState {
+enum WriteState {
     /// initial state
     Init,
     /// accumulate write data

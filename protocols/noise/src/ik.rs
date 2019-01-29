@@ -20,9 +20,9 @@
 
 use crate::{
     error::NoiseError,
-    io::NoiseOutput,
+    io::{Handshake, NoiseOutput},
     keys::{Curve25519, PublicKey},
-    util::{to_array, Resolver}
+    util::Resolver
 };
 use futures::prelude::*;
 use snow;
@@ -42,9 +42,9 @@ impl<T> NoiseInboundFuture<T> {
 
 enum InboundState<T> {
     Init(T, super::NoiseConfig<IK>),
-    RecvHandshake(NoiseOutput<T>), // -> e, es, s, ss
-    SendHandshake(NoiseOutput<T>), // <- e, ee, se
-    Flush(NoiseOutput<T>),
+    RecvHandshake(Handshake<T>), // -> e, es, s, ss
+    SendHandshake(Handshake<T>), // <- e, ee, se
+    Flush(Handshake<T>),
     Done
 }
 
@@ -62,11 +62,11 @@ where
                     let session = snow::Builder::with_resolver(config.params, Box::new(Resolver))
                         .local_private_key(config.keypair.secret().as_ref())
                         .build_responder()?;
-                    let output = NoiseOutput::new(io, session);
-                    self.0 = InboundState::RecvHandshake(output)
+                    let io = Handshake::new(io, session);
+                    self.0 = InboundState::RecvHandshake(io)
                 }
                 InboundState::RecvHandshake(mut io) => {
-                    if io.poll_read(&mut [])?.is_ready() {
+                    if io.receive()?.is_ready() {
                         self.0 = InboundState::SendHandshake(io)
                     } else {
                         self.0 = InboundState::RecvHandshake(io);
@@ -74,7 +74,7 @@ where
                     }
                 }
                 InboundState::SendHandshake(mut io) => {
-                    if io.poll_write(&[])?.is_ready() {
+                    if io.send()?.is_ready() {
                         self.0 = InboundState::Flush(io)
                     } else {
                         self.0 = InboundState::SendHandshake(io);
@@ -82,14 +82,10 @@ where
                     }
                 }
                 InboundState::Flush(mut io) => {
-                    if io.poll_flush()?.is_ready() {
-                        let s = io.session.into_transport_mode()?;
-                        let m = s.get_remote_static()
-                            .ok_or(NoiseError::InvalidKey)
-                            .and_then(to_array)?;
-                        let io = NoiseOutput { session: s, .. io };
+                    if io.flush()?.is_ready() {
+                        let result = io.finish()?;
                         self.0 = InboundState::Done;
-                        return Ok(Async::Ready((PublicKey::new(m), io)))
+                        return Ok(Async::Ready(result))
                     } else {
                         self.0 = InboundState::Flush(io);
                         return Ok(Async::NotReady)
@@ -111,9 +107,9 @@ impl<T> NoiseOutboundFuture<T> {
 
 enum OutboundState<T> {
     Init(T, super::NoiseConfig<IK, PublicKey<Curve25519>>),
-    SendHandshake(NoiseOutput<T>), // -> e, es, s, ss
-    Flush(NoiseOutput<T>),
-    RecvHandshake(NoiseOutput<T>), // <- e, ee, se
+    SendHandshake(Handshake<T>), // -> e, es, s, ss
+    Flush(Handshake<T>),
+    RecvHandshake(Handshake<T>), // <- e, ee, se
     Done
 }
 
@@ -132,11 +128,11 @@ where
                         .local_private_key(config.keypair.secret().as_ref())
                         .remote_public_key(config.remote.as_ref())
                         .build_initiator()?;
-                    let output = NoiseOutput::new(io, session);
-                    self.0 = OutboundState::SendHandshake(output)
+                    let io = Handshake::new(io, session);
+                    self.0 = OutboundState::SendHandshake(io)
                 }
                 OutboundState::SendHandshake(mut io) => {
-                    if io.poll_write(&[])?.is_ready() {
+                    if io.send()?.is_ready() {
                         self.0 = OutboundState::Flush(io)
                     } else {
                         self.0 = OutboundState::SendHandshake(io);
@@ -144,7 +140,7 @@ where
                     }
                 }
                 OutboundState::Flush(mut io) => {
-                    if io.poll_flush()?.is_ready() {
+                    if io.flush()?.is_ready() {
                         self.0 = OutboundState::RecvHandshake(io)
                     } else {
                         self.0 = OutboundState::Flush(io);
@@ -152,14 +148,10 @@ where
                     }
                 }
                 OutboundState::RecvHandshake(mut io) => {
-                    if io.poll_read(&mut [])?.is_ready() {
-                        let s = io.session.into_transport_mode()?;
-                        let m = s.get_remote_static()
-                            .ok_or(NoiseError::InvalidKey)
-                            .and_then(to_array)?;
-                        let io = NoiseOutput { session: s, .. io };
+                    if io.receive()?.is_ready() {
+                        let result = io.finish()?;
                         self.0 = OutboundState::Done;
-                        return Ok(Async::Ready((PublicKey::new(m), io)))
+                        return Ok(Async::Ready(result))
                     } else {
                         self.0 = OutboundState::RecvHandshake(io);
                         return Ok(Async::NotReady)
