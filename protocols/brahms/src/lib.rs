@@ -71,6 +71,7 @@ pub mod protocol;
 
 mod behaviour;
 mod codec;
+mod view;
 
 // These modules shouldn't be public, but we want to access their content from the `benches`
 // directory. Ideally the benchmarks of `pow` and `sampler` would be inside `pow` and `sampler`

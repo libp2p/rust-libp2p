@@ -55,7 +55,11 @@ fn topology_filled() {
         };
 
         let brahms_config = BrahmsConfig {
-            view_size: BrahmsViewSize::from_network_size(NUM_SWARMS as u64),
+            view_size: BrahmsViewSize {
+                alpha: NUM_SWARMS as u32 * 3 / 2,
+                beta: NUM_SWARMS as u32 * 3 / 2,
+                gamma: 5,
+            },
             round_duration: Duration::from_secs(2),
             num_samplers: 32,
             difficulty: 6,
