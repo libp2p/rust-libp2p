@@ -518,7 +518,6 @@ where TBehaviour: NetworkBehaviour,
 
 #[cfg(test)]
 mod tests {
-    use crate::nodes::raw_swarm::RawSwarm;
     use crate::peer_id::PeerId;
     use crate::protocols_handler::{DummyProtocolsHandler, ProtocolsHandler};
     use crate::public_key::PublicKey;
@@ -526,10 +525,9 @@ mod tests {
     use futures::prelude::*;
     use multiaddr::Multiaddr;
     use rand::random;
-    use smallvec::SmallVec;
     use std::marker::PhantomData;
     use super::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction,
-                PollParameters, Swarm, SwarmBuilder};
+                PollParameters, SwarmBuilder};
     use tokio_io::{AsyncRead, AsyncWrite};
     use void::Void;
 
