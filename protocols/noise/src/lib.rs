@@ -33,7 +33,6 @@ pub use keys::{Curve25519, PublicKey, SecretKey, Keypair};
 use libp2p_core::{UpgradeInfo, InboundUpgrade, OutboundUpgrade};
 use lazy_static::lazy_static;
 use snow;
-use std::sync::Arc;
 use tokio_io::{AsyncRead, AsyncWrite};
 use util::Resolver;
 
@@ -62,7 +61,7 @@ pub enum XX {}
 
 #[derive(Clone)]
 pub struct NoiseConfig<P, R = ()> {
-    keypair: Arc<Keypair<Curve25519>>,
+    keypair: Keypair<Curve25519>,
     params: snow::params::NoiseParams,
     remote: R,
     _marker: std::marker::PhantomData<P>
@@ -71,7 +70,7 @@ pub struct NoiseConfig<P, R = ()> {
 impl NoiseConfig<IX> {
     pub fn ix(kp: Keypair<Curve25519>) -> Self {
         NoiseConfig {
-            keypair: Arc::new(kp),
+            keypair: kp,
             params: PARAMS_IX.clone(),
             remote: (),
             _marker: std::marker::PhantomData
@@ -82,7 +81,7 @@ impl NoiseConfig<IX> {
 impl NoiseConfig<XX> {
     pub fn xx(kp: Keypair<Curve25519>) -> Self {
         NoiseConfig {
-            keypair: Arc::new(kp),
+            keypair: kp,
             params: PARAMS_XX.clone(),
             remote: (),
             _marker: std::marker::PhantomData
@@ -93,7 +92,7 @@ impl NoiseConfig<XX> {
 impl NoiseConfig<IK> {
     pub fn ik_listener(kp: Keypair<Curve25519>) -> Self {
         NoiseConfig {
-            keypair: Arc::new(kp),
+            keypair: kp,
             params: PARAMS_IK.clone(),
             remote: (),
             _marker: std::marker::PhantomData
@@ -104,7 +103,7 @@ impl NoiseConfig<IK> {
 impl NoiseConfig<IK, PublicKey<Curve25519>> {
     pub fn ik_dialer(kp: Keypair<Curve25519>, remote: PublicKey<Curve25519>) -> Self {
         NoiseConfig {
-            keypair: Arc::new(kp),
+            keypair: kp,
             params: PARAMS_IK.clone(),
             remote,
             _marker: std::marker::PhantomData
