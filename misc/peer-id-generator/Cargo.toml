@@ -1,5 +1,6 @@
 [package]
 name = "peer-id-generator"
+edition = "2018"
 version = "0.1.0"
 description = "Generate peer ids that are prefixed with a specific string"
 authors = ["Parity Technologies <admin@parity.io>"]
