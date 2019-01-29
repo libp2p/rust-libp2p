@@ -315,12 +315,12 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
     ) -> GResult<Option<GraftErrors>> {
         let r_peers_v: Vec<PeerId> = r_peers.into_iter()
             .map(|p| p.as_ref().clone()).collect();
-        let t_hashes_v: Vec<TopicHash> = t_hashes.into_iter()
+        let mut t_hashes_v: Vec<TopicHash> = t_hashes.into_iter()
             .map(|th| th.as_ref().clone()).collect();
         let mut topics_not_in_mesh = Vec::new();
         let mut graft_errs = GraftErrors::new();
-        let ts_already_grafted = Vec::new();
-        let rem_peers_not_connected = Vec::new();
+        let mut ts_already_grafted = Vec::new();
+        let mut rem_peers_not_connected = Vec::new();
         let mut topics_not_subscribed_to = HashMap::new();
         for r_peer in r_peers_v {
             let r_peer_str = r_peer.to_base58();
@@ -328,7 +328,7 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
             if let Some(topic_hashes) = self.connected_peers.gossipsub
                 .get(&r_peer) {
                 let m = &mut self.mesh;
-                for (i, t_hash) in t_hashes_v.iter().enumerate() {
+                for (i, t_hash) in t_hashes_v.clone().iter().enumerate() {
                     // Check the remote peer is subscribed to the requested
                     // topic, if not add to return error map.
                     if !topic_hashes.iter().any(|th| th == t_hash) {
@@ -502,57 +502,33 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
     /// hash. If a topic is not in the local mesh view, it still tries to join
     /// via connected peers that are subscribed to the topic.
     pub fn join_many(&mut self,
-        topic_hashes: impl IntoIterator<Item = impl AsRef<TopicHash>>)
+        topic_hashes: &mut impl IntoIterator<Item = impl AsRef<TopicHash>>)
         -> GResult<Option<Vec<TopicHash>>> {
         let mut topics_not_joined = Vec::new();
-        for topic_hash in topic_hashes {
-            let th = (&topic_hash).clone().as_ref();
-            let fanout_peers = &self.fanout.get_peers_from_topic(th);
+        for mut topic_hash in topic_hashes.clone() {
+            let mut th = (&topic_hash).clone().as_ref();
+            let mut fanout_peers = &mut self.fanout.get_peers_from_topic(th);
             let mut peer_count = 0;
             let mut joined = false;
             let mut peers_to_add = Vec::new();
-            let mut inner_loop_for_peer = |peer: &PeerId| {
-                peers_to_add.push(peer.clone());
-                peer_count += 1;
-                // If it already has `TARGET_MESH_DEGREE` peers from the
-                // `fanout` peers of a topic, then it adds them to
-                // `mesh[topic]`, and notifies them with a `GRAFT(topic)`
-                // control message.
-                if peer_count == TARGET_MESH_DEGREE {
-                    self.mesh.insert(th.clone(), peers_to_add.clone());
-                    self.graft_peers(peers_to_add, topic_hash);
-                    // for peer in &peers_to_add {
-                    //     self.graft(&peer, (&topic_hash).clone());
-                    // }
-                    joined = true;
-                }
-                return (peer_count, joined);
-            };
-            let mut try_select_connected_peers = || {
-                for peer in self.connected_peers.gossipsub.keys() {
-                    let (peer_count, joined)
-                        = inner_loop_for_peer(peer);
-                    if joined == true {
-                        return self;
-                    }
-                }
-                topics_not_joined.push(th.clone());
-                return self;
-            };
+            // has compiler errors
+            // let pls = PeerLoopState {
+            //     peers_to_add: peers_to_add,
+            //     peer_count: peer_count,
+            //     joined: joined,
+            //     th: th,
+            //     topic_hash: topic_hash,
+            // }
             match fanout_peers {
                 Ok(fanout_peers) => {
-                    let mut select_fanout_peers = || {
-                        for peer in fanout_peers {
-                            let (peer_count, joined)
-                                = inner_loop_for_peer(peer);
-                            if joined == true {
-                                break;
-                            }
-                        }
-                    };
-                    // (peer_count, joined)
+                    self.select_fanout_peers(fanout_peers,
+                    &mut peers_to_add, &mut peer_count, &mut joined,
+                    &mut th, &mut topic_hash, &mut topics_not_joined);
                     if joined == false {
-                        try_select_connected_peers();
+                        self.try_select_connected_peers(
+                                &mut peers_to_add, &mut peer_count,
+                                &mut joined, th, &mut topic_hash,
+                                &mut topics_not_joined);
                     }
                 },
                 // Otherwise, with `select_from_connected_peers()`, it
@@ -562,13 +538,85 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
                 // control message.
                 // The error should be TopicNotInMesh, therefore we continue
                 // with `select_from_connected_peers()`.
-                Err(err) => {try_select_connected_peers();},
+                Err(err) => {self.try_select_connected_peers(
+                                &mut peers_to_add, &mut peer_count,
+                                &mut joined, th, &mut topic_hash,
+                                &mut topics_not_joined);},
             }
         }
         if topics_not_joined.is_empty() {
             return Ok(None)
         } else {
             return Ok(Some(topics_not_joined))
+        }
+    }
+
+    fn inner_loop_for_peer(&mut self,
+        peer: PeerId,
+        peers_to_add: &mut Vec<PeerId>,
+        peer_count: &mut u32,
+        joined: &mut bool,
+        th: &TopicHash,
+        topic_hash: &mut impl AsRef<TopicHash>,
+        topics_not_joined: &mut Vec<TopicHash>,
+    ) -> (u32, bool) {
+        peers_to_add.push(peer);
+        *peer_count += 1;
+        // If it already has `TARGET_MESH_DEGREE` peers from the
+        // `fanout` peers of a topic, then it adds them to
+        // `mesh[topic]`, and notifies them with a `GRAFT(topic)`
+        // control message.
+        if *peer_count == TARGET_MESH_DEGREE {
+            self.mesh.insert(th.clone(), peers_to_add.clone());
+            self.graft_peers(peers_to_add, topic_hash);
+            // for peer in &peers_to_add {
+            //     self.graft(&peer, (&topic_hash).clone());
+            // }
+            *joined = true;
+        }
+        return (*peer_count, *joined);
+    }
+
+    fn try_select_connected_peers(&mut self,
+        peers_to_add: &mut Vec<PeerId>,
+        peer_count: &mut u32,
+        joined: &mut bool,
+        th: &TopicHash,
+        topic_hash: &mut impl AsRef<TopicHash>,
+        topics_not_joined: &mut Vec<TopicHash>,
+    ) {
+        for peer in self.connected_peers.gossipsub.clone().keys() {
+            let (peer_count, joined)
+                = self.inner_loop_for_peer(peer.clone(), peers_to_add,
+                peer_count, joined, th, topic_hash,
+                topics_not_joined);
+            if joined == true {
+                return;
+            }
+        }
+        topics_not_joined.push(th.clone());
+    }
+
+    fn select_fanout_peers(&mut self,
+        fanout_peers: &mut Vec<PeerId>,
+        peers_to_add: &mut Vec<PeerId>,
+        peer_count: &mut u32,
+        joined: &mut bool,
+        th: &TopicHash,
+        topic_hash: &mut impl AsRef<TopicHash>,
+        topics_not_joined: &mut Vec<TopicHash>
+    ) {
+        for peer in fanout_peers {
+            let return_tuple = self.inner_loop_for_peer(
+                peer.clone(),
+                peers_to_add, peer_count,
+                joined, th, topic_hash,
+                topics_not_joined);
+            *peer_count = return_tuple.0;
+            *joined = return_tuple.1;
+            if *joined == true {
+                break;
+            }
         }
     }
 
@@ -752,3 +800,11 @@ where
         Async::NotReady
     }
 }
+
+// pub(crate) struct PeerLoopState {
+//     peers_to_add: Vec<PeerId>,
+//     peer_count: u32,
+//     joined: bool,
+//     th: &TopicHash,
+//     topic_hash: impl AsRef<TopicHash>,
+// }

@@ -33,7 +33,7 @@ custom_error!{pub GError
 
 pub type Result<T> = std::result::Result<T, GError>;
 
-pub(crate) struct GraftErrors {
+pub struct GraftErrors {
     // Topics that remote peers are not subscribed to (they need to be
     // as a prerequisite to grafting them).
     pub(crate) topics_not_subscribed: Option<HashMap<PeerId, TopicHash>>,
