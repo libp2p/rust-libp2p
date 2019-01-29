@@ -44,7 +44,7 @@ impl Buffer {
     fn borrow_mut(&mut self) -> BufferBorrow {
         let (r, w) = self.inner.split_at_mut(2 * MAX_NOISE_PKG_LEN);
         let (read, read_crypto) = r.split_at_mut(MAX_NOISE_PKG_LEN);
-        let (write, write_crypto) = w.split_at_mut(2 * MAX_WRITE_BUF_LEN);
+        let (write, write_crypto) = w.split_at_mut(MAX_WRITE_BUF_LEN);
         BufferBorrow { read, read_crypto, write, write_crypto }
     }
 }

@@ -23,63 +23,74 @@ use libp2p_core::{Transport, upgrade::{apply_inbound, apply_outbound}};
 use libp2p_noise::{Keypair, PublicKey, Curve25519, NoiseConfig};
 use libp2p_tcp::TcpConfig;
 use log::info;
+use quickcheck::QuickCheck;
 use tokio::{self, io};
 
 #[test]
 fn xx() {
     let _ = env_logger::try_init();
+    fn prop(message: Vec<u8>) -> bool {
+        let server_keypair = Keypair::gen_curve25519();
+        let server_transport = TcpConfig::new().with_upgrade(NoiseConfig::xx(server_keypair));
 
-    let server_keypair = Keypair::gen_curve25519();
-    let server_transport = TcpConfig::new().with_upgrade(NoiseConfig::xx(server_keypair));
+        let client_keypair = Keypair::gen_curve25519();
+        let client_transport = TcpConfig::new().with_upgrade(NoiseConfig::xx(client_keypair));
 
-    let client_keypair = Keypair::gen_curve25519();
-    let client_transport = TcpConfig::new().with_upgrade(NoiseConfig::xx(client_keypair));
-
-    run(server_transport, client_transport)
+        run(server_transport, client_transport, message);
+        true
+    }
+    QuickCheck::new().max_tests(30).quickcheck(prop as fn(Vec<u8>) -> bool)
 }
 
 #[test]
 fn ix() {
     let _ = env_logger::try_init();
+    fn prop(message: Vec<u8>) -> bool {
 
-    let server_keypair = Keypair::gen_curve25519();
-    let server_transport = TcpConfig::new().with_upgrade(NoiseConfig::ix(server_keypair));
+        let server_keypair = Keypair::gen_curve25519();
+        let server_transport = TcpConfig::new().with_upgrade(NoiseConfig::ix(server_keypair));
 
-    let client_keypair = Keypair::gen_curve25519();
-    let client_transport = TcpConfig::new().with_upgrade(NoiseConfig::ix(client_keypair));
+        let client_keypair = Keypair::gen_curve25519();
+        let client_transport = TcpConfig::new().with_upgrade(NoiseConfig::ix(client_keypair));
 
-    run(server_transport, client_transport)
+        run(server_transport, client_transport, message);
+        true
+    }
+    QuickCheck::new().max_tests(30).quickcheck(prop as fn(Vec<u8>) -> bool)
 }
 
 #[test]
 fn ik_xx() {
     let _ = env_logger::try_init();
+    fn prop(message: Vec<u8>) -> bool {
+        let server_keypair = Keypair::gen_curve25519();
+        let server_public = server_keypair.public().clone();
+        let server_transport = TcpConfig::new()
+            .and_then(move |output, endpoint| {
+                if endpoint.is_listener() {
+                    Either::A(apply_inbound(output, NoiseConfig::ik_listener(server_keypair)))
+                } else {
+                    Either::B(apply_outbound(output, NoiseConfig::xx(server_keypair)))
+                }
+            });
 
-    let server_keypair = Keypair::gen_curve25519();
-    let server_public = server_keypair.public().clone();
-    let server_transport = TcpConfig::new()
-        .and_then(move |output, endpoint| {
-            if endpoint.is_listener() {
-                Either::A(apply_inbound(output, NoiseConfig::ik_listener(server_keypair)))
-            } else {
-                Either::B(apply_outbound(output, NoiseConfig::xx(server_keypair)))
-            }
-        });
+        let client_keypair = Keypair::gen_curve25519();
+        let client_transport = TcpConfig::new()
+            .and_then(move |output, endpoint| {
+                if endpoint.is_dialer() {
+                    Either::A(apply_outbound(output, NoiseConfig::ik_dialer(client_keypair, server_public)))
+                } else {
+                    Either::B(apply_inbound(output, NoiseConfig::xx(client_keypair)))
+                }
+            });
 
-    let client_keypair = Keypair::gen_curve25519();
-    let client_transport = TcpConfig::new()
-        .and_then(move |output, endpoint| {
-            if endpoint.is_dialer() {
-                Either::A(apply_outbound(output, NoiseConfig::ik_dialer(client_keypair, server_public)))
-            } else {
-                Either::B(apply_inbound(output, NoiseConfig::xx(client_keypair)))
-            }
-        });
-
-    run(server_transport, client_transport)
+        run(server_transport, client_transport, message);
+        true
+    }
+    QuickCheck::new().max_tests(30).quickcheck(prop as fn(Vec<u8>) -> bool)
 }
 
-fn run<T, A, U, B>(server_transport: T, client_transport: U)
+fn run<T, A, U, B>(server_transport: T, client_transport: U, message1: Vec<u8>)
 where
     T: Transport<Output = (PublicKey<Curve25519>, A)>,
     T::Dial: Send + 'static,
@@ -92,7 +103,7 @@ where
     U::ListenerUpgrade: Send + 'static,
     B: io::AsyncRead + io::AsyncWrite + Send + 'static
 {
-    let message = b"Lorem ipsum dolor sit amet...";
+    let message2 = message1.clone();
 
     let (server, server_address) = server_transport
         .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -106,16 +117,14 @@ where
             io::read_to_end(client, Vec::new())
         })
         .for_each(move |msg| {
-            info!("server: read message \"{}\"", std::str::from_utf8(&msg.1).unwrap());
-            assert_eq!(msg.1, message);
+            assert_eq!(msg.1, message1);
             Ok(())
         });
 
     let client = client_transport.dial(server_address).unwrap()
         .map_err(|e| panic!("client error: {}", e))
         .and_then(move |(_, server)| {
-            info!("client: writing \"{}\"", std::str::from_utf8(message).unwrap());
-            io::write_all(server, message).and_then(|(client, _)| io::flush(client))
+            io::write_all(server, message2).and_then(|(client, _)| io::flush(client))
         })
         .map(|_| ());
 

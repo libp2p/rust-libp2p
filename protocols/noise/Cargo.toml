@@ -20,4 +20,5 @@ tokio-io = "0.1"
 [dev-dependencies]
 env_logger = "0.6"
 libp2p-tcp = { version = "0.2.0", path = "../../transports/tcp" }
+quickcheck = "0.8"
 tokio = "0.1"
