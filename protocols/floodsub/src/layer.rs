@@ -139,7 +139,7 @@ impl<TSubstream> Floodsub<TSubstream> {
     ///
     /// > **Note**: Doesn't do anything if we're not subscribed to any of the
     /// > topics.
-    pub fn publish_many(&mut self, topic: impl IntoIterator<Item = impl
+    pub fn publish_many(&mut self, topics: impl IntoIterator<Item = impl
         Into<TopicHash>>, data: impl Into<Vec<u8>>) {
         let message = FloodsubMessage {
             source: self.local_peer_id.clone(),
@@ -149,7 +149,7 @@ impl<TSubstream> Floodsub<TSubstream> {
             // numbers and absorb our legitimate messages. We therefore use a
             // random number.
             sequence_number: rand::random::<[u8; 20]>().to_vec(),
-            topics: topic.into_iter().map(|t| t.into().clone()).collect(),
+            topics: topics.into_iter().map(|t| t.into().clone()).collect(),
         };
 
         // Don't publish the message if we're not subscribed ourselves to any of the topics.

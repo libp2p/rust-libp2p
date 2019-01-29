@@ -128,6 +128,10 @@ impl TopicHash {
     pub fn into_string(self) -> String {
         self.hash
     }
+    /// Converts a reference to a `TopicHash` into a raw hash `String`.
+    pub fn to_string(&self) -> String {
+        self.hash
+    }
 }
 
 impl From<Topic> for TopicHash {

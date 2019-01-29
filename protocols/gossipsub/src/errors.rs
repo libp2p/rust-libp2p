@@ -36,15 +36,15 @@ pub type Result<T> = std::result::Result<T, GError>;
 pub(crate) struct GraftErrors {
     // Topics that remote peers are not subscribed to (they need to be
     // as a prerequisite to grafting them).
-    topics_not_subscribed: Option<HashMap<PeerId, TopicHash>>,
+    pub(crate) topics_not_subscribed: Option<HashMap<PeerId, TopicHash>>,
     // Topics that are not in the local peer's mesh view.
-    topics_not_in_mesh: Option<Vec<TopicHash>>,
+    pub(crate) topics_not_in_mesh: Option<Vec<TopicHash>>,
     // Remote peers that are not connected to the local peer.
-    r_peers_not_connected: Option<Vec<PeerId>>,
+    pub(crate) r_peers_not_connected: Option<Vec<PeerId>>,
     // Topics that the local peer is already grafted to.
-    topics_already_grafted: Option<Vec<TopicHash>>,
+    pub(crate) topics_already_grafted: Option<Vec<TopicHash>>,
     // Whether any of the above are a Some(value).
-    has_errors: bool,
+    pub(crate) has_errors: bool,
 }
 
 // pub(crate) struct GraftErrorsForPeer {
