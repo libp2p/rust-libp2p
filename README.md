@@ -18,7 +18,7 @@ your Cargo.toml and run `cargo doc`.
 
 ```toml
 [dependencies]
-libp2p = { git = "https://github.com/libp2p/rust-libp2p" }
+libp2p = "0.2.2"
 ```
 
 ## Notable users

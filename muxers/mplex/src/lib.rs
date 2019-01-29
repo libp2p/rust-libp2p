@@ -46,7 +46,8 @@ pub struct MplexConfig {
     max_buffer_len: usize,
     /// Behaviour when the buffer size limit is reached.
     max_buffer_behaviour: MaxBufferBehaviour,
-    /// When sending data, split it into frames whose maximum size is this value.
+    /// When sending data, split it into frames whose maximum size is this value
+    /// (max 1MByte, as per the Mplex spec).
     split_send_size: usize,
 }
 
@@ -85,8 +86,16 @@ impl MplexConfig {
         self
     }
 
+    /// Sets the frame size used when sending data. Capped at 1Mbyte as per the
+    /// Mplex spec.
+    pub fn split_send_size(&mut self, size: usize) -> &mut Self {
+        let size = cmp::min(size, codec::MAX_FRAME_SIZE);
+        self.split_send_size = size;
+        self
+    }
+
     #[inline]
-    fn upgrade<C>(self, i: C, endpoint: Endpoint) -> Multiplex<C>
+    fn upgrade<C>(self, i: C) -> Multiplex<C>
     where
         C: AsyncRead + AsyncWrite
     {
@@ -98,7 +107,7 @@ impl MplexConfig {
                 config: self,
                 buffer: Vec::with_capacity(cmp::min(max_buffer_len, 512)),
                 opened_substreams: Default::default(),
-                next_outbound_stream_id: if endpoint == Endpoint::Dialer { 0 } else { 1 },
+                next_outbound_stream_id: 0,
                 notifier_read: Arc::new(Notifier {
                     to_notify: Mutex::new(Default::default()),
                 }),
@@ -154,7 +163,7 @@ where
     type Future = future::FutureResult<Self::Output, IoError>;
 
     fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
-        future::ok(self.upgrade(socket, Endpoint::Listener))
+        future::ok(self.upgrade(socket))
     }
 }
 
@@ -167,7 +176,7 @@ where
     type Future = future::FutureResult<Self::Output, IoError>;
 
     fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
-        future::ok(self.upgrade(socket, Endpoint::Dialer))
+        future::ok(self.upgrade(socket))
     }
 }
 
@@ -191,7 +200,7 @@ struct MultiplexInner<C> {
     // The `Endpoint` value denotes who initiated the substream from our point of view
     // (see note [StreamId]).
     opened_substreams: FnvHashSet<(u32, Endpoint)>,
-    // Id of the next outgoing substream. Should always increase by two.
+    // Id of the next outgoing substream.
     next_outbound_stream_id: u32,
     /// List of tasks to notify when a read event happens on the underlying stream.
     notifier_read: Arc<Notifier>,
@@ -373,7 +382,8 @@ where C: AsyncRead + AsyncWrite
         // Assign a substream ID now.
         let substream_id = {
             let n = inner.next_outbound_stream_id;
-            inner.next_outbound_stream_id += 2;
+            inner.next_outbound_stream_id = inner.next_outbound_stream_id.checked_add(1)
+                .expect("Mplex substream ID overflowed");
             n
         };
 

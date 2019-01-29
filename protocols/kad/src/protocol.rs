@@ -27,11 +27,11 @@
 //! used to send messages.
 
 use bytes::BytesMut;
+use crate::protobuf_structs;
 use futures::{future, sink, stream, Sink, Stream};
 use libp2p_core::{InboundUpgrade, Multiaddr, OutboundUpgrade, PeerId, UpgradeInfo};
 use multihash::Multihash;
 use protobuf::{self, Message};
-use protobuf_structs;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use tokio_codec::Framed;
@@ -54,7 +54,9 @@ pub enum KadConnectionType {
 impl From<protobuf_structs::dht::Message_ConnectionType> for KadConnectionType {
     #[inline]
     fn from(raw: protobuf_structs::dht::Message_ConnectionType) -> KadConnectionType {
-        use protobuf_structs::dht::Message_ConnectionType::*;
+        use crate::protobuf_structs::dht::Message_ConnectionType::{
+            CAN_CONNECT, CANNOT_CONNECT, CONNECTED, NOT_CONNECTED
+        };
         match raw {
             NOT_CONNECTED => KadConnectionType::NotConnected,
             CONNECTED => KadConnectionType::Connected,
@@ -67,7 +69,9 @@ impl From<protobuf_structs::dht::Message_ConnectionType> for KadConnectionType {
 impl Into<protobuf_structs::dht::Message_ConnectionType> for KadConnectionType {
     #[inline]
     fn into(self) -> protobuf_structs::dht::Message_ConnectionType {
-        use protobuf_structs::dht::Message_ConnectionType::*;
+        use crate::protobuf_structs::dht::Message_ConnectionType::{
+            CAN_CONNECT, CANNOT_CONNECT, CONNECTED, NOT_CONNECTED
+        };
         match self {
             KadConnectionType::NotConnected => NOT_CONNECTED,
             KadConnectionType::Connected => CONNECTED,
@@ -315,7 +319,6 @@ fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> protobuf_structs::dht::Message 
             msg
         }
         KadResponseMsg::FindNode { closer_peers } => {
-            assert!(!closer_peers.is_empty());
             let mut msg = protobuf_structs::dht::Message::new();
             msg.set_field_type(protobuf_structs::dht::Message_MessageType::FIND_NODE);
             msg.set_clusterLevelRaw(9);
@@ -328,7 +331,6 @@ fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> protobuf_structs::dht::Message 
             closer_peers,
             provider_peers,
         } => {
-            assert!(!closer_peers.is_empty());
             let mut msg = protobuf_structs::dht::Message::new();
             msg.set_field_type(protobuf_structs::dht::Message_MessageType::GET_PROVIDERS);
             msg.set_clusterLevelRaw(9);
@@ -538,7 +540,7 @@ mod tests {
 
             let future = transport
                 .dial(rx.recv().unwrap())
-                .unwrap_or_else(|_| panic!())
+                .unwrap()
                 .and_then(|proto| proto.send(msg_client))
                 .map(|_| ());
             let mut rt = Runtime::new().unwrap();

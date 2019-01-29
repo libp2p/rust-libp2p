@@ -18,17 +18,39 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! High level manager of the network.
+//!
+//! The `Swarm` struct contains the state of the network as a whole. The entire behaviour of a
+//! libp2p network can be controlled through the `Swarm`.
+//!
+//! # Initializing a Swarm
+//!
+//! Creating a `Swarm` requires three things:
+//!
+//! - An implementation of the `Transport` trait. This is the type that will be used in order to
+//!   reach nodes on the network based on their address. See the `transport` module for more
+//!   information.
+//! - An implementation of the `NetworkBehaviour` trait. This is a state machine that defines how
+//!   the swarm should behave once it is connected to a node.
+//! - An implementation of the `Topology` trait. This is a container that holds the list of nodes
+//!   that we think are part of the network. See the `topology` module for more information.
+//!
+//! # Network behaviour
+//!
+//! The `NetworkBehaviour` trait is implemented on types that indicate to the swarm how it should
+//! behave. This includes which protocols are supported and which nodes to try to connect to.
+//!
+
 use crate::{
-    Transport, Multiaddr, PublicKey, PeerId, InboundUpgrade, OutboundUpgrade,
-    UpgradeInfo, ProtocolName, CheckSuccessStream,
+    Transport, Multiaddr, PeerId, InboundUpgrade, OutboundUpgrade, UpgradeInfo, ProtocolName, CheckSuccessStream,
     muxing::StreamMuxer,
     nodes::{
         handled_node::NodeHandler,
         node::Substream,
         raw_swarm::{RawSwarm, RawSwarmEvent}
     },
-    protocols_handler::{NodeHandlerWrapper, ProtocolsHandler},
-    topology::Topology
+    protocols_handler::{NodeHandlerWrapperBuilder, NodeHandlerWrapper, IntoProtocolsHandler, ProtocolsHandler},
+    transport::TransportError,
 };
 use futures::prelude::*;
 use smallvec::SmallVec;
@@ -37,36 +59,36 @@ use std::{fmt, io, ops::{Deref, DerefMut}};
 pub use crate::nodes::raw_swarm::ConnectedPoint;
 
 /// Contains the state of the network, plus the way it should behave.
-pub struct Swarm<TTransport, TBehaviour, TTopology>
+pub struct Swarm<TTransport, TBehaviour>
 where TTransport: Transport,
-      TBehaviour: NetworkBehaviour<TTopology>,
+      TBehaviour: NetworkBehaviour,
 {
     raw_swarm: RawSwarm<
         TTransport,
-        <<TBehaviour as NetworkBehaviour<TTopology>>::ProtocolsHandler as ProtocolsHandler>::InEvent,
-        <<TBehaviour as NetworkBehaviour<TTopology>>::ProtocolsHandler as ProtocolsHandler>::OutEvent,
-        NodeHandlerWrapper<TBehaviour::ProtocolsHandler>,
-        <<TBehaviour as NetworkBehaviour<TTopology>>::ProtocolsHandler as ProtocolsHandler>::Error,
+        <<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent,
+        <<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent,
+        NodeHandlerWrapperBuilder<TBehaviour::ProtocolsHandler>,
+        <<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::Error,
     >,
 
     /// Handles which nodes to connect to and how to handle the events sent back by the protocol
     /// handlers.
     behaviour: TBehaviour,
 
-    /// Holds the topology of the network. In other words all the nodes that we think exist, even
-    /// if we're not connected to them.
-    topology: TTopology,
-
     /// List of protocols that the behaviour says it supports.
     supported_protocols: SmallVec<[Vec<u8>; 16]>,
 
     /// List of multiaddresses we're listening on.
     listened_addrs: SmallVec<[Multiaddr; 8]>,
+
+    /// List of multiaddresses we're listening on, after account for external IP addresses and
+    /// similar mechanisms.
+    external_addrs: SmallVec<[Multiaddr; 8]>,
 }
 
-impl<TTransport, TBehaviour, TTopology> Deref for Swarm<TTransport, TBehaviour, TTopology>
+impl<TTransport, TBehaviour> Deref for Swarm<TTransport, TBehaviour>
 where TTransport: Transport,
-      TBehaviour: NetworkBehaviour<TTopology>,
+      TBehaviour: NetworkBehaviour,
 {
     type Target = TBehaviour;
 
@@ -76,9 +98,9 @@ where TTransport: Transport,
     }
 }
 
-impl<TTransport, TBehaviour, TTopology> DerefMut for Swarm<TTransport, TBehaviour, TTopology>
+impl<TTransport, TBehaviour> DerefMut for Swarm<TTransport, TBehaviour>
 where TTransport: Transport,
-      TBehaviour: NetworkBehaviour<TTopology>,
+      TBehaviour: NetworkBehaviour,
 {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
@@ -86,55 +108,41 @@ where TTransport: Transport,
     }
 }
 
-impl<TTransport, TBehaviour, TMuxer, TTopology> Swarm<TTransport, TBehaviour, TTopology>
-where TBehaviour: NetworkBehaviour<TTopology>,
+impl<TTransport, TBehaviour, TMuxer> Swarm<TTransport, TBehaviour>
+where TBehaviour: NetworkBehaviour,
       TMuxer: StreamMuxer + Send + Sync + 'static,
       <TMuxer as StreamMuxer>::OutboundSubstream: Send + 'static,
       <TMuxer as StreamMuxer>::Substream: Send + 'static,
       TTransport: Transport<Output = (PeerId, TMuxer)> + Clone,
+      TTransport::Error: Send + 'static,
       TTransport::Listener: Send + 'static,
       TTransport::ListenerUpgrade: Send + 'static,
       TTransport::Dial: Send + 'static,
-      TBehaviour::ProtocolsHandler: ProtocolsHandler<Substream = Substream<TMuxer>> + Send + 'static,
-      <TBehaviour::ProtocolsHandler as ProtocolsHandler>::InEvent: Send + 'static,
-      <TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutEvent: Send + 'static,
-      <TBehaviour::ProtocolsHandler as ProtocolsHandler>::Error: Send + 'static,
-      <TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
-      <TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<Substream<TMuxer>> + Send + 'static,
-      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::Info: Send + 'static,
-      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
-      <<<TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
-      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Substream<TMuxer>>>::Error: fmt::Debug + Send + 'static,
-      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Substream<TMuxer>>>::Future: Send + 'static,
-      <TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol: OutboundUpgrade<CheckSuccessStream<Substream<TMuxer>>> + Send + 'static,
-      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::Info: Send + 'static,
-      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
-      <<<TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
-      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<CheckSuccessStream<Substream<TMuxer>>>>::Future: Send + 'static,
-      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<CheckSuccessStream<Substream<TMuxer>>>>::Error: fmt::Debug + Send + 'static,
-      <NodeHandlerWrapper<TBehaviour::ProtocolsHandler> as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
-      TTopology: Topology,
+      TBehaviour::ProtocolsHandler: Send + 'static,
+      <TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler: ProtocolsHandler<Substream = Substream<TMuxer>> + Send + 'static,
+      <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent: Send + 'static,
+      <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent: Send + 'static,
+      <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::Error: Send + 'static,
+      <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
+      <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<Substream<TMuxer>> + Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::Info: Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
+      <<<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Substream<TMuxer>>>::Error: fmt::Debug + Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Substream<TMuxer>>>::Future: Send + 'static,
+      <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol: OutboundUpgrade<Substream<TMuxer>> + Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::Info: Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
+      <<<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<Substream<TMuxer>>>::Future: Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<Substream<TMuxer>>>::Error: fmt::Debug + Send + 'static,
+      <NodeHandlerWrapper<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler> as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
 {
     /// Builds a new `Swarm`.
     #[inline]
-    pub fn new(transport: TTransport, mut behaviour: TBehaviour, topology: TTopology) -> Self {
-        let supported_protocols = behaviour
-            .new_handler()
-            .listen_protocol()
-            .protocol_info()
-            .into_iter()
-            .map(|info| info.protocol_name().to_vec())
-            .collect();
-
-        let raw_swarm = RawSwarm::new(transport, topology.local_peer_id().clone());
-
-        Swarm {
-            raw_swarm,
-            behaviour,
-            topology,
-            supported_protocols,
-            listened_addrs: SmallVec::new(),
-        }
+    pub fn new(transport: TTransport, behaviour: TBehaviour, local_peer_id: PeerId) -> Self {
+        SwarmBuilder::new(transport, behaviour, local_peer_id)
+            .build()
     }
 
     /// Returns the transport passed when building this object.
@@ -148,7 +156,7 @@ where TBehaviour: NetworkBehaviour<TTopology>,
     /// Returns an error if the address is not supported.
     /// On success, returns an alternative version of the address.
     #[inline]
-    pub fn listen_on(me: &mut Self, addr: Multiaddr) -> Result<Multiaddr, Multiaddr> {
+    pub fn listen_on(me: &mut Self, addr: Multiaddr) -> Result<Multiaddr, TransportError<TTransport::Error>> {
         let result = me.raw_swarm.listen_on(addr);
         if let Ok(ref addr) = result {
             me.listened_addrs.push(addr.clone());
@@ -160,9 +168,9 @@ where TBehaviour: NetworkBehaviour<TTopology>,
     ///
     /// Returns an error if the address is not supported.
     #[inline]
-    pub fn dial_addr(me: &mut Self, addr: Multiaddr) -> Result<(), Multiaddr> {
+    pub fn dial_addr(me: &mut Self, addr: Multiaddr) -> Result<(), TransportError<TTransport::Error>> {
         let handler = me.behaviour.new_handler();
-        me.raw_swarm.dial(addr, handler.into_node_handler())
+        me.raw_swarm.dial(addr, handler.into_node_handler_builder())
     }
 
     /// Tries to reach the given peer using the elements in the topology.
@@ -171,8 +179,8 @@ where TBehaviour: NetworkBehaviour<TTopology>,
     /// peer.
     #[inline]
     pub fn dial(me: &mut Self, peer_id: PeerId) {
-        let addrs = me.topology.addresses_of_peer(&peer_id);
-        let handler = me.behaviour.new_handler().into_node_handler();
+        let addrs = me.behaviour.addresses_of_peer(&peer_id);
+        let handler = me.behaviour.new_handler().into_node_handler_builder();
         if let Some(peer) = me.raw_swarm.peer(peer_id).as_not_connected() {
             let _ = peer.connect_iter(addrs, handler);
         }
@@ -189,48 +197,37 @@ where TBehaviour: NetworkBehaviour<TTopology>,
     pub fn local_peer_id(me: &Self) -> &PeerId {
         &me.raw_swarm.local_peer_id()
     }
-
-    /// Returns the topology of the swarm.
-    #[inline]
-    pub fn topology(me: &Self) -> &TTopology {
-        &me.topology
-    }
-
-    /// Returns the topology of the swarm.
-    #[inline]
-    pub fn topology_mut(me: &mut Self) -> &mut TTopology {
-        &mut me.topology
-    }
 }
 
-impl<TTransport, TBehaviour, TMuxer, TTopology> Stream for Swarm<TTransport, TBehaviour, TTopology>
-where TBehaviour: NetworkBehaviour<TTopology>,
+impl<TTransport, TBehaviour, TMuxer> Stream for Swarm<TTransport, TBehaviour>
+where TBehaviour: NetworkBehaviour,
       TMuxer: StreamMuxer + Send + Sync + 'static,
       <TMuxer as StreamMuxer>::OutboundSubstream: Send + 'static,
       <TMuxer as StreamMuxer>::Substream: Send + 'static,
       TTransport: Transport<Output = (PeerId, TMuxer)> + Clone,
+      TTransport::Error: Send + 'static,
       TTransport::Listener: Send + 'static,
       TTransport::ListenerUpgrade: Send + 'static,
       TTransport::Dial: Send + 'static,
-      TBehaviour::ProtocolsHandler: ProtocolsHandler<Substream = Substream<TMuxer>> + Send + 'static,
-      <TBehaviour::ProtocolsHandler as ProtocolsHandler>::InEvent: Send + 'static,
-      <TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutEvent: Send + 'static,
-      <TBehaviour::ProtocolsHandler as ProtocolsHandler>::Error: Send + 'static,
-      <TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
-      <TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<Substream<TMuxer>> + Send + 'static,
-      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Substream<TMuxer>>>::Future: Send + 'static,
-      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Substream<TMuxer>>>::Error: fmt::Debug + Send + 'static,
-      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::Info: Send + 'static,
-      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
-      <<<TBehaviour::ProtocolsHandler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
-      <TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol: OutboundUpgrade<CheckSuccessStream<Substream<TMuxer>>> + Send + 'static,
-      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<CheckSuccessStream<Substream<TMuxer>>>>::Future: Send + 'static,
-      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<CheckSuccessStream<Substream<TMuxer>>>>::Error: fmt::Debug + Send + 'static,
-      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::Info: Send + 'static,
-      <<TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
-      <<<TBehaviour::ProtocolsHandler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
-      <NodeHandlerWrapper<TBehaviour::ProtocolsHandler> as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
-      TTopology: Topology,
+      TBehaviour::ProtocolsHandler: Send + 'static,
+      <TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler: ProtocolsHandler<Substream = Substream<TMuxer>> + Send + 'static,
+      <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent: Send + 'static,
+      <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent: Send + 'static,
+      <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::Error: Send + 'static,
+      <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
+      <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<Substream<TMuxer>> + Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Substream<TMuxer>>>::Future: Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Substream<TMuxer>>>::Error: fmt::Debug + Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::Info: Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
+      <<<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
+      <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol: OutboundUpgrade<Substream<TMuxer>> + Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<Substream<TMuxer>>>::Future: Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<Substream<TMuxer>>>::Error: fmt::Debug + Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::Info: Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
+      <<<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
+      <NodeHandlerWrapper<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler> as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
 {
     type Item = TBehaviour::OutEvent;
     type Error = io::Error;
@@ -248,7 +245,9 @@ where TBehaviour: NetworkBehaviour<TTopology>,
                 Async::Ready(RawSwarmEvent::Connected { peer_id, endpoint }) => {
                     self.behaviour.inject_connected(peer_id, endpoint);
                 },
-                Async::Ready(RawSwarmEvent::NodeClosed { peer_id, endpoint }) |
+                Async::Ready(RawSwarmEvent::NodeClosed { peer_id, endpoint }) => {
+                    self.behaviour.inject_disconnected(&peer_id, endpoint);
+                },
                 Async::Ready(RawSwarmEvent::NodeError { peer_id, endpoint, .. }) => {
                     self.behaviour.inject_disconnected(&peer_id, endpoint);
                 },
@@ -258,7 +257,7 @@ where TBehaviour: NetworkBehaviour<TTopology>,
                 },
                 Async::Ready(RawSwarmEvent::IncomingConnection(incoming)) => {
                     let handler = self.behaviour.new_handler();
-                    incoming.accept(handler.into_node_handler());
+                    incoming.accept(handler.into_node_handler_builder());
                 },
                 Async::Ready(RawSwarmEvent::ListenerClosed { .. }) => {},
                 Async::Ready(RawSwarmEvent::IncomingConnectionError { .. }) => {},
@@ -269,9 +268,10 @@ where TBehaviour: NetworkBehaviour<TTopology>,
             let behaviour_poll = {
                 let transport = self.raw_swarm.transport();
                 let mut parameters = PollParameters {
-                    topology: &mut self.topology,
+                    local_peer_id: &mut self.raw_swarm.local_peer_id(),
                     supported_protocols: &self.supported_protocols,
                     listened_addrs: &self.listened_addrs,
+                    external_addrs: &self.external_addrs,
                     nat_traversal: &move |a, b| transport.nat_traversal(a, b),
                 };
                 self.behaviour.poll(&mut parameters)
@@ -295,7 +295,9 @@ where TBehaviour: NetworkBehaviour<TTopology>,
                     }
                 },
                 Async::Ready(NetworkBehaviourAction::ReportObservedAddr { address }) => {
-                    self.topology.add_local_external_addrs(self.raw_swarm.nat_traversal(&address));
+                    for addr in self.raw_swarm.nat_traversal(&address) {
+                        self.external_addrs.push(addr);
+                    }
                 },
             }
         }
@@ -306,14 +308,18 @@ where TBehaviour: NetworkBehaviour<TTopology>,
 ///
 /// This trait has been designed to be composable. Multiple implementations can be combined into
 /// one that handles all the behaviours at once.
-pub trait NetworkBehaviour<TTopology> {
+pub trait NetworkBehaviour {
     /// Handler for all the protocols the network supports.
-    type ProtocolsHandler: ProtocolsHandler;
+    type ProtocolsHandler: IntoProtocolsHandler;
     /// Event generated by the swarm.
     type OutEvent;
 
     /// Builds a new `ProtocolsHandler`.
     fn new_handler(&mut self) -> Self::ProtocolsHandler;
+
+    /// Addresses that this behaviour is aware of for this specific peer, and that may allow
+    /// reaching the peer.
+    fn addresses_of_peer(&self, peer_id: &PeerId) -> Vec<Multiaddr>;
 
     /// Indicates the behaviour that we connected to the node with the given peer id through the
     /// given endpoint.
@@ -330,13 +336,13 @@ pub trait NetworkBehaviour<TTopology> {
     fn inject_node_event(
         &mut self,
         peer_id: PeerId,
-        event: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent
+        event: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent
     );
 
     /// Polls for things that swarm should do.
     ///
     /// This API mimics the API of the `Stream` trait.
-    fn poll(&mut self, topology: &mut PollParameters<TTopology>) -> Async<NetworkBehaviourAction<<Self::ProtocolsHandler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
+    fn poll(&mut self, topology: &mut PollParameters) -> Async<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
 }
 
 /// Used when deriving `NetworkBehaviour`. When deriving `NetworkBehaviour`, must be implemented
@@ -348,22 +354,17 @@ pub trait NetworkBehaviourEventProcess<TEvent> {
     fn inject_event(&mut self, event: TEvent);
 }
 
-/// Parameters passed to `poll()` that the `NetworkBehaviour` has access to.
+/// Parameters passed to `poll()`, that the `NetworkBehaviour` has access to.
 // TODO: #[derive(Debug)]
-pub struct PollParameters<'a, TTopology: 'a> {
-    topology: &'a mut TTopology,
+pub struct PollParameters<'a: 'a> {
+    local_peer_id: &'a PeerId,
     supported_protocols: &'a [Vec<u8>],
     listened_addrs: &'a [Multiaddr],
+    external_addrs: &'a [Multiaddr],
     nat_traversal: &'a dyn Fn(&Multiaddr, &Multiaddr) -> Option<Multiaddr>,
 }
 
-impl<'a, TTopology> PollParameters<'a, TTopology> {
-    /// Returns a reference to the topology of the network.
-    #[inline]
-    pub fn topology(&mut self) -> &mut TTopology {
-        &mut self.topology
-    }
-
+impl<'a> PollParameters<'a> {
     /// Returns the list of protocol the behaviour supports when a remote negotiates a protocol on
     /// an inbound substream.
     ///
@@ -382,28 +383,16 @@ impl<'a, TTopology> PollParameters<'a, TTopology> {
     }
 
     /// Returns the list of the addresses nodes can use to reach us.
+    // TODO: should return references
     #[inline]
-    pub fn external_addresses<'b>(&'b mut self) -> impl ExactSizeIterator<Item = Multiaddr> + 'b
-    where TTopology: Topology
-    {
-        let local_peer_id = self.topology.local_peer_id().clone();
-        self.topology.addresses_of_peer(&local_peer_id).into_iter()
-    }
-
-    /// Returns the public key of the local node.
-    #[inline]
-    pub fn local_public_key(&self) -> &PublicKey
-    where TTopology: Topology
-    {
-        self.topology.local_public_key()
+    pub fn external_addresses<'b>(&'b mut self) -> impl ExactSizeIterator<Item = Multiaddr> + 'b {
+        self.external_addrs.iter().cloned()
     }
 
     /// Returns the peer id of the local node.
     #[inline]
-    pub fn local_peer_id(&self) -> &PeerId
-    where TTopology: Topology
-    {
-        self.topology.local_peer_id()
+    pub fn local_peer_id(&self) -> &PeerId {
+        self.local_peer_id
     }
 
     /// Calls the `nat_traversal` method on the underlying transport of the `Swarm`.
@@ -451,4 +440,162 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
         /// The address we're being observed as.
         address: Multiaddr,
     },
+}
+
+pub struct SwarmBuilder<TTransport, TBehaviour> {
+    incoming_limit: Option<u32>,
+    local_peer_id: PeerId,
+    transport: TTransport,
+    behaviour: TBehaviour,
+}
+
+impl<TTransport, TBehaviour, TMuxer> SwarmBuilder<TTransport, TBehaviour>
+where TBehaviour: NetworkBehaviour,
+      TMuxer: StreamMuxer + Send + Sync + 'static,
+      <TMuxer as StreamMuxer>::OutboundSubstream: Send + 'static,
+      <TMuxer as StreamMuxer>::Substream: Send + 'static,
+      TTransport: Transport<Output = (PeerId, TMuxer)> + Clone,
+      TTransport::Error: Send + 'static,
+      TTransport::Listener: Send + 'static,
+      TTransport::ListenerUpgrade: Send + 'static,
+      TTransport::Dial: Send + 'static,
+      TBehaviour::ProtocolsHandler: Send + 'static,
+      <TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler: ProtocolsHandler<Substream = Substream<TMuxer>> + Send + 'static,
+      <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent: Send + 'static,
+      <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent: Send + 'static,
+      <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::Error: Send + 'static,
+      <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
+      <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol: InboundUpgrade<Substream<TMuxer>> + Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::Info: Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
+      <<<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Substream<TMuxer>>>::Error: fmt::Debug + Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InboundProtocol as InboundUpgrade<Substream<TMuxer>>>::Future: Send + 'static,
+      <<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol: OutboundUpgrade<Substream<TMuxer>> + Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::Info: Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter: Send + 'static,
+      <<<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<Substream<TMuxer>>>::Future: Send + 'static,
+      <<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutboundProtocol as OutboundUpgrade<Substream<TMuxer>>>::Error: fmt::Debug + Send + 'static,
+      <NodeHandlerWrapper<<TBehaviour::ProtocolsHandler as IntoProtocolsHandler>::Handler> as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
+
+{
+    pub fn new(transport: TTransport, behaviour: TBehaviour, local_peer_id: PeerId) -> Self {
+        SwarmBuilder {
+            incoming_limit: None,
+            local_peer_id,
+            transport,
+            behaviour,
+        }
+    }
+
+    pub fn incoming_limit(mut self, incoming_limit: Option<u32>) -> Self {
+        self.incoming_limit = incoming_limit;
+        self
+    }
+
+    pub fn build(mut self) -> Swarm<TTransport, TBehaviour> {
+        let supported_protocols = self.behaviour
+            .new_handler()
+            .into_handler(&self.local_peer_id)
+            .listen_protocol()
+            .protocol_info()
+            .into_iter()
+            .map(|info| info.protocol_name().to_vec())
+            .collect();
+
+        let raw_swarm = RawSwarm::new_with_incoming_limit(self.transport, self.local_peer_id, self.incoming_limit);
+
+        Swarm {
+            raw_swarm,
+            behaviour: self.behaviour,
+            supported_protocols,
+            listened_addrs: SmallVec::new(),
+            external_addrs: SmallVec::new(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::peer_id::PeerId;
+    use crate::protocols_handler::{DummyProtocolsHandler, ProtocolsHandler};
+    use crate::public_key::PublicKey;
+    use crate::tests::dummy_transport::DummyTransport;
+    use futures::prelude::*;
+    use multiaddr::Multiaddr;
+    use rand::random;
+    use std::marker::PhantomData;
+    use super::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction,
+                PollParameters, SwarmBuilder};
+    use tokio_io::{AsyncRead, AsyncWrite};
+    use void::Void;
+
+    #[derive(Clone)]
+    struct DummyBehaviour<TSubstream> {
+        marker: PhantomData<TSubstream>,
+    }
+
+    trait TSubstream: AsyncRead + AsyncWrite {}
+
+    impl<TSubstream> NetworkBehaviour
+        for DummyBehaviour<TSubstream>
+        where TSubstream: AsyncRead + AsyncWrite
+    {
+        type ProtocolsHandler = DummyProtocolsHandler<TSubstream>;
+        type OutEvent = Void;
+
+        fn new_handler(&mut self) -> Self::ProtocolsHandler {
+            DummyProtocolsHandler::default()
+        }
+
+        fn addresses_of_peer(&self, _: &PeerId) -> Vec<Multiaddr> {
+            Vec::new()
+        }
+
+        fn inject_connected(&mut self, _: PeerId, _: ConnectedPoint) {}
+
+        fn inject_disconnected(&mut self, _: &PeerId, _: ConnectedPoint) {}
+
+        fn inject_node_event(&mut self, _: PeerId,
+            _: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent) {}
+
+        fn poll(&mut self, _: &mut PollParameters) ->
+            Async<NetworkBehaviourAction<<Self::ProtocolsHandler as
+            ProtocolsHandler>::InEvent, Self::OutEvent>>
+        {
+            Async::NotReady
+        }
+
+    }
+
+    fn get_random_id() -> PublicKey {
+        PublicKey::Rsa((0 .. 2048)
+            .map(|_| -> u8 { random() })
+            .collect()
+        )
+    }
+
+    #[test]
+    fn test_build_swarm() {
+        let id = get_random_id();
+        let transport = DummyTransport::new();
+        let behaviour = DummyBehaviour{marker: PhantomData};
+        let swarm = SwarmBuilder::new(transport, behaviour,
+            id.into_peer_id()).incoming_limit(Some(4)).build();
+        assert_eq!(swarm.raw_swarm.incoming_limit(), Some(4));
+    }
+
+    #[test]
+    fn test_build_swarm_with_max_listeners_none() {
+        let id = get_random_id();
+        let transport = DummyTransport::new();
+        let behaviour = DummyBehaviour{marker: PhantomData};
+        let swarm = SwarmBuilder::new(transport, behaviour, id.into_peer_id())
+            .build();
+        assert!(swarm.raw_swarm.incoming_limit().is_none())
+
+    }
+
+
 }

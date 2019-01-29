@@ -51,7 +51,8 @@
 //!     .map(|out: SecioOutput<_>, _| out.stream);
 //!
 //! let future = dialer.dial("/ip4/127.0.0.1/tcp/12345".parse::<Multiaddr>().unwrap())
-//!     .unwrap_or_else(|_| panic!("Unable to dial node"))
+//!     .unwrap()
+//!     .map_err(|e| panic!("error: {:?}", e))
 //!     .and_then(|connection| {
 //!         // Sends "hello world" on the connection, will be encrypted.
 //!         write_all(connection, "hello world")
@@ -84,22 +85,23 @@ extern crate stdweb;
 pub use self::error::SecioError;
 
 #[cfg(feature = "secp256k1")]
-use asn1_der::{traits::FromDerEncoded, traits::FromDerObject, DerObject};
+use asn1_der::{FromDerObject, DerObject};
 use bytes::BytesMut;
 use ed25519_dalek::Keypair as Ed25519KeyPair;
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
+use lazy_static::lazy_static;
 use libp2p_core::{PeerId, PublicKey, upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade}};
 use log::debug;
-#[cfg(all(feature = "rsa", not(any(target_os = "emscripten", target_os = "unknown"))))]
-use ring::signature::RSAKeyPair;
+#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+use ring::signature::RsaKeyPair;
 use rw_stream_sink::RwStreamSink;
 use std::error::Error;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use std::sync::Arc;
 use tokio_io::{AsyncRead, AsyncWrite};
-#[cfg(all(feature = "rsa", not(any(target_os = "emscripten", target_os = "unknown"))))]
+#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 use untrusted::Input;
 
 mod algo_support;
@@ -113,6 +115,12 @@ mod stream_cipher;
 pub use crate::algo_support::Digest;
 pub use crate::exchange::KeyAgreement;
 pub use crate::stream_cipher::Cipher;
+
+// Cached `Secp256k1` context, to avoid recreating it every time.
+#[cfg(feature = "secp256k1")]
+lazy_static! {
+    static ref SECP256K1: secp256k1::Secp256k1<secp256k1::All> = secp256k1::Secp256k1::new();
+}
 
 /// Implementation of the `ConnectionUpgrade` trait of `libp2p_core`. Automatically applies
 /// secio on any connection.
@@ -209,7 +217,7 @@ pub struct SecioKeyPair {
 
 impl SecioKeyPair {
     /// Builds a `SecioKeyPair` from a PKCS8 private key and public key.
-    #[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
+    #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
     pub fn rsa_from_pkcs8<P>(
         private: &[u8],
         public: P,
@@ -217,7 +225,7 @@ impl SecioKeyPair {
     where
         P: Into<Vec<u8>>,
     {
-        let private = RSAKeyPair::from_pkcs8(Input::from(&private[..])).map_err(Box::new)?;
+        let private = RsaKeyPair::from_pkcs8(Input::from(&private[..])).map_err(Box::new)?;
 
         Ok(SecioKeyPair {
             inner: SecioKeyPairInner::Rsa {
@@ -234,6 +242,24 @@ impl SecioKeyPair {
         Ok(SecioKeyPair {
             inner: SecioKeyPairInner::Ed25519 {
                 key_pair: Arc::new(keypair),
+            }
+        })
+    }
+
+    /// Builds a `SecioKeyPair` from a raw ed25519 32 bytes private key.
+    ///
+    /// Returns an error if the slice doesn't have the correct length.
+    pub fn ed25519_raw_key(key: impl AsRef<[u8]>) -> Result<SecioKeyPair, Box<Error + Send + Sync>> {
+        let secret = ed25519_dalek::SecretKey::from_bytes(key.as_ref())
+            .map_err(|err| err.to_string())?;
+        let public = ed25519_dalek::PublicKey::from_secret::<sha2::Sha512>(&secret);
+
+        Ok(SecioKeyPair {
+            inner: SecioKeyPairInner::Ed25519 {
+                key_pair: Arc::new(Ed25519KeyPair {
+                    secret,
+                    public,
+                }),
             }
         })
     }
@@ -268,7 +294,7 @@ impl SecioKeyPair {
     {
         // See ECPrivateKey in https://tools.ietf.org/html/rfc5915
         let obj: Vec<DerObject> =
-            FromDerEncoded::with_der_encoded(key.as_ref()).map_err(|err| err.to_string())?;
+            FromDerObject::deserialize(key.as_ref().iter()).map_err(|err| err.to_string())?;
         let priv_key_obj = obj.into_iter()
             .nth(1)
             .ok_or_else(|| "Not enough elements in DER".to_string())?;
@@ -280,15 +306,14 @@ impl SecioKeyPair {
     /// Returns the public key corresponding to this key pair.
     pub fn to_public_key(&self) -> PublicKey {
         match self.inner {
-            #[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
+            #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
             SecioKeyPairInner::Rsa { ref public, .. } => PublicKey::Rsa(public.clone()),
             SecioKeyPairInner::Ed25519 { ref key_pair } => {
                 PublicKey::Ed25519(key_pair.public.as_bytes().to_vec())
             }
             #[cfg(feature = "secp256k1")]
             SecioKeyPairInner::Secp256k1 { ref private } => {
-                let secp = secp256k1::Secp256k1::signing_only();
-                let pubkey = secp256k1::key::PublicKey::from_secret_key(&secp, private);
+                let pubkey = secp256k1::key::PublicKey::from_secret_key(&SECP256K1, private);
                 PublicKey::Secp256k1(pubkey.serialize().to_vec())
             }
         }
@@ -306,11 +331,11 @@ impl SecioKeyPair {
 // Inner content of `SecioKeyPair`.
 #[derive(Clone)]
 enum SecioKeyPairInner {
-    #[cfg(all(feature = "ring", not(any(target_os = "emscripten", target_os = "unknown"))))]
+    #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
     Rsa {
         public: Vec<u8>,
         // We use an `Arc` so that we can clone the enum.
-        private: Arc<RSAKeyPair>,
+        private: Arc<RsaKeyPair>,
     },
     Ed25519 {
         // We use an `Arc` so that we can clone the enum.

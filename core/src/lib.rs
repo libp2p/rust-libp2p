@@ -52,38 +52,15 @@
 //!   how to handle incoming substreams, which protocols are supported, when to open a new
 //!   outbound substream, etc. See the `protocols_handler` trait.
 //!
+//! # High-level APIs vs low-level APIs
+//!
+//! This crate provides two sets of APIs:
+//!
+//! - The low-level APIs are contained within the `nodes` module. See the documentation for more
+//!   information.
+//! - The high-level APIs include the concepts of `Swarm`, `ProtocolsHandler`, `NetworkBehaviour`
+//!   and `Topology`.
 
-extern crate bs58;
-extern crate bytes;
-extern crate fnv;
-#[macro_use]
-extern crate futures;
-#[macro_use]
-extern crate log;
-extern crate multihash;
-extern crate multistream_select;
-extern crate parking_lot;
-extern crate protobuf;
-#[macro_use]
-extern crate quick_error;
-extern crate rw_stream_sink;
-extern crate smallvec;
-extern crate tokio_executor;
-extern crate tokio_io;
-extern crate tokio_timer;
-extern crate void;
-
-#[cfg(test)]
-extern crate rand;
-#[cfg(test)]
-extern crate tokio;
-#[cfg(test)]
-extern crate tokio_codec;
-#[cfg(test)]
-#[macro_use]
-extern crate assert_matches;
-#[cfg(test)]
-extern crate tokio_mock_task;
 
 /// Multi-address re-export.
 pub extern crate multiaddr;
@@ -100,7 +77,6 @@ pub mod muxing;
 pub mod nodes;
 pub mod protocols_handler;
 pub mod swarm;
-pub mod topology;
 pub mod transport;
 pub mod upgrade;
 

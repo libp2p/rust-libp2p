@@ -18,10 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::PublicKey;
 use bs58;
+use quick_error::quick_error;
 use multihash;
 use std::{fmt, str::FromStr};
-use PublicKey;
 
 /// Identifier of a peer of the network.
 ///
@@ -154,6 +155,13 @@ impl AsRef<multihash::Multihash> for PeerId {
     }
 }
 
+impl AsRef<[u8]> for PeerId {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
 impl Into<multihash::Multihash> for PeerId {
     #[inline]
     fn into(self) -> multihash::Multihash {
@@ -188,7 +196,7 @@ impl FromStr for PeerId {
 #[cfg(test)]
 mod tests {
     use rand::random;
-    use {PeerId, PublicKey};
+    use crate::{PeerId, PublicKey};
 
     #[test]
     fn peer_id_is_public_key() {

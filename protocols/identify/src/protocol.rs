@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::BytesMut;
+use crate::structs_proto;
 use futures::{future::{self, FutureResult}, Async, AsyncSink, Future, Poll, Sink, Stream};
 use libp2p_core::{
     Multiaddr, PublicKey,
@@ -30,7 +31,6 @@ use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
 use protobuf::RepeatedField;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
-use structs_proto;
 use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
 use unsigned_varint::codec;
@@ -112,7 +112,8 @@ where T: AsyncWrite
             }
         }
 
-        try_ready!(self.inner.poll_complete());
+        // A call to `close()` implies flushing.
+        try_ready!(self.inner.close());
         Ok(Async::Ready(()))
     }
 }
@@ -169,6 +170,7 @@ where
     fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
         IdentifyOutboundFuture {
             inner: Framed::new(socket, codec::UviBytes::<BytesMut>::default()),
+            shutdown: false,
         }
     }
 }
@@ -176,15 +178,22 @@ where
 /// Future returned by `OutboundUpgrade::upgrade_outbound`.
 pub struct IdentifyOutboundFuture<T> {
     inner: Framed<T, codec::UviBytes<BytesMut>>,
+    /// If true, we have finished shutting down the writing part of `inner`.
+    shutdown: bool,
 }
 
 impl<T> Future for IdentifyOutboundFuture<T>
-where T: AsyncRead
+where T: AsyncRead + AsyncWrite,
 {
     type Item = RemoteInfo;
     type Error = IoError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        if !self.shutdown {
+            try_ready!(self.inner.close());
+            self.shutdown = true;
+        }
+
         let msg = match try_ready!(self.inner.poll()) {
             Some(i) => i,
             None => {
@@ -260,8 +269,7 @@ mod tests {
     use self::libp2p_tcp::TcpConfig;
     use futures::{Future, Stream};
     use libp2p_core::{PublicKey, Transport, upgrade::{apply_outbound, apply_inbound}};
-    use std::sync::mpsc;
-    use std::thread;
+    use std::{io, sync::mpsc, thread};
 
     #[test]
     fn correct_transfer() {
@@ -284,7 +292,8 @@ mod tests {
                 .map_err(|(err, _)| err)
                 .and_then(|(client, _)| client.unwrap().0)
                 .and_then(|socket| {
-                    apply_inbound(socket, IdentifyProtocolConfig).map_err(|e| e.into_io_error())
+                    apply_inbound(socket, IdentifyProtocolConfig)
+                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
                 })
                 .and_then(|sender| {
                     sender.send(
@@ -308,9 +317,10 @@ mod tests {
         let transport = TcpConfig::new();
 
         let future = transport.dial(rx.recv().unwrap())
-            .unwrap_or_else(|_| panic!())
+            .unwrap()
             .and_then(|socket| {
-                apply_outbound(socket, IdentifyProtocolConfig).map_err(|e| e.into_io_error())
+                apply_outbound(socket, IdentifyProtocolConfig)
+                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
             })
             .and_then(|RemoteInfo { info, observed_addr, .. }| {
                 assert_eq!(observed_addr, "/ip4/100.101.102.103/tcp/5000".parse().unwrap());

@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use muxing;
+use crate::muxing;
 use smallvec::SmallVec;
 use std::fmt;
 use std::io::Error as IoError;
@@ -379,11 +379,11 @@ where
 
 #[cfg(test)]
 mod node_stream {
-    use super::NodeStream;
+    use super::{NodeEvent, NodeStream};
+    use crate::tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
+    use assert_matches::assert_matches;
     use futures::prelude::*;
     use tokio_mock_task::MockTask;
-    use super::NodeEvent;
-    use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
 
     fn build_node_stream() -> NodeStream<DummyMuxer, Vec<u8>> {
         let muxer = DummyMuxer::new();
