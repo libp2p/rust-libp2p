@@ -73,6 +73,7 @@ impl<T> AsRef<[u8]> for PublicKey<T> {
     }
 }
 
+#[derive(Clone)]
 pub struct SecretKey {
     scalar: Scalar
 }
@@ -110,6 +111,7 @@ impl AsRef<[u8]> for SecretKey {
     }
 }
 
+#[derive(Clone)]
 pub struct Keypair<T> {
     secret: SecretKey,
     public: PublicKey<T>

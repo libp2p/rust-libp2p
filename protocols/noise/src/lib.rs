@@ -23,22 +23,19 @@ mod io;
 mod keys;
 mod util;
 
-pub mod ik;
-pub mod ix;
-pub mod xx;
+pub mod rt1;
+pub mod rt2;
 
 pub use error::NoiseError;
 pub use io::NoiseOutput;
 pub use keys::{Curve25519, PublicKey, SecretKey, Keypair};
 
-use ik::IK;
-use ix::IX;
 use libp2p_core::{UpgradeInfo, InboundUpgrade, OutboundUpgrade};
 use lazy_static::lazy_static;
 use snow;
 use std::sync::Arc;
 use tokio_io::{AsyncRead, AsyncWrite};
-use xx::XX;
+use util::Resolver;
 
 lazy_static! {
     static ref PARAMS_IK: snow::params::NoiseParams = "Noise_IK_25519_ChaChaPoly_SHA256"
@@ -53,6 +50,15 @@ lazy_static! {
         .parse()
         .expect("valid pattern");
 }
+
+#[derive(Debug, Clone)]
+pub enum IK {}
+
+#[derive(Debug, Clone)]
+pub enum IX {}
+
+#[derive(Debug, Clone)]
+pub enum XX {}
 
 #[derive(Clone)]
 pub struct NoiseConfig<P, R = ()> {
@@ -123,10 +129,14 @@ where
 {
     type Output = (PublicKey<Curve25519>, NoiseOutput<T>);
     type Error = NoiseError;
-    type Future = ix::NoiseInboundFuture<T>;
+    type Future = rt1::NoiseInboundFuture<T>;
 
     fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
-        ix::NoiseInboundFuture::new(socket, self)
+        let session = snow::Builder::with_resolver(self.params, Box::new(Resolver))
+            .local_private_key(self.keypair.secret().as_ref())
+            .build_responder()
+            .map_err(NoiseError::from);
+        rt1::NoiseInboundFuture::new(socket, session)
     }
 }
 
@@ -136,10 +146,14 @@ where
 {
     type Output = (PublicKey<Curve25519>, NoiseOutput<T>);
     type Error = NoiseError;
-    type Future = ix::NoiseOutboundFuture<T>;
+    type Future = rt1::NoiseOutboundFuture<T>;
 
     fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
-        ix::NoiseOutboundFuture::new(socket, self)
+        let session = snow::Builder::with_resolver(self.params, Box::new(Resolver))
+            .local_private_key(self.keypair.secret().as_ref())
+            .build_initiator()
+            .map_err(NoiseError::from);
+        rt1::NoiseOutboundFuture::new(socket, session)
     }
 }
 
@@ -160,10 +174,14 @@ where
 {
     type Output = (PublicKey<Curve25519>, NoiseOutput<T>);
     type Error = NoiseError;
-    type Future = xx::NoiseInboundFuture<T>;
+    type Future = rt2::NoiseInboundFuture<T>;
 
     fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
-        xx::NoiseInboundFuture::new(socket, self)
+        let session = snow::Builder::with_resolver(self.params, Box::new(Resolver))
+            .local_private_key(self.keypair.secret().as_ref())
+            .build_responder()
+            .map_err(NoiseError::from);
+        rt2::NoiseInboundFuture::new(socket, session)
     }
 }
 
@@ -173,10 +191,14 @@ where
 {
     type Output = (PublicKey<Curve25519>, NoiseOutput<T>);
     type Error = NoiseError;
-    type Future = xx::NoiseOutboundFuture<T>;
+    type Future = rt2::NoiseOutboundFuture<T>;
 
     fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
-        xx::NoiseOutboundFuture::new(socket, self)
+        let session = snow::Builder::with_resolver(self.params, Box::new(Resolver))
+            .local_private_key(self.keypair.secret().as_ref())
+            .build_initiator()
+            .map_err(NoiseError::from);
+        rt2::NoiseOutboundFuture::new(socket, session)
     }
 }
 
@@ -206,10 +228,14 @@ where
 {
     type Output = (PublicKey<Curve25519>, NoiseOutput<T>);
     type Error = NoiseError;
-    type Future = ik::NoiseInboundFuture<T>;
+    type Future = rt1::NoiseInboundFuture<T>;
 
     fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
-        ik::NoiseInboundFuture::new(socket, self)
+        let session = snow::Builder::with_resolver(self.params, Box::new(Resolver))
+            .local_private_key(self.keypair.secret().as_ref())
+            .build_responder()
+            .map_err(NoiseError::from);
+        rt1::NoiseInboundFuture::new(socket, session)
     }
 }
 
@@ -219,10 +245,15 @@ where
 {
     type Output = (PublicKey<Curve25519>, NoiseOutput<T>);
     type Error = NoiseError;
-    type Future = ik::NoiseOutboundFuture<T>;
+    type Future = rt1::NoiseOutboundFuture<T>;
 
     fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
-        ik::NoiseOutboundFuture::new(socket, self)
+        let session = snow::Builder::with_resolver(self.params, Box::new(Resolver))
+            .local_private_key(self.keypair.secret().as_ref())
+            .remote_public_key(self.remote.as_ref())
+            .build_initiator()
+            .map_err(NoiseError::from);
+        rt1::NoiseOutboundFuture::new(socket, session)
     }
 }
 

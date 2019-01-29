@@ -21,30 +21,30 @@
 use crate::{
     error::NoiseError,
     io::{Handshake, NoiseOutput},
-    keys::{Curve25519, PublicKey},
-    util::Resolver
+    keys::{Curve25519, PublicKey}
 };
 use futures::prelude::*;
 use snow;
 use std::mem;
 use tokio_io::{AsyncRead, AsyncWrite};
 
-#[derive(Debug, Clone)]
-pub enum IX {}
-
 pub struct NoiseInboundFuture<T>(InboundState<T>);
 
 impl<T> NoiseInboundFuture<T> {
-    pub(super) fn new(io: T, c: super::NoiseConfig<IX>) -> Self {
-        Self(InboundState::Init(io, c))
+    pub(super) fn new(io: T, session: Result<snow::Session, NoiseError>) -> Self {
+        match session {
+            Ok(s) => Self(InboundState::RecvHandshake1(Handshake::new(io, s))),
+            Err(e) => Self(InboundState::Err(e))
+        }
     }
 }
 
 enum InboundState<T> {
-    Init(T, super::NoiseConfig<IX>),
-    RecvHandshake(Handshake<T>), // -> e, s
-    SendHandshake(Handshake<T>), // <- e, ee, se, s, es
+    RecvHandshake1(Handshake<T>),
+    SendHandshake(Handshake<T>),
     Flush(Handshake<T>),
+    RecvHandshake2(Handshake<T>),
+    Err(NoiseError),
     Done
 }
 
@@ -58,18 +58,11 @@ where
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
             match mem::replace(&mut self.0, InboundState::Done) {
-                InboundState::Init(io, config) => {
-                    let session = snow::Builder::with_resolver(config.params, Box::new(Resolver))
-                        .local_private_key(config.keypair.secret().as_ref())
-                        .build_responder()?;
-                    let io = Handshake::new(io, session);
-                    self.0 = InboundState::RecvHandshake(io)
-                }
-                InboundState::RecvHandshake(mut io) => {
+                InboundState::RecvHandshake1(mut io) => {
                     if io.receive()?.is_ready() {
                         self.0 = InboundState::SendHandshake(io)
                     } else {
-                        self.0 = InboundState::RecvHandshake(io);
+                        self.0 = InboundState::RecvHandshake1(io);
                         return Ok(Async::NotReady)
                     }
                 }
@@ -83,14 +76,23 @@ where
                 }
                 InboundState::Flush(mut io) => {
                     if io.flush()?.is_ready() {
-                        let result = io.finish()?;
-                        self.0 = InboundState::Done;
-                        return Ok(Async::Ready(result))
+                        self.0 = InboundState::RecvHandshake2(io)
                     } else {
                         self.0 = InboundState::Flush(io);
                         return Ok(Async::NotReady)
                     }
                 }
+                InboundState::RecvHandshake2(mut io) => {
+                    if io.receive()?.is_ready() {
+                        let result = io.finish()?;
+                        self.0 = InboundState::Done;
+                        return Ok(Async::Ready(result))
+                    } else {
+                        self.0 = InboundState::RecvHandshake2(io);
+                        return Ok(Async::NotReady)
+                    }
+                }
+                InboundState::Err(e) => return Err(e),
                 InboundState::Done => panic!("NoiseInboundFuture::poll called after completion")
             }
         }
@@ -100,16 +102,21 @@ where
 pub struct NoiseOutboundFuture<T>(OutboundState<T>);
 
 impl<T> NoiseOutboundFuture<T> {
-    pub(super) fn new(io: T, c: super::NoiseConfig<IX>) -> Self {
-        Self(OutboundState::Init(io, c))
+    pub(super) fn new(io: T, session: Result<snow::Session, NoiseError>) -> Self {
+        match session {
+            Ok(s) => Self(OutboundState::SendHandshake1(Handshake::new(io, s))),
+            Err(e) => Self(OutboundState::Err(e))
+        }
     }
 }
 
 enum OutboundState<T> {
-    Init(T, super::NoiseConfig<IX>),
-    SendHandshake(Handshake<T>), // -> e, s
-    Flush(Handshake<T>),
-    RecvHandshake(Handshake<T>), // <- e, ee, se, s, es
+    SendHandshake1(Handshake<T>),
+    Flush1(Handshake<T>),
+    RecvHandshake(Handshake<T>),
+    SendHandshake2(Handshake<T>),
+    Flush2(Handshake<T>),
+    Err(NoiseError),
     Done
 }
 
@@ -123,42 +130,51 @@ where
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
             match mem::replace(&mut self.0, OutboundState::Done) {
-                OutboundState::Init(io, config) => {
-                    let session = snow::Builder::with_resolver(config.params, Box::new(Resolver))
-                        .local_private_key(config.keypair.secret().as_ref())
-                        .build_initiator()?;
-                    let io = Handshake::new(io, session);
-                    self.0 = OutboundState::SendHandshake(io)
-                }
-                OutboundState::SendHandshake(mut io) => {
+                OutboundState::SendHandshake1(mut io) => {
                     if io.send()?.is_ready() {
-                        self.0 = OutboundState::Flush(io)
+                        self.0 = OutboundState::Flush1(io)
                     } else {
-                        self.0 = OutboundState::SendHandshake(io);
+                        self.0 = OutboundState::SendHandshake1(io);
                         return Ok(Async::NotReady)
                     }
                 }
-                OutboundState::Flush(mut io) => {
+                OutboundState::Flush1(mut io) => {
                     if io.flush()?.is_ready() {
                         self.0 = OutboundState::RecvHandshake(io)
                     } else {
-                        self.0 = OutboundState::Flush(io);
+                        self.0 = OutboundState::Flush1(io);
                         return Ok(Async::NotReady)
                     }
                 }
                 OutboundState::RecvHandshake(mut io) => {
                     if io.receive()?.is_ready() {
-                        let result = io.finish()?;
-                        self.0 = OutboundState::Done;
-                        return Ok(Async::Ready(result))
+                        self.0 = OutboundState::SendHandshake2(io)
                     } else {
                         self.0 = OutboundState::RecvHandshake(io);
                         return Ok(Async::NotReady)
                     }
                 }
+                OutboundState::SendHandshake2(mut io) => {
+                    if io.send()?.is_ready() {
+                        self.0 = OutboundState::Flush2(io)
+                    } else {
+                        self.0 = OutboundState::SendHandshake2(io);
+                        return Ok(Async::NotReady)
+                    }
+                }
+                OutboundState::Flush2(mut io) => {
+                    if io.flush()?.is_ready() {
+                        let result = io.finish()?;
+                        self.0 = OutboundState::Done;
+                        return Ok(Async::Ready(result))
+                    } else {
+                        self.0 = OutboundState::Flush2(io);
+                        return Ok(Async::NotReady)
+                    }
+                }
+                OutboundState::Err(e) => return Err(e),
                 OutboundState::Done => panic!("NoiseOutboundFuture::poll called after completion")
             }
         }
     }
 }
-

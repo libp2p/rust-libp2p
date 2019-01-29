@@ -21,30 +21,29 @@
 use crate::{
     error::NoiseError,
     io::{Handshake, NoiseOutput},
-    keys::{Curve25519, PublicKey},
-    util::Resolver
+    keys::{Curve25519, PublicKey}
 };
 use futures::prelude::*;
 use snow;
 use std::mem;
 use tokio_io::{AsyncRead, AsyncWrite};
 
-#[derive(Debug, Clone)]
-pub enum IK {}
-
 pub struct NoiseInboundFuture<T>(InboundState<T>);
 
 impl<T> NoiseInboundFuture<T> {
-    pub(super) fn new(io: T, c: super::NoiseConfig<IK>) -> Self {
-        Self(InboundState::Init(io, c))
+    pub(super) fn new(io: T, session: Result<snow::Session, NoiseError>) -> Self {
+        match session {
+            Ok(s) => Self(InboundState::RecvHandshake(Handshake::new(io, s))),
+            Err(e) => Self(InboundState::Err(e))
+        }
     }
 }
 
 enum InboundState<T> {
-    Init(T, super::NoiseConfig<IK>),
-    RecvHandshake(Handshake<T>), // -> e, es, s, ss
-    SendHandshake(Handshake<T>), // <- e, ee, se
+    RecvHandshake(Handshake<T>),
+    SendHandshake(Handshake<T>),
     Flush(Handshake<T>),
+    Err(NoiseError),
     Done
 }
 
@@ -58,13 +57,6 @@ where
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
             match mem::replace(&mut self.0, InboundState::Done) {
-                InboundState::Init(io, config) => {
-                    let session = snow::Builder::with_resolver(config.params, Box::new(Resolver))
-                        .local_private_key(config.keypair.secret().as_ref())
-                        .build_responder()?;
-                    let io = Handshake::new(io, session);
-                    self.0 = InboundState::RecvHandshake(io)
-                }
                 InboundState::RecvHandshake(mut io) => {
                     if io.receive()?.is_ready() {
                         self.0 = InboundState::SendHandshake(io)
@@ -91,6 +83,7 @@ where
                         return Ok(Async::NotReady)
                     }
                 }
+                InboundState::Err(e) => return Err(e),
                 InboundState::Done => panic!("NoiseInboundFuture::poll called after completion")
             }
         }
@@ -100,16 +93,19 @@ where
 pub struct NoiseOutboundFuture<T>(OutboundState<T>);
 
 impl<T> NoiseOutboundFuture<T> {
-    pub(super) fn new(io: T, c: super::NoiseConfig<IK, PublicKey<Curve25519>>) -> Self {
-        Self(OutboundState::Init(io, c))
+    pub(super) fn new(io: T, session: Result<snow::Session, NoiseError>) -> Self {
+        match session {
+            Ok(s) => Self(OutboundState::SendHandshake(Handshake::new(io, s))),
+            Err(e) => Self(OutboundState::Err(e))
+        }
     }
 }
 
 enum OutboundState<T> {
-    Init(T, super::NoiseConfig<IK, PublicKey<Curve25519>>),
-    SendHandshake(Handshake<T>), // -> e, es, s, ss
+    SendHandshake(Handshake<T>),
     Flush(Handshake<T>),
-    RecvHandshake(Handshake<T>), // <- e, ee, se
+    RecvHandshake(Handshake<T>),
+    Err(NoiseError),
     Done
 }
 
@@ -123,14 +119,6 @@ where
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
             match mem::replace(&mut self.0, OutboundState::Done) {
-                OutboundState::Init(io, config) => {
-                    let session = snow::Builder::with_resolver(config.params, Box::new(Resolver))
-                        .local_private_key(config.keypair.secret().as_ref())
-                        .remote_public_key(config.remote.as_ref())
-                        .build_initiator()?;
-                    let io = Handshake::new(io, session);
-                    self.0 = OutboundState::SendHandshake(io)
-                }
                 OutboundState::SendHandshake(mut io) => {
                     if io.send()?.is_ready() {
                         self.0 = OutboundState::Flush(io)
@@ -157,6 +145,7 @@ where
                         return Ok(Async::NotReady)
                     }
                 }
+                OutboundState::Err(e) => return Err(e),
                 OutboundState::Done => panic!("NoiseOutboundFuture::poll called after completion")
             }
         }
