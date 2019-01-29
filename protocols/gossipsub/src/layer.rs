@@ -792,21 +792,21 @@ impl<TSubstream> Gossipsub<TSubstream> {
         }
 
         // maintain fanout
-        // check if our peers are still apart of the topic
+        // check if our peers are still a part of the topic
         for (topic_hash, peers) in self.fanout.clone().iter_mut() {
             peers.retain(|peer| {
                 // is the peer still subscribed to the topic?
-                if !self
-                    .peer_topics
-                    .get(peer)
-                    .expect("Peer should exist")
-                    .0
-                    .contains(&topic_hash)
-                {
-                    debug!(
-                        "HEARTBEAT: Peer removed from fanout for topic: {:?}",
-                        topic_hash
-                    );
+                if let Some(topics) = self.peer_topics.get(peer) {
+                    if !topics.0.contains(&topic_hash) {
+                        debug!(
+                            "HEARTBEAT: Peer removed from fanout for topic: {:?}",
+                            topic_hash
+                        );
+                        return false;
+                    }
+                }
+                // remove if the peer has disconnected
+                else {
                     return false;
                 }
                 true
