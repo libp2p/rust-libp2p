@@ -25,6 +25,7 @@ use libp2p_core::{
     upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade}
 };
 use smallvec::SmallVec;
+use std::time::Instant;
 use tokio_io::{AsyncRead, AsyncWrite};
 use void::{Void, unreachable};
 
@@ -90,8 +91,8 @@ where
     fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {}
 
     #[inline]
-    fn connection_keep_alive(&self) -> bool {
-        false
+    fn connection_keep_alive(&self) -> Option<Instant> {
+        Some(Instant::now())
     }
 
     #[inline]

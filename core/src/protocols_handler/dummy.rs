@@ -27,7 +27,7 @@ use crate::{
     }
 };
 use futures::prelude::*;
-use std::marker::PhantomData;
+use std::{marker::PhantomData, time::Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
 use void::Void;
 
@@ -89,7 +89,7 @@ where
     fn inject_inbound_closed(&mut self) {}
 
     #[inline]
-    fn connection_keep_alive(&self) -> bool { false }
+    fn connection_keep_alive(&self) -> Option<Instant> { Some(Instant::now()) }
 
     #[inline]
     fn shutdown(&mut self) {

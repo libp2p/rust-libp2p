@@ -26,6 +26,7 @@ use crate::{
     }
 };
 use futures::prelude::*;
+use std::time::Instant;
 
 /// Wrapper around a protocol handler that turns the output event into something else.
 pub struct MapOutEvent<TProtoHandler, TMap> {
@@ -95,7 +96,7 @@ where
     }
 
     #[inline]
-    fn connection_keep_alive(&self) -> bool {
+    fn connection_keep_alive(&self) -> Option<Instant> {
         self.inner.connection_keep_alive()
     }
 

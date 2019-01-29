@@ -37,6 +37,7 @@ use crate::{
     }
 };
 use futures::prelude::*;
+use std::{cmp, time::Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Implementation of `IntoProtocolsHandler` that combines two protocols into one.
@@ -202,8 +203,11 @@ where
     }
 
     #[inline]
-    fn connection_keep_alive(&self) -> bool {
-        self.proto1.connection_keep_alive() || self.proto2.connection_keep_alive()
+    fn connection_keep_alive(&self) -> Option<Instant> {
+        match (self.proto1.connection_keep_alive(), self.proto2.connection_keep_alive()) {
+            (None, _) | (_, None) => None,
+            (Some(a), Some(b)) => Some(cmp::max(a, b)),
+        }
     }
 
     #[inline]

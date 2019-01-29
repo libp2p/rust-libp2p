@@ -123,8 +123,12 @@ where
     }
 
     #[inline]
-    fn connection_keep_alive(&self) -> bool {
-        !self.first_id_happened
+    fn connection_keep_alive(&self) -> Option<Instant> {
+        if self.first_id_happened {
+            Some(Instant::now())
+        } else {
+            None
+        }
     }
 
     #[inline]

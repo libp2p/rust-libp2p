@@ -26,7 +26,7 @@ use crate::{
     }
 };
 use futures::prelude::*;
-use std::marker::PhantomData;
+use std::{marker::PhantomData, time::Instant};
 
 /// Wrapper around a protocol handler that turns the input event into something else.
 pub struct MapInEvent<TProtoHandler, TNewIn, TMap> {
@@ -100,7 +100,7 @@ where
     }
 
     #[inline]
-    fn connection_keep_alive(&self) -> bool {
+    fn connection_keep_alive(&self) -> Option<Instant> {
         self.inner.connection_keep_alive()
     }
 
