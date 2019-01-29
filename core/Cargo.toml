@@ -26,6 +26,7 @@ smallvec = "0.6"
 tokio-executor = "0.1.4"
 tokio-io = "0.1"
 tokio-timer = "0.2"
+unsigned-varint = "0.2"
 void = "1"
 
 [dev-dependencies]

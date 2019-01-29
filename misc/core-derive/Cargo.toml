@@ -1,5 +1,6 @@
 [package]
 name = "libp2p-core-derive"
+edition = "2018"
 description = "Procedural macros of libp2p-core"
 version = "0.2.2"
 authors = ["Parity Technologies <admin@parity.io>"]

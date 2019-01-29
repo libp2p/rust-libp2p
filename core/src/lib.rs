@@ -77,7 +77,6 @@ pub mod muxing;
 pub mod nodes;
 pub mod protocols_handler;
 pub mod swarm;
-pub mod topology;
 pub mod transport;
 pub mod upgrade;
 

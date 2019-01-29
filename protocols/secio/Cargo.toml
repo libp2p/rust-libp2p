@@ -30,15 +30,14 @@ ed25519-dalek = "0.8.0"
 hmac = "0.6.3"
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dependencies]
-ring = { version = "0.13", features = ["use_heap"], default-features = false }
+ring = { version = "0.14", features = ["use_heap"], default-features = false }
 untrusted = { version = "0.6" }
 
 [target.'cfg(any(target_os = "emscripten", target_os = "unknown"))'.dependencies]
 stdweb = { version = "0.4", default-features = false }
 
 [features]
-default = ["rsa", "secp256k1"]
-rsa = ["ring/rsa_signing"]
+default = ["secp256k1"]
 aes-all = ["aesni"]
 
 [dev-dependencies]
