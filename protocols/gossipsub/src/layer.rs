@@ -489,7 +489,7 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
 
     /// Joins the peer to a single topic as a singular iteration of
     /// `join_many()`.
-    pub fn join(&mut self, topic_hash: impl AsRef<TopicHash>)
+    pub fn join(&mut self, topic_hash: impl AsRef<TopicHash>+Clone)
         -> GResult<Option<Vec<TopicHash>>> {
         self.join_many(&mut iter::once(topic_hash))
     }
@@ -502,12 +502,14 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
     /// hash. If a topic is not in the local mesh view, it still tries to join
     /// via connected peers that are subscribed to the topic.
     pub fn join_many(&mut self,
-        topic_hashes: &mut(impl IntoIterator<Item = impl AsRef<TopicHash>>))
+        topic_hashes: &mut(impl IntoIterator<Item = impl AsRef<TopicHash> + Clone>+ Clone))
         -> GResult<Option<Vec<TopicHash>>> {
         let mut topics_not_joined = Vec::new();
         for mut topic_hash in topic_hashes.clone() {
-            let mut th = (&mut topic_hash).clone().as_ref();
-            let mut fanout_peers = &mut self.fanout.get_peers_from_topic(th);
+            let th_cl = (&mut topic_hash).clone();
+            let mut thr = th_cl.as_ref();
+            let mut fanout_peers = &mut self.fanout
+                .get_peers_from_topic(thr);
             let mut peer_count = 0;
             let mut joined = false;
             let mut peers_to_add = Vec::new();
@@ -523,11 +525,11 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
                 Ok(fanout_peers) => {
                     self.select_fanout_peers(fanout_peers,
                     &mut peers_to_add, &mut peer_count, &mut joined,
-                    &mut th, &mut topic_hash, &mut topics_not_joined);
+                    &mut thr, &mut topic_hash, &mut topics_not_joined);
                     if joined == false {
                         self.try_select_connected_peers(
                                 &mut peers_to_add, &mut peer_count,
-                                &mut joined, th, &mut topic_hash,
+                                &mut joined, thr, &mut topic_hash,
                                 &mut topics_not_joined);
                     }
                 },
@@ -540,7 +542,7 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
                 // with `select_from_connected_peers()`.
                 Err(err) => {self.try_select_connected_peers(
                                 &mut peers_to_add, &mut peer_count,
-                                &mut joined, th, &mut topic_hash,
+                                &mut joined, thr, &mut topic_hash,
                                 &mut topics_not_joined);},
             }
         }

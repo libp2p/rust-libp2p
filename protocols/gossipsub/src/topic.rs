@@ -130,7 +130,7 @@ impl TopicHash {
     }
     /// Converts a reference to a `TopicHash` into a raw hash `String`.
     pub fn to_string(&self) -> String {
-        self.hash
+        (&self.hash).clone()
     }
 }
 
