@@ -32,6 +32,7 @@ pub enum Curve25519 {}
 #[derive(Debug, Clone)]
 pub enum Ed25519 {}
 
+/// ECC public key.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PublicKey<T> {
     bytes: [u8; 32],
@@ -73,6 +74,7 @@ impl<T> AsRef<[u8]> for PublicKey<T> {
     }
 }
 
+/// ECC secret key.
 #[derive(Clone)]
 pub struct SecretKey {
     scalar: Scalar
@@ -87,14 +89,21 @@ impl SecretKey {
 }
 
 impl SecretKey {
+    /// Compute the public key from this secret key.
+    ///
+    /// Performs scalar multiplication with Curve25519's base point.
     pub fn public(&self) -> PublicKey<Curve25519> {
         PublicKey::new(self.x25519(&X25519_BASEPOINT).0)
     }
 
+    /// Elliptic-Curve Diffie-Hellman key agreement.
+    ///
+    /// Performs scalar multiplication with the given public key.
     pub fn ecdh(&self, pk: &PublicKey<Curve25519>) -> [u8; 32] {
         self.x25519(&MontgomeryPoint(pk.bytes)).0
     }
 
+    /// The actual scalar multiplication with a u-coordinate of Curve25519.
     fn x25519(&self, p: &MontgomeryPoint) -> MontgomeryPoint {
         let mut s = self.scalar.to_bytes();
         // Cf. RFC 7748 section 5 (page 7)
@@ -111,6 +120,7 @@ impl AsRef<[u8]> for SecretKey {
     }
 }
 
+/// ECC secret and public key.
 #[derive(Clone)]
 pub struct Keypair<T> {
     secret: SecretKey,
@@ -118,14 +128,17 @@ pub struct Keypair<T> {
 }
 
 impl<T> Keypair<T> {
+    /// Create a new keypair.
     pub fn new(s: SecretKey, p: PublicKey<T>) -> Self {
         Keypair { secret: s, public: p }
     }
 
+    /// Access this keypair's secret key.
     pub fn secret(&self) -> &SecretKey {
         &self.secret
     }
 
+    /// Access this keypair's public key.
     pub fn public(&self) -> &PublicKey<T> {
         &self.public
     }
@@ -138,6 +151,7 @@ impl<T> Into<(SecretKey, PublicKey<T>)> for Keypair<T> {
 }
 
 impl Keypair<Curve25519> {
+    /// Create a fresh Curve25519 keypair.
     pub fn gen_curve25519() -> Self {
         let secret = SecretKey {
             scalar: Scalar::random(&mut rand::thread_rng())
@@ -148,6 +162,7 @@ impl Keypair<Curve25519> {
 }
 
 impl Keypair<Ed25519> {
+    /// Create a fresh Ed25519 keypair.
     pub fn gen_ed25519() -> Self {
         let scalar = Scalar::random(&mut rand::thread_rng());
         let public = PublicKey::new((scalar * ED25519_BASEPOINT_POINT).compress().0);

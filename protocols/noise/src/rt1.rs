@@ -28,6 +28,12 @@ use snow;
 use std::mem;
 use tokio_io::{AsyncRead, AsyncWrite};
 
+/// A future for inbound upgrades.
+///
+/// It will perform the following steps:
+///
+/// 1. receive message
+/// 2. send message
 pub struct NoiseInboundFuture<T>(InboundState<T>);
 
 impl<T> NoiseInboundFuture<T> {
@@ -90,6 +96,12 @@ where
     }
 }
 
+/// A future for outbound upgrades.
+///
+/// It will perform the following steps:
+///
+/// 1. send message
+/// 2. receive message
 pub struct NoiseOutboundFuture<T>(OutboundState<T>);
 
 impl<T> NoiseOutboundFuture<T> {

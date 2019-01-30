@@ -21,10 +21,14 @@
 use snow::SnowError;
 use std::{error::Error, fmt, io};
 
+/// libp2p_noise error type.
 #[derive(Debug)]
 pub enum NoiseError {
+    /// An I/O error has been encountered.
     Io(io::Error),
+    /// An noise framework error has been encountered.
     Noise(SnowError),
+    /// A public key is invalid.
     InvalidKey,
     #[doc(hidden)]
     __Nonexhaustive

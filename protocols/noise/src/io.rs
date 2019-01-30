@@ -29,10 +29,12 @@ const MAX_NOISE_PKG_LEN: usize = 65535;
 const MAX_WRITE_BUF_LEN: usize = 16384;
 const TOTAL_BUFFER_LEN: usize = 2 * MAX_NOISE_PKG_LEN + 3 * MAX_WRITE_BUF_LEN;
 
+/// A single `Buffer` contains multiple non-overlapping byte buffers.
 struct Buffer {
     inner: Box<[u8; TOTAL_BUFFER_LEN]>
 }
 
+/// A mutable borrow of all byte byffers, backed by `Buffer`.
 struct BufferBorrow<'a> {
     read: &'a mut [u8],
     read_crypto: &'a mut [u8],
@@ -41,6 +43,7 @@ struct BufferBorrow<'a> {
 }
 
 impl Buffer {
+    /// Create a mutable borrow by splitting the buffer slice.
     fn borrow_mut(&mut self) -> BufferBorrow {
         let (r, w) = self.inner.split_at_mut(2 * MAX_NOISE_PKG_LEN);
         let (read, read_crypto) = r.split_at_mut(MAX_NOISE_PKG_LEN);
@@ -49,6 +52,7 @@ impl Buffer {
     }
 }
 
+/// A type used during handshake phase, exchanging key material with the remote.
 pub(super) struct Handshake<T>(NoiseOutput<T>);
 
 impl<T> Handshake<T> {
@@ -58,18 +62,25 @@ impl<T> Handshake<T> {
 }
 
 impl<T: AsyncRead + AsyncWrite> Handshake<T> {
+    /// Send handshake message to remote.
     pub(super) fn send(&mut self) -> Poll<(), io::Error> {
         Ok(self.0.poll_write(&[])?.map(|_| ()))
     }
 
+    /// Flush handshake message to remote.
     pub(super) fn flush(&mut self) -> Poll<(), io::Error> {
         self.0.poll_flush()
     }
 
+    /// Receive handshake message from remote.
     pub(super) fn receive(&mut self) -> Poll<(), io::Error> {
         Ok(self.0.poll_read(&mut [])?.map(|_| ()))
     }
 
+    /// Finish the handshake.
+    ///
+    /// This turns the noise session into handshake mode and returns the remote's static
+    /// public key as well as the established session for further communication.
     pub(super) fn finish(self) -> Result<(PublicKey<Curve25519>, NoiseOutput<T>), NoiseError> {
         let s = self.0.session.into_transport_mode()?;
         let p = s.get_remote_static()
@@ -80,6 +91,7 @@ impl<T: AsyncRead + AsyncWrite> Handshake<T> {
     }
 }
 
+/// A noise session to a remote.
 pub struct NoiseOutput<T> {
     io: T,
     session: snow::Session,
@@ -108,6 +120,7 @@ impl<T> NoiseOutput<T> {
     }
 }
 
+/// The various states of reading a noise session transitions through.
 #[derive(Debug)]
 enum ReadState {
     /// initial state
@@ -123,6 +136,7 @@ enum ReadState {
     DecErr
 }
 
+/// The various states of writing a noise session transitions through.
 #[derive(Debug)]
 enum WriteState {
     /// initial state
@@ -323,6 +337,9 @@ impl<T: AsyncWrite> AsyncWrite for NoiseOutput<T> {
     }
 }
 
+/// Read 2 bytes as frame length.
+///
+/// Returns `None` if EOF has been encountered.
 fn read_frame_len<R: io::Read>(io: &mut R) -> io::Result<Option<u16>> {
     let mut buf = [0, 0];
     let mut off = 0;
@@ -338,6 +355,9 @@ fn read_frame_len<R: io::Read>(io: &mut R) -> io::Result<Option<u16>> {
     }
 }
 
+/// Write frame length.
+///
+/// Returns `false` if EOF has been encountered.
 fn write_frame_len<W: io::Write>(io: &mut W, len: u16) -> io::Result<bool> {
     let buf = len.to_be_bytes();
     let mut off = 0;
