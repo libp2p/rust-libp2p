@@ -21,7 +21,7 @@
 use crate::protocol::{RemoteInfo, IdentifyProtocolConfig};
 use futures::prelude::*;
 use libp2p_core::{
-    protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
+    protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
     upgrade::{DeniedUpgrade, OutboundUpgrade}
 };
 use std::{io, marker::PhantomData, time::{Duration, Instant}};
@@ -123,11 +123,11 @@ where
     }
 
     #[inline]
-    fn connection_keep_alive(&self) -> Option<Instant> {
+    fn connection_keep_alive(&self) -> KeepAlive {
         if self.first_id_happened {
-            Some(Instant::now())
+            KeepAlive::Now
         } else {
-            None
+            KeepAlive::Forever
         }
     }
 

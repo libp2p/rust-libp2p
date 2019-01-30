@@ -23,6 +23,7 @@ use crate::{
     either::EitherError,
     either::EitherOutput,
     protocols_handler::{
+        KeepAlive,
         IntoProtocolsHandler,
         ProtocolsHandler,
         ProtocolsHandlerEvent,
@@ -37,7 +38,7 @@ use crate::{
     }
 };
 use futures::prelude::*;
-use std::{cmp, time::Instant};
+use std::cmp;
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Implementation of `IntoProtocolsHandler` that combines two protocols into one.
@@ -203,10 +204,11 @@ where
     }
 
     #[inline]
-    fn connection_keep_alive(&self) -> Option<Instant> {
+    fn connection_keep_alive(&self) -> KeepAlive {
         match (self.proto1.connection_keep_alive(), self.proto2.connection_keep_alive()) {
-            (None, _) | (_, None) => None,
-            (Some(a), Some(b)) => Some(cmp::max(a, b)),
+            (KeepAlive::Forever, _) | (_, KeepAlive::Forever) => KeepAlive::Forever,
+            (a, KeepAlive::Now) | (KeepAlive::Now, a) => a,
+            (KeepAlive::Until(a), KeepAlive::Until(b)) => KeepAlive::Until(cmp::max(a, b)),
         }
     }
 

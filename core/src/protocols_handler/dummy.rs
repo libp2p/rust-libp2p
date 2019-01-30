@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
+    protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
     upgrade::{
         InboundUpgrade,
         OutboundUpgrade,
@@ -27,7 +27,7 @@ use crate::{
     }
 };
 use futures::prelude::*;
-use std::{marker::PhantomData, time::Instant};
+use std::marker::PhantomData;
 use tokio_io::{AsyncRead, AsyncWrite};
 use void::Void;
 
@@ -89,7 +89,7 @@ where
     fn inject_inbound_closed(&mut self) {}
 
     #[inline]
-    fn connection_keep_alive(&self) -> Option<Instant> { Some(Instant::now()) }
+    fn connection_keep_alive(&self) -> KeepAlive { KeepAlive::Now }
 
     #[inline]
     fn shutdown(&mut self) {

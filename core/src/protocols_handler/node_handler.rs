@@ -22,7 +22,7 @@ use crate::{
     PeerId,
     nodes::handled_node::{NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent},
     nodes::handled_node_tasks::IntoNodeHandler,
-    protocols_handler::{ProtocolsHandler, IntoProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
+    protocols_handler::{KeepAlive, ProtocolsHandler, IntoProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
     upgrade::{
         self,
         OutboundUpgrade,
@@ -31,7 +31,7 @@ use crate::{
     }
 };
 use futures::prelude::*;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio_timer::{Delay, Timeout};
 
 /// Prototype for a `NodeHandlerWrapper`.
@@ -276,11 +276,11 @@ where
         loop {
             let poll_result = self.handler.poll()?;
 
-            if let Some(expiration) = self.handler.connection_keep_alive() {
-                self.connection_shutdown = Some(Delay::new(expiration));
-            } else {
-                self.connection_shutdown = None;
-            }
+            self.connection_shutdown = match self.handler.connection_keep_alive() {
+                KeepAlive::Until(expiration) => Some(Delay::new(expiration)),
+                KeepAlive::Now => Some(Delay::new(Instant::now())),
+                KeepAlive::Forever => None,
+            };
 
             match poll_result {
                 Async::Ready(ProtocolsHandlerEvent::Custom(event)) => {

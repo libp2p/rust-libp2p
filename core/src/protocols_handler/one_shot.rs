@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr};
+use crate::protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr};
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade};
 use futures::prelude::*;
 use smallvec::SmallVec;
@@ -46,8 +46,8 @@ where TOutProto: OutboundUpgrade<TSubstream>
     dial_negotiated: u32,
     /// Maximum number of concurrent outbound substreams being opened. Value is never modified.
     max_dial_negotiated: u32,
-    /// Value returned by `connection_keep_alive`.
-    keep_alive: Option<Instant>,
+    /// Value to return from `connection_keep_alive`.
+    keep_alive: KeepAlive,
     /// After the given duration has elapsed, an inactive connection will shutdown.
     inactive_timeout: Duration,
     /// Pin the `TSubstream` generic.
@@ -69,7 +69,7 @@ where TOutProto: OutboundUpgrade<TSubstream>
             dial_queue: SmallVec::new(),
             dial_negotiated: 0,
             max_dial_negotiated: 8,
-            keep_alive: None,
+            keep_alive: KeepAlive::Forever,
             inactive_timeout: Duration::from_secs(10),  // TODO: allow configuring
             marker: PhantomData,
         }
@@ -102,7 +102,7 @@ where TOutProto: OutboundUpgrade<TSubstream>
     /// Opens an outbound substream with `upgrade`.
     #[inline]
     pub fn send_request(&mut self, upgrade: TOutProto) {
-        self.keep_alive = None;
+        self.keep_alive = KeepAlive::Forever;
         self.dial_queue.push(upgrade);
     }
 }
@@ -151,8 +151,8 @@ where
         }
 
         // If we're shutting down the connection for inactivity, reset the timeout.
-        if let Some(ref mut keep_alive) = self.keep_alive {
-            *keep_alive = Instant::now() + self.inactive_timeout;
+        if !self.keep_alive.is_forever() {
+            self.keep_alive = KeepAlive::Until(Instant::now() + self.inactive_timeout);
         }
 
         self.events_out.push(out.into());
@@ -167,7 +167,7 @@ where
         self.dial_negotiated -= 1;
 
         if self.dial_negotiated == 0 && self.dial_queue.is_empty() {
-            self.keep_alive = Some(Instant::now() + self.inactive_timeout);
+            self.keep_alive = KeepAlive::Until(Instant::now() + self.inactive_timeout);
         }
 
         if self.shutting_down {
@@ -193,7 +193,7 @@ where
     fn inject_inbound_closed(&mut self) {}
 
     #[inline]
-    fn connection_keep_alive(&self) -> Option<Instant> {
+    fn connection_keep_alive(&self) -> KeepAlive {
         self.keep_alive
     }
 

@@ -142,20 +142,21 @@ pub trait ProtocolsHandler {
 
     /// Returns until when the connection should be kept alive.
     ///
-    /// If returns `Some`, that indicates that this connection may invoke `shutdown()` after the
+    /// If returns `Until`, that indicates that this connection may invoke `shutdown()` after the
     /// returned `Instant` has elapsed if they think that they will no longer need the connection
-    /// in the future. Returning `None` is equivalent to "infinite".
+    /// in the future. Returning `Forever` is equivalent to "infinite". Returning `Now` is
+    /// equivalent to `Until(Instant::now())`.
     ///
-    /// On the other hand, returning `None` is only an indication and doesn't mean that the user
+    /// On the other hand, the return value is only an indication and doesn't mean that the user
     /// will not call `shutdown()`.
     ///
     /// When multiple `ProtocolsHandler` are combined together, they should use return the largest
-    /// value of the two, or `None` if either returns `None`.
+    /// value of the two, or `Forever` if either returns `Forever`.
     ///
     /// The result of this method should be checked every time `poll()` is invoked.
     ///
     /// After `shutdown()` is called, the result of this method doesn't matter anymore.
-    fn connection_keep_alive(&self) -> Option<Instant>;
+    fn connection_keep_alive(&self) -> KeepAlive;
 
     /// Indicates to the node that it should shut down. After that, it is expected that `poll()`
     /// returns `Ready(ProtocolsHandlerEvent::Shutdown)` as soon as possible.
@@ -398,5 +399,26 @@ where T: ProtocolsHandler
     #[inline]
     fn into_handler(self, _: &PeerId) -> Self {
         self
+    }
+}
+
+/// How long the connection should be kept alive.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum KeepAlive {
+    /// If nothing new happens, the connection should be closed at the given `Instant`.
+    Until(Instant),
+    /// Keep the connection alive.
+    Forever,
+    /// Close the connection as soon as possible.
+    Now,
+}
+
+impl KeepAlive {
+    /// Returns true for `Forever`, false otherwise.
+    pub fn is_forever(&self) -> bool {
+        match *self {
+            KeepAlive::Forever => true,
+            _ => false,
+        }
     }
 }

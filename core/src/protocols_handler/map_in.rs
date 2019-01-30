@@ -19,14 +19,14 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
+    protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
     upgrade::{
         InboundUpgrade,
         OutboundUpgrade,
     }
 };
 use futures::prelude::*;
-use std::{marker::PhantomData, time::Instant};
+use std::marker::PhantomData;
 
 /// Wrapper around a protocol handler that turns the input event into something else.
 pub struct MapInEvent<TProtoHandler, TNewIn, TMap> {
@@ -100,7 +100,7 @@ where
     }
 
     #[inline]
-    fn connection_keep_alive(&self) -> Option<Instant> {
+    fn connection_keep_alive(&self) -> KeepAlive {
         self.inner.connection_keep_alive()
     }
 
