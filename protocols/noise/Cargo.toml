@@ -1,0 +1,24 @@
+[package]
+name = "libp2p-noise"
+description = "Cryptographic handshake protocol using the noise framework."
+version = "0.1.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+edition = "2018"
+
+[dependencies]
+curve25519-dalek = "1"
+futures = "0.1"
+lazy_static = "1.2"
+libp2p-core = { version = "0.2.0", path = "../../core" }
+log = "0.4"
+rand = "0.6"
+snow = { version = "0.5.0-alpha1", default-features = false, features = ["ring-resolver"] }
+tokio-io = "0.1"
+
+[dev-dependencies]
+env_logger = "0.6"
+libp2p-tcp = { version = "0.2.0", path = "../../transports/tcp" }
+quickcheck = "0.8"
+tokio = "0.1"
