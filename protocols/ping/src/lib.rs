@@ -90,7 +90,7 @@ where
         OneShotHandler::default()
     }
 
-    fn addresses_of_peer(&self, _peer_id: &PeerId) -> Vec<Multiaddr> {
+    fn addresses_of_peer(&mut self, _peer_id: &PeerId) -> Vec<Multiaddr> {
         Vec::new()
     }
 

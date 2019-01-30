@@ -217,7 +217,7 @@ where
         Default::default()
     }
 
-    fn addresses_of_peer(&self, _: &PeerId) -> Vec<Multiaddr> {
+    fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
         Vec::new()
     }
 

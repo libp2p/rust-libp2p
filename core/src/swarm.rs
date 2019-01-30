@@ -54,7 +54,7 @@ use crate::{
 };
 use futures::prelude::*;
 use smallvec::SmallVec;
-use std::{fmt, io, ops::{Deref, DerefMut}};
+use std::{error, fmt, io, ops::{Deref, DerefMut}};
 
 pub use crate::nodes::raw_swarm::ConnectedPoint;
 
@@ -261,8 +261,12 @@ where TBehaviour: NetworkBehaviour,
                 },
                 Async::Ready(RawSwarmEvent::ListenerClosed { .. }) => {},
                 Async::Ready(RawSwarmEvent::IncomingConnectionError { .. }) => {},
-                Async::Ready(RawSwarmEvent::DialError { .. }) => {},
-                Async::Ready(RawSwarmEvent::UnknownPeerDialError { .. }) => {},
+                Async::Ready(RawSwarmEvent::DialError { peer_id, multiaddr, error, .. }) => {
+                    self.behaviour.inject_dial_failure(Some(&peer_id), &multiaddr, &error);
+                },
+                Async::Ready(RawSwarmEvent::UnknownPeerDialError { multiaddr, error, .. }) => {
+                    self.behaviour.inject_dial_failure(None, &multiaddr, &error);
+                },
             }
 
             let behaviour_poll = {
@@ -319,7 +323,7 @@ pub trait NetworkBehaviour {
 
     /// Addresses that this behaviour is aware of for this specific peer, and that may allow
     /// reaching the peer.
-    fn addresses_of_peer(&self, peer_id: &PeerId) -> Vec<Multiaddr>;
+    fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr>;
 
     /// Indicates the behaviour that we connected to the node with the given peer id through the
     /// given endpoint.
@@ -338,6 +342,10 @@ pub trait NetworkBehaviour {
         peer_id: PeerId,
         event: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent
     );
+
+    /// Indicates to the behaviour that we tried to reach a node, but failed.
+    fn inject_dial_failure(&mut self, _peer_id: Option<&PeerId>, _addr: &Multiaddr, _error: &dyn error::Error) {
+    }
 
     /// Polls for things that swarm should do.
     ///
@@ -549,7 +557,7 @@ mod tests {
             DummyProtocolsHandler::default()
         }
 
-        fn addresses_of_peer(&self, _: &PeerId) -> Vec<Multiaddr> {
+        fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
             Vec::new()
         }
 
