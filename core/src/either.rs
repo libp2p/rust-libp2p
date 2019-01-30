@@ -335,11 +335,11 @@ where
         match self {
             EitherFuture2::A(a) => a.poll()
                 .map(|v| v.map(EitherOutput::First))
-                .map_err(|e| EitherError::A(e)),
+                .map_err(EitherError::A),
 
             EitherFuture2::B(b) => b.poll()
                 .map(|v| v.map(EitherOutput::Second))
-                .map_err(|e| EitherError::B(e))
+                .map_err(EitherError::B)
         }
     }
 }

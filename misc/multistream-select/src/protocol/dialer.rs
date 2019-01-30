@@ -44,7 +44,7 @@ where
     R: AsyncRead + AsyncWrite,
     N: AsRef<[u8]>
 {
-    pub fn new(inner: R) -> DialerFuture<R, N> {
+    pub fn dial(inner: R) -> DialerFuture<R, N> {
         let codec = MessageEncoder(std::marker::PhantomData);
         let sender = LengthDelimited::new(inner, codec);
         DialerFuture {
@@ -223,7 +223,7 @@ mod tests {
 
         let client = TcpStream::connect(&listener_addr)
             .from_err()
-            .and_then(move |stream| Dialer::new(stream))
+            .and_then(move |stream| Dialer::dial(stream))
             .and_then(move |dialer| {
                 let p = b"invalid_name";
                 dialer.send(DialerToListenerMessage::ProtocolRequest { name: p })

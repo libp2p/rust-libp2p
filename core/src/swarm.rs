@@ -181,7 +181,7 @@ where TBehaviour: NetworkBehaviour,
     pub fn dial(me: &mut Self, peer_id: PeerId) {
         let addrs = me.behaviour.addresses_of_peer(&peer_id);
         let handler = me.behaviour.new_handler().into_node_handler_builder();
-        if let Some(peer) = me.raw_swarm.peer(peer_id).as_not_connected() {
+        if let Some(peer) = me.raw_swarm.peer(peer_id).into_not_connected() {
             let _ = peer.connect_iter(addrs, handler);
         }
     }
@@ -294,7 +294,7 @@ where TBehaviour: NetworkBehaviour,
                     Swarm::dial(self, peer_id)
                 },
                 Async::Ready(NetworkBehaviourAction::SendEvent { peer_id, event }) => {
-                    if let Some(mut peer) = self.raw_swarm.peer(peer_id).as_connected() {
+                    if let Some(mut peer) = self.raw_swarm.peer(peer_id).into_connected() {
                         peer.send_event(event);
                     }
                 },

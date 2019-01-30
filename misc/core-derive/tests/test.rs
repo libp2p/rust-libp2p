@@ -47,6 +47,7 @@ fn one_field() {
         }
     }
 
+    #[allow(dead_code)]
     fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
         require_net_behaviour::<Foo<TSubstream>>();
     }
@@ -71,6 +72,7 @@ fn two_fields() {
         }
     }
 
+    #[allow(dead_code)]
     fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
         require_net_behaviour::<Foo<TSubstream>>();
     }
@@ -103,6 +105,7 @@ fn three_fields() {
         }
     }
 
+    #[allow(dead_code)]
     fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
         require_net_behaviour::<Foo<TSubstream>>();
     }
@@ -132,6 +135,7 @@ fn custom_polling() {
         fn foo<T>(&mut self) -> libp2p::futures::Async<libp2p::core::swarm::NetworkBehaviourAction<T, ()>> { libp2p::futures::Async::NotReady }
     }
 
+    #[allow(dead_code)]
     fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
         require_net_behaviour::<Foo<TSubstream>>();
     }
@@ -157,6 +161,7 @@ fn custom_event_no_polling() {
         }
     }
 
+    #[allow(dead_code)]
     fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
         require_net_behaviour::<Foo<TSubstream>>();
     }
@@ -186,6 +191,7 @@ fn custom_event_and_polling() {
         fn foo<T>(&mut self) -> libp2p::futures::Async<libp2p::core::swarm::NetworkBehaviourAction<T, String>> { libp2p::futures::Async::NotReady }
     }
 
+    #[allow(dead_code)]
     fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
         require_net_behaviour::<Foo<TSubstream>>();
     }

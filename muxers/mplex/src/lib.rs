@@ -459,7 +459,7 @@ where C: AsyncRead + AsyncWrite
     fn read_substream(&self, substream: &mut Self::Substream, buf: &mut [u8]) -> Poll<usize, IoError> {
         loop {
             // First, transfer from `current_data`.
-            if substream.current_data.len() != 0 {
+            if !substream.current_data.is_empty() {
                 let len = cmp::min(substream.current_data.len(), buf.len());
                 buf[..len].copy_from_slice(&substream.current_data.split_to(len));
                 return Ok(Async::Ready(len));
@@ -549,7 +549,7 @@ where C: AsyncRead + AsyncWrite
     #[inline]
     fn shutdown(&self, _: Shutdown) -> Poll<(), IoError> {
         let inner = &mut *self.inner.lock();
-        let () = try_ready!(inner.inner.close_notify(&inner.notifier_write, 0));
+        try_ready!(inner.inner.close_notify(&inner.notifier_write, 0));
         inner.is_shutdown = true;
         Ok(Async::Ready(()))
     }

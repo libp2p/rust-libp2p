@@ -177,25 +177,25 @@ impl Encoder for Codec {
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let (header, data) = match item {
             Elem::Open { substream_id } => {
-                ((substream_id as u64) << 3, Bytes::new())
+                (u64::from(substream_id) << 3, Bytes::new())
             },
             Elem::Data { substream_id, endpoint: Endpoint::Listener, data } => {
-                ((substream_id as u64) << 3 | 1, data)
+                (u64::from(substream_id) << 3 | 1, data)
             },
             Elem::Data { substream_id, endpoint: Endpoint::Dialer, data } => {
-                ((substream_id as u64) << 3 | 2, data)
+                (u64::from(substream_id) << 3 | 2, data)
             },
             Elem::Close { substream_id, endpoint: Endpoint::Listener } => {
-                ((substream_id as u64) << 3 | 3, Bytes::new())
+                (u64::from(substream_id) << 3 | 3, Bytes::new())
             },
             Elem::Close { substream_id, endpoint: Endpoint::Dialer } => {
-                ((substream_id as u64) << 3 | 4, Bytes::new())
+                (u64::from(substream_id) << 3 | 4, Bytes::new())
             },
             Elem::Reset { substream_id, endpoint: Endpoint::Listener } => {
-                ((substream_id as u64) << 3 | 5, Bytes::new())
+                (u64::from(substream_id) << 3 | 5, Bytes::new())
             },
             Elem::Reset { substream_id, endpoint: Endpoint::Dialer } => {
-                ((substream_id as u64) << 3 | 6, Bytes::new())
+                (u64::from(substream_id) << 3 | 6, Bytes::new())
             },
         };
 

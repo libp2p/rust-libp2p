@@ -90,7 +90,7 @@ impl NodeTaskTestBuilder {
             }
         };
         let node_task = NodeTask {
-            inner: inner,
+            inner,
             events_tx: events_from_node_task_tx.clone(), // events TO the outside
             in_events_rx: events_to_node_task_rx.fuse(), // events FROM the outside
             id: self.task_id,

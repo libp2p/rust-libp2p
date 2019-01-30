@@ -55,8 +55,8 @@ where
 {
     ListenerSelectFuture {
         inner: ListenerSelectState::AwaitListener {
-            listener_fut: Listener::new(inner),
-            protocols: protocols
+            listener_fut: Listener::listen(inner),
+            protocols
         }
     }
 }
