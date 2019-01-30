@@ -16,7 +16,7 @@ cuckoofilter = "0.3.2"
 fnv = "1.0"
 futures = "0.1"
 libp2p-core = { version = "0.2.0", path = "../../core" }
-protobuf = "2.0.2"
+protobuf = "2.3"
 rand = "0.6"
 smallvec = "0.6.5"
 tokio-codec = "0.1"
