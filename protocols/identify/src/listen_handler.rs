@@ -21,7 +21,7 @@
 use crate::protocol::{IdentifySender, IdentifyProtocolConfig};
 use futures::prelude::*;
 use libp2p_core::{
-    protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
+    protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
     upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade}
 };
 use smallvec::SmallVec;
@@ -90,8 +90,8 @@ where
     fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {}
 
     #[inline]
-    fn connection_keep_alive(&self) -> bool {
-        false
+    fn connection_keep_alive(&self) -> KeepAlive {
+        KeepAlive::Now
     }
 
     #[inline]

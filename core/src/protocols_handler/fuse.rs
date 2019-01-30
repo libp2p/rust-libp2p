@@ -20,7 +20,7 @@
 
 use crate::{
     either::EitherOutput,
-    protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
+    protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
     upgrade::{
         DeniedUpgrade,
         EitherUpgrade,
@@ -124,11 +124,11 @@ where
     }
 
     #[inline]
-    fn connection_keep_alive(&self) -> bool {
+    fn connection_keep_alive(&self) -> KeepAlive {
         if let Some(inner) = self.inner.as_ref() {
             inner.connection_keep_alive()
         } else {
-            false
+            KeepAlive::Now
         }
     }
 

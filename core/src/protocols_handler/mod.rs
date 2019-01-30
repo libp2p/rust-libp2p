@@ -40,7 +40,7 @@ use crate::upgrade::{
     UpgradeError,
 };
 use futures::prelude::*;
-use std::{error, fmt, time::Duration};
+use std::{error, fmt, time::Duration, time::Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 pub use self::dummy::DummyProtocolsHandler;
@@ -142,22 +142,23 @@ pub trait ProtocolsHandler {
     /// therefore no more inbound substreams will be produced.
     fn inject_inbound_closed(&mut self);
 
-    /// Returns whether the connection should be kept alive.
+    /// Returns until when the connection should be kept alive.
     ///
-    /// If returns `false`, that indicates that this connection is not important and the user may
-    /// invoke `shutdown()` if they think that they will no longer need the connection in the
-    /// future.
+    /// If returns `Until`, that indicates that this connection may invoke `shutdown()` after the
+    /// returned `Instant` has elapsed if they think that they will no longer need the connection
+    /// in the future. Returning `Forever` is equivalent to "infinite". Returning `Now` is
+    /// equivalent to `Until(Instant::now())`.
     ///
-    /// On the other hand, returning `true` is only an indication and doesn't mean that the user
+    /// On the other hand, the return value is only an indication and doesn't mean that the user
     /// will not call `shutdown()`.
     ///
-    /// When multiple `ProtocolsHandler` are combined together, they should use *OR* to merge the
-    /// result of this method.
+    /// When multiple `ProtocolsHandler` are combined together, they should use return the largest
+    /// value of the two, or `Forever` if either returns `Forever`.
     ///
     /// The result of this method should be checked every time `poll()` is invoked.
     ///
     /// After `shutdown()` is called, the result of this method doesn't matter anymore.
-    fn connection_keep_alive(&self) -> bool;
+    fn connection_keep_alive(&self) -> KeepAlive;
 
     /// Indicates to the node that it should shut down. After that, it is expected that `poll()`
     /// returns `Ready(ProtocolsHandlerEvent::Shutdown)` as soon as possible.
@@ -398,7 +399,7 @@ pub trait IntoProtocolsHandler {
     where
         Self: Sized,
     {
-        NodeHandlerWrapperBuilder::new(self, Duration::from_secs(10), Duration::from_secs(10), Duration::from_secs(5))
+        NodeHandlerWrapperBuilder::new(self, Duration::from_secs(10), Duration::from_secs(10))
     }
 }
 
@@ -410,5 +411,26 @@ where T: ProtocolsHandler
     #[inline]
     fn into_handler(self, _: &PeerId) -> Self {
         self
+    }
+}
+
+/// How long the connection should be kept alive.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum KeepAlive {
+    /// If nothing new happens, the connection should be closed at the given `Instant`.
+    Until(Instant),
+    /// Keep the connection alive.
+    Forever,
+    /// Close the connection as soon as possible.
+    Now,
+}
+
+impl KeepAlive {
+    /// Returns true for `Forever`, false otherwise.
+    pub fn is_forever(&self) -> bool {
+        match *self {
+            KeepAlive::Forever => true,
+            _ => false,
+        }
     }
 }

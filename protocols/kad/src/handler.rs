@@ -23,10 +23,10 @@ use crate::protocol::{
     KademliaProtocolConfig,
 };
 use futures::prelude::*;
-use libp2p_core::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr};
+use libp2p_core::protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr};
 use libp2p_core::{upgrade, either::EitherOutput, InboundUpgrade, OutboundUpgrade, PeerId};
 use multihash::Multihash;
-use std::{error, fmt, io};
+use std::{error, fmt, io, time::Duration, time::Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Protocol handler that handles Kademlia communications with the remote.
@@ -54,6 +54,9 @@ where
 
     /// List of active substreams with the state they are in.
     substreams: Vec<SubstreamState<TSubstream, TUserData>>,
+
+    /// Until when to keep the connection alive.
+    keep_alive: KeepAlive,
 }
 
 /// State of an active substream, opened either by us or by the remote.
@@ -322,6 +325,7 @@ where
             allow_listening,
             next_connec_unique_id: UniqueConnecId(0),
             substreams: Vec::new(),
+            keep_alive: KeepAlive::Forever,
         }
     }
 }
@@ -490,8 +494,8 @@ where
     }
 
     #[inline]
-    fn connection_keep_alive(&self) -> bool {
-        !self.substreams.is_empty()
+    fn connection_keep_alive(&self) -> KeepAlive {
+        self.keep_alive
     }
 
     #[inline]
@@ -547,6 +551,12 @@ where
                     }
                 }
             }
+        }
+
+        if self.substreams.is_empty() {
+            self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
+        } else {
+            self.keep_alive = KeepAlive::Forever;
         }
 
         Ok(Async::NotReady)
