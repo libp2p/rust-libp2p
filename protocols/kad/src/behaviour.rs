@@ -125,7 +125,9 @@ impl<TSubstream> Kademlia<TSubstream> {
     /// Adds a known address for the given `PeerId`.
     pub fn add_address(&mut self, peer_id: &PeerId, address: Multiaddr) {
         if let Some(list) = self.kbuckets.entry_mut(peer_id) {
-            list.push(address);
+            if list.iter().all(|a| *a != address) {
+                list.push(address);
+            }
         }
     }
 
@@ -333,7 +335,11 @@ where
                 // why we may not find an entry in `self.active_queries`.
                 for peer in closer_peers.iter() {
                     if let Some(entry) = self.kbuckets.entry_mut(&peer.node_id) {
-                        entry.extend(peer.multiaddrs.iter().cloned());
+                        for addr in peer.multiaddrs.iter() {
+                            if entry.iter().all(|a| a != addr) {
+                                entry.push(addr.clone());
+                            }
+                        }
                     }
 
                     self.queued_events.push(NetworkBehaviourAction::GenerateEvent(KademliaOut::Discovered {
@@ -357,7 +363,11 @@ where
             } => {
                 for peer in closer_peers.iter().chain(provider_peers.iter()) {
                     if let Some(entry) = self.kbuckets.entry_mut(&peer.node_id) {
-                        entry.extend(peer.multiaddrs.iter().cloned());
+                        for addr in peer.multiaddrs.iter() {
+                            if entry.iter().all(|a| a != addr) {
+                                entry.push(addr.clone());
+                            }
+                        }
                     }
 
                     self.queued_events.push(NetworkBehaviourAction::GenerateEvent(KademliaOut::Discovered {
@@ -385,7 +395,11 @@ where
             }
             KademliaHandlerEvent::AddProvider { key, provider_peer } => {
                 if let Some(entry) = self.kbuckets.entry_mut(&provider_peer.node_id) {
-                    entry.extend(provider_peer.multiaddrs.iter().cloned());
+                    for addr in provider_peer.multiaddrs.iter() {
+                        if entry.iter().all(|a| a != addr) {
+                            entry.push(addr.clone());
+                        }
+                    }
                 }
                 self.queued_events.push(NetworkBehaviourAction::GenerateEvent(KademliaOut::Discovered {
                     peer_id: provider_peer.node_id.clone(),
