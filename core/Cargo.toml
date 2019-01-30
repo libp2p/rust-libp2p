@@ -19,7 +19,7 @@ multihash = { package = "parity-multihash", version = "0.1.0", path = "../misc/m
 multistream-select = { version = "0.2.0", path = "../misc/multistream-select" }
 futures = { version = "0.1", features = ["use_std"] }
 parking_lot = "0.7"
-protobuf = "2.0.2"
+protobuf = "2.3"
 quick-error = "1.2"
 rw-stream-sink = { version = "0.1.0", path = "../misc/rw-stream-sink" }
 smallvec = "0.6"
