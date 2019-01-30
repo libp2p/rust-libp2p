@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! Futures performing 1 round trip.
+
 use crate::{
     error::NoiseError,
     io::{Handshake, NoiseOutput},

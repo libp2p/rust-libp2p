@@ -51,7 +51,7 @@ mod keys;
 mod util;
 
 pub mod rt1;
-pub mod rt2;
+pub mod rt15;
 
 pub use error::NoiseError;
 pub use io::NoiseOutput;
@@ -205,14 +205,14 @@ where
 {
     type Output = (PublicKey<Curve25519>, NoiseOutput<T>);
     type Error = NoiseError;
-    type Future = rt2::NoiseInboundFuture<T>;
+    type Future = rt15::NoiseInboundFuture<T>;
 
     fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
         let session = snow::Builder::with_resolver(self.params, Box::new(Resolver))
             .local_private_key(self.keypair.secret().as_ref())
             .build_responder()
             .map_err(NoiseError::from);
-        rt2::NoiseInboundFuture::new(socket, session)
+        rt15::NoiseInboundFuture::new(socket, session)
     }
 }
 
@@ -222,14 +222,14 @@ where
 {
     type Output = (PublicKey<Curve25519>, NoiseOutput<T>);
     type Error = NoiseError;
-    type Future = rt2::NoiseOutboundFuture<T>;
+    type Future = rt15::NoiseOutboundFuture<T>;
 
     fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
         let session = snow::Builder::with_resolver(self.params, Box::new(Resolver))
             .local_private_key(self.keypair.secret().as_ref())
             .build_initiator()
             .map_err(NoiseError::from);
-        rt2::NoiseOutboundFuture::new(socket, session)
+        rt15::NoiseOutboundFuture::new(socket, session)
     }
 }
 
