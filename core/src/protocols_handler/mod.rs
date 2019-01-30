@@ -44,6 +44,7 @@ use std::{error, fmt, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 pub use self::dummy::DummyProtocolsHandler;
+pub use self::fuse::Fuse;
 pub use self::map_in::MapInEvent;
 pub use self::map_out::MapOutEvent;
 pub use self::node_handler::{NodeHandlerWrapper, NodeHandlerWrapperBuilder};
@@ -51,6 +52,7 @@ pub use self::one_shot::OneShotHandler;
 pub use self::select::{IntoProtocolsHandlerSelect, ProtocolsHandlerSelect};
 
 mod dummy;
+mod fuse;
 mod map_in;
 mod map_out;
 mod node_handler;
@@ -191,6 +193,16 @@ pub trait ProtocolsHandler {
         TMap: FnMut(Self::OutEvent) -> TNewOut,
     {
         MapOutEvent::new(self, map)
+    }
+
+    /// Wraps around `self`. When `poll()` returns `Shutdown`, any further call to any method will
+    /// be ignored.
+    #[inline]
+    fn fuse(self) -> Fuse<Self>
+    where
+        Self: Sized,
+    {
+        Fuse::new(self)
     }
 
     /// Builds an implementation of `ProtocolsHandler` that handles both this protocol and the

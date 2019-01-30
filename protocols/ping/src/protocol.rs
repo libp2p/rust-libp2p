@@ -18,32 +18,27 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use bytes::{BufMut, Bytes, BytesMut};
-use futures::{prelude::*, future::{self, FutureResult}, try_ready};
+use futures::{prelude::*, future, try_ready};
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use log::debug;
 use rand::{distributions::Standard, prelude::*, rngs::EntropyRng};
-use std::collections::VecDeque;
-use std::io::Error as IoError;
-use std::{iter, marker::PhantomData, mem};
-use tokio_codec::{Decoder, Encoder, Framed};
+use std::{io, iter, time::Duration, time::Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Represents a prototype for an upgrade to handle the ping protocol.
 ///
-/// According to the design of libp2p, this struct would normally contain the configuration options
-/// for the protocol, but in the case of `Ping` no configuration is required.
-#[derive(Debug, Copy, Clone)]
-pub struct Ping<TUserData = ()>(PhantomData<TUserData>);
+/// The protocol works the following way:
+///
+/// - Dialer sends 32 bytes of random data.
+/// - Listener receives the data and sends it back.
+/// - Dialer receives the data and verifies that it matches what it sent.
+///
+/// The dialer produces a `Duration`, which corresponds to the time between when we flushed the
+/// substream and when we received back the payload.
+#[derive(Default, Debug, Copy, Clone)]
+pub struct Ping;
 
-impl<TUserData> Default for Ping<TUserData> {
-    #[inline]
-    fn default() -> Self {
-        Ping(PhantomData)
-    }
-}
-
-impl<TUserData> UpgradeInfo for Ping<TUserData> {
+impl UpgradeInfo for Ping {
     type Info = &'static [u8];
     type InfoIter = iter::Once<Self::Info>;
 
@@ -52,269 +47,139 @@ impl<TUserData> UpgradeInfo for Ping<TUserData> {
     }
 }
 
-impl<TSocket, TUserData> InboundUpgrade<TSocket> for Ping<TUserData>
+impl<TSocket> InboundUpgrade<TSocket> for Ping
 where
     TSocket: AsyncRead + AsyncWrite,
 {
-    type Output = PingListener<TSocket>;
-    type Error = IoError;
-    type Future = FutureResult<Self::Output, Self::Error>;
+    type Output = ();
+    type Error = io::Error;
+    type Future = future::Map<future::AndThen<future::AndThen<future::AndThen<tokio_io::io::ReadExact<TSocket, [u8; 32]>, tokio_io::io::WriteAll<TSocket, [u8; 32]>, fn((TSocket, [u8; 32])) -> tokio_io::io::WriteAll<TSocket, [u8; 32]>>, tokio_io::io::Flush<TSocket>, fn((TSocket, [u8; 32])) -> tokio_io::io::Flush<TSocket>>, tokio_io::io::Shutdown<TSocket>, fn(TSocket) -> tokio_io::io::Shutdown<TSocket>>, fn(TSocket) -> ()>;
 
     #[inline]
     fn upgrade_inbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
-        let listener = PingListener {
-            inner: Framed::new(socket, Codec),
-            state: PingListenerState::Listening,
-        };
-        future::ok(listener)
+        tokio_io::io::read_exact(socket, [0; 32])
+            .and_then::<fn(_) -> _, _>(|(socket, buffer)| tokio_io::io::write_all(socket, buffer))
+            .and_then::<fn(_) -> _, _>(|(socket, _)| tokio_io::io::flush(socket))
+            .and_then::<fn(_) -> _, _>(|socket| tokio_io::io::shutdown(socket))
+            .map(|_| ())
     }
 }
 
-impl<TSocket, TUserData> OutboundUpgrade<TSocket> for Ping<TUserData>
+impl<TSocket> OutboundUpgrade<TSocket> for Ping
 where
     TSocket: AsyncRead + AsyncWrite,
 {
-    type Output = PingDialer<TSocket, TUserData>;
-    type Error = IoError;
-    type Future = FutureResult<Self::Output, Self::Error>;
+    type Output = Duration;
+    type Error = io::Error;
+    type Future = PingDialer<TSocket>;
 
     #[inline]
     fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
-        let dialer = PingDialer {
-            inner: Framed::new(socket, Codec),
-            need_writer_flush: false,
-            needs_close: false,
-            sent_pings: VecDeque::with_capacity(4),
-            rng: EntropyRng::default(),
-            pings_to_send: VecDeque::with_capacity(4),
-        };
-        future::ok(dialer)
-    }
-}
-
-/// Sends pings and receives the pongs.
-///
-/// Implements `Stream`. The stream indicates when we receive a pong.
-pub struct PingDialer<TSocket, TUserData> {
-    /// The underlying socket.
-    inner: Framed<TSocket, Codec>,
-    /// If true, need to flush the sink.
-    need_writer_flush: bool,
-    /// If true, need to close the sink.
-    needs_close: bool,
-    /// List of pings that have been sent to the remote and that are waiting for an answer.
-    sent_pings: VecDeque<(Bytes, TUserData)>,
-    /// Random number generator for the ping payload.
-    rng: EntropyRng,
-    /// List of pings to send to the remote.
-    pings_to_send: VecDeque<(Bytes, TUserData)>,
-}
-
-impl<TSocket, TUserData> PingDialer<TSocket, TUserData> {
-    /// Sends a ping to the remote.
-    ///
-    /// The stream will produce an event containing the user data when we receive the pong.
-    pub fn ping(&mut self, user_data: TUserData) {
-        let payload: [u8; 32] = self.rng.sample(Standard);
+        let payload: [u8; 32] = EntropyRng::default().sample(Standard);
         debug!("Preparing for ping with payload {:?}", payload);
-        self.pings_to_send.push_back((Bytes::from(payload.to_vec()), user_data));
+
+        PingDialer {
+            inner: PingDialerInner::Write {
+                inner: tokio_io::io::write_all(socket, payload),
+            },
+        }
     }
 }
 
-impl<TSocket, TUserData> PingDialer<TSocket, TUserData>
-where TSocket: AsyncRead + AsyncWrite,
-{
-    /// Call this when the ping dialer needs to shut down. After this, the `Stream` is guaranteed
-    /// to finish soon-ish.
-    #[inline]
-    pub fn shutdown(&mut self) {
-        self.needs_close = true;
-    }
-}
-
-impl<TSocket, TUserData> Stream for PingDialer<TSocket, TUserData>
-where TSocket: AsyncRead + AsyncWrite,
-{
-    type Item = TUserData;
-    type Error = IoError;
-
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        if self.needs_close {
-            try_ready!(self.inner.close());
-            return Ok(Async::Ready(None));
-        }
-
-        while let Some((ping, user_data)) = self.pings_to_send.pop_front() {
-            match self.inner.start_send(ping.clone()) {
-                Ok(AsyncSink::Ready) => self.need_writer_flush = true,
-                Ok(AsyncSink::NotReady(_)) => {
-                    self.pings_to_send.push_front((ping, user_data));
-                    break;
-                },
-                Err(err) => return Err(err),
-            }
-
-            self.sent_pings.push_back((ping, user_data));
-        }
-
-        if self.need_writer_flush {
-            match self.inner.poll_complete() {
-                Ok(Async::Ready(())) => self.need_writer_flush = false,
-                Ok(Async::NotReady) => (),
-                Err(err) => return Err(err),
-            }
-        }
-
-        loop {
-            match self.inner.poll() {
-                Ok(Async::Ready(Some(pong))) => {
-                    if let Some(pos) = self.sent_pings.iter().position(|&(ref p, _)| p == &pong) {
-                        let (_, user_data) = self.sent_pings.remove(pos)
-                            .expect("Grabbed a valid position just above");
-                        return Ok(Async::Ready(Some(user_data)));
-                    } else {
-                        debug!("Received pong that doesn't match what we sent: {:?}", pong);
-                    }
-                },
-                Ok(Async::NotReady) => break,
-                Ok(Async::Ready(None)) => {
-                    // Notify the current task so that we poll again.
-                    self.needs_close = true;
-                    try_ready!(self.inner.close());
-                    return Ok(Async::Ready(None));
-                }
-                Err(err) => return Err(err),
-            }
-        }
-
-        Ok(Async::NotReady)
-    }
-}
-
-/// Listens to incoming pings and answers them.
+/// Sends a ping and receives a pong.
 ///
-/// Implements `Future`. The future terminates when the underlying socket closes.
-pub struct PingListener<TSocket> {
-    /// The underlying socket.
-    inner: Framed<TSocket, Codec>,
-    /// State of the listener.
-    state: PingListenerState,
+/// Implements `Future`. Finishes when the pong has arrived and has been verified.
+pub struct PingDialer<TSocket> {
+    inner: PingDialerInner<TSocket>,
 }
 
-#[derive(Debug)]
-enum PingListenerState {
-    /// We are waiting for the next ping on the socket.
-    Listening,
-    /// We are trying to send a pong.
-    Sending(Bytes),
-    /// We are flushing the underlying sink.
-    Flushing,
-    /// We are shutting down everything.
-    Closing,
-    /// A panic happened during the processing.
-    Poisoned,
+enum PingDialerInner<TSocket> {
+    Write {
+        inner: tokio_io::io::WriteAll<TSocket, [u8; 32]>,
+    },
+    Flush {
+        inner: tokio_io::io::Flush<TSocket>,
+        ping_payload: [u8; 32],
+    },
+    Read {
+        inner: tokio_io::io::ReadExact<TSocket, [u8; 32]>,
+        ping_payload: [u8; 32],
+        started: Instant,
+    },
+    Shutdown {
+        inner: tokio_io::io::Shutdown<TSocket>,
+        ping_time: Duration,
+    },
 }
 
-impl<TSocket> PingListener<TSocket>
-where TSocket: AsyncRead + AsyncWrite
+impl<TSocket> Future for PingDialer<TSocket>
+where TSocket: AsyncRead + AsyncWrite,
 {
-    /// Call this when the ping listener needs to shut down. After this, the `Future` is guaranteed
-    /// to finish soon-ish.
-    #[inline]
-    pub fn shutdown(&mut self) {
-        self.state = PingListenerState::Closing;
-    }
-}
-
-impl<TSocket> Future for PingListener<TSocket>
-where TSocket: AsyncRead + AsyncWrite
-{
-    type Item = ();
-    type Error = IoError;
+    type Item = Duration;
+    type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
-            match mem::replace(&mut self.state, PingListenerState::Poisoned) {
-                PingListenerState::Listening => {
-                    match self.inner.poll() {
-                        Ok(Async::Ready(Some(payload))) => {
-                            debug!("Received ping (payload={:?}); sending back", payload);
-                            self.state = PingListenerState::Sending(payload.freeze())
-                        },
-                        Ok(Async::Ready(None)) => self.state = PingListenerState::Closing,
-                        Ok(Async::NotReady) => {
-                            self.state = PingListenerState::Listening;
-                            return Ok(Async::NotReady);
-                        },
-                        Err(err) => return Err(err),
+            let new_state = match self.inner {
+                PingDialerInner::Write { ref mut inner } => {
+                    let (socket, ping_payload) = try_ready!(inner.poll());
+                    PingDialerInner::Flush {
+                        inner: tokio_io::io::flush(socket),
+                        ping_payload,
                     }
                 },
-                PingListenerState::Sending(data) => {
-                    match self.inner.start_send(data) {
-                        Ok(AsyncSink::Ready) => self.state = PingListenerState::Flushing,
-                        Ok(AsyncSink::NotReady(data)) => {
-                            self.state = PingListenerState::Sending(data);
-                            return Ok(Async::NotReady);
-                        },
-                        Err(err) => return Err(err),
+                PingDialerInner::Flush { ref mut inner, ping_payload } => {
+                    let socket = try_ready!(inner.poll());
+                    let started = Instant::now();
+                    PingDialerInner::Read {
+                        inner: tokio_io::io::read_exact(socket, [0; 32]),
+                        ping_payload,
+                        started,
                     }
                 },
-                PingListenerState::Flushing => {
-                    match self.inner.poll_complete() {
-                        Ok(Async::Ready(())) => self.state = PingListenerState::Listening,
-                        Ok(Async::NotReady) => {
-                            self.state = PingListenerState::Flushing;
-                            return Ok(Async::NotReady);
-                        },
-                        Err(err) => return Err(err),
+                PingDialerInner::Read { ref mut inner, ping_payload, started } => {
+                    let (socket, obtained) = try_ready!(inner.poll());
+                    let ping_time = started.elapsed();
+                    if obtained != ping_payload {
+                        return Err(io::Error::new(io::ErrorKind::InvalidData,
+                            "Received ping payload doesn't match expected"));
+                    }
+                    PingDialerInner::Shutdown {
+                        inner: tokio_io::io::shutdown(socket),
+                        ping_time,
                     }
                 },
-                PingListenerState::Closing => {
-                    match self.inner.close() {
-                        Ok(Async::Ready(())) => return Ok(Async::Ready(())),
-                        Ok(Async::NotReady) => {
-                            self.state = PingListenerState::Closing;
-                            return Ok(Async::NotReady);
-                        },
-                        Err(err) => return Err(err),
-                    }
+                PingDialerInner::Shutdown { ref mut inner, ping_time } => {
+                    let _ = try_ready!(inner.poll());
+                    return Ok(Async::Ready(ping_time));
                 },
-                PingListenerState::Poisoned => panic!("Poisoned or errored PingListener"),
-            }
+            };
+
+            self.inner = new_state;
         }
     }
 }
 
-// Implementation of the `Codec` trait of tokio-io. Splits frames into groups of 32 bytes.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-struct Codec;
+/// Enum to merge the output of `Ping` for the dialer and listener.
+#[derive(Debug, Copy, Clone)]
+pub enum PingOutput {
+    /// Received a ping and sent back a pong.
+    Pong,
+    /// Sent a ping and received back a pong. Contains the ping time.
+    Ping(Duration),
+}
 
-impl Decoder for Codec {
-    type Item = BytesMut;
-    type Error = IoError;
-
+impl From<Duration> for PingOutput {
     #[inline]
-    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<BytesMut>, IoError> {
-        if buf.len() >= 32 {
-            Ok(Some(buf.split_to(32)))
-        } else {
-            Ok(None)
-        }
+    fn from(duration: Duration) -> PingOutput {
+        PingOutput::Ping(duration)
     }
 }
 
-impl Encoder for Codec {
-    type Item = Bytes;
-    type Error = IoError;
-
+impl From<()> for PingOutput {
     #[inline]
-    fn encode(&mut self, mut data: Bytes, buf: &mut BytesMut) -> Result<(), IoError> {
-        if !data.is_empty() {
-            let split = 32 * (1 + ((data.len() - 1) / 32));
-            buf.reserve(split);
-            buf.put(data.split_to(split));
-        }
-        Ok(())
+    fn from(_: ()) -> PingOutput {
+        PingOutput::Pong
     }
 }
 
@@ -323,7 +188,7 @@ mod tests {
     use tokio_tcp::{TcpListener, TcpStream};
     use super::Ping;
     use futures::{Future, Stream};
-    use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade};
+    use libp2p_core::upgrade;
 
     // TODO: rewrite tests with the MemoryTransport
 
@@ -337,54 +202,16 @@ mod tests {
             .into_future()
             .map_err(|(e, _)| e)
             .and_then(|(c, _)| {
-                Ping::<()>::default().upgrade_inbound(c.unwrap(), b"/ipfs/ping/1.0.0")
-            })
-            .flatten();
+                upgrade::apply_inbound(c.unwrap(), Ping::default()).map_err(|_| panic!())
+            });
 
         let client = TcpStream::connect(&listener_addr)
             .and_then(|c| {
-                Ping::<()>::default().upgrade_outbound(c, b"/ipfs/ping/1.0.0")
-            })
-            .and_then(|mut pinger| {
-                pinger.ping(());
-                pinger.into_future().map(|_| ()).map_err(|_| panic!())
+                upgrade::apply_outbound(c, Ping::default()).map_err(|_| panic!())
             })
             .map(|_| ());
 
         let mut runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.block_on(server.select(client).map_err(|_| panic!())).unwrap();
-    }
-
-    #[test]
-    fn multipings() {
-        // Check that we can send multiple pings in a row and it will still work.
-        let listener = TcpListener::bind(&"127.0.0.1:0".parse().unwrap()).unwrap();
-        let listener_addr = listener.local_addr().unwrap();
-
-        let server = listener
-            .incoming()
-            .into_future()
-            .map_err(|(e, _)| e)
-            .and_then(|(c, _)| {
-                Ping::<u32>::default().upgrade_inbound(c.unwrap(), b"/ipfs/ping/1.0.0")
-            })
-            .flatten();
-
-        let client = TcpStream::connect(&listener_addr)
-            .and_then(|c| {
-                Ping::<u32>::default().upgrade_outbound(c, b"/ipfs/ping/1.0.0")
-            })
-            .and_then(|mut pinger| {
-                for n in 0..20 {
-                    pinger.ping(n);
-                }
-                pinger.take(20)
-                    .collect()
-                    .map(|val| { assert_eq!(val, (0..20).collect::<Vec<_>>()); })
-                    .map_err(|_| panic!())
-            });
-
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
-        runtime.block_on(server.select(client)).unwrap_or_else(|_| panic!());
     }
 }

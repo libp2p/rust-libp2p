@@ -24,7 +24,7 @@ extern crate void;
 
 /// Small utility to check that a type implements `NetworkBehaviour`.
 #[allow(dead_code)]
-fn require_net_behaviour<T: libp2p::core::swarm::NetworkBehaviour<libp2p::core::topology::MemoryTopology>>() {}
+fn require_net_behaviour<T: libp2p::core::swarm::NetworkBehaviour>() {}
 
 // TODO: doesn't compile
 /*#[test]

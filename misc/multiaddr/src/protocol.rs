@@ -1,5 +1,6 @@
 use bs58;
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt, WriteBytesExt};
+use crate::{Result, Error};
 use data_encoding::BASE32;
 use multihash::Multihash;
 use std::{
@@ -11,7 +12,6 @@ use std::{
     str::{self, FromStr}
 };
 use unsigned_varint::{encode, decode};
-use {Result, Error};
 
 const DCCP: u32 = 33;
 const DNS4: u32 = 54;
@@ -320,7 +320,7 @@ impl<'a> Protocol<'a> {
 
     /// Turn this `Protocol` into one that owns its data, thus being valid for any lifetime.
     pub fn acquire<'b>(self) -> Protocol<'b> {
-        use Protocol::*;
+        use self::Protocol::*;
         match self {
             Dccp(a) => Dccp(a),
             Dns4(cow) => Dns4(Cow::Owned(cow.into_owned())),
@@ -351,7 +351,7 @@ impl<'a> Protocol<'a> {
 
 impl<'a> fmt::Display for Protocol<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use Protocol::*;
+        use self::Protocol::*;
         match self {
             Dccp(port) => write!(f, "/dccp/{}", port),
             Dns4(s) => write!(f, "/dns4/{}", s),

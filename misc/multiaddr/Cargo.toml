@@ -1,5 +1,6 @@
 [package]
 name = "parity-multiaddr"
+edition = "2018"
 authors = ["dignifiedquire <dignifiedquire@gmail.com>", "Parity Technologies <admin@parity.io>"]
 description = "Implementation of the multiaddr format"
 homepage = "https://github.com/libp2p/rust-libp2p"

@@ -21,8 +21,8 @@ use sha2::Digest;
 use tiny_keccak::Keccak;
 use unsigned_varint::{decode, encode};
 
-pub use errors::{DecodeError, DecodeOwnedError, EncodeError};
-pub use hashes::Hash;
+pub use self::errors::{DecodeError, DecodeOwnedError, EncodeError};
+pub use self::hashes::Hash;
 
 // Helper macro for encoding input into output using sha1, sha2, tiny_keccak, or blake2
 macro_rules! encode {
@@ -276,7 +276,7 @@ pub fn to_hex(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use {Hash, Multihash};
+    use crate::{Hash, Multihash};
 
     #[test]
     fn rand_generates_valid_multihash() {

@@ -30,8 +30,8 @@ use std::{
     result::Result as StdResult,
     str::FromStr
 };
-pub use errors::{Result, Error};
-pub use protocol::Protocol;
+pub use self::errors::{Result, Error};
+pub use self::protocol::Protocol;
 
 /// Representation of a Multiaddr.
 #[derive(PartialEq, Eq, Clone, Hash)]

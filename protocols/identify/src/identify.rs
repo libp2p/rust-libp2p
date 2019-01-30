@@ -21,11 +21,10 @@
 use crate::listen_handler::IdentifyListenHandler;
 use crate::periodic_id_handler::{PeriodicIdHandler, PeriodicIdHandlerEvent};
 use crate::protocol::{IdentifyInfo, IdentifySender, IdentifySenderFuture};
-use crate::topology::IdentifyTopology;
 use futures::prelude::*;
 use libp2p_core::protocols_handler::{ProtocolsHandler, ProtocolsHandlerSelect, ProtocolsHandlerUpgrErr};
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
-use libp2p_core::{Multiaddr, PeerId, either::EitherOutput};
+use libp2p_core::{Multiaddr, PeerId, PublicKey, either::EitherOutput};
 use smallvec::SmallVec;
 use std::{collections::HashMap, collections::VecDeque, io};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -38,6 +37,8 @@ pub struct Identify<TSubstream> {
     protocol_version: String,
     /// Agent version to send back to remotes.
     agent_version: String,
+    /// The public key of the local node. To report on the wire.
+    local_public_key: PublicKey,
     /// For each peer we're connected to, the observed address to send back to it.
     observed_addresses: HashMap<PeerId, Multiaddr>,
     /// List of senders to answer, with the observed multiaddr.
@@ -50,10 +51,11 @@ pub struct Identify<TSubstream> {
 
 impl<TSubstream> Identify<TSubstream> {
     /// Creates a `Identify`.
-    pub fn new(protocol_version: String, agent_version: String) -> Self {
+    pub fn new(protocol_version: String, agent_version: String, local_public_key: PublicKey) -> Self {
         Identify {
             protocol_version,
             agent_version,
+            local_public_key,
             observed_addresses: HashMap::new(),
             to_answer: SmallVec::new(),
             futures: SmallVec::new(),
@@ -62,16 +64,19 @@ impl<TSubstream> Identify<TSubstream> {
     }
 }
 
-impl<TSubstream, TTopology> NetworkBehaviour<TTopology> for Identify<TSubstream>
+impl<TSubstream> NetworkBehaviour for Identify<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
-    TTopology: IdentifyTopology,
 {
     type ProtocolsHandler = ProtocolsHandlerSelect<IdentifyListenHandler<TSubstream>, PeriodicIdHandler<TSubstream>>;
     type OutEvent = IdentifyEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
         IdentifyListenHandler::new().select(PeriodicIdHandler::new())
+    }
+
+    fn addresses_of_peer(&self, _: &PeerId) -> Vec<Multiaddr> {
+        Vec::new()
     }
 
     fn inject_connected(&mut self, peer_id: PeerId, endpoint: ConnectedPoint) {
@@ -124,7 +129,7 @@ where
 
     fn poll(
         &mut self,
-        params: &mut PollParameters<TTopology>,
+        params: &mut PollParameters,
     ) -> Async<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
@@ -132,12 +137,6 @@ where
         >,
     > {
         if let Some(event) = self.events.pop_front() {
-            // We intercept identified events in order to insert the addresses in the topology.
-            if let NetworkBehaviourAction::GenerateEvent(IdentifyEvent::Identified { ref peer_id, ref info, .. }) = event {
-                let iter = info.listen_addrs.iter().cloned();
-                params.topology().add_identify_discovered_addrs(peer_id, iter);
-            }
-
             return Async::Ready(event);
         }
 
@@ -150,7 +149,7 @@ where
                 .collect();
 
             let send_back_info = IdentifyInfo {
-                public_key: params.local_public_key().clone(),
+                public_key: self.local_public_key.clone(),
                 protocol_version: self.protocol_version.clone(),
                 agent_version: self.agent_version.clone(),
                 listen_addrs: params.listened_addresses().cloned().collect(),

@@ -63,6 +63,7 @@ mod either;
 mod error;
 mod map;
 mod select;
+mod transfer;
 
 use futures::future::Future;
 
@@ -72,7 +73,8 @@ pub use self::{
     either::EitherUpgrade,
     error::UpgradeError,
     map::{MapInboundUpgrade, MapOutboundUpgrade, MapInboundUpgradeErr, MapOutboundUpgradeErr},
-    select::SelectUpgrade
+    select::SelectUpgrade,
+    transfer::{write_one, WriteOne, read_one, ReadOne, read_one_then, ReadOneThen, ReadOneError, request_response, RequestResponse},
 };
 
 /// Types serving as protocol names.
