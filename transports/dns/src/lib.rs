@@ -246,7 +246,7 @@ where
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let ty = self.ty;
         let addrs = try_ready!(self.inner.poll().map_err(|error| {
-            let domain_name = self.name.take().unwrap_or(String::new());
+            let domain_name = self.name.take().unwrap_or_default();
             DnsErr::ResolveError { domain_name, error }
         }));
 
@@ -260,7 +260,7 @@ where
             });
         match addrs.next() {
             Some(a) => Ok(Async::Ready(a)),
-            None => Err(DnsErr::ResolveFail(self.name.take().unwrap_or(String::new())))
+            None => Err(DnsErr::ResolveFail(self.name.take().unwrap_or_default()))
         }
     }
 }

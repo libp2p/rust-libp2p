@@ -102,7 +102,7 @@ where
 
         if !self.nonce.is_empty() {
             let n = min(data_buf.len(), self.nonce.len());
-            if &data_buf[.. n] != &self.nonce[.. n] {
+            if data_buf[.. n] != self.nonce[.. n] {
                 return Err(SecioError::NonceVerificationFailed)
             }
             self.nonce.drain(.. n);

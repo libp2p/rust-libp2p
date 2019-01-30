@@ -191,6 +191,20 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         })
     };
 
+    // Build the list of statements to put in the body of `inject_dial_failure()`.
+    let inject_dial_failure_stmts = {
+        data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
+            if is_ignored(&field) {
+                return None;
+            }
+
+            Some(match field.ident {
+                Some(ref i) => quote!{ self.#i.inject_dial_failure(peer_id, addr, error); },
+                None => quote!{ self.#field_n.inject_dial_failure(peer_id, addr, error); },
+            })
+        })
+    };
+
     // Build the list of variants to put in the body of `inject_node_event()`.
     //
     // The event type is a construction of nested `#either_ident`s of the events of the children.
@@ -337,7 +351,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 #new_handler
             }
 
-            fn addresses_of_peer(&self, peer_id: &#peer_id) -> Vec<#multiaddr> {
+            fn addresses_of_peer(&mut self, peer_id: &#peer_id) -> Vec<#multiaddr> {
                 let mut out = Vec::new();
                 #(#addresses_of_peer_stmts);*
                 out
@@ -351,6 +365,11 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             #[inline]
             fn inject_disconnected(&mut self, peer_id: &#peer_id, endpoint: #connected_point) {
                 #(#inject_disconnected_stmts);*
+            }
+
+            #[inline]
+            fn inject_dial_failure(&mut self, peer_id: Option<&#peer_id>, addr: &#multiaddr, error: &dyn std::error::Error) {
+                #(#inject_dial_failure_stmts);*
             }
 
             #[inline]
