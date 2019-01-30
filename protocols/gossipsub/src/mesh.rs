@@ -33,21 +33,21 @@ pub struct Mesh { m: HashMap<TopicHash, Vec<PeerId>> }
 
 impl Mesh {
     /// Creates a new `Mesh`.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Mesh {
             m: HashMap::new(),
         }
     }
 
     /// Inserts a topic via it's `TopicHash` and grafted peers to the mesh.
-    pub fn insert(&mut self, k: TopicHash, v: Vec<PeerId>)
+    pub(crate) fn insert(&mut self, k: TopicHash, v: Vec<PeerId>)
         -> Option<Vec<PeerId>> {
         self.m.insert(k, v)
     }
 
     /// Gets all the peers that are grafted to a topic in the mesh, or returns
     /// an error if the topic is not in the mesh.
-    pub fn get_peers_from_topic(&self, th: &TopicHash)
+    pub(crate) fn get_peers_from_topic(&self, th: &TopicHash)
         -> GResult<Vec<PeerId>>
     {
         let th_str = th.clone().into_string();
@@ -62,10 +62,10 @@ impl Mesh {
 
     /// Gets a peer that is grafted to a topic in the mesh, or returns a
     /// `GError` if the peer or topic is not in the mesh.
-    pub fn get_peer_from_topic(&self, th: &TopicHash, p: &PeerId)
+    pub(crate) fn get_peer_from_topic(&self, th: TopicHash, p: PeerId)
         -> GResult<PeerId> {
-        let get_result = self.get_peers_from_topic(th).map(|peers| {
-            match peers.into_iter().find(|&peer| &peer == p) {
+        let get_result = self.get_peers_from_topic(&th).map(|peers| {
+            match peers.into_iter().find(|peer| peer == &p) {
                 Some(peer) => return Ok(peer),
                 None => {
                     let th_str = th.clone().into_string();
@@ -83,9 +83,14 @@ impl Mesh {
         }
     }
 
-    pub fn get_mut(&mut self, ) {}
+    // Graft
+    pub(crate) fn add_peer(&mut self, th: TopicHash, p: PeerId) {
+        self.m.entry(th).and_modify(|ps| ps.push(p));
+    }
 
-    pub fn remove(&mut self, th: &TopicHash) -> GResult<Vec<PeerId>>
+    // pub fn get_mut(&mut self, ) {}
+
+    pub(crate) fn remove(&mut self, th: &TopicHash) -> GResult<Vec<PeerId>>
     {
         if let Some(peers) = self.m.remove(th) {
             Ok(peers)
@@ -97,10 +102,11 @@ impl Mesh {
         }
     }
 
-    pub fn remove_peer_from_topic(&mut self, th: &TopicHash,
-        p: &PeerId) -> GResult<()>
+    // Prune with handling
+    pub(crate) fn remove_peer_from_topic(&mut self, th: &TopicHash,
+        p: PeerId) -> GResult<()>
     {
-        let peer_str = &(*p.to_base58());
+        let peer_str = p.to_base58();
         let th_str = th.clone().into_string();
         let no_t = GError::TopicNotInMesh{t_hash: th_str.clone(),
                 err: "Tried to remove the topic with topic hash '{&th_str}' \
@@ -110,11 +116,13 @@ impl Mesh {
                 // TODO: use remove_item when stable:
                 // https://github.com/rust-lang/rust/issues/40062
                 for (pos, peer) in peers.clone().iter().enumerate() {
-                    if peer == p {
+                    if peer.clone() == p {
+                        // prune
                         peers.remove(pos);
                         // The same peer ID cannot exist more than
                         // once in the vector, since we check if the peer
-                        // already exists before adding it in `layer::graft_many`.
+                        // already exists before adding it in
+                        // the graft methods.
                         return Ok(());
                     }
                 }

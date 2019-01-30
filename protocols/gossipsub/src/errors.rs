@@ -7,7 +7,9 @@ use std::{
     io,
 };
 
-custom_error!{pub GError
+custom_error!{
+    // The error type for Gossipsub.
+    pub GError
     Io{source: io::Error} = "Input/output error",
     // Note that when combined with the err arguments passed elsewhere e.g. in mesh and layer, these are repetitive, but avoids ambiguity.
     NotSubscribedToTopic{t_hash: String, peer_id: String, err: String}
@@ -24,6 +26,9 @@ custom_error!{pub GError
     InvalidPeerId{from_data: String}
         = "The from field '{from_data}' of an instance of rpc_proto::Message \
         could not be converted to a valid peer ID.",
+    // UsedLocalPeerAsRemotePeer{l_peer: String, r_peer: String, err: String}
+    //     = "Tried to incorrectly use the local peer {l_peer} as the remote \
+    //     peer {r_peer}.",
     // NotConnectedToPeer{peer: String, err: String}
     //     = "The remote peer {peer} was not found in the \
     //     `connected_peers.gossipsub` of the local peer.",
@@ -31,20 +36,26 @@ custom_error!{pub GError
     //     = "The local peer is not connected to enough peers.",
 }
 
+/// The result type to use for gossipsub.
 pub type Result<T> = std::result::Result<T, GError>;
 
+/// The errors returned with graft methods as an Ok() for the caller to
+/// handle.
 pub struct GraftErrors {
-    // Topics that remote peers are not subscribed to (they need to be
-    // as a prerequisite to grafting them).
-    pub(crate) topics_not_subscribed: Option<HashMap<PeerId, TopicHash>>,
+    /// Topics that remote peers are not subscribed to (they need to be
+    /// as a prerequisite to grafting them).
+    pub topics_not_subscribed: Option<HashMap<PeerId, TopicHash>>,
     // Topics that are not in the local peer's mesh view.
-    pub(crate) topics_not_in_mesh: Option<Vec<TopicHash>>,
-    // Remote peers that are not connected to the local peer.
-    pub(crate) r_peers_not_connected: Option<Vec<PeerId>>,
-    // Topics that the local peer is already grafted to.
-    pub(crate) topics_already_grafted: Option<Vec<TopicHash>>,
-    // Whether any of the above are a Some(value).
-    pub(crate) has_errors: bool,
+    pub topics_not_in_mesh: Option<Vec<TopicHash>>,
+    /// Remote peers that are not connected to the local peer.
+    pub r_peers_not_connected: Option<Vec<PeerId>>,
+    /// Topics that the local peer is already grafted to.
+    pub topics_already_grafted: Option<Vec<TopicHash>>,
+    /// Count of how many times tried to use the local peer as a remote peer,
+    /// if any.
+    pub lp_as_rp: Option<u32>,
+    /// Whether any of the above are a Some(value).
+    pub has_errors: bool,
 }
 
 // pub(crate) struct GraftErrorsForPeer {
@@ -58,6 +69,7 @@ impl GraftErrors {
             topics_not_in_mesh: None,
             r_peers_not_connected: None,
             topics_already_grafted: None,
+            lp_as_rp: None,
             has_errors: false,
         }
     }
@@ -123,4 +135,35 @@ impl GraftErrors {
     //     self.topics_not_in_mesh = Some(topics_not_in_mesh);
     //     self.topics_not_subscribed = Some(topics_not_subscribed);
     // }
+}
+
+/// Errors to return as an optional Ok value with prune methods.
+pub struct PruneErrors {
+    // Topics that are not in the local peer's mesh view.
+    pub topics_not_in_mesh: Option<Vec<TopicHash>>,
+    /// Contains remote peers with a topic that had been tried to prune,
+    /// but are not grafted.
+    pub ps_ts_not_grafted: Option<HashMap<TopicHash, PeerId>>,
+    /// Count of how many times tried to use the local peer as a remote peer,
+    /// if any. Checked before ps_ts_not_grafted.
+    pub lp_as_rp: Option<u32>,
+    /// Whether any of the above are a Some(value).
+    pub has_errors: bool,
+}
+
+impl PruneErrors {
+    pub fn new() -> Self {
+        PruneErrors {
+            topics_not_in_mesh: None,
+            ps_ts_not_grafted: None,
+            lp_as_rp: None,
+            has_errors: false,
+        }
+    }
+    pub fn has_errors(&self) -> bool {
+        if self.has_errors == true {
+            return true;
+        }
+        return false;
+    }
 }
