@@ -282,7 +282,7 @@ where
         KademliaHandler::dial_and_listen()
     }
 
-    fn addresses_of_peer(&self, peer_id: &PeerId) -> Vec<Multiaddr> {
+    fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
         self.kbuckets
             .get(peer_id)
             .map(|l| l.iter().cloned().collect::<Vec<_>>())
