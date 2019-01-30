@@ -41,7 +41,7 @@ impl<E> UpgradeError<E> {
         }
     }
 
-    pub fn from_err<T>(self) -> UpgradeError<T>
+    pub fn into_err<T>(self) -> UpgradeError<T>
     where
         T: From<E>
     {
