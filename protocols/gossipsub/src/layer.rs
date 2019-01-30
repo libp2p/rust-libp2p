@@ -323,7 +323,7 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
         let mut rem_peers_not_connected = Vec::new();
         let mut topics_not_subscribed_to = HashMap::new();
         let l_peer = &self.local_peer_id;
-        let l_peer_str = l_peer.to_base58();
+        // let l_peer_str = l_peer.to_base58();
         let m = &mut self.mesh;
 
         for (i, t_hash) in t_hashes_v.clone().iter().enumerate() {
@@ -466,9 +466,63 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
             .map(|th| th.as_ref().clone()).collect();
         let mut topics_not_in_mesh = Vec::new();
         let mut graft_errs = GraftErrors::new();
-        let mut ts_already_grafted = Vec::new();
+        let mut ts_not_grafted = Vec::new();
         let mut rem_peers_not_connected = Vec::new();
         let mut topics_not_subscribed_to = HashMap::new();
+        let l_peer = &self.local_peer_id;
+        // let l_peer_str = l_peer.to_base58();
+        let m = &mut self.mesh;
+
+        for (i, t_hash) in t_hashes_v.clone().iter().enumerate() {
+            // let th_str = t_hash.to_string();
+            match m.remove(t_hash) {
+                Ok(mut ps) => {
+                    match m.get_peer_from_topic(t_hash, l_peer) {
+                        Ok(_peer)
+                        => {
+                            // do nothing
+                        }
+                        // {ts_already_grafted
+                        //         .push(t_hash.clone());},
+                            // return Err(GError::AlreadyGrafted{
+                            // t_hash: th_str, peer_id: l_peer_str,
+                            // err: "".to_string()}),
+                        Err(GError::NotGraftedToTopic{t_hash: _th_str,
+                            peer_id: _peer_str, err: _err})
+                        => {
+                            // Need to have a local mesh view of the topic
+                            // in order to be able to prune 
+                            ts_not_grafted.push(t_hash.clone());
+                        }
+                        // {
+                        //         ps.push(l_peer.clone());
+                        //         m.insert(t_hash.clone(), ps);
+                        // },
+                        // returned from get_peers_from_topic within
+                        // get_peer_from_topic.
+                    // We return the topics that are not in the mesh,
+                    // rather than an error, since that would prevent grafting
+                    // other graftable topics.
+                    // return Err(GError::TopicNotInMesh{t_hash: _t_hash,
+                    // err: "{err} The local peer needs to `join` the topic \
+                    // (adding it to the mesh with TARGET_MESH_DEGREE (\
+                    // {TARGET_MESH_DEGREE}) peers before it can graft \
+                    // remote peers to the topic, which needs to be in the \
+                    // local mesh view".into()}),
+                        Err(GError::TopicNotInMesh{t_hash: _t_hash,
+                            err})
+                        => {
+                            topics_not_in_mesh.push(t_hash.clone());
+                            t_hashes_v.remove(i);
+                        },
+                        // Shouldn't happen, just for the compiler.
+                        Err(err) => {return Err(err);}
+                    }
+                },
+                // Shouldn't happen.
+                Err(err) => {return Err(err);},
+            }
+        }
         for r_peer in r_peers_v {
             let r_peer_str = r_peer.to_base58();
             assert!(r_peer != self.local_peer_id);
@@ -479,7 +533,6 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
             }
         }
     }
-
     /// gossip: this notifies the peer that the input messages
     /// were recently seen and are available on request.
     /// Checks the seen set and requests unknown messages with an IWANT

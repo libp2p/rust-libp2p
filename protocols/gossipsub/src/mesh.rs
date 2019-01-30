@@ -65,17 +65,17 @@ impl Mesh {
     pub fn get_peer_from_topic(&self, th: &TopicHash, p: &PeerId)
         -> GResult<PeerId> {
         let get_result = self.get_peers_from_topic(th).map(|peers| {
-            for peer in peers {
-                if peer == *p {
-                    return Ok(peer);
+            match peers.into_iter().find(|&peer| &peer == p) {
+                Some(peer) => return Ok(peer),
+                None => {
+                    let th_str = th.clone().into_string();
+                    Err(GError::NotGraftedToTopic{t_hash: th_str,
+                        peer_id: p.clone().to_base58(),
+                        err: "Tried to get peer '{p}' but it was not found \
+                        in the peers that are grafted to the topic with topic hash \
+                        '{&th_str}'.".to_string()})
                 }
             }
-            let th_str = th.clone().into_string();
-            Err(GError::NotGraftedToTopic{t_hash: th_str,
-                peer_id: p.clone().to_base58(),
-                err: "Tried to get peer '{p}' but it was not found \
-                in the peers that are grafted to the topic with topic hash \
-                '{&th_str}'.".to_string()})
         });
         match get_result {
             Ok(result) => result,
