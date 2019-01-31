@@ -722,6 +722,7 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
     /// It tries to notifies the peers in the
     /// mesh entry for the topic (`<TopicHash, Vec<PeerId>>`) via
     /// `prune_peers()` and subsequently removes the entry.
+    pub fn foo() {}
     // pub fn leave_topics(&mut self, topic_hashes: impl IntoIterator<
     //     Item = impl AsRef<TopicHash>>) -> GResult<Option<Vec<TopicHash>>> {
         // match self.prune_peers_from_topics(topic_hashes) {}
