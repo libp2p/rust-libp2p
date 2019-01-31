@@ -986,8 +986,9 @@ where
         match self.active_nodes.poll() {
             Async::NotReady => return Async::NotReady,
             Async::Ready(CollectionEvent::NodeReached(reach_event)) => {
-                out_event = handle_node_reached(&mut self.reach_attempts, reach_event);
-                action = Default::default();
+                let (a, e) = handle_node_reached(&mut self.reach_attempts, reach_event);
+                action = a;
+                out_event = e;
             }
             Async::Ready(CollectionEvent::ReachError { id, error, handler }) => {
                 let (a, e) = handle_reach_error(&mut self.reach_attempts, id, error, handler);
@@ -1031,6 +1032,18 @@ where
             self.start_dial_out(peer_id, handler, first, rest);
         }
 
+        if let Some(interrupt) = action.interrupt {
+            // TODO: improve proof or remove; this is too complicated right now
+            self.active_nodes
+                .interrupt(interrupt)
+                .expect("interrupt is guaranteed to be gathered from `out_reach_attempts`;
+                         we insert in out_reach_attempts only when we call \
+                         active_nodes.add_reach_attempt, and we remove only when we call \
+                         interrupt or when a reach attempt succeeds or errors; therefore the \
+                         out_reach_attempts should always be in sync with the actual \
+                         attempts; QED");
+        }
+
         Async::Ready(out_event)
     }
 }
@@ -1040,12 +1053,14 @@ where
 #[must_use]
 struct ActionItem<THandler, TPeerId> {
     start_dial_out: Option<(TPeerId, THandler, Multiaddr, Vec<Multiaddr>)>,
+    interrupt: Option<ReachAttemptId>,
 }
 
 impl<THandler, TPeerId> Default for ActionItem<THandler, TPeerId> {
     fn default() -> Self {
         ActionItem {
             start_dial_out: None,
+            interrupt: None,
         }
     }
 }
@@ -1059,7 +1074,7 @@ impl<THandler, TPeerId> Default for ActionItem<THandler, TPeerId> {
 fn handle_node_reached<'a, TTrans, TMuxer, TInEvent, TOutEvent, THandler, THandlerErr, TPeerId>(
     reach_attempts: &mut ReachAttempts<TPeerId>,
     event: CollectionReachEvent<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TPeerId>, THandlerErr, TPeerId>,
-) -> RawSwarmEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TPeerId>
+) -> (ActionItem<THandler, TPeerId>, RawSwarmEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TPeerId>)
 where
     TTrans: Transport<Output = (TPeerId, TMuxer)> + Clone,
     TMuxer: StreamMuxer + Send + Sync + 'static,
@@ -1077,17 +1092,18 @@ where
         .position(|i| i.0 == event.reach_attempt_id())
     {
         let (_, opened_endpoint) = reach_attempts.other_reach_attempts.swap_remove(in_pos);
+        let has_dial_prio = has_dial_prio(&reach_attempts.local_peer_id, event.peer_id());
 
         // If we already have an active connection to this peer, a priority system comes into play.
         // If we have a lower peer ID than the incoming one, we drop an incoming connection.
-        if event.would_replace() && has_dial_prio(&reach_attempts.local_peer_id, event.peer_id()) {
+        if event.would_replace() && has_dial_prio {
             if let Some(ConnectedPoint::Dialer { .. }) = reach_attempts.connected_points.get(event.peer_id()) {
                 if let ConnectedPoint::Listener { listen_addr, send_back_addr } = opened_endpoint {
-                    return RawSwarmEvent::IncomingConnectionError {
+                    return (Default::default(), RawSwarmEvent::IncomingConnectionError {
                         listen_addr,
                         send_back_addr,
                         error: IncomingError::DeniedLowerPriority,
-                    };
+                    });
                 }
             }
         }
@@ -1095,15 +1111,27 @@ where
         // Set the endpoint for this peer.
         let closed_endpoint = reach_attempts.connected_points.insert(event.peer_id().clone(), opened_endpoint.clone());
 
-        // We keep the current outgoing attempt because it may already have succeeded without us
-        // knowing. It is possible that the remote has already closed its ougoing attempt because
-        // it sees our outgoing attempt as a success.
-        // However we cancel any further multiaddress to attempt.
-        // TODO: cancel if we don't have dial priority? we should write tests first
-        if let Some(attempt) = reach_attempts.out_reach_attempts.get_mut(&event.peer_id()) {
-            debug_assert_ne!(attempt.id, event.reach_attempt_id());
-            attempt.next_attempts.clear();
-        }
+        // If we have dial priority, we keep the current outgoing attempt because it may already
+        // have succeeded without us knowing. It is possible that the remote has already closed
+        // its ougoing attempt because it sees our outgoing attempt as a success.
+        // However we cancel any further multiaddress to attempt in any situation.
+        let action = if has_dial_prio {
+            if let Some(attempt) = reach_attempts.out_reach_attempts.get_mut(&event.peer_id()) {
+                debug_assert_ne!(attempt.id, event.reach_attempt_id());
+                attempt.next_attempts.clear();
+            }
+            ActionItem::default()
+        } else {
+            if let Some(attempt) = reach_attempts.out_reach_attempts.remove(&event.peer_id()) {
+                debug_assert_ne!(attempt.id, event.reach_attempt_id());
+                ActionItem {
+                    interrupt: Some(attempt.id),
+                    .. Default::default()
+                }
+            } else {
+                ActionItem::default()
+            }
+        };
 
         let (outcome, peer_id) = event.accept();
         if outcome == CollectionNodeAccept::ReplacedExisting {
@@ -1112,13 +1140,13 @@ where
                          remove only when a connection is closed; the underlying API is \
                          guaranteed to always deliver a connection closed message after it has \
                          been opened, and no two closed messages; QED");
-            return RawSwarmEvent::Replaced {
+            return (action, RawSwarmEvent::Replaced {
                 peer_id,
                 endpoint: opened_endpoint,
                 closed_endpoint,
-            };
+            });
         } else {
-            return RawSwarmEvent::Connected { peer_id, endpoint: opened_endpoint };
+            return (action, RawSwarmEvent::Connected { peer_id, endpoint: opened_endpoint });
         }
     }
 
@@ -1150,13 +1178,13 @@ where
                         remove only when a connection is closed; the underlying API is guaranteed \
                         to always deliver a connection closed message after it has been opened, \
                         and no two closed messages; QED");
-            return RawSwarmEvent::Replaced {
+            return (Default::default(), RawSwarmEvent::Replaced {
                 peer_id,
                 endpoint: opened_endpoint,
                 closed_endpoint,
-            };
+            });
         } else {
-            return RawSwarmEvent::Connected { peer_id, endpoint: opened_endpoint };
+            return (Default::default(), RawSwarmEvent::Connected { peer_id, endpoint: opened_endpoint });
         }
     }
 
