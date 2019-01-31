@@ -3,7 +3,8 @@ use errors::{GError, Result as GResult, GraftErrors, PruneErrors};
 use handler::GossipsubHandler;
 use mcache::MCache;
 use mesh::Mesh;
-use message::{ControlIHave, ControlIWant, ControlMessage, GMessage,
+use message::{ControlGraft, ControlIHave, ControlIWant, ControlMessage,
+    GMessage,
     GossipsubRpc, GossipsubSubscription, GossipsubSubscriptionAction,
     GOutEvents, MsgHash, MsgMap};
 use peers::Peers;
@@ -188,7 +189,7 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
     /// a message ID.
     ///
     /// > **Note**: Doesn't do anything if we're not subscribed to the topic.
-    pub fn publish(&mut self, topic_hash: impl Into<TopicHash>,
+    pub fn publish_topic(&mut self, topic_hash: impl Into<TopicHash>,
         data: impl Into<Vec<u8>>,
         control: Option<ControlMessage>,
         msg_id: bool) {
@@ -202,7 +203,7 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
     /// topics.
     //
     // Optionally add a message ID.
-    pub fn publish_many(&mut self,
+    pub fn publish_topics(&mut self,
         topic_hashes: impl IntoIterator<Item = impl Into<TopicHash>>,
         data: impl Into<Vec<u8>>,
         control: Option<ControlMessage>,
@@ -272,12 +273,12 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
     /// This notifies the peer that it has been added to the local mesh view.
     /// Returns true if the graft succeeded. Returns false if we were
     /// already grafted.
-    pub fn graft(
+    pub fn graft_peer_to_topic(
         &mut self,
         r_peer: impl AsRef<PeerId>,
         t_hash: impl AsRef<TopicHash>)
         -> GResult<Option<GraftErrors>> {
-        self.graft_peers_many(iter::once(r_peer), iter::once(t_hash))
+        self.graft_peers_to_topics(iter::once(r_peer), iter::once(t_hash))
     }
 
     /// Tries to grafts a remote peer to multiple topics.
@@ -287,25 +288,25 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
     /// to (the first
     /// returned vector) or that aren't in the mesh (the second returned
     /// vector). For the latter case, the peer must first `join()` the topic.
-    pub fn graft_many(&mut self, r_peer: impl AsRef<PeerId>,
+    pub fn graft_peer_to_topics(&mut self, r_peer: impl AsRef<PeerId>,
         t_hashes: impl IntoIterator<Item = impl AsRef<TopicHash>>)
         -> GResult<Option<GraftErrors>> {
-        self.graft_peers_many(iter::once(r_peer), t_hashes)
+        self.graft_peers_to_topics(iter::once(r_peer), t_hashes)
     }
 
     /// Tries to graft peers to a topic.
-    pub fn graft_peers(&mut self,
+    pub fn graft_peers_to_topic(&mut self,
         r_peers: impl IntoIterator<Item = impl AsRef<PeerId>>,
         t_hash: impl AsRef<TopicHash>
     ) -> GResult<Option<GraftErrors>> {
-        self.graft_peers_many(r_peers, iter::once(t_hash))
+        self.graft_peers_to_topics(r_peers, iter::once(t_hash))
     }
 
     /// Tries to graft peers to many topics.
     ///
     /// ## Errors
     /// Errors, if any, are returned in an `Ok(Some(GraftErrors))`.
-    pub fn graft_peers_many(&mut self,
+    pub fn graft_peers_to_topics(&mut self,
         // r_peers: Vec<&PeerId>,
         r_peers: impl IntoIterator<Item = impl AsRef<PeerId>>,
         // t_hashes: Vec<TopicHash>
@@ -354,7 +355,18 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
                         t_hashes_v.remove(i);
                     } else {
                         // Graft
+
+                        // Add remote to the topic in the local peer's mesh.
                         m.add_peer(t_hash.clone(), (&r_peer).clone());
+
+                        // Notify remote peer
+                        let ctrl = ControlMessage::new();
+                        let graft = ControlGraft::new_with_thash(
+                            t_hash.clone());
+                        ctrl.graft.push(graft);
+                        let grpc = GossipsubRpc::new();
+                        grpc.control = ctrl;
+                        self.inject_node_event(self.local_peer_id, grpc);
                     }
                 }
             } else {
@@ -387,32 +399,34 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
 
     /// Tries to prune a remote peer from a topic.
     ///
-    /// Convenience function using `prune_peers_many()`.
-    pub fn prune(&mut self,
+    /// Convenience function using `prune_peers_from_topics()`.
+    pub fn prune_peer_from_topic(&mut self,
         r_peer: impl AsRef<PeerId>,
-        t_hash: impl AsRef<TopicHash> + Clone)
-        -> GResult<Option<PruneErrors>> {
-        self.prune_peers_many(iter::once(r_peer), iter::once(t_hash))
+        t_hash: &mut (impl AsRef<TopicHash>))
+    -> GResult<Option<PruneErrors>> {
+        self.prune_peers_from_topics(iter::once(r_peer),
+            &mut iter::once(t_hash))
     }
 
     /// Tries to prune a peer from multiple topics.
     ///
     /// Note that this only works if the peer is grafted to such topics.
-    pub fn prune_many(&mut self, r_peer: impl AsRef<PeerId>,
-        t_hashes: impl IntoIterator<Item = impl AsRef<TopicHash>> + Clone)
-        -> GResult<Option<PruneErrors>> {
-        self.prune_peers_many(iter::once(r_peer), t_hashes)
+    pub fn prune_peer_from_topics(&mut self, r_peer: impl AsRef<PeerId>,
+        t_hashes: &mut (impl IntoIterator<
+            Item = impl AsRef<TopicHash>>))
+    -> GResult<Option<PruneErrors>> {
+        self.prune_peers_from_topics(iter::once(r_peer), t_hashes)
     }
 
     /// Tries to prunes peers from a single topic.
     ///
-    /// Convenience function using `prune_peers_many()`.
-    pub fn prune_peers(
+    /// Convenience function using `prune_peers_from_topics()`.
+    pub fn prune_peers_from_topic(
         &mut self,
         r_peers: impl IntoIterator<Item = impl AsRef<PeerId>>,
-        t_hash: impl AsRef<TopicHash> + Clone
+        t_hash: &mut (impl AsRef<TopicHash>)
     ) -> GResult<Option<PruneErrors>> {
-        self.prune_peers_many(r_peers, iter::once(t_hash))
+        self.prune_peers_from_topics(r_peers, &mut iter::once(t_hash))
     }
 
     /// Tries to prune peers from many topics.
@@ -426,14 +440,15 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
     /// as a value.
     /// - If a local peer is passed as an argument, an error is returned with
     /// a count of how many times it is passed.
-    pub fn prune_peers_many(
+    pub fn prune_peers_from_topics(
         &mut self,
         r_peers: impl IntoIterator<Item = impl AsRef<PeerId>>,
-        t_hashes: impl IntoIterator<Item = impl AsRef<TopicHash>> + Clone
+        t_hashes: &mut (impl IntoIterator<
+            Item = impl AsRef<TopicHash>>)
     ) -> GResult<Option<PruneErrors>> {
         let r_peers_v: Vec<PeerId> = r_peers.into_iter()
             .map(|p| p.as_ref().clone()).collect();
-        let mut t_hashes_v: Vec<TopicHash> = t_hashes.clone().into_iter()
+        let mut t_hashes_v: Vec<TopicHash> = t_hashes.into_iter()
             .map(|th| th.as_ref().clone()).collect();
         let mut topics_not_in_mesh = Vec::new();
         let mut prune_errs = PruneErrors::new();
@@ -443,8 +458,7 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
         let m = &mut self.mesh;
 
         // Like graft, first check that the topic is in the mesh and handle.
-        for (i, t_hash) in t_hashes_v.clone().iter().enumerate() {
-            // let th_str = t_hash.to_string();
+        for (i, t_hash) in t_hashes_v.iter().enumerate() {
             match m.remove(t_hash) {
                 Ok(mut ps) => {
                     // All good, proceed with pruning.
@@ -452,7 +466,7 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
                 Err(GError::TopicNotInMesh{t_hash: _t_hash, err}) => {
                     // The topic needs to be in the local peer's mesh view
                     // in order to be able to prune peers from this topic.
-                    topics_not_in_mesh.push(t_hash.clone());
+                    topics_not_in_mesh.push(*t_hash);
                     t_hashes_v.remove(i);
                 },
                 // Shouldn't happen, just for the compiler.
@@ -461,14 +475,13 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
         }
         let mut lp_as_rp_count = 0;
         for r_peer in r_peers_v {
-            // let r_peer_str = r_peer.to_base58();
             if r_peer == self.local_peer_id {
                 lp_as_rp_count += 1;
                 prune_errs.lp_as_rp = Some(lp_as_rp_count);
                 prune_errs.has_errors = true;
             }
-            for t_hash in t_hashes.clone() {
-                let thr = t_hash.as_ref();
+            for t_hash in t_hashes_v {
+                let thr = &t_hash;
                 match m.remove_peer_from_topic(thr, r_peer.clone()) {
                     Ok(()) => {},
                     Err(GError::NotGraftedToTopic{..}) => {
@@ -488,6 +501,51 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
         }
         if !ps_ts_not_grafted.is_empty() {
             prune_errs.ps_ts_not_grafted = Some(ps_ts_not_grafted);
+            prune_errs.has_errors = true;
+        }
+        if prune_errs.has_errors() {
+            return Ok(Some(prune_errs));
+        } else {
+            return Ok(None);
+        }
+    }
+
+    /// Prunes all peers from a topic.
+    ///
+    /// Similar in implementation to `prune_peers_from_topics`. Used in
+    /// `leave_topics`.
+    pub fn prune_all_peers_from_topics(&mut self, topic_hashes: impl
+        IntoIterator<Item = impl AsRef<TopicHash>>)
+    -> GResult<Option<PruneErrors>> {
+        let mut t_hashes_v: Vec<TopicHash> = topic_hashes.into_iter()
+            .map(|th| th.as_ref().clone()).collect();
+        let m = &mut self.mesh;
+        let mut topics_not_in_mesh = Vec::new();
+        let mut prune_errs = PruneErrors::new();
+        // The same as `prune_peers_from_topics()` , first check that the
+        // topic is in the mesh and handle.
+        // You could move this duplication to a separate function, but AIUI
+        // you'd have to pass the above parameters to it, so it wouldn't save
+        // much.
+        for (i, t_hash) in t_hashes_v.iter().enumerate() {
+            match m.remove(t_hash) {
+                Ok(mut ps) => {
+                    // All good, proceed with pruning.
+
+                },
+                Err(GError::TopicNotInMesh{t_hash: _t_hash, err}) => {
+                    // The topic needs to be in the local peer's mesh view
+                    // in order to be able to prune peers from this topic.
+                    topics_not_in_mesh.push(*t_hash);
+                    t_hashes_v.remove(i);
+                },
+                // Shouldn't happen, just for the compiler.
+                Err(err) => {return Err(err);},
+            }
+        }
+        if !topics_not_in_mesh.is_empty() {
+            prune_errs.topics_not_in_mesh
+                = Some(topics_not_in_mesh);
             prune_errs.has_errors = true;
         }
         if prune_errs.has_errors() {
@@ -530,21 +588,21 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
         Ok((return_msgs, not_found))
     }
 
-    /// Joins the peer to a single topic as a singular iteration of
-    /// `join_many()`.
+    /// Joins the local peer to a single topic as a singular iteration of
+    /// `join_topics()`.
     pub fn join(&mut self, topic_hash: impl AsRef<TopicHash>+Clone)
         -> GResult<Option<Vec<TopicHash>>> {
-        self.join_many(&mut iter::once(topic_hash))
+        self.join_topics(&mut iter::once(topic_hash))
     }
 
-    /// Joins the peer to many topics.
+    /// Joins the local peer to many topics.
     ///
     /// If a topic is not joined due to insufficient peers, after trying to
     /// select them first from the fanout of a topic and then in the local
     /// peer's connected peers that are subscribed to a topic, it returns its
     /// hash. If a topic is not in the local mesh view, it still tries to join
     /// via connected peers that are subscribed to the topic.
-    pub fn join_many(&mut self,
+    pub fn join_topics(&mut self,
         topic_hashes: &mut(impl IntoIterator<Item = impl AsRef<TopicHash> + Clone>+ Clone))
         -> GResult<Option<Vec<TopicHash>>> {
         let mut topics_not_joined = Vec::new();
@@ -556,14 +614,6 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
             let mut peer_count = 0;
             let mut joined = false;
             let mut peers_to_add = Vec::new();
-            // has compiler errors
-            // let pls = PeerLoopState {
-            //     peers_to_add: peers_to_add,
-            //     peer_count: peer_count,
-            //     joined: joined,
-            //     th: th,
-            //     topic_hash: topic_hash,
-            // }
             match fanout_peers {
                 Ok(fanout_peers) => {
                     self.select_fanout_peers(fanout_peers,
@@ -613,10 +663,7 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
         // control message.
         if *peer_count == TARGET_MESH_DEGREE {
             self.mesh.insert(th.clone(), peers_to_add.clone());
-            self.graft_peers(peers_to_add, topic_hash);
-            // for peer in &peers_to_add {
-            //     self.graft(&peer, (&topic_hash).clone());
-            // }
+            self.graft_peers_to_topic(peers_to_add, topic_hash);
             *joined = true;
         }
         return (*peer_count, *joined);
@@ -665,14 +712,43 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
         }
     }
 
-    pub fn leave(&mut self, topic: impl AsRef<TopicHash>) {
-
+    /// Tries to make a peer leave a topic.
+    pub fn leave_topic(&mut self, topic: impl AsRef<TopicHash>) {
+        //
     }
 
-    pub fn leave_many(&self, topics: impl IntoIterator<
-        Item = impl AsRef<TopicHash>>) {
-
-    }
+    /// Makes the local peer try to leave topics.
+    ///
+    /// It tries to notifies the peers in the
+    /// mesh entry for the topic (`<TopicHash, Vec<PeerId>>`) via
+    /// `prune_peers()` and subsequently removes the entry.
+    // pub fn leave_topics(&mut self, topic_hashes: impl IntoIterator<
+    //     Item = impl AsRef<TopicHash>>) -> GResult<Option<Vec<TopicHash>>> {
+        // match self.prune_peers_from_topics(topic_hashes) {}
+        // let mut t_hashes_v: Vec<TopicHash> = topic_hashes.into_iter()
+        //     .map(|th| th.as_ref().clone()).collect();
+        // let m = &mut self.mesh;
+        // let mut topics_not_in_mesh = Vec::new();
+        // // Check the topic is in the mesh.
+        // for (i, t_hash) in t_hashes_v.clone().iter().enumerate() {
+        //     match m.remove(t_hash) {
+        //         Ok(mut ps) => {
+        //             self.prune_peers(ps, (*t_hash));
+        //         },
+        //         Err(GError::TopicNotInMesh{t_hash: _t_hash, err}) => {
+        //             topics_not_in_mesh.push(t_hash.clone());
+        //             t_hashes_v.remove(i);
+        //         },
+        //         // Shouldn't happen, just for the compiler.
+        //         Err(err) => {return Err(err);},
+        //     }
+        // }
+        // if !topics_not_in_mesh.is_empty() {
+        //     return Ok(Some(topics_not_in_mesh));
+        // } else {
+        //     return Ok(None);
+        // }
+    // }
 }
 
 impl<'a, TSubstream, TTopology> NetworkBehaviour<TTopology> for

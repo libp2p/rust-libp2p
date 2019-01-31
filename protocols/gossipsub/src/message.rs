@@ -467,7 +467,7 @@ pub struct ControlMessage {
 }
 
 impl ControlMessage {
-    fn new() -> Self {
+    pub fn new() -> Self {
         ControlMessage {
             ihave: Vec::new(),
             iwant: Vec::new(),
@@ -551,8 +551,10 @@ impl From<ControlIHave> for rpc_proto::ControlIHave {
         // let bar_into_iter = control_i_have.recent_mcache.into_iter();
         // let map_bar_into_iter = bar_into_iter.map(|m| m.id.into_string());
         // let collect_map_bar_into_iter = map_bar_into_iter.collect();
-        ctrl_i_have.set_message_hashes(control_i_have.recent_mcache.msgs_keys()
-            .map(|m| m.clone().into_string()).collect());
+        ctrl_i_have.set_message_hashes(control_i_have.recent_mcache
+            .msgs_keys()
+            .map(|m| m.clone().into_string())
+            .collect());
         ctrl_i_have
     }
 }
@@ -600,13 +602,26 @@ impl From<ControlIWant> for rpc_proto::ControlIWant {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct ControlGraft {
     /// Topic to graft a peer to.
-    pub topic: TopicHash,
+    pub th: TopicHash
 }
 
+impl ControlGraft {
+    pub fn new() -> Self {
+        ControlGraft {
+            th: TopicHash::new()
+        }
+    }
+
+    pub fn new_with_thash(th: TopicHash) -> Self {
+        ControlGraft {
+            th: th
+        }
+    }
+}
 impl From<ControlGraft> for rpc_proto::ControlGraft {
     fn from(control_graft: ControlGraft) -> rpc_proto::ControlGraft {
         let mut ctrl_graft = rpc_proto::ControlGraft::new();
-        ctrl_graft.set_topic_hash(control_graft.topic.into_string());
+        ctrl_graft.set_topic_hash(control_graft.th.into_string());
         ctrl_graft
     }
 }
@@ -656,6 +671,14 @@ pub struct GossipsubRpc {
     pub subscriptions: Vec<GossipsubSubscription>,
     /// Optional control message.
     pub control: Option<ControlMessage>,
+}
+
+impl GossipsubRpc {
+    pub(crate) fn new() -> Self {
+        messages: Vec::new(),
+        subscriptions: Vec::new(),
+        control: Vec::new(),
+    }
 }
 
 /// Contains the different types of events that we yield to the outside when
