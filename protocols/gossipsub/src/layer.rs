@@ -296,6 +296,7 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
         self.graft_peers_many(iter::once(r_peer), t_hashes)
     }
 
+    /// Tries to graft peers to a topic.
     pub fn graft_peers(&mut self,
         r_peers: impl IntoIterator<Item = impl AsRef<PeerId>>,
         t_hash: impl AsRef<TopicHash>
@@ -303,12 +304,10 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
         self.graft_peers_many(r_peers, iter::once(t_hash))
     }
 
-    // TODO: graft_peers_many and graft_peers to graft peers to multiple
-    // topics and a single topic, respectively. Same for prune.
-    // We only need to work with the topics_not_in_mesh while iterating
-    // through the topics the first time (with the first peer).
-    // We can do this by removing each topic that is not found in the mesh
-    // from the t_hashes initial argument.
+    /// Tries to graft peers to many topics.
+    ///
+    /// ## Errors
+    /// Errors, if any, are returned in an `Ok(Some(GraftErrors))`.
     pub fn graft_peers_many(&mut self,
         // r_peers: Vec<&PeerId>,
         r_peers: impl IntoIterator<Item = impl AsRef<PeerId>>,
@@ -430,7 +429,9 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
         }
     }
 
-    /// Prunes a remote peer from a topic.
+    /// Tries to prune a remote peer from a topic.
+    ///
+    /// Convenience function using `prune_peers_many()`.
     pub fn prune(&mut self,
         r_peer: impl AsRef<PeerId>,
         t_hash: impl AsRef<TopicHash> + Clone)
@@ -438,7 +439,7 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
         self.prune_peers_many(iter::once(r_peer), iter::once(t_hash))
     }
 
-    /// Prunes the peer from multiple topics.
+    /// Tries to prune a peer from multiple topics.
     ///
     /// Note that this only works if the peer is grafted to such topics.
     pub fn prune_many(&mut self, r_peer: impl AsRef<PeerId>,
@@ -474,6 +475,9 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
         // Ok(())
     }
 
+    /// Tries to prunes peers from a single topic.
+    ///
+    /// Convenience function using `prune_peers_many()`.
     pub fn prune_peers(
         &mut self,
         r_peers: impl IntoIterator<Item = impl AsRef<PeerId>>,
@@ -482,6 +486,17 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
         self.prune_peers_many(r_peers, iter::once(t_hash))
     }
 
+    /// Tries to prune peers from many topics.
+    ///
+    /// ## Errors
+    /// The following errors, if any, are returned in an Ok() in
+    /// `PruneErrors`:
+    /// - If a topic is not in the local peer's mesh, it is returned.
+    /// - If a peer is not grafted to a topic, it is returned in a hashmap
+    /// with the topic as a key and a vector of the non-grafted peer(s)
+    /// as a value.
+    /// - If a local peer is passed as an argument, an error is returned with
+    /// a count of how many times it is passed.
     pub fn prune_peers_many(
         &mut self,
         r_peers: impl IntoIterator<Item = impl AsRef<PeerId>>,
