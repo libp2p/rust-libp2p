@@ -160,6 +160,9 @@ pub use libp2p_mplex as mplex;
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_mdns as mdns;
+#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+#[doc(inline)]
+pub use libp2p_noise as noise;
 #[doc(inline)]
 pub use libp2p_ping as ping;
 #[doc(inline)]
@@ -278,7 +281,7 @@ impl CommonTransport {
     pub fn new() -> CommonTransport {
         let inner = websocket::BrowserWsConfig::new();
         CommonTransport {
-            inner: CommonTransportInner { inner: inner }
+            inner: CommonTransportInner { inner }
         }
     }
 }

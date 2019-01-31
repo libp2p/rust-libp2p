@@ -149,7 +149,7 @@ where
         DummyProtocolsHandler::default()
     }
 
-    fn addresses_of_peer(&self, peer_id: &PeerId) -> Vec<Multiaddr> {
+    fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
         let now = Instant::now();
         self.discovered_nodes
             .iter()

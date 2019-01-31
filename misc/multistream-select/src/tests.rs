@@ -52,7 +52,7 @@ fn negotiate_with_self_succeeds() {
         .incoming()
         .into_future()
         .map_err(|(e, _)| e.into())
-        .and_then(move |(connec, _)| Listener::new(connec.unwrap()))
+        .and_then(move |(connec, _)| Listener::listen(connec.unwrap()))
         .and_then(|l| l.into_future().map_err(|(e, _)| e))
         .and_then(|(msg, rest)| {
             let proto = match msg {
@@ -64,7 +64,7 @@ fn negotiate_with_self_succeeds() {
 
     let client = TcpStream::connect(&listener_addr)
         .from_err()
-        .and_then(move |stream| Dialer::new(stream))
+        .and_then(move |stream| Dialer::dial(stream))
         .and_then(move |dialer| {
             let p = b"/hello/1.0.0";
             dialer.send(DialerToListenerMessage::ProtocolRequest { name: p })

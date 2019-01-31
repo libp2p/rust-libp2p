@@ -1,25 +1,24 @@
 [package]
-name = "libp2p-mplex"
-edition = "2018"
-description = "Mplex multiplexing protocol for libp2p"
-version = "0.3.0"
+name = "libp2p-noise"
+description = "Cryptographic handshake protocol using the noise framework."
+version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
-keywords = ["peer-to-peer", "libp2p", "networking"]
-categories = ["network-programming", "asynchronous"]
+edition = "2018"
 
 [dependencies]
-bytes = "0.4.5"
-fnv = "1.0"
+curve25519-dalek = "1"
 futures = "0.1"
+lazy_static = "1.2"
 libp2p-core = { version = "0.3.0", path = "../../core" }
 log = "0.4"
-parking_lot = "0.7"
-tokio-codec = "0.1"
+rand = "0.6.5"
+snow = { version = "0.5.0-alpha1", default-features = false, features = ["ring-resolver"] }
 tokio-io = "0.1"
-unsigned-varint = { version = "0.2.1", features = ["codec"] }
 
 [dev-dependencies]
+env_logger = "0.6"
 libp2p-tcp = { version = "0.3.0", path = "../../transports/tcp" }
+quickcheck = "0.8"
 tokio = "0.1"

@@ -208,7 +208,7 @@ where T: AsyncRead + AsyncWrite,
             Ok(v) => v,
             Err(err) => {
                 debug!("Failed to parse protobuf message; error = {:?}", err);
-                return Err(err.into());
+                return Err(err)
             }
         };
 
@@ -248,7 +248,7 @@ fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> 
                 public_key: PublicKey::from_protobuf_encoding(msg.get_publicKey())?,
                 protocol_version: msg.take_protocolVersion(),
                 agent_version: msg.take_agentVersion(),
-                listen_addrs: listen_addrs,
+                listen_addrs,
                 protocols: msg.take_protocols().into_vec(),
             };
 

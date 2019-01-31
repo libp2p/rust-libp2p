@@ -1,4 +1,4 @@
-// Copyright 2018 Parity Technologies (UK) Ltd.
+// Copyright 2019 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -19,50 +19,58 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
+    either::EitherOutput,
     protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
     upgrade::{
+        DeniedUpgrade,
+        EitherUpgrade,
         InboundUpgrade,
         OutboundUpgrade,
     }
 };
 use futures::prelude::*;
-use std::marker::PhantomData;
 
-/// Wrapper around a protocol handler that turns the input event into something else.
-pub struct MapInEvent<TProtoHandler, TNewIn, TMap> {
-    inner: TProtoHandler,
-    map: TMap,
-    marker: PhantomData<TNewIn>,
+/// Wrapper around a protocol handler and ignores all further method calls once it has shut down.
+#[derive(Debug, Copy, Clone)]
+pub struct Fuse<TProtoHandler> {
+    inner: Option<TProtoHandler>,
 }
 
-impl<TProtoHandler, TMap, TNewIn> MapInEvent<TProtoHandler, TNewIn, TMap> {
-    /// Creates a `MapInEvent`.
+impl<TProtoHandler> Fuse<TProtoHandler> {
+    /// Creates a `Fuse`.
     #[inline]
-    pub(crate) fn new(inner: TProtoHandler, map: TMap) -> Self {
-        MapInEvent {
-            inner,
-            map,
-            marker: PhantomData,
+    pub(crate) fn new(inner: TProtoHandler) -> Self {
+        Fuse {
+            inner: Some(inner),
         }
+    }
+
+    /// Returns true if polling has returned `Shutdown` in the past.
+    #[inline]
+    pub fn is_shutdown(&self) -> bool {
+        self.inner.is_none()
     }
 }
 
-impl<TProtoHandler, TMap, TNewIn> ProtocolsHandler for MapInEvent<TProtoHandler, TNewIn, TMap>
+impl<TProtoHandler> ProtocolsHandler for Fuse<TProtoHandler>
 where
     TProtoHandler: ProtocolsHandler,
-    TMap: Fn(TNewIn) -> Option<TProtoHandler::InEvent>,
 {
-    type InEvent = TNewIn;
+    type InEvent = TProtoHandler::InEvent;
     type OutEvent = TProtoHandler::OutEvent;
     type Error = TProtoHandler::Error;
     type Substream = TProtoHandler::Substream;
-    type InboundProtocol = TProtoHandler::InboundProtocol;
+    type InboundProtocol = EitherUpgrade<TProtoHandler::InboundProtocol, DeniedUpgrade>;
     type OutboundProtocol = TProtoHandler::OutboundProtocol;
     type OutboundOpenInfo = TProtoHandler::OutboundOpenInfo;
 
     #[inline]
     fn listen_protocol(&self) -> Self::InboundProtocol {
-        self.inner.listen_protocol()
+        if let Some(inner) = self.inner.as_ref() {
+            EitherUpgrade::A(inner.listen_protocol())
+        } else {
+            EitherUpgrade::B(DeniedUpgrade)
+        }
     }
 
     #[inline]
@@ -70,7 +78,17 @@ where
         &mut self,
         protocol: <Self::InboundProtocol as InboundUpgrade<Self::Substream>>::Output
     ) {
-        self.inner.inject_fully_negotiated_inbound(protocol)
+        match (protocol, self.inner.as_mut()) {
+            (EitherOutput::First(proto), Some(inner)) => {
+                inner.inject_fully_negotiated_inbound(proto)
+            },
+            (EitherOutput::Second(_), None) => {}
+            (EitherOutput::First(_), None) => {} // Can happen if we shut down during an upgrade.
+            (EitherOutput::Second(_), Some(_)) => {
+                panic!("Wrong API usage; an upgrade was passed to a different object that the \
+                    one that asked for the upgrade")
+            },
+        }
     }
 
     #[inline]
@@ -79,34 +97,46 @@ where
         protocol: <Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Output,
         info: Self::OutboundOpenInfo
     ) {
-        self.inner.inject_fully_negotiated_outbound(protocol, info)
+        if let Some(inner) = self.inner.as_mut() {
+            inner.inject_fully_negotiated_outbound(protocol, info)
+        }
     }
 
     #[inline]
-    fn inject_event(&mut self, event: TNewIn) {
-        if let Some(event) = (self.map)(event) {
-            self.inner.inject_event(event);
+    fn inject_event(&mut self, event: Self::InEvent) {
+        if let Some(inner) = self.inner.as_mut() {
+            inner.inject_event(event)
         }
     }
 
     #[inline]
     fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {
-        self.inner.inject_dial_upgrade_error(info, error)
+        if let Some(inner) = self.inner.as_mut() {
+            inner.inject_dial_upgrade_error(info, error)
+        }
     }
 
     #[inline]
     fn inject_inbound_closed(&mut self) {
-        self.inner.inject_inbound_closed()
+        if let Some(inner) = self.inner.as_mut() {
+            inner.inject_inbound_closed()
+        }
     }
 
     #[inline]
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.inner.connection_keep_alive()
+        if let Some(inner) = self.inner.as_ref() {
+            inner.connection_keep_alive()
+        } else {
+            KeepAlive::Now
+        }
     }
 
     #[inline]
     fn shutdown(&mut self) {
-        self.inner.shutdown()
+        if let Some(inner) = self.inner.as_mut() {
+            inner.shutdown()
+        }
     }
 
     #[inline]
@@ -116,6 +146,16 @@ where
         ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
         Self::Error,
     > {
-        self.inner.poll()
+        if let Some(mut inner) = self.inner.take() {
+            let poll = inner.poll();
+            if let Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown)) = poll {
+                poll
+            } else {
+                self.inner = Some(inner);
+                poll
+            }
+        } else {
+            Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown))
+        }
     }
 }

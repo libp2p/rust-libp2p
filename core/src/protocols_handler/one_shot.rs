@@ -18,11 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr};
+use crate::protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr};
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade};
 use futures::prelude::*;
 use smallvec::SmallVec;
-use std::{error, marker::PhantomData};
+use std::{error, marker::PhantomData, time::Duration, time::Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Implementation of `ProtocolsHandler` that opens a new substream for each individual message.
@@ -46,6 +46,10 @@ where TOutProto: OutboundUpgrade<TSubstream>
     dial_negotiated: u32,
     /// Maximum number of concurrent outbound substreams being opened. Value is never modified.
     max_dial_negotiated: u32,
+    /// Value to return from `connection_keep_alive`.
+    keep_alive: KeepAlive,
+    /// After the given duration has elapsed, an inactive connection will shutdown.
+    inactive_timeout: Duration,
     /// Pin the `TSubstream` generic.
     marker: PhantomData<TSubstream>,
 }
@@ -65,6 +69,8 @@ where TOutProto: OutboundUpgrade<TSubstream>
             dial_queue: SmallVec::new(),
             dial_negotiated: 0,
             max_dial_negotiated: 8,
+            keep_alive: KeepAlive::Forever,
+            inactive_timeout: Duration::from_secs(10),  // TODO: allow configuring
             marker: PhantomData,
         }
     }
@@ -96,6 +102,7 @@ where TOutProto: OutboundUpgrade<TSubstream>
     /// Opens an outbound substream with `upgrade`.
     #[inline]
     pub fn send_request(&mut self, upgrade: TOutProto) {
+        self.keep_alive = KeepAlive::Forever;
         self.dial_queue.push(upgrade);
     }
 }
@@ -143,6 +150,11 @@ where
             return;
         }
 
+        // If we're shutting down the connection for inactivity, reset the timeout.
+        if !self.keep_alive.is_forever() {
+            self.keep_alive = KeepAlive::Until(Instant::now() + self.inactive_timeout);
+        }
+
         self.events_out.push(out.into());
     }
 
@@ -153,6 +165,10 @@ where
         _: Self::OutboundOpenInfo
     ) {
         self.dial_negotiated -= 1;
+
+        if self.dial_negotiated == 0 && self.dial_queue.is_empty() {
+            self.keep_alive = KeepAlive::Until(Instant::now() + self.inactive_timeout);
+        }
 
         if self.shutting_down {
             return;
@@ -177,8 +193,8 @@ where
     fn inject_inbound_closed(&mut self) {}
 
     #[inline]
-    fn connection_keep_alive(&self) -> bool {
-        self.dial_negotiated != 0 || !self.dial_queue.is_empty()
+    fn connection_keep_alive(&self) -> KeepAlive {
+        self.keep_alive
     }
 
     #[inline]

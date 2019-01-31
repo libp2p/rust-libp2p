@@ -58,7 +58,7 @@ where
                 let stream = MapErrListener { inner: stream, map };
                 Ok((stream, listen_addr))
             }
-            Err(err) => Err(err.map(move |err| map(err))),
+            Err(err) => Err(err.map(map)),
         }
     }
 
@@ -67,7 +67,7 @@ where
 
         match self.transport.dial(addr) {
             Ok(future) => Ok(MapErrDial { inner: future, map: Some(map) }),
-            Err(err) => Err(err.map(move |err| map(err))),
+            Err(err) => Err(err.map(map)),
         }
     }
 
