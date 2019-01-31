@@ -58,10 +58,6 @@ pub struct GraftErrors {
     pub has_errors: bool,
 }
 
-// pub(crate) struct GraftErrorsForPeer {
-
-// }
-
 impl GraftErrors {
     pub fn new() -> Self {
         GraftErrors {

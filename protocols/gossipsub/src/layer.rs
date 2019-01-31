@@ -280,9 +280,6 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
         self.graft_peers_many(iter::once(r_peer), iter::once(t_hash))
     }
 
-    // TODO: finish writing these methods
-    // TODO: avoid excessive cloning.
-
     /// Tries to grafts a remote peer to multiple topics.
     ///
     /// If the local peer is not connected to the remote peer, then an error
@@ -324,49 +321,12 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
         let mut rem_peers_not_connected = Vec::new();
         let mut topics_not_subscribed_to = HashMap::new();
         let l_peer = &self.local_peer_id;
-        // let l_peer_str = l_peer.to_base58();
         let m = &mut self.mesh;
 
         for (i, t_hash) in t_hashes_v.clone().iter().enumerate() {
-            // let th_str = t_hash.to_string();
             match m.remove(t_hash) {
                 Ok(mut ps) => {
                     // Do nothing, proceed to peer loop below.
-                    // This is wrong, a peer doesn't add itself to a topic in
-                    // the mesh, it adds other peers.
-                    // match m.get_peer_from_topic(t_hash, l_peer) {
-                    //     Ok(_peer)
-                    //     => {ts_already_grafted
-                    //             .push(t_hash.clone());},
-                    //         // return Err(GError::AlreadyGrafted{
-                    //         // t_hash: th_str, peer_id: l_peer_str,
-                    //         // err: "".to_string()}),
-                    //     Err(GError::NotGraftedToTopic{t_hash: _th_str,
-                    //         peer_id: _peer_str, err: _err})
-                    //     => {
-                    //             ps.push(l_peer.clone());
-                    //             m.insert(t_hash.clone(), ps);
-                    //     },
-                    //     // returned from get_peers_from_topic within
-                    //     // get_peer_from_topic.
-                    // // We return the topics that are not in the mesh,
-                    // // rather than an error, since that would prevent grafting
-                    // // other graftable topics.
-                    // // return Err(GError::TopicNotInMesh{t_hash: _t_hash,
-                    // // err: "{err} The local peer needs to `join` the topic \
-                    // // (adding it to the mesh with TARGET_MESH_DEGREE (\
-                    // // {TARGET_MESH_DEGREE}) peers before it can graft \
-                    // // remote peers to the topic, which needs to be in the \
-                    // // local mesh view".into()}),
-                    //     Err(GError::TopicNotInMesh{t_hash: _t_hash,
-                    //         err})
-                    //     => {
-                    //         topics_not_in_mesh.push(t_hash.clone());
-                    //         t_hashes_v.remove(i);
-                    //     },
-                    //     // Shouldn't happen, just for the compiler.
-                    //     Err(err) => {return Err(err);}
-                    // }
                 },
                 Err(GError::TopicNotInMesh{t_hash: _t_hash, err}) => {
                     topics_not_in_mesh.push(t_hash.clone());
@@ -413,10 +373,6 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
         if !rem_peers_not_connected.is_empty() {
             graft_errs.r_peers_not_connected = Some(rem_peers_not_connected);
             graft_errs.has_errors = true;
-            // return Err(GError::NotConnectedToPeer{peer: r_peer_str,
-            // err: "Tried to graft the remote peer {r_peer_str.as_slice()} \
-            // to the topic with hash {th_str}, but the remote is not \
-            // connected.".into()});
         }
         if !ts_already_grafted.is_empty() {
             graft_errs.topics_already_grafted = Some(ts_already_grafted);
@@ -446,33 +402,6 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
         t_hashes: impl IntoIterator<Item = impl AsRef<TopicHash>> + Clone)
         -> GResult<Option<PruneErrors>> {
         self.prune_peers_many(iter::once(r_peer), t_hashes)
-        // let p = &self.local_peer_id;
-        // let m = &mut self.mesh;
-        // for t_hash in t_hashes {
-        //     let thr = t_hash.as_ref();
-        //     let th = thr.clone();
-        //     let _th_str = th.into_string();
-        //     let _p_str = p.clone().to_base58();
-
-        //     match m.get_peer_from_topic(thr, p) {
-        //         Ok(_peer) => {
-        //             m.remove_peer_from_topic(thr, p);
-        //         },
-        //         Err(GError::NotGraftedToTopic{t_hash: th_str, peer_id: p_str,
-        //         err: _err}) => {
-        //             return Err(GError::NotGraftedToTopic{t_hash: th_str,
-        //             peer_id: p_str,
-        //             err: "{get_err} Tried to prune the peer '{p_str}' to the \
-        //             topic with topic hash '{th_str}'.".to_string()});
-        //         },
-        //         Err(GError::TopicNotInMesh{t_hash, err: _err})
-        //         => {return Err(GError::TopicNotInMesh{t_hash,
-        //             err: "{err} Tried to prune the peer '{p_str}' to the \
-        //             topic with topic hash '{th_str}'.".to_string()});},
-        //         Err(err) => {return Err(err);} // Shouldn't happen.
-        //     }
-        // }
-        // Ok(())
     }
 
     /// Tries to prunes peers from a single topic.
@@ -519,41 +448,6 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
             match m.remove(t_hash) {
                 Ok(mut ps) => {
                     // All good, proceed with pruning.
-
-                    // This is wrong.
-                    // match m.get_peer_from_topic(t_hash, l_peer) {
-                    //     Ok(_peer)
-                    //     => {
-                    //     }
-                    //     Err(GError::NotGraftedToTopic{t_hash: _th_str,
-                    //         peer_id: _peer_str, err: _err})
-                    //     => {
-                    //         ts_not_grafted.push(t_hash.clone());
-                    //     }
-                    //     // {
-                    //     //         ps.push(l_peer.clone());
-                    //     //         m.insert(t_hash.clone(), ps);
-                    //     // },
-                    //     // returned from get_peers_from_topic within
-                    //     // get_peer_from_topic.
-                    // // We return the topics that are not in the mesh,
-                    // // rather than an error, since that would prevent grafting
-                    // // other graftable topics.
-                    // // return Err(GError::TopicNotInMesh{t_hash: _t_hash,
-                    // // err: "{err} The local peer needs to `join` the topic \
-                    // // (adding it to the mesh with TARGET_MESH_DEGREE (\
-                    // // {TARGET_MESH_DEGREE}) peers before it can graft \
-                    // // remote peers to the topic, which needs to be in the \
-                    // // local mesh view".into()}),
-                    //     Err(GError::TopicNotInMesh{t_hash: _t_hash,
-                    //         err})
-                    //     => {
-                    //         topics_not_in_mesh.push(t_hash.clone());
-                    //         t_hashes_v.remove(i);
-                    //     },
-                    //     // Shouldn't happen, just for the compiler.
-                    //     Err(err) => {return Err(err);}
-                    // }
                 },
                 Err(GError::TopicNotInMesh{t_hash: _t_hash, err}) => {
                     // The topic needs to be in the local peer's mesh view
