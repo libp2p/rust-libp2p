@@ -1712,4 +1712,34 @@ mod tests {
         assert!(random_peers.len() == 10, "Expected 10 peers to be returned");
     }
 
+    #[test]
+    fn test_handle_iwant_msg_exists() {
+        let (mut gs, peers, _) = build_and_inject_nodes(20, Vec::new(), true);
+
+        let message = GossipsubMessage {
+            source: peers[11].clone(),
+            data: vec![1,2,3,4],
+            sequence_number: vec![2,4,3],
+            topics: Vec::new(),
+        };
+        let msg_id = message.id();
+        gs.mcache.put(message.clone());
+
+        let eventsBefore = gs.events.len();
+        gs.handle_iwant(&peers[7], vec![msg_id.clone()]);
+        let eventsAfter = gs.events.len();
+
+        assert_eq!(eventsBefore + 1, eventsAfter);
+    }
+
+    #[test]
+    fn test_handle_iwant_msg_not_exists() {
+        let (mut gs, peers, _) = build_and_inject_nodes(20, Vec::new(), true);
+
+        let eventsBefore = gs.events.len();
+        gs.handle_iwant(&peers[7], vec![String::from("unknown id")]);
+        let eventsAfter = gs.events.len();
+
+        assert_eq!(eventsBefore, eventsAfter);
+    }
 }
