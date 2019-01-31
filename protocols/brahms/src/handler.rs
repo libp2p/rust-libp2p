@@ -25,13 +25,14 @@ use crate::protocol::{
 use futures::prelude::*;
 use libp2p_core::{
     either::{EitherError, EitherOutput},
+    protocols_handler::KeepAlive,
     protocols_handler::IntoProtocolsHandler,
     protocols_handler::ProtocolsHandlerUpgrErr,
     upgrade::{EitherUpgrade, InboundUpgrade, OutboundUpgrade},
     Multiaddr, PeerId, ProtocolsHandler, ProtocolsHandlerEvent,
 };
 use smallvec::SmallVec;
-use std::{error, fmt, io, marker::PhantomData};
+use std::{error, fmt, io, marker::PhantomData, time::Duration, time::Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Per-connection handler for the Brahms protocol.
@@ -62,7 +63,7 @@ pub struct BrahmsHandlerInner<TSubstream> {
     send_queue: SmallVec<[OutEvent; 16]>,
 
     /// Whether or not we should force the connection alive.
-    connection_keep_alive: bool,
+    connection_keep_alive: KeepAlive,
 
     /// The latest pull request received by the remote.
     ongoing_pull_request: Option<BrahmsListenPullRequest<TSubstream>>,
@@ -130,7 +131,7 @@ where
             pow_difficulty: self.pow_difficulty,
             shutting_down: false,
             send_queue: SmallVec::new(),
-            connection_keep_alive: false,
+            connection_keep_alive: KeepAlive::Until(Instant::now() + Duration::from_secs(10)),
             ongoing_pull_request: None,
             pull_response_flushes: SmallVec::new(),
         }
@@ -225,10 +226,10 @@ where
                 }
             }
             BrahmsHandlerIn::EnableKeepAlive => {
-                self.connection_keep_alive = true;
+                self.connection_keep_alive = KeepAlive::Forever;
             }
             BrahmsHandlerIn::DisableKeepAlive => {
-                self.connection_keep_alive = false;
+                self.connection_keep_alive = KeepAlive::Now;
             }
         }
     }
@@ -241,7 +242,7 @@ where
     }
 
     #[inline]
-    fn connection_keep_alive(&self) -> bool {
+    fn connection_keep_alive(&self) -> KeepAlive {
         self.connection_keep_alive
     }
 

@@ -385,7 +385,7 @@ where
         BrahmsHandler::new(self.local_peer_id.clone(), self.difficulty)
     }
 
-    fn addresses_of_peer(&self, peer_id: &PeerId) -> Vec<Multiaddr> {
+    fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
         self.view.peer(peer_id).map(|peer| peer.addrs().cloned().collect::<Vec<_>>()).unwrap_or_default()
     }
 
