@@ -30,6 +30,7 @@ unsigned-varint = "0.2"
 void = "1"
 
 [dev-dependencies]
+env_logger = "0.6"
 libp2p-ping = { version = "0.3.0", path = "../protocols/ping" }
 libp2p-tcp = { version = "0.3.0", path = "../transports/tcp" }
 libp2p-mplex = { version = "0.3.0", path = "../muxers/mplex" }

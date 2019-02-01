@@ -213,7 +213,7 @@ fn raw_swarm_simultaneous_connect() {
                         return Ok(Async::Ready(()));
                     }
 
-                    if swarm1_not_ready && swarm2_not_ready {
+                    if swarm1_step != 0 && swarm2_step != 0 && swarm1_not_ready && swarm2_not_ready {
                         return Ok(Async::NotReady);
                     }
                 }
