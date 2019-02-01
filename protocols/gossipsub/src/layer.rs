@@ -1713,7 +1713,8 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_iwant_msg_exists() {
+    // tests that an event is created when a peer asks for a message in our cache
+    fn test_handle_iwant_msg_cached() {
         let (mut gs, peers, _) = build_and_inject_nodes(20, Vec::new(), true);
 
         let message = GossipsubMessage {
@@ -1729,17 +1730,59 @@ mod tests {
         gs.handle_iwant(&peers[7], vec![msg_id.clone()]);
         let eventsAfter = gs.events.len();
 
-        assert_eq!(eventsBefore + 1, eventsAfter);
+        assert_eq!(eventsBefore + 1, eventsAfter, "Expected event count to increase");
     }
 
     #[test]
-    fn test_handle_iwant_msg_not_exists() {
+    // tests that an event is not created when a peers asks for a message not in our cache
+    fn test_handle_iwant_msg_not_cached() {
         let (mut gs, peers, _) = build_and_inject_nodes(20, Vec::new(), true);
 
         let eventsBefore = gs.events.len();
         gs.handle_iwant(&peers[7], vec![String::from("unknown id")]);
         let eventsAfter = gs.events.len();
 
-        assert_eq!(eventsBefore, eventsAfter);
+        assert_eq!(eventsBefore, eventsAfter, "Expected event count to stay the same");
+    }
+
+    #[test]
+    // tests that an event is created when a peer shares that it has a message we want
+    fn test_handle_ihave_subscribed_and_msg_not_cached() {
+        let (mut gs, peers, topic_hashes) = build_and_inject_nodes(20, vec![String::from("topic1")], true);
+
+        let eventsBefore = gs.events.len();
+        gs.handle_ihave(&peers[7], vec![(topic_hashes[0].clone(), vec![String::from("unknown id")])]);
+        let eventsAfter = gs.events.len();
+
+        assert_eq!(eventsBefore + 1, eventsAfter, "Expected event count to increase")
+    }
+
+    #[test]
+    // tests that an event is not created when a peer shares that it has a message that
+    // we already have
+    fn test_handle_ihave_subscribed_and_msg_cached() {
+        let (mut gs, peers, topic_hashes) = build_and_inject_nodes(20, vec![String::from("topic1")], true);
+
+        let msg_id = String::from("known id");
+        gs.received.add(&msg_id);
+
+        let eventsBefore = gs.events.len();
+        gs.handle_ihave(&peers[7], vec![(topic_hashes[0].clone(), vec![msg_id])]);
+        let eventsAfter = gs.events.len();
+
+        assert_eq!(eventsBefore, eventsAfter, "Expected event count to stay the same")
+    }
+
+    #[test]
+    // test that an event is not created when a peer shares that it has a message in
+    // a topic that we are not subscribed to
+    fn test_handle_ihave_not_subscribed() {
+        let (mut gs, peers, _) = build_and_inject_nodes(20, vec![], true);
+
+        let eventsBefore = gs.events.len();
+        gs.handle_ihave(&peers[7], vec![(TopicHash::from_raw(String::from("unsubscribed topic")), vec![String::from("irrelevant id")])]);
+        let eventsAfter = gs.events.len();
+
+        assert_eq!(eventsBefore, eventsAfter, "Expected event count to stay the same")
     }
 }
