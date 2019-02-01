@@ -475,29 +475,83 @@ mod tests {
         assert!(random_peers.len() == 10, "Expected 10 peers to be returned");
     }
 
+    /// Tests that the correct message is sent when a peer asks for a message in our cache.
     #[test]
-    // tests that an event is created when a peer asks for a message in our cache
     fn test_handle_iwant_msg_cached() {
         let (mut gs, peers, _) = build_and_inject_nodes(20, Vec::new(), true);
 
         let message = GossipsubMessage {
             source: peers[11].clone(),
             data: vec![1, 2, 3, 4],
-            sequence_number: vec![2, 4, 3],
+            sequence_number: vec![0, 0, 0, 0, 0, 0, 0, 1],
             topics: Vec::new(),
         };
         let msg_id = message.id();
         gs.mcache.put(message.clone());
 
-        let events_before = gs.events.len();
         gs.handle_iwant(&peers[7], vec![msg_id.clone()]);
-        let events_after = gs.events.len();
 
-        assert_eq!(
-            events_before + 1,
-            events_after,
-            "Expected event count to increase"
+        // the messages we are sending
+        let sent_messages = gs
+            .events
+            .iter()
+            .fold(vec![], |mut collected_messages, e| match e {
+                NetworkBehaviourAction::SendEvent { peer_id: _, event } => {
+                    for c in &event.messages {
+                        collected_messages.push(c.clone())
+                    }
+                    collected_messages
+                }
+                _ => collected_messages,
+            });
+
+        assert!(
+            sent_messages.iter().any(|msg| msg.id() == msg_id),
+            "Expected the cached message to be sent to an IWANT peer"
         );
+    }
+
+    /// Tests that messages are sent correctly depending on the shifting of the message cache.
+    #[test]
+    fn test_handle_iwant_msg_cached_shifted() {
+        let (mut gs, peers, _) = build_and_inject_nodes(20, Vec::new(), true);
+
+        // perform 10 memshifts and check that it leaves the cache
+        for shift in 1..10 {
+            let message = GossipsubMessage {
+                source: peers[11].clone(),
+                data: vec![1, 2, 3, 4],
+                sequence_number: vec![0, 0, 0, 0, 0, 0, 0, shift],
+                topics: Vec::new(),
+            };
+            let msg_id = message.id();
+            gs.mcache.put(message.clone());
+            for _ in 0..shift {
+                gs.mcache.shift();
+            }
+
+            gs.handle_iwant(&peers[7], vec![msg_id.clone()]);
+
+            // is the message is being sent?
+            let message_exists = gs.events.iter().any(|e| match e {
+                NetworkBehaviourAction::SendEvent { peer_id: _, event } => {
+                    event.messages.iter().any(|msg| msg.id() == msg_id)
+                }
+                _ => false,
+            });
+            // default history_length is 5, expect no messages after shift > 5
+            if shift < 5 {
+                assert!(
+                    message_exists,
+                    "Expected the cached message to be sent to an IWANT peer before 5 shifts"
+                );
+            } else {
+                assert!(
+                    !message_exists,
+                    "Expected the cached message to not be sent to an IWANT peer after 5 shifts"
+                );
+            }
+        }
     }
 
     #[test]
@@ -521,18 +575,25 @@ mod tests {
         let (mut gs, peers, topic_hashes) =
             build_and_inject_nodes(20, vec![String::from("topic1")], true);
 
-        let events_before = gs.events.len();
         gs.handle_ihave(
             &peers[7],
             vec![(topic_hashes[0].clone(), vec![String::from("unknown id")])],
         );
-        let events_after = gs.events.len();
+        // check that we sent an IWANT request for `unknown id`
+        let iwant_exists = gs.events.iter().any(|e| match e {
+            NetworkBehaviourAction::SendEvent { peer_id: _, event } => {
+                event.control_msgs.iter().any(|e| match e {
+                    GossipsubControlAction::IWant { message_ids } => {
+                        message_ids.iter().any(|m| *m == String::from("unknown id"))
+                    }
+                    _ => false,
+                })
+            }
+            _ => false,
+        });
 
-        assert_eq!(
-            events_before + 1,
-            events_after,
-            "Expected event count to increase"
-        )
+        assert!(iwant_exists
+            "Expected to send an IWANT control message for unkown message id");
     }
 
     #[test]
