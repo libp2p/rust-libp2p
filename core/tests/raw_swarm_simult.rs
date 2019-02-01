@@ -83,7 +83,6 @@ where
     }
 }
 
-
 #[test]
 fn raw_swarm_simultaneous_connect() {
     // Checks whether two swarms dialing each other simultaneously properly works.
@@ -100,111 +99,131 @@ fn raw_swarm_simultaneous_connect() {
     //   connection with the listening one.
     //
 
-    // TODO: make creating the transport more elegant ; literaly half of the code of the test
-    //       is about creating the transport
-    let mut swarm1 = {
-        let local_key = libp2p_secio::SecioKeyPair::ed25519_generated().unwrap();
-        let local_public_key = local_key.to_public_key();
-        let transport = libp2p_tcp::TcpConfig::new()
-            .with_upgrade(libp2p_secio::SecioConfig::new(local_key))
-            .and_then(move |out, _| {
-                let peer_id = out.remote_key.into_peer_id();
-                let upgrade =
-                    libp2p_mplex::MplexConfig::new().map_outbound(move |muxer| (peer_id, muxer));
-                upgrade::apply_outbound(out.stream, upgrade)
-            });
-        RawSwarm::new(transport, local_public_key.into_peer_id())
-    };
+    for _ in 0 .. 10 {
+        // TODO: make creating the transport more elegant ; literaly half of the code of the test
+        //       is about creating the transport
+        let mut swarm1 = {
+            let local_key = libp2p_secio::SecioKeyPair::ed25519_generated().unwrap();
+            let local_public_key = local_key.to_public_key();
+            let transport = libp2p_tcp::TcpConfig::new()
+                .with_upgrade(libp2p_secio::SecioConfig::new(local_key))
+                .and_then(move |out, _| {
+                    let peer_id = out.remote_key.into_peer_id();
+                    let upgrade =
+                        libp2p_mplex::MplexConfig::default().map_outbound(move |muxer| (peer_id, muxer));
+                    upgrade::apply_outbound(out.stream, upgrade)
+                });
+            RawSwarm::new(transport, local_public_key.into_peer_id())
+        };
 
-    let mut swarm2 = {
-        let local_key = libp2p_secio::SecioKeyPair::ed25519_generated().unwrap();
-        let local_public_key = local_key.to_public_key();
-        let transport = libp2p_tcp::TcpConfig::new()
-            .with_upgrade(libp2p_secio::SecioConfig::new(local_key))
-            .and_then(move |out, _| {
-                let peer_id = out.remote_key.into_peer_id();
-                let upgrade =
-                    libp2p_mplex::MplexConfig::new().map_outbound(move |muxer| (peer_id, muxer));
-                upgrade::apply_outbound(out.stream, upgrade)
-            });
-        RawSwarm::new(transport, local_public_key.into_peer_id())
-    };
+        let mut swarm2 = {
+            let local_key = libp2p_secio::SecioKeyPair::ed25519_generated().unwrap();
+            let local_public_key = local_key.to_public_key();
+            let transport = libp2p_tcp::TcpConfig::new()
+                .with_upgrade(libp2p_secio::SecioConfig::new(local_key))
+                .and_then(move |out, _| {
+                    let peer_id = out.remote_key.into_peer_id();
+                    let upgrade =
+                        libp2p_mplex::MplexConfig::default().map_outbound(move |muxer| (peer_id, muxer));
+                    upgrade::apply_outbound(out.stream, upgrade)
+                });
+            RawSwarm::new(transport, local_public_key.into_peer_id())
+        };
 
-    let swarm1_listen = swarm1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
-    let swarm2_listen = swarm2.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+        let swarm1_listen = swarm1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+        let swarm2_listen = swarm2.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
 
-    let mut reactor = tokio::runtime::current_thread::Runtime::new().unwrap();
+        let mut reactor = tokio::runtime::current_thread::Runtime::new().unwrap();
 
-    for _ in 0 .. 100 {
-        let handler1 = TestHandler::default().into_node_handler_builder();
-        let handler2 = TestHandler::default().into_node_handler_builder();
+        for _ in 0 .. 10 {
+            let mut swarm1_step = 0;
+            let mut swarm2_step = 0;
 
-        swarm1.peer(swarm2.local_peer_id().clone()).into_not_connected().unwrap()
-            .connect(swarm2_listen.clone(), handler1);
-        swarm2.peer(swarm1.local_peer_id().clone()).into_not_connected().unwrap()
-            .connect(swarm1_listen.clone(), handler2);
+            let future = future::poll_fn(|| -> Poll<(), io::Error> {
+                loop {
+                    let mut swarm1_not_ready = false;
+                    let mut swarm2_not_ready = false;
 
-        let mut swarm1_step = 0;
-        let mut swarm2_step = 0;
+                    // We add a lot of randomness. In a real-life situation the swarm also has to
+                    // handle other nodes, which may delay the processing.
 
-        let future = future::poll_fn(|| -> Poll<(), io::Error> {
-            loop {
-                let mut swarm1_not_ready = false;
-                match swarm1.poll() {
-                    Async::Ready(RawSwarmEvent::IncomingConnectionError { error: IncomingError::DeniedLowerPriority, .. }) => {
-                        assert_eq!(swarm1_step, 1);
-                        swarm1_step = 2;
-                    },
-                    Async::Ready(RawSwarmEvent::Connected { peer_id, .. }) => {
-                        assert_eq!(peer_id, *swarm2.local_peer_id());
-                        assert_eq!(swarm1_step, 0);
+                    if swarm1_step == 0 && rand::random::<f32>() < 0.2 {
+                        let handler = TestHandler::default().into_node_handler_builder();
+                        swarm1.peer(swarm2.local_peer_id().clone()).into_not_connected().unwrap()
+                            .connect(swarm2_listen.clone(), handler);
                         swarm1_step = 1;
-                    },
-                    Async::Ready(RawSwarmEvent::Replaced { peer_id, .. }) => {
-                        assert_eq!(peer_id, *swarm2.local_peer_id());
-                        assert_eq!(swarm1_step, 1);
-                        swarm1_step = 2;
-                    },
-                    Async::Ready(RawSwarmEvent::IncomingConnection(inc)) => {
-                        inc.accept(TestHandler::default().into_node_handler_builder());
-                    },
-                    Async::Ready(_) => unreachable!(),
-                    Async::NotReady => { swarm1_not_ready = true; }
-                }
+                    }
 
-                match swarm2.poll() {
-                    Async::Ready(RawSwarmEvent::IncomingConnectionError { error: IncomingError::DeniedLowerPriority, .. }) => {
-                        assert_eq!(swarm2_step, 1);
-                        swarm2_step = 2;
-                    },
-                    Async::Ready(RawSwarmEvent::Connected { peer_id, .. }) => {
-                        assert_eq!(peer_id, *swarm1.local_peer_id());
-                        assert_eq!(swarm2_step, 0);
+                    if swarm2_step == 0 && rand::random::<f32>() < 0.2 {
+                        let handler = TestHandler::default().into_node_handler_builder();
+                        swarm2.peer(swarm1.local_peer_id().clone()).into_not_connected().unwrap()
+                            .connect(swarm1_listen.clone(), handler);
                         swarm2_step = 1;
-                    },
-                    Async::Ready(RawSwarmEvent::Replaced { peer_id, .. }) => {
-                        assert_eq!(peer_id, *swarm1.local_peer_id());
-                        assert_eq!(swarm2_step, 1);
-                        swarm2_step = 2;
-                    },
-                    Async::Ready(RawSwarmEvent::IncomingConnection(inc)) => {
-                        inc.accept(TestHandler::default().into_node_handler_builder());
-                    },
-                    Async::Ready(_) => unreachable!(),
-                    Async::NotReady if swarm1_not_ready => return Ok(Async::NotReady),
-                    Async::NotReady => (),
+                    }
+
+                    if rand::random::<f32>() < 0.5 {
+                        match swarm1.poll() {
+                            Async::Ready(RawSwarmEvent::IncomingConnectionError { error: IncomingError::DeniedLowerPriority, .. }) => {
+                                assert_eq!(swarm1_step, 2);
+                                swarm1_step = 3;
+                            },
+                            Async::Ready(RawSwarmEvent::Connected { peer_id, .. }) => {
+                                assert_eq!(peer_id, *swarm2.local_peer_id());
+                                assert_eq!(swarm1_step, 1);
+                                swarm1_step = 2;
+                            },
+                            Async::Ready(RawSwarmEvent::Replaced { peer_id, .. }) => {
+                                assert_eq!(peer_id, *swarm2.local_peer_id());
+                                assert_eq!(swarm1_step, 2);
+                                swarm1_step = 3;
+                            },
+                            Async::Ready(RawSwarmEvent::IncomingConnection(inc)) => {
+                                inc.accept(TestHandler::default().into_node_handler_builder());
+                            },
+                            Async::Ready(_) => unreachable!(),
+                            Async::NotReady => swarm1_not_ready = true,
+                        }
+                    }
+
+                    if rand::random::<f32>() < 0.5 {
+                        match swarm2.poll() {
+                            Async::Ready(RawSwarmEvent::IncomingConnectionError { error: IncomingError::DeniedLowerPriority, .. }) => {
+                                assert_eq!(swarm2_step, 2);
+                                swarm2_step = 3;
+                            },
+                            Async::Ready(RawSwarmEvent::Connected { peer_id, .. }) => {
+                                assert_eq!(peer_id, *swarm1.local_peer_id());
+                                assert_eq!(swarm2_step, 1);
+                                swarm2_step = 2;
+                            },
+                            Async::Ready(RawSwarmEvent::Replaced { peer_id, .. }) => {
+                                assert_eq!(peer_id, *swarm1.local_peer_id());
+                                assert_eq!(swarm2_step, 2);
+                                swarm2_step = 3;
+                            },
+                            Async::Ready(RawSwarmEvent::IncomingConnection(inc)) => {
+                                inc.accept(TestHandler::default().into_node_handler_builder());
+                            },
+                            Async::Ready(_) => unreachable!(),
+                            Async::NotReady => swarm2_not_ready = true,
+                        }
+                    }
+
+                    if swarm1_step == 3 && swarm2_step == 3 {
+                        return Ok(Async::Ready(()));
+                    }
+
+                    if swarm1_not_ready && swarm2_not_ready {
+                        return Ok(Async::NotReady);
+                    }
                 }
+            });
 
-                if swarm1_step == 2 && swarm2_step == 2 {
-                    return Ok(Async::Ready(()));
-                }
-            }
-        });
+            reactor.block_on(future).unwrap();
 
-        reactor.block_on(future).unwrap();
-
-        // We now disconnect them again.
-        swarm1.peer(swarm2.local_peer_id().clone()).into_connected().unwrap().close();
-        swarm2.peer(swarm1.local_peer_id().clone()).into_connected().unwrap().close();
+            // We now disconnect them again.
+            swarm1.peer(swarm2.local_peer_id().clone()).into_connected().unwrap().close();
+            swarm2.peer(swarm1.local_peer_id().clone()).into_connected().unwrap().close();
+        }
     }
 }
