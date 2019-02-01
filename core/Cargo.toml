@@ -33,6 +33,7 @@ void = "1"
 libp2p-ping = { version = "0.3.0", path = "../protocols/ping" }
 libp2p-tcp = { version = "0.3.0", path = "../transports/tcp" }
 libp2p-mplex = { version = "0.3.0", path = "../muxers/mplex" }
+libp2p-secio = { version = "0.3.0", path = "../protocols/secio" }
 rand = "0.6"
 tokio = "0.1"
 tokio-codec = "0.1"
