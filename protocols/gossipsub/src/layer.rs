@@ -200,8 +200,8 @@ impl<TSubstream> Gossipsub<TSubstream> {
             return false;
         }
 
-        // send subscription request to all floodsub and gossipsub peers
-        for (gossip_peers, flood_peers) in self.topic_peers.get(&topic.hash()) {
+        // send subscription request to all floodsub and gossipsub peers in the topic
+        if let Some((gossip_peers, flood_peers)) = self.topic_peers.get(&topic.hash()) {
             for peer in flood_peers.iter().chain(gossip_peers) {
                 debug!("Sending SUBSCRIBE to peer: {:?}", peer);
                 self.events.push_back(NetworkBehaviourAction::SendEvent {
@@ -241,7 +241,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
         }
 
         // announce to all floodsub and gossipsub peers, in the topic
-        for (gossip_peers, flood_peers) in self.topic_peers.get(topic_hash) {
+        if let Some((gossip_peers, flood_peers)) = self.topic_peers.get(topic_hash) {
             for peer in flood_peers.iter().chain(gossip_peers) {
                 debug!("Sending UNSUBSCRIBE to peer: {:?}", peer);
                 self.events.push_back(NetworkBehaviourAction::SendEvent {
@@ -365,10 +365,12 @@ impl<TSubstream> Gossipsub<TSubstream> {
             );
             // add up to mesh_n of them them to the mesh
             // Note: These aren't randomly added, currently FIFO
-            let mut add_peers = self.config.mesh_n.clone();
-            if peers.len() < self.config.mesh_n {
-                add_peers = peers.len();
-            }
+            let mut add_peers = if peers.len() < self.config.mesh_n {
+                peers.len()
+            } else {
+                self.config.mesh_n
+            };
+
             debug!(
                 "JOIN: Adding {:?} peers from the fanout for topic: {:?}",
                 add_peers, topic_hash
@@ -393,7 +395,10 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 "JOIN: Inserting {:?} random peers into the mesh",
                 new_peers.len()
             );
-            let mesh_peers = self.mesh.entry(topic_hash.clone()).or_insert(vec![]);
+            let mesh_peers = self
+                .mesh
+                .entry(topic_hash.clone())
+                .or_insert_with(|| vec![]);
             mesh_peers.append(&mut new_peers);
         }
 
@@ -612,7 +617,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
     /// Handles received subscriptions.
     fn handle_received_subscriptions(
         &mut self,
-        subscriptions: &Vec<GossipsubSubscription>,
+        subscriptions: &[GossipsubSubscription],
         propagation_source: &PeerId,
     ) {
         debug!(
@@ -740,7 +745,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 for peer in peer_list {
                     peers.push(peer.clone());
                     // TODO: tagPeer
-                    let current_topic = to_graft.entry(peer).or_insert(Vec::new());
+                    let current_topic = to_graft.entry(peer).or_insert_with(|| vec![]);
                     current_topic.push(topic_hash.clone());
                 }
                 // update the mesh
@@ -764,7 +769,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
                     let peer = peers
                         .pop()
                         .expect("There should always be enough peers to remove");
-                    let current_topic = to_prune.entry(peer).or_insert(vec![]);
+                    let current_topic = to_prune.entry(peer).or_insert_with(|| vec![]);
                     current_topic.push(topic_hash.clone());
                     //TODO: untagPeer
                 }
@@ -882,10 +887,8 @@ impl<TSubstream> Gossipsub<TSubstream> {
         for (peer, topics) in to_graft.iter() {
             let mut grafts: Vec<GossipsubControlAction> = topics
                 .iter()
-                .map(|topic_hash| {
-                    return GossipsubControlAction::Graft {
-                        topic_hash: topic_hash.clone(),
-                    };
+                .map(|topic_hash| GossipsubControlAction::Graft {
+                    topic_hash: topic_hash.clone(),
                 })
                 .collect();
             let mut prunes: Vec<GossipsubControlAction> = to_prune
@@ -997,7 +1000,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
         debug!("RANDOM PEERS: Got {:?} peers", n);
 
-        return gossip_peers[..n].to_vec();
+        gossip_peers[..n].to_vec()
     }
 }
 
@@ -1174,12 +1177,8 @@ where
             return Async::Ready(event);
         }
 
-        loop {
-            match self.heartbeat.poll() {
-                // heartbeat ready
-                Ok(Async::Ready(Some(_))) => self.heartbeat(),
-                _ => break,
-            };
+        while let Ok(Async::Ready(Some(_))) = self.heartbeat.poll() {
+            self.heartbeat();
         }
 
         Async::NotReady

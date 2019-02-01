@@ -330,10 +330,11 @@ impl GossipsubMessage {
         // the sequence number is a big endian uint64 (as per go implementation)
         // avoid a potential panic by setting the seqno to 0 if it is not long enough.
         // TODO: Check that this doesn't introduce a vulnerability or issue
-        let mut seqno = 0;
-        if self.sequence_number.len() >= 8 {
-            seqno = BigEndian::read_u64(&self.sequence_number);
-        }
+        let seqno = if self.sequence_number.len() >= 8 {
+            BigEndian::read_u64(&self.sequence_number)
+        } else {
+            0
+        };
         source_string.push_str(&seqno.to_string());
         source_string
     }

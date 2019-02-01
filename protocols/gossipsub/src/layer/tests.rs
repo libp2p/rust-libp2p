@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::super::*;
     use libp2p_floodsub::TopicBuilder;
 
     // helper functions for testing
@@ -489,13 +489,13 @@ mod tests {
         let msg_id = message.id();
         gs.mcache.put(message.clone());
 
-        let eventsBefore = gs.events.len();
+        let events_before = gs.events.len();
         gs.handle_iwant(&peers[7], vec![msg_id.clone()]);
-        let eventsAfter = gs.events.len();
+        let events_after = gs.events.len();
 
         assert_eq!(
-            eventsBefore + 1,
-            eventsAfter,
+            events_before + 1,
+            events_after,
             "Expected event count to increase"
         );
     }
@@ -505,12 +505,12 @@ mod tests {
     fn test_handle_iwant_msg_not_cached() {
         let (mut gs, peers, _) = build_and_inject_nodes(20, Vec::new(), true);
 
-        let eventsBefore = gs.events.len();
+        let events_before = gs.events.len();
         gs.handle_iwant(&peers[7], vec![String::from("unknown id")]);
-        let eventsAfter = gs.events.len();
+        let events_after = gs.events.len();
 
         assert_eq!(
-            eventsBefore, eventsAfter,
+            events_before, events_after,
             "Expected event count to stay the same"
         );
     }
@@ -521,16 +521,16 @@ mod tests {
         let (mut gs, peers, topic_hashes) =
             build_and_inject_nodes(20, vec![String::from("topic1")], true);
 
-        let eventsBefore = gs.events.len();
+        let events_before = gs.events.len();
         gs.handle_ihave(
             &peers[7],
             vec![(topic_hashes[0].clone(), vec![String::from("unknown id")])],
         );
-        let eventsAfter = gs.events.len();
+        let events_after = gs.events.len();
 
         assert_eq!(
-            eventsBefore + 1,
-            eventsAfter,
+            events_before + 1,
+            events_after,
             "Expected event count to increase"
         )
     }
@@ -545,12 +545,12 @@ mod tests {
         let msg_id = String::from("known id");
         gs.received.add(&msg_id);
 
-        let eventsBefore = gs.events.len();
+        let events_before = gs.events.len();
         gs.handle_ihave(&peers[7], vec![(topic_hashes[0].clone(), vec![msg_id])]);
-        let eventsAfter = gs.events.len();
+        let events_after = gs.events.len();
 
         assert_eq!(
-            eventsBefore, eventsAfter,
+            events_before, events_after,
             "Expected event count to stay the same"
         )
     }
@@ -561,7 +561,7 @@ mod tests {
     fn test_handle_ihave_not_subscribed() {
         let (mut gs, peers, _) = build_and_inject_nodes(20, vec![], true);
 
-        let eventsBefore = gs.events.len();
+        let events_before = gs.events.len();
         gs.handle_ihave(
             &peers[7],
             vec![(
@@ -569,10 +569,10 @@ mod tests {
                 vec![String::from("irrelevant id")],
             )],
         );
-        let eventsAfter = gs.events.len();
+        let events_after = gs.events.len();
 
         assert_eq!(
-            eventsBefore, eventsAfter,
+            events_before, events_after,
             "Expected event count to stay the same"
         )
     }
