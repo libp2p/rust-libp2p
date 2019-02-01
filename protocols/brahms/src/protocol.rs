@@ -23,8 +23,8 @@
 
 use crate::codec::{Codec, RawMessage};
 use crate::pow::Pow;
-use futures::{future, prelude::*, try_ready};
-use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use futures::{prelude::*, try_ready};
+use libp2p_core::upgrade::{self, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_core::{Multiaddr, PeerId};
 use std::{error, io, iter};
 use tokio_codec::Framed;
@@ -59,7 +59,7 @@ where
 {
     type Output = ();
     type Error = io::Error;
-    type Future = future::Map<future::AndThen<tokio_io::io::WriteAll<TSocket, Vec<u8>>, tokio_io::io::Shutdown<TSocket>, fn((TSocket, Vec<u8>)) -> tokio_io::io::Shutdown<TSocket>>, fn(TSocket) -> ()>;
+    type Future = upgrade::WriteOne<TSocket>;
 
     #[inline]
     fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
@@ -70,13 +70,7 @@ where
             .collect();
         // TODO: what if lots of addrs? https://github.com/libp2p/rust-libp2p/issues/760
         let pow = Pow::generate(&self.local_peer_id, &self.remote_peer_id, self.pow_difficulty).unwrap();   // TODO:
-        let message = RawMessage::Push(addrs, pow.nonce()).into_bytes();
-        let mut len_buf = unsigned_varint::encode::usize_buffer();
-        let len = unsigned_varint::encode::usize(message.len(), &mut len_buf);
-        let message = len.iter().cloned().chain(message.into_iter()).collect::<Vec<u8>>();
-        tokio_io::io::write_all(socket, message)
-            .and_then::<fn(_) -> _, _>(|(socket, _)| tokio_io::io::shutdown(socket))
-            .map::<fn(_) -> _, _>(|_| ())
+        upgrade::write_one(socket, RawMessage::Push(addrs, pow.nonce()).into_bytes())
     }
 }
 
