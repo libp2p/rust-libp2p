@@ -328,7 +328,7 @@ fn known_peer_that_is_unreachable_yields_dial_error() {
                 Async::Ready(event) => {
                     let failed_peer_id = assert_matches!(
                         event,
-                        RawSwarmEvent::DialError { remain_addrs_attempt: _, peer_id: failed_peer_id, .. } => failed_peer_id
+                        RawSwarmEvent::DialError { new_state: _, peer_id: failed_peer_id, .. } => failed_peer_id
                     );
                     assert_eq!(peer_id, failed_peer_id);
                     Ok(Async::Ready(false))
