@@ -1,32 +1,38 @@
-//! Gossipsub is a P2P pubsub (publish/subscription) routing layer designed to extend upon flooodsub
-//! and meshsub routing protocols.
+//! Gossipsub is a P2P pubsub (publish/subscription) routing layer designed to extend upon
+//! flooodsub and meshsub routing protocols.
 //!
 //! # Overview
 //!
-//! *Note: The gossipsub protocol specifications (https://github.com/libp2p/specs/tree/master/pubsub/gossipsub) provide an outline for the routing protocol. They should be consulted for further detail.*
+//! *Note: The gossipsub protocol specifications
+//! (https://github.com/libp2p/specs/tree/master/pubsub/gossipsub) provide an outline for the
+//! routing protocol. They should be consulted for further detail.*
 //!
 //! Gossipsub  is a blend of meshsub for data and randomsub for mesh metadata. It provides bounded
 //! degree and amplification factor with the meshsub construction and augments it using gossip
 //! propagation of metadata with the randomsub technique.
 //!
-//! The router maintains an overlay mesh network of peers on which to efficiently send messages and metadata.
-//! Peers use control messages to broadcast and request known messages and subscribe/unsubscribe from topics in the mesh network.
+//! The router maintains an overlay mesh network of peers on which to efficiently send messages and
+//! metadata.  Peers use control messages to broadcast and request known messages and
+//! subscribe/unsubscribe from topics in the mesh network.
 //!
 //! # Important Discrepancies
 //!
-//! This section outlines the current implementation's potential discrepancies from that of
-//! other implementations, due to undefined elements in the current specification.
+//! This section outlines the current implementation's potential discrepancies from that of other
+//! implementations, due to undefined elements in the current specification.
 //!
-//! - **Topics** -  In gossipsub, topics are utf-8 string's that are `base58` encoded. These are of type
-//! `TopicHash`. The current go implementation uses raw utf-8 strings.
-//! - **Sequence Numbers** - A message on the gossipsub network is identified by the source `PeerId`
-//! and a nonce (sequence number) of the message. The sequence numbers in this implementation are sent as raw bytes across the wire. They are 64-bit big-endian   unsigned integers. They are chosen at random in this implementation of gossipsub, but are sequential in the current go implementation.
+//! - **Topics** -  In gossipsub, topics are utf-8 string's that are `base58` encoded. These are of
+//! type `TopicHash`. The current go implementation uses raw utf-8 strings.  - **Sequence Numbers**
+//! - A message on the gossipsub network is identified by the source `PeerId` and a nonce (sequence
+//! number) of the message. The sequence numbers in this implementation are sent as raw bytes
+//! across the wire. They are 64-bit big-endian   unsigned integers. They are chosen at random in
+//! this implementation of gossipsub, but are sequential in the current go implementation.
 //!
 //! # Using Gossipsub
 //!
 //! ## GossipsubConfig
 //!
-//! The [`GossipsubConfig`] struct specifies various network performance/tuning configuration parameters. Specifically it specifies:
+//! The [`GossipsubConfig`] struct specifies various network performance/tuning configuration
+//! parameters. Specifically it specifies:
 //!
 //! [`GossipsubConfig`]: struct.GossipsubConfig.html
 
