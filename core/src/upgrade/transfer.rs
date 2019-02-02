@@ -168,8 +168,20 @@ where
     type Error = ReadOneError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        Ok(self.inner.poll()?.map(|(_, out)| out))
+    }
+}
+
+impl<TSocket> Future for ReadOneInner<TSocket>
+where
+    TSocket: AsyncRead,
+{
+    type Item = (TSocket, Vec<u8>);
+    type Error = ReadOneError;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
-            match mem::replace(&mut self.inner, ReadOneInner::Poisoned) {
+            match mem::replace(self, ReadOneInner::Poisoned) {
                 ReadOneInner::ReadLen {
                     mut socket,
                     mut len_buf,
@@ -203,10 +215,9 @@ where
                                 data_buf[.. n].copy_from_slice(&data_start[.. n]);
                                 let mut data_buf = io::Window::new(data_buf);
                                 data_buf.set_start(data_start.len());
-                                self.inner =
-                                    ReadOneInner::ReadRest(io::read_exact(socket, data_buf));
+                                *self = ReadOneInner::ReadRest(io::read_exact(socket, data_buf));
                             } else {
-                                self.inner = ReadOneInner::ReadLen {
+                                *self = ReadOneInner::ReadLen {
                                     socket,
                                     len_buf,
                                     max_size,
@@ -214,7 +225,7 @@ where
                             }
                         }
                         Async::NotReady => {
-                            self.inner = ReadOneInner::ReadLen {
+                            *self = ReadOneInner::ReadLen {
                                 socket,
                                 len_buf,
                                 max_size,
@@ -225,11 +236,11 @@ where
                 }
                 ReadOneInner::ReadRest(mut inner) => {
                     match inner.poll()? {
-                        Async::Ready((_, data)) => {
-                            return Ok(Async::Ready(data.into_inner()));
+                        Async::Ready((socket, data)) => {
+                            return Ok(Async::Ready((socket, data.into_inner())));
                         }
                         Async::NotReady => {
-                            self.inner = ReadOneInner::ReadRest(inner);
+                            *self = ReadOneInner::ReadRest(inner);
                             return Ok(Async::NotReady);
                         }
                     }
@@ -317,6 +328,51 @@ where
             Async::Ready(buffer) => {
                 let then = self.then.take().expect("Future was polled after it was finished");
                 Ok(Async::Ready(then(buffer)?))
+            },
+            Async::NotReady => Ok(Async::NotReady),
+        }
+    }
+}
+
+/// Similar to `read_one`, but applies a transformation on the output buffer.
+#[inline]
+pub fn read_respond<TSocket, TThen, TParam, TOut, TErr>(
+    socket: TSocket,
+    max_size: usize,
+    param: TParam,
+    then: TThen,
+) -> ReadRespond<TSocket, TParam, TThen>
+where
+    TSocket: AsyncRead,
+    TThen: FnOnce(TSocket, Vec<u8>, TParam) -> Result<TOut, TErr>,
+    TErr: From<ReadOneError>,
+{
+    ReadRespond {
+        inner: read_one(socket, max_size).inner,
+        then: Some((then, param)),
+    }
+}
+
+/// Future that makes `read_respond` work.
+pub struct ReadRespond<TSocket, TParam, TThen> {
+    inner: ReadOneInner<TSocket>,
+    then: Option<(TThen, TParam)>,
+}
+
+impl<TSocket, TThen, TParam, TOut, TErr> Future for ReadRespond<TSocket, TParam, TThen>
+where
+    TSocket: AsyncRead,
+    TThen: FnOnce(TSocket, Vec<u8>, TParam) -> Result<TOut, TErr>,
+    TErr: From<ReadOneError>,
+{
+    type Item = TOut;
+    type Error = TErr;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        match self.inner.poll()? {
+            Async::Ready((socket, buffer)) => {
+                let (then, param) = self.then.take().expect("Future was polled after it was finished");
+                Ok(Async::Ready(then(socket, buffer, param)?))
             },
             Async::NotReady => Ok(Async::NotReady),
         }

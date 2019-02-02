@@ -231,70 +231,36 @@ where
     TSocket: AsyncRead + AsyncWrite,
 {
     type Output = BrahmsListenOut<TSocket>;
-    type Error = Box<error::Error + Send + Sync>;
-    type Future = BrahmsListenFuture<TSocket>;
+    type Error = Box<error::Error + Send + Sync>;   // TODO: better error
+    type Future = upgrade::ReadRespond<TSocket, Self, fn(TSocket, Vec<u8>, Self) -> Result<Self::Output, Self::Error>>;
 
     #[inline]
     fn upgrade_inbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
-        BrahmsListenFuture {
-            inner: Some(Framed::new(socket, Codec::default())),
-            local_peer_id: self.local_peer_id,
-            remote_peer_id: self.remote_peer_id,
-            pow_difficulty: self.pow_difficulty,
-        }
-    }
-}
-
-/// Future that listens for a query from the remote.
-#[derive(Debug)]
-#[must_use = "futures do nothing unless polled"]
-pub struct BrahmsListenFuture<TSocket> {
-    /// The stream to the remote.
-    inner: Option<Framed<TSocket, Codec>>,
-    /// Id of the local peer. The message is only valid for this specific peer.
-    local_peer_id: PeerId,
-    /// Id of the peer we're going to send this message to. The message is only valid for this
-    /// specific peer.
-    remote_peer_id: PeerId,
-    /// Required difficulty of the proof of work.
-    pow_difficulty: u8,
-}
-
-impl<TSocket> Future for BrahmsListenFuture<TSocket>
-where
-    TSocket: AsyncRead + AsyncWrite,
-{
-    type Item = BrahmsListenOut<TSocket>;
-    type Error = Box<error::Error + Send + Sync>;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match try_ready!(self
-            .inner
-            .as_mut()
-            .expect("Future is already finished")
-            .poll())
-        {
-            Some(RawMessage::Push(addrs, nonce)) => {
-                // We swap the remote and local peer IDs, as the parameters are from the point
-                // of view of the remote.
-                if Pow::verify(&self.remote_peer_id, &self.local_peer_id, nonce, self.pow_difficulty).is_err() {
-                    return Err(io::Error::new(io::ErrorKind::Other, "invalid PoW").into());
+        upgrade::read_respond(socket, 2048, self, |socket, message_bytes, me| {
+            let message = RawMessage::from_bytes(&message_bytes);
+            match message {
+                RawMessage::Push(addrs, nonce) => {
+                    // We swap the remote and local peer IDs, as the parameters are from the point
+                    // of view of the remote.
+                    if Pow::verify(&me.remote_peer_id, &me.local_peer_id, nonce, me.pow_difficulty).is_err() {
+                        return Err(io::Error::new(io::ErrorKind::Other, "invalid PoW").into());
+                    }
+                    let mut addrs_parsed = Vec::with_capacity(addrs.len());
+                    for addr in addrs {
+                        addrs_parsed.push(Multiaddr::from_bytes(addr)?);
+                    }
+                    Ok(BrahmsListenOut::Push(addrs_parsed))
                 }
-                let mut addrs_parsed = Vec::with_capacity(addrs.len());
-                for addr in addrs {
-                    addrs_parsed.push(Multiaddr::from_bytes(addr)?);
+                RawMessage::PullRequest => Ok(BrahmsListenOut::PullRequest(
+                    BrahmsListenPullRequest {
+                        inner: socket,
+                    },
+                )),
+                RawMessage::PullResponse(_) => {
+                    Err("Invalid remote request".to_string().into())
                 }
-                Ok(Async::Ready(BrahmsListenOut::Push(addrs_parsed)))
             }
-            Some(RawMessage::PullRequest) => Ok(Async::Ready(BrahmsListenOut::PullRequest(
-                BrahmsListenPullRequest {
-                    inner: self.inner.take().expect("Future is already finished"),
-                },
-            ))),
-            Some(RawMessage::PullResponse(_)) | None => {
-                Err("Invalid remote request".to_string().into())
-            }
-        }
+        })
     }
 }
 
@@ -311,7 +277,7 @@ pub enum BrahmsListenOut<TSocket> {
 /// Sender requests us to send back our view of the network.
 #[derive(Debug)]
 pub struct BrahmsListenPullRequest<TSocket> {
-    inner: Framed<TSocket, Codec>,
+    inner: TSocket,
 }
 
 impl<TSocket> BrahmsListenPullRequest<TSocket> {
@@ -334,6 +300,6 @@ impl<TSocket> BrahmsListenPullRequest<TSocket> {
             .collect();
 
         let msg_bytes = RawMessage::PullResponse(view).into_bytes();
-        upgrade::write_one(self.inner.into_inner(), msg_bytes)
+        upgrade::write_one(self.inner, msg_bytes)
     }
 }

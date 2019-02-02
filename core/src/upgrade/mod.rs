@@ -74,7 +74,7 @@ pub use self::{
     error::UpgradeError,
     map::{MapInboundUpgrade, MapOutboundUpgrade, MapInboundUpgradeErr, MapOutboundUpgradeErr},
     select::SelectUpgrade,
-    transfer::{write_one, WriteOne, read_one, ReadOne, read_one_then, ReadOneThen, ReadOneError, request_response, RequestResponse},
+    transfer::{write_one, WriteOne, read_one, ReadOne, read_one_then, ReadOneThen, ReadOneError, request_response, RequestResponse, read_respond, ReadRespond},
 };
 
 /// Types serving as protocol names.
