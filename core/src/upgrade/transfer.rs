@@ -378,6 +378,7 @@ where
                         }
                         Async::NotReady => {
                             self.inner = RequestResponseInner::Write(inner, max_size, then);
+                            return Ok(Async::NotReady);
                         }
                     }
                 }
@@ -385,6 +386,7 @@ where
                     Async::Ready(packet) => return Ok(Async::Ready(packet)),
                     Async::NotReady => {
                         self.inner = RequestResponseInner::Read(inner);
+                        return Ok(Async::NotReady);
                     }
                 },
                 RequestResponseInner::Poisoned => panic!(),
