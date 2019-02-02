@@ -18,11 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use bytes::BytesMut;
 use serde_derive::{Serialize, Deserialize};
-use std::{error, fmt, io};
-use tokio_codec::{Decoder, Encoder};
-use unsigned_varint::codec::UviBytes;
 
 /// Message that can be transmitted over a stream.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

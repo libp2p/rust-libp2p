@@ -35,6 +35,9 @@ use smallvec::SmallVec;
 use std::{error, fmt, io, marker::PhantomData, time::Duration, time::Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
 
+/// Duration after which an inactive connection will be shut down.
+const INACTIVE_TIMEOUT: Duration = Duration::from_secs(10);
+
 /// Per-connection handler for the Brahms protocol.
 pub struct BrahmsHandler<TSubstream> {
     /// PeerId of the local node.
@@ -131,7 +134,7 @@ where
             pow_difficulty: self.pow_difficulty,
             shutting_down: false,
             send_queue: SmallVec::new(),
-            connection_keep_alive: KeepAlive::Until(Instant::now() + Duration::from_secs(10)),
+            connection_keep_alive: KeepAlive::Until(Instant::now() + INACTIVE_TIMEOUT),
             ongoing_pull_request: None,
             pull_response_flushes: SmallVec::new(),
         }
@@ -163,6 +166,10 @@ where
         &mut self,
         request: <Self::InboundProtocol as InboundUpgrade<TSubstream>>::Output,
     ) {
+        if let KeepAlive::Until(_) = self.connection_keep_alive {
+            self.connection_keep_alive = KeepAlive::Until(Instant::now() + INACTIVE_TIMEOUT);
+        }
+
         match request {
             BrahmsListenOut::Push(addresses) => {
                 self.send_queue
@@ -187,6 +194,10 @@ where
         response: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output,
         _: Self::OutboundOpenInfo,
     ) {
+        if let KeepAlive::Until(_) = self.connection_keep_alive {
+            self.connection_keep_alive = KeepAlive::Until(Instant::now() + INACTIVE_TIMEOUT);
+        }
+
         let list = match response {
             EitherOutput::First(()) => return,
             EitherOutput::Second(list) => list,
@@ -199,6 +210,10 @@ where
 
     #[inline]
     fn inject_event(&mut self, message: BrahmsHandlerIn) {
+        if let KeepAlive::Until(_) = self.connection_keep_alive {
+            self.connection_keep_alive = KeepAlive::Until(Instant::now() + INACTIVE_TIMEOUT);
+        }
+
         match message {
             BrahmsHandlerIn::Event(BrahmsHandlerEvent::Push { addresses, local_peer_id, remote_peer_id, pow_difficulty }) => {
                 self.send_queue
@@ -229,7 +244,9 @@ where
                 self.connection_keep_alive = KeepAlive::Forever;
             }
             BrahmsHandlerIn::DisableKeepAlive => {
-                self.connection_keep_alive = KeepAlive::Now;
+                if let KeepAlive::Forever = self.connection_keep_alive {
+                    self.connection_keep_alive = KeepAlive::Until(Instant::now() + INACTIVE_TIMEOUT);
+                }
             }
         }
     }
