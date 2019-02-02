@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::protocol::{
-    BrahmsListen, BrahmsListenOut, BrahmsListenPullRequest, BrahmsListenPullRequestFlush,
+    BrahmsListen, BrahmsListenOut, BrahmsListenPullRequest,
     BrahmsPullRequestRequest, BrahmsPushRequest, BrahmsPushRequestError,
 };
 use futures::prelude::*;
@@ -28,7 +28,7 @@ use libp2p_core::{
     protocols_handler::KeepAlive,
     protocols_handler::IntoProtocolsHandler,
     protocols_handler::ProtocolsHandlerUpgrErr,
-    upgrade::{EitherUpgrade, InboundUpgrade, OutboundUpgrade},
+    upgrade::{EitherUpgrade, InboundUpgrade, OutboundUpgrade, WriteOne},
     Multiaddr, PeerId, ProtocolsHandler, ProtocolsHandlerEvent,
 };
 use smallvec::SmallVec;
@@ -69,7 +69,7 @@ pub struct BrahmsHandlerInner<TSubstream> {
     ongoing_pull_request: Option<BrahmsListenPullRequest<TSubstream>>,
 
     /// Futures that flush pull responses.
-    pull_response_flushes: SmallVec<[BrahmsListenPullRequestFlush<TSubstream>; 4]>,
+    pull_response_flushes: SmallVec<[WriteOne<TSubstream>; 4]>,
 }
 
 type OutEvent = ProtocolsHandlerEvent<

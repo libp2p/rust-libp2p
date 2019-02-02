@@ -319,7 +319,10 @@ impl<TSocket> BrahmsListenPullRequest<TSocket> {
     pub fn respond(
         self,
         view: impl IntoIterator<Item = (PeerId, impl IntoIterator<Item = Multiaddr>)>,
-    ) -> BrahmsListenPullRequestFlush<TSocket> {
+    ) -> upgrade::WriteOne<TSocket>
+    where
+        TSocket: AsyncWrite
+    {
         let view = view
             .into_iter()
             .map(|(peer_id, addrs)| {
@@ -330,42 +333,7 @@ impl<TSocket> BrahmsListenPullRequest<TSocket> {
             })
             .collect();
 
-        BrahmsListenPullRequestFlush {
-            inner: self.inner,
-            message: Some(RawMessage::PullResponse(view)),
-        }
-    }
-}
-
-/// Future that answers a pull request from the remote.
-#[derive(Debug)]
-#[must_use = "futures do nothing unless polled"]
-pub struct BrahmsListenPullRequestFlush<TSocket> {
-    /// The stream to the remote.
-    inner: Framed<TSocket, Codec>,
-    /// The message to send back to the remote.
-    message: Option<RawMessage>,
-}
-
-impl<TSocket> Future for BrahmsListenPullRequestFlush<TSocket>
-where
-    TSocket: AsyncRead + AsyncWrite,
-{
-    type Item = ();
-    type Error = io::Error;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        if let Some(message) = self.message.take() {
-            match self.inner.start_send(message)? {
-                AsyncSink::Ready => (),
-                AsyncSink::NotReady(message) => {
-                    self.message = Some(message);
-                    return Ok(Async::NotReady);
-                }
-            }
-        }
-
-        try_ready!(self.inner.poll_complete());
-        Ok(Async::Ready(()))
+        let msg_bytes = RawMessage::PullResponse(view).into_bytes();
+        upgrade::write_one(self.inner.into_inner(), msg_bytes)
     }
 }
