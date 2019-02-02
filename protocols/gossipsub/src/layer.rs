@@ -226,26 +226,25 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 debug!("Topic: {:?} not in the mesh", topic_hash);
                 // build a list of peers to forward the message to
                 // if we have fanout peers add them to the map
-                if let Some(fanout_peers) = self.fanout.get(&topic_hash) {
-                    for peer in fanout_peers {
+                if self.fanout.contains_key(&topic_hash) {
+                    for peer in self.fanout.get(&topic_hash).expect("Topic must exist") {
+                        recipient_peers.insert(peer.clone(), ());
+                    }
+                } else {
+                    // we have no fanout peers, select mesh_n of them and add them to the fanout
+                    let mesh_n = self.config.mesh_n;
+                    let new_peers = self.get_random_peers(&topic_hash, mesh_n, { |_| true });
+                    // add the new peers to the fanout and recipient peers
+                    self.fanout.insert(topic_hash.clone(), new_peers.clone());
+                    for peer in new_peers {
+                        debug!("Peer added to fanout: {:?}", peer);
                         recipient_peers.insert(peer.clone(), ());
                     }
                 }
-            } else {
-                // TODO: Ensure fanout key never contains an empty set
-                // we have no fanout peers, select mesh_n of them and add them to the fanout
-                let mesh_n = self.config.mesh_n;
-                let new_peers = self.get_random_peers(&topic_hash, mesh_n, { |_| true });
-                // add the new peers to the fanout and recipient peers
-                self.fanout.insert(topic_hash.clone(), new_peers.clone());
-                for peer in new_peers {
-                    debug!("Peer added to fanout: {:?}", peer);
-                    recipient_peers.insert(peer.clone(), ());
-                }
+                // we are publishing to fanout peers - update the time we published
+                self.fanout_last_pub
+                    .insert(topic_hash.clone(), Instant::now());
             }
-            // we are publishing to fanout peers - update the time we published
-            self.fanout_last_pub
-                .insert(topic_hash.clone(), Instant::now());
         }
 
         // add published message to our received caches
