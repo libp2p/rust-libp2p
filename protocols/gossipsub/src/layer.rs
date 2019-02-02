@@ -41,6 +41,7 @@ use rand;
 use rand::{seq::SliceRandom, thread_rng};
 use smallvec::SmallVec;
 use std::collections::hash_map::{DefaultHasher, HashMap};
+use std::collections::HashSet;
 use std::time::Instant;
 use std::{collections::VecDeque, iter, marker::PhantomData};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -287,12 +288,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
             );
             // add up to mesh_n of them them to the mesh
             // Note: These aren't randomly added, currently FIFO
-            let mut add_peers = if peers.len() < self.config.mesh_n {
-                peers.len()
-            } else {
-                self.config.mesh_n
-            };
-
+            let add_peers = std::cmp::min(peers.len(), self.config.mesh_n);
             debug!(
                 "JOIN: Adding {:?} peers from the fanout for topic: {:?}",
                 add_peers, topic_hash
@@ -372,7 +368,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
     fn handle_ihave(&mut self, peer_id: &PeerId, ihave_msgs: Vec<(TopicHash, Vec<String>)>) {
         debug!("Handling IHAVE for peer: {:?}", peer_id);
         // use a hashmap to avoid duplicates efficiently
-        let mut iwant_ids = HashMap::new();
+        let mut iwant_ids = HashSet::new();
 
         for (topic, ids) in ihave_msgs {
             // only process the message if we are subscribed
@@ -387,7 +383,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
             for id in ids {
                 if !self.received.contains(&id) {
                     // have not seen this message, request it
-                    iwant_ids.insert(id, true);
+                    iwant_ids.insert(id);
                 }
             }
         }
@@ -401,7 +397,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
                     subscriptions: Vec::new(),
                     messages: Vec::new(),
                     control_msgs: vec![GossipsubControlAction::IWant {
-                        message_ids: iwant_ids.keys().cloned().collect(),
+                        message_ids: iwant_ids.iter().cloned().collect(),
                     }],
                 },
             });
@@ -444,7 +440,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
     fn handle_graft(&mut self, peer_id: &PeerId, topics: Vec<TopicHash>) {
         debug!("Handling GRAFT message for peer: {:?}", peer_id);
 
-        let mut to_prune_topics = HashMap::new();
+        let mut to_prune_topics = HashSet::new();
         for topic_hash in topics {
             if let Some(peers) = self.mesh.get_mut(&topic_hash) {
                 // if we are subscribed, add peer to the mesh
@@ -455,14 +451,14 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 peers.push(peer_id.clone());
             //TODO: tagPeer
             } else {
-                to_prune_topics.insert(topic_hash.clone(), ());
+                to_prune_topics.insert(topic_hash.clone());
             }
         }
 
         if !to_prune_topics.is_empty() {
             // build the prune messages to send
             let prune_messages = to_prune_topics
-                .keys()
+                .iter()
                 .map(|t| GossipsubControlAction::Prune {
                     topic_hash: t.clone(),
                 })
@@ -856,7 +852,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
     /// Helper function to publish and forward messages to floodsub[topic] and mesh[topic] peers.
     fn forward_msg(&mut self, message: GossipsubMessage, source: PeerId) {
         debug!("Forwarding message: {:?}", message.id());
-        let mut recipient_peers = HashMap::new();
+        let mut recipient_peers = HashSet::new();
 
         // add floodsub and mesh peers
         for topic in &message.topics {
@@ -864,7 +860,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
             if let Some((_, floodsub_peers)) = self.topic_peers.get(&topic) {
                 for peer_id in floodsub_peers {
                     if *peer_id != source {
-                        recipient_peers.insert(peer_id.clone(), ());
+                        recipient_peers.insert(peer_id.clone());
                     }
                 }
             }
@@ -873,7 +869,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
             if let Some(mesh_peers) = self.mesh.get(&topic) {
                 for peer_id in mesh_peers {
                     if *peer_id != source {
-                        recipient_peers.insert(peer_id.clone(), ());
+                        recipient_peers.insert(peer_id.clone());
                     }
                 }
             }
@@ -881,7 +877,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
         // forward the message to peers
         if !recipient_peers.is_empty() {
-            for peer in recipient_peers.keys() {
+            for peer in recipient_peers.iter() {
                 debug!("Sending message: {:?} to peer {:?}", message.id(), peer);
                 self.events.push_back(NetworkBehaviourAction::SendEvent {
                     peer_id: peer.clone(),
@@ -937,7 +933,7 @@ where
         Default::default()
     }
 
-    fn addresses_of_peer(&self, _: &PeerId) -> Vec<Multiaddr> {
+    fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
         Vec::new()
     }
 

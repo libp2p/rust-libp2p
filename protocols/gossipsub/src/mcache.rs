@@ -1,8 +1,8 @@
 extern crate fnv;
 
-use fnv::FnvHashMap;
 use libp2p_floodsub::TopicHash;
 use protocol::GossipsubMessage;
+use std::collections::HashMap;
 
 /// CacheEntry stored in the history
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -14,7 +14,7 @@ pub struct CacheEntry {
 /// MessageCache struct holding history of messages
 #[derive(Debug, Clone, PartialEq)]
 pub struct MessageCache {
-    msgs: FnvHashMap<String, GossipsubMessage>,
+    msgs: HashMap<String, GossipsubMessage>,
     history: Vec<Vec<CacheEntry>>,
     gossip: usize,
 }
@@ -24,7 +24,7 @@ impl MessageCache {
     pub fn new(gossip: usize, history_capacity: usize) -> MessageCache {
         MessageCache {
             gossip,
-            msgs: FnvHashMap::default(),
+            msgs: HashMap::default(),
             history: vec![Vec::new(); history_capacity],
         }
     }
