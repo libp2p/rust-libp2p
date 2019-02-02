@@ -21,13 +21,12 @@
 //! Provides the `BrahmsRequest` upgrade that sends a request on the network and waits for a
 //! potential response, and `BrahmsListen` upgrade that accepts a request from the remote.
 
-use crate::codec::{Codec, RawMessage};
+use crate::codec::RawMessage;
 use crate::pow::Pow;
-use futures::{future, prelude::*, try_ready};
+use futures::{future, prelude::*};
 use libp2p_core::upgrade::{self, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_core::{Multiaddr, PeerId};
 use std::{error, fmt, io, iter};
-use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Request that can be sent to a peer.
@@ -130,79 +129,39 @@ where
 {
     type Output = Vec<(PeerId, Vec<Multiaddr>)>;
     type Error = Box<error::Error + Send + Sync>;
-    type Future = BrahmsPullRequestRequestFlush<TSocket>;
+    type Future = upgrade::RequestResponse<TSocket, fn(Vec<u8>) -> Result<Self::Output, Self::Error>>;
 
     #[inline]
     fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
-        BrahmsPullRequestRequestFlush {
-            inner: Framed::new(socket, Codec::default()),
-            message: Some(RawMessage::PullRequest),
-            flushed: false,
-        }
-    }
-}
-
-/// Future that sends a pull request request to the remote, and waits for an answer.
-#[derive(Debug)]
-#[must_use = "futures do nothing unless polled"]
-pub struct BrahmsPullRequestRequestFlush<TSocket> {
-    /// The stream to the remote.
-    inner: Framed<TSocket, Codec>,
-    /// The message to send back to the remote.
-    message: Option<RawMessage>,
-    /// If true, then we successfully flushed after sending.
-    flushed: bool,
-}
-
-impl<TSocket> Future for BrahmsPullRequestRequestFlush<TSocket>
-where
-    TSocket: AsyncRead + AsyncWrite,
-{
-    type Item = Vec<(PeerId, Vec<Multiaddr>)>;
-    type Error = Box<error::Error + Send + Sync>;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        if let Some(message) = self.message.take() {
-            match self.inner.start_send(message)? {
-                AsyncSink::Ready => (),
-                AsyncSink::NotReady(message) => {
-                    self.message = Some(message);
-                    return Ok(Async::NotReady);
-                }
-            }
-        }
-
-        if !self.flushed {
-            try_ready!(self.inner.close());
-            self.flushed = true;
-        }
-
-        match try_ready!(self.inner.poll()) {
-            Some(RawMessage::PullResponse(response)) => {
-                let mut out = Vec::new();
-                for (peer_id, addrs) in response {
-                    let peer_id = if let Ok(id) = PeerId::from_bytes(peer_id) {
-                        id
-                    } else {
-                        return Err("Invalid peer ID in pull response".to_string().into());
-                    };
-
-                    let mut peer = Vec::new();
-                    for addr in addrs {
-                        if let Ok(a) = Multiaddr::from_bytes(addr) {
-                            peer.push(a);
+        let message = RawMessage::PullRequest.into_bytes();
+        upgrade::request_response(socket, message, 2048, |message| {
+            match RawMessage::from_bytes(&message) {
+                RawMessage::PullResponse(response) => {
+                    let mut out = Vec::new();
+                    for (peer_id, addrs) in response {
+                        let peer_id = if let Ok(id) = PeerId::from_bytes(peer_id) {
+                            id
                         } else {
-                            return Err("Invalid multiaddr in pull response".to_string().into());
+                            return Err("Invalid peer ID in pull response".to_string().into());
+                        };
+
+                        let mut peer = Vec::new();
+                        for addr in addrs {
+                            if let Ok(a) = Multiaddr::from_bytes(addr) {
+                                peer.push(a);
+                            } else {
+                                return Err("Invalid multiaddr in pull response".to_string().into());
+                            }
                         }
+                        out.push((peer_id, peer));
                     }
-                    out.push((peer_id, peer));
+                    Ok(out)
                 }
-                Ok(Async::Ready(out))
+                RawMessage::Push(_, _) | RawMessage::PullRequest => {
+                    Err("Invalid remote request".to_string().into())
+                }
             }
-            Some(RawMessage::Push(_, _)) | Some(RawMessage::PullRequest) | None => {
-                Err("Invalid remote request".to_string().into())
-            }
-        }
+        })
     }
 }
 

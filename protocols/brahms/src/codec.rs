@@ -24,52 +24,6 @@ use std::{error, fmt, io};
 use tokio_codec::{Decoder, Encoder};
 use unsigned_varint::codec::UviBytes;
 
-/// Encoder and decoder for protocol messages.
-pub struct Codec {
-    inner: UviBytes<Vec<u8>>,
-}
-
-impl Default for Codec {
-    #[inline]
-    fn default() -> Self {
-        let mut inner = UviBytes::default();
-        inner.set_max_len(1024);
-        Codec {
-            inner,
-        }
-    }
-}
-
-impl fmt::Debug for Codec {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "BrahmsCodec")
-    }
-}
-
-impl Encoder for Codec {
-    type Item = RawMessage;
-    type Error = io::Error;
-
-    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        let tmp_buf = serde_cbor::to_vec(&item).expect("encoding with serde_cbor cannot fail; QED");
-        self.inner.encode(tmp_buf, dst)?;
-        Ok(())
-    }
-}
-
-impl Decoder for Codec {
-    type Item = RawMessage;
-    type Error = Box<error::Error + Send + Sync>;
-
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        if let Some(item) = self.inner.decode(src)? {
-            Ok(Some(serde_cbor::from_slice(&item)?))
-        } else {
-            Ok(None)
-        }
-    }
-}
-
 /// Message that can be transmitted over a stream.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RawMessage {
