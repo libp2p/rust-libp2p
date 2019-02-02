@@ -422,7 +422,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
         if !cached_messages.is_empty() {
             info!("IWANT: Sending cached messages to peer: {:?}", peer_id);
             // Send the messages to the peer
-            let message_list = cached_messages.values().cloned().collect();
+            let message_list = cached_messages.into_iter().map(|entry| entry.1).collect();
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer_id.clone(),
                 event: GossipsubRpc {
