@@ -219,6 +219,7 @@ where
                                 len_buf,
                                 max_size,
                             };
+                            return Ok(Async::NotReady);
                         }
                     }
                 }
@@ -229,6 +230,7 @@ where
                         }
                         Async::NotReady => {
                             self.inner = ReadOneInner::ReadRest(inner);
+                            return Ok(Async::NotReady);
                         }
                     }
                 }
