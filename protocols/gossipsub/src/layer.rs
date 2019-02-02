@@ -293,7 +293,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 "JOIN: Adding {:?} peers from the fanout for topic: {:?}",
                 add_peers, topic_hash
             );
-            added_peers.append(&mut peers.clone()[..add_peers].to_vec());
+            added_peers.extend_from_slice(&peers[.. add_peers]);
             self.mesh
                 .insert(topic_hash.clone(), peers[..add_peers].to_vec());
             // remove the last published time
