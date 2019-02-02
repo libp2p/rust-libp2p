@@ -410,7 +410,7 @@ mod tests {
         );
 
         for topic_hash in topic_hashes[..3].iter() {
-            let topic_peers = gs.topic_peers.get(topic_hash).unwrap().0.clone(); // only gossipsub at the moment
+            let topic_peers = gs.topic_peers.get(topic_hash).unwrap().gossipsub.clone(); // only gossipsub at the moment
             assert!(
                 topic_peers == peers[..2].to_vec(),
                 "Two peers should be added to the first three topics"
@@ -433,7 +433,12 @@ mod tests {
             "Peer should be subscribed to two topics"
         );
 
-        let topic_peers = gs.topic_peers.get(&topic_hashes[0]).unwrap().0.clone(); // only gossipsub at the moment
+        let topic_peers = gs
+            .topic_peers
+            .get(&topic_hashes[0])
+            .unwrap()
+            .gossipsub
+            .clone(); // only gossipsub at the moment
         assert!(
             topic_peers == peers[1..2].to_vec(),
             "Only the second peers should be in the first topic"
@@ -455,8 +460,13 @@ mod tests {
             peers.push(PeerId::random())
         }
 
-        gs.topic_peers
-            .insert(topic_hash.clone(), (peers.clone(), vec![]));
+        gs.topic_peers.insert(
+            topic_hash.clone(),
+            PeerList {
+                gossipsub: peers.clone(),
+                floodsub: vec![],
+            },
+        );
 
         let random_peers = gs.get_random_peers(&topic_hash, 5, { |_| true });
         assert!(random_peers.len() == 5, "Expected 5 peers to be returned");

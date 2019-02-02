@@ -61,8 +61,8 @@ pub struct Gossipsub<TSubstream> {
     /// Peer id of the local node. Used for the source of the messages that we publish.
     local_peer_id: PeerId,
 
-    /// A map of all connected peers - A map of topic hash to a tuple containing a list of gossipsub peers and floodsub peers respectively.
-    topic_peers: HashMap<TopicHash, (Vec<PeerId>, Vec<PeerId>)>,
+    /// A map of all connected peers - A map of topic hash to PeerList which contains a list of gossipsub and floodsub peers.
+    topic_peers: HashMap<TopicHash, PeerList>,
 
     /// A map of all connected peers to a tuple containing their subscribed topics and NodeType
     /// respectively.
@@ -125,8 +125,8 @@ impl<TSubstream> Gossipsub<TSubstream> {
         }
 
         // send subscription request to all floodsub and gossipsub peers in the topic
-        if let Some((gossip_peers, flood_peers)) = self.topic_peers.get(&topic.hash()) {
-            for peer in flood_peers.iter().chain(gossip_peers) {
+        if let Some(peer_list) = self.topic_peers.get(&topic.hash()) {
+            for peer in peer_list.floodsub.iter().chain(peer_list.gossipsub.iter()) {
                 debug!("Sending SUBSCRIBE to peer: {:?}", peer);
                 self.events.push_back(NetworkBehaviourAction::SendEvent {
                     peer_id: peer.clone(),
@@ -165,8 +165,8 @@ impl<TSubstream> Gossipsub<TSubstream> {
         }
 
         // announce to all floodsub and gossipsub peers, in the topic
-        if let Some((gossip_peers, flood_peers)) = self.topic_peers.get(topic_hash) {
-            for peer in flood_peers.iter().chain(gossip_peers) {
+        if let Some(peer_list) = self.topic_peers.get(topic_hash) {
+            for peer in peer_list.floodsub.iter().chain(peer_list.gossipsub.iter()) {
                 debug!("Sending UNSUBSCRIBE to peer: {:?}", peer);
                 self.events.push_back(NetworkBehaviourAction::SendEvent {
                     peer_id: peer.clone(),
@@ -552,24 +552,24 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
         for subscription in subscriptions {
             // get the peers from the mapping, or insert empty lists if topic doesn't exist
-            let (gossip_peers, flood_peers) = self
+            let peer_list = self
                 .topic_peers
                 .entry(subscription.topic_hash.clone())
-                .or_insert((vec![], vec![]));
+                .or_insert(PeerList::new());
 
             match subscription.action {
                 GossipsubSubscriptionAction::Subscribe => {
                     match node_type {
                         NodeType::Floodsub => {
-                            if !flood_peers.contains(&propagation_source) {
+                            if !peer_list.floodsub.contains(&propagation_source) {
                                 debug!("SUBSCRIPTION: topic_peer: Adding floodsub peer: {:?} to topic: {:?}", propagation_source, subscription.topic_hash);
-                                flood_peers.push(propagation_source.clone());
+                                peer_list.floodsub.push(propagation_source.clone());
                             }
                         }
                         NodeType::Gossipsub => {
-                            if !gossip_peers.contains(&propagation_source) {
+                            if !peer_list.gossipsub.contains(&propagation_source) {
                                 debug!("SUBSCRIPTION: topic_peer: Adding gossip peer: {:?} to topic: {:?}", propagation_source, subscription.topic_hash);
-                                gossip_peers.push(propagation_source.clone());
+                                peer_list.gossipsub.push(propagation_source.clone());
                             }
                         }
                     }
@@ -592,25 +592,29 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 GossipsubSubscriptionAction::Unsubscribe => {
                     match node_type {
                         NodeType::Floodsub => {
-                            if let Some(pos) =
-                                flood_peers.iter().position(|p| p == propagation_source)
+                            if let Some(pos) = peer_list
+                                .floodsub
+                                .iter()
+                                .position(|p| p == propagation_source)
                             {
                                 info!(
                                     "SUBSCRIPTION: Removing floodsub peer: {:?} from topic: {:?}",
                                     propagation_source, subscription.topic_hash
                                 );
-                                flood_peers.remove(pos);
+                                peer_list.floodsub.remove(pos);
                             }
                         }
                         NodeType::Gossipsub => {
-                            if let Some(pos) =
-                                gossip_peers.iter().position(|p| p == propagation_source)
+                            if let Some(pos) = peer_list
+                                .gossipsub
+                                .iter()
+                                .position(|p| p == propagation_source)
                             {
                                 info!(
                                     "SUBSCRIPTION: Removing gossip peer: {:?} from topic: {:?}",
                                     propagation_source, subscription.topic_hash
                                 );
-                                gossip_peers.remove(pos);
+                                peer_list.gossipsub.remove(pos);
                             }
                         }
                     }
@@ -857,8 +861,8 @@ impl<TSubstream> Gossipsub<TSubstream> {
         // add floodsub and mesh peers
         for topic in &message.topics {
             // floodsub
-            if let Some((_, floodsub_peers)) = self.topic_peers.get(&topic) {
-                for peer_id in floodsub_peers {
+            if let Some(peer_list) = self.topic_peers.get(&topic) {
+                for peer_id in &peer_list.floodsub {
                     if *peer_id != source {
                         recipient_peers.insert(peer_id.clone());
                     }
@@ -902,7 +906,12 @@ impl<TSubstream> Gossipsub<TSubstream> {
     ) -> Vec<PeerId> {
         let mut gossip_peers = match self.topic_peers.get(topic_hash) {
             // if they exist, filter the peers by `f`
-            Some((gossip_peers, _)) => gossip_peers.iter().cloned().filter(|p| f(p)).collect(),
+            Some(peer_list) => peer_list
+                .gossipsub
+                .iter()
+                .cloned()
+                .filter(|p| f(p))
+                .collect(),
             None => Vec::new(),
         };
 
@@ -990,11 +999,11 @@ where
                 }
 
                 // remove from topic_peers
-                if let Some((gossip_peers, flood_peers)) = self.topic_peers.get_mut(&topic) {
+                if let Some(peer_list) = self.topic_peers.get_mut(&topic) {
                     match node_type {
                         NodeType::Gossipsub => {
-                            if let Some(pos) = gossip_peers.iter().position(|p| p == id) {
-                                gossip_peers.remove(pos);
+                            if let Some(pos) = peer_list.gossipsub.iter().position(|p| p == id) {
+                                peer_list.gossipsub.remove(pos);
                             //TODO: untagPeer
                             }
                             // debugging purposes
@@ -1006,8 +1015,8 @@ where
                             }
                         }
                         NodeType::Floodsub => {
-                            if let Some(pos) = flood_peers.iter().position(|p| p == id) {
-                                flood_peers.remove(pos);
+                            if let Some(pos) = peer_list.floodsub.iter().position(|p| p == id) {
+                                peer_list.floodsub.remove(pos);
                             //TODO: untagPeer
                             }
                             // debugging purposes
@@ -1122,6 +1131,23 @@ impl From<()> for InnerMessage {
     #[inline]
     fn from(_: ()) -> InnerMessage {
         InnerMessage::Sent
+    }
+}
+
+/// Struct that contains lists of gossipsub and floodsub peers.
+struct PeerList {
+    /// List of gossipsub peers.
+    gossipsub: Vec<PeerId>,
+    /// List of floodsub peers.
+    floodsub: Vec<PeerId>,
+}
+
+impl PeerList {
+    pub fn new() -> Self {
+        PeerList {
+            gossipsub: vec![],
+            floodsub: vec![],
+        }
     }
 }
 
