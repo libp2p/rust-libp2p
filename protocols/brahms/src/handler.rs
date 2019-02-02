@@ -20,7 +20,7 @@
 
 use crate::protocol::{
     BrahmsListen, BrahmsListenOut, BrahmsListenPullRequest, BrahmsListenPullRequestFlush,
-    BrahmsPullRequestRequest, BrahmsPushRequest,
+    BrahmsPullRequestRequest, BrahmsPushRequest, BrahmsPushRequestError,
 };
 use futures::prelude::*;
 use libp2p_core::{
@@ -238,7 +238,7 @@ where
     fn inject_inbound_closed(&mut self) {}
 
     #[inline]
-    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<EitherError<io::Error, Box<error::Error + Send + Sync>>>) {
+    fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<EitherError<BrahmsPushRequestError, Box<error::Error + Send + Sync>>>) {
     }
 
     #[inline]

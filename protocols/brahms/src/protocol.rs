@@ -23,10 +23,10 @@
 
 use crate::codec::{Codec, RawMessage};
 use crate::pow::Pow;
-use futures::{prelude::*, try_ready};
+use futures::{future, prelude::*, try_ready};
 use libp2p_core::upgrade::{self, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_core::{Multiaddr, PeerId};
-use std::{error, io, iter};
+use std::{error, fmt, io, iter};
 use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -58,8 +58,8 @@ where
     TSocket: AsyncRead + AsyncWrite,
 {
     type Output = ();
-    type Error = io::Error;
-    type Future = upgrade::WriteOne<TSocket>;
+    type Error = BrahmsPushRequestError;
+    type Future = future::Either<future::FromErr<upgrade::WriteOne<TSocket>, BrahmsPushRequestError>, future::FutureResult<(), BrahmsPushRequestError>>;
 
     #[inline]
     fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
@@ -69,8 +69,45 @@ where
             .map(Multiaddr::into_bytes)
             .collect();
         // TODO: what if lots of addrs? https://github.com/libp2p/rust-libp2p/issues/760
-        let pow = Pow::generate(&self.local_peer_id, &self.remote_peer_id, self.pow_difficulty).unwrap();   // TODO:
-        upgrade::write_one(socket, RawMessage::Push(addrs, pow.nonce()).into_bytes())
+
+        match Pow::generate(&self.local_peer_id, &self.remote_peer_id, self.pow_difficulty) {
+            Ok(pow) => future::Either::A(upgrade::write_one(socket, RawMessage::Push(addrs, pow.nonce()).into_bytes()).from_err()),
+            Err(()) => future::Either::B(future::err(BrahmsPushRequestError::PowGenerationFailed)),
+        }
+    }
+}
+
+/// Error while sending a push request.
+#[derive(Debug)]
+pub enum BrahmsPushRequestError {
+    /// I/O error.
+    Io(io::Error),
+    /// Failed to generate a proof of work for the given request with the given difficulty.
+    PowGenerationFailed,
+}
+
+impl From<io::Error> for BrahmsPushRequestError {
+    fn from(err: io::Error) -> Self {
+        BrahmsPushRequestError::Io(err)
+    }
+}
+
+impl fmt::Display for BrahmsPushRequestError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            BrahmsPushRequestError::Io(ref err) => write!(f, "{}", err),
+            BrahmsPushRequestError::PowGenerationFailed =>
+                write!(f, "Failed to generate a proof of work for the push request."),
+        }
+    }
+}
+
+impl error::Error for BrahmsPushRequestError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match *self {
+            BrahmsPushRequestError::Io(ref err) => Some(err),
+            BrahmsPushRequestError::PowGenerationFailed => None,
+        }
     }
 }
 
