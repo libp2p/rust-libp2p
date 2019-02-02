@@ -30,19 +30,11 @@ fn main() {
     // Create a Swarm to manage peers and events
     let mut swarm = {
         // set default parameters for gossipsub
-        //let gossipsub_config = gossipsub::GossipsubConfig::default();
+        // let gossipsub_config = gossipsub::GossipsubConfig::default();
         // set custom gossipsub
-        let gossipsub_config = gossipsub::GossipsubConfig::new(
-            5,
-            3,
-            6,
-            4,
-            12,
-            6,
-            Duration::from_secs(10),
-            Duration::from_secs(10),
-            Duration::from_secs(60),
-        );
+        let gossipsub_config = gossipsub::GossipsubConfigBuilder::new()
+            .heartbeat_interval(Duration::from_secs(10))
+            .build();
         // build a gossipsub network behaviour
         let mut gossipsub = gossipsub::Gossipsub::new(local_peer_id.clone(), gossipsub_config);
         gossipsub.subscribe(topic.clone());

@@ -119,9 +119,11 @@ extern crate unsigned_varint;
 
 pub mod protocol;
 
+mod gossipsub_config;
 mod layer;
 mod mcache;
 mod rpc_proto;
 
-pub use self::layer::{Gossipsub, GossipsubConfig, GossipsubEvent};
-pub use self::protocol::*;
+pub use self::gossipsub_config::{GossipsubConfig, GossipsubConfigBuilder};
+pub use self::layer::{Gossipsub, GossipsubEvent};
+pub use self::protocol::{GossipsubMessage, GossipsubRpc};

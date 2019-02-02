@@ -23,6 +23,7 @@
 
 use cuckoofilter::CuckooFilter;
 use futures::prelude::*;
+use gossipsub_config::GossipsubConfig;
 use libp2p_core::swarm::{
     ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
 };
@@ -40,90 +41,12 @@ use rand;
 use rand::{seq::SliceRandom, thread_rng};
 use smallvec::SmallVec;
 use std::collections::hash_map::{DefaultHasher, HashMap};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use std::{collections::VecDeque, iter, marker::PhantomData};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_timer::Interval;
 
 mod tests;
-
-// potentially rename this struct - due to clashes
-/// Configuration parameters that define the performance of the gossipsub network.
-#[derive(Clone)]
-pub struct GossipsubConfig {
-    /// Overlay network parameters.
-    /// Number of heartbeats to keep in the `memcache`.
-    history_length: usize,
-    /// Number of past heartbeats to gossip about.
-    history_gossip: usize,
-
-    /// Target number of peers for the mesh network (D in the spec).
-    mesh_n: usize,
-    /// Minimum number of peers in mesh network before adding more (D_lo in the spec).
-    mesh_n_low: usize,
-    /// Maximum number of peers in mesh network before removing some (D_high in the spec).
-    mesh_n_high: usize,
-
-    /// Number of peers to emit gossip to during a heartbeat (D_lazy in the spec).
-    gossip_lazy: usize,
-
-    /// Initial delay in each heartbeat.
-    heartbeat_initial_delay: Duration,
-    /// Time between each heartbeat.
-    heartbeat_interval: Duration,
-    /// Time to live for fanout peers.
-    fanout_ttl: Duration,
-}
-
-impl Default for GossipsubConfig {
-    fn default() -> GossipsubConfig {
-        GossipsubConfig {
-            history_length: 5,
-            history_gossip: 3,
-            mesh_n: 6,
-            mesh_n_low: 4,
-            mesh_n_high: 12,
-            gossip_lazy: 6, // default to mesh_n
-            heartbeat_initial_delay: Duration::from_secs(5),
-            heartbeat_interval: Duration::from_secs(1),
-            fanout_ttl: Duration::from_secs(60),
-        }
-    }
-}
-
-impl GossipsubConfig {
-    pub fn new(
-        history_length: usize,
-        history_gossip: usize,
-        mesh_n: usize,
-        mesh_n_low: usize,
-        mesh_n_high: usize,
-        gossip_lazy: usize,
-        heartbeat_initial_delay: Duration,
-        heartbeat_interval: Duration,
-        fanout_ttl: Duration,
-    ) -> GossipsubConfig {
-        assert!(
-            history_length >= history_gossip,
-            "The history_length must be greater than or equal to the history_gossip length"
-        );
-        assert!(
-            mesh_n_low <= mesh_n && mesh_n <= mesh_n_high,
-            "The following equality doesn't hold mesh_n_low <= mesh_n <= mesh_n_high"
-        );
-        GossipsubConfig {
-            history_length,
-            history_gossip,
-            mesh_n,
-            mesh_n_low,
-            mesh_n_high,
-            gossip_lazy,
-            heartbeat_initial_delay,
-            heartbeat_interval,
-            fanout_ttl,
-        }
-    }
-}
 
 /// Network behaviour that automatically identifies nodes periodically, and returns information
 /// about them.
