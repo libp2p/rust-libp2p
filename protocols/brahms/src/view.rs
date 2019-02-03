@@ -59,6 +59,11 @@ where
         }
     }
 
+    /// Returns true if the view is empty.
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
     /// Inserts addresses for the given peer in the view. The peer is added even if the list of
     /// addresses is empty.
     pub fn insert(&mut self, peer_id: &TPeerId, addrs: impl IntoIterator<Item = Multiaddr>) {

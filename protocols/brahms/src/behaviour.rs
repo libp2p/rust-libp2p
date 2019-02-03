@@ -283,8 +283,9 @@ impl<TSubstream> Brahms<TSubstream> {
         };
 
         // Update the view if necessary.
-        if !self.push_list.is_empty() && // !self.pull_list.is_empty() &&  //TODO: figure out this
-            self.push_list.len() <= self.view_size.alpha as usize
+        // TODO: figure out bootstrapping
+        if self.push_list.len() <= self.view_size.alpha as usize //&&
+            //(self.view.is_empty() || (!self.push_list.is_empty() && !self.pull_list.is_empty()))
         {
             // Clear `self.view` and put the former view in `old_view`.
             let old_view = {
