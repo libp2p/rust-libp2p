@@ -4,7 +4,7 @@ use handler::GossipsubHandler;
 use mcache::MCache;
 use mesh::Mesh;
 use message::{ControlGraft, ControlIHave, ControlIWant, ControlMessage,
-    GMessage,
+    ControlPrune, GMessage,
     GossipsubRpc, GossipsubSubscription, GossipsubSubscriptionAction,
     GOutEvents, MsgHash, MsgMap};
 use peers::Peers;
@@ -530,9 +530,22 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
         // much.
         for (i, t_hash) in t_hashes_v.clone().into_iter().enumerate() {
             match m.remove(&t_hash) {
-                Ok(mut ps) => {
+                Ok(mut r_peers) => {
                     // All good, proceed with pruning.
-
+                    // Already removed peers above, now notify them.
+                    for r_peer in r_peers {
+                        let mut ctrl = ControlMessage::new();
+                        let prune = ControlPrune::new_with_thash(
+                            t_hash.clone());
+                        ctrl.prune.push(prune);
+                        grpc.control = Some(ctrl);
+                        self.events.push_back(
+                            NetworkBehaviourAction::SendEvent {
+                                peer_id: r_peer.clone(),
+                                event: grpc,
+                            }
+                        );
+                    }
                 },
                 Err(GError::TopicNotInMesh{t_hash: _t_hash, err}) => {
                     // The topic needs to be in the local peer's mesh view

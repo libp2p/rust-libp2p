@@ -631,7 +631,7 @@ impl From<ControlGraft> for rpc_proto::ControlGraft {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct ControlPrune {
     /// Topic to prune a peer from.
-    pub topic: TopicHash,
+    pub topic: TopicHash
 }
 
 impl From<ControlPrune> for rpc_proto::ControlPrune {
@@ -639,6 +639,14 @@ impl From<ControlPrune> for rpc_proto::ControlPrune {
         let mut ctrl_prune = rpc_proto::ControlPrune::new();
         ctrl_prune.set_topic_hash(control_prune.topic.into_string());
         ctrl_prune
+    }
+}
+
+impl ControlPrune {
+    pub fn new_with_thash(th: TopicHash) -> Self {
+        ControlPrune {
+            topic: th
+        }
     }
 }
 
