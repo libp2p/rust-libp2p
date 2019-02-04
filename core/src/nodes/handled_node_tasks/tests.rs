@@ -97,7 +97,7 @@ impl NodeTaskTestBuilder {
     }
 }
 
-type TestHandledNodesTasks = HandledNodesTasks<InEvent, OutEvent, Handler, io::Error, io::Error>;
+type TestHandledNodesTasks = HandledNodesTasks<InEvent, OutEvent, Handler, io::Error, io::Error, ()>;
 
 struct HandledNodeTaskTestBuilder {
     muxer: DummyMuxer,
@@ -125,7 +125,7 @@ impl HandledNodeTaskTestBuilder {
         for _i in 0..self.task_count {
             let fut = future::ok((peer_id.clone(), self.muxer.clone()));
             task_ids.push(
-                handled_nodes.add_reach_attempt(fut, self.handler.clone())
+                handled_nodes.add_reach_attempt(fut, (), self.handler.clone())
             );
         }
         (handled_nodes, task_ids)
@@ -245,11 +245,11 @@ fn iterate_over_all_tasks() {
 
 #[test]
 fn add_reach_attempt_prepares_a_new_task() {
-    let mut handled_nodes: HandledNodesTasks<_, _, _, _, _> = HandledNodesTasks::new();
+    let mut handled_nodes: HandledNodesTasks<_, _, _, _, _, _> = HandledNodesTasks::new();
     assert_eq!(handled_nodes.tasks().count(), 0);
     assert_eq!(handled_nodes.to_spawn.len(), 0);
 
-    handled_nodes.add_reach_attempt( future::empty::<_, Void>(), Handler::default() );
+    handled_nodes.add_reach_attempt(future::empty::<_, Void>(), (), Handler::default());
 
     assert_eq!(handled_nodes.tasks().count(), 1);
     assert_eq!(handled_nodes.to_spawn.len(), 1);

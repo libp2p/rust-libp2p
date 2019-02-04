@@ -56,11 +56,11 @@ mod tests;
 // conditions in the user's code. See similar comments in the documentation of `NodeStream`.
 
 /// Implementation of `Stream` that handles a collection of nodes.
-pub struct HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId = PeerId> {
+pub struct HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TPeerId = PeerId> {
     /// A map between active tasks to an unbounded sender, used to control the task. Closing the sender interrupts
     /// the task. It is possible that we receive messages from tasks that used to be in this list
     /// but no longer are, in which case we should ignore them.
-    tasks: FnvHashMap<TaskId, mpsc::UnboundedSender<TInEvent>>,
+    tasks: FnvHashMap<TaskId, (mpsc::UnboundedSender<TInEvent>, TUserData)>,
 
     /// Identifier for the next task to spawn.
     next_task_id: TaskId,
@@ -75,12 +75,14 @@ pub struct HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THand
     events_rx: mpsc::UnboundedReceiver<(InToExtMessage<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>, TaskId)>,
 }
 
-impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId> fmt::Debug for
-    HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>
+impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TPeerId> fmt::Debug for
+    HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TPeerId>
+where
+    TUserData: fmt::Debug
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        f.debug_list()
-            .entries(self.tasks.keys().cloned())
+        f.debug_map()
+            .entries(self.tasks.iter().map(|(id, (_, ud))| (id, ud)))
             .finish()
     }
 }
@@ -144,7 +146,7 @@ where T: NodeHandler
 
 /// Event that can happen on the `HandledNodesTasks`.
 #[derive(Debug)]
-pub enum HandledNodesEvent<'a, TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId = PeerId> {
+pub enum HandledNodesEvent<'a, TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TPeerId = PeerId> {
     /// A task has been closed.
     ///
     /// This happens once the node handler closes or an error happens.
@@ -152,6 +154,8 @@ pub enum HandledNodesEvent<'a, TInEvent, TOutEvent, TIntoHandler, TReachErr, THa
     TaskClosed {
         /// Identifier of the task that closed.
         id: TaskId,
+        /// The user data that was associated with the task.
+        user_data: TUserData,
         /// What happened.
         result: Result<(), TaskClosedEvent<TReachErr, THandlerErr>>,
         /// If the task closed before reaching the node, this contains the handler that was passed
@@ -162,7 +166,7 @@ pub enum HandledNodesEvent<'a, TInEvent, TOutEvent, TIntoHandler, TReachErr, THa
     /// A task has successfully connected to a node.
     NodeReached {
         /// The task that succeeded.
-        task: Task<'a, TInEvent>,
+        task: Task<'a, TInEvent, TUserData>,
         /// Identifier of the node.
         peer_id: TPeerId,
     },
@@ -170,7 +174,7 @@ pub enum HandledNodesEvent<'a, TInEvent, TOutEvent, TIntoHandler, TReachErr, THa
     /// A task has produced an event.
     NodeEvent {
         /// The task that produced the event.
-        task: Task<'a, TInEvent>,
+        task: Task<'a, TInEvent, TUserData>,
         /// The produced event.
         event: TOutEvent,
     },
@@ -180,8 +184,8 @@ pub enum HandledNodesEvent<'a, TInEvent, TOutEvent, TIntoHandler, TReachErr, THa
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TaskId(usize);
 
-impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>
-    HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>
+impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TPeerId>
+    HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TPeerId>
 {
     /// Creates a new empty collection.
     #[inline]
@@ -201,7 +205,7 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>
     ///
     /// This method spawns a task dedicated to resolving this future and processing the node's
     /// events.
-    pub fn add_reach_attempt<TFut, TMuxer>(&mut self, future: TFut, handler: TIntoHandler) -> TaskId
+    pub fn add_reach_attempt<TFut, TMuxer>(&mut self, future: TFut, user_data: TUserData, handler: TIntoHandler) -> TaskId
     where
         TFut: Future<Item = (TPeerId, TMuxer), Error = TReachErr> + Send + 'static,
         TIntoHandler: IntoNodeHandler<TPeerId> + Send + 'static,
@@ -219,7 +223,7 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>
         self.next_task_id.0 += 1;
 
         let (tx, rx) = mpsc::unbounded();
-        self.tasks.insert(task_id, tx);
+        self.tasks.insert(task_id, (tx, user_data));
 
         let task = Box::new(NodeTask {
             inner: NodeTaskInner::Future {
@@ -240,7 +244,7 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>
     pub fn broadcast_event(&mut self, event: &TInEvent)
     where TInEvent: Clone,
     {
-        for sender in self.tasks.values() {
+        for (sender, _) in self.tasks.values() {
             // Note: it is possible that sending an event fails if the background task has already
             // finished, but the local state hasn't reflected that yet because it hasn't been
             // polled. This is not an error situation.
@@ -252,7 +256,7 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>
     ///
     /// Returns `None` if the task id is invalid.
     #[inline]
-    pub fn task(&mut self, id: TaskId) -> Option<Task<TInEvent>> {
+    pub fn task(&mut self, id: TaskId) -> Option<Task<TInEvent, TUserData>> {
         match self.tasks.entry(id) {
             Entry::Occupied(inner) => Some(Task { inner }),
             Entry::Vacant(_) => None,
@@ -266,7 +270,7 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>
     }
 
     /// Provides an API similar to `Stream`, except that it cannot produce an error.
-    pub fn poll(&mut self) -> Async<HandledNodesEvent<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>> {
+    pub fn poll(&mut self) -> Async<HandledNodesEvent<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TPeerId>> {
         let (message, task_id) = match self.poll_inner() {
             Async::Ready(r) => r,
             Async::NotReady => return Async::NotReady,
@@ -292,9 +296,10 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>
                 }
             },
             InToExtMessage::TaskClosed(result, handler) => {
-                let _ = self.tasks.remove(&task_id);
+                let (_, user_data) = self.tasks.remove(&task_id)
+                    .expect("poll_inner only returns valid TaskIds; QED");
                 HandledNodesEvent::TaskClosed {
-                    id: task_id, result, handler
+                    id: task_id, result, handler, user_data,
                 }
             },
         })
@@ -332,11 +337,11 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>
 }
 
 /// Access to a task in the collection.
-pub struct Task<'a, TInEvent: 'a> {
-    inner: OccupiedEntry<'a, TaskId, mpsc::UnboundedSender<TInEvent>>,
+pub struct Task<'a, TInEvent: 'a, TUserData: 'a> {
+    inner: OccupiedEntry<'a, TaskId, (mpsc::UnboundedSender<TInEvent>, TUserData)>,
 }
 
-impl<'a, TInEvent> Task<'a, TInEvent> {
+impl<'a, TInEvent, TUserData> Task<'a, TInEvent, TUserData> {
     /// Sends an event to the given node.
     // TODO: report back on delivery
     #[inline]
@@ -344,7 +349,17 @@ impl<'a, TInEvent> Task<'a, TInEvent> {
         // It is possible that the sender is closed if the background task has already finished
         // but the local state hasn't been updated yet because we haven't been polled in the
         // meanwhile.
-        let _ = self.inner.get_mut().unbounded_send(event);
+        let _ = self.inner.get_mut().0.unbounded_send(event);
+    }
+
+    /// Returns the user data associated with the task.
+    pub fn user_data(&self) -> &TUserData {
+        &self.inner.get().1
+    }
+
+    /// Returns the user data associated with the task.
+    pub fn user_data_mut(&mut self) -> &mut TUserData {
+        &mut self.inner.get_mut().1
     }
 
     /// Returns the task id.
@@ -361,10 +376,14 @@ impl<'a, TInEvent> Task<'a, TInEvent> {
     }
 }
 
-impl<'a, TInEvent> fmt::Debug for Task<'a, TInEvent> {
+impl<'a, TInEvent, TUserData> fmt::Debug for Task<'a, TInEvent, TUserData>
+where
+    TUserData: fmt::Debug,
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         f.debug_tuple("Task")
             .field(&self.id())
+            .field(self.user_data())
             .finish()
     }
 }

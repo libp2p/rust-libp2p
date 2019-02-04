@@ -37,7 +37,7 @@ mod tests;
 /// Implementation of `Stream` that handles a collection of nodes.
 pub struct CollectionStream<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TPeerId = PeerId> {
     /// Object that handles the tasks.
-    inner: HandledNodesTasks<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TPeerId>,
+    inner: HandledNodesTasks<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, (), TPeerId>,
     /// List of nodes, with the task id that handles this node. The corresponding entry in `tasks`
     /// must always be in the `Connected` state.
     nodes: FnvHashMap<TPeerId, TaskId>,
@@ -314,7 +314,7 @@ where
         TMuxer::OutboundSubstream: Send + 'static,  // TODO: shouldn't be required
         TPeerId: Send + 'static,
     {
-        let id = self.inner.add_reach_attempt(future, handler);
+        let id = self.inner.add_reach_attempt(future, (), handler);
         self.tasks.insert(id, TaskState::Pending);
         ReachAttemptId(id)
     }
@@ -401,7 +401,7 @@ where
         };
 
         match item {
-            HandledNodesEvent::TaskClosed { id, result, handler } => {
+            HandledNodesEvent::TaskClosed { id, result, handler, .. } => {
                 match (self.tasks.remove(&id), result, handler) {
                     (Some(TaskState::Pending), Err(TaskClosedEvent::Reach(err)), Some(handler)) => {
                         Async::Ready(CollectionEvent::ReachError {
@@ -509,7 +509,7 @@ impl error::Error for InterruptError {}
 
 /// Access to a peer in the collection.
 pub struct PeerMut<'a, TInEvent: 'a, TPeerId: 'a = PeerId> {
-    inner: HandledNodesTask<'a, TInEvent>,
+    inner: HandledNodesTask<'a, TInEvent, ()>,
     tasks: &'a mut FnvHashMap<TaskId, TaskState<TPeerId>>,
     nodes: &'a mut FnvHashMap<TPeerId, TaskId>,
 }
