@@ -538,7 +538,7 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
                         let prune = ControlPrune::new_with_thash(
                             t_hash.clone());
                         ctrl.prune.push(prune);
-                        grpc.control = Some(ctrl);
+                        let mut grpc = GossipsubRpc::new_with_control(ctrl);
                         self.events.push_back(
                             NetworkBehaviourAction::SendEvent {
                                 peer_id: r_peer.clone(),

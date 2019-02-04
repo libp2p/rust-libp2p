@@ -475,6 +475,15 @@ impl ControlMessage {
             prune: Vec::new(),
         }
     }
+
+    pub fn new_with_prune(prune: ControlPrune) -> Self {
+        ControlMessage {
+            ihave: Vec::new(),
+            iwant: Vec::new(),
+            graft: Vec::new(),
+            prune: vec!(prune),
+        }
+    }
 }
 
 impl From<ControlMessage> for rpc_proto::ControlMessage {
@@ -687,6 +696,14 @@ impl GossipsubRpc {
             messages: Vec::new(),
             subscriptions: Vec::new(),
             control: None,
+        }
+    }
+
+    pub(crate) fn new_with_control(ctrl: ControlMessage) -> Self {
+        GossipsubRpc {
+            messages: Vec::new(),
+            subscriptions: Vec::new(),
+            control: Some(ctrl),
         }
     }
 }
