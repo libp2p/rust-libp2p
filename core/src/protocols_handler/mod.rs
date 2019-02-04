@@ -443,7 +443,7 @@ impl PartialOrd for KeepAlive {
 
 impl Ord for KeepAlive {
     fn cmp(&self, other: &KeepAlive) -> Ordering {
-        use KeepAlive::*;
+        use self::KeepAlive::*;
 
         match (self, other) {
             (Now, Now) | (Forever, Forever) => Ordering::Equal,
