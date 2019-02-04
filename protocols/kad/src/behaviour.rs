@@ -319,6 +319,8 @@ where
         for (query, _, _) in self.active_queries.values_mut() {
             query.inject_rpc_error(id);
         }
+
+        self.kbuckets.set_disconnected(&id);
     }
 
     fn inject_replaced(&mut self, peer_id: PeerId, _: ConnectedPoint, _: ConnectedPoint) {
