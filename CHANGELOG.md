@@ -1,3 +1,8 @@
+# Version 0.3.1 (2019-02-02)
+
+- Added `NetworkBehaviour::inject_replaced` that is called whenever we replace a connection with a different connection to the same peer.
+- Fixed various issues with Kademlia.
+
 # Version 0.3.0 (2019-01-30)
 
 - Removed the `topology` module and everything it contained, including the `Topology` trait.

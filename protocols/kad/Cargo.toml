@@ -2,7 +2,7 @@
 name = "libp2p-kad"
 edition = "2018"
 description = "Kademlia protocol for libp2p"
-version = "0.3.1"
+version = "0.3.2"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -18,7 +18,7 @@ fnv = "1.0"
 futures = "0.1"
 libp2p-identify = { version = "0.3.0", path = "../../protocols/identify" }
 libp2p-ping = { version = "0.3.0", path = "../../protocols/ping" }
-libp2p-core = { version = "0.3.0", path = "../../core" }
+libp2p-core = { version = "0.3.2", path = "../../core" }
 log = "0.4"
 multiaddr = { package = "parity-multiaddr", version = "0.1.0", path = "../../misc/multiaddr" }
 multihash = { package = "parity-multihash", version = "0.1.0", path = "../../misc/multihash" }
