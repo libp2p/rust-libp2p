@@ -291,7 +291,7 @@ where
             .unwrap_or_else(Vec::new)
     }
 
-    fn inject_connected(&mut self, id: PeerId, _: ConnectedPoint) {
+    fn inject_connected(&mut self, id: PeerId, endpoint: ConnectedPoint) {
         if let Some(pos) = self.pending_rpcs.iter().position(|(p, _)| p == &id) {
             let (_, rpc) = self.pending_rpcs.remove(pos);
             self.queued_events.push(NetworkBehaviourAction::SendEvent {
@@ -309,6 +309,14 @@ where
             _ => ()
         }
 
+        if let ConnectedPoint::Dialer { address } = endpoint {
+            if let Some(list) = self.kbuckets.entry_mut(&id) {
+                if list.iter().all(|a| *a != address) {
+                    list.push(address);
+                }
+            }
+        }
+
         self.connected_peers.insert(id);
     }
 
@@ -318,6 +326,28 @@ where
 
         for (query, _, _) in self.active_queries.values_mut() {
             query.inject_rpc_error(id);
+        }
+
+        self.kbuckets.set_disconnected(&id);
+    }
+
+    fn inject_replaced(&mut self, peer_id: PeerId, _: ConnectedPoint, new_endpoint: ConnectedPoint) {
+        // We need to re-send the active queries.
+        for (query_id, (query, _, _)) in self.active_queries.iter() {
+            if query.is_waiting(&peer_id) {
+                self.queued_events.push(NetworkBehaviourAction::SendEvent {
+                    peer_id: peer_id.clone(),
+                    event: query.target().to_rpc_request(*query_id),
+                });
+            }
+        }
+
+        if let ConnectedPoint::Dialer { address } = new_endpoint {
+            if let Some(list) = self.kbuckets.entry_mut(&peer_id) {
+                if list.iter().all(|a| *a != address) {
+                    list.push(address);
+                }
+            }
         }
     }
 

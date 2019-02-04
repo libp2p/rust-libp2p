@@ -262,8 +262,7 @@ where TBehaviour: NetworkBehaviour,
                     self.behaviour.inject_disconnected(&peer_id, endpoint);
                 },
                 Async::Ready(RawSwarmEvent::Replaced { peer_id, closed_endpoint, endpoint }) => {
-                    self.behaviour.inject_disconnected(&peer_id, closed_endpoint);
-                    self.behaviour.inject_connected(peer_id, endpoint);
+                    self.behaviour.inject_replaced(peer_id, closed_endpoint, endpoint);
                 },
                 Async::Ready(RawSwarmEvent::IncomingConnection(incoming)) => {
                     let handler = self.behaviour.new_handler();
@@ -342,6 +341,12 @@ pub trait NetworkBehaviour {
     /// Indicates the behaviour that we disconnected from the node with the given peer id. The
     /// endpoint is the one we used to be connected to.
     fn inject_disconnected(&mut self, peer_id: &PeerId, endpoint: ConnectedPoint);
+
+    /// Indicates the behaviour that we replace the connection from the node with another.
+    fn inject_replaced(&mut self, peer_id: PeerId, closed_endpoint: ConnectedPoint, new_endpoint: ConnectedPoint) {
+        self.inject_disconnected(&peer_id, closed_endpoint);
+        self.inject_connected(peer_id, new_endpoint);
+    }
 
     /// Indicates the behaviour that the node with the given peer id has generated an event for
     /// us.

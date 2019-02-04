@@ -191,6 +191,32 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         })
     };
 
+    // Build the list of statements to put in the body of `inject_replaced()`.
+    let inject_replaced_stmts = {
+        let num_fields = data_struct.fields.iter().filter(|f| !is_ignored(f)).count();
+        data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
+            if is_ignored(&field) {
+                return None;
+            }
+
+            Some(if field_n == num_fields - 1 {
+                match field.ident {
+                    Some(ref i) => quote!{ self.#i.inject_replaced(peer_id, closed_endpoint, new_endpoint); },
+                    None => quote!{ self.#field_n.inject_replaced(peer_id, closed_endpoint, new_endpoint); },
+                }
+            } else {
+                match field.ident {
+                    Some(ref i) => quote!{
+                        self.#i.inject_replaced(peer_id.clone(), closed_endpoint.clone(), new_endpoint.clone());
+                    },
+                    None => quote!{
+                        self.#field_n.inject_replaced(peer_id.clone(), closed_endpoint.clone(), new_endpoint.clone());
+                    },
+                }
+            })
+        })
+    };
+
     // Build the list of statements to put in the body of `inject_dial_failure()`.
     let inject_dial_failure_stmts = {
         data_struct.fields.iter().enumerate().filter_map(move |(field_n, field)| {
@@ -365,6 +391,11 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             #[inline]
             fn inject_disconnected(&mut self, peer_id: &#peer_id, endpoint: #connected_point) {
                 #(#inject_disconnected_stmts);*
+            }
+
+            #[inline]
+            fn inject_replaced(&mut self, peer_id: #peer_id, closed_endpoint: #connected_point, new_endpoint: #connected_point) {
+                #(#inject_replaced_stmts);*
             }
 
             #[inline]
