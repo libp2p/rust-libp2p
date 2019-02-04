@@ -647,4 +647,18 @@ mod tests {
             "Expected event count to stay the same"
         )
     }
+
+    #[test]
+    // tests that a peer is removed from our mesh
+    fn test_handle_prune_in_mesh(){
+        let (mut gs, peers, topic_hashes) =
+            build_and_inject_nodes(20, vec![String::from("topic1")], true);
+
+        // insert peer into our mesh for 'topic1'
+        gs.mesh.insert(topic_hashes[0].clone(), peers.clone());
+        assert!(gs.mesh.get(&topic_hashes[0]).unwrap().contains(&peers[7]));
+
+        gs.handle_prune(&peers[7], topic_hashes.clone());
+        assert!(!gs.mesh.get(&topic_hashes[0]).unwrap().contains(&peers[7]));
+    }
 }
