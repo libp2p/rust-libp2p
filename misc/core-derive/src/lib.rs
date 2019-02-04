@@ -206,8 +206,12 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 }
             } else {
                 match field.ident {
-                    Some(ref i) => quote!{ self.#i.inject_replaced(peer_id.clone(), closed_endpoint.clone(), new_endpoint.clone()); },
-                    None => quote!{ self.#field_n.inject_replaced(peer_id.clone(), closed_endpoint.clone(), new_endpoint.clone()); },
+                    Some(ref i) => quote!{
+                        self.#i.inject_replaced(peer_id.clone(), closed_endpoint.clone(), new_endpoint.clone());
+                    },
+                    None => quote!{
+                        self.#field_n.inject_replaced(peer_id.clone(), closed_endpoint.clone(), new_endpoint.clone());
+                    },
                 }
             })
         })
