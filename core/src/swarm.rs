@@ -197,6 +197,16 @@ where TBehaviour: NetworkBehaviour,
     pub fn local_peer_id(me: &Self) -> &PeerId {
         &me.raw_swarm.local_peer_id()
     }
+
+    /// Adds an external address.
+    ///
+    /// An external address is an address we are listening on but that accounts for things such as
+    /// NAT traversal.
+    pub fn add_external_address(me: &mut Self, addr: Multiaddr) {
+        if me.external_addrs.iter().all(|a| *a != addr) {
+            me.external_addrs.push(addr);
+        }
+    }
 }
 
 impl<TTransport, TBehaviour, TMuxer> Stream for Swarm<TTransport, TBehaviour>
