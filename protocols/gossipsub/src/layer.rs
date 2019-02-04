@@ -480,7 +480,7 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
                 prune_errs.lp_as_rp = Some(lp_as_rp_count);
                 prune_errs.has_errors = true;
             }
-            for t_hash in t_hashes_v {
+            for t_hash in t_hashes_v.clone() {
                 let thr = &t_hash;
                 match m.remove_peer_from_topic(thr, r_peer.clone()) {
                     Ok(()) => {},
@@ -516,7 +516,7 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
     /// Similar in implementation to `prune_peers_from_topics`. Used in
     /// `leave_topics`.
     pub fn prune_all_peers_from_topics(&mut self, topic_hashes: impl
-        IntoIterator<Item = impl AsRef<TopicHash>>)
+        IntoIterator<Item = impl AsRef<TopicHash>> + Clone)
     -> GResult<Option<PruneErrors>> {
         let mut t_hashes_v: Vec<TopicHash> = topic_hashes.into_iter()
             .map(|th| th.as_ref().clone()).collect();
@@ -528,8 +528,8 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
         // You could move this duplication to a separate function, but AIUI
         // you'd have to pass the above parameters to it, so it wouldn't save
         // much.
-        for (i, t_hash) in t_hashes_v.iter().enumerate() {
-            match m.remove(t_hash) {
+        for (i, t_hash) in t_hashes_v.clone().into_iter().enumerate() {
+            match m.remove(&t_hash) {
                 Ok(mut ps) => {
                     // All good, proceed with pruning.
 
@@ -537,7 +537,7 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
                 Err(GError::TopicNotInMesh{t_hash: _t_hash, err}) => {
                     // The topic needs to be in the local peer's mesh view
                     // in order to be able to prune peers from this topic.
-                    topics_not_in_mesh.push(*t_hash);
+                    topics_not_in_mesh.push(t_hash.clone());
                     t_hashes_v.remove(i);
                 },
                 // Shouldn't happen, just for the compiler.
