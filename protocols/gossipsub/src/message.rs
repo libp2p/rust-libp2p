@@ -675,9 +675,11 @@ pub struct GossipsubRpc {
 
 impl GossipsubRpc {
     pub(crate) fn new() -> Self {
-        messages: Vec::new(),
-        subscriptions: Vec::new(),
-        control: Vec::new(),
+        GossipsubRpc {
+            messages: Vec::new(),
+            subscriptions: Vec::new(),
+            control: None,
+        }
     }
 }
 

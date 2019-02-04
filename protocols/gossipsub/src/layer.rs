@@ -193,7 +193,7 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
         data: impl Into<Vec<u8>>,
         control: Option<ControlMessage>,
         msg_id: bool) {
-        self.publish_many(iter::once(topic_hash), data, control, msg_id)
+        self.publish_topics(iter::once(topic_hash), data, control, msg_id)
     }
 
     /// Publishes a message with multiple topics to the network, without any
@@ -365,7 +365,7 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
                             t_hash.clone());
                         ctrl.graft.push(graft);
                         let grpc = GossipsubRpc::new();
-                        grpc.control = ctrl;
+                        grpc.control = Some(ctrl);
                         self.inject_node_event(self.local_peer_id, grpc);
                     }
                 }
@@ -487,8 +487,9 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
                     Err(GError::NotGraftedToTopic{..}) => {
                         ps_ts_not_grafted.insert(thr.clone(), r_peer.clone());
                     },
-                    Err(GError::TopicNotInMesh{..}) => {
+                    Err(err @ GError::TopicNotInMesh{..}) => {
                         // Shouldn't happen, we already handled this above.
+                        return Err(err);
                     },
                     Err(err) => return Err(err), // Shouldn't happen.
                 }
