@@ -321,6 +321,18 @@ where
         }
     }
 
+    fn inject_replaced(&mut self, peer_id: PeerId, _: ConnectedPoint, _: ConnectedPoint) {
+        // We need to re-send the active queries.
+        for (query_id, (query, _, _)) in self.active_queries.iter() {
+            if query.is_waiting(&peer_id) {
+                self.queued_events.push(NetworkBehaviourAction::SendEvent {
+                    peer_id: peer_id.clone(),
+                    event: query.target().to_rpc_request(*query_id),
+                });
+            }
+        }
+    }
+
     fn inject_node_event(&mut self, source: PeerId, event: KademliaHandlerEvent<QueryId>) {
         match event {
             KademliaHandlerEvent::FindNodeReq { key, request_id } => {
