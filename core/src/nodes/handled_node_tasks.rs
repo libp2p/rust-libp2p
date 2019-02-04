@@ -36,7 +36,6 @@ use std::{
     mem
 };
 use tokio_executor;
-use void::Void;
 
 mod tests;
 
@@ -145,7 +144,7 @@ where T: NodeHandler
 
 /// Event that can happen on the `HandledNodesTasks`.
 #[derive(Debug)]
-pub enum HandledNodesEvent<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId = PeerId> {
+pub enum HandledNodesEvent<'a, TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId = PeerId> {
     /// A task has been closed.
     ///
     /// This happens once the node handler closes or an error happens.
@@ -162,16 +161,16 @@ pub enum HandledNodesEvent<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPee
 
     /// A task has successfully connected to a node.
     NodeReached {
-        /// Identifier of the task that succeeded.
-        id: TaskId,
+        /// The task that succeeded.
+        task: Task<'a, TInEvent>,
         /// Identifier of the node.
         peer_id: TPeerId,
     },
 
     /// A task has produced an event.
     NodeEvent {
-        /// Identifier of the task that produced the event.
-        id: TaskId,
+        /// The task that produced the event.
+        task: Task<'a, TInEvent>,
         /// The produced event.
         event: TOutEvent,
     },
@@ -267,39 +266,56 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>
     }
 
     /// Provides an API similar to `Stream`, except that it cannot produce an error.
-    pub fn poll(&mut self) -> Async<HandledNodesEvent<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>> {
+    pub fn poll(&mut self) -> Async<HandledNodesEvent<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>> {
+        let (message, task_id) = match self.poll_inner() {
+            Async::Ready(r) => r,
+            Async::NotReady => return Async::NotReady,
+        };
+
+        Async::Ready(match message {
+            InToExtMessage::NodeEvent(event) => {
+                HandledNodesEvent::NodeEvent {
+                    task: match self.tasks.entry(task_id) {
+                        Entry::Occupied(inner) => Task { inner },
+                        Entry::Vacant(_) => panic!("poll_inner only returns valid TaskIds; QED")
+                    },
+                    event
+                }
+            },
+            InToExtMessage::NodeReached(peer_id) => {
+                HandledNodesEvent::NodeReached {
+                    task: match self.tasks.entry(task_id) {
+                        Entry::Occupied(inner) => Task { inner },
+                        Entry::Vacant(_) => panic!("poll_inner only returns valid TaskIds; QED")
+                    },
+                    peer_id
+                }
+            },
+            InToExtMessage::TaskClosed(result, handler) => {
+                let _ = self.tasks.remove(&task_id);
+                HandledNodesEvent::TaskClosed {
+                    id: task_id, result, handler
+                }
+            },
+        })
+    }
+
+    /// Since non-lexical lifetimes still don't work very well in Rust at the moment, we have to
+    /// split `poll()` in two. This method returns an `InToExtMessage` that is guaranteed to come
+    /// from an alive task.
+    fn poll_inner(&mut self) -> Async<(InToExtMessage<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>, TaskId)> {
         for to_spawn in self.to_spawn.drain() {
             tokio_executor::spawn(to_spawn);
         }
+
         loop {
             match self.events_rx.poll() {
                 Ok(Async::Ready(Some((message, task_id)))) => {
                     // If the task id is no longer in `self.tasks`, that means that the user called
                     // `close()` on this task earlier. Therefore no new event should be generated
                     // for this task.
-                    if !self.tasks.contains_key(&task_id) {
-                        continue;
-                    };
-
-                    match message {
-                        InToExtMessage::NodeEvent(event) => {
-                            break Async::Ready(HandledNodesEvent::NodeEvent {
-                                id: task_id,
-                                event,
-                            });
-                        },
-                        InToExtMessage::NodeReached(peer_id) => {
-                            break Async::Ready(HandledNodesEvent::NodeReached {
-                                id: task_id,
-                                peer_id,
-                            });
-                        },
-                        InToExtMessage::TaskClosed(result, handler) => {
-                            let _ = self.tasks.remove(&task_id);
-                            break Async::Ready(HandledNodesEvent::TaskClosed {
-                                id: task_id, result, handler
-                            });
-                        },
+                    if self.tasks.contains_key(&task_id) {
+                        break Async::Ready((message, task_id));
                     }
                 }
                 Ok(Async::NotReady) => {
@@ -350,18 +366,6 @@ impl<'a, TInEvent> fmt::Debug for Task<'a, TInEvent> {
         f.debug_tuple("Task")
             .field(&self.id())
             .finish()
-    }
-}
-
-impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId> Stream for
-    HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>
-{
-    type Item = HandledNodesEvent<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>;
-    type Error = Void; // TODO: use ! once stable
-
-    #[inline]
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        Ok(self.poll().map(Option::Some))
     }
 }
 

@@ -454,15 +454,17 @@ where
                     },
                 }
             },
-            HandledNodesEvent::NodeReached { id, peer_id } => {
+            HandledNodesEvent::NodeReached { task, peer_id } => {
+                let id = task.id();
+                drop(task);
                 Async::Ready(CollectionEvent::NodeReached(CollectionReachEvent {
                     parent: self,
                     id,
                     peer_id,
                 }))
             },
-            HandledNodesEvent::NodeEvent { id, event } => {
-                let peer_id = match self.tasks.get(&id) {
+            HandledNodesEvent::NodeEvent { task, event } => {
+                let peer_id = match self.tasks.get(&task.id()) {
                     Some(TaskState::Connected(peer_id)) => peer_id.clone(),
                     _ => panic!("we can only receive NodeEvent events from a task after we \
                                  received a corresponding NodeReached event from that same task; \
