@@ -437,15 +437,18 @@ impl KeepAlive {
 
 impl PartialOrd for KeepAlive {
     fn partial_cmp(&self, other: &KeepAlive) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for KeepAlive {
+    fn cmp(&self, other: &KeepAlive) -> Ordering {
         use self::KeepAlive::*;
 
         match (self, other) {
-            (Now, Now) | (Forever, Forever) => None,
-            (Now, _) | (_, Forever) => Some(Ordering::Less),
-            (_, Now) | (Forever, _) => Some(Ordering::Greater),
-            (Until(expiration), Until(other_expiration)) => {
-                expiration.partial_cmp(other_expiration)
-            }
+            (Now, _) | (_, Forever) => Ordering::Less,
+            (_, Now) | (Forever, _) => Ordering::Greater,
+            (Until(expiration), Until(other_expiration)) => expiration.cmp(other_expiration),
         }
     }
 }
