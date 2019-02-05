@@ -47,7 +47,7 @@ use crate::{
     nodes::{
         handled_node::NodeHandler,
         node::Substream,
-        raw_swarm::{RawSwarm, RawSwarmEvent}
+        raw_swarm::{self, RawSwarm, RawSwarmEvent}
     },
     protocols_handler::{NodeHandlerWrapperBuilder, NodeHandlerWrapper, IntoProtocolsHandler, ProtocolsHandler},
     transport::TransportError,
@@ -180,9 +180,15 @@ where TBehaviour: NetworkBehaviour,
     #[inline]
     pub fn dial(me: &mut Self, peer_id: PeerId) {
         let addrs = me.behaviour.addresses_of_peer(&peer_id);
-        let handler = me.behaviour.new_handler().into_node_handler_builder();
-        if let Some(peer) = me.raw_swarm.peer(peer_id).into_not_connected() {
-            let _ = peer.connect_iter(addrs, handler);
+        match me.raw_swarm.peer(peer_id.clone()) {
+            raw_swarm::Peer::NotConnected(peer) => {
+                let handler = me.behaviour.new_handler().into_node_handler_builder();
+                let _ = peer.connect_iter(addrs, handler);
+            },
+            raw_swarm::Peer::PendingConnect(mut peer) => {
+                peer.append_multiaddr_attempts(addrs)
+            },
+            raw_swarm::Peer::Connected(_) | raw_swarm::Peer::LocalNode => {}
         }
     }
 
