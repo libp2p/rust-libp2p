@@ -649,16 +649,65 @@ mod tests {
     }
 
     #[test]
+    // tests that a peer is added to our mesh when we are both subscribed
+    // to the same topic
+    fn test_handle_graft_is_subscribed() {
+        let (mut gs, peers, topic_hashes) =
+            build_and_inject_nodes(20, vec![String::from("topic1")], true);
+
+        assert!(
+            !gs.mesh.get(&topic_hashes[0]).unwrap().contains(&peers[7]),
+            "Expected peer to not be in mesh"
+        );
+
+        gs.handle_graft(&peers[7], topic_hashes.clone());
+
+        assert!(
+            gs.mesh.get(&topic_hashes[0]).unwrap().contains(&peers[7]),
+            "Expected peer to have been added to mesh"
+        );
+    }
+
+    #[test]
+    // tests that a peer is not added to our mesh when they are subscribed to
+    // a topic that we are not
+    fn test_handle_graft_is_not_subscribed() {
+        let (mut gs, peers, topic_hashes) =
+            build_and_inject_nodes(20, vec![String::from("topic1")], true);
+
+        assert!(
+            !gs.mesh.get(&topic_hashes[0]).unwrap().contains(&peers[7]),
+            "Expected peer to not be in mesh"
+        );
+
+        gs.handle_graft(
+            &peers[7],
+            vec![TopicHash::from_raw(String::from("unsubscribed topic"))]
+        );
+
+        assert!(
+            !gs.mesh.get(&topic_hashes[0]).unwrap().contains(&peers[7]),
+            "Expected peer to have been added to mesh"
+        );
+    }
+
+    #[test]
     // tests that a peer is removed from our mesh
-    fn test_handle_prune_in_mesh(){
+    fn test_handle_prune_peer_in_mesh(){
         let (mut gs, peers, topic_hashes) =
             build_and_inject_nodes(20, vec![String::from("topic1")], true);
 
         // insert peer into our mesh for 'topic1'
         gs.mesh.insert(topic_hashes[0].clone(), peers.clone());
-        assert!(gs.mesh.get(&topic_hashes[0]).unwrap().contains(&peers[7]));
+        assert!(
+            gs.mesh.get(&topic_hashes[0]).unwrap().contains(&peers[7]),
+            "Expected peer to be in mesh"
+        );
 
         gs.handle_prune(&peers[7], topic_hashes.clone());
-        assert!(!gs.mesh.get(&topic_hashes[0]).unwrap().contains(&peers[7]));
+        assert!(
+            !gs.mesh.get(&topic_hashes[0]).unwrap().contains(&peers[7]),
+            "Expected peer to be removed from mesh"
+        );
     }
 }
