@@ -145,7 +145,7 @@ fn custom_polling() {
 fn custom_event_no_polling() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    #[behaviour(out_event = "String")]
+    #[behaviour(out_event = "Vec<String>")]
     struct Foo<TSubstream> {
         ping: libp2p::ping::Ping<TSubstream>,
         identify: libp2p::identify::Identify<TSubstream>,
