@@ -221,7 +221,7 @@ impl SecioKeyPair {
     pub fn rsa_from_pkcs8<P>(
         private: &[u8],
         public: P,
-    ) -> Result<SecioKeyPair, Box<Error + Send + Sync>>
+    ) -> Result<SecioKeyPair, Box<dyn Error + Send + Sync>>
     where
         P: Into<Vec<u8>>,
     {
@@ -236,7 +236,7 @@ impl SecioKeyPair {
     }
 
     /// Generates a new Ed25519 key pair and uses it.
-    pub fn ed25519_generated() -> Result<SecioKeyPair, Box<Error + Send + Sync>> {
+    pub fn ed25519_generated() -> Result<SecioKeyPair, Box<dyn Error + Send + Sync>> {
         let mut csprng = rand::thread_rng();
         let keypair: Ed25519KeyPair = Ed25519KeyPair::generate::<_>(&mut csprng);
         Ok(SecioKeyPair {
@@ -249,7 +249,7 @@ impl SecioKeyPair {
     /// Builds a `SecioKeyPair` from a raw ed25519 32 bytes private key.
     ///
     /// Returns an error if the slice doesn't have the correct length.
-    pub fn ed25519_raw_key(key: impl AsRef<[u8]>) -> Result<SecioKeyPair, Box<Error + Send + Sync>> {
+    pub fn ed25519_raw_key(key: impl AsRef<[u8]>) -> Result<SecioKeyPair, Box<dyn Error + Send + Sync>> {
         let secret = ed25519_dalek::SecretKey::from_bytes(key.as_ref())
             .map_err(|err| err.to_string())?;
         let public = ed25519_dalek::PublicKey::from(&secret);
@@ -266,7 +266,7 @@ impl SecioKeyPair {
 
     /// Generates a new random sec256k1 key pair.
     #[cfg(feature = "secp256k1")]
-    pub fn secp256k1_generated() -> Result<SecioKeyPair, Box<Error + Send + Sync>> {
+    pub fn secp256k1_generated() -> Result<SecioKeyPair, Box<dyn Error + Send + Sync>> {
         let private = secp256k1::key::SecretKey::new(&mut secp256k1::rand::thread_rng());
         Ok(SecioKeyPair {
             inner: SecioKeyPairInner::Secp256k1 { private },
@@ -275,7 +275,7 @@ impl SecioKeyPair {
 
     /// Builds a `SecioKeyPair` from a raw secp256k1 32 bytes private key.
     #[cfg(feature = "secp256k1")]
-    pub fn secp256k1_raw_key<K>(key: K) -> Result<SecioKeyPair, Box<Error + Send + Sync>>
+    pub fn secp256k1_raw_key<K>(key: K) -> Result<SecioKeyPair, Box<dyn Error + Send + Sync>>
     where
         K: AsRef<[u8]>,
     {
@@ -288,7 +288,7 @@ impl SecioKeyPair {
 
     /// Builds a `SecioKeyPair` from a secp256k1 private key in DER format.
     #[cfg(feature = "secp256k1")]
-    pub fn secp256k1_from_der<K>(key: K) -> Result<SecioKeyPair, Box<Error + Send + Sync>>
+    pub fn secp256k1_from_der<K>(key: K) -> Result<SecioKeyPair, Box<dyn Error + Send + Sync>>
     where
         K: AsRef<[u8]>,
     {

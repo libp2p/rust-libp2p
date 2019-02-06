@@ -38,16 +38,9 @@
 //! The `TcpConfig` structs implements the `Transport` trait of the `swarm` library. See the
 //! documentation of `swarm` and of libp2p in general to learn how to use the `Transport` trait.
 
-extern crate futures;
-extern crate libp2p_core as swarm;
-#[macro_use]
-extern crate log;
-extern crate multiaddr;
-extern crate tk_listen;
-extern crate tokio_io;
-extern crate tokio_tcp;
-
 use futures::{future, future::FutureResult, prelude::*, Async, Poll};
+use libp2p_core as swarm;
+use log::{debug, error};
 use multiaddr::{Protocol, Multiaddr, ToMultiaddr};
 use std::fmt;
 use std::io::{self, Read, Write};
@@ -338,7 +331,7 @@ impl Stream for TcpListenStream {
 }
 
 impl fmt::Debug for TcpListenStream {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.inner {
             Ok(_) => write!(f, "TcpListenStream"),
             Err(None) => write!(f, "TcpListenStream(Errored)"),
@@ -394,15 +387,14 @@ impl Drop for TcpTransStream {
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio;
-    use self::tokio::runtime::current_thread::Runtime;
+    use tokio::runtime::current_thread::Runtime;
     use super::{multiaddr_to_socketaddr, TcpConfig};
     use futures::stream::Stream;
     use futures::Future;
     use multiaddr::Multiaddr;
     use std;
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-    use swarm::Transport;
+    use super::swarm::Transport;
     use tokio_io;
 
     #[test]

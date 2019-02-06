@@ -68,19 +68,9 @@
 //! ```
 //!
 
-extern crate futures;
-extern crate libp2p_core as swarm;
-#[macro_use]
-extern crate log;
-extern crate multiaddr;
-extern crate rw_stream_sink;
-extern crate tokio_io;
-
 #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
 #[macro_use]
 extern crate stdweb;
-#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-extern crate websocket;
 
 #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
 mod browser;

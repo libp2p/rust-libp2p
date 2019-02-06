@@ -322,7 +322,7 @@ impl<TMuxer, TUserData> fmt::Debug for NodeStream<TMuxer, TUserData>
 where
     TMuxer: muxing::StreamMuxer,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_struct("NodeStream")
             .field("inbound_state", &self.inbound_state)
             .field("outbound_state", &self.outbound_state)
@@ -351,7 +351,7 @@ where
     TMuxer::Substream: fmt::Debug,
     TUserData: fmt::Debug,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             NodeEvent::InboundSubstream { substream } => {
                 f.debug_struct("NodeEvent::OutboundClosed")

@@ -40,10 +40,6 @@ use void::Void;
 /// # Example
 ///
 /// ```no_run
-/// # extern crate futures;
-/// # extern crate libp2p_core;
-/// # extern crate libp2p_tcp;
-/// # extern crate tokio;
 /// # fn main() {
 /// use futures::prelude::*;
 /// use libp2p_core::nodes::listeners::{ListenersEvent, ListenersStream};
@@ -238,7 +234,7 @@ impl<TTrans> fmt::Debug for ListenersStream<TTrans>
 where
     TTrans: Transport + fmt::Debug,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_struct("ListenersStream")
             .field("transport", &self.transport)
             .field("listeners", &self.listeners().collect::<Vec<_>>())
@@ -251,7 +247,7 @@ where
     TTrans: Transport,
     <TTrans::Listener as Stream>::Error: fmt::Debug,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
             ListenersEvent::Incoming {
                 ref listen_addr, ..
@@ -274,8 +270,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    extern crate libp2p_tcp;
-
     use super::*;
     use crate::transport;
     use assert_matches::assert_matches;

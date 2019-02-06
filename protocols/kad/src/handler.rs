@@ -197,7 +197,7 @@ pub enum KademliaHandlerQueryErr {
 }
 
 impl fmt::Display for KademliaHandlerQueryErr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             KademliaHandlerQueryErr::Upgrade(err) => {
                 write!(f, "Error while performing Kademlia query: {}", err)

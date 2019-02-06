@@ -275,7 +275,7 @@ impl QueryState {
     }
 
     /// Polls this individual query.
-    pub fn poll(&mut self) -> Async<QueryStatePollOut> {
+    pub fn poll(&mut self) -> Async<QueryStatePollOut<'_>> {
         // While iterating over peers, count the number of queries currently being processed.
         // This is used to not go over the limit of parallel requests.
         // If this is still 0 at the end of the function, that means the query is finished.
@@ -468,7 +468,7 @@ enum QueryPeerState {
 #[cfg(test)]
 mod tests {
     use super::{QueryConfig, QueryState, QueryStatePollOut, QueryTarget};
-    use futures::{self, prelude::*};
+    use futures::{self, try_ready, prelude::*};
     use libp2p_core::PeerId;
     use std::{iter, time::Duration, sync::Arc, sync::Mutex, thread};
     use tokio;

@@ -23,11 +23,6 @@
 //! You can pass as parameter a base58 peer ID to search for. If you don't pass any parameter, a
 //! peer ID will be generated randomly.
 
-extern crate futures;
-extern crate libp2p;
-extern crate rand;
-extern crate tokio;
-
 use futures::prelude::*;
 use libp2p::{
     core::PublicKey,
