@@ -159,8 +159,11 @@ where
 
     #[inline]
     fn upgrade_inbound(self, incoming: C, _: Self::Info) -> Self::Future {
+        let mut codec = codec::UviBytes::default();
+        codec.set_max_len(4096);
+
         future::ok(
-            Framed::new(incoming, codec::UviBytes::default())
+            Framed::new(incoming, codec)
                 .from_err::<IoError>()
                 .with::<_, fn(_) -> _, _>(|response| -> Result<_, IoError> {
                     let proto_struct = resp_msg_to_proto(response);
@@ -185,8 +188,11 @@ where
 
     #[inline]
     fn upgrade_outbound(self, incoming: C, _: Self::Info) -> Self::Future {
+        let mut codec = codec::UviBytes::default();
+        codec.set_max_len(4096);
+
         future::ok(
-            Framed::new(incoming, codec::UviBytes::default())
+            Framed::new(incoming, codec)
                 .from_err::<IoError>()
                 .with::<_, fn(_) -> _, _>(|request| -> Result<_, IoError> {
                     let proto_struct = req_msg_to_proto(request);
