@@ -122,7 +122,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 match meta_item {
                     syn::NestedMeta::Meta(syn::Meta::NameValue(ref m)) if m.ident == "out_event" => {
                         if let syn::Lit::Str(ref s) = m.lit {
-                            let ident: Ident = syn::parse_str(&s.value()).unwrap();
+                            let ident: syn::Type = syn::parse_str(&s.value()).unwrap();
                             out = quote!{#ident};
                         }
                     }
