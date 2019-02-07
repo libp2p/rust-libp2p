@@ -569,22 +569,28 @@ impl<'a, TSubstream> Gossipsub<'a, TSubstream> {
         }
     }
 
-    /// gossip: this notifies the peer that the input messages
-    /// were recently seen and are available on request.
-    /// Checks the seen set and requests unknown messages with an IWANT
+    /// gossip: this notifies the remote peer that the input messages (as
+    /// hashes) were recently seen and are available on request.
+    /// Checks the seen set and requests unknown messages with an `IWANT`
     /// message.
-    pub fn i_have(&mut self,
+    pub fn i_have(&mut self, peer: PeerId,
         msg_hashes: impl IntoIterator<Item = impl AsRef<MsgHash>>) {
-        let i_want = ControlIWant::new();
+        let mut i_want = ControlIWant::new();
+        let m = &mut self.mesh;
+        
     }
 
-    /// Requests transmission of messages announced in an IHAVE message.
+    pub fn i_have_to_peers(&mut self,
+        peers: impl IntoIterator<Item = impl AsRef<PeerId>>,
+        ) {}
+
+    /// Requests transmission of messages announced in an `IHAVE` message.
     /// Forwards all request messages that are present in mcache to the
     /// requesting peer, as well as (unlike the spec and Go impl) returning
     /// those that are not, via reconstructing them from the message hashes.
     pub fn i_want(&mut self,
         msg_hashes: impl IntoIterator<Item = impl AsRef<MsgHash>>)
-            -> GResult<(MsgMap, MsgMap)> {
+    -> GResult<(MsgMap, MsgMap)> {
         let mut return_msgs = MsgMap::new();
         let mut not_found = MsgMap::new();
         for msg_hash in msg_hashes {
