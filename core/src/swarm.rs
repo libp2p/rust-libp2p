@@ -315,7 +315,9 @@ where TBehaviour: NetworkBehaviour,
                 },
                 Async::Ready(NetworkBehaviourAction::ReportObservedAddr { address }) => {
                     for addr in self.raw_swarm.nat_traversal(&address) {
-                        self.external_addrs.push(addr);
+                        if self.external_addrs.iter().all(|a| *a != addr) {
+                            self.external_addrs.push(addr);
+                        }
                     }
                 },
             }
