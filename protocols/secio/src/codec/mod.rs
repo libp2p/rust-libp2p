@@ -73,11 +73,11 @@ impl Hmac {
         match *self {
             Hmac::Sha256(ref mut hmac) => {
                 hmac.input(crypted_data);
-                hmac.result().code().to_vec()
+                hmac.clone().result().code().to_vec()
             },
             Hmac::Sha512(ref mut hmac) => {
                 hmac.input(crypted_data);
-                hmac.result().code().to_vec()
+                hmac.clone().result().code().to_vec()
             },
         }
     }
@@ -88,11 +88,11 @@ impl Hmac {
         match *self {
             Hmac::Sha256(ref mut hmac) => {
                 hmac.input(crypted_data);
-                hmac.verify(expected_hash).map_err(|_| ())
+                hmac.clone().verify(expected_hash).map_err(|_| ())
             },
             Hmac::Sha512(ref mut hmac) => {
                 hmac.input(crypted_data);
-                hmac.verify(expected_hash).map_err(|_| ())
+                hmac.clone().verify(expected_hash).map_err(|_| ())
             },
         }
     }
