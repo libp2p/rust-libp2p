@@ -148,11 +148,14 @@ where
                 .map(|p| String::from_utf8_lossy(p).to_string())
                 .collect();
 
+            let mut listen_addrs: Vec<_> = params.listened_addresses().cloned().collect();
+            listen_addrs.extend(params.external_addresses());
+
             let send_back_info = IdentifyInfo {
                 public_key: self.local_public_key.clone(),
                 protocol_version: self.protocol_version.clone(),
                 agent_version: self.agent_version.clone(),
-                listen_addrs: params.listened_addresses().cloned().collect(),
+                listen_addrs,
                 protocols,
             };
 
