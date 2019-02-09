@@ -238,7 +238,7 @@ impl SecioKeyPair {
     /// Generates a new Ed25519 key pair and uses it.
     pub fn ed25519_generated() -> Result<SecioKeyPair, Box<Error + Send + Sync>> {
         let mut csprng = rand::thread_rng();
-        let keypair: Ed25519KeyPair = Ed25519KeyPair::generate::<sha2::Sha512, _>(&mut csprng);
+        let keypair: Ed25519KeyPair = Ed25519KeyPair::generate::<_>(&mut csprng);
         Ok(SecioKeyPair {
             inner: SecioKeyPairInner::Ed25519 {
                 key_pair: Arc::new(keypair),
@@ -252,7 +252,7 @@ impl SecioKeyPair {
     pub fn ed25519_raw_key(key: impl AsRef<[u8]>) -> Result<SecioKeyPair, Box<Error + Send + Sync>> {
         let secret = ed25519_dalek::SecretKey::from_bytes(key.as_ref())
             .map_err(|err| err.to_string())?;
-        let public = ed25519_dalek::PublicKey::from_secret::<sha2::Sha512>(&secret);
+        let public = ed25519_dalek::PublicKey::from(&secret);
 
         Ok(SecioKeyPair {
             inner: SecioKeyPairInner::Ed25519 {

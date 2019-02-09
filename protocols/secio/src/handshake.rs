@@ -40,7 +40,7 @@ use ring::signature::{RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256, verify as ri
 use ring::rand::SystemRandom;
 #[cfg(feature = "secp256k1")]
 use secp256k1;
-use sha2::{Digest as ShaDigestTrait, Sha256, Sha512};
+use sha2::{Digest as ShaDigestTrait, Sha256};
 use std::cmp::{self, Ordering};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use crate::structs_proto::{Exchange, Propose};
@@ -385,7 +385,7 @@ where
                             signature
                         },
                         SecioKeyPairInner::Ed25519 { ref key_pair } => {
-                            let signature = key_pair.sign::<Sha512>(&data_to_sign);
+                            let signature = key_pair.sign(&data_to_sign);
                             signature.to_bytes().to_vec()
                         },
                         #[cfg(feature = "secp256k1")]
@@ -468,7 +468,7 @@ where
                     let pubkey = Ed25519PublicKey::from_bytes(remote_public_key);
 
                     if let (Ok(signature), Ok(pubkey)) = (signature, pubkey) {
-                        match pubkey.verify::<Sha512>(&data_to_verify, &signature) {
+                        match pubkey.verify(&data_to_verify, &signature) {
                             Ok(()) => (),
                             Err(_) => {
                                 debug!("failed to verify the remote's signature");
@@ -591,8 +591,11 @@ fn stretch_key(hmac: Hmac, result: &mut [u8]) {
     }
 }
 
-fn stretch_key_inner<D: ::hmac::digest::Digest + Clone>(hmac: ::hmac::Hmac<D>, result: &mut [u8])
-where ::hmac::Hmac<D>: Clone {
+fn stretch_key_inner<D>(hmac: ::hmac::Hmac<D>, result: &mut [u8])
+where D: ::hmac::digest::Input + ::hmac::digest::BlockInput +
+          ::hmac::digest::FixedOutput + ::hmac::digest::Reset + Default + Clone,
+    ::hmac::Hmac<D>: Clone + ::hmac::crypto_mac::Mac
+{
     use ::hmac::Mac;
     const SEED: &[u8] = b"key expansion";
 

@@ -216,6 +216,33 @@ impl QueryState {
         }
     }
 
+    /// Returns true if we are waiting for a query answer from that peer.
+    ///
+    /// After `poll()` returned `SendRpc`, this function will return `true`.
+    pub fn is_waiting(&self, id: &PeerId) -> bool {
+        let state = self
+            .closest_peers
+            .iter()
+            .filter_map(
+                |(peer_id, state)| {
+                    if peer_id == id {
+                        Some(state)
+                    } else {
+                        None
+                    }
+                },
+            )
+            .next();
+
+        match state {
+            Some(&QueryPeerState::InProgress(_)) => true,
+            Some(&QueryPeerState::NotContacted) => false,
+            Some(&QueryPeerState::Succeeded) => false,
+            Some(&QueryPeerState::Failed) => false,
+            None => false,
+        }
+    }
+
     /// After `poll()` returned `SendRpc`, this function should be called if we were unable to
     /// reach the peer, or if an error of some sort happened.
     ///
