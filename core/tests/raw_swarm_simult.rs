@@ -22,8 +22,8 @@ use futures::{future, prelude::*};
 use libp2p_core::nodes::raw_swarm::{RawSwarm, RawSwarmEvent, IncomingError};
 use libp2p_core::{Transport, upgrade, upgrade::OutboundUpgradeExt, upgrade::InboundUpgradeExt};
 use libp2p_core::protocols_handler::{ProtocolsHandler, KeepAlive, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr};
-use std::{io, time::Duration, time::Instant};
-use tokio_timer::Delay;
+use std::{io, time::Duration};
+use wasm_time::{Delay, Instant};
 
 // TODO: replace with DummyProtocolsHandler after https://github.com/servo/rust-smallvec/issues/139 ?
 struct TestHandler<TSubstream>(std::marker::PhantomData<TSubstream>, bool);

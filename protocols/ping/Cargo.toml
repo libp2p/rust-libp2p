@@ -22,6 +22,7 @@ tokio-codec = "0.1"
 tokio-io = "0.1"
 tokio-timer = "0.2.6"
 void = "1.0"
+wasm-time = { version = "0.1", path = "../../misc/wasm-time" }
 
 [dev-dependencies]
 libp2p-tcp = { version = "0.4.0", path = "../../transports/tcp" }

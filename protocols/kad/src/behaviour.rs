@@ -30,9 +30,9 @@ use libp2p_core::{protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
 use multihash::Multihash;
 use rand;
 use smallvec::SmallVec;
-use std::{cmp::Ordering, error, marker::PhantomData, time::Duration, time::Instant};
+use std::{cmp::Ordering, error, marker::PhantomData, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_timer::Interval;
+use wasm_time::{Instant, Interval};
 
 /// Network behaviour that handles Kademlia.
 pub struct Kademlia<TSubstream> {
@@ -68,9 +68,6 @@ pub struct Kademlia<TSubstream> {
     /// List of values that we are providing ourselves. Must be kept in sync with
     /// `values_providers`.
     providing_keys: FnvHashSet<Multihash>,
-
-    /// Interval to send `ADD_PROVIDER` messages to everyone.
-    refresh_add_providers: stream::Fuse<Interval>,
 
     /// `α` in the Kademlia reference papers. Designates the maximum number of queries that we
     /// perform in parallel.
@@ -159,7 +156,6 @@ impl<TSubstream> Kademlia<TSubstream> {
             remote_requests: SmallVec::new(),
             values_providers: FnvHashMap::default(),
             providing_keys: FnvHashSet::default(),
-            refresh_add_providers: Interval::new_interval(Duration::from_secs(60)).fuse(),     // TODO: constant
             parallelism,
             num_results: 20,
             rpc_timeout: Duration::from_secs(8),
@@ -255,9 +251,6 @@ impl<TSubstream> Kademlia<TSubstream> {
         if !providers.iter().any(|k| k == my_id) {
             providers.push(my_id.clone());
         }
-
-        // Trigger the next refresh now.
-        self.refresh_add_providers = Interval::new(Instant::now(), Duration::from_secs(60)).fuse();
     }
 
     /// Cancels a registration done with `add_providing`.
@@ -469,22 +462,6 @@ where
             }
         }
         self.add_provider.shrink_to_fit();
-
-        // Handle `refresh_add_providers`.
-        match self.refresh_add_providers.poll() {
-            Ok(Async::NotReady) => {},
-            Ok(Async::Ready(Some(_))) => {
-                for provided in self.providing_keys.clone().into_iter() {
-                    let purpose = QueryPurpose::AddProvider(provided.clone());
-                    // TODO: messy because of the PeerId/Multihash division
-                    if let Ok(key_as_peer) = PeerId::from_multihash(provided) {
-                        self.start_query(QueryTarget::FindPeer(key_as_peer), purpose);
-                    }
-                }
-            },
-            // Ignore errors.
-            Ok(Async::Ready(None)) | Err(_) => {},
-        }
 
         // Start queries that are waiting to start.
         for (query_id, query_target, query_purpose) in self.queries_to_starts.drain() {

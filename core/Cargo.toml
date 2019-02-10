@@ -30,6 +30,7 @@ tokio-io = "0.1"
 tokio-timer = "0.2"
 unsigned-varint = "0.2"
 void = "1"
+wasm-time = { version = "0.1", path = "../misc/wasm-time" }
 
 [dev-dependencies]
 env_logger = "0.6"

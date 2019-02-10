@@ -1,0 +1,33 @@
+{
+  "name": "libp2p-wasm-example",
+  "version": "1.0.0",
+  "description": "Example of using libp2p within the browser",
+  "main": "index.js",
+  "scripts": {
+    "build": "webpack",
+    "serve": "webpack-dev-server"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/libp2p/rust-libp2p.git"
+  },
+  "author": "Parity Technologies",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/libp2p/rust-libp2p/issues"
+  },
+  "homepage": "https://github.com/libp2p/rust-libp2p#readme",
+  "devDependencies": {
+    "@wasm-tool/wasm-pack-plugin": "0.2.1",
+    "html-webpack-plugin": "^3.2.0",
+    "text-encoding": "^0.7.0",
+    "webpack": "^4.29.5",
+    "webpack-cli": "^3.1.1",
+    "webpack-dev-server": "^3.2.0"
+  },
+  "dependencies": {
+    "libp2p-webrtc-star": "^0.15.8",
+    "libp2p-websockets": "^0.12.2",
+    "multiaddr": "^6.0.5"
+  }
+}

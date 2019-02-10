@@ -109,6 +109,7 @@ where
             data_buf.drain(.. n);
         }
 
+        web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(&format!("> {:?}", String::from_utf8(data_buf.clone()))));
         Ok(Async::Ready(Some(data_buf)))
     }
 }

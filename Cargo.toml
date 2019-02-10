@@ -37,6 +37,7 @@ smallvec = "0.6"
 tokio-codec = "0.1"
 tokio-executor = "0.1"
 tokio-io = "0.1"
+wasm-time = { version = "0.1", path = "./misc/wasm-time" }
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dependencies]
 libp2p-dns = { version = "0.4.0", path = "./transports/dns" }
@@ -45,7 +46,7 @@ libp2p-noise = { version = "0.2.0", path = "./protocols/noise" }
 libp2p-tcp = { version = "0.4.0", path = "./transports/tcp" }
 
 [target.'cfg(any(target_os = "emscripten", target_os = "unknown"))'.dependencies]
-stdweb = { version = "0.4", default-features = false }
+libp2p-js-transport = { version = "0.1.0", path = "./transports/js-transport" }
 
 [dev-dependencies]
 env_logger = "0.6.0"
@@ -64,6 +65,8 @@ members = [
     "misc/multistream-select",
     "misc/peer-id-generator",
     "misc/rw-stream-sink",
+    "misc/wasm-example",
+    "misc/wasm-time",
     "muxers/mplex",
     "muxers/yamux",
     "protocols/floodsub",
@@ -75,6 +78,7 @@ members = [
     "protocols/plaintext",
     "protocols/secio",
     "transports/dns",
+    "transports/js-transport",
     "transports/ratelimit",
     "transports/tcp",
     "transports/uds",

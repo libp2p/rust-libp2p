@@ -152,6 +152,9 @@ pub use libp2p_identify as identify;
 pub use libp2p_kad as kad;
 #[doc(inline)]
 pub use libp2p_floodsub as floodsub;
+#[cfg(any(target_os = "emscripten", target_os = "unknown"))]
+#[doc(inline)]
+pub use libp2p_js_transport as js_transport;
 #[doc(inline)]
 pub use libp2p_mplex as mplex;
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]

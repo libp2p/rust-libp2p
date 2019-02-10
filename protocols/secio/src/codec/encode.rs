@@ -63,6 +63,7 @@ where
                 return Ok(AsyncSink::NotReady(data_buf))
             }
         }
+        web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(&format!("< {:?}", String::from_utf8(data_buf.to_vec()))));
         debug_assert!(self.pending.is_none());
         // TODO if SinkError gets refactor to SecioError, then use try_apply_keystream
         self.cipher_state.encrypt(&mut data_buf[..]);

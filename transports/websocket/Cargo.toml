@@ -21,7 +21,10 @@ tokio-io = "0.1"
 websocket = { version = "0.22.2", default-features = false, features = ["async", "async-ssl"] }
 
 [target.'cfg(any(target_os = "emscripten", target_os = "unknown"))'.dependencies]
-stdweb = { version = "0.4", default-features = false }
+js-sys = "0.3.14"
+wasm-bindgen = "0.2.37"
+# TODO: remove console feature
+web-sys = { version = "0.3.14", default-features = false, features = ["console", "Blob", "CloseEvent", "Event", "EventTarget", "FileReader", "MessageEvent", "WebSocket"] }
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dev-dependencies]
 libp2p-tcp = { version = "0.4.0", path = "../tcp" }

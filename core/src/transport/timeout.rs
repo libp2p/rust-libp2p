@@ -27,8 +27,8 @@ use crate::{Multiaddr, Transport, transport::TransportError};
 use futures::{try_ready, Async, Future, Poll, Stream};
 use log::debug;
 use std::{error, fmt, time::Duration};
-use tokio_timer::Timeout;
-use tokio_timer::timeout::Error as TimeoutError;
+use wasm_time::Timeout;
+use wasm_time::timeout::Error as TimeoutError;
 
 /// Wraps around a `Transport` and adds a timeout to all the incoming and outgoing connections.
 ///

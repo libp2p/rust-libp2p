@@ -24,6 +24,7 @@ tokio-reactor = "0.1"
 tokio-timer = "0.2"
 tokio-udp = "0.1"
 void = "1.0"
+wasm-time = { version = "0.1", path = "../wasm-time" }
 
 [dev-dependencies]
 tokio = "0.1"

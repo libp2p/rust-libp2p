@@ -23,10 +23,10 @@ use dns_parser::{Packet, RData};
 use futures::{prelude::*, task};
 use libp2p_core::{Multiaddr, PeerId};
 use multiaddr::Protocol;
-use std::{fmt, io, net::Ipv4Addr, net::SocketAddr, str, time::Duration, time::Instant};
+use std::{fmt, io, net::Ipv4Addr, net::SocketAddr, str, time::Duration};
 use tokio_reactor::Handle;
-use tokio_timer::Interval;
 use tokio_udp::UdpSocket;
+use wasm_time::{Instant, Interval};
 
 pub use dns::MdnsResponseError;
 

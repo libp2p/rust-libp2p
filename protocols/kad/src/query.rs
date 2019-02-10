@@ -29,8 +29,8 @@ use futures::prelude::*;
 use libp2p_core::PeerId;
 use multihash::Multihash;
 use smallvec::SmallVec;
-use std::time::{Duration, Instant};
-use tokio_timer::Delay;
+use std::time::Duration;
+use wasm_time::{Delay, Instant};
 
 /// State of a query iterative process.
 ///

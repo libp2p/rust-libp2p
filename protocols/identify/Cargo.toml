@@ -24,6 +24,7 @@ tokio-io = "0.1.0"
 tokio-timer = "0.2.6"
 unsigned-varint = { version = "0.2.1", features = ["codec"] }
 void = "1.0"
+wasm-time = { version = "0.1", path = "../../misc/wasm-time" }
 
 [dev-dependencies]
 libp2p-mplex = { version = "0.4.0", path = "../../muxers/mplex" }

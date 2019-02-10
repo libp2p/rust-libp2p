@@ -69,10 +69,6 @@
 //!
 
 #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
-#[macro_use]
-extern crate stdweb;
-
-#[cfg(any(target_os = "emscripten", target_os = "unknown"))]
 mod browser;
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 mod desktop;

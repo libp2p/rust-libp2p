@@ -32,8 +32,9 @@ use bigint::U512;
 use libp2p_core::PeerId;
 use multihash::Multihash;
 use std::slice::IterMut as SliceIterMut;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use std::vec::IntoIter as VecIntoIter;
+use wasm_time::Instant;
 
 /// Maximum number of nodes in a bucket.
 pub const MAX_NODES_PER_BUCKET: usize = 20;

@@ -20,7 +20,8 @@
 
 use arrayvec::ArrayVec;
 use libp2p_core::Multiaddr;
-use std::{fmt, time::Duration, time::Instant};
+use std::{fmt, time::Duration};
+use wasm_time::Instant;
 
 /// List of addresses of a peer.
 #[derive(Clone)]

@@ -26,8 +26,9 @@ use futures::prelude::*;
 use libp2p_core::protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr};
 use libp2p_core::{upgrade, either::EitherOutput, InboundUpgrade, OutboundUpgrade, PeerId};
 use multihash::Multihash;
-use std::{error, fmt, io, time::Duration, time::Instant};
+use std::{error, fmt, io, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
+use wasm_time::Instant;
 
 /// Protocol handler that handles Kademlia communications with the remote.
 ///

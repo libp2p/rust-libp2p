@@ -31,8 +31,8 @@ use crate::{
     }
 };
 use futures::prelude::*;
-use std::time::{Duration, Instant};
-use tokio_timer::{Delay, Timeout};
+use std::time::Duration;
+use wasm_time::{Delay, Instant, Timeout};
 
 /// Prototype for a `NodeHandlerWrapper`.
 pub struct NodeHandlerWrapperBuilder<TIntoProtoHandler> {
