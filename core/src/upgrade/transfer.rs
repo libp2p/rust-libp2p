@@ -168,8 +168,20 @@ where
     type Error = ReadOneError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        Ok(self.inner.poll()?.map(|(_, out)| out))
+    }
+}
+
+impl<TSocket> Future for ReadOneInner<TSocket>
+where
+    TSocket: AsyncRead,
+{
+    type Item = (TSocket, Vec<u8>);
+    type Error = ReadOneError;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
-            match mem::replace(&mut self.inner, ReadOneInner::Poisoned) {
+            match mem::replace(self, ReadOneInner::Poisoned) {
                 ReadOneInner::ReadLen {
                     mut socket,
                     mut len_buf,
@@ -203,10 +215,9 @@ where
                                 data_buf[.. n].copy_from_slice(&data_start[.. n]);
                                 let mut data_buf = io::Window::new(data_buf);
                                 data_buf.set_start(data_start.len());
-                                self.inner =
-                                    ReadOneInner::ReadRest(io::read_exact(socket, data_buf));
+                                *self = ReadOneInner::ReadRest(io::read_exact(socket, data_buf));
                             } else {
-                                self.inner = ReadOneInner::ReadLen {
+                                *self = ReadOneInner::ReadLen {
                                     socket,
                                     len_buf,
                                     max_size,
@@ -214,7 +225,7 @@ where
                             }
                         }
                         Async::NotReady => {
-                            self.inner = ReadOneInner::ReadLen {
+                            *self = ReadOneInner::ReadLen {
                                 socket,
                                 len_buf,
                                 max_size,
@@ -225,11 +236,11 @@ where
                 }
                 ReadOneInner::ReadRest(mut inner) => {
                     match inner.poll()? {
-                        Async::Ready((_, data)) => {
-                            return Ok(Async::Ready(data.into_inner()));
+                        Async::Ready((socket, data)) => {
+                            return Ok(Async::Ready((socket, data.into_inner())));
                         }
                         Async::NotReady => {
-                            self.inner = ReadOneInner::ReadRest(inner);
+                            *self = ReadOneInner::ReadRest(inner);
                             return Ok(Async::NotReady);
                         }
                     }
@@ -280,33 +291,40 @@ impl error::Error for ReadOneError {
 }
 
 /// Similar to `read_one`, but applies a transformation on the output buffer.
+///
+/// > **Note**: The `param` parameter is an arbitrary value that will be passed back to `then`.
+/// >           This parameter is normally not necessary, as we could just pass a closure that has
+/// >           ownership of any data we want. In practice, though, this would make the
+/// >           `ReadRespond` type impossible to express as a concrete type. Once the `impl Trait`
+/// >           syntax is allowed within traits, we can remove this parameter.
 #[inline]
-pub fn read_one_then<TSocket, TThen, TOut, TErr>(
+pub fn read_one_then<TSocket, TParam, TThen, TOut, TErr>(
     socket: TSocket,
     max_size: usize,
+    param: TParam,
     then: TThen,
-) -> ReadOneThen<TSocket, TThen>
+) -> ReadOneThen<TSocket, TParam, TThen>
 where
     TSocket: AsyncRead,
-    TThen: FnOnce(Vec<u8>) -> Result<TOut, TErr>,
+    TThen: FnOnce(Vec<u8>, TParam) -> Result<TOut, TErr>,
     TErr: From<ReadOneError>,
 {
     ReadOneThen {
         inner: read_one(socket, max_size),
-        then: Some(then),
+        then: Some((param, then)),
     }
 }
 
 /// Future that makes `read_one_then` work.
-pub struct ReadOneThen<TSocket, TThen> {
+pub struct ReadOneThen<TSocket, TParam, TThen> {
     inner: ReadOne<TSocket>,
-    then: Option<TThen>,
+    then: Option<(TParam, TThen)>,
 }
 
-impl<TSocket, TThen, TOut, TErr> Future for ReadOneThen<TSocket, TThen>
+impl<TSocket, TParam, TThen, TOut, TErr> Future for ReadOneThen<TSocket, TParam, TThen>
 where
     TSocket: AsyncRead,
-    TThen: FnOnce(Vec<u8>) -> Result<TOut, TErr>,
+    TThen: FnOnce(Vec<u8>, TParam) -> Result<TOut, TErr>,
     TErr: From<ReadOneError>,
 {
     type Item = TOut;
@@ -315,8 +333,60 @@ where
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self.inner.poll()? {
             Async::Ready(buffer) => {
-                let then = self.then.take().expect("Future was polled after it was finished");
-                Ok(Async::Ready(then(buffer)?))
+                let (param, then) = self.then.take()
+                    .expect("Future was polled after it was finished");
+                Ok(Async::Ready(then(buffer, param)?))
+            },
+            Async::NotReady => Ok(Async::NotReady),
+        }
+    }
+}
+
+/// Similar to `read_one`, but applies a transformation on the output buffer.
+///
+/// > **Note**: The `param` parameter is an arbitrary value that will be passed back to `then`.
+/// >           This parameter is normally not necessary, as we could just pass a closure that has
+/// >           ownership of any data we want. In practice, though, this would make the
+/// >           `ReadRespond` type impossible to express as a concrete type. Once the `impl Trait`
+/// >           syntax is allowed within traits, we can remove this parameter.
+#[inline]
+pub fn read_respond<TSocket, TThen, TParam, TOut, TErr>(
+    socket: TSocket,
+    max_size: usize,
+    param: TParam,
+    then: TThen,
+) -> ReadRespond<TSocket, TParam, TThen>
+where
+    TSocket: AsyncRead,
+    TThen: FnOnce(TSocket, Vec<u8>, TParam) -> Result<TOut, TErr>,
+    TErr: From<ReadOneError>,
+{
+    ReadRespond {
+        inner: read_one(socket, max_size).inner,
+        then: Some((then, param)),
+    }
+}
+
+/// Future that makes `read_respond` work.
+pub struct ReadRespond<TSocket, TParam, TThen> {
+    inner: ReadOneInner<TSocket>,
+    then: Option<(TThen, TParam)>,
+}
+
+impl<TSocket, TThen, TParam, TOut, TErr> Future for ReadRespond<TSocket, TParam, TThen>
+where
+    TSocket: AsyncRead,
+    TThen: FnOnce(TSocket, Vec<u8>, TParam) -> Result<TOut, TErr>,
+    TErr: From<ReadOneError>,
+{
+    type Item = TOut;
+    type Error = TErr;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        match self.inner.poll()? {
+            Async::Ready((socket, buffer)) => {
+                let (then, param) = self.then.take().expect("Future was polled after it was finished");
+                Ok(Async::Ready(then(socket, buffer, param)?))
             },
             Async::NotReady => Ok(Async::NotReady),
         }
@@ -325,43 +395,50 @@ where
 
 /// Send a message to the given socket, then shuts down the writing side, then reads an answer.
 ///
-/// This combines `write_one` followed with `read_one`.
+/// This combines `write_one` followed with `read_one_then`.
+///
+/// > **Note**: The `param` parameter is an arbitrary value that will be passed back to `then`.
+/// >           This parameter is normally not necessary, as we could just pass a closure that has
+/// >           ownership of any data we want. In practice, though, this would make the
+/// >           `ReadRespond` type impossible to express as a concrete type. Once the `impl Trait`
+/// >           syntax is allowed within traits, we can remove this parameter.
 #[inline]
-pub fn request_response<TSocket, TData, TThen, TOut, TErr>(
+pub fn request_response<TSocket, TData, TParam, TThen, TOut, TErr>(
     socket: TSocket,
     data: TData,
     max_size: usize,
+    param: TParam,
     then: TThen,
-) -> RequestResponse<TSocket, TThen, TData>
+) -> RequestResponse<TSocket, TParam, TThen, TData>
 where
     TSocket: AsyncRead + AsyncWrite,
     TData: AsRef<[u8]>,
-    TThen: FnOnce(Vec<u8>) -> Result<TOut, TErr>,
+    TThen: FnOnce(Vec<u8>, TParam) -> Result<TOut, TErr>,
 {
     RequestResponse {
-        inner: RequestResponseInner::Write(write_one(socket, data).inner, max_size, then),
+        inner: RequestResponseInner::Write(write_one(socket, data).inner, max_size, param, then),
     }
 }
 
 /// Future that makes `request_response` work.
-pub struct RequestResponse<TSocket, TThen, TData = Vec<u8>> {
-    inner: RequestResponseInner<TSocket, TData, TThen>,
+pub struct RequestResponse<TSocket, TParam, TThen, TData = Vec<u8>> {
+    inner: RequestResponseInner<TSocket, TData, TParam, TThen>,
 }
 
-enum RequestResponseInner<TSocket, TData, TThen> {
+enum RequestResponseInner<TSocket, TData, TParam, TThen> {
     // We need to write data to the socket.
-    Write(WriteOneInner<TSocket, TData>, usize, TThen),
+    Write(WriteOneInner<TSocket, TData>, usize, TParam, TThen),
     // We need to read the message.
-    Read(ReadOneThen<TSocket, TThen>),
+    Read(ReadOneThen<TSocket, TParam, TThen>),
     // An error happened during the processing.
     Poisoned,
 }
 
-impl<TSocket, TData, TThen, TOut, TErr> Future for RequestResponse<TSocket, TThen, TData>
+impl<TSocket, TData, TParam, TThen, TOut, TErr> Future for RequestResponse<TSocket, TParam, TThen, TData>
 where
     TSocket: AsyncRead + AsyncWrite,
     TData: AsRef<[u8]>,
-    TThen: FnOnce(Vec<u8>) -> Result<TOut, TErr>,
+    TThen: FnOnce(Vec<u8>, TParam) -> Result<TOut, TErr>,
     TErr: From<ReadOneError>,
 {
     type Item = TOut;
@@ -370,14 +447,14 @@ where
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
             match mem::replace(&mut self.inner, RequestResponseInner::Poisoned) {
-                RequestResponseInner::Write(mut inner, max_size, then) => {
+                RequestResponseInner::Write(mut inner, max_size, param, then) => {
                     match inner.poll().map_err(ReadOneError::Io)? {
                         Async::Ready(socket) => {
                             self.inner =
-                                RequestResponseInner::Read(read_one_then(socket, max_size, then));
+                                RequestResponseInner::Read(read_one_then(socket, max_size, param, then));
                         }
                         Async::NotReady => {
-                            self.inner = RequestResponseInner::Write(inner, max_size, then);
+                            self.inner = RequestResponseInner::Write(inner, max_size, param, then);
                             return Ok(Async::NotReady);
                         }
                     }
@@ -428,7 +505,7 @@ mod tests {
         let mut in_buffer = len_buf.to_vec();
         in_buffer.extend_from_slice(&original_data);
 
-        let future = read_one_then(Cursor::new(in_buffer), 10_000, move |out| -> Result<_, ReadOneError> {
+        let future = read_one_then(Cursor::new(in_buffer), 10_000, (), move |out, ()| -> Result<_, ReadOneError> {
             assert_eq!(out, original_data);
             Ok(())
         });
@@ -438,7 +515,7 @@ mod tests {
 
     #[test]
     fn read_one_zero_len() {
-        let future = read_one_then(Cursor::new(vec![0]), 10_000, move |out| -> Result<_, ReadOneError> {
+        let future = read_one_then(Cursor::new(vec![0]), 10_000, (), move |out, ()| -> Result<_, ReadOneError> {
             assert!(out.is_empty());
             Ok(())
         });
@@ -454,7 +531,7 @@ mod tests {
         let mut in_buffer = len_buf.to_vec();
         in_buffer.extend((0..5000).map(|_| 0));
 
-        let future = read_one_then(Cursor::new(in_buffer), 100, move |_| -> Result<_, ReadOneError> {
+        let future = read_one_then(Cursor::new(in_buffer), 100, (), move |_, ()| -> Result<_, ReadOneError> {
             Ok(())
         });
 
