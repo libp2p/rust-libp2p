@@ -313,13 +313,10 @@ where
             });
         }
 
-        match self.kbuckets.set_connected(&id) {
-            Update::Pending(to_ping) => {
-                self.queued_events.push(NetworkBehaviourAction::DialPeer {
-                    peer_id: to_ping.clone(),
-                })
-            },
-            _ => ()
+        if let Update::Pending(to_ping) = self.kbuckets.set_connected(&id) {
+            self.queued_events.push(NetworkBehaviourAction::DialPeer {
+                peer_id: to_ping.clone(),
+            })
         }
 
         if let ConnectedPoint::Dialer { address } = endpoint {
@@ -334,7 +331,8 @@ where
     fn inject_dial_failure(&mut self, peer_id: Option<&PeerId>, addr: &Multiaddr, _: &dyn error::Error) {
         if let Some(peer_id) = peer_id {
             if let Some(list) = self.kbuckets.get_mut(peer_id) {
-                debug_assert!(!list.is_connected());
+                // TODO: don't remove the address if the error is that we are already connected
+                //       to this peer
                 list.remove_addr(addr);
             }
         }
@@ -395,12 +393,6 @@ where
                 // It is possible that we obtain a response for a query that has finished, which is
                 // why we may not find an entry in `self.active_queries`.
                 for peer in closer_peers.iter() {
-                    if let Some(entry) = self.kbuckets.entry_mut(&peer.node_id) {
-                        for addr in peer.multiaddrs.iter() {
-                            entry.insert_not_connected(addr.clone());
-                        }
-                    }
-
                     self.queued_events.push(NetworkBehaviourAction::GenerateEvent(KademliaOut::Discovered {
                         peer_id: peer.node_id.clone(),
                         addresses: peer.multiaddrs.clone(),
@@ -421,12 +413,6 @@ where
                 user_data,
             } => {
                 for peer in closer_peers.iter().chain(provider_peers.iter()) {
-                    if let Some(entry) = self.kbuckets.entry_mut(&peer.node_id) {
-                        for addr in peer.multiaddrs.iter() {
-                            entry.insert_not_connected(addr.clone());
-                        }
-                    }
-
                     self.queued_events.push(NetworkBehaviourAction::GenerateEvent(KademliaOut::Discovered {
                         peer_id: peer.node_id.clone(),
                         addresses: peer.multiaddrs.clone(),
@@ -451,11 +437,6 @@ where
                 }
             }
             KademliaHandlerEvent::AddProvider { key, provider_peer } => {
-                if let Some(entry) = self.kbuckets.entry_mut(&provider_peer.node_id) {
-                    for addr in provider_peer.multiaddrs.iter() {
-                        entry.insert_not_connected(addr.clone());
-                    }
-                }
                 self.queued_events.push(NetworkBehaviourAction::GenerateEvent(KademliaOut::Discovered {
                     peer_id: provider_peer.node_id.clone(),
                     addresses: provider_peer.multiaddrs.clone(),
