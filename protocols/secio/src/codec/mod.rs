@@ -69,13 +69,15 @@ impl Hmac {
 
     /// Signs the data.
     // TODO: better return type?
-    pub fn sign(&mut self, crypted_data: &[u8]) -> Vec<u8> {
+    pub fn sign(&self, crypted_data: &[u8]) -> Vec<u8> {
         match *self {
-            Hmac::Sha256(ref mut hmac) => {
+            Hmac::Sha256(ref hmac) => {
+                let mut hmac = hmac.clone();
                 hmac.input(crypted_data);
                 hmac.result().code().to_vec()
             },
-            Hmac::Sha512(ref mut hmac) => {
+            Hmac::Sha512(ref hmac) => {
+                let mut hmac = hmac.clone();
                 hmac.input(crypted_data);
                 hmac.result().code().to_vec()
             },
@@ -84,13 +86,15 @@ impl Hmac {
 
     /// Verifies that the data matches the expected hash.
     // TODO: better error?
-    pub fn verify(&mut self, crypted_data: &[u8], expected_hash: &[u8]) -> Result<(), ()> {
+    pub fn verify(&self, crypted_data: &[u8], expected_hash: &[u8]) -> Result<(), ()> {
         match *self {
-            Hmac::Sha256(ref mut hmac) => {
+            Hmac::Sha256(ref hmac) => {
+                let mut hmac = hmac.clone();
                 hmac.input(crypted_data);
                 hmac.verify(expected_hash).map_err(|_| ())
             },
-            Hmac::Sha512(ref mut hmac) => {
+            Hmac::Sha512(ref hmac) => {
+                let mut hmac = hmac.clone();
                 hmac.input(crypted_data);
                 hmac.verify(expected_hash).map_err(|_| ())
             },

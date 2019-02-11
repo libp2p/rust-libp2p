@@ -1613,6 +1613,15 @@ where
         self.attempt.get().next_attempts.iter()
     }
 
+    /// Adds new multiaddrs to attempt if the current dialing fails.
+    ///
+    /// Doesn't do anything for multiaddresses that are already in the queue.
+    pub fn append_multiaddr_attempts(&mut self, addrs: impl IntoIterator<Item = Multiaddr>) {
+        for addr in addrs {
+            self.append_multiaddr_attempt(addr);
+        }
+    }
+
     /// Adds a new multiaddr to attempt if the current dialing fails.
     ///
     /// Doesn't do anything if that multiaddress is already in the queue.
