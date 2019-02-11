@@ -171,7 +171,7 @@ impl<TSubstream> Kademlia<TSubstream> {
     }
 
     /// Builds the answer to a request.
-    fn build_result<TUserData>(&mut self, query: QueryTarget, request_id: KademliaRequestId, parameters: &mut PollParameters)
+    fn build_result<TUserData>(&mut self, query: QueryTarget, request_id: KademliaRequestId, parameters: &mut PollParameters<'_>)
         -> KademliaHandlerIn<TUserData>
     {
         match query {
@@ -444,7 +444,7 @@ where
 
     fn poll(
         &mut self,
-        parameters: &mut PollParameters,
+        parameters: &mut PollParameters<'_>,
     ) -> Async<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
@@ -674,7 +674,7 @@ fn gen_random_id(my_id: &PeerId, bucket_num: usize) -> Result<PeerId, ()> {
 /// > **Note**: This is just a convenience function that doesn't do anything note-worthy.
 fn build_kad_peer(
     peer_id: PeerId,
-    parameters: &mut PollParameters,
+    parameters: &mut PollParameters<'_>,
     kbuckets: &KBucketsTable<PeerId, SmallVec<[Multiaddr; 4]>>,
     connected_peers: &FnvHashSet<PeerId>
 ) -> KadPeer {

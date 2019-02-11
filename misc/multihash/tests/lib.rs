@@ -1,4 +1,4 @@
-extern crate parity_multihash;
+
 
 use parity_multihash::*;
 

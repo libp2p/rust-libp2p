@@ -49,12 +49,6 @@
 //!
 //! The two nodes then connect.
 
-extern crate env_logger;
-extern crate futures;
-extern crate libp2p;
-extern crate tokio;
-extern crate void;
-
 use futures::prelude::*;
 use libp2p::{
     NetworkBehaviour,

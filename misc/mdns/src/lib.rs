@@ -30,23 +30,6 @@
 //! struct will automatically discover other libp2p nodes on the local network.
 //!
 
-extern crate data_encoding;
-extern crate dns_parser;
-extern crate futures;
-extern crate libp2p_core;
-extern crate multiaddr;
-extern crate net2;
-extern crate rand;
-extern crate smallvec;
-extern crate tokio_io;
-extern crate tokio_reactor;
-extern crate tokio_timer;
-extern crate tokio_udp;
-extern crate void;
-
-#[cfg(test)]
-extern crate tokio;
-
 /// Hardcoded name of the mDNS service. Part of the mDNS libp2p specifications.
 const SERVICE_NAME: &[u8] = b"_p2p._udp.local";
 /// Hardcoded name of the service used for DNS-SD.

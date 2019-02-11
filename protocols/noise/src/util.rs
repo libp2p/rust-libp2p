@@ -108,7 +108,7 @@ impl snow::types::Dh for X25519 {
         self.keypair = Keypair::new(secret, public)
     }
 
-    fn generate(&mut self, rng: &mut snow::types::Random) {
+    fn generate(&mut self, rng: &mut dyn snow::types::Random) {
         let mut s = [0; 32];
         rng.fill_bytes(&mut s);
         let secret = SecretKey::new(s);

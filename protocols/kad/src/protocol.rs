@@ -463,8 +463,6 @@ fn proto_to_resp_msg(
 
 #[cfg(test)]
 mod tests {
-    extern crate libp2p_tcp;
-    extern crate tokio;
 
     /*// TODO: restore
     use self::libp2p_tcp::TcpConfig;
