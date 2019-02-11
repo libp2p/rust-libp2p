@@ -246,7 +246,7 @@ impl<TErr> TransportError<TErr> {
 impl<TErr> fmt::Display for TransportError<TErr>
 where TErr: fmt::Display,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TransportError::MultiaddrNotSupported(addr) => write!(f, "Multiaddr is not supported: {}", addr),
             TransportError::Other(err) => write!(f, "{}", err),

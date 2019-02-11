@@ -77,7 +77,7 @@ impl error::Error for MultistreamSelectError {
         }
     }
 
-    fn cause(&self) -> Option<&error::Error> {
+    fn cause(&self) -> Option<&dyn error::Error> {
         match *self {
             MultistreamSelectError::IoError(ref err) => Some(err),
             _ => None,
@@ -87,7 +87,7 @@ impl error::Error for MultistreamSelectError {
 
 impl fmt::Display for MultistreamSelectError {
     #[inline]
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         write!(fmt, "{}", error::Error::description(self))
     }
 }

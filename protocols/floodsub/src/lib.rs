@@ -21,19 +21,6 @@
 //! Implements the floodsub protocol, see also the:
 //! [spec](https://github.com/libp2p/specs/tree/master/pubsub).
 
-extern crate bs58;
-extern crate bytes;
-extern crate cuckoofilter;
-extern crate fnv;
-extern crate futures;
-extern crate libp2p_core;
-extern crate protobuf;
-extern crate rand;
-extern crate smallvec;
-extern crate tokio_codec;
-extern crate tokio_io;
-extern crate unsigned_varint;
-
 pub mod protocol;
 
 mod layer;

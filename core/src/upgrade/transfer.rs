@@ -262,7 +262,7 @@ impl From<std::io::Error> for ReadOneError {
 }
 
 impl fmt::Display for ReadOneError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             ReadOneError::Io(ref err) => write!(f, "{}", err),
             ReadOneError::TooLarge { .. } => write!(f, "Received data size over maximum"),

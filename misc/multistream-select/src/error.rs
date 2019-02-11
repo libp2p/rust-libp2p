@@ -66,7 +66,7 @@ impl error::Error for ProtocolChoiceError {
         }
     }
 
-    fn cause(&self) -> Option<&error::Error> {
+    fn cause(&self) -> Option<&dyn error::Error> {
         match *self {
             ProtocolChoiceError::MultistreamSelectError(ref err) => Some(err),
             _ => None,
@@ -76,7 +76,7 @@ impl error::Error for ProtocolChoiceError {
 
 impl fmt::Display for ProtocolChoiceError {
     #[inline]
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         write!(fmt, "{}", error::Error::description(self))
     }
 }

@@ -20,7 +20,7 @@ pub enum Error {
 }
 
 impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Error::DataLessThanLen => f.write_str("we have less data than indicated by length"),
             Error::InvalidMultiaddr => f.write_str("invalid multiaddr"),

@@ -183,7 +183,7 @@ pub enum TransportTimeoutError<TErr> {
 impl<TErr> fmt::Display for TransportTimeoutError<TErr>
 where TErr: fmt::Display,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TransportTimeoutError::Timeout => write!(f, "Timeout has been reached"),
             TransportTimeoutError::TimerError => write!(f, "Error in the timer"),

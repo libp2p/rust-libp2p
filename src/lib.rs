@@ -132,15 +132,12 @@
 #![doc(html_logo_url = "https://libp2p.io/img/logo_small.png")]
 #![doc(html_favicon_url = "https://libp2p.io/img/favicon.png")]
 
-pub extern crate bytes;
-pub extern crate futures;
-pub extern crate multiaddr;
-pub extern crate multihash;
-pub extern crate tokio_io;
-pub extern crate tokio_codec;
-
-extern crate libp2p_core_derive;
-extern crate tokio_executor;
+pub use bytes;
+pub use futures;
+pub use multiaddr::{self};
+pub use multihash;
+pub use tokio_io;
+pub use tokio_codec;
 
 #[doc(inline)]
 pub use libp2p_core as core;
