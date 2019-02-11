@@ -53,7 +53,7 @@ pub struct KBucketsTable<TPeerId, TVal> {
 #[derive(Debug, Clone)]
 struct KBucket<TPeerId, TVal> {
     /// Nodes are always ordered from oldest to newest. The nodes we are connected to are always
-    /// all on top of the nodes we are not connected to.
+    /// all on top (ie. have higher indices) of the nodes we are not connected to.
     nodes: ArrayVec<[Node<TPeerId, TVal>; MAX_NODES_PER_BUCKET]>,
 
     /// Index in `nodes` over which all nodes are connected. Must always be <= to the length
@@ -96,7 +96,10 @@ impl<TPeerId, TVal> KBucket<TPeerId, TVal> {
 }
 
 /// Trait that must be implemented on types that can be used as an identifier in a k-bucket.
-pub trait KBucketsPeerId<TOther = Self>: PartialEq<TOther> + Clone {
+///
+/// If `TOther` is not the same as `Self`, it represents an entry already in the k-buckets that
+/// `Self` can compare against.
+pub trait KBucketsPeerId<TOther = Self>: PartialEq<TOther> {
     /// Computes the XOR of this value and another one. The lower the closer.
     fn distance_with(&self, other: &TOther) -> u32;
 
@@ -110,7 +113,7 @@ pub trait KBucketsPeerId<TOther = Self>: PartialEq<TOther> + Clone {
 impl KBucketsPeerId for PeerId {
     #[inline]
     fn distance_with(&self, other: &Self) -> u32 {
-        Multihash::distance_with(self.as_ref(), other.as_ref())
+        <Multihash as KBucketsPeerId<Multihash>>::distance_with(self.as_ref(), other.as_ref())
     }
 
     #[inline]
@@ -119,15 +122,15 @@ impl KBucketsPeerId for PeerId {
     }
 }
 
-impl KBucketsPeerId<Multihash> for PeerId {
+impl KBucketsPeerId<PeerId> for Multihash {
     #[inline]
-    fn distance_with(&self, other: &Multihash) -> u32 {
-        Multihash::distance_with(self.as_ref(), other)
+    fn distance_with(&self, other: &PeerId) -> u32 {
+        <Multihash as KBucketsPeerId<Multihash>>::distance_with(self, other.as_ref())
     }
 
     #[inline]
     fn max_distance() -> usize {
-        <Multihash as KBucketsPeerId>::max_distance()
+        <PeerId as KBucketsPeerId>::max_distance()
     }
 }
 
@@ -148,9 +151,40 @@ impl KBucketsPeerId for Multihash {
     }
 }
 
+impl<A, B> KBucketsPeerId for (A, B)
+where
+    A: KBucketsPeerId + PartialEq,
+    B: KBucketsPeerId + PartialEq,
+{
+    #[inline]
+    fn distance_with(&self, other: &(A, B)) -> u32 {
+        A::distance_with(&self.0, &other.0) + B::distance_with(&self.1, &other.1)
+    }
+
+    #[inline]
+    fn max_distance() -> usize {
+        <A as KBucketsPeerId<A>>::max_distance() + <B as KBucketsPeerId<B>>::max_distance()
+    }
+}
+
+impl<'a, T> KBucketsPeerId for &'a T
+where
+    T: KBucketsPeerId,
+{
+    #[inline]
+    fn distance_with(&self, other: &&'a T) -> u32 {
+        T::distance_with(*self, *other)
+    }
+
+    #[inline]
+    fn max_distance() -> usize {
+        <T as KBucketsPeerId>::max_distance()
+    }
+}
+
 impl<TPeerId, TVal> KBucketsTable<TPeerId, TVal>
 where
-    TPeerId: KBucketsPeerId,
+    TPeerId: KBucketsPeerId + Clone,
 {
     /// Builds a new routing table.
     pub fn new(my_id: TPeerId, unresponsive_timeout: Duration) -> Self {
@@ -168,9 +202,9 @@ where
         }
     }
 
-    // Returns the id of the bucket that should contain the peer with the given ID.
-    //
-    // Returns `None` if out of range, which happens if `id` is the same as the local peer id.
+    /// Returns the id of the bucket that should contain the peer with the given ID.
+    ///
+    /// Returns `None` if out of range, which happens if `id` is the same as the local peer id.
     #[inline]
     fn bucket_num(&self, id: &TPeerId) -> Option<usize> {
         (self.my_id.distance_with(id) as usize).checked_sub(1)
@@ -354,11 +388,32 @@ where
         }
     }
 
+    /// Removes an entry from the k-buckets. You shouldn't generally use this, .
+    pub fn remove(&mut self, id: &TPeerId) {
+        let table = match self.bucket_num(&id) {
+            Some(n) => &mut self.tables[n],
+            None => return,
+        };
+
+        if table.pending_node.as_ref().map(|n| &n.0.id) == Some(id) {
+            table.pending_node = None;
+            return;
+        }
+
+        let pos = match table.nodes.iter().position(|elem| elem.id == *id) {
+            Some(pos) => pos,
+            None => return,
+        };
+
+        if pos < table.first_connected_pos {
+            // `first_connected_pos` can't be 0, otherwise `pos` can't be inferior.
+            debug_assert_ne!(table.first_connected_pos, 0);
+            table.first_connected_pos -= 1;
+        }
+    }
+
     /// Finds the `num` nodes closest to `id`, ordered by distance.
-    pub fn find_closest<TOther>(&mut self, id: &TOther) -> VecIntoIter<TPeerId>
-    where
-        TPeerId: Clone + KBucketsPeerId<TOther>,
-    {
+    pub fn find_closest(&mut self, id: &impl KBucketsPeerId<TPeerId>) -> VecIntoIter<TPeerId> {
         // TODO: optimize
         let mut out = Vec::new();
         for table in self.tables.iter_mut() {
@@ -370,20 +425,18 @@ where
                 out.push(node.id.clone());
             }
         }
-        out.sort_by(|a, b| b.distance_with(id).cmp(&a.distance_with(id)));
+        out.sort_by(|a, b| id.distance_with(a).cmp(&id.distance_with(b)));
         out.into_iter()
     }
 
     /// Same as `find_closest`, but includes the local peer as well.
-    pub fn find_closest_with_self<TOther>(&mut self, id: &TOther) -> VecIntoIter<TPeerId>
-    where
-        TPeerId: Clone + KBucketsPeerId<TOther>,
-    {
+    // TODO: this method shouldn't be necessary, as per the Kademlia algorithm?!
+    pub fn find_closest_with_self(&mut self, id: &impl KBucketsPeerId<TPeerId>) -> VecIntoIter<TPeerId> {
         // TODO: optimize
         let mut intermediate: Vec<_> = self.find_closest(id).collect();
         if let Some(pos) = intermediate
             .iter()
-            .position(|e| e.distance_with(id) >= self.my_id.distance_with(id))
+            .position(|e| id.distance_with(e) >= id.distance_with(&self.my_id))
         {
             if intermediate[pos] != self.my_id {
                 intermediate.insert(pos, self.my_id.clone());

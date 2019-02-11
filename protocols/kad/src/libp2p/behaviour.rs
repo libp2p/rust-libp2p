@@ -18,19 +18,19 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::gen_random_id;
 use crate::addresses::Addresses;
-use crate::handler::{KademliaHandler, KademliaHandlerEvent, KademliaHandlerIn, KademliaRequestId};
-use crate::kbucket::{KBucketsTable, Update};
-use crate::protocol::{KadConnectionType, KadPeer};
-use crate::query::{QueryConfig, QueryState, QueryStatePollOut, QueryTarget};
+use crate::kbucket::{KBucketsPeerId, KBucketsTable, Update};
+use crate::libp2p::handler::{KademliaHandler, KademliaHandlerEvent, KademliaHandlerIn, KademliaRequestId};
+use crate::libp2p::protocol::{KadConnectionType, KadPeer};
+use crate::query::{QueryConfig, QueryState, QueryStatePollOut};
 use fnv::{FnvHashMap, FnvHashSet};
 use futures::{prelude::*, stream};
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use libp2p_core::{protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
 use multihash::Multihash;
-use rand;
 use smallvec::SmallVec;
-use std::{cmp::Ordering, error, marker::PhantomData, time::Duration, time::Instant};
+use std::{cmp::PartialEq, error, marker::PhantomData, time::Duration, time::Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_timer::Interval;
 
@@ -41,7 +41,7 @@ pub struct Kademlia<TSubstream> {
 
     /// All the iterative queries we are currently performing, with their ID. The last parameter
     /// is the list of accumulated providers for `GET_PROVIDERS` queries.
-    active_queries: FnvHashMap<QueryId, (QueryState, QueryPurpose, Vec<PeerId>)>,
+    active_queries: FnvHashMap<QueryId, (QueryState<QueryTarget, PeerId>, QueryPurpose, Vec<PeerId>)>,
 
     /// List of queries to start once we are inside `poll()`.
     queries_to_starts: SmallVec<[(QueryId, QueryTarget, QueryPurpose); 8]>,
@@ -95,6 +95,63 @@ pub struct Kademlia<TSubstream> {
 /// Opaque type. Each query that we start gets a unique number.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct QueryId(usize);
+
+/// What we're aiming for with our query.
+#[derive(Debug, Clone)]
+enum QueryTarget {
+    /// Finding a peer.
+    FindPeer(PeerId),
+    /// Find the peers that provide a certain value.
+    GetProviders(Multihash),
+}
+
+impl QueryTarget {
+    /// Creates the corresponding RPC request to send to remote.
+    #[inline]
+    pub fn to_rpc_request<TUserData>(&self, user_data: TUserData) -> KademliaHandlerIn<TUserData> {
+        self.clone().into_rpc_request(user_data)
+    }
+
+    /// Creates the corresponding RPC request to send to remote.
+    pub fn into_rpc_request<TUserData>(self, user_data: TUserData) -> KademliaHandlerIn<TUserData> {
+        match self {
+            QueryTarget::FindPeer(key) => KademliaHandlerIn::FindNodeReq {
+                key,
+                user_data,
+            },
+            QueryTarget::GetProviders(key) => KademliaHandlerIn::GetProvidersReq {
+                key,
+                user_data,
+            },
+        }
+    }
+}
+
+impl AsRef<Multihash> for QueryTarget {
+    fn as_ref(&self) -> &Multihash {
+        match self {
+            QueryTarget::FindPeer(peer) => peer.as_ref(),
+            QueryTarget::GetProviders(key) => key,
+        }
+    }
+}
+
+impl KBucketsPeerId<PeerId> for QueryTarget {
+    fn distance_with(&self, other: &PeerId) -> u32 {
+        let other: &Multihash = other.as_ref();
+        self.as_ref().distance_with(other)
+    }
+
+    fn max_distance() -> usize {
+        <PeerId as KBucketsPeerId>::max_distance()
+    }
+}
+
+impl PartialEq<PeerId> for QueryTarget {
+    fn eq(&self, other: &PeerId) -> bool {
+        self.as_ref().eq(other)
+    }
+}
 
 /// Reason why we have this query in the list of queries.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -489,7 +546,7 @@ where
         // Start queries that are waiting to start.
         for (query_id, query_target, query_purpose) in self.queries_to_starts.drain() {
             let known_closest_peers = self.kbuckets
-                .find_closest(query_target.as_hash())
+                .find_closest(query_target.as_ref())
                 .take(self.num_results);
             self.active_queries.insert(
                 query_id,
@@ -639,39 +696,6 @@ pub enum KademliaOut {
         /// List of peers ordered from closest to furthest away.
         closer_peers: Vec<PeerId>,
     },
-}
-
-// Generates a random `PeerId` that belongs to the given bucket.
-//
-// Returns an error if `bucket_num` is out of range.
-fn gen_random_id(my_id: &PeerId, bucket_num: usize) -> Result<PeerId, ()> {
-    let my_id_len = my_id.as_bytes().len();
-
-    // TODO: this 2 is magic here; it is the length of the hash of the multihash
-    let bits_diff = bucket_num + 1;
-    if bits_diff > 8 * (my_id_len - 2) {
-        return Err(());
-    }
-
-    let mut random_id = [0; 64];
-    for byte in 0..my_id_len {
-        match byte.cmp(&(my_id_len - bits_diff / 8 - 1)) {
-            Ordering::Less => {
-                random_id[byte] = my_id.as_bytes()[byte];
-            }
-            Ordering::Equal => {
-                let mask: u8 = (1 << (bits_diff % 8)) - 1;
-                random_id[byte] = (my_id.as_bytes()[byte] & !mask) | (rand::random::<u8>() & mask);
-            }
-            Ordering::Greater => {
-                random_id[byte] = rand::random();
-            }
-        }
-    }
-
-    let peer_id = PeerId::from_bytes(random_id[..my_id_len].to_owned())
-        .expect("randomly-generated peer ID should always be valid");
-    Ok(peer_id)
 }
 
 /// Builds a `KadPeer` struct corresponding to the given `PeerId`.

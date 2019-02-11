@@ -13,11 +13,11 @@ categories = ["network-programming", "asynchronous"]
 arrayvec = "0.4.7"
 bs58 = "0.2.0"
 bigint = "4.2"
+byteorder = "1.3.1"
 bytes = "0.4"
 fnv = "1.0"
 futures = "0.1"
-libp2p-identify = { version = "0.4.0", path = "../../protocols/identify" }
-libp2p-ping = { version = "0.4.0", path = "../../protocols/ping" }
+lazy_static = "1.2"
 libp2p-core = { version = "0.4.0", path = "../../core" }
 log = "0.4"
 multiaddr = { package = "parity-multiaddr", version = "0.2.0", path = "../../misc/multiaddr" }
@@ -25,6 +25,10 @@ multihash = { package = "parity-multihash", version = "0.1.0", path = "../../mis
 parking_lot = "0.7"
 protobuf = "2.3"
 rand = "0.6.0"
+schnorrkel = "0.0.0"
+serde = "1.0"
+serde_cbor = "0.9"
+serde_derive = "1.0"
 smallvec = "0.6"
 tokio-codec = "0.1"
 tokio-io = "0.1"
@@ -33,5 +37,8 @@ unsigned-varint = { version = "0.2.1", features = ["codec"] }
 void = "1.0"
 
 [dev-dependencies]
+libp2p-mplex = { version = "0.4.0", path = "../../muxers/mplex" }
+libp2p-secio = { version = "0.4.0", path = "../secio" }
 libp2p-tcp = { version = "0.4.0", path = "../../transports/tcp" }
+libp2p-yamux = { version = "0.4.0", path = "../../muxers/yamux" }
 tokio = "0.1"

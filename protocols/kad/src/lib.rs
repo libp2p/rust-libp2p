@@ -56,15 +56,49 @@
 //   `KademliaSystem`.
 //
 
-pub use self::behaviour::{Kademlia, KademliaOut};
 pub use self::kbucket::KBucketsPeerId;
-pub use self::protocol::KadConnectionType;
+pub use self::libp2p::{Kademlia, KademliaOut};
+pub use self::libp2p::protocol::KadConnectionType;
 
-pub mod handler;
 pub mod kbucket;
-pub mod protocol;
+pub mod parity;
 
 mod addresses;
-mod behaviour;
-mod protobuf_structs;
+mod libp2p;
 mod query;
+
+use libp2p_core::PeerId;
+use std::cmp::Ordering;
+
+/// Generates a random `PeerId` that belongs to the given bucket.
+///
+/// Returns an error if `bucket_num` is out of range.
+fn gen_random_id(my_id: &PeerId, bucket_num: usize) -> Result<PeerId, ()> {
+    let my_id_len = my_id.as_bytes().len();
+
+    // TODO: this 2 is magic here; it is the length of the hash of the multihash
+    let bits_diff = bucket_num + 1;
+    if bits_diff > 8 * (my_id_len - 2) {
+        return Err(());
+    }
+
+    let mut random_id = [0; 64];
+    for byte in 0..my_id_len {
+        match byte.cmp(&(my_id_len - bits_diff / 8 - 1)) {
+            Ordering::Less => {
+                random_id[byte] = my_id.as_bytes()[byte];
+            }
+            Ordering::Equal => {
+                let mask: u8 = (1 << (bits_diff % 8)) - 1;
+                random_id[byte] = (my_id.as_bytes()[byte] & !mask) | (rand::random::<u8>() & mask);
+            }
+            Ordering::Greater => {
+                random_id[byte] = rand::random();
+            }
+        }
+    }
+
+    let peer_id = PeerId::from_bytes(random_id[..my_id_len].to_owned())
+        .expect("randomly-generated peer ID should always be valid");
+    Ok(peer_id)
+}

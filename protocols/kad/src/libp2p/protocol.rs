@@ -27,7 +27,7 @@
 //! used to send messages.
 
 use bytes::BytesMut;
-use crate::protobuf_structs;
+use crate::libp2p::protobuf_structs;
 use futures::{future, sink, stream, Sink, Stream};
 use libp2p_core::{InboundUpgrade, Multiaddr, OutboundUpgrade, PeerId, UpgradeInfo};
 use multihash::Multihash;
@@ -54,7 +54,7 @@ pub enum KadConnectionType {
 impl From<protobuf_structs::dht::Message_ConnectionType> for KadConnectionType {
     #[inline]
     fn from(raw: protobuf_structs::dht::Message_ConnectionType) -> KadConnectionType {
-        use crate::protobuf_structs::dht::Message_ConnectionType::{
+        use crate::libp2p::protobuf_structs::dht::Message_ConnectionType::{
             CAN_CONNECT, CANNOT_CONNECT, CONNECTED, NOT_CONNECTED
         };
         match raw {
@@ -69,7 +69,7 @@ impl From<protobuf_structs::dht::Message_ConnectionType> for KadConnectionType {
 impl Into<protobuf_structs::dht::Message_ConnectionType> for KadConnectionType {
     #[inline]
     fn into(self) -> protobuf_structs::dht::Message_ConnectionType {
-        use crate::protobuf_structs::dht::Message_ConnectionType::{
+        use crate::libp2p::protobuf_structs::dht::Message_ConnectionType::{
             CAN_CONNECT, CANNOT_CONNECT, CONNECTED, NOT_CONNECTED
         };
         match self {

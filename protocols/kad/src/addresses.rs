@@ -63,6 +63,15 @@ impl Addresses {
         })
     }
 
+    /// Returns true if the list of addresses is empty, or contains only expired addresses.
+    pub fn is_empty(&self) -> bool {
+        if self.addrs.is_empty() {
+            return true;
+        }
+
+        self.iter().next().is_some()
+    }
+
     /// If true, we are connected to all the addresses returned by `iter()`.
     ///
     /// Returns false if the list of addresses is empty.
@@ -93,11 +102,25 @@ impl Addresses {
         self.addrs.remove(pos);
     }
 
+    /// Marks all the addresses as disconnected.
+    pub fn set_all_disconnected(&mut self) {
+        for addr in self.addrs.iter_mut() {
+            if addr.1.is_none() {
+                addr.1 = Some(Instant::now() + self.expiration);
+            }
+        }
+    }
+
     /// Removes the given address from the list. Typically called if an address is determined to
     /// be invalid or unreachable.
-    pub fn remove_addr(&mut self, addr: &Multiaddr) {
+    ///
+    /// Returns `true` if an address has been effectively removed.
+    pub fn remove_addr(&mut self, addr: &Multiaddr) -> bool {
         if let Some(pos) = self.addrs.iter().position(|(a, _)| a == addr) {
             self.addrs.remove(pos);
+            true
+        } else {
+            false
         }
     }
 
