@@ -64,6 +64,7 @@ pub mod handler;
 pub mod kbucket;
 pub mod protocol;
 
+mod addresses;
 mod behaviour;
 mod protobuf_structs;
 mod query;
