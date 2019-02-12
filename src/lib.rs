@@ -132,15 +132,12 @@
 #![doc(html_logo_url = "https://libp2p.io/img/logo_small.png")]
 #![doc(html_favicon_url = "https://libp2p.io/img/favicon.png")]
 
-pub extern crate bytes;
-pub extern crate futures;
-pub extern crate multiaddr;
-pub extern crate multihash;
-pub extern crate tokio_io;
-pub extern crate tokio_codec;
-
-extern crate libp2p_core_derive;
-extern crate tokio_executor;
+pub use bytes;
+pub use futures;
+pub use multiaddr::{self};
+pub use multihash;
+pub use tokio_io;
+pub use tokio_codec;
 
 #[doc(inline)]
 pub use libp2p_core as core;
@@ -247,8 +244,10 @@ struct CommonTransport {
 type InnerImplementation = core::transport::OrTransport<dns::DnsConfig<tcp::TcpConfig>, websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>>;
 #[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), not(feature = "libp2p-websocket")))]
 type InnerImplementation = dns::DnsConfig<tcp::TcpConfig>;
-#[cfg(any(target_os = "emscripten", target_os = "unknown"))]
+#[cfg(all(any(target_os = "emscripten", target_os = "unknown"), feature = "libp2p-websocket"))]
 type InnerImplementation = websocket::BrowserWsConfig;
+#[cfg(all(any(target_os = "emscripten", target_os = "unknown"), not(feature = "libp2p-websocket")))]
+type InnerImplementation = core::transport::dummy::DummyTransport;
 
 #[derive(Debug, Clone)]
 struct CommonTransportInner {
@@ -275,9 +274,19 @@ impl CommonTransport {
 
     /// Initializes the `CommonTransport`.
     #[inline]
-    #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
+    #[cfg(all(any(target_os = "emscripten", target_os = "unknown"), feature = "libp2p-websocket"))]
     pub fn new() -> CommonTransport {
         let inner = websocket::BrowserWsConfig::new();
+        CommonTransport {
+            inner: CommonTransportInner { inner }
+        }
+    }
+
+    /// Initializes the `CommonTransport`.
+    #[inline]
+    #[cfg(all(any(target_os = "emscripten", target_os = "unknown"), not(feature = "libp2p-websocket")))]
+    pub fn new() -> CommonTransport {
+        let inner = core::transport::dummy::DummyTransport::new();
         CommonTransport {
             inner: CommonTransportInner { inner }
         }

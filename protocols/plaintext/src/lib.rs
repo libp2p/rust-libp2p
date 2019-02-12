@@ -18,10 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-extern crate futures;
-extern crate libp2p_core;
-extern crate void;
-
 use futures::future::{self, FutureResult};
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use std::iter;

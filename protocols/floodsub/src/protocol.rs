@@ -121,7 +121,7 @@ impl From<ProtobufError> for FloodsubDecodeError {
 }
 
 impl fmt::Display for FloodsubDecodeError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             FloodsubDecodeError::ReadError(ref err) =>
                 write!(f, "Error while reading from socket: {}", err),

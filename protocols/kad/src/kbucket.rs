@@ -181,7 +181,7 @@ where
     /// Ordered by proximity to the local node. Closest bucket (with max. one node in it) comes
     /// first.
     #[inline]
-    pub fn buckets(&mut self) -> BucketsIter<TPeerId, TVal> {
+    pub fn buckets(&mut self) -> BucketsIter<'_, TPeerId, TVal> {
         BucketsIter(self.tables.iter_mut(), self.unresponsive_timeout)
     }
 
@@ -279,7 +279,7 @@ where
     /// This inserts the node in the k-buckets, if possible. If it is already in a k-bucket, puts
     /// it above the disconnected nodes. If it is not already in a k-bucket, then the value will
     /// be built with the `Default` trait.
-    pub fn set_connected(&mut self, id: &TPeerId) -> Update<TPeerId>
+    pub fn set_connected(&mut self, id: &TPeerId) -> Update<'_, TPeerId>
     where
         TVal: Default,
     {
@@ -412,9 +412,9 @@ pub enum Update<'a, TPeerId> {
 }
 
 /// Iterator giving access to a bucket.
-pub struct BucketsIter<'a, TPeerId: 'a, TVal: 'a>(SliceIterMut<'a, KBucket<TPeerId, TVal>>, Duration);
+pub struct BucketsIter<'a, TPeerId, TVal>(SliceIterMut<'a, KBucket<TPeerId, TVal>>, Duration);
 
-impl<'a, TPeerId: 'a, TVal: 'a> Iterator for BucketsIter<'a, TPeerId, TVal> {
+impl<'a, TPeerId, TVal> Iterator for BucketsIter<'a, TPeerId, TVal> {
     type Item = Bucket<'a, TPeerId, TVal>;
 
     #[inline]
@@ -431,12 +431,12 @@ impl<'a, TPeerId: 'a, TVal: 'a> Iterator for BucketsIter<'a, TPeerId, TVal> {
     }
 }
 
-impl<'a, TPeerId: 'a, TVal: 'a> ExactSizeIterator for BucketsIter<'a, TPeerId, TVal> {}
+impl<'a, TPeerId, TVal> ExactSizeIterator for BucketsIter<'a, TPeerId, TVal> {}
 
 /// Access to a bucket.
-pub struct Bucket<'a, TPeerId: 'a, TVal: 'a>(&'a mut KBucket<TPeerId, TVal>);
+pub struct Bucket<'a, TPeerId, TVal>(&'a mut KBucket<TPeerId, TVal>);
 
-impl<'a, TPeerId: 'a, TVal: 'a> Bucket<'a, TPeerId, TVal> {
+impl<'a, TPeerId, TVal> Bucket<'a, TPeerId, TVal> {
     /// Returns the number of entries in that bucket.
     ///
     /// > **Note**: Keep in mind that this operation can be racy. If `update()` is called on the
@@ -464,8 +464,7 @@ impl<'a, TPeerId: 'a, TVal: 'a> Bucket<'a, TPeerId, TVal> {
 
 #[cfg(test)]
 mod tests {
-    extern crate rand;
-    use self::rand::random;
+    use rand::random;
     use crate::kbucket::{KBucketsPeerId, KBucketsTable, Update, MAX_NODES_PER_BUCKET};
     use multihash::{Multihash, Hash};
     use std::thread;

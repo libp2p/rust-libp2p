@@ -44,7 +44,7 @@ struct BufferBorrow<'a> {
 
 impl Buffer {
     /// Create a mutable borrow by splitting the buffer slice.
-    fn borrow_mut(&mut self) -> BufferBorrow {
+    fn borrow_mut(&mut self) -> BufferBorrow<'_> {
         let (r, w) = self.inner.split_at_mut(2 * MAX_NOISE_PKG_LEN);
         let (read, read_crypto) = r.split_at_mut(MAX_NOISE_PKG_LEN);
         let (write, write_crypto) = w.split_at_mut(MAX_WRITE_BUF_LEN);
@@ -101,7 +101,7 @@ pub struct NoiseOutput<T> {
 }
 
 impl<T> fmt::Debug for NoiseOutput<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("NoiseOutput")
             .field("read_state", &self.read_state)
             .field("write_state", &self.write_state)

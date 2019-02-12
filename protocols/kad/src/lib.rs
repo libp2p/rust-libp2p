@@ -56,32 +56,6 @@
 //   `KademliaSystem`.
 //
 
-extern crate arrayvec;
-extern crate bigint;
-extern crate bs58;
-extern crate bytes;
-extern crate fnv;
-#[cfg_attr(test, macro_use)]
-extern crate futures;
-extern crate libp2p_core;
-extern crate libp2p_identify;
-extern crate libp2p_ping;
-extern crate log;
-extern crate multiaddr;
-extern crate multihash;
-extern crate parking_lot;
-extern crate protobuf;
-extern crate rand;
-extern crate smallvec;
-extern crate tokio_codec;
-extern crate tokio_io;
-extern crate tokio_timer;
-extern crate unsigned_varint;
-extern crate void;
-
-#[cfg(test)]
-extern crate tokio;
-
 pub use self::behaviour::{Kademlia, KademliaOut};
 pub use self::kbucket::KBucketsPeerId;
 pub use self::protocol::KadConnectionType;

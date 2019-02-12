@@ -1,3 +1,5 @@
+
+use arrayref::array_ref;
 use bs58;
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt, WriteBytesExt};
 use crate::{Result, Error};
@@ -350,7 +352,7 @@ impl<'a> Protocol<'a> {
 }
 
 impl<'a> fmt::Display for Protocol<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use self::Protocol::*;
         match self {
             Dccp(port) => write!(f, "/dccp/{}", port),

@@ -315,7 +315,9 @@ where TBehaviour: NetworkBehaviour,
                 },
                 Async::Ready(NetworkBehaviourAction::ReportObservedAddr { address }) => {
                     for addr in self.raw_swarm.nat_traversal(&address) {
-                        self.external_addrs.push(addr);
+                        if self.external_addrs.iter().all(|a| *a != addr) {
+                            self.external_addrs.push(addr);
+                        }
                     }
                 },
             }
@@ -371,7 +373,7 @@ pub trait NetworkBehaviour {
     /// Polls for things that swarm should do.
     ///
     /// This API mimics the API of the `Stream` trait.
-    fn poll(&mut self, topology: &mut PollParameters) -> Async<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
+    fn poll(&mut self, topology: &mut PollParameters<'_>) -> Async<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
 }
 
 /// Used when deriving `NetworkBehaviour`. When deriving `NetworkBehaviour`, must be implemented
@@ -589,7 +591,7 @@ mod tests {
         fn inject_node_event(&mut self, _: PeerId,
             _: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent) {}
 
-        fn poll(&mut self, _: &mut PollParameters) ->
+        fn poll(&mut self, _: &mut PollParameters<'_>) ->
             Async<NetworkBehaviourAction<<Self::ProtocolsHandler as
             ProtocolsHandler>::InEvent, Self::OutEvent>>
         {

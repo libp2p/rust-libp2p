@@ -77,7 +77,7 @@ where
     TTrans: Transport + fmt::Debug,
     TPeerId: fmt::Debug + Eq + Hash,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_struct("ReachAttempts")
             .field("listeners", &self.listeners)
             .field("active_nodes", &self.active_nodes)
@@ -108,7 +108,7 @@ impl<TPeerId> fmt::Debug for ReachAttempts<TPeerId>
 where
     TPeerId: fmt::Debug + Eq + Hash,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_struct("ReachAttempts")
             .field("local_peer_id", &self.local_peer_id)
             .field("out_reach_attempts", &self.out_reach_attempts)
@@ -246,7 +246,7 @@ where
     THandlerErr: fmt::Debug,
     TPeerId: fmt::Debug,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match *self {
             RawSwarmEvent::ListenerClosed { ref listen_addr, ref result, .. } => {
                 f.debug_struct("ListenerClosed")
@@ -337,7 +337,7 @@ where
     TTransErr: fmt::Display,
     TPeerId: fmt::Debug,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             InternalReachErr::Transport(err) => write!(f, "{}", err),
             InternalReachErr::PeerIdMismatch { obtained } => {
@@ -397,7 +397,7 @@ where
     TTransErr: fmt::Display,
     TPeerId: fmt::Debug,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             RawSwarmReachError::Transport(err) => write!(f, "{}", err),
             RawSwarmReachError::PeerIdMismatch { obtained } => {
@@ -432,7 +432,7 @@ pub enum UnknownPeerDialErr<TTransErr> {
 impl<TTransErr> fmt::Display for UnknownPeerDialErr<TTransErr>
 where TTransErr: fmt::Display
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             UnknownPeerDialErr::Transport(err) => write!(f, "{}", err),
             UnknownPeerDialErr::FoundLocalPeerId => {
@@ -469,7 +469,7 @@ pub enum IncomingError<TTransErr> {
 impl<TTransErr> fmt::Display for IncomingError<TTransErr>
 where TTransErr: fmt::Display
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             IncomingError::Transport(err) => write!(f, "{}", err),
             IncomingError::DeniedLowerPriority => {
@@ -495,7 +495,7 @@ where TTransErr: error::Error + 'static
 }
 
 /// A new connection arrived on a listener.
-pub struct IncomingConnectionEvent<'a, TTrans: 'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a, THandlerErr: 'a, TPeerId: 'a>
+pub struct IncomingConnectionEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TPeerId>
 where TTrans: Transport
 {
     /// The produced upgrade.
@@ -537,7 +537,7 @@ where
 
     /// Same as `accept`, but accepts a closure that turns a `IncomingInfo` into a handler.
     pub fn accept_with_builder<TBuilder>(self, builder: TBuilder)
-    where TBuilder: FnOnce(IncomingInfo) -> THandler
+    where TBuilder: FnOnce(IncomingInfo<'_>) -> THandler
     {
         let connected_point = self.to_connected_point();
         let handler = builder(self.info());
@@ -565,7 +565,7 @@ where TTrans: Transport
 {
     /// Returns the `IncomingInfo` corresponding to this incoming connection.
     #[inline]
-    pub fn info(&self) -> IncomingInfo {
+    pub fn info(&self) -> IncomingInfo<'_> {
         IncomingInfo {
             listen_addr: &self.listen_addr,
             send_back_addr: &self.send_back_addr,
@@ -817,7 +817,7 @@ where
     /// Returns the list of incoming connections that are currently in the process of being
     /// negotiated. We don't know the `PeerId` of these nodes yet.
     #[inline]
-    pub fn incoming_negotiated(&self) -> impl Iterator<Item = IncomingInfo> {
+    pub fn incoming_negotiated(&self) -> impl Iterator<Item = IncomingInfo<'_>> {
         self.reach_attempts
             .other_reach_attempts
             .iter()
@@ -844,7 +844,7 @@ where
 
     /// Grants access to a struct that represents a peer.
     #[inline]
-    pub fn peer(&mut self, peer_id: TPeerId) -> Peer<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TPeerId> {
+    pub fn peer(&mut self, peer_id: TPeerId) -> Peer<'_, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TPeerId> {
         if peer_id == self.reach_attempts.local_peer_id {
             return Peer::LocalNode;
         }
@@ -929,7 +929,7 @@ where
     }
 
     /// Provides an API similar to `Stream`, except that it cannot error.
-    pub fn poll(&mut self) -> Async<RawSwarmEvent<TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TPeerId>>
+    pub fn poll(&mut self) -> Async<RawSwarmEvent<'_, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TPeerId>>
     where
         TTrans: Transport<Output = (TPeerId, TMuxer)>,
         TTrans::Error: Send + 'static,
@@ -1073,7 +1073,7 @@ impl<THandler, TPeerId> Default for ActionItem<THandler, TPeerId> {
 /// >           panics will likely happen.
 fn handle_node_reached<'a, TTrans, TMuxer, TInEvent, TOutEvent, THandler, THandlerErr, TPeerId>(
     reach_attempts: &mut ReachAttempts<TPeerId>,
-    event: CollectionReachEvent<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TPeerId>, THandlerErr, TPeerId>,
+    event: CollectionReachEvent<'_, TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TPeerId>, THandlerErr, TPeerId>,
 ) -> (ActionItem<THandler, TPeerId>, RawSwarmEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TPeerId>)
 where
     TTrans: Transport<Output = (TPeerId, TMuxer)> + Clone,
@@ -1358,7 +1358,7 @@ where
     TTrans: Transport,
     TPeerId: Eq + Hash + fmt::Debug,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match *self {
             Peer::Connected( PeerConnected { ref peer_id, ref connected_points, .. }) => {
                 f.debug_struct("Connected")
@@ -1515,7 +1515,7 @@ where
 }
 
 /// Access to a peer we are connected to.
-pub struct PeerConnected<'a, TTrans: 'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a, THandlerErr: 'a, TPeerId: 'a>
+pub struct PeerConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TPeerId>
 where TTrans: Transport,
 {
     /// Reference to the `active_nodes` of the parent.
@@ -1571,7 +1571,7 @@ where
 
 /// Access to a peer we are attempting to connect to.
 #[derive(Debug)]
-pub struct PeerPendingConnect<'a, TTrans: 'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a, THandlerErr: 'a, TPeerId: 'a>
+pub struct PeerPendingConnect<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TPeerId>
 where
     TTrans: Transport
 {
@@ -1635,7 +1635,7 @@ where
 }
 
 /// Access to a peer we're not connected to.
-pub struct PeerNotConnected<'a, TTrans: 'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a, THandlerErr: 'a, TPeerId: 'a>
+pub struct PeerNotConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TPeerId>
 where
     TTrans: Transport,
 {
@@ -1649,7 +1649,7 @@ where
     TTrans: Transport,
     TPeerId: fmt::Debug,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_struct("PeerNotConnected")
             .field("peer_id", &self.peer_id)
             .finish()

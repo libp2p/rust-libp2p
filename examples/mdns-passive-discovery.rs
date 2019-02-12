@@ -18,11 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-extern crate futures;
-extern crate libp2p;
-extern crate rand;
-extern crate tokio;
-
 use futures::prelude::*;
 use libp2p::mdns::service::{MdnsPacket, MdnsService};
 use std::io;

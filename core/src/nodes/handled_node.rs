@@ -173,7 +173,7 @@ where
     TMuxer: StreamMuxer,
     THandler: NodeHandler<Substream = Substream<TMuxer>> + fmt::Debug,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("HandledNode")
             .field("node", &self.node)
             .field("handler", &self.handler)
@@ -338,7 +338,7 @@ pub enum HandledNodeError<THandlerErr> {
 impl<THandlerErr> fmt::Display for HandledNodeError<THandlerErr>
 where THandlerErr: fmt::Display
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             HandledNodeError::Node(err) => write!(f, "{}", err),
             HandledNodeError::Handler(err) => write!(f, "{}", err),

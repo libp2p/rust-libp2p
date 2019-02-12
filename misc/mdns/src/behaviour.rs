@@ -103,7 +103,7 @@ impl ExactSizeIterator for DiscoveredAddrsIter {
 }
 
 impl fmt::Debug for DiscoveredAddrsIter {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("DiscoveredAddrsIter")
             .finish()
     }
@@ -132,7 +132,7 @@ impl ExactSizeIterator for ExpiredAddrsIter {
 }
 
 impl fmt::Debug for ExpiredAddrsIter {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("ExpiredAddrsIter")
             .finish()
     }
@@ -172,7 +172,7 @@ where
 
     fn poll(
         &mut self,
-        params: &mut PollParameters,
+        params: &mut PollParameters<'_>,
     ) -> Async<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
@@ -277,7 +277,7 @@ where
 }
 
 impl<TSubstream> fmt::Debug for Mdns<TSubstream> {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("Mdns")
             .field("service", &self.service)
             .finish()
