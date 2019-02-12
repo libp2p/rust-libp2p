@@ -3,14 +3,7 @@
 ///! Implementation of [multiaddr](https://github.com/jbenet/multiaddr)
 ///! in Rust.
 
-#[macro_use]
-extern crate arrayref;
-extern crate bs58;
-extern crate byteorder;
-extern crate data_encoding;
-extern crate serde;
-extern crate unsigned_varint;
-pub extern crate multihash;
+pub use multihash;
 
 mod protocol;
 mod errors;
@@ -60,7 +53,7 @@ impl<'de> Deserialize<'de> for Multiaddr {
         impl<'de> de::Visitor<'de> for Visitor {
             type Value = Multiaddr;
 
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
                 formatter.write_str("multiaddress")
             }
             fn visit_str<E: de::Error>(self, v: &str) -> StdResult<Self::Value, E> {
@@ -93,7 +86,7 @@ impl<'de> Deserialize<'de> for Multiaddr {
 
 impl fmt::Debug for Multiaddr {
     #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.to_string().fmt(f)
     }
 }
@@ -111,7 +104,7 @@ impl fmt::Display for Multiaddr {
     /// ```
     ///
     #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for s in self.iter() {
             s.to_string().fmt(f)?;
         }
@@ -185,7 +178,7 @@ impl Multiaddr {
     /// ```
     ///
     #[inline]
-    pub fn append(&mut self, p: Protocol) {
+    pub fn append(&mut self, p: Protocol<'_>) {
         let n = self.bytes.len();
         let mut w = io::Cursor::new(&mut self.bytes);
         w.set_position(n as u64);
@@ -267,7 +260,7 @@ impl Multiaddr {
     /// ```
     ///
     #[inline]
-    pub fn iter(&self) -> Iter {
+    pub fn iter(&self) -> Iter<'_> {
         Iter(&self.bytes)
     }
 

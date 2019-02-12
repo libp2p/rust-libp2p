@@ -94,7 +94,7 @@ where
     TTransErr: fmt::Display,
     TUpgrErr: fmt::Display,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TransportUpgradeError::Transport(e) => write!(f, "Transport error: {}", e),
             TransportUpgradeError::Upgrade(e) => write!(f, "Upgrade error: {}", e),

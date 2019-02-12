@@ -69,9 +69,9 @@ impl DummyTransport {
 impl Transport for DummyTransport {
     type Output = (PeerId, DummyMuxer);
     type Error = io::Error;
-    type Listener = Box<Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=io::Error> + Send>;
+    type Listener = Box<dyn Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=io::Error> + Send>;
     type ListenerUpgrade = FutureResult<Self::Output, io::Error>;
-    type Dial = Box<Future<Item = Self::Output, Error = io::Error> + Send>;
+    type Dial = Box<dyn Future<Item = Self::Output, Error = io::Error> + Send>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>>
     where

@@ -35,7 +35,7 @@ pub enum NoiseError {
 }
 
 impl fmt::Display for NoiseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             NoiseError::Io(e) => write!(f, "{}", e),
             NoiseError::Noise(e) => write!(f, "{}", e),

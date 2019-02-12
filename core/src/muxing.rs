@@ -303,7 +303,7 @@ where
     P::Target: StreamMuxer,
     <P::Target as StreamMuxer>::Substream: fmt::Debug,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         write!(f, "Substream({:?})", self.substream)
     }
 }
@@ -398,7 +398,7 @@ where
 
 /// Abstract `StreamMuxer`.
 pub struct StreamMuxerBox {
-    inner: Box<StreamMuxer<Substream = usize, OutboundSubstream = usize> + Send + Sync>,
+    inner: Box<dyn StreamMuxer<Substream = usize, OutboundSubstream = usize> + Send + Sync>,
 }
 
 impl StreamMuxerBox {

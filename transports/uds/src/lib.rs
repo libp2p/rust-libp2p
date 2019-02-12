@@ -46,22 +46,9 @@
 
 #![cfg(all(unix, not(any(target_os = "emscripten", target_os = "unknown"))))]
 
-extern crate futures;
-extern crate libp2p_core;
-#[macro_use]
-extern crate log;
-extern crate multiaddr;
-extern crate tokio_uds;
-
-#[cfg(test)]
-extern crate tempfile;
-#[cfg(test)]
-extern crate tokio_io;
-#[cfg(test)]
-extern crate tokio;
-
 use futures::{future::{self, FutureResult}, prelude::*, try_ready};
 use futures::stream::Stream;
+use log::debug;
 use multiaddr::{Protocol, Multiaddr};
 use std::{io, path::PathBuf};
 use libp2p_core::{Transport, transport::TransportError};
