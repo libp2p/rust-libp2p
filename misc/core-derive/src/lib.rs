@@ -21,13 +21,10 @@
 #![recursion_limit = "256"]
 
 extern crate proc_macro;
-#[macro_use]
-extern crate syn;
-#[macro_use]
-extern crate quote;
 
-use self::proc_macro::TokenStream;
-use syn::{DeriveInput, Data, DataStruct, Ident};
+use quote::quote;
+use proc_macro::TokenStream;
+use syn::{parse_macro_input, DeriveInput, Data, DataStruct, Ident};
 
 /// The interface that satisfies Rust.
 #[proc_macro_derive(NetworkBehaviour, attributes(behaviour))]

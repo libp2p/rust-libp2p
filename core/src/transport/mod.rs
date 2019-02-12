@@ -36,6 +36,7 @@ use tokio_io::{AsyncRead, AsyncWrite};
 pub mod and_then;
 pub mod boxed;
 pub mod choice;
+pub mod dummy;
 pub mod map;
 pub mod map_err;
 pub mod memory;
@@ -246,7 +247,7 @@ impl<TErr> TransportError<TErr> {
 impl<TErr> fmt::Display for TransportError<TErr>
 where TErr: fmt::Display,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TransportError::MultiaddrNotSupported(addr) => write!(f, "Multiaddr is not supported: {}", addr),
             TransportError::Other(err) => write!(f, "{}", err),

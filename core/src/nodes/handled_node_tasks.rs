@@ -68,7 +68,7 @@ pub struct HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THand
 
     /// List of node tasks to spawn.
     // TODO: stronger typing?
-    to_spawn: SmallVec<[Box<Future<Item = (), Error = ()> + Send>; 8]>,
+    to_spawn: SmallVec<[Box<dyn Future<Item = (), Error = ()> + Send>; 8]>,
 
     /// Sender to emit events to the outside. Meant to be cloned and sent to tasks.
     events_tx: mpsc::UnboundedSender<(InToExtMessage<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>, TaskId)>,
@@ -79,7 +79,7 @@ pub struct HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THand
 impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId> fmt::Debug for
     HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_list()
             .entries(self.tasks.keys().cloned())
             .finish()
@@ -100,7 +100,7 @@ where
     TReachErr: fmt::Display,
     THandlerErr: fmt::Display,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TaskClosedEvent::Reach(err) => write!(f, "{}", err),
             TaskClosedEvent::Node(err) => write!(f, "{}", err),
@@ -253,7 +253,7 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>
     ///
     /// Returns `None` if the task id is invalid.
     #[inline]
-    pub fn task(&mut self, id: TaskId) -> Option<Task<TInEvent>> {
+    pub fn task(&mut self, id: TaskId) -> Option<Task<'_, TInEvent>> {
         match self.tasks.entry(id) {
             Entry::Occupied(inner) => Some(Task { inner }),
             Entry::Vacant(_) => None,
@@ -316,7 +316,7 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>
 }
 
 /// Access to a task in the collection.
-pub struct Task<'a, TInEvent: 'a> {
+pub struct Task<'a, TInEvent> {
     inner: OccupiedEntry<'a, TaskId, mpsc::UnboundedSender<TInEvent>>,
 }
 
@@ -346,7 +346,7 @@ impl<'a, TInEvent> Task<'a, TInEvent> {
 }
 
 impl<'a, TInEvent> fmt::Debug for Task<'a, TInEvent> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_tuple("Task")
             .field(&self.id())
             .finish()

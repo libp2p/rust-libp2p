@@ -51,7 +51,7 @@ impl<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TPeerId> fmt::Debug 
 where
     TPeerId: fmt::Debug,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         let mut list = f.debug_list();
         for (id, task) in &self.tasks {
             match *task {
@@ -127,7 +127,7 @@ where TOutEvent: fmt::Debug,
       THandlerErr: fmt::Debug,
       TPeerId: Eq + Hash + Clone + fmt::Debug,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match *self {
             CollectionEvent::NodeReached(ref inner) => {
                 f.debug_tuple("CollectionEvent::NodeReached")
@@ -163,7 +163,7 @@ where TOutEvent: fmt::Debug,
 
 /// Event that happens when we reach a node.
 #[must_use = "The node reached event is used to accept the newly-opened connection"]
-pub struct CollectionReachEvent<'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a, TReachErr, THandlerErr: 'a, TPeerId: 'a = PeerId> {
+pub struct CollectionReachEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TPeerId = PeerId> {
     /// Peer id we connected to.
     peer_id: TPeerId,
     /// The task id that reached the node.
@@ -244,7 +244,7 @@ impl<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TPeerId> fmt::De
 where
     TPeerId: Eq + Hash + Clone + fmt::Debug,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_struct("CollectionReachEvent")
             .field("peer_id", &self.peer_id)
             .field("reach_attempt_id", &self.reach_attempt_id())
@@ -357,7 +357,7 @@ where
     ///
     /// Returns `None` if we don't have a connection to this peer.
     #[inline]
-    pub fn peer_mut(&mut self, id: &TPeerId) -> Option<PeerMut<TInEvent, TPeerId>> {
+    pub fn peer_mut(&mut self, id: &TPeerId) -> Option<PeerMut<'_, TInEvent, TPeerId>> {
         let task = match self.nodes.get(id) {
             Some(&task) => task,
             None => return None,
@@ -394,7 +394,7 @@ where
     /// > **Note**: we use a regular `poll` method instead of implementing `Stream` in order to
     /// > remove the `Err` variant, but also because we want the `CollectionStream` to stay
     /// > borrowed if necessary.
-    pub fn poll(&mut self) -> Async<CollectionEvent<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TPeerId>> {
+    pub fn poll(&mut self) -> Async<CollectionEvent<'_, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TPeerId>> {
         let item = match self.inner.poll() {
             Async::Ready(item) => item,
             Async::NotReady => return Async::NotReady,
@@ -493,7 +493,7 @@ pub enum InterruptError {
 }
 
 impl fmt::Display for InterruptError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             InterruptError::ReachAttemptNotFound =>
                 write!(f, "The reach attempt could not be found."),
@@ -506,7 +506,7 @@ impl fmt::Display for InterruptError {
 impl error::Error for InterruptError {}
 
 /// Access to a peer in the collection.
-pub struct PeerMut<'a, TInEvent: 'a, TPeerId: 'a = PeerId> {
+pub struct PeerMut<'a, TInEvent, TPeerId = PeerId> {
     inner: HandledNodesTask<'a, TInEvent>,
     tasks: &'a mut FnvHashMap<TaskId, TaskState<TPeerId>>,
     nodes: &'a mut FnvHashMap<TPeerId, TaskId>,

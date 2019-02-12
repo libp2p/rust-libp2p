@@ -21,13 +21,6 @@
 //! Connection upgrade to allow retrieving the externally visible address (as dialer) or
 //! to report the externally visible address (as listener).
 
-extern crate bytes;
-extern crate futures;
-extern crate libp2p_core;
-extern crate tokio_codec;
-extern crate tokio_io;
-extern crate unsigned_varint;
-
 use bytes::Bytes;
 use futures::{future, prelude::*};
 use libp2p_core::{Multiaddr, upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}};
@@ -107,11 +100,9 @@ impl<C: AsyncWrite> Sender<C> {
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio;
-
     use libp2p_core::{Multiaddr, upgrade::{InboundUpgrade, OutboundUpgrade}};
-    use self::tokio::runtime::current_thread;
-    use self::tokio::net::{TcpListener, TcpStream};
+    use tokio::runtime::current_thread;
+    use tokio::net::{TcpListener, TcpStream};
     use super::*;
 
     #[test]

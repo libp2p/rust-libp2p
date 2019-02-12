@@ -34,7 +34,7 @@ where
     A: fmt::Display,
     B: fmt::Display
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             EitherError::A(a) => a.fmt(f),
             EitherError::B(b) => b.fmt(f)
