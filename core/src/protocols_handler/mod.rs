@@ -446,6 +446,7 @@ impl Ord for KeepAlive {
         use self::KeepAlive::*;
 
         match (self, other) {
+            (Now, Now) | (Forever, Forever) => Ordering::Equal,
             (Now, _) | (_, Forever) => Ordering::Less,
             (_, Now) | (Forever, _) => Ordering::Greater,
             (Until(expiration), Until(other_expiration)) => expiration.cmp(other_expiration),
