@@ -36,7 +36,7 @@ impl<TInner> BandwidthLogging<TInner> {
     /// Creates a new `BandwidthLogging` around the transport.
     #[inline]
     pub fn new(inner: TInner, period: Duration) -> (Self, Arc<BandwidthSinks>) {
-        let mut period_seconds = cmp::min(period.as_secs(), u64::from(u32::max_value())) as u32;
+        let mut period_seconds = cmp::min(period.as_secs(), 86400) as u32;
         if period.subsec_nanos() > 0 {
             period_seconds += 1;
         }
