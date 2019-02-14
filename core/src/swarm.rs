@@ -47,7 +47,7 @@ use crate::{
     nodes::{
         handled_node::NodeHandler,
         node::Substream,
-        raw_swarm::{RawSwarm, RawSwarmEvent}
+        raw_swarm::{self, RawSwarm, RawSwarmEvent}
     },
     protocols_handler::{NodeHandlerWrapperBuilder, NodeHandlerWrapper, IntoProtocolsHandler, ProtocolsHandler},
     transport::TransportError,
@@ -180,9 +180,15 @@ where TBehaviour: NetworkBehaviour,
     #[inline]
     pub fn dial(me: &mut Self, peer_id: PeerId) {
         let addrs = me.behaviour.addresses_of_peer(&peer_id);
-        let handler = me.behaviour.new_handler().into_node_handler_builder();
-        if let Some(peer) = me.raw_swarm.peer(peer_id).into_not_connected() {
-            let _ = peer.connect_iter(addrs, handler);
+        match me.raw_swarm.peer(peer_id.clone()) {
+            raw_swarm::Peer::NotConnected(peer) => {
+                let handler = me.behaviour.new_handler().into_node_handler_builder();
+                let _ = peer.connect_iter(addrs, handler);
+            },
+            raw_swarm::Peer::PendingConnect(mut peer) => {
+                peer.append_multiaddr_attempts(addrs)
+            },
+            raw_swarm::Peer::Connected(_) | raw_swarm::Peer::LocalNode => {}
         }
     }
 
@@ -309,7 +315,9 @@ where TBehaviour: NetworkBehaviour,
                 },
                 Async::Ready(NetworkBehaviourAction::ReportObservedAddr { address }) => {
                     for addr in self.raw_swarm.nat_traversal(&address) {
-                        self.external_addrs.push(addr);
+                        if self.external_addrs.iter().all(|a| *a != addr) {
+                            self.external_addrs.push(addr);
+                        }
                     }
                 },
             }
@@ -365,7 +373,7 @@ pub trait NetworkBehaviour {
     /// Polls for things that swarm should do.
     ///
     /// This API mimics the API of the `Stream` trait.
-    fn poll(&mut self, topology: &mut PollParameters) -> Async<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
+    fn poll(&mut self, topology: &mut PollParameters<'_>) -> Async<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
 }
 
 /// Used when deriving `NetworkBehaviour`. When deriving `NetworkBehaviour`, must be implemented
@@ -583,7 +591,7 @@ mod tests {
         fn inject_node_event(&mut self, _: PeerId,
             _: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent) {}
 
-        fn poll(&mut self, _: &mut PollParameters) ->
+        fn poll(&mut self, _: &mut PollParameters<'_>) ->
             Async<NetworkBehaviourAction<<Self::ProtocolsHandler as
             ProtocolsHandler>::InEvent, Self::OutEvent>>
         {

@@ -21,13 +21,10 @@
 #![recursion_limit = "256"]
 
 extern crate proc_macro;
-#[macro_use]
-extern crate syn;
-#[macro_use]
-extern crate quote;
 
-use self::proc_macro::TokenStream;
-use syn::{DeriveInput, Data, DataStruct, Ident};
+use quote::quote;
+use proc_macro::TokenStream;
+use syn::{parse_macro_input, DeriveInput, Data, DataStruct, Ident};
 
 /// The interface that satisfies Rust.
 #[proc_macro_derive(NetworkBehaviour, attributes(behaviour))]
@@ -122,7 +119,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 match meta_item {
                     syn::NestedMeta::Meta(syn::Meta::NameValue(ref m)) if m.ident == "out_event" => {
                         if let syn::Lit::Str(ref s) = m.lit {
-                            let ident: Ident = syn::parse_str(&s.value()).unwrap();
+                            let ident: syn::Type = syn::parse_str(&s.value()).unwrap();
                             out = quote!{#ident};
                         }
                     }

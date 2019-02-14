@@ -18,9 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#[macro_use]
-extern crate libp2p;
-extern crate void;
+use libp2p_core_derive::*;
 
 /// Small utility to check that a type implements `NetworkBehaviour`.
 #[allow(dead_code)]
@@ -145,7 +143,7 @@ fn custom_polling() {
 fn custom_event_no_polling() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    #[behaviour(out_event = "String")]
+    #[behaviour(out_event = "Vec<String>")]
     struct Foo<TSubstream> {
         ping: libp2p::ping::Ping<TSubstream>,
         identify: libp2p::identify::Identify<TSubstream>,

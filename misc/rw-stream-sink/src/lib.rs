@@ -27,10 +27,6 @@
 //! > **Note**: Although this crate is hosted in the libp2p repo, it is purely a utility crate and
 //! >           not at all specific to libp2p.
 
-extern crate bytes;
-extern crate futures;
-extern crate tokio_io;
-
 use bytes::{Buf, IntoBuf};
 use futures::{Async, AsyncSink, Poll, Sink, Stream};
 use std::cmp;

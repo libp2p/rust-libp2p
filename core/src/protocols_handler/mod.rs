@@ -342,7 +342,7 @@ impl<TUpgrErr> fmt::Display for ProtocolsHandlerUpgrErr<TUpgrErr>
 where
     TUpgrErr: fmt::Display,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ProtocolsHandlerUpgrErr::Timeout => {
                 write!(f, "Timeout error while opening a substream")

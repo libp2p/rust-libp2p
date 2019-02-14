@@ -18,11 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-extern crate libp2p_core;
-extern crate libp2p_secio;
-extern crate num_cpus;
-extern crate rand;
-
 use libp2p_core::PeerId;
 use libp2p_secio::SecioKeyPair;
 use std::{env, str, thread, time::Duration};

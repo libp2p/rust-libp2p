@@ -67,7 +67,7 @@ pub struct HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THand
 
     /// List of node tasks to spawn.
     // TODO: stronger typing?
-    to_spawn: SmallVec<[Box<Future<Item = (), Error = ()> + Send>; 8]>,
+    to_spawn: SmallVec<[Box<dyn Future<Item = (), Error = ()> + Send>; 8]>,
 
     /// Sender to emit events to the outside. Meant to be cloned and sent to tasks.
     events_tx: mpsc::UnboundedSender<(InToExtMessage<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>, TaskId)>,
@@ -80,7 +80,7 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TPeer
 where
     TUserData: fmt::Debug
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_map()
             .entries(self.tasks.iter().map(|(id, (_, ud))| (id, ud)))
             .finish()
@@ -101,7 +101,7 @@ where
     TReachErr: fmt::Display,
     THandlerErr: fmt::Display,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TaskClosedEvent::Reach(err) => write!(f, "{}", err),
             TaskClosedEvent::Node(err) => write!(f, "{}", err),
@@ -256,7 +256,7 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TPeer
     ///
     /// Returns `None` if the task id is invalid.
     #[inline]
-    pub fn task(&mut self, id: TaskId) -> Option<Task<TInEvent, TUserData>> {
+    pub fn task(&mut self, id: TaskId) -> Option<Task<'_, TInEvent, TUserData>> {
         match self.tasks.entry(id) {
             Entry::Occupied(inner) => Some(Task { inner }),
             Entry::Vacant(_) => None,
@@ -337,7 +337,7 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TPeer
 }
 
 /// Access to a task in the collection.
-pub struct Task<'a, TInEvent: 'a, TUserData: 'a> {
+pub struct Task<'a, TInEvent, TUserData> {
     inner: OccupiedEntry<'a, TaskId, (mpsc::UnboundedSender<TInEvent>, TUserData)>,
 }
 
@@ -380,7 +380,7 @@ impl<'a, TInEvent, TUserData> fmt::Debug for Task<'a, TInEvent, TUserData>
 where
     TUserData: fmt::Debug,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_tuple("Task")
             .field(&self.id())
             .field(self.user_data())

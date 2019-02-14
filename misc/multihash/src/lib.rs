@@ -5,19 +5,11 @@
 //! A `Multihash` is a structure that contains a hashing algorithm, plus some hashed data.
 //! A `MultihashRef` is the same as a `Multihash`, except that it doesn't own its data.
 
-extern crate blake2;
-extern crate rand;
-extern crate sha1;
-extern crate sha2;
-extern crate tiny_keccak;
-extern crate unsigned_varint;
-
 mod errors;
 mod hashes;
 
-use std::fmt::Write;
-
 use sha2::Digest;
+use std::fmt::Write;
 use tiny_keccak::Keccak;
 use unsigned_varint::{decode, encode};
 
@@ -169,7 +161,7 @@ impl Multihash {
 
     /// Builds a `MultihashRef` corresponding to this `Multihash`.
     #[inline]
-    pub fn as_ref(&self) -> MultihashRef {
+    pub fn as_ref(&self) -> MultihashRef<'_> {
         MultihashRef { bytes: &self.bytes }
     }
 

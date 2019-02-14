@@ -18,18 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-extern crate aio_limited;
-#[macro_use]
-extern crate futures;
-extern crate libp2p_core;
-#[macro_use]
-extern crate log;
-extern crate tokio_executor;
-extern crate tokio_io;
-
 use aio_limited::{Limited, Limiter};
 use futures::prelude::*;
+use futures::try_ready;
 use libp2p_core::{Multiaddr, Transport, transport::TransportError};
+use log::error;
 use std::{error, fmt, io};
 use tokio_executor::Executor;
 use tokio_io::{AsyncRead, AsyncWrite, io::{ReadHalf, WriteHalf}};
@@ -82,7 +75,7 @@ pub enum RateLimitedErr<TErr> {
 impl<TErr> fmt::Display for RateLimitedErr<TErr>
 where TErr: fmt::Display
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             RateLimitedErr::LimiterError(err) => write!(f, "Limiter initialization error: {}", err),
             RateLimitedErr::Underlying(err) => write!(f, "{}", err),

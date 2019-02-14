@@ -21,6 +21,7 @@
 use bytes::BytesMut;
 use crate::structs_proto;
 use futures::{future::{self, FutureResult}, Async, AsyncSink, Future, Poll, Sink, Stream};
+use futures::try_ready;
 use libp2p_core::{
     Multiaddr, PublicKey,
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
@@ -261,12 +262,9 @@ fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> 
 
 #[cfg(test)]
 mod tests {
-    extern crate libp2p_tcp;
-    extern crate tokio;
-
     use crate::protocol::{IdentifyInfo, RemoteInfo, IdentifyProtocolConfig};
-    use self::tokio::runtime::current_thread::Runtime;
-    use self::libp2p_tcp::TcpConfig;
+    use tokio::runtime::current_thread::Runtime;
+    use libp2p_tcp::TcpConfig;
     use futures::{Future, Stream};
     use libp2p_core::{PublicKey, Transport, upgrade::{apply_outbound, apply_inbound}};
     use std::{io, sync::mpsc, thread};
