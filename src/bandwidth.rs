@@ -219,14 +219,13 @@ fn current_second() -> u32 {
 /// If you want to calculate for example both download and upload bandwidths, create two different
 /// objects.
 struct BandwidthSink {
-    /// Bytes sent over the past seconds. Contains `rolling_seconds + 1` elements. Only the first
-    /// `rolling_seconds` elements are taken into account for the average, while the last element
-    /// is the element to be inserted later.
+    /// Bytes sent over the past seconds. Contains `rolling_seconds + 1` elements, where
+    /// `rolling_seconds` is the value passed to `new`. Only the first `rolling_seconds` elements
+    /// are taken into account for the average, while the last element is the element to be
+    /// inserted later.
     bytes: SmallVec<[u64; 8]>,
     /// Number of seconds between `EPOCH` and the moment we have last updated `bytes`.
     latest_update: u32,
-    /// Number of seconds. Configured at initialization and never modified.
-    rolling_seconds: u32,
 }
 
 impl BandwidthSink {
@@ -235,7 +234,6 @@ impl BandwidthSink {
         BandwidthSink {
             bytes: smallvec![0; seconds as usize + 1],
             latest_update: current_second(),
-            rolling_seconds: seconds,
         }
     }
 
@@ -243,9 +241,10 @@ impl BandwidthSink {
     /// configured at initialization.
     fn get(&mut self) -> u64 {
         self.update();
+        let seconds = self.bytes.len() - 1;
         self.bytes.iter()
-            .take(self.rolling_seconds as usize)
-            .fold(0u64, |a, &b| a.saturating_add(b)) / u64::from(self.rolling_seconds)
+            .take(seconds)
+            .fold(0u64, |a, &b| a.saturating_add(b)) / seconds as u64
     }
 
     /// Notifies the `BandwidthSink` that a certain number of bytes have been transmitted at this
