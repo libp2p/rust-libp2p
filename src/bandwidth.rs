@@ -244,7 +244,7 @@ impl BandwidthSink {
     fn get(&mut self) -> u64 {
         self.update();
         self.bytes.iter()
-            .take(self.rolling_seconds.saturating_sub(1) as usize)
+            .take(self.rolling_seconds as usize)
             .fold(0u64, |a, &b| a.saturating_add(b)) / u64::from(self.rolling_seconds)
     }
 
@@ -269,5 +269,33 @@ impl BandwidthSink {
         }
 
         self.latest_update = current_second;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{thread, time::Duration};
+    use super::*;
+
+    #[test]
+    fn sink_works() {
+        let mut sink = BandwidthSink::new(5);
+        sink.inject(100);
+        thread::sleep(Duration::from_millis(1000));
+        assert_eq!(sink.get(), 20);
+        sink.inject(100);
+        thread::sleep(Duration::from_millis(1000));
+        assert_eq!(sink.get(), 40);
+        sink.inject(100);
+        thread::sleep(Duration::from_millis(1000));
+        assert_eq!(sink.get(), 60);
+        sink.inject(100);
+        thread::sleep(Duration::from_millis(1000));
+        assert_eq!(sink.get(), 80);
+        sink.inject(100);
+        thread::sleep(Duration::from_millis(1000));
+        assert_eq!(sink.get(), 100);
+        thread::sleep(Duration::from_millis(1000));
+        assert_eq!(sink.get(), 80);
     }
 }
