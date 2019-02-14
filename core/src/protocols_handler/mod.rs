@@ -40,7 +40,7 @@ use crate::upgrade::{
     UpgradeError,
 };
 use futures::prelude::*;
-use std::{error, fmt, time::Duration, time::Instant};
+use std::{cmp::Ordering, error, fmt, time::Duration, time::Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
 
 pub use self::dummy::DummyProtocolsHandler;
@@ -152,8 +152,8 @@ pub trait ProtocolsHandler {
     /// On the other hand, the return value is only an indication and doesn't mean that the user
     /// will not call `shutdown()`.
     ///
-    /// When multiple `ProtocolsHandler` are combined together, they should use return the largest
-    /// value of the two, or `Forever` if either returns `Forever`.
+    /// When multiple `ProtocolsHandler` are combined together, the largest `KeepAlive` should be
+    /// used.
     ///
     /// The result of this method should be checked every time `poll()` is invoked.
     ///
@@ -431,6 +431,25 @@ impl KeepAlive {
         match *self {
             KeepAlive::Forever => true,
             _ => false,
+        }
+    }
+}
+
+impl PartialOrd for KeepAlive {
+    fn partial_cmp(&self, other: &KeepAlive) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for KeepAlive {
+    fn cmp(&self, other: &KeepAlive) -> Ordering {
+        use self::KeepAlive::*;
+
+        match (self, other) {
+            (Now, Now) | (Forever, Forever) => Ordering::Equal,
+            (Now, _) | (_, Forever) => Ordering::Less,
+            (_, Now) | (Forever, _) => Ordering::Greater,
+            (Until(expiration), Until(other_expiration)) => expiration.cmp(other_expiration),
         }
     }
 }
