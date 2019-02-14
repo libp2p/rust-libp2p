@@ -42,9 +42,9 @@ pub struct Identify<TSubstream> {
     /// For each peer we're connected to, the observed address to send back to it.
     observed_addresses: HashMap<PeerId, Multiaddr>,
     /// List of senders to answer, with the observed multiaddr.
-    to_answer: SmallVec<[(IdentifySender<TSubstream>, Multiaddr); 4]>,
+    to_answer: SmallVec<[(PeerId, IdentifySender<TSubstream>, Multiaddr); 4]>,
     /// List of futures that send back information back to remotes.
-    futures: SmallVec<[IdentifySenderFuture<TSubstream>; 4]>,
+    futures: SmallVec<[(PeerId, IdentifySenderFuture<TSubstream>); 4]>,
     /// Events that need to be produced outside when polling..
     events: VecDeque<NetworkBehaviourAction<EitherOutput<Void, Void>, IdentifyEvent>>,
 }
@@ -115,7 +115,7 @@ where
                     .expect("We only receive events from nodes we're connected to. We insert \
                              into the hashmap when we connect to a node and remove only when we \
                              disconnect; QED");
-                self.to_answer.push((sender, observed.clone()));
+                self.to_answer.push((peer_id, sender, observed.clone()));
             }
             EitherOutput::Second(PeriodicIdHandlerEvent::IdentificationError(err)) => {
                 self.events
@@ -140,7 +140,7 @@ where
             return Async::Ready(event);
         }
 
-        for (sender, observed) in self.to_answer.drain() {
+        for (peer_id, sender, observed) in self.to_answer.drain() {
             // The protocol names can be bytes, but the identify protocol except UTF-8 strings.
             // There's not much we can do to solve this conflict except strip non-UTF-8 characters.
             let protocols = params
@@ -160,16 +160,28 @@ where
             };
 
             let future = sender.send(send_back_info, &observed);
-            self.futures.push(future);
+            self.futures.push((peer_id, future));
         }
 
         // Removes each future one by one, and pushes them back if they're not ready.
         for n in (0..self.futures.len()).rev() {
-            let mut future = self.futures.swap_remove(n);
+            let (peer_id, mut future) = self.futures.swap_remove(n);
             match future.poll() {
-                Ok(Async::Ready(())) => {}
-                Ok(Async::NotReady) => self.futures.push(future),
-                Err(_) => {},
+                Ok(Async::Ready(())) => {
+                    let event = IdentifyEvent::SendBack {
+                        peer_id,
+                        result: Ok(()),
+                    };
+                    return Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
+                },
+                Ok(Async::NotReady) => self.futures.push((peer_id, future)),
+                Err(err) => {
+                    let event = IdentifyEvent::SendBack {
+                        peer_id,
+                        result: Err(err),
+                    };
+                    return Async::Ready(NetworkBehaviourAction::GenerateEvent(event));
+                },
             }
         }
 
@@ -195,5 +207,12 @@ pub enum IdentifyEvent {
         peer_id: PeerId,
         /// The error that happened.
         error: ProtocolsHandlerUpgrErr<io::Error>,
+    },
+    /// Finished sending back our identification information to a remote.
+    SendBack {
+        /// Peer that we sent our identification info to.
+        peer_id: PeerId,
+        /// Contains the error that potentially happened when sending back.
+        result: Result<(), io::Error>,
     },
 }
