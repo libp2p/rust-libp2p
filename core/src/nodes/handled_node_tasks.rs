@@ -308,6 +308,7 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TPeer
     /// Since non-lexical lifetimes still don't work very well in Rust at the moment, we have to
     /// split `poll()` in two. This method returns an `InToExtMessage` that is guaranteed to come
     /// from an alive task.
+    // TODO: look into merging with `poll()`
     fn poll_inner(&mut self) -> Async<(InToExtMessage<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>, TaskId)> {
         for to_spawn in self.to_spawn.drain() {
             tokio_executor::spawn(to_spawn);
