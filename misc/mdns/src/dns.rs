@@ -29,7 +29,7 @@ use std::{borrow::Cow, cmp, error, fmt, str, time::Duration};
 
 /// Decodes a `<character-string>` (as defined by RFC1035) into a `Vec` of ASCII characters.
 // TODO: better error type?
-pub fn decode_character_string(mut from: &[u8]) -> Result<Cow<[u8]>, ()> {
+pub fn decode_character_string(mut from: &[u8]) -> Result<Cow<'_, [u8]>, ()> {
     if from.is_empty() {
         return Ok(Cow::Owned(Vec::new()));
     }
@@ -317,7 +317,7 @@ pub enum MdnsResponseError {
 }
 
 impl fmt::Display for MdnsResponseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             MdnsResponseError::TxtRecordTooLong => {
                 write!(f, "TXT record invalid because it is too long")

@@ -9,7 +9,7 @@ pub enum EncodeError {
 
 impl fmt::Display for EncodeError {
     #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             EncodeError::UnsupportedType => write!(f, "This type is not supported yet"),
         }
@@ -29,7 +29,7 @@ pub enum DecodeError {
 
 impl fmt::Display for DecodeError {
     #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             DecodeError::BadInputLength => write!(f, "Not matching input length"),
             DecodeError::UnknownCode => write!(f, "Found unknown code"),
@@ -52,7 +52,7 @@ pub struct DecodeOwnedError {
 
 impl fmt::Display for DecodeOwnedError {
     #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.error)
     }
 }

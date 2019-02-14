@@ -53,9 +53,9 @@ impl<T> Clone for Dialer<T> {
 impl<T: IntoBuf + Send + 'static> Transport for Dialer<T> {
     type Output = Channel<T>;
     type Error = MemoryTransportError;
-    type Listener = Box<Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=MemoryTransportError> + Send>;
+    type Listener = Box<dyn Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=MemoryTransportError> + Send>;
     type ListenerUpgrade = FutureResult<Self::Output, MemoryTransportError>;
-    type Dial = Box<Future<Item=Self::Output, Error=MemoryTransportError> + Send>;
+    type Dial = Box<dyn Future<Item=Self::Output, Error=MemoryTransportError> + Send>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
         Err(TransportError::MultiaddrNotSupported(addr))
@@ -92,7 +92,7 @@ pub enum MemoryTransportError {
 }
 
 impl fmt::Display for MemoryTransportError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             MemoryTransportError::RemoteClosed => 
                 write!(f, "The other side of the memory transport has been closed."),
@@ -114,9 +114,9 @@ impl<T> Clone for Listener<T> {
 impl<T: IntoBuf + Send + 'static> Transport for Listener<T> {
     type Output = Channel<T>;
     type Error = MemoryTransportError;
-    type Listener = Box<Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=MemoryTransportError> + Send>;
+    type Listener = Box<dyn Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=MemoryTransportError> + Send>;
     type ListenerUpgrade = FutureResult<Self::Output, MemoryTransportError>;
-    type Dial = Box<Future<Item=Self::Output, Error=MemoryTransportError> + Send>;
+    type Dial = Box<dyn Future<Item=Self::Output, Error=MemoryTransportError> + Send>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
         if !is_memory_addr(&addr) {

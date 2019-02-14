@@ -219,6 +219,7 @@ where
                                 len_buf,
                                 max_size,
                             };
+                            return Ok(Async::NotReady);
                         }
                     }
                 }
@@ -229,6 +230,7 @@ where
                         }
                         Async::NotReady => {
                             self.inner = ReadOneInner::ReadRest(inner);
+                            return Ok(Async::NotReady);
                         }
                     }
                 }
@@ -260,7 +262,7 @@ impl From<std::io::Error> for ReadOneError {
 }
 
 impl fmt::Display for ReadOneError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             ReadOneError::Io(ref err) => write!(f, "{}", err),
             ReadOneError::TooLarge { .. } => write!(f, "Received data size over maximum"),
@@ -376,6 +378,7 @@ where
                         }
                         Async::NotReady => {
                             self.inner = RequestResponseInner::Write(inner, max_size, then);
+                            return Ok(Async::NotReady);
                         }
                     }
                 }
@@ -383,6 +386,7 @@ where
                     Async::Ready(packet) => return Ok(Async::Ready(packet)),
                     Async::NotReady => {
                         self.inner = RequestResponseInner::Read(inner);
+                        return Ok(Async::NotReady);
                     }
                 },
                 RequestResponseInner::Poisoned => panic!(),
