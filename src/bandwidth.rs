@@ -261,7 +261,9 @@ impl BandwidthSink {
     /// current second.
     fn update(&mut self) {
         let current_second = current_second();
-        for _ in self.latest_update .. current_second {
+        debug_assert!(current_second >= self.latest_update);
+        let num_iter = cmp::min(current_second - self.latest_update, self.bytes.len() as u32);
+        for _ in 0..num_iter {
             self.bytes.remove(0);
             self.bytes.push(0);
         }
