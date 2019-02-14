@@ -53,11 +53,11 @@ where
 {
     type Output = FloodsubRpc;
     type Error = FloodsubDecodeError;
-    type Future = upgrade::ReadOneThen<TSocket, fn(Vec<u8>) -> Result<FloodsubRpc, FloodsubDecodeError>>;
+    type Future = upgrade::ReadOneThen<TSocket, (), fn(Vec<u8>, ()) -> Result<FloodsubRpc, FloodsubDecodeError>>;
 
     #[inline]
     fn upgrade_inbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
-        upgrade::read_one_then(socket, 2048, |packet| {
+        upgrade::read_one_then(socket, 2048, (), |packet, ()| {
             let mut rpc: rpc_proto::RPC = protobuf::parse_from_bytes(&packet)?;
 
             let mut messages = Vec::with_capacity(rpc.get_publish().len());

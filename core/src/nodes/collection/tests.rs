@@ -107,7 +107,6 @@ fn accepting_a_node_yields_new_entry() {
                 }
                 2 => {
                     assert_matches!(event, Async::Ready(CollectionEvent::NodeReached(reach_ev)) => {
-                        assert_matches!(reach_ev.parent, CollectionStream{..});
                         let (accept_ev, accepted_peer_id) = reach_ev.accept();
                         assert_eq!(accepted_peer_id, peer_id);
                         assert_matches!(accept_ev, CollectionNodeAccept::NewEntry);

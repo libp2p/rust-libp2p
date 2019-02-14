@@ -27,10 +27,8 @@ use std::io;
 use assert_matches::assert_matches;
 use futures::future::{self, FutureResult};
 use futures::sync::mpsc::{UnboundedReceiver, UnboundedSender};
-use crate::nodes::handled_node::NodeHandlerEvent;
-use crate::tests::dummy_handler::{Handler, HandlerState, InEvent, OutEvent, TestHandledNode};
+use crate::tests::dummy_handler::{Handler, InEvent, OutEvent, TestHandledNode};
 use crate::tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
-use tokio::runtime::Builder;
 use tokio::runtime::current_thread::Runtime;
 use void::Void;
 use crate::PeerId;
@@ -99,7 +97,7 @@ impl NodeTaskTestBuilder {
     }
 }
 
-type TestHandledNodesTasks = HandledNodesTasks<InEvent, OutEvent, Handler, io::Error, io::Error>;
+type TestHandledNodesTasks = HandledNodesTasks<InEvent, OutEvent, Handler, io::Error, io::Error, ()>;
 
 struct HandledNodeTaskTestBuilder {
     muxer: DummyMuxer,
@@ -120,22 +118,6 @@ impl HandledNodeTaskTestBuilder {
         self.task_count = amt;
         self
     }
-    fn with_muxer_inbound_state(&mut self, state: DummyConnectionState) -> &mut Self {
-        self.muxer.set_inbound_connection_state(state);
-        self
-    }
-    fn with_muxer_outbound_state(&mut self, state: DummyConnectionState) -> &mut Self {
-        self.muxer.set_outbound_connection_state(state);
-        self
-    }
-    fn with_handler_state(&mut self, state: HandlerState) -> &mut Self {
-        self.handler.state = Some(state);
-        self
-    }
-    fn with_handler_states(&mut self, states: Vec<HandlerState>) -> &mut Self {
-        self.handler.next_states = states;
-        self
-    }
     fn handled_nodes_tasks(&mut self) -> (TestHandledNodesTasks, Vec<TaskId>) {
         let mut handled_nodes = HandledNodesTasks::new();
         let peer_id = PeerId::random();
@@ -143,7 +125,7 @@ impl HandledNodeTaskTestBuilder {
         for _i in 0..self.task_count {
             let fut = future::ok((peer_id.clone(), self.muxer.clone()));
             task_ids.push(
-                handled_nodes.add_reach_attempt(fut, self.handler.clone())
+                handled_nodes.add_reach_attempt(fut, (), self.handler.clone())
             );
         }
         (handled_nodes, task_ids)
@@ -250,29 +232,6 @@ fn query_for_tasks() {
 }
 
 #[test]
-fn send_event_to_task() {
-    let (mut handled_nodes, _) = HandledNodeTaskTestBuilder::new()
-        .with_tasks(1)
-        .handled_nodes_tasks();
-
-    let task_id = {
-        let mut task = handled_nodes.task(TaskId(0)).expect("can fetch a Task");
-        task.send_event(InEvent::Custom("banana"));
-        task.id()
-    };
-
-    let mut rt = Builder::new().core_threads(1).build().unwrap();
-    let mut events = rt.block_on(handled_nodes.into_future()).unwrap();
-    assert_matches!(events.0.unwrap(), HandledNodesEvent::NodeReached{..});
-
-    events = rt.block_on(events.1.into_future()).unwrap();
-    assert_matches!(events.0.unwrap(), HandledNodesEvent::NodeEvent{id: event_task_id, event} => {
-        assert_eq!(event_task_id, task_id);
-        assert_matches!(event, OutEvent::Custom("banana"));
-    });
-}
-
-#[test]
 fn iterate_over_all_tasks() {
     let (handled_nodes, task_ids) = HandledNodeTaskTestBuilder::new()
         .with_tasks(3)
@@ -286,83 +245,12 @@ fn iterate_over_all_tasks() {
 
 #[test]
 fn add_reach_attempt_prepares_a_new_task() {
-    let mut handled_nodes: HandledNodesTasks<_, _, _, _, _> = HandledNodesTasks::new();
+    let mut handled_nodes: HandledNodesTasks<_, _, _, _, _, _> = HandledNodesTasks::new();
     assert_eq!(handled_nodes.tasks().count(), 0);
     assert_eq!(handled_nodes.to_spawn.len(), 0);
 
-    handled_nodes.add_reach_attempt( future::empty::<_, Void>(), Handler::default() );
+    handled_nodes.add_reach_attempt(future::empty::<_, Void>(), (), Handler::default());
 
     assert_eq!(handled_nodes.tasks().count(), 1);
     assert_eq!(handled_nodes.to_spawn.len(), 1);
-}
-
-#[test]
-fn running_handled_tasks_reaches_the_nodes() {
-    let (mut handled_nodes_tasks, _) = HandledNodeTaskTestBuilder::new()
-        .with_tasks(5)
-        .with_muxer_inbound_state(DummyConnectionState::Closed)
-        .with_muxer_outbound_state(DummyConnectionState::Closed)
-        .with_handler_state(HandlerState::Err) // stop the loop
-        .handled_nodes_tasks();
-
-    let mut rt = Runtime::new().unwrap();
-    let mut events: (Option<HandledNodesEvent<_, _, _, _>>, TestHandledNodesTasks);
-    // we're running on a single thread so events are sequential: first
-    // we get a NodeReached, then a TaskClosed
-    for i in 0..5 {
-        events = rt.block_on(handled_nodes_tasks.into_future()).unwrap();
-        assert_matches!(events, (Some(HandledNodesEvent::NodeReached{..}), ref hnt) => {
-            assert_matches!(hnt, HandledNodesTasks{..});
-            assert_eq!(hnt.tasks().count(), 5 - i);
-        });
-        handled_nodes_tasks = events.1;
-        events = rt.block_on(handled_nodes_tasks.into_future()).unwrap();
-        assert_matches!(events, (Some(HandledNodesEvent::TaskClosed{..}), _));
-        handled_nodes_tasks = events.1;
-    }
-}
-
-#[test]
-fn events_in_tasks_are_emitted() {
-    // States are pop()'d so they are set in reverse order by the Handler
-    let handler_states = vec![
-        HandlerState::Err,
-        HandlerState::Ready(Some(NodeHandlerEvent::Custom(OutEvent::Custom("from handler2") ))),
-        HandlerState::Ready(Some(NodeHandlerEvent::Custom(OutEvent::Custom("from handler") ))),
-    ];
-
-    let (mut handled_nodes_tasks, _) = HandledNodeTaskTestBuilder::new()
-        .with_tasks(1)
-        .with_muxer_inbound_state(DummyConnectionState::Pending)
-        .with_muxer_outbound_state(DummyConnectionState::Opened)
-        .with_handler_states(handler_states)
-        .handled_nodes_tasks();
-
-    let tx = {
-        let mut task0 = handled_nodes_tasks.task(TaskId(0)).unwrap();
-        let tx = task0.inner.get_mut();
-        tx.clone()
-    };
-
-    let mut rt = Builder::new().core_threads(1).build().unwrap();
-    let mut events = rt.block_on(handled_nodes_tasks.into_future()).unwrap();
-    assert_matches!(events.0.unwrap(), HandledNodesEvent::NodeReached{..});
-
-    tx.unbounded_send(InEvent::NextState).expect("send works");
-    events = rt.block_on(events.1.into_future()).unwrap();
-    assert_matches!(events.0.unwrap(), HandledNodesEvent::NodeEvent{id: _, event} => {
-        assert_matches!(event, OutEvent::Custom("from handler"));
-    });
-
-    tx.unbounded_send(InEvent::NextState).expect("send works");
-    events = rt.block_on(events.1.into_future()).unwrap();
-    assert_matches!(events.0.unwrap(), HandledNodesEvent::NodeEvent{id: _, event} => {
-        assert_matches!(event, OutEvent::Custom("from handler2"));
-    });
-
-    tx.unbounded_send(InEvent::NextState).expect("send works");
-    events = rt.block_on(events.1.into_future()).unwrap();
-    assert_matches!(events.0.unwrap(), HandledNodesEvent::TaskClosed{id: _, result, handler: _} => {
-        assert_matches!(result, Err(_));
-    });
 }

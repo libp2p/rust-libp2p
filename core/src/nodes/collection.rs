@@ -30,20 +30,21 @@ use crate::{
 };
 use fnv::FnvHashMap;
 use futures::prelude::*;
-use std::{collections::hash_map::Entry, error, fmt, hash::Hash, mem};
+use std::{error, fmt, hash::Hash, mem};
 
 mod tests;
 
 /// Implementation of `Stream` that handles a collection of nodes.
 pub struct CollectionStream<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TPeerId = PeerId> {
     /// Object that handles the tasks.
-    inner: HandledNodesTasks<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TPeerId>,
+    ///
+    /// The user data contains the state of the task. If `Connected`, then a corresponding entry
+    /// must be present in `nodes`.
+    inner: HandledNodesTasks<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TaskState<TPeerId>, TPeerId>,
+
     /// List of nodes, with the task id that handles this node. The corresponding entry in `tasks`
     /// must always be in the `Connected` state.
     nodes: FnvHashMap<TPeerId, TaskId>,
-    /// List of tasks and their state. If `Connected`, then a corresponding entry must be present
-    /// in `nodes`.
-    tasks: FnvHashMap<TaskId, TaskState<TPeerId>>,
 }
 
 impl<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TPeerId> fmt::Debug for
@@ -52,18 +53,7 @@ where
     TPeerId: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        let mut list = f.debug_list();
-        for (id, task) in &self.tasks {
-            match *task {
-                TaskState::Pending => {
-                    list.entry(&format!("Pending({:?})", ReachAttemptId(*id)))
-                },
-                TaskState::Connected(ref peer_id) => {
-                    list.entry(&format!("Connected({:?})", peer_id))
-                }
-            };
-        }
-        list.finish()
+        f.debug_tuple("CollectionStream").finish()
     }
 }
 
@@ -200,20 +190,16 @@ where
     pub fn accept(self) -> (CollectionNodeAccept, TPeerId) {
         // Set the state of the task to `Connected`.
         let former_task_id = self.parent.nodes.insert(self.peer_id.clone(), self.id);
-        let _former_state = self.parent.tasks.insert(self.id, TaskState::Connected(self.peer_id.clone()));
-        debug_assert!(_former_state == Some(TaskState::Pending));
+        *self.parent.inner.task(self.id)
+            .expect("A CollectionReachEvent is only ever created from a valid attempt; QED")
+            .user_data_mut() = TaskState::Connected(self.peer_id.clone());
 
         // It is possible that we already have a task connected to the same peer. In this
         // case, we need to emit a `NodeReplaced` event.
-        let ret_value = if let Some(former_task_id) = former_task_id {
-            self.parent.inner.task(former_task_id)
-                .expect("whenever we receive a TaskClosed event or close a node, we remove the \
-                         corresponding entry from self.nodes; therefore all elements in \
-                         self.nodes are valid tasks in the HandledNodesTasks; QED")
-                .close();
-            let _former_other_state = self.parent.tasks.remove(&former_task_id);
-            debug_assert!(_former_other_state == Some(TaskState::Connected(self.peer_id.clone())));
-
+        let tasks = &mut self.parent.inner;
+        let ret_value = if let Some(former_task) = former_task_id.and_then(|i| tasks.task(i)) {
+            debug_assert!(*former_task.user_data() == TaskState::Connected(self.peer_id.clone()));
+            former_task.close();
             // TODO: we unfortunately have to clone the peer id here
             (CollectionNodeAccept::ReplacedExisting, self.peer_id.clone())
         } else {
@@ -256,14 +242,13 @@ impl<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TPeerId> Drop fo
     CollectionReachEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TPeerId>
 {
     fn drop(&mut self) {
-        let task_state = self.parent.tasks.remove(&self.id);
-        debug_assert!(if let Some(TaskState::Pending) = task_state { true } else { false });
-        self.parent.inner.task(self.id)
+        let task = self.parent.inner.task(self.id)
             .expect("we create the CollectionReachEvent with a valid task id; the \
                      CollectionReachEvent mutably borrows the collection, therefore nothing \
                      can delete this task during the lifetime of the CollectionReachEvent; \
-                     therefore the task is still valid when we delete it; QED")
-            .close();
+                     therefore the task is still valid when we delete it; QED");
+        debug_assert!(if let TaskState::Pending = task.user_data() { true } else { false });
+        task.close();
     }
 }
 
@@ -291,7 +276,6 @@ where
         CollectionStream {
             inner: HandledNodesTasks::new(),
             nodes: Default::default(),
-            tasks: Default::default(),
         }
     }
 
@@ -314,31 +298,22 @@ where
         TMuxer::OutboundSubstream: Send + 'static,  // TODO: shouldn't be required
         TPeerId: Send + 'static,
     {
-        let id = self.inner.add_reach_attempt(future, handler);
-        self.tasks.insert(id, TaskState::Pending);
-        ReachAttemptId(id)
+        ReachAttemptId(self.inner.add_reach_attempt(future, TaskState::Pending, handler))
     }
 
     /// Interrupts a reach attempt.
     ///
     /// Returns `Ok` if something was interrupted, and `Err` if the ID is not or no longer valid.
     pub fn interrupt(&mut self, id: ReachAttemptId) -> Result<(), InterruptError> {
-        match self.tasks.entry(id.0) {
-            Entry::Vacant(_) => Err(InterruptError::ReachAttemptNotFound),
-            Entry::Occupied(entry) => {
-                match entry.get() {
+        match self.inner.task(id.0) {
+            None => Err(InterruptError::ReachAttemptNotFound),
+            Some(task) => {
+                match task.user_data() {
                     TaskState::Connected(_) => return Err(InterruptError::AlreadyReached),
                     TaskState::Pending => (),
                 };
 
-                entry.remove();
-                self.inner.task(id.0)
-                    .expect("whenever we receive a TaskClosed event or interrupt a task, we \
-                             remove the corresponding entry from self.tasks; therefore all \
-                             elements in self.tasks are valid tasks in the \
-                             HandledNodesTasks; QED")
-                    .close();
-
+                task.close();
                 Ok(())
             }
         }
@@ -366,7 +341,6 @@ where
         match self.inner.task(task) {
             Some(inner) => Some(PeerMut {
                 inner,
-                tasks: &mut self.tasks,
                 nodes: &mut self.nodes,
             }),
             None => None,
@@ -401,31 +375,31 @@ where
         };
 
         match item {
-            HandledNodesEvent::TaskClosed { id, result, handler } => {
-                match (self.tasks.remove(&id), result, handler) {
-                    (Some(TaskState::Pending), Err(TaskClosedEvent::Reach(err)), Some(handler)) => {
+            HandledNodesEvent::TaskClosed { id, result, handler, user_data } => {
+                match (user_data, result, handler) {
+                    (TaskState::Pending, Err(TaskClosedEvent::Reach(err)), Some(handler)) => {
                         Async::Ready(CollectionEvent::ReachError {
                             id: ReachAttemptId(id),
                             error: err,
                             handler,
                         })
                     },
-                    (Some(TaskState::Pending), Ok(()), _) => {
+                    (TaskState::Pending, Ok(()), _) => {
                         panic!("The API of HandledNodesTasks guarantees that a task cannot \
                                 gracefully closed before being connected to a node, in which case \
                                 its state should be Connected and not Pending; QED");
                     },
-                    (Some(TaskState::Pending), Err(TaskClosedEvent::Node(_)), _) => {
+                    (TaskState::Pending, Err(TaskClosedEvent::Node(_)), _) => {
                         panic!("We switch the task state to Connected once we're connected, and \
                                 a TaskClosedEvent::Node can only happen after we're \
                                 connected; QED");
                     },
-                    (Some(TaskState::Pending), Err(TaskClosedEvent::Reach(_)), None) => {
+                    (TaskState::Pending, Err(TaskClosedEvent::Reach(_)), None) => {
                         // TODO: this could be improved in the API of HandledNodesTasks
                         panic!("The HandledNodesTasks is guaranteed to always return the handler \
                                 when producing a TaskClosedEvent::Reach error");
                     },
-                    (Some(TaskState::Connected(peer_id)), Ok(()), _handler) => {
+                    (TaskState::Connected(peer_id), Ok(()), _handler) => {
                         debug_assert!(_handler.is_none());
                         let _node_task_id = self.nodes.remove(&peer_id);
                         debug_assert_eq!(_node_task_id, Some(id));
@@ -433,7 +407,7 @@ where
                             peer_id,
                         })
                     },
-                    (Some(TaskState::Connected(peer_id)), Err(TaskClosedEvent::Node(err)), _handler) => {
+                    (TaskState::Connected(peer_id), Err(TaskClosedEvent::Node(err)), _handler) => {
                         debug_assert!(_handler.is_none());
                         let _node_task_id = self.nodes.remove(&peer_id);
                         debug_assert_eq!(_node_task_id, Some(id));
@@ -442,28 +416,24 @@ where
                             error: err,
                         })
                     },
-                    (Some(TaskState::Connected(_)), Err(TaskClosedEvent::Reach(_)), _) => {
+                    (TaskState::Connected(_), Err(TaskClosedEvent::Reach(_)), _) => {
                         panic!("A TaskClosedEvent::Reach can only happen before we are connected \
                                 to a node; therefore the TaskState won't be Connected; QED");
                     },
-                    (None, _, _) => {
-                        panic!("self.tasks is always kept in sync with the tasks in self.inner; \
-                                when we add a task in self.inner we add a corresponding entry in \
-                                self.tasks, and remove the entry only when the task is closed; \
-                                QED")
-                    },
                 }
             },
-            HandledNodesEvent::NodeReached { id, peer_id } => {
+            HandledNodesEvent::NodeReached { task, peer_id } => {
+                let id = task.id();
+                drop(task);
                 Async::Ready(CollectionEvent::NodeReached(CollectionReachEvent {
                     parent: self,
                     id,
                     peer_id,
                 }))
             },
-            HandledNodesEvent::NodeEvent { id, event } => {
-                let peer_id = match self.tasks.get(&id) {
-                    Some(TaskState::Connected(peer_id)) => peer_id.clone(),
+            HandledNodesEvent::NodeEvent { task, event } => {
+                let peer_id = match task.user_data() {
+                    TaskState::Connected(peer_id) => peer_id.clone(),
                     _ => panic!("we can only receive NodeEvent events from a task after we \
                                  received a corresponding NodeReached event from that same task; \
                                  when we receive a NodeReached event, we ensure that the entry in \
@@ -507,8 +477,7 @@ impl error::Error for InterruptError {}
 
 /// Access to a peer in the collection.
 pub struct PeerMut<'a, TInEvent, TPeerId = PeerId> {
-    inner: HandledNodesTask<'a, TInEvent>,
-    tasks: &'a mut FnvHashMap<TaskId, TaskState<TPeerId>>,
+    inner: HandledNodesTask<'a, TInEvent, TaskState<TPeerId>>,
     nodes: &'a mut FnvHashMap<TPeerId, TaskId>,
 }
 
@@ -526,13 +495,12 @@ where
     ///
     /// No further event will be generated for this node.
     pub fn close(self) {
-        let task_state = self.tasks.remove(&self.inner.id());
-        if let Some(TaskState::Connected(peer_id)) = task_state {
+        if let TaskState::Connected(peer_id) = self.inner.user_data() {
             let old_task_id = self.nodes.remove(&peer_id);
             debug_assert_eq!(old_task_id, Some(self.inner.id()));
         } else {
             panic!("a PeerMut can only be created if an entry is present in nodes; an entry in \
-                    nodes always matched a Connected entry in tasks; QED");
+                    nodes always matched a Connected entry in the tasks; QED");
         };
 
         self.inner.close();
