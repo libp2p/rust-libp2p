@@ -18,6 +18,7 @@ bytes = "0.4"
 futures = "0.1"
 multiaddr = { package = "parity-multiaddr", version = "0.1.0", path = "./misc/multiaddr" }
 multihash = { package = "parity-multihash", version = "0.1.0", path = "./misc/multihash" }
+lazy_static = "1.2"
 libp2p-mplex = { version = "0.3.0", path = "./muxers/mplex" }
 libp2p-identify = { version = "0.3.0", path = "./protocols/identify" }
 libp2p-kad = { version = "0.3.1", path = "./protocols/kad" }
@@ -31,6 +32,8 @@ libp2p-secio = { version = "0.3.0", path = "./protocols/secio", default-features
 libp2p-uds = { version = "0.3.0", path = "./transports/uds" }
 libp2p-websocket = { version = "0.3.0", path = "./transports/websocket", optional = true }
 libp2p-yamux = { version = "0.3.0", path = "./muxers/yamux" }
+parking_lot = "0.7"
+smallvec = "0.6"
 tokio-codec = "0.1"
 tokio-executor = "0.1"
 tokio-io = "0.1"

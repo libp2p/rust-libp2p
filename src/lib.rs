@@ -179,6 +179,7 @@ pub use libp2p_yamux as yamux;
 
 mod transport_ext;
 
+pub mod bandwidth;
 pub mod simple;
 
 pub use self::core::{
