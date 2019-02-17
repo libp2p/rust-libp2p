@@ -1023,9 +1023,9 @@ where
                 action = Default::default();
                 out_event = RawSwarmEvent::NodeClosed { peer_id, endpoint };
             }
-            Async::Ready(CollectionEvent::NodeEvent { peer_id, event }) => {
+            Async::Ready(CollectionEvent::NodeEvent { peer, event }) => {
                 action = Default::default();
-                out_event = RawSwarmEvent::NodeEvent { peer_id, event };
+                out_event = RawSwarmEvent::NodeEvent { peer_id: peer.id().clone(), event };
             }
         }
 

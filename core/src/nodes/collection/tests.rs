@@ -168,7 +168,7 @@ fn events_in_a_node_reaches_the_collection_stream() {
     rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
         let mut cs = cs_fut.lock();
         cs.broadcast_event(&InEvent::NextState);
-        assert_matches!(cs.poll(), Async::Ready(CollectionEvent::NodeEvent{peer_id: _, event}) => {
+        assert_matches!(cs.poll(), Async::Ready(CollectionEvent::NodeEvent{peer: _, event}) => {
             assert_matches!(event, OutEvent::Custom("init"));
         });
         Ok(Async::Ready(()))
@@ -179,7 +179,7 @@ fn events_in_a_node_reaches_the_collection_stream() {
     rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
         let mut cs = cs_fut.lock();
         cs.broadcast_event(&InEvent::NextState);
-        assert_matches!(cs.poll(), Async::Ready(CollectionEvent::NodeEvent{peer_id: _, event}) => {
+        assert_matches!(cs.poll(), Async::Ready(CollectionEvent::NodeEvent{peer: _, event}) => {
             assert_matches!(event, OutEvent::Custom("from handler 1"));
         });
         Ok(Async::Ready(()))
@@ -189,7 +189,7 @@ fn events_in_a_node_reaches_the_collection_stream() {
     rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
         let mut cs = cs_fut.lock();
         cs.broadcast_event(&InEvent::NextState);
-        assert_matches!(cs.poll(), Async::Ready(CollectionEvent::NodeEvent{peer_id: _, event}) => {
+        assert_matches!(cs.poll(), Async::Ready(CollectionEvent::NodeEvent{peer: _, event}) => {
             assert_matches!(event, OutEvent::Custom("from handler 2"));
         });
         Ok(Async::Ready(()))

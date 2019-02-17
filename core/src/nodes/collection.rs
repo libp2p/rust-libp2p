@@ -106,10 +106,9 @@ pub enum CollectionEvent<'a, TInEvent:'a , TOutEvent: 'a, THandler: 'a, TReachEr
     },
 
     /// A node has produced an event.
-    // TODO: should contain a `Peer`
     NodeEvent {
-        /// Identifier of the node.
-        peer_id: TPeerId,
+        /// The node that has generated the event.
+        peer: PeerMut<'a, TInEvent, TUserData, TPeerId>,
         /// The produced event.
         event: TOutEvent,
     },
@@ -149,9 +148,9 @@ where TOutEvent: fmt::Debug,
                 .field("error", error)
                 .finish()
             },
-            CollectionEvent::NodeEvent { ref peer_id, ref event } => {
+            CollectionEvent::NodeEvent { ref peer, ref event } => {
                 f.debug_struct("CollectionEvent::NodeEvent")
-                .field("peer_id", peer_id)
+                .field("peer_id", peer.id())
                 .field("event", event)
                 .finish()
             },
@@ -452,9 +451,14 @@ where
                                  when we receive a NodeReached event, we ensure that the entry in \
                                  self.tasks is switched to the Connected state; QED"),
                 };
-
+                drop(task);
                 Async::Ready(CollectionEvent::NodeEvent {
-                    peer_id,
+                    // TODO: normally we'd build a `PeerMut` manually here, but the borrow checker
+                    //       doesn't like it
+                    peer: self.peer_mut(&peer_id)
+                        .expect("we can only receive NodeEvent events from a task after we \
+                                 received a corresponding NodeReached event from that same task;\
+                                 when that happens, peer_mut will always return Some; QED"),
                     event,
                 })
             }
@@ -498,6 +502,24 @@ impl<'a, TInEvent, TUserData, TPeerId> PeerMut<'a, TInEvent, TUserData, TPeerId>
 where
     TPeerId: Eq + Hash,
 {
+    /// Returns the identifier of the peer.
+    pub fn id(&self) -> &TPeerId {
+        match self.inner.user_data() {
+            TaskState::Connected(peer_id, _) => peer_id,
+            _ => panic!("A PeerMut is only ever constructed from a peer in the connected \
+                         state; QED")
+        }
+    }
+
+    /// Returns the user data that was stored in the collections when we accepted the connection.
+    pub fn user_data(&self) -> &TUserData {
+        match self.inner.user_data() {
+            TaskState::Connected(_, user_data) => user_data,
+            _ => panic!("A PeerMut is only ever constructed from a peer in the connected \
+                         state; QED")
+        }
+    }
+
     /// Sends an event to the given node.
     #[inline]
     pub fn send_event(&mut self, event: TInEvent) {
