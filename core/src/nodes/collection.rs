@@ -520,6 +520,15 @@ where
         }
     }
 
+    /// Returns the user data that was stored in the collections when we accepted the connection.
+    pub fn user_data_mut(&mut self) -> &mut TUserData {
+        match self.inner.user_data_mut() {
+            TaskState::Connected(_, user_data) => user_data,
+            _ => panic!("A PeerMut is only ever constructed from a peer in the connected \
+                         state; QED")
+        }
+    }
+
     /// Sends an event to the given node.
     #[inline]
     pub fn send_event(&mut self, event: TInEvent) {
