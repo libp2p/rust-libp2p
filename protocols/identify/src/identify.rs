@@ -216,3 +216,90 @@ pub enum IdentifyEvent {
         result: Result<(), io::Error>,
     },
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{Identify, IdentifyEvent};
+    use futures::prelude::*;
+    use libp2p_core::{upgrade, upgrade::OutboundUpgradeExt, Swarm, Transport};
+    use libp2p_core::muxing::StreamMuxerBox;
+    use std::io;
+
+    #[test]
+    fn periodic_id_works() {
+        let mut swarm1 = {
+            // TODO: make creating the transport more elegant ; literaly half of the code of the test
+            //       is about creating the transport
+            let local_key = libp2p_secio::SecioKeyPair::ed25519_generated().unwrap();
+            let local_public_key = local_key.to_public_key();
+            let local_peer_id = local_public_key.clone().into_peer_id();
+            let transport = libp2p_tcp::TcpConfig::new()
+                .with_upgrade(libp2p_secio::SecioConfig::new(local_key))
+                .and_then(move |out, _| {
+                    let peer_id = out.remote_key.into_peer_id();
+                    let upgrade =
+                        libp2p_mplex::MplexConfig::new().map_outbound(move |muxer| (peer_id, muxer));
+                    upgrade::apply_outbound(out.stream, upgrade)
+                        .map(|(id, muxer)| (id, StreamMuxerBox::new(muxer)))
+                })
+                .map_err(|_| -> io::Error { panic!() });
+
+            Swarm::new(transport, Identify::new("a".to_string(), "b".to_string(), local_public_key), local_peer_id)
+        };
+
+        let mut swarm2 = {
+            // TODO: make creating the transport more elegant ; literaly half of the code of the test
+            //       is about creating the transport
+            let local_key = libp2p_secio::SecioKeyPair::ed25519_generated().unwrap();
+            let local_public_key = local_key.to_public_key();
+            let local_peer_id = local_public_key.clone().into_peer_id();
+            let transport = libp2p_tcp::TcpConfig::new()
+                .with_upgrade(libp2p_secio::SecioConfig::new(local_key))
+                .and_then(move |out, _| {
+                    let peer_id = out.remote_key.into_peer_id();
+                    let upgrade =
+                        libp2p_mplex::MplexConfig::new().map_outbound(move |muxer| (peer_id, muxer));
+                    upgrade::apply_outbound(out.stream, upgrade)
+                        .map(|(id, muxer)| (id, StreamMuxerBox::new(muxer)))
+                })
+                .map_err(|_| -> io::Error { panic!() });
+
+            Swarm::new(transport, Identify::new("c".to_string(), "d".to_string(), local_public_key), local_peer_id)
+        };
+
+        let actual_addr = Swarm::listen_on(&mut swarm1, "/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+        Swarm::dial_addr(&mut swarm2, actual_addr).unwrap();
+
+        let mut swarm1_good = false;
+        let mut swarm2_good = false;
+
+        tokio::runtime::current_thread::Runtime::new()
+            .unwrap()
+            .block_on(futures::future::poll_fn(move || -> Result<_, io::Error> {
+                loop {
+                    let mut swarm1_not_ready = false;
+                    match swarm1.poll().unwrap() {
+                        Async::Ready(Some(IdentifyEvent::Identified { .. })) => swarm1_good = true,
+                        Async::Ready(Some(IdentifyEvent::SendBack { result: Ok(()), .. })) => (),
+                        Async::Ready(_) => panic!(),
+                        Async::NotReady => swarm1_not_ready = true,
+                    }
+
+                    match swarm2.poll().unwrap() {
+                        Async::Ready(Some(IdentifyEvent::Identified { .. })) => swarm2_good = true,
+                        Async::Ready(Some(IdentifyEvent::SendBack { result: Ok(()), .. })) => (),
+                        Async::Ready(_) => panic!(),
+                        Async::NotReady if swarm1_not_ready => break,
+                        Async::NotReady => ()
+                    }
+                }
+
+                if swarm1_good && swarm2_good {
+                    Ok(Async::Ready(()))
+                } else {
+                    Ok(Async::NotReady)
+                }
+            }))
+            .unwrap();
+    }
+}
