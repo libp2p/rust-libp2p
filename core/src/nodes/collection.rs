@@ -194,7 +194,7 @@ where
     }
 
     /// Accepts the new node.
-    pub fn accept(self, user_data: TUserData) -> (CollectionNodeAccept, TPeerId) {
+    pub fn accept(self, user_data: TUserData) -> (CollectionNodeAccept<TUserData>, TPeerId) {
         // Set the state of the task to `Connected`.
         let former_task_id = self.parent.nodes.insert(self.peer_id.clone(), self.id);
         *self.parent.inner.task(self.id)
@@ -209,9 +209,13 @@ where
                 TaskState::Connected(ref p, _) if *p == self.peer_id => true,
                 _ => false
             });
-            former_task.close();
+            let user_data = match former_task.close() {
+                TaskState::Connected(_, user_data) => user_data,
+                _ => panic!("The former task was picked from `nodes`; all the nodes in `nodes` \
+                             are always in the connected state")
+            };
             // TODO: we unfortunately have to clone the peer id here
-            (CollectionNodeAccept::ReplacedExisting, self.peer_id.clone())
+            (CollectionNodeAccept::ReplacedExisting(user_data), self.peer_id.clone())
         } else {
             // TODO: we unfortunately have to clone the peer id here
             (CollectionNodeAccept::NewEntry, self.peer_id.clone())
@@ -264,9 +268,9 @@ impl<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TPeer
 
 /// Outcome of accepting a node.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum CollectionNodeAccept {
-    /// We replaced an existing node.
-    ReplacedExisting,
+pub enum CollectionNodeAccept<TUserData> {
+    /// We replaced an existing node. Returns the user data that was assigned to this node.
+    ReplacedExisting(TUserData),
     /// We didn't replace anything existing.
     NewEntry,
 }

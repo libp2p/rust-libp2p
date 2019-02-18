@@ -1135,7 +1135,7 @@ where
         };
 
         let (outcome, peer_id) = event.accept(());
-        if outcome == CollectionNodeAccept::ReplacedExisting {
+        if let CollectionNodeAccept::ReplacedExisting(()) = outcome {
             let closed_endpoint = closed_endpoint
                 .expect("We insert into connected_points whenever a connection is opened and \
                          remove only when a connection is closed; the underlying API is \
@@ -1173,7 +1173,7 @@ where
             .insert(event.peer_id().clone(), opened_endpoint.clone());
 
         let (outcome, peer_id) = event.accept(());
-        if outcome == CollectionNodeAccept::ReplacedExisting {
+        if let CollectionNodeAccept::ReplacedExisting(()) = outcome {
             let closed_endpoint = closed_endpoint
                 .expect("We insert into connected_points whenever a connection is opened and \
                         remove only when a connection is closed; the underlying API is guaranteed \
