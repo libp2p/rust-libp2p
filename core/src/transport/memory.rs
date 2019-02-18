@@ -231,3 +231,18 @@ impl<T: IntoBuf> Into<RwStreamSink<Chan<T>>> for Chan<T> {
         RwStreamSink::new(self)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_memory_addr_works() {
+        assert_eq!(parse_memory_addr(&"/memory/5".parse().unwrap()), Ok(5));
+        assert_eq!(parse_memory_addr(&"/tcp/150".parse().unwrap()), Err(()));
+        assert_eq!(parse_memory_addr(&"/memory/0".parse().unwrap()), Ok(0));
+        assert_eq!(parse_memory_addr(&"/memory/5/tcp/150".parse().unwrap()), Err(()));
+        assert_eq!(parse_memory_addr(&"/tcp/150/memory/5".parse().unwrap()), Err(()));
+        assert_eq!(parse_memory_addr(&"/memory/1234567890".parse().unwrap()), Ok(1_234_567_890));
+    }
+}
