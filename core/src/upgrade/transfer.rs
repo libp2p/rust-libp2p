@@ -189,11 +189,17 @@ where
                 } => {
                     match socket.read_buf(&mut len_buf)? {
                         Async::Ready(num_read) => {
-                            // Reaching EOF before finishing to read the length is an error.
+                            // Reaching EOF before finishing to read the length is an error, unless
+                            // the EOF is at the very beginning of the substream, in which case we
+                            // assume that the data is empty.
                             if num_read == 0 {
-                                return Err(ReadOneError::Io(
-                                    std::io::ErrorKind::UnexpectedEof.into(),
-                                ));
+                                if len_buf.position() == 0 {
+                                    return Ok(Async::Ready((socket, Vec::new())));
+                                } else {
+                                    return Err(ReadOneError::Io(
+                                        std::io::ErrorKind::UnexpectedEof.into(),
+                                    ));
+                                }
                             }
 
                             let len_buf_with_data =
@@ -475,7 +481,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
+    use std::io::{self, Cursor};
     use tokio::runtime::current_thread::Runtime;
 
     #[test]
@@ -538,6 +544,28 @@ mod tests {
         match Runtime::new().unwrap().block_on(future) {
             Err(ReadOneError::TooLarge { .. }) => (),
             _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn read_one_accepts_empty() {
+        let future = read_one_then(Cursor::new([]), 10_000, (), move |out, ()| -> Result<_, ReadOneError> {
+            assert!(out.is_empty());
+            Ok(())
+        });
+
+        Runtime::new().unwrap().block_on(future).unwrap();
+    }
+
+    #[test]
+    fn read_one_eof_before_len() {
+        let future = read_one_then(Cursor::new([0x80]), 10_000, (), move |_, ()| -> Result<(), ReadOneError> {
+            unreachable!()
+        });
+
+        match Runtime::new().unwrap().block_on(future) {
+            Err(ReadOneError::Io(ref err)) if err.kind() == io::ErrorKind::UnexpectedEof => (),
+            _ => panic!()
         }
     }
 }

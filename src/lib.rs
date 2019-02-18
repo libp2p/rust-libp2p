@@ -134,7 +134,9 @@
 
 pub use bytes;
 pub use futures;
-pub use multiaddr::{self};
+#[doc(inline)]
+pub use multiaddr;
+#[doc(inline)]
 pub use multihash;
 pub use tokio_io;
 pub use tokio_codec;
@@ -188,7 +190,7 @@ pub use self::core::{
     upgrade::{InboundUpgrade, InboundUpgradeExt, OutboundUpgrade, OutboundUpgradeExt}
 };
 pub use libp2p_core_derive::NetworkBehaviour;
-pub use self::multiaddr::Multiaddr;
+pub use self::multiaddr::{Multiaddr, multiaddr as build_multiaddr};
 pub use self::simple::SimpleProtocol;
 pub use self::transport_ext::TransportExt;
 
@@ -314,38 +316,5 @@ impl Transport for CommonTransport {
     #[inline]
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         self.inner.inner.nat_traversal(server, observed)
-    }
-}
-
-/// The `multiaddr!` macro is an easy way for a user to create a `Multiaddr`.
-///
-/// Example:
-///
-/// ```rust
-/// # #[macro_use]
-/// # extern crate libp2p;
-/// # fn main() {
-/// let _addr = multiaddr![Ip4([127, 0, 0, 1]), Tcp(10500u16)];
-/// # }
-/// ```
-///
-/// Each element passed to `multiaddr![]` should be a variant of the `Protocol` enum. The
-/// optional parameter is casted into the proper type with the `Into` trait.
-///
-/// For example, `Ip4([127, 0, 0, 1])` works because `Ipv4Addr` implements `From<[u8; 4]>`.
-#[macro_export]
-macro_rules! multiaddr {
-    ($($comp:ident $(($param:expr))*),+) => {
-        {
-            use std::iter;
-            let elem = iter::empty::<$crate::multiaddr::Protocol>();
-            $(
-                let elem = {
-                    let cmp = $crate::multiaddr::Protocol::$comp $(( $param.into() ))*;
-                    elem.chain(iter::once(cmp))
-                };
-            )+
-            elem.collect::<$crate::Multiaddr>()
-        }
     }
 }
