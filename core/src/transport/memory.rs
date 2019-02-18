@@ -255,22 +255,22 @@ mod tests {
     #[test]
     fn listening_twice() {
         let transport = MemoryTransport::default();
-        assert!(transport.listen_on("/memory/5".parse().unwrap()).is_ok());
-        assert!(transport.listen_on("/memory/5".parse().unwrap()).is_ok());
-        let _listener = transport.listen_on("/memory/5".parse().unwrap()).unwrap();
-        assert!(transport.listen_on("/memory/5".parse().unwrap()).is_err());
-        assert!(transport.listen_on("/memory/5".parse().unwrap()).is_err());
+        assert!(transport.listen_on("/memory/1639174018481".parse().unwrap()).is_ok());
+        assert!(transport.listen_on("/memory/1639174018481".parse().unwrap()).is_ok());
+        let _listener = transport.listen_on("/memory/1639174018481".parse().unwrap()).unwrap();
+        assert!(transport.listen_on("/memory/1639174018481".parse().unwrap()).is_err());
+        assert!(transport.listen_on("/memory/1639174018481".parse().unwrap()).is_err());
         drop(_listener);
-        assert!(transport.listen_on("/memory/5".parse().unwrap()).is_ok());
-        assert!(transport.listen_on("/memory/5".parse().unwrap()).is_ok());
+        assert!(transport.listen_on("/memory/1639174018481".parse().unwrap()).is_ok());
+        assert!(transport.listen_on("/memory/1639174018481".parse().unwrap()).is_ok());
     }
 
     #[test]
     fn port_not_in_use() {
         let transport = MemoryTransport::default();
-        assert!(transport.dial("/memory/5".parse().unwrap()).is_err());
-        let _listener = transport.listen_on("/memory/5".parse().unwrap()).unwrap();
-        assert!(transport.dial("/memory/5".parse().unwrap()).is_ok());
+        assert!(transport.dial("/memory/810172461024613".parse().unwrap()).is_err());
+        let _listener = transport.listen_on("/memory/810172461024613".parse().unwrap()).unwrap();
+        assert!(transport.dial("/memory/810172461024613".parse().unwrap()).is_ok());
     }
 
     // TODO: test that is actually works
