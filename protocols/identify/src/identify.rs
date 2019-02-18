@@ -221,8 +221,7 @@ pub enum IdentifyEvent {
 mod tests {
     use crate::{Identify, IdentifyEvent};
     use futures::prelude::*;
-    use libp2p_core::{upgrade, upgrade::OutboundUpgradeExt, Swarm, Transport};
-    use libp2p_core::muxing::StreamMuxerBox;
+    use libp2p_core::{upgrade, upgrade::OutboundUpgradeExt, upgrade::InboundUpgradeExt, Swarm, Transport};
     use std::io;
 
     #[test]
@@ -238,12 +237,13 @@ mod tests {
             let local_peer_id = node1_public_key.clone().into_peer_id();
             let transport = libp2p_tcp::TcpConfig::new()
                 .with_upgrade(libp2p_secio::SecioConfig::new(node1_key))
-                .and_then(move |out, _| {
+                .and_then(move |out, endpoint| {
                     let peer_id = out.remote_key.into_peer_id();
-                    let upgrade =
-                        libp2p_mplex::MplexConfig::new().map_outbound(move |muxer| (peer_id, muxer));
-                    upgrade::apply_outbound(out.stream, upgrade)
-                        .map(|(id, muxer)| (id, StreamMuxerBox::new(muxer)))
+                    let peer_id2 = peer_id.clone();
+                    let upgrade = libp2p_mplex::MplexConfig::default()
+                        .map_outbound(move |muxer| (peer_id, muxer))
+                        .map_inbound(move |muxer| (peer_id2, muxer));
+                    upgrade::apply(out.stream, upgrade, endpoint)
                 })
                 .map_err(|_| -> io::Error { panic!() });
 
@@ -256,12 +256,13 @@ mod tests {
             let local_peer_id = node2_public_key.clone().into_peer_id();
             let transport = libp2p_tcp::TcpConfig::new()
                 .with_upgrade(libp2p_secio::SecioConfig::new(node2_key))
-                .and_then(move |out, _| {
+                .and_then(move |out, endpoint| {
                     let peer_id = out.remote_key.into_peer_id();
-                    let upgrade =
-                        libp2p_mplex::MplexConfig::new().map_outbound(move |muxer| (peer_id, muxer));
-                    upgrade::apply_outbound(out.stream, upgrade)
-                        .map(|(id, muxer)| (id, StreamMuxerBox::new(muxer)))
+                    let peer_id2 = peer_id.clone();
+                    let upgrade = libp2p_mplex::MplexConfig::default()
+                        .map_outbound(move |muxer| (peer_id, muxer))
+                        .map_inbound(move |muxer| (peer_id2, muxer));
+                    upgrade::apply(out.stream, upgrade, endpoint)
                 })
                 .map_err(|_| -> io::Error { panic!() });
 
