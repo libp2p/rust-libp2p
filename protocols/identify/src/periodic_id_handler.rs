@@ -30,7 +30,7 @@ use tokio_timer::{self, Delay};
 use void::{Void, unreachable};
 
 /// Delay between the moment we connect and the first time we identify.
-const DELAY_TO_FIRST_ID: Duration = Duration::from_secs(3600);
+const DELAY_TO_FIRST_ID: Duration = Duration::from_millis(500);
 /// After an identification succeeded, wait this long before the next time.
 const DELAY_TO_NEXT_ID: Duration = Duration::from_secs(5 * 60);
 /// After we failed to identify the remote, try again after the given delay.
