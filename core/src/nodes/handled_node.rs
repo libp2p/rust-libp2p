@@ -215,6 +215,13 @@ where
         self.handler.inject_event(event);
     }
 
+    /// Returns `true` if the remote has shown any sign of activity after the muxer has been open.
+    ///
+    /// See `StreamMuxer::is_remote_acknowledged`.
+    pub fn is_remote_acknowledged(&self) -> bool {
+        self.node.get_ref().is_remote_acknowledged()
+    }
+
     /// Returns true if the inbound channel of the muxer is open.
     ///
     /// If `true` is returned, more inbound substream will be received.

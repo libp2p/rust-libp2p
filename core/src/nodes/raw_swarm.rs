@@ -1033,16 +1033,17 @@ where
             self.start_dial_out(peer_id, handler, first, rest);
         }
 
-        if let Some(interrupt) = action.interrupt {
+        if let Some((peer_id, interrupt)) = action.take_over {
             // TODO: improve proof or remove; this is too complicated right now
-            self.active_nodes
+            let interrupted = self.active_nodes
                 .interrupt(interrupt)
-                .expect("interrupt is guaranteed to be gathered from `out_reach_attempts`;
+                .expect("take_over is guaranteed to be gathered from `out_reach_attempts`;
                          we insert in out_reach_attempts only when we call \
                          active_nodes.add_reach_attempt, and we remove only when we call \
                          interrupt or when a reach attempt succeeds or errors; therefore the \
                          out_reach_attempts should always be in sync with the actual \
                          attempts; QED");
+            self.active_nodes.peer_mut(&peer_id).unwrap().take_over(interrupted);
         }
 
         Async::Ready(out_event)
@@ -1054,14 +1055,16 @@ where
 #[must_use]
 struct ActionItem<THandler, TPeerId> {
     start_dial_out: Option<(TPeerId, THandler, Multiaddr, Vec<Multiaddr>)>,
-    interrupt: Option<ReachAttemptId>,
+    /// The `ReachAttemptId` should be interrupted, and the task for the given `PeerId` should take
+    /// over it.
+    take_over: Option<(TPeerId, ReachAttemptId)>,
 }
 
 impl<THandler, TPeerId> Default for ActionItem<THandler, TPeerId> {
     fn default() -> Self {
         ActionItem {
             start_dial_out: None,
-            interrupt: None,
+            take_over: None,
         }
     }
 }
@@ -1126,7 +1129,7 @@ where
             if let Some(attempt) = reach_attempts.out_reach_attempts.remove(&event.peer_id()) {
                 debug_assert_ne!(attempt.id, event.reach_attempt_id());
                 ActionItem {
-                    interrupt: Some(attempt.id),
+                    take_over: Some((event.peer_id().clone(), attempt.id)),
                     .. Default::default()
                 }
             } else {

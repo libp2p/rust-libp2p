@@ -114,6 +114,7 @@ impl StreamMuxer for DummyMuxer {
         unreachable!()
     }
     fn destroy_substream(&self, _: Self::Substream) {}
+    fn is_remote_acknowledged(&self) -> bool { true }
     fn shutdown(&self, _: Shutdown) -> Poll<(), IoError> {
         Ok(Async::Ready(()))
     }

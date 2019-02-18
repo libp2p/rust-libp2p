@@ -24,78 +24,11 @@ use super::*;
 
 use std::io;
 
-use assert_matches::assert_matches;
-use futures::future::{self, FutureResult};
-use futures::sync::mpsc::{UnboundedReceiver, UnboundedSender};
-use crate::tests::dummy_handler::{Handler, InEvent, OutEvent, TestHandledNode};
-use crate::tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
-use tokio::runtime::current_thread::Runtime;
+use futures::future;
+use crate::tests::dummy_handler::{Handler, InEvent, OutEvent};
+use crate::tests::dummy_muxer::DummyMuxer;
 use void::Void;
 use crate::PeerId;
-
-type TestNodeTask = NodeTask<
-    FutureResult<(PeerId, DummyMuxer), io::Error>,
-    DummyMuxer,
-    Handler,
-    InEvent,
-    OutEvent,
-    io::Error,
-    PeerId,
->;
-
-struct NodeTaskTestBuilder {
-    task_id: TaskId,
-    inner_node: Option<TestHandledNode>,
-    inner_fut: Option<FutureResult<(PeerId, DummyMuxer), io::Error>>,
-}
-
-impl NodeTaskTestBuilder {
-    fn new() -> Self {
-        NodeTaskTestBuilder {
-            task_id: TaskId(123),
-            inner_node: None,
-            inner_fut: {
-                let peer_id = PeerId::random();
-                Some(future::ok((peer_id, DummyMuxer::new())))
-            },
-        }
-    }
-
-    fn with_inner_fut(&mut self, fut: FutureResult<(PeerId, DummyMuxer), io::Error>) -> &mut Self{
-        self.inner_fut = Some(fut);
-        self
-    }
-
-    fn with_task_id(&mut self, id: usize) -> &mut Self {
-        self.task_id = TaskId(id);
-        self
-    }
-
-    fn node_task(&mut self) -> (
-        TestNodeTask,
-        UnboundedSender<InEvent>,
-        UnboundedReceiver<(InToExtMessage<OutEvent, Handler, io::Error, io::Error, PeerId>, TaskId)>,
-    ) {
-        let (events_from_node_task_tx, events_from_node_task_rx) = mpsc::unbounded::<(InToExtMessage<OutEvent, Handler, _, _, _>, TaskId)>();
-        let (events_to_node_task_tx, events_to_node_task_rx) = mpsc::unbounded::<InEvent>();
-        let inner = if self.inner_node.is_some() {
-            NodeTaskInner::Node(self.inner_node.take().unwrap())
-        } else {
-            NodeTaskInner::Future {
-                future: self.inner_fut.take().unwrap(),
-                handler: Handler::default(),
-                events_buffer: Vec::new(),
-            }
-        };
-        let node_task = NodeTask {
-            inner,
-            events_tx: events_from_node_task_tx.clone(), // events TO the outside
-            in_events_rx: events_to_node_task_rx.fuse(), // events FROM the outside
-            id: self.task_id,
-        };
-        (node_task, events_to_node_task_tx, events_from_node_task_rx)
-    }
-}
 
 type TestHandledNodesTasks = HandledNodesTasks<InEvent, OutEvent, Handler, io::Error, io::Error, ()>;
 
@@ -130,91 +63,6 @@ impl HandledNodeTaskTestBuilder {
         }
         (handled_nodes, task_ids)
     }
-}
-
-
-// Tests for NodeTask
-
-#[test]
-fn task_emits_event_when_things_happen_in_the_node() {
-    let (node_task, tx, mut rx) = NodeTaskTestBuilder::new()
-        .with_task_id(890)
-        .node_task();
-
-    tx.unbounded_send(InEvent::Custom("beef")).expect("send to NodeTask should work");
-    let mut rt = Runtime::new().unwrap();
-    rt.spawn(node_task);
-    let events = rt.block_on(rx.by_ref().take(2).collect()).expect("reading on rx should work");
-
-    assert_matches!(events[0], (InToExtMessage::NodeReached(_), TaskId(890)));
-    assert_matches!(events[1], (InToExtMessage::NodeEvent(ref outevent), TaskId(890)) => {
-        assert_matches!(outevent, OutEvent::Custom(beef) => {
-            assert_eq!(beef, &"beef");
-        })
-    });
-}
-
-#[test]
-fn task_exits_when_node_errors() {
-    let mut rt = Runtime::new().unwrap();
-    let (node_task, _tx, rx) = NodeTaskTestBuilder::new()
-        .with_inner_fut(future::err(io::Error::new(io::ErrorKind::Other, "nah")))
-        .with_task_id(345)
-        .node_task();
-
-    rt.spawn(node_task);
-    let events = rt.block_on(rx.collect()).expect("rx failed");
-    assert!(events.len() == 1);
-    assert_matches!(events[0], (InToExtMessage::TaskClosed{..}, TaskId(345)));
-}
-
-#[test]
-fn task_exits_when_node_is_done() {
-    let mut rt = Runtime::new().unwrap();
-    let fut = {
-        let peer_id = PeerId::random();
-        let mut muxer = DummyMuxer::new();
-        muxer.set_inbound_connection_state(DummyConnectionState::Closed);
-        muxer.set_outbound_connection_state(DummyConnectionState::Closed);
-        future::ok((peer_id, muxer))
-    };
-    let (node_task, tx, rx) = NodeTaskTestBuilder::new()
-        .with_inner_fut(fut)
-        .with_task_id(345)
-        .node_task();
-
-    // Even though we set up the muxer outbound state to be `Closed` we
-    // still need to open a substream or the outbound state will never
-    // be checked (see https://github.com/libp2p/rust-libp2p/issues/609).
-    // We do not have a HandledNode yet, so we can't simply call
-    // `open_substream`. Instead we send a message to the NodeTask,
-    // which will be buffered until the inner future resolves, then
-    // it'll call `inject_event` on the handler. In the test Handler,
-    // inject_event will set the next state so that it yields an
-    // OutboundSubstreamRequest.
-    // Back up in the HandledNode, at the next iteration we'll
-    // open_substream() and iterate again. This time, node.poll() will
-    // poll the muxer inbound (closed) and also outbound (because now
-    // there's an entry in the outbound_streams) which will be Closed
-    // (because we set up the muxer state so) and thus yield
-    // Async::Ready(None) which in turn makes the NodeStream yield an
-    // Async::Ready(OutboundClosed) to the HandledNode.
-    // Now we're at the point where poll_inbound, poll_outbound and
-    // address are all skipped and there is nothing left to do: we yield
-    // Async::Ready(None) from the NodeStream. In the HandledNode,
-    // Async::Ready(None) triggers a shutdown of the Handler so that it
-    // also yields Async::Ready(None). Finally, the NodeTask gets a
-    // Async::Ready(None) and sends a TaskClosed and returns
-    // Async::Ready(()). QED.
-
-    let create_outbound_substream_event = InEvent::Substream(Some(135));
-    tx.unbounded_send(create_outbound_substream_event).expect("send msg works");
-    rt.spawn(node_task);
-    let events = rt.block_on(rx.collect()).expect("rx failed");
-
-    assert_eq!(events.len(), 2);
-    assert_matches!(events[0].0, InToExtMessage::NodeReached(PeerId{..}));
-    assert_matches!(events[1].0, InToExtMessage::TaskClosed(Ok(()), _));
 }
 
 
