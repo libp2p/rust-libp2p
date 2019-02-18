@@ -26,5 +26,7 @@ unsigned-varint = { version = "0.2.1", features = ["codec"] }
 void = "1.0"
 
 [dev-dependencies]
+libp2p-mplex = { version = "0.3.0", path = "../../muxers/mplex" }
+libp2p-secio = { version = "0.3.0", path = "../../protocols/secio" }
 libp2p-tcp = { version = "0.3.0", path = "../../transports/tcp" }
 tokio = "0.1"
