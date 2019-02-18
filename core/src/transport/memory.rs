@@ -26,7 +26,7 @@ use lazy_static::lazy_static;
 use multiaddr::{Protocol, Multiaddr};
 use parking_lot::Mutex;
 use rw_stream_sink::RwStreamSink;
-use std::{error, fmt, io, num::NonZeroU64};
+use std::{collections::hash_map::Entry, error, fmt, io, num::NonZeroU64};
 
 lazy_static! {
     static ref HUB: Mutex<FnvHashMap<NonZeroU64, mpsc::UnboundedSender<Channel<Bytes>>>> = Mutex::new(FnvHashMap::default());
@@ -69,7 +69,10 @@ impl Transport for MemoryTransport {
         let actual_addr = Protocol::Memory(port.get()).into();
 
         let (tx, rx) = mpsc::unbounded();
-        hub.insert(port, tx);
+        match hub.entry(port) {
+            Entry::Occupied(_) => return Err(TransportError::Other(MemoryTransportError::Unreachable)),
+            Entry::Vacant(e) => e.insert(tx),
+        };
 
         let listener = Listener {
             port,
@@ -96,7 +99,7 @@ impl Transport for MemoryTransport {
             let (b_tx, b_rx) = mpsc::unbounded();
             let a = RwStreamSink::new(Chan { incoming: a_rx, outgoing: b_tx });
             let b = RwStreamSink::new(Chan { incoming: b_rx, outgoing: a_tx });
-            if let Err(_) = tx.unbounded_send(b) {
+            if tx.unbounded_send(b).is_err() {
                 return Err(TransportError::Other(MemoryTransportError::Unreachable));
             }
             a
@@ -122,12 +125,15 @@ impl Transport for MemoryTransport {
 pub enum MemoryTransportError {
     /// There's no listener on the given port.
     Unreachable,
+    /// Tries to listen on a port that is already in use.
+    AlreadyInUse,
 }
 
 impl fmt::Display for MemoryTransportError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             MemoryTransportError::Unreachable => write!(f, "No listener on the given port."),
+            MemoryTransportError::AlreadyInUse => write!(f, "Port already occupied."),
         }
     }
 }
@@ -245,4 +251,27 @@ mod tests {
         assert_eq!(parse_memory_addr(&"/tcp/150/memory/5".parse().unwrap()), Err(()));
         assert_eq!(parse_memory_addr(&"/memory/1234567890".parse().unwrap()), Ok(1_234_567_890));
     }
+
+    #[test]
+    fn listening_twice() {
+        let transport = MemoryTransport::default();
+        assert!(transport.listen_on("/memory/5".parse().unwrap()).is_ok());
+        assert!(transport.listen_on("/memory/5".parse().unwrap()).is_ok());
+        let _listener = transport.listen_on("/memory/5".parse().unwrap()).unwrap();
+        assert!(transport.listen_on("/memory/5".parse().unwrap()).is_err());
+        assert!(transport.listen_on("/memory/5".parse().unwrap()).is_err());
+        drop(_listener);
+        assert!(transport.listen_on("/memory/5".parse().unwrap()).is_ok());
+        assert!(transport.listen_on("/memory/5".parse().unwrap()).is_ok());
+    }
+
+    #[test]
+    fn port_not_in_use() {
+        let transport = MemoryTransport::default();
+        assert!(transport.dial("/memory/5".parse().unwrap()).is_err());
+        let _listener = transport.listen_on("/memory/5".parse().unwrap()).unwrap();
+        assert!(transport.dial("/memory/5".parse().unwrap()).is_ok());
+    }
+
+    // TODO: test that is actually works
 }
