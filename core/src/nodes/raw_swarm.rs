@@ -61,7 +61,7 @@ where
     listeners: ListenersStream<TTrans>,
 
     /// The nodes currently active.
-    active_nodes: CollectionStream<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TPeerId>, THandlerErr, TPeerId>,
+    active_nodes: CollectionStream<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TPeerId>, THandlerErr, (), TPeerId>,
 
     /// The reach attempts of the swarm.
     /// This needs to be a separate struct in order to handle multiple mutable borrows issues.
@@ -507,7 +507,7 @@ where TTrans: Transport
     /// Address used to send back data to the remote.
     send_back_addr: Multiaddr,
     /// Reference to the `active_nodes` field of the swarm.
-    active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TPeerId>, THandlerErr, TPeerId>,
+    active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TPeerId>, THandlerErr, (), TPeerId>,
     /// Reference to the `other_reach_attempts` field of the swarm.
     other_reach_attempts: &'a mut Vec<(ReachAttemptId, ConnectedPoint)>,
 }
@@ -998,6 +998,7 @@ where
             Async::Ready(CollectionEvent::NodeError {
                 peer_id,
                 error,
+                ..
             }) => {
                 let endpoint = self.reach_attempts.connected_points.remove(&peer_id)
                     .expect("We insert into connected_points whenever a connection is \
@@ -1012,7 +1013,7 @@ where
                     error,
                 };
             }
-            Async::Ready(CollectionEvent::NodeClosed { peer_id }) => {
+            Async::Ready(CollectionEvent::NodeClosed { peer_id, .. }) => {
                 let endpoint = self.reach_attempts.connected_points.remove(&peer_id)
                     .expect("We insert into connected_points whenever a connection is \
                              opened and remove only when a connection is closed; the \
@@ -1022,9 +1023,9 @@ where
                 action = Default::default();
                 out_event = RawSwarmEvent::NodeClosed { peer_id, endpoint };
             }
-            Async::Ready(CollectionEvent::NodeEvent { peer_id, event }) => {
+            Async::Ready(CollectionEvent::NodeEvent { peer, event }) => {
                 action = Default::default();
-                out_event = RawSwarmEvent::NodeEvent { peer_id, event };
+                out_event = RawSwarmEvent::NodeEvent { peer_id: peer.id().clone(), event };
             }
         }
 
@@ -1073,7 +1074,7 @@ impl<THandler, TPeerId> Default for ActionItem<THandler, TPeerId> {
 /// >           panics will likely happen.
 fn handle_node_reached<'a, TTrans, TMuxer, TInEvent, TOutEvent, THandler, THandlerErr, TPeerId>(
     reach_attempts: &mut ReachAttempts<TPeerId>,
-    event: CollectionReachEvent<'_, TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TPeerId>, THandlerErr, TPeerId>,
+    event: CollectionReachEvent<'_, TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TPeerId>, THandlerErr, (), TPeerId>,
 ) -> (ActionItem<THandler, TPeerId>, RawSwarmEvent<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TPeerId>)
 where
     TTrans: Transport<Output = (TPeerId, TMuxer)> + Clone,
@@ -1133,8 +1134,8 @@ where
             }
         };
 
-        let (outcome, peer_id) = event.accept();
-        if outcome == CollectionNodeAccept::ReplacedExisting {
+        let (outcome, peer_id) = event.accept(());
+        if let CollectionNodeAccept::ReplacedExisting(()) = outcome {
             let closed_endpoint = closed_endpoint
                 .expect("We insert into connected_points whenever a connection is opened and \
                          remove only when a connection is closed; the underlying API is \
@@ -1171,8 +1172,8 @@ where
         let closed_endpoint = reach_attempts.connected_points
             .insert(event.peer_id().clone(), opened_endpoint.clone());
 
-        let (outcome, peer_id) = event.accept();
-        if outcome == CollectionNodeAccept::ReplacedExisting {
+        let (outcome, peer_id) = event.accept(());
+        if let CollectionNodeAccept::ReplacedExisting(()) = outcome {
             let closed_endpoint = closed_endpoint
                 .expect("We insert into connected_points whenever a connection is opened and \
                         remove only when a connection is closed; the underlying API is guaranteed \
@@ -1519,7 +1520,7 @@ pub struct PeerConnected<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr,
 where TTrans: Transport,
 {
     /// Reference to the `active_nodes` of the parent.
-    active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TPeerId>, THandlerErr, TPeerId>,
+    active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TPeerId>, THandlerErr, (), TPeerId>,
     /// Reference to the `connected_points` field of the parent.
     connected_points: &'a mut FnvHashMap<TPeerId, ConnectedPoint>,
     /// Reference to the `out_reach_attempts` field of the parent.
@@ -1576,7 +1577,7 @@ where
     TTrans: Transport
 {
     attempt: OccupiedEntry<'a, TPeerId, OutReachAttempt>,
-    active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TPeerId>, THandlerErr, TPeerId>,
+    active_nodes: &'a mut CollectionStream<TInEvent, TOutEvent, THandler, InternalReachErr<TTrans::Error, TPeerId>, THandlerErr, (), TPeerId>,
 }
 
 impl<'a, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TPeerId>
