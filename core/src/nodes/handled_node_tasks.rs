@@ -369,11 +369,11 @@ impl<'a, TInEvent, TUserData> Task<'a, TInEvent, TUserData> {
         *self.inner.key()
     }
 
-    /// Closes the task.
+    /// Closes the task. Returns the user data.
     ///
     /// No further event will be generated for this task.
-    pub fn close(self) {
-        self.inner.remove();
+    pub fn close(self) -> TUserData {
+        self.inner.remove().1
     }
 }
 
