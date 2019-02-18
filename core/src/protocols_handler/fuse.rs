@@ -146,16 +146,15 @@ where
         ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
         Self::Error,
     > {
-        if let Some(mut inner) = self.inner.take() {
-            let poll = inner.poll();
-            if let Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown)) = poll {
-                poll
-            } else {
-                self.inner = Some(inner);
-                poll
-            }
-        } else {
-            Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown))
+        let poll = match self.inner.as_mut() {
+            Some(i) => i.poll(),
+            None => return Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown)),
+        };
+
+        if let Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown)) = poll {
+            self.inner = None;
         }
+
+        poll
     }
 }

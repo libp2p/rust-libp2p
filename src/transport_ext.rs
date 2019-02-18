@@ -20,8 +20,8 @@
 
 //! Provides the `TransportExt` trait.
 
-use crate::{ratelimit::RateLimited, Transport};
-use std::io;
+use crate::{bandwidth::BandwidthLogging, bandwidth::BandwidthSinks, ratelimit::RateLimited, Transport};
+use std::{io, sync::Arc, time::Duration};
 use tokio_executor::DefaultExecutor;
 
 /// Trait automatically implemented on all objects that implement `Transport`. Provides some
@@ -55,6 +55,18 @@ pub trait TransportExt: Transport {
             max_read_bytes_per_sec,
             max_write_bytes_per_sec,
         )
+    }
+
+    /// Adds a layer on the `Transport` that logs all trafic that passes through the sockets
+    /// created by it.
+    ///
+    /// This method returns an `Arc<BandwidthSinks>` that can be used to retreive the bandwidth
+    /// values.
+    fn with_bandwidth_logging(self, period: Duration) -> (BandwidthLogging<Self>, Arc<BandwidthSinks>)
+    where
+        Self: Sized
+    {
+        BandwidthLogging::new(self, period)
     }
 
     // TODO: add methods to easily upgrade for secio/mplex/yamux
