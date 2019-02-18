@@ -36,9 +36,9 @@ impl Serialize for Multiaddr {
         S: Serializer,
     {
         if serializer.is_human_readable() {
-            self.to_string().serialize(serializer)
+            serializer.serialize_str(&self.to_string())
         } else {
-            self.to_bytes().serialize(serializer)
+            serializer.serialize_bytes(self.as_slice())
         }
     }
 }
@@ -451,4 +451,3 @@ impl ToMultiaddr for Multiaddr {
         Ok(self.clone())
     }
 }
-
