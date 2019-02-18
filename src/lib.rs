@@ -134,7 +134,9 @@
 
 pub use bytes;
 pub use futures;
+#[doc(inline)]
 pub use multiaddr;
+#[doc(inline)]
 pub use multihash;
 pub use tokio_io;
 pub use tokio_codec;

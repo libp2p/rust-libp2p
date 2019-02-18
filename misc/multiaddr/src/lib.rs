@@ -442,7 +442,7 @@ impl ToMultiaddr for Multiaddr {
     }
 }
 
-/// The `multiaddr!` macro is an easy way for a user to create a `Multiaddr`.
+/// Easy way for a user to create a `Multiaddr`.
 ///
 /// Example:
 ///
