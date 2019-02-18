@@ -36,9 +36,9 @@ impl Serialize for Multiaddr {
         S: Serializer,
     {
         if serializer.is_human_readable() {
-            self.to_string().serialize(serializer)
+            serializer.serialize_str(&self.to_string())
         } else {
-            self.to_bytes().serialize(serializer)
+            serializer.serialize_bytes(self.as_slice())
         }
     }
 }
@@ -48,13 +48,23 @@ impl<'de> Deserialize<'de> for Multiaddr {
     where
         D: Deserializer<'de>,
     {
-        struct Visitor;
+        struct Visitor { is_human_readable: bool };
 
         impl<'de> de::Visitor<'de> for Visitor {
             type Value = Multiaddr;
 
             fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
                 formatter.write_str("multiaddress")
+            }
+            fn visit_seq<A: de::SeqAccess<'de>>(self, mut seq: A) -> StdResult<Self::Value, A::Error> {
+                let mut buf: Vec<u8> = Vec::with_capacity(seq.size_hint().unwrap_or(0));
+                while let Some(e) = seq.next_element()? { buf.push(e); }
+                if self.is_human_readable {
+                    let s = String::from_utf8(buf).map_err(DeserializerError::custom)?;
+                    s.parse().map_err(DeserializerError::custom)
+                } else {
+                    Multiaddr::from_bytes(buf).map_err(DeserializerError::custom)
+                }
             }
             fn visit_str<E: de::Error>(self, v: &str) -> StdResult<Self::Value, E> {
                 v.parse().map_err(DeserializerError::custom)
@@ -77,9 +87,9 @@ impl<'de> Deserialize<'de> for Multiaddr {
         }
 
         if deserializer.is_human_readable() {
-            deserializer.deserialize_str(Visitor)
+            deserializer.deserialize_str(Visitor { is_human_readable: true })
         } else {
-            deserializer.deserialize_bytes(Visitor)
+            deserializer.deserialize_bytes(Visitor { is_human_readable: false })
         }
     }
 }
@@ -441,4 +451,3 @@ impl ToMultiaddr for Multiaddr {
         Ok(self.clone())
     }
 }
-
