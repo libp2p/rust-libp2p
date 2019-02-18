@@ -311,12 +311,12 @@ mod tests {
 
     #[test]
     fn incoming_event() {
-        let (tx, rx) = transport::connector();
+        let mem_transport = transport::MemoryTransport::default();
 
-        let mut listeners = ListenersStream::new(rx);
-        listeners.listen_on("/memory".parse().unwrap()).unwrap();
+        let mut listeners = ListenersStream::new(mem_transport);
+        let actual_addr = listeners.listen_on("/memory/0".parse().unwrap()).unwrap();
 
-        let dial = tx.dial("/memory".parse().unwrap()).unwrap();
+        let dial = mem_transport.dial(actual_addr.clone()).unwrap();
 
         let future = listeners
             .into_future()
@@ -324,8 +324,8 @@ mod tests {
             .and_then(|(event, _)| {
                 match event {
                     Some(ListenersEvent::Incoming { listen_addr, upgrade, send_back_addr }) => {
-                        assert_eq!(listen_addr, "/memory".parse().unwrap());
-                        assert_eq!(send_back_addr, "/memory".parse().unwrap());
+                        assert_eq!(listen_addr, actual_addr);
+                        assert_eq!(send_back_addr, actual_addr);
                         upgrade.map(|_| ()).map_err(|_| panic!())
                     },
                     _ => panic!()

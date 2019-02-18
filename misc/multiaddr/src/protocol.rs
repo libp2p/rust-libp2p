@@ -52,7 +52,8 @@ pub enum Protocol<'a> {
     P2pWebRtcDirect,
     P2pWebRtcStar,
     P2pWebSocketStar,
-    Memory,
+    /// Contains the "port" to contact. Similar to TCP or UDP, 0 means "assign me a port".
+    Memory(u64),
     Onion(Cow<'a, [u8; 10]>, u16),
     P2p(Multihash),
     P2pCircuit,
@@ -139,7 +140,10 @@ impl<'a> Protocol<'a> {
             "p2p-webrtc-star" => Ok(Protocol::P2pWebRtcStar),
             "p2p-webrtc-direct" => Ok(Protocol::P2pWebRtcDirect),
             "p2p-circuit" => Ok(Protocol::P2pCircuit),
-            "memory" => Ok(Protocol::Memory),
+            "memory" => {
+                let s = iter.next().ok_or(Error::InvalidProtocolString)?;
+                Ok(Protocol::Memory(s.parse()?))
+            }
             _ => Err(Error::UnknownProtocolString)
         }
     }
@@ -200,7 +204,12 @@ impl<'a> Protocol<'a> {
             P2P_WEBRTC_DIRECT => Ok((Protocol::P2pWebRtcDirect, input)),
             P2P_WEBRTC_STAR => Ok((Protocol::P2pWebRtcStar, input)),
             P2P_WEBSOCKET_STAR => Ok((Protocol::P2pWebSocketStar, input)),
-            MEMORY => Ok((Protocol::Memory, input)),
+            MEMORY => {
+                let (data, rest) = split_at(8, input)?;
+                let mut rdr = Cursor::new(data);
+                let num = rdr.read_u64::<BigEndian>()?;
+                Ok((Protocol::Memory(num), rest))
+            }
             ONION => {
                 let (data, rest) = split_at(12, input)?;
                 let port = BigEndian::read_u16(&data[10 ..]);
@@ -315,7 +324,10 @@ impl<'a> Protocol<'a> {
             Protocol::P2pWebRtcStar => w.write_all(encode::u32(P2P_WEBRTC_STAR, &mut buf))?,
             Protocol::P2pWebRtcDirect => w.write_all(encode::u32(P2P_WEBRTC_DIRECT, &mut buf))?,
             Protocol::P2pCircuit => w.write_all(encode::u32(P2P_CIRCUIT, &mut buf))?,
-            Protocol::Memory => w.write_all(encode::u32(MEMORY, &mut buf))?
+            Protocol::Memory(port) => {
+                w.write_all(encode::u32(MEMORY, &mut buf))?;
+                w.write_u64::<BigEndian>(*port)?
+            }
         }
         Ok(())
     }
@@ -334,7 +346,7 @@ impl<'a> Protocol<'a> {
             P2pWebRtcDirect => P2pWebRtcDirect,
             P2pWebRtcStar => P2pWebRtcStar,
             P2pWebSocketStar => P2pWebSocketStar,
-            Memory => Memory,
+            Memory(a) => Memory(a),
             Onion(addr, port) => Onion(Cow::Owned(addr.into_owned()), port),
             P2p(a) => P2p(a),
             P2pCircuit => P2pCircuit,
@@ -365,7 +377,7 @@ impl<'a> fmt::Display for Protocol<'a> {
             P2pWebRtcDirect => f.write_str("/p2p-webrtc-direct"),
             P2pWebRtcStar => f.write_str("/p2p-webrtc-star"),
             P2pWebSocketStar => f.write_str("/p2p-websocket-star"),
-            Memory => f.write_str("/memory"),
+            Memory(port) => write!(f, "/memory/{}", port),
             Onion(addr, port) => {
                 let s = BASE32.encode(addr.as_ref());
                 write!(f, "/onion/{}:{}", s.to_lowercase(), port)

@@ -44,7 +44,7 @@ pub mod timeout;
 pub mod upgrade;
 
 pub use self::choice::OrTransport;
-pub use self::memory::connector;
+pub use self::memory::MemoryTransport;
 pub use self::upgrade::Upgrade;
 
 /// A transport is an object that can be used to produce connections by listening or dialing a

@@ -20,62 +20,98 @@
 
 use crate::{Transport, transport::TransportError};
 use bytes::{Bytes, IntoBuf};
-use futures::{future::{self, FutureResult}, prelude::*, stream, sync::mpsc};
+use fnv::FnvHashMap;
+use futures::{future::{self, FutureResult}, prelude::*, sync::mpsc, try_ready};
+use lazy_static::lazy_static;
 use multiaddr::{Protocol, Multiaddr};
 use parking_lot::Mutex;
 use rw_stream_sink::RwStreamSink;
-use std::{error, fmt, sync::Arc};
+use std::{collections::hash_map::Entry, error, fmt, io, num::NonZeroU64};
 
-/// Builds a new pair of `Transport`s. The dialer can reach the listener by dialing `/memory`.
-#[inline]
-pub fn connector() -> (Dialer, Listener) {
-    let (tx, rx) = mpsc::unbounded();
-    (Dialer(tx), Listener(Arc::new(Mutex::new(rx))))
+lazy_static! {
+    static ref HUB: Mutex<FnvHashMap<NonZeroU64, mpsc::UnboundedSender<Channel<Bytes>>>> = Mutex::new(FnvHashMap::default());
 }
 
-/// Same as `connector()`, but allows customizing the type used for transmitting packets between
-/// the two endpoints.
-#[inline]
-pub fn connector_custom_type<T>() -> (Dialer<T>, Listener<T>) {
-    let (tx, rx) = mpsc::unbounded();
-    (Dialer(tx), Listener(Arc::new(Mutex::new(rx))))
-}
+/// Transport that supports `/memory/N` multiaddresses.
+#[derive(Debug, Copy, Clone, Default)]
+pub struct MemoryTransport;
 
-/// Dialing end of the memory transport.
-pub struct Dialer<T = Bytes>(mpsc::UnboundedSender<Chan<T>>);
-
-impl<T> Clone for Dialer<T> {
-    fn clone(&self) -> Self {
-        Dialer(self.0.clone())
-    }
-}
-
-impl<T: IntoBuf + Send + 'static> Transport for Dialer<T> {
-    type Output = Channel<T>;
+impl Transport for MemoryTransport {
+    type Output = Channel<Bytes>;
     type Error = MemoryTransportError;
-    type Listener = Box<dyn Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=MemoryTransportError> + Send>;
-    type ListenerUpgrade = FutureResult<Self::Output, MemoryTransportError>;
-    type Dial = Box<dyn Future<Item=Self::Output, Error=MemoryTransportError> + Send>;
+    type Listener = Listener;
+    type ListenerUpgrade = FutureResult<Self::Output, Self::Error>;
+    type Dial = FutureResult<Self::Output, Self::Error>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
-        Err(TransportError::MultiaddrNotSupported(addr))
+        let port = if let Ok(port) = parse_memory_addr(&addr) {
+            port
+        } else {
+            return Err(TransportError::MultiaddrNotSupported(addr));
+        };
+
+        let mut hub = (&*HUB).lock();
+
+        let port = if let Some(port) = NonZeroU64::new(port) {
+            port
+        } else {
+            loop {
+                let port = match NonZeroU64::new(rand::random()) {
+                    Some(p) => p,
+                    None => continue,
+                };
+                if !hub.contains_key(&port) {
+                    break port;
+                }
+            }
+        };
+
+        let actual_addr = Protocol::Memory(port.get()).into();
+
+        let (tx, rx) = mpsc::unbounded();
+        match hub.entry(port) {
+            Entry::Occupied(_) => return Err(TransportError::Other(MemoryTransportError::Unreachable)),
+            Entry::Vacant(e) => e.insert(tx),
+        };
+
+        let listener = Listener {
+            port,
+            receiver: rx,
+        };
+
+        Ok((listener, actual_addr))
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        if !is_memory_addr(&addr) {
-            return Err(TransportError::MultiaddrNotSupported(addr))
-        }
-        let (a_tx, a_rx) = mpsc::unbounded();
-        let (b_tx, b_rx) = mpsc::unbounded();
-        let a = Chan { incoming: a_rx, outgoing: b_tx };
-        let b = Chan { incoming: b_rx, outgoing: a_tx };
-        let future = self.0.send(b)
-            .map(move |_| a.into())
-            .map_err(|_| MemoryTransportError::RemoteClosed);
-        Ok(Box::new(future))
+        let port = if let Ok(port) = parse_memory_addr(&addr) {
+            if let Some(port) = NonZeroU64::new(port) {
+                port
+            } else {
+                return Err(TransportError::Other(MemoryTransportError::Unreachable));
+            }
+        } else {
+            return Err(TransportError::MultiaddrNotSupported(addr));
+        };
+
+        let hub = HUB.lock();
+        let chan = if let Some(tx) = hub.get(&port) {
+            let (a_tx, a_rx) = mpsc::unbounded();
+            let (b_tx, b_rx) = mpsc::unbounded();
+            let a = RwStreamSink::new(Chan { incoming: a_rx, outgoing: b_tx });
+            let b = RwStreamSink::new(Chan { incoming: b_rx, outgoing: a_tx });
+            if tx.unbounded_send(b).is_err() {
+                return Err(TransportError::Other(MemoryTransportError::Unreachable));
+            }
+            a
+        } else {
+            return Err(TransportError::Other(MemoryTransportError::Unreachable));
+        };
+
+        Ok(future::ok(chan))
     }
 
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        // TODO: NAT traversal for `/memory` addresses? how does that make sense?
         if server == observed {
             Some(server.clone())
         } else {
@@ -87,76 +123,69 @@ impl<T: IntoBuf + Send + 'static> Transport for Dialer<T> {
 /// Error that can be produced from the `MemoryTransport`.
 #[derive(Debug, Copy, Clone)]
 pub enum MemoryTransportError {
-    /// The other side of the transport has been closed earlier.
-    RemoteClosed,
+    /// There's no listener on the given port.
+    Unreachable,
+    /// Tries to listen on a port that is already in use.
+    AlreadyInUse,
 }
 
 impl fmt::Display for MemoryTransportError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            MemoryTransportError::RemoteClosed => 
-                write!(f, "The other side of the memory transport has been closed."),
+            MemoryTransportError::Unreachable => write!(f, "No listener on the given port."),
+            MemoryTransportError::AlreadyInUse => write!(f, "Port already occupied."),
         }
     }
 }
 
 impl error::Error for MemoryTransportError {}
 
-/// Receiving end of the memory transport.
-pub struct Listener<T = Bytes>(Arc<Mutex<mpsc::UnboundedReceiver<Chan<T>>>>);
-
-impl<T> Clone for Listener<T> {
-    fn clone(&self) -> Self {
-        Listener(self.0.clone())
-    }
+/// Listener for memory connections.
+pub struct Listener {
+    /// Port we're listening on.
+    port: NonZeroU64,
+    /// Receives incoming connections.
+    receiver: mpsc::UnboundedReceiver<Channel<Bytes>>,
 }
 
-impl<T: IntoBuf + Send + 'static> Transport for Listener<T> {
-    type Output = Channel<T>;
+impl Stream for Listener {
+    type Item = (FutureResult<Channel<Bytes>, MemoryTransportError>, Multiaddr);
     type Error = MemoryTransportError;
-    type Listener = Box<dyn Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=MemoryTransportError> + Send>;
-    type ListenerUpgrade = FutureResult<Self::Output, MemoryTransportError>;
-    type Dial = Box<dyn Future<Item=Self::Output, Error=MemoryTransportError> + Send>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
-        if !is_memory_addr(&addr) {
-            return Err(TransportError::MultiaddrNotSupported(addr));
-        }
-        let addr2 = addr.clone();
-        let receiver = self.0.clone();
-        let stream = stream::poll_fn(move || receiver.lock().poll())
-            .map(move |channel| {
-                (future::ok(channel.into()), addr.clone())
-            })
-            .map_err(|()| unreachable!());
-        Ok((Box::new(stream), addr2))
-    }
-
-    #[inline]
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        Err(TransportError::MultiaddrNotSupported(addr))
-    }
-
-    #[inline]
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        if server == observed {
-            Some(server.clone())
-        } else {
-            None
-        }
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        let channel = try_ready!(Ok(self.receiver.poll()
+            .expect("An unbounded receiver never panics; QED")));
+        let channel = match channel {
+            Some(c) => c,
+            None => return Ok(Async::Ready(None)),
+        };
+        let dialed_addr = Protocol::Memory(self.port.get()).into();
+        Ok(Async::Ready(Some((future::ok(channel), dialed_addr))))
     }
 }
 
-/// Returns `true` if and only if the address is `/memory`.
-fn is_memory_addr(a: &Multiaddr) -> bool {
+impl Drop for Listener {
+    fn drop(&mut self) {
+        let val_in = HUB.lock().remove(&self.port);
+        debug_assert!(val_in.is_some());
+    }
+}
+
+/// If the address is `/memory/n`, returns the value of `n`.
+fn parse_memory_addr(a: &Multiaddr) -> Result<u64, ()> {
     let mut iter = a.iter();
-    if iter.next() != Some(Protocol::Memory) {
-        return false;
-    }
+
+    let port = if let Some(Protocol::Memory(port)) = iter.next() {
+        port
+    } else {
+        return Err(());
+    };
+
     if iter.next().is_some() {
-        return false;
+        return Err(());
     }
-    true
+
+    Ok(port)
 }
 
 /// A channel represents an established, in-memory, logical connection between two endpoints.
@@ -174,31 +203,31 @@ pub struct Chan<T = Bytes> {
 
 impl<T> Stream for Chan<T> {
     type Item = T;
-    type Error = MemoryTransportError;
+    type Error = io::Error;
 
     #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        self.incoming.poll().map_err(|()| MemoryTransportError::RemoteClosed)
+        self.incoming.poll().map_err(|()| io::ErrorKind::BrokenPipe.into())
     }
 }
 
 impl<T> Sink for Chan<T> {
     type SinkItem = T;
-    type SinkError = MemoryTransportError;
+    type SinkError = io::Error;
 
     #[inline]
     fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
-        self.outgoing.start_send(item).map_err(|_| MemoryTransportError::RemoteClosed)
+        self.outgoing.start_send(item).map_err(|_| io::ErrorKind::BrokenPipe.into())
     }
 
     #[inline]
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
-        self.outgoing.poll_complete().map_err(|_| MemoryTransportError::RemoteClosed)
+        self.outgoing.poll_complete().map_err(|_| io::ErrorKind::BrokenPipe.into())
     }
 
     #[inline]
     fn close(&mut self) -> Poll<(), Self::SinkError> {
-        self.outgoing.close().map_err(|_| MemoryTransportError::RemoteClosed)
+        self.outgoing.close().map_err(|_| io::ErrorKind::BrokenPipe.into())
     }
 }
 
@@ -207,4 +236,42 @@ impl<T: IntoBuf> Into<RwStreamSink<Chan<T>>> for Chan<T> {
     fn into(self) -> RwStreamSink<Chan<T>> {
         RwStreamSink::new(self)
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_memory_addr_works() {
+        assert_eq!(parse_memory_addr(&"/memory/5".parse().unwrap()), Ok(5));
+        assert_eq!(parse_memory_addr(&"/tcp/150".parse().unwrap()), Err(()));
+        assert_eq!(parse_memory_addr(&"/memory/0".parse().unwrap()), Ok(0));
+        assert_eq!(parse_memory_addr(&"/memory/5/tcp/150".parse().unwrap()), Err(()));
+        assert_eq!(parse_memory_addr(&"/tcp/150/memory/5".parse().unwrap()), Err(()));
+        assert_eq!(parse_memory_addr(&"/memory/1234567890".parse().unwrap()), Ok(1_234_567_890));
+    }
+
+    #[test]
+    fn listening_twice() {
+        let transport = MemoryTransport::default();
+        assert!(transport.listen_on("/memory/5".parse().unwrap()).is_ok());
+        assert!(transport.listen_on("/memory/5".parse().unwrap()).is_ok());
+        let _listener = transport.listen_on("/memory/5".parse().unwrap()).unwrap();
+        assert!(transport.listen_on("/memory/5".parse().unwrap()).is_err());
+        assert!(transport.listen_on("/memory/5".parse().unwrap()).is_err());
+        drop(_listener);
+        assert!(transport.listen_on("/memory/5".parse().unwrap()).is_ok());
+        assert!(transport.listen_on("/memory/5".parse().unwrap()).is_ok());
+    }
+
+    #[test]
+    fn port_not_in_use() {
+        let transport = MemoryTransport::default();
+        assert!(transport.dial("/memory/5".parse().unwrap()).is_err());
+        let _listener = transport.listen_on("/memory/5".parse().unwrap()).unwrap();
+        assert!(transport.dial("/memory/5".parse().unwrap()).is_ok());
+    }
+
+    // TODO: test that is actually works
 }
