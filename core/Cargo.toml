@@ -13,6 +13,7 @@ categories = ["network-programming", "asynchronous"]
 bs58 = "0.2.0"
 bytes = "0.4"
 fnv = "1.0"
+lazy_static = "1.2"
 log = "0.4"
 multiaddr = { package = "parity-multiaddr", version = "0.1.0", path = "../misc/multiaddr" }
 multihash = { package = "parity-multihash", version = "0.1.0", path = "../misc/multihash" }
@@ -21,6 +22,7 @@ futures = { version = "0.1", features = ["use_std"] }
 parking_lot = "0.7"
 protobuf = "2.3"
 quick-error = "1.2"
+rand = "0.6"
 rw-stream-sink = { version = "0.1.0", path = "../misc/rw-stream-sink" }
 smallvec = "0.6"
 tokio-executor = "0.1.4"

@@ -62,7 +62,7 @@ impl Arbitrary for Proto {
              7 => Proto(P2pWebRtcDirect),
              8 => Proto(P2pWebRtcStar),
              9 => Proto(P2pWebSocketStar),
-            10 => Proto(Memory),
+            10 => Proto(Memory(g.gen())),
             // TODO: impl Arbitrary for Multihash:
             11 => Proto(P2p(multihash("QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC"))),
             12 => Proto(P2pCircuit),
