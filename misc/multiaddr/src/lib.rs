@@ -451,3 +451,35 @@ impl ToMultiaddr for Multiaddr {
         Ok(self.clone())
     }
 }
+
+/// Easy way for a user to create a `Multiaddr`.
+///
+/// Example:
+///
+/// ```rust
+/// # use parity_multiaddr::multiaddr;
+/// # fn main() {
+/// let _addr = multiaddr![Ip4([127, 0, 0, 1]), Tcp(10500u16)];
+/// # }
+/// ```
+///
+/// Each element passed to `multiaddr![]` should be a variant of the `Protocol` enum. The
+/// optional parameter is casted into the proper type with the `Into` trait.
+///
+/// For example, `Ip4([127, 0, 0, 1])` works because `Ipv4Addr` implements `From<[u8; 4]>`.
+#[macro_export]
+macro_rules! multiaddr {
+    ($($comp:ident $(($param:expr))*),+) => {
+        {
+            use std::iter;
+            let elem = iter::empty::<$crate::Protocol>();
+            $(
+                let elem = {
+                    let cmp = $crate::Protocol::$comp $(( $param.into() ))*;
+                    elem.chain(iter::once(cmp))
+                };
+            )+
+            elem.collect::<$crate::Multiaddr>()
+        }
+    }
+}
