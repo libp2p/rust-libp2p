@@ -248,7 +248,7 @@ where
                     }));
                 },
                 Async::Ready(ProtocolsHandlerEvent::Shutdown) => {
-                    if !self.proto1.is_shutdown() {
+                    if !self.proto1.is_shutting_down_or_shutdown() {
                         self.proto1.shutdown();
                         continue;
                     }
