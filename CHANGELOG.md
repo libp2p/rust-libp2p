@@ -1,3 +1,7 @@
+# Version 0.4.1 (2019-02-20)
+
+- Fixed wrong version of libp2p-noise.
+
 # Version 0.4.0 (2019-02-20)
 
 - The `multiaddr!` macro has been moved to the `multiaddr` crate and is now reexported under the name `build_multiaddr!`.
