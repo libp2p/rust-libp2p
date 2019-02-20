@@ -24,19 +24,19 @@
 use futures::{future::{self, FutureResult}, prelude::*};
 use libp2p_core::{muxing::Shutdown, upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}};
 use log::error;
-use std::{io, iter};
+use std::{io, iter, sync::atomic};
 use std::io::{Error as IoError};
 use tokio_io::{AsyncRead, AsyncWrite};
 
-
-pub struct Yamux<C>(yamux::Connection<C>);
+// TODO: add documentation and field names
+pub struct Yamux<C>(yamux::Connection<C>, atomic::AtomicBool);
 
 impl<C> Yamux<C>
 where
     C: AsyncRead + AsyncWrite + 'static
 {
     pub fn new(c: C, cfg: yamux::Config, mode: yamux::Mode) -> Self {
-        Yamux(yamux::Connection::new(c, cfg, mode))
+        Yamux(yamux::Connection::new(c, cfg, mode), atomic::AtomicBool::new(false))
     }
 }
 
@@ -56,7 +56,10 @@ where
             }
             Ok(Async::NotReady) => Ok(Async::NotReady),
             Ok(Async::Ready(None)) => Ok(Async::Ready(None)),
-            Ok(Async::Ready(Some(stream))) => Ok(Async::Ready(Some(stream)))
+            Ok(Async::Ready(Some(stream))) => {
+                self.1.store(true, atomic::Ordering::Release);
+                Ok(Async::Ready(Some(stream)))
+            }
         }
     }
 
@@ -77,7 +80,11 @@ where
 
     #[inline]
     fn read_substream(&self, sub: &mut Self::Substream, buf: &mut [u8]) -> Poll<usize, IoError> {
-        sub.poll_read(buf)
+        let result = sub.poll_read(buf);
+        if let Ok(Async::Ready(_)) = result {
+            self.1.store(true, atomic::Ordering::Release);
+        }
+        result
     }
 
     #[inline]
@@ -97,6 +104,11 @@ where
 
     #[inline]
     fn destroy_substream(&self, _: Self::Substream) {
+    }
+
+    #[inline]
+    fn is_remote_acknowledged(&self) -> bool {
+        self.1.load(atomic::Ordering::Acquire)
     }
 
     #[inline]
