@@ -22,7 +22,6 @@ use crate::algo_support;
 use bytes::BytesMut;
 use crate::codec::{full_codec, FullCodec, Hmac};
 use crate::stream_cipher::{Cipher, ctr};
-use ed25519_dalek::{PublicKey as Ed25519PublicKey, Signature as Ed25519Signature};
 use crate::error::SecioError;
 use crate::exchange;
 use futures::future;
@@ -34,23 +33,13 @@ use log::{debug, trace};
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
 use protobuf::Message as ProtobufMessage;
 use rand::{self, RngCore};
-#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-use ring::signature::{RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256, verify as ring_verify};
-#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-use ring::rand::SystemRandom;
-#[cfg(feature = "secp256k1")]
-use secp256k1;
 use sha2::{Digest as ShaDigestTrait, Sha256};
 use std::cmp::{self, Ordering};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use crate::structs_proto::{Exchange, Propose};
 use tokio_io::codec::length_delimited;
 use tokio_io::{AsyncRead, AsyncWrite};
-#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-use untrusted::Input as UntrustedInput;
-use crate::{KeyAgreement, SecioConfig, SecioKeyPairInner};
-#[cfg(feature = "secp256k1")]
-use crate::SECP256K1;
+use crate::{KeyAgreement, SecioConfig};
 
 // This struct contains the whole context of a handshake, and is filled progressively
 // throughout the various parts of the handshake.
@@ -63,8 +52,8 @@ struct HandshakeContext<T> {
 struct Local {
     // Locally-generated random number. The array size can be changed without any repercussion.
     nonce: [u8; 16],
-    // Our local public key protobuf structure encoded in bytes:
-    public_key_in_protobuf_bytes: Vec<u8>,
+    // Our encoded local public key
+    public_key_encoded: Vec<u8>,
     // Our local proposition's raw bytes:
     proposition_bytes: Vec<u8>
 }
@@ -124,13 +113,12 @@ impl HandshakeContext<()> {
             .try_fill_bytes(&mut nonce)
             .map_err(|_| SecioError::NonceGenerationFailed)?;
 
-        let public_key_in_protobuf_bytes =
-            self.config.key.to_public_key().into_protobuf_encoding();
+        let public_key_encoded = self.config.key.public().into_protobuf_encoding()?;
 
         // Send our proposition with our nonce, public key and supported protocols.
         let mut proposition = Propose::new();
         proposition.set_rand(nonce.to_vec());
-        proposition.set_pubkey(public_key_in_protobuf_bytes.clone());
+        proposition.set_pubkey(public_key_encoded.clone());
 
         if let Some(ref p) = self.config.agreements_prop {
             trace!("agreements proposition: {}", p);
@@ -162,7 +150,7 @@ impl HandshakeContext<()> {
             config: self.config,
             state: Local {
                 nonce,
-                public_key_in_protobuf_bytes,
+                public_key_encoded,
                 proposition_bytes
             }
         })
@@ -180,10 +168,10 @@ impl HandshakeContext<Local> {
             }
         };
 
-        let public_key_in_protobuf_bytes = prop.take_pubkey();
+        let public_key_encoded = prop.take_pubkey();
         let nonce = prop.take_rand();
 
-        let pubkey = match PublicKey::from_protobuf_encoding(&public_key_in_protobuf_bytes) {
+        let pubkey = match PublicKey::from_protobuf_encoding(&public_key_encoded) {
             Ok(p) => p,
             Err(_) => {
                 debug!("failed to parse remote's proposition's pubkey protobuf");
@@ -196,14 +184,14 @@ impl HandshakeContext<Local> {
         let hashes_ordering = {
             let oh1 = {
                 let mut ctx = Sha256::new();
-                ctx.input(&public_key_in_protobuf_bytes);
+                ctx.input(&public_key_encoded);
                 ctx.input(&self.state.nonce);
                 ctx.result()
             };
 
             let oh2 = {
                 let mut ctx = Sha256::new();
-                ctx.input(&self.state.public_key_in_protobuf_bytes);
+                ctx.input(&self.state.public_key_encoded);
                 ctx.input(&nonce);
                 ctx.result()
             };
@@ -368,37 +356,10 @@ where
 
                 let mut exchange = Exchange::new();
                 exchange.set_epubkey(tmp_pub_key);
-                exchange.set_signature({
-                    match context.config.key.inner {
-                        #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-                        SecioKeyPairInner::Rsa { ref private, .. } => {
-                            let mut signature = vec![0; private.public_modulus_len()];
-                            let rng = SystemRandom::new();
-                            match private.sign(&RSA_PKCS1_SHA256, &rng, &data_to_sign, &mut signature) {
-                                Ok(_) => (),
-                                Err(_) => {
-                                    debug!("failed to sign local exchange");
-                                    return Err(SecioError::SigningFailure);
-                                },
-                            };
-
-                            signature
-                        },
-                        SecioKeyPairInner::Ed25519 { ref key_pair } => {
-                            let signature = key_pair.sign(&data_to_sign);
-                            signature.to_bytes().to_vec()
-                        },
-                        #[cfg(feature = "secp256k1")]
-                        SecioKeyPairInner::Secp256k1 { ref private } => {
-                            let data_to_sign = Sha256::digest(&data_to_sign);
-                            let message = secp256k1::Message::from_slice(data_to_sign.as_ref())
-                                .expect("digest output length doesn't match secp256k1 input length");
-                            SECP256K1
-                                .sign(&message, private)
-                                .serialize_der()
-                        },
-                    }
-                });
+                match context.config.key.sign(&data_to_sign) {
+                    Ok(sig) => exchange.set_signature(sig),
+                    Err(_) => return Err(SecioError::SigningFailure)
+                }
                 exchange
             };
             let local_exch = exchange.write_to_bytes()?;
@@ -445,72 +406,9 @@ where
             data_to_verify.extend_from_slice(&context.state.remote.local.proposition_bytes);
             data_to_verify.extend_from_slice(remote_exch.get_epubkey());
 
-            match context.state.remote.public_key {
-                #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
-                PublicKey::Rsa(ref remote_public_key) => {
-                    // TODO: The ring library doesn't like some stuff in our DER public key,
-                    //       therefore we scrap the first 24 bytes of the key. A proper fix would
-                    //       be to write a DER parser, but that's not trivial.
-                    match ring_verify(&RSA_PKCS1_2048_8192_SHA256,
-                                      UntrustedInput::from(&remote_public_key[24..]),
-                                      UntrustedInput::from(&data_to_verify),
-                                      UntrustedInput::from(remote_exch.get_signature()))
-                    {
-                        Ok(()) => (),
-                        Err(_) => {
-                            debug!("failed to verify the remote's signature");
-                            return Err(SecioError::SignatureVerificationFailed)
-                        },
-                    }
-                },
-                PublicKey::Ed25519(ref remote_public_key) => {
-                    let signature = Ed25519Signature::from_bytes(remote_exch.get_signature());
-                    let pubkey = Ed25519PublicKey::from_bytes(remote_public_key);
-
-                    if let (Ok(signature), Ok(pubkey)) = (signature, pubkey) {
-                        match pubkey.verify(&data_to_verify, &signature) {
-                            Ok(()) => (),
-                            Err(_) => {
-                                debug!("failed to verify the remote's signature");
-                                return Err(SecioError::SignatureVerificationFailed)
-                            }
-                        }
-                    } else {
-                        debug!("the remote's signature or publickey are in the wrong format");
-                        return Err(SecioError::SignatureVerificationFailed)
-                    }
-                },
-                #[cfg(feature = "secp256k1")]
-                PublicKey::Secp256k1(ref remote_public_key) => {
-                    let data_to_verify = Sha256::digest(&data_to_verify);
-                    let message = secp256k1::Message::from_slice(data_to_verify.as_ref())
-                        .expect("digest output length doesn't match secp256k1 input length");
-                    let signature = secp256k1::Signature::from_der(remote_exch.get_signature());
-                    let remote_public_key = secp256k1::key::PublicKey::from_slice(remote_public_key);
-                    if let (Ok(signature), Ok(remote_public_key)) = (signature, remote_public_key) {
-                        match SECP256K1.verify(&message, &signature, &remote_public_key) {
-                            Ok(()) => (),
-                            Err(_) => {
-                                debug!("failed to verify the remote's signature");
-                                return Err(SecioError::SignatureVerificationFailed)
-                            },
-                        }
-                    } else {
-                        debug!("remote's secp256k1 signature has wrong format");
-                        return Err(SecioError::SignatureVerificationFailed)
-                    }
-                },
-                #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
-                PublicKey::Rsa(_) => {
-                    debug!("support for RSA was disabled at compile-time");
-                    return Err(SecioError::SignatureVerificationFailed);
-                },
-                #[cfg(not(feature = "secp256k1"))]
-                PublicKey::Secp256k1(_) => {
-                    debug!("support for secp256k1 was disabled at compile-time");
-                    return Err(SecioError::SignatureVerificationFailed);
-                }
-            };
+            if !context.state.remote.public_key.verify(&data_to_verify, remote_exch.get_signature()) {
+                return Err(SecioError::SignatureVerificationFailed)
+            }
 
             trace!("successfully verified the remote's signature");
             Ok((remote_exch, socket, context))
@@ -625,29 +523,27 @@ where D: ::hmac::digest::Input + ::hmac::digest::BlockInput +
 #[cfg(test)]
 mod tests {
     use bytes::BytesMut;
+    use libp2p_core::identity;
     use tokio::runtime::current_thread::Runtime;
     use tokio_tcp::{TcpListener, TcpStream};
-    use crate::SecioError;
+    use crate::{SecioConfig, SecioError};
     use super::handshake;
     use super::stretch_key;
     use crate::algo_support::Digest;
     use crate::codec::Hmac;
     use futures::prelude::*;
-    use crate::{SecioConfig, SecioKeyPair};
 
     #[test]
     #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
     fn handshake_with_self_succeeds_rsa() {
         let key1 = {
-            let private = include_bytes!("../tests/test-rsa-private-key.pk8");
-            let public = include_bytes!("../tests/test-rsa-public-key.der").to_vec();
-            SecioKeyPair::rsa_from_pkcs8(private, public).unwrap()
+            let mut private = include_bytes!("../tests/test-rsa-private-key.pk8").to_vec();
+            identity::Keypair::rsa_from_pkcs8(&mut private).unwrap()
         };
 
         let key2 = {
-            let private = include_bytes!("../tests/test-rsa-private-key-2.pk8");
-            let public = include_bytes!("../tests/test-rsa-public-key-2.der").to_vec();
-            SecioKeyPair::rsa_from_pkcs8(private, public).unwrap()
+            let mut private = include_bytes!("../tests/test-rsa-private-key-2.pk8").to_vec();
+            identity::Keypair::rsa_from_pkcs8(&mut private).unwrap()
         };
 
         handshake_with_self_succeeds(SecioConfig::new(key1), SecioConfig::new(key2));
@@ -655,8 +551,8 @@ mod tests {
 
     #[test]
     fn handshake_with_self_succeeds_ed25519() {
-        let key1 = SecioKeyPair::ed25519_generated().unwrap();
-        let key2 = SecioKeyPair::ed25519_generated().unwrap();
+        let key1 = identity::Keypair::generate_ed25519();
+        let key2 = identity::Keypair::generate_ed25519();
         handshake_with_self_succeeds(SecioConfig::new(key1), SecioConfig::new(key2));
     }
 
@@ -664,13 +560,13 @@ mod tests {
     #[cfg(feature = "secp256k1")]
     fn handshake_with_self_succeeds_secp256k1() {
         let key1 = {
-            let key = include_bytes!("../tests/test-secp256k1-private-key.der");
-            SecioKeyPair::secp256k1_from_der(&key[..]).unwrap()
+            let mut key = include_bytes!("../tests/test-secp256k1-private-key.der").to_vec();
+            identity::Keypair::secp256k1_from_der(&mut key).unwrap()
         };
 
         let key2 = {
-            let key = include_bytes!("../tests/test-secp256k1-private-key-2.der");
-            SecioKeyPair::secp256k1_from_der(&key[..]).unwrap()
+            let mut key = include_bytes!("../tests/test-secp256k1-private-key-2.der").to_vec();
+            identity::Keypair::secp256k1_from_der(&mut key).unwrap()
         };
 
         handshake_with_self_succeeds(SecioConfig::new(key1), SecioConfig::new(key2));

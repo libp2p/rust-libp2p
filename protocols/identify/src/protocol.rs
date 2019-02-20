@@ -67,10 +67,13 @@ impl<T> IdentifySender<T> where T: AsyncWrite {
             .map(|addr| addr.into_bytes())
             .collect();
 
+        let pubkey_bytes = info.public_key.into_protobuf_encoding()
+            .expect("Public key protobuf encoding failed.");
+
         let mut message = structs_proto::Identify::new();
         message.set_agentVersion(info.agent_version);
         message.set_protocolVersion(info.protocol_version);
-        message.set_publicKey(info.public_key.into_protobuf_encoding());
+        message.set_publicKey(pubkey_bytes);
         message.set_listenAddrs(listen_addrs);
         message.set_observedAddr(observed_addr.to_bytes());
         message.set_protocols(RepeatedField::from_vec(info.protocols));
@@ -244,9 +247,12 @@ fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> 
                 addrs
             };
 
+            let public_key = PublicKey::from_protobuf_encoding(msg.get_publicKey())
+                .map_err(|e| IoError::new(IoErrorKind::InvalidData, e))?;
+
             let observed_addr = bytes_to_multiaddr(msg.take_observedAddr())?;
             let info = IdentifyInfo {
-                public_key: PublicKey::from_protobuf_encoding(msg.get_publicKey())?,
+                public_key,
                 protocol_version: msg.take_protocolVersion(),
                 agent_version: msg.take_agentVersion(),
                 listen_addrs,
@@ -266,13 +272,15 @@ mod tests {
     use tokio::runtime::current_thread::Runtime;
     use libp2p_tcp::TcpConfig;
     use futures::{Future, Stream};
-    use libp2p_core::{PublicKey, Transport, upgrade::{apply_outbound, apply_inbound}};
+    use libp2p_core::{identity, Transport, upgrade::{apply_outbound, apply_inbound}};
     use std::{io, sync::mpsc, thread};
 
     #[test]
     fn correct_transfer() {
         // We open a server and a client, send info from the server to the client, and check that
         // they were successfully received.
+        let send_pubkey = identity::Keypair::generate_ed25519().public();
+        let recv_pubkey = send_pubkey.clone();
 
         let (tx, rx) = mpsc::channel();
 
@@ -296,7 +304,7 @@ mod tests {
                 .and_then(|sender| {
                     sender.send(
                         IdentifyInfo {
-                            public_key: PublicKey::Ed25519(vec![1, 2, 3, 4, 5, 7]),
+                            public_key: send_pubkey,
                             protocol_version: "proto_version".to_owned(),
                             agent_version: "agent_version".to_owned(),
                             listen_addrs: vec![
@@ -322,7 +330,7 @@ mod tests {
             })
             .and_then(|RemoteInfo { info, observed_addr, .. }| {
                 assert_eq!(observed_addr, "/ip4/100.101.102.103/tcp/5000".parse().unwrap());
-                assert_eq!(info.public_key, PublicKey::Ed25519(vec![1, 2, 3, 4, 5, 7]));
+                assert_eq!(info.public_key, recv_pubkey);
                 assert_eq!(info.protocol_version, "proto_version");
                 assert_eq!(info.agent_version, "agent_version");
                 assert_eq!(info.listen_addrs,

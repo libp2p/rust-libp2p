@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{future, prelude::*};
+use libp2p_core::identity;
 use libp2p_core::multiaddr::multiaddr;
 use libp2p_core::nodes::raw_swarm::{RawSwarm, RawSwarmEvent, RawSwarmReachError, PeerState, UnknownPeerDialErr, IncomingError};
 use libp2p_core::{PeerId, Transport, upgrade, upgrade::InboundUpgradeExt, upgrade::OutboundUpgradeExt};
@@ -92,8 +93,8 @@ fn deny_incoming_connec() {
     // TODO: make creating the transport more elegant ; literaly half of the code of the test
     //       is about creating the transport
     let mut swarm1: RawSwarm<_, _, _, NodeHandlerWrapperBuilder<TestHandler<_>>, _> = {
-        let local_key = libp2p_secio::SecioKeyPair::ed25519_generated().unwrap();
-        let local_public_key = local_key.to_public_key();
+        let local_key = identity::Keypair::generate_ed25519();
+        let local_public_key = local_key.public();
         let transport = libp2p_tcp::TcpConfig::new()
             .with_upgrade(libp2p_secio::SecioConfig::new(local_key))
             .and_then(move |out, endpoint| {
@@ -104,12 +105,12 @@ fn deny_incoming_connec() {
                     .map_inbound(move |muxer| (peer_id2, muxer));
                 upgrade::apply(out.stream, upgrade, endpoint)
             });
-        RawSwarm::new(transport, local_public_key.into_peer_id())
+        RawSwarm::new(transport, local_public_key.into())
     };
 
     let mut swarm2 = {
-        let local_key = libp2p_secio::SecioKeyPair::ed25519_generated().unwrap();
-        let local_public_key = local_key.to_public_key();
+        let local_key = identity::Keypair::generate_ed25519();
+        let local_public_key = local_key.public();
         let transport = libp2p_tcp::TcpConfig::new()
             .with_upgrade(libp2p_secio::SecioConfig::new(local_key))
             .and_then(move |out, endpoint| {
@@ -120,7 +121,7 @@ fn deny_incoming_connec() {
                     .map_inbound(move |muxer| (peer_id2, muxer));
                 upgrade::apply(out.stream, upgrade, endpoint)
             });
-        RawSwarm::new(transport, local_public_key.into_peer_id())
+        RawSwarm::new(transport, local_public_key.into())
     };
 
     let listen = swarm1.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
@@ -173,8 +174,8 @@ fn dial_self() {
     // TODO: make creating the transport more elegant ; literaly half of the code of the test
     //       is about creating the transport
     let mut swarm = {
-        let local_key = libp2p_secio::SecioKeyPair::ed25519_generated().unwrap();
-        let local_public_key = local_key.to_public_key();
+        let local_key = identity::Keypair::generate_ed25519();
+        let local_public_key = local_key.public();
         let transport = libp2p_tcp::TcpConfig::new()
             .with_upgrade(libp2p_secio::SecioConfig::new(local_key))
             .and_then(move |out, endpoint| {
@@ -185,7 +186,7 @@ fn dial_self() {
                     .map_inbound(move |muxer| (peer_id2, muxer));
                 upgrade::apply(out.stream, upgrade, endpoint)
             });
-        RawSwarm::new(transport, local_public_key.into_peer_id())
+        RawSwarm::new(transport, local_public_key.into())
     };
 
     let listen = swarm.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
@@ -241,8 +242,8 @@ fn dial_self_by_id() {
     // TODO: make creating the transport more elegant ; literaly half of the code of the test
     //       is about creating the transport
     let mut swarm: RawSwarm<_, _, _, NodeHandlerWrapperBuilder<TestHandler<_>>, _> = {
-        let local_key = libp2p_secio::SecioKeyPair::ed25519_generated().unwrap();
-        let local_public_key = local_key.to_public_key();
+        let local_key = identity::Keypair::generate_ed25519();
+        let local_public_key = local_key.public();
         let transport = libp2p_tcp::TcpConfig::new()
             .with_upgrade(libp2p_secio::SecioConfig::new(local_key))
             .and_then(move |out, endpoint| {
@@ -253,7 +254,7 @@ fn dial_self_by_id() {
                     .map_inbound(move |muxer| (peer_id2, muxer));
                 upgrade::apply(out.stream, upgrade, endpoint)
             });
-        RawSwarm::new(transport, local_public_key.into_peer_id())
+        RawSwarm::new(transport, local_public_key.into())
     };
 
     let peer_id = swarm.local_peer_id().clone();
@@ -267,8 +268,8 @@ fn multiple_addresses_err() {
     // TODO: make creating the transport more elegant ; literaly half of the code of the test
     //       is about creating the transport
     let mut swarm = {
-        let local_key = libp2p_secio::SecioKeyPair::ed25519_generated().unwrap();
-        let local_public_key = local_key.to_public_key();
+        let local_key = identity::Keypair::generate_ed25519();
+        let local_public_key = local_key.public();
         let transport = libp2p_tcp::TcpConfig::new()
             .with_upgrade(libp2p_secio::SecioConfig::new(local_key))
             .and_then(move |out, endpoint| {
@@ -279,7 +280,7 @@ fn multiple_addresses_err() {
                     .map_inbound(move |muxer| (peer_id2, muxer));
                 upgrade::apply(out.stream, upgrade, endpoint)
             });
-        RawSwarm::new(transport, local_public_key.into_peer_id())
+        RawSwarm::new(transport, local_public_key.into())
     };
 
     let mut addresses = Vec::new();

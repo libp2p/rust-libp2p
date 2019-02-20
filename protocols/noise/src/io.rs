@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{NoiseError, keys::{PublicKey, Curve25519}, util::to_array};
+use crate::{NoiseError, Protocol, PublicKey};
 use futures::Poll;
 use log::{debug, trace};
 use snow;
@@ -52,7 +52,7 @@ impl Buffer {
     }
 }
 
-/// A type used during handshake phase, exchanging key material with the remote.
+/// A type used during the handshake phase, exchanging key material with the remote.
 pub(super) struct Handshake<T>(NoiseOutput<T>);
 
 impl<T> Handshake<T> {
@@ -79,14 +79,16 @@ impl<T: AsyncRead + AsyncWrite> Handshake<T> {
 
     /// Finish the handshake.
     ///
-    /// This turns the noise session into handshake mode and returns the remote's static
+    /// This turns the noise session into transport mode and returns the remote's static
     /// public key as well as the established session for further communication.
-    pub(super) fn finish(self) -> Result<(PublicKey<Curve25519>, NoiseOutput<T>), NoiseError> {
+    pub(super) fn finish<C>(self) -> Result<(PublicKey<C>, NoiseOutput<T>), NoiseError>
+    where
+        C: Protocol<C>
+    {
         let s = self.0.session.into_transport_mode()?;
         let p = s.get_remote_static()
             .ok_or(NoiseError::InvalidKey)
-            .and_then(to_array)
-            .map(PublicKey::new)?;
+            .and_then(C::public_from_bytes)?;
         Ok((p, NoiseOutput { session: s, .. self.0 }))
     }
 }

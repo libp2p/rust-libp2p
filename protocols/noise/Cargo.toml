@@ -14,11 +14,15 @@ lazy_static = "1.2"
 libp2p-core = { version = "0.4.0", path = "../../core" }
 log = "0.4"
 rand = "0.6.5"
-snow = { version = "0.5.0-alpha1", default-features = false, features = ["ring-resolver"] }
+ring = { version = "0.14", features = ["use_heap"], default-features = false }
+snow = { version = "0.5.1", features = ["ring-resolver"], default-features = false }
 tokio-io = "0.1"
+x25519-dalek = "0.5"
+zeroize = "0.5"
 
 [dev-dependencies]
 env_logger = "0.6"
 libp2p-tcp = { version = "0.4.0", path = "../../transports/tcp" }
 quickcheck = "0.8"
 tokio = "0.1"
+sodiumoxide = "0.2"
