@@ -1,3 +1,16 @@
+# Version 0.4.0 (2019-02-20)
+
+- Modified the functions in `upgrade::transfer` to be more convenient to use.
+- Now properly sending external addresses in the identify protocol.
+- Fixed duplicate addresses being reported in identify and Kademlia.
+- Fixed infinite looping in the functions in `upgrade::transfer`.
+- Fixed infinite loop on graceful node shutdown with the `ProtocolsHandlerSelect`.
+- Added a `BandwidthLogging` transport wrapper that logs the bandwidth consumption.
+- The addresses to try dialing when dialing a node is now refreshed by the `Swarm` when necessary.
+- Lots of modifications to the semi-private structs in `core/nodes`.
+- Added `IdentifyEvent::SendBack`, when we send back our information.
+- Rewrote the `MemoryTransport` to be similar to the `TcpConfig`.
+
 # Version 0.3.1 (2019-02-02)
 
 - Added `NetworkBehaviour::inject_replaced` that is called whenever we replace a connection with a different connection to the same peer.

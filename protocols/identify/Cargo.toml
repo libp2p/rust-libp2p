@@ -2,7 +2,7 @@
 name = "libp2p-identify"
 edition = "2018"
 description = "Nodes identifcation protocol for libp2p"
-version = "0.3.1"
+version = "0.4.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -13,9 +13,9 @@ categories = ["network-programming", "asynchronous"]
 bytes = "0.4"
 fnv = "1"
 futures = "0.1"
-libp2p-core = { version = "0.3.0", path = "../../core" }
+libp2p-core = { version = "0.4.0", path = "../../core" }
 log = "0.4.1"
-multiaddr = { package = "parity-multiaddr", version = "0.1.0", path = "../../misc/multiaddr" }
+multiaddr = { package = "parity-multiaddr", version = "0.2.0", path = "../../misc/multiaddr" }
 parking_lot = "0.7"
 protobuf = "2.3"
 smallvec = "0.6"
@@ -26,7 +26,7 @@ unsigned-varint = { version = "0.2.1", features = ["codec"] }
 void = "1.0"
 
 [dev-dependencies]
-libp2p-mplex = { version = "0.3.0", path = "../../muxers/mplex" }
-libp2p-secio = { version = "0.3.0", path = "../../protocols/secio" }
-libp2p-tcp = { version = "0.3.0", path = "../../transports/tcp" }
+libp2p-mplex = { version = "0.4.0", path = "../../muxers/mplex" }
+libp2p-secio = { version = "0.4.0", path = "../../protocols/secio" }
+libp2p-tcp = { version = "0.4.0", path = "../../transports/tcp" }
 tokio = "0.1"

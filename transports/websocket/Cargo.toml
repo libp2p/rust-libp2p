@@ -2,7 +2,7 @@
 name = "libp2p-websocket"
 edition = "2018"
 description = "WebSocket transport for libp2p"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -10,9 +10,9 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-libp2p-core = { version = "0.3.0", path = "../../core" }
+libp2p-core = { version = "0.4.0", path = "../../core" }
 futures = "0.1"
-multiaddr = { package = "parity-multiaddr", version = "0.1.0", path = "../../misc/multiaddr" }
+multiaddr = { package = "parity-multiaddr", version = "0.2.0", path = "../../misc/multiaddr" }
 log = "0.4.1"
 rw-stream-sink = { version = "0.1.0", path = "../../misc/rw-stream-sink" }
 tokio-io = "0.1"
@@ -24,5 +24,5 @@ websocket = { version = "0.22.2", default-features = false, features = ["async",
 stdweb = { version = "0.4", default-features = false }
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dev-dependencies]
-libp2p-tcp = { version = "0.3.0", path = "../tcp" }
+libp2p-tcp = { version = "0.4.0", path = "../tcp" }
 tokio = "0.1"
