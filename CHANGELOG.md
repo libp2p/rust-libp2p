@@ -1,5 +1,6 @@
 # Version 0.4.0 (2019-02-20)
 
+- The `multiaddr!` macro has been moved to the `multiaddr` crate and is now reexported under the name `build_multiaddr!`.
 - Modified the functions in `upgrade::transfer` to be more convenient to use.
 - Now properly sending external addresses in the identify protocol.
 - Fixed duplicate addresses being reported in identify and Kademlia.
