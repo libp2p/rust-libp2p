@@ -29,11 +29,37 @@ use crate::{
     }
 };
 use futures::prelude::*;
+use std::mem;
 
 /// Wrapper around a protocol handler and ignores all further method calls once it has shut down.
 #[derive(Debug, Copy, Clone)]
 pub struct Fuse<TProtoHandler> {
-    inner: Option<TProtoHandler>,
+    inner: State<TProtoHandler>,
+}
+
+#[derive(Debug, Copy, Clone)]
+enum State<TProtoHandler> {
+    Normal(TProtoHandler),
+    ShuttingDown(TProtoHandler),
+    Shutdown,
+}
+
+impl<TProtoHandler> State<TProtoHandler> {
+    fn as_ref(&self) -> Option<&TProtoHandler> {
+        match self {
+            State::Normal(h) => Some(h),
+            State::ShuttingDown(h) => Some(h),
+            State::Shutdown => None,
+        }
+    }
+
+    fn as_mut(&mut self) -> Option<&mut TProtoHandler> {
+        match self {
+            State::Normal(h) => Some(h),
+            State::ShuttingDown(h) => Some(h),
+            State::Shutdown => None,
+        }
+    }
 }
 
 impl<TProtoHandler> Fuse<TProtoHandler> {
@@ -41,14 +67,28 @@ impl<TProtoHandler> Fuse<TProtoHandler> {
     #[inline]
     pub(crate) fn new(inner: TProtoHandler) -> Self {
         Fuse {
-            inner: Some(inner),
+            inner: State::Normal(inner),
+        }
+    }
+
+    /// Returns true if `shutdown()` has been called in the past, or if polling has returned
+    /// `Shutdown` in the past.
+    pub fn is_shutting_down_or_shutdown(&self) -> bool {
+        match self.inner {
+            State::Normal(_) => false,
+            State::ShuttingDown(_) => true,
+            State::Shutdown => true,
         }
     }
 
     /// Returns true if polling has returned `Shutdown` in the past.
     #[inline]
     pub fn is_shutdown(&self) -> bool {
-        self.inner.is_none()
+        if let State::Shutdown = self.inner {
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -134,9 +174,14 @@ where
 
     #[inline]
     fn shutdown(&mut self) {
-        if let Some(inner) = self.inner.as_mut() {
-            inner.shutdown()
-        }
+        self.inner = match mem::replace(&mut self.inner, State::Shutdown) {
+            State::Normal(mut inner) => {
+                inner.shutdown();
+                State::ShuttingDown(inner)
+            },
+            s @ State::ShuttingDown(_) => s,
+            s @ State::Shutdown => s,
+        };
     }
 
     #[inline]
@@ -152,7 +197,7 @@ where
         };
 
         if let Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown)) = poll {
-            self.inner = None;
+            self.inner = State::Shutdown;
         }
 
         poll
