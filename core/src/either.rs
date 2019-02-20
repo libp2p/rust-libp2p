@@ -243,6 +243,13 @@ where
         }
     }
 
+    fn is_remote_acknowledged(&self) -> bool {
+        match self {
+            EitherOutput::First(inner) => inner.is_remote_acknowledged(),
+            EitherOutput::Second(inner) => inner.is_remote_acknowledged()
+        }
+    }
+
     fn shutdown(&self, kind: Shutdown) -> Poll<(), IoError> {
         match self {
             EitherOutput::First(inner) => inner.shutdown(kind),

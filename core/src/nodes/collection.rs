@@ -24,7 +24,7 @@ use crate::{
     nodes::{
         node::Substream,
         handled_node_tasks::{HandledNodesEvent, HandledNodesTasks, TaskClosedEvent},
-        handled_node_tasks::{IntoNodeHandler, Task as HandledNodesTask, TaskId},
+        handled_node_tasks::{IntoNodeHandler, Task as HandledNodesTask, TaskId, ClosedTask},
         handled_node::{HandledNodeError, NodeHandler}
     }
 };
@@ -209,7 +209,7 @@ where
                 TaskState::Connected(ref p, _) if *p == self.peer_id => true,
                 _ => false
             });
-            let user_data = match former_task.close() {
+            let user_data = match former_task.close().into_user_data() {
                 TaskState::Connected(_, user_data) => user_data,
                 _ => panic!("The former task was picked from `nodes`; all the nodes in `nodes` \
                              are always in the connected state")
@@ -318,7 +318,7 @@ where
     /// Interrupts a reach attempt.
     ///
     /// Returns `Ok` if something was interrupted, and `Err` if the ID is not or no longer valid.
-    pub fn interrupt(&mut self, id: ReachAttemptId) -> Result<(), InterruptError> {
+    pub fn interrupt(&mut self, id: ReachAttemptId) -> Result<InterruptedReachAttempt<TInEvent, TPeerId, TUserData>, InterruptError> {
         match self.inner.task(id.0) {
             None => Err(InterruptError::ReachAttemptNotFound),
             Some(task) => {
@@ -327,8 +327,9 @@ where
                     TaskState::Pending => (),
                 };
 
-                task.close();
-                Ok(())
+                Ok(InterruptedReachAttempt {
+                    inner: task.close(),
+                })
             }
         }
     }
@@ -389,7 +390,10 @@ where
         };
 
         match item {
-            HandledNodesEvent::TaskClosed { id, result, handler, user_data } => {
+            HandledNodesEvent::TaskClosed { task, result, handler } => {
+                let id = task.id();
+                let user_data = task.into_user_data();
+
                 match (user_data, result, handler) {
                     (TaskState::Pending, Err(TaskClosedEvent::Reach(err)), Some(handler)) => {
                         Async::Ready(CollectionEvent::ReachError {
@@ -496,6 +500,23 @@ impl fmt::Display for InterruptError {
 
 impl error::Error for InterruptError {}
 
+/// Reach attempt after it has been interrupted.
+pub struct InterruptedReachAttempt<TInEvent, TPeerId, TUserData> {
+    inner: ClosedTask<TInEvent, TaskState<TPeerId, TUserData>>,
+}
+
+impl<TInEvent, TPeerId, TUserData> fmt::Debug for InterruptedReachAttempt<TInEvent, TPeerId, TUserData>
+where
+    TUserData: fmt::Debug,
+    TPeerId: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        f.debug_tuple("InterruptedReachAttempt")
+            .field(&self.inner)
+            .finish()
+    }
+}
+
 /// Access to a peer in the collection.
 pub struct PeerMut<'a, TInEvent, TUserData, TPeerId = PeerId> {
     inner: HandledNodesTask<'a, TInEvent, TaskState<TPeerId, TUserData>>,
@@ -544,7 +565,7 @@ where
     /// No further event will be generated for this node.
     pub fn close(self) -> TUserData {
         let task_id = self.inner.id();
-        if let TaskState::Connected(peer_id, user_data) = self.inner.close() {
+        if let TaskState::Connected(peer_id, user_data) = self.inner.close().into_user_data() {
             let old_task_id = self.nodes.remove(&peer_id);
             debug_assert_eq!(old_task_id, Some(task_id));
             user_data
@@ -552,5 +573,17 @@ where
             panic!("a PeerMut can only be created if an entry is present in nodes; an entry in \
                     nodes always matched a Connected entry in the tasks; QED");
         }
+    }
+
+    /// Gives ownership of a closed reach attempt. As soon as the connection to the peer (`self`)
+    /// has some acknowledgment from the remote that its connection is alive, it will close the
+    /// connection inside `id`.
+    ///
+    /// The reach attempt will only be effectively cancelled once the peer (the object you're
+    /// manipulating) has received some network activity. However no event will be ever be
+    /// generated from this reach attempt, and this takes effect immediately.
+    pub fn take_over(&mut self, id: InterruptedReachAttempt<TInEvent, TPeerId, TUserData>) {
+        let _state = self.inner.take_over(id.inner);
+        debug_assert!(if let TaskState::Pending = _state { true } else { false });
     }
 }
