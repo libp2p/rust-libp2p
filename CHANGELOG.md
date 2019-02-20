@@ -6,6 +6,8 @@
 - Fixed duplicate addresses being reported in identify and Kademlia.
 - Fixed infinite looping in the functions in `upgrade::transfer`.
 - Fixed infinite loop on graceful node shutdown with the `ProtocolsHandlerSelect`.
+- Fixed various issues with nodes dialing each other simultaneously.
+- Added the `StreamMuxer::is_remote_acknowledged()` method.
 - Added a `BandwidthLogging` transport wrapper that logs the bandwidth consumption.
 - The addresses to try dialing when dialing a node is now refreshed by the `Swarm` when necessary.
 - Lots of modifications to the semi-private structs in `core/nodes`.
