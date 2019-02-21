@@ -247,6 +247,7 @@ impl MdnsService {
                                     from,
                                     query_id: packet.header.id,
                                     send_buffers: &mut self.send_buffers,
+                                    legacy: false
                                 }));
                             } else if packet
                                 .questions
@@ -261,11 +262,35 @@ impl MdnsService {
                                         send_buffers: &mut self.send_buffers,
                                     },
                                 ));
+                            } else if self.legacy_support && packet
+                                .questions
+                                .iter()
+                                .any(|q| q.qname.to_string().as_bytes() == LEGACY_SERVICE_NAME_GO)
+                            {
+                                return Async::Ready(MdnsPacket::Query(MdnsQuery {
+                                    from,
+                                    query_id: packet.header.id,
+                                    send_buffers: &mut self.send_buffers,
+                                    legacy: true,
+                                }));
+                            } else if self.legacy_support && packet
+                                .questions
+                                .iter()
+                                .any(|q| q.qname.to_string().as_bytes() == LEGACY_SERVICE_NAME_JS)
+                            {
+                                return Async::Ready(MdnsPacket::Query(MdnsQuery {
+                                    from,
+                                    query_id: packet.header.id,
+                                    send_buffers: &mut self.send_buffers,
+                                    legacy: true
+                                }));
+                                // 
                             } else {
                                 // Note that ideally we would use a loop instead. However as of the
                                 // writing of this code non-lexical lifetimes haven't been merged
                                 // yet, and I can't manage to write this code without having borrow
                                 // issues.
+                                println!("Unknown message received: {:?}", packet);
                                 task::current().notify();
                                 return Async::NotReady;
                             }
@@ -325,6 +350,8 @@ pub struct MdnsQuery<'a> {
     query_id: u16,
     /// Queue of pending buffers.
     send_buffers: &'a mut Vec<Vec<u8>>,
+    /// this was a legacy query
+    legacy: bool
 }
 
 impl<'a> MdnsQuery<'a> {
@@ -340,15 +367,30 @@ impl<'a> MdnsQuery<'a> {
         self,
         peer_id: PeerId,
         addresses: TAddresses,
-        ttl: Duration,
+        ttl: Duration
     ) -> Result<(), MdnsResponseError>
     where
         TAddresses: IntoIterator<Item = Multiaddr>,
         TAddresses::IntoIter: ExactSizeIterator,
     {
-        let response =
-            dns::build_query_response(self.query_id, peer_id, addresses.into_iter(), ttl)?;
-        self.send_buffers.push(response);
+        if self.legacy {
+            let (r1, r2) = dns::build_legacy_query_response(
+                self.query_id,
+                peer_id,
+                addresses.into_iter(),
+                ttl
+            )?;
+            self.send_buffers.push(r1);
+            self.send_buffers.push(r2);
+        } else {
+            
+            self.send_buffers.push(dns::build_query_response(
+                self.query_id,
+                peer_id,
+                addresses.into_iter(),
+                ttl
+            )?);
+        };
         Ok(())
     }
 
@@ -412,44 +454,66 @@ impl<'a> MdnsResponse<'a> {
     /// Returns the list of peers that have been reported in this packet.
     ///
     /// > **Note**: Keep in mind that this will also contain the responses we sent ourselves.
-    pub fn discovered_peers<'b>(&'b self) -> impl Iterator<Item = MdnsPeer<'b>> {
+    pub fn discovered_peers<'b>(&'b self) -> impl Iterator<Item = MdnsPeer> + 'b {
         let packet = &self.packet;
         self.packet.answers.iter().filter_map(move |record| {
-            if record.name.to_string().as_bytes() != SERVICE_NAME {
-                return None;
-            }
+            let name = record.name.to_string();
+            
+            if name.as_bytes() == SERVICE_NAME {
 
-            let record_value = match record.data {
-                RData::PTR(record) => record.0.to_string(),
-                _ => return None,
-            };
-
-            let peer_name = {
+                let record_value = match record.data {
+                    RData::PTR(record) => record.0.to_string(),
+                    _ => return None,
+                };
+            
                 let mut iter = record_value.splitn(2, |c| c == '.');
-                let name = match iter.next() {
+                let peer_name = match iter.next() {
                     Some(n) => n.to_owned(),
                     None => return None,
                 };
-                if iter.next().map(|v| v.as_bytes()) != Some(SERVICE_NAME) {
-                    return None;
+
+                let decoded = match iter.next().map(|v| v.as_bytes()) {
+                    Some(SERVICE_NAME) => data_encoding::BASE32_DNSCURVE.decode(peer_name.as_bytes()),
+                    _ => return None
+                }.map(|bytes| PeerId::from_bytes(bytes));
+
+                if let Ok(Ok(peer_id)) = decoded {
+                    return Some(MdnsPeer::parse(
+                        peer_id,
+                        record.ttl,
+                        packet,
+                        record_value,
+                    ))
                 }
-                name
-            };
+            } else if name.as_bytes().ends_with(LEGACY_SERVICE_NAME_JS) {
+                let mut iter = name.splitn(2, |c| c == '.');
+                if let Ok(peer_id) = match iter.next() {
+                    Some(n) => n.parse::<PeerId>(),
+                    None => return None,
+                } {
+                    if let RData::SRV(srv) = record.data {
+                        // FIXME: assuming ipv4
+                        let addr = match format!(
+                            // FIXME: dns4 is probably incorrect
+                            "/dns4/{}/tcp/{}/p2p/{}",
+                            srv.target.to_string(),
+                            srv.port,
+                            peer_id.to_base58()
+                        ).parse::<Multiaddr>() {
+                            Ok(m) => m,
+                            _ => return None
+                        };
+                        println!("Js legacy detected peer id: {:?}", peer_id);
+                        return Some(MdnsPeer {
+                            peer_id,
+                            addresses: vec![addr],
+                            ttl: record.ttl,
+                        })
+                    };
+                }
+            }
 
-            let peer_id = match data_encoding::BASE32_DNSCURVE.decode(peer_name.as_bytes()) {
-                Ok(bytes) => match PeerId::from_bytes(bytes) {
-                    Ok(id) => id,
-                    Err(_) => return None,
-                },
-                Err(_) => return None,
-            };
-
-            Some(MdnsPeer {
-                packet,
-                record_value,
-                peer_id,
-                ttl: record.ttl,
-            })
+            return None
         })
     }
 
@@ -469,22 +533,71 @@ impl<'a> fmt::Debug for MdnsResponse<'a> {
 }
 
 /// A peer discovered by the service.
-pub struct MdnsPeer<'a> {
-    /// The original packet which will be used to determine the addresses.
-    packet: &'a Packet<'a>,
-    /// Cached value of `concat(base32(peer_id), service name)`.
-    record_value: String,
+pub struct MdnsPeer {
+    addresses: Vec<Multiaddr>,
     /// Id of the peer.
     peer_id: PeerId,
     /// TTL of the record in seconds.
     ttl: u32,
 }
 
-impl<'a> MdnsPeer<'a> {
+impl MdnsPeer {
     /// Returns the id of the peer.
     #[inline]
     pub fn id(&self) -> &PeerId {
         &self.peer_id
+    }
+
+    /// Create new entry from packet
+    pub fn parse<'a>(
+        peer_id: PeerId,
+        ttl: u32,
+        packet: &'a Packet<'a>,
+        record_value: String
+    ) -> Self {
+        MdnsPeer {
+            ttl,
+            peer_id: peer_id.clone(),
+            addresses: packet
+                .additional
+                .iter()
+                .filter_map(move |add_record| {
+                    if add_record.name.to_string() != record_value {
+                        return None;
+                    }
+
+                    if let RData::TXT(ref txt) = add_record.data {
+                        Some(txt)
+                    } else {
+                        None
+                    }
+                })
+                .flat_map(|txt| txt.iter())
+                .filter_map(move |txt| {
+                    // TODO: wrong, txt can be multiple character strings
+                    let addr = match dns::decode_character_string(txt) {
+                        Ok(a) => a,
+                        Err(_) => return None,
+                    };
+                    if !addr.starts_with(b"dnsaddr=") {
+                        return None;
+                    }
+                    let addr = match str::from_utf8(&addr[8..]) {
+                        Ok(a) => a,
+                        Err(_) => return None,
+                    };
+                    let mut addr = match addr.parse::<Multiaddr>() {
+                        Ok(a) => a,
+                        Err(_) => return None,
+                    };
+                    match addr.pop() {
+                        Some(Protocol::P2p(ref remote_id)) if remote_id == &peer_id => (),
+                        _ => return None,
+                    };
+                    Some(addr)
+                })
+                .collect()
+        }
     }
 
     /// Returns the requested time-to-live for the record.
@@ -496,51 +609,12 @@ impl<'a> MdnsPeer<'a> {
     /// Returns the list of addresses the peer says it is listening on.
     ///
     /// Filters out invalid addresses.
-    pub fn addresses<'b>(&'b self) -> impl Iterator<Item = Multiaddr> + 'b {
-        let my_peer_id = &self.peer_id;
-        let record_value = &self.record_value;
-        self.packet
-            .additional
-            .iter()
-            .filter_map(move |add_record| {
-                if &add_record.name.to_string() != record_value {
-                    return None;
-                }
-
-                if let RData::TXT(ref txt) = add_record.data {
-                    Some(txt)
-                } else {
-                    None
-                }
-            })
-            .flat_map(|txt| txt.iter())
-            .filter_map(move |txt| {
-                // TODO: wrong, txt can be multiple character strings
-                let addr = match dns::decode_character_string(txt) {
-                    Ok(a) => a,
-                    Err(_) => return None,
-                };
-                if !addr.starts_with(b"dnsaddr=") {
-                    return None;
-                }
-                let addr = match str::from_utf8(&addr[8..]) {
-                    Ok(a) => a,
-                    Err(_) => return None,
-                };
-                let mut addr = match addr.parse::<Multiaddr>() {
-                    Ok(a) => a,
-                    Err(_) => return None,
-                };
-                match addr.pop() {
-                    Some(Protocol::P2p(ref peer_id)) if peer_id == my_peer_id => (),
-                    _ => return None,
-                };
-                Some(addr)
-            })
+    pub fn addresses<'b>(&'b self) -> impl Iterator<Item = &Multiaddr> + 'b {
+        self.addresses.iter()
     }
 }
 
-impl<'a> fmt::Debug for MdnsPeer<'a> {
+impl fmt::Debug for MdnsPeer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MdnsPeer")
             .field("peer_id", &self.peer_id)
@@ -569,7 +643,7 @@ mod tests {
 
                 match packet {
                     MdnsPacket::Query(query) => {
-                        query.respond(peer_id.clone(), None, Duration::from_secs(120)).unwrap();
+                        query.respond(peer_id.clone(), None, Duration::from_secs(120), false).unwrap();
                     }
                     MdnsPacket::Response(response) => {
                         for peer in response.discovered_peers() {

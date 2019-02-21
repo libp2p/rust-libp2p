@@ -21,7 +21,7 @@
 //! Contains methods that handle the DNS encoding and decoding capabilities not available in the
 //! `dns_parser` library.
 
-use crate::{META_QUERY_SERVICE, SERVICE_NAME};
+use crate::{META_QUERY_SERVICE, SERVICE_NAME, LEGACY_SERVICE_NAME_GO, LEGACY_SERVICE_NAME_JS};
 use data_encoding;
 use libp2p_core::{Multiaddr, PeerId};
 use rand;
@@ -214,7 +214,7 @@ pub fn build_query_response(
     id: u16,
     peer_id: PeerId,
     addresses: impl ExactSizeIterator<Item = Multiaddr>,
-    ttl: Duration,
+    ttl: Duration
 ) -> Result<Vec<u8>, MdnsResponseError> {
     // Convert the TTL into seconds.
     let ttl = duration_to_secs(ttl);
@@ -274,6 +274,7 @@ pub fn build_query_response(
 
     Ok(out)
 }
+
 
 /// Builds the response to the DNS query.
 pub fn build_service_discovery_response(id: u16, ttl: Duration) -> Vec<u8> {

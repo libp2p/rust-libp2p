@@ -249,7 +249,7 @@ where
                             if let Some(new_addr) = params.nat_traversal(&addr, &observed) {
                                 addrs.push(new_addr);
                             }
-                            addrs.push(addr);
+                            addrs.push(addr.clone());
                         }
 
                         for addr in addrs {
