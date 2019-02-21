@@ -211,7 +211,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
             // To be interoperable with the go-implementation this is treated as a 64-bit
             // big-endian uint.
             sequence_number: rand::random::<[u8; 8]>().to_vec(),
-            topics: topic.into_iter().map(|t| t.into().clone()).collect(),
+            topics: topic.into_iter().map(Into::into).collect(),
         };
 
         debug!("Publishing message: {:?}", message.id());
