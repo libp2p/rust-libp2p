@@ -555,7 +555,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
             let peer_list = self
                 .topic_peers
                 .entry(subscription.topic_hash.clone())
-                .or_insert(PeerList::new());
+                .or_insert_with(PeerList::new);
 
             match subscription.action {
                 GossipsubSubscriptionAction::Subscribe => {
