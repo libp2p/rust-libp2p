@@ -32,6 +32,10 @@
 
 /// Hardcoded name of the mDNS service. Part of the mDNS libp2p specifications.
 const SERVICE_NAME: &[u8] = b"_p2p._udp.local";
+/// Hardcoded name of the mDNS service as used by legacy IPFS services in GO
+const LEGACY_SERVICE_NAME_GO: &[u8] = b"_ipfs-discovery._udp.local";
+/// Hardcoded name of the mDNS service as used by legacy IPFS services in JS
+const LEGACY_SERVICE_NAME_JS: &[u8] = b"ipfs.local";
 /// Hardcoded name of the service used for DNS-SD.
 const META_QUERY_SERVICE: &[u8] = b"_services._dns-sd._udp.local";
 

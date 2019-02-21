@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{SERVICE_NAME, META_QUERY_SERVICE, dns};
+use crate::{SERVICE_NAME, LEGACY_SERVICE_NAME_GO, LEGACY_SERVICE_NAME_JS, META_QUERY_SERVICE, dns};
 use dns_parser::{Packet, RData};
 use futures::{prelude::*, task};
 use libp2p_core::{Multiaddr, PeerId};
@@ -101,6 +101,8 @@ pub struct MdnsService {
     /// Note that we still need to have an interval for querying, as we need to wake up the socket
     /// regularly to recover from errors. Otherwise we could simply use an `Option<Interval>`.
     silent: bool,
+    /// Whether this will support legacy IPFS discovery
+    legacy_support: bool,
     /// Buffer used for receiving data from the main socket.
     recv_buffer: [u8; 2048],
     /// Buffers pending to send on the main socket.
@@ -113,17 +115,23 @@ impl MdnsService {
     /// Starts a new mDNS service.
     #[inline]
     pub fn new() -> io::Result<MdnsService> {
-        Self::new_inner(false)
+        Self::new_inner(false, false)
     }
 
     /// Same as `new`, but we don't send automatically send queries on the network.
     #[inline]
     pub fn silent() -> io::Result<MdnsService> {
-        Self::new_inner(true)
+        Self::new_inner(true, false)
+    }
+
+    /// Starts a new mDNS service with legacy IPFS discovery support
+    #[inline]
+    pub fn new_with_legacy() -> io::Result<MdnsService> {
+        Self::new_inner(false, true)
     }
 
     /// Starts a new mDNS service.
-    fn new_inner(silent: bool) -> io::Result<MdnsService> {
+    fn new_inner(silent: bool, legacy_support: bool) -> io::Result<MdnsService> {
         let socket = {
             #[cfg(unix)]
             fn platform_specific(s: &net2::UdpBuilder) -> io::Result<()> {
@@ -149,6 +157,7 @@ impl MdnsService {
             query_socket: UdpSocket::bind(&From::from(([0, 0, 0, 0], 0)))?,
             query_interval: Interval::new(Instant::now(), Duration::from_secs(20)),
             silent,
+            legacy_support,
             recv_buffer: [0; 2048],
             send_buffers: Vec::new(),
             query_send_buffers: Vec::new(),
@@ -165,6 +174,11 @@ impl MdnsService {
                 if !self.silent {
                     let query = dns::build_query();
                     self.query_send_buffers.push(query.to_vec());
+                    if self.legacy_support {
+                        let (q1, q2) = dns::build_legacy_queries();
+                        self.query_send_buffers.push(q1.to_vec());
+                        self.query_send_buffers.push(q2.to_vec());
+                    }
                 }
             }
             Ok(Async::NotReady) => (),

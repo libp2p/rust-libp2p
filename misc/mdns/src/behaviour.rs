@@ -60,6 +60,15 @@ impl<TSubstream> Mdns<TSubstream> {
             marker: PhantomData,
         })
     }
+    /// Builds a new `Mdns` behaviour with legacy IPFS support
+    pub fn new_with_legacy() -> io::Result<Mdns<TSubstream>> {
+        Ok(Mdns {
+            service: MdnsService::new_with_legacy()?,
+            discovered_nodes: SmallVec::new(),
+            closest_expiration: None,
+            marker: PhantomData,
+        })
+    }
 
     /// Returns true if the given `PeerId` is in the list of nodes discovered through mDNS.
     pub fn has_node(&self, peer_id: &PeerId) -> bool {
