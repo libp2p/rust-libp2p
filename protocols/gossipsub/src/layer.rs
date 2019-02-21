@@ -535,7 +535,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
     /// Handles received subscriptions.
     fn handle_received_subscriptions(
         &mut self,
-        subscriptions: &Vec<GossipsubSubscription>,
+        subscriptions: &[GossipsubSubscription],
         propagation_source: &PeerId,
     ) {
         debug!(
