@@ -142,6 +142,8 @@ pub use tokio_io;
 pub use tokio_codec;
 
 #[doc(inline)]
+pub use libp2p_bluetooth as bluetooth;
+#[doc(inline)]
 pub use libp2p_core as core;
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 #[doc(inline)]
@@ -244,7 +246,7 @@ struct CommonTransport {
 }
 
 #[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "libp2p-websocket"))]
-type InnerImplementation = core::transport::OrTransport<dns::DnsConfig<tcp::TcpConfig>, websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>>;
+type InnerImplementation = core::transport::OrTransport<core::transport::OrTransport<dns::DnsConfig<tcp::TcpConfig>, websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>>, bluetooth::BluetoothTransport>;
 #[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), not(feature = "libp2p-websocket")))]
 type InnerImplementation = dns::DnsConfig<tcp::TcpConfig>;
 #[cfg(all(any(target_os = "emscripten", target_os = "unknown"), feature = "libp2p-websocket"))]
@@ -269,6 +271,7 @@ impl CommonTransport {
             let trans_clone = transport.clone();
             transport.or_transport(websocket::WsConfig::new(trans_clone))
         };
+        let transport = transport.or_transport(bluetooth::BluetoothTransport::default())
 
         CommonTransport {
             inner: CommonTransportInner { inner: transport }
