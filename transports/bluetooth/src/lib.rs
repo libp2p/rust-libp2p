@@ -22,7 +22,7 @@
 
 use bluetooth_serial_port::BtAddr;
 use futures::{future, prelude::*};
-use libp2p_core::{Multiaddr, Transport, transport::TransportError};
+use libp2p_core::{Multiaddr, multiaddr::Protocol, Transport, transport::TransportError};
 use std::io;
 
 // TODO: yeah, no
@@ -48,9 +48,9 @@ impl Transport for BluetoothConfig {
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let addr = multiaddr_to_mac(addr)?;
+        let addr = multiaddr_to_rfcomm(addr)?;
         let mut socket = bluetooth_serial_port::BtSocket::new(bluetooth_serial_port::BtProtocol::RFCOMM).unwrap();
-        socket.connect(addr).unwrap();
+        socket.connect(bluetooth_serial_port::BtAddr(addr.0)).unwrap();
         Ok(future::ok(socket))
     }
 
@@ -60,21 +60,36 @@ impl Transport for BluetoothConfig {
 }
 
 // This type of logic should probably be moved into the multiaddr package
-fn multiaddr_to_mac<T>(addr: Multiaddr) -> Result<BtAddr, TransportError<T>> {
+fn multiaddr_to_rfcomm<T>(addr: Multiaddr) -> Result<([u8; 6], u8), TransportError<T>> {
     // TODO: TransportError::MultiaddrNotSupported(addr)
-    /*let mut iter = addr.iter();
-    let proto1 = iter.next().ok_or(())?;
-    let proto2 = iter.next().ok_or(())?;
+    let mut iter = addr.iter();
+    let proto1 = match iter.next() {
+        Some(p) => p,
+        None => return Err(TransportError::MultiaddrNotSupported(addr)),
+    };
+
+    let proto2 = match iter.next() {
+        Some(p) => p,
+        None => return Err(TransportError::MultiaddrNotSupported(addr)),
+    };
+
+    let proto3 = match iter.next() {
+        Some(p) => p,
+        None => return Err(TransportError::MultiaddrNotSupported(addr)),
+    };
 
     if iter.next().is_some() {
-        return Err(());
+        return Err(TransportError::MultiaddrNotSupported(addr));
     }
 
-    match (proto1, proto2) {
-        (Protocol::Ip4(ip), Protocol::Tcp(port)) => Ok(SocketAddr::new(ip.into(), port)),
-        (Protocol::Ip6(ip), Protocol::Tcp(port)) => Ok(SocketAddr::new(ip.into(), port)),
-        _ => Err(()),
-    }*/
-    // TODO:
-    Ok(BtAddr([0xe8, 0x07, 0xbf, 0x3f, 0x03, 0xa6]))
+    match (proto1, proto2, proto3) {
+        (Protocol::Bluetooth(mac), Protocol::L2cap(3), Protocol::Rfcomm(port)) => {
+            if port > 30 {
+                return Err(TransportError::MultiaddrNotSupported(addr));
+            }
+
+            Ok((mac, port))
+        },
+        _ => Err(TransportError::MultiaddrNotSupported(addr)),
+    }
 }
