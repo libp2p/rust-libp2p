@@ -23,7 +23,7 @@ use dns_parser::{Packet, RData, ResourceRecord};
 use futures::{prelude::*, task};
 use libp2p_core::{Multiaddr, PeerId};
 use multiaddr::Protocol;
-use std::{fmt, io, iter, net::Ipv4Addr, net::SocketAddr, str, time::Duration, time::Instant};
+use std::{fmt, io, net::Ipv4Addr, net::SocketAddr, str, time::Duration, time::Instant};
 use tokio_reactor::Handle;
 use tokio_timer::Interval;
 use tokio_udp::UdpSocket;
@@ -171,15 +171,15 @@ impl MdnsService {
         // no point in sending multiple requests in a row.
         match self.query_interval.poll() {
             Ok(Async::Ready(_)) => {
-                // if !self.silent {
-                //     let query = dns::build_query();
-                //     self.query_send_buffers.push(query.to_vec());
+                if !self.silent {
+                    let query = dns::build_query();
+                    self.query_send_buffers.push(query.to_vec());
                     if self.legacy_support {
                         let (q1, q2) = dns::build_legacy_queries();
                         self.query_send_buffers.push(q1.to_vec());
-                        // self.query_send_buffers.push(q2.to_vec());
+                        self.query_send_buffers.push(q2.to_vec());
                     }
-                // }
+                }
             }
             Ok(Async::NotReady) => (),
             _ => unreachable!("A tokio_timer::Interval never errors"), // TODO: is that true?
@@ -269,12 +269,12 @@ impl MdnsService {
                                 // writing of this code non-lexical lifetimes haven't been merged
                                 // yet, and I can't manage to write this code without having borrow
                                 // issues.
-                                println!("Unknown message received: {:?} from {:?}", packet, from);
+                                // println!("Unknown message received: {:?} from {:?}", packet, from);
                                 task::current().notify();
                                 return Async::NotReady;
                             }
                         } else {
-                            println!("Response receive: {:?} from {:?}", packet, from);
+                            // println!("Response receive: {:?} from {:?}", packet, from);
                             return Async::Ready(MdnsPacket::Response(MdnsResponse {
                                 packet,
                                 from,
@@ -500,7 +500,7 @@ impl<'a> MdnsResponse<'a> {
                         Ok(m) => m,
                         _ => return None
                     };
-                    println!("Js legacy detected peer id: {:?}", peer_id);
+                    println!("JS legacy peer detected: {:?}", addr);
                     return Some(MdnsPeer {
                         peer_id: peer_id.clone(),
                         addresses: vec![addr],
