@@ -140,3 +140,26 @@ impl Stream for BluetoothListener {
         Ok(Async::Ready(socket.map(|i| BluetoothStream { inner: i })))
     }
 }
+
+/// Service that scans nearby Bluetooth devices.
+pub struct Scan {
+    inner: platform::Scan,
+}
+
+impl Scan {
+    /// Initializes a new scan.
+    pub fn new() -> Scan {
+        Scan {}
+    }
+
+    /// Pulls the latest discovered devices.
+    ///
+    /// Note that this method doesn't cache the list of devices. The same device will be returned
+    /// regularly.
+    ///
+    /// Just like `Future::poll()`, must be executed within the context of a task. If `NotReady` is
+    /// returned, the current task is registered then notified when something is ready.
+    pub fn poll(&mut self) -> Async<Multiaddr> {
+        Async::NotReady
+    }
+}
