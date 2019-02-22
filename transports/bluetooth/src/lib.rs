@@ -122,8 +122,8 @@ mod tests {
     fn connect_to_self() {
         let config = BluetoothConfig::default();
 
-        // TODO: correct addresses
-        let listener = config.clone().listen_on("/bluetooth/34:e1:2d:90:20:bc/l2cap/3/rfcomm/5".parse().unwrap()).unwrap().0;
+        // TODO: correct addresses; also, doesn't work
+        let listener = config.clone().listen_on("/bluetooth/00:00:00:00:00:00/l2cap/3/rfcomm/5".parse().unwrap()).unwrap().0;
         let dialer = config.dial("/bluetooth/34:e1:2d:90:20:bc/l2cap/3/rfcomm/5".parse().unwrap()).unwrap();
 
         let listener = listener.into_future().map_err(|(err, _)| err).map(|(inc, _)| inc.unwrap().0).map(|_| ());
