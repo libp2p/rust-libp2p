@@ -58,6 +58,9 @@ pub struct Gossipsub<TSubstream> {
     /// Events that need to be yielded to the outside when polling.
     events: VecDeque<NetworkBehaviourAction<GossipsubRpc, GossipsubEvent>>,
 
+    // pool non-urgent control messages between heartbeats
+    control_pool: HashMap<PeerId, Vec<GossipsubControlAction>>,
+
     /// Peer id of the local node. Used for the source of the messages that we publish.
     local_peer_id: PeerId,
 
@@ -98,6 +101,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
         Gossipsub {
             config: gs_config.clone(),
             events: VecDeque::new(),
+            control_pool: HashMap::new(),
             local_peer_id,
             topic_peers: HashMap::new(),
             peer_topics: HashMap::new(),
@@ -323,16 +327,12 @@ impl<TSubstream> Gossipsub<TSubstream> {
         for peer_id in added_peers {
             // Send a GRAFT control message
             info!("JOIN: Sending Graft message to peer: {:?}", peer_id);
-            self.events.push_back(NetworkBehaviourAction::SendEvent {
-                peer_id: peer_id.clone(),
-                event: GossipsubRpc {
-                    subscriptions: Vec::new(),
-                    messages: Vec::new(),
-                    control_msgs: vec![GossipsubControlAction::Graft {
-                        topic_hash: topic_hash.clone(),
-                    }],
-                },
-            });
+            self.control_pool_add(
+                peer_id.clone(),
+                GossipsubControlAction::Graft {
+                    topic_hash: topic_hash.clone(),
+                }
+            );
             //TODO: tagPeer
         }
         debug!("Completed JOIN for topic: {:?}", topic_hash);
@@ -347,16 +347,12 @@ impl<TSubstream> Gossipsub<TSubstream> {
             for peer in peers {
                 // Send a PRUNE control message
                 info!("LEAVE: Sending PRUNE to peer: {:?}", peer);
-                self.events.push_back(NetworkBehaviourAction::SendEvent {
-                    peer_id: peer.clone(),
-                    event: GossipsubRpc {
-                        subscriptions: Vec::new(),
-                        messages: Vec::new(),
-                        control_msgs: vec![GossipsubControlAction::Prune {
-                            topic_hash: topic_hash.clone(),
-                        }],
-                    },
-                });
+                self.control_pool_add(
+                    peer.clone(),
+                    GossipsubControlAction::Prune {
+                        topic_hash: topic_hash.clone(),
+                    }
+                );
                 //TODO: untag Peer
             }
         }
@@ -391,16 +387,12 @@ impl<TSubstream> Gossipsub<TSubstream> {
         if !iwant_ids.is_empty() {
             // Send the list of IWANT control messages
             info!("IHAVE: Sending IWANT message");
-            self.events.push_back(NetworkBehaviourAction::SendEvent {
-                peer_id: peer_id.clone(),
-                event: GossipsubRpc {
-                    subscriptions: Vec::new(),
-                    messages: Vec::new(),
-                    control_msgs: vec![GossipsubControlAction::IWant {
-                        message_ids: iwant_ids.iter().cloned().collect(),
-                    }],
-                },
-            });
+            self.control_pool_add(
+                peer_id.clone(),
+                GossipsubControlAction::IWant {
+                    message_ids: iwant_ids.iter().cloned().collect(),
+                }
+            );
         }
         debug!("Completed IHAVE handling for peer: {:?}", peer_id);
     }
@@ -764,6 +756,9 @@ impl<TSubstream> Gossipsub<TSubstream> {
             self.send_graft_prune(to_graft, to_prune);
         }
 
+        // piggyback pooled control messages
+        flush_control_pool();
+
         // shift the memcache
         self.mcache.shift();
         debug!("Completed Heartbeat");
@@ -783,17 +778,13 @@ impl<TSubstream> Gossipsub<TSubstream> {
         });
         for peer in to_msg_peers {
             // send an IHAVE message
-            self.events.push_back(NetworkBehaviourAction::SendEvent {
-                peer_id: peer,
-                event: GossipsubRpc {
-                    subscriptions: Vec::new(),
-                    messages: Vec::new(),
-                    control_msgs: vec![GossipsubControlAction::IHave {
-                        topic_hash: topic_hash.clone(),
-                        message_ids: message_ids.clone(),
-                    }],
-                },
-            });
+            self.control_pool_add(
+                peer.clone(),
+                GossipsubControlAction::IHave {
+                    topic_hash: topic_hash.clone(),
+                    message_ids: message_ids.clone(),
+                }
+            );
         }
         debug!("Completed gossip");
     }
@@ -928,6 +919,31 @@ impl<TSubstream> Gossipsub<TSubstream> {
         debug!("RANDOM PEERS: Got {:?} peers", n);
 
         gossip_peers[..n].to_vec()
+    }
+
+    // adds a control action to control_pool
+    fn control_pool_add(&mut self, peer: PeerId, control: GossipsubControlAction) {
+        if !self.control_pool.contains_key(&peer) {
+            self.control_pool.insert(peer.clone(), Vec::new());
+        }
+
+        if let Some(controls) = self.control_pool.get_mut(&peer) {
+            controls.push(control.clone());
+        }
+    }
+
+    // takes each control action mapping and turns it into a message
+    fn flush_control_pool(&mut self) {
+        for (peer, controls) in self.control_pool.drain() {
+            self.events.push_back(NetworkBehaviourAction::SendEvent {
+                peer_id: peer,
+                event: GossipsubRpc {
+                    subscriptions: Vec::new(),
+                    messages: Vec::new(),
+                    control_msgs: controls
+                }
+            });
+        }
     }
 }
 
