@@ -20,13 +20,12 @@
 
 //! Implementation of the libp2p `Transport` trait for Bluetooth.
 
-use bluetooth_serial_port::BtAddr;
-use futures::{future, prelude::*};
+use futures::{future, prelude::*, try_ready};
 use libp2p_core::{Multiaddr, multiaddr::Protocol, Transport, transport::TransportError};
 use std::io;
 
-// TODO: yeah, no
-pub use bluetooth_serial_port::scan_devices;
+mod scan;
+mod sys;
 
 /// Represents the configuration for a Bluetooth transport capability for libp2p.
 #[derive(Debug, Clone, Default)]
@@ -37,25 +36,44 @@ impl BluetoothConfig {
 }
 
 impl Transport for BluetoothConfig {
-    type Output = bluetooth_serial_port::BtSocket;
+    type Output = sys::BluetoothStream;
     type Error = io::Error;
-    type Listener = futures::stream::Empty<(Self::ListenerUpgrade, Multiaddr), Self::Error>;
-    type ListenerUpgrade = futures::future::FutureResult<Self::Output, Self::Error>;
-    type Dial = futures::future::FutureResult<Self::Output, Self::Error>;
+    type Listener = BluetoothListener;
+    type ListenerUpgrade = future::FutureResult<Self::Output, Self::Error>;
+    type Dial = future::FutureResult<Self::Output, Self::Error>;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
-        Err(TransportError::MultiaddrNotSupported(addr))
+        let (mac, port) = multiaddr_to_rfcomm(addr.clone())?;       // TODO: don't clone
+        let listener = sys::BluetoothListener::bind(mac, port).map_err(TransportError::Other)?;
+        Ok((BluetoothListener { inner: listener }, addr))
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let addr = multiaddr_to_rfcomm(addr)?;
-        let mut socket = bluetooth_serial_port::BtSocket::new(bluetooth_serial_port::BtProtocol::RFCOMM).unwrap();
-        socket.connect(bluetooth_serial_port::BtAddr(addr.0)).unwrap();
+        let (mac, port) = multiaddr_to_rfcomm(addr)?;
+        let socket = sys::BluetoothStream::connect(mac, port).map_err(TransportError::Other)?;
         Ok(future::ok(socket))
     }
 
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        // TODO: ?
         None
+    }
+}
+
+pub struct BluetoothListener {
+    inner: sys::BluetoothListener,
+}
+
+impl Stream for BluetoothListener {
+    type Item = (future::FutureResult<sys::BluetoothStream, io::Error>, Multiaddr);
+    type Error = io::Error;
+
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        let socket = try_ready!(self.inner.poll());
+        Ok(Async::Ready(socket.map(|stream| {
+            let addr = "/bluetooth/34:e1:2d:90:20:bc/l2cap/3/rfcomm/10".parse().unwrap();
+            (future::ok(stream), addr)
+        })))
     }
 }
 
@@ -91,5 +109,27 @@ fn multiaddr_to_rfcomm<T>(addr: Multiaddr) -> Result<([u8; 6], u8), TransportErr
             Ok((mac, port))
         },
         _ => Err(TransportError::MultiaddrNotSupported(addr)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::BluetoothConfig;
+    use futures::prelude::*;
+    use libp2p_core::Transport;
+
+    #[test]
+    fn connect_to_self() {
+        let config = BluetoothConfig::default();
+
+        // TODO: correct addresses
+        let listener = config.clone().listen_on("/bluetooth/34:e1:2d:90:20:bc/l2cap/3/rfcomm/5".parse().unwrap()).unwrap().0;
+        let dialer = config.dial("/bluetooth/34:e1:2d:90:20:bc/l2cap/3/rfcomm/5".parse().unwrap()).unwrap();
+
+        let listener = listener.into_future().map_err(|(err, _)| err).map(|(inc, _)| inc.unwrap().0).map(|_| ());
+        let dialer = dialer.map(|_| ());
+
+        let combined = listener.select(dialer).map_err(|_| panic!()).and_then(|(_, next)| next).map(|_| ());
+        tokio::runtime::Runtime::new().unwrap().block_on(combined).unwrap();
     }
 }

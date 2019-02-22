@@ -18,7 +18,43 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-fn main() {
-    // TODO:
-    //println!("{:?}", libp2p_bluetooth::scan_devices().unwrap());
+use futures::{prelude::*, try_ready};
+use std::io;
+
+#[cfg(unix)]
+#[path = "sys/unix.rs"]
+mod platform;
+
+pub struct BluetoothStream {
+    inner: platform::BluetoothStream,
+}
+
+impl BluetoothStream {
+    pub fn connect(addr: [u8; 6], port: u8) -> io::Result<BluetoothStream> {
+        Ok(BluetoothStream {
+            inner: platform::BluetoothStream::connect(addr, port)?
+        })
+    }
+}
+
+pub struct BluetoothListener {
+    inner: platform::BluetoothListener,
+}
+
+impl BluetoothListener {
+    pub fn bind(addr: [u8; 6], port: u8) -> io::Result<BluetoothListener> {
+        Ok(BluetoothListener {
+            inner: platform::BluetoothListener::bind(addr, port)?
+        })
+    }
+}
+
+impl Stream for BluetoothListener {
+    type Item = BluetoothStream;
+    type Error = io::Error;
+
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        let socket = try_ready!(self.inner.poll());
+        Ok(Async::Ready(socket.map(|i| BluetoothStream { inner: i })))
+    }
 }

@@ -10,6 +10,11 @@ keywords = ["peer-to-peer", "libp2p", "networking", "bluetooth"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-bluetooth-serial-port = "0.5.1"
+bluetooth-serial-port = "0.5.1"     # TODO: remove
 libp2p-core = { version = "0.4.0", path = "../../core" }
 futures = "0.1"
+
+[target."cfg(unix)".dependencies]
+libc = "0.2.48"
+tokio = "0.1"
+tokio-uds = "0.2.5"
