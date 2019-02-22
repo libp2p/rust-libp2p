@@ -59,7 +59,7 @@ impl Stream for BluetoothListener {
     }
 }
 
-/*/// Service that scans nearby Bluetooth devices.
+/// Service that scans nearby Bluetooth devices.
 pub struct Scan {
     inner: platform::Scan,
 }
@@ -67,7 +67,9 @@ pub struct Scan {
 impl Scan {
     /// Initializes a new scan.
     pub fn new() -> Scan {
-        Scan {}
+        Scan {
+            inner: platform::Scan::new(),
+        }
     }
 
     /// Pulls the latest discovered devices.
@@ -77,8 +79,7 @@ impl Scan {
     ///
     /// Just like `Future::poll()`, must be executed within the context of a task. If `NotReady` is
     /// returned, the current task is registered then notified when something is ready.
-    pub fn poll(&mut self) -> Async<Multiaddr> {
-        Async::NotReady
+    pub fn poll(&mut self) -> Async<([u8; 6], u8)> {
+        self.inner.poll()
     }
-}*/
-
+}
