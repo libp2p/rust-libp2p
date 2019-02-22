@@ -24,7 +24,7 @@ use futures::{future, prelude::*, try_ready};
 use libp2p_core::{Multiaddr, multiaddr::Protocol, Transport, transport::TransportError};
 use std::io;
 
-mod scan;
+//mod scan;
 mod sys;
 
 /// Represents the configuration for a Bluetooth transport capability for libp2p.

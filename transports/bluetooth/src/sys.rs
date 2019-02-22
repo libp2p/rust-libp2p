@@ -59,7 +59,7 @@ impl Stream for BluetoothListener {
     }
 }
 
-/// Service that scans nearby Bluetooth devices.
+/*/// Service that scans nearby Bluetooth devices.
 pub struct Scan {
     inner: platform::Scan,
 }
@@ -80,5 +80,5 @@ impl Scan {
     pub fn poll(&mut self) -> Async<Multiaddr> {
         Async::NotReady
     }
-}
+}*/
 
