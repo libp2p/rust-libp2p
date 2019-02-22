@@ -211,7 +211,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
             // To be interoperable with the go-implementation this is treated as a 64-bit
             // big-endian uint.
             sequence_number: rand::random::<[u8; 8]>().to_vec(),
-            topics: topic.into_iter().map(|t| t.into().clone()).collect(),
+            topics: topic.into_iter().map(Into::into).collect(),
         };
 
         debug!("Publishing message: {:?}", message.id());
@@ -535,7 +535,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
     /// Handles received subscriptions.
     fn handle_received_subscriptions(
         &mut self,
-        subscriptions: &Vec<GossipsubSubscription>,
+        subscriptions: &[GossipsubSubscription],
         propagation_source: &PeerId,
     ) {
         debug!(
@@ -555,7 +555,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
             let peer_list = self
                 .topic_peers
                 .entry(subscription.topic_hash.clone())
-                .or_insert(PeerList::new());
+                .or_insert_with(PeerList::new);
 
             match subscription.action {
                 GossipsubSubscriptionAction::Subscribe => {
