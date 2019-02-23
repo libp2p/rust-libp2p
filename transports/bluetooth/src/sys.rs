@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::Addr;
 use futures::{prelude::*, try_ready};
 use std::io;
 
@@ -30,7 +31,7 @@ pub struct BluetoothStream {
 }
 
 impl BluetoothStream {
-    pub fn connect(addr: [u8; 6], port: u8) -> io::Result<BluetoothStream> {
+    pub fn connect(addr: Addr, port: u8) -> io::Result<BluetoothStream> {
         Ok(BluetoothStream {
             inner: platform::BluetoothStream::connect(addr, port)?
         })
@@ -42,7 +43,7 @@ pub struct BluetoothListener {
 }
 
 impl BluetoothListener {
-    pub fn bind(addr: [u8; 6], port: u8) -> io::Result<BluetoothListener> {
+    pub fn bind(addr: Addr, port: u8) -> io::Result<BluetoothListener> {
         Ok(BluetoothListener {
             inner: platform::BluetoothListener::bind(addr, port)?
         })
@@ -66,12 +67,13 @@ pub struct Scan {
 
 impl Scan {
     /// Initializes a new scan.
-    pub fn new() -> Scan {
-        Scan {
-            inner: platform::Scan::new(),
-        }
+    pub fn new() -> Result<Scan, io::Error> {
+        Ok(Scan {
+            inner: platform::Scan::new()?,
+        })
     }
 
+    // TODO: wrong doc
     /// Pulls the latest discovered devices.
     ///
     /// Note that this method doesn't cache the list of devices. The same device will be returned
@@ -79,7 +81,9 @@ impl Scan {
     ///
     /// Just like `Future::poll()`, must be executed within the context of a task. If `NotReady` is
     /// returned, the current task is registered then notified when something is ready.
-    pub fn poll(&mut self) -> Async<([u8; 6], u8)> {
+    pub fn poll(&mut self) -> Poll<Option<Addr>, io::Error> {
         self.inner.poll()
     }
 }
+
+// TODO: test that things don't panic or crash or whatever

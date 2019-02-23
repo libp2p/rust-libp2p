@@ -18,7 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use futures::prelude::*;
+
 fn main() {
-    // TODO:
-    //println!("{:?}", libp2p_bluetooth::scan_devices().unwrap());
+    let mut scan = libp2p_bluetooth::sys::Scan::new().unwrap();
+    let future = futures::stream::poll_fn(move || scan.poll())
+        .for_each(|elem| { println!("{:?}", elem); Ok(()) })
+        .map_err(|err| println!("{:?}", err));
+    tokio::run(future);
 }

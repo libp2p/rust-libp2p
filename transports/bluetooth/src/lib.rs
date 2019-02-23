@@ -24,8 +24,11 @@ use futures::{future, prelude::*, try_ready};
 use libp2p_core::{Multiaddr, multiaddr::Protocol, Transport, transport::TransportError};
 use std::io;
 
+mod addr;
 //mod scan;
-mod sys;
+pub mod sys; // TODO: not pub
+
+pub use self::addr::Addr;
 
 /// Represents the configuration for a Bluetooth transport capability for libp2p.
 #[derive(Debug, Clone, Default)]
@@ -78,7 +81,7 @@ impl Stream for BluetoothListener {
 }
 
 // This type of logic should probably be moved into the multiaddr package
-fn multiaddr_to_rfcomm<T>(addr: Multiaddr) -> Result<([u8; 6], u8), TransportError<T>> {
+fn multiaddr_to_rfcomm<T>(addr: Multiaddr) -> Result<(Addr, u8), TransportError<T>> {
     // TODO: TransportError::MultiaddrNotSupported(addr)
     let mut iter = addr.iter();
     let proto1 = match iter.next() {
@@ -106,7 +109,7 @@ fn multiaddr_to_rfcomm<T>(addr: Multiaddr) -> Result<([u8; 6], u8), TransportErr
                 return Err(TransportError::MultiaddrNotSupported(addr));
             }
 
-            Ok((mac, port))
+            Ok((Addr::from_big_endian(mac), port))
         },
         _ => Err(TransportError::MultiaddrNotSupported(addr)),
     }
@@ -124,7 +127,7 @@ mod tests {
 
         // TODO: correct addresses; also, doesn't work
         let listener = config.clone().listen_on("/bluetooth/00:00:00:00:00:00/l2cap/3/rfcomm/5".parse().unwrap()).unwrap().0;
-        let dialer = config.dial("/bluetooth/34:e1:2d:90:20:bc/l2cap/3/rfcomm/5".parse().unwrap()).unwrap();
+        let dialer = config.dial("/bluetooth/00:00:00:FF:FF:FF/l2cap/3/rfcomm/5".parse().unwrap()).unwrap();
 
         let listener = listener.into_future().map_err(|(err, _)| err).map(|(inc, _)| inc.unwrap().0).map(|_| ());
         let dialer = dialer.map(|_| ());

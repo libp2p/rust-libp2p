@@ -18,43 +18,41 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::Addr;
 use futures::{prelude::*, try_ready};
 use std::{io, mem, os::unix::io::FromRawFd};
 
-#[repr(C)]
-#[derive(Copy, Debug, Clone)]
-struct sockaddr_rc {
-    rc_family: libc::sa_family_t,
-    rc_bdaddr: [u8; 6],
-    rc_channel: u8,
-}
+mod ffi;
+mod hci_scan;
+
+pub use self::hci_scan::HciScan as Scan;
 
 pub struct BluetoothStream {
     inner: tokio_uds::UnixStream,
 }
 
 impl BluetoothStream {
-    pub fn connect(dest: [u8; 6], port: u8) -> Result<BluetoothStream, io::Error> {
+    pub fn connect(dest: Addr, port: u8) -> Result<BluetoothStream, io::Error> {
         let socket = unsafe {
             let socket = libc::socket(
                 libc::AF_BLUETOOTH,
                 libc::SOCK_STREAM | libc::SOCK_CLOEXEC | libc::SOCK_NONBLOCK,
-                3 /* BTPROTO_RFCOMM */
+                ffi::BTPROTO_RFCOMM
             );
 
             if socket == -1 {
                 return Err(io::Error::last_os_error());
             }
 
-            let params = sockaddr_rc {
+            let params = ffi::sockaddr_rc {
                 rc_family: libc::AF_BLUETOOTH as u16,
-                rc_bdaddr: dest,
+                rc_bdaddr: ffi::bdaddr_t { b: dest.to_little_endian() },
                 rc_channel: port,
             };
 
             let status = libc::connect(
                 socket,
-                &params as *const sockaddr_rc as *const _,
+                &params as *const ffi::sockaddr_rc as *const _,
                 mem::size_of_val(&params) as u32
             );
 
@@ -84,27 +82,27 @@ pub struct BluetoothListener {
 }
 
 impl BluetoothListener {
-    pub fn bind(dest: [u8; 6], port: u8) -> Result<BluetoothListener, io::Error> {
+    pub fn bind(dest: Addr, port: u8) -> Result<BluetoothListener, io::Error> {
         let socket = unsafe {
             let socket = libc::socket(
                 libc::AF_BLUETOOTH,
                 libc::SOCK_STREAM | libc::SOCK_NONBLOCK | libc::SOCK_CLOEXEC,
-                3 /* BTPROTO_RFCOMM */
+                ffi::BTPROTO_RFCOMM
             );
 
             if socket == -1 {
                 return Err(io::Error::last_os_error());
             }
 
-            let params = sockaddr_rc {
+            let params = ffi::sockaddr_rc {
                 rc_family: libc::AF_BLUETOOTH as u16,
-                rc_bdaddr: dest,
+                rc_bdaddr: ffi::bdaddr_t { b: dest.to_little_endian() },
                 rc_channel: port,
             };
 
             let status = libc::bind(
                 socket,
-                &params as *const sockaddr_rc as *const _,
+                &params as *const ffi::sockaddr_rc as *const _,
                 mem::size_of_val(&params) as u32
             );
 
@@ -138,28 +136,5 @@ impl Stream for BluetoothListener {
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         let socket = try_ready!(self.inner.poll());
         Ok(Async::Ready(socket.map(|i| BluetoothStream { inner: i })))
-    }
-}
-
-/// Service that scans nearby Bluetooth devices.
-pub struct Scan {
-
-}
-
-impl Scan {
-    /// Initializes a new scan.
-    pub fn new() -> Scan {
-        Scan {}
-    }
-
-    /// Pulls the latest discovered devices.
-    ///
-    /// Note that this method doesn't cache the list of devices. The same device will be returned
-    /// regularly.
-    ///
-    /// Just like `Future::poll()`, must be executed within the context of a task. If `NotReady` is
-    /// returned, the current task is registered then notified when something is ready.
-    pub fn poll(&mut self) -> Async<([u8; 6], u8)> {
-        Async::NotReady
     }
 }
