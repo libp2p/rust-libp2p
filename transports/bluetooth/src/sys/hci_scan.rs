@@ -19,9 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::Addr;
-use super::{ffi, hci_socket::HciSocket};
+use super::hci_socket::HciSocket;
 use futures::{prelude::*, sync::oneshot};
-use std::{io, mem, ptr};
+use std::{io, thread, time::Duration};
 
 /// Request to the HCI for the list of nearby Bluetooth devices.
 pub struct HciScan {
@@ -73,10 +73,12 @@ impl HciScan {
 }
 
 fn start_thread(sender: oneshot::Sender<Result<Vec<Addr>, io::Error>>) {
-    let _ = sender.send(query());
+    thread::spawn(move || {
+        let _ = sender.send(query());
+    });
 }
 
 fn query() -> Result<Vec<Addr>, io::Error> {
     let socket = HciSocket::new()?;
-    socket.inquiry()
+    socket.inquiry(Duration::from_secs(10))
 }

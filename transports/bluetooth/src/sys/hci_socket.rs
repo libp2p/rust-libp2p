@@ -20,8 +20,9 @@
 
 use crate::Addr;
 use super::ffi;
-use std::{io, mem, os::raw::{c_int, c_ulong}, ptr};
+use std::{io, mem, os::raw::{c_int, c_ulong}, time::Duration};
 
+/// Socket to the Bluetooth controller. Allows performing requests to it.
 pub struct HciSocket {
     socket: c_int,
 }
@@ -80,7 +81,7 @@ impl HciSocket {
     }
 
     /// Performs a scan of the nearby devices.
-    pub fn inquiry(&self) -> Result<Vec<Addr>, io::Error> {
+    pub fn inquiry(&self, timeout: Duration) -> Result<Vec<Addr>, io::Error> {
         unsafe {
             // TODO: code actually calls getroute normally
             let dev_id = self.for_each_dev()?.into_iter().next().expect("test");  // TODO: don't unwrap
@@ -96,7 +97,11 @@ impl HciSocket {
             (*req).dev_id = dev_id as u16;
             (*req).flags = ffi::IREQ_CACHE_FLUSH as u16;
             (*req).lap = [0x33, 0x8b, 0x9e];
-            (*req).length = 8;     // Timeout; the actual timeout is 1.28 times this value, don't ask me why
+            // Timeout; the actual timeout is 1.28 times this value, don't ask me why.
+            (*req).length = {
+                let s = timeout.as_millis().saturating_mul(25) / 32 / 1000;
+                if s > 255 { 255 } else { s as u8 }
+            };
             (*req).num_rsp = num_results;
 
             self.ioctl1(ffi::HCIINQUIRY, req)?;
