@@ -25,103 +25,33 @@ use std::{ffi::CStr, io, mem, os::unix::io::FromRawFd};
 mod ffi;
 mod hci_scan;
 mod sdp;
+mod socket;
 
 pub use self::hci_scan::HciScan as Scan;
 
 pub struct BluetoothStream {
-    inner: tokio_uds::UnixStream,
+    inner: tokio_reactor::PollEvented<socket::BluetoothSocket>,
 }
 
 impl BluetoothStream {
     pub fn connect(dest: Addr, port: u8) -> Result<BluetoothStream, io::Error> {
-        let socket = unsafe {
-            let socket = libc::socket(
-                libc::AF_BLUETOOTH,
-                libc::SOCK_STREAM | libc::SOCK_CLOEXEC,// TODO: | libc::SOCK_NONBLOCK,
-                ffi::BTPROTO_RFCOMM
-            );
-
-            if socket == -1 {
-                return Err(io::Error::last_os_error());
-            }
-
-            let params = ffi::sockaddr_rc {
-                rc_family: libc::AF_BLUETOOTH as u16,
-                rc_bdaddr: ffi::bdaddr_t { b: dest.to_little_endian() },
-                rc_channel: port,
-            };
-
-            let status = libc::connect(
-                socket,
-                &params as *const ffi::sockaddr_rc as *const _,
-                mem::size_of_val(&params) as u32
-            );
-
-            if status == -1 {
-                let err = io::Error::last_os_error();
-                println!("dial err: {:?}", err);
-                // TODO: handle?
-                /*if err.kind() != io::ErrorKind::WouldBlock {
-                    libc::close(socket);
-                    return Err(io::Error::last_os_error());
-                }*/
-            }
-
-            std::os::unix::net::UnixStream::from_raw_fd(socket)
-        };
-
-        tokio_uds::UnixStream::from_std(socket, &Default::default())
-            .map(|inner| {
-                BluetoothStream {
-                    inner
-                }
-            })
+        let socket = socket::BluetoothSocket::new()?;
+        socket.connect(dest, port)?;
+        Ok(BluetoothStream {
+            inner: tokio_reactor::PollEvented::new(socket)
+        })
     }
 }
 
 pub struct BluetoothListener {
-    inner: tokio_uds::Incoming,
+    inner: tokio_reactor::PollEvented<socket::BluetoothSocket>,
     sdp_registration: Option<sdp::SdpRegistration>,
 }
 
 impl BluetoothListener {
     pub fn bind(dest: Addr, port: u8) -> Result<BluetoothListener, io::Error> {
-        let socket = unsafe {
-            let socket = libc::socket(
-                libc::AF_BLUETOOTH,
-                libc::SOCK_STREAM | libc::SOCK_NONBLOCK | libc::SOCK_CLOEXEC,
-                ffi::BTPROTO_RFCOMM
-            );
-
-            if socket == -1 {
-                return Err(io::Error::last_os_error());
-            }
-
-            let params = ffi::sockaddr_rc {
-                rc_family: libc::AF_BLUETOOTH as u16,
-                rc_bdaddr: ffi::bdaddr_t { b: dest.to_little_endian() },
-                rc_channel: port,
-            };
-
-            let status = libc::bind(
-                socket,
-                &params as *const ffi::sockaddr_rc as *const _,
-                mem::size_of_val(&params) as u32
-            );
-
-            if status == -1 {
-                libc::close(socket);
-                return Err(io::Error::last_os_error());
-            }
-
-            let status = libc::listen(socket, 8);       // TODO: allow configuring this 8
-            if status == -1 {
-                libc::close(socket);
-                return Err(io::Error::last_os_error());
-            }
-
-            std::os::unix::net::UnixListener::from_raw_fd(socket)
-        };
+        let socket = socket::BluetoothSocket::new()?;
+        socket.bind(dest, port)?;
 
         let sdp_registration = sdp::register(sdp::RegisterConfig {
             uuid: [0x0, 0x0, 0x0, 0xABCD],
@@ -131,13 +61,10 @@ impl BluetoothListener {
             service_prov: CStr::from_bytes_with_nul(b"rust-libp2p\0").expect("Always ends with 0"),
         }).ok();
 
-        tokio_uds::UnixListener::from_std(socket, &Default::default())
-            .map(|inner| {
-                BluetoothListener {
-                    inner: inner.incoming(),
-                    sdp_registration,
-                }
-            })
+        Ok(BluetoothListener {
+            inner: tokio_reactor::PollEvented::new(socket),
+            sdp_registration,
+        })
     }
 }
 
@@ -146,7 +73,18 @@ impl Stream for BluetoothListener {
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let socket = try_ready!(self.inner.poll());
-        Ok(Async::Ready(socket.map(|i| BluetoothStream { inner: i })))
+        let ready = mio::Ready::readable();
+        try_ready!(self.inner.poll_read_ready(ready));
+
+        match self.inner.get_ref().accept() {
+            Ok((client, addr)) => Ok(Async::Ready(Some(BluetoothStream {
+                inner: tokio_reactor::PollEvented::new(client)
+            }))),
+            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                self.inner.clear_read_ready(ready)?;
+                Ok(Async::NotReady)
+            }
+            Err(e) => Err(e),
+        }
     }
 }
