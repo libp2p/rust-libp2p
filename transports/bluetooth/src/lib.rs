@@ -31,11 +31,17 @@ pub mod sys; // TODO: not pub
 pub use self::addr::Addr;
 
 /// Represents the configuration for a Bluetooth transport capability for libp2p.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct BluetoothConfig {
+    register_sdp: bool,
 }
 
-impl BluetoothConfig {
+impl Default for BluetoothConfig {
+    fn default() -> BluetoothConfig {
+        BluetoothConfig {
+            register_sdp: true,
+        }
+    }
 }
 
 impl Transport for BluetoothConfig {

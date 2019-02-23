@@ -67,6 +67,7 @@ pub struct Scan {
 
 impl Scan {
     /// Initializes a new scan.
+    // TODO: change API to have scan() instead
     pub fn new() -> Result<Scan, io::Error> {
         Ok(Scan {
             inner: platform::Scan::new()?,

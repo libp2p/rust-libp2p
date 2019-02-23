@@ -24,6 +24,7 @@ use std::{io, mem, os::unix::io::FromRawFd};
 
 mod ffi;
 mod hci_scan;
+mod sdp;
 
 pub use self::hci_scan::HciScan as Scan;
 
