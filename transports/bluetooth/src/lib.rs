@@ -25,6 +25,7 @@ use libp2p_core::{Multiaddr, multiaddr::Protocol, Transport, transport::Transpor
 use std::{io, iter};
 
 mod addr;
+mod discoverable;
 //mod scan;
 pub mod sys; // TODO: not pub
 
@@ -49,7 +50,7 @@ impl Transport for BluetoothConfig {
     type Error = io::Error;
     type Listener = BluetoothListener;
     type ListenerUpgrade = future::FutureResult<Self::Output, Self::Error>;
-    type Dial = future::FutureResult<Self::Output, Self::Error>;
+    type Dial = sys::BluetoothStreamFuture;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
         let (mac, port) = multiaddr_to_rfcomm(addr.clone())?;       // TODO: don't clone
@@ -59,8 +60,7 @@ impl Transport for BluetoothConfig {
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let (mac, port) = multiaddr_to_rfcomm(addr)?;
-        let socket = sys::BluetoothStream::connect(mac, port).map_err(TransportError::Other)?;
-        Ok(future::ok(socket))
+        Ok(sys::BluetoothStream::connect(mac, port))
     }
 
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {

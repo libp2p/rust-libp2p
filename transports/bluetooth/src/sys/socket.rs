@@ -31,7 +31,7 @@ impl BluetoothSocket {
         let socket = unsafe {
             libc::socket(
                 libc::AF_BLUETOOTH,
-                libc::SOCK_STREAM | libc::SOCK_CLOEXEC,// TODO: | libc::SOCK_NONBLOCK,
+                libc::SOCK_STREAM | libc::SOCK_CLOEXEC | libc::SOCK_NONBLOCK,
                 ffi::BTPROTO_RFCOMM
             )
         };
@@ -69,13 +69,6 @@ impl BluetoothSocket {
                 }*/
             }
 
-            // TODO: set to non-block at initialization instead
-            let mut nonblocking = 1;
-            let res = libc::ioctl(self.socket, libc::FIONBIO, &mut nonblocking);
-            if res == -1 {
-                return Err(io::Error::last_os_error());
-            }
-
             Ok(())
         }
     }
@@ -103,13 +96,6 @@ impl BluetoothSocket {
                 return Err(io::Error::last_os_error());
             }
 
-            // TODO: set to non-block at initialization instead
-            let mut nonblocking = 1;
-            let res = libc::ioctl(self.socket, libc::FIONBIO, &mut nonblocking);
-            if res == -1 {
-                return Err(io::Error::last_os_error());
-            }
-
             Ok(())
         }
     }
@@ -117,20 +103,14 @@ impl BluetoothSocket {
     pub fn accept(&self) -> Result<(BluetoothSocket, Addr), io::Error> {
         unsafe {
             let mut out_addr: ffi::sockaddr_rc = mem::zeroed();
-            let client = libc::accept(
+            let client = libc::accept4(
                 self.socket,
                 &mut out_addr as *mut _ as *mut _,
-                &mut mem::size_of_val(&out_addr) as *mut _ as *mut _
+                &mut mem::size_of_val(&out_addr) as *mut _ as *mut _,
+                libc::SOCK_NONBLOCK | libc::SOCK_CLOEXEC
             );
 
             if client == -1 {
-                return Err(io::Error::last_os_error());
-            }
-
-            // TODO: set to non-block at initialization instead, if possible?
-            let mut nonblocking = 1;
-            let res = libc::ioctl(client, libc::FIONBIO, &mut nonblocking);
-            if res == -1 {
                 return Err(io::Error::last_os_error());
             }
 

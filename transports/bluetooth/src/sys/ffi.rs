@@ -20,6 +20,7 @@
 
 use std::os::raw::{c_char, c_int, c_long, c_void};
 
+pub const BTPROTO_HCI: i32 = 0x1;
 pub const BTPROTO_RFCOMM: i32 = 0x3;
 pub const IREQ_CACHE_FLUSH: i64 = 0x1;
 pub const PUBLIC_BROWSE_GROUP: u16 = 0x1002;
@@ -33,6 +34,9 @@ pub const L2CAP_UUID: u16 = 0x0100;
 pub const RFCOMM_UUID: u16 = 0x0003;
 pub const BDADDR_ANY: bdaddr_t = bdaddr_t { b: [0, 0, 0, 0, 0, 0] };
 pub const BDADDR_LOCAL: bdaddr_t = bdaddr_t { b: [0, 0, 0, 0xff, 0xff, 0xff] };
+pub const HCISETSCAN: u64 = 0x400448dd;
+pub const SCAN_INQUIRY: u32 = 0x01;
+pub const SCAN_PAGE: u32 = 0x02;
 
 #[repr(C)]
 #[derive(Copy, Debug, Clone)]
@@ -128,6 +132,12 @@ pub union sdp_data_val {
     uuid: uuid_t,
     string: *const c_char,
     dataseq: *const sdp_data_t,
+}
+
+#[repr(C)]
+pub struct hci_dev_req {
+    pub dev_id: u16,
+    pub dev_opt: u32,
 }
 
 // TODO: build script instead

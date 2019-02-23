@@ -20,9 +20,9 @@
 
 use crate::Addr;
 use futures::{prelude::*, try_ready};
-use std::{ffi::CStr, io};
+use std::{ffi::CStr, io, mem};
 
-mod ffi;
+pub mod ffi;        // TODO: not pub
 mod hci_scan;
 mod sdp;
 mod socket;
@@ -34,12 +34,58 @@ pub struct BluetoothStream {
 }
 
 impl BluetoothStream {
-    pub fn connect(dest: Addr, port: u8) -> Result<BluetoothStream, io::Error> {
-        let socket = socket::BluetoothSocket::new()?;
-        socket.connect(dest, port)?;
-        Ok(BluetoothStream {
-            inner: tokio_reactor::PollEvented::new(socket)
-        })
+    pub fn connect(dest: Addr, port: u8) -> BluetoothStreamFuture {
+        let socket = match socket::BluetoothSocket::new() {
+            Ok(s) => s,
+            Err(err) => return BluetoothStreamFuture {
+                inner: BluetoothStreamFutureInner::Error(err)
+            },
+        };
+
+        match socket.connect(dest, port) {
+            Ok(s) => s,
+            Err(err) => return BluetoothStreamFuture {
+                inner: BluetoothStreamFutureInner::Error(err)
+            },
+        };
+
+        BluetoothStreamFuture {
+            inner: BluetoothStreamFutureInner::Waiting(tokio_reactor::PollEvented::new(socket))
+        }
+    }
+}
+
+pub struct BluetoothStreamFuture {
+    inner: BluetoothStreamFutureInner,
+}
+
+enum BluetoothStreamFutureInner {
+    Waiting(tokio_reactor::PollEvented<socket::BluetoothSocket>),
+    Error(io::Error),
+    Finished,
+}
+
+impl Future for BluetoothStreamFuture {
+    type Item = BluetoothStream;
+    type Error = io::Error;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        match mem::replace(&mut self.inner, BluetoothStreamFutureInner::Finished) {
+            BluetoothStreamFutureInner::Waiting(socket) => match socket.poll_write_ready() {
+                Ok(Async::Ready(_)) => {
+                    Ok(Async::Ready(BluetoothStream {
+                        inner: socket,
+                    }))
+                }
+                Ok(Async::NotReady) => {
+                    self.inner = BluetoothStreamFutureInner::Waiting(socket);
+                    Ok(Async::NotReady)
+                }
+                Err(err) => Err(err),
+            },
+            BluetoothStreamFutureInner::Error(err) => Err(err),
+            BluetoothStreamFutureInner::Finished => panic!("future polled after finished"),
+        }
     }
 }
 

@@ -24,17 +24,33 @@ use std::io;
 
 #[cfg(unix)]
 #[path = "sys/unix.rs"]
-mod platform;
+pub mod platform;       // TODO: not pub
 
 pub struct BluetoothStream {
     inner: platform::BluetoothStream,
 }
 
 impl BluetoothStream {
-    pub fn connect(addr: Addr, port: u8) -> io::Result<BluetoothStream> {
-        Ok(BluetoothStream {
-            inner: platform::BluetoothStream::connect(addr, port)?
-        })
+    pub fn connect(addr: Addr, port: u8) -> BluetoothStreamFuture {
+        BluetoothStreamFuture {
+            inner: platform::BluetoothStream::connect(addr, port)
+        }
+    }
+}
+
+pub struct BluetoothStreamFuture {
+    inner: platform::BluetoothStreamFuture,
+}
+
+impl Future for BluetoothStreamFuture {
+    type Item = BluetoothStream;
+    type Error = io::Error;
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let socket = try_ready!(self.inner.poll());
+        Ok(Async::Ready(BluetoothStream {
+            inner: socket,
+        }))
     }
 }
 
@@ -70,6 +86,7 @@ pub struct BluetoothListener {
 
 impl BluetoothListener {
     pub fn bind(addr: Addr, port: u8) -> io::Result<BluetoothListener> {
+        crate::discoverable::enable_discoverable(&addr)?;
         Ok(BluetoothListener {
             inner: platform::BluetoothListener::bind(addr, port)?
         })
