@@ -20,7 +20,7 @@
 
 use crate::Addr;
 use futures::{prelude::*, try_ready};
-use std::{ffi::CStr, io, mem, os::unix::io::FromRawFd};
+use std::{ffi::CStr, io};
 
 mod ffi;
 mod hci_scan;
@@ -43,6 +43,22 @@ impl BluetoothStream {
     }
 }
 
+impl io::Read for BluetoothStream {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
+        self.inner.read(buf)
+    }
+}
+
+impl io::Write for BluetoothStream {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
+        self.inner.write(buf)
+    }
+
+    fn flush(&mut self) -> Result<(), io::Error> {
+        self.inner.flush()
+    }
+}
+
 pub struct BluetoothListener {
     inner: tokio_reactor::PollEvented<socket::BluetoothSocket>,
     sdp_registration: Option<sdp::SdpRegistration>,
@@ -50,6 +66,8 @@ pub struct BluetoothListener {
 
 impl BluetoothListener {
     pub fn bind(dest: Addr, port: u8) -> Result<BluetoothListener, io::Error> {
+        // TODO: make the controller discoverable (https://stackoverflow.com/questions/30058715/bluez-hci-api-to-make-the-host-discoverable)
+
         let socket = socket::BluetoothSocket::new()?;
         socket.bind(dest, port)?;
 

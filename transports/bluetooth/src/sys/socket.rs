@@ -20,7 +20,7 @@
 
 use super::ffi;
 use crate::Addr;
-use std::{io, mem, os::raw::c_int};
+use std::{io, mem, os::raw::c_int, os::raw::c_void};
 
 pub struct BluetoothSocket {
     socket: c_int,
@@ -120,6 +120,34 @@ impl BluetoothSocket {
 
             Ok((client, addr))
         }
+    }
+}
+
+impl io::Read for BluetoothSocket {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
+        unsafe {
+            let ret = libc::read(self.socket, buf.as_mut_ptr() as *mut c_void, buf.len());
+            if ret == -1 {
+                return Err(io::Error::last_os_error())
+            }
+            Ok(ret as usize)
+        }
+    }
+}
+
+impl io::Write for BluetoothSocket {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
+        unsafe {
+            let ret = libc::write(self.socket, buf.as_ptr() as *mut c_void, buf.len());
+            if ret == -1 {
+                return Err(io::Error::last_os_error())
+            }
+            Ok(ret as usize)
+        }
+    }
+
+    fn flush(&mut self) -> Result<(), io::Error> {
+        Ok(())
     }
 }
 
