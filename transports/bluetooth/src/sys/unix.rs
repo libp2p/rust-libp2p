@@ -25,18 +25,18 @@ use std::{ffi::CStr, io, mem};
 pub mod ffi;        // TODO: not pub
 mod hci_scan;
 mod hci_socket;
+mod rfcomm;
 mod sdp;
-mod socket;
 
 pub use self::hci_scan::HciScan as Scan;
 
 pub struct BluetoothStream {
-    inner: tokio_reactor::PollEvented<socket::BluetoothSocket>,
+    inner: tokio_reactor::PollEvented<rfcomm::RfcommSocket>,
 }
 
 impl BluetoothStream {
     pub fn connect(dest: Addr, port: u8) -> BluetoothStreamFuture {
-        let socket = match socket::BluetoothSocket::new() {
+        let socket = match rfcomm::RfcommSocket::new() {
             Ok(s) => s,
             Err(err) => return BluetoothStreamFuture {
                 inner: BluetoothStreamFutureInner::Error(err)
@@ -61,7 +61,7 @@ pub struct BluetoothStreamFuture {
 }
 
 enum BluetoothStreamFutureInner {
-    Waiting(tokio_reactor::PollEvented<socket::BluetoothSocket>),
+    Waiting(tokio_reactor::PollEvented<rfcomm::RfcommSocket>),
     Error(io::Error),
     Finished,
 }
@@ -117,7 +117,7 @@ impl tokio_io::AsyncWrite for BluetoothStream {
 }
 
 pub struct BluetoothListener {
-    inner: tokio_reactor::PollEvented<socket::BluetoothSocket>,
+    inner: tokio_reactor::PollEvented<rfcomm::RfcommSocket>,
     sdp_registration: Option<sdp::SdpRegistration>,
 }
 
@@ -125,7 +125,7 @@ impl BluetoothListener {
     pub fn bind(dest: Addr, port: u8) -> Result<BluetoothListener, io::Error> {
         // TODO: make the controller discoverable (https://stackoverflow.com/questions/30058715/bluez-hci-api-to-make-the-host-discoverable)
 
-        let socket = socket::BluetoothSocket::new()?;
+        let socket = rfcomm::RfcommSocket::new()?;
         socket.bind(dest, port)?;
 
         let sdp_registration = sdp::register(sdp::RegisterConfig {

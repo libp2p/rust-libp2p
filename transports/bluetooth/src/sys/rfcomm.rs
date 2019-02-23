@@ -22,12 +22,12 @@ use super::ffi;
 use crate::Addr;
 use std::{io, mem, os::raw::c_int, os::raw::c_void};
 
-pub struct BluetoothSocket {
+pub struct RfcommSocket {
     socket: c_int,
 }
 
-impl BluetoothSocket {
-    pub fn new() -> Result<BluetoothSocket, io::Error> {
+impl RfcommSocket {
+    pub fn new() -> Result<RfcommSocket, io::Error> {
         let socket = unsafe {
             libc::socket(
                 libc::AF_BLUETOOTH,
@@ -40,7 +40,7 @@ impl BluetoothSocket {
             return Err(io::Error::last_os_error());
         }
 
-        Ok(BluetoothSocket {
+        Ok(RfcommSocket {
             socket,
         })
     }
@@ -100,7 +100,7 @@ impl BluetoothSocket {
         }
     }
 
-    pub fn accept(&self) -> Result<(BluetoothSocket, Addr), io::Error> {
+    pub fn accept(&self) -> Result<(RfcommSocket, Addr), io::Error> {
         unsafe {
             let mut out_addr: ffi::sockaddr_rc = mem::zeroed();
             let client = libc::accept4(
@@ -115,7 +115,7 @@ impl BluetoothSocket {
             }
 
             let addr = Addr::from_little_endian(out_addr.rc_bdaddr.b);
-            let client = BluetoothSocket {
+            let client = RfcommSocket {
                 socket: client,
             };
 
@@ -141,7 +141,7 @@ impl BluetoothSocket {
     }
 }
 
-impl io::Read for BluetoothSocket {
+impl io::Read for RfcommSocket {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
         unsafe {
             let ret = libc::read(self.socket, buf.as_mut_ptr() as *mut c_void, buf.len());
@@ -153,7 +153,7 @@ impl io::Read for BluetoothSocket {
     }
 }
 
-impl io::Write for BluetoothSocket {
+impl io::Write for RfcommSocket {
     fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
         unsafe {
             let ret = libc::write(self.socket, buf.as_ptr() as *mut c_void, buf.len());
@@ -169,7 +169,7 @@ impl io::Write for BluetoothSocket {
     }
 }
 
-impl mio::Evented for BluetoothSocket {
+impl mio::Evented for RfcommSocket {
     fn register(&self, poll: &mio::Poll, token: mio::Token, interest: mio::Ready, opts: mio::PollOpt) -> io::Result<()> {
         mio::unix::EventedFd(&self.socket).register(poll, token, interest, opts)
     }
@@ -183,7 +183,7 @@ impl mio::Evented for BluetoothSocket {
     }
 }
 
-impl Drop for BluetoothSocket {
+impl Drop for RfcommSocket {
     fn drop(&mut self) {
         unsafe {
             libc::close(self.socket);
