@@ -69,6 +69,13 @@ impl BluetoothSocket {
                 }*/
             }
 
+            // TODO: set to non-block at initialization instead
+            let mut nonblocking = 1;
+            let res = libc::ioctl(self.socket, libc::FIONBIO, &mut nonblocking);
+            if res == -1 {
+                return Err(io::Error::last_os_error());
+            }
+
             Ok(())
         }
     }
@@ -96,6 +103,13 @@ impl BluetoothSocket {
                 return Err(io::Error::last_os_error());
             }
 
+            // TODO: set to non-block at initialization instead
+            let mut nonblocking = 1;
+            let res = libc::ioctl(self.socket, libc::FIONBIO, &mut nonblocking);
+            if res == -1 {
+                return Err(io::Error::last_os_error());
+            }
+
             Ok(())
         }
     }
@@ -110,6 +124,13 @@ impl BluetoothSocket {
             );
 
             if client == -1 {
+                return Err(io::Error::last_os_error());
+            }
+
+            // TODO: set to non-block at initialization instead, if possible?
+            let mut nonblocking = 1;
+            let res = libc::ioctl(client, libc::FIONBIO, &mut nonblocking);
+            if res == -1 {
                 return Err(io::Error::last_os_error());
             }
 
