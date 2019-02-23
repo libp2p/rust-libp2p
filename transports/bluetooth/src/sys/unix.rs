@@ -37,7 +37,7 @@ impl BluetoothStream {
         let socket = unsafe {
             let socket = libc::socket(
                 libc::AF_BLUETOOTH,
-                libc::SOCK_STREAM | libc::SOCK_CLOEXEC | libc::SOCK_NONBLOCK,
+                libc::SOCK_STREAM | libc::SOCK_CLOEXEC,// TODO: | libc::SOCK_NONBLOCK,
                 ffi::BTPROTO_RFCOMM
             );
 
@@ -59,6 +59,7 @@ impl BluetoothStream {
 
             if status == -1 {
                 let err = io::Error::last_os_error();
+                println!("dial err: {:?}", err);
                 // TODO: handle?
                 /*if err.kind() != io::ErrorKind::WouldBlock {
                     libc::close(socket);
