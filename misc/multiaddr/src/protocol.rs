@@ -45,6 +45,7 @@ const WSS: u32 = 478;
 /// `Protocol` describes all possible multiaddress protocols.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Protocol<'a> {
+    // TODO: document whether big endian or little endian
     Bluetooth([u8; 6]),
     Dccp(u16),
     Dns4(Cow<'a, str>),

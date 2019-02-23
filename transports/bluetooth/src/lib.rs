@@ -22,7 +22,7 @@
 
 use futures::{future, prelude::*, try_ready};
 use libp2p_core::{Multiaddr, multiaddr::Protocol, Transport, transport::TransportError};
-use std::io;
+use std::{io, iter};
 
 mod addr;
 //mod scan;
@@ -79,8 +79,11 @@ impl Stream for BluetoothListener {
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         let socket = try_ready!(self.inner.poll());
-        Ok(Async::Ready(socket.map(|stream| {
-            let addr = "/bluetooth/34:e1:2d:90:20:bc/l2cap/3/rfcomm/10".parse().unwrap();
+        Ok(Async::Ready(socket.map(|(stream, addr)| {
+            let addr = iter::once(Protocol::Bluetooth(addr.to_big_endian()))
+                .chain(iter::once(Protocol::L2cap(3)))
+                .chain(iter::once(Protocol::Rfcomm(0)))
+                .collect();
             (future::ok(stream), addr)
         })))
     }

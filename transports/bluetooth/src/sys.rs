@@ -38,6 +38,32 @@ impl BluetoothStream {
     }
 }
 
+impl io::Read for BluetoothStream {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
+        self.inner.read(buf)
+    }
+}
+
+impl tokio_io::AsyncRead for BluetoothStream {
+    // TODO: specialize functions
+}
+
+impl io::Write for BluetoothStream {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
+        self.inner.write(buf)
+    }
+
+    fn flush(&mut self) -> Result<(), io::Error> {
+        self.inner.flush()
+    }
+}
+
+impl tokio_io::AsyncWrite for BluetoothStream {
+    fn shutdown(&mut self) -> Poll<(), io::Error> {
+        self.inner.shutdown()
+    }
+}
+
 pub struct BluetoothListener {
     inner: platform::BluetoothListener,
 }
@@ -51,12 +77,12 @@ impl BluetoothListener {
 }
 
 impl Stream for BluetoothListener {
-    type Item = BluetoothStream;
+    type Item = (BluetoothStream, Addr);
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         let socket = try_ready!(self.inner.poll());
-        Ok(Async::Ready(socket.map(|i| BluetoothStream { inner: i })))
+        Ok(Async::Ready(socket.map(|(i, a)| (BluetoothStream { inner: i }, a))))
     }
 }
 

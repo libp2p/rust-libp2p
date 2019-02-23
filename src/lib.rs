@@ -246,7 +246,7 @@ struct CommonTransport {
 }
 
 #[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "libp2p-websocket"))]
-type InnerImplementation = core::transport::OrTransport<core::transport::OrTransport<dns::DnsConfig<tcp::TcpConfig>, websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>>, bluetooth::BluetoothTransport>;
+type InnerImplementation = core::transport::OrTransport<core::transport::OrTransport<dns::DnsConfig<tcp::TcpConfig>, websocket::WsConfig<dns::DnsConfig<tcp::TcpConfig>>>, bluetooth::BluetoothConfig>;
 #[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), not(feature = "libp2p-websocket")))]
 type InnerImplementation = dns::DnsConfig<tcp::TcpConfig>;
 #[cfg(all(any(target_os = "emscripten", target_os = "unknown"), feature = "libp2p-websocket"))]
@@ -271,7 +271,7 @@ impl CommonTransport {
             let trans_clone = transport.clone();
             transport.or_transport(websocket::WsConfig::new(trans_clone))
         };
-        let transport = transport.or_transport(bluetooth::BluetoothTransport::default())
+        let transport = transport.or_transport(bluetooth::BluetoothConfig::default());
 
         CommonTransport {
             inner: CommonTransportInner { inner: transport }

@@ -49,6 +49,10 @@ impl io::Read for BluetoothStream {
     }
 }
 
+impl tokio_io::AsyncRead for BluetoothStream {
+    // TODO: specialize functions
+}
+
 impl io::Write for BluetoothStream {
     fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
         self.inner.write(buf)
@@ -56,6 +60,12 @@ impl io::Write for BluetoothStream {
 
     fn flush(&mut self) -> Result<(), io::Error> {
         self.inner.flush()
+    }
+}
+
+impl tokio_io::AsyncWrite for BluetoothStream {
+    fn shutdown(&mut self) -> Poll<(), io::Error> {
+        self.inner.shutdown()
     }
 }
 
@@ -87,7 +97,7 @@ impl BluetoothListener {
 }
 
 impl Stream for BluetoothListener {
-    type Item = BluetoothStream;
+    type Item = (BluetoothStream, Addr);
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
@@ -95,9 +105,12 @@ impl Stream for BluetoothListener {
         try_ready!(self.inner.poll_read_ready(ready));
 
         match self.inner.get_ref().accept() {
-            Ok((client, addr)) => Ok(Async::Ready(Some(BluetoothStream {
-                inner: tokio_reactor::PollEvented::new(client)
-            }))),
+            Ok((client, addr)) => {
+                let stream = BluetoothStream {
+                    inner: tokio_reactor::PollEvented::new(client)
+                };
+                Ok(Async::Ready(Some((stream, addr))))
+            },
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
                 self.inner.clear_read_ready(ready)?;
                 Ok(Async::NotReady)
