@@ -27,6 +27,7 @@ pub struct HciSocket {
 }
 
 impl HciSocket {
+    /// Initializes a new socket to the Bluetooth controller.
     pub fn new() -> Result<HciSocket, io::Error> {
         let socket = unsafe {
             libc::socket(
@@ -55,13 +56,34 @@ impl HciSocket {
         }
     }
 
+    // TODO: return an iterator instead?
+    pub fn for_each_dev(&self) -> Result<Vec<u16>, io::Error> {
+        unsafe {
+            let mut buf = vec![0u8; mem::size_of::<ffi::hci_dev_list_req>() + mem::size_of::<ffi::hci_dev_req>() * ffi::HCI_MAX_DEV as usize];
+            let (req, results) = buf.split_at_mut(mem::size_of::<ffi::hci_dev_list_req>());
+            let mut req: *mut ffi::hci_dev_list_req = req.as_mut_ptr() as *mut _;
+            let results: *mut ffi::hci_dev_req = results.as_mut_ptr() as *mut _;
+
+            (*req).dev_num = ffi::HCI_MAX_DEV;
+
+            self.ioctl1(ffi::HCIGETDEVLIST, req)?;
+
+            let mut out = Vec::with_capacity((*req).dev_num as usize);
+            for elem in (0..(*req).dev_num).map(|n| results.offset(n as isize)) {
+                if (*elem).dev_opt & (1 << ffi::HCI_UP) == 0 {
+                    continue;
+                }
+                out.push((*elem).dev_id);
+            }
+            Ok(out)
+        }
+    }
+
     /// Performs a scan of the nearby devices.
     pub fn inquiry(&self) -> Result<Vec<Addr>, io::Error> {
         unsafe {
-            let dev_id = ffi::hci_get_route(ptr::null_mut());
-            if dev_id == -1 {
-                return Err(io::Error::last_os_error());
-            }
+            // TODO: code actually calls getroute normally
+            let dev_id = self.for_each_dev()?.into_iter().next().expect("test");  // TODO: don't unwrap
 
             let num_results: u8 = 255;
 

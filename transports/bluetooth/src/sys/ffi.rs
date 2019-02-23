@@ -35,9 +35,12 @@ pub const RFCOMM_UUID: u16 = 0x0003;
 pub const BDADDR_ANY: bdaddr_t = bdaddr_t { b: [0, 0, 0, 0, 0, 0] };
 pub const BDADDR_LOCAL: bdaddr_t = bdaddr_t { b: [0, 0, 0, 0xff, 0xff, 0xff] };
 pub const HCISETSCAN: u64 = 0x400448dd;
+pub const HCIGETDEVLIST: u64 = 0x800448d2;
 pub const HCIINQUIRY: u64 = 0x800448f0;
+pub const HCI_MAX_DEV: u16 = 16;
 pub const SCAN_INQUIRY: u32 = 0x01;
 pub const SCAN_PAGE: u32 = 0x02;
+pub const HCI_UP: u32 = 0;
 
 #[repr(C)]
 #[derive(Copy, Debug, Clone)]
@@ -148,6 +151,29 @@ pub struct hci_inquiry_req {
     pub lap: [u8; 3],
     pub length: u8,
     pub num_rsp: u8,
+}
+
+#[repr(C)]
+pub struct hci_dev_list_req {
+    pub dev_num: u16,
+    pub dev_req: [hci_dev_req; 0],
+}
+
+#[repr(C)]
+pub struct hci_conn_list_req {
+    pub dev_id: u16,
+    pub conn_num: u16,
+    pub conn_info: [hci_conn_info; 0],
+}
+
+#[repr(C)]
+pub struct hci_conn_info {
+    pub handle: u16,
+    pub bdaddr: bdaddr_t,
+    pub ty: u8,
+    pub out: u8,
+    pub state: u16,
+    pub link_mode: u32,
 }
 
 // TODO: build script instead
