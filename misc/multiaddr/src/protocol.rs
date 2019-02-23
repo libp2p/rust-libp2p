@@ -427,7 +427,7 @@ impl<'a> fmt::Display for Protocol<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use self::Protocol::*;
         match self {
-            Bluetooth(addr) => write!(f, "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+            Bluetooth(addr) => write!(f, "/bluetooth/{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
                 addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]),
             Dccp(port) => write!(f, "/dccp/{}", port),
             Dns4(s) => write!(f, "/dns4/{}", s),
