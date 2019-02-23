@@ -134,7 +134,7 @@ impl BluetoothListener {
             service_name: CStr::from_bytes_with_nul(b"libp2p\0").expect("Always ends with 0"),
             service_desc: CStr::from_bytes_with_nul(b"libp2p entry point\0").expect("Always ends with 0"),
             service_prov: CStr::from_bytes_with_nul(b"rust-libp2p\0").expect("Always ends with 0"),
-        }).ok();
+        }).map_err(|err| { println!("sdp server error: {:?}", err); err }).ok();
 
         Ok(BluetoothListener {
             inner: tokio_reactor::PollEvented::new(socket),
