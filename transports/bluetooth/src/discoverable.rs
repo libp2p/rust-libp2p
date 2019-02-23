@@ -42,10 +42,10 @@ pub fn enable_discoverable(addr: &Addr) -> Result<(), io::Error> {
 	dbus_pending_call_set_notify(call, set_property_reply, data, g_free);
 	dbus_pending_call_unref(call);
 
-	dbus_message_unref(msg);
+	dbus_message_unref(msg);*/
 
-    unsafe {
-        let ctl = libc::socket(libc::AF_BLUETOOTH, libc::SOCK_RAW, ffi::BTPROTO_HCI);
+    /*unsafe {
+        let ctl = libc::socket(libc::AF_BLUETOOTH, libc::SOCK_RAW | libc::SOCK_CLOEXEC, ffi::BTPROTO_HCI);
         if ctl == 0 {
             return Err(io::Error::last_os_error());
         }
@@ -69,5 +69,6 @@ pub fn enable_discoverable(addr: &Addr) -> Result<(), io::Error> {
 
         Ok(())
     }*/
-    Ok(())      // TODO:
+
+    Ok(())
 }

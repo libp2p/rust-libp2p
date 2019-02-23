@@ -24,6 +24,7 @@ use std::{ffi::CStr, io, mem};
 
 pub mod ffi;        // TODO: not pub
 mod hci_scan;
+mod hci_socket;
 mod sdp;
 mod socket;
 

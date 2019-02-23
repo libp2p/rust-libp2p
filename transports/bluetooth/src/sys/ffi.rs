@@ -35,6 +35,7 @@ pub const RFCOMM_UUID: u16 = 0x0003;
 pub const BDADDR_ANY: bdaddr_t = bdaddr_t { b: [0, 0, 0, 0, 0, 0] };
 pub const BDADDR_LOCAL: bdaddr_t = bdaddr_t { b: [0, 0, 0, 0xff, 0xff, 0xff] };
 pub const HCISETSCAN: u64 = 0x400448dd;
+pub const HCIINQUIRY: u64 = 0x800448f0;
 pub const SCAN_INQUIRY: u32 = 0x01;
 pub const SCAN_PAGE: u32 = 0x02;
 
@@ -140,7 +141,17 @@ pub struct hci_dev_req {
     pub dev_opt: u32,
 }
 
+#[repr(C)]
+pub struct hci_inquiry_req {
+    pub dev_id: u16,
+    pub flags: u16,
+    pub lap: [u8; 3],
+    pub length: u8,
+    pub num_rsp: u8,
+}
+
 // TODO: build script instead
+// TODO: remove useless methods; eventually we can remove everything
 #[link(name = "bluetooth")]
 extern "C" {
     pub fn hci_get_route(addr: *mut bdaddr_t) -> c_int;
