@@ -85,11 +85,25 @@ pub struct BluetoothListener {
 }
 
 impl BluetoothListener {
-    pub fn bind(addr: Addr, port: u8) -> io::Result<BluetoothListener> {
+    pub fn bind(addr: Addr, port: u8) -> io::Result<(BluetoothListener, u8)> {
         crate::discoverable::enable_discoverable(&addr)?;
-        Ok(BluetoothListener {
-            inner: platform::BluetoothListener::bind(addr, port)?
-        })
+
+        let (inner, actual_port) = if port != 0 {
+            (platform::BluetoothListener::bind(addr, port)?, port)
+        } else {
+            (1..30)
+                .filter_map(|port| {
+                    platform::BluetoothListener::bind(addr, port).ok().map(|s| (s, port))
+                })
+                .next()
+                .ok_or_else(|| io::Error::last_os_error())?
+        };
+
+        let inner = BluetoothListener {
+            inner
+        };
+
+        Ok((inner, actual_port))
     }
 }
 

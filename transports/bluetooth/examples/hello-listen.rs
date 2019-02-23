@@ -5,7 +5,8 @@ fn main() {
     let config = libp2p_bluetooth::BluetoothConfig::default();
 
     // TODO: correct address
-    let listener = config.clone().listen_on("/bluetooth/00:00:00:00:00:00/l2cap/3/rfcomm/5".parse().unwrap()).unwrap().0;
+    let (listener, addr) = config.clone().listen_on("/bluetooth/00:00:00:00:00:00/l2cap/3/rfcomm/0".parse().unwrap()).unwrap();
+    println!("actual addr = {:?}", addr);
 
     let listener = listener.into_future().map_err(|(err, _)| err).map(|(inc, _)| inc.unwrap().0).map(|_| ());
 

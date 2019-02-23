@@ -122,6 +122,23 @@ impl BluetoothSocket {
             Ok((client, addr))
         }
     }
+
+    // TODO: remove?
+    pub fn getsockname(&self) -> Result<(Addr, u8), io::Error> {
+        unsafe {
+            let mut out_addr: ffi::sockaddr_rc = mem::zeroed();
+            if libc::getsockname(
+                self.socket,
+                &mut out_addr as *mut _ as *mut _,
+                &mut mem::size_of_val(&out_addr) as *mut _ as *mut _
+            ) != 0 {
+                return Err(io::Error::last_os_error());
+            }
+
+            let addr = Addr::from_little_endian(out_addr.rc_bdaddr.b);
+            Ok((addr, out_addr.rc_channel))
+        }
+    }
 }
 
 impl io::Read for BluetoothSocket {

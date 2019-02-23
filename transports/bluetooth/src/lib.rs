@@ -53,9 +53,13 @@ impl Transport for BluetoothConfig {
     type Dial = sys::BluetoothStreamFuture;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
-        let (mac, port) = multiaddr_to_rfcomm(addr.clone())?;       // TODO: don't clone
-        let listener = sys::BluetoothListener::bind(mac, port).map_err(TransportError::Other)?;
-        Ok((BluetoothListener { inner: listener }, addr))
+        let (mac, port) = multiaddr_to_rfcomm(addr)?;       // TODO: don't clone
+        let (listener,  actual_port) = sys::BluetoothListener::bind(mac, port).map_err(TransportError::Other)?;
+        let actual_addr = iter::once(Protocol::Bluetooth(mac.to_big_endian()))
+            .chain(iter::once(Protocol::L2cap(3)))
+            .chain(iter::once(Protocol::Rfcomm(actual_port)))
+            .collect();
+        Ok((BluetoothListener { inner: listener }, actual_addr))
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {

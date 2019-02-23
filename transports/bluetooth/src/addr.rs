@@ -25,6 +25,7 @@ pub const ALL: Addr = Addr { inner: [0xff, 0xff, 0xff, 0xff, 0xff, 0xff] };
 pub const LOCAL: Addr = Addr { inner: [0x00, 0x00, 0x00, 0xff, 0xff, 0xff] };
 
 /// MAC address of a Bluetooth device.
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Addr {
     /// Little-endian.
     inner: [u8; 6],
