@@ -20,7 +20,7 @@
 
 use crate::Addr;
 use futures::{prelude::*, try_ready};
-use std::{io, mem, os::unix::io::FromRawFd};
+use std::{ffi::CStr, io, mem, os::unix::io::FromRawFd};
 
 mod ffi;
 mod hci_scan;
@@ -80,6 +80,7 @@ impl BluetoothStream {
 
 pub struct BluetoothListener {
     inner: tokio_uds::Incoming,
+    sdp_registration: Option<sdp::SdpRegistration>,
 }
 
 impl BluetoothListener {
@@ -121,10 +122,19 @@ impl BluetoothListener {
             std::os::unix::net::UnixListener::from_raw_fd(socket)
         };
 
+        let sdp_registration = sdp::register(sdp::RegisterConfig {
+            uuid: [0x0, 0x0, 0x0, 0xABCD],
+            rfcomm_channel: port,
+            service_name: CStr::from_bytes_with_nul(b"libp2p\0").expect("Always ends with 0"),
+            service_desc: CStr::from_bytes_with_nul(b"libp2p entry point\0").expect("Always ends with 0"),
+            service_prov: CStr::from_bytes_with_nul(b"rust-libp2p\0").expect("Always ends with 0"),
+        }).ok();
+
         tokio_uds::UnixListener::from_std(socket, &Default::default())
             .map(|inner| {
                 BluetoothListener {
-                    inner: inner.incoming()
+                    inner: inner.incoming(),
+                    sdp_registration,
                 }
             })
     }

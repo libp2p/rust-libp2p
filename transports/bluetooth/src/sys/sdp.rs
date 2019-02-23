@@ -72,6 +72,12 @@ pub fn register(config: RegisterConfig) -> Result<SdpRegistration, io::Error> {
         ffi::sdp_set_info_attr(record, config.service_name.as_ptr(), config.service_prov.as_ptr(), config.service_desc.as_ptr());
 
         let session = ffi::sdp_connect(&ffi::BDADDR_ANY, &ffi::BDADDR_LOCAL, ffi::SDP_RETRY_IF_BUSY);
+        if session.is_null() {
+            // TODO: must clean up
+            println!("err session");
+            return Err(io::Error::last_os_error());
+        }
+
         let result = if ffi::sdp_record_register(session, record, 0) == 0 {
             Ok(SdpRegistration { session })
         } else {
@@ -93,10 +99,29 @@ pub struct SdpRegistration {
     session: *mut ffi::sdp_session_t,
 }
 
+unsafe impl Send for SdpRegistration {}
+unsafe impl Sync for SdpRegistration {}
+
+impl SdpRegistration {
+    /// Closes the registration. Allows checking for errors.
+    pub fn close(mut self) -> Result<(), io::Error> {
+        unsafe {
+            if ffi::sdp_close(self.session) == 0 {
+                self.session = ptr::null_mut();
+                Ok(())
+            } else {
+                Err(io::Error::last_os_error())
+            }
+        }
+    }
+}
+
 impl Drop for SdpRegistration {
     fn drop(&mut self) {
         unsafe {
-            ffi::sdp_close(self.session);
+            if self.session != ptr::null_mut() {
+                ffi::sdp_close(self.session);
+            }
         }
     }
 }
