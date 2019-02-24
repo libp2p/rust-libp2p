@@ -23,6 +23,8 @@ use super::hci_socket::HciSocket;
 use futures::{prelude::*, sync::oneshot};
 use std::{io, thread, time::Duration};
 
+// TODO: use dbus instead, and rename this struct
+
 /// Request to the HCI for the list of nearby Bluetooth devices.
 pub struct HciScan {
     inner: HciScanInner,

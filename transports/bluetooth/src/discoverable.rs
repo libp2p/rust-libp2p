@@ -27,6 +27,8 @@ use std::{io, ptr};
 ///
 /// Without doing that, you will not receive any incoming connection.
 pub fn enable_discoverable(addr: &Addr) -> Result<(), io::Error> {
+    // TODO: quite bad, as we should revert to non-discoverable
+
     let connection = dbus::Connection::get_private(dbus::BusType::System).unwrap(); // TODO: don't unwrap
     let msg = dbus::Message::new_method_call("org.bluez", "/org/bluez/hci0", "org.freedesktop.DBus.Properties", "Set")
         .map_err(|s| io::Error::new(io::ErrorKind::Other, s))?
