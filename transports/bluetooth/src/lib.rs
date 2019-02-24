@@ -38,6 +38,7 @@ mod sdp_client;
 mod sdp;
 
 pub use self::addr::{Addr, ANY, ALL, LOCAL};
+//pub use self::scan_behaviour::BluetoothDiscovery;
 
 /// Represents the configuration for a Bluetooth transport capability for libp2p.
 #[derive(Debug, Clone)]

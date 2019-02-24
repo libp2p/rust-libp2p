@@ -40,7 +40,7 @@ pub struct BluetoothDiscovery<TSubstream> {
 
 impl<TSubstream> BluetoothDiscovery<TSubstream> {
     /// Builds a new `BluetoothDiscovery`.
-    pub fn new() -> io::Result<Mdns<TSubstream>> {
+    pub fn new() -> io::Result<BluetoothDiscovery<TSubstream>> {
         Ok(BluetoothDiscovery {
             service: HciScan::new(),
             marker: PhantomData,

@@ -46,26 +46,26 @@ impl L2capSocket {
         })
     }
 
-    pub fn connect(&self, dest: Addr, port: u8) -> Result<(), io::Error> {
+    pub fn connect(&self, dest: Addr, port: u16) -> Result<(), io::Error> {
         unsafe {
-            let params = ffi::sockaddr_rc {
-                rc_family: libc::AF_BLUETOOTH as u16,
-                rc_bdaddr: ffi::bdaddr_t { b: dest.to_little_endian() },
-                rc_channel: port,
+            let params = ffi::sockaddr_l2 {
+                l2_family: libc::AF_BLUETOOTH as u16,
+                l2_bdaddr: ffi::bdaddr_t { b: dest.to_little_endian() },
+                l2_psm: port,
+                l2_bdaddr_type: 0,  // BDADDR_BREDR constant
+                l2_cid: 0,
             };
 
             let status = libc::connect(
                 self.socket,
-                &params as *const ffi::sockaddr_rc as *const _,
+                &params as *const ffi::sockaddr_l2 as *const _,
                 mem::size_of_val(&params) as u32
             );
 
             if status == -1 {
                 let err = io::Error::last_os_error();
-                println!("dial err: {:?}", err);
-                // TODO: handle?
+                // TODO: handle that
                 /*if err.kind() != io::ErrorKind::WouldBlock {
-                    libc::close(socket);
                     return Err(io::Error::last_os_error());
                 }*/
             }
