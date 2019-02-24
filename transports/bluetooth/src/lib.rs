@@ -46,25 +46,25 @@ impl Default for BluetoothConfig {
 }
 
 impl Transport for BluetoothConfig {
-    type Output = sys::BluetoothStream;
+    type Output = sys::RfcommStream;
     type Error = io::Error;
-    type Listener = BluetoothListener;
+    type Listener = RfcommListener;
     type ListenerUpgrade = future::FutureResult<Self::Output, Self::Error>;
-    type Dial = sys::BluetoothStreamFuture;
+    type Dial = sys::RfcommStreamFuture;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
         let (mac, port) = multiaddr_to_rfcomm(addr)?;
-        let (listener,  actual_port) = sys::BluetoothListener::bind(mac, port).map_err(TransportError::Other)?;
+        let (listener,  actual_port) = sys::RfcommListener::bind(mac, port).map_err(TransportError::Other)?;
         let actual_addr = iter::once(Protocol::Bluetooth(mac.to_big_endian()))
             .chain(iter::once(Protocol::L2cap(3)))
             .chain(iter::once(Protocol::Rfcomm(actual_port)))
             .collect();
-        Ok((BluetoothListener { inner: listener }, actual_addr))
+        Ok((RfcommListener { inner: listener }, actual_addr))
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let (mac, port) = multiaddr_to_rfcomm(addr)?;
-        Ok(sys::BluetoothStream::connect(mac, port))
+        Ok(sys::RfcommStream::connect(mac, port))
     }
 
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
@@ -73,12 +73,12 @@ impl Transport for BluetoothConfig {
     }
 }
 
-pub struct BluetoothListener {
-    inner: sys::BluetoothListener,
+pub struct RfcommListener {
+    inner: sys::RfcommListener,
 }
 
-impl Stream for BluetoothListener {
-    type Item = (future::FutureResult<sys::BluetoothStream, io::Error>, Multiaddr);
+impl Stream for RfcommListener {
+    type Item = (future::FutureResult<sys::RfcommStream, io::Error>, Multiaddr);
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {

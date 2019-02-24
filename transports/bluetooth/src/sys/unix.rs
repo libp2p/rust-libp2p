@@ -30,77 +30,77 @@ mod sdp;
 
 pub use self::hci_scan::HciScan as Scan;
 
-pub struct BluetoothStream {
+pub struct RfcommStream {
     inner: tokio_reactor::PollEvented<rfcomm::RfcommSocket>,
 }
 
-impl BluetoothStream {
-    pub fn connect(dest: Addr, port: u8) -> BluetoothStreamFuture {
+impl RfcommStream {
+    pub fn connect(dest: Addr, port: u8) -> RfcommStreamFuture {
         let socket = match rfcomm::RfcommSocket::new() {
             Ok(s) => s,
-            Err(err) => return BluetoothStreamFuture {
-                inner: BluetoothStreamFutureInner::Error(err)
+            Err(err) => return RfcommStreamFuture {
+                inner: RfcommStreamFutureInner::Error(err)
             },
         };
 
         match socket.connect(dest, port) {
             Ok(s) => s,
-            Err(err) => return BluetoothStreamFuture {
-                inner: BluetoothStreamFutureInner::Error(err)
+            Err(err) => return RfcommStreamFuture {
+                inner: RfcommStreamFutureInner::Error(err)
             },
         };
 
-        BluetoothStreamFuture {
-            inner: BluetoothStreamFutureInner::Waiting(tokio_reactor::PollEvented::new(socket))
+        RfcommStreamFuture {
+            inner: RfcommStreamFutureInner::Waiting(tokio_reactor::PollEvented::new(socket))
         }
     }
 }
 
-pub struct BluetoothStreamFuture {
-    inner: BluetoothStreamFutureInner,
+pub struct RfcommStreamFuture {
+    inner: RfcommStreamFutureInner,
 }
 
-enum BluetoothStreamFutureInner {
+enum RfcommStreamFutureInner {
     Waiting(tokio_reactor::PollEvented<rfcomm::RfcommSocket>),
     Error(io::Error),
     Finished,
 }
 
-impl Future for BluetoothStreamFuture {
-    type Item = BluetoothStream;
+impl Future for RfcommStreamFuture {
+    type Item = RfcommStream;
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match mem::replace(&mut self.inner, BluetoothStreamFutureInner::Finished) {
-            BluetoothStreamFutureInner::Waiting(socket) => match socket.poll_write_ready() {
+        match mem::replace(&mut self.inner, RfcommStreamFutureInner::Finished) {
+            RfcommStreamFutureInner::Waiting(socket) => match socket.poll_write_ready() {
                 Ok(Async::Ready(_)) => {
-                    Ok(Async::Ready(BluetoothStream {
+                    Ok(Async::Ready(RfcommStream {
                         inner: socket,
                     }))
                 }
                 Ok(Async::NotReady) => {
-                    self.inner = BluetoothStreamFutureInner::Waiting(socket);
+                    self.inner = RfcommStreamFutureInner::Waiting(socket);
                     Ok(Async::NotReady)
                 }
                 Err(err) => Err(err),
             },
-            BluetoothStreamFutureInner::Error(err) => Err(err),
-            BluetoothStreamFutureInner::Finished => panic!("future polled after finished"),
+            RfcommStreamFutureInner::Error(err) => Err(err),
+            RfcommStreamFutureInner::Finished => panic!("future polled after finished"),
         }
     }
 }
 
-impl io::Read for BluetoothStream {
+impl io::Read for RfcommStream {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
         self.inner.read(buf)
     }
 }
 
-impl tokio_io::AsyncRead for BluetoothStream {
+impl tokio_io::AsyncRead for RfcommStream {
     // TODO: specialize functions
 }
 
-impl io::Write for BluetoothStream {
+impl io::Write for RfcommStream {
     fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
         self.inner.write(buf)
     }
@@ -110,19 +110,19 @@ impl io::Write for BluetoothStream {
     }
 }
 
-impl tokio_io::AsyncWrite for BluetoothStream {
+impl tokio_io::AsyncWrite for RfcommStream {
     fn shutdown(&mut self) -> Poll<(), io::Error> {
         self.inner.shutdown()
     }
 }
 
-pub struct BluetoothListener {
+pub struct RfcommListener {
     inner: tokio_reactor::PollEvented<rfcomm::RfcommSocket>,
     sdp_registration: Option<sdp::SdpRegistration>,
 }
 
-impl BluetoothListener {
-    pub fn bind(dest: Addr, port: u8) -> Result<BluetoothListener, io::Error> {
+impl RfcommListener {
+    pub fn bind(dest: Addr, port: u8) -> Result<RfcommListener, io::Error> {
         // TODO: make the controller discoverable (https://stackoverflow.com/questions/30058715/bluez-hci-api-to-make-the-host-discoverable)
 
         let socket = rfcomm::RfcommSocket::new()?;
@@ -136,15 +136,15 @@ impl BluetoothListener {
             service_prov: CStr::from_bytes_with_nul(b"rust-libp2p\0").expect("Always ends with 0"),
         }).map_err(|err| { println!("sdp server error: {:?}", err); err }).ok();
 
-        Ok(BluetoothListener {
+        Ok(RfcommListener {
             inner: tokio_reactor::PollEvented::new(socket),
             sdp_registration,
         })
     }
 }
 
-impl Stream for BluetoothListener {
-    type Item = (BluetoothStream, Addr);
+impl Stream for RfcommListener {
+    type Item = (RfcommStream, Addr);
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
@@ -153,7 +153,7 @@ impl Stream for BluetoothListener {
 
         match self.inner.get_ref().accept() {
             Ok((client, addr)) => {
-                let stream = BluetoothStream {
+                let stream = RfcommStream {
                     inner: tokio_reactor::PollEvented::new(client)
                 };
                 Ok(Async::Ready(Some((stream, addr))))

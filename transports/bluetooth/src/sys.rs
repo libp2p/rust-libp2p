@@ -26,45 +26,45 @@ use std::io;
 #[path = "sys/unix.rs"]
 pub mod platform;       // TODO: not pub
 
-pub struct BluetoothStream {
-    inner: platform::BluetoothStream,
+pub struct RfcommStream {
+    inner: platform::RfcommStream,
 }
 
-impl BluetoothStream {
-    pub fn connect(addr: Addr, port: u8) -> BluetoothStreamFuture {
-        BluetoothStreamFuture {
-            inner: platform::BluetoothStream::connect(addr, port)
+impl RfcommStream {
+    pub fn connect(addr: Addr, port: u8) -> RfcommStreamFuture {
+        RfcommStreamFuture {
+            inner: platform::RfcommStream::connect(addr, port)
         }
     }
 }
 
-pub struct BluetoothStreamFuture {
-    inner: platform::BluetoothStreamFuture,
+pub struct RfcommStreamFuture {
+    inner: platform::RfcommStreamFuture,
 }
 
-impl Future for BluetoothStreamFuture {
-    type Item = BluetoothStream;
+impl Future for RfcommStreamFuture {
+    type Item = RfcommStream;
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let socket = try_ready!(self.inner.poll());
-        Ok(Async::Ready(BluetoothStream {
+        Ok(Async::Ready(RfcommStream {
             inner: socket,
         }))
     }
 }
 
-impl io::Read for BluetoothStream {
+impl io::Read for RfcommStream {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
         self.inner.read(buf)
     }
 }
 
-impl tokio_io::AsyncRead for BluetoothStream {
+impl tokio_io::AsyncRead for RfcommStream {
     // TODO: specialize functions
 }
 
-impl io::Write for BluetoothStream {
+impl io::Write for RfcommStream {
     fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
         self.inner.write(buf)
     }
@@ -74,32 +74,32 @@ impl io::Write for BluetoothStream {
     }
 }
 
-impl tokio_io::AsyncWrite for BluetoothStream {
+impl tokio_io::AsyncWrite for RfcommStream {
     fn shutdown(&mut self) -> Poll<(), io::Error> {
         self.inner.shutdown()
     }
 }
 
-pub struct BluetoothListener {
-    inner: platform::BluetoothListener,
+pub struct RfcommListener {
+    inner: platform::RfcommListener,
 }
 
-impl BluetoothListener {
-    pub fn bind(addr: Addr, port: u8) -> io::Result<(BluetoothListener, u8)> {
+impl RfcommListener {
+    pub fn bind(addr: Addr, port: u8) -> io::Result<(RfcommListener, u8)> {
         crate::discoverable::enable_discoverable(&addr)?;
 
         let (inner, actual_port) = if port != 0 {
-            (platform::BluetoothListener::bind(addr, port)?, port)
+            (platform::RfcommListener::bind(addr, port)?, port)
         } else {
             (1..30)
                 .filter_map(|port| {
-                    platform::BluetoothListener::bind(addr, port).ok().map(|s| (s, port))
+                    platform::RfcommListener::bind(addr, port).ok().map(|s| (s, port))
                 })
                 .next()
                 .ok_or_else(|| io::Error::last_os_error())?
         };
 
-        let inner = BluetoothListener {
+        let inner = RfcommListener {
             inner
         };
 
@@ -107,13 +107,13 @@ impl BluetoothListener {
     }
 }
 
-impl Stream for BluetoothListener {
-    type Item = (BluetoothStream, Addr);
+impl Stream for RfcommListener {
+    type Item = (RfcommStream, Addr);
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         let socket = try_ready!(self.inner.poll());
-        Ok(Async::Ready(socket.map(|(i, a)| (BluetoothStream { inner: i }, a))))
+        Ok(Async::Ready(socket.map(|(i, a)| (RfcommStream { inner: i }, a))))
     }
 }
 
