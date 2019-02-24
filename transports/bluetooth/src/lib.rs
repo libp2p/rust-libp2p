@@ -26,6 +26,7 @@ use std::{io, iter};
 
 mod addr;
 mod discoverable;
+mod gatt_register;
 //mod scan;
 pub mod sys; // TODO: not pub
 

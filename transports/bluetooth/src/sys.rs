@@ -87,6 +87,7 @@ pub struct RfcommListener {
 impl RfcommListener {
     pub fn bind(addr: Addr, port: u8) -> io::Result<(RfcommListener, u8)> {
         crate::discoverable::enable_discoverable(&addr)?;
+        // TODO: crate::gatt_register::register_gatt()?;
 
         let (inner, actual_port) = if port != 0 {
             (platform::RfcommListener::bind(addr, port)?, port)
