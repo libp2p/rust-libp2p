@@ -28,6 +28,7 @@ pub struct RfcommSocket {
 }
 
 impl RfcommSocket {
+    /// Initializes a new socket by calling `libc::socket`.
     pub fn new() -> Result<RfcommSocket, io::Error> {
         let socket = unsafe {
             libc::socket(
@@ -46,6 +47,7 @@ impl RfcommSocket {
         })
     }
 
+    /// Calls `connect` on the socket.
     pub fn connect(&self, dest: Addr, port: u8) -> Result<(), io::Error> {
         unsafe {
             let params = ffi::sockaddr_rc {
@@ -74,6 +76,7 @@ impl RfcommSocket {
         }
     }
 
+    /// Calls `bind` on the socket.
     pub fn bind(&self, dest: Addr, port: u8) -> Result<(), io::Error> {
         unsafe {
             let params = ffi::sockaddr_rc {
@@ -101,6 +104,7 @@ impl RfcommSocket {
         }
     }
 
+    /// Calls `accept` on the socket.
     pub fn accept(&self) -> Result<(RfcommSocket, Addr), io::Error> {
         unsafe {
             let mut out_addr: ffi::sockaddr_rc = mem::zeroed();
@@ -124,6 +128,7 @@ impl RfcommSocket {
         }
     }
 
+    /// Calls `getsockname` on the socket.
     // TODO: remove?
     pub fn getsockname(&self) -> Result<(Addr, u8), io::Error> {
         unsafe {

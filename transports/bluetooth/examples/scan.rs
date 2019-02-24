@@ -21,7 +21,7 @@
 use futures::prelude::*;
 
 fn main() {
-    let mut scan = libp2p_bluetooth::sys::Scan::new().unwrap();
+    let mut scan = libp2p_bluetooth::hci_scan::HciScan::new().unwrap();
     let future = futures::stream::poll_fn(move || scan.poll())
         .for_each(|elem| { println!("{:?}", elem); Ok(()) })
         .map_err(|err| println!("{:?}", err));

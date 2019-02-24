@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::scan::Scan;
+use crate::hci_scan::HciScan;
 use futures::prelude::*;
 use log::warn;
 use libp2p_core::protocols_handler::{DummyProtocolsHandler, ProtocolsHandler};
@@ -32,7 +32,7 @@ use tokio_timer::Delay;
 /// A network behaviour that discovers nearby libp2p-compatible Bluetooth devices.
 pub struct BluetoothDiscovery<TSubstream> {
     /// The inner service.
-    inner: Scan,
+    inner: HciScan,
 
     /// Marker to pin the generic.
     marker: PhantomData<TSubstream>,
@@ -42,7 +42,7 @@ impl<TSubstream> BluetoothDiscovery<TSubstream> {
     /// Builds a new `BluetoothDiscovery`.
     pub fn new() -> io::Result<Mdns<TSubstream>> {
         Ok(BluetoothDiscovery {
-            service: Scan::new(),
+            service: HciScan::new(),
             marker: PhantomData,
         })
     }

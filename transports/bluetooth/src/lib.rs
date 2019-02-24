@@ -26,11 +26,18 @@ use std::{io, iter};
 
 mod addr;
 mod discoverable;
+mod ffi;
 mod gatt_register;
-//mod scan;
-pub mod sys; // TODO: not pub
+pub mod hci_scan;       // TODO: shouldn't be pub
+mod hci_socket;
+mod l2cap;
+mod rfcomm_socket;
+mod rfcomm;
+//mod scan_behaviour;       // TODO:
+mod sdp_client;
+mod sdp;
 
-pub use self::addr::Addr;
+pub use self::addr::{Addr, ANY, ALL, LOCAL};
 
 /// Represents the configuration for a Bluetooth transport capability for libp2p.
 #[derive(Debug, Clone)]
@@ -47,15 +54,15 @@ impl Default for BluetoothConfig {
 }
 
 impl Transport for BluetoothConfig {
-    type Output = sys::RfcommStream;
+    type Output = rfcomm::RfcommStream;
     type Error = io::Error;
     type Listener = RfcommListener;
     type ListenerUpgrade = future::FutureResult<Self::Output, Self::Error>;
-    type Dial = sys::RfcommStreamFuture;
+    type Dial = rfcomm::RfcommStreamFuture;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
         let (mac, port) = multiaddr_to_rfcomm(addr)?;
-        let (listener,  actual_port) = sys::RfcommListener::bind(mac, port).map_err(TransportError::Other)?;
+        let (listener,  actual_port) = rfcomm::RfcommListener::bind(mac, port).map_err(TransportError::Other)?;
         let actual_addr = iter::once(Protocol::Bluetooth(mac.to_big_endian()))
             .chain(iter::once(Protocol::L2cap(3)))
             .chain(iter::once(Protocol::Rfcomm(actual_port)))
@@ -65,7 +72,7 @@ impl Transport for BluetoothConfig {
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let (mac, port) = multiaddr_to_rfcomm(addr)?;
-        Ok(sys::RfcommStream::connect(mac, port))
+        Ok(rfcomm::RfcommStream::connect(mac, port))
     }
 
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
@@ -75,11 +82,11 @@ impl Transport for BluetoothConfig {
 }
 
 pub struct RfcommListener {
-    inner: sys::RfcommListener,
+    inner: rfcomm::RfcommListener,
 }
 
 impl Stream for RfcommListener {
-    type Item = (future::FutureResult<sys::RfcommStream, io::Error>, Multiaddr);
+    type Item = (future::FutureResult<rfcomm::RfcommStream, io::Error>, Multiaddr);
     type Error = io::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {

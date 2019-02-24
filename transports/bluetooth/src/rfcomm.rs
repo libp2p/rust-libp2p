@@ -18,27 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::Addr;
+use crate::{Addr, rfcomm_socket::RfcommSocket, sdp};
 use futures::{prelude::*, try_ready};
 use std::{ffi::CStr, io, mem};
 
-pub mod ffi;        // TODO: not pub
-mod hci_scan;
-mod hci_socket;
-mod l2cap;
-mod rfcomm;
-mod sdp;
-mod sdp_client;
-
-pub use self::hci_scan::HciScan as Scan;
-
 pub struct RfcommStream {
-    inner: tokio_reactor::PollEvented<rfcomm::RfcommSocket>,
+    inner: tokio_reactor::PollEvented<RfcommSocket>,
 }
 
 impl RfcommStream {
     pub fn connect(dest: Addr, port: u8) -> RfcommStreamFuture {
-        let socket = match rfcomm::RfcommSocket::new() {
+        let socket = match RfcommSocket::new() {
             Ok(s) => s,
             Err(err) => return RfcommStreamFuture {
                 inner: RfcommStreamFutureInner::Error(err)
@@ -63,7 +53,7 @@ pub struct RfcommStreamFuture {
 }
 
 enum RfcommStreamFutureInner {
-    Waiting(tokio_reactor::PollEvented<rfcomm::RfcommSocket>),
+    Waiting(tokio_reactor::PollEvented<RfcommSocket>),
     Error(io::Error),
     Finished,
 }
@@ -119,17 +109,29 @@ impl tokio_io::AsyncWrite for RfcommStream {
 }
 
 pub struct RfcommListener {
-    inner: tokio_reactor::PollEvented<rfcomm::RfcommSocket>,
+    inner: tokio_reactor::PollEvented<RfcommSocket>,
     sdp_registration: Option<sdp::SdpRegistration>,
 }
 
 impl RfcommListener {
-    pub fn bind(dest: Addr, port: u8) -> Result<RfcommListener, io::Error> {
-        // TODO: make the controller discoverable (https://stackoverflow.com/questions/30058715/bluez-hci-api-to-make-the-host-discoverable)
+    pub fn bind(addr: Addr, port: u8) -> Result<(RfcommListener, u8), io::Error> {
+        crate::discoverable::enable_discoverable(&addr)?;
+        // TODO: crate::gatt_register::register_gatt()?;
 
-        let socket = rfcomm::RfcommSocket::new()?;
-        socket.bind(dest, port)?;
+        let socket = RfcommSocket::new()?;
 
+        let (inner, actual_port) = if port != 0 {
+            (socket.bind(addr, port)?, port)
+        } else {
+            (1..30)
+                .filter_map(|port| {
+                    socket.bind(addr, port).ok().map(|s| (s, port))
+                })
+                .next()
+                .ok_or_else(|| io::Error::last_os_error())?
+        };
+
+        // TODO: remove
         let sdp_registration = sdp::register(sdp::RegisterConfig {
             uuid: [0x0, 0x0, 0x0, 0xABCD],
             rfcomm_channel: port,
@@ -138,10 +140,12 @@ impl RfcommListener {
             service_prov: CStr::from_bytes_with_nul(b"rust-libp2p\0").expect("Always ends with 0"),
         }).map_err(|err| { println!("sdp server error: {:?}", err); err }).ok();
 
-        Ok(RfcommListener {
+        let inner = RfcommListener {
             inner: tokio_reactor::PollEvented::new(socket),
             sdp_registration,
-        })
+        };
+
+        Ok((inner, actual_port))
     }
 }
 

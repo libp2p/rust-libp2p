@@ -18,15 +18,16 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::Addr;
-// TODO: put that in sys, or move the ffi, or something, I don't know
-use crate::sys::platform::ffi;
+use crate::{Addr, ffi};
 use std::{io, ptr};
 
 /// Makes the given local interface discoverable from the outside.
 ///
 /// Without doing that, you will not receive any incoming connection.
-pub fn enable_discoverable(addr: &Addr) -> Result<(), io::Error> {
+///
+/// Must be passed the address of a local interface.
+pub fn enable_discoverable(local_addr: &Addr) -> Result<(), io::Error> {
+    // TODO: take local_addr into account
     // TODO: quite bad, as we should revert to non-discoverable
 
     let connection = dbus::Connection::get_private(dbus::BusType::System).unwrap(); // TODO: don't unwrap
@@ -38,12 +39,3 @@ pub fn enable_discoverable(addr: &Addr) -> Result<(), io::Error> {
     let reply = connection.send_with_reply_and_block(msg, 5000).unwrap();
     Ok(())
 }
-
-/*
-let c = Connection::get_private(BusType::Session).unwrap();
-    c.add_match("interface='com.canonical.Unity.WindowStack',member='FocusedWindowChanged'").unwrap();
-
-    for i in c.iter(1000) {
-        if let Some(app) = focus_msg(&i) { println!("{} has now focus.", app) };
-}
-*/
