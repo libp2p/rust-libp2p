@@ -25,8 +25,10 @@ use std::{ffi::CStr, io, mem};
 pub mod ffi;        // TODO: not pub
 mod hci_scan;
 mod hci_socket;
+mod l2cap;
 mod rfcomm;
 mod sdp;
+mod sdp_client;
 
 pub use self::hci_scan::HciScan as Scan;
 

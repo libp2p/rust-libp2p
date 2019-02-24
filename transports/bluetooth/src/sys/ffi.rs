@@ -18,8 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::os::raw::{c_char, c_int, c_long, c_void};
+use std::os::raw::{c_char, c_int, c_ushort, c_long, c_void};
 
+pub const BTPROTO_L2CAP: i32 = 0x0;
 pub const BTPROTO_HCI: i32 = 0x1;
 pub const BTPROTO_RFCOMM: i32 = 0x3;
 pub const IREQ_CACHE_FLUSH: i64 = 0x1;
@@ -174,6 +175,15 @@ pub struct hci_conn_info {
     pub out: u8,
     pub state: u16,
     pub link_mode: u32,
+}
+
+#[repr(C)]
+pub struct sockaddr_l2 {
+	pub l2_family: libc::sa_family_t,
+	pub l2_psm: c_ushort,
+	pub l2_bdaddr: bdaddr_t,
+	pub l2_cid: c_ushort,
+	pub l2_bdaddr_type: u8,
 }
 
 // TODO: build script instead

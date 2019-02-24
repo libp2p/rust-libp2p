@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::fmt;
+use std::{fmt, str::FromStr};
 
 pub const ANY: Addr = Addr { inner: [0x00, 0x00, 0x00, 0x00, 0x00, 0x00] };
 pub const ALL: Addr = Addr { inner: [0xff, 0xff, 0xff, 0xff, 0xff, 0xff] };
@@ -70,5 +70,26 @@ impl fmt::Display for Addr {
 impl fmt::Debug for Addr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(self, f)
+    }
+}
+
+impl FromStr for Addr {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut out = [0; 6];
+
+        {
+            let mut bytes = s.split(':');
+            let mut out_iter = out.iter_mut();
+            for (byte, o) in bytes.by_ref().zip(out_iter.by_ref()) {
+                *o = u8::from_str_radix(byte, 16).map_err(|_| ())?;
+            }
+            if out_iter.next().is_some() || bytes.next().is_some() {
+                return Err(());
+            }
+        }
+
+        Ok(Addr::from_big_endian(out))
     }
 }

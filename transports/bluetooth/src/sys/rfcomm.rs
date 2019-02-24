@@ -22,6 +22,7 @@ use super::ffi;
 use crate::Addr;
 use std::{io, mem, os::raw::c_int, os::raw::c_void};
 
+/// Non-blocking socket for RFCOMM communication with a remote.
 pub struct RfcommSocket {
     socket: c_int,
 }
