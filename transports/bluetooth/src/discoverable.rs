@@ -27,48 +27,21 @@ use std::{io, ptr};
 ///
 /// Without doing that, you will not receive any incoming connection.
 pub fn enable_discoverable(addr: &Addr) -> Result<(), io::Error> {
-    /*let connection = ;
+    let connection = dbus::Connection::get_private(dbus::BusType::System).unwrap(); // TODO: don't unwrap
+    let msg = dbus::Message::new_method_call("org.bluez", "/org/bluez/hci0", "org.freedesktop.DBus.Properties", "Set")
+        .map_err(|s| io::Error::new(io::ErrorKind::Other, s))?
+        .append3("org.bluez.Adapter1", "Discoverable", true);
 
-    let msg = dbus::Message::new_method_call(destination: D, path: P, "org.freedesktop.DBus.Properties", "Set")?
-        .append3(proxy->interface, "Discoverable", true);
-
-	if (g_dbus_send_message_with_reply(client->dbus_conn, msg,
-							&call, -1) == FALSE) {
-		dbus_message_unref(msg);
-		g_free(data);
-		return FALSE;
-	}
-
-	dbus_pending_call_set_notify(call, set_property_reply, data, g_free);
-	dbus_pending_call_unref(call);
-
-	dbus_message_unref(msg);*/
-
-    /*unsafe {
-        let ctl = libc::socket(libc::AF_BLUETOOTH, libc::SOCK_RAW | libc::SOCK_CLOEXEC, ffi::BTPROTO_HCI);
-        if ctl == 0 {
-            return Err(io::Error::last_os_error());
-        }
-
-        let dev_id = ffi::hci_get_route(ptr::null_mut());
-        if dev_id == -1 {
-            return Err(io::Error::last_os_error());
-        }
-
-        let dr = ffi::hci_dev_req {
-            dev_id: dev_id as u16,
-            dev_opt: ffi::SCAN_INQUIRY | ffi::SCAN_PAGE,
-        };
-
-        if libc::ioctl(ctl, ffi::HCISETSCAN, &dr as *const _) < 0 {
-            return Err(io::Error::last_os_error());
-        }
-
-        // TODO: :-/
-        libc::close(ctl);
-
-        Ok(())
-    }*/
-
+    // TODO: don't block
+    let reply = connection.send_with_reply_and_block(msg, 5000).unwrap();
     Ok(())
 }
+
+/*
+let c = Connection::get_private(BusType::Session).unwrap();
+    c.add_match("interface='com.canonical.Unity.WindowStack',member='FocusedWindowChanged'").unwrap();
+
+    for i in c.iter(1000) {
+        if let Some(app) = focus_msg(&i) { println!("{} has now focus.", app) };
+}
+*/
