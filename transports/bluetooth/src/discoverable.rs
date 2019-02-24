@@ -30,7 +30,7 @@ pub fn enable_discoverable(addr: &Addr) -> Result<(), io::Error> {
     let connection = dbus::Connection::get_private(dbus::BusType::System).unwrap(); // TODO: don't unwrap
     let msg = dbus::Message::new_method_call("org.bluez", "/org/bluez/hci0", "org.freedesktop.DBus.Properties", "Set")
         .map_err(|s| io::Error::new(io::ErrorKind::Other, s))?
-        .append3("org.bluez.Adapter1", "Discoverable", true);
+        .append3("org.bluez.Adapter1", "Discoverable", dbus::arg::Variant(true));
 
     // TODO: don't block
     let reply = connection.send_with_reply_and_block(msg, 5000).unwrap();
