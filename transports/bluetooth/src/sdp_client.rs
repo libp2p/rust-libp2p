@@ -18,6 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! Client for the SDP (Service Discovery Protocol) protocol.
+//!
+//! Allows connecting to a client and querying which services are provided.
+//!
 //! Documented in the Bluetooth core specifications, Volume 3 part B.
 
 use super::l2cap;
