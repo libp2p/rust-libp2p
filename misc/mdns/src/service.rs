@@ -91,10 +91,8 @@ pub use dns::MdnsResponseError;
 /// }).for_each(|_| Ok(()));
 /// # }
 pub struct MdnsService {
-    /// Main socket for listening.
+    /// Main socket for listening and sending queries
     socket: UdpSocket,
-    /// Socket for sending queries on the network.
-    query_socket: UdpSocket,
     /// Interval for sending queries.
     query_interval: Interval,
     /// Whether we send queries on the network at all.
@@ -154,7 +152,6 @@ impl MdnsService {
 
         Ok(MdnsService {
             socket,
-            query_socket: UdpSocket::bind(&From::from(([0, 0, 0, 0], 0)))?,
             query_interval: Interval::new(Instant::now(), Duration::from_secs(20)),
             silent,
             legacy_support,
@@ -213,7 +210,7 @@ impl MdnsService {
         while !self.query_send_buffers.is_empty() {
             let to_send = self.query_send_buffers.remove(0);
             match self
-                .query_socket
+                .socket
                 .poll_send_to(&to_send, &From::from(([224, 0, 0, 251], 5353)))
             {
                 Ok(Async::Ready(bytes_written)) => {
