@@ -172,9 +172,9 @@ impl MdnsService {
                     let query = dns::build_query();
                     self.query_send_buffers.push(query.to_vec());
                     if self.legacy_support {
-                        let (q1, q2) = dns::build_legacy_queries();
-                        self.query_send_buffers.push(q1.to_vec());
-                        self.query_send_buffers.push(q2.to_vec());
+                        let (js_query, go_query) = dns::build_legacy_queries();
+                        self.query_send_buffers.push(js_query.to_vec());
+                        self.query_send_buffers.push(go_query.to_vec());
                     }
                 }
             }
@@ -240,7 +240,6 @@ impl MdnsService {
                                 .iter()
                                 .any(|q| q.qname.to_string().as_bytes() == SERVICE_NAME)
                             {
-                                print!("Query received {:?}", packet);
                                 return Async::Ready(MdnsPacket::Query(MdnsQuery {
                                     from,
                                     query_id: packet.header.id,
@@ -251,7 +250,6 @@ impl MdnsService {
                                 .iter()
                                 .any(|q| q.qname.to_string().as_bytes() == META_QUERY_SERVICE)
                             {
-                                print!("Discovery received {:?}", packet);
                                 // TODO: what if multiple questions, one with SERVICE_NAME
                                 // and one with META_QUERY_SERVICE?
                                 return Async::Ready(MdnsPacket::ServiceDiscovery(
@@ -266,12 +264,10 @@ impl MdnsService {
                                 // writing of this code non-lexical lifetimes haven't been merged
                                 // yet, and I can't manage to write this code without having borrow
                                 // issues.
-                                // println!("Unknown message received: {:?} from {:?}", packet, from);
                                 task::current().notify();
                                 return Async::NotReady;
                             }
                         } else {
-                            // println!("Response receive: {:?} from {:?}", packet, from);
                             return Async::Ready(MdnsPacket::Response(MdnsResponse {
                                 packet,
                                 from,
@@ -418,55 +414,22 @@ impl<'a> MdnsResponse<'a> {
     fn get_mapper<'b>(&'b self) -> Box<Fn(&ResourceRecord) -> Option<MdnsPeer> + 'b> {
         let packet = &self.packet;
 
-        let r_type = self.packet.answers.iter().filter_map(|record|
+        let matched = self.packet.answers.iter().filter_map(|record|
             match record.name.to_string().as_bytes() {
-                SERVICE_NAME => Some(SERVICE_NAME),
-                LEGACY_SERVICE_NAME_JS => Some(LEGACY_SERVICE_NAME_JS),
+                SERVICE_NAME => Some(false), // we've found a regular packet
+                LEGACY_SERVICE_NAME_JS | LEGACY_SERVICE_NAME_GO => Some(true), // legacy
                 _ => None
             }
         ).next();
 
-        if r_type == Some(SERVICE_NAME) {
-            return Box::new(move |record: &ResourceRecord | {
-                if record.name.to_string().as_bytes() != SERVICE_NAME {
-                    return None
-                }
-
-                let record_value = match record.data {
-                    RData::PTR(record) => record.0.to_string(),
-                    _ => return None,
-                };
-            
-                let mut iter = record_value.splitn(2, |c| c == '.');
-                let peer_name = match iter.next() {
-                    Some(n) => n.to_owned(),
-                    None => return None,
-                };
-
-                let decoded = match iter.next().map(|v| v.as_bytes()) {
-                    Some(SERVICE_NAME) => data_encoding::BASE32_DNSCURVE.decode(
-                        peer_name.as_bytes()),
-                    _ => return None
-                }.map(|bytes| PeerId::from_bytes(bytes));
-
-                // in modern versions, we receive everything in this record
-                // and can return it.
-                if let Ok(Ok(peer_id)) = decoded {
-                    Some(MdnsPeer::parse(
-                        peer_id,
-                        record.ttl,
-                        packet,
-                        record_value,
-                    ))
-                } else {
-                    None
-                }
-            });
-        } else if r_type == Some(LEGACY_SERVICE_NAME_JS) {
-            // we have to map out some info first
+        if Some(true) == matched {
+            // Legacy support
             if let Some((peer_id, port, peer_name)) = packet.answers.iter().filter_map(|r| {
                 let name = r.name.to_string();
-                if name.as_bytes().ends_with(LEGACY_SERVICE_NAME_JS) {
+                let name_bytes = name.as_bytes();
+                if name_bytes.ends_with(LEGACY_SERVICE_NAME_JS)
+                    || name_bytes.ends_with(LEGACY_SERVICE_NAME_GO)
+                {
                     if let RData::SRV(srv) = r.data {
                         if let Some(Ok(peer_id)) = name.splitn(2, |c| c == '.')
                             .next().map(|n| n.parse::<PeerId>())
@@ -497,7 +460,7 @@ impl<'a> MdnsResponse<'a> {
                         Ok(m) => m,
                         _ => return None
                     };
-                    println!("JS legacy peer detected: {:?}", addr);
+                    println!("Legacy peer detected: {:?}", addr);
                     return Some(MdnsPeer {
                         peer_id: peer_id.clone(),
                         addresses: vec![addr],
@@ -505,10 +468,49 @@ impl<'a> MdnsResponse<'a> {
                     })
                 });
             }
-        };
+        }
 
+        if matched == Some(false) {
+            // regular match
+            return Box::new(move |record: &ResourceRecord | {
+                if record.name.to_string().as_bytes() != SERVICE_NAME {
+                    return None
+                }
+
+                let record_value = match record.data {
+                    RData::PTR(record) => record.0.to_string(),
+                    _ => return None,
+                };
+
+                let mut iter = record_value.splitn(2, |c| c == '.');
+                let peer_name = match iter.next() {
+                    Some(n) => n.to_owned(),
+                    None => return None,
+                };
+
+                let decoded = match iter.next().map(|v| v.as_bytes()) {
+                    Some(SERVICE_NAME) => data_encoding::BASE32_DNSCURVE.decode(
+                        peer_name.as_bytes()),
+                    _ => return None
+                }.map(|bytes| PeerId::from_bytes(bytes));
+
+                // in modern versions, we receive everything in this record
+                // and can return it.
+                if let Ok(Ok(peer_id)) = decoded {
+                    Some(MdnsPeer::parse(
+                        peer_id,
+                        record.ttl,
+                        packet,
+                        record_value,
+                    ))
+                } else {
+                    None
+                }
+            })
+        }
+
+        // fallback
         Box::new(|_record: &ResourceRecord| None)
-
     }
     /// Returns the list of peers that have been reported in this packet.
     ///
