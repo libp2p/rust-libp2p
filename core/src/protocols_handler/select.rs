@@ -210,11 +210,7 @@ where
 
     #[inline]
     fn connection_keep_alive(&self) -> KeepAlive {
-        match (self.proto1.connection_keep_alive(), self.proto2.connection_keep_alive()) {
-            (KeepAlive::Forever, _) | (_, KeepAlive::Forever) => KeepAlive::Forever,
-            (a, KeepAlive::Now) | (KeepAlive::Now, a) => a,
-            (KeepAlive::Until(a), KeepAlive::Until(b)) => KeepAlive::Until(cmp::max(a, b)),
-        }
+        cmp::max(self.proto1.connection_keep_alive(), self.proto2.connection_keep_alive())
     }
 
     #[inline]
@@ -252,7 +248,7 @@ where
                     }));
                 },
                 Async::Ready(ProtocolsHandlerEvent::Shutdown) => {
-                    if !self.proto1.is_shutdown() {
+                    if !self.proto1.is_shutting_down_or_shutdown() {
                         self.proto1.shutdown();
                         continue;
                     }

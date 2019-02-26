@@ -163,6 +163,13 @@ where
         self.outbound_state == StreamState::Open
     }
 
+    /// Returns `true` if the remote has shown any sign of activity after the muxer has been open.
+    ///
+    /// See `StreamMuxer::is_remote_acknowledged`.
+    pub fn is_remote_acknowledged(&self) -> bool {
+        self.muxer.is_remote_acknowledged()
+    }
+
     /// Destroys the node stream and returns all the pending outbound substreams.
     pub fn close(mut self) -> Vec<TUserData> {
         self.cancel_outgoing()
@@ -322,7 +329,7 @@ impl<TMuxer, TUserData> fmt::Debug for NodeStream<TMuxer, TUserData>
 where
     TMuxer: muxing::StreamMuxer,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_struct("NodeStream")
             .field("inbound_state", &self.inbound_state)
             .field("outbound_state", &self.outbound_state)
@@ -351,7 +358,7 @@ where
     TMuxer::Substream: fmt::Debug,
     TUserData: fmt::Debug,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             NodeEvent::InboundSubstream { substream } => {
                 f.debug_struct("NodeEvent::OutboundClosed")

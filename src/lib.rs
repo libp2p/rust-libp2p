@@ -132,15 +132,14 @@
 #![doc(html_logo_url = "https://libp2p.io/img/logo_small.png")]
 #![doc(html_favicon_url = "https://libp2p.io/img/favicon.png")]
 
-pub extern crate bytes;
-pub extern crate futures;
-pub extern crate multiaddr;
-pub extern crate multihash;
-pub extern crate tokio_codec;
-pub extern crate tokio_io;
-
-extern crate libp2p_core_derive;
-extern crate tokio_executor;
+pub use bytes;
+pub use futures;
+#[doc(inline)]
+pub use multiaddr;
+#[doc(inline)]
+pub use multihash;
+pub use tokio_codec;
+pub use tokio_io;
 
 #[doc(inline)]
 pub use libp2p_core as core;
@@ -184,6 +183,7 @@ pub use libp2p_yamux as yamux;
 
 mod transport_ext;
 
+pub mod bandwidth;
 pub mod simple;
 
 pub use self::core::{
@@ -191,7 +191,7 @@ pub use self::core::{
     upgrade::{InboundUpgrade, InboundUpgradeExt, OutboundUpgrade, OutboundUpgradeExt},
     PeerId, Swarm, Transport,
 };
-pub use self::multiaddr::Multiaddr;
+pub use self::multiaddr::{multiaddr as build_multiaddr, Multiaddr};
 pub use self::simple::SimpleProtocol;
 pub use self::transport_ext::TransportExt;
 pub use libp2p_core_derive::NetworkBehaviour;
@@ -283,8 +283,16 @@ type InnerImplementation = core::transport::OrTransport<
     not(feature = "libp2p-websocket")
 ))]
 type InnerImplementation = dns::DnsConfig<tcp::TcpConfig>;
-#[cfg(any(target_os = "emscripten", target_os = "unknown"))]
+#[cfg(all(
+    any(target_os = "emscripten", target_os = "unknown"),
+    feature = "libp2p-websocket"
+))]
 type InnerImplementation = websocket::BrowserWsConfig;
+#[cfg(all(
+    any(target_os = "emscripten", target_os = "unknown"),
+    not(feature = "libp2p-websocket")
+))]
+type InnerImplementation = core::transport::dummy::DummyTransport;
 
 #[derive(Debug, Clone)]
 struct CommonTransportInner {
@@ -311,9 +319,25 @@ impl CommonTransport {
 
     /// Initializes the `CommonTransport`.
     #[inline]
-    #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
+    #[cfg(all(
+        any(target_os = "emscripten", target_os = "unknown"),
+        feature = "libp2p-websocket"
+    ))]
     pub fn new() -> CommonTransport {
         let inner = websocket::BrowserWsConfig::new();
+        CommonTransport {
+            inner: CommonTransportInner { inner },
+        }
+    }
+
+    /// Initializes the `CommonTransport`.
+    #[inline]
+    #[cfg(all(
+        any(target_os = "emscripten", target_os = "unknown"),
+        not(feature = "libp2p-websocket")
+    ))]
+    pub fn new() -> CommonTransport {
+        let inner = core::transport::dummy::DummyTransport::new();
         CommonTransport {
             inner: CommonTransportInner { inner },
         }
@@ -343,38 +367,5 @@ impl Transport for CommonTransport {
     #[inline]
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         self.inner.inner.nat_traversal(server, observed)
-    }
-}
-
-/// The `multiaddr!` macro is an easy way for a user to create a `Multiaddr`.
-///
-/// Example:
-///
-/// ```rust
-/// # #[macro_use]
-/// # extern crate libp2p;
-/// # fn main() {
-/// let _addr = multiaddr![Ip4([127, 0, 0, 1]), Tcp(10500u16)];
-/// # }
-/// ```
-///
-/// Each element passed to `multiaddr![]` should be a variant of the `Protocol` enum. The
-/// optional parameter is casted into the proper type with the `Into` trait.
-///
-/// For example, `Ip4([127, 0, 0, 1])` works because `Ipv4Addr` implements `From<[u8; 4]>`.
-#[macro_export]
-macro_rules! multiaddr {
-    ($($comp:ident $(($param:expr))*),+) => {
-        {
-            use std::iter;
-            let elem = iter::empty::<$crate::multiaddr::Protocol>();
-            $(
-                let elem = {
-                    let cmp = $crate::multiaddr::Protocol::$comp $(( $param.into() ))*;
-                    elem.chain(iter::once(cmp))
-                };
-            )+
-            elem.collect::<$crate::Multiaddr>()
-        }
     }
 }

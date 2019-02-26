@@ -64,7 +64,7 @@ fn nat_traversal_transforms_the_observed_address_according_to_the_transport_used
     let mut raw_swarm = RawSwarm::<_, _, _, Handler, _>::new(transport, PeerId::random());
     let addr1 = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
     // An unrelated outside address is returned as-is, no transform
-    let outside_addr1 = "/memory".parse::<Multiaddr>().expect("bad multiaddr");
+    let outside_addr1 = "/memory/0".parse::<Multiaddr>().expect("bad multiaddr");
 
     let addr2 = "/ip4/127.0.0.2/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
     let outside_addr2 = "/ip4/127.0.0.2/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
@@ -128,7 +128,7 @@ fn num_incoming_negotiated() {
     transport.set_initial_listener_state(ListenerState::Ok(Async::Ready(Some((peer_id, muxer)))));
 
     let mut swarm = RawSwarm::<_, _, _, Handler, _>::new(transport, PeerId::random());
-    swarm.listen_on("/memory".parse().unwrap()).unwrap();
+    swarm.listen_on("/memory/0".parse().unwrap()).unwrap();
 
     // no incoming yet
     assert_eq!(swarm.incoming_negotiated().count(), 0);
@@ -203,7 +203,7 @@ fn querying_for_pending_peer() {
     let peer_id = PeerId::random();
     let peer = swarm.peer(peer_id.clone());
     assert_matches!(peer, Peer::NotConnected(PeerNotConnected{ .. }));
-    let addr = "/memory".parse().expect("bad multiaddr");
+    let addr = "/memory/0".parse().expect("bad multiaddr");
     let pending_peer = peer.into_not_connected().unwrap().connect(addr, Handler::default());
     assert_matches!(pending_peer, PeerPendingConnect { .. });
 }
@@ -255,7 +255,7 @@ fn poll_with_closed_listener() {
     transport.set_initial_listener_state(ListenerState::Ok(Async::Ready(None)));
 
     let mut swarm = RawSwarm::<_, _, _, Handler, _>::new(transport, PeerId::random());
-    swarm.listen_on("/memory".parse().unwrap()).unwrap();
+    swarm.listen_on("/memory/0".parse().unwrap()).unwrap();
 
     let mut rt = Runtime::new().unwrap();
     let swarm = Arc::new(Mutex::new(swarm));
@@ -274,7 +274,7 @@ fn unknown_peer_that_is_unreachable_yields_unknown_peer_dial_error() {
     let mut transport = DummyTransport::new();
     transport.make_dial_fail();
     let mut swarm = RawSwarm::<_, _, _, Handler, _>::new(transport, PeerId::random());
-    let addr = "/memory".parse::<Multiaddr>().expect("bad multiaddr");
+    let addr = "/memory/0".parse::<Multiaddr>().expect("bad multiaddr");
     let handler = Handler::default();
     let dial_result = swarm.dial(addr, handler);
     assert!(dial_result.is_ok());
@@ -311,7 +311,7 @@ fn known_peer_that_is_unreachable_yields_dial_error() {
         let mut swarm1 = swarm1.lock();
         let peer = swarm1.peer(peer_id.clone());
         assert_matches!(peer, Peer::NotConnected(PeerNotConnected{ .. }));
-        let addr = "/memory".parse::<Multiaddr>().expect("bad multiaddr");
+        let addr = "/memory/0".parse::<Multiaddr>().expect("bad multiaddr");
         let pending_peer = peer.into_not_connected().unwrap().connect(addr, Handler::default());
         assert_matches!(pending_peer, PeerPendingConnect { .. });
     }
@@ -466,7 +466,7 @@ fn limit_incoming_connections() {
     let mut swarm = RawSwarm::<_, _, _, Handler, _>::new_with_incoming_limit(
         transport, PeerId::random(), Some(limit));
     assert_eq!(swarm.incoming_limit(), Some(limit));
-    swarm.listen_on("/memory".parse().unwrap()).unwrap();
+    swarm.listen_on("/memory/0".parse().unwrap()).unwrap();
     assert_eq!(swarm.incoming_negotiated().count(), 0);
 
     let swarm = Arc::new(Mutex::new(swarm));

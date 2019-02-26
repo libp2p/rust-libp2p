@@ -63,7 +63,7 @@
 
 
 /// Multi-address re-export.
-pub extern crate multiaddr;
+pub use multiaddr;
 
 mod keys_proto;
 mod peer_id;

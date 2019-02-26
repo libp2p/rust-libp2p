@@ -36,6 +36,7 @@ use tokio_io::{AsyncRead, AsyncWrite};
 pub mod and_then;
 pub mod boxed;
 pub mod choice;
+pub mod dummy;
 pub mod map;
 pub mod map_err;
 pub mod memory;
@@ -43,7 +44,7 @@ pub mod timeout;
 pub mod upgrade;
 
 pub use self::choice::OrTransport;
-pub use self::memory::connector;
+pub use self::memory::MemoryTransport;
 pub use self::upgrade::Upgrade;
 
 /// A transport is an object that can be used to produce connections by listening or dialing a
@@ -246,7 +247,7 @@ impl<TErr> TransportError<TErr> {
 impl<TErr> fmt::Display for TransportError<TErr>
 where TErr: fmt::Display,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TransportError::MultiaddrNotSupported(addr) => write!(f, "Multiaddr is not supported: {}", addr),
             TransportError::Other(err) => write!(f, "{}", err),
