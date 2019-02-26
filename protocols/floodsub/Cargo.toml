@@ -1,8 +1,13 @@
 [package]
 name = "libp2p-floodsub"
-version = "0.1.0"
+edition = "2018"
+description = "Floodsub protocol for libp2p"
+version = "0.4.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 bs58 = "0.2.0"
@@ -10,9 +15,9 @@ bytes = "0.4"
 cuckoofilter = "0.3.2"
 fnv = "1.0"
 futures = "0.1"
-libp2p-core = { path = "../../core" }
-protobuf = "2.0.2"
-rand = "0.5"
+libp2p-core = { version = "0.4.0", path = "../../core" }
+protobuf = "2.3"
+rand = "0.6"
 smallvec = "0.6.5"
 tokio-codec = "0.1"
 tokio-io = "0.1"

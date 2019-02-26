@@ -20,12 +20,9 @@
 
 //! Provides the `TransportExt` trait.
 
-use ratelimit::RateLimited;
-use std::io;
-use std::time::Duration;
+use crate::{bandwidth::BandwidthLogging, bandwidth::BandwidthSinks, ratelimit::RateLimited, Transport};
+use std::{io, sync::Arc, time::Duration};
 use tokio_executor::DefaultExecutor;
-use transport_timeout::TransportTimeout;
-use Transport;
 
 /// Trait automatically implemented on all objects that implement `Transport`. Provides some
 /// additional utilities.
@@ -38,41 +35,10 @@ use Transport;
 /// use std::time::Duration;
 ///
 /// let _transport = TcpConfig::new()
-///     .with_timeout(Duration::from_secs(20))
 ///     .with_rate_limit(1024 * 1024, 1024 * 1024);
 /// ```
 ///
 pub trait TransportExt: Transport {
-    /// Adds a timeout to the connection and upgrade steps for all the sockets created by
-    /// the transport.
-    #[inline]
-    fn with_timeout(self, timeout: Duration) -> TransportTimeout<Self>
-    where
-        Self: Sized,
-    {
-        TransportTimeout::new(self, timeout)
-    }
-
-    /// Adds a timeout to the connection and upgrade steps for all the outgoing sockets created
-    /// by the transport.
-    #[inline]
-    fn with_outbound_timeout(self, timeout: Duration) -> TransportTimeout<Self>
-    where
-        Self: Sized,
-    {
-        TransportTimeout::with_outgoing_timeout(self, timeout)
-    }
-
-    /// Adds a timeout to the connection and upgrade steps for all the incoming sockets created
-    /// by the transport.
-    #[inline]
-    fn with_inbound_timeout(self, timeout: Duration) -> TransportTimeout<Self>
-    where
-        Self: Sized,
-    {
-        TransportTimeout::with_ingoing_timeout(self, timeout)
-    }
-
     /// Adds a maximum transfer rate to the sockets created with the transport.
     #[inline]
     fn with_rate_limit(
@@ -89,6 +55,18 @@ pub trait TransportExt: Transport {
             max_read_bytes_per_sec,
             max_write_bytes_per_sec,
         )
+    }
+
+    /// Adds a layer on the `Transport` that logs all trafic that passes through the sockets
+    /// created by it.
+    ///
+    /// This method returns an `Arc<BandwidthSinks>` that can be used to retreive the bandwidth
+    /// values.
+    fn with_bandwidth_logging(self, period: Duration) -> (BandwidthLogging<Self>, Arc<BandwidthSinks>)
+    where
+        Self: Sized
+    {
+        BandwidthLogging::new(self, period)
     }
 
     // TODO: add methods to easily upgrade for secio/mplex/yamux

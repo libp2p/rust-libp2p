@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use muxing;
+use crate::muxing;
 use smallvec::SmallVec;
 use std::fmt;
 use std::io::Error as IoError;
@@ -161,6 +161,13 @@ where
     #[inline]
     pub fn is_outbound_open(&self) -> bool {
         self.outbound_state == StreamState::Open
+    }
+
+    /// Returns `true` if the remote has shown any sign of activity after the muxer has been open.
+    ///
+    /// See `StreamMuxer::is_remote_acknowledged`.
+    pub fn is_remote_acknowledged(&self) -> bool {
+        self.muxer.is_remote_acknowledged()
     }
 
     /// Destroys the node stream and returns all the pending outbound substreams.
@@ -322,7 +329,7 @@ impl<TMuxer, TUserData> fmt::Debug for NodeStream<TMuxer, TUserData>
 where
     TMuxer: muxing::StreamMuxer,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_struct("NodeStream")
             .field("inbound_state", &self.inbound_state)
             .field("outbound_state", &self.outbound_state)
@@ -351,7 +358,7 @@ where
     TMuxer::Substream: fmt::Debug,
     TUserData: fmt::Debug,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             NodeEvent::InboundSubstream { substream } => {
                 f.debug_struct("NodeEvent::OutboundClosed")
@@ -379,11 +386,11 @@ where
 
 #[cfg(test)]
 mod node_stream {
-    use super::NodeStream;
+    use super::{NodeEvent, NodeStream};
+    use crate::tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
+    use assert_matches::assert_matches;
     use futures::prelude::*;
     use tokio_mock_task::MockTask;
-    use super::NodeEvent;
-    use tests::dummy_muxer::{DummyMuxer, DummyConnectionState};
 
     fn build_node_stream() -> NodeStream<DummyMuxer, Vec<u8>> {
         let muxer = DummyMuxer::new();

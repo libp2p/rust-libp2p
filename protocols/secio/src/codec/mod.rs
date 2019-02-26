@@ -24,8 +24,8 @@
 use self::decode::DecoderMiddleware;
 use self::encode::EncoderMiddleware;
 
-use aes_ctr::stream_cipher::StreamCipherCore;
-use algo_support::Digest;
+use aes_ctr::stream_cipher;
+use crate::algo_support::Digest;
 use hmac::{self, Mac};
 use sha2::{Sha256, Sha512};
 use tokio_io::codec::length_delimited;
@@ -37,7 +37,7 @@ mod encode;
 /// Type returned by `full_codec`.
 pub type FullCodec<S> = DecoderMiddleware<EncoderMiddleware<length_delimited::Framed<S>>>;
 
-pub type StreamCipher = Box<dyn StreamCipherCore + Send>;
+pub type StreamCipher = Box<dyn stream_cipher::StreamCipher + Send>;
 
 #[derive(Debug, Clone)]
 pub enum Hmac {
@@ -69,13 +69,15 @@ impl Hmac {
 
     /// Signs the data.
     // TODO: better return type?
-    pub fn sign(&mut self, crypted_data: &[u8]) -> Vec<u8> {
+    pub fn sign(&self, crypted_data: &[u8]) -> Vec<u8> {
         match *self {
-            Hmac::Sha256(ref mut hmac) => {
+            Hmac::Sha256(ref hmac) => {
+                let mut hmac = hmac.clone();
                 hmac.input(crypted_data);
                 hmac.result().code().to_vec()
             },
-            Hmac::Sha512(ref mut hmac) => {
+            Hmac::Sha512(ref hmac) => {
+                let mut hmac = hmac.clone();
                 hmac.input(crypted_data);
                 hmac.result().code().to_vec()
             },
@@ -84,13 +86,15 @@ impl Hmac {
 
     /// Verifies that the data matches the expected hash.
     // TODO: better error?
-    pub fn verify(&mut self, crypted_data: &[u8], expected_hash: &[u8]) -> Result<(), ()> {
+    pub fn verify(&self, crypted_data: &[u8], expected_hash: &[u8]) -> Result<(), ()> {
         match *self {
-            Hmac::Sha256(ref mut hmac) => {
+            Hmac::Sha256(ref hmac) => {
+                let mut hmac = hmac.clone();
                 hmac.input(crypted_data);
                 hmac.verify(expected_hash).map_err(|_| ())
             },
-            Hmac::Sha512(ref mut hmac) => {
+            Hmac::Sha512(ref hmac) => {
+                let mut hmac = hmac.clone();
                 hmac.input(crypted_data);
                 hmac.verify(expected_hash).map_err(|_| ())
             },
@@ -120,19 +124,16 @@ where
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio;
-    extern crate tokio_tcp;
-    use self::tokio::runtime::current_thread::Runtime;
-    use self::tokio_tcp::TcpListener;
-    use self::tokio_tcp::TcpStream;
-    use stream_cipher::{ctr, Cipher};
+    use tokio::runtime::current_thread::Runtime;
+    use tokio_tcp::{TcpListener, TcpStream};
+    use crate::stream_cipher::{ctr, Cipher};
     use super::full_codec;
     use super::DecoderMiddleware;
     use super::EncoderMiddleware;
     use super::Hmac;
-    use algo_support::Digest;
+    use crate::algo_support::Digest;
+    use crate::error::SecioError;
     use bytes::BytesMut;
-    use error::SecioError;
     use futures::sync::mpsc::channel;
     use futures::{Future, Sink, Stream, stream};
     use rand;

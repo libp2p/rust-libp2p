@@ -18,36 +18,38 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use algo_support;
+use crate::algo_support;
 use bytes::BytesMut;
-use codec::{full_codec, FullCodec, Hmac};
-use stream_cipher::{Cipher, ctr};
+use crate::codec::{full_codec, FullCodec, Hmac};
+use crate::stream_cipher::{Cipher, ctr};
 use ed25519_dalek::{PublicKey as Ed25519PublicKey, Signature as Ed25519Signature};
-use error::SecioError;
-use exchange;
+use crate::error::SecioError;
+use crate::exchange;
 use futures::future;
 use futures::sink::Sink;
 use futures::stream::Stream;
 use futures::Future;
 use libp2p_core::PublicKey;
+use log::{debug, trace};
 use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
 use protobuf::Message as ProtobufMessage;
 use rand::{self, RngCore};
-#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
-use ring::signature::{RSASigningState, RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256, verify as ring_verify};
-#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+use ring::signature::{RSA_PKCS1_2048_8192_SHA256, RSA_PKCS1_SHA256, verify as ring_verify};
+#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 use ring::rand::SystemRandom;
 #[cfg(feature = "secp256k1")]
 use secp256k1;
-use sha2::{Digest as ShaDigestTrait, Sha256, Sha512};
+use sha2::{Digest as ShaDigestTrait, Sha256};
 use std::cmp::{self, Ordering};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use structs_proto::{Exchange, Propose};
+use crate::structs_proto::{Exchange, Propose};
 use tokio_io::codec::length_delimited;
 use tokio_io::{AsyncRead, AsyncWrite};
-#[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 use untrusted::Input as UntrustedInput;
-use {KeyAgreement, SecioConfig, SecioKeyPairInner};
+use crate::{KeyAgreement, SecioConfig, SecioKeyPairInner};
+#[cfg(feature = "secp256k1")]
 
 // This struct contains the whole context of a handshake, and is filled progressively
 // throughout the various parts of the handshake.
@@ -367,18 +369,11 @@ where
                 exchange.set_epubkey(tmp_pub_key);
                 exchange.set_signature({
                     match context.config.key.inner {
-                        #[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+                        #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
                         SecioKeyPairInner::Rsa { ref private, .. } => {
-                            let mut state = match RSASigningState::new(private.clone()) {
-                                Ok(s) => s,
-                                Err(_) => {
-                                    debug!("failed to sign local exchange");
-                                    return Err(SecioError::SigningFailure);
-                                },
-                            };
                             let mut signature = vec![0; private.public_modulus_len()];
                             let rng = SystemRandom::new();
-                            match state.sign(&RSA_PKCS1_SHA256, &rng, &data_to_sign, &mut signature) {
+                            match private.sign(&RSA_PKCS1_SHA256, &rng, &data_to_sign, &mut signature) {
                                 Ok(_) => (),
                                 Err(_) => {
                                     debug!("failed to sign local exchange");
@@ -389,7 +384,7 @@ where
                             signature
                         },
                         SecioKeyPairInner::Ed25519 { ref key_pair } => {
-                            let signature = key_pair.sign::<Sha512>(&data_to_sign);
+                            let signature = key_pair.sign(&data_to_sign);
                             signature.to_bytes().to_vec()
                         },
                         #[cfg(feature = "secp256k1")]
@@ -448,7 +443,7 @@ where
             data_to_verify.extend_from_slice(remote_exch.get_epubkey());
 
             match context.state.remote.public_key {
-                #[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+                #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
                 PublicKey::Rsa(ref remote_public_key) => {
                     // TODO: The ring library doesn't like some stuff in our DER public key,
                     //       therefore we scrap the first 24 bytes of the key. A proper fix would
@@ -470,7 +465,7 @@ where
                     let pubkey = Ed25519PublicKey::from_bytes(remote_public_key);
 
                     if let (Ok(signature), Ok(pubkey)) = (signature, pubkey) {
-                        match pubkey.verify::<Sha512>(&data_to_verify, &signature) {
+                        match pubkey.verify(&data_to_verify, &signature) {
                             Ok(()) => (),
                             Err(_) => {
                                 debug!("failed to verify the remote's signature");
@@ -500,7 +495,7 @@ where
                         return Err(SecioError::SignatureVerificationFailed)
                     }
                 },
-                #[cfg(not(all(feature = "ring", not(target_os = "emscripten"))))]
+                #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
                 PublicKey::Rsa(_) => {
                     debug!("support for RSA was disabled at compile-time");
                     return Err(SecioError::SignatureVerificationFailed);
@@ -549,7 +544,7 @@ where
             let (encoding_cipher, encoding_hmac) = {
                 let (iv, rest) = local_infos.split_at(iv_size);
                 let (cipher_key, mac_key) = rest.split_at(cipher_key_size);
-                let hmac = Hmac::from_key(context.state.remote.chosen_hash.into(), mac_key);
+                let hmac = Hmac::from_key(context.state.remote.chosen_hash, mac_key);
                 let cipher = ctr(chosen_cipher, cipher_key, iv);
                 (cipher, hmac)
             };
@@ -557,7 +552,7 @@ where
             let (decoding_cipher, decoding_hmac) = {
                 let (iv, rest) = remote_infos.split_at(iv_size);
                 let (cipher_key, mac_key) = rest.split_at(cipher_key_size);
-                let hmac = Hmac::from_key(context.state.remote.chosen_hash.into(), mac_key);
+                let hmac = Hmac::from_key(context.state.remote.chosen_hash, mac_key);
                 let cipher = ctr(chosen_cipher, cipher_key, iv);
                 (cipher, hmac)
             };
@@ -591,8 +586,11 @@ fn stretch_key(hmac: Hmac, result: &mut [u8]) {
     }
 }
 
-fn stretch_key_inner<D: ::hmac::digest::Digest + Clone>(hmac: ::hmac::Hmac<D>, result: &mut [u8])
-where ::hmac::Hmac<D>: Clone {
+fn stretch_key_inner<D>(hmac: ::hmac::Hmac<D>, result: &mut [u8])
+where D: ::hmac::digest::Input + ::hmac::digest::BlockInput +
+          ::hmac::digest::FixedOutput + ::hmac::digest::Reset + Default + Clone,
+    ::hmac::Hmac<D>: Clone + ::hmac::crypto_mac::Mac
+{
     use ::hmac::Mac;
     const SEED: &[u8] = b"key expansion";
 
@@ -621,22 +619,19 @@ where ::hmac::Hmac<D>: Clone {
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio;
-    extern crate tokio_tcp;
     use bytes::BytesMut;
-    use self::tokio::runtime::current_thread::Runtime;
-    use self::tokio_tcp::TcpListener;
-    use self::tokio_tcp::TcpStream;
+    use tokio::runtime::current_thread::Runtime;
+    use tokio_tcp::{TcpListener, TcpStream};
     use crate::SecioError;
     use super::handshake;
     use super::stretch_key;
-    use algo_support::Digest;
-    use codec::Hmac;
+    use crate::algo_support::Digest;
+    use crate::codec::Hmac;
     use futures::prelude::*;
-    use {SecioConfig, SecioKeyPair};
+    use crate::{SecioConfig, SecioKeyPair};
 
     #[test]
-    #[cfg(all(feature = "ring", not(target_os = "emscripten")))]
+    #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
     fn handshake_with_self_succeeds_rsa() {
         let key1 = {
             let private = include_bytes!("../tests/test-rsa-private-key.pk8");

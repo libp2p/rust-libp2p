@@ -18,34 +18,22 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-extern crate bytes;
-extern crate fnv;
-#[macro_use]
-extern crate futures;
-extern crate libp2p_core as core;
-#[macro_use]
-extern crate log;
-extern crate parking_lot;
-extern crate tokio_codec;
-extern crate tokio_io;
-extern crate unsigned_varint;
-
 mod codec;
 
 use std::{cmp, iter, mem};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::sync::{atomic::AtomicUsize, atomic::Ordering, Arc};
 use bytes::Bytes;
-use core::{
+use libp2p_core::{
     Endpoint,
     StreamMuxer,
     muxing::Shutdown,
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
 };
+use log::{debug, trace};
 use parking_lot::Mutex;
 use fnv::{FnvHashMap, FnvHashSet};
-use futures::prelude::*;
-use futures::{executor, future, stream::Fuse, task};
+use futures::{prelude::*, executor, future, stream::Fuse, task, task_local, try_ready};
 use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -58,7 +46,8 @@ pub struct MplexConfig {
     max_buffer_len: usize,
     /// Behaviour when the buffer size limit is reached.
     max_buffer_behaviour: MaxBufferBehaviour,
-    /// When sending data, split it into frames whose maximum size is this value.
+    /// When sending data, split it into frames whose maximum size is this value
+    /// (max 1MByte, as per the Mplex spec).
     split_send_size: usize,
 }
 
@@ -97,8 +86,16 @@ impl MplexConfig {
         self
     }
 
+    /// Sets the frame size used when sending data. Capped at 1Mbyte as per the
+    /// Mplex spec.
+    pub fn split_send_size(&mut self, size: usize) -> &mut Self {
+        let size = cmp::min(size, codec::MAX_FRAME_SIZE);
+        self.split_send_size = size;
+        self
+    }
+
     #[inline]
-    fn upgrade<C>(self, i: C, endpoint: Endpoint) -> Multiplex<C>
+    fn upgrade<C>(self, i: C) -> Multiplex<C>
     where
         C: AsyncRead + AsyncWrite
     {
@@ -110,14 +107,15 @@ impl MplexConfig {
                 config: self,
                 buffer: Vec::with_capacity(cmp::min(max_buffer_len, 512)),
                 opened_substreams: Default::default(),
-                next_outbound_stream_id: if endpoint == Endpoint::Dialer { 0 } else { 1 },
+                next_outbound_stream_id: 0,
                 notifier_read: Arc::new(Notifier {
                     to_notify: Mutex::new(Default::default()),
                 }),
                 notifier_write: Arc::new(Notifier {
                     to_notify: Mutex::new(Default::default()),
                 }),
-                is_shutdown: false
+                is_shutdown: false,
+                is_acknowledged: false,
             })
         }
     }
@@ -148,12 +146,12 @@ pub enum MaxBufferBehaviour {
 }
 
 impl UpgradeInfo for MplexConfig {
-    type UpgradeId = ();
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
     #[inline]
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once((Bytes::from("/mplex/6.7.0"), ()))
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once(b"/mplex/6.7.0")
     }
 }
 
@@ -165,8 +163,8 @@ where
     type Error = IoError;
     type Future = future::FutureResult<Self::Output, IoError>;
 
-    fn upgrade_inbound(self, socket: C, _: Self::UpgradeId) -> Self::Future {
-        future::ok(self.upgrade(socket, Endpoint::Listener))
+    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
+        future::ok(self.upgrade(socket))
     }
 }
 
@@ -178,8 +176,8 @@ where
     type Error = IoError;
     type Future = future::FutureResult<Self::Output, IoError>;
 
-    fn upgrade_outbound(self, socket: C, _: Self::UpgradeId) -> Self::Future {
-        future::ok(self.upgrade(socket, Endpoint::Dialer))
+    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
+        future::ok(self.upgrade(socket))
     }
 }
 
@@ -203,7 +201,7 @@ struct MultiplexInner<C> {
     // The `Endpoint` value denotes who initiated the substream from our point of view
     // (see note [StreamId]).
     opened_substreams: FnvHashSet<(u32, Endpoint)>,
-    // Id of the next outgoing substream. Should always increase by two.
+    // Id of the next outgoing substream.
     next_outbound_stream_id: u32,
     /// List of tasks to notify when a read event happens on the underlying stream.
     notifier_read: Arc<Notifier>,
@@ -211,7 +209,9 @@ struct MultiplexInner<C> {
     notifier_write: Arc<Notifier>,
     /// If true, the connection has been shut down. We need to be careful not to accidentally
     /// call `Sink::poll_complete` or `Sink::start_send` after `Sink::close`.
-    is_shutdown: bool
+    is_shutdown: bool,
+    /// If true, the remote has sent data to us.
+    is_acknowledged: bool,
 }
 
 struct Notifier {
@@ -299,6 +299,7 @@ where C: AsyncRead + AsyncWrite,
         };
 
         trace!("Received message: {:?}", elem);
+        inner.is_acknowledged = true;
 
         // Handle substreams opening/closing.
         match elem {
@@ -385,7 +386,8 @@ where C: AsyncRead + AsyncWrite
         // Assign a substream ID now.
         let substream_id = {
             let n = inner.next_outbound_stream_id;
-            inner.next_outbound_stream_id += 2;
+            inner.next_outbound_stream_id = inner.next_outbound_stream_id.checked_add(1)
+                .expect("Mplex substream ID overflowed");
             n
         };
 
@@ -461,7 +463,7 @@ where C: AsyncRead + AsyncWrite
     fn read_substream(&self, substream: &mut Self::Substream, buf: &mut [u8]) -> Poll<usize, IoError> {
         loop {
             // First, transfer from `current_data`.
-            if substream.current_data.len() != 0 {
+            if !substream.current_data.is_empty() {
                 let len = cmp::min(substream.current_data.len(), buf.len());
                 buf[..len].copy_from_slice(&substream.current_data.split_to(len));
                 return Ok(Async::Ready(len));
@@ -548,10 +550,14 @@ where C: AsyncRead + AsyncWrite
         })
     }
 
+    fn is_remote_acknowledged(&self) -> bool {
+        self.inner.lock().is_acknowledged
+    }
+
     #[inline]
     fn shutdown(&self, _: Shutdown) -> Poll<(), IoError> {
         let inner = &mut *self.inner.lock();
-        let () = try_ready!(inner.inner.close_notify(&inner.notifier_write, 0));
+        try_ready!(inner.inner.close_notify(&inner.notifier_write, 0));
         inner.is_shutdown = true;
         Ok(Async::Ready(()))
     }

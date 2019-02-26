@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{muxing::{Shutdown, StreamMuxer}, Multiaddr};
+use crate::{muxing::{Shutdown, StreamMuxer}, Multiaddr, ProtocolName};
 use futures::prelude::*;
 use std::{fmt, io::{Error as IoError, Read, Write}};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -34,7 +34,7 @@ where
     A: fmt::Display,
     B: fmt::Display
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             EitherError::A(a) => a.fmt(f),
             EitherError::B(b) => b.fmt(f)
@@ -47,10 +47,10 @@ where
     A: fmt::Debug + std::error::Error,
     B: fmt::Debug + std::error::Error
 {
-    fn cause(&self) -> Option<&dyn std::error::Error> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            EitherError::A(a) => a.cause(),
-            EitherError::B(b) => b.cause()
+            EitherError::A(a) => a.source(),
+            EitherError::B(b) => b.source()
         }
     }
 }
@@ -243,6 +243,13 @@ where
         }
     }
 
+    fn is_remote_acknowledged(&self) -> bool {
+        match self {
+            EitherOutput::First(inner) => inner.is_remote_acknowledged(),
+            EitherOutput::Second(inner) => inner.is_remote_acknowledged()
+        }
+    }
+
     fn shutdown(&self, kind: Shutdown) -> Poll<(), IoError> {
         match self {
             EitherOutput::First(inner) => inner.shutdown(kind),
@@ -275,19 +282,21 @@ pub enum EitherListenStream<A, B> {
 
 impl<AStream, BStream, AInner, BInner> Stream for EitherListenStream<AStream, BStream>
 where
-    AStream: Stream<Item = (AInner, Multiaddr), Error = IoError>,
-    BStream: Stream<Item = (BInner, Multiaddr), Error = IoError>,
+    AStream: Stream<Item = (AInner, Multiaddr)>,
+    BStream: Stream<Item = (BInner, Multiaddr)>,
 {
     type Item = (EitherFuture<AInner, BInner>, Multiaddr);
-    type Error = IoError;
+    type Error = EitherError<AStream::Error, BStream::Error>;
 
     #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         match self {
             EitherListenStream::First(a) => a.poll()
-                .map(|i| (i.map(|v| (v.map(|(o, addr)| (EitherFuture::First(o), addr)))))),
+                .map(|i| (i.map(|v| (v.map(|(o, addr)| (EitherFuture::First(o), addr))))))
+                .map_err(EitherError::A),
             EitherListenStream::Second(a) => a.poll()
-                .map(|i| (i.map(|v| (v.map(|(o, addr)| (EitherFuture::Second(o), addr)))))),
+                .map(|i| (i.map(|v| (v.map(|(o, addr)| (EitherFuture::Second(o), addr))))))
+                .map_err(EitherError::B),
         }
     }
 }
@@ -302,17 +311,17 @@ pub enum EitherFuture<A, B> {
 
 impl<AFuture, BFuture, AInner, BInner> Future for EitherFuture<AFuture, BFuture>
 where
-    AFuture: Future<Item = AInner, Error = IoError>,
-    BFuture: Future<Item = BInner, Error = IoError>,
+    AFuture: Future<Item = AInner>,
+    BFuture: Future<Item = BInner>,
 {
     type Item = EitherOutput<AInner, BInner>;
-    type Error = IoError;
+    type Error = EitherError<AFuture::Error, BFuture::Error>;
 
     #[inline]
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self {
-            EitherFuture::First(a) => a.poll().map(|v| v.map(EitherOutput::First)),
-            EitherFuture::Second(a) => a.poll().map(|v| v.map(EitherOutput::Second)),
+            EitherFuture::First(a) => a.poll().map(|v| v.map(EitherOutput::First)).map_err(EitherError::A),
+            EitherFuture::Second(a) => a.poll().map(|v| v.map(EitherOutput::Second)).map_err(EitherError::B),
         }
     }
 }
@@ -333,12 +342,23 @@ where
         match self {
             EitherFuture2::A(a) => a.poll()
                 .map(|v| v.map(EitherOutput::First))
-                .map_err(|e| EitherError::A(e)),
+                .map_err(EitherError::A),
 
             EitherFuture2::B(b) => b.poll()
                 .map(|v| v.map(EitherOutput::Second))
-                .map_err(|e| EitherError::B(e))
+                .map_err(EitherError::B)
         }
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum EitherName<A, B> { A(A), B(B) }
+
+impl<A: ProtocolName, B: ProtocolName> ProtocolName for EitherName<A, B> {
+    fn protocol_name(&self) -> &[u8] {
+        match self {
+            EitherName::A(a) => a.protocol_name(),
+            EitherName::B(b) => b.protocol_name()
+        }
+    }
+}

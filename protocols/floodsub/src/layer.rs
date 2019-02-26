@@ -18,31 +18,34 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::protocol::{FloodsubConfig, FloodsubMessage, FloodsubRpc, FloodsubSubscription, FloodsubSubscriptionAction};
+use crate::topic::{Topic, TopicHash};
 use cuckoofilter::CuckooFilter;
+use fnv::FnvHashSet;
 use futures::prelude::*;
-use handler::FloodsubHandler;
-use libp2p_core::nodes::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction};
-use libp2p_core::{protocols_handler::ProtocolsHandler, PeerId};
-use protocol::{FloodsubMessage, FloodsubRpc, FloodsubSubscription, FloodsubSubscriptionAction};
+use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use libp2p_core::{protocols_handler::ProtocolsHandler, protocols_handler::OneShotHandler, Multiaddr, PeerId};
 use rand;
 use smallvec::SmallVec;
 use std::{collections::VecDeque, iter, marker::PhantomData};
 use std::collections::hash_map::{DefaultHasher, HashMap};
 use tokio_io::{AsyncRead, AsyncWrite};
-use topic::{Topic, TopicHash};
 
 /// Network behaviour that automatically identifies nodes periodically, and returns information
 /// about them.
-pub struct FloodsubBehaviour<TSubstream> {
+pub struct Floodsub<TSubstream> {
     /// Events that need to be yielded to the outside when polling.
-    events: VecDeque<NetworkBehaviourAction<FloodsubRpc, FloodsubMessage>>,
+    events: VecDeque<NetworkBehaviourAction<FloodsubRpc, FloodsubEvent>>,
 
     /// Peer id of the local node. Used for the source of the messages that we publish.
     local_peer_id: PeerId,
 
+    /// List of peers to send messages to.
+    target_peers: FnvHashSet<PeerId>,
+
     /// List of peers the network is connected to, and the topics that they're subscribed to.
     // TODO: filter out peers that don't support floodsub, so that we avoid hammering them with
-    //       opened substream
+    //       opened substreams
     connected_peers: HashMap<PeerId, SmallVec<[TopicHash; 8]>>,
 
     // List of topics we're subscribed to. Necessary to filter out messages that we receive
@@ -57,21 +60,52 @@ pub struct FloodsubBehaviour<TSubstream> {
     marker: PhantomData<TSubstream>,
 }
 
-impl<TSubstream> FloodsubBehaviour<TSubstream> {
-    /// Creates a `FloodsubBehaviour`.
+impl<TSubstream> Floodsub<TSubstream> {
+    /// Creates a `Floodsub`.
     pub fn new(local_peer_id: PeerId) -> Self {
-        FloodsubBehaviour {
+        Floodsub {
             events: VecDeque::new(),
             local_peer_id,
+            target_peers: FnvHashSet::default(),
             connected_peers: HashMap::new(),
             subscribed_topics: SmallVec::new(),
             received: CuckooFilter::new(),
             marker: PhantomData,
         }
     }
+
+    /// Add a node to the list of nodes to propagate messages to.
+    #[inline]
+    pub fn add_node_to_partial_view(&mut self, peer_id: PeerId) {
+        // Send our topics to this node if we're already connected to it.
+        if self.connected_peers.contains_key(&peer_id) {
+            for topic in self.subscribed_topics.iter() {
+                self.events.push_back(NetworkBehaviourAction::SendEvent {
+                    peer_id: peer_id.clone(),
+                    event: FloodsubRpc {
+                        messages: Vec::new(),
+                        subscriptions: vec![FloodsubSubscription {
+                            topic: topic.hash().clone(),
+                            action: FloodsubSubscriptionAction::Subscribe,
+                        }],
+                    },
+                });
+            }
+        }
+
+        if self.target_peers.insert(peer_id.clone()) {
+            self.events.push_back(NetworkBehaviourAction::DialPeer { peer_id });
+        }
+    }
+
+    /// Remove a node from the list of nodes to propagate messages to.
+    #[inline]
+    pub fn remove_node_from_partial_view(&mut self, peer_id: &PeerId) {
+        self.target_peers.remove(&peer_id);
+    }
 }
 
-impl<TSubstream> FloodsubBehaviour<TSubstream> {
+impl<TSubstream> Floodsub<TSubstream> {
     /// Subscribes to a topic.
     ///
     /// Returns true if the subscription worked. Returns false if we were already subscribed.
@@ -172,30 +206,36 @@ impl<TSubstream> FloodsubBehaviour<TSubstream> {
     }
 }
 
-impl<TSubstream> NetworkBehaviour for FloodsubBehaviour<TSubstream>
+impl<TSubstream> NetworkBehaviour for Floodsub<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
-    type ProtocolsHandler = FloodsubHandler<TSubstream>;
-    type OutEvent = FloodsubMessage;
+    type ProtocolsHandler = OneShotHandler<TSubstream, FloodsubConfig, FloodsubRpc, InnerMessage>;
+    type OutEvent = FloodsubEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        FloodsubHandler::new()
+        Default::default()
+    }
+
+    fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
+        Vec::new()
     }
 
     fn inject_connected(&mut self, id: PeerId, _: ConnectedPoint) {
         // We need to send our subscriptions to the newly-connected node.
-        for topic in self.subscribed_topics.iter() {
-            self.events.push_back(NetworkBehaviourAction::SendEvent {
-                peer_id: id.clone(),
-                event: FloodsubRpc {
-                    messages: Vec::new(),
-                    subscriptions: vec![FloodsubSubscription {
-                        topic: topic.hash().clone(),
-                        action: FloodsubSubscriptionAction::Subscribe,
-                    }],
-                },
-            });
+        if self.target_peers.contains(&id) {
+            for topic in self.subscribed_topics.iter() {
+                self.events.push_back(NetworkBehaviourAction::SendEvent {
+                    peer_id: id.clone(),
+                    event: FloodsubRpc {
+                        messages: Vec::new(),
+                        subscriptions: vec![FloodsubSubscription {
+                            topic: topic.hash().clone(),
+                            action: FloodsubSubscriptionAction::Subscribe,
+                        }],
+                    },
+                });
+            }
         }
 
         self.connected_peers.insert(id.clone(), SmallVec::new());
@@ -204,28 +244,48 @@ where
     fn inject_disconnected(&mut self, id: &PeerId, _: ConnectedPoint) {
         let was_in = self.connected_peers.remove(id);
         debug_assert!(was_in.is_some());
+
+        // We can be disconnected by the remote in case of inactivity for example, so we always
+        // try to reconnect.
+        if self.target_peers.contains(id) {
+            self.events.push_back(NetworkBehaviourAction::DialPeer { peer_id: id.clone() });
+        }
     }
 
     fn inject_node_event(
         &mut self,
         propagation_source: PeerId,
-        event: FloodsubRpc,
+        event: InnerMessage,
     ) {
+        // We ignore successful sends event.
+        let event = match event {
+            InnerMessage::Rx(event) => event,
+            InnerMessage::Sent => return,
+        };
+
         // Update connected peers topics
         for subscription in event.subscriptions {
-            let mut remote_peer_topics = self.connected_peers
+            let remote_peer_topics = self.connected_peers
                 .get_mut(&propagation_source)
-                .expect("connected_peers is kept in sync with the peers we are connected to; we are guaranteed to only receive events from connected peers ; qed");
+                .expect("connected_peers is kept in sync with the peers we are connected to; we are guaranteed to only receive events from connected peers; QED");
             match subscription.action {
                 FloodsubSubscriptionAction::Subscribe => {
                     if !remote_peer_topics.contains(&subscription.topic) {
-                        remote_peer_topics.push(subscription.topic);
+                        remote_peer_topics.push(subscription.topic.clone());
                     }
+                    self.events.push_back(NetworkBehaviourAction::GenerateEvent(FloodsubEvent::Subscribed {
+                        peer_id: propagation_source.clone(),
+                        topic: subscription.topic,
+                    }));
                 }
                 FloodsubSubscriptionAction::Unsubscribe => {
                     if let Some(pos) = remote_peer_topics.iter().position(|t| t == &subscription.topic ) {
                         remote_peer_topics.remove(pos);
                     }
+                    self.events.push_back(NetworkBehaviourAction::GenerateEvent(FloodsubEvent::Unsubscribed {
+                        peer_id: propagation_source.clone(),
+                        topic: subscription.topic,
+                    }));
                 }
             }
         }
@@ -242,7 +302,8 @@ where
 
             // Add the message to be dispatched to the user.
             if self.subscribed_topics.iter().any(|t| message.topics.iter().any(|u| t.hash() == u)) {
-                self.events.push_back(NetworkBehaviourAction::GenerateEvent(message.clone()));
+                let event = FloodsubEvent::Message(message.clone());
+                self.events.push_back(NetworkBehaviourAction::GenerateEvent(event));
             }
 
             // Propagate the message to everyone else who is subscribed to any of the topics.
@@ -276,6 +337,7 @@ where
 
     fn poll(
         &mut self,
+        _: &mut PollParameters<'_>,
     ) -> Async<
         NetworkBehaviourAction<
             <Self::ProtocolsHandler as ProtocolsHandler>::InEvent,
@@ -288,4 +350,49 @@ where
 
         Async::NotReady
     }
+}
+
+/// Transmission between the `OneShotHandler` and the `FloodsubHandler`.
+pub enum InnerMessage {
+    /// We received an RPC from a remote.
+    Rx(FloodsubRpc),
+    /// We successfully sent an RPC request.
+    Sent,
+}
+
+impl From<FloodsubRpc> for InnerMessage {
+    #[inline]
+    fn from(rpc: FloodsubRpc) -> InnerMessage {
+        InnerMessage::Rx(rpc)
+    }
+}
+
+impl From<()> for InnerMessage {
+    #[inline]
+    fn from(_: ()) -> InnerMessage {
+        InnerMessage::Sent
+    }
+}
+
+/// Event that can happen on the floodsub behaviour.
+#[derive(Debug)]
+pub enum FloodsubEvent {
+    /// A message has been received.
+    Message(FloodsubMessage),
+
+    /// A remote subscribed to a topic.
+    Subscribed {
+        /// Remote that has subscribed.
+        peer_id: PeerId,
+        /// The topic it has subscribed to.
+        topic: TopicHash,
+    },
+
+    /// A remote unsubscribed from a topic.
+    Unsubscribed {
+        /// Remote that has unsubscribed.
+        peer_id: PeerId,
+        /// The topic it has subscribed from.
+        topic: TopicHash,
+    },
 }

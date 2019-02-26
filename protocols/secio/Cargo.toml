@@ -1,43 +1,52 @@
 [package]
 name = "libp2p-secio"
-version = "0.1.0"
+edition = "2018"
+description = "Secio encryption protocol for libp2p"
+version = "0.4.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-asn1_der = "0.5"
+asn1_der = "0.6.1"
 bytes = "0.4"
 futures = "0.1"
-libp2p-core = { path = "../../core" }
-log = "0.4.1"
-protobuf = "2.0.2"
-rand = "0.5"
+libp2p-core = { version = "0.4.0", path = "../../core" }
+log = "0.4.6"
+protobuf = "2.3"
+rand = "0.6.5"
 libsecp256k1 = { version = "0.2", optional = true }
-aes-ctr = "0.1.0"
-aesni = { version = "0.4.1", features = ["nocheck"], optional = true }
-twofish = "0.1.0"
-ctr = "0.1"
-lazy_static = { version = "0.2.11", optional = true }
-rw-stream-sink = { path = "../../misc/rw-stream-sink" }
+aes-ctr = "0.3"
+aesni = { version = "0.6", features = ["nocheck"], optional = true }
+twofish = "0.2.0"
+ctr = "0.3"
+lazy_static = "1.2.0"
+rw-stream-sink = { version = "0.1.0", path = "../../misc/rw-stream-sink" }
 tokio-io = "0.1.0"
-sha2 = "0.7.1"
-ed25519-dalek = "0.8.0"
-hmac = "0.6.3"
+sha2 = "0.8.0"
+ed25519-dalek = "1.0.0-pre.1"
+hmac = "0.7.0"
 
-[target.'cfg(not(target_os = "emscripten"))'.dependencies]
-ring = { version = "0.12", default-features = false }
-untrusted = { version = "0.5" }
+[target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dependencies]
+ring = { version = "0.14", features = ["use_heap"], default-features = false }
+untrusted = { version = "0.6" }
 
-[target.'cfg(target_os = "emscripten")'.dependencies]
-stdweb = { version = "0.4.8", default-features = false }
+[target.'cfg(any(target_os = "emscripten", target_os = "unknown"))'.dependencies]
+stdweb = { version = "0.4", default-features = false }
 
 [features]
-default = ["rsa", "secp256k1"]
+default = ["secp256k1"]
 secp256k1 = ["libsecp256k1"]
-rsa = ["ring/rsa_signing"]
-aes-all = ["aesni", "lazy_static"]
+aes-all = ["aesni"]
 
 [dev-dependencies]
-libp2p-tcp-transport = { path = "../../transports/tcp" }
+criterion = "0.2"
+libp2p-tcp = { version = "0.4.0", path = "../../transports/tcp" }
 tokio = "0.1"
 tokio-tcp = "0.1"
+
+[[bench]]
+name = "bench"
+harness = false

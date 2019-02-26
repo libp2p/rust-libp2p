@@ -21,12 +21,17 @@
 //! Contains the `listener_select_proto` code, which allows selecting a protocol thanks to
 //! `multistream-select` for the listener.
 
-use bytes::Bytes;
 use futures::{prelude::*, sink, stream::StreamFuture};
-use protocol::{DialerToListenerMessage, Listener, ListenerFuture, ListenerToDialerMessage};
+use crate::protocol::{
+    DialerToListenerMessage,
+    Listener,
+    ListenerFuture,
+    ListenerToDialerMessage
+};
+use log::{debug, trace};
 use std::mem;
 use tokio_io::{AsyncRead, AsyncWrite};
-use ProtocolChoiceError;
+use crate::ProtocolChoiceError;
 
 /// Helps selecting a protocol amongst the ones supported.
 ///
@@ -42,46 +47,59 @@ use ProtocolChoiceError;
 ///
 /// On success, returns the socket and the identifier of the chosen protocol (of type `P`). The
 /// socket now uses this protocol.
-pub fn listener_select_proto<R, I, M, P>(inner: R, protocols: I) -> ListenerSelectFuture<R, I, P>
+pub fn listener_select_proto<R, I, X>(inner: R, protocols: I) -> ListenerSelectFuture<R, I, X>
 where
     R: AsyncRead + AsyncWrite,
-    I: Iterator<Item = (Bytes, M, P)> + Clone,
-    M: FnMut(&Bytes, &Bytes) -> bool,
+    for<'r> &'r I: IntoIterator<Item = X>,
+    X: AsRef<[u8]>
 {
     ListenerSelectFuture {
-        inner: ListenerSelectState::AwaitListener { listener_fut: Listener::new(inner), protocols }
+        inner: ListenerSelectState::AwaitListener {
+            listener_fut: Listener::listen(inner),
+            protocols
+        }
     }
 }
 
 /// Future, returned by `listener_select_proto` which selects a protocol among the ones supported.
-pub struct ListenerSelectFuture<R: AsyncRead + AsyncWrite, I, P> {
-    inner: ListenerSelectState<R, I, P>
+pub struct ListenerSelectFuture<R, I, X>
+where
+    R: AsyncRead + AsyncWrite,
+    for<'a> &'a I: IntoIterator<Item = X>,
+    X: AsRef<[u8]>
+{
+    inner: ListenerSelectState<R, I, X>
 }
 
-enum ListenerSelectState<R: AsyncRead + AsyncWrite, I, P> {
+enum ListenerSelectState<R, I, X>
+where
+    R: AsyncRead + AsyncWrite,
+    for<'a> &'a I: IntoIterator<Item = X>,
+    X: AsRef<[u8]>
+{
     AwaitListener {
-        listener_fut: ListenerFuture<R>,
+        listener_fut: ListenerFuture<R, X>,
         protocols: I
     },
     Incoming {
-        stream: StreamFuture<Listener<R>>,
+        stream: StreamFuture<Listener<R, X>>,
         protocols: I
     },
     Outgoing {
-        sender: sink::Send<Listener<R>>,
+        sender: sink::Send<Listener<R, X>>,
         protocols: I,
-        outcome: Option<P>
+        outcome: Option<X>
     },
     Undefined
 }
 
-impl<R, I, M, P> Future for ListenerSelectFuture<R, I, P>
+impl<R, I, X> Future for ListenerSelectFuture<R, I, X>
 where
-    I: Iterator<Item=(Bytes, M, P)> + Clone,
-    M: FnMut(&Bytes, &Bytes) -> bool,
     R: AsyncRead + AsyncWrite,
+    for<'a> &'a I: IntoIterator<Item = X>,
+    X: AsRef<[u8]> + Clone
 {
-    type Item = (P, R);
+    type Item = (X, R, I);
     type Error = ProtocolChoiceError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -109,10 +127,12 @@ where
                     };
                     match msg {
                         Some(DialerToListenerMessage::ProtocolsListRequest) => {
-                            let msg = ListenerToDialerMessage::ProtocolsListResponse {
-                                list: protocols.clone().map(|(p, _, _)| p).collect(),
-                            };
-                            trace!("protocols list response: {:?}", msg);
+                            trace!("protocols list response: {:?}", protocols
+                                   .into_iter()
+                                   .map(|p| p.as_ref().into())
+                                   .collect::<Vec<Vec<u8>>>());
+                            let list = protocols.into_iter().collect();
+                            let msg = ListenerToDialerMessage::ProtocolsListResponse { list };
                             let sender = listener.send(msg);
                             self.inner = ListenerSelectState::Outgoing {
                                 sender,
@@ -123,14 +143,16 @@ where
                         Some(DialerToListenerMessage::ProtocolRequest { name }) => {
                             let mut outcome = None;
                             let mut send_back = ListenerToDialerMessage::NotAvailable;
-                            for (supported, mut matches, value) in protocols.clone() {
-                                if matches(&name, &supported) {
-                                    send_back = ListenerToDialerMessage::ProtocolAck {name: name.clone()};
-                                    outcome = Some(value);
+                            for supported in &protocols {
+                                if name.as_ref() == supported.as_ref() {
+                                    send_back = ListenerToDialerMessage::ProtocolAck {
+                                        name: supported.clone()
+                                    };
+                                    outcome = Some(supported);
                                     break;
                                 }
                             }
-                            trace!("requested: {:?}, response: {:?}", name, send_back);
+                            trace!("requested: {:?}, supported: {}", name, outcome.is_some());
                             let sender = listener.send(send_back);
                             self.inner = ListenerSelectState::Outgoing { sender, protocols, outcome }
                         }
@@ -149,7 +171,7 @@ where
                         }
                     };
                     if let Some(p) = outcome {
-                        return Ok(Async::Ready((p, listener.into_inner())))
+                        return Ok(Async::Ready((p, listener.into_inner(), protocols)))
                     } else {
                         let stream = listener.into_future();
                         self.inner = ListenerSelectState::Incoming { stream, protocols }

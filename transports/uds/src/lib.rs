@@ -44,28 +44,14 @@
 //! The `UdsConfig` structs implements the `Transport` trait of the `core` library. See the
 //! documentation of `core` and of libp2p in general to learn how to use the `Transport` trait.
 
-#![cfg(all(unix, not(target_os = "emscripten")))]
+#![cfg(all(unix, not(any(target_os = "emscripten", target_os = "unknown"))))]
 
-extern crate futures;
-extern crate libp2p_core;
-#[macro_use]
-extern crate log;
-extern crate multiaddr;
-extern crate tokio_uds;
-
-#[cfg(test)]
-extern crate tempfile;
-#[cfg(test)]
-extern crate tokio_io;
-#[cfg(test)]
-extern crate tokio;
-
-use futures::future::{self, Future, FutureResult};
+use futures::{future::{self, FutureResult}, prelude::*, try_ready};
 use futures::stream::Stream;
+use log::debug;
 use multiaddr::{Protocol, Multiaddr};
-use std::io::Error as IoError;
-use std::path::PathBuf;
-use libp2p_core::Transport;
+use std::{io, path::PathBuf};
+use libp2p_core::{Transport, transport::TransportError};
 use tokio_uds::{UnixListener, UnixStream};
 
 /// Represents the configuration for a Unix domain sockets transport capability for libp2p.
@@ -86,45 +72,38 @@ impl UdsConfig {
 
 impl Transport for UdsConfig {
     type Output = UnixStream;
-    type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = IoError> + Send + Sync>;
-    type ListenerUpgrade = FutureResult<Self::Output, IoError>;
-    type Dial = Box<Future<Item = UnixStream, Error = IoError> + Send + Sync>;  // TODO: name this type
+    type Error = io::Error;
+    type Listener = ListenerStream<tokio_uds::Incoming>;
+    type ListenerUpgrade = FutureResult<Self::Output, io::Error>;
+    type Dial = tokio_uds::ConnectFuture;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)> {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
         if let Ok(path) = multiaddr_to_path(&addr) {
             let listener = UnixListener::bind(&path);
             // We need to build the `Multiaddr` to return from this function. If an error happened,
             // just return the original multiaddr.
             match listener {
-                Ok(_) => {},
-                Err(_) => return Err((self, addr)),
-            };
-
-            debug!("Now listening on {}", addr);
-            let new_addr = addr.clone();
-
-            let future = future::result(listener)
-                .map(move |listener| {
-                    // Pull out a stream of sockets for incoming connections
-                    listener.incoming().map(move |sock| {
-                        debug!("Incoming connection on {}", addr);
-                        (future::ok(sock), addr.clone())
-                    })
-                })
-                .flatten_stream();
-            Ok((Box::new(future), new_addr))
+                Ok(listener) => {
+                    debug!("Now listening on {}", addr);
+                    let future = ListenerStream {
+                        stream: listener.incoming(),
+                        addr: addr.clone()
+                    };
+                    Ok((future, addr))
+                }
+                Err(_) => return Err(TransportError::MultiaddrNotSupported(addr)),
+            }
         } else {
-            Err((self, addr))
+            Err(TransportError::MultiaddrNotSupported(addr))
         }
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)> {
+    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         if let Ok(path) = multiaddr_to_path(&addr) {
             debug!("Dialing {}", addr);
-            let fut = UnixStream::connect(&path);
-            Ok(Box::new(fut) as Box<_>)
+            Ok(UnixStream::connect(&path))
         } else {
-            Err((self, addr))
+            Err(TransportError::MultiaddrNotSupported(addr))
         }
     }
 
@@ -160,6 +139,29 @@ fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
     }
 
     Ok(out)
+}
+
+pub struct ListenerStream<T> {
+    stream: T,
+    addr: Multiaddr
+}
+
+impl<T> Stream for ListenerStream<T>
+where
+    T: Stream
+{
+    type Item = (FutureResult<T::Item, T::Error>, Multiaddr);
+    type Error = T::Error;
+
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        match try_ready!(self.stream.poll()) {
+            Some(item) => {
+                debug!("incoming connection on {}", self.addr);
+                Ok(Async::Ready(Some((future::ok(item), self.addr.clone()))))
+            }
+            None => Ok(Async::Ready(None))
+        }
+    }
 }
 
 #[cfg(test)]

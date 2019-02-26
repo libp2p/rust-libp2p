@@ -1,24 +1,18 @@
 [package]
-name = "multihash"
+name = "parity-multihash"
+edition = "2018"
 description = "Implementation of the multihash format"
-repository = "https://github.com/multiformats/rust-multihash"
-
+repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["multihash", "ipfs"]
-
-version = "0.8.1-pre"
-
-authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
-
+version = "0.1.0"
+authors = ["dignifiedquire <dignifiedquire@gmail.com>", "Parity Technologies <admin@parity.io>"]
 license = "MIT"
-
-readme = "README.md"
-
-documentation = "https://docs.rs/multihash/"
+documentation = "https://docs.rs/parity-multihash/"
 
 [dependencies]
-blake2 = { version = "0.7", default-features = false }
+blake2 = { version = "0.8", default-features = false }
 rand = { version = "0.6", default-features = false, features = ["std"] }
-sha1 = "0.5"
-sha2 = { version = "0.7", default-features = false }
+sha1 = "0.6"
+sha2 = { version = "0.8", default-features = false }
 tiny-keccak = "1.4"
 unsigned-varint = "0.2"

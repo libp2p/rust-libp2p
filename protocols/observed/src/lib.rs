@@ -21,13 +21,6 @@
 //! Connection upgrade to allow retrieving the externally visible address (as dialer) or
 //! to report the externally visible address (as listener).
 
-extern crate bytes;
-extern crate futures;
-extern crate libp2p_core;
-extern crate tokio_codec;
-extern crate tokio_io;
-extern crate unsigned_varint;
-
 use bytes::Bytes;
 use futures::{future, prelude::*};
 use libp2p_core::{Multiaddr, upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}};
@@ -46,11 +39,11 @@ impl Observed {
 }
 
 impl UpgradeInfo for Observed {
-    type UpgradeId = ();
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once((Bytes::from("/paritytech/observed-address/0.1.0"), ()))
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once(b"/paritytech/observed-address/0.1.0")
     }
 }
 
@@ -62,7 +55,7 @@ where
     type Error = io::Error;
     type Future = Box<dyn Future<Item=Self::Output, Error=Self::Error> + Send>;
 
-    fn upgrade_inbound(self, conn: C, _: ()) -> Self::Future {
+    fn upgrade_inbound(self, conn: C, _: Self::Info) -> Self::Future {
         let io = FramedWrite::new(conn, UviBytes::default());
         Box::new(future::ok(Sender { io }))
     }
@@ -76,7 +69,7 @@ where
     type Error = io::Error;
     type Future = Box<dyn Future<Item=Self::Output, Error=Self::Error> + Send>;
 
-    fn upgrade_outbound(self, conn: C, _: ()) -> Self::Future {
+    fn upgrade_outbound(self, conn: C, _: Self::Info) -> Self::Future {
         let io = FramedRead::new(conn, UviBytes::default());
         let future = io.into_future()
             .map_err(|(e, _): (io::Error, FramedRead<C, UviBytes>)| e)
@@ -107,11 +100,9 @@ impl<C: AsyncWrite> Sender<C> {
 
 #[cfg(test)]
 mod tests {
-    extern crate tokio;
-
     use libp2p_core::{Multiaddr, upgrade::{InboundUpgrade, OutboundUpgrade}};
-    use self::tokio::runtime::current_thread;
-    use self::tokio::net::{TcpListener, TcpStream};
+    use tokio::runtime::current_thread;
+    use tokio::net::{TcpListener, TcpStream};
     use super::*;
 
     #[test]
@@ -126,14 +117,14 @@ mod tests {
             .into_future()
             .map_err(|(e, _)| e.into())
             .and_then(move |(conn, _)| {
-                Observed::new().upgrade_inbound(conn.unwrap(), ())
+                Observed::new().upgrade_inbound(conn.unwrap(), b"/paritytech/observed-address/0.1.0")
             })
             .and_then(move |sender| sender.send_address(observed_addr1));
 
         let client = TcpStream::connect(&server_addr)
             .map_err(|e| e.into())
             .and_then(|conn| {
-                Observed::new().upgrade_outbound(conn, ())
+                Observed::new().upgrade_outbound(conn, b"/paritytech/observed-address/0.1.0")
             })
             .map(move |addr| {
                 eprintln!("{} {}", addr, observed_addr2);

@@ -1,8 +1,13 @@
 [package]
 name = "multistream-select"
-version = "0.1.0"
+description = "Multistream-select negotiation protocol for libp2p"
+version = "0.3.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
+edition = "2018"
 
 [dependencies]
 bytes = "0.4"

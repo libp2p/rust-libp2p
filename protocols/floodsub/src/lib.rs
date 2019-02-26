@@ -18,26 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-extern crate bs58;
-extern crate bytes;
-extern crate cuckoofilter;
-extern crate fnv;
-extern crate futures;
-extern crate libp2p_core;
-extern crate protobuf;
-extern crate rand;
-extern crate smallvec;
-extern crate tokio_codec;
-extern crate tokio_io;
-extern crate unsigned_varint;
+//! Implements the floodsub protocol, see also the:
+//! [spec](https://github.com/libp2p/specs/tree/master/pubsub).
 
-mod handler;
+pub mod protocol;
+
 mod layer;
-mod protocol;
 mod rpc_proto;
 mod topic;
 
-pub use self::handler::FloodsubHandler;
-pub use self::layer::FloodsubBehaviour;
-pub use self::protocol::*; // TODO: exact reexports
+pub use self::layer::{Floodsub, FloodsubEvent};
+pub use self::protocol::{FloodsubMessage, FloodsubRpc};
 pub use self::topic::{Topic, TopicBuilder, TopicHash};

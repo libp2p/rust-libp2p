@@ -1,12 +1,16 @@
 [package]
 name = "libp2p-plaintext"
-version = "0.1.0"
+edition = "2018"
+description = "Plaintext encryption dummy protocol for libp2p"
+version = "0.4.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-bytes = "0.4"
 futures = "0.1"
-libp2p-core = { path = "../../core" }
+libp2p-core = { version = "0.4.0", path = "../../core" }
 void = "1"
 

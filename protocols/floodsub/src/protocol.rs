@@ -18,19 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use bytes::{BufMut, Bytes, BytesMut};
 use crate::rpc_proto;
-use futures::future;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, PeerId};
-use protobuf::Message as ProtobufMessage;
-use std::{io, iter};
-use tokio_codec::{Decoder, Encoder, Framed};
+use crate::topic::TopicHash;
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, PeerId, upgrade};
+use protobuf::{ProtobufError, Message as ProtobufMessage};
+use std::{error, fmt, io, iter};
 use tokio_io::{AsyncRead, AsyncWrite};
-use topic::TopicHash;
-use unsigned_varint::codec;
 
 /// Implementation of `ConnectionUpgrade` for the floodsub protocol.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct FloodsubConfig {}
 
 impl FloodsubConfig {
@@ -42,57 +38,151 @@ impl FloodsubConfig {
 }
 
 impl UpgradeInfo for FloodsubConfig {
-    type UpgradeId = ();
-    type NamesIter = iter::Once<(Bytes, Self::UpgradeId)>;
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
 
     #[inline]
-    fn protocol_names(&self) -> Self::NamesIter {
-        iter::once(("/floodsub/1.0.0".into(), ()))
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once(b"/floodsub/1.0.0")
     }
 }
 
 impl<TSocket> InboundUpgrade<TSocket> for FloodsubConfig
 where
-    TSocket: AsyncRead + AsyncWrite,
+    TSocket: AsyncRead,
 {
-    type Output = Framed<TSocket, FloodsubCodec>;
-    type Error = io::Error;
-    type Future = future::FutureResult<Self::Output, Self::Error>;
+    type Output = FloodsubRpc;
+    type Error = FloodsubDecodeError;
+    type Future = upgrade::ReadOneThen<TSocket, (), fn(Vec<u8>, ()) -> Result<FloodsubRpc, FloodsubDecodeError>>;
 
     #[inline]
-    fn upgrade_inbound(self, socket: TSocket, _: Self::UpgradeId) -> Self::Future {
-        future::ok(Framed::new(socket, FloodsubCodec { length_prefix: Default::default() }))
+    fn upgrade_inbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
+        upgrade::read_one_then(socket, 2048, (), |packet, ()| {
+            let mut rpc: rpc_proto::RPC = protobuf::parse_from_bytes(&packet)?;
+
+            let mut messages = Vec::with_capacity(rpc.get_publish().len());
+            for mut publish in rpc.take_publish().into_iter() {
+                messages.push(FloodsubMessage {
+                    source: PeerId::from_bytes(publish.take_from()).map_err(|_| {
+                        FloodsubDecodeError::InvalidPeerId
+                    })?,
+                    data: publish.take_data(),
+                    sequence_number: publish.take_seqno(),
+                    topics: publish
+                        .take_topicIDs()
+                        .into_iter()
+                        .map(TopicHash::from_raw)
+                        .collect(),
+                });
+            }
+
+            Ok(FloodsubRpc {
+                messages,
+                subscriptions: rpc
+                    .take_subscriptions()
+                    .into_iter()
+                    .map(|mut sub| FloodsubSubscription {
+                        action: if sub.get_subscribe() {
+                            FloodsubSubscriptionAction::Subscribe
+                        } else {
+                            FloodsubSubscriptionAction::Unsubscribe
+                        },
+                        topic: TopicHash::from_raw(sub.take_topicid()),
+                    })
+                    .collect(),
+            })
+        })
     }
 }
 
-impl<TSocket> OutboundUpgrade<TSocket> for FloodsubConfig
+/// Reach attempt interrupt errors.
+#[derive(Debug)]
+pub enum FloodsubDecodeError {
+    /// Error when reading the packet from the socket.
+    ReadError(upgrade::ReadOneError),
+    /// Error when decoding the raw buffer into a protobuf.
+    ProtobufError(ProtobufError),
+    /// Error when parsing the `PeerId` in the message.
+    InvalidPeerId,
+}
+
+impl From<upgrade::ReadOneError> for FloodsubDecodeError {
+    #[inline]
+    fn from(err: upgrade::ReadOneError) -> Self {
+        FloodsubDecodeError::ReadError(err)
+    }
+}
+
+impl From<ProtobufError> for FloodsubDecodeError {
+    #[inline]
+    fn from(err: ProtobufError) -> Self {
+        FloodsubDecodeError::ProtobufError(err)
+    }
+}
+
+impl fmt::Display for FloodsubDecodeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            FloodsubDecodeError::ReadError(ref err) =>
+                write!(f, "Error while reading from socket: {}", err),
+            FloodsubDecodeError::ProtobufError(ref err) =>
+                write!(f, "Error while decoding protobuf: {}", err),
+            FloodsubDecodeError::InvalidPeerId =>
+                write!(f, "Error while decoding PeerId from message"),
+        }
+    }
+}
+
+impl error::Error for FloodsubDecodeError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match *self {
+            FloodsubDecodeError::ReadError(ref err) => Some(err),
+            FloodsubDecodeError::ProtobufError(ref err) => Some(err),
+            FloodsubDecodeError::InvalidPeerId => None,
+        }
+    }
+}
+
+/// An RPC received by the floodsub system.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FloodsubRpc {
+    /// List of messages that were part of this RPC query.
+    pub messages: Vec<FloodsubMessage>,
+    /// List of subscriptions.
+    pub subscriptions: Vec<FloodsubSubscription>,
+}
+
+impl UpgradeInfo for FloodsubRpc {
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
+
+    #[inline]
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once(b"/floodsub/1.0.0")
+    }
+}
+
+impl<TSocket> OutboundUpgrade<TSocket> for FloodsubRpc
 where
-    TSocket: AsyncRead + AsyncWrite,
+    TSocket: AsyncWrite,
 {
-    type Output = Framed<TSocket, FloodsubCodec>;
+    type Output = ();
     type Error = io::Error;
-    type Future = future::FutureResult<Self::Output, Self::Error>;
+    type Future = upgrade::WriteOne<TSocket>;
 
     #[inline]
-    fn upgrade_outbound(self, socket: TSocket, _: Self::UpgradeId) -> Self::Future {
-        future::ok(Framed::new(socket, FloodsubCodec { length_prefix: Default::default() }))
+    fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
+        let bytes = self.into_bytes();
+        upgrade::write_one(socket, bytes)
     }
 }
 
-/// Implementation of `tokio_codec::Codec`.
-pub struct FloodsubCodec {
-    /// The codec for encoding/decoding the length prefix of messages.
-    length_prefix: codec::UviBytes,
-}
-
-impl Encoder for FloodsubCodec {
-    type Item = FloodsubRpc;
-    type Error = io::Error;
-
-    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
+impl FloodsubRpc {
+    /// Turns this `FloodsubRpc` into a message that can be sent to a substream.
+    fn into_bytes(self) -> Vec<u8> {
         let mut proto = rpc_proto::RPC::new();
 
-        for message in item.messages.into_iter() {
+        for message in self.messages {
             let mut msg = rpc_proto::Message::new();
             msg.set_from(message.source.into_bytes());
             msg.set_data(message.data);
@@ -107,81 +197,17 @@ impl Encoder for FloodsubCodec {
             proto.mut_publish().push(msg);
         }
 
-        for topic in item.subscriptions.into_iter() {
+        for topic in self.subscriptions {
             let mut subscription = rpc_proto::RPC_SubOpts::new();
             subscription.set_subscribe(topic.action == FloodsubSubscriptionAction::Subscribe);
             subscription.set_topicid(topic.topic.into_string());
             proto.mut_subscriptions().push(subscription);
         }
 
-        let msg_size = proto.compute_size();
-        // Reserve enough space for the data and the length. The length has a maximum of 32 bits,
-        // which means that 5 bytes is enough for the variable-length integer.
-        dst.reserve(msg_size as usize + 5);
-
         proto
-            .write_length_delimited_to_writer(&mut dst.by_ref().writer())
-            .expect(
-                "there is no situation in which the protobuf message can be invalid, and \
-                 writing to a BytesMut never fails as we reserved enough space beforehand",
-            );
-        Ok(())
+            .write_to_bytes()
+            .expect("there is no situation in which the protobuf message can be invalid")
     }
-}
-
-impl Decoder for FloodsubCodec {
-    type Item = FloodsubRpc;
-    type Error = io::Error;
-
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let packet = match self.length_prefix.decode(src)? {
-            Some(p) => p,
-            None => return Ok(None),
-        };
-
-        let mut rpc: rpc_proto::RPC = protobuf::parse_from_bytes(&packet)?;
-
-        let mut messages = Vec::with_capacity(rpc.get_publish().len());
-        for mut publish in rpc.take_publish().into_iter() {
-            messages.push(FloodsubMessage {
-                source: PeerId::from_bytes(publish.take_from()).map_err(|_| {
-                    io::Error::new(io::ErrorKind::InvalidData, "Invalid peer ID in message")
-                })?,
-                data: publish.take_data(),
-                sequence_number: publish.take_seqno(),
-                topics: publish
-                    .take_topicIDs()
-                    .into_iter()
-                    .map(|topic| TopicHash::from_raw(topic))
-                    .collect(),
-            });
-        }
-
-        Ok(Some(FloodsubRpc {
-            messages,
-            subscriptions: rpc
-                .take_subscriptions()
-                .into_iter()
-                .map(|mut sub| FloodsubSubscription {
-                    action: if sub.get_subscribe() {
-                        FloodsubSubscriptionAction::Subscribe
-                    } else {
-                        FloodsubSubscriptionAction::Unsubscribe
-                    },
-                    topic: TopicHash::from_raw(sub.take_topicid()),
-                })
-                .collect(),
-        }))
-    }
-}
-
-/// An RPC received by the floodsub system.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct FloodsubRpc {
-    /// List of messages that were part of this RPC query.
-    pub messages: Vec<FloodsubMessage>,
-    /// List of subscriptions.
-    pub subscriptions: Vec<FloodsubSubscription>,
 }
 
 /// A message received by the floodsub system.

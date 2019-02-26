@@ -28,51 +28,66 @@ use futures::{
     stream,
 };
 use std::io;
-use {Multiaddr, Transport};
+use crate::{Multiaddr, PeerId, Transport, transport::TransportError};
+use crate::tests::dummy_muxer::DummyMuxer;
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) enum ListenerState {
-    /// The `usize` indexes items produced by the listener
-    Ok(Async<Option<usize>>),
-    Error,
+    Ok(Async<Option<(PeerId, DummyMuxer)>>),
+    Error
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) struct DummyTransport {
+    /// The current state of Listeners.
     listener_state: ListenerState,
+    /// The next peer returned from dial().
+    next_peer_id: Option<PeerId>,
+    /// When true, all dial attempts return error.
+    dial_should_fail: bool,
 }
 impl DummyTransport {
     pub(crate) fn new() -> Self {
         DummyTransport {
             listener_state: ListenerState::Ok(Async::NotReady),
+            next_peer_id: None,
+            dial_should_fail: false,
         }
     }
     pub(crate) fn set_initial_listener_state(&mut self, state: ListenerState) {
         self.listener_state = state;
     }
+
+    pub(crate) fn set_next_peer_id(&mut self, peer_id: &PeerId) {
+        self.next_peer_id = Some(peer_id.clone());
+    }
+
+    pub(crate) fn make_dial_fail(&mut self) {
+        self.dial_should_fail = true;
+    }
 }
 impl Transport for DummyTransport {
-    type Output = usize;
-    type Listener =
-        Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = io::Error> + Send>;
+    type Output = (PeerId, DummyMuxer);
+    type Error = io::Error;
+    type Listener = Box<dyn Stream<Item=(Self::ListenerUpgrade, Multiaddr), Error=io::Error> + Send>;
     type ListenerUpgrade = FutureResult<Self::Output, io::Error>;
-    type Dial = Box<Future<Item = Self::Output, Error = io::Error> + Send>;
+    type Dial = Box<dyn Future<Item = Self::Output, Error = io::Error> + Send>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), (Self, Multiaddr)>
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>>
     where
         Self: Sized,
     {
         let addr2 = addr.clone();
         match self.listener_state {
-            ListenerState::Ok(async) => {
+            ListenerState::Ok(r#async) => {
                 let tupelize = move |stream| (future::ok(stream), addr.clone());
-                Ok(match async {
+                Ok(match r#async {
                     Async::NotReady => {
                         let stream = stream::poll_fn(|| Ok(Async::NotReady)).map(tupelize);
                         (Box::new(stream), addr2)
                     }
-                    Async::Ready(Some(n)) => {
-                        let stream = stream::iter_ok(n..).map(tupelize);
+                    Async::Ready(Some(tup)) => {
+                        let stream = stream::poll_fn(move || Ok( Async::Ready(Some(tup.clone()) ))).map(tupelize);
                         (Box::new(stream), addr2)
                     }
                     Async::Ready(None) => {
@@ -81,18 +96,36 @@ impl Transport for DummyTransport {
                     }
                 })
             }
-            ListenerState::Error => Err((self, addr2)),
+            ListenerState::Error => Err(TransportError::MultiaddrNotSupported(addr)),
         }
     }
 
-    fn dial(self, _addr: Multiaddr) -> Result<Self::Dial, (Self, Multiaddr)>
+    fn dial(self, _addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>>
     where
         Self: Sized,
     {
-        unimplemented!();
+        let peer_id = if let Some(peer_id) = self.next_peer_id {
+            peer_id
+        } else {
+            PeerId::random()
+        };
+
+        let fut =
+            if self.dial_should_fail {
+                let err_string = format!("unreachable host error, peer={:?}", peer_id);
+                future::err(io::Error::new(io::ErrorKind::Other, err_string))
+            } else {
+                future::ok((peer_id, DummyMuxer::new()))
+            };
+
+        Ok(Box::new(fut))
     }
 
-    fn nat_traversal(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
-        unimplemented!();
+    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        if server == observed {
+            Some(observed.clone())
+        } else {
+            None
+        }
     }
 }
