@@ -452,10 +452,9 @@ impl<'a> MdnsResponse<'a> {
                     };
 
                     let addr = match format!(
-                        "/ip4/{}/tcp/{}/p2p/{}",
+                        "/ip4/{}/tcp/{}",
                         addr,
-                        port,
-                        peer_id.to_base58()
+                        port
                     ).parse::<Multiaddr>() {
                         Ok(m) => m,
                         _ => return None
