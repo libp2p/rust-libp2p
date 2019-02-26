@@ -22,6 +22,7 @@
 
 use aes_ctr::stream_cipher::LoopError;
 use protobuf::error::ProtobufError;
+#[cfg(feature = "secp256k1")]
 use secp256k1::Error as Secp256k1Error;
 use std::error;
 use std::fmt;
@@ -149,6 +150,7 @@ impl From<ProtobufError> for SecioError {
     }
 }
 
+#[cfg(feature = "secp256k1")]
 impl From<Secp256k1Error> for SecioError {
     #[inline]
     fn from(_err: Secp256k1Error) -> SecioError {
