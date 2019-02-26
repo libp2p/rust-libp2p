@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 /// Configuration parameters that define the performance of the gossipsub network.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct GossipsubConfig {
     /// Overlay network parameters.
     /// Number of heartbeats to keep in the `memcache`.

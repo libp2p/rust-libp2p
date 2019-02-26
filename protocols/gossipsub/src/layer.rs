@@ -293,7 +293,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 "JOIN: Adding {:?} peers from the fanout for topic: {:?}",
                 add_peers, topic_hash
             );
-            added_peers.extend_from_slice(&peers[.. add_peers]);
+            added_peers.extend_from_slice(&peers[..add_peers]);
             self.mesh
                 .insert(topic_hash.clone(), peers[..add_peers].to_vec());
             // remove the last published time
@@ -1113,6 +1113,7 @@ where
 }
 
 /// Transmission between the `OneShotHandler` and the `GossipsubRpc`.
+#[derive(Debug)]
 pub enum InnerMessage {
     /// We received an RPC from a remote.
     Rx(GossipsubRpc),
@@ -1135,6 +1136,7 @@ impl From<()> for InnerMessage {
 }
 
 /// Struct that contains lists of gossipsub and floodsub peers.
+#[derive(Debug, Clone)]
 struct PeerList {
     /// List of gossipsub peers.
     gossipsub: Vec<PeerId>,
@@ -1175,6 +1177,7 @@ pub enum GossipsubEvent {
 }
 
 /// The type of node in the pubsub system.
+#[derive(Debug)]
 pub enum NodeType {
     /// A gossipsub node.
     Gossipsub,

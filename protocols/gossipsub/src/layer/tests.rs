@@ -55,7 +55,7 @@ mod tests {
                             action: GossipsubSubscriptionAction::Subscribe,
                             topic_hash: t,
                         })
-                        .collect(),
+                        .collect::<Vec<_>>(),
                     &peer,
                 );
             };
