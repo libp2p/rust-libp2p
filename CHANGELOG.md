@@ -1,3 +1,7 @@
+# Version 0.4.2 (2019-02-27)
+
+- Fixed periodic pinging not working.
+
 # Version 0.4.1 (2019-02-20)
 
 - Fixed wrong version of libp2p-noise.
