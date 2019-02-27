@@ -47,7 +47,7 @@ where
     TSubstream: AsyncRead + AsyncWrite,
 {
     /// Builds a new `PingHandler`.
-    pub fn new() -> PingHandler<TSubstream> {
+    pub fn new() -> Self {
         // TODO: allow customizing timeout; depends on https://github.com/libp2p/rust-libp2p/issues/864
         PingHandler {
             inner: OneShotHandler::default(),
