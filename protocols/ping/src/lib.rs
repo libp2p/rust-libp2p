@@ -32,10 +32,11 @@
 //! When a ping succeeds, a `PingSuccess` event is generated, indicating the time the ping took.
 
 pub mod protocol;
+pub mod handler;
 
 use futures::prelude::*;
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
-use libp2p_core::protocols_handler::{OneShotHandler, ProtocolsHandler};
+use libp2p_core::protocols_handler::ProtocolsHandler;
 use libp2p_core::{Multiaddr, PeerId};
 use std::{marker::PhantomData, time::Duration};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -83,11 +84,11 @@ impl<TSubstream> NetworkBehaviour for Ping<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
-    type ProtocolsHandler = OneShotHandler<TSubstream, protocol::Ping, protocol::Ping, protocol::PingOutput>;
+    type ProtocolsHandler = handler::PingHandler<TSubstream>;
     type OutEvent = PingEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        OneShotHandler::default()
+        handler::PingHandler::default()
     }
 
     fn addresses_of_peer(&mut self, _peer_id: &PeerId) -> Vec<Multiaddr> {
