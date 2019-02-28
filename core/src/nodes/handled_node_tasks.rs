@@ -35,7 +35,7 @@ use std::{
     fmt,
     mem
 };
-use tokio_executor;
+use tokio_executor::Executor;
 
 mod tests;
 
@@ -68,6 +68,9 @@ pub struct HandledNodesTasks<TInEvent, TOutEvent, TIntoHandler, TReachErr, THand
     /// List of node tasks to spawn.
     // TODO: stronger typing?
     to_spawn: SmallVec<[Box<dyn Future<Item = (), Error = ()> + Send>; 8]>,
+    /// If no tokio executor is available, we move tasks to this list, and futures are polled on
+    /// the current thread instead.
+    local_spawns: Vec<Box<dyn Future<Item = (), Error = ()> + Send>>,
 
     /// Sender to emit events to the outside. Meant to be cloned and sent to tasks.
     events_tx: mpsc::UnboundedSender<(InToExtMessage<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>, TaskId)>,
@@ -194,6 +197,7 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TPeer
             tasks: Default::default(),
             next_task_id: TaskId(0),
             to_spawn: SmallVec::new(),
+            local_spawns: Vec::new(),
             events_tx,
             events_rx,
         }
@@ -316,7 +320,24 @@ impl<TInEvent, TOutEvent, TIntoHandler, TReachErr, THandlerErr, TUserData, TPeer
     // TODO: look into merging with `poll()`
     fn poll_inner(&mut self) -> Async<(InToExtMessage<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId>, TaskId)> {
         for to_spawn in self.to_spawn.drain() {
-            tokio_executor::spawn(to_spawn);
+            // We try to use the default executor, but fall back to polling the task manually if
+            // no executor is available. This makes it possible to use the core in environments
+            // outside of tokio.
+            let mut executor = tokio_executor::DefaultExecutor::current();
+            if executor.status().is_ok() {
+                executor.spawn(to_spawn).expect("failed to create a node task");
+            } else {
+                self.local_spawns.push(to_spawn);
+            }
+        }
+
+        for n in (0..self.local_spawns.len()).rev() {
+            let mut task = self.local_spawns.swap_remove(n);
+            match task.poll() {
+                Ok(Async::Ready(())) => (),
+                Ok(Async::NotReady) => self.local_spawns.push(task),
+                Err(_err) => ()     // TODO: log this?
+            }
         }
 
         loop {

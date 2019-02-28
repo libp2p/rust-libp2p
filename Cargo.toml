@@ -2,7 +2,7 @@
 name = "libp2p"
 edition = "2018"
 description = "Peer-to-peer networking library"
-version = "0.4.1"
+version = "0.4.2"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -20,10 +20,10 @@ multiaddr = { package = "parity-multiaddr", version = "0.2.0", path = "./misc/mu
 multihash = { package = "parity-multihash", version = "0.1.0", path = "./misc/multihash" }
 lazy_static = "1.2"
 libp2p-mplex = { version = "0.4.0", path = "./muxers/mplex" }
-libp2p-identify = { version = "0.4.0", path = "./protocols/identify" }
+libp2p-identify = { version = "0.4.1", path = "./protocols/identify" }
 libp2p-kad = { version = "0.4.0", path = "./protocols/kad" }
 libp2p-floodsub = { version = "0.4.0", path = "./protocols/floodsub" }
-libp2p-ping = { version = "0.4.0", path = "./protocols/ping" }
+libp2p-ping = { version = "0.4.1", path = "./protocols/ping" }
 libp2p-plaintext = { version = "0.4.0", path = "./protocols/plaintext" }
 libp2p-ratelimit = { version = "0.4.0", path = "./transports/ratelimit" }
 libp2p-core = { version = "0.4.0", path = "./core" }

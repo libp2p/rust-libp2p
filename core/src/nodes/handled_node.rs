@@ -209,10 +209,13 @@ where
         &mut self.handler
     }
 
-    /// Injects an event to the handler.
+    /// Injects an event to the handler. Has no effect if the handler has already shut down,
+    /// either by itself or after `shutdown()` has been called.
     #[inline]
     pub fn inject_event(&mut self, event: THandler::InEvent) {
-        self.handler.inject_event(event);
+        if !self.handler_is_done {
+            self.handler.inject_event(event);
+        }
     }
 
     /// Returns `true` if the remote has shown any sign of activity after the muxer has been open.
@@ -253,7 +256,9 @@ where
         for user_data in self.node.get_mut().cancel_outgoing() {
             self.handler.inject_outbound_closed(user_data);
         }
-        self.handler.shutdown();
+        if !self.handler_is_done {
+            self.handler.shutdown();
+        }
         self.is_shutting_down = true;
     }
 }
@@ -277,23 +282,33 @@ where
             match self.node.poll().map_err(HandledNodeError::Node)? {
                 Async::NotReady => node_not_ready = true,
                 Async::Ready(Some(NodeEvent::InboundSubstream { substream })) => {
-                    self.handler.inject_substream(substream, NodeHandlerEndpoint::Listener)
+                    if !self.handler_is_done {
+                        self.handler.inject_substream(substream, NodeHandlerEndpoint::Listener)
+                    }
                 }
                 Async::Ready(Some(NodeEvent::OutboundSubstream { user_data, substream })) => {
                     let endpoint = NodeHandlerEndpoint::Dialer(user_data);
-                    self.handler.inject_substream(substream, endpoint)
+                    if !self.handler_is_done {
+                        self.handler.inject_substream(substream, endpoint)
+                    }
                 }
                 Async::Ready(None) => {
                     if !self.is_shutting_down {
                         self.is_shutting_down = true;
-                        self.handler.shutdown()
+                        if !self.handler_is_done {
+                            self.handler.shutdown()
+                        }
                     }
                 }
                 Async::Ready(Some(NodeEvent::OutboundClosed { user_data })) => {
-                    self.handler.inject_outbound_closed(user_data)
+                    if !self.handler_is_done {
+                        self.handler.inject_outbound_closed(user_data)
+                    }
                 }
                 Async::Ready(Some(NodeEvent::InboundClosed)) => {
-                    self.handler.inject_inbound_closed()
+                    if !self.handler_is_done {
+                        self.handler.inject_inbound_closed()
+                    }
                 }
             }
 
