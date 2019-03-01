@@ -32,12 +32,11 @@ lazy_static! {
     static ref HUB: Mutex<FnvHashMap<NonZeroU64, mpsc::Sender<Channel<Bytes>>>> = Mutex::new(FnvHashMap::default());
 }
 
-static CHAN_BUF_SIZE: usize = 1000;
-
 /// Transport that supports `/memory/N` multiaddresses.
 #[derive(Debug, Copy, Clone, Default)]
 pub struct MemoryTransport;
 
+/// Connection to a `MemoryTransport` currently being opened.
 pub struct DialFuture {
     sender: mpsc::Sender<Channel<Bytes>>,
     channel_to_send: Option<Channel<Bytes>>,
@@ -59,10 +58,11 @@ impl Future for DialFuture {
                 _ => (),
             }
         }
-        match self.sender.poll_complete() {
+        match self.sender.close() {
             Err(_) => Err(MemoryTransportError::Unreachable),
             Ok(Async::NotReady) => Ok(Async::NotReady),
-            Ok(Async::Ready(_)) => Ok(Async::Ready(self.channel_to_return.take().unwrap())),
+            Ok(Async::Ready(_)) => Ok(Async::Ready(self.channel_to_return.take()
+                .expect("Future should not be polled again once complete"))),
         }
     }
 }
@@ -99,7 +99,7 @@ impl Transport for MemoryTransport {
 
         let actual_addr = Protocol::Memory(port.get()).into();
 
-        let (tx, rx) = mpsc::channel(CHAN_BUF_SIZE);
+        let (tx, rx) = mpsc::channel(2);
         match hub.entry(port) {
             Entry::Occupied(_) => return Err(TransportError::Other(MemoryTransportError::Unreachable)),
             Entry::Vacant(e) => e.insert(tx),
@@ -126,8 +126,8 @@ impl Transport for MemoryTransport {
 
         let hub = HUB.lock();
         if let Some(sender) = hub.get(&port) {
-            let (a_tx, a_rx) = mpsc::channel(CHAN_BUF_SIZE);
-            let (b_tx, b_rx) = mpsc::channel(CHAN_BUF_SIZE);
+            let (a_tx, a_rx) = mpsc::channel(4096);
+            let (b_tx, b_rx) = mpsc::channel(4096);
             Ok(DialFuture {
                 sender: sender.clone(),
                 channel_to_send: Some(RwStreamSink::new(Chan { incoming: a_rx, outgoing: b_tx })),
