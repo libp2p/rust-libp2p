@@ -81,7 +81,7 @@ where
         // Copy it!
         debug_assert!(item_to_copy.has_remaining());
         let to_copy = cmp::min(buf.len(), item_to_copy.remaining());
-        item_to_copy.by_ref().take(to_copy).copy_to_slice(&mut buf[..to_copy]);
+        item_to_copy.take(to_copy).copy_to_slice(&mut buf[..to_copy]);
         Ok(to_copy)
     }
 }
