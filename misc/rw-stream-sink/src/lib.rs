@@ -195,6 +195,26 @@ mod tests {
         assert_eq!(3, rws.read(&mut buf[3..]).unwrap());
         assert_eq!(3, rws.read(&mut buf[6..]).unwrap());
         assert_eq!(0, rws.read(&mut buf).unwrap());
-        assert_eq!(b"foobarbaz", &buf[..])
+        assert_eq!(b"foobarbaz", &buf[..]);
+    }
+
+    #[test]
+    fn partial_read() {
+        let data: Vec<&[u8]> = vec![b"hell", b"o world"];
+        let mut rws = RwStreamSink::new(stream::iter_ok::<_, std::io::Error>(data));
+        let mut buf = [0; 3];
+        assert_eq!(3, rws.read(&mut buf).unwrap());
+        assert_eq!(b"hel", &buf[..3]);
+        assert_eq!(0, rws.read(&mut buf[..0]).unwrap());
+        assert_eq!(1, rws.read(&mut buf).unwrap());
+        assert_eq!(b"l", &buf[..1]);
+        assert_eq!(3, rws.read(&mut buf).unwrap());
+        assert_eq!(b"o w", &buf[..3]);
+        assert_eq!(0, rws.read(&mut buf[..0]).unwrap());
+        assert_eq!(3, rws.read(&mut buf).unwrap());
+        assert_eq!(b"orl", &buf[..3]);
+        assert_eq!(1, rws.read(&mut buf).unwrap());
+        assert_eq!(b"d", &buf[..1]);
+        assert_eq!(0, rws.read(&mut buf).unwrap());
     }
 }
