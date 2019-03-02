@@ -173,7 +173,7 @@ where
     TMuxer: StreamMuxer,
     THandler: NodeHandler<Substream = Substream<TMuxer>> + fmt::Debug,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("HandledNode")
             .field("node", &self.node)
             .field("handler", &self.handler)
@@ -213,6 +213,13 @@ where
     #[inline]
     pub fn inject_event(&mut self, event: THandler::InEvent) {
         self.handler.inject_event(event);
+    }
+
+    /// Returns `true` if the remote has shown any sign of activity after the muxer has been open.
+    ///
+    /// See `StreamMuxer::is_remote_acknowledged`.
+    pub fn is_remote_acknowledged(&self) -> bool {
+        self.node.get_ref().is_remote_acknowledged()
     }
 
     /// Returns true if the inbound channel of the muxer is open.
@@ -338,7 +345,7 @@ pub enum HandledNodeError<THandlerErr> {
 impl<THandlerErr> fmt::Display for HandledNodeError<THandlerErr>
 where THandlerErr: fmt::Display
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             HandledNodeError::Node(err) => write!(f, "{}", err),
             HandledNodeError::Handler(err) => write!(f, "{}", err),

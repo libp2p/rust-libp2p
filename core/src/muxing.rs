@@ -143,6 +143,14 @@ pub trait StreamMuxer {
     /// Destroys a substream.
     fn destroy_substream(&self, s: Self::Substream);
 
+    /// Returns `true` if the remote has shown any sign of activity after the muxer has been open.
+    ///
+    /// For optimisation purposes, the connection handshake of libp2p can be very optimistic and is
+    /// allowed to assume that the handshake has succeeded when it didn't in fact succeed. This
+    /// method can be called in order to determine whether the remote has accepted our handshake or
+    /// has potentially not received it yet.
+    fn is_remote_acknowledged(&self) -> bool;
+
     /// Shutdown this `StreamMuxer`.
     ///
     /// If supported, sends a hint to the remote that we may no longer open any further outbound
@@ -303,7 +311,7 @@ where
     P::Target: StreamMuxer,
     <P::Target as StreamMuxer>::Substream: fmt::Debug,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         write!(f, "Substream({:?})", self.substream)
     }
 }
@@ -398,7 +406,7 @@ where
 
 /// Abstract `StreamMuxer`.
 pub struct StreamMuxerBox {
-    inner: Box<StreamMuxer<Substream = usize, OutboundSubstream = usize> + Send + Sync>,
+    inner: Box<dyn StreamMuxer<Substream = usize, OutboundSubstream = usize> + Send + Sync>,
 }
 
 impl StreamMuxerBox {
@@ -475,6 +483,11 @@ impl StreamMuxer for StreamMuxerBox {
     #[inline]
     fn shutdown(&self, kind: Shutdown) -> Poll<(), IoError> {
         self.inner.shutdown(kind)
+    }
+
+    #[inline]
+    fn is_remote_acknowledged(&self) -> bool {
+        self.inner.is_remote_acknowledged()
     }
 
     #[inline]
@@ -570,6 +583,11 @@ impl<T> StreamMuxer for Wrap<T> where T: StreamMuxer {
     #[inline]
     fn shutdown(&self, kind: Shutdown) -> Poll<(), IoError> {
         self.inner.shutdown(kind)
+    }
+
+    #[inline]
+    fn is_remote_acknowledged(&self) -> bool {
+        self.inner.is_remote_acknowledged()
     }
 
     #[inline]

@@ -1,3 +1,28 @@
+# Version 0.4.1 (2019-02-20)
+
+- Fixed wrong version of libp2p-noise.
+
+# Version 0.4.0 (2019-02-20)
+
+- The `multiaddr!` macro has been moved to the `multiaddr` crate and is now reexported under the name `build_multiaddr!`.
+- Modified the functions in `upgrade::transfer` to be more convenient to use.
+- Now properly sending external addresses in the identify protocol.
+- Fixed duplicate addresses being reported in identify and Kademlia.
+- Fixed infinite looping in the functions in `upgrade::transfer`.
+- Fixed infinite loop on graceful node shutdown with the `ProtocolsHandlerSelect`.
+- Fixed various issues with nodes dialing each other simultaneously.
+- Added the `StreamMuxer::is_remote_acknowledged()` method.
+- Added a `BandwidthLogging` transport wrapper that logs the bandwidth consumption.
+- The addresses to try dialing when dialing a node is now refreshed by the `Swarm` when necessary.
+- Lots of modifications to the semi-private structs in `core/nodes`.
+- Added `IdentifyEvent::SendBack`, when we send back our information.
+- Rewrote the `MemoryTransport` to be similar to the `TcpConfig`.
+
+# Version 0.3.1 (2019-02-02)
+
+- Added `NetworkBehaviour::inject_replaced` that is called whenever we replace a connection with a different connection to the same peer.
+- Fixed various issues with Kademlia.
+
 # Version 0.3.0 (2019-01-30)
 
 - Removed the `topology` module and everything it contained, including the `Topology` trait.

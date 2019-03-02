@@ -19,6 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{Future, IntoFuture, Sink, Stream};
+use libp2p_core as swarm;
+use log::{debug, trace};
 use multiaddr::{Protocol, Multiaddr};
 use rw_stream_sink::RwStreamSink;
 use std::{error, fmt};
@@ -27,8 +29,8 @@ use swarm::{Transport, transport::TransportError};
 use tokio_io::{AsyncRead, AsyncWrite};
 use websocket::client::builder::ClientBuilder;
 use websocket::message::OwnedMessage;
-use websocket::server::upgrade::async::IntoWs;
-use websocket::stream::async::Stream as AsyncStream;
+use websocket::server::upgrade::r#async::IntoWs;
+use websocket::stream::r#async::Stream as AsyncStream;
 
 /// Represents the configuration for a websocket transport capability for libp2p. Must be put on
 /// top of another `Transport`.
@@ -67,11 +69,11 @@ where
     // TODO: this Send is pretty arbitrary and is necessary because of the websocket library
     T::Output: AsyncRead + AsyncWrite + Send,
 {
-    type Output = Box<AsyncStream + Send>;
+    type Output = Box<dyn AsyncStream + Send>;
     type Error = WsError<T::Error>;
-    type Listener = Box<Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = Self::Error> + Send>;
-    type ListenerUpgrade = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
-    type Dial = Box<Future<Item = Self::Output, Error = Self::Error> + Send>;
+    type Listener = Box<dyn Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = Self::Error> + Send>;
+    type ListenerUpgrade = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
+    type Dial = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
 
     fn listen_on(
         self,
@@ -127,15 +129,15 @@ where
                                     .map(|v| v.expect("we only take while this is Some"));
 
                                 let read_write = RwStreamSink::new(framed_data);
-                                Box::new(read_write) as Box<AsyncStream + Send>
+                                Box::new(read_write) as Box<dyn AsyncStream + Send>
                             })
                     })
-                    .map(|s| Box::new(Ok(s).into_future()) as Box<Future<Item = _, Error = _> + Send>)
+                    .map(|s| Box::new(Ok(s).into_future()) as Box<dyn Future<Item = _, Error = _> + Send>)
                     .into_future()
                     .flatten()
             });
 
-            (Box::new(upgraded) as Box<Future<Item = _, Error = _> + Send>, client_addr)
+            (Box::new(upgraded) as Box<dyn Future<Item = _, Error = _> + Send>, client_addr)
         });
 
         Ok((Box::new(listen) as Box<_>, new_addr))
@@ -189,7 +191,7 @@ where
                                 }
                             });
                         let read_write = RwStreamSink::new(framed_data);
-                        Box::new(read_write) as Box<AsyncStream + Send>
+                        Box::new(read_write) as Box<dyn AsyncStream + Send>
                     })
             });
 
@@ -213,7 +215,7 @@ pub enum WsError<TErr> {
 impl<TErr> fmt::Display for WsError<TErr>
 where TErr: fmt::Display
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             WsError::WebSocket(err) => write!(f, "{}", err),
             WsError::Underlying(err) => write!(f, "{}", err),
@@ -266,13 +268,12 @@ fn client_addr_to_ws(client_addr: &Multiaddr, is_wss: bool) -> String {
 
 #[cfg(test)]
 mod tests {
-    extern crate libp2p_tcp as tcp;
-    extern crate tokio;
-    use self::tokio::runtime::current_thread::Runtime;
+    use libp2p_tcp as tcp;
+    use tokio::runtime::current_thread::Runtime;
     use futures::{Future, Stream};
     use multiaddr::Multiaddr;
-    use swarm::Transport;
-    use WsConfig;
+    use super::swarm::Transport;
+    use super::WsConfig;
 
     #[test]
     fn dialer_connects_to_listener_ipv4() {

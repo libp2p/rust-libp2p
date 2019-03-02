@@ -47,7 +47,7 @@ use crate::{
     nodes::{
         handled_node::NodeHandler,
         node::Substream,
-        raw_swarm::{RawSwarm, RawSwarmEvent}
+        raw_swarm::{self, RawSwarm, RawSwarmEvent}
     },
     protocols_handler::{NodeHandlerWrapperBuilder, NodeHandlerWrapper, IntoProtocolsHandler, ProtocolsHandler},
     transport::TransportError,
@@ -180,9 +180,15 @@ where TBehaviour: NetworkBehaviour,
     #[inline]
     pub fn dial(me: &mut Self, peer_id: PeerId) {
         let addrs = me.behaviour.addresses_of_peer(&peer_id);
-        let handler = me.behaviour.new_handler().into_node_handler_builder();
-        if let Some(peer) = me.raw_swarm.peer(peer_id).into_not_connected() {
-            let _ = peer.connect_iter(addrs, handler);
+        match me.raw_swarm.peer(peer_id.clone()) {
+            raw_swarm::Peer::NotConnected(peer) => {
+                let handler = me.behaviour.new_handler().into_node_handler_builder();
+                let _ = peer.connect_iter(addrs, handler);
+            },
+            raw_swarm::Peer::PendingConnect(mut peer) => {
+                peer.append_multiaddr_attempts(addrs)
+            },
+            raw_swarm::Peer::Connected(_) | raw_swarm::Peer::LocalNode => {}
         }
     }
 
@@ -196,6 +202,16 @@ where TBehaviour: NetworkBehaviour,
     #[inline]
     pub fn local_peer_id(me: &Self) -> &PeerId {
         &me.raw_swarm.local_peer_id()
+    }
+
+    /// Adds an external address.
+    ///
+    /// An external address is an address we are listening on but that accounts for things such as
+    /// NAT traversal.
+    pub fn add_external_address(me: &mut Self, addr: Multiaddr) {
+        if me.external_addrs.iter().all(|a| *a != addr) {
+            me.external_addrs.push(addr);
+        }
     }
 }
 
@@ -252,8 +268,7 @@ where TBehaviour: NetworkBehaviour,
                     self.behaviour.inject_disconnected(&peer_id, endpoint);
                 },
                 Async::Ready(RawSwarmEvent::Replaced { peer_id, closed_endpoint, endpoint }) => {
-                    self.behaviour.inject_disconnected(&peer_id, closed_endpoint);
-                    self.behaviour.inject_connected(peer_id, endpoint);
+                    self.behaviour.inject_replaced(peer_id, closed_endpoint, endpoint);
                 },
                 Async::Ready(RawSwarmEvent::IncomingConnection(incoming)) => {
                     let handler = self.behaviour.new_handler();
@@ -300,7 +315,9 @@ where TBehaviour: NetworkBehaviour,
                 },
                 Async::Ready(NetworkBehaviourAction::ReportObservedAddr { address }) => {
                     for addr in self.raw_swarm.nat_traversal(&address) {
-                        self.external_addrs.push(addr);
+                        if self.external_addrs.iter().all(|a| *a != addr) {
+                            self.external_addrs.push(addr);
+                        }
                     }
                 },
             }
@@ -333,6 +350,12 @@ pub trait NetworkBehaviour {
     /// endpoint is the one we used to be connected to.
     fn inject_disconnected(&mut self, peer_id: &PeerId, endpoint: ConnectedPoint);
 
+    /// Indicates the behaviour that we replace the connection from the node with another.
+    fn inject_replaced(&mut self, peer_id: PeerId, closed_endpoint: ConnectedPoint, new_endpoint: ConnectedPoint) {
+        self.inject_disconnected(&peer_id, closed_endpoint);
+        self.inject_connected(peer_id, new_endpoint);
+    }
+
     /// Indicates the behaviour that the node with the given peer id has generated an event for
     /// us.
     ///
@@ -350,7 +373,7 @@ pub trait NetworkBehaviour {
     /// Polls for things that swarm should do.
     ///
     /// This API mimics the API of the `Stream` trait.
-    fn poll(&mut self, topology: &mut PollParameters) -> Async<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
+    fn poll(&mut self, topology: &mut PollParameters<'_>) -> Async<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
 }
 
 /// Used when deriving `NetworkBehaviour`. When deriving `NetworkBehaviour`, must be implemented
@@ -568,7 +591,7 @@ mod tests {
         fn inject_node_event(&mut self, _: PeerId,
             _: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent) {}
 
-        fn poll(&mut self, _: &mut PollParameters) ->
+        fn poll(&mut self, _: &mut PollParameters<'_>) ->
             Async<NetworkBehaviourAction<<Self::ProtocolsHandler as
             ProtocolsHandler>::InEvent, Self::OutEvent>>
         {
