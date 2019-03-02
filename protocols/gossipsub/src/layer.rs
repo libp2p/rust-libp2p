@@ -757,7 +757,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
         }
 
         // piggyback pooled control messages
-        flush_control_pool();
+        self.flush_control_pool();
 
         // shift the memcache
         self.mcache.shift();
@@ -923,13 +923,11 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
     // adds a control action to control_pool
     fn control_pool_add(&mut self, peer: PeerId, control: GossipsubControlAction) {
-        if !self.control_pool.contains_key(&peer) {
-            self.control_pool.insert(peer.clone(), Vec::new());
-        }
-
-        if let Some(controls) = self.control_pool.get_mut(&peer) {
-            controls.push(control.clone());
-        }
+        (*self
+            .control_pool
+            .entry(peer.clone())
+            .or_insert_with(|| Vec::new()))
+        .push(control.clone());
     }
 
     // takes each control action mapping and turns it into a message

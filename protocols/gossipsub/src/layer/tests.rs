@@ -221,25 +221,22 @@ mod tests {
 
         // there should be mesh_n GRAFT messages.
         let graft_messages = gs
-            .events
+            .control_pool
             .iter()
-            .fold(vec![], |mut collected_grafts, e| match e {
-                NetworkBehaviourAction::SendEvent { peer_id: _, event } => {
-                    for c in &event.control_msgs {
-                        match c {
-                            GossipsubControlAction::Graft { topic_hash: _ } => {
-                                collected_grafts.push(c.clone())
-                            }
-                            _ => {}
-                        };
+            .fold(vec![], |mut collected_grafts, (_, controls)| {
+                for c in controls.iter() {
+                    match c {
+                        GossipsubControlAction::Graft { topic_hash: _ } => {
+                            collected_grafts.push(c.clone())
+                        }
+                        _ => {}
                     }
-                    collected_grafts
                 }
-                _ => collected_grafts,
+                collected_grafts
             });
 
-        assert!(
-            graft_messages.len() == 6,
+        assert_eq!(
+            graft_messages.len(), 6,
             "There should be 6 grafts messages sent to peers"
         );
 
@@ -270,26 +267,23 @@ mod tests {
 
         // there should now be 12 graft messages to be sent
         let graft_messages = gs
-            .events
+            .control_pool
             .iter()
-            .fold(vec![], |mut collected_grafts, e| match e {
-                NetworkBehaviourAction::SendEvent { peer_id: _, event } => {
-                    for c in &event.control_msgs {
-                        match c {
-                            GossipsubControlAction::Graft { topic_hash: _ } => {
-                                collected_grafts.push(c.clone())
-                            }
-                            _ => {}
-                        };
+            .fold(vec![], |mut collected_grafts, (_, controls)| {
+                for c in controls.iter() {
+                    match c {
+                        GossipsubControlAction::Graft { topic_hash: _ } => {
+                            collected_grafts.push(c.clone())
+                        }
+                        _ => {}
                     }
-                    collected_grafts
                 }
-                _ => collected_grafts,
+                collected_grafts
             });
 
         assert!(
             graft_messages.len() == 12,
-            "There should be 6 grafts messages sent to peers"
+            "There should be 12 grafts messages sent to peers"
         );
     }
 
@@ -589,18 +583,19 @@ mod tests {
             &peers[7],
             vec![(topic_hashes[0].clone(), vec![String::from("unknown id")])],
         );
+
         // check that we sent an IWANT request for `unknown id`
-        let iwant_exists = gs.events.iter().any(|e| match e {
-            NetworkBehaviourAction::SendEvent { peer_id: _, event } => {
-                event.control_msgs.iter().any(|e| match e {
+        let iwant_exists = match gs.control_pool.get(&peers[7]) {
+            Some(controls) => {
+                controls.iter().any(|c| match c {
                     GossipsubControlAction::IWant { message_ids } => {
                         message_ids.iter().any(|m| *m == String::from("unknown id"))
                     }
                     _ => false,
                 })
             }
-            _ => false,
-        });
+            _ => false
+        };
 
         assert!(iwant_exists
             "Expected to send an IWANT control message for unkown message id");
