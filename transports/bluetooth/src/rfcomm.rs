@@ -28,14 +28,7 @@ pub struct RfcommStream {
 
 impl RfcommStream {
     pub fn connect(dest: Addr, port: u8) -> RfcommStreamFuture {
-        let socket = match RfcommSocket::new() {
-            Ok(s) => s,
-            Err(err) => return RfcommStreamFuture {
-                inner: RfcommStreamFutureInner::Error(err)
-            },
-        };
-
-        match socket.connect(dest, port) {
+        let socket = match RfcommSocket::connect(dest, port) {
             Ok(s) => s,
             Err(err) => return RfcommStreamFuture {
                 inner: RfcommStreamFutureInner::Error(err)
@@ -118,14 +111,12 @@ impl RfcommListener {
         crate::discoverable::enable_discoverable(&addr)?;
         // TODO: crate::gatt_register::register_gatt()?;
 
-        let socket = RfcommSocket::new()?;
-
-        let (inner, actual_port) = if port != 0 {
-            (socket.bind(addr, port)?, port)
+        let (socket, actual_port) = if port != 0 {
+            (RfcommSocket::bind(addr, port)?, port)
         } else {
             (1..30)
                 .filter_map(|port| {
-                    socket.bind(addr, port).ok().map(|s| (s, port))
+                    RfcommSocket::bind(addr, port).ok().map(|s| (s, port))
                 })
                 .next()
                 .ok_or_else(|| io::Error::last_os_error())?

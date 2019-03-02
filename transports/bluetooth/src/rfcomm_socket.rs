@@ -29,7 +29,7 @@ pub struct RfcommSocket {
 
 impl RfcommSocket {
     /// Initializes a new socket by calling `libc::socket`.
-    pub fn new() -> Result<RfcommSocket, io::Error> {
+    fn new() -> Result<RfcommSocket, io::Error> {
         let socket = unsafe {
             libc::socket(
                 libc::AF_BLUETOOTH,
@@ -47,9 +47,11 @@ impl RfcommSocket {
         })
     }
 
-    /// Calls `connect` on the socket.
-    pub fn connect(&self, dest: Addr, port: u8) -> Result<(), io::Error> {
+    /// Initializes a new socket by connecting to a remote.
+    pub fn connect(dest: Addr, port: u8) -> Result<RfcommSocket, io::Error> {
         unsafe {
+            let me = Self::new()?;
+
             let params = ffi::sockaddr_rc {
                 rc_family: libc::AF_BLUETOOTH as u16,
                 rc_bdaddr: ffi::bdaddr_t { b: dest.to_little_endian() },
@@ -57,7 +59,7 @@ impl RfcommSocket {
             };
 
             let status = libc::connect(
-                self.socket,
+                me.socket,
                 &params as *const ffi::sockaddr_rc as *const _,
                 mem::size_of_val(&params) as u32
             );
@@ -72,13 +74,15 @@ impl RfcommSocket {
                 }*/
             }
 
-            Ok(())
+            Ok(me)
         }
     }
 
-    /// Calls `bind` on the socket.
-    pub fn bind(&self, dest: Addr, port: u8) -> Result<(), io::Error> {
+    /// Initializes a new socket by binding and listening to a port.
+    pub fn bind(dest: Addr, port: u8) -> Result<RfcommSocket, io::Error> {
         unsafe {
+            let me = Self::new()?;
+
             let params = ffi::sockaddr_rc {
                 rc_family: libc::AF_BLUETOOTH as u16,
                 rc_bdaddr: ffi::bdaddr_t { b: dest.to_little_endian() },
@@ -86,7 +90,7 @@ impl RfcommSocket {
             };
 
             let status = libc::bind(
-                self.socket,
+                me.socket,
                 &params as *const ffi::sockaddr_rc as *const _,
                 mem::size_of_val(&params) as u32
             );
@@ -95,12 +99,12 @@ impl RfcommSocket {
                 return Err(io::Error::last_os_error());
             }
 
-            let status = libc::listen(self.socket, 8);       // TODO: allow configuring this 8
+            let status = libc::listen(me.socket, 8);       // TODO: allow configuring this 8
             if status == -1 {
                 return Err(io::Error::last_os_error());
             }
 
-            Ok(())
+            Ok(me)
         }
     }
 

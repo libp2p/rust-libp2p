@@ -55,8 +55,7 @@ struct OngoingRequest {
 
 impl SdpClient {
     pub fn connect(addr: Addr) -> Result<SdpClient, io::Error> {
-        let socket = l2cap::L2capSocket::new()?;
-        socket.connect(addr, 0x1)?;
+        let socket = l2cap::L2capSocket::connect(addr, 0x1)?;
         Ok(SdpClient {
             socket: tokio_reactor::PollEvented::new(socket),
             send_queue: SmallVec::new(),

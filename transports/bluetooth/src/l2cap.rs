@@ -28,7 +28,7 @@ pub struct L2capSocket {
 }
 
 impl L2capSocket {
-    pub fn new() -> Result<L2capSocket, io::Error> {
+    fn new() -> Result<L2capSocket, io::Error> {
         let socket = unsafe {
             libc::socket(
                 libc::AF_BLUETOOTH,
@@ -46,8 +46,10 @@ impl L2capSocket {
         })
     }
 
-    pub fn connect(&self, dest: Addr, port: u16) -> Result<(), io::Error> {
+    pub fn connect(dest: Addr, port: u16) -> Result<L2capSocket, io::Error> {
         unsafe {
+            let me = Self::new()?;
+
             let params = ffi::sockaddr_l2 {
                 l2_family: libc::AF_BLUETOOTH as u16,
                 l2_bdaddr: ffi::bdaddr_t { b: dest.to_little_endian() },
@@ -57,7 +59,7 @@ impl L2capSocket {
             };
 
             let status = libc::connect(
-                self.socket,
+                me.socket,
                 &params as *const ffi::sockaddr_l2 as *const _,
                 mem::size_of_val(&params) as u32
             );
@@ -70,7 +72,7 @@ impl L2capSocket {
                 }*/
             }
 
-            Ok(())
+            Ok(me)
         }
     }
 }
