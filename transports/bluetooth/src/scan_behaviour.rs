@@ -18,21 +18,24 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::hci_scan::HciScan;
+use crate::scan::Scan;
 use futures::prelude::*;
-use log::warn;
 use libp2p_core::protocols_handler::{DummyProtocolsHandler, ProtocolsHandler};
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
-use libp2p_core::{Multiaddr, PeerId, multiaddr::Protocol};
-use smallvec::SmallVec;
-use std::{cmp, fmt, io, iter, marker::PhantomData, time::Duration, time::Instant};
+use libp2p_core::{Multiaddr, PeerId};
+use std::{fmt, io, marker::PhantomData, time::Duration, time::Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_timer::Delay;
 
 /// A network behaviour that discovers nearby libp2p-compatible Bluetooth devices.
 pub struct BluetoothDiscovery<TSubstream> {
-    /// The inner service.
-    inner: HciScan,
+    /// The current scan.
+    current_scan: Scan,
+
+    /// Known nearby Bluetooth nodes, and when their TTL expires.
+    known_nodes: Vec<(PeerId, Multiaddr, Instant)>,
+
+    /// Duration for addresses.
+    ttl: Duration,
 
     /// Marker to pin the generic.
     marker: PhantomData<TSubstream>,
@@ -42,27 +45,30 @@ impl<TSubstream> BluetoothDiscovery<TSubstream> {
     /// Builds a new `BluetoothDiscovery`.
     pub fn new() -> io::Result<BluetoothDiscovery<TSubstream>> {
         Ok(BluetoothDiscovery {
-            service: HciScan::new(),
+            current_scan: Scan::new()?,
+            known_nodes: Vec::with_capacity(16),
+            ttl: Duration::from_secs(120),
             marker: PhantomData,
         })
     }
 
-    /// Returns true if the given `PeerId` is in the list of nodes discovered through mDNS.
+    /// Returns true if the given `PeerId` is in the list of nodes discovered through Bluetooth.
     pub fn has_node(&self, peer_id: &PeerId) -> bool {
-        self.discovered_nodes.iter().any(|(p, _, _)| p == peer_id)
+        self.known_nodes.iter().any(|(p, _, _)| p == peer_id)
     }
 }
 
 /// Event that can be produced by the `BluetoothDiscovery`.
 #[derive(Debug)]
-pub enum MdnsEvent {
-    /// Discovered nodes through mDNS.
-    Discovered(DiscoveredAddrsIter),
+pub enum BluetoothEvent {
+    /// Discovered Bluetooth nodes.
+    Discovered {
+        peer_id: PeerId,
+        address: Multiaddr,
+    },
 
     /// The given combinations of `PeerId` and `Multiaddr` have expired.
-    ///
-    /// Each discovered record has a time-to-live. When this TTL expires and the address hasn't
-    /// been refreshed, we remove it from the list emit it as an `Expired` event.
+    // TODO: never triggered
     Expired(ExpiredAddrsIter),
 }
 
@@ -129,7 +135,7 @@ where
     TSubstream: AsyncRead + AsyncWrite,
 {
     type ProtocolsHandler = DummyProtocolsHandler<TSubstream>;
-    type OutEvent = MdnsEvent;
+    type OutEvent = BluetoothEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
         DummyProtocolsHandler::default()
@@ -137,7 +143,7 @@ where
 
     fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
         let now = Instant::now();
-        self.discovered_nodes
+        self.known_nodes
             .iter()
             .filter(move |(p, _, expires)| p == peer_id && *expires > now)
             .map(|(_, addr, _)| addr.clone())
@@ -165,7 +171,7 @@ where
             Self::OutEvent,
         >,
     > {
-        // Remove expired peers.
+        /*// Remove expired peers.
         if let Some(ref mut closest_expiration) = self.closest_expiration {
             match closest_expiration.poll() {
                 Ok(Async::Ready(())) => {
@@ -177,7 +183,7 @@ where
                     }
 
                     if !expired.is_empty() {
-                        let event = MdnsEvent::Expired(ExpiredAddrsIter {
+                        let event = BluetoothEvent::Expired(ExpiredAddrsIter {
                             inner: expired.into_iter(),
                         });
 
@@ -187,78 +193,27 @@ where
                 Ok(Async::NotReady) => (),
                 Err(err) => warn!("tokio timer has errored: {:?}", err),
             }
+        }*/
+
+        // Polling the current scan.
+        match self.current_scan.poll().unwrap() {       // TODO: don't unwrap
+            Async::Ready(Some((addr, peer_id))) => {
+                if let Some(existing) = self.known_nodes.iter_mut().find(|(p, a, _)| *p == peer_id && *a == addr) {
+                    existing.2 = Instant::now() + self.ttl;
+                } else {
+                    self.known_nodes.push((peer_id.clone(), addr.clone(), Instant::now() + self.ttl));
+                }
+
+                return Async::Ready(NetworkBehaviourAction::GenerateEvent(BluetoothEvent::Discovered {
+                    peer_id,
+                    address: addr,
+                }))
+            },
+            Async::Ready(None) => self.current_scan = Scan::new().unwrap(),     // TODO: don't unwrap
+            Async::NotReady => (),
         }
 
-        // Polling the scanning service, and obtain the list of nodes discovered this round.
-        let discovered = loop {
-            let event = match self.inner.poll() {
-                Async::Ready(ev) => ev,
-                Async::NotReady => return Async::NotReady,
-            };
-
-            match event {
-                MdnsPacket::Query(query) => {
-                    let _ = query.respond(
-                        params.local_peer_id().clone(),
-                        params.listened_addresses().cloned(),
-                        Duration::from_secs(5 * 60)
-                    );
-                },
-                MdnsPacket::Response(response) => {
-                    // We perform a call to `nat_traversal()` with the address we observe the
-                    // remote as and the address they listen on.
-                    let obs_ip = Protocol::from(response.remote_addr().ip());
-                    let obs_port = Protocol::Udp(response.remote_addr().port());
-                    let observed: Multiaddr = iter::once(obs_ip)
-                        .chain(iter::once(obs_port))
-                        .collect();
-
-                    let mut discovered: SmallVec<[_; 4]> = SmallVec::new();
-                    for peer in response.discovered_peers() {
-                        if peer.id() == params.local_peer_id() {
-                            continue;
-                        }
-
-                        let new_expiration = Instant::now() + peer.ttl();
-
-                        let mut addrs = Vec::new();
-                        for addr in peer.addresses() {
-                            if let Some(new_addr) = params.nat_traversal(&addr, &observed) {
-                                addrs.push(new_addr);
-                            }
-                            addrs.push(addr);
-                        }
-
-                        for addr in addrs {
-                            if let Some((_, _, cur_expires)) = self.discovered_nodes.iter_mut()
-                                .find(|(p, a, _)| p == peer.id() && *a == addr)
-                            {
-                                *cur_expires = cmp::max(*cur_expires, new_expiration);
-                            } else {
-                                self.discovered_nodes.push((peer.id().clone(), addr.clone(), new_expiration));
-                            }
-
-                            discovered.push((peer.id().clone(), addr));
-                        }
-                    }
-
-                    break discovered;
-                },
-                MdnsPacket::ServiceDiscovery(disc) => {
-                    disc.respond(Duration::from_secs(5 * 60));
-                },
-            }
-        };
-
-        // As the final step, we need to refresh `closest_expiration`.
-        self.closest_expiration = self.discovered_nodes.iter()
-            .fold(None, |exp, &(_, _, elem_exp)| {
-                Some(exp.map(|exp| cmp::min(exp, elem_exp)).unwrap_or(elem_exp))
-            })
-            .map(Delay::new);
-        Async::Ready(NetworkBehaviourAction::GenerateEvent(MdnsEvent::Discovered(DiscoveredAddrsIter {
-            inner: discovered.into_iter(),
-        })))
+        Async::NotReady
     }
 }
 
