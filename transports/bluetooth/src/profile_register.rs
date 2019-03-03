@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{LIBP2P_UUID, LIBP2P_PEER_ID_ATTRIB};
+use lazy_static::lazy_static;
 use libp2p_core::PeerId;
 use std::{io, iter, mem};
 
@@ -26,16 +27,6 @@ use std::{io, iter, mem};
 // TODO: should return a future
 pub fn register_libp2p_profile(rfcomm_port: u8) -> Result<Registration, io::Error> {
     let interface_path = b"/io/libp2p".to_vec();
-    let uuid_string = {
-        let num = LIBP2P_UUID.to_u128();
-        format!("{:x}-{:x}-{:x}-{:x}-{:x}",
-            (num >> 96) & 0xffff_ffff,
-            (num >> 80) & 0xffff,
-            (num >> 64) & 0xffff,
-            (num >> 48) & 0xffff,
-            num & 0xffff_ffff_ffff,
-        )
-    };
 
     let dict = {
         let key = "ServiceRecord".to_string();
@@ -46,7 +37,7 @@ pub fn register_libp2p_profile(rfcomm_port: u8) -> Result<Registration, io::Erro
     let connection = dbus::Connection::get_private(dbus::BusType::System).unwrap(); // TODO: don't unwrap
     let msg = dbus::Message::new_method_call("org.bluez", "/org/bluez", "org.bluez.ProfileManager1", "RegisterProfile")
         .map_err(|s| io::Error::new(io::ErrorKind::Other, s))?
-        .append3(dbus::Path::from_slice(&interface_path[..]).unwrap(), uuid_string, dict);
+        .append3(dbus::Path::from_slice(&interface_path[..]).unwrap(), UUID_STRING.clone(), dict);
 
     // TODO: confirm with answer
     connection.send(msg).unwrap();      // TODO: don't unwrap
@@ -84,6 +75,11 @@ fn generate_xml(peer_id: &PeerId, rfcomm_port: u8) -> String {
 <?xml version="1.0" encoding="UTF-8" ?>
 
 <record>
+    <attribute id="0x001">
+        <sequence>
+            <text value="{uuid_string}" />
+        </sequence>
+    </attribute>
     <attribute id="0x0004">
         <sequence>
             <sequence>
@@ -112,9 +108,23 @@ fn generate_xml(peer_id: &PeerId, rfcomm_port: u8) -> String {
     </attribute>
 </record>
 "#,
+    uuid_string = &*UUID_STRING,
     rfcomm_port = rfcomm_port,
     peer_id_attr = LIBP2P_PEER_ID_ATTRIB,
     peer_id = peer_id.to_base58())
+}
+
+lazy_static!{
+    static ref UUID_STRING: String = {
+        let num = LIBP2P_UUID.to_u128();
+        format!("{:x}-{:x}-{:x}-{:x}-{:x}",
+            (num >> 96) & 0xffff_ffff,
+            (num >> 80) & 0xffff,
+            (num >> 64) & 0xffff,
+            (num >> 48) & 0xffff,
+            num & 0xffff_ffff_ffff,
+        )
+    };
 }
 
 #[cfg(test)]

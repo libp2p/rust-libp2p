@@ -187,8 +187,25 @@ impl PacketTy {
                 //Ok(PacketTy::ServiceSearchAttributeRequest)
             },
             0x7 => {
-                unimplemented!()
-                //Ok(PacketTy::ServiceSearchAttributeResponse)
+                assert!(params.len() >= 3);
+                let attrib_list_bytes_count = BigEndian::read_u16(&params[0..2]) as usize;
+                assert!(params.len() >= 3 + attrib_list_bytes_count);
+                let (data, remaining) = Data::from_slice(&params[2.. 2 + attrib_list_bytes_count]).unwrap();
+                assert!(remaining.is_empty());
+                let continuation_state = ContinuationState(params[2 + attrib_list_bytes_count..].to_vec());
+                let attribute_lists = if let Data::Sequence(seq) = data {
+                    seq.into_iter()
+                        .map(|l| if let Data::Sequence(l) = l { l } else { panic!() })
+                        .map(|l| l.windows(2).map(|elems| {
+                            let id = if let Data::Uint(v) = elems[0] { v as u16 } else { panic!() };
+                            (id, elems[1].clone())
+                        }).collect::<Vec<_>>())
+                        .collect()
+                } else { panic!() };
+                Ok(PacketTy::ServiceSearchAttributeResponse {
+                    attribute_lists,
+                    continuation_state,
+                })
             },
             _ => panic!()       // TODO: no
         }
@@ -218,9 +235,29 @@ impl PacketTy {
             },
             PacketTy::ServiceAttributeRequest => (0x4, Vec::new()),
             PacketTy::ServiceAttributeResponse => (0x5, Vec::new()),
-            PacketTy::ServiceSearchAttributeRequest { .. } => {
-                unimplemented!()
-                // TODO: (0x6, Vec::new())
+            PacketTy::ServiceSearchAttributeRequest { service_search_pattern, maximum_attribute_byte_count, attribute_id_list, continuation_state } => {
+                let service_search_pattern = Data::Sequence(service_search_pattern
+                    .into_iter()
+                    .map(Data::Uuid)
+                    .collect());
+                let attribute_id_list = Data::Sequence(attribute_id_list
+                    .into_iter()
+                    .map(|attr| {
+                        match attr {
+                            AttributeSearch::Attribute(id) => Data::Uint(u128::from(id)),
+                            AttributeSearch::Range(range) => {
+                                let r = u32::from(*range.start()) << 16 | u32::from(*range.end());
+                                Data::Uint(u128::from(r))
+                            }
+                        }
+                    })
+                    .collect());
+                let mut params = Vec::new();
+                service_search_pattern.serialize(&mut params);      // TODO: result must be processed
+                params.write_u16::<BigEndian>(maximum_attribute_byte_count).expect("Writing to a Vec never fails");
+                attribute_id_list.serialize(&mut params);      // TODO: result must be processed
+                params.extend(continuation_state.0);
+                (0x6, params)
             },
             PacketTy::ServiceSearchAttributeResponse { .. } => {
                 unimplemented!()
@@ -266,7 +303,7 @@ impl Data {
             panic!()        // TODO:
         }
 
-        let (ty, len_code) = (data[0] >> 5, data[0] & 7);
+        let (ty, len_code) = (data[0] >> 3, data[0] & 0b111);
 
         let (payload_len, header_len) = match (ty, len_code) {
             (0, 0) => (0, 0),

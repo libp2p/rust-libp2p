@@ -99,7 +99,7 @@ impl SdpClient {
         self.send_queue.push(protocol::Packet {
             transaction_id,
             packet_ty: protocol::PacketTy::ServiceSearchAttributeRequest {
-                service_search_pattern: vec![protocol::Uuid::Uuid16(0x1002)],
+                service_search_pattern: vec![searched_uuid],
                 maximum_attribute_byte_count: u16::max_value(),
                 attribute_id_list: attributes.collect(),
                 continuation_state: protocol::ContinuationState::zero(),
@@ -148,9 +148,8 @@ impl SdpClient {
                 },
 
                 protocol::PacketTy::ServiceSearchAttributeResponse { attribute_lists, continuation_state } => {
-                    if continuation_state.is_zero() {
-                        println!("ServiceSearchAttributeResponse: = {:?}", attribute_lists);
-                    }
+                    assert!(continuation_state.is_zero());  // not implemented
+                    println!("ServiceSearchAttributeResponse: = {:?}", attribute_lists);
                 },
 
                 // TODO:

@@ -54,7 +54,13 @@ impl Scan {
             match self.devices.as_mut().map(|d| d.poll()) {
                 Some(Ok(Async::Ready(Some(addr)))) => {
                     let mut client = sdp_client::SdpClient::connect(addr)?;
-                    client.start_request(LIBP2P_UUID, iter::once(sdp_client::AttributeSearch::Attribute(LIBP2P_PEER_ID_ATTRIB)));
+                    client.start_request(LIBP2P_UUID,
+                        // We ask for the attribute containing the peer ID, and the protocols
+                        // stack.
+                        iter::once(sdp_client::AttributeSearch::Range(0x0 ..= 0xffff))
+                        //iter::once(sdp_client::AttributeSearch::Attribute(0x4))
+                            //.chain(iter::once(sdp_client::AttributeSearch::Attribute(LIBP2P_PEER_ID_ATTRIB)))
+                    );
                     self.sdp_scans.push(client);
                 },
                 Some(Ok(Async::Ready(None))) => { self.devices = None; break; },
@@ -71,6 +77,7 @@ impl Scan {
                 },
                 Async::Ready(sdp_client::SdpClientEvent::RequestSuccess { results, .. }) => {
                     // TODO:
+                    println!("{:?}", results);
                 },
                 Async::NotReady => {
                     self.sdp_scans.push(in_progress);
