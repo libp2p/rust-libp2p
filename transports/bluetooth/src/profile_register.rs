@@ -25,12 +25,12 @@ use std::{io, iter, mem};
 
 /// Register a profile to BlueZ so that it gets added to the local SDP server.
 // TODO: should return a future
-pub fn register_libp2p_profile(rfcomm_port: u8) -> Result<Registration, io::Error> {
+pub fn register_libp2p_profile(peer_id: &PeerId, rfcomm_port: u8) -> Result<Registration, io::Error> {
     let interface_path = b"/io/libp2p".to_vec();
 
     let dict = {
         let key = "ServiceRecord".to_string();
-        let val = dbus::arg::Variant(generate_xml(&PeerId::random(), rfcomm_port));     // TODO: correct values
+        let val = dbus::arg::Variant(generate_xml(peer_id, rfcomm_port));     // TODO: correct values
         dbus::arg::Dict::<String, dbus::arg::Variant<String>, _>::new(iter::once((key, val)))
     };
 
@@ -130,11 +130,12 @@ lazy_static!{
 #[cfg(test)]
 mod tests {
     use super::register_libp2p_profile;
+    use libp2p_core::PeerId;
     use std::{thread, time::Duration};
 
     #[test]
     fn register_libp2p_profile_working() {
-        let _reg = register_libp2p_profile(1).unwrap();
+        let _reg = register_libp2p_profile(&PeerId::random(), 1).unwrap();
         thread::sleep(Duration::from_millis(5000));     // TODO: smaller
     }
 }

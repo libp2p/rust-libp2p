@@ -1,8 +1,8 @@
 use futures::prelude::*;
-use libp2p_core::Transport;
+use libp2p_core::{PeerId, Transport};
 
 fn main() {
-    let config = libp2p_bluetooth::BluetoothConfig::default();
+    let config = libp2p_bluetooth::BluetoothConfig::new(PeerId::random());
 
     // TODO: correct address
     let (listener, addr) = config.clone().listen_on("/bluetooth/00:00:00:00:00:00/l2cap/3/rfcomm/0".parse().unwrap()).unwrap();

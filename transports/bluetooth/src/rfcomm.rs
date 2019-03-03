@@ -103,7 +103,6 @@ impl tokio_io::AsyncWrite for RfcommStream {
 
 pub struct RfcommListener {
     inner: tokio_reactor::PollEvented<RfcommSocket>,
-    sdp_registration: Option<profile_register::Registration>,
 }
 
 impl RfcommListener {
@@ -121,12 +120,8 @@ impl RfcommListener {
                 .ok_or_else(|| io::Error::last_os_error())?
         };
 
-        let sdp_registration = profile_register::register_libp2p_profile(actual_port)
-            .map_err(|err| { println!("registration error: {:?}", err); err }).ok();
-
         let inner = RfcommListener {
             inner: tokio_reactor::PollEvented::new(socket),
-            sdp_registration,
         };
 
         Ok((inner, actual_port))

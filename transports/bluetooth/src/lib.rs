@@ -21,7 +21,7 @@
 //! Implementation of the libp2p `Transport` trait for Bluetooth.
 
 use futures::{future, prelude::*, try_ready};
-use libp2p_core::{Multiaddr, multiaddr::Protocol, Transport, transport::TransportError};
+use libp2p_core::{Multiaddr, multiaddr::Protocol, PeerId, Transport, transport::TransportError};
 use std::{io, iter};
 
 mod addr;
@@ -46,13 +46,13 @@ const LIBP2P_PEER_ID_ATTRIB: u16 = 0x3000;
 /// Represents the configuration for a Bluetooth transport capability for libp2p.
 #[derive(Debug, Clone)]
 pub struct BluetoothConfig {
-    register_sdp: bool,
+    register_sdp: Option<PeerId>,
 }
 
-impl Default for BluetoothConfig {
-    fn default() -> BluetoothConfig {
+impl BluetoothConfig {
+    pub fn new(peer_id: PeerId) -> BluetoothConfig {
         BluetoothConfig {
-            register_sdp: true,
+            register_sdp: Some(peer_id),
         }
     }
 }
@@ -66,12 +66,22 @@ impl Transport for BluetoothConfig {
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
         let (mac, port) = multiaddr_to_rfcomm(addr)?;
+        discoverable::enable_discoverable(&mac).unwrap();      // TODO:
         let (listener,  actual_port) = rfcomm::RfcommListener::bind(mac, port).map_err(TransportError::Other)?;
+
         let actual_addr = iter::once(Protocol::Bluetooth(mac.to_big_endian()))
             .chain(iter::once(Protocol::L2cap(3)))
             .chain(iter::once(Protocol::Rfcomm(actual_port)))
             .collect();
-        Ok((RfcommListener { inner: listener }, actual_addr))
+
+        let sdp_registration = if let Some(peer_id) = self.register_sdp {
+            profile_register::register_libp2p_profile(&peer_id, actual_port)
+                .map_err(|err| { println!("registration error: {:?}", err); err }).ok()
+        } else {
+            None
+        };
+
+        Ok((RfcommListener { inner: listener, sdp_registration }, actual_addr))
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
@@ -87,6 +97,7 @@ impl Transport for BluetoothConfig {
 
 pub struct RfcommListener {
     inner: rfcomm::RfcommListener,
+    sdp_registration: Option<profile_register::Registration>,
 }
 
 impl Stream for RfcommListener {
@@ -144,11 +155,11 @@ fn multiaddr_to_rfcomm<T>(addr: Multiaddr) -> Result<(Addr, u8), TransportError<
 mod tests {
     use crate::BluetoothConfig;
     use futures::prelude::*;
-    use libp2p_core::Transport;
+    use libp2p_core::{PeerId, Transport};
 
     #[test]
     fn connect_to_self() {
-        let config = BluetoothConfig::default();
+        let config = BluetoothConfig::default(PeerId::random());
 
         // TODO: correct addresses; also, doesn't work
         let listener = config.clone().listen_on("/bluetooth/00:00:00:00:00:00/l2cap/3/rfcomm/5".parse().unwrap()).unwrap().0;
