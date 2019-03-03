@@ -27,16 +27,15 @@ use std::{io, iter};
 mod addr;
 mod discoverable;
 mod ffi;
-mod gatt_register;
 mod hci_scan;
 mod hci_socket;
 mod l2cap;
+mod profile_register;
 mod rfcomm_socket;
 mod rfcomm;
 pub mod scan;           // TODO: shouldn't be pub
 //mod scan_behaviour;       // TODO:
 mod sdp_client;
-mod sdp;
 
 pub use self::addr::{Addr, ANY, ALL, LOCAL};
 //pub use self::scan_behaviour::BluetoothDiscovery;

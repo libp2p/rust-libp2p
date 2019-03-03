@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{Addr, rfcomm_socket::RfcommSocket, sdp};
+use crate::{Addr, profile_register, rfcomm_socket::RfcommSocket};
 use futures::{prelude::*, try_ready};
 use std::{ffi::CStr, io, mem};
 
@@ -103,13 +103,12 @@ impl tokio_io::AsyncWrite for RfcommStream {
 
 pub struct RfcommListener {
     inner: tokio_reactor::PollEvented<RfcommSocket>,
-    sdp_registration: Option<sdp::SdpRegistration>,
+    sdp_registration: Option<profile_register::Registration>,
 }
 
 impl RfcommListener {
     pub fn bind(addr: Addr, port: u8) -> Result<(RfcommListener, u8), io::Error> {
         crate::discoverable::enable_discoverable(&addr)?;
-        // TODO: crate::gatt_register::register_gatt()?;
 
         let (socket, actual_port) = if port != 0 {
             (RfcommSocket::bind(addr, port)?, port)
@@ -122,14 +121,8 @@ impl RfcommListener {
                 .ok_or_else(|| io::Error::last_os_error())?
         };
 
-        // TODO: remove
-        let sdp_registration = sdp::register(sdp::RegisterConfig {
-            uuid: [0x0, 0x0, 0x0, 0xABCD],
-            rfcomm_channel: port,
-            service_name: CStr::from_bytes_with_nul(b"libp2p\0").expect("Always ends with 0"),
-            service_desc: CStr::from_bytes_with_nul(b"libp2p entry point\0").expect("Always ends with 0"),
-            service_prov: CStr::from_bytes_with_nul(b"rust-libp2p\0").expect("Always ends with 0"),
-        }).map_err(|err| { println!("sdp server error: {:?}", err); err }).ok();
+        let sdp_registration = profile_register::register_libp2p_profile(actual_port)
+            .map_err(|err| { println!("registration error: {:?}", err); err }).ok();
 
         let inner = RfcommListener {
             inner: tokio_reactor::PollEvented::new(socket),
