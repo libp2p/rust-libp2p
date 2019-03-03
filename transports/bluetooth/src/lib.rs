@@ -28,17 +28,21 @@ mod addr;
 mod discoverable;
 mod ffi;
 mod gatt_register;
-pub mod hci_scan;       // TODO: shouldn't be pub
+mod hci_scan;
 mod hci_socket;
 mod l2cap;
 mod rfcomm_socket;
 mod rfcomm;
+pub mod scan;           // TODO: shouldn't be pub
 //mod scan_behaviour;       // TODO:
 mod sdp_client;
 mod sdp;
 
 pub use self::addr::{Addr, ANY, ALL, LOCAL};
 //pub use self::scan_behaviour::BluetoothDiscovery;
+
+const LIBP2P_UUID: sdp_client::Uuid = sdp_client::Uuid::Uuid128(0xd8263f85_cdca_4ac8_8fee_81c64221d6d5);
+const LIBP2P_PEER_ID_ATTRIB: u16 = 0x3000;
 
 /// Represents the configuration for a Bluetooth transport capability for libp2p.
 #[derive(Debug, Clone)]
