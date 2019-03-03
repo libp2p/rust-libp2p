@@ -196,7 +196,7 @@ impl PacketTy {
                 let attribute_lists = if let Data::Sequence(seq) = data {
                     seq.into_iter()
                         .map(|l| if let Data::Sequence(l) = l { l } else { panic!() })
-                        .map(|l| l.windows(2).map(|elems| {
+                        .map(|l| l.chunks(2).map(|elems| {
                             let id = if let Data::Uint(v) = elems[0] { v as u16 } else { panic!() };
                             (id, elems[1].clone())
                         }).collect::<Vec<_>>())
@@ -247,7 +247,7 @@ impl PacketTy {
                             AttributeSearch::Attribute(id) => Data::Uint(u128::from(id)),
                             AttributeSearch::Range(range) => {
                                 let r = u32::from(*range.start()) << 16 | u32::from(*range.end());
-                                Data::Uint(u128::from(r))
+                                Data::U32(r)
                             }
                         }
                     })
@@ -287,6 +287,8 @@ impl ErrorResponseCode {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Data {
     Nil,
+    // This variant is added because servers differentiate attributes from attribute ranges based on the size
+    U32(u32),      // TODO: PartialEq impl should be adjusted; also
     Uint(u128),
     Sint(i128),
     Uuid(Uuid),
@@ -385,6 +387,28 @@ impl Data {
         match *self {
             Data::Nil => {
                 writer.write_u8(0)?
+            },
+            Data::U32(val) => {
+                writer.write_u8(1 << 3 | 2)?;
+                writer.write_u32::<BigEndian>(val);
+            },
+            Data::Uint(val) => {
+                if val <= u8::max_value() as u128 {
+                    writer.write_u8(1 << 3 | 0)?;
+                    writer.write_u8(val as u8);
+                } else if val <= u16::max_value() as u128 {
+                    writer.write_u8(1 << 3 | 1)?;
+                    writer.write_u16::<BigEndian>(val as u16);
+                } else if val <= u32::max_value() as u128 {
+                    writer.write_u8(1 << 3 | 2)?;
+                    writer.write_u32::<BigEndian>(val as u32);
+                } else if val <= u64::max_value() as u128 {
+                    writer.write_u8(1 << 3 | 3)?;
+                    writer.write_u64::<BigEndian>(val as u64);
+                } else {
+                    writer.write_u8(1 << 3 | 4)?;
+                    writer.write_u128::<BigEndian>(val);
+                }
             },
             Data::Uint(val) => {
                 if val <= u8::max_value() as u128 {

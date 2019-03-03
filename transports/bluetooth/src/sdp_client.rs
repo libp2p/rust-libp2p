@@ -65,7 +65,7 @@ struct OngoingRequest {
     transaction_id: u16,
     /// Either a single `0` at initialization, or a value returned by the server in the previous
     /// iteration so that we continue the query.
-    continuation_state: SmallVec<[u8; 1]>,
+    continuation_state: protocol::ContinuationState,
 }
 
 impl SdpClient {
@@ -95,6 +95,11 @@ impl SdpClient {
             }
             i
         };
+
+        self.requests.push(OngoingRequest {
+            transaction_id,
+            continuation_state: protocol::ContinuationState::zero(),
+        });
 
         self.send_queue.push(protocol::Packet {
             transaction_id,
@@ -149,7 +154,10 @@ impl SdpClient {
 
                 protocol::PacketTy::ServiceSearchAttributeResponse { attribute_lists, continuation_state } => {
                     assert!(continuation_state.is_zero());  // not implemented
-                    println!("ServiceSearchAttributeResponse: = {:?}", attribute_lists);
+                    return Ok(Async::Ready(SdpClientEvent::RequestSuccess {
+                        request_id: RequestId(request.transaction_id),
+                        results: attribute_lists,
+                    }))
                 },
 
                 // TODO:
