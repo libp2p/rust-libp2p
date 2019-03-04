@@ -206,7 +206,7 @@ where
         };
 
         // Polling the current scan.
-        match current_scan.poll().unwrap() {       // TODO: don't unwrap
+        match current_scan.poll() {
             Async::Ready(Some((addr, peer_id))) => {
                 if let Some(existing) = self.known_nodes.iter_mut().find(|(p, a, _)| *p == peer_id && *a == addr) {
                     existing.2 = Instant::now() + self.ttl;

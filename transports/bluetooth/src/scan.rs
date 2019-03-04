@@ -52,15 +52,19 @@ impl Scan {
     ///
     /// Just like `Stream::poll()`, must be executed within the context of a task. If `NotReady` is
     /// returned, the current task is registered then notified when something is ready.
-    pub fn poll(&mut self) -> Poll<Option<(Multiaddr, PeerId)>, io::Error> {
+    pub fn poll(&mut self) -> Async<Option<(Multiaddr, PeerId)>> {
         if !self.pending_results.is_empty() {
-            return Ok(Async::Ready(Some(self.pending_results.remove(0))));
+            return Async::Ready(Some(self.pending_results.remove(0)));
         }
 
         loop {
             match self.devices.as_mut().map(|d| d.poll()) {
                 Some(Ok(Async::Ready(Some(addr)))) => {
-                    let mut client = sdp_client::SdpClient::connect(addr)?;
+                    let mut client = match sdp_client::SdpClient::connect(addr) {
+                        Ok(c) => c,
+                        Err(_) => continue,
+                    };
+
                     client.start_request(LIBP2P_UUID,
                         // We ask for the attribute containing the peer ID, and the protocols
                         // stack.
@@ -69,21 +73,22 @@ impl Scan {
                         //iter::once(sdp_client::AttributeSearch::Attribute(0x4))
                             //.chain(iter::once(sdp_client::AttributeSearch::Attribute(LIBP2P_PEER_ID_ATTRIB)))
                     );
+
                     self.sdp_scans.push((addr, client));
                 },
-                Some(Ok(Async::Ready(None))) => { self.devices = None; break; },
-                Some(Err(err)) => return Err(err),
+                Some(Ok(Async::Ready(None))) => self.devices = None,
+                Some(Err(err)) => self.devices = None,
                 None | Some(Ok(Async::NotReady)) => break,
             };
         }
 
         for n in (0..self.sdp_scans.len()).rev() {
             let (addr, mut in_progress) = self.sdp_scans.swap_remove(n);
-            match in_progress.poll()? {
-                Async::Ready(sdp_client::SdpClientEvent::RequestFailed { .. }) => {
+            match in_progress.poll() {
+                Err(_) | Ok(Async::Ready(sdp_client::SdpClientEvent::RequestFailed { .. })) => {
                     panic!()
                 },
-                Async::Ready(sdp_client::SdpClientEvent::RequestSuccess { results, .. }) => {
+                Ok(Async::Ready(sdp_client::SdpClientEvent::RequestSuccess { results, .. })) => {
                     for record in results {
                         let peer_id = record.iter().find(|r| r.0 == LIBP2P_PEER_ID_ATTRIB)
                             .and_then(|r| if let sdp_client::Data::Str(s) = &r.1 { Some(s) } else { None })
@@ -97,19 +102,19 @@ impl Scan {
                         }
                     }
                     if !self.pending_results.is_empty() {
-                        return Ok(Async::Ready(Some(self.pending_results.remove(0))));
+                        return Async::Ready(Some(self.pending_results.remove(0)));
                     }
                 },
-                Async::NotReady => {
+                Ok(Async::NotReady) => {
                     self.sdp_scans.push((addr, in_progress));
                 }
             }
         }
 
         if self.sdp_scans.is_empty() && self.devices.is_none() {
-            Ok(Async::Ready(None))
+            Async::Ready(None)
         } else {
-            Ok(Async::NotReady)
+            Async::NotReady
         }
     }
 }
