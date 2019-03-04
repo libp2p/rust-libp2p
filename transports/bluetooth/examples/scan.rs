@@ -21,8 +21,12 @@
 use futures::prelude::*;
 
 fn main() {
+    println!("Scanning for nearby Bluetooth devices");
     let mut scan = libp2p_bluetooth::scan::Scan::new().unwrap();
     let future = futures::stream::poll_fn(move || Ok(scan.poll()))
-        .for_each(|elem| { println!("{:?}", elem); Ok(()) });
+        .for_each(|(addr, peer_id)| {
+            println!("Found {:?} with address {:?}", peer_id, addr);
+            Ok(())
+        });
     tokio::run(future);
 }
