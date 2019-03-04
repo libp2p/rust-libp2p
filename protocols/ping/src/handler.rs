@@ -95,20 +95,12 @@ where
         void::unreachable(event)
     }
 
-    fn inject_inbound_closed(&mut self) {
-        self.inner.inject_inbound_closed()
-    }
-
     fn inject_dial_upgrade_error(&mut self, info: Self::OutboundOpenInfo, error: ProtocolsHandlerUpgrErr<io::Error>) {
         self.inner.inject_dial_upgrade_error(info, error)
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
         self.inner.connection_keep_alive()
-    }
-
-    fn shutdown(&mut self) {
-        self.inner.shutdown();
     }
 
     fn poll(

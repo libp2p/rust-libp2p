@@ -33,7 +33,6 @@ use void::Void;
 
 /// Implementation of `ProtocolsHandler` that doesn't handle anything.
 pub struct DummyProtocolsHandler<TSubstream> {
-    shutting_down: bool,
     marker: PhantomData<TSubstream>,
 }
 
@@ -41,7 +40,6 @@ impl<TSubstream> Default for DummyProtocolsHandler<TSubstream> {
     #[inline]
     fn default() -> Self {
         DummyProtocolsHandler {
-            shutting_down: false,
             marker: PhantomData,
         }
     }
@@ -86,15 +84,7 @@ where
     fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {}
 
     #[inline]
-    fn inject_inbound_closed(&mut self) {}
-
-    #[inline]
     fn connection_keep_alive(&self) -> KeepAlive { KeepAlive::Now }
-
-    #[inline]
-    fn shutdown(&mut self) {
-        self.shutting_down = true;
-    }
 
     #[inline]
     fn poll(
@@ -103,10 +93,6 @@ where
         ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
         Void,
     > {
-        if self.shutting_down {
-            Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown))
-        } else {
-            Ok(Async::NotReady)
-        }
+        Ok(Async::NotReady)
     }
 }

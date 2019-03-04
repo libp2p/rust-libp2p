@@ -49,7 +49,7 @@ use crate::{
         node::Substream,
         raw_swarm::{self, RawSwarm, RawSwarmEvent}
     },
-    protocols_handler::{NodeHandlerWrapperBuilder, NodeHandlerWrapper, IntoProtocolsHandler, ProtocolsHandler},
+    protocols_handler::{NodeHandlerWrapperBuilder, NodeHandlerWrapper, NodeHandlerWrapperError, IntoProtocolsHandler, ProtocolsHandler},
     transport::TransportError,
 };
 use futures::prelude::*;
@@ -68,7 +68,7 @@ where TTransport: Transport,
         <<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent,
         <<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent,
         NodeHandlerWrapperBuilder<TBehaviour::ProtocolsHandler>,
-        <<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::Error,
+        NodeHandlerWrapperError<<<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::Error>,
     >,
 
     /// Handles which nodes to connect to and how to handle the events sent back by the protocol
@@ -261,10 +261,7 @@ where TBehaviour: NetworkBehaviour,
                 Async::Ready(RawSwarmEvent::Connected { peer_id, endpoint }) => {
                     self.behaviour.inject_connected(peer_id, endpoint);
                 },
-                Async::Ready(RawSwarmEvent::NodeClosed { peer_id, endpoint }) => {
-                    self.behaviour.inject_disconnected(&peer_id, endpoint);
-                },
-                Async::Ready(RawSwarmEvent::NodeError { peer_id, endpoint, .. }) => {
+                Async::Ready(RawSwarmEvent::NodeClosed { peer_id, endpoint, .. }) => {
                     self.behaviour.inject_disconnected(&peer_id, endpoint);
                 },
                 Async::Ready(RawSwarmEvent::Replaced { peer_id, closed_endpoint, endpoint }) => {

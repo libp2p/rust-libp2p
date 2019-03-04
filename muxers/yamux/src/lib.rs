@@ -22,7 +22,7 @@
 //! [specification](https://github.com/hashicorp/yamux/blob/master/spec.md).
 
 use futures::{future::{self, FutureResult}, prelude::*};
-use libp2p_core::{muxing::Shutdown, upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}};
+use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use log::error;
 use std::{io, iter, sync::atomic};
 use std::io::{Error as IoError};
@@ -48,17 +48,17 @@ where
     type OutboundSubstream = FutureResult<Option<Self::Substream>, io::Error>;
 
     #[inline]
-    fn poll_inbound(&self) -> Poll<Option<Self::Substream>, IoError> {
+    fn poll_inbound(&self) -> Poll<Self::Substream, IoError> {
         match self.0.poll() {
             Err(e) => {
                 error!("connection error: {}", e);
                 Err(io::Error::new(io::ErrorKind::Other, e))
             }
             Ok(Async::NotReady) => Ok(Async::NotReady),
-            Ok(Async::Ready(None)) => Ok(Async::Ready(None)),
+            Ok(Async::Ready(None)) => panic!(),
             Ok(Async::Ready(Some(stream))) => {
                 self.1.store(true, atomic::Ordering::Release);
-                Ok(Async::Ready(Some(stream)))
+                Ok(Async::Ready(stream))
             }
         }
     }
@@ -70,8 +70,8 @@ where
     }
 
     #[inline]
-    fn poll_outbound(&self, substream: &mut Self::OutboundSubstream) -> Poll<Option<Self::Substream>, IoError> {
-        substream.poll()
+    fn poll_outbound(&self, substream: &mut Self::OutboundSubstream) -> Poll<Self::Substream, IoError> {
+        substream.poll().map(|s| s.map(Option::unwrap))
     }
 
     #[inline]
@@ -98,7 +98,7 @@ where
     }
 
     #[inline]
-    fn shutdown_substream(&self, sub: &mut Self::Substream, _: Shutdown) -> Poll<(), IoError> {
+    fn shutdown_substream(&self, sub: &mut Self::Substream) -> Poll<(), IoError> {
         sub.shutdown()
     }
 
@@ -112,7 +112,7 @@ where
     }
 
     #[inline]
-    fn shutdown(&self, _: Shutdown) -> Poll<(), IoError> {
+    fn close(&self) -> Poll<(), IoError> {
         self.0.close()
     }
 

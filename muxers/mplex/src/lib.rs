@@ -27,7 +27,6 @@ use bytes::Bytes;
 use libp2p_core::{
     Endpoint,
     StreamMuxer,
-    muxing::Shutdown,
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
 };
 use log::{debug, trace};
@@ -247,8 +246,8 @@ task_local!{
 /// Processes elements in `inner` until one matching `filter` is found.
 ///
 /// If `NotReady` is returned, the current task is scheduled for later, just like with any `Poll`.
-/// `Ready(Some())` is almost always returned. `Ready(None)` is returned if the stream is EOF.
-fn next_match<C, F, O>(inner: &mut MultiplexInner<C>, mut filter: F) -> Poll<Option<O>, IoError>
+/// `Ready(Some())` is almost always returned. An error is returned if the stream is EOF.
+fn next_match<C, F, O>(inner: &mut MultiplexInner<C>, mut filter: F) -> Poll<O, IoError>
 where C: AsyncRead + AsyncWrite,
       F: FnMut(&codec::Elem) -> Option<O>,
 {
@@ -264,7 +263,7 @@ where C: AsyncRead + AsyncWrite,
         }
 
         inner.buffer.remove(offset);
-        return Ok(Async::Ready(Some(out)));
+        return Ok(Async::Ready(out));
     }
 
     loop {
@@ -286,7 +285,7 @@ where C: AsyncRead + AsyncWrite,
 
         let elem = match inner.inner.poll_stream_notify(&inner.notifier_read, 0) {
             Ok(Async::Ready(Some(item))) => item,
-            Ok(Async::Ready(None)) => return Ok(Async::Ready(None)),
+            Ok(Async::Ready(None)) => return Err(IoErrorKind::BrokenPipe.into()),
             Ok(Async::NotReady) => {
                 inner.notifier_read.to_notify.lock().insert(TASK_ID.with(|&t| t), task::current());
                 return Ok(Async::NotReady);
@@ -315,7 +314,7 @@ where C: AsyncRead + AsyncWrite,
         }
 
         if let Some(out) = filter(&elem) {
-            return Ok(Async::Ready(Some(out)));
+            return Ok(Async::Ready(out));
         } else {
             let endpoint = elem.endpoint().unwrap_or(Endpoint::Dialer);
             if inner.opened_substreams.contains(&(elem.substream_id(), !endpoint)) || elem.is_open_msg() {
@@ -352,7 +351,7 @@ where C: AsyncRead + AsyncWrite
     type Substream = Substream;
     type OutboundSubstream = OutboundSubstream;
 
-    fn poll_inbound(&self) -> Poll<Option<Self::Substream>, IoError> {
+    fn poll_inbound(&self) -> Poll<Self::Substream, IoError> {
         let mut inner = self.inner.lock();
 
         if inner.opened_substreams.len() >= inner.config.max_substreams {
@@ -368,16 +367,12 @@ where C: AsyncRead + AsyncWrite
             }
         }));
 
-        if let Some(num) = num {
-            debug!("Successfully opened inbound substream {}", num);
-            Ok(Async::Ready(Some(Substream {
-                current_data: Bytes::new(),
-                num,
-                endpoint: Endpoint::Listener,
-            })))
-        } else {
-            Ok(Async::Ready(None))
-        }
+        debug!("Successfully opened inbound substream {}", num);
+        Ok(Async::Ready(Substream {
+            current_data: Bytes::new(),
+            num,
+            endpoint: Endpoint::Listener,
+        }))
     }
 
     fn open_outbound(&self) -> Self::OutboundSubstream {
@@ -399,7 +394,7 @@ where C: AsyncRead + AsyncWrite
         }
     }
 
-    fn poll_outbound(&self, substream: &mut Self::OutboundSubstream) -> Poll<Option<Self::Substream>, IoError> {
+    fn poll_outbound(&self, substream: &mut Self::OutboundSubstream) -> Poll<Self::Substream, IoError> {
         loop {
             let mut inner = self.inner.lock();
 
@@ -444,11 +439,11 @@ where C: AsyncRead + AsyncWrite
                 OutboundSubstreamState::Flush => {
                     debug!("Successfully opened outbound substream {}", substream.num);
                     substream.state = OutboundSubstreamState::Done;
-                    return Ok(Async::Ready(Some(Substream {
+                    return Ok(Async::Ready(Substream {
                         num: substream.num,
                         current_data: Bytes::new(),
                         endpoint: Endpoint::Dialer,
-                    })));
+                    }));
                 },
                 OutboundSubstreamState::Done => unreachable!(),
             }
@@ -485,8 +480,7 @@ where C: AsyncRead + AsyncWrite
             // We're in a loop, so all we need to do is set `substream.current_data` to the data we
             // just read and wait for the next iteration.
             match next_data_poll {
-                Ok(Async::Ready(Some(data))) => substream.current_data = data,
-                Ok(Async::Ready(None)) => return Ok(Async::Ready(0)),
+                Ok(Async::Ready(data)) => substream.current_data = data,
                 Ok(Async::NotReady) => {
                     // There was no data packet in the buffer about this substream; maybe it's
                     // because it has been closed.
@@ -534,7 +528,7 @@ where C: AsyncRead + AsyncWrite
         }
     }
 
-    fn shutdown_substream(&self, sub: &mut Self::Substream, _: Shutdown) -> Poll<(), IoError> {
+    fn shutdown_substream(&self, sub: &mut Self::Substream) -> Poll<(), IoError> {
         let elem = codec::Elem::Close {
             substream_id: sub.num,
             endpoint: sub.endpoint,
@@ -555,7 +549,7 @@ where C: AsyncRead + AsyncWrite
     }
 
     #[inline]
-    fn shutdown(&self, _: Shutdown) -> Poll<(), IoError> {
+    fn close(&self) -> Poll<(), IoError> {
         let inner = &mut *self.inner.lock();
         try_ready!(inner.inner.close_notify(&inner.notifier_write, 0));
         inner.is_shutdown = true;

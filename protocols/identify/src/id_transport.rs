@@ -149,13 +149,10 @@ where TMuxer: muxing::StreamMuxer + Send + Sync + 'static,
             match mem::replace(&mut self.state, IdRetrieverState::Poisoned) {
                 IdRetrieverState::OpeningSubstream(muxer, mut opening, config) => {
                     match opening.poll() {
-                        Ok(Async::Ready(Some(substream))) => {
+                        Ok(Async::Ready(substream)) => {
                             let upgrade = upgrade::apply_outbound(substream, config);
                             self.state = IdRetrieverState::NegotiatingIdentify(muxer, upgrade)
                         },
-                        Ok(Async::Ready(None)) => {
-                            return Err(UpgradeError::Apply(IoError::new(IoErrorKind::Other, "remote refused our identify attempt")))
-                        }
                         Ok(Async::NotReady) => {
                             self.state = IdRetrieverState::OpeningSubstream(muxer, opening, config);
                             return Ok(Async::NotReady);
