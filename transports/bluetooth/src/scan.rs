@@ -76,8 +76,8 @@ impl Scan {
 
                     self.sdp_scans.push((addr, client));
                 },
-                Some(Ok(Async::Ready(None))) => self.devices = None,
-                Some(Err(err)) => self.devices = None,
+                Some(Ok(Async::Ready(None))) => { self.devices = None; break },
+                Some(Err(err)) => { println!("error during inquiry: {:?}", err); self.devices = None; break },
                 None | Some(Ok(Async::NotReady)) => break,
             };
         }
@@ -85,8 +85,11 @@ impl Scan {
         for n in (0..self.sdp_scans.len()).rev() {
             let (addr, mut in_progress) = self.sdp_scans.swap_remove(n);
             match in_progress.poll() {
-                Err(_) | Ok(Async::Ready(sdp_client::SdpClientEvent::RequestFailed { .. })) => {
-                    panic!()
+                Err(err) => {
+                    println!("error during scan: {:?}", err);
+                },
+                Ok(Async::Ready(sdp_client::SdpClientEvent::RequestFailed { .. })) => {
+                    println!("error during scan");
                 },
                 Ok(Async::Ready(sdp_client::SdpClientEvent::RequestSuccess { results, .. })) => {
                     for record in results {

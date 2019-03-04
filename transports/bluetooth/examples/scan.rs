@@ -22,8 +22,7 @@ use futures::prelude::*;
 
 fn main() {
     let mut scan = libp2p_bluetooth::scan::Scan::new().unwrap();
-    let future = futures::stream::poll_fn(move || scan.poll())
-        .for_each(|elem| { println!("{:?}", elem); Ok(()) })
-        .map_err(|err| println!("{:?}", err));
+    let future = futures::stream::poll_fn(move || Ok(scan.poll()))
+        .for_each(|elem| { println!("{:?}", elem); Ok(()) });
     tokio::run(future);
 }
