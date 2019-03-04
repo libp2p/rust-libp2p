@@ -28,8 +28,9 @@ use tokio_io::{AsyncRead, AsyncWrite};
 
 /// A network behaviour that discovers nearby libp2p-compatible Bluetooth devices.
 pub struct BluetoothDiscovery<TSubstream> {
-    /// The current scan.
-    current_scan: Scan,
+    /// The current scan, if any.
+    /// We start with `None` so that creating a new `BluetoothDiscovery` always succeeds.
+    current_scan: Option<Scan>,
 
     /// Known nearby Bluetooth nodes, and when their TTL expires.
     known_nodes: Vec<(PeerId, Multiaddr, Instant)>,
@@ -45,7 +46,7 @@ impl<TSubstream> BluetoothDiscovery<TSubstream> {
     /// Builds a new `BluetoothDiscovery`.
     pub fn new() -> io::Result<BluetoothDiscovery<TSubstream>> {
         Ok(BluetoothDiscovery {
-            current_scan: Scan::new()?,
+            current_scan: None,
             known_nodes: Vec::with_capacity(16),
             ttl: Duration::from_secs(120),
             marker: PhantomData,
@@ -195,8 +196,17 @@ where
             }
         }*/
 
+        // Creating a scan, if none is started.
+        let current_scan = match self.current_scan {
+            Some(ref mut s) => s,
+            ref mut s @ None => {
+                *s = Some(Scan::new().unwrap());
+                s.as_mut().expect("We just inserted Some in the Option")
+            }
+        };
+
         // Polling the current scan.
-        match self.current_scan.poll().unwrap() {       // TODO: don't unwrap
+        match current_scan.poll().unwrap() {       // TODO: don't unwrap
             Async::Ready(Some((addr, peer_id))) => {
                 if let Some(existing) = self.known_nodes.iter_mut().find(|(p, a, _)| *p == peer_id && *a == addr) {
                     existing.2 = Instant::now() + self.ttl;
@@ -209,7 +219,7 @@ where
                     address: addr,
                 }))
             },
-            Async::Ready(None) => self.current_scan = Scan::new().unwrap(),     // TODO: don't unwrap
+            Async::Ready(None) => self.current_scan = Some(Scan::new().unwrap()),     // TODO: don't unwrap
             Async::NotReady => (),
         }
 
