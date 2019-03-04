@@ -133,7 +133,6 @@ impl RfcommSocket {
     }
 
     /// Calls `getsockname` on the socket.
-    // TODO: remove?
     pub fn getsockname(&self) -> Result<(Addr, u8), io::Error> {
         unsafe {
             let mut out_addr: ffi::sockaddr_rc = mem::zeroed();

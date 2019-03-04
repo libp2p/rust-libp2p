@@ -40,19 +40,36 @@ mod sdp_client;
 pub use self::addr::{Addr, ANY, ALL, LOCAL};
 pub use self::scan_behaviour::{BluetoothDiscovery, BluetoothEvent};
 
+/// UUID for the advertised service class. We advertise this UUID locally, and search for devices
+/// around that advertise this UUID.
 const LIBP2P_UUID: sdp_client::Uuid = sdp_client::Uuid::Uuid128(0xd8263f85_cdca_4ac8_8fee_81c64221d6d5);
+/// ID of the attribute of the service that contains the `PeerId` in base58. The type of the
+/// attribute's value must be "text".
 const LIBP2P_PEER_ID_ATTRIB: u16 = 0x3000;
 
 /// Represents the configuration for a Bluetooth transport capability for libp2p.
 #[derive(Debug, Clone)]
 pub struct BluetoothConfig {
+    /// If `Some`, we will register the service with the given `PeerId`.
     register_sdp: Option<PeerId>,
 }
 
 impl BluetoothConfig {
+    /// Builds a new `BluetoothConfig`.
+    ///
+    /// The `PeerId` is used to advertise our service through the SDP server so that other devices
+    /// can discover it.
     pub fn new(peer_id: PeerId) -> BluetoothConfig {
         BluetoothConfig {
             register_sdp: Some(peer_id),
+        }
+    }
+
+    /// Builds a new `BluetoothConfig` that allows listening for incoming connections, but doesn't
+    /// advertise the service to other devices.
+    pub fn without_registration() -> BluetoothConfig {
+        BluetoothConfig {
+            register_sdp: None,
         }
     }
 }
@@ -81,7 +98,12 @@ impl Transport for BluetoothConfig {
             None
         };
 
-        Ok((RfcommListener { inner: listener, sdp_registration }, actual_addr))
+        let listener = RfcommListener {
+            inner: listener,
+            _sdp_registration: sdp_registration,
+        };
+
+        Ok((listener, actual_addr))
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
@@ -89,15 +111,19 @@ impl Transport for BluetoothConfig {
         Ok(rfcomm::RfcommStream::connect(mac, port))
     }
 
-    fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+    fn nat_traversal(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
         // TODO: ?
         None
     }
 }
 
 pub struct RfcommListener {
+    /// The inner listener.
     inner: rfcomm::RfcommListener,
-    sdp_registration: Option<profile_register::Registration>,
+
+    /// RAII object for the service advertisement. If destroyed, the service stops being
+    /// advertised.
+    _sdp_registration: Option<profile_register::Registration>,
 }
 
 impl Stream for RfcommListener {

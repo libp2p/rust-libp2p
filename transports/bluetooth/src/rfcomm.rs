@@ -18,15 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{Addr, profile_register, rfcomm_socket::RfcommSocket};
+use crate::{Addr, rfcomm_socket::RfcommSocket};
 use futures::{prelude::*, try_ready};
-use std::{ffi::CStr, io, mem};
+use std::{fmt, io, mem};
 
+/// A stream, similar to `TcpStream`, that operates over the RFCOMM Bluetooth protocol.
 pub struct RfcommStream {
     inner: tokio_reactor::PollEvented<RfcommSocket>,
 }
 
 impl RfcommStream {
+    /// Creates a stream that tries to connect to the given Bluetooth device on the given port.
     pub fn connect(dest: Addr, port: u8) -> RfcommStreamFuture {
         let socket = match RfcommSocket::connect(dest, port) {
             Ok(s) => s,
@@ -41,13 +43,17 @@ impl RfcommStream {
     }
 }
 
+/// Bluetooth dialing in progress.
 pub struct RfcommStreamFuture {
     inner: RfcommStreamFutureInner,
 }
 
 enum RfcommStreamFutureInner {
+    /// We are waiting for the socket to be writable.
     Waiting(tokio_reactor::PollEvented<RfcommSocket>),
+    /// An error happened during the construction of the socket.
     Error(io::Error),
+    /// The future is finished. Polling it again should error or panic.
     Finished,
 }
 
@@ -101,11 +107,43 @@ impl tokio_io::AsyncWrite for RfcommStream {
     }
 }
 
+impl fmt::Debug for RfcommStream {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        if let Ok((addr, port)) = self.inner.get_ref().getsockname() {
+            f.debug_tuple("RfcommStream")
+                .field(&addr)
+                .field(&port)
+                .finish()
+        } else {
+            f.debug_tuple("RfcommStream").finish()
+        }
+    }
+}
+
+impl fmt::Debug for RfcommStreamFuture {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        if let RfcommStreamFutureInner::Waiting(inner) = &self.inner {
+            if let Ok((addr, port)) = inner.get_ref().getsockname() {
+                return f.debug_tuple("RfcommStreamFuture")
+                    .field(&addr)
+                    .field(&port)
+                    .finish();
+            }
+        }
+
+        f.debug_tuple("RfcommStreamFuture").finish()
+    }
+}
+
+/// Stream that listens for incoming RFCOMM connections.
+///
+/// Implements the `Stream` trait and yields incoming connections.
 pub struct RfcommListener {
     inner: tokio_reactor::PollEvented<RfcommSocket>,
 }
 
 impl RfcommListener {
+    /// Builds a listener that listens on the given address with the given port.
     pub fn bind(addr: Addr, port: u8) -> Result<(RfcommListener, u8), io::Error> {
         crate::discoverable::enable_discoverable(&addr)?;
 
@@ -117,7 +155,7 @@ impl RfcommListener {
                     RfcommSocket::bind(addr, port).ok().map(|s| (s, port))
                 })
                 .next()
-                .ok_or_else(|| io::Error::last_os_error())?
+                .ok_or_else(io::Error::last_os_error)?
         };
 
         let inner = RfcommListener {
