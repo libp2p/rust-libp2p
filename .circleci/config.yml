@@ -44,7 +44,7 @@ jobs:
 
   test-wasm:
     docker:
-      - image: tomaka/rustc-emscripten
+      - image: tomaka/cargo-web
     steps:
       - checkout
       - restore_cache:

@@ -163,6 +163,13 @@ where
         self.outbound_state == StreamState::Open
     }
 
+    /// Returns `true` if the remote has shown any sign of activity after the muxer has been open.
+    ///
+    /// See `StreamMuxer::is_remote_acknowledged`.
+    pub fn is_remote_acknowledged(&self) -> bool {
+        self.muxer.is_remote_acknowledged()
+    }
+
     /// Destroys the node stream and returns all the pending outbound substreams.
     pub fn close(mut self) -> Vec<TUserData> {
         self.cancel_outgoing()
