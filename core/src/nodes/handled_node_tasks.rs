@@ -559,7 +559,7 @@ where
     type Error = ();
 
     fn poll(&mut self) -> Poll<(), ()> {
-        loop {
+        'outer_loop: loop {
             match mem::replace(&mut self.inner, NodeTaskInner::Poisoned) {
                 // First possibility: we are still trying to reach a node.
                 NodeTaskInner::Future { mut future, handler, mut events_buffer } => {
@@ -616,8 +616,8 @@ where
                                 },
                                 Ok(Async::Ready(None)) => {
                                     // Node closed by the external API; start closing.
-                                    // TODO: node.close();
-                                    break;
+                                    self.inner = NodeTaskInner::Closing(node.close());
+                                    continue 'outer_loop;
                                 }
                                 Err(()) => unreachable!("An unbounded receiver never errors"),
                             }

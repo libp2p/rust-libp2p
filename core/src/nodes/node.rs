@@ -108,16 +108,12 @@ where
 
     /// Starts the process of opening a new outbound substream.
     ///
-    /// Returns an error if the muxer is closed or is shutting down.
-    ///
     /// After calling this method, polling the stream should eventually produce either an
     /// `OutboundSubstream` event or an `OutboundClosed` event containing the user data that has
     /// been passed to this method.
-    pub fn open_substream(&mut self, user_data: TUserData) -> Result<(), TUserData> {
+    pub fn open_substream(&mut self, user_data: TUserData) {
         let raw = self.muxer.open_outbound();
         self.outbound_substreams.push((user_data, raw));
-
-        Ok(())
     }
 
     /// Returns `true` if the remote has shown any sign of activity after the muxer has been open.

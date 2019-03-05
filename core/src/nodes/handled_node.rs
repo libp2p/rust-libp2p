@@ -219,18 +219,14 @@ where
                     }
                 }
                 Async::Ready(NodeHandlerEvent::OutboundSubstreamRequest(user_data)) => {
-                    match self.node.open_substream(user_data) {
-                        Ok(()) => (),
-                        Err(user_data) => {
-                            // TODO: self.handler.inject_outbound_closed(user_data)
-                        },
-                    }
+                    self.node.open_substream(user_data);
                 }
                 Async::Ready(NodeHandlerEvent::Custom(event)) => {
                     return Ok(Async::Ready(event));
                 }
             }
         }
+
         Ok(Async::NotReady)
     }
 }
