@@ -55,7 +55,7 @@ where
                 Err(io::Error::new(io::ErrorKind::Other, e))
             }
             Ok(Async::NotReady) => Ok(Async::NotReady),
-            Ok(Async::Ready(None)) => panic!(),
+            Ok(Async::Ready(None)) => Err(io::ErrorKind::BrokenPipe.into()),
             Ok(Async::Ready(Some(stream))) => {
                 self.1.store(true, atomic::Ordering::Release);
                 Ok(Async::Ready(stream))
