@@ -34,6 +34,8 @@ use std::{cmp::Ordering, error, marker::PhantomData, time::Duration, time::Insta
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_timer::Interval;
 
+mod test;
+
 /// Network behaviour that handles Kademlia.
 pub struct Kademlia<TSubstream> {
     /// Storage for the nodes. Contains the known multiaddresses for this node.
@@ -96,7 +98,6 @@ struct QueryInfo {
     /// What we are querying and why.
     inner: QueryInfoInner,
     /// Temporary addresses used when trying to reach nodes.
-    // TODO: insert in it
     untrusted_addresses: FnvHashMap<PeerId, SmallVec<[Multiaddr; 8]>>,
 }
 
@@ -475,6 +476,10 @@ where
                     }));
                 }
                 if let Some(query) = self.active_queries.get_mut(&user_data) {
+                    for peer in closer_peers.iter() {
+                        query.target_mut().untrusted_addresses
+                            .insert(peer.node_id.clone(), peer.multiaddrs.iter().cloned().collect());
+                    }
                     query.inject_rpc_result(&source, closer_peers.into_iter().map(|kp| kp.node_id))
                 }
             }
@@ -521,6 +526,10 @@ where
                         for peer in provider_peers {
                             pending_results.push(peer.node_id);
                         }
+                    }
+                    for peer in closer_peers.iter() {
+                        query.target_mut().untrusted_addresses
+                            .insert(peer.node_id.clone(), peer.multiaddrs.iter().cloned().collect());
                     }
                     query.inject_rpc_result(&source, closer_peers.into_iter().map(|kp| kp.node_id))
                 }
