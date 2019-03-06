@@ -20,9 +20,9 @@
 
 use crate::addresses::Addresses;
 use crate::handler::{KademliaHandler, KademliaHandlerEvent, KademliaHandlerIn, KademliaRequestId};
-use crate::kbucket::{KBucketsTable, Update};
+use crate::kbucket::{KBucketsTable, KBucketsPeerId, Update};
 use crate::protocol::{KadConnectionType, KadPeer};
-use crate::query::{QueryConfig, QueryState, QueryStatePollOut, QueryTarget};
+use crate::query::{QueryConfig, QueryState, QueryStatePollOut};
 use fnv::{FnvHashMap, FnvHashSet};
 use futures::{prelude::*, stream};
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
@@ -41,7 +41,7 @@ pub struct Kademlia<TSubstream> {
 
     /// All the iterative queries we are currently performing, with their ID. The last parameter
     /// is the list of accumulated providers for `GET_PROVIDERS` queries.
-    active_queries: FnvHashMap<QueryId, (QueryState, QueryPurpose, Vec<PeerId>)>,
+    active_queries: FnvHashMap<QueryId, (QueryState<QueryTarget, PeerId>, QueryPurpose, Vec<PeerId>)>,
 
     /// List of queries to start once we are inside `poll()`.
     queries_to_starts: SmallVec<[(QueryId, QueryTarget, QueryPurpose); 8]>,
@@ -105,6 +105,63 @@ enum QueryPurpose {
     UserRequest,
     /// We should add an `ADD_PROVIDER` message to the peers of the outcome.
     AddProvider(Multihash),
+}
+
+/// What we're aiming for with our query.
+#[derive(Debug, Clone)]
+enum QueryTarget {
+    /// Finding a peer.
+    FindPeer(PeerId),
+    /// Find the peers that provide a certain value.
+    GetProviders(Multihash),
+}
+
+impl QueryTarget {
+    /// Creates the corresponding RPC request to send to remote.
+    #[inline]
+    pub fn to_rpc_request<TUserData>(&self, user_data: TUserData) -> KademliaHandlerIn<TUserData> {
+        self.clone().into_rpc_request(user_data)
+    }
+
+    /// Creates the corresponding RPC request to send to remote.
+    pub fn into_rpc_request<TUserData>(self, user_data: TUserData) -> KademliaHandlerIn<TUserData> {
+        match self {
+            QueryTarget::FindPeer(key) => KademliaHandlerIn::FindNodeReq {
+                key,
+                user_data,
+            },
+            QueryTarget::GetProviders(key) => KademliaHandlerIn::GetProvidersReq {
+                key,
+                user_data,
+            },
+        }
+    }
+}
+
+impl AsRef<Multihash> for QueryTarget {
+    fn as_ref(&self) -> &Multihash {
+        match self {
+            QueryTarget::FindPeer(peer) => peer.as_ref(),
+            QueryTarget::GetProviders(key) => key,
+        }
+    }
+}
+
+impl KBucketsPeerId<PeerId> for QueryTarget {
+    fn distance_with(&self, other: &PeerId) -> u32 {
+        let other: &Multihash = other.as_ref();
+        self.as_ref().distance_with(other)
+    }
+
+    fn max_distance() -> usize {
+        <PeerId as KBucketsPeerId>::max_distance()
+    }
+}
+
+impl PartialEq<PeerId> for QueryTarget {
+    fn eq(&self, other: &PeerId) -> bool {
+        self.as_ref().eq(other)
+    }
 }
 
 impl<TSubstream> Kademlia<TSubstream> {
@@ -489,7 +546,7 @@ where
         // Start queries that are waiting to start.
         for (query_id, query_target, query_purpose) in self.queries_to_starts.drain() {
             let known_closest_peers = self.kbuckets
-                .find_closest(query_target.as_hash())
+                .find_closest(query_target.as_ref())
                 .take(self.num_results);
             self.active_queries.insert(
                 query_id,
