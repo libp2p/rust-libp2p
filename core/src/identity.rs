@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! A node's network identity keys.
+
 pub mod ed25519;
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 pub mod rsa;
@@ -29,7 +31,7 @@ pub mod error;
 use self::error::*;
 use crate::{PeerId, keys_proto};
 
-/// Identity keypair of the local node.
+/// Identity keypair of a node.
 ///
 /// # Example: Generating RSA keys with OpenSSL
 ///
@@ -48,9 +50,12 @@ use crate::{PeerId, keys_proto};
 ///
 #[derive(Clone)]
 pub enum Keypair {
+    /// An Ed25519 keypair.
     Ed25519(ed25519::Keypair),
     #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+    /// An RSA keypair.
     Rsa(rsa::Keypair),
+    /// A Secp256k1 keypair.
     #[cfg(feature = "secp256k1")]
     Secp256k1(secp256k1::Keypair)
 }
@@ -115,10 +120,13 @@ impl Keypair {
 /// The public key of a node's identity keypair.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PublicKey {
+    /// A public Ed25519 key.
     Ed25519(ed25519::PublicKey),
     #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+    /// A public RSA key.
     Rsa(rsa::PublicKey),
     #[cfg(feature = "secp256k1")]
+    /// A public Secp256k1 key.
     Secp256k1(secp256k1::PublicKey)
 }
 
@@ -140,7 +148,7 @@ impl PublicKey {
 
     /// Encode the public key into a protobuf structure for storage or
     /// exchange with other nodes.
-    pub fn into_protobuf_encoding(self) -> Result<Vec<u8>, EncodingError> {
+    pub fn into_protobuf_encoding(self) -> Vec<u8> {
         use protobuf::Message;
         let mut public_key = keys_proto::PublicKey::new();
         match self {
@@ -150,9 +158,8 @@ impl PublicKey {
             },
             #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
             PublicKey::Rsa(key) => {
-                let der = key.encode_x509()?;
                 public_key.set_Type(keys_proto::KeyType::RSA);
-                public_key.set_Data(der);
+                public_key.set_Data(key.encode_x509());
             },
             #[cfg(feature = "secp256k1")]
             PublicKey::Secp256k1(key) => {
@@ -163,7 +170,7 @@ impl PublicKey {
 
         public_key
             .write_to_bytes()
-            .map_err(|e| EncodingError::new("Protobuf", e))
+            .expect("Encoding public key into protobuf failed.")
     }
 
     /// Decode a public key from a protobuf structure, e.g. read from storage
@@ -201,6 +208,7 @@ impl PublicKey {
         }
     }
 
+    /// Convert the `PublicKey` into the corresponding `PeerId`.
     pub fn into_peer_id(self) -> PeerId {
         self.into()
     }

@@ -113,7 +113,7 @@ impl HandshakeContext<()> {
             .try_fill_bytes(&mut nonce)
             .map_err(|_| SecioError::NonceGenerationFailed)?;
 
-        let public_key_encoded = self.config.key.public().into_protobuf_encoding()?;
+        let public_key_encoded = self.config.key.public().into_protobuf_encoding();
 
         // Send our proposition with our nonce, public key and supported protocols.
         let mut proposition = Propose::new();

@@ -43,7 +43,7 @@ impl PeerId {
     /// Builds a `PeerId` from a public key.
     #[inline]
     pub fn from_public_key(key: PublicKey) -> PeerId {
-        let key_enc = key.into_protobuf_encoding().expect("Protobuf encoding failed.");
+        let key_enc = key.into_protobuf_encoding();
         let multihash = multihash::encode(multihash::Hash::SHA2256, &key_enc)
             .expect("sha2-256 is always supported");
         PeerId { multihash }
@@ -120,11 +120,11 @@ impl PeerId {
     /// given public key, otherwise `Some` boolean as the result of an equality check.
     pub fn is_public_key(&self, public_key: &PublicKey) -> Option<bool> {
         let alg = self.multihash.algorithm();
-        public_key.clone().into_protobuf_encoding().ok()
-            .and_then(|pb| match multihash::encode(alg, &pb) {
-                Ok(h) => Some(h == self.multihash),
-                Err(multihash::EncodeError::UnsupportedType) => None
-            })
+        let enc = public_key.clone().into_protobuf_encoding();
+        match multihash::encode(alg, &enc) {
+            Ok(h) => Some(h == self.multihash),
+            Err(multihash::EncodeError::UnsupportedType) => None
+        }
     }
 }
 

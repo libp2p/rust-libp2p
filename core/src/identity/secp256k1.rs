@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! Secp256k1 keys.
+
 use asn1_der::{FromDerObject, DerObject};
 use lazy_static::lazy_static;
 use sha2::{Digest as ShaDigestTrait, Sha256};

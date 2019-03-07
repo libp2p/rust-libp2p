@@ -21,7 +21,6 @@
 //! Defines the `SecioError` enum that groups all possible errors in SECIO.
 
 use aes_ctr::stream_cipher::LoopError;
-use libp2p_core::identity::error::EncodingError;
 use protobuf::error::ProtobufError;
 use std::error;
 use std::fmt;
@@ -35,9 +34,6 @@ pub enum SecioError {
 
     /// Protocol buffer error.
     ProtobufError(ProtobufError),
-
-    /// Key encoding error.
-    KeyEncodingError(EncodingError),
 
     /// Failed to parse one of the handshake protobuf messages.
     HandshakeParsingFailure,
@@ -84,7 +80,6 @@ impl error::Error for SecioError {
         match *self {
             SecioError::IoError(ref err) => Some(err),
             SecioError::ProtobufError(ref err) => Some(err),
-            SecioError::KeyEncodingError(ref err) => Some(err),
             // TODO: The type doesn't implement `Error`
             /*SecioError::CipherError(ref err) => {
                 Some(err)
@@ -102,8 +97,6 @@ impl fmt::Display for SecioError {
                 write!(f, "I/O error: {}", e),
             SecioError::ProtobufError(e) =>
                 write!(f, "Protobuf error: {}", e),
-            SecioError::KeyEncodingError(e) =>
-                write!(f, "Key encoding error: {}", e),
             SecioError::HandshakeParsingFailure =>
                 f.write_str("Failed to parse one of the handshake protobuf messages"),
             SecioError::NoSupportIntersection =>
@@ -152,11 +145,5 @@ impl From<ProtobufError> for SecioError {
     #[inline]
     fn from(err: ProtobufError) -> SecioError {
         SecioError::ProtobufError(err)
-    }
-}
-
-impl From<EncodingError> for SecioError {
-    fn from(err: EncodingError) -> SecioError {
-        SecioError::KeyEncodingError(err)
     }
 }

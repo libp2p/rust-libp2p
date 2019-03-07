@@ -18,39 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! Errors during identity key operations.
+
 use std::error::Error;
 use std::fmt;
-
-#[derive(Debug)]
-pub struct EncodingError {
-    msg: String,
-    source: Option<Box<dyn Error + Send + Sync>>
-}
-
-/// An error during encoding of key material.
-impl EncodingError {
-    pub fn new(msg: &str, source: impl Error + Send + Sync + 'static) -> EncodingError {
-        EncodingError { msg: msg.to_string(), source: Some(Box::new(source)) }
-    }
-}
-
-impl fmt::Display for EncodingError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Key encoding error: {}", self.msg)
-    }
-}
-
-impl From<String> for EncodingError {
-    fn from(s: String) -> EncodingError {
-        EncodingError { msg: s, source: None }
-    }
-}
-
-impl Error for EncodingError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        self.source.as_ref().map(|s| &**s as &dyn Error)
-    }
-}
 
 /// An error during decoding of key material.
 #[derive(Debug)]
@@ -60,7 +31,7 @@ pub struct DecodingError {
 }
 
 impl DecodingError {
-    pub fn new(msg: &str, source: impl Error + Send + Sync + 'static) -> DecodingError {
+    pub(crate) fn new(msg: &str, source: impl Error + Send + Sync + 'static) -> DecodingError {
         DecodingError { msg: msg.to_string(), source: Some(Box::new(source)) }
     }
 }
@@ -92,7 +63,7 @@ pub struct SigningError {
 
 /// An error during encoding of key material.
 impl SigningError {
-    pub fn new(msg: &str, source: impl Error + Send + Sync + 'static) -> SigningError {
+    pub(crate) fn new(msg: &str, source: impl Error + Send + Sync + 'static) -> SigningError {
         SigningError { msg: msg.to_string(), source: Some(Box::new(source)) }
     }
 }

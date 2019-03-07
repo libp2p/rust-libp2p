@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! Ed25519 keys.
+
 use ed25519_dalek as ed25519;
 use failure::Fail;
 use super::error::DecodingError;

@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! RSA keys.
+
 use asn1_der::{Asn1Der, FromDerObject, IntoDerObject, DerObject, DerTag, DerValue, Asn1DerError};
 use lazy_static::lazy_static;
 use super::error::*;
@@ -86,7 +88,7 @@ impl PublicKey {
     /// as defined in [RFC5280].
     ///
     /// [RFC5280] https://tools.ietf.org/html/rfc5280#section-4.1
-    pub fn encode_x509(&self) -> Result<Vec<u8>, EncodingError> {
+    pub fn encode_x509(&self) -> Vec<u8> {
         let spki = Asn1SubjectPublicKeyInfo {
             algorithmIdentifier: Asn1RsaEncryption {
                 algorithm: Asn1OidRsaEncryption(),
@@ -96,7 +98,7 @@ impl PublicKey {
         };
         let mut buf = vec![0u8; spki.serialized_len()];
         spki.serialize(buf.iter_mut()).map(|_| buf)
-            .map_err(|e| EncodingError::new("RSA X.509", e))
+            .expect("RSA X.509 public key encoding failed.")
     }
 
     /// Decode an RSA public key from a DER-encoded X.509 SubjectPublicKeyInfo
@@ -239,9 +241,8 @@ mod tests {
     fn rsa_x509_encode_decode() {
         fn prop(SomeKeypair(kp): SomeKeypair) -> Result<bool, String> {
             let pk = kp.public();
-            pk.encode_x509()
+            PublicKey::decode_x509(&pk.encode_x509())
                 .map_err(|e| e.to_string())
-                .and_then(|der| PublicKey::decode_x509(&der).map_err(|e| e.to_string()))
                 .map(|pk2| pk2 == pk)
         }
         QuickCheck::new().tests(10).quickcheck(prop as fn(_) -> _);

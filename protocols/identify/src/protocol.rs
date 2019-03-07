@@ -67,8 +67,7 @@ impl<T> IdentifySender<T> where T: AsyncWrite {
             .map(|addr| addr.into_bytes())
             .collect();
 
-        let pubkey_bytes = info.public_key.into_protobuf_encoding()
-            .expect("Public key protobuf encoding failed.");
+        let pubkey_bytes = info.public_key.into_protobuf_encoding();
 
         let mut message = structs_proto::Identify::new();
         message.set_agentVersion(info.agent_version);
