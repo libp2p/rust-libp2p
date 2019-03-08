@@ -449,7 +449,7 @@ where
         match event {
             KademliaHandlerEvent::FindNodeReq { key, request_id } => {
                 let closer_peers = self.kbuckets
-                    .find_closest_with_self(&key)
+                    .find_closest(&key)
                     .take(self.num_results)
                     .map(|peer_id| build_kad_peer(peer_id, &self.kbuckets))
                     .collect();
@@ -485,7 +485,7 @@ where
             }
             KademliaHandlerEvent::GetProvidersReq { key, request_id } => {
                 let closer_peers = self.kbuckets
-                    .find_closest_with_self(&key)
+                    .find_closest(&key)
                     .take(self.num_results)
                     .map(|peer_id| build_kad_peer(peer_id, &self.kbuckets))
                     .collect();
@@ -742,19 +742,16 @@ fn gen_random_id(my_id: &PeerId, bucket_num: usize) -> Result<PeerId, ()> {
 }
 
 /// Builds a `KadPeer` struct corresponding to the given `PeerId`.
-/// The `PeerId` can be the same as the local one.
+/// The `PeerId` cannot be the same as the local one.
 ///
 /// > **Note**: This is just a convenience function that doesn't do anything note-worthy.
 fn build_kad_peer(
     peer_id: PeerId,
     kbuckets: &KBucketsTable<PeerId, Addresses>
 ) -> KadPeer {
-    let is_self = false;        // TODO: ?
+    debug_assert_ne!(*kbuckets.my_id(), peer_id);
 
-    let (multiaddrs, connection_ty) = if is_self {
-        (Vec::new(), KadConnectionType::Connected)      // TODO:?
-
-    } else if let Some(addresses) = kbuckets.get(&peer_id) {
+    let (multiaddrs, connection_ty) = if let Some(addresses) = kbuckets.get(&peer_id) {
         let connected = if addresses.is_connected() {
             KadConnectionType::Connected
         } else {
