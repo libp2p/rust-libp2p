@@ -210,3 +210,94 @@ fn indirect_query() {
         }))
         .unwrap();
 }
+
+#[test]
+fn unresponsive_not_returned_direct() {
+    // Build one node. It contains fake addresses to non-existing nodes. We ask it to find a
+    // random peer. We make sure that no fake address is returned.
+
+    let mut swarms = build_nodes(1);
+
+    // Add fake addresses.
+    for _ in 0 .. 10 {
+        swarms[0].add_not_connected_address(
+            &PeerId::random(),
+            libp2p_core::multiaddr::multiaddr![Udp(10u16)]
+        );
+    }
+
+    // Ask first to search a random value.
+    let search_target = PeerId::random();
+    swarms[0].find_node(search_target.clone());
+
+    tokio::runtime::Runtime::new()
+        .unwrap()
+        .block_on(futures::future::poll_fn(move || -> Result<_, io::Error> {
+            for swarm in &mut swarms {
+                loop {
+                    match swarm.poll().unwrap() {
+                        Async::Ready(Some(KademliaOut::FindNodeResult { key, closer_peers })) => {
+                            assert_eq!(key, search_target);
+                            assert_eq!(closer_peers.len(), 0);
+                            return Ok(Async::Ready(()));
+                        }
+                        Async::Ready(_) => (),
+                        Async::NotReady => break,
+                    }
+                }
+            }
+
+            Ok(Async::NotReady)
+        }))
+        .unwrap();
+}
+
+#[test]
+fn unresponsive_not_returned_indirect() {
+    // Build two nodes. Node #2 knows about node #1. Node #1 contains fake addresses to
+    // non-existing nodes. We ask node #1 to find a random peer. We make sure that no fake address
+    // is returned.
+
+    let mut swarms = build_nodes(2);
+
+    // Add fake addresses to first.
+    let first_peer_id = Swarm::local_peer_id(&swarms[0]).clone();
+    for _ in 0 .. 10 {
+        swarms[0].add_not_connected_address(
+            &PeerId::random(),
+            libp2p_core::multiaddr::multiaddr![Udp(10u16)]
+        );
+    }
+
+    // Connect second to first.
+    {
+        let listen_addr = Swarm::listeners(&swarms[0]).next().unwrap().clone();
+        swarms[1].add_not_connected_address(&first_peer_id, listen_addr);
+    }
+
+    // Ask second to search a random value.
+    let search_target = PeerId::random();
+    swarms[1].find_node(search_target.clone());
+
+    tokio::runtime::Runtime::new()
+        .unwrap()
+        .block_on(futures::future::poll_fn(move || -> Result<_, io::Error> {
+            for swarm in &mut swarms {
+                loop {
+                    match swarm.poll().unwrap() {
+                        Async::Ready(Some(KademliaOut::FindNodeResult { key, closer_peers })) => {
+                            assert_eq!(key, search_target);
+                            assert_eq!(closer_peers.len(), 1);
+                            assert_eq!(closer_peers[0], first_peer_id);
+                            return Ok(Async::Ready(()));
+                        }
+                        Async::Ready(_) => (),
+                        Async::NotReady => break,
+                    }
+                }
+            }
+
+            Ok(Async::NotReady)
+        }))
+        .unwrap();
+}
