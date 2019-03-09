@@ -212,12 +212,11 @@ where
                     existing.2 = Instant::now() + self.ttl;
                 } else {
                     self.known_nodes.push((peer_id.clone(), addr.clone(), Instant::now() + self.ttl));
+                    return Async::Ready(NetworkBehaviourAction::GenerateEvent(BluetoothEvent::Discovered {
+                        peer_id,
+                        address: addr,
+                    }))
                 }
-
-                return Async::Ready(NetworkBehaviourAction::GenerateEvent(BluetoothEvent::Discovered {
-                    peer_id,
-                    address: addr,
-                }))
             },
             Async::Ready(None) => self.current_scan = Some(Scan::new().unwrap()),     // TODO: don't unwrap
             Async::NotReady => (),
