@@ -77,7 +77,7 @@ fn generate_xml(peer_id: &PeerId, rfcomm_port: u8) -> String {
 <record>
     <attribute id="0x001">
         <sequence>
-            <text value="{uuid_string}" />
+            <uuid value="{uuid_string}" />
         </sequence>
     </attribute>
     <attribute id="0x0004">
