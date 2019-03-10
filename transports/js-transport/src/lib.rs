@@ -23,13 +23,14 @@
 use futures::{prelude::*, future::FutureResult, sync::mpsc, sync::oneshot};
 use libp2p_core::{Multiaddr, Transport, transport::TransportError};
 use send_wrapper::SendWrapper;
-use std::{error, fmt, io, io::Read, io::Write};
-use tokio_io::{AsyncRead, AsyncWrite};
+use std::{error, fmt, io::Write};
 use wasm_bindgen::{JsCast, prelude::*};
 
 mod connection;
+mod dial;
 
 pub use connection::Connection;
+pub use dial::DialFuture;
 
 /// Allows using as a `Transport` a JavaScript object that implements the `js-libp2p-transport`
 /// interface.
@@ -56,11 +57,18 @@ impl JsTransport {
     ///
     /// Must be passed an object that implements the `js-libp2p-transport` interface, and an
     /// function that, when passed a string, returns a JavaScript multiaddr object.
-    pub fn new(transport: JsValue, multiaddr_constructor: JsValue) -> JsTransport {
-        JsTransport {
+    pub fn new(transport: JsValue, multiaddr_constructor: JsValue) -> Result<JsTransport, JsErr> {
+        let multiaddr_constructor = multiaddr_constructor
+            .dyn_into::<js_sys::Function>()
+            .map_err(|v| {
+                let msg = format!("Expected multiaddr_constructor to be a function, got {:?}", v);
+                JsErr::from(JsValue::from_str(&msg))
+            })?;
+
+        Ok(JsTransport {
             transport: SendWrapper::new(transport),
-            multiaddr_constructor: SendWrapper::new(multiaddr_constructor.into()),        // TODO: can panic
-        }
+            multiaddr_constructor: SendWrapper::new(multiaddr_constructor),
+        })
     }
 
     /// Translates from a Rust `multiaddr` into a JavaScript `multiaddr`.
@@ -139,42 +147,8 @@ impl Transport for JsTransport {
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         // Turn the Rust multiaddr into a JavaScript multiaddr.
-        let js_multiaddr = self.build_js_multiaddr(addr)
-            .map_err(|v| TransportError::Other(v.into()))?;
-
-        // The `dial` function directly returns the connection, but also expects a callback that
-        // will be passed either NULL on success, or an error.
-        let (callback, finished) = {
-            let (tx, rx) = oneshot::channel();
-            let mut tx = Some(tx);
-            let callback = Closure::wrap(Box::new(move |result| {
-                // When we closure is called, we move out of `tx`. If the closure is called a
-                // second time, `tx` will be empty.
-                if let Some(sender) = tx.take() {
-                    let _ = sender.send(SendWrapper::new(result));
-                } else {
-                    wasm_bindgen::throw_str("Dialing callback has been called multiple times");
-                }
-            }) as Box<FnMut(JsValue)>);
-            (callback, rx)
-        };
-
-        // Call `dial(multiaddr, NULL, callback)` on our JavaScript transport.
-        let connection = js_sys::Reflect::get(&self.transport, &JsValue::from_str("dial"))
-            .map_err(|v| TransportError::Other(v.into()))?
-            .dyn_into::<js_sys::Function>()
-            .map_err(|v| {
-                let msg = format!("Expected dial to be a function, but got {:?}", v);
-                TransportError::Other(JsErr::from(JsValue::from_str(&msg)))
-            })?
-            .call3(&self.transport, &js_multiaddr, &JsValue::NULL, callback.as_ref().unchecked_ref())
-            .map_err(|v| TransportError::Other(v.into()))?;
-
-        Ok(DialFuture {
-            _callback: SendWrapper::new(callback),
-            finished,
-            connection: Some(SendWrapper::new(connection)),
-        })
+        let js_multiaddr = self.build_js_multiaddr(addr).map_err(TransportError::Other)?;
+        dial::dial(&self.transport, js_multiaddr).map_err(TransportError::Other)
     }
 
     fn nat_traversal(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
@@ -207,46 +181,6 @@ impl fmt::Display for JsErr {
 impl error::Error for JsErr {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         None
-    }
-}
-
-/// Future for establishing the connection.
-pub struct DialFuture {
-    /// Callback called by the JavaScript. We need to keep it alive.
-    // TODO: what to do if we drop before finished?
-    _callback: SendWrapper<Closure<FnMut(JsValue)>>,
-    /// Channel that receives the output of the closure (null on success, something else on error).
-    finished: oneshot::Receiver<SendWrapper<JsValue>>,
-    /// Connection waiting to be established. `None` if the future has succeeded and we have moved
-    /// it out.
-    connection: Option<SendWrapper<JsValue>>,
-}
-
-impl fmt::Debug for DialFuture {
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt.debug_tuple("DialFuture").finish()
-    }
-}
-
-impl Future for DialFuture {
-    type Item = Connection;
-    type Error = JsErr;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let value = match self.finished.poll() {
-            Ok(Async::Ready(v)) => v,
-            Ok(Async::NotReady) => return Ok(Async::NotReady),
-            Err(_) => unreachable!("The sender is in self, so this is never cancelled; QED"),
-        };
-
-        // Value contains the potential error that happened.
-        if !value.is_null() {
-            return Err(JsErr(value));
-        }
-
-        // Success!
-        let connection = self.connection.take().expect("Future has already succeeded in the past");
-        Ok(Async::Ready(Connection::from_js_connection(connection.take())?))
     }
 }
 

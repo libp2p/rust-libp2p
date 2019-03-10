@@ -19,10 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::JsErr;
-use futures::{prelude::*, future::FutureResult, sync::mpsc, sync::oneshot};
-use libp2p_core::{Multiaddr, Transport, transport::TransportError};
+use futures::{prelude::*, sync::mpsc};
 use send_wrapper::SendWrapper;
-use std::{error, fmt, io, io::Read, io::Write};
+use std::{fmt, io, io::Read, io::Write};
 use tokio_io::{AsyncRead, AsyncWrite};
 use wasm_bindgen::{JsCast, prelude::*};
 
