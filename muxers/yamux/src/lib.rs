@@ -113,7 +113,7 @@ where
 
     #[inline]
     fn shutdown(&self, _: Shutdown) -> Poll<(), IoError> {
-        self.0.shutdown()
+        self.0.close()
     }
 
     #[inline]
