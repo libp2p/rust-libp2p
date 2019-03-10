@@ -1,4 +1,4 @@
-// Copyright 2018 Parity Technologies (UK) Ltd.
+// Copyright 2019 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -20,17 +20,19 @@
 
 //! Allows using a transport from js-libp2p with rust-libp2p
 
-use futures::{prelude::*, future::FutureResult, sync::mpsc, sync::oneshot};
+use futures::future::FutureResult;
 use libp2p_core::{Multiaddr, Transport, transport::TransportError};
 use send_wrapper::SendWrapper;
-use std::{error, fmt, io::Write};
+use std::{error, fmt};
 use wasm_bindgen::{JsCast, prelude::*};
 
 mod connection;
 mod dial;
+mod listen;
 
 pub use connection::Connection;
 pub use dial::DialFuture;
+pub use listen::Listener;
 
 /// Allows using as a `Transport` a JavaScript object that implements the `js-libp2p-transport`
 /// interface.
@@ -55,8 +57,9 @@ impl Clone for JsTransport {
 impl JsTransport {
     /// Creates an implementation of `Transport` that uses the given JavaScript transport inside.
     ///
-    /// Must be passed an object that implements the `js-libp2p-transport` interface, and an
-    /// function that, when passed a string, returns a JavaScript multiaddr object.
+    /// Must be passed an object that implements the `js-libp2p-transport` interface (see
+    /// https://github.com/libp2p/interface-transport), and a function that, when passed a string,
+    /// returns a JavaScript multiaddr object.
     pub fn new(transport: JsValue, multiaddr_constructor: JsValue) -> Result<JsTransport, JsErr> {
         let multiaddr_constructor = multiaddr_constructor
             .dyn_into::<js_sys::Function>()
@@ -92,61 +95,11 @@ impl Transport for JsTransport {
     type Dial = DialFuture;
 
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
-        let js_multiaddr = self.build_js_multiaddr(addr)
-            .map_err(|v| TransportError::Other(v.into()))?;
-
-        let create_listener: js_sys::Function = {
-            let create_listener = js_sys::Reflect::get(&self.transport, &JsValue::from_str("createListener"))
-                .map_err(|v| TransportError::Other(v.into()))?;
-            if !create_listener.is_function() {
-                // TODO: ?
-            }
-            // TODO: can panic
-            create_listener.into()
-        };
-
-        // Spawn the listener with the callback called when we receive an incoming connection.
-        let (inc_tx, inc_rx) = mpsc::channel(2);
-        let mut inc_tx = Some(inc_tx);
-        let incoming_callback = Closure::wrap(Box::new(move |connec| {
-            let inc_tx = inc_tx.take().expect("Ready callback called twice");       // TODO: exception instead
-            let _ = inc_tx.send(SendWrapper::new(connec));
-        }) as Box<FnMut(JsValue)>);
-        let listener = create_listener.call2(&create_listener, &JsValue::NULL, incoming_callback.as_ref().unchecked_ref())
-            .map_err(|v| TransportError::Other(v.into()))?;
-
-        // Add event listeners for close and error.
-        // TODO: ^
-
-        // Start listening. Passes the callback to call when the listener is ready.
-        let (ready_tx, ready_rx) = oneshot::channel();
-        let mut ready_tx = Some(ready_tx);
-        let ready_cb = Closure::wrap(Box::new(move || {
-            if let Some(sender) = ready_tx.take() {
-                let _ = sender.send(());
-            } else {
-                wasm_bindgen::throw_str("Listener ready callback has been called multiple times");
-            }
-        }) as Box<FnMut()>);
-        {
-            let listen: js_sys::Function = js_sys::Reflect::get(&self.transport, &JsValue::from_str("listen")).unwrap().into();
-            listen.call2(&listener, &js_multiaddr, ready_cb.as_ref().unchecked_ref())
-                .map_err(|v| TransportError::Other(v.into()))?;
-        }
-
-        let listener = Listener {
-            listener: Some(SendWrapper::new(listener)),
-            listener_ready: ready_rx,
-            connection_incoming: inc_rx,
-            _incoming_callback: SendWrapper::new(incoming_callback),
-            _ready_callback: SendWrapper::new(ready_cb),
-        };
-
-        Ok((listener, "/ip4/5.6.7.8/tcp/9".parse().unwrap()))       // TODO: wrong
+        let js_multiaddr = self.build_js_multiaddr(addr).map_err(TransportError::Other)?;
+        listen::listen_on(&self.transport, js_multiaddr).map_err(TransportError::Other)
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        // Turn the Rust multiaddr into a JavaScript multiaddr.
         let js_multiaddr = self.build_js_multiaddr(addr).map_err(TransportError::Other)?;
         dial::dial(&self.transport, js_multiaddr).map_err(TransportError::Other)
     }
@@ -181,43 +134,5 @@ impl fmt::Display for JsErr {
 impl error::Error for JsErr {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         None
-    }
-}
-
-/// An active listener.
-pub struct Listener {
-    /// The object representing the listener.
-    listener: Option<SendWrapper<JsValue>>,
-    /// Trigger whenever a connection is propagated to the `_incoming_callback`.
-    connection_incoming: mpsc::Receiver<SendWrapper<JsValue>>,
-    /// Callback called whenever a connection arrives.
-    _incoming_callback: SendWrapper<Closure<FnMut(JsValue)>>,
-    /// Triggered when the listener is "ready". TODO: useless?
-    listener_ready: oneshot::Receiver<()>,
-    /// Callback called when the listener is ready.
-    _ready_callback: SendWrapper<Closure<FnMut()>>,
-}
-
-impl fmt::Debug for Listener {
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt.debug_tuple("Listener").finish()
-    }
-}
-
-impl Stream for Listener {
-    type Item = (FutureResult<Connection, JsErr>, Multiaddr);
-    type Error = JsErr;
-
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        // Next incoming connection.
-        let incoming = match self.connection_incoming.poll() {
-            Ok(Async::Ready(Some(v))) => v,
-            Ok(Async::NotReady) => return Ok(Async::NotReady),
-            Ok(Async::Ready(None)) | Err(_) =>
-                unreachable!("The sender is in self, so this is never cancelled; QED"),
-        };
-
-        let incoming = Connection::from_js_connection(incoming.take()).into_future();
-        Ok(Async::Ready(Some((incoming, "/ip4/1.2.3.4/tcp/5".parse().unwrap()))))
     }
 }
