@@ -79,6 +79,8 @@ impl Connection {
             // If `end` is not null, we have to call the `callback` directly with it. This is
             // specified in the documentation.
             if !end.is_null() {
+                // TODO: clear the content of cb_tx? the JavaScript doc doesn't cover half of the
+                // corner cases that we have to cover
                 return callback.call1(&callback, &end).unwrap_throw();
             }
 
@@ -285,5 +287,11 @@ impl Write for Connection {
     fn flush(&mut self) -> Result<(), io::Error> {
         // Everything is always considered flushed.
         Ok(())
+    }
+}
+
+impl Drop for Connection {
+    fn drop(&mut self) {
+        // TODO: cancel the callbacks? again, not sure how to do that
     }
 }
