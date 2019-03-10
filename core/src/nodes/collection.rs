@@ -24,61 +24,53 @@ use crate::{
     nodes::{
         node::Substream,
         handled_node_tasks::{HandledNodesEvent, HandledNodesTasks, TaskClosedEvent},
-        handled_node_tasks::{IntoNodeHandler, Task as HandledNodesTask, TaskId},
+        handled_node_tasks::{IntoNodeHandler, Task as HandledNodesTask, TaskId, ClosedTask},
         handled_node::{HandledNodeError, NodeHandler}
     }
 };
 use fnv::FnvHashMap;
 use futures::prelude::*;
-use std::{collections::hash_map::Entry, error, fmt, mem};
+use std::{error, fmt, hash::Hash, mem};
 
 mod tests;
 
-// TODO: make generic over PeerId
-
 /// Implementation of `Stream` that handles a collection of nodes.
-pub struct CollectionStream<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> {
+pub struct CollectionStream<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TPeerId = PeerId> {
     /// Object that handles the tasks.
-    inner: HandledNodesTasks<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr>,
+    ///
+    /// The user data contains the state of the task. If `Connected`, then a corresponding entry
+    /// must be present in `nodes`.
+    inner: HandledNodesTasks<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TaskState<TPeerId, TUserData>, TPeerId>,
+
     /// List of nodes, with the task id that handles this node. The corresponding entry in `tasks`
     /// must always be in the `Connected` state.
-    nodes: FnvHashMap<PeerId, TaskId>,
-    /// List of tasks and their state. If `Connected`, then a corresponding entry must be present
-    /// in `nodes`.
-    tasks: FnvHashMap<TaskId, TaskState>,
+    nodes: FnvHashMap<TPeerId, TaskId>,
 }
 
-impl<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> fmt::Debug for CollectionStream<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        let mut list = f.debug_list();
-        for (id, task) in &self.tasks {
-            match *task {
-                TaskState::Pending => {
-                    list.entry(&format!("Pending({:?})", ReachAttemptId(*id)))
-                },
-                TaskState::Connected(ref peer_id) => {
-                    list.entry(&format!("Connected({:?})", peer_id))
-                }
-            };
-        }
-        list.finish()
+impl<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TPeerId> fmt::Debug for
+    CollectionStream<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TPeerId>
+where
+    TPeerId: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        f.debug_tuple("CollectionStream").finish()
     }
 }
 
 /// State of a task.
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum TaskState {
+enum TaskState<TPeerId, TUserData> {
     /// Task is attempting to reach a peer.
     Pending,
     /// The task is connected to a peer.
-    Connected(PeerId),
+    Connected(TPeerId, TUserData),
 }
 
 /// Event that can happen on the `CollectionStream`.
-pub enum CollectionEvent<'a, TInEvent:'a , TOutEvent: 'a, THandler: 'a, TReachErr, THandlerErr> {
+pub enum CollectionEvent<'a, TInEvent:'a , TOutEvent: 'a, THandler: 'a, TReachErr, THandlerErr, TUserData, TPeerId> {
     /// A connection to a node has succeeded. You must use the provided event in order to accept
     /// the connection.
-    NodeReached(CollectionReachEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr>),
+    NodeReached(CollectionReachEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TPeerId>),
 
     /// A connection to a node has been closed.
     ///
@@ -86,7 +78,9 @@ pub enum CollectionEvent<'a, TInEvent:'a , TOutEvent: 'a, THandler: 'a, TReachEr
     /// substream attempt is pending.
     NodeClosed {
         /// Identifier of the node.
-        peer_id: PeerId,
+        peer_id: TPeerId,
+        /// User data that was passed when accepting.
+        user_data: TUserData,
     },
 
     /// A connection to a node has errored.
@@ -94,9 +88,11 @@ pub enum CollectionEvent<'a, TInEvent:'a , TOutEvent: 'a, THandler: 'a, TReachEr
     /// Can only happen after a node has been successfully reached.
     NodeError {
         /// Identifier of the node.
-        peer_id: PeerId,
+        peer_id: TPeerId,
         /// The error that happened.
         error: HandledNodeError<THandlerErr>,
+        /// User data that was passed when accepting.
+        user_data: TUserData,
     },
 
     /// An error happened on the future that was trying to reach a node.
@@ -111,33 +107,38 @@ pub enum CollectionEvent<'a, TInEvent:'a , TOutEvent: 'a, THandler: 'a, TReachEr
 
     /// A node has produced an event.
     NodeEvent {
-        /// Identifier of the node.
-        peer_id: PeerId,
+        /// The node that has generated the event.
+        peer: PeerMut<'a, TInEvent, TUserData, TPeerId>,
         /// The produced event.
         event: TOutEvent,
     },
 }
 
-impl<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> fmt::Debug for CollectionEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr>
+impl<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TPeerId> fmt::Debug for
+    CollectionEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TPeerId>
 where TOutEvent: fmt::Debug,
       TReachErr: fmt::Debug,
       THandlerErr: fmt::Debug,
+      TPeerId: Eq + Hash + Clone + fmt::Debug,
+      TUserData: fmt::Debug,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match *self {
             CollectionEvent::NodeReached(ref inner) => {
                 f.debug_tuple("CollectionEvent::NodeReached")
                 .field(inner)
                 .finish()
             },
-            CollectionEvent::NodeClosed { ref peer_id } => {
+            CollectionEvent::NodeClosed { ref peer_id, ref user_data } => {
                 f.debug_struct("CollectionEvent::NodeClosed")
                 .field("peer_id", peer_id)
+                .field("user_data", user_data)
                 .finish()
             },
-            CollectionEvent::NodeError { ref peer_id, ref error } => {
+            CollectionEvent::NodeError { ref peer_id, ref error, ref user_data } => {
                 f.debug_struct("CollectionEvent::NodeError")
                 .field("peer_id", peer_id)
+                .field("user_data", user_data)
                 .field("error", error)
                 .finish()
             },
@@ -147,9 +148,9 @@ where TOutEvent: fmt::Debug,
                 .field("error", error)
                 .finish()
             },
-            CollectionEvent::NodeEvent { ref peer_id, ref event } => {
+            CollectionEvent::NodeEvent { ref peer, ref event } => {
                 f.debug_struct("CollectionEvent::NodeEvent")
-                .field("peer_id", peer_id)
+                .field("peer_id", peer.id())
                 .field("event", event)
                 .finish()
             },
@@ -159,19 +160,23 @@ where TOutEvent: fmt::Debug,
 
 /// Event that happens when we reach a node.
 #[must_use = "The node reached event is used to accept the newly-opened connection"]
-pub struct CollectionReachEvent<'a, TInEvent: 'a, TOutEvent: 'a, THandler: 'a, TReachErr, THandlerErr: 'a> {
+pub struct CollectionReachEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TPeerId = PeerId> {
     /// Peer id we connected to.
-    peer_id: PeerId,
+    peer_id: TPeerId,
     /// The task id that reached the node.
     id: TaskId,
     /// The `CollectionStream` we are referencing.
-    parent: &'a mut CollectionStream<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr>,
+    parent: &'a mut CollectionStream<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TPeerId>,
 }
 
-impl<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> CollectionReachEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> {
+impl<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TPeerId>
+    CollectionReachEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TPeerId>
+where
+    TPeerId: Eq + Hash + Clone,
+{
     /// Returns the peer id of the node that has been reached.
     #[inline]
-    pub fn peer_id(&self) -> &PeerId {
+    pub fn peer_id(&self) -> &TPeerId {
         &self.peer_id
     }
 
@@ -189,25 +194,28 @@ impl<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> CollectionReachE
     }
 
     /// Accepts the new node.
-    pub fn accept(self) -> (CollectionNodeAccept, PeerId) {
+    pub fn accept(self, user_data: TUserData) -> (CollectionNodeAccept<TUserData>, TPeerId) {
         // Set the state of the task to `Connected`.
         let former_task_id = self.parent.nodes.insert(self.peer_id.clone(), self.id);
-        let _former_state = self.parent.tasks.insert(self.id, TaskState::Connected(self.peer_id.clone()));
-        debug_assert_eq!(_former_state, Some(TaskState::Pending));
+        *self.parent.inner.task(self.id)
+            .expect("A CollectionReachEvent is only ever created from a valid attempt; QED")
+            .user_data_mut() = TaskState::Connected(self.peer_id.clone(), user_data);
 
         // It is possible that we already have a task connected to the same peer. In this
         // case, we need to emit a `NodeReplaced` event.
-        let ret_value = if let Some(former_task_id) = former_task_id {
-            self.parent.inner.task(former_task_id)
-                .expect("whenever we receive a TaskClosed event or close a node, we remove the \
-                         corresponding entry from self.nodes; therefore all elements in \
-                         self.nodes are valid tasks in the HandledNodesTasks; QED")
-                .close();
-            let _former_other_state = self.parent.tasks.remove(&former_task_id);
-            debug_assert_eq!(_former_other_state, Some(TaskState::Connected(self.peer_id.clone())));
-
+        let tasks = &mut self.parent.inner;
+        let ret_value = if let Some(former_task) = former_task_id.and_then(|i| tasks.task(i)) {
+            debug_assert!(match *former_task.user_data() {
+                TaskState::Connected(ref p, _) if *p == self.peer_id => true,
+                _ => false
+            });
+            let user_data = match former_task.close().into_user_data() {
+                TaskState::Connected(_, user_data) => user_data,
+                _ => panic!("The former task was picked from `nodes`; all the nodes in `nodes` \
+                             are always in the connected state")
+            };
             // TODO: we unfortunately have to clone the peer id here
-            (CollectionNodeAccept::ReplacedExisting, self.peer_id.clone())
+            (CollectionNodeAccept::ReplacedExisting(user_data), self.peer_id.clone())
         } else {
             // TODO: we unfortunately have to clone the peer id here
             (CollectionNodeAccept::NewEntry, self.peer_id.clone())
@@ -223,7 +231,7 @@ impl<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> CollectionReachE
     ///
     /// Has the same effect as dropping the event without accepting it.
     #[inline]
-    pub fn deny(self) -> PeerId {
+    pub fn deny(self) -> TPeerId {
         // TODO: we unfortunately have to clone the id here, in order to be explicit
         let peer_id = self.peer_id.clone();
         drop(self);  // Just to be explicit
@@ -231,8 +239,12 @@ impl<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> CollectionReachE
     }
 }
 
-impl<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> fmt::Debug for CollectionReachEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+impl<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TPeerId> fmt::Debug for
+    CollectionReachEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TPeerId>
+where
+    TPeerId: Eq + Hash + Clone + fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_struct("CollectionReachEvent")
             .field("peer_id", &self.peer_id)
             .field("reach_attempt_id", &self.reach_attempt_id())
@@ -240,24 +252,25 @@ impl<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> fmt::Debug for C
     }
 }
 
-impl<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> Drop for CollectionReachEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> {
+impl<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TPeerId> Drop for
+    CollectionReachEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TPeerId>
+{
     fn drop(&mut self) {
-        let task_state = self.parent.tasks.remove(&self.id);
-        debug_assert!(if let Some(TaskState::Pending) = task_state { true } else { false });
-        self.parent.inner.task(self.id)
+        let task = self.parent.inner.task(self.id)
             .expect("we create the CollectionReachEvent with a valid task id; the \
                      CollectionReachEvent mutably borrows the collection, therefore nothing \
                      can delete this task during the lifetime of the CollectionReachEvent; \
-                     therefore the task is still valid when we delete it; QED")
-            .close();
+                     therefore the task is still valid when we delete it; QED");
+        debug_assert!(if let TaskState::Pending = task.user_data() { true } else { false });
+        task.close();
     }
 }
 
 /// Outcome of accepting a node.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum CollectionNodeAccept {
-    /// We replaced an existing node.
-    ReplacedExisting,
+pub enum CollectionNodeAccept<TUserData> {
+    /// We replaced an existing node. Returns the user data that was assigned to this node.
+    ReplacedExisting(TUserData),
     /// We didn't replace anything existing.
     NewEntry,
 }
@@ -266,14 +279,17 @@ pub enum CollectionNodeAccept {
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ReachAttemptId(TaskId);
 
-impl<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> CollectionStream<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> {
+impl<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TPeerId>
+    CollectionStream<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TPeerId>
+where
+    TPeerId: Eq + Hash + Clone,
+{
     /// Creates a new empty collection.
     #[inline]
     pub fn new() -> Self {
         CollectionStream {
             inner: HandledNodesTasks::new(),
             nodes: Default::default(),
-            tasks: Default::default(),
         }
     }
 
@@ -284,8 +300,8 @@ impl<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> CollectionStream<TIn
     pub fn add_reach_attempt<TFut, TMuxer>(&mut self, future: TFut, handler: THandler)
         -> ReachAttemptId
     where
-        TFut: Future<Item = (PeerId, TMuxer), Error = TReachErr> + Send + 'static,
-        THandler: IntoNodeHandler + Send + 'static,
+        TFut: Future<Item = (TPeerId, TMuxer), Error = TReachErr> + Send + 'static,
+        THandler: IntoNodeHandler<TPeerId> + Send + 'static,
         THandler::Handler: NodeHandler<Substream = Substream<TMuxer>, InEvent = TInEvent, OutEvent = TOutEvent, Error = THandlerErr> + Send + 'static,
         <THandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static,     // TODO: shouldn't be required?
         TReachErr: error::Error + Send + 'static,
@@ -294,33 +310,26 @@ impl<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> CollectionStream<TIn
         TOutEvent: Send + 'static,
         TMuxer: StreamMuxer + Send + Sync + 'static,  // TODO: Send + Sync + 'static shouldn't be required
         TMuxer::OutboundSubstream: Send + 'static,  // TODO: shouldn't be required
+        TPeerId: Send + 'static,
     {
-        let id = self.inner.add_reach_attempt(future, handler);
-        self.tasks.insert(id, TaskState::Pending);
-        ReachAttemptId(id)
+        ReachAttemptId(self.inner.add_reach_attempt(future, TaskState::Pending, handler))
     }
 
     /// Interrupts a reach attempt.
     ///
     /// Returns `Ok` if something was interrupted, and `Err` if the ID is not or no longer valid.
-    pub fn interrupt(&mut self, id: ReachAttemptId) -> Result<(), InterruptError> {
-        match self.tasks.entry(id.0) {
-            Entry::Vacant(_) => Err(InterruptError::ReachAttemptNotFound),
-            Entry::Occupied(entry) => {
-                match entry.get() {
-                    TaskState::Connected(_) => return Err(InterruptError::AlreadyReached),
+    pub fn interrupt(&mut self, id: ReachAttemptId) -> Result<InterruptedReachAttempt<TInEvent, TPeerId, TUserData>, InterruptError> {
+        match self.inner.task(id.0) {
+            None => Err(InterruptError::ReachAttemptNotFound),
+            Some(task) => {
+                match task.user_data() {
+                    TaskState::Connected(_, _) => return Err(InterruptError::AlreadyReached),
                     TaskState::Pending => (),
                 };
 
-                entry.remove();
-                self.inner.task(id.0)
-                    .expect("whenever we receive a TaskClosed event or interrupt a task, we \
-                             remove the corresponding entry from self.tasks; therefore all \
-                             elements in self.tasks are valid tasks in the \
-                             HandledNodesTasks; QED")
-                    .close();
-
-                Ok(())
+                Ok(InterruptedReachAttempt {
+                    inner: task.close(),
+                })
             }
         }
     }
@@ -338,7 +347,7 @@ impl<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> CollectionStream<TIn
     ///
     /// Returns `None` if we don't have a connection to this peer.
     #[inline]
-    pub fn peer_mut(&mut self, id: &PeerId) -> Option<PeerMut<TInEvent>> {
+    pub fn peer_mut(&mut self, id: &TPeerId) -> Option<PeerMut<'_, TInEvent, TUserData, TPeerId>> {
         let task = match self.nodes.get(id) {
             Some(&task) => task,
             None => return None,
@@ -347,7 +356,6 @@ impl<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> CollectionStream<TIn
         match self.inner.task(task) {
             Some(inner) => Some(PeerMut {
                 inner,
-                tasks: &mut self.tasks,
                 nodes: &mut self.nodes,
             }),
             None => None,
@@ -358,7 +366,7 @@ impl<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> CollectionStream<TIn
     ///
     /// This will return true only after a `NodeReached` event has been produced by `poll()`.
     #[inline]
-    pub fn has_connection(&self, id: &PeerId) -> bool {
+    pub fn has_connection(&self, id: &TPeerId) -> bool {
         self.nodes.contains_key(id)
     }
 
@@ -366,7 +374,7 @@ impl<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> CollectionStream<TIn
     ///
     /// Does not include reach attempts that haven't reached any target yet.
     #[inline]
-    pub fn connections(&self) -> impl Iterator<Item = &PeerId> {
+    pub fn connections(&self) -> impl Iterator<Item = &TPeerId> {
         self.nodes.keys()
     }
 
@@ -375,84 +383,90 @@ impl<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr> CollectionStream<TIn
     /// > **Note**: we use a regular `poll` method instead of implementing `Stream` in order to
     /// > remove the `Err` variant, but also because we want the `CollectionStream` to stay
     /// > borrowed if necessary.
-    pub fn poll(&mut self) -> Async<CollectionEvent<TInEvent, TOutEvent, THandler, TReachErr, THandlerErr>> {
+    pub fn poll(&mut self) -> Async<CollectionEvent<'_, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TPeerId>> {
         let item = match self.inner.poll() {
             Async::Ready(item) => item,
             Async::NotReady => return Async::NotReady,
         };
 
         match item {
-            HandledNodesEvent::TaskClosed { id, result, handler } => {
-                match (self.tasks.remove(&id), result, handler) {
-                    (Some(TaskState::Pending), Err(TaskClosedEvent::Reach(err)), Some(handler)) => {
+            HandledNodesEvent::TaskClosed { task, result, handler } => {
+                let id = task.id();
+                let user_data = task.into_user_data();
+
+                match (user_data, result, handler) {
+                    (TaskState::Pending, Err(TaskClosedEvent::Reach(err)), Some(handler)) => {
                         Async::Ready(CollectionEvent::ReachError {
                             id: ReachAttemptId(id),
                             error: err,
                             handler,
                         })
                     },
-                    (Some(TaskState::Pending), Ok(()), _) => {
+                    (TaskState::Pending, Ok(()), _) => {
                         panic!("The API of HandledNodesTasks guarantees that a task cannot \
                                 gracefully closed before being connected to a node, in which case \
                                 its state should be Connected and not Pending; QED");
                     },
-                    (Some(TaskState::Pending), Err(TaskClosedEvent::Node(_)), _) => {
+                    (TaskState::Pending, Err(TaskClosedEvent::Node(_)), _) => {
                         panic!("We switch the task state to Connected once we're connected, and \
                                 a TaskClosedEvent::Node can only happen after we're \
                                 connected; QED");
                     },
-                    (Some(TaskState::Pending), Err(TaskClosedEvent::Reach(_)), None) => {
+                    (TaskState::Pending, Err(TaskClosedEvent::Reach(_)), None) => {
                         // TODO: this could be improved in the API of HandledNodesTasks
                         panic!("The HandledNodesTasks is guaranteed to always return the handler \
                                 when producing a TaskClosedEvent::Reach error");
                     },
-                    (Some(TaskState::Connected(peer_id)), Ok(()), _handler) => {
+                    (TaskState::Connected(peer_id, user_data), Ok(()), _handler) => {
                         debug_assert!(_handler.is_none());
                         let _node_task_id = self.nodes.remove(&peer_id);
                         debug_assert_eq!(_node_task_id, Some(id));
                         Async::Ready(CollectionEvent::NodeClosed {
                             peer_id,
+                            user_data,
                         })
                     },
-                    (Some(TaskState::Connected(peer_id)), Err(TaskClosedEvent::Node(err)), _handler) => {
+                    (TaskState::Connected(peer_id, user_data), Err(TaskClosedEvent::Node(err)), _handler) => {
                         debug_assert!(_handler.is_none());
                         let _node_task_id = self.nodes.remove(&peer_id);
                         debug_assert_eq!(_node_task_id, Some(id));
                         Async::Ready(CollectionEvent::NodeError {
                             peer_id,
                             error: err,
+                            user_data,
                         })
                     },
-                    (Some(TaskState::Connected(_)), Err(TaskClosedEvent::Reach(_)), _) => {
+                    (TaskState::Connected(_, _), Err(TaskClosedEvent::Reach(_)), _) => {
                         panic!("A TaskClosedEvent::Reach can only happen before we are connected \
                                 to a node; therefore the TaskState won't be Connected; QED");
                     },
-                    (None, _, _) => {
-                        panic!("self.tasks is always kept in sync with the tasks in self.inner; \
-                                when we add a task in self.inner we add a corresponding entry in \
-                                self.tasks, and remove the entry only when the task is closed; \
-                                QED")
-                    },
                 }
             },
-            HandledNodesEvent::NodeReached { id, peer_id } => {
+            HandledNodesEvent::NodeReached { task, peer_id } => {
+                let id = task.id();
+                drop(task);
                 Async::Ready(CollectionEvent::NodeReached(CollectionReachEvent {
                     parent: self,
                     id,
                     peer_id,
                 }))
             },
-            HandledNodesEvent::NodeEvent { id, event } => {
-                let peer_id = match self.tasks.get(&id) {
-                    Some(TaskState::Connected(peer_id)) => peer_id.clone(),
+            HandledNodesEvent::NodeEvent { task, event } => {
+                let peer_id = match task.user_data() {
+                    TaskState::Connected(peer_id, _) => peer_id.clone(),
                     _ => panic!("we can only receive NodeEvent events from a task after we \
                                  received a corresponding NodeReached event from that same task; \
                                  when we receive a NodeReached event, we ensure that the entry in \
                                  self.tasks is switched to the Connected state; QED"),
                 };
-
+                drop(task);
                 Async::Ready(CollectionEvent::NodeEvent {
-                    peer_id,
+                    // TODO: normally we'd build a `PeerMut` manually here, but the borrow checker
+                    //       doesn't like it
+                    peer: self.peer_mut(&peer_id)
+                        .expect("we can only receive NodeEvent events from a task after we \
+                                 received a corresponding NodeReached event from that same task;\
+                                 when that happens, peer_mut will always return Some; QED"),
                     event,
                 })
             }
@@ -474,7 +488,7 @@ pub enum InterruptError {
 }
 
 impl fmt::Display for InterruptError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             InterruptError::ReachAttemptNotFound =>
                 write!(f, "The reach attempt could not be found."),
@@ -486,33 +500,90 @@ impl fmt::Display for InterruptError {
 
 impl error::Error for InterruptError {}
 
-/// Access to a peer in the collection.
-pub struct PeerMut<'a, TInEvent: 'a> {
-    inner: HandledNodesTask<'a, TInEvent>,
-    tasks: &'a mut FnvHashMap<TaskId, TaskState>,
-    nodes: &'a mut FnvHashMap<PeerId, TaskId>,
+/// Reach attempt after it has been interrupted.
+pub struct InterruptedReachAttempt<TInEvent, TPeerId, TUserData> {
+    inner: ClosedTask<TInEvent, TaskState<TPeerId, TUserData>>,
 }
 
-impl<'a, TInEvent> PeerMut<'a, TInEvent> {
+impl<TInEvent, TPeerId, TUserData> fmt::Debug for InterruptedReachAttempt<TInEvent, TPeerId, TUserData>
+where
+    TUserData: fmt::Debug,
+    TPeerId: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        f.debug_tuple("InterruptedReachAttempt")
+            .field(&self.inner)
+            .finish()
+    }
+}
+
+/// Access to a peer in the collection.
+pub struct PeerMut<'a, TInEvent, TUserData, TPeerId = PeerId> {
+    inner: HandledNodesTask<'a, TInEvent, TaskState<TPeerId, TUserData>>,
+    nodes: &'a mut FnvHashMap<TPeerId, TaskId>,
+}
+
+impl<'a, TInEvent, TUserData, TPeerId> PeerMut<'a, TInEvent, TUserData, TPeerId>
+where
+    TPeerId: Eq + Hash,
+{
+    /// Returns the identifier of the peer.
+    pub fn id(&self) -> &TPeerId {
+        match self.inner.user_data() {
+            TaskState::Connected(peer_id, _) => peer_id,
+            _ => panic!("A PeerMut is only ever constructed from a peer in the connected \
+                         state; QED")
+        }
+    }
+
+    /// Returns the user data that was stored in the collections when we accepted the connection.
+    pub fn user_data(&self) -> &TUserData {
+        match self.inner.user_data() {
+            TaskState::Connected(_, user_data) => user_data,
+            _ => panic!("A PeerMut is only ever constructed from a peer in the connected \
+                         state; QED")
+        }
+    }
+
+    /// Returns the user data that was stored in the collections when we accepted the connection.
+    pub fn user_data_mut(&mut self) -> &mut TUserData {
+        match self.inner.user_data_mut() {
+            TaskState::Connected(_, user_data) => user_data,
+            _ => panic!("A PeerMut is only ever constructed from a peer in the connected \
+                         state; QED")
+        }
+    }
+
     /// Sends an event to the given node.
     #[inline]
     pub fn send_event(&mut self, event: TInEvent) {
         self.inner.send_event(event)
     }
 
-    /// Closes the connections to this node.
+    /// Closes the connections to this node. Returns the user data.
     ///
     /// No further event will be generated for this node.
-    pub fn close(self) {
-        let task_state = self.tasks.remove(&self.inner.id());
-        if let Some(TaskState::Connected(peer_id)) = task_state {
+    pub fn close(self) -> TUserData {
+        let task_id = self.inner.id();
+        if let TaskState::Connected(peer_id, user_data) = self.inner.close().into_user_data() {
             let old_task_id = self.nodes.remove(&peer_id);
-            debug_assert_eq!(old_task_id, Some(self.inner.id()));
+            debug_assert_eq!(old_task_id, Some(task_id));
+            user_data
         } else {
             panic!("a PeerMut can only be created if an entry is present in nodes; an entry in \
-                    nodes always matched a Connected entry in tasks; QED");
-        };
+                    nodes always matched a Connected entry in the tasks; QED");
+        }
+    }
 
-        self.inner.close();
+    /// Gives ownership of a closed reach attempt. As soon as the connection to the peer (`self`)
+    /// has some acknowledgment from the remote that its connection is alive, it will close the
+    /// connection inside `id`.
+    ///
+    /// The reach attempt will only be effectively cancelled once the peer (the object you're
+    /// manipulating) has received some network activity. However no event will be ever be
+    /// generated from this reach attempt, and this takes effect immediately.
+    pub fn take_over(&mut self, id: InterruptedReachAttempt<TInEvent, TPeerId, TUserData>) {
+        let _state = self.inner.take_over(id.inner);
+        debug_assert!(if let TaskState::Pending = _state { true } else { false });
     }
 }

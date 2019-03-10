@@ -46,7 +46,7 @@ where
 {
     /// Takes ownership of a socket and starts the handshake. If the handshake succeeds, the
     /// future returns a `Listener`.
-    pub fn new(inner: R) -> ListenerFuture<R, N> {
+    pub fn listen(inner: R) -> ListenerFuture<R, N> {
         let codec = MessageEncoder(std::marker::PhantomData);
         let inner = LengthDelimited::new(inner, codec);
         ListenerFuture {
@@ -258,7 +258,7 @@ mod tests {
             .incoming()
             .into_future()
             .map_err(|(e, _)| e.into())
-            .and_then(move |(connec, _)| Listener::new(connec.unwrap()))
+            .and_then(move |(connec, _)| Listener::listen(connec.unwrap()))
             .and_then(|listener| {
                 let proto_name = Bytes::from("invalid-proto");
                 listener.send(ListenerToDialerMessage::ProtocolAck { name: proto_name })
@@ -266,7 +266,7 @@ mod tests {
 
         let client = TcpStream::connect(&listener_addr)
             .from_err()
-            .and_then(move |stream| Dialer::<_, Bytes>::new(stream));
+            .and_then(move |stream| Dialer::<_, Bytes>::dial(stream));
 
         let mut rt = Runtime::new().unwrap();
         match rt.block_on(server.join(client)) {

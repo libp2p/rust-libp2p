@@ -48,9 +48,10 @@ pub fn generate_agreement(algorithm: KeyAgreement) -> impl Future<Item = (Agreem
 
     match ring_agreement::EphemeralPrivateKey::generate(algorithm.into(), &rng) {
         Ok(tmp_priv_key) => {
-            let mut tmp_pub_key: Vec<u8> = (0 .. tmp_priv_key.public_key_len()).map(|_| 0).collect();
-            tmp_priv_key.compute_public_key(&mut tmp_pub_key).unwrap();
-            future::ok((tmp_priv_key, tmp_pub_key))
+            let r = tmp_priv_key.compute_public_key()
+                .map_err(|_| SecioError::EphemeralKeyGenerationFailed)
+                .map(move |tmp_pub_key| (tmp_priv_key, tmp_pub_key.as_ref().to_vec()));
+            future::result(r)
         },
         Err(_) => {
             debug!("failed to generate ECDH key");

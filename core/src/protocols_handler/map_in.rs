@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
+    protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
     upgrade::{
         InboundUpgrade,
         OutboundUpgrade,
@@ -100,7 +100,7 @@ where
     }
 
     #[inline]
-    fn connection_keep_alive(&self) -> bool {
+    fn connection_keep_alive(&self) -> KeepAlive {
         self.inner.connection_keep_alive()
     }
 

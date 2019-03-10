@@ -21,7 +21,7 @@
 use crate::protocol::{RemoteInfo, IdentifyProtocolConfig};
 use futures::prelude::*;
 use libp2p_core::{
-    protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
+    protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
     upgrade::{DeniedUpgrade, OutboundUpgrade}
 };
 use std::{io, marker::PhantomData, time::{Duration, Instant}};
@@ -105,7 +105,8 @@ where
         protocol: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output,
         _info: Self::OutboundOpenInfo,
     ) {
-        self.pending_result = Some(PeriodicIdHandlerEvent::Identified(protocol))
+        self.pending_result = Some(PeriodicIdHandlerEvent::Identified(protocol));
+        self.first_id_happened = true;
     }
 
     #[inline]
@@ -117,14 +118,19 @@ where
     #[inline]
     fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, err: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {
         self.pending_result = Some(PeriodicIdHandlerEvent::IdentificationError(err));
+        self.first_id_happened = true;
         if let Some(ref mut next_id) = self.next_id {
             next_id.reset(Instant::now() + TRY_AGAIN_ON_ERR);
         }
     }
 
     #[inline]
-    fn connection_keep_alive(&self) -> bool {
-        !self.first_id_happened
+    fn connection_keep_alive(&self) -> KeepAlive {
+        if self.first_id_happened {
+            KeepAlive::Now
+        } else {
+            KeepAlive::Forever
+        }
     }
 
     #[inline]
@@ -160,7 +166,6 @@ where
                 next_id.reset(Instant::now() + DELAY_TO_NEXT_ID);
                 let upgrade = self.config.clone();
                 let ev = ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info: () };
-                self.first_id_happened = true;
                 Ok(Async::Ready(ev))
             }
         }

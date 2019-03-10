@@ -18,13 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#[macro_use]
-extern crate libp2p;
-extern crate void;
+use libp2p_core_derive::*;
 
 /// Small utility to check that a type implements `NetworkBehaviour`.
 #[allow(dead_code)]
-fn require_net_behaviour<T: libp2p::core::swarm::NetworkBehaviour<libp2p::core::topology::MemoryTopology>>() {}
+fn require_net_behaviour<T: libp2p::core::swarm::NetworkBehaviour>() {}
 
 // TODO: doesn't compile
 /*#[test]
@@ -47,6 +45,7 @@ fn one_field() {
         }
     }
 
+    #[allow(dead_code)]
     fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
         require_net_behaviour::<Foo<TSubstream>>();
     }
@@ -71,6 +70,7 @@ fn two_fields() {
         }
     }
 
+    #[allow(dead_code)]
     fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
         require_net_behaviour::<Foo<TSubstream>>();
     }
@@ -103,6 +103,7 @@ fn three_fields() {
         }
     }
 
+    #[allow(dead_code)]
     fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
         require_net_behaviour::<Foo<TSubstream>>();
     }
@@ -132,6 +133,7 @@ fn custom_polling() {
         fn foo<T>(&mut self) -> libp2p::futures::Async<libp2p::core::swarm::NetworkBehaviourAction<T, ()>> { libp2p::futures::Async::NotReady }
     }
 
+    #[allow(dead_code)]
     fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
         require_net_behaviour::<Foo<TSubstream>>();
     }
@@ -141,7 +143,7 @@ fn custom_polling() {
 fn custom_event_no_polling() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    #[behaviour(out_event = "String")]
+    #[behaviour(out_event = "Vec<String>")]
     struct Foo<TSubstream> {
         ping: libp2p::ping::Ping<TSubstream>,
         identify: libp2p::identify::Identify<TSubstream>,
@@ -157,6 +159,7 @@ fn custom_event_no_polling() {
         }
     }
 
+    #[allow(dead_code)]
     fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
         require_net_behaviour::<Foo<TSubstream>>();
     }
@@ -186,6 +189,7 @@ fn custom_event_and_polling() {
         fn foo<T>(&mut self) -> libp2p::futures::Async<libp2p::core::swarm::NetworkBehaviourAction<T, String>> { libp2p::futures::Async::NotReady }
     }
 
+    #[allow(dead_code)]
     fn foo<TSubstream: libp2p::tokio_io::AsyncRead + libp2p::tokio_io::AsyncWrite>() {
         require_net_behaviour::<Foo<TSubstream>>();
     }
@@ -202,6 +206,12 @@ fn where_clause() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
     struct Bar<TSubstream: std::fmt::Debug> {
+        ping: libp2p::ping::Ping<TSubstream>,
+    }
+
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    struct Baz<TSubstream> where TSubstream: std::fmt::Debug + Clone, {
         ping: libp2p::ping::Ping<TSubstream>,
     }
 

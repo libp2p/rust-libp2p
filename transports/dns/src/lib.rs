@@ -33,16 +33,10 @@
 //! replaced with respectively an `/ip4/` or an `/ip6/` component.
 //!
 
-extern crate futures;
-extern crate libp2p_core as swarm;
-#[macro_use]
-extern crate log;
-extern crate multiaddr;
-extern crate tokio_dns;
-extern crate tokio_io;
+use libp2p_core as swarm;
 
 use futures::{future::{self, Either, FutureResult, JoinAll}, prelude::*, stream, try_ready};
-use log::Level;
+use log::{debug, trace, log_enabled, Level};
 use multiaddr::{Protocol, Multiaddr};
 use std::{error, fmt, io, marker::PhantomData, net::IpAddr};
 use swarm::{Transport, transport::TransportError};
@@ -85,7 +79,7 @@ where
     T: fmt::Debug,
 {
     #[inline]
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_tuple("DnsConfig").field(&self.inner).finish()
     }
 }
@@ -195,7 +189,7 @@ pub enum DnsErr<TErr> {
 impl<TErr> fmt::Display for DnsErr<TErr>
 where TErr: fmt::Display
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             DnsErr::Underlying(err) => write!(f, "{}", err),
             DnsErr::ResolveFail(addr) => write!(f, "Failed to resolve DNS address: {:?}", addr),
@@ -246,7 +240,7 @@ where
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let ty = self.ty;
         let addrs = try_ready!(self.inner.poll().map_err(|error| {
-            let domain_name = self.name.take().unwrap_or(String::new());
+            let domain_name = self.name.take().unwrap_or_default();
             DnsErr::ResolveError { domain_name, error }
         }));
 
@@ -260,7 +254,7 @@ where
             });
         match addrs.next() {
             Some(a) => Ok(Async::Ready(a)),
-            None => Err(DnsErr::ResolveFail(self.name.take().unwrap_or(String::new())))
+            None => Err(DnsErr::ResolveFail(self.name.take().unwrap_or_default()))
         }
     }
 }
@@ -322,12 +316,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    extern crate libp2p_tcp;
-    use self::libp2p_tcp::TcpConfig;
+    use libp2p_tcp::TcpConfig;
     use futures::future;
-    use swarm::{Transport, transport::TransportError};
+    use super::swarm::{Transport, transport::TransportError};
     use multiaddr::{Protocol, Multiaddr};
-    use DnsConfig;
+    use super::DnsConfig;
 
     #[test]
     fn basic_resolve() {

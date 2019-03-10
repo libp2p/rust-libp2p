@@ -76,7 +76,7 @@ pub enum SecioError {
 }
 
 impl error::Error for SecioError {
-    fn cause(&self) -> Option<&error::Error> {
+    fn cause(&self) -> Option<&dyn error::Error> {
         match *self {
             SecioError::IoError(ref err) => Some(err),
             SecioError::Protobuf(ref err) => Some(err),
@@ -91,7 +91,7 @@ impl error::Error for SecioError {
 
 impl fmt::Display for SecioError {
     #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
             SecioError::IoError(e) =>
                 write!(f, "I/O error: {}", e),

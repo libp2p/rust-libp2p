@@ -72,7 +72,7 @@ mod length_delimited;
 mod listener_select;
 mod tests;
 
-pub mod protocol;
+mod protocol;
 
 pub use self::dialer_select::{dialer_select_proto, DialerSelectFuture};
 pub use self::error::ProtocolChoiceError;

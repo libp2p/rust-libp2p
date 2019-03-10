@@ -6,7 +6,7 @@
 
 This repository is the central place for Rust development of the [libp2p](https://libp2p.io) spec.
 
-**Warning**: While we are trying our best to be compatible with other lib2p implementations, we
+**Warning**: While we are trying our best to be compatible with other libp2p implementations, we
 cannot guarantee that this is the case considering the lack of a precise libp2p specifications.
 
 ## Documentation
@@ -18,7 +18,7 @@ your Cargo.toml and run `cargo doc`.
 
 ```toml
 [dependencies]
-libp2p = { git = "https://github.com/libp2p/rust-libp2p" }
+libp2p = "0.2.2"
 ```
 
 ## Notable users

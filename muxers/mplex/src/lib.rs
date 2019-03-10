@@ -95,7 +95,7 @@ impl MplexConfig {
     }
 
     #[inline]
-    fn upgrade<C>(self, i: C, endpoint: Endpoint) -> Multiplex<C>
+    fn upgrade<C>(self, i: C) -> Multiplex<C>
     where
         C: AsyncRead + AsyncWrite
     {
@@ -107,14 +107,15 @@ impl MplexConfig {
                 config: self,
                 buffer: Vec::with_capacity(cmp::min(max_buffer_len, 512)),
                 opened_substreams: Default::default(),
-                next_outbound_stream_id: if endpoint == Endpoint::Dialer { 0 } else { 1 },
+                next_outbound_stream_id: 0,
                 notifier_read: Arc::new(Notifier {
                     to_notify: Mutex::new(Default::default()),
                 }),
                 notifier_write: Arc::new(Notifier {
                     to_notify: Mutex::new(Default::default()),
                 }),
-                is_shutdown: false
+                is_shutdown: false,
+                is_acknowledged: false,
             })
         }
     }
@@ -163,7 +164,7 @@ where
     type Future = future::FutureResult<Self::Output, IoError>;
 
     fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
-        future::ok(self.upgrade(socket, Endpoint::Listener))
+        future::ok(self.upgrade(socket))
     }
 }
 
@@ -176,7 +177,7 @@ where
     type Future = future::FutureResult<Self::Output, IoError>;
 
     fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
-        future::ok(self.upgrade(socket, Endpoint::Dialer))
+        future::ok(self.upgrade(socket))
     }
 }
 
@@ -200,7 +201,7 @@ struct MultiplexInner<C> {
     // The `Endpoint` value denotes who initiated the substream from our point of view
     // (see note [StreamId]).
     opened_substreams: FnvHashSet<(u32, Endpoint)>,
-    // Id of the next outgoing substream. Should always increase by two.
+    // Id of the next outgoing substream.
     next_outbound_stream_id: u32,
     /// List of tasks to notify when a read event happens on the underlying stream.
     notifier_read: Arc<Notifier>,
@@ -208,7 +209,9 @@ struct MultiplexInner<C> {
     notifier_write: Arc<Notifier>,
     /// If true, the connection has been shut down. We need to be careful not to accidentally
     /// call `Sink::poll_complete` or `Sink::start_send` after `Sink::close`.
-    is_shutdown: bool
+    is_shutdown: bool,
+    /// If true, the remote has sent data to us.
+    is_acknowledged: bool,
 }
 
 struct Notifier {
@@ -296,6 +299,7 @@ where C: AsyncRead + AsyncWrite,
         };
 
         trace!("Received message: {:?}", elem);
+        inner.is_acknowledged = true;
 
         // Handle substreams opening/closing.
         match elem {
@@ -382,7 +386,8 @@ where C: AsyncRead + AsyncWrite
         // Assign a substream ID now.
         let substream_id = {
             let n = inner.next_outbound_stream_id;
-            inner.next_outbound_stream_id += 2;
+            inner.next_outbound_stream_id = inner.next_outbound_stream_id.checked_add(1)
+                .expect("Mplex substream ID overflowed");
             n
         };
 
@@ -458,7 +463,7 @@ where C: AsyncRead + AsyncWrite
     fn read_substream(&self, substream: &mut Self::Substream, buf: &mut [u8]) -> Poll<usize, IoError> {
         loop {
             // First, transfer from `current_data`.
-            if substream.current_data.len() != 0 {
+            if !substream.current_data.is_empty() {
                 let len = cmp::min(substream.current_data.len(), buf.len());
                 buf[..len].copy_from_slice(&substream.current_data.split_to(len));
                 return Ok(Async::Ready(len));
@@ -545,10 +550,14 @@ where C: AsyncRead + AsyncWrite
         })
     }
 
+    fn is_remote_acknowledged(&self) -> bool {
+        self.inner.lock().is_acknowledged
+    }
+
     #[inline]
     fn shutdown(&self, _: Shutdown) -> Poll<(), IoError> {
         let inner = &mut *self.inner.lock();
-        let () = try_ready!(inner.inner.close_notify(&inner.notifier_write, 0));
+        try_ready!(inner.inner.close_notify(&inner.notifier_write, 0));
         inner.is_shutdown = true;
         Ok(Async::Ready(()))
     }

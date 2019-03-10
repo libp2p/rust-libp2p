@@ -41,7 +41,7 @@ impl<E> UpgradeError<E> {
         }
     }
 
-    pub fn from_err<T>(self) -> UpgradeError<T>
+    pub fn into_err<T>(self) -> UpgradeError<T>
     where
         T: From<E>
     {
@@ -53,7 +53,7 @@ impl<E> fmt::Display for UpgradeError<E>
 where
     E: fmt::Display
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             UpgradeError::Select(e) => write!(f, "select error: {}", e),
             UpgradeError::Apply(e) => write!(f, "upgrade apply error: {}", e),

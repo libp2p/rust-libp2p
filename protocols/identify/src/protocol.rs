@@ -19,7 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use bytes::BytesMut;
+use crate::structs_proto;
 use futures::{future::{self, FutureResult}, Async, AsyncSink, Future, Poll, Sink, Stream};
+use futures::try_ready;
 use libp2p_core::{
     Multiaddr, PublicKey,
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
@@ -30,7 +32,6 @@ use protobuf::parse_from_bytes as protobuf_parse_from_bytes;
 use protobuf::RepeatedField;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
-use structs_proto;
 use tokio_codec::Framed;
 use tokio_io::{AsyncRead, AsyncWrite};
 use unsigned_varint::codec;
@@ -112,7 +113,8 @@ where T: AsyncWrite
             }
         }
 
-        try_ready!(self.inner.poll_complete());
+        // A call to `close()` implies flushing.
+        try_ready!(self.inner.close());
         Ok(Async::Ready(()))
     }
 }
@@ -169,6 +171,7 @@ where
     fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
         IdentifyOutboundFuture {
             inner: Framed::new(socket, codec::UviBytes::<BytesMut>::default()),
+            shutdown: false,
         }
     }
 }
@@ -176,15 +179,22 @@ where
 /// Future returned by `OutboundUpgrade::upgrade_outbound`.
 pub struct IdentifyOutboundFuture<T> {
     inner: Framed<T, codec::UviBytes<BytesMut>>,
+    /// If true, we have finished shutting down the writing part of `inner`.
+    shutdown: bool,
 }
 
 impl<T> Future for IdentifyOutboundFuture<T>
-where T: AsyncRead
+where T: AsyncRead + AsyncWrite,
 {
     type Item = RemoteInfo;
     type Error = IoError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        if !self.shutdown {
+            try_ready!(self.inner.close());
+            self.shutdown = true;
+        }
+
         let msg = match try_ready!(self.inner.poll()) {
             Some(i) => i,
             None => {
@@ -199,7 +209,7 @@ where T: AsyncRead
             Ok(v) => v,
             Err(err) => {
                 debug!("Failed to parse protobuf message; error = {:?}", err);
-                return Err(err.into());
+                return Err(err)
             }
         };
 
@@ -239,7 +249,7 @@ fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> 
                 public_key: PublicKey::from_protobuf_encoding(msg.get_publicKey())?,
                 protocol_version: msg.take_protocolVersion(),
                 agent_version: msg.take_agentVersion(),
-                listen_addrs: listen_addrs,
+                listen_addrs,
                 protocols: msg.take_protocols().into_vec(),
             };
 
@@ -252,12 +262,9 @@ fn parse_proto_msg(msg: BytesMut) -> Result<(IdentifyInfo, Multiaddr), IoError> 
 
 #[cfg(test)]
 mod tests {
-    extern crate libp2p_tcp;
-    extern crate tokio;
-
     use crate::protocol::{IdentifyInfo, RemoteInfo, IdentifyProtocolConfig};
-    use self::tokio::runtime::current_thread::Runtime;
-    use self::libp2p_tcp::TcpConfig;
+    use tokio::runtime::current_thread::Runtime;
+    use libp2p_tcp::TcpConfig;
     use futures::{Future, Stream};
     use libp2p_core::{PublicKey, Transport, upgrade::{apply_outbound, apply_inbound}};
     use std::{io, sync::mpsc, thread};

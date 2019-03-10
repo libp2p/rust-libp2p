@@ -34,7 +34,7 @@ pub struct PeerId {
 }
 
 impl fmt::Debug for PeerId {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "PeerId({})", self.to_base58())
     }
 }
@@ -152,6 +152,13 @@ impl AsRef<multihash::Multihash> for PeerId {
     #[inline]
     fn as_ref(&self) -> &multihash::Multihash {
         &self.multihash
+    }
+}
+
+impl AsRef<[u8]> for PeerId {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        self.as_bytes()
     }
 }
 

@@ -63,7 +63,7 @@
 
 
 /// Multi-address re-export.
-pub extern crate multiaddr;
+pub use multiaddr;
 
 mod keys_proto;
 mod peer_id;
@@ -77,7 +77,6 @@ pub mod muxing;
 pub mod nodes;
 pub mod protocols_handler;
 pub mod swarm;
-pub mod topology;
 pub mod transport;
 pub mod upgrade;
 

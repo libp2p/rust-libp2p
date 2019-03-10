@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use libp2p_core as swarm;
+use log::debug;
 use futures::{future, stream};
 use futures::stream::Then as StreamThen;
 use futures::sync::{mpsc, oneshot};

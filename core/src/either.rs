@@ -34,7 +34,7 @@ where
     A: fmt::Display,
     B: fmt::Display
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             EitherError::A(a) => a.fmt(f),
             EitherError::B(b) => b.fmt(f)
@@ -243,6 +243,13 @@ where
         }
     }
 
+    fn is_remote_acknowledged(&self) -> bool {
+        match self {
+            EitherOutput::First(inner) => inner.is_remote_acknowledged(),
+            EitherOutput::Second(inner) => inner.is_remote_acknowledged()
+        }
+    }
+
     fn shutdown(&self, kind: Shutdown) -> Poll<(), IoError> {
         match self {
             EitherOutput::First(inner) => inner.shutdown(kind),
@@ -335,11 +342,11 @@ where
         match self {
             EitherFuture2::A(a) => a.poll()
                 .map(|v| v.map(EitherOutput::First))
-                .map_err(|e| EitherError::A(e)),
+                .map_err(EitherError::A),
 
             EitherFuture2::B(b) => b.poll()
                 .map(|v| v.map(EitherOutput::Second))
-                .map_err(|e| EitherError::B(e))
+                .map_err(EitherError::B)
         }
     }
 }

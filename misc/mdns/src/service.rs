@@ -18,20 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-extern crate data_encoding;
-extern crate dns_parser;
-extern crate futures;
-extern crate libp2p_core;
-extern crate multiaddr;
-extern crate net2;
-extern crate rand;
-extern crate tokio_reactor;
-extern crate tokio_timer;
-extern crate tokio_udp;
-
-#[cfg(test)]
-extern crate tokio;
-
 use crate::{SERVICE_NAME, META_QUERY_SERVICE, dns};
 use dns_parser::{Packet, RData};
 use futures::{prelude::*, task};
@@ -48,7 +34,7 @@ pub use dns::MdnsResponseError;
 /// the local network.
 ///
 /// # Usage
-/// 
+///
 /// In order to use mDNS to discover peers on the local network, use the `MdnsService`. This is
 /// done by creating a `MdnsService` then polling it in the same way as you would poll a stream.
 ///
@@ -66,9 +52,6 @@ pub use dns::MdnsResponseError;
 /// # Example
 ///
 /// ```rust
-/// # extern crate futures;
-/// # extern crate libp2p_core;
-/// # extern crate libp2p_mdns;
 /// # use futures::prelude::*;
 /// # use libp2p_mdns::service::{MdnsService, MdnsPacket};
 /// # use std::{io, time::Duration};
@@ -173,7 +156,7 @@ impl MdnsService {
     }
 
     /// Polls the service for packets.
-    pub fn poll(&mut self) -> Async<MdnsPacket> {
+    pub fn poll(&mut self) -> Async<MdnsPacket<'_>> {
         // Send a query every time `query_interval` fires.
         // Note that we don't use a loop here—it is pretty unlikely that we need it, and there is
         // no point in sending multiple requests in a row.
@@ -302,7 +285,7 @@ impl MdnsService {
 }
 
 impl fmt::Debug for MdnsService {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("MdnsService")
             .field("silent", &self.silent)
             .finish()
@@ -363,7 +346,7 @@ impl<'a> MdnsQuery<'a> {
 }
 
 impl<'a> fmt::Debug for MdnsQuery<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MdnsQuery")
             .field("from", self.remote_addr())
             .field("query_id", &self.query_id)
@@ -397,7 +380,7 @@ impl<'a> MdnsServiceDiscovery<'a> {
 }
 
 impl<'a> fmt::Debug for MdnsServiceDiscovery<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MdnsServiceDiscovery")
             .field("from", self.remote_addr())
             .field("query_id", &self.query_id)
@@ -451,6 +434,7 @@ impl<'a> MdnsResponse<'a> {
                 packet,
                 record_value,
                 peer_id,
+                ttl: record.ttl,
             })
         })
     }
@@ -463,7 +447,7 @@ impl<'a> MdnsResponse<'a> {
 }
 
 impl<'a> fmt::Debug for MdnsResponse<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MdnsResponse")
             .field("from", self.remote_addr())
             .finish()
@@ -478,6 +462,8 @@ pub struct MdnsPeer<'a> {
     record_value: String,
     /// Id of the peer.
     peer_id: PeerId,
+    /// TTL of the record in seconds.
+    ttl: u32,
 }
 
 impl<'a> MdnsPeer<'a> {
@@ -485,6 +471,12 @@ impl<'a> MdnsPeer<'a> {
     #[inline]
     pub fn id(&self) -> &PeerId {
         &self.peer_id
+    }
+
+    /// Returns the requested time-to-live for the record.
+    #[inline]
+    pub fn ttl(&self) -> Duration {
+        Duration::from_secs(u64::from(self.ttl))
     }
 
     /// Returns the list of addresses the peer says it is listening on.
@@ -535,7 +527,7 @@ impl<'a> MdnsPeer<'a> {
 }
 
 impl<'a> fmt::Debug for MdnsPeer<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MdnsPeer")
             .field("peer_id", &self.peer_id)
             .finish()

@@ -27,11 +27,11 @@
 //! used to send messages.
 
 use bytes::BytesMut;
+use crate::protobuf_structs;
 use futures::{future, sink, stream, Sink, Stream};
 use libp2p_core::{InboundUpgrade, Multiaddr, OutboundUpgrade, PeerId, UpgradeInfo};
 use multihash::Multihash;
 use protobuf::{self, Message};
-use protobuf_structs;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::iter;
 use tokio_codec::Framed;
@@ -54,7 +54,9 @@ pub enum KadConnectionType {
 impl From<protobuf_structs::dht::Message_ConnectionType> for KadConnectionType {
     #[inline]
     fn from(raw: protobuf_structs::dht::Message_ConnectionType) -> KadConnectionType {
-        use protobuf_structs::dht::Message_ConnectionType::*;
+        use crate::protobuf_structs::dht::Message_ConnectionType::{
+            CAN_CONNECT, CANNOT_CONNECT, CONNECTED, NOT_CONNECTED
+        };
         match raw {
             NOT_CONNECTED => KadConnectionType::NotConnected,
             CONNECTED => KadConnectionType::Connected,
@@ -67,7 +69,9 @@ impl From<protobuf_structs::dht::Message_ConnectionType> for KadConnectionType {
 impl Into<protobuf_structs::dht::Message_ConnectionType> for KadConnectionType {
     #[inline]
     fn into(self) -> protobuf_structs::dht::Message_ConnectionType {
-        use protobuf_structs::dht::Message_ConnectionType::*;
+        use crate::protobuf_structs::dht::Message_ConnectionType::{
+            CAN_CONNECT, CANNOT_CONNECT, CONNECTED, NOT_CONNECTED
+        };
         match self {
             KadConnectionType::NotConnected => NOT_CONNECTED,
             KadConnectionType::Connected => CONNECTED,
@@ -108,9 +112,9 @@ impl KadPeer {
         let connection_ty = peer.get_connection().into();
 
         Ok(KadPeer {
-            node_id: node_id,
+            node_id,
             multiaddrs: addrs,
-            connection_ty: connection_ty,
+            connection_ty
         })
     }
 }
@@ -155,8 +159,11 @@ where
 
     #[inline]
     fn upgrade_inbound(self, incoming: C, _: Self::Info) -> Self::Future {
+        let mut codec = codec::UviBytes::default();
+        codec.set_max_len(4096);
+
         future::ok(
-            Framed::new(incoming, codec::UviBytes::default())
+            Framed::new(incoming, codec)
                 .from_err::<IoError>()
                 .with::<_, fn(_) -> _, _>(|response| -> Result<_, IoError> {
                     let proto_struct = resp_msg_to_proto(response);
@@ -181,8 +188,11 @@ where
 
     #[inline]
     fn upgrade_outbound(self, incoming: C, _: Self::Info) -> Self::Future {
+        let mut codec = codec::UviBytes::default();
+        codec.set_max_len(4096);
+
         future::ok(
-            Framed::new(incoming, codec::UviBytes::default())
+            Framed::new(incoming, codec)
                 .from_err::<IoError>()
                 .with::<_, fn(_) -> _, _>(|request| -> Result<_, IoError> {
                     let proto_struct = req_msg_to_proto(request);
@@ -453,8 +463,6 @@ fn proto_to_resp_msg(
 
 #[cfg(test)]
 mod tests {
-    extern crate libp2p_tcp;
-    extern crate tokio;
 
     /*// TODO: restore
     use self::libp2p_tcp::TcpConfig;

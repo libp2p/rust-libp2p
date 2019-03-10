@@ -22,7 +22,7 @@ use crate::{
     PeerId,
     nodes::handled_node::{NodeHandler, NodeHandlerEndpoint, NodeHandlerEvent},
     nodes::handled_node_tasks::IntoNodeHandler,
-    protocols_handler::{ProtocolsHandler, IntoProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
+    protocols_handler::{KeepAlive, ProtocolsHandler, IntoProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
     upgrade::{
         self,
         OutboundUpgrade,
@@ -42,8 +42,6 @@ pub struct NodeHandlerWrapperBuilder<TIntoProtoHandler> {
     in_timeout: Duration,
     /// Timeout for outgoing substreams negotiation.
     out_timeout: Duration,
-    /// Time after which a useless connection will be closed.
-    useless_timeout: Duration,
 }
 
 impl<TIntoProtoHandler> NodeHandlerWrapperBuilder<TIntoProtoHandler>
@@ -52,12 +50,11 @@ where
 {
     /// Builds a `NodeHandlerWrapperBuilder`.
     #[inline]
-    pub(crate) fn new(handler: TIntoProtoHandler, in_timeout: Duration, out_timeout: Duration, useless_timeout: Duration) -> Self {
+    pub(crate) fn new(handler: TIntoProtoHandler, in_timeout: Duration, out_timeout: Duration) -> Self {
         NodeHandlerWrapperBuilder {
             handler,
             in_timeout,
             out_timeout,
-            useless_timeout,
         }
     }
 
@@ -72,14 +69,6 @@ where
     #[inline]
     pub fn with_out_negotiation_timeout(mut self, timeout: Duration) -> Self {
         self.out_timeout = timeout;
-        self
-    }
-
-    /// Sets the timeout between the moment `connection_keep_alive()` returns `false` on the
-    /// `ProtocolsHandler`, and the moment the connection is closed.
-    #[inline]
-    pub fn with_useless_timeout(mut self, timeout: Duration) -> Self {
-        self.useless_timeout = timeout;
         self
     }
 
@@ -98,7 +87,6 @@ where
             queued_dial_upgrades: Vec::new(),
             unique_dial_upgrade_id: 0,
             connection_shutdown: None,
-            useless_timeout: self.useless_timeout,
         }
     }
 }
@@ -122,7 +110,6 @@ where
             queued_dial_upgrades: Vec::new(),
             unique_dial_upgrade_id: 0,
             connection_shutdown: None,
-            useless_timeout: self.useless_timeout,
         }
     }
 }
@@ -156,9 +143,6 @@ where
     /// When a connection has been deemed useless, will contain `Some` with a `Delay` to when it
     /// should be shut down.
     connection_shutdown: Option<Delay>,
-    ///  Timeout after which a useless connection is closed. When the `connection_shutdown` is set
-    /// to `Some`, this is the value that is being used.
-    useless_timeout: Duration,
 }
 
 impl<TProtoHandler> NodeHandler for NodeHandlerWrapper<TProtoHandler>
@@ -289,50 +273,55 @@ where
 
         // Poll the handler at the end so that we see the consequences of the method calls on
         // `self.handler`.
-        let poll_result = self.handler.poll()?;
+        loop {
+            let poll_result = self.handler.poll()?;
 
-        if self.handler.connection_keep_alive() {
-            self.connection_shutdown = None;
-        } else if self.connection_shutdown.is_none() {
-            self.connection_shutdown = Some(Delay::new(Instant::now() + self.useless_timeout));
-        }
+            self.connection_shutdown = match self.handler.connection_keep_alive() {
+                KeepAlive::Until(expiration) => Some(Delay::new(expiration)),
+                KeepAlive::Now => Some(Delay::new(Instant::now())),
+                KeepAlive::Forever => None,
+            };
 
-        match poll_result {
-            Async::Ready(ProtocolsHandlerEvent::Custom(event)) => {
-                return Ok(Async::Ready(NodeHandlerEvent::Custom(event)));
-            }
-            Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
-                upgrade,
-                info,
-            }) => {
-                let id = self.unique_dial_upgrade_id;
-                self.unique_dial_upgrade_id += 1;
-                self.queued_dial_upgrades.push((id, upgrade));
-                return Ok(Async::Ready(
-                    NodeHandlerEvent::OutboundSubstreamRequest((id, info)),
-                ));
-            }
-            Async::Ready(ProtocolsHandlerEvent::Shutdown) => {
-                return Ok(Async::Ready(NodeHandlerEvent::Shutdown))
-            },
-            Async::NotReady => (),
-        };
-
-        // Check the `connection_shutdown`.
-        if let Some(mut connection_shutdown) = self.connection_shutdown.take() {
-            // If we're negotiating substreams, let's delay the closing.
-            if self.negotiating_in.is_empty() && self.negotiating_out.is_empty() {
-                match connection_shutdown.poll() {
-                    Ok(Async::Ready(_)) | Err(_) => {
-                        return Ok(Async::Ready(NodeHandlerEvent::Shutdown))
-                    },
-                    Ok(Async::NotReady) => {
-                        self.connection_shutdown = Some(connection_shutdown);
-                    }
+            match poll_result {
+                Async::Ready(ProtocolsHandlerEvent::Custom(event)) => {
+                    return Ok(Async::Ready(NodeHandlerEvent::Custom(event)));
                 }
-            } else {
-                self.connection_shutdown = Some(connection_shutdown);
+                Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                    upgrade,
+                    info,
+                }) => {
+                    let id = self.unique_dial_upgrade_id;
+                    self.unique_dial_upgrade_id += 1;
+                    self.queued_dial_upgrades.push((id, upgrade));
+                    return Ok(Async::Ready(
+                        NodeHandlerEvent::OutboundSubstreamRequest((id, info)),
+                    ));
+                }
+                Async::Ready(ProtocolsHandlerEvent::Shutdown) => {
+                    return Ok(Async::Ready(NodeHandlerEvent::Shutdown))
+                },
+                Async::NotReady => (),
+            };
+
+            // Check the `connection_shutdown`.
+            if let Some(mut connection_shutdown) = self.connection_shutdown.take() {
+                // If we're negotiating substreams, let's delay the closing.
+                if self.negotiating_in.is_empty() && self.negotiating_out.is_empty() {
+                    match connection_shutdown.poll() {
+                        Ok(Async::Ready(_)) | Err(_) => {
+                            self.shutdown();
+                            continue;   // We need to poll the handler again.
+                        },
+                        Ok(Async::NotReady) => {
+                            self.connection_shutdown = Some(connection_shutdown);
+                        }
+                    }
+                } else {
+                    self.connection_shutdown = Some(connection_shutdown);
+                }
             }
+
+            break;
         }
 
         Ok(Async::NotReady)
