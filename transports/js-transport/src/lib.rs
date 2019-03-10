@@ -134,34 +134,41 @@ impl Transport for JsTransport {
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        // Turn the Rust multiaddr into a JavaScript multiaddr.
         let js_multiaddr = self.build_js_multiaddr(addr)
             .map_err(|v| TransportError::Other(v.into()))?;
 
-        let dial: js_sys::Function = {
-            let dial = js_sys::Reflect::get(&self.transport, &JsValue::from_str("dial")).unwrap();
-            if !dial.is_function() {
-                // TODO: ?
-            }
-            // TODO: can panic
-            dial.into()
+        // The `dial` function directly returns the connection, but also expects a callback that
+        // will be passed either NULL on success, or an error.
+        let (callback, finished) = {
+            let (tx, rx) = oneshot::channel();
+            let mut tx = Some(tx);
+            let callback = Closure::wrap(Box::new(move |result| {
+                // When we closure is called, we move out of `tx`. If the closure is called a
+                // second time, `tx` will be empty.
+                if let Some(sender) = tx.take() {
+                    let _ = sender.send(SendWrapper::new(result));
+                } else {
+                    wasm_bindgen::throw_str("Dialing callback has been called multiple times");
+                }
+            }) as Box<FnMut(JsValue)>);
+            (callback, rx)
         };
 
-        let (finished_tx, finished_rx) = oneshot::channel();
-
-        let mut finished_tx = Some(finished_tx);
-        let callback = Closure::wrap(Box::new(move |result| {
-            if let Some(sender) = finished_tx.take() {
-                let _ = sender.send(SendWrapper::new(result));
-            } else {
-                wasm_bindgen::throw_str("Dialing callback has been called multiple times");
-            }
-        }) as Box<FnMut(JsValue)>);
-        let connection = dial.call3(&self.transport, &js_multiaddr, &JsValue::NULL, callback.as_ref().unchecked_ref())
+        // Call `dial(multiaddr, NULL, callback)` on our JavaScript transport.
+        let connection = js_sys::Reflect::get(&self.transport, &JsValue::from_str("dial"))
+            .map_err(|v| TransportError::Other(v.into()))?
+            .dyn_into::<js_sys::Function>()
+            .map_err(|v| {
+                let msg = format!("Expected dial to be a function, but got {:?}", v);
+                TransportError::Other(JsErr::from(JsValue::from_str(&msg)))
+            })?
+            .call3(&self.transport, &js_multiaddr, &JsValue::NULL, callback.as_ref().unchecked_ref())
             .map_err(|v| TransportError::Other(v.into()))?;
 
         Ok(DialFuture {
             _callback: SendWrapper::new(callback),
-            finished: finished_rx,
+            finished,
             connection: Some(SendWrapper::new(connection)),
         })
     }
@@ -238,19 +245,20 @@ impl Connection {
         // We create an implementation of a "source" (as described here:
         // https://www.npmjs.com/package/pull-stream#source-readable-stream-that-produces-values)
         // and pass it the connection.
+
         // The `cb_tx`/`cb_rx` channel receives callback functions that we should call when we
         // want to write data.
         let (mut cb_tx, cb_rx) = mpsc::channel(1);
+
+        // This is our "source".
         let writer = Closure::wrap(Box::new(move |end: JsValue, callback: JsValue| -> JsValue {
-            let callback: js_sys::Function = callback.into();       // TODO: don't panic
+            let callback = callback.dyn_into::<js_sys::Function>()
+                .expect_throw("Passed non-function callback to the source");
 
             // If `end` is not null, we have to call the `callback` directly with it. This is
             // specified in the documentation.
             if !end.is_null() {
-                match callback.call1(&callback, &end) {
-                    Ok(val) => return val,
-                    Err(err) => wasm_bindgen::throw_val(err),
-                }
+                return callback.call1(&callback, &end).unwrap_throw();
             }
 
             match cb_tx.start_send(SendWrapper::new(callback)) {
@@ -268,8 +276,12 @@ impl Connection {
 
             JsValue::NULL
         }) as Box<FnMut(JsValue, JsValue) -> JsValue>);
-        let sink: js_sys::Function = js_sys::Reflect::get(&connection, &JsValue::from_str("sink"))?.into();     // TODO: don't panic
-        sink.call1(&connection, writer.as_ref().unchecked_ref())?;   // TODO: don't panic
+
+        // Calling `connection.sink()` with our source.
+        js_sys::Reflect::get(&connection, &JsValue::from_str("sink"))?
+            .dyn_into::<js_sys::Function>()
+            .map_err(|v| JsValue::from_str(&format!("Expected function for sink, got {:?}", v)))?
+            .call1(&connection, writer.as_ref().unchecked_ref())?;
 
         // Let's initialize the reading part.
         // We create a callback that we will pass to the connection whenever we want to read from
@@ -431,7 +443,7 @@ pub struct DialFuture {
     /// Callback called by the JavaScript. We need to keep it alive.
     // TODO: what to do if we drop before finished?
     _callback: SendWrapper<Closure<FnMut(JsValue)>>,
-    /// Channel that receives the output of the closure.
+    /// Channel that receives the output of the closure (null on success, something else on error).
     finished: oneshot::Receiver<SendWrapper<JsValue>>,
     /// Connection waiting to be established. `None` if the future has succeeded and we have moved
     /// it out.
@@ -457,7 +469,7 @@ impl Future for DialFuture {
 
         // Value contains the potential error that happened.
         if !value.is_null() {
-            panic!()        // TODO:
+            return Err(JsErr(value));
         }
 
         // Success!
