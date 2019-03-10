@@ -27,7 +27,7 @@ use libp2p_core::{
     transport::{TransportError, upgrade::TransportUpgradeError},
     upgrade::{self, OutboundUpgradeApply, UpgradeError}
 };
-use std::io::{Error as IoError, ErrorKind as IoErrorKind};
+use std::io::Error as IoError;
 use std::mem;
 use std::sync::Arc;
 

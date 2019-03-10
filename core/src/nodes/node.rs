@@ -267,76 +267,13 @@ mod node_stream {
     }
 
     #[test]
-    fn can_open_outbound_substreams_until_an_outbound_channel_is_closed() {
-        let mut muxer = DummyMuxer::new();
-        muxer.set_outbound_connection_state(DummyConnectionState::Closed);
-        let mut ns = NodeStream::<_, Vec<u8>>::new(muxer);
-
-        // open first substream works
-        assert!(ns.open_substream(vec![1,2,3]).is_ok());
-
-        // Given the state we set on the DummyMuxer, once we poll() we'll get an
-        // `OutboundClosed` which will make subsequent calls to `open_substream` fail
-        let out = ns.poll();
-        assert_matches!(out, Ok(Async::Ready(Some(node_event))) => {
-            assert_matches!(node_event, NodeEvent::OutboundClosed{user_data} => {
-                assert_eq!(user_data, vec![1,2,3])
-            })
-        });
-
-        // Opening a second substream fails because `outbound_state` is no longer open.
-        assert_matches!(ns.open_substream(vec![22]), Err(user_data) => {
-            assert_eq!(user_data, vec![22]);
-        });
-    }
-
-    #[test]
-    fn query_inbound_outbound_state() {
-        let ns = build_node_stream();
-        assert!(ns.is_open());
-    }
-
-    #[test]
-    fn query_inbound_state() {
-        let mut muxer = DummyMuxer::new();
-        muxer.set_inbound_connection_state(DummyConnectionState::Closed);
-        let mut ns = NodeStream::<_, Vec<u8>>::new(muxer);
-
-        assert_matches!(ns.poll(), Ok(Async::Ready(Some(node_event))) => {
-            assert_matches!(node_event, NodeEvent::InboundClosed)
-        });
-
-        assert!(!ns.is_open());
-    }
-
-    #[test]
-    fn query_outbound_state() {
-        let mut muxer = DummyMuxer::new();
-        muxer.set_outbound_connection_state(DummyConnectionState::Closed);
-        let mut ns = NodeStream::<_, Vec<u8>>::new(muxer);
-
-        assert!(ns.is_outbound_open());
-
-        ns.open_substream(vec![1]).unwrap();
-        let poll_result = ns.poll();
-
-        assert_matches!(poll_result, Ok(Async::Ready(Some(node_event))) => {
-            assert_matches!(node_event, NodeEvent::OutboundClosed{user_data} => {
-                assert_eq!(user_data, vec![1])
-            })
-        });
-
-        assert!(!ns.is_outbound_open(), "outbound connection should be closed after polling");
-    }
-
-    #[test]
     fn closing_a_node_stream_destroys_substreams_and_returns_submitted_user_data() {
         let mut ns = build_node_stream();
-        ns.open_substream(vec![2]).unwrap();
-        ns.open_substream(vec![3]).unwrap();
-        ns.open_substream(vec![5]).unwrap();
+        ns.open_substream(vec![2]);
+        ns.open_substream(vec![3]);
+        ns.open_substream(vec![5]);
         let user_data_submitted = ns.close();
-        assert_eq!(user_data_submitted, vec![
+        assert_eq!(user_data_submitted.1, vec![
             vec![2], vec![3], vec![5]
         ]);
     }
@@ -358,69 +295,26 @@ mod node_stream {
     }
 
     #[test]
-    fn poll_closes_the_node_stream_when_no_more_work_can_be_done() {
-        let mut muxer = DummyMuxer::new();
-        // ensure muxer.poll_inbound() returns Async::Ready(None)
-        muxer.set_inbound_connection_state(DummyConnectionState::Closed);
-        // ensure muxer.poll_outbound() returns Async::Ready(None)
-        muxer.set_outbound_connection_state(DummyConnectionState::Closed);
-        let mut ns = NodeStream::<_, Vec<u8>>::new(muxer);
-        ns.open_substream(vec![]).unwrap();
-        ns.poll().unwrap(); // poll_inbound()
-        ns.poll().unwrap(); // poll_outbound()
-        ns.poll().unwrap(); // resolve the address
-        // Nothing more to do, the NodeStream should be closed
-        assert_matches!(ns.poll(), Ok(Async::Ready(None)));
-    }
-
-    #[test]
-    fn poll_sets_up_substreams_yielding_them_in_reverse_order() {
-        let mut muxer = DummyMuxer::new();
-        // ensure muxer.poll_inbound() returns Async::Ready(None)
-        muxer.set_inbound_connection_state(DummyConnectionState::Closed);
-        // ensure muxer.poll_outbound() returns Async::Ready(Some(substream))
-        muxer.set_outbound_connection_state(DummyConnectionState::Opened);
-        let mut ns = NodeStream::<_, Vec<u8>>::new(muxer);
-        ns.open_substream(vec![1]).unwrap();
-        ns.open_substream(vec![2]).unwrap();
-        ns.poll().unwrap(); // poll_inbound()
-
-        // poll() sets up second outbound substream
-        assert_matches!(ns.poll(), Ok(Async::Ready(Some(node_event))) => {
-            assert_matches!(node_event, NodeEvent::OutboundSubstream{ user_data, substream:_ } => {
-                assert_eq!(user_data, vec![2]);
-            })
-        });
-        // Next poll() sets up first outbound substream
-        assert_matches!(ns.poll(), Ok(Async::Ready(Some(node_event))) => {
-            assert_matches!(node_event, NodeEvent::OutboundSubstream{ user_data, substream: _ } => {
-                assert_eq!(user_data, vec![1]);
-            })
-        });
-    }
-
-    #[test]
     fn poll_keeps_outbound_substreams_when_the_outgoing_connection_is_not_ready() {
         let mut muxer = DummyMuxer::new();
-        // ensure muxer.poll_inbound() returns Async::Ready(None)
-        muxer.set_inbound_connection_state(DummyConnectionState::Closed);
+        // ensure muxer.poll_inbound() returns Async::NotReady
+        muxer.set_inbound_connection_state(DummyConnectionState::Pending);
         // ensure muxer.poll_outbound() returns Async::NotReady
         muxer.set_outbound_connection_state(DummyConnectionState::Pending);
         let mut ns = NodeStream::<_, Vec<u8>>::new(muxer);
-        ns.open_substream(vec![1]).unwrap();
+        ns.open_substream(vec![1]);
         ns.poll().unwrap(); // poll past inbound
         ns.poll().unwrap(); // poll outbound
-        assert!(ns.is_open());
         assert!(format!("{:?}", ns).contains("outbound_substreams: 1"));
     }
 
     #[test]
     fn poll_returns_incoming_substream() {
         let mut muxer = DummyMuxer::new();
-        // ensure muxer.poll_inbound() returns Async::Ready(Some(subs))
+        // ensure muxer.poll_inbound() returns Async::Ready(subs)
         muxer.set_inbound_connection_state(DummyConnectionState::Opened);
         let mut ns = NodeStream::<_, Vec<u8>>::new(muxer);
-        assert_matches!(ns.poll(), Ok(Async::Ready(Some(node_event))) => {
+        assert_matches!(ns.poll(), Ok(Async::Ready(node_event)) => {
             assert_matches!(node_event, NodeEvent::InboundSubstream{ substream: _ });
         });
     }
