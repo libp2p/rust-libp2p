@@ -28,11 +28,11 @@ use rand::seq::SliceRandom;
 use std::io;
 
 // TODO: replace with DummyProtocolsHandler after https://github.com/servo/rust-smallvec/issues/139 ?
-struct TestHandler<TSubstream>(std::marker::PhantomData<TSubstream>, bool);
+struct TestHandler<TSubstream>(std::marker::PhantomData<TSubstream>);
 
 impl<TSubstream> Default for TestHandler<TSubstream> {
     fn default() -> Self {
-        TestHandler(std::marker::PhantomData, false)
+        TestHandler(std::marker::PhantomData)
     }
 }
 
@@ -71,18 +71,10 @@ where
 
     }
 
-    fn inject_inbound_closed(&mut self) {}
-
     fn connection_keep_alive(&self) -> KeepAlive { KeepAlive::Now }
 
-    fn shutdown(&mut self) { self.1 = true; }
-
     fn poll(&mut self) -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>, Self::Error> {
-        if self.1 {
-            Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown))
-        } else {
-            Ok(Async::NotReady)
-        }
+        Ok(Async::NotReady)
     }
 }
 
