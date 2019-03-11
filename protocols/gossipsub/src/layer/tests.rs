@@ -332,19 +332,10 @@ mod tests {
 
         // should add the new peers to `peer_topics` with an empty vec as a gossipsub node
         for peer in peers {
-            let known_topics = &gs.peer_topics.get(&peer).unwrap().0;
-            let node_type = &gs.peer_topics.get(&peer).unwrap().1;
+            let known_topics = gs.peer_topics.get(&peer).unwrap();
             assert!(
                 known_topics == &SmallVec::<[TopicHash; 16]>::from_vec(topic_hashes.clone()),
                 "The topics for each node should all topics"
-            );
-            // TODO: Update this for handling floodsub nodes
-            assert!(
-                match node_type {
-                    NodeType::Gossipsub => true,
-                    _ => false,
-                },
-                "All peers should be added as a gossipsub node"
             );
         }
     }
@@ -388,12 +379,12 @@ mod tests {
 
         // verify the result
 
-        let peer_topics = gs.peer_topics.get(&peers[0]).unwrap().0.clone();
+        let peer_topics = gs.peer_topics.get(&peers[0]).unwrap().clone();
         assert!(
             peer_topics == SmallVec::<[TopicHash; 16]>::from_vec(topic_hashes[..3].to_vec()),
             "First peer should be subscribed to three topics"
         );
-        let peer_topics = gs.peer_topics.get(&peers[1]).unwrap().0.clone();
+        let peer_topics = gs.peer_topics.get(&peers[1]).unwrap().clone();
         assert!(
             peer_topics == SmallVec::<[TopicHash; 16]>::from_vec(topic_hashes[..3].to_vec()),
             "Second peer should be subscribed to three topics"
@@ -405,7 +396,7 @@ mod tests {
         );
 
         for topic_hash in topic_hashes[..3].iter() {
-            let topic_peers = gs.topic_peers.get(topic_hash).unwrap().gossipsub.clone(); // only gossipsub at the moment
+            let topic_peers = gs.topic_peers.get(topic_hash).unwrap().clone();
             assert!(
                 topic_peers == peers[..2].to_vec(),
                 "Two peers should be added to the first three topics"
@@ -422,18 +413,13 @@ mod tests {
             &peers[0],
         );
 
-        let peer_topics = gs.peer_topics.get(&peers[0]).unwrap().0.clone();
+        let peer_topics = gs.peer_topics.get(&peers[0]).unwrap().clone();
         assert!(
             peer_topics == SmallVec::<[TopicHash; 16]>::from_vec(topic_hashes[1..3].to_vec()),
             "Peer should be subscribed to two topics"
         );
 
-        let topic_peers = gs
-            .topic_peers
-            .get(&topic_hashes[0])
-            .unwrap()
-            .gossipsub
-            .clone(); // only gossipsub at the moment
+        let topic_peers = gs.topic_peers.get(&topic_hashes[0]).unwrap().clone(); // only gossipsub at the moment
         assert!(
             topic_peers == peers[1..2].to_vec(),
             "Only the second peers should be in the first topic"
@@ -455,13 +441,7 @@ mod tests {
             peers.push(PeerId::random())
         }
 
-        gs.topic_peers.insert(
-            topic_hash.clone(),
-            PeerList {
-                gossipsub: peers.clone(),
-                floodsub: vec![],
-            },
-        );
+        gs.topic_peers.insert(topic_hash.clone(), peers.clone());
 
         let random_peers = gs.get_random_peers(&topic_hash, 5, { |_| true });
         assert!(random_peers.len() == 5, "Expected 5 peers to be returned");
