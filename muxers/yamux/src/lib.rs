@@ -71,7 +71,11 @@ where
 
     #[inline]
     fn poll_outbound(&self, substream: &mut Self::OutboundSubstream) -> Poll<Self::Substream, IoError> {
-        substream.poll().map(|s| s.map(Option::unwrap))
+        match substream.poll()? {
+            Async::Ready(Some(s)) => Ok(Async::Ready(s)),
+            Async::Ready(None) => Err(io::ErrorKind::BrokenPipe.into()),
+            Async::NotReady => Ok(Async::NotReady),
+        }
     }
 
     #[inline]
