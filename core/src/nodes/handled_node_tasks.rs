@@ -648,7 +648,6 @@ where
                     }
                 },
 
-                // Second possibility: we have a node.
                 NodeTaskInner::Closing(mut closing) => {
                     match closing.poll() {
                         Ok(Async::Ready(())) | Err(_) => {
