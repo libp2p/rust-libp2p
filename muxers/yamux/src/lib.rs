@@ -35,7 +35,8 @@ impl<C> Yamux<C>
 where
     C: AsyncRead + AsyncWrite + 'static
 {
-    pub fn new(c: C, cfg: yamux::Config, mode: yamux::Mode) -> Self {
+    pub fn new(c: C, mut cfg: yamux::Config, mode: yamux::Mode) -> Self {
+        cfg.set_read_after_close(false);
         Yamux(yamux::Connection::new(c, cfg, mode), atomic::AtomicBool::new(false))
     }
 }
