@@ -59,7 +59,7 @@
 //! Example:
 //!
 //! ```rust
-//! let key = libp2p::secio::SecioKeyPair::ed25519_generated().unwrap();
+//! let key = libp2p::identity::Keypair::generate_ed25519();
 //! let _transport = libp2p::build_development_transport(key);
 //! // _transport.dial(...);
 //! ```
@@ -185,6 +185,7 @@ pub mod bandwidth;
 pub mod simple;
 
 pub use self::core::{
+    identity,
     Transport, PeerId, Swarm,
     transport::TransportError,
     upgrade::{InboundUpgrade, InboundUpgradeExt, OutboundUpgrade, OutboundUpgradeExt}
@@ -202,10 +203,10 @@ use std::{error, time::Duration};
 /// > **Note**: This `Transport` is not suitable for production usage, as its implementation
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
 #[inline]
-pub fn build_development_transport(local_private_key: secio::SecioKeyPair)
+pub fn build_development_transport(keypair: identity::Keypair)
     -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
 {
-     build_tcp_ws_secio_mplex_yamux(local_private_key)
+     build_tcp_ws_secio_mplex_yamux(keypair)
 }
 
 /// Builds an implementation of `Transport` that is suitable for usage with the `Swarm`.
@@ -214,13 +215,13 @@ pub fn build_development_transport(local_private_key: secio::SecioKeyPair)
 /// and mplex or yamux as the multiplexing layer.
 ///
 /// > **Note**: If you ever need to express the type of this `Transport`.
-pub fn build_tcp_ws_secio_mplex_yamux(local_private_key: secio::SecioKeyPair)
+pub fn build_tcp_ws_secio_mplex_yamux(keypair: identity::Keypair)
     -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
 {
     CommonTransport::new()
-        .with_upgrade(secio::SecioConfig::new(local_private_key))
+        .with_upgrade(secio::SecioConfig::new(keypair))
         .and_then(move |out, endpoint| {
-            let peer_id = out.remote_key.into_peer_id();
+            let peer_id = PeerId::from(out.remote_key);
             let peer_id2 = peer_id.clone();
             let upgrade = core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new())
                 // TODO: use a single `.map` instead of two maps

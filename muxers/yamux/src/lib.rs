@@ -23,7 +23,7 @@
 
 use futures::{future::{self, FutureResult}, prelude::*};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
-use log::error;
+use log::debug;
 use std::{io, iter, sync::atomic};
 use std::io::{Error as IoError};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -52,7 +52,7 @@ where
     fn poll_inbound(&self) -> Poll<Self::Substream, IoError> {
         match self.0.poll() {
             Err(e) => {
-                error!("connection error: {}", e);
+                debug!("connection error: {}", e);
                 Err(io::Error::new(io::ErrorKind::Other, e))
             }
             Ok(Async::NotReady) => Ok(Async::NotReady),

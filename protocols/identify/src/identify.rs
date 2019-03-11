@@ -221,15 +221,16 @@ pub enum IdentifyEvent {
 mod tests {
     use crate::{Identify, IdentifyEvent};
     use futures::prelude::*;
+    use libp2p_core::identity;
     use libp2p_core::{upgrade, upgrade::OutboundUpgradeExt, upgrade::InboundUpgradeExt, Swarm, Transport};
     use std::io;
 
     #[test]
     fn periodic_id_works() {
-        let node1_key = libp2p_secio::SecioKeyPair::ed25519_generated().unwrap();
-        let node1_public_key = node1_key.to_public_key();
-        let node2_key = libp2p_secio::SecioKeyPair::ed25519_generated().unwrap();
-        let node2_public_key = node2_key.to_public_key();
+        let node1_key = identity::Keypair::generate_ed25519();
+        let node1_public_key = node1_key.public();
+        let node2_key = identity::Keypair::generate_ed25519();
+        let node2_public_key = node2_key.public();
 
         let mut swarm1 = {
             // TODO: make creating the transport more elegant ; literaly half of the code of the test
@@ -253,7 +254,7 @@ mod tests {
         let mut swarm2 = {
             // TODO: make creating the transport more elegant ; literaly half of the code of the test
             //       is about creating the transport
-            let local_peer_id = node2_public_key.clone().into_peer_id();
+            let local_peer_id = node2_public_key.clone().into();
             let transport = libp2p_tcp::TcpConfig::new()
                 .with_upgrade(libp2p_secio::SecioConfig::new(node2_key))
                 .and_then(move |out, endpoint| {
