@@ -26,7 +26,6 @@ lazy_static = "1.2.0"
 rw-stream-sink = { version = "0.1.0", path = "../../misc/rw-stream-sink" }
 tokio-io = "0.1.0"
 sha2 = "0.8.0"
-ed25519-dalek = "1.0.0-pre.1"
 hmac = "0.7.0"
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dependencies]

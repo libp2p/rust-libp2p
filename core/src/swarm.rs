@@ -549,13 +549,11 @@ where TBehaviour: NetworkBehaviour,
 
 #[cfg(test)]
 mod tests {
-    use crate::peer_id::PeerId;
+    use crate::{identity, PeerId, PublicKey};
     use crate::protocols_handler::{DummyProtocolsHandler, ProtocolsHandler};
-    use crate::public_key::PublicKey;
     use crate::tests::dummy_transport::DummyTransport;
     use futures::prelude::*;
     use multiaddr::Multiaddr;
-    use rand::random;
     use std::marker::PhantomData;
     use super::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction,
                 PollParameters, SwarmBuilder};
@@ -601,10 +599,7 @@ mod tests {
     }
 
     fn get_random_id() -> PublicKey {
-        PublicKey::Rsa((0 .. 2048)
-            .map(|_| -> u8 { random() })
-            .collect()
-        )
+        identity::Keypair::generate_ed25519().public()
     }
 
     #[test]
@@ -612,8 +607,8 @@ mod tests {
         let id = get_random_id();
         let transport = DummyTransport::new();
         let behaviour = DummyBehaviour{marker: PhantomData};
-        let swarm = SwarmBuilder::new(transport, behaviour,
-            id.into_peer_id()).incoming_limit(Some(4)).build();
+        let swarm = SwarmBuilder::new(transport, behaviour, id.into())
+            .incoming_limit(Some(4)).build();
         assert_eq!(swarm.raw_swarm.incoming_limit(), Some(4));
     }
 
@@ -622,8 +617,7 @@ mod tests {
         let id = get_random_id();
         let transport = DummyTransport::new();
         let behaviour = DummyBehaviour{marker: PhantomData};
-        let swarm = SwarmBuilder::new(transport, behaviour, id.into_peer_id())
-            .build();
+        let swarm = SwarmBuilder::new(transport, behaviour, id.into()).build();
         assert!(swarm.raw_swarm.incoming_limit().is_none())
 
     }
