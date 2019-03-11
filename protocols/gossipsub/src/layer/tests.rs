@@ -220,23 +220,24 @@ mod tests {
         );
 
         // there should be mesh_n GRAFT messages.
-        let graft_messages = gs
-            .control_pool
-            .iter()
-            .fold(vec![], |mut collected_grafts, (_, controls)| {
-                for c in controls.iter() {
-                    match c {
-                        GossipsubControlAction::Graft { topic_hash: _ } => {
-                            collected_grafts.push(c.clone())
+        let graft_messages =
+            gs.control_pool
+                .iter()
+                .fold(vec![], |mut collected_grafts, (_, controls)| {
+                    for c in controls.iter() {
+                        match c {
+                            GossipsubControlAction::Graft { topic_hash: _ } => {
+                                collected_grafts.push(c.clone())
+                            }
+                            _ => {}
                         }
-                        _ => {}
                     }
-                }
-                collected_grafts
-            });
+                    collected_grafts
+                });
 
         assert_eq!(
-            graft_messages.len(), 6,
+            graft_messages.len(),
+            6,
             "There should be 6 grafts messages sent to peers"
         );
 
@@ -266,20 +267,20 @@ mod tests {
         }
 
         // there should now be 12 graft messages to be sent
-        let graft_messages = gs
-            .control_pool
-            .iter()
-            .fold(vec![], |mut collected_grafts, (_, controls)| {
-                for c in controls.iter() {
-                    match c {
-                        GossipsubControlAction::Graft { topic_hash: _ } => {
-                            collected_grafts.push(c.clone())
+        let graft_messages =
+            gs.control_pool
+                .iter()
+                .fold(vec![], |mut collected_grafts, (_, controls)| {
+                    for c in controls.iter() {
+                        match c {
+                            GossipsubControlAction::Graft { topic_hash: _ } => {
+                                collected_grafts.push(c.clone())
+                            }
+                            _ => {}
                         }
-                        _ => {}
                     }
-                }
-                collected_grafts
-            });
+                    collected_grafts
+                });
 
         assert!(
             graft_messages.len() == 12,
@@ -298,7 +299,7 @@ mod tests {
 
         // check that our subscriptions are sent to each of the peers
         // collect all the SendEvents
-        let send_events: Vec<&NetworkBehaviourAction<GossipsubRpc, GossipsubEvent>> = gs
+        let send_events: Vec<&NetworkBehaviourAction<Arc<GossipsubRpc>, GossipsubEvent>> = gs
             .events
             .iter()
             .filter(|e| match e {
@@ -586,15 +587,13 @@ mod tests {
 
         // check that we sent an IWANT request for `unknown id`
         let iwant_exists = match gs.control_pool.get(&peers[7]) {
-            Some(controls) => {
-                controls.iter().any(|c| match c {
-                    GossipsubControlAction::IWant { message_ids } => {
-                        message_ids.iter().any(|m| *m == String::from("unknown id"))
-                    }
-                    _ => false,
-                })
-            }
-            _ => false
+            Some(controls) => controls.iter().any(|c| match c {
+                GossipsubControlAction::IWant { message_ids } => {
+                    message_ids.iter().any(|m| *m == String::from("unknown id"))
+                }
+                _ => false,
+            }),
+            _ => false,
         };
 
         assert!(iwant_exists
@@ -677,7 +676,7 @@ mod tests {
 
         gs.handle_graft(
             &peers[7],
-            vec![TopicHash::from_raw(String::from("unsubscribed topic"))]
+            vec![TopicHash::from_raw(String::from("unsubscribed topic"))],
         );
 
         assert!(
@@ -690,10 +689,11 @@ mod tests {
     // tests multiple topics in a single graft message
     fn test_handle_graft_multiple_topics() {
         let topics: Vec<String> = vec!["topic1", "topic2", "topic3", "topic4"]
-            .iter().map(|&t| String::from(t)).collect();
+            .iter()
+            .map(|&t| String::from(t))
+            .collect();
 
-        let (mut gs, peers, topic_hashes) =
-            build_and_inject_nodes(20, topics.clone(), true);
+        let (mut gs, peers, topic_hashes) = build_and_inject_nodes(20, topics.clone(), true);
 
         // sanity check: mesh does not already contain peer
         for topic_hash in topic_hashes.clone() {
@@ -702,7 +702,6 @@ mod tests {
                 "Expected peer to not be in mesh for any topic"
             );
         }
-
 
         let mut their_topics = topic_hashes.clone();
         // their_topics = [topic1, topic2, topic3]
@@ -732,7 +731,7 @@ mod tests {
 
     #[test]
     // tests that a peer is removed from our mesh
-    fn test_handle_prune_peer_in_mesh(){
+    fn test_handle_prune_peer_in_mesh() {
         let (mut gs, peers, topic_hashes) =
             build_and_inject_nodes(20, vec![String::from("topic1")], true);
 

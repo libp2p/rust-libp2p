@@ -42,6 +42,7 @@ use rand::{seq::SliceRandom, thread_rng};
 use smallvec::SmallVec;
 use std::collections::hash_map::{DefaultHasher, HashMap};
 use std::collections::HashSet;
+use std::sync::Arc;
 use std::time::Instant;
 use std::{collections::VecDeque, iter, marker::PhantomData};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -56,7 +57,7 @@ pub struct Gossipsub<TSubstream> {
     config: GossipsubConfig,
 
     /// Events that need to be yielded to the outside when polling.
-    events: VecDeque<NetworkBehaviourAction<GossipsubRpc, GossipsubEvent>>,
+    events: VecDeque<NetworkBehaviourAction<Arc<GossipsubRpc>, GossipsubEvent>>,
 
     // pool non-urgent control messages between heartbeats
     control_pool: HashMap<PeerId, Vec<GossipsubControlAction>>,
@@ -130,18 +131,20 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
         // send subscription request to all floodsub and gossipsub peers in the topic
         if let Some(peer_list) = self.topic_peers.get(&topic.hash()) {
+            let event = Arc::new(GossipsubRpc {
+                messages: Vec::new(),
+                subscriptions: vec![GossipsubSubscription {
+                    topic_hash: topic.hash().clone(),
+                    action: GossipsubSubscriptionAction::Subscribe,
+                }],
+                control_msgs: Vec::new(),
+            });
+
             for peer in peer_list.floodsub.iter().chain(peer_list.gossipsub.iter()) {
                 debug!("Sending SUBSCRIBE to peer: {:?}", peer);
                 self.events.push_back(NetworkBehaviourAction::SendEvent {
                     peer_id: peer.clone(),
-                    event: GossipsubRpc {
-                        messages: Vec::new(),
-                        subscriptions: vec![GossipsubSubscription {
-                            topic_hash: topic.hash().clone(),
-                            action: GossipsubSubscriptionAction::Subscribe,
-                        }],
-                        control_msgs: Vec::new(),
-                    },
+                    event: event.clone(),
                 });
             }
         }
@@ -170,18 +173,19 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
         // announce to all floodsub and gossipsub peers, in the topic
         if let Some(peer_list) = self.topic_peers.get(topic_hash) {
+            let event = Arc::new(GossipsubRpc {
+                messages: Vec::new(),
+                subscriptions: vec![GossipsubSubscription {
+                    topic_hash: topic_hash.clone(),
+                    action: GossipsubSubscriptionAction::Unsubscribe,
+                }],
+                control_msgs: Vec::new(),
+            });
             for peer in peer_list.floodsub.iter().chain(peer_list.gossipsub.iter()) {
                 debug!("Sending UNSUBSCRIBE to peer: {:?}", peer);
                 self.events.push_back(NetworkBehaviourAction::SendEvent {
                     peer_id: peer.clone(),
-                    event: GossipsubRpc {
-                        messages: Vec::new(),
-                        subscriptions: vec![GossipsubSubscription {
-                            topic_hash: topic_hash.clone(),
-                            action: GossipsubSubscriptionAction::Unsubscribe,
-                        }],
-                        control_msgs: Vec::new(),
-                    },
+                    event: event.clone(),
                 });
             }
         }
@@ -256,16 +260,17 @@ impl<TSubstream> Gossipsub<TSubstream> {
         self.mcache.put(message.clone());
         self.received.add(&message.id());
 
+        let event = Arc::new(GossipsubRpc {
+            subscriptions: Vec::new(),
+            messages: vec![message.clone()],
+            control_msgs: Vec::new(),
+        });
         // Send to peers we know are subscribed to the topic.
         for peer_id in recipient_peers.keys() {
             debug!("Sending message to peer: {:?}", peer_id);
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer_id.clone(),
-                event: GossipsubRpc {
-                    subscriptions: Vec::new(),
-                    messages: vec![message.clone()],
-                    control_msgs: Vec::new(),
-                },
+                event: event.clone(),
             });
         }
         info!("Published message: {:?}", message.id());
@@ -307,11 +312,11 @@ impl<TSubstream> Gossipsub<TSubstream> {
         // check if we need to get more peers, which we randomly select
         if added_peers.len() < self.config.mesh_n {
             // get the peers
-            let mut new_peers =
+            let new_peers =
                 self.get_random_peers(topic_hash, self.config.mesh_n - added_peers.len(), {
                     |_| true
                 });
-            added_peers.append(&mut new_peers.clone());
+            added_peers.extend_from_slice(&new_peers);
             // add them to the mesh
             debug!(
                 "JOIN: Inserting {:?} random peers into the mesh",
@@ -321,7 +326,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 .mesh
                 .entry(topic_hash.clone())
                 .or_insert_with(|| vec![]);
-            mesh_peers.append(&mut new_peers);
+            mesh_peers.extend_from_slice(&new_peers);
         }
 
         for peer_id in added_peers {
@@ -331,7 +336,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 peer_id.clone(),
                 GossipsubControlAction::Graft {
                     topic_hash: topic_hash.clone(),
-                }
+                },
             );
             //TODO: tagPeer
         }
@@ -351,7 +356,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
                     peer.clone(),
                     GossipsubControlAction::Prune {
                         topic_hash: topic_hash.clone(),
-                    }
+                    },
                 );
                 //TODO: untag Peer
             }
@@ -391,7 +396,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 peer_id.clone(),
                 GossipsubControlAction::IWant {
                     message_ids: iwant_ids.iter().cloned().collect(),
-                }
+                },
             );
         }
         debug!("Completed IHAVE handling for peer: {:?}", peer_id);
@@ -417,11 +422,11 @@ impl<TSubstream> Gossipsub<TSubstream> {
             let message_list = cached_messages.into_iter().map(|entry| entry.1).collect();
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer_id.clone(),
-                event: GossipsubRpc {
+                event: Arc::new(GossipsubRpc {
                     subscriptions: Vec::new(),
                     messages: message_list,
                     control_msgs: Vec::new(),
-                },
+                }),
             });
         }
         debug!("Completed IWANT handling for peer: {:?}", peer_id);
@@ -462,11 +467,11 @@ impl<TSubstream> Gossipsub<TSubstream> {
             );
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer_id.clone(),
-                event: GossipsubRpc {
+                event: Arc::new(GossipsubRpc {
                     subscriptions: Vec::new(),
                     messages: Vec::new(),
                     control_msgs: prune_messages,
-                },
+                }),
             });
         }
         debug!("Completed GRAFT handling for peer: {:?}", peer_id);
@@ -783,7 +788,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 GossipsubControlAction::IHave {
                     topic_hash: topic_hash.clone(),
                     message_ids: message_ids.clone(),
-                }
+                },
             );
         }
         debug!("Completed gossip");
@@ -817,11 +822,11 @@ impl<TSubstream> Gossipsub<TSubstream> {
             // send the control messages
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer.clone(),
-                event: GossipsubRpc {
+                event: Arc::new(GossipsubRpc {
                     subscriptions: Vec::new(),
                     messages: Vec::new(),
                     control_msgs: grafts,
-                },
+                }),
             });
         }
 
@@ -835,11 +840,11 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 .collect();
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer.clone(),
-                event: GossipsubRpc {
+                event: Arc::new(GossipsubRpc {
                     subscriptions: Vec::new(),
                     messages: Vec::new(),
                     control_msgs: remaining_prunes,
-                },
+                }),
             });
         }
     }
@@ -872,15 +877,17 @@ impl<TSubstream> Gossipsub<TSubstream> {
 
         // forward the message to peers
         if !recipient_peers.is_empty() {
+            let event = Arc::new(GossipsubRpc {
+                subscriptions: Vec::new(),
+                messages: vec![message.clone()],
+                control_msgs: Vec::new(),
+            });
+
             for peer in recipient_peers.iter() {
                 debug!("Sending message: {:?} to peer {:?}", message.id(), peer);
                 self.events.push_back(NetworkBehaviourAction::SendEvent {
                     peer_id: peer.clone(),
-                    event: GossipsubRpc {
-                        subscriptions: Vec::new(),
-                        messages: vec![message.clone()],
-                        control_msgs: Vec::new(),
-                    },
+                    event: event.clone(),
                 });
             }
         }
@@ -935,11 +942,11 @@ impl<TSubstream> Gossipsub<TSubstream> {
         for (peer, controls) in self.control_pool.drain() {
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer,
-                event: GossipsubRpc {
+                event: Arc::new(GossipsubRpc {
                     subscriptions: Vec::new(),
                     messages: Vec::new(),
-                    control_msgs: controls
-                }
+                    control_msgs: controls,
+                }),
             });
         }
     }
@@ -974,11 +981,11 @@ where
             // send our subscriptions to the peer
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: id.clone(),
-                event: GossipsubRpc {
+                event: Arc::new(GossipsubRpc {
                     messages: Vec::new(),
                     subscriptions,
                     control_msgs: Vec::new(),
-                },
+                }),
             });
         }
 
@@ -1115,7 +1122,38 @@ where
         >,
     > {
         if let Some(event) = self.events.pop_front() {
-            return Async::Ready(event);
+            // clone send event reference if others references are present
+            match event {
+                NetworkBehaviourAction::SendEvent {
+                    peer_id,
+                    event: send_event,
+                } => match Arc::try_unwrap(send_event) {
+                    Ok(event) => {
+                        return Async::Ready(NetworkBehaviourAction::SendEvent {
+                            peer_id,
+                            event: event,
+                        });
+                    }
+                    Err(event) => {
+                        return Async::Ready(NetworkBehaviourAction::SendEvent {
+                            peer_id,
+                            event: (*event).clone(),
+                        });
+                    }
+                },
+                NetworkBehaviourAction::GenerateEvent(e) => {
+                    return Async::Ready(NetworkBehaviourAction::GenerateEvent(e));
+                }
+                NetworkBehaviourAction::DialAddress { address } => {
+                    return Async::Ready(NetworkBehaviourAction::DialAddress { address });
+                }
+                NetworkBehaviourAction::DialPeer { peer_id } => {
+                    return Async::Ready(NetworkBehaviourAction::DialPeer { peer_id });
+                }
+                NetworkBehaviourAction::ReportObservedAddr { address } => {
+                    return Async::Ready(NetworkBehaviourAction::ReportObservedAddr { address });
+                }
+            }
         }
 
         while let Ok(Async::Ready(Some(_))) = self.heartbeat.poll() {
