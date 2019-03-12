@@ -2,7 +2,7 @@
 name = "libp2p-mplex"
 edition = "2018"
 description = "Mplex multiplexing protocol for libp2p"
-version = "0.4.0"
+version = "0.5.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -13,7 +13,7 @@ categories = ["network-programming", "asynchronous"]
 bytes = "0.4.5"
 fnv = "1.0"
 futures = "0.1"
-libp2p-core = { version = "0.4.0", path = "../../core" }
+libp2p-core = { version = "0.5.0", path = "../../core" }
 log = "0.4"
 parking_lot = "0.7"
 tokio-codec = "0.1"
@@ -21,5 +21,5 @@ tokio-io = "0.1"
 unsigned-varint = { version = "0.2.1", features = ["codec"] }
 
 [dev-dependencies]
-libp2p-tcp = { version = "0.4.0", path = "../../transports/tcp" }
+libp2p-tcp = { version = "0.5.0", path = "../../transports/tcp" }
 tokio = "0.1"

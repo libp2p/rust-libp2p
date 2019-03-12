@@ -2,7 +2,7 @@
 name = "libp2p-core"
 edition = "2018"
 description = "Core traits and structs of libp2p"
-version = "0.4.0"
+version = "0.5.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -26,7 +26,7 @@ parking_lot = "0.7"
 protobuf = "2.3"
 quick-error = "1.2"
 rand = "0.6"
-rw-stream-sink = { version = "0.1.0", path = "../misc/rw-stream-sink" }
+rw-stream-sink = { version = "0.1.1", path = "../misc/rw-stream-sink" }
 secp256k1 = { version = "0.12", features = ["rand"], optional = true }
 sha2 = "0.8.0"
 smallvec = "0.6"
@@ -43,10 +43,10 @@ untrusted = { version = "0.6" }
 
 [dev-dependencies]
 env_logger = "0.6"
-libp2p-ping = { version = "0.4.0", path = "../protocols/ping" }
-libp2p-tcp = { version = "0.4.0", path = "../transports/tcp" }
-libp2p-mplex = { version = "0.4.0", path = "../muxers/mplex" }
-libp2p-secio = { version = "0.4.0", path = "../protocols/secio" }
+libp2p-ping = { version = "0.5.0", path = "../protocols/ping" }
+libp2p-tcp = { version = "0.5.0", path = "../transports/tcp" }
+libp2p-mplex = { version = "0.5.0", path = "../muxers/mplex" }
+libp2p-secio = { version = "0.5.0", path = "../protocols/secio" }
 rand = "0.6"
 quickcheck = "0.8"
 tokio = "0.1"
