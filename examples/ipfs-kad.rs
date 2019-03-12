@@ -25,14 +25,14 @@
 
 use futures::prelude::*;
 use libp2p::{
-    core::PublicKey,
-    secio,
+    PeerId,
+    identity
 };
 
 fn main() {
     // Create a random key for ourselves.
-    let local_key = secio::SecioKeyPair::ed25519_generated().unwrap();
-    let local_peer_id = local_key.to_peer_id();
+    let local_key = identity::Keypair::generate_ed25519();
+    let local_peer_id = PeerId::from(local_key.public());
 
     // Set up a an encrypted DNS-enabled TCP Transport over the Mplex protocol
     let transport = libp2p::build_development_transport(local_key);
@@ -58,10 +58,10 @@ fn main() {
     };
 
     // Order Kademlia to search for a peer.
-    let to_search = if let Some(peer_id) = std::env::args().nth(1) {
+    let to_search: PeerId = if let Some(peer_id) = std::env::args().nth(1) {
         peer_id.parse().expect("Failed to parse peer ID to find")
     } else {
-        PublicKey::Secp256k1((0..32).map(|_| -> u8 { rand::random() }).collect()).into_peer_id()
+        identity::Keypair::generate_ed25519().public().into()
     };
     println!("Searching for {:?}", to_search);
     swarm.find_node(to_search);

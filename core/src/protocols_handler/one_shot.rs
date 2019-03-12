@@ -188,18 +188,10 @@ where
             self.pending_error = Some(error);
         }
     }
-
-    #[inline]
-    fn inject_inbound_closed(&mut self) {}
-
+ 
     #[inline]
     fn connection_keep_alive(&self) -> KeepAlive {
         self.keep_alive
-    }
-
-    #[inline]
-    fn shutdown(&mut self) {
-        self.shutting_down = true;
     }
 
     fn poll(&mut self) -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>, Self::Error> {
@@ -211,10 +203,6 @@ where
             return Ok(Async::Ready(ProtocolsHandlerEvent::Custom(self.events_out.remove(0))));
         } else {
             self.events_out.shrink_to_fit();
-        }
-
-        if self.shutting_down && self.dial_negotiated == 0 {
-            return Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown));
         }
 
         if !self.dial_queue.is_empty() {

@@ -67,12 +67,12 @@ pub use multiaddr;
 
 mod keys_proto;
 mod peer_id;
-mod public_key;
 
 #[cfg(test)]
 mod tests;
 
 pub mod either;
+pub mod identity;
 pub mod muxing;
 pub mod nodes;
 pub mod protocols_handler;
@@ -84,7 +84,7 @@ pub use self::multiaddr::Multiaddr;
 pub use self::muxing::StreamMuxer;
 pub use self::peer_id::PeerId;
 pub use self::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent};
-pub use self::public_key::PublicKey;
+pub use self::identity::PublicKey;
 pub use self::swarm::Swarm;
 pub use self::transport::Transport;
 pub use self::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, UpgradeError, ProtocolName};

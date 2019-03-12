@@ -180,19 +180,8 @@ where
         endpoint: ConnectedPoint,
     },
 
-    /// A connection to a node has been closed.
-    ///
-    /// This happens once both the inbound and outbound channels are closed, and no more outbound
-    /// substream attempt is pending.
-    NodeClosed {
-        /// Identifier of the node.
-        peer_id: TPeerId,
-        /// Endpoint we were connected to.
-        endpoint: ConnectedPoint,
-    },
-
     /// The handler of a node has produced an error.
-    NodeError {
+    NodeClosed {
         /// Identifier of the node.
         peer_id: TPeerId,
         /// Endpoint we were connected to.
@@ -280,14 +269,8 @@ where
                     .field("endpoint", endpoint)
                     .finish()
             }
-            RawSwarmEvent::NodeClosed { ref peer_id, ref endpoint } => {
+            RawSwarmEvent::NodeClosed { ref peer_id, ref endpoint, ref error } => {
                 f.debug_struct("NodeClosed")
-                    .field("peer_id", peer_id)
-                    .field("endpoint", endpoint)
-                    .finish()
-            }
-            RawSwarmEvent::NodeError { ref peer_id, ref endpoint, ref error } => {
-                f.debug_struct("NodeError")
                     .field("peer_id", peer_id)
                     .field("endpoint", endpoint)
                     .field("error", error)
@@ -995,7 +978,7 @@ where
                 action = a;
                 out_event = e;
             }
-            Async::Ready(CollectionEvent::NodeError {
+            Async::Ready(CollectionEvent::NodeClosed {
                 peer_id,
                 error,
                 ..
@@ -1007,21 +990,11 @@ where
                              closed message after it has been opened, and no two closed \
                              messages; QED");
                 action = Default::default();
-                out_event = RawSwarmEvent::NodeError {
+                out_event = RawSwarmEvent::NodeClosed {
                     peer_id,
                     endpoint,
                     error,
                 };
-            }
-            Async::Ready(CollectionEvent::NodeClosed { peer_id, .. }) => {
-                let endpoint = self.reach_attempts.connected_points.remove(&peer_id)
-                    .expect("We insert into connected_points whenever a connection is \
-                             opened and remove only when a connection is closed; the \
-                             underlying API is guaranteed to always deliver a connection \
-                             closed message after it has been opened, and no two closed \
-                             messages; QED");
-                action = Default::default();
-                out_event = RawSwarmEvent::NodeClosed { peer_id, endpoint };
             }
             Async::Ready(CollectionEvent::NodeEvent { peer, event }) => {
                 action = Default::default();

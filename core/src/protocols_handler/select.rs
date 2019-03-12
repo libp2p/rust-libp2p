@@ -24,7 +24,6 @@ use crate::{
     either::EitherOutput,
     protocols_handler::{
         KeepAlive,
-        Fuse,
         IntoProtocolsHandler,
         ProtocolsHandler,
         ProtocolsHandlerEvent,
@@ -78,8 +77,8 @@ where
 
     fn into_handler(self, remote_peer_id: &PeerId) -> Self::Handler {
         ProtocolsHandlerSelect {
-            proto1: self.proto1.into_handler(remote_peer_id).fuse(),
-            proto2: self.proto2.into_handler(remote_peer_id).fuse(),
+            proto1: self.proto1.into_handler(remote_peer_id),
+            proto2: self.proto2.into_handler(remote_peer_id),
         }
     }
 }
@@ -88,9 +87,9 @@ where
 #[derive(Debug, Clone)]
 pub struct ProtocolsHandlerSelect<TProto1, TProto2> {
     /// The first protocol.
-    proto1: Fuse<TProto1>,
+    proto1: TProto1,
     /// The second protocol.
-    proto2: Fuse<TProto2>,
+    proto2: TProto2,
 }
 
 impl<TProto1, TProto2> ProtocolsHandlerSelect<TProto1, TProto2> {
@@ -98,8 +97,8 @@ impl<TProto1, TProto2> ProtocolsHandlerSelect<TProto1, TProto2> {
     #[inline]
     pub(crate) fn new(proto1: TProto1, proto2: TProto2) -> Self {
         ProtocolsHandlerSelect {
-            proto1: Fuse::new(proto1),
-            proto2: Fuse::new(proto2),
+            proto1,
+            proto2,
         }
     }
 }
@@ -119,7 +118,7 @@ where
     type OutEvent = EitherOutput<TProto1::OutEvent, TProto2::OutEvent>;
     type Error = EitherError<TProto1::Error, TProto2::Error>;
     type Substream = TSubstream;
-    type InboundProtocol = SelectUpgrade<<Fuse<TProto1> as ProtocolsHandler>::InboundProtocol, <Fuse<TProto2> as ProtocolsHandler>::InboundProtocol>;
+    type InboundProtocol = SelectUpgrade<<TProto1 as ProtocolsHandler>::InboundProtocol, <TProto2 as ProtocolsHandler>::InboundProtocol>;
     type OutboundProtocol = EitherUpgrade<TProto1::OutboundProtocol, TProto2::OutboundProtocol>;
     type OutboundOpenInfo = EitherOutput<TProto1::OutboundOpenInfo, TProto2::OutboundOpenInfo>;
 
@@ -158,12 +157,6 @@ where
             EitherOutput::First(event) => self.proto1.inject_event(event),
             EitherOutput::Second(event) => self.proto2.inject_event(event),
         }
-    }
-
-    #[inline]
-    fn inject_inbound_closed(&mut self) {
-        self.proto1.inject_inbound_closed();
-        self.proto2.inject_inbound_closed();
     }
 
     #[inline]
@@ -213,12 +206,6 @@ where
         cmp::max(self.proto1.connection_keep_alive(), self.proto2.connection_keep_alive())
     }
 
-    #[inline]
-    fn shutdown(&mut self) {
-        self.proto1.shutdown();
-        self.proto2.shutdown();
-    }
-
     fn poll(&mut self) -> Poll<ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>, Self::Error> {
         loop {
             match self.proto1.poll().map_err(EitherError::A)? {
@@ -230,9 +217,6 @@ where
                         upgrade: EitherUpgrade::A(upgrade),
                         info: EitherOutput::First(info),
                     }));
-                },
-                Async::Ready(ProtocolsHandlerEvent::Shutdown) => {
-                    self.proto2.shutdown();
                 },
                 Async::NotReady => ()
             };
@@ -247,22 +231,12 @@ where
                         info: EitherOutput::Second(info),
                     }));
                 },
-                Async::Ready(ProtocolsHandlerEvent::Shutdown) => {
-                    if !self.proto1.is_shutting_down_or_shutdown() {
-                        self.proto1.shutdown();
-                        continue;
-                    }
-                },
                 Async::NotReady => ()
             };
 
             break;
         }
 
-        if self.proto1.is_shutdown() && self.proto2.is_shutdown() {
-            Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown))
-        } else {
-            Ok(Async::NotReady)
-        }
+        Ok(Async::NotReady)
     }
 }
