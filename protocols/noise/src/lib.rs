@@ -58,7 +58,7 @@ pub use io::NoiseOutput;
 pub use protocol::{Keypair, PublicKey, Protocol, ProtocolParams, IX, IK, XX};
 pub use protocol::x25519::X25519;
 
-use libp2p_core::{UpgradeInfo, InboundUpgrade, OutboundUpgrade};
+use libp2p_core::{UpgradeInfo, InboundUpgrade, OutboundUpgrade, upgrade::Negotiated};
 use tokio_io::{AsyncRead, AsyncWrite};
 use zeroize::Zeroize;
 
@@ -127,11 +127,11 @@ where
     NoiseConfig<IX, C>: UpgradeInfo,
     C: Protocol<C> + AsRef<[u8]> + Zeroize
 {
-    type Output = (PublicKey<C>, NoiseOutput<T>);
+    type Output = (PublicKey<C>, NoiseOutput<Negotiated<T>>);
     type Error = NoiseError;
-    type Future = rt1::NoiseInboundFuture<T, C>;
+    type Future = rt1::NoiseInboundFuture<Negotiated<T>, C>;
 
-    fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
         let session = self.params.into_builder()
             .local_private_key(self.keys.secret().as_ref())
             .build_responder()
@@ -146,11 +146,11 @@ where
     NoiseConfig<IX, C>: UpgradeInfo,
     C: Protocol<C> + AsRef<[u8]> + Zeroize
 {
-    type Output = (PublicKey<C>, NoiseOutput<T>);
+    type Output = (PublicKey<C>, NoiseOutput<Negotiated<T>>);
     type Error = NoiseError;
-    type Future = rt1::NoiseOutboundFuture<T, C>;
+    type Future = rt1::NoiseOutboundFuture<Negotiated<T>, C>;
 
-    fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
         let session = self.params.into_builder()
             .local_private_key(self.keys.secret().as_ref())
             .build_initiator()
@@ -167,11 +167,11 @@ where
     NoiseConfig<XX, C>: UpgradeInfo,
     C: Protocol<C> + AsRef<[u8]> + Zeroize
 {
-    type Output = (PublicKey<C>, NoiseOutput<T>);
+    type Output = (PublicKey<C>, NoiseOutput<Negotiated<T>>);
     type Error = NoiseError;
-    type Future = rt15::NoiseInboundFuture<T, C>;
+    type Future = rt15::NoiseInboundFuture<Negotiated<T>, C>;
 
-    fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
         let session = self.params.into_builder()
             .local_private_key(self.keys.secret().as_ref())
             .build_responder()
@@ -186,11 +186,11 @@ where
     NoiseConfig<XX, C>: UpgradeInfo,
     C: Protocol<C> + AsRef<[u8]> + Zeroize
 {
-    type Output = (PublicKey<C>, NoiseOutput<T>);
+    type Output = (PublicKey<C>, NoiseOutput<Negotiated<T>>);
     type Error = NoiseError;
-    type Future = rt15::NoiseOutboundFuture<T, C>;
+    type Future = rt15::NoiseOutboundFuture<Negotiated<T>, C>;
 
-    fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
         let session = self.params.into_builder()
             .local_private_key(self.keys.secret().as_ref())
             .build_initiator()
@@ -207,11 +207,11 @@ where
     NoiseConfig<IK, C>: UpgradeInfo,
     C: Protocol<C> + AsRef<[u8]> + Zeroize
 {
-    type Output = (PublicKey<C>, NoiseOutput<T>);
+    type Output = (PublicKey<C>, NoiseOutput<Negotiated<T>>);
     type Error = NoiseError;
-    type Future = rt1::NoiseInboundFuture<T, C>;
+    type Future = rt1::NoiseInboundFuture<Negotiated<T>, C>;
 
-    fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
         let session = self.params.into_builder()
             .local_private_key(self.keys.secret().as_ref())
             .build_responder()
@@ -226,11 +226,11 @@ where
     NoiseConfig<IK, C, PublicKey<C>>: UpgradeInfo,
     C: Protocol<C> + AsRef<[u8]> + Zeroize
 {
-    type Output = (PublicKey<C>, NoiseOutput<T>);
+    type Output = (PublicKey<C>, NoiseOutput<Negotiated<T>>);
     type Error = NoiseError;
-    type Future = rt1::NoiseOutboundFuture<T, C>;
+    type Future = rt1::NoiseOutboundFuture<Negotiated<T>, C>;
 
-    fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
         let session = self.params.into_builder()
             .local_private_key(self.keys.secret().as_ref())
             .remote_public_key(self.remote.as_ref())

@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{prelude::*, future, try_ready};
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, upgrade::Negotiated};
 use log::debug;
 use rand::{distributions::Standard, prelude::*, rngs::EntropyRng};
 use std::{io, iter, time::Duration, time::Instant};
@@ -53,10 +53,10 @@ where
 {
     type Output = ();
     type Error = io::Error;
-    type Future = future::Map<future::AndThen<future::AndThen<future::AndThen<tokio_io::io::ReadExact<TSocket, [u8; 32]>, tokio_io::io::WriteAll<TSocket, [u8; 32]>, fn((TSocket, [u8; 32])) -> tokio_io::io::WriteAll<TSocket, [u8; 32]>>, tokio_io::io::Flush<TSocket>, fn((TSocket, [u8; 32])) -> tokio_io::io::Flush<TSocket>>, tokio_io::io::Shutdown<TSocket>, fn(TSocket) -> tokio_io::io::Shutdown<TSocket>>, fn(TSocket) -> ()>;
+    type Future = future::Map<future::AndThen<future::AndThen<future::AndThen<tokio_io::io::ReadExact<Negotiated<TSocket>, [u8; 32]>, tokio_io::io::WriteAll<Negotiated<TSocket>, [u8; 32]>, fn((Negotiated<TSocket>, [u8; 32])) -> tokio_io::io::WriteAll<Negotiated<TSocket>, [u8; 32]>>, tokio_io::io::Flush<Negotiated<TSocket>>, fn((Negotiated<TSocket>, [u8; 32])) -> tokio_io::io::Flush<Negotiated<TSocket>>>, tokio_io::io::Shutdown<Negotiated<TSocket>>, fn(Negotiated<TSocket>) -> tokio_io::io::Shutdown<Negotiated<TSocket>>>, fn(Negotiated<TSocket>) -> ()>;
 
     #[inline]
-    fn upgrade_inbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: Negotiated<TSocket>, _: Self::Info) -> Self::Future {
         tokio_io::io::read_exact(socket, [0; 32])
             .and_then::<fn(_) -> _, _>(|(socket, buffer)| tokio_io::io::write_all(socket, buffer))
             .and_then::<fn(_) -> _, _>(|(socket, _)| tokio_io::io::flush(socket))
@@ -71,10 +71,10 @@ where
 {
     type Output = Duration;
     type Error = io::Error;
-    type Future = PingDialer<TSocket>;
+    type Future = PingDialer<Negotiated<TSocket>>;
 
     #[inline]
-    fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: Negotiated<TSocket>, _: Self::Info) -> Self::Future {
         let payload: [u8; 32] = EntropyRng::default().sample(Standard);
         debug!("Preparing for ping with payload {:?}", payload);
 

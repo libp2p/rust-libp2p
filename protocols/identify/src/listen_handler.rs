@@ -22,7 +22,7 @@ use crate::protocol::{IdentifySender, IdentifyProtocolConfig};
 use futures::prelude::*;
 use libp2p_core::{
     protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
-    upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade}
+    upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade, Negotiated}
 };
 use smallvec::SmallVec;
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -34,7 +34,7 @@ pub struct IdentifyListenHandler<TSubstream> {
     config: IdentifyProtocolConfig,
 
     /// List of senders to yield to the user.
-    pending_result: SmallVec<[IdentifySender<TSubstream>; 4]>,
+    pending_result: SmallVec<[IdentifySender<Negotiated<TSubstream>>; 4]>,
 }
 
 impl<TSubstream> IdentifyListenHandler<TSubstream> {
@@ -53,7 +53,7 @@ where
     TSubstream: AsyncRead + AsyncWrite,
 {
     type InEvent = Void;
-    type OutEvent = IdentifySender<TSubstream>;
+    type OutEvent = IdentifySender<Negotiated<TSubstream>>;
     type Error = Void;
     type Substream = TSubstream;
     type InboundProtocol = IdentifyProtocolConfig;
