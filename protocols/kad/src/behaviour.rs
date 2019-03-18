@@ -690,7 +690,7 @@ fn build_kad_peer(
             .listened_addresses()
             .cloned()
             .collect::<Vec<_>>();
-        addrs.extend(parameters.external_addresses());
+        addrs.extend(parameters.external_addresses().cloned());
         (addrs, KadConnectionType::Connected)
 
     } else if let Some(addresses) = kbuckets.get(&peer_id) {
