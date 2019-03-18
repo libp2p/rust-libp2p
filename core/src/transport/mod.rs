@@ -109,7 +109,7 @@ pub trait Transport {
     where
         Self: Sized;
 
-    /// Takes a [`Multiaddr`] that represents listening address together with an
+    /// Takes a [`Multiaddr`] that represents a listening address together with an
     /// an address observed by another node and tries to incoporate information
     /// from the observed address into the listening address, yielding an
     /// externally-visible address.
