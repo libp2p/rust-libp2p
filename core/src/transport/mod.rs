@@ -55,11 +55,12 @@ pub use self::upgrade::Upgrade;
 /// the DNS).
 ///
 /// Additional protocols can be layered on top of the connections established
-/// by a `Transport` through an upgrade mechanism that is initiated via `with_upgrade`
-/// and optionally followed by further upgrades through chaining calls to
-/// `with_upgrade` and `and_then`. Thereby every upgrade yields a new `Transport` whose
-/// connection setup incorporates all earlier upgrades followed by the new upgrade, i.e. the
-/// order of the upgrades is significant.
+/// by a [`Transport`] through an upgrade mechanism that is initiated via
+/// [`with_upgrade`](Transport::with_upgrade) and optionally followed by further upgrades
+/// through chaining calls to [`with_upgrade`](Transport::with_upgrade) and
+/// [`and_then`](Transport::and_then). Thereby every upgrade yields a new [`Transport`]
+/// whose connection setup incorporates all earlier upgrades followed by the new upgrade,
+/// i.e. the order of the upgrades is significant.
 ///
 /// > **Note**: The methods of this trait use `self` and not `&self` or `&mut self`. In other
 /// >           words, listening or dialing consumes the transport object. This has been designed
