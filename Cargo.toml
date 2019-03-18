@@ -15,6 +15,7 @@ secio-secp256k1 = ["libp2p-secio/secp256k1"]
 
 [dependencies]
 bytes = "0.4"
+fnv = "1.0"
 futures = "0.1"
 multiaddr = { package = "parity-multiaddr", version = "0.2.0", path = "./misc/multiaddr" }
 multihash = { package = "parity-multihash", version = "0.1.0", path = "./misc/multihash" }
@@ -37,6 +38,7 @@ smallvec = "0.6"
 tokio-codec = "0.1"
 tokio-executor = "0.1"
 tokio-io = "0.1"
+tokio-timer = "0.2"
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "unknown")))'.dependencies]
 libp2p-dns = { version = "0.5.0", path = "./transports/dns" }
