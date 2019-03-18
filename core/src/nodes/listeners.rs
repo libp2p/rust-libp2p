@@ -309,6 +309,7 @@ mod tests {
             };
     }
 
+    /*
     #[test]
     fn incoming_event() {
         let mem_transport = transport::MemoryTransport::default();
@@ -337,6 +338,7 @@ mod tests {
         let mut runtime = Runtime::new().unwrap();
         runtime.block_on(future).unwrap();
     }
+    */
 
     #[test]
     fn listener_stream_returns_transport() {

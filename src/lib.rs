@@ -211,7 +211,7 @@ pub use self::core::{
     upgrade::{InboundUpgrade, InboundUpgradeExt, OutboundUpgrade, OutboundUpgradeExt}
 };
 pub use libp2p_core_derive::NetworkBehaviour;
-pub use self::multiaddr::{Multiaddr, multiaddr as build_multiaddr};
+pub use self::multiaddr::Multiaddr;
 pub use self::simple::SimpleProtocol;
 pub use self::transport_ext::TransportExt;
 

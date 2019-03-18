@@ -22,7 +22,7 @@ use crate::{SERVICE_NAME, META_QUERY_SERVICE, dns};
 use dns_parser::{Packet, RData};
 use futures::{prelude::*, task};
 use libp2p_core::{Multiaddr, PeerId};
-use multiaddr::Protocol;
+use multiaddr::AddrComponent;
 use std::{fmt, io, net::Ipv4Addr, net::SocketAddr, str, time::Duration, time::Instant};
 use tokio_reactor::Handle;
 use tokio_timer::Interval;
@@ -519,7 +519,7 @@ impl<'a> MdnsPeer<'a> {
                     Err(_) => return None,
                 };
                 match addr.pop() {
-                    Some(Protocol::P2p(ref peer_id)) if peer_id == my_peer_id => (),
+                    Some(AddrComponent::P2P(ref peer_id)) if peer_id.as_slice() == my_peer_id.as_bytes() => (),
                     _ => return None,
                 };
                 Some(addr)

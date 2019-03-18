@@ -41,7 +41,7 @@
 use futures::{future, future::FutureResult, prelude::*, Async, Poll};
 use libp2p_core as swarm;
 use log::{debug, error};
-use multiaddr::{Protocol, Multiaddr, ToMultiaddr};
+use multiaddr::{AddrComponent, Multiaddr, ToMultiaddr};
 use std::fmt;
 use std::io::{self, Read, Write};
 use std::net::SocketAddr;
@@ -184,14 +184,14 @@ impl Transport for TcpConfig {
     }
 
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        let mut address = Multiaddr::empty();
+        let mut address: Multiaddr = Multiaddr::from_bytes(vec![]).unwrap();
 
         // Use the observed IP address.
         match server.iter().zip(observed.iter()).next() {
-            Some((Protocol::Ip4(_), x @ Protocol::Ip4(_))) => address.append(x),
-            Some((Protocol::Ip6(_), x @ Protocol::Ip4(_))) => address.append(x),
-            Some((Protocol::Ip4(_), x @ Protocol::Ip6(_))) => address.append(x),
-            Some((Protocol::Ip6(_), x @ Protocol::Ip6(_))) => address.append(x),
+            Some((AddrComponent::IP4(_), x @ AddrComponent::IP4(_))) => address.append(x),
+            Some((AddrComponent::IP6(_), x @ AddrComponent::IP4(_))) => address.append(x),
+            Some((AddrComponent::IP4(_), x @ AddrComponent::IP6(_))) => address.append(x),
+            Some((AddrComponent::IP6(_), x @ AddrComponent::IP6(_))) => address.append(x),
             _ => return None
         }
 
@@ -215,8 +215,8 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Result<SocketAddr, ()> {
     }
 
     match (proto1, proto2) {
-        (Protocol::Ip4(ip), Protocol::Tcp(port)) => Ok(SocketAddr::new(ip.into(), port)),
-        (Protocol::Ip6(ip), Protocol::Tcp(port)) => Ok(SocketAddr::new(ip.into(), port)),
+        (AddrComponent::IP4(ip), AddrComponent::TCP(port)) => Ok(SocketAddr::new(ip.into(), port)),
+        (AddrComponent::IP6(ip), AddrComponent::TCP(port)) => Ok(SocketAddr::new(ip.into(), port)),
         _ => Err(()),
     }
 }

@@ -49,7 +49,7 @@
 use futures::{future::{self, FutureResult}, prelude::*, try_ready};
 use futures::stream::Stream;
 use log::debug;
-use multiaddr::{Protocol, Multiaddr};
+use multiaddr::{AddrComponent, Multiaddr};
 use std::{io, path::PathBuf};
 use libp2p_core::{Transport, transport::TransportError};
 use tokio_uds::{UnixListener, UnixStream};
@@ -130,7 +130,7 @@ fn multiaddr_to_path(addr: &Multiaddr) -> Result<PathBuf, ()> {
     }
 
     let out: PathBuf = match path {
-        Some(Protocol::Unix(ref path)) => path.as_ref().into(),
+        Some(AddrComponent::UNIX(ref path)) => path.into(),
         _ => return Err(())
     };
 

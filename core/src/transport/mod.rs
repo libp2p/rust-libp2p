@@ -38,12 +38,12 @@ pub mod choice;
 pub mod dummy;
 pub mod map;
 pub mod map_err;
-pub mod memory;
+//pub mod memory;
 pub mod timeout;
 pub mod upgrade;
 
 pub use self::choice::OrTransport;
-pub use self::memory::MemoryTransport;
+//pub use self::memory::MemoryTransport;
 pub use self::upgrade::Upgrade;
 
 /// A transport provides connection-oriented communication between two peers

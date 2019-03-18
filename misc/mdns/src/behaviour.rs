@@ -23,7 +23,7 @@ use futures::prelude::*;
 use log::warn;
 use libp2p_core::protocols_handler::{DummyProtocolsHandler, ProtocolsHandler};
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
-use libp2p_core::{Multiaddr, PeerId, multiaddr::Protocol};
+use libp2p_core::{Multiaddr, PeerId, multiaddr::AddrComponent};
 use smallvec::SmallVec;
 use std::{cmp, fmt, io, iter, marker::PhantomData, time::Duration, time::Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -221,8 +221,11 @@ where
                 MdnsPacket::Response(response) => {
                     // We perform a call to `nat_traversal()` with the address we observe the
                     // remote as and the address they listen on.
-                    let obs_ip = Protocol::from(response.remote_addr().ip());
-                    let obs_port = Protocol::Udp(response.remote_addr().port());
+                    let obs_ip = match response.remote_addr().ip() {
+                        std::net::IpAddr::V4(v4) => AddrComponent::IP4(v4),
+                        std::net::IpAddr::V6(v6) => AddrComponent::IP6(v6),
+                    };
+                    let obs_port = AddrComponent::UDP(response.remote_addr().port());
                     let observed: Multiaddr = iter::once(obs_ip)
                         .chain(iter::once(obs_port))
                         .collect();

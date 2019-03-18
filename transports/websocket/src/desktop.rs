@@ -21,7 +21,7 @@
 use futures::{Future, IntoFuture, Sink, Stream};
 use libp2p_core as swarm;
 use log::{debug, trace};
-use multiaddr::{Protocol, Multiaddr};
+use multiaddr::{AddrComponent, Multiaddr};
 use rw_stream_sink::RwStreamSink;
 use std::{error, fmt};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -81,18 +81,18 @@ where
     ) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
         let mut inner_addr = original_addr.clone();
         match inner_addr.pop() {
-            Some(Protocol::Ws) => {}
+            Some(AddrComponent::WS) => {}
             _ => return Err(TransportError::MultiaddrNotSupported(original_addr)),
         };
 
         let (inner_listen, mut new_addr) = self.transport.listen_on(inner_addr)
             .map_err(|err| err.map(WsError::Underlying))?;
-        new_addr.append(Protocol::Ws);
+        new_addr.append(AddrComponent::WS);
         debug!("Listening on {}", new_addr);
 
         let listen = inner_listen.map_err(WsError::Underlying).map(|(stream, mut client_addr)| {
             // Need to suffix `/ws` to each client address.
-            client_addr.append(Protocol::Ws);
+            client_addr.append(AddrComponent::WS);
 
             // Upgrade the listener to websockets like the websockets library requires us to do.
             let upgraded = stream.map_err(WsError::Underlying).and_then(move |stream| {
@@ -146,8 +146,8 @@ where
     fn dial(self, original_addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let mut inner_addr = original_addr.clone();
         let is_wss = match inner_addr.pop() {
-            Some(Protocol::Ws) => false,
-            Some(Protocol::Wss) => true,
+            Some(AddrComponent::WS) => false,
+            Some(AddrComponent::WSS) => true,
             _ => {
                 trace!(
                     "Ignoring dial attempt for {} because it is not a websocket multiaddr",
@@ -242,16 +242,16 @@ fn client_addr_to_ws(client_addr: &Multiaddr, is_wss: bool) -> String {
             "127.0.0.1".to_owned()
         } else {
             match (&protocols[0], &protocols[1]) {
-                (&Protocol::Ip4(ref ip), &Protocol::Tcp(port)) => {
+                (&AddrComponent::IP4(ref ip), &AddrComponent::TCP(port)) => {
                     format!("{}:{}", ip, port)
                 }
-                (&Protocol::Ip6(ref ip), &Protocol::Tcp(port)) => {
+                (&AddrComponent::IP6(ref ip), &AddrComponent::TCP(port)) => {
                     format!("[{}]:{}", ip, port)
                 }
-                (&Protocol::Dns4(ref ns), &Protocol::Tcp(port)) => {
+                (&AddrComponent::DNS4(ref ns), &AddrComponent::TCP(port)) => {
                     format!("{}:{}", ns, port)
                 }
-                (&Protocol::Dns6(ref ns), &Protocol::Tcp(port)) => {
+                (&AddrComponent::DNS6(ref ns), &AddrComponent::TCP(port)) => {
                     format!("{}:{}", ns, port)
                 }
                 _ => "127.0.0.1".to_owned(),

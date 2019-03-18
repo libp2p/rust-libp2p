@@ -37,7 +37,7 @@ use libp2p_core as swarm;
 
 use futures::{future::{self, Either, FutureResult, JoinAll}, prelude::*, stream, try_ready};
 use log::{debug, trace, log_enabled, Level};
-use multiaddr::{Protocol, Multiaddr};
+use multiaddr::{AddrComponent, Multiaddr};
 use std::{error, fmt, io, marker::PhantomData, net::IpAddr};
 use swarm::{Transport, transport::TransportError};
 use tokio_dns::{CpuPoolResolver, Resolver};
@@ -99,7 +99,7 @@ where
     type Dial = Either<future::MapErr<T::Dial, fn(T::Error) -> Self::Error>,
         DialFuture<T, JoinFuture<JoinAll<std::vec::IntoIter<Either<
             ResolveFuture<tokio_dns::IoFuture<Vec<IpAddr>>, T::Error>,
-            FutureResult<Protocol<'static>, Self::Error>>>>
+            FutureResult<AddrComponent, Self::Error>>>>
         >>
     >;
 
@@ -115,8 +115,8 @@ where
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let contains_dns = addr.iter().any(|cmp| match cmp {
-            Protocol::Dns4(_) => true,
-            Protocol::Dns6(_) => true,
+            AddrComponent::DNS4(_) => true,
+            AddrComponent::DNS6(_) => true,
             _ => false,
         });
 
@@ -131,10 +131,10 @@ where
         trace!("Dialing address with DNS: {}", addr);
         let resolve_iters = addr.iter()
             .map(move |cmp| match cmp {
-                Protocol::Dns4(ref name) =>
+                AddrComponent::DNS4(ref name) =>
                     Either::A(ResolveFuture {
                         name: if log_enabled!(Level::Trace) {
-                            Some(name.clone().into_owned())
+                            Some(name.clone())
                         } else {
                             None
                         },
@@ -142,10 +142,10 @@ where
                         ty: ResolveTy::Dns4,
                         error_ty: PhantomData,
                     }),
-                Protocol::Dns6(ref name) =>
+                AddrComponent::DNS6(ref name) =>
                     Either::A(ResolveFuture {
                         name: if log_enabled!(Level::Trace) {
-                            Some(name.clone().into_owned())
+                            Some(name.clone())
                         } else {
                             None
                         },
@@ -153,7 +153,7 @@ where
                         ty: ResolveTy::Dns6,
                         error_ty: PhantomData,
                     }),
-                cmp => Either::B(future::ok(cmp.acquire()))
+                cmp => Either::B(future::ok(cmp))
             })
             .collect::<Vec<_>>()
             .into_iter();
@@ -234,7 +234,7 @@ impl<T, E> Future for ResolveFuture<T, E>
 where
     T: Future<Item = Vec<IpAddr>, Error = io::Error>
 {
-    type Item = Protocol<'static>;
+    type Item = AddrComponent;
     type Error = DnsErr<E>;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -248,8 +248,8 @@ where
         let mut addrs = addrs
             .into_iter()
             .filter_map(move |addr| match (addr, ty) {
-                (IpAddr::V4(addr), ResolveTy::Dns4) => Some(Protocol::Ip4(addr)),
-                (IpAddr::V6(addr), ResolveTy::Dns6) => Some(Protocol::Ip6(addr)),
+                (IpAddr::V4(addr), ResolveTy::Dns4) => Some(AddrComponent::IP4(addr)),
+                (IpAddr::V6(addr), ResolveTy::Dns6) => Some(AddrComponent::IP6(addr)),
                 _ => None,
             });
         match addrs.next() {
@@ -268,7 +268,7 @@ pub struct JoinFuture<T> {
 
 impl<T> Future for JoinFuture<T>
 where
-    T: Future<Item = Vec<Protocol<'static>>>
+    T: Future<Item = Vec<AddrComponent>>
 {
     type Item = Multiaddr;
     type Error = T::Error;
@@ -319,7 +319,7 @@ mod tests {
     use libp2p_tcp::TcpConfig;
     use futures::future;
     use super::swarm::{Transport, transport::TransportError};
-    use multiaddr::{Protocol, Multiaddr};
+    use multiaddr::{AddrComponent, Multiaddr};
     use super::DnsConfig;
 
     #[test]
