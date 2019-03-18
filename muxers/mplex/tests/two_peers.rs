@@ -49,7 +49,7 @@ fn client_to_server_outbound() {
             .and_then(|(client, _)| client.unwrap().0)
             .map_err(|err| panic!("{:?}", err))
             .and_then(|client| muxing::outbound_from_ref_and_wrap(Arc::new(client)))
-            .map(|client| Builder::new().new_read(client.unwrap()))
+            .map(|client| Builder::new().new_read(client))
             .and_then(|client| {
                 client
                     .into_future()
@@ -73,7 +73,7 @@ fn client_to_server_outbound() {
         .unwrap()
         .map_err(|err| panic!("{:?}", err))
         .and_then(|client| muxing::inbound_from_ref_and_wrap(Arc::new(client)))
-        .map(|server| Builder::new().new_write(server.unwrap()))
+        .map(|server| Builder::new().new_write(server))
         .and_then(|server| server.send("hello world".into()))
         .map(|_| ());
 
@@ -103,7 +103,7 @@ fn client_to_server_inbound() {
             .and_then(|(client, _)| client.unwrap().0)
             .map_err(|err| panic!("{:?}", err))
             .and_then(|client| muxing::inbound_from_ref_and_wrap(Arc::new(client)))
-            .map(|client| Builder::new().new_read(client.unwrap()))
+            .map(|client| Builder::new().new_read(client))
             .and_then(|client| {
                 client
                     .into_future()
@@ -127,7 +127,7 @@ fn client_to_server_inbound() {
         .unwrap()
         .map_err(|err| panic!("{:?}", err))
         .and_then(|client| muxing::outbound_from_ref_and_wrap(Arc::new(client)))
-        .map(|server| Builder::new().new_write(server.unwrap()))
+        .map(|server| Builder::new().new_write(server))
         .and_then(|server| server.send("hello world".into()))
         .map(|_| ());
 

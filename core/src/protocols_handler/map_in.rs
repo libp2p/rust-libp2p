@@ -95,18 +95,8 @@ where
     }
 
     #[inline]
-    fn inject_inbound_closed(&mut self) {
-        self.inner.inject_inbound_closed()
-    }
-
-    #[inline]
     fn connection_keep_alive(&self) -> KeepAlive {
         self.inner.connection_keep_alive()
-    }
-
-    #[inline]
-    fn shutdown(&mut self) {
-        self.inner.shutdown()
     }
 
     #[inline]

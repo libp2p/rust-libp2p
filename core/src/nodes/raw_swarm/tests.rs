@@ -158,7 +158,7 @@ fn broadcasted_events_reach_active_nodes() {
     muxer.set_outbound_connection_state(DummyConnectionState::Opened);
     let addr = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().expect("bad multiaddr");
     let mut handler = Handler::default();
-    handler.next_states = vec![HandlerState::Ready(Some(NodeHandlerEvent::Custom(OutEvent::Custom("from handler 1") ))),];
+    handler.next_states = vec![HandlerState::Ready(NodeHandlerEvent::Custom(OutEvent::Custom("from handler 1") )),];
     let dial_result = swarm.dial(addr, handler);
     assert!(dial_result.is_ok());
 
@@ -367,60 +367,6 @@ fn yields_node_error_when_there_is_an_error_after_successful_connect() {
         keep_polling = rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
             let mut swarm = swarm_fut.lock();
             // Push the Handler into an error state on the next poll
-            swarm.broadcast_event(&InEvent::NextState);
-            match swarm.poll() {
-                Async::NotReady => Ok(Async::Ready(true)),
-                Async::Ready(event) => {
-                    assert_matches!(event, RawSwarmEvent::Connected { .. });
-                    // We're connected, we can move on
-                    Ok(Async::Ready(false))
-                },
-            }
-        })).expect("tokio works");
-    }
-
-    // Poll again. It is going to be a NodeError because of how the
-    // handler's next state was set up.
-    let swarm_fut = swarm.clone();
-    let expected_peer_id = peer_id.clone();
-    rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
-        let mut swarm = swarm_fut.lock();
-        assert_matches!(swarm.poll(), Async::Ready(RawSwarmEvent::NodeError { peer_id, .. }) => {
-            assert_eq!(peer_id, expected_peer_id);
-        });
-        Ok(Async::Ready(()))
-    })).expect("tokio works");
-}
-
-#[test]
-fn yields_node_closed_when_the_node_closes_after_successful_connect() {
-    let mut transport = DummyTransport::new();
-    let peer_id = PeerId::random();
-    transport.set_next_peer_id(&peer_id);
-    let swarm = Arc::new(Mutex::new(RawSwarm::<_, _, _, Handler, _>::new(transport, PeerId::random())));
-
-    {
-        // Set up an outgoing connection with a PeerId we know
-        let swarm1 = swarm.clone();
-        let mut swarm1 = swarm1.lock();
-        let peer = swarm1.peer(peer_id.clone());
-        let addr = "/unix/reachable".parse().expect("bad multiaddr");
-        let mut handler = Handler::default();
-        // Force handler to close
-        handler.next_states = vec![ HandlerState::Ready(None) ];
-        peer.into_not_connected().unwrap().connect(addr, handler);
-    }
-
-    // Ensure we run on a single thread
-    let mut rt = Builder::new().core_threads(1).build().unwrap();
-
-    // Drive it forward until we connect to the node.
-    let mut keep_polling = true;
-    while keep_polling {
-        let swarm_fut = swarm.clone();
-        keep_polling = rt.block_on(future::poll_fn(move || -> Poll<_, ()> {
-            let mut swarm = swarm_fut.lock();
-            // Push the Handler into the closed state on the next poll
             swarm.broadcast_event(&InEvent::NextState);
             match swarm.poll() {
                 Async::NotReady => Ok(Async::Ready(true)),
