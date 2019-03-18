@@ -31,7 +31,7 @@
 //!
 //! * `/ip4/80.123.90.4/tcp/5432`
 //! * `/ip6/[::1]/udp/10560/quic`
-//! * `/unix/path/to/socket`
+//! * `/unix//path/to/socket`
 //!
 //! ## Transport
 //!
@@ -80,8 +80,7 @@
 //!
 //! Once a connection has been established with a remote through a [`Transport`], it can be
 //! *upgraded*. Upgrading a transport is the process of negotiating an additional protocol
-//! with the remote, mediated through a negotiation protocol called
-//! [`multistream-select`].
+//! with the remote, mediated through a negotiation protocol called [`multistream-select`].
 //!
 //! Example ([`secio`] Protocol Upgrade):
 //!

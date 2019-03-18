@@ -46,10 +46,20 @@ pub use self::choice::OrTransport;
 pub use self::memory::MemoryTransport;
 pub use self::upgrade::Upgrade;
 
-/// A transport is a connection-oriented communication channel between two peers,
-/// providing ordered streams of data and (usually) reliable delivery.
+/// A transport provides connection-oriented communication between two peers
+/// through ordered streams of data (i.e. connections).
 ///
-/// This trait is implemented on concrete connection-oriented transport protocols
+/// Connections are established either by [listening](Transport::listen_on)
+/// or [dialing](Transport::dial) on a [`Transport`]. A peer that
+/// obtains a connection by listening is often referred to as the *listener* and the
+/// peer that initiated the connection through dialing as the *dialer*, in
+/// contrast to the traditional roles of *server* and *client*.
+///
+/// Most transports also provide a form of reliable delivery on the established
+/// connections but the precise semantics of these guarantees depend on the
+/// specific transport.
+///
+/// This trait is implemented for concrete connection-oriented transport protocols
 /// like TCP or Unix Domain Sockets, but also on wrappers that add additional
 /// functionality to the dialing or listening process (e.g. name resolution via
 /// the DNS).
@@ -67,36 +77,44 @@ pub use self::upgrade::Upgrade;
 /// >           so that you would implement this trait on `&Foo` or `&mut Foo` instead of directly
 /// >           on `Foo`.
 pub trait Transport {
-    /// A data stream (i.e. connection) created by the transport.
+    /// The result of a connection setup process, including protocol upgrades.
+    ///
+    /// Typically the output contains at least a handle to a data stream (i.e. a
+    /// connection or a substream multiplexer on top of a connection) that
+    /// provides APIs for sending and receiving data through the connection.
     type Output;
 
     /// An error that occurred during connection setup.
     type Error: error::Error;
 
-    /// A stream of incoming connections.
+    /// A stream of [`Output`](Transport::Output)s for inbound connections.
     ///
     /// An item should be produced whenever a connection is received at the lowest level of the
-    /// transport stack. The item is a [`Future`] that resolves to a connection once all
-    /// protocol upgrades have been applied.
+    /// transport stack. The item must be a [`ListenerUpgrade`](Transport::ListenerUpgrade) future
+    /// that resolves to an [`Output`](Transport::Output) value once all protocol upgrades
+    /// have been applied.
     type Listener: Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = Self::Error>;
 
-    /// A pending, inbound connection, obtained from the stream of incoming connections.
+    /// A pending [`Output`](Transport::Output) for an inbound connection,
+    /// obtained from the [`Listener`](Transport::Listener) stream.
     ///
     /// After a connection has been accepted by the transport, it may need to go through
     /// asynchronous post-processing (i.e. protocol upgrade negotiations). Such
     /// post-processing should not block the `Listener` from producing the next
     /// connection, hence further connection setup proceeds asynchronously.
-    /// One a `ListenerUpgrade` future resolves, the connection setup is complete.
+    /// Once a `ListenerUpgrade` future resolves it yields the [`Output`](Transport::Output)
+    /// of the connection setup process.
     type ListenerUpgrade: Future<Item = Self::Output, Error = Self::Error>;
 
-    /// A pending, outbound connection, obtained through dialing on the transport.
+    /// A pending [`Output`](Transport::Output) for an outbound connection,
+    /// obtained from [dialing](Transport::dial).
     type Dial: Future<Item = Self::Output, Error = Self::Error>;
 
     /// Listens on the given [`Multiaddr`], producing a stream of pending, inbound connections.
     ///
-    /// **Note**: The new [`Multiaddr`] that is returned alongside the connection stream
-    /// is the address that should be advertised to other nodes, as the given address
-    /// may be subject to changes such as an OS-assigned port number.
+    /// > **Note**: The new [`Multiaddr`] that is returned alongside the connection stream
+    /// > is the address that should be advertised to other nodes, as the given address
+    /// > may be subject to changes such as an OS-assigned port number.
     fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>>
     where
         Self: Sized;
