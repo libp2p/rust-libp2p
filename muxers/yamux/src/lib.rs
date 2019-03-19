@@ -22,7 +22,7 @@
 //! [specification](https://github.com/hashicorp/yamux/blob/master/spec.md).
 
 use futures::{future::{self, FutureResult}, prelude::*};
-use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated};
 use log::debug;
 use std::{io, iter, sync::atomic};
 use std::io::{Error as IoError};
@@ -155,11 +155,11 @@ impl<C> InboundUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + 'static,
 {
-    type Output = Yamux<C>;
+    type Output = Yamux<Negotiated<C>>;
     type Error = io::Error;
-    type Future = FutureResult<Yamux<C>, io::Error>;
+    type Future = FutureResult<Yamux<Negotiated<C>>, io::Error>;
 
-    fn upgrade_inbound(self, i: C, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, i: Negotiated<C>, _: Self::Info) -> Self::Future {
         future::ok(Yamux::new(i, self.0, yamux::Mode::Server))
     }
 }
@@ -168,11 +168,11 @@ impl<C> OutboundUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + 'static,
 {
-    type Output = Yamux<C>;
+    type Output = Yamux<Negotiated<C>>;
     type Error = io::Error;
-    type Future = FutureResult<Yamux<C>, io::Error>;
+    type Future = FutureResult<Yamux<Negotiated<C>>, io::Error>;
 
-    fn upgrade_outbound(self, i: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, i: Negotiated<C>, _: Self::Info) -> Self::Future {
         future::ok(Yamux::new(i, self.0, yamux::Mode::Client))
     }
 }

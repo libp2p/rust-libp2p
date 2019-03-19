@@ -61,6 +61,7 @@
 
 /// Multi-address re-export.
 pub use multiaddr;
+pub use multistream_select::Negotiated;
 
 mod keys_proto;
 mod peer_id;

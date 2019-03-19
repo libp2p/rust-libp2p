@@ -84,7 +84,7 @@ pub use self::error::SecioError;
 use bytes::BytesMut;
 use futures::stream::MapErr as StreamMapErr;
 use futures::{Future, Poll, Sink, StartSend, Stream};
-use libp2p_core::{PublicKey, identity, upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade}};
+use libp2p_core::{PublicKey, identity, upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade, Negotiated}};
 use log::debug;
 use rw_stream_sink::RwStreamSink;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -195,11 +195,11 @@ impl<T> InboundUpgrade<T> for SecioConfig
 where
     T: AsyncRead + AsyncWrite + Send + 'static
 {
-    type Output = SecioOutput<T>;
+    type Output = SecioOutput<Negotiated<T>>;
     type Error = SecioError;
     type Future = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
 
-    fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
         Box::new(self.handshake(socket))
     }
 }
@@ -208,11 +208,11 @@ impl<T> OutboundUpgrade<T> for SecioConfig
 where
     T: AsyncRead + AsyncWrite + Send + 'static
 {
-    type Output = SecioOutput<T>;
+    type Output = SecioOutput<Negotiated<T>>;
     type Error = SecioError;
     type Future = Box<dyn Future<Item = Self::Output, Error = Self::Error> + Send>;
 
-    fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: Negotiated<T>, _: Self::Info) -> Self::Future {
         Box::new(self.handshake(socket))
     }
 }

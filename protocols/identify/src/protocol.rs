@@ -24,7 +24,7 @@ use futures::{future::{self, FutureResult}, Async, AsyncSink, Future, Poll, Sink
 use futures::try_ready;
 use libp2p_core::{
     Multiaddr, PublicKey,
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
+    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated}
 };
 use log::{debug, trace};
 use protobuf::Message as ProtobufMessage;
@@ -150,11 +150,11 @@ impl<C> InboundUpgrade<C> for IdentifyProtocolConfig
 where
     C: AsyncRead + AsyncWrite,
 {
-    type Output = IdentifySender<C>;
+    type Output = IdentifySender<Negotiated<C>>;
     type Error = IoError;
     type Future = FutureResult<Self::Output, IoError>;
 
-    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: Negotiated<C>, _: Self::Info) -> Self::Future {
         trace!("Upgrading inbound connection");
         let socket = Framed::new(socket, codec::UviBytes::default());
         let sender = IdentifySender { inner: socket };
@@ -168,9 +168,9 @@ where
 {
     type Output = RemoteInfo;
     type Error = IoError;
-    type Future = IdentifyOutboundFuture<C>;
+    type Future = IdentifyOutboundFuture<Negotiated<C>>;
 
-    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: Negotiated<C>, _: Self::Info) -> Self::Future {
         IdentifyOutboundFuture {
             inner: Framed::new(socket, codec::UviBytes::<BytesMut>::default()),
             shutdown: false,

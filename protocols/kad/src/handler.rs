@@ -24,7 +24,7 @@ use crate::protocol::{
 };
 use futures::prelude::*;
 use libp2p_core::protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr};
-use libp2p_core::{upgrade, either::EitherOutput, InboundUpgrade, OutboundUpgrade, PeerId};
+use libp2p_core::{upgrade, either::EitherOutput, InboundUpgrade, OutboundUpgrade, PeerId, upgrade::Negotiated};
 use multihash::Multihash;
 use std::{error, fmt, io, time::Duration, time::Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -49,7 +49,7 @@ where
     next_connec_unique_id: UniqueConnecId,
 
     /// List of active substreams with the state they are in.
-    substreams: Vec<SubstreamState<TSubstream, TUserData>>,
+    substreams: Vec<SubstreamState<Negotiated<TSubstream>, TUserData>>,
 
     /// Until when to keep the connection alive.
     keep_alive: KeepAlive,
