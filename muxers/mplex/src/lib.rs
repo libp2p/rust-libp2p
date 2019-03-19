@@ -495,7 +495,7 @@ where C: AsyncRead + AsyncWrite
             // just read and wait for the next iteration.
             match next_data_poll? {
                 Async::Ready(Some(data)) => substream.current_data = data,
-                Async::Ready(None) | Async::Ready(None) => {
+                Async::Ready(None) => {
                     substream.remote_open = false;
                     return Ok(Async::Ready(0));
                 },

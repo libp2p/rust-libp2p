@@ -42,8 +42,6 @@
 //! - Use the `NetworkBehaviour` trait to customize the behaviour of a `Swarm`. It is the
 //!   `NetworkBehaviour` that controls what happens on the network. Multiple types that implement
 //!   `NetworkBehaviour` can be composed into a single behaviour.
-//! - The `Topology` trait is implemented for types that hold the layout of a network. When other
-//!   components need the network layout to operate, they are passed an instance of a `Topology`.
 //! - The `StreamMuxer` trait is implemented on structs that hold a connection to a remote and can
 //!   subdivide this connection into multiple substreams. See the `muxing` module.
 //! - The `UpgradeInfo`, `InboundUpgrade` and `OutboundUpgrade` traits define how to upgrade each
@@ -58,8 +56,7 @@
 //!
 //! - The low-level APIs are contained within the `nodes` module. See the documentation for more
 //!   information.
-//! - The high-level APIs include the concepts of `Swarm`, `ProtocolsHandler`, `NetworkBehaviour`
-//!   and `Topology`.
+//! - The high-level APIs include the concepts of `Swarm`, `ProtocolsHandler` and `NetworkBehaviour`.
 
 
 /// Multi-address re-export.

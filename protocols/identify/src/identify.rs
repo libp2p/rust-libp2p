@@ -148,7 +148,7 @@ where
                 .map(|p| String::from_utf8_lossy(p).to_string())
                 .collect();
 
-            let mut listen_addrs: Vec<_> = params.external_addresses().collect();
+            let mut listen_addrs: Vec<_> = params.external_addresses().cloned().collect();
             listen_addrs.extend(params.listened_addresses().cloned());
 
             let send_back_info = IdentifyInfo {

@@ -127,8 +127,6 @@ where
     }
 }
 
-
-
 #[derive(Clone)]
 pub struct Config(yamux::Config);
 
