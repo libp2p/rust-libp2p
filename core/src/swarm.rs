@@ -20,22 +20,21 @@
 
 //! High level manager of the network.
 //!
-//! The `Swarm` struct contains the state of the network as a whole. The entire behaviour of a
+//! A [`Swarm`] contains the state of the network as a whole. The entire behaviour of a
 //! libp2p network can be controlled through the `Swarm`.
 //!
 //! # Initializing a Swarm
 //!
 //! Creating a `Swarm` requires three things:
 //!
-//! - An implementation of the `Transport` trait. This is the type that will be used in order to
-//!   reach nodes on the network based on their address. See the `transport` module for more
-//!   information.
-//! - An implementation of the `NetworkBehaviour` trait. This is a state machine that defines how
-//!   the swarm should behave once it is connected to a node.
-//! - An implementation of the `Topology` trait. This is a container that holds the list of nodes
-//!   that we think are part of the network. See the `topology` module for more information.
+//!  1. A network identity of the local node in form of a [`PeerId`].
+//!  2. An implementation of the [`Transport`] trait. This is the type that will be used in
+//!     order to reach nodes on the network based on their address. See the [`transport`] module
+//!     for more information.
+//!  3. An implementation of the [`NetworkBehaviour`] trait. This is a state machine that
+//!     defines how the swarm should behave once it is connected to a node.
 //!
-//! # Network behaviour
+//! # Network Behaviour
 //!
 //! The `NetworkBehaviour` trait is implemented on types that indicate to the swarm how it should
 //! behave. This includes which protocols are supported and which nodes to try to connect to.

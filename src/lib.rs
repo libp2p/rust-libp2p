@@ -26,7 +26,8 @@
 //!
 //! ## Multiaddr
 //!
-//! A `Multiaddr` is a way to reach a node. Examples:
+//! A [`Multiaddr`] is a self-describing network address and protocol stack
+//! that is used to establish connections to peers. Some examples:
 //!
 //! * `/ip4/80.123.90.4/tcp/5432`
 //! * `/ip6/[::1]/udp/10560/quic`
@@ -34,100 +35,119 @@
 //!
 //! ## Transport
 //!
-//! `Transport` is a trait that represents an object capable of dialing multiaddresses or
-//! listening on multiaddresses. The `Transport` produces an output which varies depending on the
-//! object that implements the trait.
+//! [`Transport`] is a trait for types that provide connection-oriented communication channels
+//! based on dialing to or listening on a [`Multiaddr`]. To that end a transport
+//! produces as output a type of data stream that varies depending on the concrete type of
+//! transport.
 //!
-//! Each implementation of `Transport` typically supports only some multiaddresses. For example
-//! the `TcpConfig` type (which implements `Transport`) only supports multiaddresses of the format
+//! An implementation of transport typically supports only certain multi-addresses.
+//! For example, the [`TcpConfig`] only supports multi-addresses of the format
 //! `/ip4/.../tcp/...`.
 //!
-//! Example:
+//! Example (Dialing a TCP/IP multi-address):
 //!
 //! ```rust
 //! use libp2p::{Multiaddr, Transport, tcp::TcpConfig};
 //! let tcp = TcpConfig::new();
 //! let addr: Multiaddr = "/ip4/98.97.96.95/tcp/20500".parse().expect("invalid multiaddr");
-//! let _outgoing_connec = tcp.dial(addr);
-//! // Note that `_outgoing_connec` is a `Future`, and therefore doesn't do anything by itself
-//! // unless it is run through a tokio runtime.
+//! let _conn = tcp.dial(addr);
 //! ```
+//! In the above example, `_conn` is a [`Future`] that needs to be polled in order for
+//! the dialing to take place and eventually resolve to a connection. Polling
+//! futures is typically done through a [tokio] runtime.
 //!
-//! The easiest way to create a transport is to use the `build_development_transport` function.
-//! This function provides support for the most common protocols.
+//! The easiest way to create a transport is to use [`build_development_transport`].
+//! This function provides support for the most common protocols but it is also
+//! subject to change over time and should thus not be used in production
+//! configurations.
 //!
-//! Example:
+//! Example (Creating a development transport):
 //!
 //! ```rust
-//! let key = libp2p::identity::Keypair::generate_ed25519();
-//! let _transport = libp2p::build_development_transport(key);
+//! let keypair = libp2p::identity::Keypair::generate_ed25519();
+//! let _transport = libp2p::build_development_transport(keypair);
 //! // _transport.dial(...);
 //! ```
 //!
-//! See the documentation of the `libp2p-core` crate for more details about transports.
+//! The keypair that is passed as an argument in the above example is used
+//! to set up transport-layer encryption using a newly generated long-term
+//! identity keypair. The public key of this keypair uniquely identifies
+//! the node in the network in the form of a [`PeerId`].
 //!
-//! # Connection upgrades
+//! See the documentation of the [`Transport`] trait for more details.
 //!
-//! Once a connection has been opened with a remote through a `Transport`, it can be *upgraded*.
-//! This consists in negotiating a protocol with the remote (through a negotiation protocol
-//! `multistream-select`), and applying that protocol on the socket.
+//! ### Connection Upgrades
 //!
-//! Example:
+//! Once a connection has been established with a remote through a [`Transport`], it can be
+//! *upgraded*. Upgrading a transport is the process of negotiating an additional protocol
+//! with the remote, mediated through a negotiation protocol called [`multistream-select`].
+//!
+//! Example ([`secio`] Protocol Upgrade):
 //!
 //! ```rust
-//! # #[cfg(all(any(target_os = "emscripten", target_os = "unknown"), feature = "libp2p-secio"))] {
-//! use libp2p::{Transport, tcp::TcpConfig, secio::{SecioConfig, SecioKeyPair}};
+//! # #[cfg(all(not(any(target_os = "emscripten", target_os = "unknown")), feature = "libp2p-secio"))] {
+//! use libp2p::{Transport, tcp::TcpConfig, secio::SecioConfig, identity::Keypair};
 //! let tcp = TcpConfig::new();
-//! let secio_upgrade = SecioConfig::new(SecioKeyPair::ed25519_generated().unwrap());
-//! let with_security = tcp.with_upgrade(secio_upgrade);
-//! // let _ = with_security.dial(...);
-//! // `with_security` also implements the `Transport` trait, and all the connections opened
-//! // through it will automatically negotiate the `secio` protocol.
+//! let secio_upgrade = SecioConfig::new(Keypair::generate_ed25519());
+//! let tcp_secio = tcp.with_upgrade(secio_upgrade);
+//! // let _ = tcp_secio.dial(...);
 //! # }
 //! ```
+//! In this example, `tcp_secio` is a new [`Transport`] that negotiates the secio protocol
+//! on all connections.
 //!
-//! See the documentation of the `libp2p-core` crate for more details about upgrades.
+//! ## Network Behaviour
 //!
-//! ## Topology
+//! The [`NetworkBehaviour`] trait is implemented on types that provide some capability to the
+//! network. Examples of network behaviours include:
 //!
-//! The `Topology` trait is implemented for types that hold the layout of a network. When other
-//! components need the network layout to operate, they are passed an instance of a `Topology`.
-//!
-//! The most basic implementation of `Topology` is the `MemoryTopology`, which is essentially a
-//! `HashMap`. Creating your own `Topology` makes it possible to add for example a reputation
-//! system.
-//!
-//! ## Network behaviour
-//!
-//! The `NetworkBehaviour` trait is implemented on types that provide some capability to the
-//! network. Examples of network behaviours include: periodically ping the nodes we are connected
-//! to, periodically ask for information from the nodes we are connected to, connect to a DHT and
-//! make queries to it, propagate messages to the nodes we are connected to (pubsub), and so on.
+//!   * Periodically pinging other nodes on established connections.
+//!   * Periodically asking for information from other nodes.
+//!   * Querying information from a DHT and propagating it to other nodes.
 //!
 //! ## Swarm
 //!
-//! The `Swarm` struct contains all active and pending connections to remotes and manages the
-//! state of all the substreams that have been opened, and all the upgrades that were built upon
-//! these substreams.
+//! A [`Swarm`] manages a pool of connections established through a [`Transport`]
+//! and drives a [`NetworkBehaviour`] through emitting events triggered by activity
+//! on the managed connections. Creating a [`Swarm`] thus involves combining a
+//! [`Transport`] with a [`NetworkBehaviour`].
 //!
-//! It combines a `Transport`, a `NetworkBehaviour` and a `Topology` together.
-//!
-//! See the documentation of the `libp2p-core` crate for more details about creating a swarm.
+//! See the documentation of the [`core`] module for more details about swarms.
 //!
 //! # Using libp2p
 //!
-//! This section contains details about how to use libp2p in practice.
+//! The easiest way to get started with libp2p involves the following steps:
 //!
-//! The most simple way to use libp2p consists in the following steps:
+//!   1. Creating an identity [`Keypair`] for the local node, obtaining the local
+//!      [`PeerId`] from the [`PublicKey`].
+//!   2. Creating an instance of a base [`Transport`], e.g. [`TcpConfig`], upgrading it with
+//!      all the desired protocols, such as for transport security and multiplexing.
+//!      In order to be usable with a [`Swarm`] later, the [`Output`](Transport::Output)
+//!      of the final transport must be a tuple of a [`PeerId`] and a value whose type
+//!      implements [`StreamMuxer`] (e.g. [`Yamux`]). The peer ID must be the
+//!      identity of the remote peer of the established connection, which is
+//!      usually obtained through a transport encryption protocol such as
+//!      [`secio`] that authenticates the peer. See the implementation of
+//!      [`build_development_transport`] for an example.
+//!   3. Creating a struct that implements the [`NetworkBehaviour`] trait and combines all the
+//!      desired network behaviours, implementing the event handlers as per the
+//!      desired application's networking logic.
+//!   4. Instantiating a [`Swarm`] with the transport, the network behaviour and the
+//!      local peer ID from the previous steps.
 //!
-//! - Create a *base* implementation of `Transport` that combines all the protocols you want and
-//!   the upgrades you want, such as the security layer and multiplexing.
-//! - Create a struct that implements the `NetworkBehaviour` trait and that combines all the
-//!   network behaviours that you want.
-//! - Create and implement the `Topology` trait that to store the topology of the network.
-//! - Create a swarm that combines your base transport, the network behaviour, and the topology.
-//! - This swarm can now be polled with the `tokio` library in order to start the network.
+//! The swarm instance can then be polled with the [tokio] library, in order to
+//! continuously drive the network activity of the program.
 //!
+//! [`Keypair`]: identity::Keypair
+//! [`PublicKey`]: identity::PublicKey
+//! [`Future`]: futures::Future
+//! [`TcpConfig`]: tcp::TcpConfig
+//! [`NetworkBehaviour`]: core::swarm::NetworkBehaviour
+//! [`StreamMuxer`]: core::muxing::StreamMuxer
+//! [`Yamux`]: yamux::Yamux
+//!
+//! [tokio]: https://tokio.rs
+//! [`multistream-select`]: https://github.com/multiformats/multistream-select
 
 #![doc(html_logo_url = "https://libp2p.io/img/logo_small.png")]
 #![doc(html_favicon_url = "https://libp2p.io/img/favicon.png")]
