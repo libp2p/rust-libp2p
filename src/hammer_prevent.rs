@@ -189,7 +189,7 @@ where
                     match dial.poll() {
                         Ok(Async::Ready(output)) => {
                             // On success, remove the address from the list.
-                            let _ = self.addresses.lock().remove(&self.local_addr);
+                            self.addresses.lock().remove(&self.local_addr);
                             return Ok(Async::Ready(output))
                         }
                         Ok(Async::NotReady) => {
