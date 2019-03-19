@@ -410,10 +410,9 @@ impl<'a> PollParameters<'a> {
     }
 
     /// Returns the list of the addresses nodes can use to reach us.
-    // TODO: should return references
     #[inline]
-    pub fn external_addresses<'b>(&'b mut self) -> impl ExactSizeIterator<Item = Multiaddr> + 'b {
-        self.external_addrs.iter().cloned()
+    pub fn external_addresses(&self) -> impl ExactSizeIterator<Item = &Multiaddr> {
+        self.external_addrs.iter()
     }
 
     /// Returns the peer id of the local node.
