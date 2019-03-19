@@ -18,9 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Wraps around a `Transport` and adds a timeout to all the incoming and outgoing connections.
+//! Transports with timeouts on the connection setup.
 //!
-//! The timeout includes the upgrading process.
+//! The connection setup includes all protocol upgrades applied on the
+//! underlying `Transport`.
 // TODO: add example
 
 use crate::{Multiaddr, Transport, transport::TransportError};
@@ -30,10 +31,11 @@ use std::{error, fmt, time::Duration};
 use tokio_timer::Timeout;
 use tokio_timer::timeout::Error as TimeoutError;
 
-/// Wraps around a `Transport` and adds a timeout to all the incoming and outgoing connections.
+/// A `TransportTimeout` is a `Transport` that wraps another `Transport` and adds
+/// timeouts to all inbound and outbound connection attempts.
 ///
-/// The timeout includes the upgrade. There is no timeout on the listener or on stream of incoming
-/// substreams.
+/// **Note**: `listen_on` is never subject to a timeout, only the setup of each
+/// individual accepted connection.
 #[derive(Debug, Copy, Clone)]
 pub struct TransportTimeout<InnerTrans> {
     inner: InnerTrans,
