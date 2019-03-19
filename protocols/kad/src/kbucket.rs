@@ -211,7 +211,7 @@ where
                 // If all the nodes in the bucket are connected, then there shouldn't be any
                 // pending node.
                 debug_assert!(*first_connected_pos >= 1);
-                let _ = table.nodes.remove(0);
+                table.nodes.remove(0);
                 if pending.connected {
                     *first_connected_pos -= 1;
                     table.nodes.insert(*first_connected_pos, pending.node);
@@ -495,14 +495,14 @@ where
     pub fn value(&mut self) -> &mut TVal {
         let table = {
             let num = self.parent.bucket_num(&self.peer_id)
-                .expect("we can only build a EntryInKbucketPending if we know of a bucket; QED");
+                .expect("we can only build a EntryInKbucketDiscPending if we know of a bucket; QED");
             &mut self.parent.tables[num]
         };
 
         assert!(table.pending_node.as_ref().map(|n| &n.node.id) == Some(self.peer_id));
         &mut table.pending_node
             .as_mut()
-            .expect("we can only build a EntryInKbucketPending if the node is pending; QED")
+            .expect("we can only build a EntryInKbucketDiscPending if the node is pending; QED")
             .node.value
     }
 
@@ -511,12 +511,12 @@ where
         {
             let table = {
                 let num = self.parent.bucket_num(&self.peer_id)
-                    .expect("we can only build a EntryInKbucketConnPending if we know of a bucket; QED");
+                    .expect("we can only build a EntryInKbucketDiscPending if we know of a bucket; QED");
                 &mut self.parent.tables[num]
             };
 
             let mut pending = table.pending_node.as_mut()
-                .expect("we can only build a EntryInKbucketConnPending if there's a pending node; QED");
+                .expect("we can only build a EntryInKbucketDiscPending if there's a pending node; QED");
             debug_assert!(!pending.connected);
             pending.connected = true;
         }
@@ -609,7 +609,7 @@ where
     pub fn insert_connected(self, value: TVal) -> InsertOutcome<TPeerId> {
         let table = {
             let num = self.parent.bucket_num(&self.peer_id)
-                .expect("we can only build a EntryInKbucketDisc if we know of a bucket; QED");
+                .expect("we can only build a EntryNotInKbucket if we know of a bucket; QED");
             &mut self.parent.tables[num]
         };
 
@@ -642,7 +642,7 @@ where
     pub fn insert_disconnected(self, value: TVal) -> InsertOutcome<TPeerId> {
         let table = {
             let num = self.parent.bucket_num(&self.peer_id)
-                .expect("we can only build a EntryInKbucketDisc if we know of a bucket; QED");
+                .expect("we can only build a EntryNotInKbucket if we know of a bucket; QED");
             &mut self.parent.tables[num]
         };
 
