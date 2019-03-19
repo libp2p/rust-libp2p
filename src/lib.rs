@@ -118,19 +118,33 @@
 //!
 //! The easiest way to get started with libp2p involves the following steps:
 //!
-//!   1. Creating a *base* implementation of [`Transport`] that is upgraded with
+//!   1. Creating an identity [`Keypair`] for the local node, obtaining the local
+//!      [`PeerId`] from the [`PublicKey`].
+//!   2. Creating an instance of a base [`Transport`], e.g. [`TcpConfig`], upgrading it with
 //!      all the desired protocols, such as for transport security and multiplexing.
-//!   2. Creating a struct that implements the [`NetworkBehaviour`] trait and combines all the
-//!      desired network behaviours.
-//!   3. Instantiating a [`Swarm`] with the transport and network behaviour from the previous
-//!      steps.
+//!      In order to be usable with a [`Swarm`] later, the [`Output`](Transport::Output)
+//!      of the final transport must be a tuple of a [`PeerId`] and a value whose type
+//!      implements [`StreamMuxer`] (e.g. [`Yamux`]). The peer ID must be the
+//!      identity of the remote peer of the established connection, which is
+//!      usually obtained through a transport encryption protocol such as
+//!      [`secio`] that authenticates the peer. See the implementation of
+//!      [`build_development_transport`] for an example.
+//!   3. Creating a struct that implements the [`NetworkBehaviour`] trait and combines all the
+//!      desired network behaviours, implementing the event handlers as per the
+//!      desired application's networking logic.
+//!   4. Instantiating a [`Swarm`] with the transport, the network behaviour and the
+//!      local peer ID from the previous steps.
 //!
-//! The swarm instance can then be polled, e.g. with the [tokio] library, in order to
+//! The swarm instance can then be polled with the [tokio] library, in order to
 //! continuously drive the network activity of the program.
 //!
+//! [`Keypair`]: identity::Keypair
+//! [`PublicKey`]: identity::PublicKey
 //! [`Future`]: futures::Future
 //! [`TcpConfig`]: tcp::TcpConfig
 //! [`NetworkBehaviour`]: core::swarm::NetworkBehaviour
+//! [`StreamMuxer`]: core::muxing::StreamMuxer
+//! [`Yamux`]: yamux::Yamux
 //!
 //! [tokio]: https://tokio.rs
 //! [`multistream-select`]: https://github.com/multiformats/multistream-select
