@@ -410,8 +410,6 @@ where
             });
         }
 
-        println!("Connected {:?}", id);
-
         let address = match endpoint {
             ConnectedPoint::Dialer { address } => Some(address),
             ConnectedPoint::Listener { .. } => None,
