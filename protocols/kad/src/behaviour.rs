@@ -30,7 +30,7 @@ use libp2p_core::{protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
 use multihash::Multihash;
 use rand;
 use smallvec::SmallVec;
-use std::{cmp::Ordering, error, marker::PhantomData, time::Duration, time::Instant};
+use std::{cmp::Ordering, error, marker::PhantomData, num::NonZeroUsize, time::Duration, time::Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_timer::Interval;
 
@@ -136,7 +136,7 @@ impl KBucketsPeerId<PeerId> for QueryInfo {
         self.as_ref().distance_with(other)
     }
 
-    fn max_distance() -> usize {
+    fn max_distance() -> NonZeroUsize {
         <PeerId as KBucketsPeerId>::max_distance()
     }
 }
