@@ -27,6 +27,6 @@ mod layer;
 mod rpc_proto;
 mod topic;
 
-pub use self::layer::{Floodsub, FloodsubEvent};
+pub use self::layer::{Floodsub, FloodsubConfig, FloodsubEvent};
 pub use self::protocol::{FloodsubMessage, FloodsubRpc};
 pub use self::topic::{Topic, TopicBuilder, TopicHash};

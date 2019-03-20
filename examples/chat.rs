@@ -109,8 +109,13 @@ fn main() {
 
     // Create a Swarm to manage peers and events
     let mut swarm = {
+        let config = libp2p::floodsub::FloodsubConfig {
+            max_message_size: 2048,
+            local_peer_id: local_peer_id.clone(),
+        };
+
         let mut behaviour = MyBehaviour {
-            floodsub: libp2p::floodsub::Floodsub::new(local_peer_id.clone()),
+            floodsub: libp2p::floodsub::Floodsub::new(config),
             mdns: libp2p::mdns::Mdns::new().expect("Failed to create mDNS service"),
         };
 

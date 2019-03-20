@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{FloodsubConfig, FloodsubMessage, FloodsubRpc, FloodsubSubscription, FloodsubSubscriptionAction};
+use crate::protocol::{FloodsubListen, FloodsubMessage, FloodsubSend, FloodsubRpc, FloodsubSubscription, FloodsubSubscriptionAction};
 use crate::topic::{Topic, TopicHash};
 use cuckoofilter::CuckooFilter;
 use fnv::FnvHashSet;
@@ -35,10 +35,10 @@ use tokio_io::{AsyncRead, AsyncWrite};
 /// about them.
 pub struct Floodsub<TSubstream> {
     /// Events that need to be yielded to the outside when polling.
-    events: VecDeque<NetworkBehaviourAction<FloodsubRpc, FloodsubEvent>>,
+    events: VecDeque<NetworkBehaviourAction<FloodsubSend, FloodsubEvent>>,
 
-    /// Peer id of the local node. Used for the source of the messages that we publish.
-    local_peer_id: PeerId,
+    /// The configuration object that was passed when creating.
+    config: FloodsubConfig,
 
     /// List of peers to send messages to.
     target_peers: FnvHashSet<PeerId>,
@@ -60,12 +60,21 @@ pub struct Floodsub<TSubstream> {
     marker: PhantomData<TSubstream>,
 }
 
+/// Configuration for the floodsub behaviour.
+#[derive(Debug, Clone)]
+pub struct FloodsubConfig {
+    /// Identifier of the local node.
+    pub local_peer_id: PeerId,
+    /// Maximum number of bytes allowed in an RPC message.
+    pub max_message_size: usize,
+}
+
 impl<TSubstream> Floodsub<TSubstream> {
     /// Creates a `Floodsub`.
-    pub fn new(local_peer_id: PeerId) -> Self {
+    pub fn new(config: FloodsubConfig) -> Self {
         Floodsub {
             events: VecDeque::new(),
-            local_peer_id,
+            config,
             target_peers: FnvHashSet::default(),
             connected_peers: HashMap::new(),
             subscribed_topics: SmallVec::new(),
@@ -82,12 +91,15 @@ impl<TSubstream> Floodsub<TSubstream> {
             for topic in self.subscribed_topics.iter() {
                 self.events.push_back(NetworkBehaviourAction::SendEvent {
                     peer_id: peer_id.clone(),
-                    event: FloodsubRpc {
-                        messages: Vec::new(),
-                        subscriptions: vec![FloodsubSubscription {
-                            topic: topic.hash().clone(),
-                            action: FloodsubSubscriptionAction::Subscribe,
-                        }],
+                    event: FloodsubSend {
+                        max_message_size: self.config.max_message_size,
+                        rpc: FloodsubRpc {
+                            messages: Vec::new(),
+                            subscriptions: vec![FloodsubSubscription {
+                                topic: topic.hash().clone(),
+                                action: FloodsubSubscriptionAction::Subscribe,
+                            }],
+                        },
                     },
                 });
             }
@@ -117,12 +129,15 @@ impl<TSubstream> Floodsub<TSubstream> {
         for peer in self.connected_peers.keys() {
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer.clone(),
-                event: FloodsubRpc {
-                    messages: Vec::new(),
-                    subscriptions: vec![FloodsubSubscription {
-                        topic: topic.hash().clone(),
-                        action: FloodsubSubscriptionAction::Subscribe,
-                    }],
+                event: FloodsubSend {
+                    max_message_size: self.config.max_message_size,
+                    rpc: FloodsubRpc {
+                        messages: Vec::new(),
+                        subscriptions: vec![FloodsubSubscription {
+                            topic: topic.hash().clone(),
+                            action: FloodsubSubscriptionAction::Subscribe,
+                        }],
+                    },
                 },
             });
         }
@@ -148,12 +163,15 @@ impl<TSubstream> Floodsub<TSubstream> {
         for peer in self.connected_peers.keys() {
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer.clone(),
-                event: FloodsubRpc {
-                    messages: Vec::new(),
-                    subscriptions: vec![FloodsubSubscription {
-                        topic: topic.clone(),
-                        action: FloodsubSubscriptionAction::Unsubscribe,
-                    }],
+                event: FloodsubSend {
+                    max_message_size: self.config.max_message_size,
+                    rpc: FloodsubRpc {
+                        messages: Vec::new(),
+                        subscriptions: vec![FloodsubSubscription {
+                            topic: topic.clone(),
+                            action: FloodsubSubscriptionAction::Unsubscribe,
+                        }],
+                    },
                 },
             });
         }
@@ -173,7 +191,7 @@ impl<TSubstream> Floodsub<TSubstream> {
     /// > **Note**: Doesn't do anything if we're not subscribed to any of the topics.
     pub fn publish_many(&mut self, topic: impl IntoIterator<Item = impl Into<TopicHash>>, data: impl Into<Vec<u8>>) {
         let message = FloodsubMessage {
-            source: self.local_peer_id.clone(),
+            source: self.config.local_peer_id.clone(),
             data: data.into(),
             // If the sequence numbers are predictable, then an attacker could flood the network
             // with packets with the predetermined sequence numbers and absorb our legitimate
@@ -197,9 +215,12 @@ impl<TSubstream> Floodsub<TSubstream> {
 
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id: peer_id.clone(),
-                event: FloodsubRpc {
-                    subscriptions: Vec::new(),
-                    messages: vec![message.clone()],
+                event: FloodsubSend {
+                    max_message_size: self.config.max_message_size,
+                    rpc: FloodsubRpc {
+                        subscriptions: Vec::new(),
+                        messages: vec![message.clone()],
+                    }
                 }
             });
         }
@@ -210,11 +231,13 @@ impl<TSubstream> NetworkBehaviour for Floodsub<TSubstream>
 where
     TSubstream: AsyncRead + AsyncWrite,
 {
-    type ProtocolsHandler = OneShotHandler<TSubstream, FloodsubConfig, FloodsubRpc, InnerMessage>;
+    type ProtocolsHandler = OneShotHandler<TSubstream, FloodsubListen, FloodsubSend, InnerMessage>;
     type OutEvent = FloodsubEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        Default::default()
+        OneShotHandler::new(FloodsubListen {
+            max_message_size: self.config.max_message_size,
+        })
     }
 
     fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
@@ -227,12 +250,15 @@ where
             for topic in self.subscribed_topics.iter() {
                 self.events.push_back(NetworkBehaviourAction::SendEvent {
                     peer_id: id.clone(),
-                    event: FloodsubRpc {
-                        messages: Vec::new(),
-                        subscriptions: vec![FloodsubSubscription {
-                            topic: topic.hash().clone(),
-                            action: FloodsubSubscriptionAction::Subscribe,
-                        }],
+                    event: FloodsubSend {
+                        max_message_size: self.config.max_message_size,
+                        rpc: FloodsubRpc {
+                            messages: Vec::new(),
+                            subscriptions: vec![FloodsubSubscription {
+                                topic: topic.hash().clone(),
+                                action: FloodsubSubscriptionAction::Subscribe,
+                            }],
+                        },
                     },
                 });
             }
@@ -330,7 +356,10 @@ where
         for (peer_id, rpc) in rpcs_to_dispatch {
             self.events.push_back(NetworkBehaviourAction::SendEvent {
                 peer_id,
-                event: rpc,
+                event: FloodsubSend {
+                    max_message_size: self.config.max_message_size,
+                    rpc,
+                },
             });
         }
     }

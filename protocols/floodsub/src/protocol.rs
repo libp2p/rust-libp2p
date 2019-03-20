@@ -20,24 +20,28 @@
 
 use crate::rpc_proto;
 use crate::topic::TopicHash;
+use futures::future;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, PeerId, upgrade};
 use protobuf::{ProtobufError, Message as ProtobufMessage};
 use std::{error, fmt, io, iter};
 use tokio_io::{AsyncRead, AsyncWrite};
 
-/// Implementation of `ConnectionUpgrade` for the floodsub protocol.
-#[derive(Debug, Clone, Default)]
-pub struct FloodsubConfig {}
+/// Implementation of `InboundUpgrade` for the floodsub protocol.
+#[derive(Debug, Clone)]
+pub struct FloodsubListen {
+    /// Maximum allowed number of bytes in a received message.
+    pub max_message_size: usize,
+}
 
-impl FloodsubConfig {
-    /// Builds a new `FloodsubConfig`.
-    #[inline]
-    pub fn new() -> FloodsubConfig {
-        FloodsubConfig {}
+impl Default for FloodsubListen {
+    fn default() -> FloodsubListen {
+        FloodsubListen {
+            max_message_size: 2048,
+        }
     }
 }
 
-impl UpgradeInfo for FloodsubConfig {
+impl UpgradeInfo for FloodsubListen {
     type Info = &'static [u8];
     type InfoIter = iter::Once<Self::Info>;
 
@@ -47,7 +51,7 @@ impl UpgradeInfo for FloodsubConfig {
     }
 }
 
-impl<TSocket> InboundUpgrade<TSocket> for FloodsubConfig
+impl<TSocket> InboundUpgrade<TSocket> for FloodsubListen
 where
     TSocket: AsyncRead,
 {
@@ -57,7 +61,7 @@ where
 
     #[inline]
     fn upgrade_inbound(self, socket: upgrade::Negotiated<TSocket>, _: Self::Info) -> Self::Future {
-        upgrade::read_one_then(socket, 2048, (), |packet, ()| {
+        upgrade::read_one_then(socket, self.max_message_size, (), |packet, ()| {
             let mut rpc: rpc_proto::RPC = protobuf::parse_from_bytes(&packet)?;
 
             let mut messages = Vec::with_capacity(rpc.get_publish().len());
@@ -152,7 +156,16 @@ pub struct FloodsubRpc {
     pub subscriptions: Vec<FloodsubSubscription>,
 }
 
-impl UpgradeInfo for FloodsubRpc {
+/// Implementation of `OutboundUpgrade` that delivers the given message.
+#[derive(Debug, Clone)]
+pub struct FloodsubSend {
+    /// Message to send.
+    pub rpc: FloodsubRpc,
+    /// Maximum size of the message. If greater, an error is produced instead.
+    pub max_message_size: usize,
+}
+
+impl UpgradeInfo for FloodsubSend {
     type Info = &'static [u8];
     type InfoIter = iter::Once<Self::Info>;
 
@@ -162,18 +175,22 @@ impl UpgradeInfo for FloodsubRpc {
     }
 }
 
-impl<TSocket> OutboundUpgrade<TSocket> for FloodsubRpc
+impl<TSocket> OutboundUpgrade<TSocket> for FloodsubSend
 where
     TSocket: AsyncWrite,
 {
     type Output = ();
     type Error = io::Error;
-    type Future = upgrade::WriteOne<upgrade::Negotiated<TSocket>>;
+    type Future = future::Either<upgrade::WriteOne<upgrade::Negotiated<TSocket>>, future::FutureResult<(), Self::Error>>;
 
     #[inline]
     fn upgrade_outbound(self, socket: upgrade::Negotiated<TSocket>, _: Self::Info) -> Self::Future {
-        let bytes = self.into_bytes();
-        upgrade::write_one(socket, bytes)
+        let bytes = self.rpc.into_bytes();
+        if bytes.len() > self.max_message_size {
+            let err = io::Error::new(io::ErrorKind::Other, "Floodsub message size over limit");
+            return future::Either::B(Err(err).into());
+        }
+        future::Either::A(upgrade::write_one(socket, bytes))
     }
 }
 
