@@ -188,7 +188,7 @@ where
             self.pending_error = Some(error);
         }
     }
- 
+
     #[inline]
     fn connection_keep_alive(&self) -> KeepAlive {
         self.keep_alive
