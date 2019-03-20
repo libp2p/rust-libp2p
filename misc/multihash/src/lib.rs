@@ -15,7 +15,7 @@ use unsigned_varint::{decode, encode};
 pub use self::errors::{DecodeError, DecodeOwnedError, EncodeError};
 pub use self::hashes::Hash;
 
-// Helper function for encoding input into output using given `Digest`
+/// Helper function for encoding input into output using given `Digest`
 fn digest_encode<D: Digest>(input: &[u8], output: &mut [u8]) {
     output.copy_from_slice(&D::digest(input))
 }
