@@ -287,7 +287,12 @@ where
             for node in table.nodes.iter() {
                 out.push(node.id.clone());
             }
-            // TODO: that's kind of wrong
+
+            // TODO: this code that handles the pending_node should normally be shared with
+            //       the one in `entry()`; however right now there's no mechanism to notify the
+            //       user when a pending node has been inserted in the table, and thus we need to
+            //       rework this pending node handling code anyway; when that is being done, we
+            //       should rewrite this code properly
             if let Some(ref pending) = table.pending_node {
                 if pending.replace <= Instant::now() && pending.connected {
                     out.pop();
