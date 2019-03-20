@@ -420,10 +420,10 @@ where
 
         match self.kbuckets.entry(&id) {
             kbucket::Entry::InKbucketConnected(_) => {
-                unreachable!("Kbuckets are always kept in sync with the connection state1; QED")
+                unreachable!("Kbuckets are always kept in sync with the connection state; QED")
             },
             kbucket::Entry::InKbucketConnectedPending(_) => {
-                unreachable!("Kbuckets are always kept in sync with the connection state2; QED")
+                unreachable!("Kbuckets are always kept in sync with the connection state; QED")
             },
 
             kbucket::Entry::InKbucketDisconnected(mut entry) => {
