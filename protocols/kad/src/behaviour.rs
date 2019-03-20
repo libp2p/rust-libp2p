@@ -269,9 +269,12 @@ impl<TSubstream> Kademlia<TSubstream> {
 
         behaviour
     }
-}
 
-impl<TSubstream> Kademlia<TSubstream> {
+    /// Returns an iterator to all the peer IDs in the bucket, without the pending nodes.
+    pub fn kbuckets_entries(&self) -> impl Iterator<Item = &PeerId> {
+        self.kbuckets.entries_not_pending().map(|(id, _)| id)
+    }
+
     /// Performs the Kademlia initialization process.
     ///
     /// If you called `new` to create the `Kademlia`, then this has been started. Calling this
