@@ -470,13 +470,25 @@ where
         self.connected_peers.insert(id);
     }
 
-    fn inject_dial_failure(&mut self, peer_id: Option<&PeerId>, addr: &Multiaddr, _: &dyn error::Error) {
+    fn inject_addr_reach_failure(&mut self, peer_id: Option<&PeerId>, addr: &Multiaddr, _: &dyn error::Error) {
         if let Some(peer_id) = peer_id {
             if let Some(list) = self.kbuckets.entry(peer_id).value() {
                 // TODO: don't remove the address if the error is that we are already connected
                 //       to this peer
                 list.remove(addr);
             }
+
+            for query in self.active_queries.values_mut() {
+                if let Some(addrs) = query.target_mut().untrusted_addresses.get_mut(peer_id) {
+                    addrs.retain(|a| a != addr);
+                }
+            }
+        }
+    }
+
+    fn inject_dial_failure(&mut self, peer_id: &PeerId) {
+        for query in self.active_queries.values_mut() {
+            query.inject_rpc_error(peer_id);
         }
     }
 

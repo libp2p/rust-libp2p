@@ -182,7 +182,9 @@ where TBehaviour: NetworkBehaviour,
         match me.raw_swarm.peer(peer_id.clone()) {
             raw_swarm::Peer::NotConnected(peer) => {
                 let handler = me.behaviour.new_handler().into_node_handler_builder();
-                let _ = peer.connect_iter(addrs, handler);
+                if peer.connect_iter(addrs, handler).is_err() {
+                    me.behaviour.inject_dial_failure(&peer_id);
+                }
             },
             raw_swarm::Peer::PendingConnect(mut peer) => {
                 peer.append_multiaddr_attempts(addrs)
@@ -272,11 +274,14 @@ where TBehaviour: NetworkBehaviour,
                 },
                 Async::Ready(RawSwarmEvent::ListenerClosed { .. }) => {},
                 Async::Ready(RawSwarmEvent::IncomingConnectionError { .. }) => {},
-                Async::Ready(RawSwarmEvent::DialError { peer_id, multiaddr, error, .. }) => {
-                    self.behaviour.inject_dial_failure(Some(&peer_id), &multiaddr, &error);
+                Async::Ready(RawSwarmEvent::DialError { peer_id, multiaddr, error, new_state }) => {
+                    self.behaviour.inject_addr_reach_failure(Some(&peer_id), &multiaddr, &error);
+                    if let raw_swarm::PeerState::NotConnected = new_state {
+                        self.behaviour.inject_dial_failure(&peer_id);
+                    }
                 },
                 Async::Ready(RawSwarmEvent::UnknownPeerDialError { multiaddr, error, .. }) => {
-                    self.behaviour.inject_dial_failure(None, &multiaddr, &error);
+                    self.behaviour.inject_addr_reach_failure(None, &multiaddr, &error);
                 },
             }
 
@@ -362,8 +367,16 @@ pub trait NetworkBehaviour {
         event: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent
     );
 
-    /// Indicates to the behaviour that we tried to reach a node, but failed.
-    fn inject_dial_failure(&mut self, _peer_id: Option<&PeerId>, _addr: &Multiaddr, _error: &dyn error::Error) {
+    /// Indicates to the behaviour that we tried to reach an address, but failed.
+    ///
+    /// If we were trying to reach a specific node, its ID is passed as parameter. If this is the
+    /// last address to attempt for the given node, then `inject_dial_failure` is called afterwards.
+    fn inject_addr_reach_failure(&mut self, _peer_id: Option<&PeerId>, _addr: &Multiaddr, _error: &dyn error::Error) {
+    }
+
+    /// Indicates to the behaviour that we tried to dial all the addresses known for a node, but
+    /// failed.
+    fn inject_dial_failure(&mut self, _peer_id: &PeerId) {
     }
 
     /// Polls for things that swarm should do.
@@ -443,6 +456,9 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
     },
 
     /// Instructs the swarm to try reach the given peer.
+    ///
+    /// In the future, a corresponding `inject_dial_failure` or `inject_connected` function call
+    /// must be performed.
     DialPeer {
         /// The peer to try reach.
         peer_id: PeerId,
