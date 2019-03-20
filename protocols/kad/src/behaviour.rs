@@ -416,9 +416,11 @@ where
         };
 
         match self.kbuckets.entry(&id) {
-            kbucket::Entry::InKbucketConnected(_) |
+            kbucket::Entry::InKbucketConnected(_) => {
+                unreachable!("Kbuckets are always kept in sync with the connection state1; QED")
+            },
             kbucket::Entry::InKbucketConnectedPending(_) => {
-                unreachable!("Kbuckets are always kept in sync with the connection state; QED")
+                unreachable!("Kbuckets are always kept in sync with the connection state2; QED")
             },
 
             kbucket::Entry::InKbucketDisconnected(mut entry) => {
@@ -483,34 +485,32 @@ where
             query.inject_rpc_error(id);
         }
 
-        if let ConnectedPoint::Dialer { address } = old_endpoint {
-            match self.kbuckets.entry(id) {
-                kbucket::Entry::InKbucketConnected(entry) => {
-                    match entry.set_disconnected() {
-                        kbucket::SetDisconnectedOutcome::Kept(_) => {},
-                        kbucket::SetDisconnectedOutcome::Replaced { replacement, .. } => {
-                            let event = KademliaOut::KBucketAdded {
-                                peer_id: replacement,
-                                replaced: Some(id.clone()),
-                            };
-                            self.queued_events.push(NetworkBehaviourAction::GenerateEvent(event));
-                        },
-                    }
-                },
-                kbucket::Entry::InKbucketConnectedPending(entry) => {
-                    entry.set_disconnected();
-                },
-                kbucket::Entry::InKbucketDisconnected(_) => {
-                    unreachable!("Kbuckets are always kept in sync with the connection state; QED")
-                },
-                kbucket::Entry::InKbucketDisconnectedPending(_) => {
-                    unreachable!("Kbuckets are always kept in sync with the connection state; QED")
-                },
-                kbucket::Entry::NotInKbucket(_) => (),
-                kbucket::Entry::SelfEntry => {
-                    unreachable!("Guaranteed to never receive disconnected even for self; QED")
-                },
-            }
+        match self.kbuckets.entry(id) {
+            kbucket::Entry::InKbucketConnected(entry) => {
+                match entry.set_disconnected() {
+                    kbucket::SetDisconnectedOutcome::Kept(_) => {},
+                    kbucket::SetDisconnectedOutcome::Replaced { replacement, .. } => {
+                        let event = KademliaOut::KBucketAdded {
+                            peer_id: replacement,
+                            replaced: Some(id.clone()),
+                        };
+                        self.queued_events.push(NetworkBehaviourAction::GenerateEvent(event));
+                    },
+                }
+            },
+            kbucket::Entry::InKbucketConnectedPending(entry) => {
+                entry.set_disconnected();
+            },
+            kbucket::Entry::InKbucketDisconnected(_) => {
+                unreachable!("Kbuckets are always kept in sync with the connection state; QED")
+            },
+            kbucket::Entry::InKbucketDisconnectedPending(_) => {
+                unreachable!("Kbuckets are always kept in sync with the connection state; QED")
+            },
+            kbucket::Entry::NotInKbucket(_) => {},
+            kbucket::Entry::SelfEntry => {
+                unreachable!("Guaranteed to never receive disconnected even for self; QED")
+            },
         }
     }
 
