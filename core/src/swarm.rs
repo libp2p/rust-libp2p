@@ -369,7 +369,9 @@ pub trait NetworkBehaviour {
 
     /// Indicates to the behaviour that we tried to reach an address, but failed.
     ///
-    /// If we were trying to reach a specific node, its ID is passed as parameter.
+    /// If we were trying to reach a specific node, its ID is passed as parameter. If this is the
+    /// last address to attempt for the given node, then `inject_dial_failure` must be called
+    /// afterwards.
     fn inject_addr_reach_failure(&mut self, _peer_id: Option<&PeerId>, _addr: &Multiaddr, _error: &dyn error::Error) {
     }
 
@@ -455,6 +457,9 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
     },
 
     /// Instructs the swarm to try reach the given peer.
+    ///
+    /// In the future, a corresponding `inject_dial_failure` or `inject_connected` function call
+    /// must be performed.
     DialPeer {
         /// The peer to try reach.
         peer_id: PeerId,
