@@ -418,6 +418,11 @@ where
         table.first_connected_pos += 1;
 
         // And return a EntryInKbucketDisc.
+        debug_assert!(table.nodes.iter()
+            .position(move |e| e.id == *peer_id)
+            .map(|p| p < table.first_connected_pos)
+            .unwrap_or(false));
+
         SetDisconnectedOutcome::Kept(EntryInKbucketDisc {
             parent: self.parent,
             peer_id: self.peer_id,

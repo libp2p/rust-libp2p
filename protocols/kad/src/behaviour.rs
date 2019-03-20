@@ -214,21 +214,13 @@ impl<TSubstream> Kademlia<TSubstream> {
     /// Underlying implementation for `add_connected_address` and `add_not_connected_address`.
     fn add_address(&mut self, peer_id: &PeerId, address: Multiaddr, connected: bool) {
         match self.kbuckets.entry(peer_id) {
-            kbucket::Entry::InKbucketConnected(mut entry) => if connected {
-                entry.value().insert_connected(address)
-            } else {
-                entry.value().insert_not_connected(address)
-            },
-            kbucket::Entry::InKbucketConnectedPending(mut entry) => if connected {
-                entry.value().insert_connected(address)
-            } else {
-                entry.value().insert_not_connected(address)
-            },
-            kbucket::Entry::InKbucketDisconnected(mut entry) => entry.value().insert_not_connected(address),
-            kbucket::Entry::InKbucketDisconnectedPending(mut entry) => entry.value().insert_not_connected(address),
+            kbucket::Entry::InKbucketConnected(mut entry) => entry.value().insert(address),
+            kbucket::Entry::InKbucketConnectedPending(mut entry) => entry.value().insert(address),
+            kbucket::Entry::InKbucketDisconnected(mut entry) => entry.value().insert(address),
+            kbucket::Entry::InKbucketDisconnectedPending(mut entry) => entry.value().insert(address),
             kbucket::Entry::NotInKbucket(entry) => {
                 let mut addresses = Addresses::new();
-                addresses.insert_not_connected(address);
+                addresses.insert(address);
                 match entry.insert_disconnected(addresses) {
                     kbucket::InsertOutcome::Inserted => {
                         let event = KademliaOut::KBucketAdded {
@@ -430,17 +422,15 @@ where
             },
 
             kbucket::Entry::InKbucketDisconnected(mut entry) => {
-                debug_assert!(!entry.value().is_connected());
                 if let Some(address) = address {
-                    entry.value().insert_connected(address);
+                    entry.value().insert(address);
                 }
                 entry.set_connected();
             },
 
             kbucket::Entry::InKbucketDisconnectedPending(mut entry) => {
-                debug_assert!(!entry.value().is_connected());
                 if let Some(address) = address {
-                    entry.value().insert_connected(address);
+                    entry.value().insert(address);
                 }
                 entry.set_connected();
             },
@@ -448,7 +438,7 @@ where
             kbucket::Entry::NotInKbucket(entry) => {
                 let mut addresses = Addresses::new();
                 if let Some(address) = address {
-                    addresses.insert_connected(address);
+                    addresses.insert(address);
                 }
                 match entry.insert_connected(addresses) {
                     kbucket::InsertOutcome::Inserted => {
@@ -480,7 +470,7 @@ where
             if let Some(list) = self.kbuckets.entry(peer_id).value() {
                 // TODO: don't remove the address if the error is that we are already connected
                 //       to this peer
-                list.remove_addr(addr);
+                list.remove(addr);
             }
         }
     }
@@ -495,9 +485,7 @@ where
 
         if let ConnectedPoint::Dialer { address } = old_endpoint {
             match self.kbuckets.entry(id) {
-                kbucket::Entry::InKbucketConnected(mut entry) => {
-                    debug_assert!(entry.value().is_connected());
-                    entry.value().set_disconnected(&address);
+                kbucket::Entry::InKbucketConnected(entry) => {
                     match entry.set_disconnected() {
                         kbucket::SetDisconnectedOutcome::Kept(_) => {},
                         kbucket::SetDisconnectedOutcome::Replaced { replacement, .. } => {
@@ -509,9 +497,7 @@ where
                         },
                     }
                 },
-                kbucket::Entry::InKbucketConnectedPending(mut entry) => {
-                    debug_assert!(entry.value().is_connected());
-                    entry.value().set_disconnected(&address);
+                kbucket::Entry::InKbucketConnectedPending(entry) => {
                     entry.set_disconnected();
                 },
                 kbucket::Entry::InKbucketDisconnected(_) => {
@@ -528,7 +514,7 @@ where
         }
     }
 
-    fn inject_replaced(&mut self, peer_id: PeerId, old_endpoint: ConnectedPoint, new_endpoint: ConnectedPoint) {
+    fn inject_replaced(&mut self, peer_id: PeerId, _old: ConnectedPoint, new_endpoint: ConnectedPoint) {
         // We need to re-send the active queries.
         for (query_id, query) in self.active_queries.iter() {
             if query.is_waiting(&peer_id) {
@@ -540,12 +526,8 @@ where
         }
 
         if let Some(list) = self.kbuckets.entry(&peer_id).value() {
-            if let ConnectedPoint::Dialer { address } = old_endpoint {
-                list.set_disconnected(&address);
-            }
-
             if let ConnectedPoint::Dialer { address } = new_endpoint {
-                list.insert_connected(address);
+                list.insert(address);
             }
         }
     }
@@ -868,21 +850,13 @@ fn build_kad_peer(
     peer_id: PeerId,
     kbuckets: &mut KBucketsTable<PeerId, Addresses>
 ) -> KadPeer {
-    debug_assert_ne!(*kbuckets.my_id(), peer_id);
-
-    let (multiaddrs, connection_ty) = if let Some(addresses) = kbuckets.entry(&peer_id).value() {
-        let connected = if addresses.is_connected() {
-            KadConnectionType::Connected
-        } else {
-            // TODO: there's also pending connection
-            KadConnectionType::NotConnected
-        };
-
-        (addresses.iter().cloned().collect(), connected)
-
-    } else {
-        // TODO: there's also pending connection
-        (Vec::new(), KadConnectionType::NotConnected)
+    let (multiaddrs, connection_ty) = match kbuckets.entry(&peer_id) {
+        kbucket::Entry::NotInKbucket(_) => (Vec::new(), KadConnectionType::NotConnected),       // TODO: pending connection?
+        kbucket::Entry::InKbucketConnected(mut entry) => (entry.value().iter().cloned().collect(), KadConnectionType::Connected),
+        kbucket::Entry::InKbucketDisconnected(mut entry) => (entry.value().iter().cloned().collect(), KadConnectionType::NotConnected),
+        kbucket::Entry::InKbucketConnectedPending(mut entry) => (entry.value().iter().cloned().collect(), KadConnectionType::Connected),
+        kbucket::Entry::InKbucketDisconnectedPending(mut entry) => (entry.value().iter().cloned().collect(), KadConnectionType::NotConnected),
+        kbucket::Entry::SelfEntry => panic!("build_kad_peer expects not to be called with the local ID"),
     };
 
     KadPeer {
