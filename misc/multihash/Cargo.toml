@@ -12,7 +12,7 @@ documentation = "https://docs.rs/parity-multihash/"
 [dependencies]
 blake2 = { version = "0.8", default-features = false }
 rand = { version = "0.6", default-features = false, features = ["std"] }
-sha1 = "0.6"
+sha-1 = { version = "0.8", default-features = false }
 sha2 = { version = "0.8", default-features = false }
-tiny-keccak = "1.4"
+sha3 = { version = "0.8", default-features = false }
 unsigned-varint = "0.2"
