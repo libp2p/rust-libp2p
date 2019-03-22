@@ -34,8 +34,6 @@ where TOutProto: OutboundUpgrade<TSubstream>
 {
     /// The upgrade for inbound substreams.
     listen_protocol: TInProto,
-    /// If true, we should return as soon as possible.
-    shutting_down: bool,
     /// If `Some`, something bad happened and we should shut down the handler with an error.
     pending_error: Option<ProtocolsHandlerUpgrErr<<TOutProto as OutboundUpgrade<TSubstream>>::Error>>,
     /// Queue of events to produce in `poll()`.
@@ -63,7 +61,6 @@ where TOutProto: OutboundUpgrade<TSubstream>
     pub fn new(listen_protocol: TInProto) -> Self {
         OneShotHandler {
             listen_protocol,
-            shutting_down: false,
             pending_error: None,
             events_out: SmallVec::new(),
             dial_queue: SmallVec::new(),
@@ -146,10 +143,6 @@ where
         &mut self,
         out: <Self::InboundProtocol as InboundUpgrade<Self::Substream>>::Output
     ) {
-        if self.shutting_down {
-            return;
-        }
-
         // If we're shutting down the connection for inactivity, reset the timeout.
         if !self.keep_alive.is_forever() {
             self.keep_alive = KeepAlive::Until(Instant::now() + self.inactive_timeout);
@@ -168,10 +161,6 @@ where
 
         if self.dial_negotiated == 0 && self.dial_queue.is_empty() {
             self.keep_alive = KeepAlive::Until(Instant::now() + self.inactive_timeout);
-        }
-
-        if self.shutting_down {
-            return;
         }
 
         self.events_out.push(out.into());
@@ -206,7 +195,7 @@ where
         }
 
         if !self.dial_queue.is_empty() {
-            if !self.shutting_down && self.dial_negotiated < self.max_dial_negotiated {
+            if self.dial_negotiated < self.max_dial_negotiated {
                 self.dial_negotiated += 1;
                 return Ok(Async::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
                     upgrade: self.dial_queue.remove(0),
