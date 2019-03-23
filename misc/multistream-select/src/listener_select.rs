@@ -31,7 +31,7 @@ use crate::protocol::{
 use log::{debug, trace};
 use std::mem;
 use tokio_io::{AsyncRead, AsyncWrite};
-use crate::ProtocolChoiceError;
+use crate::{Negotiated, ProtocolChoiceError};
 
 /// Helps selecting a protocol amongst the ones supported.
 ///
@@ -99,7 +99,7 @@ where
     for<'a> &'a I: IntoIterator<Item = X>,
     X: AsRef<[u8]> + Clone
 {
-    type Item = (X, R, I);
+    type Item = (X, Negotiated<R>, I);
     type Error = ProtocolChoiceError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -171,7 +171,7 @@ where
                         }
                     };
                     if let Some(p) = outcome {
-                        return Ok(Async::Ready((p, listener.into_inner(), protocols)))
+                        return Ok(Async::Ready((p, Negotiated(listener.into_inner()), protocols)))
                     } else {
                         let stream = listener.into_future();
                         self.inner = ListenerSelectState::Incoming { stream, protocols }

@@ -45,9 +45,8 @@ pub struct PeriodicIdHandler<TSubstream> {
     /// it the next time `poll()` is invoked.
     pending_result: Option<PeriodicIdHandlerEvent>,
 
-    /// Future that fires when we need to identify the node again. If `None`, means that we should
-    /// shut down.
-    next_id: Option<Delay>,
+    /// Future that fires when we need to identify the node again.
+    next_id: Delay,
 
     /// If `true`, we have started an identification of the remote at least once in the past.
     first_id_happened: bool,
@@ -72,7 +71,7 @@ impl<TSubstream> PeriodicIdHandler<TSubstream> {
         PeriodicIdHandler {
             config: IdentifyProtocolConfig,
             pending_result: None,
-            next_id: Some(Delay::new(Instant::now() + DELAY_TO_FIRST_ID)),
+            next_id: Delay::new(Instant::now() + DELAY_TO_FIRST_ID),
             first_id_happened: false,
             marker: PhantomData,
         }
@@ -113,15 +112,10 @@ where
     fn inject_event(&mut self, _: Self::InEvent) {}
 
     #[inline]
-    fn inject_inbound_closed(&mut self) {}
-
-    #[inline]
     fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, err: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {
         self.pending_result = Some(PeriodicIdHandlerEvent::IdentificationError(err));
         self.first_id_happened = true;
-        if let Some(ref mut next_id) = self.next_id {
-            next_id.reset(Instant::now() + TRY_AGAIN_ON_ERR);
-        }
+        self.next_id.reset(Instant::now() + TRY_AGAIN_ON_ERR);
     }
 
     #[inline]
@@ -131,11 +125,6 @@ where
         } else {
             KeepAlive::Forever
         }
-    }
-
-    #[inline]
-    fn shutdown(&mut self) {
-        self.next_id = None;
     }
 
     fn poll(
@@ -154,16 +143,11 @@ where
             )));
         }
 
-        let next_id = match self.next_id {
-            Some(ref mut nid) => nid,
-            None => return Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown)),
-        };
-
         // Poll the future that fires when we need to identify the node again.
-        match next_id.poll()? {
+        match self.next_id.poll()? {
             Async::NotReady => Ok(Async::NotReady),
             Async::Ready(()) => {
-                next_id.reset(Instant::now() + DELAY_TO_NEXT_ID);
+                self.next_id.reset(Instant::now() + DELAY_TO_NEXT_ID);
                 let upgrade = self.config.clone();
                 let ev = ProtocolsHandlerEvent::OutboundSubstreamRequest { upgrade, info: () };
                 Ok(Async::Ready(ev))

@@ -21,13 +21,15 @@
 //! Futures performing 1.5 round trips.
 
 use crate::{
-    error::NoiseError,
+    Protocol,
+    PublicKey,
+    NoiseError,
     io::{Handshake, NoiseOutput},
-    keys::{Curve25519, PublicKey}
 };
 use futures::prelude::*;
 use snow;
 use std::mem;
+use std::marker::PhantomData;
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// A future for inbound upgrades.
@@ -37,13 +39,22 @@ use tokio_io::{AsyncRead, AsyncWrite};
 /// 1. receive message
 /// 2. send message
 /// 3. receive message
-pub struct NoiseInboundFuture<T>(InboundState<T>);
+pub struct NoiseInboundFuture<T, C> {
+    state: InboundState<T>,
+    _phantom: PhantomData<C>
+}
 
-impl<T> NoiseInboundFuture<T> {
+impl<T, C> NoiseInboundFuture<T, C> {
     pub(super) fn new(io: T, session: Result<snow::Session, NoiseError>) -> Self {
         match session {
-            Ok(s) => Self(InboundState::RecvHandshake1(Handshake::new(io, s))),
-            Err(e) => Self(InboundState::Err(e))
+            Ok(s) => NoiseInboundFuture {
+                state: InboundState::RecvHandshake1(Handshake::new(io, s)),
+                _phantom: PhantomData
+            },
+            Err(e) => NoiseInboundFuture {
+                state: InboundState::Err(e),
+                _phantom: PhantomData
+            }
         }
     }
 }
@@ -57,47 +68,47 @@ enum InboundState<T> {
     Done
 }
 
-impl<T> Future for NoiseInboundFuture<T>
+impl<T, C: Protocol<C>> Future for NoiseInboundFuture<T, C>
 where
     T: AsyncRead + AsyncWrite
 {
-    type Item = (PublicKey<Curve25519>, NoiseOutput<T>);
+    type Item = (PublicKey<C>, NoiseOutput<T>);
     type Error = NoiseError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
-            match mem::replace(&mut self.0, InboundState::Done) {
+            match mem::replace(&mut self.state, InboundState::Done) {
                 InboundState::RecvHandshake1(mut io) => {
                     if io.receive()?.is_ready() {
-                        self.0 = InboundState::SendHandshake(io)
+                        self.state = InboundState::SendHandshake(io)
                     } else {
-                        self.0 = InboundState::RecvHandshake1(io);
+                        self.state = InboundState::RecvHandshake1(io);
                         return Ok(Async::NotReady)
                     }
                 }
                 InboundState::SendHandshake(mut io) => {
                     if io.send()?.is_ready() {
-                        self.0 = InboundState::Flush(io)
+                        self.state = InboundState::Flush(io)
                     } else {
-                        self.0 = InboundState::SendHandshake(io);
+                        self.state = InboundState::SendHandshake(io);
                         return Ok(Async::NotReady)
                     }
                 }
                 InboundState::Flush(mut io) => {
                     if io.flush()?.is_ready() {
-                        self.0 = InboundState::RecvHandshake2(io)
+                        self.state = InboundState::RecvHandshake2(io)
                     } else {
-                        self.0 = InboundState::Flush(io);
+                        self.state = InboundState::Flush(io);
                         return Ok(Async::NotReady)
                     }
                 }
                 InboundState::RecvHandshake2(mut io) => {
                     if io.receive()?.is_ready() {
-                        let result = io.finish()?;
-                        self.0 = InboundState::Done;
+                        let result = io.finish::<C>()?;
+                        self.state = InboundState::Done;
                         return Ok(Async::Ready(result))
                     } else {
-                        self.0 = InboundState::RecvHandshake2(io);
+                        self.state = InboundState::RecvHandshake2(io);
                         return Ok(Async::NotReady)
                     }
                 }
@@ -115,13 +126,22 @@ where
 /// 1. send message
 /// 2. receive message
 /// 3. send message
-pub struct NoiseOutboundFuture<T>(OutboundState<T>);
+pub struct NoiseOutboundFuture<T, C> {
+    state: OutboundState<T>,
+    _phantom: PhantomData<C>
+}
 
-impl<T> NoiseOutboundFuture<T> {
+impl<T, C> NoiseOutboundFuture<T, C> {
     pub(super) fn new(io: T, session: Result<snow::Session, NoiseError>) -> Self {
         match session {
-            Ok(s) => Self(OutboundState::SendHandshake1(Handshake::new(io, s))),
-            Err(e) => Self(OutboundState::Err(e))
+            Ok(s) => NoiseOutboundFuture {
+                state: OutboundState::SendHandshake1(Handshake::new(io, s)),
+                _phantom: PhantomData
+            },
+            Err(e) => NoiseOutboundFuture {
+                state: OutboundState::Err(e),
+                _phantom: PhantomData
+            }
         }
     }
 }
@@ -136,55 +156,55 @@ enum OutboundState<T> {
     Done
 }
 
-impl<T> Future for NoiseOutboundFuture<T>
+impl<T, C: Protocol<C>> Future for NoiseOutboundFuture<T, C>
 where
     T: AsyncRead + AsyncWrite
 {
-    type Item = (PublicKey<Curve25519>, NoiseOutput<T>);
+    type Item = (PublicKey<C>, NoiseOutput<T>);
     type Error = NoiseError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
-            match mem::replace(&mut self.0, OutboundState::Done) {
+            match mem::replace(&mut self.state, OutboundState::Done) {
                 OutboundState::SendHandshake1(mut io) => {
                     if io.send()?.is_ready() {
-                        self.0 = OutboundState::Flush1(io)
+                        self.state = OutboundState::Flush1(io)
                     } else {
-                        self.0 = OutboundState::SendHandshake1(io);
+                        self.state = OutboundState::SendHandshake1(io);
                         return Ok(Async::NotReady)
                     }
                 }
                 OutboundState::Flush1(mut io) => {
                     if io.flush()?.is_ready() {
-                        self.0 = OutboundState::RecvHandshake(io)
+                        self.state = OutboundState::RecvHandshake(io)
                     } else {
-                        self.0 = OutboundState::Flush1(io);
+                        self.state = OutboundState::Flush1(io);
                         return Ok(Async::NotReady)
                     }
                 }
                 OutboundState::RecvHandshake(mut io) => {
                     if io.receive()?.is_ready() {
-                        self.0 = OutboundState::SendHandshake2(io)
+                        self.state = OutboundState::SendHandshake2(io)
                     } else {
-                        self.0 = OutboundState::RecvHandshake(io);
+                        self.state = OutboundState::RecvHandshake(io);
                         return Ok(Async::NotReady)
                     }
                 }
                 OutboundState::SendHandshake2(mut io) => {
                     if io.send()?.is_ready() {
-                        self.0 = OutboundState::Flush2(io)
+                        self.state = OutboundState::Flush2(io)
                     } else {
-                        self.0 = OutboundState::SendHandshake2(io);
+                        self.state = OutboundState::SendHandshake2(io);
                         return Ok(Async::NotReady)
                     }
                 }
                 OutboundState::Flush2(mut io) => {
                     if io.flush()?.is_ready() {
-                        let result = io.finish()?;
-                        self.0 = OutboundState::Done;
+                        let result = io.finish::<C>()?;
+                        self.state = OutboundState::Done;
                         return Ok(Async::Ready(result))
                     } else {
-                        self.0 = OutboundState::Flush2(io);
+                        self.state = OutboundState::Flush2(io);
                         return Ok(Async::NotReady)
                     }
                 }

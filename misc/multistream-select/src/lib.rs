@@ -74,6 +74,49 @@ mod tests;
 
 mod protocol;
 
+use futures::prelude::*;
+use std::io;
+
 pub use self::dialer_select::{dialer_select_proto, DialerSelectFuture};
 pub use self::error::ProtocolChoiceError;
 pub use self::listener_select::{listener_select_proto, ListenerSelectFuture};
+
+/// A stream after it has been negotiated.
+pub struct Negotiated<TInner>(pub(crate) TInner);
+
+impl<TInner> io::Read for Negotiated<TInner>
+where
+    TInner: io::Read
+{
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.0.read(buf)
+    }
+}
+
+impl<TInner> tokio_io::AsyncRead for Negotiated<TInner>
+where
+    TInner: tokio_io::AsyncRead
+{
+}
+
+impl<TInner> io::Write for Negotiated<TInner>
+where
+    TInner: io::Write
+{
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.0.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.0.flush()
+    }
+}
+
+impl<TInner> tokio_io::AsyncWrite for Negotiated<TInner>
+where
+    TInner: tokio_io::AsyncWrite
+{
+    fn shutdown(&mut self) -> Poll<(), io::Error> {
+        self.0.shutdown()
+    }
+}
