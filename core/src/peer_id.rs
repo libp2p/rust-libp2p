@@ -43,7 +43,7 @@ impl fmt::Debug for PeerId {
 
 impl fmt::Display for PeerId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&self.to_base58(), f)
+        self.to_base58().fmt(f)
     }
 }
 
