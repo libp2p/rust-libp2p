@@ -215,7 +215,7 @@ pub use self::multiaddr::{Multiaddr, multiaddr as build_multiaddr};
 pub use self::simple::SimpleProtocol;
 pub use self::transport_ext::TransportExt;
 
-use futures::prelude::*;
+use futures::{future, prelude::*};
 use std::{error, time::Duration};
 
 /// Builds a `Transport` that supports the most commonly-used protocols that libp2p supports.
@@ -226,29 +226,38 @@ use std::{error, time::Duration};
 pub fn build_development_transport(keypair: identity::Keypair)
     -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
 {
-     build_tcp_ws_secio_mplex_yamux(keypair)
+     build_tcp_ws_noise_mplex_yamux(keypair)
 }
 
 /// Builds an implementation of `Transport` that is suitable for usage with the `Swarm`.
 ///
 /// The implementation supports TCP/IP, WebSockets over TCP/IP, secio as the encryption layer,
 /// and mplex or yamux as the multiplexing layer.
-///
-/// > **Note**: If you ever need to express the type of this `Transport`.
-pub fn build_tcp_ws_secio_mplex_yamux(keypair: identity::Keypair)
-    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
-{
+pub fn build_tcp_ws_noise_mplex_yamux(id_keys: identity::Keypair) -> impl Transport<
+    Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync),
+    Error = impl error::Error + Send,
+    Listener = impl Send,
+    Dial = impl Send,
+    ListenerUpgrade = impl Send
+> + Clone {
+    let dh_keys = noise::Keypair::<noise::X25519>::from_identity(&id_keys);
     CommonTransport::new()
-        .with_upgrade(secio::SecioConfig::new(keypair))
-        .and_then(move |out, endpoint| {
-            let peer_id = PeerId::from(out.remote_key);
+        .with_upgrade(noise::NoiseConfig::xx(id_keys, dh_keys))
+        .and_then(move |(remote_id, stream), _endpoint| {
+            match remote_id {
+                noise::RemoteIdentity::IdentityKey(id_pk) =>
+                    future::Either::A(future::ok((PeerId::from(id_pk), stream))),
+                _ =>
+                    future::Either::B(future::err(noise::NoiseError::InvalidKey))
+            }
+        })
+        .and_then(move |(peer_id, stream), endpoint| {
             let peer_id2 = peer_id.clone();
             let upgrade = core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new())
                 // TODO: use a single `.map` instead of two maps
                 .map_inbound(move |muxer| (peer_id, muxer))
                 .map_outbound(move |muxer| (peer_id2, muxer));
-
-            core::upgrade::apply(out.stream, upgrade, endpoint)
+            core::upgrade::apply(stream, upgrade, endpoint)
                 .map(|(id, muxer)| (id, core::muxing::StreamMuxerBox::new(muxer)))
         })
         .with_timeout(Duration::from_secs(20))

@@ -23,6 +23,7 @@
 pub mod x25519;
 
 use crate::NoiseError;
+use libp2p_core::identity;
 use rand::FromEntropy;
 use zeroize::Zeroize;
 
@@ -59,8 +60,66 @@ pub trait Protocol<C> {
     fn params_ix() -> ProtocolParams;
     /// The protocol parameters for the XX handshake pattern.
     fn params_xx() -> ProtocolParams;
+
     /// Construct a DH public key from a byte slice.
     fn public_from_bytes(s: &[u8]) -> Result<PublicKey<C>, NoiseError>;
+
+    /// Determines whether the authenticity of the given DH static public key
+    /// and public identity key is linked, i.e. that proof of ownership of a
+    /// secret key for one implies ownership of a secret key for the other.
+    ///
+    /// The trivial case is when the keys are byte for byte identical.
+    #[allow(unused_variables)]
+    fn linked(id_pk: &identity::PublicKey, dh_pk: &PublicKey<C>) -> bool {
+        false
+    }
+
+    /// Links the authenticity of the given DH static public key to the given
+    /// identity keypair by signing the DH static key if necessary.
+    ///
+    /// If the authenticity of the public keys is [`linked`] `None` is returned,
+    /// otherwise the DH static public key is signed with the identity keypair,
+    /// returning the signature.
+    ///
+    /// This function must return `Ok(None)` if and only if [`verify`] returns `true` when
+    /// given the same static DH public key and the public identity key of the identity
+    /// keypair without a signature.
+    fn sign(id_keys: &identity::Keypair, dh_pk: &PublicKey<C>)
+        -> Result<Option<Vec<u8>>, NoiseError>
+    where
+        C: AsRef<[u8]>
+    {
+        if Self::linked(&id_keys.public(), dh_pk) {
+            Ok(None)
+        } else {
+            Ok(Some(id_keys.sign(dh_pk.as_ref())?))
+        }
+    }
+
+    /// Verifies that a remote possesses a secret key corresponding to the given
+    /// public identity key, given the remote's static DH public key and an optional
+    /// signature over that key from a successful Noise handshake.
+    ///
+    /// The given static DH public key is assumed to be authentic in the sense
+    /// that posession of a corresponding secret key has already been
+    /// established, as is the case at the end of a Noise handshake involving
+    /// static DH keys.
+    ///
+    /// If the authenticity of the public keys is [`linked`](Protocol::linked),
+    /// verification succeeds without a signature, otherwise a signature over the
+    /// static DH public key must be given and is verified with the public identity key.
+    ///
+    /// This function must return `true` given no signature if and only if
+    /// [`sign`](Protocol::sign) returns `Ok(None)` when given the same static DH public key
+    /// and the identity keypair corresponding to the public identity key `id_pk`.
+    fn verify(id_pk: &identity::PublicKey, dh_pk: &PublicKey<C>, sig: &Option<Vec<u8>>) -> bool
+    where
+        C: AsRef<[u8]>
+    {
+        Self::linked(id_pk, dh_pk)
+            ||
+        sig.as_ref().map_or(false, |s| id_pk.verify(dh_pk.as_ref(), s))
+    }
 }
 
 /// DH keypair.
@@ -79,6 +138,11 @@ impl<T: Zeroize> Keypair<T> {
     /// The secret key of the DH keypair.
     pub fn secret(&self) -> &SecretKey<T> {
         &self.secret
+    }
+
+    /// Convert the keypair into the public key, dropping the secret key.
+    pub fn into_public(self) -> PublicKey<T> {
+        self.public
     }
 }
 

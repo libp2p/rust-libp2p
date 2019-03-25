@@ -928,8 +928,8 @@ where
         <THandler::Handler as NodeHandler>::OutboundOpenInfo: Send + 'static, // TODO: shouldn't be necessary
         THandlerErr: error::Error + Send + 'static,
     {
-        // Start by polling the listeners for events, but only
-        // if numer of incoming connection does not exceed the limit.
+        // Start by polling the listeners for events, but only if the number
+        // of incoming connections does not exceed the limit.
         match self.incoming_limit {
             Some(x) if self.incoming_negotiated().count() >= (x as usize)
                 => (),
@@ -949,7 +949,7 @@ where
                             other_reach_attempts: &mut self.reach_attempts.other_reach_attempts,
                         };
                         return Async::Ready(RawSwarmEvent::IncomingConnection(event));
-                     },
+                    },
                     Async::Ready(ListenersEvent::Closed {
                         listen_addr, listener, result }) =>
                     {
