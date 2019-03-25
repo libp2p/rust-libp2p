@@ -540,7 +540,7 @@ where
                 let closer_peers = self.kbuckets
                     .find_closest(&KadHash::from(&key))
                     .take(self.num_results)
-                    .map(|kad_hash| build_kad_peer(kad_hash.peer_id().clone(), &mut self.kbuckets))
+                    .map(|kad_hash| build_kad_peer(&kad_hash, &mut self.kbuckets))
                     .collect();
 
                 self.queued_events.push(NetworkBehaviourAction::SendEvent {
@@ -576,7 +576,7 @@ where
                 let closer_peers = self.kbuckets
                     .find_closest(&key)
                     .take(self.num_results)
-                    .map(|kad_hash| build_kad_peer(kad_hash.peer_id().clone(), &mut self.kbuckets))
+                    .map(|kad_hash| build_kad_peer(&kad_hash, &mut self.kbuckets))
                     .collect();
 
                 let provider_peers = {
@@ -585,7 +585,7 @@ where
                         .get(&key)
                         .into_iter()
                         .flat_map(|peers| peers)
-                        .map(move |kad_hash| build_kad_peer(kad_hash.peer_id().clone(), kbuckets))
+                        .map(move |kad_hash| build_kad_peer(&kad_hash, kbuckets))
                         .collect()
                 };
 
@@ -753,7 +753,7 @@ where
                                 peer_id: closest,
                                 event: KademliaHandlerIn::AddProvider {
                                     key: target.clone(),
-                                    provider_peer: build_kad_peer(parameters.local_peer_id().clone(), &mut self.kbuckets),
+                                    provider_peer: build_kad_peer(&KadHash::from(parameters.local_peer_id()), &mut self.kbuckets),
                                 },
                             };
 
@@ -816,20 +816,20 @@ pub enum KademliaOut {
 ///
 /// > **Note**: This is just a convenience function that doesn't do anything note-worthy.
 fn build_kad_peer(
-    peer_id: PeerId,
+    kad_hash: &KadHash,
     kbuckets: &mut KBucketsTable<KadHash, Addresses>
 ) -> KadPeer {
-    let (multiaddrs, connection_ty) = match kbuckets.entry(&KadHash::from(&peer_id)) {
+    let (multiaddrs, connection_ty) = match kbuckets.entry(kad_hash) {
         kbucket::Entry::NotInKbucket(_) => (Vec::new(), KadConnectionType::NotConnected),       // TODO: pending connection?
         kbucket::Entry::InKbucketConnected(mut entry) => (entry.value().iter().cloned().collect(), KadConnectionType::Connected),
         kbucket::Entry::InKbucketDisconnected(mut entry) => (entry.value().iter().cloned().collect(), KadConnectionType::NotConnected),
         kbucket::Entry::InKbucketConnectedPending(mut entry) => (entry.value().iter().cloned().collect(), KadConnectionType::Connected),
         kbucket::Entry::InKbucketDisconnectedPending(mut entry) => (entry.value().iter().cloned().collect(), KadConnectionType::NotConnected),
-        kbucket::Entry::SelfEntry => panic!("build_kad_peer expects not to be called with the local ID"),
+        kbucket::Entry::SelfEntry => panic!("build_kad_peer expects not to be called with the KadHash of the local ID"),
     };
 
     KadPeer {
-        node_id: peer_id,
+        node_id: kad_hash.peer_id().clone(),
         multiaddrs,
         connection_ty,
     }
