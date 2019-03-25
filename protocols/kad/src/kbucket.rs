@@ -27,6 +27,7 @@
 
 use arrayvec::ArrayVec;
 use bigint::U512;
+use crate::kad_hash::KadHash;
 use libp2p_core::PeerId;
 use multihash::Multihash;
 use std::num::NonZeroUsize;
@@ -117,6 +118,16 @@ impl KBucketsPeerId<PeerId> for Multihash {
 
     fn max_distance() -> NonZeroUsize {
         <PeerId as KBucketsPeerId>::max_distance()
+    }
+}
+
+impl KBucketsPeerId<KadHash> for Multihash {
+    fn distance_with(&self, other: &KadHash) -> u32 {
+        <Multihash as KBucketsPeerId<Multihash>>::distance_with(self, other.hash())
+    }
+
+    fn max_distance() -> NonZeroUsize {
+        <Multihash as KBucketsPeerId>::max_distance()
     }
 }
 
