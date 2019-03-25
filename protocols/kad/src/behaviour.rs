@@ -29,9 +29,8 @@ use futures::{prelude::*, stream};
 use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use libp2p_core::{protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
 use multihash::Multihash;
-use rand;
 use smallvec::SmallVec;
-use std::{cmp::Ordering, error, marker::PhantomData, num::NonZeroUsize, time::Duration, time::Instant};
+use std::{error, marker::PhantomData, num::NonZeroUsize, time::Duration, time::Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_timer::Interval;
 
@@ -175,7 +174,7 @@ impl QueryInfo {
                 key: target.clone().into(),
                 user_data,
             },
-            QueryInfoInner::AddProvider { target, .. } => KademliaHandlerIn::FindNodeReq {
+            QueryInfoInner::AddProvider { .. } => KademliaHandlerIn::FindNodeReq {
                 key: unimplemented!(), // TODO: target.clone(),
                 user_data,
             },
@@ -214,7 +213,7 @@ impl<TSubstream> Kademlia<TSubstream> {
     }
 
     /// Underlying implementation for `add_connected_address` and `add_not_connected_address`.
-    fn add_address(&mut self, peer_id: &PeerId, address: Multiaddr, connected: bool) {
+    fn add_address(&mut self, peer_id: &PeerId, address: Multiaddr, _connected: bool) {
         let kad_hash = KadHash::from(peer_id);
 
         match self.kbuckets.entry(&kad_hash) {
@@ -480,7 +479,7 @@ where
         }
     }
 
-    fn inject_disconnected(&mut self, id: &PeerId, old_endpoint: ConnectedPoint) {
+    fn inject_disconnected(&mut self, id: &PeerId, _old_endpoint: ConnectedPoint) {
         let was_in = self.connected_peers.remove(id);
         debug_assert!(was_in);
 
@@ -810,39 +809,6 @@ pub enum KademliaOut {
         /// List of peers ordered from closest to furthest away.
         closer_peers: Vec<PeerId>,
     },
-}
-
-// Generates a random `PeerId` that belongs to the given bucket.
-//
-// Returns an error if `bucket_num` is out of range.
-fn gen_random_id(my_id: &PeerId, bucket_num: usize) -> Result<PeerId, ()> {
-    let my_id_len = my_id.as_bytes().len();
-
-    // TODO: this 2 is magic here; it is the length of the hash of the multihash
-    let bits_diff = bucket_num + 1;
-    if bits_diff > 8 * (my_id_len - 2) {
-        return Err(());
-    }
-
-    let mut random_id = [0; 64];
-    for byte in 0..my_id_len {
-        match byte.cmp(&(my_id_len - bits_diff / 8 - 1)) {
-            Ordering::Less => {
-                random_id[byte] = my_id.as_bytes()[byte];
-            }
-            Ordering::Equal => {
-                let mask: u8 = (1 << (bits_diff % 8)) - 1;
-                random_id[byte] = (my_id.as_bytes()[byte] & !mask) | (rand::random::<u8>() & mask);
-            }
-            Ordering::Greater => {
-                random_id[byte] = rand::random();
-            }
-        }
-    }
-
-    let peer_id = PeerId::from_bytes(random_id[..my_id_len].to_owned())
-        .expect("randomly-generated peer ID should always be valid");
-    Ok(peer_id)
 }
 
 /// Builds a `KadPeer` struct corresponding to the given `PeerId`.

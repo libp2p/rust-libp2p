@@ -121,6 +121,16 @@ impl KBucketsPeerId<PeerId> for Multihash {
     }
 }
 
+impl KBucketsPeerId for KadHash {
+    fn distance_with(&self, other: &Self) -> u32 {
+        <Multihash as KBucketsPeerId<Multihash>>::distance_with(self.hash(), other.hash())
+    }
+
+    fn max_distance() -> NonZeroUsize {
+        <Multihash as KBucketsPeerId>::max_distance()
+    }
+}
+
 impl KBucketsPeerId<KadHash> for Multihash {
     fn distance_with(&self, other: &KadHash) -> u32 {
         <Multihash as KBucketsPeerId<Multihash>>::distance_with(self, other.hash())

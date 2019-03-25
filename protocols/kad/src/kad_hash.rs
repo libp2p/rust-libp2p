@@ -18,20 +18,24 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Docs
+//! Inside a KBucketsTable we would like to store the hash of a PeerId
+//! even if a PeerId is itself already a hash. When querying the table
+//! we may be interested in getting the PeerId back. This module provides
+//! a struct, KadHash that stores together a PeerId and its hash for
+//! convenience.
 
-use crate::kbucket::KBucketsPeerId;
 use libp2p_core::PeerId;
 use multihash::Multihash;
-use std::num::NonZeroUsize;
 
-///Hi
+/// Used as key in a KBucketsTable for Kademlia. Stores the hash of a
+/// PeerId, and the PeerId itself because it may need to be queried.
 #[derive(Clone, Debug, PartialEq)]
 pub struct KadHash {
     peer_id: PeerId,
     hash: Multihash,
 }
 
+/// Provide convenience getters.
 impl KadHash {
     pub fn peer_id(&self) -> &PeerId {
         &self.peer_id
@@ -44,18 +48,10 @@ impl KadHash {
 
 impl From<&PeerId> for KadHash {
     fn from(peer_id: &PeerId) -> Self {
-        KadHash{peer_id: peer_id.clone(), hash: multihash::encode(multihash::Hash::SHA2256, peer_id.as_bytes()).expect("sha2-256 is always supported")}
-    }
-}
-
-impl KBucketsPeerId for KadHash {
-    fn distance_with(&self, other: &Self) -> u32 {
-//        self.hash().distance_with(other.hash())
-        <Multihash as KBucketsPeerId<Multihash>>::distance_with(self.hash(), other.hash())
-    }
-
-    fn max_distance() -> NonZeroUsize {
-        <Multihash as KBucketsPeerId>::max_distance()
+        KadHash{
+            peer_id: peer_id.clone(),
+            hash: multihash::encode(multihash::Hash::SHA2256, peer_id.as_bytes()).expect("sha2-256 is always supported")
+        }
     }
 }
 
