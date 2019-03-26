@@ -24,7 +24,7 @@ use crate::protocol::{
 };
 use futures::prelude::*;
 use libp2p_core::protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr};
-use libp2p_core::{upgrade, either::EitherOutput, InboundUpgrade, OutboundUpgrade, PeerId};
+use libp2p_core::{upgrade, either::EitherOutput, InboundUpgrade, OutboundUpgrade, PeerId, upgrade::Negotiated};
 use multihash::Multihash;
 use std::{error, fmt, io, time::Duration, time::Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -42,10 +42,6 @@ where
     /// Configuration for the Kademlia protocol.
     config: KademliaProtocolConfig,
 
-    /// If true, we are trying to shut down the existing Kademlia substream and should refuse any
-    /// incoming connection.
-    shutting_down: bool,
-
     /// If false, we always refuse incoming Kademlia substreams.
     allow_listening: bool,
 
@@ -53,7 +49,7 @@ where
     next_connec_unique_id: UniqueConnecId,
 
     /// List of active substreams with the state they are in.
-    substreams: Vec<SubstreamState<TSubstream, TUserData>>,
+    substreams: Vec<SubstreamState<Negotiated<TSubstream>, TUserData>>,
 
     /// Until when to keep the connection alive.
     keep_alive: KeepAlive,
@@ -321,7 +317,6 @@ where
     fn with_allow_listening(allow_listening: bool) -> Self {
         KademliaHandler {
             config: Default::default(),
-            shutting_down: false,
             allow_listening,
             next_connec_unique_id: UniqueConnecId(0),
             substreams: Vec::new(),
@@ -368,10 +363,6 @@ where
         protocol: <Self::OutboundProtocol as OutboundUpgrade<TSubstream>>::Output,
         (msg, user_data): Self::OutboundOpenInfo,
     ) {
-        if self.shutting_down {
-            return;
-        }
-
         self.substreams
             .push(SubstreamState::OutPendingSend(protocol, msg, user_data));
     }
@@ -386,10 +377,6 @@ where
             EitherOutput::First(p) => p,
             EitherOutput::Second(p) => void::unreachable(p),
         };
-
-        if self.shutting_down {
-            return;
-        }
 
         debug_assert!(self.allow_listening);
         let connec_unique_id = self.next_connec_unique_id;
@@ -477,9 +464,6 @@ where
     }
 
     #[inline]
-    fn inject_inbound_closed(&mut self) {}
-
-    #[inline]
     fn inject_dial_upgrade_error(
         &mut self,
         (_, user_data): Self::OutboundOpenInfo,
@@ -498,33 +482,12 @@ where
         self.keep_alive
     }
 
-    #[inline]
-    fn shutdown(&mut self) {
-        self.shutting_down = true;
-    }
-
     fn poll(
         &mut self,
     ) -> Poll<
         ProtocolsHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
         io::Error,
     > {
-        // Special case if shutting down.
-        if self.shutting_down {
-            for n in (0..self.substreams.len()).rev() {
-                match self.substreams.swap_remove(n).try_close() {
-                    AsyncSink::Ready => (),
-                    AsyncSink::NotReady(stream) => self.substreams.push(stream),
-                }
-            }
-
-            if self.substreams.is_empty() {
-                return Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown));
-            } else {
-                return Ok(Async::NotReady);
-            }
-        }
-
         // We remove each element from `substreams` one by one and add them back.
         for n in (0..self.substreams.len()).rev() {
             let mut substream = self.substreams.swap_remove(n);

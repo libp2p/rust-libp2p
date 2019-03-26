@@ -337,7 +337,7 @@ impl error::Error for MdnsResponseError {}
 mod tests {
     use super::*;
     use dns_parser::Packet;
-    use libp2p_core::{PeerId, PublicKey};
+    use libp2p_core::identity;
     use std::time::Duration;
 
     #[test]
@@ -348,7 +348,7 @@ mod tests {
 
     #[test]
     fn build_query_response_correct() {
-        let my_peer_id = PeerId::from_public_key(PublicKey::Rsa(vec![1, 2, 3, 4]));
+        let my_peer_id = identity::Keypair::generate_ed25519().public().into_peer_id();
         let addr1 = "/ip4/1.2.3.4/tcp/5000".parse().unwrap();
         let addr2 = "/ip6/::1/udp/10000".parse().unwrap();
         let query = build_query_response(

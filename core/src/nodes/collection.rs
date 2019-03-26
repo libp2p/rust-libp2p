@@ -72,21 +72,10 @@ pub enum CollectionEvent<'a, TInEvent:'a , TOutEvent: 'a, THandler: 'a, TReachEr
     /// the connection.
     NodeReached(CollectionReachEvent<'a, TInEvent, TOutEvent, THandler, TReachErr, THandlerErr, TUserData, TPeerId>),
 
-    /// A connection to a node has been closed.
-    ///
-    /// This happens once both the inbound and outbound channels are closed, and no more outbound
-    /// substream attempt is pending.
-    NodeClosed {
-        /// Identifier of the node.
-        peer_id: TPeerId,
-        /// User data that was passed when accepting.
-        user_data: TUserData,
-    },
-
     /// A connection to a node has errored.
     ///
     /// Can only happen after a node has been successfully reached.
-    NodeError {
+    NodeClosed {
         /// Identifier of the node.
         peer_id: TPeerId,
         /// The error that happened.
@@ -129,14 +118,8 @@ where TOutEvent: fmt::Debug,
                 .field(inner)
                 .finish()
             },
-            CollectionEvent::NodeClosed { ref peer_id, ref user_data } => {
+            CollectionEvent::NodeClosed { ref peer_id, ref error, ref user_data } => {
                 f.debug_struct("CollectionEvent::NodeClosed")
-                .field("peer_id", peer_id)
-                .field("user_data", user_data)
-                .finish()
-            },
-            CollectionEvent::NodeError { ref peer_id, ref error, ref user_data } => {
-                f.debug_struct("CollectionEvent::NodeError")
                 .field("peer_id", peer_id)
                 .field("user_data", user_data)
                 .field("error", error)
@@ -395,48 +378,34 @@ where
                 let user_data = task.into_user_data();
 
                 match (user_data, result, handler) {
-                    (TaskState::Pending, Err(TaskClosedEvent::Reach(err)), Some(handler)) => {
+                    (TaskState::Pending, TaskClosedEvent::Reach(err), Some(handler)) => {
                         Async::Ready(CollectionEvent::ReachError {
                             id: ReachAttemptId(id),
                             error: err,
                             handler,
                         })
                     },
-                    (TaskState::Pending, Ok(()), _) => {
-                        panic!("The API of HandledNodesTasks guarantees that a task cannot \
-                                gracefully closed before being connected to a node, in which case \
-                                its state should be Connected and not Pending; QED");
-                    },
-                    (TaskState::Pending, Err(TaskClosedEvent::Node(_)), _) => {
+                    (TaskState::Pending, TaskClosedEvent::Node(_), _) => {
                         panic!("We switch the task state to Connected once we're connected, and \
                                 a TaskClosedEvent::Node can only happen after we're \
                                 connected; QED");
                     },
-                    (TaskState::Pending, Err(TaskClosedEvent::Reach(_)), None) => {
+                    (TaskState::Pending, TaskClosedEvent::Reach(_), None) => {
                         // TODO: this could be improved in the API of HandledNodesTasks
                         panic!("The HandledNodesTasks is guaranteed to always return the handler \
                                 when producing a TaskClosedEvent::Reach error");
                     },
-                    (TaskState::Connected(peer_id, user_data), Ok(()), _handler) => {
+                    (TaskState::Connected(peer_id, user_data), TaskClosedEvent::Node(err), _handler) => {
                         debug_assert!(_handler.is_none());
                         let _node_task_id = self.nodes.remove(&peer_id);
                         debug_assert_eq!(_node_task_id, Some(id));
                         Async::Ready(CollectionEvent::NodeClosed {
                             peer_id,
-                            user_data,
-                        })
-                    },
-                    (TaskState::Connected(peer_id, user_data), Err(TaskClosedEvent::Node(err)), _handler) => {
-                        debug_assert!(_handler.is_none());
-                        let _node_task_id = self.nodes.remove(&peer_id);
-                        debug_assert_eq!(_node_task_id, Some(id));
-                        Async::Ready(CollectionEvent::NodeError {
-                            peer_id,
                             error: err,
                             user_data,
                         })
                     },
-                    (TaskState::Connected(_, _), Err(TaskClosedEvent::Reach(_)), _) => {
+                    (TaskState::Connected(_, _), TaskClosedEvent::Reach(_), _) => {
                         panic!("A TaskClosedEvent::Reach can only happen before we are connected \
                                 to a node; therefore the TaskState won't be Connected; QED");
                     },

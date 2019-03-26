@@ -23,7 +23,7 @@ use crate::{
     muxing::StreamMuxer,
     nodes::{
         handled_node::{HandledNode, HandledNodeError, NodeHandler},
-        node::Substream
+        node::{Close, Substream}
     }
 };
 use fnv::FnvHashMap;
@@ -158,7 +158,7 @@ pub enum HandledNodesEvent<'a, TInEvent, TOutEvent, TIntoHandler, TReachErr, THa
         /// The task that has been closed.
         task: ClosedTask<TInEvent, TUserData>,
         /// What happened.
-        result: Result<(), TaskClosedEvent<TReachErr, THandlerErr>>,
+        result: TaskClosedEvent<TReachErr, THandlerErr>,
         /// If the task closed before reaching the node, this contains the handler that was passed
         /// to `add_reach_attempt`.
         handler: Option<TIntoHandler>,
@@ -494,7 +494,7 @@ enum InToExtMessage<TOutEvent, TIntoHandler, TReachErr, THandlerErr, TPeerId> {
     /// A connection to a node has succeeded.
     NodeReached(TPeerId),
     /// The task closed.
-    TaskClosed(Result<(), TaskClosedEvent<TReachErr, THandlerErr>>, Option<TIntoHandler>),
+    TaskClosed(TaskClosedEvent<TReachErr, THandlerErr>, Option<TIntoHandler>),
     /// An event from the node.
     NodeEvent(TOutEvent),
 }
@@ -540,6 +540,9 @@ where
     /// Fully functional node.
     Node(HandledNode<TMuxer, TIntoHandler::Handler>),
 
+    /// Node closing.
+    Closing(Close<TMuxer>),
+
     /// A panic happened while polling.
     Poisoned,
 }
@@ -556,7 +559,7 @@ where
     type Error = ();
 
     fn poll(&mut self) -> Poll<(), ()> {
-        loop {
+        'outer_loop: loop {
             match mem::replace(&mut self.inner, NodeTaskInner::Poisoned) {
                 // First possibility: we are still trying to reach a node.
                 NodeTaskInner::Future { mut future, handler, mut events_buffer } => {
@@ -582,9 +585,7 @@ where
                             for event in events_buffer {
                                 node.inject_event(event);
                             }
-                            if self.events_tx.unbounded_send((event, self.id)).is_err() {
-                                node.shutdown();
-                            }
+                            let _ = self.events_tx.unbounded_send((event, self.id));
                             self.inner = NodeTaskInner::Node(node);
                         }
                         Ok(Async::NotReady) => {
@@ -593,7 +594,7 @@ where
                         },
                         Err(err) => {
                             // End the task
-                            let event = InToExtMessage::TaskClosed(Err(TaskClosedEvent::Reach(err)), Some(handler));
+                            let event = InToExtMessage::TaskClosed(TaskClosedEvent::Reach(err), Some(handler));
                             let _ = self.events_tx.unbounded_send((event, self.id));
                             return Ok(Async::Ready(()));
                         }
@@ -614,9 +615,9 @@ where
                                     self.taken_over.push(take_over);
                                 },
                                 Ok(Async::Ready(None)) => {
-                                    // Node closed by the external API; start shutdown process.
-                                    node.shutdown();
-                                    break;
+                                    // Node closed by the external API; start closing.
+                                    self.inner = NodeTaskInner::Closing(node.close());
+                                    continue 'outer_loop;
                                 }
                                 Err(()) => unreachable!("An unbounded receiver never errors"),
                             }
@@ -634,22 +635,27 @@ where
                                 self.inner = NodeTaskInner::Node(node);
                                 return Ok(Async::NotReady);
                             },
-                            Ok(Async::Ready(Some(event))) => {
+                            Ok(Async::Ready(event)) => {
                                 let event = InToExtMessage::NodeEvent(event);
-                                if self.events_tx.unbounded_send((event, self.id)).is_err() {
-                                    node.shutdown();
-                                }
-                            }
-                            Ok(Async::Ready(None)) => {
-                                let event = InToExtMessage::TaskClosed(Ok(()), None);
                                 let _ = self.events_tx.unbounded_send((event, self.id));
-                                return Ok(Async::Ready(())); // End the task.
                             }
                             Err(err) => {
-                                let event = InToExtMessage::TaskClosed(Err(TaskClosedEvent::Node(err)), None);
+                                let event = InToExtMessage::TaskClosed(TaskClosedEvent::Node(err), None);
                                 let _ = self.events_tx.unbounded_send((event, self.id));
                                 return Ok(Async::Ready(())); // End the task.
                             }
+                        }
+                    }
+                },
+
+                NodeTaskInner::Closing(mut closing) => {
+                    match closing.poll() {
+                        Ok(Async::Ready(())) | Err(_) => {
+                            return Ok(Async::Ready(())); // End the task.
+                        },
+                        Ok(Async::NotReady) => {
+                            self.inner = NodeTaskInner::Closing(closing);
+                            return Ok(Async::NotReady);
                         }
                     }
                 },

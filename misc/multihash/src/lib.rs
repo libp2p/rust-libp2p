@@ -10,44 +10,24 @@ mod hashes;
 
 use sha2::Digest;
 use std::fmt::Write;
-use tiny_keccak::Keccak;
 use unsigned_varint::{decode, encode};
 
 pub use self::errors::{DecodeError, DecodeOwnedError, EncodeError};
 pub use self::hashes::Hash;
 
-// Helper macro for encoding input into output using sha1, sha2, tiny_keccak, or blake2
-macro_rules! encode {
-    (sha1, Sha1, $input:expr, $output:expr) => {{
-        let mut hasher = sha1::Sha1::new();
-        hasher.update($input);
-        $output.copy_from_slice(&hasher.digest().bytes());
-    }};
-    (sha2, $algorithm:ident, $input:expr, $output:expr) => {{
-        let mut hasher = sha2::$algorithm::default();
-        hasher.input($input);
-        $output.copy_from_slice(hasher.result().as_ref());
-    }};
-    (tiny, $constructor:ident, $input:expr, $output:expr) => {{
-        let mut kec = Keccak::$constructor();
-        kec.update($input);
-        kec.finalize($output);
-    }};
-    (blake2, $algorithm:ident, $input:expr, $output:expr) => {{
-        let mut hasher = blake2::$algorithm::default();
-        hasher.input($input);
-        $output.copy_from_slice(hasher.result().as_ref());
-    }};
+/// Helper function for encoding input into output using given `Digest`
+fn digest_encode<D: Digest>(input: &[u8], output: &mut [u8]) {
+    output.copy_from_slice(&D::digest(input))
 }
 
 // And another one to keep the matching DRY
 macro_rules! match_encoder {
-    ($hash:ident for ($input:expr, $output:expr) {
-        $( $hashtype:ident => $lib:ident :: $method:ident, )*
+    ($hash_id:ident for ($input:expr, $output:expr) {
+        $( $hashtype:ident => $hash_ty:path, )*
     }) => ({
-        match $hash {
+        match $hash_id {
             $(
-                Hash::$hashtype => encode!($lib, $method, $input, $output),
+                Hash::$hashtype => digest_encode::<$hash_ty>($input, $output),
             )*
 
             _ => return Err(EncodeError::UnsupportedType)
@@ -90,14 +70,14 @@ pub fn encode(hash: Hash, input: &[u8]) -> Result<Multihash, EncodeError> {
         SHA1 => sha1::Sha1,
         SHA2256 => sha2::Sha256,
         SHA2512 => sha2::Sha512,
-        SHA3224 => tiny::new_sha3_224,
-        SHA3256 => tiny::new_sha3_256,
-        SHA3384 => tiny::new_sha3_384,
-        SHA3512 => tiny::new_sha3_512,
-        Keccak224 => tiny::new_keccak224,
-        Keccak256 => tiny::new_keccak256,
-        Keccak384 => tiny::new_keccak384,
-        Keccak512 => tiny::new_keccak512,
+        SHA3224 => sha3::Sha3_224,
+        SHA3256 => sha3::Sha3_256,
+        SHA3384 => sha3::Sha3_384,
+        SHA3512 => sha3::Sha3_512,
+        Keccak224 => sha3::Keccak224,
+        Keccak256 => sha3::Keccak256,
+        Keccak384 => sha3::Keccak384,
+        Keccak512 => sha3::Keccak512,
         Blake2b512 => blake2::Blake2b,
         Blake2s256 => blake2::Blake2s,
     });

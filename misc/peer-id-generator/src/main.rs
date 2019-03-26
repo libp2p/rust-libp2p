@@ -18,8 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::PeerId;
-use libp2p_secio::SecioKeyPair;
+use libp2p_core::identity;
 use std::{env, str, thread, time::Duration};
 
 fn main() {
@@ -67,13 +66,13 @@ fn main() {
     for _ in 0..num_cpus::get() {
         let prefix = prefix.clone();
         thread::spawn(move || loop {
-            let private_key: [u8; 32] = rand::random();
-            let generated = SecioKeyPair::secp256k1_raw_key(private_key).unwrap();
-            let peer_id: PeerId = generated.to_public_key().into_peer_id();
+            let keypair = identity::ed25519::Keypair::generate();
+            let secret = keypair.secret();
+            let peer_id = identity::PublicKey::Ed25519(keypair.public()).into_peer_id();
             let base58 = peer_id.to_base58();
             if base58[2..].starts_with(&prefix) {
                 println!("Found {:?}", peer_id);
-                println!("=> Private key = {:?}", private_key);
+                println!("=> Private key = {:?}", secret.as_ref());
             }
         });
     }
