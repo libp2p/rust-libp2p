@@ -24,15 +24,17 @@
 //! a struct, KadHash that stores together a PeerId and its hash for
 //! convenience.
 
+use arrayref::array_ref;
 use libp2p_core::PeerId;
 use multihash::Multihash;
+
 
 /// Used as key in a KBucketsTable for Kademlia. Stores the hash of a
 /// PeerId, and the PeerId itself because it may need to be queried.
 #[derive(Clone, Debug, PartialEq)]
 pub struct KadHash {
     peer_id: PeerId,
-    hash: Multihash,
+    hash: [u8; 32],
 }
 
 /// Provide convenience getters.
@@ -41,16 +43,18 @@ impl KadHash {
         &self.peer_id
     }
 
-    pub fn hash(&self) -> &Multihash {
+    pub fn hash(&self) -> &[u8; 32] {
         &self.hash
     }
 }
 
 impl From<&PeerId> for KadHash {
     fn from(peer_id: &PeerId) -> Self {
+        let encoding = multihash::encode(multihash::Hash::SHA2256, peer_id.as_bytes()).expect("sha2-256 is always supported");
+
         KadHash{
             peer_id: peer_id.clone(),
-            hash: multihash::encode(multihash::Hash::SHA2256, peer_id.as_bytes()).expect("sha2-256 is always supported")
+            hash: array_ref!(encoding.digest(), 0, 32).clone(),
         }
     }
 }
@@ -58,13 +62,14 @@ impl From<&PeerId> for KadHash {
 impl PartialEq<multihash::Multihash> for KadHash {
     #[inline]
     fn eq(&self, other: &multihash::Multihash) -> bool {
-        self.hash() == other
+        self.hash() == other.digest()
     }
 }
+
 
 impl PartialEq<KadHash> for multihash::Multihash {
     #[inline]
     fn eq(&self, other: &KadHash) -> bool {
-        self == other.hash()
+        self.digest() == other.hash()
     }
 }
