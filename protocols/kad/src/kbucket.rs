@@ -26,7 +26,8 @@
 //! corresponding to its distance with the reference key.
 
 use arrayvec::ArrayVec;
-use bigint::U512;
+use bigint::{U512, U256};
+use crate::kad_hash::KadHash;
 use libp2p_core::PeerId;
 use multihash::Multihash;
 use std::num::NonZeroUsize;
@@ -117,6 +118,36 @@ impl KBucketsPeerId<PeerId> for Multihash {
 
     fn max_distance() -> NonZeroUsize {
         <PeerId as KBucketsPeerId>::max_distance()
+    }
+}
+
+impl KBucketsPeerId for KadHash {
+    fn distance_with(&self, other: &Self) -> u32 {
+        // Note that we don't compare the hash functions because there's no chance of collision
+        // of the same value hashed with two different hash functions.
+        let my_hash = U256::from(self.hash());
+        let other_hash = U256::from(other.hash());
+        let xor = my_hash ^ other_hash;
+        256 - xor.leading_zeros()
+    }
+
+    fn max_distance() -> NonZeroUsize {
+        // Hash is SHA2256, so fixed value
+        NonZeroUsize::new(256).expect("256 is not zero; QED")
+    }
+}
+
+impl KBucketsPeerId<KadHash> for Multihash {
+    fn distance_with(&self, other: &KadHash) -> u32 {
+        let my_hash = U512::from(self.digest());
+        let other_hash = U512::from(U256::from(other.hash()));
+
+        let xor = my_hash ^ other_hash;
+        512 - xor.leading_zeros()
+    }
+
+    fn max_distance() -> NonZeroUsize {
+        NonZeroUsize::new(512).expect("512 is not zero; QED")
     }
 }
 
