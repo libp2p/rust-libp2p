@@ -1000,7 +1000,10 @@ where
         let was_in = self.peer_topics.remove(id);
         debug_assert!(was_in.is_some());
 
-        //TODO: Reconnect due to inactivity
+        // Some peers disconnect due to inactivity. Try and reconnect.
+        self.events.push_back(NetworkBehaviourAction::DialPeer {
+            peer_id: id.clone(),
+        });
     }
 
     fn inject_node_event(&mut self, propagation_source: PeerId, event: InnerMessage) {
