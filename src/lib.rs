@@ -222,18 +222,49 @@ use std::{error, time::Duration};
 ///
 /// > **Note**: This `Transport` is not suitable for production usage, as its implementation
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
-#[inline]
-pub fn build_development_transport(keypair: identity::Keypair)
-    -> impl Transport<Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync), Error = impl error::Error + Send, Listener = impl Send, Dial = impl Send, ListenerUpgrade = impl Send> + Clone
-{
-     build_tcp_ws_noise_mplex_yamux(keypair)
+pub fn build_development_transport(keypair: identity::Keypair) -> impl Transport<
+    Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync),
+    Error = impl error::Error + Send,
+    Listener = impl Send,
+    Dial = impl Send,
+    ListenerUpgrade = impl Send
+> + Clone {
+     build_tcp_ws_mplex_yamux(keypair)
 }
 
 /// Builds an implementation of `Transport` that is suitable for usage with the `Swarm`.
 ///
 /// The implementation supports TCP/IP, WebSockets over TCP/IP, secio as the encryption layer,
 /// and mplex or yamux as the multiplexing layer.
-pub fn build_tcp_ws_noise_mplex_yamux(id_keys: identity::Keypair) -> impl Transport<
+#[cfg(any(target_os = "emscripten", target_os = "unknown"))]
+pub fn build_tcp_ws_mplex_yamux(id_keys: identity::Keypair) -> impl Transport<
+    Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync),
+    Error = impl error::Error + Send,
+    Listener = impl Send,
+    Dial = impl Send,
+    ListenerUpgrade = impl Send
+> + Clone {
+    CommonTransport::new()
+        .with_upgrade(secio::SecioConfig::new(id_keys))
+        .and_then(move |output, endpoint| {
+            let peer_id = output.remote_key.into_peer_id();
+            let peer_id2 = peer_id.clone();
+            let upgrade = core::upgrade::SelectUpgrade::new(yamux::Config::default(), mplex::MplexConfig::new())
+                // TODO: use a single `.map` instead of two maps
+                .map_inbound(move |muxer| (peer_id, muxer))
+                .map_outbound(move |muxer| (peer_id2, muxer));
+            core::upgrade::apply(output.stream, upgrade, endpoint)
+                .map(|(id, muxer)| (id, core::muxing::StreamMuxerBox::new(muxer)))
+        })
+        .with_timeout(Duration::from_secs(20))
+}
+
+/// Builds an implementation of `Transport` that is suitable for usage with the `Swarm`.
+///
+/// The implementation supports TCP/IP, WebSockets over TCP/IP, secio as the encryption layer,
+/// and mplex or yamux as the multiplexing layer.
+#[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
+pub fn build_tcp_ws_mplex_yamux(id_keys: identity::Keypair) -> impl Transport<
     Output = (PeerId, impl core::muxing::StreamMuxer<OutboundSubstream = impl Send, Substream = impl Send> + Send + Sync),
     Error = impl error::Error + Send,
     Listener = impl Send,
