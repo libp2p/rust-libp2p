@@ -26,8 +26,6 @@
 
 use arrayref::array_ref;
 use libp2p_core::PeerId;
-use multihash::Multihash;
-
 
 /// Used as key in a KBucketsTable for Kademlia. Stores the hash of a
 /// PeerId, and the PeerId itself because it may need to be queried.
@@ -48,12 +46,12 @@ impl KadHash {
     }
 }
 
-impl From<&PeerId> for KadHash {
-    fn from(peer_id: &PeerId) -> Self {
+impl From<PeerId> for KadHash {
+    fn from(peer_id: PeerId) -> Self {
         let encoding = multihash::encode(multihash::Hash::SHA2256, peer_id.as_bytes()).expect("sha2-256 is always supported");
 
         KadHash{
-            peer_id: peer_id.clone(),
+            peer_id: peer_id,
             hash: array_ref!(encoding.digest(), 0, 32).clone(),
         }
     }

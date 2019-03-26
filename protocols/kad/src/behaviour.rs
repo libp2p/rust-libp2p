@@ -214,7 +214,7 @@ impl<TSubstream> Kademlia<TSubstream> {
 
     /// Underlying implementation for `add_connected_address` and `add_not_connected_address`.
     fn add_address(&mut self, peer_id: &PeerId, address: Multiaddr, _connected: bool) {
-        let kad_hash = KadHash::from(peer_id);
+        let kad_hash = KadHash::from(peer_id.clone());
 
         match self.kbuckets.entry(&kad_hash) {
             kbucket::Entry::InKbucketConnected(mut entry) => entry.value().insert(address),
@@ -250,7 +250,7 @@ impl<TSubstream> Kademlia<TSubstream> {
         let parallelism = 3;
 
         Kademlia {
-            kbuckets: KBucketsTable::new(KadHash::from(&local_peer_id), Duration::from_secs(60)),   // TODO: constant
+            kbuckets: KBucketsTable::new(KadHash::from(local_peer_id), Duration::from_secs(60)),   // TODO: constant
             queued_events: SmallVec::new(),
             active_queries: Default::default(),
             connected_peers: Default::default(),
@@ -366,7 +366,7 @@ where
         // We should order addresses from decreasing likelyhood of connectivity, so start with
         // the addresses of that peer in the k-buckets.
         let mut out_list = self.kbuckets
-            .entry(&KadHash::from(peer_id))
+            .entry(&KadHash::from(peer_id.clone()))
             .value_not_pending()
             .map(|l| l.iter().cloned().collect::<Vec<_>>())
             .unwrap_or_else(Vec::new);
@@ -397,7 +397,7 @@ where
             ConnectedPoint::Listener { .. } => None,
         };
 
-        let id_kad_hash = KadHash::from(&id);
+        let id_kad_hash = KadHash::from(id.clone());
 
         match self.kbuckets.entry(&id_kad_hash) {
             kbucket::Entry::InKbucketConnected(_) => {
@@ -453,7 +453,7 @@ where
 
     fn inject_addr_reach_failure(&mut self, peer_id: Option<&PeerId>, addr: &Multiaddr, _: &dyn error::Error) {
         if let Some(peer_id) = peer_id {
-            let id_kad_hash = KadHash::from(peer_id);
+            let id_kad_hash = KadHash::from(peer_id.clone());
 
             if let Some(list) = self.kbuckets.entry(&id_kad_hash).value() {
                 // TODO: don't remove the address if the error is that we are already connected
@@ -483,7 +483,7 @@ where
             query.inject_rpc_error(id);
         }
 
-        match self.kbuckets.entry(&KadHash::from(id)) {
+        match self.kbuckets.entry(&KadHash::from(id.clone())) {
             kbucket::Entry::InKbucketConnected(entry) => {
                 match entry.set_disconnected() {
                     kbucket::SetDisconnectedOutcome::Kept(_) => {},
@@ -523,7 +523,7 @@ where
             }
         }
 
-        if let Some(list) = self.kbuckets.entry(&KadHash::from(&peer_id)).value() {
+        if let Some(list) = self.kbuckets.entry(&KadHash::from(peer_id)).value() {
             if let ConnectedPoint::Dialer { address } = new_endpoint {
                 list.insert(address);
             }
@@ -534,7 +534,7 @@ where
         match event {
             KademliaHandlerEvent::FindNodeReq { key, request_id } => {
                 let closer_peers = self.kbuckets
-                    .find_closest(&KadHash::from(&key))
+                    .find_closest(&KadHash::from(key.clone()))
                     .take(self.num_results)
                     .map(|kad_hash| build_kad_peer(&kad_hash, &mut self.kbuckets))
                     .collect();
@@ -581,7 +581,7 @@ where
                         .get(&key)
                         .into_iter()
                         .flat_map(|peers| peers)
-                        .map(move |peer_id| build_kad_peer(&KadHash::from(peer_id), kbuckets))
+                        .map(move |peer_id| build_kad_peer(&KadHash::from(peer_id.clone()), kbuckets))
                         .collect()
                 };
 
@@ -749,7 +749,7 @@ where
                                 peer_id: closest,
                                 event: KademliaHandlerIn::AddProvider {
                                     key: target.clone(),
-                                    provider_peer: build_kad_peer(&KadHash::from(parameters.local_peer_id()), &mut self.kbuckets),
+                                    provider_peer: build_kad_peer(&KadHash::from(parameters.local_peer_id().clone()), &mut self.kbuckets),
                                 },
                             };
 
