@@ -8,8 +8,9 @@ use env_logger::{Builder, Env};
 use futures::prelude::*;
 use libp2p::gossipsub::GossipsubEvent;
 use libp2p::{
-    gossipsub, secio,
+    gossipsub, identity,
     tokio_codec::{FramedRead, LinesCodec},
+    PeerId,
 };
 use std::time::Duration;
 
@@ -17,8 +18,8 @@ fn main() {
     Builder::from_env(Env::default().default_filter_or("debug")).init();
 
     // Create a random PeerId
-    let local_key = secio::SecioKeyPair::ed25519_generated().unwrap();
-    let local_peer_id = local_key.to_peer_id();
+    let local_key = identity::Keypair::generate_ed25519();
+    let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {:?}", local_peer_id);
 
     // Set up an encrypted TCP Transport over the Mplex and Yamux protocols

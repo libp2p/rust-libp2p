@@ -210,7 +210,7 @@ pub use self::core::{
     identity,
     transport::TransportError,
     upgrade::{InboundUpgrade, InboundUpgradeExt, OutboundUpgrade, OutboundUpgradeExt},
-    PeerId, PeerId, Swarm, Swarm, Transport, Transport,
+    PeerId, Swarm, Transport,
 };
 pub use self::multiaddr::{multiaddr as build_multiaddr, Multiaddr};
 pub use self::simple::SimpleProtocol;

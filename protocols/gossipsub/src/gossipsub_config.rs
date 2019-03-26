@@ -25,6 +25,8 @@ pub struct GossipsubConfig {
     pub heartbeat_interval: Duration,
     /// Time to live for fanout peers.
     pub fanout_ttl: Duration,
+    /// The maximum byte size for each gossip.
+    pub max_gossip_size: usize,
 }
 
 impl Default for GossipsubConfig {
@@ -39,6 +41,7 @@ impl Default for GossipsubConfig {
             heartbeat_initial_delay: Duration::from_secs(5),
             heartbeat_interval: Duration::from_secs(1),
             fanout_ttl: Duration::from_secs(60),
+            max_gossip_size: 2048,
         }
     }
 }
@@ -64,6 +67,8 @@ pub struct GossipsubConfigBuilder {
     heartbeat_interval: Duration,
     /// Time to live for fanout peers.
     fanout_ttl: Duration,
+    /// The maximum byte size for each gossip.
+    pub max_gossip_size: usize,
 }
 
 impl Default for GossipsubConfigBuilder {
@@ -78,6 +83,7 @@ impl Default for GossipsubConfigBuilder {
             heartbeat_initial_delay: Duration::from_secs(5),
             heartbeat_interval: Duration::from_secs(1),
             fanout_ttl: Duration::from_secs(60),
+            max_gossip_size: 2048,
         }
     }
 }
@@ -150,6 +156,10 @@ impl GossipsubConfigBuilder {
         self.fanout_ttl = fanout_ttl;
         self
     }
+    pub fn max_gossip_size(&mut self, max_gossip_size: usize) -> &mut Self {
+        self.max_gossip_size = max_gossip_size;
+        self
+    }
 
     pub fn build(&self) -> GossipsubConfig {
         GossipsubConfig {
@@ -162,6 +172,7 @@ impl GossipsubConfigBuilder {
             heartbeat_initial_delay: self.heartbeat_initial_delay,
             heartbeat_interval: self.heartbeat_interval,
             fanout_ttl: self.fanout_ttl,
+            max_gossip_size: self.max_gossip_size,
         }
     }
 }

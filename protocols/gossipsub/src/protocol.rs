@@ -20,25 +20,32 @@
 
 use crate::rpc_proto;
 use byteorder::{BigEndian, ByteOrder};
-use bytes::BytesMut;
-use futures::{future, stream, Future, Stream};
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
+use libp2p_core::{upgrade, InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
 use libp2p_floodsub::TopicHash;
-use protobuf::Message as ProtobufMessage;
+use protobuf::{Message as ProtobufMessage, ProtobufError};
 use std::{io, iter};
-use tokio_codec::{Decoder, FramedRead};
 use tokio_io::{AsyncRead, AsyncWrite};
-use unsigned_varint::codec;
 
 /// Implementation of the `ConnectionUpgrade` for the Gossipsub protocol.
-#[derive(Debug, Clone, Default)]
-pub struct ProtocolConfig {}
+#[derive(Debug, Clone)]
+pub struct ProtocolConfig {
+    max_transmit_size: usize,
+}
+
+impl Default for ProtocolConfig {
+    fn default() -> Self {
+        Self {
+            max_transmit_size: 2048,
+        }
+    }
+}
 
 impl ProtocolConfig {
     /// Builds a new `ProtocolConfig`.
     #[inline]
-    pub fn new() -> ProtocolConfig {
-        ProtocolConfig {}
+    /// Sets the maximum gossip transmission size.
+    pub fn new(max_transmit_size: usize) -> ProtocolConfig {
+        ProtocolConfig { max_transmit_size }
     }
 }
 
@@ -57,132 +64,121 @@ where
     TSocket: AsyncRead,
 {
     type Output = GossipsubRpc;
-    type Error = io::Error;
-    type Future = future::MapErr<
-        future::AndThen<
-            stream::StreamFuture<FramedRead<TSocket, GossipsubCodec>>,
-            Result<GossipsubRpc, (io::Error, FramedRead<TSocket, GossipsubCodec>)>,
-            fn(
-                (Option<GossipsubRpc>, FramedRead<TSocket, GossipsubCodec>),
-            )
-                -> Result<GossipsubRpc, (io::Error, FramedRead<TSocket, GossipsubCodec>)>,
-        >,
-        fn((io::Error, FramedRead<TSocket, GossipsubCodec>)) -> io::Error,
+    type Error = GossipsubDecodeError;
+    type Future = upgrade::ReadOneThen<
+        upgrade::Negotiated<TSocket>,
+        (),
+        fn(Vec<u8>, ()) -> Result<GossipsubRpc, GossipsubDecodeError>,
     >;
-
     #[inline]
-    fn upgrade_inbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
-        FramedRead::new(
-            socket,
-            GossipsubCodec {
-                length_prefix: Default::default(),
-            },
-        )
-        .into_future()
-        .and_then::<fn(_) -> _, _>(|(val, socket)| {
-            val.ok_or_else(move || (io::ErrorKind::UnexpectedEof.into(), socket))
+    fn upgrade_inbound(self, socket: upgrade::Negotiated<TSocket>, _: Self::Info) -> Self::Future {
+        upgrade::read_one_then(socket, self.max_transmit_size, (), |packet, ()| {
+            let mut rpc: rpc_proto::RPC = protobuf::parse_from_bytes(&packet)?;
+
+            let mut messages = Vec::with_capacity(rpc.get_publish().len());
+            for mut publish in rpc.take_publish().into_iter() {
+                messages.push(GossipsubMessage {
+                    source: PeerId::from_bytes(publish.take_from())
+                        .map_err(|_| GossipsubDecodeError::InvalidPeerId)?,
+                    data: publish.take_data(),
+                    sequence_number: publish.take_seqno(),
+                    topics: publish
+                        .take_topicIDs()
+                        .into_iter()
+                        .map(TopicHash::from_raw)
+                        .collect(),
+                });
+            }
+
+            let mut rpc_control = rpc.take_control();
+            let mut control_msgs = vec![];
+            // Collect the gossipsub control messages
+            let ihave_msgs: Vec<GossipsubControlAction> = rpc_control
+                .take_ihave()
+                .into_iter()
+                .map(|mut ihave| {
+                    GossipsubControlAction::IHave {
+                        topic_hash: TopicHash::from_raw(ihave.take_topicID()),
+                        // TODO: Potentially format the message ids better
+                        message_ids: ihave.take_messageIDs().into_vec(),
+                    }
+                })
+                .collect();
+
+            let iwant_msgs: Vec<GossipsubControlAction> = rpc_control
+                .take_iwant()
+                .into_iter()
+                .map(|mut iwant| {
+                    GossipsubControlAction::IWant {
+                        // TODO: Potentially format the message ids better
+                        message_ids: iwant.take_messageIDs().into_vec(),
+                    }
+                })
+                .collect();
+
+            let graft_msgs: Vec<GossipsubControlAction> = rpc_control
+                .take_graft()
+                .into_iter()
+                .map(|mut graft| GossipsubControlAction::Graft {
+                    topic_hash: TopicHash::from_raw(graft.take_topicID()),
+                })
+                .collect();
+
+            let prune_msgs: Vec<GossipsubControlAction> = rpc_control
+                .take_prune()
+                .into_iter()
+                .map(|mut prune| GossipsubControlAction::Prune {
+                    topic_hash: TopicHash::from_raw(prune.take_topicID()),
+                })
+                .collect();
+
+            control_msgs.extend(ihave_msgs);
+            control_msgs.extend(iwant_msgs);
+            control_msgs.extend(graft_msgs);
+            control_msgs.extend(prune_msgs);
+
+            Ok(GossipsubRpc {
+                messages,
+                subscriptions: rpc
+                    .take_subscriptions()
+                    .into_iter()
+                    .map(|mut sub| GossipsubSubscription {
+                        action: if sub.get_subscribe() {
+                            GossipsubSubscriptionAction::Subscribe
+                        } else {
+                            GossipsubSubscriptionAction::Unsubscribe
+                        },
+                        topic_hash: TopicHash::from_raw(sub.take_topicid()),
+                    })
+                    .collect(),
+                control_msgs,
+            })
         })
-        .map_err(|(err, _)| err)
     }
 }
 
-/// Implementation of `tokio_codec::Codec`.
-pub struct GossipsubCodec {
-    /// The codec for encoding/decoding the length prefix of messages.
-    length_prefix: codec::UviBytes,
+/// Reach attempt interrupt errors.
+#[derive(Debug)]
+pub enum GossipsubDecodeError {
+    /// Error when reading the packet from the socket.
+    ReadError(upgrade::ReadOneError),
+    /// Error when decoding the raw buffer into a protobuf.
+    ProtobufError(ProtobufError),
+    /// Error when parsing the `PeerId` in the message.
+    InvalidPeerId,
 }
 
-impl Decoder for GossipsubCodec {
-    type Item = GossipsubRpc;
-    type Error = io::Error;
+impl From<upgrade::ReadOneError> for GossipsubDecodeError {
+    #[inline]
+    fn from(err: upgrade::ReadOneError) -> Self {
+        GossipsubDecodeError::ReadError(err)
+    }
+}
 
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let packet = match self.length_prefix.decode(src)? {
-            Some(p) => p,
-            None => return Ok(None),
-        };
-
-        let mut rpc: rpc_proto::RPC = protobuf::parse_from_bytes(&packet)?;
-
-        let mut messages = Vec::with_capacity(rpc.get_publish().len());
-        for mut publish in rpc.take_publish().into_iter() {
-            messages.push(GossipsubMessage {
-                source: PeerId::from_bytes(publish.take_from()).map_err(|_| {
-                    io::Error::new(io::ErrorKind::InvalidData, "Invalid peer ID in message")
-                })?,
-                data: publish.take_data(),
-                sequence_number: publish.take_seqno(),
-                topics: publish
-                    .take_topicIDs()
-                    .into_iter()
-                    .map(TopicHash::from_raw)
-                    .collect(),
-            });
-        }
-
-        let mut rpc_control = rpc.take_control();
-        let mut control_msgs = vec![];
-        // Collect the gossipsub control messages
-        let ihave_msgs: Vec<GossipsubControlAction> = rpc_control
-            .take_ihave()
-            .into_iter()
-            .map(|mut ihave| {
-                GossipsubControlAction::IHave {
-                    topic_hash: TopicHash::from_raw(ihave.take_topicID()),
-                    // TODO: Potentially format the message ids better
-                    message_ids: ihave.take_messageIDs().into_vec(),
-                }
-            })
-            .collect();
-
-        let iwant_msgs: Vec<GossipsubControlAction> = rpc_control
-            .take_iwant()
-            .into_iter()
-            .map(|mut iwant| {
-                GossipsubControlAction::IWant {
-                    // TODO: Potentially format the message ids better
-                    message_ids: iwant.take_messageIDs().into_vec(),
-                }
-            })
-            .collect();
-
-        let graft_msgs: Vec<GossipsubControlAction> = rpc_control
-            .take_graft()
-            .into_iter()
-            .map(|mut graft| GossipsubControlAction::Graft {
-                topic_hash: TopicHash::from_raw(graft.take_topicID()),
-            })
-            .collect();
-
-        let prune_msgs: Vec<GossipsubControlAction> = rpc_control
-            .take_prune()
-            .into_iter()
-            .map(|mut prune| GossipsubControlAction::Prune {
-                topic_hash: TopicHash::from_raw(prune.take_topicID()),
-            })
-            .collect();
-
-        control_msgs.extend(ihave_msgs);
-        control_msgs.extend(iwant_msgs);
-        control_msgs.extend(graft_msgs);
-        control_msgs.extend(prune_msgs);
-
-        Ok(Some(GossipsubRpc {
-            messages,
-            subscriptions: rpc
-                .take_subscriptions()
-                .into_iter()
-                .map(|mut sub| GossipsubSubscription {
-                    action: if sub.get_subscribe() {
-                        GossipsubSubscriptionAction::Subscribe
-                    } else {
-                        GossipsubSubscriptionAction::Unsubscribe
-                    },
-                    topic_hash: TopicHash::from_raw(sub.take_topicid()),
-                })
-                .collect(),
-            control_msgs,
-        }))
+impl From<ProtobufError> for GossipsubDecodeError {
+    #[inline]
+    fn from(err: ProtobufError) -> Self {
+        GossipsubDecodeError::ProtobufError(err)
     }
 }
 
@@ -213,21 +209,11 @@ where
 {
     type Output = ();
     type Error = io::Error;
-    type Future = future::Map<
-        future::AndThen<
-            tokio_io::io::WriteAll<TSocket, Vec<u8>>,
-            tokio_io::io::Shutdown<TSocket>,
-            fn((TSocket, Vec<u8>)) -> tokio_io::io::Shutdown<TSocket>,
-        >,
-        fn(TSocket) -> (),
-    >;
-
+    type Future = upgrade::WriteOne<upgrade::Negotiated<TSocket>>;
     #[inline]
-    fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: upgrade::Negotiated<TSocket>, _: Self::Info) -> Self::Future {
         let bytes = self.into_length_delimited_bytes();
-        tokio_io::io::write_all(socket, bytes)
-            .and_then::<fn(_) -> _, _>(|(socket, _)| tokio_io::io::shutdown(socket))
-            .map(|_| ())
+        upgrade::write_one(socket, bytes)
     }
 }
 
