@@ -59,7 +59,7 @@ pub struct Kademlia<TSubstream> {
     ///
     /// Our local peer ID can be in this container.
     // TODO: Note that in reality the value is a SHA-256 of the actual value (https://github.com/libp2p/rust-libp2p/issues/694)
-    values_providers: FnvHashMap<Multihash, SmallVec<[KadHash; 20]>>,
+    values_providers: FnvHashMap<Multihash, SmallVec<[PeerId; 20]>>,
 
     /// List of values that we are providing ourselves. Must be kept in sync with
     /// `values_providers`.
@@ -301,8 +301,8 @@ impl<TSubstream> Kademlia<TSubstream> {
         self.providing_keys.insert(kad_hash.hash().clone());
         let providers = self.values_providers.entry(kad_hash.hash().clone()).or_insert_with(Default::default);
         let my_id = self.kbuckets.my_id();
-        if !providers.iter().any(|k| k == my_id) {
-            providers.push(my_id.clone());
+        if !providers.iter().any(|peer_id| peer_id == my_id.peer_id()) {
+            providers.push(my_id.peer_id().clone());
         }
 
         // Trigger the next refresh now.
@@ -313,10 +313,10 @@ impl<TSubstream> Kademlia<TSubstream> {
     ///
     /// There doesn't exist any "remove provider" message to broadcast on the network, therefore we
     /// will still be registered as a provider in the DHT for as long as the timeout doesn't expire.
-    pub fn remove_providing(&mut self, key: &KadHash) {
-        self.providing_keys.remove(key.hash());
+    pub fn remove_providing(&mut self, key: &Multihash) {
+        self.providing_keys.remove(key);
 
-        let providers = match self.values_providers.get_mut(key.hash()) {
+        let providers = match self.values_providers.get_mut(key) {
             Some(p) => p,
             None => return,
         };
@@ -585,7 +585,7 @@ where
                         .get(&key)
                         .into_iter()
                         .flat_map(|peers| peers)
-                        .map(move |kad_hash| build_kad_peer(&kad_hash, kbuckets))
+                        .map(move |peer_id| build_kad_peer(&KadHash::from(peer_id), kbuckets))
                         .collect()
                 };
 
@@ -661,8 +661,8 @@ where
                 continue;
             }
             let providers = self.values_providers.entry(key).or_insert_with(Default::default);
-            if !providers.iter().any(|k| k.peer_id() == &provider) {
-                providers.push(KadHash::from(&provider));
+            if !providers.iter().any(|peer_id| peer_id == &provider) {
+                providers.push(provider);
             }
         }
         self.add_provider.shrink_to_fit();
