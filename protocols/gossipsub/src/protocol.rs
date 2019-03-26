@@ -210,16 +210,17 @@ where
     type Output = ();
     type Error = io::Error;
     type Future = upgrade::WriteOne<upgrade::Negotiated<TSocket>>;
+
     #[inline]
     fn upgrade_outbound(self, socket: upgrade::Negotiated<TSocket>, _: Self::Info) -> Self::Future {
-        let bytes = self.into_length_delimited_bytes();
+        let bytes = self.into_bytes();
         upgrade::write_one(socket, bytes)
     }
 }
 
 impl GossipsubRpc {
     /// Turns this `GossipsubRpc` into a message that can be sent to a substream.
-    fn into_length_delimited_bytes(self) -> Vec<u8> {
+    fn into_bytes(self) -> Vec<u8> {
         let mut proto = rpc_proto::RPC::new();
 
         for message in self.messages.into_iter() {
@@ -285,7 +286,7 @@ impl GossipsubRpc {
         proto.set_control(control_msg);
 
         proto
-            .write_length_delimited_to_bytes()
+            .write_to_bytes()
             .expect("there is no situation in which the protobuf message can be invalid")
     }
 }
