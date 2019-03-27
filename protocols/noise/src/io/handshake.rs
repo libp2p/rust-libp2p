@@ -264,7 +264,7 @@ struct State<T, C> {
     dh_remote_pubkey_sig: Option<Vec<u8>>,
     /// The known or received public identity key of the remote, if any.
     id_remote_pubkey: Option<identity::PublicKey>,
-    /// Whether to send the public identity key if the local node to the remote.
+    /// Whether to send the public identity key of the local node to the remote.
     send_id: bool,
 }
 

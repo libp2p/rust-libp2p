@@ -77,7 +77,7 @@ pub trait Protocol<C> {
     /// Links the authenticity of the given DH static public key to the given
     /// identity keypair by signing the DH static key if necessary.
     ///
-    /// If the authenticity of the public keys is [`linked`] `None` is returned,
+    /// If the public keys are [`linked`](Protocol::linked) `None` is returned,
     /// otherwise the DH static public key is signed with the identity keypair,
     /// returning the signature.
     ///
@@ -96,18 +96,18 @@ pub trait Protocol<C> {
         }
     }
 
-    /// Verifies that a remote possesses a secret key corresponding to the given
-    /// public identity key, given the remote's static DH public key and an optional
-    /// signature over that key from a successful Noise handshake.
+    /// Verifies that a given static DH public key is authentic w.r.t. a
+    /// given public identity key in the context of an optional signature.
     ///
     /// The given static DH public key is assumed to be authentic in the sense
     /// that posession of a corresponding secret key has already been
     /// established, as is the case at the end of a Noise handshake involving
     /// static DH keys.
     ///
-    /// If the authenticity of the public keys is [`linked`](Protocol::linked),
-    /// verification succeeds without a signature, otherwise a signature over the
-    /// static DH public key must be given and is verified with the public identity key.
+    /// If the public keys are [`linked`](Protocol::linked), verification succeeds
+    /// without a signature, otherwise a signature over the static DH public key
+    /// must be given and is verified with the public identity key, establishing
+    /// the authenticity of the static DH public key w.r.t. the public identity key.
     ///
     /// This function must return `true` given no signature if and only if
     /// [`sign`](Protocol::sign) returns `Ok(None)` when given the same static DH public key

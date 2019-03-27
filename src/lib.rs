@@ -261,7 +261,7 @@ pub fn build_tcp_ws_mplex_yamux(id_keys: identity::Keypair) -> impl Transport<
 
 /// Builds an implementation of `Transport` that is suitable for usage with the `Swarm`.
 ///
-/// The implementation supports TCP/IP, WebSockets over TCP/IP, secio as the encryption layer,
+/// The implementation supports TCP/IP, WebSockets over TCP/IP, noise as the encryption layer,
 /// and mplex or yamux as the multiplexing layer.
 #[cfg(not(any(target_os = "emscripten", target_os = "unknown")))]
 pub fn build_tcp_ws_mplex_yamux(id_keys: identity::Keypair) -> impl Transport<
