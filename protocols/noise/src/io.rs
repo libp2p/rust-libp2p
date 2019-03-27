@@ -128,7 +128,7 @@ impl<T: io::Read> io::Read for NoiseOutput<T> {
             trace!("read state: {:?}", self.read_state);
             match self.read_state {
                 ReadState::Init => {
-                    self.read_state = ReadState::ReadLen { buf: [0u8; 2], off: 0 };
+                    self.read_state = ReadState::ReadLen { buf: [0, 0], off: 0 };
                 }
                 ReadState::ReadLen { mut buf, mut off } => {
                     let n = match read_frame_len(&mut self.io, &mut buf, &mut off) {
@@ -181,7 +181,7 @@ impl<T: io::Read> io::Read for NoiseOutput<T> {
                     trace!("read: copied {}/{} bytes", *off + n, len);
                     *off += n;
                     if len == *off {
-                        self.read_state = ReadState::ReadLen { buf: [0u8; 2], off: 0 };
+                        self.read_state = ReadState::ReadLen { buf: [0, 0], off: 0 };
                     }
                     return Ok(n)
                 }

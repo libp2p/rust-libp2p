@@ -490,14 +490,15 @@ where
         loop {
             match mem::replace(&mut self.state, RecvIdentityState::Done) {
                 RecvIdentityState::Init(st) => {
-                    self.state = RecvIdentityState::ReadPayloadLen(nio::read_exact(st, [0u8; 2]));
+                    self.state = RecvIdentityState::ReadPayloadLen(nio::read_exact(st, [0, 0]));
                 },
                 RecvIdentityState::ReadPayloadLen(mut read_len) => {
                     if let Async::Ready((st, bytes)) = read_len.poll()? {
-                        let mut len_be = [0u8; 2];
+                        let mut len_be = [0, 0];
                         len_be.copy_from_slice(&bytes);
                         let len = u16::from_be_bytes(len_be) as usize;
-                        self.state = RecvIdentityState::ReadPayload(nio::read_exact(st, vec![0; len as usize]));
+                        self.state = RecvIdentityState::ReadPayload(
+                            nio::read_exact(st, vec![0; len as usize]));
                     } else {
                         self.state = RecvIdentityState::ReadPayloadLen(read_len);
                         return Ok(Async::NotReady);
@@ -572,7 +573,8 @@ where
                     }
                     let pb_bytes = pb.write_to_bytes()?;
                     let len = (pb_bytes.len() as u16).to_be_bytes();
-                    self.state = SendIdentityState::WritePayloadLen(nio::write_all(st, len), pb_bytes);
+                    self.state = SendIdentityState::WritePayloadLen(
+                        nio::write_all(st, len), pb_bytes);
                 },
                 SendIdentityState::WritePayloadLen(mut write_len, payload) => {
                     if let Async::Ready((st, _)) = write_len.poll()? {
