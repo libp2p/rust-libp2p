@@ -152,12 +152,9 @@ impl Keypair<X25519> {
         Self::from(sk)
     }
 
-    /// Creates an X25519 keypair from an [`identity::Keypair`], reusing (e.g.
-    /// converting) the identity keypair if possible.
+    /// Creates an X25519 keypair from an [`identity::Keypair`], if possible.
     ///
-    /// If the given identity keypair can be reused as an X25519 keypair, the
-    /// derived X25519 keypair is returned. otherwise a newly generated X25519
-    /// keypair is returned.
+    /// Returns `None` if the given identity keypair cannot be used as an X25519 keypair.
     ///
     /// > **Note**: If the identity keypair is already used in the context
     /// > of other cryptographic protocols outside of Noise, e.g. for
@@ -167,10 +164,10 @@ impl Keypair<X25519> {
     /// > See also:
     /// >
     /// >  * [Noise: Static Key Reuse](http://www.noiseprotocol.org/noise.html#security-considerations)
-    pub fn from_identity(id_keys: &identity::Keypair) -> Keypair<X25519> {
+    pub fn from_identity(id_keys: &identity::Keypair) -> Option<Keypair<X25519>> {
         match id_keys {
-            identity::Keypair::Ed25519(p) => SecretKey::from_ed25519(&p.secret()).into(),
-            _ => Keypair::new()
+            identity::Keypair::Ed25519(p) => Some(SecretKey::from_ed25519(&p.secret()).into()),
+            _ => None
         }
     }
 }

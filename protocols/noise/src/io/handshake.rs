@@ -494,9 +494,7 @@ where
                 },
                 RecvIdentityState::ReadPayloadLen(mut read_len) => {
                     if let Async::Ready((st, bytes)) = read_len.poll()? {
-                        let mut len_be = [0, 0];
-                        len_be.copy_from_slice(&bytes);
-                        let len = u16::from_be_bytes(len_be) as usize;
+                        let len = u16::from_be_bytes(bytes) as usize;
                         let buf = vec![0; len];
                         self.state = RecvIdentityState::ReadPayload(nio::read_exact(st, buf));
                     } else {
