@@ -83,7 +83,7 @@ pub trait Protocol<C> {
     /// returning the signature.
     ///
     /// This function must return `Ok(None)` if and only if [`verify`] returns `true` when
-    /// given the same static DH public key and the public identity key of the identity
+    /// given the same static DH public key and the public key of the identity
     /// keypair without a signature.
     fn sign(id_keys: &identity::Keypair, dh_pk: &PublicKey<C>)
         -> Result<Option<Vec<u8>>, NoiseError>
