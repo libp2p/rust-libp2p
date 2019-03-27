@@ -78,10 +78,8 @@ pub enum RemoteIdentity<C> {
     /// > otherwise known public key.
     StaticDhKey(PublicKey<C>),
 
-    /// The remote provided a public identity key.
-    ///
-    /// The public identity key is authentic in the sense that a successful handshake
-    /// implies that the remote possesses a corresponding secret key.
+    /// The remote provided a public identity key in addition to a static DH
+    /// public key and the latter is authentic w.r.t. the former.
     ///
     /// > **Note**: To rule out active attacks like a MITM, trust in the public key must
     /// > still be established, e.g. by comparing the key against an expected or

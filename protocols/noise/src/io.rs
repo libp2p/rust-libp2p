@@ -123,26 +123,25 @@ enum WriteState {
 
 impl<T: io::Read> io::Read for NoiseOutput<T> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        use ReadState::*;
         let buffer = self.buffer.borrow_mut();
         loop {
             trace!("read state: {:?}", self.read_state);
             match self.read_state {
-                Init => {
-                    self.read_state = ReadLen { buf: [0u8; 2], off: 0 };
+                ReadState::Init => {
+                    self.read_state = ReadState::ReadLen { buf: [0u8; 2], off: 0 };
                 }
-                ReadLen { mut buf, mut off } => {
+                ReadState::ReadLen { mut buf, mut off } => {
                     let n = match read_frame_len(&mut self.io, &mut buf, &mut off) {
                         Ok(Some(n)) => n,
                         Ok(None) => {
                             trace!("read: eof");
-                            self.read_state = Eof(Ok(()));
+                            self.read_state = ReadState::Eof(Ok(()));
                             return Ok(0)
                         }
                         Err(e) => {
                             if e.kind() == io::ErrorKind::WouldBlock {
                                 // Preserve read state
-                                self.read_state = ReadLen { buf, off };
+                                self.read_state = ReadState::ReadLen { buf, off };
                             }
                             return Err(e)
                         }
@@ -150,17 +149,17 @@ impl<T: io::Read> io::Read for NoiseOutput<T> {
                     trace!("read: next frame len = {}", n);
                     if n == 0 {
                         trace!("read: empty frame");
-                        self.read_state = Init;
+                        self.read_state = ReadState::Init;
                         continue
                     }
-                    self.read_state = ReadData { len: usize::from(n), off: 0 }
+                    self.read_state = ReadState::ReadData { len: usize::from(n), off: 0 }
                 }
-                ReadData { len, ref mut off } => {
+                ReadState::ReadData { len, ref mut off } => {
                     let n = self.io.read(&mut buffer.read[*off .. len])?;
                     trace!("read: read {}/{} bytes", *off + n, len);
                     if n == 0 {
                         trace!("read: eof");
-                        self.read_state = Eof(Err(()));
+                        self.read_state = ReadState::Eof(Err(()));
                         return Err(io::ErrorKind::UnexpectedEof.into())
                     }
                     *off += n;
@@ -168,33 +167,33 @@ impl<T: io::Read> io::Read for NoiseOutput<T> {
                         trace!("read: decrypting {} bytes", len);
                         if let Ok(n) = self.session.read_message(&buffer.read[.. len], buffer.read_crypto) {
                             trace!("read: payload len = {} bytes", n);
-                            self.read_state = CopyData { len: n, off: 0 }
+                            self.read_state = ReadState::CopyData { len: n, off: 0 }
                         } else {
                             debug!("decryption error");
-                            self.read_state = DecErr;
+                            self.read_state = ReadState::DecErr;
                             return Err(io::ErrorKind::InvalidData.into())
                         }
                     }
                 }
-                CopyData { len, ref mut off } => {
+                ReadState::CopyData { len, ref mut off } => {
                     let n = std::cmp::min(len - *off, buf.len());
                     buf[.. n].copy_from_slice(&buffer.read_crypto[*off .. *off + n]);
                     trace!("read: copied {}/{} bytes", *off + n, len);
                     *off += n;
                     if len == *off {
-                        self.read_state = ReadLen { buf: [0u8; 2], off: 0 };
+                        self.read_state = ReadState::ReadLen { buf: [0u8; 2], off: 0 };
                     }
                     return Ok(n)
                 }
-                Eof(Ok(())) => {
+                ReadState::Eof(Ok(())) => {
                     trace!("read: eof");
                     return Ok(0)
                 }
-                Eof(Err(())) => {
+                ReadState::Eof(Err(())) => {
                     trace!("read: eof (unexpected)");
                     return Err(io::ErrorKind::UnexpectedEof.into())
                 }
-                DecErr => return Err(io::ErrorKind::InvalidData.into())
+                ReadState::DecErr => return Err(io::ErrorKind::InvalidData.into())
             }
         }
     }
@@ -202,15 +201,14 @@ impl<T: io::Read> io::Read for NoiseOutput<T> {
 
 impl<T: io::Write> io::Write for NoiseOutput<T> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        use WriteState::*;
         let buffer = self.buffer.borrow_mut();
         loop {
             trace!("write state: {:?}", self.write_state);
             match self.write_state {
-                Init => {
-                    self.write_state = BufferData { off: 0 }
+                WriteState::Init => {
+                    self.write_state = WriteState::BufferData { off: 0 }
                 }
-                BufferData { ref mut off } => {
+                WriteState::BufferData { ref mut off } => {
                     let n = std::cmp::min(MAX_WRITE_BUF_LEN - *off, buf.len());
                     buffer.write[*off .. *off + n].copy_from_slice(&buf[.. n]);
                     trace!("write: buffered {} bytes", *off + n);
@@ -219,120 +217,119 @@ impl<T: io::Write> io::Write for NoiseOutput<T> {
                         trace!("write: encrypting {} bytes", *off);
                         if let Ok(n) = self.session.write_message(buffer.write, buffer.write_crypto) {
                             trace!("write: cipher text len = {} bytes", n);
-                            self.write_state = WriteLen {
+                            self.write_state = WriteState::WriteLen {
                                 len: n,
                                 buf: u16::to_be_bytes(n as u16),
                                 off: 0
                             }
                         } else {
                             debug!("encryption error");
-                            self.write_state = EncErr;
+                            self.write_state = WriteState::EncErr;
                             return Err(io::ErrorKind::InvalidData.into())
                         }
                     }
                     return Ok(n)
                 }
-                WriteLen { len, mut buf, mut off } => {
+                WriteState::WriteLen { len, mut buf, mut off } => {
                     trace!("write: writing len ({}, {:?}, {}/2)", len, buf, off);
                     match write_frame_len(&mut self.io, &mut buf, &mut off) {
                         Err(e) => {
                             if e.kind() == io::ErrorKind::WouldBlock {
-                                self.write_state = WriteLen{ len, buf, off };
+                                self.write_state = WriteState::WriteLen{ len, buf, off };
                             }
                             return Err(e)
                         }
                         Ok(false) => {
                             trace!("write: eof");
-                            self.write_state = Eof;
+                            self.write_state = WriteState::Eof;
                             return Err(io::ErrorKind::WriteZero.into())
                         }
                         Ok(true) => ()
                     }
                     self.write_state = WriteState::WriteData { len, off: 0 }
                 }
-                WriteData { len, ref mut off } => {
+                WriteState::WriteData { len, ref mut off } => {
                     let n = self.io.write(&buffer.write_crypto[*off .. len])?;
                     trace!("write: wrote {}/{} bytes", *off + n, len);
                     if n == 0 {
                         trace!("write: eof");
-                        self.write_state = Eof;
+                        self.write_state = WriteState::Eof;
                         return Err(io::ErrorKind::WriteZero.into())
                     }
                     *off += n;
                     if len == *off {
                         trace!("write: finished writing {} bytes", len);
-                        self.write_state = Init
+                        self.write_state = WriteState::Init
                     }
                 }
-                Eof => {
+                WriteState::Eof => {
                     trace!("write: eof");
                     return Err(io::ErrorKind::WriteZero.into())
                 }
-                EncErr => return Err(io::ErrorKind::InvalidData.into())
+                WriteState::EncErr => return Err(io::ErrorKind::InvalidData.into())
             }
         }
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        use WriteState::*;
         let buffer = self.buffer.borrow_mut();
         loop {
             match self.write_state {
-                Init => return Ok(()),
-                BufferData { off } => {
+                WriteState::Init => return Ok(()),
+                WriteState::BufferData { off } => {
                     trace!("flush: encrypting {} bytes", off);
                     if let Ok(n) = self.session.write_message(&buffer.write[.. off], buffer.write_crypto) {
                         trace!("flush: cipher text len = {} bytes", n);
-                        self.write_state = WriteLen {
+                        self.write_state = WriteState::WriteLen {
                             len: n,
                             buf: u16::to_be_bytes(n as u16),
                             off: 0
                         }
                     } else {
                         debug!("encryption error");
-                        self.write_state = EncErr;
+                        self.write_state = WriteState::EncErr;
                         return Err(io::ErrorKind::InvalidData.into())
                     }
                 }
-                WriteLen { len, mut buf, mut off } => {
+                WriteState::WriteLen { len, mut buf, mut off } => {
                     trace!("flush: writing len ({}, {:?}, {}/2)", len, buf, off);
                     match write_frame_len(&mut self.io, &mut buf, &mut off) {
                         Ok(true) => (),
                         Ok(false) => {
                             trace!("write: eof");
-                            self.write_state = Eof;
+                            self.write_state = WriteState::Eof;
                             return Err(io::ErrorKind::WriteZero.into())
                         }
                         Err(e) => {
                             if e.kind() == io::ErrorKind::WouldBlock {
                                 // Preserve write state
-                                self.write_state = WriteLen { len, buf, off };
+                                self.write_state = WriteState::WriteLen { len, buf, off };
                             }
                             return Err(e)
                         }
                     }
-                    self.write_state = WriteData { len, off: 0 }
+                    self.write_state = WriteState::WriteData { len, off: 0 }
                 }
-                WriteData { len, ref mut off } => {
+                WriteState::WriteData { len, ref mut off } => {
                     let n = self.io.write(&buffer.write_crypto[*off .. len])?;
                     trace!("flush: wrote {}/{} bytes", *off + n, len);
                     if n == 0 {
                         trace!("flush: eof");
-                        self.write_state = Eof;
+                        self.write_state = WriteState::Eof;
                         return Err(io::ErrorKind::WriteZero.into())
                     }
                     *off += n;
                     if len == *off {
                         trace!("flush: finished writing {} bytes", len);
-                        self.write_state = Init;
+                        self.write_state = WriteState::Init;
                         return Ok(())
                     }
                 }
-                Eof => {
+                WriteState::Eof => {
                     trace!("flush: eof");
                     return Err(io::ErrorKind::WriteZero.into())
                 }
-                EncErr => return Err(io::ErrorKind::InvalidData.into())
+                WriteState::EncErr => return Err(io::ErrorKind::InvalidData.into())
             }
         }
     }
