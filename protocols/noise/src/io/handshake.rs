@@ -406,16 +406,15 @@ where
     type Item = State<T, C>;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        use RecvState::*;
-        match mem::replace(&mut self.state, Done) {
-            Read(mut st) =>  {
+        match mem::replace(&mut self.state, RecvState::Done) {
+            RecvState::Read(mut st) =>  {
                 if !st.io.poll_read(&mut [])?.is_ready() {
-                    self.state = Read(st);
+                    self.state = RecvState::Read(st);
                     return Ok(Async::NotReady)
                 }
                 Ok(Async::Ready(st))
             },
-            Done => panic!("RecvEmpty polled after completion")
+            RecvState::Done => panic!("RecvEmpty polled after completion")
         }
     }
 }
@@ -443,24 +442,23 @@ where
     type Item = State<T, C>;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        use SendState::*;
         loop {
-            match mem::replace(&mut self.state, Done) {
-                Write(mut st) => {
+            match mem::replace(&mut self.state, SendState::Done) {
+                SendState::Write(mut st) => {
                     if !st.io.poll_write(&mut [])?.is_ready() {
-                        self.state = Write(st);
+                        self.state = SendState::Write(st);
                         return Ok(Async::NotReady)
                     }
-                    self.state = Flush(st);
+                    self.state = SendState::Flush(st);
                 },
-                Flush(mut st) => {
+                SendState::Flush(mut st) => {
                     if !st.io.poll_flush()?.is_ready() {
-                        self.state = Flush(st);
+                        self.state = SendState::Flush(st);
                         return Ok(Async::NotReady)
                     }
                     return Ok(Async::Ready(st))
                 }
-                Done => panic!("SendEmpty polled after completion")
+                SendState::Done => panic!("SendEmpty polled after completion")
             }
         }
     }
@@ -491,24 +489,23 @@ where
     type Item = State<T, C>;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        use RecvIdentityState::*;
         loop {
-            match mem::replace(&mut self.state, Done) {
-                Init(st) => {
-                    self.state = ReadPayloadLen(nio::read_exact(st, [0u8; 2]));
+            match mem::replace(&mut self.state, RecvIdentityState::Done) {
+                RecvIdentityState::Init(st) => {
+                    self.state = RecvIdentityState::ReadPayloadLen(nio::read_exact(st, [0u8; 2]));
                 },
-                ReadPayloadLen(mut read_len) => {
+                RecvIdentityState::ReadPayloadLen(mut read_len) => {
                     if let Async::Ready((st, bytes)) = read_len.poll()? {
                         let mut len_be = [0u8; 2];
                         len_be.copy_from_slice(&bytes);
                         let len = u16::from_be_bytes(len_be) as usize;
-                        self.state = ReadPayload(nio::read_exact(st, vec![0; len as usize]));
+                        self.state = RecvIdentityState::ReadPayload(nio::read_exact(st, vec![0; len as usize]));
                     } else {
-                        self.state = ReadPayloadLen(read_len);
+                        self.state = RecvIdentityState::ReadPayloadLen(read_len);
                         return Ok(Async::NotReady);
                     }
                 },
-                ReadPayload(mut read_payload) => {
+                RecvIdentityState::ReadPayload(mut read_payload) => {
                     if let Async::Ready((mut st, bytes)) = read_payload.poll()? {
                         let pb: payload::Identity = protobuf::parse_from_bytes(&bytes)?;
                         if !pb.pubkey.is_empty() {
@@ -526,11 +523,11 @@ where
                         }
                         return Ok(Async::Ready(st))
                     } else {
-                        self.state = ReadPayload(read_payload);
+                        self.state = RecvIdentityState::ReadPayload(read_payload);
                         return Ok(Async::NotReady)
                     }
                 },
-                Done => panic!("RecvIdentity polled after completion")
+                RecvIdentityState::Done => panic!("RecvIdentity polled after completion")
             }
         }
     }
@@ -563,10 +560,9 @@ where
     type Item = State<T, C>;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        use SendIdentityState::*;
         loop {
-            match mem::replace(&mut self.state, Done) {
-                Init(st) => {
+            match mem::replace(&mut self.state, SendIdentityState::Done) {
+                SendIdentityState::Init(st) => {
                     let sig = C::sign(&st.id_keys, &st.dh_pubkey)?;
                     let mut pb = payload::Identity::new();
                     if st.send_id {
@@ -578,32 +574,32 @@ where
                     }
                     let pb_bytes = pb.write_to_bytes()?;
                     let len = (pb_bytes.len() as u16).to_be_bytes();
-                    self.state = WritePayloadLen(nio::write_all(st, len), pb_bytes);
+                    self.state = SendIdentityState::WritePayloadLen(nio::write_all(st, len), pb_bytes);
                 },
-                WritePayloadLen(mut write_len, payload) => {
+                SendIdentityState::WritePayloadLen(mut write_len, payload) => {
                     if let Async::Ready((st, _)) = write_len.poll()? {
-                        self.state = WritePayload(nio::write_all(st, payload));
+                        self.state = SendIdentityState::WritePayload(nio::write_all(st, payload));
                     } else {
-                        self.state = WritePayloadLen(write_len, payload);
+                        self.state = SendIdentityState::WritePayloadLen(write_len, payload);
                         return Ok(Async::NotReady)
                     }
                 },
-                WritePayload(mut write_payload) => {
+                SendIdentityState::WritePayload(mut write_payload) => {
                     if let Async::Ready((st, _)) = write_payload.poll()? {
-                        self.state = Flush(st);
+                        self.state = SendIdentityState::Flush(st);
                     } else {
-                        self.state = WritePayload(write_payload);
+                        self.state = SendIdentityState::WritePayload(write_payload);
                         return Ok(Async::NotReady)
                     }
                 },
-                Flush(mut st) => {
+                SendIdentityState::Flush(mut st) => {
                     if !st.poll_flush()?.is_ready() {
-                        self.state = Flush(st);
+                        self.state = SendIdentityState::Flush(st);
                         return Ok(Async::NotReady)
                     }
                     return Ok(Async::Ready(st))
                 },
-                Done => panic!("SendIdentity polled after completion")
+                SendIdentityState::Done => panic!("SendIdentity polled after completion")
             }
         }
     }

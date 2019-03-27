@@ -66,7 +66,8 @@ pub trait Protocol<C> {
 
     /// Determines whether the authenticity of the given DH static public key
     /// and public identity key is linked, i.e. that proof of ownership of a
-    /// secret key for one implies ownership of a secret key for the other.
+    /// secret key for the static DH public key implies that the key is
+    /// authentic w.r.t. the given public identity key.
     ///
     /// The trivial case is when the keys are byte for byte identical.
     #[allow(unused_variables)]
@@ -74,8 +75,8 @@ pub trait Protocol<C> {
         false
     }
 
-    /// Links the authenticity of the given DH static public key to the given
-    /// identity keypair by signing the DH static key if necessary.
+    /// Authenticates the given DH static public key with the given
+    /// identity keypair by signing it if necessary.
     ///
     /// If the public keys are [`linked`](Protocol::linked) `None` is returned,
     /// otherwise the DH static public key is signed with the identity keypair,
@@ -99,8 +100,8 @@ pub trait Protocol<C> {
     /// Verifies that a given static DH public key is authentic w.r.t. a
     /// given public identity key in the context of an optional signature.
     ///
-    /// The given static DH public key is assumed to be authentic in the sense
-    /// that posession of a corresponding secret key has already been
+    /// The given static DH public key is assumed to already be authentic
+    /// in the sense that posession of a corresponding secret key has been
     /// established, as is the case at the end of a Noise handshake involving
     /// static DH keys.
     ///
