@@ -497,8 +497,8 @@ where
                         let mut len_be = [0, 0];
                         len_be.copy_from_slice(&bytes);
                         let len = u16::from_be_bytes(len_be) as usize;
-                        self.state = RecvIdentityState::ReadPayload(
-                            nio::read_exact(st, vec![0; len as usize]));
+                        let buf = vec![0; len];
+                        self.state = RecvIdentityState::ReadPayload(nio::read_exact(st, buf));
                     } else {
                         self.state = RecvIdentityState::ReadPayloadLen(read_len);
                         return Ok(Async::NotReady);
@@ -573,8 +573,8 @@ where
                     }
                     let pb_bytes = pb.write_to_bytes()?;
                     let len = (pb_bytes.len() as u16).to_be_bytes();
-                    self.state = SendIdentityState::WritePayloadLen(
-                        nio::write_all(st, len), pb_bytes);
+                    let write_len = nio::write_all(st, len);
+                    self.state = SendIdentityState::WritePayloadLen(write_len, pb_bytes);
                 },
                 SendIdentityState::WritePayloadLen(mut write_len, payload) => {
                     if let Async::Ready((st, _)) = write_len.poll()? {
