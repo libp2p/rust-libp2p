@@ -331,12 +331,12 @@ where
         let dh_remote_pubkey = match self.io.session.get_remote_static() {
             None => None,
             Some(k) => match C::public_from_bytes(k) {
-                Err(e) => return future::result(Err(e)),
+                Err(e) => return future::err(e),
                 Ok(dh_pk) => Some(dh_pk)
             }
         };
-        future::result(match self.io.session.into_transport_mode() {
-            Err(e) => Err(e.into()),
+        match self.io.session.into_transport_mode() {
+            Err(e) => future::err(e.into()),
             Ok(s) => {
                 let remote = match (self.id_remote_pubkey, dh_remote_pubkey) {
                     (_, None) => RemoteIdentity::Unknown,
@@ -345,13 +345,13 @@ where
                         if C::verify(&id_pk, &dh_pk, &self.dh_remote_pubkey_sig) {
                             RemoteIdentity::IdentityKey(id_pk)
                         } else {
-                            return future::result(Err(NoiseError::InvalidKey))
+                            return future::err(NoiseError::InvalidKey)
                         }
                     }
                 };
-                Ok((remote, NoiseOutput { session: s, .. self.io }))
+                future::ok((remote, NoiseOutput { session: s, .. self.io }))
             }
-        })
+        }
     }
 }
 
