@@ -260,9 +260,11 @@ where TBehaviour: NetworkBehaviour,
                     self.behaviour.inject_node_event(peer_id, event);
                 },
                 Async::Ready(RawSwarmEvent::Connected { peer_id, endpoint }) => {
+                    log::debug!("connected to {:?}", peer_id);
                     self.behaviour.inject_connected(peer_id, endpoint);
                 },
                 Async::Ready(RawSwarmEvent::NodeClosed { peer_id, endpoint, .. }) => {
+                    log::debug!("dc from {:?}", peer_id);
                     self.behaviour.inject_disconnected(&peer_id, endpoint);
                 },
                 Async::Ready(RawSwarmEvent::Replaced { peer_id, closed_endpoint, endpoint }) => {
@@ -273,14 +275,18 @@ where TBehaviour: NetworkBehaviour,
                     incoming.accept(handler.into_node_handler_builder());
                 },
                 Async::Ready(RawSwarmEvent::ListenerClosed { .. }) => {},
-                Async::Ready(RawSwarmEvent::IncomingConnectionError { .. }) => {},
+                Async::Ready(RawSwarmEvent::IncomingConnectionError { error, .. }) => {
+                    log::debug!("inc err {:?}", error);
+                },
                 Async::Ready(RawSwarmEvent::DialError { peer_id, multiaddr, error, new_state }) => {
+                    log::debug!("dial err {:?}", error);
                     self.behaviour.inject_addr_reach_failure(Some(&peer_id), &multiaddr, &error);
                     if let raw_swarm::PeerState::NotConnected = new_state {
                         self.behaviour.inject_dial_failure(&peer_id);
                     }
                 },
                 Async::Ready(RawSwarmEvent::UnknownPeerDialError { multiaddr, error, .. }) => {
+                    log::debug!("unknown dial err {:?}", error);
                     self.behaviour.inject_addr_reach_failure(None, &multiaddr, &error);
                 },
             }

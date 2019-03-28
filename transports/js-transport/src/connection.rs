@@ -115,7 +115,7 @@ impl Connection {
         // the value, and therefore a channel capacity of 1 looks it would be enough. However the
         // JavaScript is also allowed to call the callback to interrupt the stream, so we need a
         // capacity of 2.
-        let (mut inc_tx, inc_rx) = mpsc::channel(2);
+        let (mut inc_tx, inc_rx) = mpsc::channel(200);
         let source_callback = Closure::wrap(Box::new(move |end: JsValue, data: JsValue| {
             let to_send = if end.is_null() {
                 // If `end` is null, then `data` is valid.
@@ -185,16 +185,19 @@ impl Read for Connection {
                     self.has_pending_read = false;
                     debug_assert!(self.pending_data.is_empty());
                     self.pending_data = data;
+                    log::debug!("data");
                     continue;
                 },
                 Ok(Async::Ready(Some(Err(err)))) => {
                     // An error has been propagated from the JavaScript side.
                     self.has_pending_read = false;
+                    log::debug!("err: {:?}", err);
                     return Err(err);
                 },
                 Ok(Async::Ready(Some(Ok(None)))) => {
                     // EOF
                     self.has_pending_read = false;
+                    log::debug!("eof");
                     return Ok(0);
                 },
                 Ok(Async::NotReady) => (),

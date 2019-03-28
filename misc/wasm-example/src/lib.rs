@@ -20,7 +20,9 @@
 
 use futures::prelude::*;
 use libp2p::{
+    NetworkBehaviour,
     core::PublicKey, core::Transport, core::upgrade::InboundUpgradeExt, core::upgrade::OutboundUpgradeExt,
+    core::swarm::{NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess},
     secio,
 };
 use log::debug;
@@ -50,7 +52,8 @@ pub fn start(multiaddr_constructor: JsValue, transport: JsValue) -> JsValue {
     console_log::init_with_level(log::Level::Debug).unwrap();
 
     // Create a random key for ourselves.
-    let local_key = libp2p::core::identity::Keypair::generate_secp256k1();
+    let local_key = libp2p::core::identity::Keypair::generate_ed25519();
+    let local_public = local_key.public();
     let local_peer_id = local_key.public().into_peer_id();
 
     let transport = libp2p::js_transport::JsTransport::new(transport, multiaddr_constructor).unwrap()
@@ -70,17 +73,61 @@ pub fn start(multiaddr_constructor: JsValue, transport: JsValue) -> JsValue {
 
     // Create a swarm to manage peers and events.
     let mut swarm = {
-        let mut behaviour = libp2p::kad::Kademlia::without_init(local_peer_id.clone());
-        behaviour.add_connected_address(
-            &"QmSiUKk9rA6NxXar2D9AjvEgS9BbujLGbbdm3ZtFXSqLV5".parse().unwrap(),
+        #[derive(NetworkBehaviour)]
+        #[behaviour(out_event = "libp2p::kad::KademliaOut", poll_method = "poll")]
+        struct Behaviour<TSubstream> {
+            kad: libp2p::kad::Kademlia<TSubstream>,
+            ping: libp2p::ping::Ping<TSubstream>,
+            identify: libp2p::identify::Identify<TSubstream>,
+
+            #[behaviour(ignore)]
+            events: Vec<libp2p::kad::KademliaOut>,
+        }
+
+        impl<TSubstream> Behaviour<TSubstream> {
+            fn poll<TEv>(&mut self) -> Async<NetworkBehaviourAction<TEv, libp2p::kad::KademliaOut>> {
+                if !self.events.is_empty() {
+                    return Async::Ready(NetworkBehaviourAction::GenerateEvent(self.events.remove(0)))
+                }
+
+                Async::NotReady
+            }
+        }
+
+        impl<TSubstream> NetworkBehaviourEventProcess<libp2p::kad::KademliaOut> for Behaviour<TSubstream> {
+            fn inject_event(&mut self, event: libp2p::kad::KademliaOut) {
+                self.events.push(event);
+            }
+        }
+
+        impl<TSubstream> NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Behaviour<TSubstream> {
+            fn inject_event(&mut self, _event: libp2p::ping::PingEvent) {}
+        }
+
+        impl<TSubstream> NetworkBehaviourEventProcess<libp2p::identify::IdentifyEvent> for Behaviour<TSubstream> {
+            fn inject_event(&mut self, _event: libp2p::identify::IdentifyEvent) {
+            }
+        }
+
+        let mut kad = libp2p::kad::Kademlia::without_init(local_peer_id.clone());
+        kad.add_connected_address(
+            &"QmRLQHNBHVZjBznJUymyVDWbqtY2XLTWvubfkRvcdQHXSe".parse().unwrap(),
             "/ip4/127.0.0.1/tcp/30333/ws".parse().unwrap()
         );
+
+        let behaviour = Behaviour {
+            kad,
+            ping: libp2p::ping::Ping::new(),
+            identify: libp2p::identify::Identify::new("substrate".to_string(), "substrate".to_string(), local_public),
+            events: Vec::new(),
+        };
+
         libp2p::core::Swarm::new(transport, behaviour, local_peer_id)
     };
 
     // Order Kademlia to search for a peer.
     let mut csprng = rand_chacha::ChaChaRng::from_seed([0; 32]);
-    swarm.find_node(libp2p::PeerId::random());
+    swarm.kad.find_node(libp2p::PeerId::random());
 
     // Kick it off!
     let future = futures::future::poll_fn(move || -> Result<_, JsValue> {

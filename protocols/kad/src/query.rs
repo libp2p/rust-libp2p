@@ -156,6 +156,7 @@ where
         result_source: &impl PartialEq<TPeerId>,
         closer_peers: impl IntoIterator<Item = TPeerId>,
     ) {
+        log::debug!("rpc result");
         // Mark the peer as succeeded.
         for (peer_id, state) in self.closest_peers.iter_mut() {
             if result_source == peer_id {
@@ -256,6 +257,7 @@ where
     ///
     /// After this function returns, you should call `poll()` again.
     pub fn inject_rpc_error(&mut self, id: &TPeerId) {
+        log::debug!("rpc error");
         let state = self
             .closest_peers
             .iter_mut()
@@ -305,6 +307,7 @@ where
                     _ => false,
                 };
                 if timed_out {
+                    log::debug!("timed out");
                     *state = QueryPeerState::Failed;
                     return Async::Ready(QueryStatePollOut::CancelRpc { peer_id });
                 }

@@ -234,7 +234,7 @@ impl Read for BrowserWsConn {
                 Ok(Async::Ready(Some(InnerEvent::Array(arr)))) => {
                     let arr = js_sys::Uint8Array::new(&arr);
                     let arr_len = arr.length() as usize;
-                    if buf.len() >= arr_len {
+                    if buf.len() >= arr_len && arr_len != 0 {
                         arr.copy_to(&mut buf[..arr_len]);
                         return Ok(arr_len);
                     } else {

@@ -170,7 +170,7 @@ impl Delay {
 
         let handle = web_sys::window()
             .expect("not in a browser")
-            .set_timeout_with_callback_and_timeout_and_arguments_0(cb.as_ref().unchecked_ref(), 1_000)
+            .set_timeout_with_callback_and_timeout_and_arguments_0(cb.as_ref().unchecked_ref(), duration.as_millis() as i32)
             .expect("failed to call set_timeout");
 
         Delay { handle, triggered_rx: rx, deadline, cb }
