@@ -15,9 +15,11 @@ crate-type = ["cdylib"]
 [dependencies]
 # We add this dependency on `clear_on_drop` in order to activate the `no_cc` feature
 clear_on_drop = { version = "0.2", features = ["no_cc"] }
+console_log = "0.1.2"
 futures = "0.1"
 js-sys = "0.3.14"
 libp2p = { path = "../..", default-features = false, features = ["libp2p-websocket", "secio-secp256k1"] }
+log = "0.4.6"
 rand = { version = "0.6", features = ["wasm-bindgen"] }
 rand_chacha = "0.1.1"
 rand_core = "0.4"
