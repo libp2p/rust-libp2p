@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{Multiaddr, core::Transport, core::transport::TransportError};
+use crate::{Multiaddr, MultiaddrSeq, core::Transport, core::transport::TransportError};
 use futures::{prelude::*, try_ready};
 use lazy_static::lazy_static;
 use parking_lot::Mutex;
@@ -65,7 +65,7 @@ where
     type ListenerUpgrade = BandwidthFuture<TInner::ListenerUpgrade>;
     type Dial = BandwidthFuture<TInner::Dial>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, MultiaddrSeq), TransportError<Self::Error>> {
         let sinks = self.sinks;
         self.inner
             .listen_on(addr)

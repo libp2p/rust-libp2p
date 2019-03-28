@@ -271,7 +271,7 @@ mod tests {
         };
 
         let actual_addr = Swarm::listen_on(&mut swarm1, "/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
-        Swarm::dial_addr(&mut swarm2, actual_addr).unwrap();
+        Swarm::dial_addr(&mut swarm2, actual_addr.head().clone()).unwrap();
 
         let mut swarm1_good = false;
         let mut swarm2_good = false;

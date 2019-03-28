@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
+    MultiaddrSeq,
     transport::Transport,
     transport::TransportError,
     upgrade::{
@@ -69,7 +70,7 @@ where
         })
     }
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, MultiaddrSeq), TransportError<Self::Error>> {
         let (inbound, addr) = self.inner.listen_on(addr)
             .map_err(|err| err.map(TransportUpgradeError::Transport))?;
         Ok((ListenerStream { stream: inbound, upgrade: self.upgrade }, addr))

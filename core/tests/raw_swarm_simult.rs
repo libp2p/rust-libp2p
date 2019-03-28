@@ -157,7 +157,7 @@ fn raw_swarm_simultaneous_connect() {
                             Async::Ready(_) => {
                                 let handler = TestHandler::default().into_node_handler_builder();
                                 swarm1.peer(swarm2.local_peer_id().clone()).into_not_connected().unwrap()
-                                    .connect(swarm2_listen.clone(), handler);
+                                    .connect(swarm2_listen.head().clone(), handler);
                                 swarm1_step = 1;
                                 swarm1_not_ready = false;
                             },
@@ -170,7 +170,7 @@ fn raw_swarm_simultaneous_connect() {
                             Async::Ready(_) => {
                                 let handler = TestHandler::default().into_node_handler_builder();
                                 swarm2.peer(swarm1.local_peer_id().clone()).into_not_connected().unwrap()
-                                    .connect(swarm1_listen.clone(), handler);
+                                    .connect(swarm1_listen.head().clone(), handler);
                                 swarm2_step = 1;
                                 swarm2_not_ready = false;
                             },

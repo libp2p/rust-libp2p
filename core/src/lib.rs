@@ -64,6 +64,7 @@ pub use multiaddr;
 pub use multistream_select::Negotiated;
 
 mod keys_proto;
+mod multiaddrs;
 mod peer_id;
 
 #[cfg(test)]
@@ -79,6 +80,7 @@ pub mod transport;
 pub mod upgrade;
 
 pub use self::multiaddr::Multiaddr;
+pub use self::multiaddrs::{MultiaddrSeq, MultiAddrIter, MultiAddrIterMut, IntoMultiAddrIter};
 pub use self::muxing::StreamMuxer;
 pub use self::peer_id::PeerId;
 pub use self::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent};

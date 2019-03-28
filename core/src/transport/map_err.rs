@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{Transport, TransportError};
+use crate::{MultiaddrSeq, transport::{Transport, TransportError}};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::error;
@@ -50,7 +50,7 @@ where
     type ListenerUpgrade = MapErrListenerUpgrade<T, F>;
     type Dial = MapErrDial<T, F>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, MultiaddrSeq), TransportError<Self::Error>> {
         let map = self.map;
 
         match self.transport.listen_on(addr) {

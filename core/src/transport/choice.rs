@@ -20,6 +20,7 @@
 
 use crate::either::{EitherListenStream, EitherOutput, EitherError, EitherFuture};
 use crate::transport::{Transport, TransportError};
+use crate::MultiaddrSeq;
 use multiaddr::Multiaddr;
 
 /// Struct returned by `or_transport()`.
@@ -43,7 +44,7 @@ where
     type ListenerUpgrade = EitherFuture<A::ListenerUpgrade, B::ListenerUpgrade>;
     type Dial = EitherFuture<A::Dial, B::Dial>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, MultiaddrSeq), TransportError<Self::Error>> {
         let addr = match self.0.listen_on(addr) {
             Ok((connec, addr)) => return Ok((EitherListenStream::First(connec), addr)),
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,

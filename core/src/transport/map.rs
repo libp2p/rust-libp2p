@@ -18,7 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{nodes::raw_swarm::ConnectedPoint, transport::Transport, transport::TransportError};
+use crate::{
+    MultiaddrSeq,
+    nodes::raw_swarm::ConnectedPoint,
+    transport::Transport,
+    transport::TransportError
+};
 use futures::{prelude::*, try_ready};
 use multiaddr::Multiaddr;
 
@@ -44,14 +49,14 @@ where
     type ListenerUpgrade = MapFuture<T::ListenerUpgrade, F>;
     type Dial = MapFuture<T::Dial, F>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
-        let (stream, listen_addr) = self.transport.listen_on(addr)?;
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, MultiaddrSeq), TransportError<Self::Error>> {
+        let (stream, listen_addrs) = self.transport.listen_on(addr)?;
         let stream = MapStream {
             stream,
-            listen_addr: listen_addr.clone(),
+            listen_addrs: listen_addrs.clone(),
             fun: self.fun
         };
-        Ok((stream, listen_addr))
+        Ok((stream, listen_addrs))
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
@@ -73,7 +78,11 @@ where
 ///
 /// Maps a function over every stream item.
 #[derive(Clone, Debug)]
-pub struct MapStream<T, F> { stream: T, listen_addr: Multiaddr, fun: F }
+pub struct MapStream<T, F> {
+    stream: T,
+    listen_addrs: MultiaddrSeq,
+    fun: F
+}
 
 impl<T, F, A, B, X> Stream for MapStream<T, F>
 where
@@ -89,7 +98,7 @@ where
             Async::Ready(Some((future, addr))) => {
                 let f = self.fun.clone();
                 let p = ConnectedPoint::Listener {
-                    listen_addr: self.listen_addr.clone(),
+                    listen_addrs: self.listen_addrs.clone(),
                     send_back_addr: addr.clone()
                 };
                 let future = MapFuture {

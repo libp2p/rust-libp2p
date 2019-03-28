@@ -19,13 +19,12 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{Future, IntoFuture, Sink, Stream};
-use libp2p_core as swarm;
+use libp2p_core::{MultiaddrSeq, Transport, transport::TransportError};
 use log::{debug, trace};
 use multiaddr::{Protocol, Multiaddr};
 use rw_stream_sink::RwStreamSink;
 use std::{error, fmt};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use swarm::{Transport, transport::TransportError};
 use tokio_io::{AsyncRead, AsyncWrite};
 use websocket::client::builder::ClientBuilder;
 use websocket::message::OwnedMessage;
@@ -78,7 +77,7 @@ where
     fn listen_on(
         self,
         original_addr: Multiaddr,
-    ) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+    ) -> Result<(Self::Listener, MultiaddrSeq), TransportError<Self::Error>> {
         let mut inner_addr = original_addr.clone();
         match inner_addr.pop() {
             Some(Protocol::Ws) => {}
@@ -87,7 +86,9 @@ where
 
         let (inner_listen, mut new_addr) = self.transport.listen_on(inner_addr)
             .map_err(|err| err.map(WsError::Underlying))?;
-        new_addr.append(Protocol::Ws);
+        for a in new_addr.iter_mut() {
+            a.append(Protocol::Ws);
+        }
         debug!("Listening on {}", new_addr);
 
         let listen = inner_listen.map_err(WsError::Underlying).map(|(stream, mut client_addr)| {
@@ -271,8 +272,8 @@ mod tests {
     use libp2p_tcp as tcp;
     use tokio::runtime::current_thread::Runtime;
     use futures::{Future, Stream};
-    use multiaddr::Multiaddr;
-    use super::swarm::Transport;
+    use multiaddr::{Multiaddr, Protocol};
+    use libp2p_core::Transport;
     use super::WsConfig;
 
     #[test]
@@ -283,13 +284,13 @@ mod tests {
             .clone()
             .listen_on("/ip4/127.0.0.1/tcp/0/ws".parse().unwrap())
             .unwrap();
-        assert!(addr.to_string().ends_with("/ws"));
-        assert!(!addr.to_string().ends_with("/0/ws"));
+        assert_eq!(Some(Protocol::Ws), addr.head().iter().nth(2));
+        assert_ne!(Some(Protocol::Tcp(0)), addr.head().iter().nth(1));
         let listener = listener
             .into_future()
             .map_err(|(e, _)| e)
             .and_then(|(c, _)| c.unwrap().0);
-        let dialer = ws_config.clone().dial(addr).unwrap();
+        let dialer = ws_config.clone().dial(addr.head().clone()).unwrap();
 
         let future = listener
             .select(dialer)
@@ -307,13 +308,13 @@ mod tests {
             .clone()
             .listen_on("/ip6/::1/tcp/0/ws".parse().unwrap())
             .unwrap();
-        assert!(addr.to_string().ends_with("/ws"));
-        assert!(!addr.to_string().ends_with("/0/ws"));
+        assert_eq!(Some(Protocol::Ws), addr.head().iter().nth(2));
+        assert_ne!(Some(Protocol::Tcp(0)), addr.head().iter().nth(1));
         let listener = listener
             .into_future()
             .map_err(|(e, _)| e)
             .and_then(|(c, _)| c.unwrap().0);
-        let dialer = ws_config.clone().dial(addr).unwrap();
+        let dialer = ws_config.clone().dial(addr.head().clone()).unwrap();
 
         let future = listener
             .select(dialer)

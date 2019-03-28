@@ -25,7 +25,7 @@
 //! any desired protocols. The rest of the module defines combinators for
 //! modifying a transport through composition with other transports or protocol upgrades.
 
-use crate::{InboundUpgrade, OutboundUpgrade, nodes::raw_swarm::ConnectedPoint};
+use crate::{MultiaddrSeq, InboundUpgrade, OutboundUpgrade, nodes::raw_swarm::ConnectedPoint};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{error, fmt};
@@ -115,7 +115,7 @@ pub trait Transport {
     /// > **Note**: The new [`Multiaddr`] that is returned alongside the connection stream
     /// > is the address that should be advertised to other nodes, as the given address
     /// > may be subject to changes such as an OS-assigned port number.
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>>
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, MultiaddrSeq), TransportError<Self::Error>>
     where
         Self: Sized;
 

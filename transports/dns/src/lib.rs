@@ -33,13 +33,11 @@
 //! replaced with respectively an `/ip4/` or an `/ip6/` component.
 //!
 
-use libp2p_core as swarm;
-
 use futures::{future::{self, Either, FutureResult, JoinAll}, prelude::*, stream, try_ready};
+use libp2p_core::{MultiaddrSeq, Transport, transport::TransportError};
 use log::{debug, trace, log_enabled, Level};
 use multiaddr::{Protocol, Multiaddr};
 use std::{error, fmt, io, marker::PhantomData, net::IpAddr};
-use swarm::{Transport, transport::TransportError};
 use tokio_dns::{CpuPoolResolver, Resolver};
 
 /// Represents the configuration for a DNS transport capability of libp2p.
@@ -104,7 +102,7 @@ where
     >;
 
     #[inline]
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, MultiaddrSeq), TransportError<Self::Error>> {
         let (listener, new_addr) = self.inner.listen_on(addr)
             .map_err(|err| err.map(DnsErr::Underlying))?;
         let listener = listener
@@ -318,7 +316,7 @@ where
 mod tests {
     use libp2p_tcp::TcpConfig;
     use futures::future;
-    use super::swarm::{Transport, transport::TransportError};
+    use libp2p_core::{MultiaddrSeq, Transport, transport::TransportError};
     use multiaddr::{Protocol, Multiaddr};
     use super::DnsConfig;
 
@@ -337,7 +335,7 @@ mod tests {
             fn listen_on(
                 self,
                 _addr: Multiaddr,
-            ) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+            ) -> Result<(Self::Listener, MultiaddrSeq), TransportError<Self::Error>> {
                 unreachable!()
             }
 

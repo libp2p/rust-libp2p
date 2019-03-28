@@ -24,7 +24,7 @@
 //! underlying `Transport`.
 // TODO: add example
 
-use crate::{Multiaddr, Transport, transport::TransportError};
+use crate::{Multiaddr, MultiaddrSeq, Transport, transport::TransportError};
 use futures::{try_ready, Async, Future, Poll, Stream};
 use log::debug;
 use std::{error, fmt, time::Duration};
@@ -86,7 +86,7 @@ where
     type ListenerUpgrade = TokioTimerMapErr<Timeout<InnerTrans::ListenerUpgrade>>;
     type Dial = TokioTimerMapErr<Timeout<InnerTrans::Dial>>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, MultiaddrSeq), TransportError<Self::Error>> {
         let (listener, addr) = self.inner.listen_on(addr)
             .map_err(|err| err.map(TransportTimeoutError::Other))?;
 

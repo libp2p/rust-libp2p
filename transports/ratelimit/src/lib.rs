@@ -21,7 +21,7 @@
 use aio_limited::{Limited, Limiter};
 use futures::prelude::*;
 use futures::try_ready;
-use libp2p_core::{Multiaddr, Transport, transport::TransportError};
+use libp2p_core::{Multiaddr, MultiaddrSeq, Transport, transport::TransportError};
 use log::error;
 use std::{error, fmt, io};
 use tokio_executor::Executor;
@@ -190,7 +190,7 @@ where
     type ListenerUpgrade = ListenerUpgrade<T>;
     type Dial = DialFuture<T::Dial>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, MultiaddrSeq), TransportError<Self::Error>> {
         let r = self.rlimiter;
         let w = self.wlimiter;
         self.value

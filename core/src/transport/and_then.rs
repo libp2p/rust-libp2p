@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::either::EitherError;
+use crate::{MultiaddrSeq, either::EitherError};
 use crate::{nodes::raw_swarm::ConnectedPoint, transport::Transport, transport::TransportError};
 use futures::{future::Either, prelude::*, try_ready};
 use multiaddr::Multiaddr;
@@ -48,9 +48,8 @@ where
     type ListenerUpgrade = AndThenFuture<T::ListenerUpgrade, C, F::Future>;
     type Dial = AndThenFuture<T::Dial, C, F::Future>;
 
-    #[inline]
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
-        let (listening_stream, new_addr) = self.transport.listen_on(addr)
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, MultiaddrSeq), TransportError<Self::Error>> {
+        let (listening_stream, new_addrs) = self.transport.listen_on(addr)
             .map_err(|err| err.map(EitherError::A))?;
 
         // Try to negotiate the protocol.
@@ -59,11 +58,11 @@ where
         // `stream` can only produce an `Err` if `listening_stream` produces an `Err`.
         let stream = AndThenStream {
             stream: listening_stream,
-            listen_addr: new_addr.clone(),
+            listen_addrs: new_addrs.clone(),
             fun: self.fun
         };
 
-        Ok((stream, new_addr))
+        Ok((stream, new_addrs))
     }
 
     #[inline]
@@ -91,7 +90,11 @@ where
 ///
 /// Applies a function to every stream item.
 #[derive(Debug, Clone)]
-pub struct AndThenStream<TListener, TMap> { stream: TListener, listen_addr: Multiaddr, fun: TMap }
+pub struct AndThenStream<TListener, TMap> {
+    stream: TListener,
+    listen_addrs: MultiaddrSeq,
+    fun: TMap
+}
 
 impl<TListener, TMap, TTransOut, TMapOut, TListUpgr, TTransErr> Stream for AndThenStream<TListener, TMap>
 where
@@ -108,7 +111,7 @@ where
             Async::Ready(Some((future, addr))) => {
                 let f = self.fun.clone();
                 let p = ConnectedPoint::Listener {
-                    listen_addr: self.listen_addr.clone(),
+                    listen_addrs: self.listen_addrs.clone(),
                     send_back_addr: addr.clone()
                 };
                 let future = AndThenFuture {

@@ -39,14 +39,13 @@
 //! documentation of `swarm` and of libp2p in general to learn how to use the `Transport` trait.
 
 use futures::{future, future::FutureResult, prelude::*, Async, Poll};
-use libp2p_core as swarm;
+use libp2p_core::{MultiaddrSeq, Transport, transport::TransportError};
 use log::{debug, error};
 use multiaddr::{Protocol, Multiaddr, ToMultiaddr};
 use std::fmt;
 use std::io::{self, Read, Write};
 use std::net::SocketAddr;
 use std::time::Duration;
-use swarm::{Transport, transport::TransportError};
 use tk_listen::{ListenExt, SleepOnError};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_tcp::{ConnectFuture, Incoming, TcpListener, TcpStream};
@@ -128,7 +127,7 @@ impl Transport for TcpConfig {
     type ListenerUpgrade = FutureResult<Self::Output, io::Error>;
     type Dial = TcpDialFut;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, MultiaddrSeq), TransportError<Self::Error>> {
         if let Ok(socket_addr) = multiaddr_to_socketaddr(&addr) {
             let listener = TcpListener::bind(&socket_addr);
             // We need to build the `Multiaddr` to return from this function. If an error happened,
@@ -157,7 +156,7 @@ impl Transport for TcpConfig {
                     inner: Ok(inner),
                     config: self,
                 },
-                new_addr,
+                MultiaddrSeq::from(new_addr)
             ))
         } else {
             Err(TransportError::MultiaddrNotSupported(addr))
@@ -396,7 +395,7 @@ mod tests {
     use multiaddr::Multiaddr;
     use std;
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-    use super::swarm::Transport;
+    use libp2p_core::Transport;
     use tokio_io;
 
     #[test]

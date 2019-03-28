@@ -20,7 +20,7 @@
 
 use crate::muxing::StreamMuxer;
 use crate::{
-    Endpoint, Multiaddr, PeerId,
+    Endpoint, Multiaddr, MultiaddrSeq, PeerId,
     nodes::{
         collection::{
             CollectionEvent,
@@ -137,7 +137,7 @@ where
     /// One of the listeners gracefully closed.
     ListenerClosed {
         /// Address of the listener which closed.
-        listen_addr: Multiaddr,
+        listen_addrs: MultiaddrSeq,
         /// The listener which closed.
         listener: TTrans::Listener,
         /// The error that happened. `Ok` if gracefully closed.
@@ -153,7 +153,7 @@ where
     /// the connection unexpectedly closed.
     IncomingConnectionError {
         /// Address of the listener which received the connection.
-        listen_addr: Multiaddr,
+        listen_addrs: MultiaddrSeq,
         /// Address used to send back data to the remote.
         send_back_addr: Multiaddr,
         /// The error that happened.
@@ -237,21 +237,21 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match *self {
-            RawSwarmEvent::ListenerClosed { ref listen_addr, ref result, .. } => {
+            RawSwarmEvent::ListenerClosed { ref listen_addrs, ref result, .. } => {
                 f.debug_struct("ListenerClosed")
-                    .field("listen_addr", listen_addr)
+                    .field("listen_addrs", listen_addrs)
                     .field("result", result)
                     .finish()
             }
-            RawSwarmEvent::IncomingConnection( IncomingConnectionEvent { ref listen_addr, ref send_back_addr, .. } ) => {
+            RawSwarmEvent::IncomingConnection( IncomingConnectionEvent { ref listen_addrs, ref send_back_addr, .. } ) => {
                 f.debug_struct("IncomingConnection")
-                    .field("listen_addr", listen_addr)
+                    .field("listen_addrs", listen_addrs)
                     .field("send_back_addr", send_back_addr)
                     .finish()
             }
-            RawSwarmEvent::IncomingConnectionError { ref listen_addr, ref send_back_addr, ref error} => {
+            RawSwarmEvent::IncomingConnectionError { ref listen_addrs, ref send_back_addr, ref error} => {
                 f.debug_struct("IncomingConnectionError")
-                    .field("listen_addr", listen_addr)
+                    .field("listen_addrs", listen_addrs)
                     .field("send_back_addr", send_back_addr)
                     .field("error", error)
                     .finish()
@@ -485,8 +485,8 @@ where TTrans: Transport
     upgrade: TTrans::ListenerUpgrade,
     /// PeerId of the local node.
     local_peer_id: TPeerId,
-    /// Address of the listener which received the connection.
-    listen_addr: Multiaddr,
+    /// Addresses of the listener which received the connection.
+    listen_addrs: MultiaddrSeq,
     /// Address used to send back data to the remote.
     send_back_addr: Multiaddr,
     /// Reference to the `active_nodes` field of the swarm.
@@ -550,15 +550,15 @@ where TTrans: Transport
     #[inline]
     pub fn info(&self) -> IncomingInfo<'_> {
         IncomingInfo {
-            listen_addr: &self.listen_addr,
+            listen_addrs: &self.listen_addrs,
             send_back_addr: &self.send_back_addr,
         }
     }
 
-    /// Address of the listener that received the connection.
+    /// Addresses of the listener that received the connection.
     #[inline]
-    pub fn listen_addr(&self) -> &Multiaddr {
-        &self.listen_addr
+    pub fn listen_addrs(&self) -> &MultiaddrSeq {
+        &self.listen_addrs
     }
 
     /// Address used to send back data to the dialer.
@@ -586,7 +586,7 @@ pub enum ConnectedPoint {
     /// We received the node.
     Listener {
         /// Address of the listener that received the connection.
-        listen_addr: Multiaddr,
+        listen_addrs: MultiaddrSeq,
         /// Stack of protocols used to send back data to the remote.
         send_back_addr: Multiaddr,
     },
@@ -639,7 +639,7 @@ impl ConnectedPoint {
 #[derive(Debug, Copy, Clone)]
 pub struct IncomingInfo<'a> {
     /// Address of the listener that received the connection.
-    pub listen_addr: &'a Multiaddr,
+    pub listen_addrs: &'a MultiaddrSeq,
     /// Stack of protocols used to send back data to the remote.
     pub send_back_addr: &'a Multiaddr,
 }
@@ -649,7 +649,7 @@ impl<'a> IncomingInfo<'a> {
     #[inline]
     pub fn to_connected_point(&self) -> ConnectedPoint {
         ConnectedPoint::Listener {
-            listen_addr: self.listen_addr.clone(),
+            listen_addrs: self.listen_addrs.clone(),
             send_back_addr: self.send_back_addr.clone(),
         }
     }
@@ -709,7 +709,7 @@ where
 
     /// Start listening on the given multiaddress.
     #[inline]
-    pub fn listen_on(&mut self, addr: Multiaddr) -> Result<Multiaddr, TransportError<TTrans::Error>> {
+    pub fn listen_on(&mut self, addr: Multiaddr) -> Result<MultiaddrSeq, TransportError<TTrans::Error>> {
         self.listeners.listen_on(addr)
     }
 
@@ -806,9 +806,9 @@ where
             .iter()
             .filter_map(|&(_, ref endpoint)| {
                 match endpoint {
-                    ConnectedPoint::Listener { listen_addr, send_back_addr } => {
+                    ConnectedPoint::Listener { listen_addrs, send_back_addr } => {
                         Some(IncomingInfo {
-                            listen_addr,
+                            listen_addrs,
                             send_back_addr,
                         })
                     },
@@ -937,13 +937,13 @@ where
                 match self.listeners.poll() {
                     Async::NotReady => (),
                     Async::Ready(ListenersEvent::Incoming {
-                        upgrade, listen_addr, send_back_addr }) =>
+                        upgrade, listen_addrs, send_back_addr }) =>
                     {
                         let event = IncomingConnectionEvent {
                             upgrade,
                             local_peer_id:
                                 self.reach_attempts.local_peer_id.clone(),
-                            listen_addr,
+                            listen_addrs,
                             send_back_addr,
                             active_nodes: &mut self.active_nodes,
                             other_reach_attempts: &mut self.reach_attempts.other_reach_attempts,
@@ -951,10 +951,10 @@ where
                         return Async::Ready(RawSwarmEvent::IncomingConnection(event));
                      },
                     Async::Ready(ListenersEvent::Closed {
-                        listen_addr, listener, result }) =>
+                        listen_addrs, listener, result }) =>
                     {
                         return Async::Ready(RawSwarmEvent::ListenerClosed {
-                            listen_addr,
+                            listen_addrs,
                             listener,
                             result,
                         });
@@ -1075,9 +1075,9 @@ where
         // If we have a lower peer ID than the incoming one, we drop an incoming connection.
         if event.would_replace() && has_dial_prio {
             if let Some(ConnectedPoint::Dialer { .. }) = reach_attempts.connected_points.get(event.peer_id()) {
-                if let ConnectedPoint::Listener { listen_addr, send_back_addr } = opened_endpoint {
+                if let ConnectedPoint::Listener { listen_addrs, send_back_addr } = opened_endpoint {
                     return (Default::default(), RawSwarmEvent::IncomingConnectionError {
-                        listen_addr,
+                        listen_addrs,
                         send_back_addr,
                         error: IncomingError::DeniedLowerPriority,
                     });
@@ -1280,7 +1280,7 @@ where
                     handler,
                 });
             }
-            ConnectedPoint::Listener { listen_addr, send_back_addr } => {
+            ConnectedPoint::Listener { listen_addrs, send_back_addr } => {
                 let error = match error {
                     InternalReachErr::Transport(err) => IncomingError::Transport(err),
                     InternalReachErr::FoundLocalPeerId => IncomingError::FoundLocalPeerId,
@@ -1290,7 +1290,7 @@ where
                     },
                 };
                 return (Default::default(), RawSwarmEvent::IncomingConnectionError {
-                    listen_addr,
+                    listen_addrs,
                     send_back_addr,
                     error
                 });

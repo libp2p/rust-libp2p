@@ -206,7 +206,7 @@ pub mod simple;
 
 pub use self::core::{
     identity,
-    Transport, PeerId, Swarm,
+    Transport, PeerId, Swarm, MultiaddrSeq,
     transport::TransportError,
     upgrade::{InboundUpgrade, InboundUpgradeExt, OutboundUpgrade, OutboundUpgradeExt}
 };
@@ -325,7 +325,7 @@ impl Transport for CommonTransport {
     type Dial = <InnerImplementation as Transport>::Dial;
 
     #[inline]
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, MultiaddrSeq), TransportError<Self::Error>> {
         self.inner.inner.listen_on(addr)
     }
 

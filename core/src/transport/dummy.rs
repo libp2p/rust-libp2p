@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::transport::{Transport, TransportError};
-use multiaddr::Multiaddr;
+use crate::{Multiaddr, MultiaddrSeq};
 use std::{fmt, io, marker::PhantomData};
 
 /// Implementation of `Transport` that doesn't support any multiaddr.
@@ -60,7 +60,7 @@ impl<TOut> Transport for DummyTransport<TOut> {
     type Dial = futures::future::Empty<Self::Output, io::Error>;
 
     #[inline]
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, MultiaddrSeq), TransportError<Self::Error>> {
         Err(TransportError::MultiaddrNotSupported(addr))
     }
 

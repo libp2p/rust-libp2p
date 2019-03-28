@@ -28,7 +28,7 @@ use futures::{
     stream,
 };
 use std::io;
-use crate::{Multiaddr, PeerId, Transport, transport::TransportError};
+use crate::{Multiaddr, MultiaddrSeq, PeerId, Transport, transport::TransportError};
 use crate::tests::dummy_muxer::DummyMuxer;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -73,7 +73,7 @@ impl Transport for DummyTransport {
     type ListenerUpgrade = FutureResult<Self::Output, io::Error>;
     type Dial = Box<dyn Future<Item = Self::Output, Error = io::Error> + Send>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>>
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, MultiaddrSeq), TransportError<Self::Error>>
     where
         Self: Sized,
     {
@@ -84,15 +84,15 @@ impl Transport for DummyTransport {
                 Ok(match r#async {
                     Async::NotReady => {
                         let stream = stream::poll_fn(|| Ok(Async::NotReady)).map(tupelize);
-                        (Box::new(stream), addr2)
+                        (Box::new(stream), MultiaddrSeq::from(addr2))
                     }
                     Async::Ready(Some(tup)) => {
                         let stream = stream::poll_fn(move || Ok( Async::Ready(Some(tup.clone()) ))).map(tupelize);
-                        (Box::new(stream), addr2)
+                        (Box::new(stream), MultiaddrSeq::from(addr2))
                     }
                     Async::Ready(None) => {
                         let stream = stream::empty();
-                        (Box::new(stream), addr2)
+                        (Box::new(stream), MultiaddrSeq::from(addr2))
                     }
                 })
             }

@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{Transport, transport::TransportError};
+use crate::{MultiaddrSeq, Transport, transport::TransportError};
 use bytes::{Bytes, IntoBuf};
 use fnv::FnvHashMap;
 use futures::{future::{self, FutureResult}, prelude::*, sync::mpsc, try_ready};
@@ -43,7 +43,7 @@ impl Transport for MemoryTransport {
     type ListenerUpgrade = FutureResult<Self::Output, Self::Error>;
     type Dial = FutureResult<Self::Output, Self::Error>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, MultiaddrSeq), TransportError<Self::Error>> {
         let port = if let Ok(port) = parse_memory_addr(&addr) {
             port
         } else {
@@ -66,7 +66,7 @@ impl Transport for MemoryTransport {
             }
         };
 
-        let actual_addr = Protocol::Memory(port.get()).into();
+        let actual_addr = MultiaddrSeq::singleton(Protocol::Memory(port.get()).into());
 
         let (tx, rx) = mpsc::unbounded();
         match hub.entry(port) {
