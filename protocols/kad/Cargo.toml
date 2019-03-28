@@ -10,6 +10,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
+arrayref = "0.3"
 arrayvec = "0.4.7"
 bs58 = "0.2.0"
 bigint = "4.2"
@@ -33,5 +34,8 @@ unsigned-varint = { version = "0.2.1", features = ["codec"] }
 void = "1.0"
 
 [dev-dependencies]
+libp2p-mplex = { version = "0.5.0", path = "../../muxers/mplex" }
+libp2p-secio = { version = "0.5.0", path = "../secio" }
 libp2p-tcp = { version = "0.5.0", path = "../../transports/tcp" }
+libp2p-yamux = { version = "0.5.0", path = "../../muxers/yamux" }
 tokio = "0.1"
