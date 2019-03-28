@@ -31,7 +31,7 @@ use crate::protocol::{
 use log::trace;
 use std::mem;
 use tokio_io::{AsyncRead, AsyncWrite};
-use crate::ProtocolChoiceError;
+use crate::{Negotiated, ProtocolChoiceError};
 
 /// Future, returned by `dialer_select_proto`, which selects a protocol and dialer
 /// either sequentially of by considering all protocols in parallel.
@@ -125,7 +125,7 @@ where
     I: Iterator,
     I::Item: AsRef<[u8]> + Clone
 {
-    type Item = (I::Item, R);
+    type Item = (I::Item, Negotiated<R>);
     type Error = ProtocolChoiceError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -207,7 +207,7 @@ where
                         ListenerToDialerMessage::ProtocolAck { ref name }
                             if name.as_ref() == proto_name.as_ref() =>
                         {
-                            return Ok(Async::Ready((proto_name, r.into_inner())))
+                            return Ok(Async::Ready((proto_name, Negotiated(r.into_inner()))))
                         }
                         ListenerToDialerMessage::NotAvailable => {
                             let proto_name = protocols.next()
@@ -300,7 +300,7 @@ where
     I: Iterator,
     I::Item: AsRef<[u8]> + Clone
 {
-    type Item = (I::Item, R);
+    type Item = (I::Item, Negotiated<R>);
     type Error = ProtocolChoiceError;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -423,7 +423,7 @@ where
                         Some(ListenerToDialerMessage::ProtocolAck { ref name })
                             if name.as_ref() == proto_name.as_ref() =>
                         {
-                            return Ok(Async::Ready((proto_name, dialer.into_inner())))
+                            return Ok(Async::Ready((proto_name, Negotiated(dialer.into_inner()))))
                         }
                         _ => return Err(ProtocolChoiceError::UnexpectedMessage)
                     }

@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use crate::core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, Negotiated};
 use bytes::Bytes;
 use futures::{future::FromErr, prelude::*};
 use std::{iter, io::Error as IoError, sync::Arc};
@@ -70,7 +70,7 @@ impl<F> UpgradeInfo for SimpleProtocol<F> {
 impl<C, F, O> InboundUpgrade<C> for SimpleProtocol<F>
 where
     C: AsyncRead + AsyncWrite,
-    F: Fn(C) -> O,
+    F: Fn(Negotiated<C>) -> O,
     O: IntoFuture<Error = IoError>
 {
     type Output = O::Item;
@@ -78,7 +78,7 @@ where
     type Future = FromErr<O::Future, IoError>;
 
     #[inline]
-    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: Negotiated<C>, _: Self::Info) -> Self::Future {
         let upgrade = &self.upgrade;
         upgrade(socket).into_future().from_err()
     }
@@ -87,7 +87,7 @@ where
 impl<C, F, O> OutboundUpgrade<C> for SimpleProtocol<F>
 where
     C: AsyncRead + AsyncWrite,
-    F: Fn(C) -> O,
+    F: Fn(Negotiated<C>) -> O,
     O: IntoFuture<Error = IoError>
 {
     type Output = O::Item;
@@ -95,7 +95,7 @@ where
     type Future = FromErr<O::Future, IoError>;
 
     #[inline]
-    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: Negotiated<C>, _: Self::Info) -> Self::Future {
         let upgrade = &self.upgrade;
         upgrade(socket).into_future().from_err()
     }

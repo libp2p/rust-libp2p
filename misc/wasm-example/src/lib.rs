@@ -50,8 +50,8 @@ pub fn start(multiaddr_constructor: JsValue, transport: JsValue) -> JsValue {
     console_log::init_with_level(log::Level::Debug).unwrap();
 
     // Create a random key for ourselves.
-    let local_key = secio::SecioKeyPair::secp256k1_generated().unwrap();
-    let local_peer_id = local_key.to_peer_id();
+    let local_key = libp2p::core::identity::Keypair::generate_secp256k1();
+    let local_peer_id = local_key.public().into_peer_id();
 
     let transport = libp2p::js_transport::JsTransport::new(transport, multiaddr_constructor).unwrap()
         .with_upgrade(libp2p::secio::SecioConfig::new(local_key))
@@ -71,7 +71,7 @@ pub fn start(multiaddr_constructor: JsValue, transport: JsValue) -> JsValue {
     // Create a swarm to manage peers and events.
     let mut swarm = {
         let mut behaviour = libp2p::kad::Kademlia::without_init(local_peer_id.clone());
-        behaviour.add_address(
+        behaviour.add_connected_address(
             &"QmSiUKk9rA6NxXar2D9AjvEgS9BbujLGbbdm3ZtFXSqLV5".parse().unwrap(),
             "/ip4/127.0.0.1/tcp/30333/ws".parse().unwrap()
         );
@@ -80,8 +80,7 @@ pub fn start(multiaddr_constructor: JsValue, transport: JsValue) -> JsValue {
 
     // Order Kademlia to search for a peer.
     let mut csprng = rand_chacha::ChaChaRng::from_seed([0; 32]);
-    let to_search = PublicKey::Secp256k1((0..32).map(|_| csprng.next_u32() as u8).collect()).into_peer_id();
-    swarm.find_node(to_search);
+    swarm.find_node(libp2p::PeerId::random());
 
     // Kick it off!
     let future = futures::future::poll_fn(move || -> Result<_, JsValue> {
