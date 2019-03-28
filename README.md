@@ -27,3 +27,4 @@ libp2p = "0.2.2"
 
 - https://github.com/paritytech/polkadot
 - https://github.com/paritytech/substrate
+- https://github.com/sigp/lighthouse
