@@ -10,6 +10,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
+arrayref = "0.3"
 arrayvec = "0.4.7"
 bs58 = "0.2.0"
 bigint = "4.2"
