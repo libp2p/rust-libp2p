@@ -199,6 +199,13 @@ where TBehaviour: NetworkBehaviour,
         RawSwarm::listeners(&me.raw_swarm)
     }
 
+    /// Returns an iterator that produces the list of addresses that other nodes can use to reach
+    /// us.
+    #[inline]
+    pub fn external_addresses(me: &Self) -> impl Iterator<Item = &Multiaddr> {
+        me.external_addrs.iter()
+    }
+
     /// Returns the peer ID of the swarm passed as parameter.
     #[inline]
     pub fn local_peer_id(me: &Self) -> &PeerId {
