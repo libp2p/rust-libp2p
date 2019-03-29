@@ -31,14 +31,12 @@ pub struct DecodingError {
 }
 
 impl DecodingError {
-    pub(crate) fn new(msg: &str, source: impl Error + Send + Sync + 'static) -> DecodingError {
-        DecodingError { msg: msg.to_string(), source: Some(Box::new(source)) }
+    pub(crate) fn new<S: ToString>(msg: S) -> Self {
+        Self { msg: msg.to_string(), source: None }
     }
-}
 
-impl From<String> for DecodingError {
-    fn from(s: String) -> DecodingError {
-        DecodingError { msg: s, source: None }
+    pub(crate) fn source(self, source: impl Error + Send + Sync + 'static) -> Self {
+        Self { source: Some(Box::new(source)), .. self }
     }
 }
 
@@ -63,20 +61,18 @@ pub struct SigningError {
 
 /// An error during encoding of key material.
 impl SigningError {
-    pub(crate) fn new(msg: &str, source: impl Error + Send + Sync + 'static) -> SigningError {
-        SigningError { msg: msg.to_string(), source: Some(Box::new(source)) }
+    pub(crate) fn new<S: ToString>(msg: S) -> Self {
+        Self { msg: msg.to_string(), source: None }
+    }
+
+    pub(crate) fn source(self, source: impl Error + Send + Sync + 'static) -> Self {
+        Self { source: Some(Box::new(source)), .. self }
     }
 }
 
 impl fmt::Display for SigningError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Key signing error: {}", self.msg)
-    }
-}
-
-impl From<String> for SigningError {
-    fn from(s: String) -> SigningError {
-        SigningError { msg: s, source: None }
     }
 }
 
