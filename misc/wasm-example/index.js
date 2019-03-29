@@ -18,12 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-const libp2p_webrtc = require('libp2p-webrtc-star');
 const libp2p_ws = require('libp2p-websockets');
 const multiaddr = require('multiaddr');
 const rust = import('./pkg/libp2p_wasm_example');
-
-console.log(new libp2p_webrtc().createListener());//multiaddr('/ip4/206.189.241.107/tcp/30433/ws')).source);
 
 rust
   .then(libp2p => libp2p.start(multiaddr, new libp2p_ws()))

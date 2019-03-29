@@ -118,7 +118,11 @@ pub fn start(multiaddr_constructor: JsValue, transport: JsValue) -> JsValue {
         let behaviour = Behaviour {
             kad,
             ping: libp2p::ping::Ping::new(),
-            identify: libp2p::identify::Identify::new("substrate".to_string(), "substrate".to_string(), local_public),
+            identify: libp2p::identify::Identify::new(
+                "substrate-mock/1.0.0".to_string(),
+                "substrate-mock/1.0.0".to_string(),
+                local_public
+            ),
             events: Vec::new(),
         };
 
