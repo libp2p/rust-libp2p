@@ -193,7 +193,7 @@ impl PublicKey {
             #[cfg(any(target_os = "emscripten", target_os = "unknown"))]
             keys_proto::KeyType::RSA => {
                 log::debug!("support for RSA was disabled at compile-time");
-                Err("Unsupported".to_string().into())
+                Err(DecodingError::new("Unsupported"))
             },
             #[cfg(feature = "secp256k1")]
             keys_proto::KeyType::Secp256k1 => {
