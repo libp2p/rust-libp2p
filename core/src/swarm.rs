@@ -55,6 +55,8 @@ use futures::prelude::*;
 use smallvec::SmallVec;
 use std::{error, fmt, io, ops::{Deref, DerefMut}};
 
+pub mod toggle;
+
 pub use crate::nodes::raw_swarm::ConnectedPoint;
 
 /// Contains the state of the network, plus the way it should behave.
@@ -389,7 +391,7 @@ pub trait NetworkBehaviour {
     /// Polls for things that swarm should do.
     ///
     /// This API mimics the API of the `Stream` trait.
-    fn poll(&mut self, topology: &mut PollParameters<'_>) -> Async<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
+    fn poll(&mut self, params: &mut PollParameters<'_>) -> Async<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
 }
 
 /// Used when deriving `NetworkBehaviour`. When deriving `NetworkBehaviour`, must be implemented
