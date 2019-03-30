@@ -34,8 +34,8 @@ fn topology_filled() {
     for _ in 0..NUM_SWARMS {
         // TODO: make creating the transport more elegant ; literaly half of the code of the test
         //       is about creating the transport
-        let local_key = libp2p_secio::SecioKeyPair::ed25519_generated().unwrap();
-        let local_public_key = local_key.to_public_key();
+        let local_key = libp2p_core::identity::Keypair::generate_ed25519();
+        let local_public_key = local_key.public();
         let transport = libp2p_tcp::TcpConfig::new()
             .with_upgrade(libp2p_secio::SecioConfig::new(local_key))
             .and_then(move |out, _| {

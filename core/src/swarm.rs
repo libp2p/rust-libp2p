@@ -20,22 +20,21 @@
 
 //! High level manager of the network.
 //!
-//! The `Swarm` struct contains the state of the network as a whole. The entire behaviour of a
+//! A [`Swarm`] contains the state of the network as a whole. The entire behaviour of a
 //! libp2p network can be controlled through the `Swarm`.
 //!
 //! # Initializing a Swarm
 //!
 //! Creating a `Swarm` requires three things:
 //!
-//! - An implementation of the `Transport` trait. This is the type that will be used in order to
-//!   reach nodes on the network based on their address. See the `transport` module for more
-//!   information.
-//! - An implementation of the `NetworkBehaviour` trait. This is a state machine that defines how
-//!   the swarm should behave once it is connected to a node.
-//! - An implementation of the `Topology` trait. This is a container that holds the list of nodes
-//!   that we think are part of the network. See the `topology` module for more information.
+//!  1. A network identity of the local node in form of a [`PeerId`].
+//!  2. An implementation of the [`Transport`] trait. This is the type that will be used in
+//!     order to reach nodes on the network based on their address. See the [`transport`] module
+//!     for more information.
+//!  3. An implementation of the [`NetworkBehaviour`] trait. This is a state machine that
+//!     defines how the swarm should behave once it is connected to a node.
 //!
-//! # Network behaviour
+//! # Network Behaviour
 //!
 //! The `NetworkBehaviour` trait is implemented on types that indicate to the swarm how it should
 //! behave. This includes which protocols are supported and which nodes to try to connect to.
@@ -49,12 +48,14 @@ use crate::{
         node::Substream,
         raw_swarm::{self, RawSwarm, RawSwarmEvent}
     },
-    protocols_handler::{NodeHandlerWrapperBuilder, NodeHandlerWrapper, IntoProtocolsHandler, ProtocolsHandler},
+    protocols_handler::{NodeHandlerWrapperBuilder, NodeHandlerWrapper, NodeHandlerWrapperError, IntoProtocolsHandler, ProtocolsHandler},
     transport::TransportError,
 };
 use futures::prelude::*;
 use smallvec::SmallVec;
 use std::{error, fmt, io, ops::{Deref, DerefMut}};
+
+pub mod toggle;
 
 pub use crate::nodes::raw_swarm::ConnectedPoint;
 
@@ -68,7 +69,7 @@ where TTransport: Transport,
         <<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent,
         <<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent,
         NodeHandlerWrapperBuilder<TBehaviour::ProtocolsHandler>,
-        <<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::Error,
+        NodeHandlerWrapperError<<<<TBehaviour as NetworkBehaviour>::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::Error>,
     >,
 
     /// Handles which nodes to connect to and how to handle the events sent back by the protocol
@@ -183,7 +184,9 @@ where TBehaviour: NetworkBehaviour,
         match me.raw_swarm.peer(peer_id.clone()) {
             raw_swarm::Peer::NotConnected(peer) => {
                 let handler = me.behaviour.new_handler().into_node_handler_builder();
-                let _ = peer.connect_iter(addrs, handler);
+                if peer.connect_iter(addrs, handler).is_err() {
+                    me.behaviour.inject_dial_failure(&peer_id);
+                }
             },
             raw_swarm::Peer::PendingConnect(mut peer) => {
                 peer.append_multiaddr_attempts(addrs)
@@ -196,6 +199,13 @@ where TBehaviour: NetworkBehaviour,
     #[inline]
     pub fn listeners(me: &Self) -> impl Iterator<Item = &Multiaddr> {
         RawSwarm::listeners(&me.raw_swarm)
+    }
+
+    /// Returns an iterator that produces the list of addresses that other nodes can use to reach
+    /// us.
+    #[inline]
+    pub fn external_addresses(me: &Self) -> impl Iterator<Item = &Multiaddr> {
+        me.external_addrs.iter()
     }
 
     /// Returns the peer ID of the swarm passed as parameter.
@@ -261,10 +271,7 @@ where TBehaviour: NetworkBehaviour,
                 Async::Ready(RawSwarmEvent::Connected { peer_id, endpoint }) => {
                     self.behaviour.inject_connected(peer_id, endpoint);
                 },
-                Async::Ready(RawSwarmEvent::NodeClosed { peer_id, endpoint }) => {
-                    self.behaviour.inject_disconnected(&peer_id, endpoint);
-                },
-                Async::Ready(RawSwarmEvent::NodeError { peer_id, endpoint, .. }) => {
+                Async::Ready(RawSwarmEvent::NodeClosed { peer_id, endpoint, .. }) => {
                     self.behaviour.inject_disconnected(&peer_id, endpoint);
                 },
                 Async::Ready(RawSwarmEvent::Replaced { peer_id, closed_endpoint, endpoint }) => {
@@ -276,11 +283,14 @@ where TBehaviour: NetworkBehaviour,
                 },
                 Async::Ready(RawSwarmEvent::ListenerClosed { .. }) => {},
                 Async::Ready(RawSwarmEvent::IncomingConnectionError { .. }) => {},
-                Async::Ready(RawSwarmEvent::DialError { peer_id, multiaddr, error, .. }) => {
-                    self.behaviour.inject_dial_failure(Some(&peer_id), &multiaddr, &error);
+                Async::Ready(RawSwarmEvent::DialError { peer_id, multiaddr, error, new_state }) => {
+                    self.behaviour.inject_addr_reach_failure(Some(&peer_id), &multiaddr, &error);
+                    if let raw_swarm::PeerState::NotConnected = new_state {
+                        self.behaviour.inject_dial_failure(&peer_id);
+                    }
                 },
                 Async::Ready(RawSwarmEvent::UnknownPeerDialError { multiaddr, error, .. }) => {
-                    self.behaviour.inject_dial_failure(None, &multiaddr, &error);
+                    self.behaviour.inject_addr_reach_failure(None, &multiaddr, &error);
                 },
             }
 
@@ -366,14 +376,22 @@ pub trait NetworkBehaviour {
         event: <<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::OutEvent
     );
 
-    /// Indicates to the behaviour that we tried to reach a node, but failed.
-    fn inject_dial_failure(&mut self, _peer_id: Option<&PeerId>, _addr: &Multiaddr, _error: &dyn error::Error) {
+    /// Indicates to the behaviour that we tried to reach an address, but failed.
+    ///
+    /// If we were trying to reach a specific node, its ID is passed as parameter. If this is the
+    /// last address to attempt for the given node, then `inject_dial_failure` is called afterwards.
+    fn inject_addr_reach_failure(&mut self, _peer_id: Option<&PeerId>, _addr: &Multiaddr, _error: &dyn error::Error) {
+    }
+
+    /// Indicates to the behaviour that we tried to dial all the addresses known for a node, but
+    /// failed.
+    fn inject_dial_failure(&mut self, _peer_id: &PeerId) {
     }
 
     /// Polls for things that swarm should do.
     ///
     /// This API mimics the API of the `Stream` trait.
-    fn poll(&mut self, topology: &mut PollParameters) -> Async<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
+    fn poll(&mut self, params: &mut PollParameters<'_>) -> Async<NetworkBehaviourAction<<<Self::ProtocolsHandler as IntoProtocolsHandler>::Handler as ProtocolsHandler>::InEvent, Self::OutEvent>>;
 }
 
 /// Used when deriving `NetworkBehaviour`. When deriving `NetworkBehaviour`, must be implemented
@@ -414,10 +432,9 @@ impl<'a> PollParameters<'a> {
     }
 
     /// Returns the list of the addresses nodes can use to reach us.
-    // TODO: should return references
     #[inline]
-    pub fn external_addresses<'b>(&'b mut self) -> impl ExactSizeIterator<Item = Multiaddr> + 'b {
-        self.external_addrs.iter().cloned()
+    pub fn external_addresses(&self) -> impl ExactSizeIterator<Item = &Multiaddr> {
+        self.external_addrs.iter()
     }
 
     /// Returns the peer id of the local node.
@@ -448,6 +465,9 @@ pub enum NetworkBehaviourAction<TInEvent, TOutEvent> {
     },
 
     /// Instructs the swarm to try reach the given peer.
+    ///
+    /// In the future, a corresponding `inject_dial_failure` or `inject_connected` function call
+    /// must be performed.
     DialPeer {
         /// The peer to try reach.
         peer_id: PeerId,
@@ -549,13 +569,11 @@ where TBehaviour: NetworkBehaviour,
 
 #[cfg(test)]
 mod tests {
-    use crate::peer_id::PeerId;
+    use crate::{identity, PeerId, PublicKey};
     use crate::protocols_handler::{DummyProtocolsHandler, ProtocolsHandler};
-    use crate::public_key::PublicKey;
     use crate::tests::dummy_transport::DummyTransport;
     use futures::prelude::*;
     use multiaddr::Multiaddr;
-    use rand::random;
     use std::marker::PhantomData;
     use super::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourAction,
                 PollParameters, SwarmBuilder};
@@ -591,7 +609,7 @@ mod tests {
         fn inject_node_event(&mut self, _: PeerId,
             _: <Self::ProtocolsHandler as ProtocolsHandler>::OutEvent) {}
 
-        fn poll(&mut self, _: &mut PollParameters) ->
+        fn poll(&mut self, _: &mut PollParameters<'_>) ->
             Async<NetworkBehaviourAction<<Self::ProtocolsHandler as
             ProtocolsHandler>::InEvent, Self::OutEvent>>
         {
@@ -601,10 +619,7 @@ mod tests {
     }
 
     fn get_random_id() -> PublicKey {
-        PublicKey::Rsa((0 .. 2048)
-            .map(|_| -> u8 { random() })
-            .collect()
-        )
+        identity::Keypair::generate_ed25519().public()
     }
 
     #[test]
@@ -612,8 +627,8 @@ mod tests {
         let id = get_random_id();
         let transport = DummyTransport::new();
         let behaviour = DummyBehaviour{marker: PhantomData};
-        let swarm = SwarmBuilder::new(transport, behaviour,
-            id.into_peer_id()).incoming_limit(Some(4)).build();
+        let swarm = SwarmBuilder::new(transport, behaviour, id.into())
+            .incoming_limit(Some(4)).build();
         assert_eq!(swarm.raw_swarm.incoming_limit(), Some(4));
     }
 
@@ -622,8 +637,7 @@ mod tests {
         let id = get_random_id();
         let transport = DummyTransport::new();
         let behaviour = DummyBehaviour{marker: PhantomData};
-        let swarm = SwarmBuilder::new(transport, behaviour, id.into_peer_id())
-            .build();
+        let swarm = SwarmBuilder::new(transport, behaviour, id.into()).build();
         assert!(swarm.raw_swarm.incoming_limit().is_none())
 
     }

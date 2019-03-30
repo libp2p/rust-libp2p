@@ -22,7 +22,7 @@ use crate::protocol::{IdentifySender, IdentifyProtocolConfig};
 use futures::prelude::*;
 use libp2p_core::{
     protocols_handler::{KeepAlive, ProtocolsHandler, ProtocolsHandlerEvent, ProtocolsHandlerUpgrErr},
-    upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade}
+    upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade, Negotiated}
 };
 use smallvec::SmallVec;
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -34,10 +34,7 @@ pub struct IdentifyListenHandler<TSubstream> {
     config: IdentifyProtocolConfig,
 
     /// List of senders to yield to the user.
-    pending_result: SmallVec<[IdentifySender<TSubstream>; 4]>,
-
-    /// True if `shutdown` has been called.
-    shutdown: bool,
+    pending_result: SmallVec<[IdentifySender<Negotiated<TSubstream>>; 4]>,
 }
 
 impl<TSubstream> IdentifyListenHandler<TSubstream> {
@@ -47,7 +44,6 @@ impl<TSubstream> IdentifyListenHandler<TSubstream> {
         IdentifyListenHandler {
             config: IdentifyProtocolConfig,
             pending_result: SmallVec::new(),
-            shutdown: false,
         }
     }
 }
@@ -57,7 +53,7 @@ where
     TSubstream: AsyncRead + AsyncWrite,
 {
     type InEvent = Void;
-    type OutEvent = IdentifySender<TSubstream>;
+    type OutEvent = IdentifySender<Negotiated<TSubstream>>;
     type Error = Void;
     type Substream = TSubstream;
     type InboundProtocol = IdentifyProtocolConfig;
@@ -84,19 +80,11 @@ where
     fn inject_event(&mut self, _: Self::InEvent) {}
 
     #[inline]
-    fn inject_inbound_closed(&mut self) {}
-
-    #[inline]
     fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgrade<Self::Substream>>::Error>) {}
 
     #[inline]
     fn connection_keep_alive(&self) -> KeepAlive {
         KeepAlive::Now
-    }
-
-    #[inline]
-    fn shutdown(&mut self) {
-        self.shutdown = true;
     }
 
     fn poll(
@@ -115,10 +103,6 @@ where
             )));
         }
 
-        if self.shutdown {
-            Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown))
-        } else {
-            Ok(Async::NotReady)
-        }
+        Ok(Async::NotReady)
     }
 }

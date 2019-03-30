@@ -189,11 +189,17 @@ where
                 } => {
                     match socket.read_buf(&mut len_buf)? {
                         Async::Ready(num_read) => {
-                            // Reaching EOF before finishing to read the length is an error.
+                            // Reaching EOF before finishing to read the length is an error, unless
+                            // the EOF is at the very beginning of the substream, in which case we
+                            // assume that the data is empty.
                             if num_read == 0 {
-                                return Err(ReadOneError::Io(
-                                    std::io::ErrorKind::UnexpectedEof.into(),
-                                ));
+                                if len_buf.position() == 0 {
+                                    return Ok(Async::Ready((socket, Vec::new())));
+                                } else {
+                                    return Err(ReadOneError::Io(
+                                        std::io::ErrorKind::UnexpectedEof.into(),
+                                    ));
+                                }
                             }
 
                             let len_buf_with_data =
@@ -273,7 +279,7 @@ impl From<std::io::Error> for ReadOneError {
 }
 
 impl fmt::Display for ReadOneError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             ReadOneError::Io(ref err) => write!(f, "{}", err),
             ReadOneError::TooLarge { .. } => write!(f, "Received data size over maximum"),
@@ -291,33 +297,40 @@ impl error::Error for ReadOneError {
 }
 
 /// Similar to `read_one`, but applies a transformation on the output buffer.
+///
+/// > **Note**: The `param` parameter is an arbitrary value that will be passed back to `then`.
+/// >           This parameter is normally not necessary, as we could just pass a closure that has
+/// >           ownership of any data we want. In practice, though, this would make the
+/// >           `ReadRespond` type impossible to express as a concrete type. Once the `impl Trait`
+/// >           syntax is allowed within traits, we can remove this parameter.
 #[inline]
-pub fn read_one_then<TSocket, TThen, TOut, TErr>(
+pub fn read_one_then<TSocket, TParam, TThen, TOut, TErr>(
     socket: TSocket,
     max_size: usize,
+    param: TParam,
     then: TThen,
-) -> ReadOneThen<TSocket, TThen>
+) -> ReadOneThen<TSocket, TParam, TThen>
 where
     TSocket: AsyncRead,
-    TThen: FnOnce(Vec<u8>) -> Result<TOut, TErr>,
+    TThen: FnOnce(Vec<u8>, TParam) -> Result<TOut, TErr>,
     TErr: From<ReadOneError>,
 {
     ReadOneThen {
         inner: read_one(socket, max_size),
-        then: Some(then),
+        then: Some((param, then)),
     }
 }
 
 /// Future that makes `read_one_then` work.
-pub struct ReadOneThen<TSocket, TThen> {
+pub struct ReadOneThen<TSocket, TParam, TThen> {
     inner: ReadOne<TSocket>,
-    then: Option<TThen>,
+    then: Option<(TParam, TThen)>,
 }
 
-impl<TSocket, TThen, TOut, TErr> Future for ReadOneThen<TSocket, TThen>
+impl<TSocket, TParam, TThen, TOut, TErr> Future for ReadOneThen<TSocket, TParam, TThen>
 where
     TSocket: AsyncRead,
-    TThen: FnOnce(Vec<u8>) -> Result<TOut, TErr>,
+    TThen: FnOnce(Vec<u8>, TParam) -> Result<TOut, TErr>,
     TErr: From<ReadOneError>,
 {
     type Item = TOut;
@@ -326,8 +339,9 @@ where
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self.inner.poll()? {
             Async::Ready(buffer) => {
-                let then = self.then.take().expect("Future was polled after it was finished");
-                Ok(Async::Ready(then(buffer)?))
+                let (param, then) = self.then.take()
+                    .expect("Future was polled after it was finished");
+                Ok(Async::Ready(then(buffer, param)?))
             },
             Async::NotReady => Ok(Async::NotReady),
         }
@@ -335,6 +349,12 @@ where
 }
 
 /// Similar to `read_one`, but applies a transformation on the output buffer.
+///
+/// > **Note**: The `param` parameter is an arbitrary value that will be passed back to `then`.
+/// >           This parameter is normally not necessary, as we could just pass a closure that has
+/// >           ownership of any data we want. In practice, though, this would make the
+/// >           `ReadRespond` type impossible to express as a concrete type. Once the `impl Trait`
+/// >           syntax is allowed within traits, we can remove this parameter.
 #[inline]
 pub fn read_respond<TSocket, TThen, TParam, TOut, TErr>(
     socket: TSocket,
@@ -381,43 +401,50 @@ where
 
 /// Send a message to the given socket, then shuts down the writing side, then reads an answer.
 ///
-/// This combines `write_one` followed with `read_one`.
+/// This combines `write_one` followed with `read_one_then`.
+///
+/// > **Note**: The `param` parameter is an arbitrary value that will be passed back to `then`.
+/// >           This parameter is normally not necessary, as we could just pass a closure that has
+/// >           ownership of any data we want. In practice, though, this would make the
+/// >           `ReadRespond` type impossible to express as a concrete type. Once the `impl Trait`
+/// >           syntax is allowed within traits, we can remove this parameter.
 #[inline]
-pub fn request_response<TSocket, TData, TThen, TOut, TErr>(
+pub fn request_response<TSocket, TData, TParam, TThen, TOut, TErr>(
     socket: TSocket,
     data: TData,
     max_size: usize,
+    param: TParam,
     then: TThen,
-) -> RequestResponse<TSocket, TThen, TData>
+) -> RequestResponse<TSocket, TParam, TThen, TData>
 where
     TSocket: AsyncRead + AsyncWrite,
     TData: AsRef<[u8]>,
-    TThen: FnOnce(Vec<u8>) -> Result<TOut, TErr>,
+    TThen: FnOnce(Vec<u8>, TParam) -> Result<TOut, TErr>,
 {
     RequestResponse {
-        inner: RequestResponseInner::Write(write_one(socket, data).inner, max_size, then),
+        inner: RequestResponseInner::Write(write_one(socket, data).inner, max_size, param, then),
     }
 }
 
 /// Future that makes `request_response` work.
-pub struct RequestResponse<TSocket, TThen, TData = Vec<u8>> {
-    inner: RequestResponseInner<TSocket, TData, TThen>,
+pub struct RequestResponse<TSocket, TParam, TThen, TData = Vec<u8>> {
+    inner: RequestResponseInner<TSocket, TData, TParam, TThen>,
 }
 
-enum RequestResponseInner<TSocket, TData, TThen> {
+enum RequestResponseInner<TSocket, TData, TParam, TThen> {
     // We need to write data to the socket.
-    Write(WriteOneInner<TSocket, TData>, usize, TThen),
+    Write(WriteOneInner<TSocket, TData>, usize, TParam, TThen),
     // We need to read the message.
-    Read(ReadOneThen<TSocket, TThen>),
+    Read(ReadOneThen<TSocket, TParam, TThen>),
     // An error happened during the processing.
     Poisoned,
 }
 
-impl<TSocket, TData, TThen, TOut, TErr> Future for RequestResponse<TSocket, TThen, TData>
+impl<TSocket, TData, TParam, TThen, TOut, TErr> Future for RequestResponse<TSocket, TParam, TThen, TData>
 where
     TSocket: AsyncRead + AsyncWrite,
     TData: AsRef<[u8]>,
-    TThen: FnOnce(Vec<u8>) -> Result<TOut, TErr>,
+    TThen: FnOnce(Vec<u8>, TParam) -> Result<TOut, TErr>,
     TErr: From<ReadOneError>,
 {
     type Item = TOut;
@@ -426,14 +453,14 @@ where
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
             match mem::replace(&mut self.inner, RequestResponseInner::Poisoned) {
-                RequestResponseInner::Write(mut inner, max_size, then) => {
+                RequestResponseInner::Write(mut inner, max_size, param, then) => {
                     match inner.poll().map_err(ReadOneError::Io)? {
                         Async::Ready(socket) => {
                             self.inner =
-                                RequestResponseInner::Read(read_one_then(socket, max_size, then));
+                                RequestResponseInner::Read(read_one_then(socket, max_size, param, then));
                         }
                         Async::NotReady => {
-                            self.inner = RequestResponseInner::Write(inner, max_size, then);
+                            self.inner = RequestResponseInner::Write(inner, max_size, param, then);
                             return Ok(Async::NotReady);
                         }
                     }
@@ -454,7 +481,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
+    use std::io::{self, Cursor};
     use tokio::runtime::current_thread::Runtime;
 
     #[test]
@@ -484,7 +511,7 @@ mod tests {
         let mut in_buffer = len_buf.to_vec();
         in_buffer.extend_from_slice(&original_data);
 
-        let future = read_one_then(Cursor::new(in_buffer), 10_000, move |out| -> Result<_, ReadOneError> {
+        let future = read_one_then(Cursor::new(in_buffer), 10_000, (), move |out, ()| -> Result<_, ReadOneError> {
             assert_eq!(out, original_data);
             Ok(())
         });
@@ -494,7 +521,7 @@ mod tests {
 
     #[test]
     fn read_one_zero_len() {
-        let future = read_one_then(Cursor::new(vec![0]), 10_000, move |out| -> Result<_, ReadOneError> {
+        let future = read_one_then(Cursor::new(vec![0]), 10_000, (), move |out, ()| -> Result<_, ReadOneError> {
             assert!(out.is_empty());
             Ok(())
         });
@@ -510,13 +537,35 @@ mod tests {
         let mut in_buffer = len_buf.to_vec();
         in_buffer.extend((0..5000).map(|_| 0));
 
-        let future = read_one_then(Cursor::new(in_buffer), 100, move |_| -> Result<_, ReadOneError> {
+        let future = read_one_then(Cursor::new(in_buffer), 100, (), move |_, ()| -> Result<_, ReadOneError> {
             Ok(())
         });
 
         match Runtime::new().unwrap().block_on(future) {
             Err(ReadOneError::TooLarge { .. }) => (),
             _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn read_one_accepts_empty() {
+        let future = read_one_then(Cursor::new([]), 10_000, (), move |out, ()| -> Result<_, ReadOneError> {
+            assert!(out.is_empty());
+            Ok(())
+        });
+
+        Runtime::new().unwrap().block_on(future).unwrap();
+    }
+
+    #[test]
+    fn read_one_eof_before_len() {
+        let future = read_one_then(Cursor::new([0x80]), 10_000, (), move |_, ()| -> Result<(), ReadOneError> {
+            unreachable!()
+        });
+
+        match Runtime::new().unwrap().block_on(future) {
+            Err(ReadOneError::Io(ref err)) if err.kind() == io::ErrorKind::UnexpectedEof => (),
+            _ => panic!()
         }
     }
 }

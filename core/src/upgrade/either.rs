@@ -22,6 +22,7 @@ use crate::{
     either::{EitherOutput, EitherError, EitherFuture2, EitherName},
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo}
 };
+use multistream_select::Negotiated;
 
 /// A type to represent two possible upgrade types (inbound or outbound).
 #[derive(Debug, Clone)]
@@ -55,7 +56,7 @@ where
     type Error = EitherError<EA, EB>;
     type Future = EitherFuture2<A::Future, B::Future>;
 
-    fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, sock: Negotiated<C>, info: Self::Info) -> Self::Future {
         match (self, info) {
             (EitherUpgrade::A(a), EitherName::A(info)) => EitherFuture2::A(a.upgrade_inbound(sock, info)),
             (EitherUpgrade::B(b), EitherName::B(info)) => EitherFuture2::B(b.upgrade_inbound(sock, info)),
@@ -73,7 +74,7 @@ where
     type Error = EitherError<EA, EB>;
     type Future = EitherFuture2<A::Future, B::Future>;
 
-    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, sock: Negotiated<C>, info: Self::Info) -> Self::Future {
         match (self, info) {
             (EitherUpgrade::A(a), EitherName::A(info)) => EitherFuture2::A(a.upgrade_outbound(sock, info)),
             (EitherUpgrade::B(b), EitherName::B(info)) => EitherFuture2::B(b.upgrade_outbound(sock, info)),

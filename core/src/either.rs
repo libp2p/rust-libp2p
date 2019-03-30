@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{muxing::{Shutdown, StreamMuxer}, Multiaddr, ProtocolName};
+use crate::{muxing::StreamMuxer, Multiaddr, ProtocolName};
 use futures::prelude::*;
 use std::{fmt, io::{Error as IoError, Read, Write}};
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -34,7 +34,7 @@ where
     A: fmt::Display,
     B: fmt::Display
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             EitherError::A(a) => a.fmt(f),
             EitherError::B(b) => b.fmt(f)
@@ -135,10 +135,10 @@ where
     type Substream = EitherOutput<A::Substream, B::Substream>;
     type OutboundSubstream = EitherOutbound<A, B>;
 
-    fn poll_inbound(&self) -> Poll<Option<Self::Substream>, IoError> {
+    fn poll_inbound(&self) -> Poll<Self::Substream, IoError> {
         match self {
-            EitherOutput::First(inner) => inner.poll_inbound().map(|p| p.map(|o| o.map(EitherOutput::First))),
-            EitherOutput::Second(inner) => inner.poll_inbound().map(|p| p.map(|o| o.map(EitherOutput::Second))),
+            EitherOutput::First(inner) => inner.poll_inbound().map(|p| p.map(EitherOutput::First)),
+            EitherOutput::Second(inner) => inner.poll_inbound().map(|p| p.map(EitherOutput::Second)),
         }
     }
 
@@ -149,13 +149,13 @@ where
         }
     }
 
-    fn poll_outbound(&self, substream: &mut Self::OutboundSubstream) -> Poll<Option<Self::Substream>, IoError> {
+    fn poll_outbound(&self, substream: &mut Self::OutboundSubstream) -> Poll<Self::Substream, IoError> {
         match (self, substream) {
             (EitherOutput::First(ref inner), EitherOutbound::A(ref mut substream)) => {
-                inner.poll_outbound(substream).map(|p| p.map(|o| o.map(EitherOutput::First)))
+                inner.poll_outbound(substream).map(|p| p.map(EitherOutput::First))
             },
             (EitherOutput::Second(ref inner), EitherOutbound::B(ref mut substream)) => {
-                inner.poll_outbound(substream).map(|p| p.map(|o| o.map(EitherOutput::Second)))
+                inner.poll_outbound(substream).map(|p| p.map(EitherOutput::Second))
             },
             _ => panic!("Wrong API usage")
         }
@@ -214,13 +214,13 @@ where
         }
     }
 
-    fn shutdown_substream(&self, sub: &mut Self::Substream, kind: Shutdown) -> Poll<(), IoError> {
+    fn shutdown_substream(&self, sub: &mut Self::Substream) -> Poll<(), IoError> {
         match (self, sub) {
             (EitherOutput::First(ref inner), EitherOutput::First(ref mut sub)) => {
-                inner.shutdown_substream(sub, kind)
+                inner.shutdown_substream(sub)
             },
             (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut sub)) => {
-                inner.shutdown_substream(sub, kind)
+                inner.shutdown_substream(sub)
             },
             _ => panic!("Wrong API usage")
         }
@@ -243,10 +243,17 @@ where
         }
     }
 
-    fn shutdown(&self, kind: Shutdown) -> Poll<(), IoError> {
+    fn is_remote_acknowledged(&self) -> bool {
         match self {
-            EitherOutput::First(inner) => inner.shutdown(kind),
-            EitherOutput::Second(inner) => inner.shutdown(kind)
+            EitherOutput::First(inner) => inner.is_remote_acknowledged(),
+            EitherOutput::Second(inner) => inner.is_remote_acknowledged()
+        }
+    }
+
+    fn close(&self) -> Poll<(), IoError> {
+        match self {
+            EitherOutput::First(inner) => inner.close(),
+            EitherOutput::Second(inner) => inner.close()
         }
     }
 

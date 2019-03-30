@@ -29,7 +29,7 @@ use libp2p_core::{
     protocols_handler::IntoProtocolsHandler,
     protocols_handler::ProtocolsHandlerUpgrErr,
     upgrade::{EitherUpgrade, InboundUpgrade, OutboundUpgrade, WriteOne},
-    Multiaddr, PeerId, ProtocolsHandler, ProtocolsHandlerEvent,
+    Negotiated, Multiaddr, PeerId, ProtocolsHandler, ProtocolsHandlerEvent,
 };
 use smallvec::SmallVec;
 use std::{error, fmt, io, marker::PhantomData, time::Duration, time::Instant};
@@ -58,10 +58,6 @@ pub struct BrahmsHandlerInner<TSubstream> {
     /// Required difficulty of the proof of work.
     pow_difficulty: u8,
 
-    /// If true, we are trying to shut down the existing floodsub substream and should refuse any
-    /// incoming connection.
-    shutting_down: bool,
-
     /// Queue of values that `poll` should produces.
     send_queue: SmallVec<[OutEvent; 16]>,
 
@@ -72,7 +68,7 @@ pub struct BrahmsHandlerInner<TSubstream> {
     ongoing_pull_request: Option<BrahmsListenPullRequest<TSubstream>>,
 
     /// Futures that flush pull responses.
-    pull_response_flushes: SmallVec<[WriteOne<TSubstream>; 4]>,
+    pull_response_flushes: SmallVec<[WriteOne<Negotiated<TSubstream>>; 4]>,
 }
 
 type OutEvent = ProtocolsHandlerEvent<
@@ -132,7 +128,6 @@ where
             local_peer_id: self.local_peer_id,
             remote_peer_id: remote_peer_id.clone(),
             pow_difficulty: self.pow_difficulty,
-            shutting_down: false,
             send_queue: SmallVec::new(),
             connection_keep_alive: KeepAlive::Until(Instant::now() + INACTIVE_TIMEOUT),
             ongoing_pull_request: None,
@@ -252,9 +247,6 @@ where
     }
 
     #[inline]
-    fn inject_inbound_closed(&mut self) {}
-
-    #[inline]
     fn inject_dial_upgrade_error(&mut self, _: Self::OutboundOpenInfo, _: ProtocolsHandlerUpgrErr<EitherError<BrahmsPushRequestError, Box<error::Error + Send + Sync>>>) {
     }
 
@@ -263,21 +255,12 @@ where
         self.connection_keep_alive
     }
 
-    #[inline]
-    fn shutdown(&mut self) {
-        self.shutting_down = true;
-    }
-
     fn poll(
         &mut self,
     ) -> Poll<
         OutEvent,
         Self::Error,
     > {
-        if self.shutting_down {
-            return Ok(Async::Ready(ProtocolsHandlerEvent::Shutdown));
-        }
-
         if !self.send_queue.is_empty() {
             let event = self.send_queue.remove(0);
             return Ok(Async::Ready(event));
@@ -305,7 +288,6 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         f.debug_struct("BrahmsHandlerInner")
-            .field("shutting_down", &self.shutting_down)
             .field("send_queue", &self.send_queue.len())
             .field("ongoing_pull_request", &self.ongoing_pull_request.is_some())
             .field("pull_response_flushes", &self.pull_response_flushes.len())

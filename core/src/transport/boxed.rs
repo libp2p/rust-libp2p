@@ -37,9 +37,9 @@ where
     }
 }
 
-pub type Dial<O, E> = Box<Future<Item = O, Error = E> + Send>;
-pub type Listener<O, E> = Box<Stream<Item = (ListenerUpgrade<O, E>, Multiaddr), Error = E> + Send>;
-pub type ListenerUpgrade<O, E> = Box<Future<Item = O, Error = E> + Send>;
+pub type Dial<O, E> = Box<dyn Future<Item = O, Error = E> + Send>;
+pub type Listener<O, E> = Box<dyn Stream<Item = (ListenerUpgrade<O, E>, Multiaddr), Error = E> + Send>;
+pub type ListenerUpgrade<O, E> = Box<dyn Future<Item = O, Error = E> + Send>;
 
 trait Abstract<O, E> {
     fn listen_on(&self, addr: Multiaddr) -> Result<(Listener<O, E>, Multiaddr), TransportError<E>>;
@@ -76,11 +76,11 @@ where
 
 /// See the `Transport::boxed` method.
 pub struct Boxed<O, E> {
-    inner: Arc<Abstract<O, E> + Send + Sync>,
+    inner: Arc<dyn Abstract<O, E> + Send + Sync>,
 }
 
 impl<O, E> fmt::Debug for Boxed<O, E> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "BoxedTransport")
     }
 }

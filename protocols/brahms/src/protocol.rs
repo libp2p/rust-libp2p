@@ -25,7 +25,7 @@ use crate::codec::RawMessage;
 use crate::pow::Pow;
 use futures::{future, prelude::*};
 use libp2p_core::upgrade::{self, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
-use libp2p_core::{Multiaddr, PeerId};
+use libp2p_core::{Negotiated, Multiaddr, PeerId};
 use std::{error, fmt, io, iter};
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -58,10 +58,10 @@ where
 {
     type Output = ();
     type Error = BrahmsPushRequestError;
-    type Future = future::Either<future::FromErr<upgrade::WriteOne<TSocket>, BrahmsPushRequestError>, future::FutureResult<(), BrahmsPushRequestError>>;
+    type Future = future::Either<future::FromErr<upgrade::WriteOne<Negotiated<TSocket>>, BrahmsPushRequestError>, future::FutureResult<(), BrahmsPushRequestError>>;
 
     #[inline]
-    fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: Negotiated<TSocket>, _: Self::Info) -> Self::Future {
         let addrs = self
             .addresses
             .into_iter()
@@ -129,12 +129,12 @@ where
 {
     type Output = Vec<(PeerId, Vec<Multiaddr>)>;
     type Error = Box<error::Error + Send + Sync>;
-    type Future = upgrade::RequestResponse<TSocket, fn(Vec<u8>) -> Result<Self::Output, Self::Error>>;
+    type Future = upgrade::RequestResponse<Negotiated<TSocket>, (), fn(Vec<u8>, ()) -> Result<Self::Output, Self::Error>>;
 
     #[inline]
-    fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: Negotiated<TSocket>, _: Self::Info) -> Self::Future {
         let message = RawMessage::PullRequest.into_bytes();
-        upgrade::request_response(socket, message, 2048, |message| {
+        upgrade::request_response(socket, message, 2048, (), |message, ()| {
             match RawMessage::from_bytes(&message) {
                 RawMessage::PullResponse(response) => {
                     let mut out = Vec::new();
@@ -191,10 +191,10 @@ where
 {
     type Output = BrahmsListenOut<TSocket>;
     type Error = Box<error::Error + Send + Sync>;   // TODO: better error
-    type Future = upgrade::ReadRespond<TSocket, Self, fn(TSocket, Vec<u8>, Self) -> Result<Self::Output, Self::Error>>;
+    type Future = upgrade::ReadRespond<Negotiated<TSocket>, Self, fn(Negotiated<TSocket>, Vec<u8>, Self) -> Result<Self::Output, Self::Error>>;
 
     #[inline]
-    fn upgrade_inbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: Negotiated<TSocket>, _: Self::Info) -> Self::Future {
         upgrade::read_respond(socket, 2048, self, |socket, message_bytes, me| {
             let message = RawMessage::from_bytes(&message_bytes);
             match message {
@@ -224,7 +224,7 @@ where
 }
 
 /// Request received from a remote.
-#[derive(Debug)]
+// TODO: #[derive(Debug)]
 pub enum BrahmsListenOut<TSocket> {
     /// The sender pushes itself to us. Contains the addresses it's listening on.
     Push(Vec<Multiaddr>),
@@ -234,9 +234,9 @@ pub enum BrahmsListenOut<TSocket> {
 }
 
 /// Sender requests us to send back our view of the network.
-#[derive(Debug)]
+// TODO: #[derive(Debug)]
 pub struct BrahmsListenPullRequest<TSocket> {
-    inner: TSocket,
+    inner: Negotiated<TSocket>,
 }
 
 impl<TSocket> BrahmsListenPullRequest<TSocket> {
@@ -244,7 +244,7 @@ impl<TSocket> BrahmsListenPullRequest<TSocket> {
     pub fn respond(
         self,
         view: impl IntoIterator<Item = (PeerId, impl IntoIterator<Item = Multiaddr>)>,
-    ) -> upgrade::WriteOne<TSocket>
+    ) -> upgrade::WriteOne<Negotiated<TSocket>>
     where
         TSocket: AsyncWrite
     {

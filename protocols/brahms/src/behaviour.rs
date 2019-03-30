@@ -438,11 +438,10 @@ where
 
         if !self.pull_requests_to_respond.is_empty() {
             let peer_id = self.pull_requests_to_respond.remove(0);
-            let external_addresses = parameters.external_addresses().collect::<Vec<_>>();
             let local_addresses = parameters
                 .listened_addresses()
+                .chain(parameters.external_addresses())
                 .cloned()
-                .chain(external_addresses.into_iter())
                 .collect();
             let local_peer_id = parameters.local_peer_id().clone();
             let response = self
@@ -473,14 +472,13 @@ where
 
         if let Some(pos) = self.pending_pushes.iter().position(|p| self.connected_peers.contains(p)) {
             let peer_id = self.pending_pushes.remove(pos);
-            let external_addresses = parameters.external_addresses().collect::<Vec<_>>();
             return Async::Ready(NetworkBehaviourAction::SendEvent {
                 peer_id: peer_id.clone(),
                 event: BrahmsHandlerIn::Event(BrahmsHandlerEvent::Push {
                     addresses: parameters
                         .listened_addresses()
+                        .chain(parameters.external_addresses())
                         .cloned()
-                        .chain(external_addresses)
                         .collect(),
                     local_peer_id: parameters.local_peer_id().clone(),
                     remote_peer_id: peer_id.clone(),

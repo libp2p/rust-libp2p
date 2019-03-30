@@ -49,16 +49,11 @@
 //!
 //! The two nodes then connect.
 
-extern crate env_logger;
-extern crate futures;
-extern crate libp2p;
-extern crate tokio;
-extern crate void;
-
 use futures::prelude::*;
 use libp2p::{
+    PeerId,
     NetworkBehaviour,
-    secio,
+    identity,
     tokio_codec::{FramedRead, LinesCodec}
 };
 
@@ -66,8 +61,8 @@ fn main() {
     env_logger::init();
 
     // Create a random PeerId
-    let local_key = secio::SecioKeyPair::ed25519_generated().unwrap();
-    let local_peer_id = local_key.to_peer_id();
+    let local_key = identity::Keypair::generate_ed25519();
+    let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {:?}", local_peer_id);
 
     // Set up a an encrypted DNS-enabled TCP Transport over the Mplex and Yamux protocols
