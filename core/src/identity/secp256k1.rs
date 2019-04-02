@@ -96,6 +96,7 @@ impl SecretKey {
         let sk_bytes = sk.as_mut();
         let secret = secp::key::SecretKey::from_slice(&*sk_bytes)
             .map_err(|e| DecodingError::new("Secp256k1 secret key", e))?;
+        sk_bytes.zeroize();
         Ok(SecretKey(secret))
     }
 
