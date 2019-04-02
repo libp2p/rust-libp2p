@@ -19,8 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 //
 
-// TODO: Implement control message piggybacking
-
 use cuckoofilter::CuckooFilter;
 use futures::prelude::*;
 use gossipsub_config::GossipsubConfig;
@@ -533,7 +531,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
         subscriptions: &[GossipsubSubscription],
         propagation_source: &PeerId,
     ) {
-        debug!(
+        trace!(
             "Handling subscriptions from source: {:?}",
             propagation_source
         );
@@ -603,7 +601,7 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 }
             }
         }
-        debug!(
+        trace!(
             "Completed handling subscriptions from source: {:?}",
             propagation_source
         );
@@ -633,11 +631,15 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 let peer_list = self
                     .get_random_peers(topic_hash, desired_peers, { |peer| !peers.contains(peer) });
                 for peer in peer_list {
-                    peers.push(peer.clone());
+                    // exclude potential duplicates
+                    if !peers.contains(&peer) {
+                        peers.push(peer.clone());
+                    }
                     // TODO: tagPeer
                     let current_topic = to_graft.entry(peer).or_insert_with(|| vec![]);
                     current_topic.push(topic_hash.clone());
                 }
+                debug!("Updating mesh, new mesh: {:?}", peers);
                 // update the mesh
                 self.mesh.insert(topic_hash.clone(), peers.clone());
             }
@@ -719,7 +721,12 @@ impl<TSubstream> Gossipsub<TSubstream> {
                 let needed_peers = self.config.mesh_n - peers.len();
                 let mut new_peers =
                     self.get_random_peers(topic_hash, needed_peers, |peer| !peers.contains(peer));
-                peers.append(&mut new_peers);
+                // check for duplicates before adding
+                for new_peer in new_peers {
+                    if !peers.contains(&new_peer) {
+                        peers.push(new_peer);
+                    }
+                }
             }
             // update the entry
             self.fanout.insert(topic_hash.clone(), peers.to_vec());
@@ -925,6 +932,7 @@ where
     }
 
     fn inject_connected(&mut self, id: PeerId, _: ConnectedPoint) {
+        info!("New peer connected: {:?}", id);
         // We need to send our subscriptions to the newly-connected node.
         let mut subscriptions = vec![];
         for topic_hash in self.mesh.keys() {
@@ -954,11 +962,12 @@ where
     fn inject_disconnected(&mut self, id: &PeerId, _: ConnectedPoint) {
         // TODO: Refactor
         // remove from mesh, topic_peers and peer_topic
+        debug!("Peer disconnected: {:?}", id);
         {
             let topics = match self.peer_topics.get(&id) {
                 Some(topics) => (topics),
                 None => {
-                    println!("ERROR: Disconnected node, not in connected nodes");
+                    error!("ERROR: Disconnected node, not in connected nodes");
                     return;
                 }
             };
@@ -982,13 +991,13 @@ where
                     }
                     // debugging purposes
                     else {
-                        println!(
+                        warn!(
                             "ERROR: Disconnected node: {:?} not in topic_peers peer list",
                             &id
                         );
                     }
                 } else {
-                    println!(
+                    warn!(
                         "ERROR: Disconnected node: {:?} with topic: {:?} not in topic_peers",
                         &id, &topic
                     );
