@@ -27,6 +27,8 @@ pub struct GossipsubConfig {
     pub fanout_ttl: Duration,
     /// The maximum byte size for each gossip.
     pub max_gossip_size: usize,
+    /// Timeout before the protocol handler terminates the stream.
+    pub inactivity_timeout: Duration,
 }
 
 impl Default for GossipsubConfig {
@@ -42,6 +44,7 @@ impl Default for GossipsubConfig {
             heartbeat_interval: Duration::from_secs(1),
             fanout_ttl: Duration::from_secs(60),
             max_gossip_size: 2048,
+            inactivity_timeout: Duration::from_secs(60),
         }
     }
 }
@@ -68,7 +71,9 @@ pub struct GossipsubConfigBuilder {
     /// Time to live for fanout peers.
     fanout_ttl: Duration,
     /// The maximum byte size for each gossip.
-    pub max_gossip_size: usize,
+    max_gossip_size: usize,
+    /// The inactivity time before a peer is disconnected.
+    inactivity_timeout: Duration,
 }
 
 impl Default for GossipsubConfigBuilder {
@@ -84,6 +89,7 @@ impl Default for GossipsubConfigBuilder {
             heartbeat_interval: Duration::from_secs(1),
             fanout_ttl: Duration::from_secs(60),
             max_gossip_size: 2048,
+            inactivity_timeout: Duration::from_secs(60),
         }
     }
 }
@@ -161,6 +167,11 @@ impl GossipsubConfigBuilder {
         self
     }
 
+    pub fn inactivity_timeout(&mut self, inactivity_timeout: Duration) -> &mut Self {
+        self.inactivity_timeout = inactivity_timeout;
+        self
+    }
+
     pub fn build(&self) -> GossipsubConfig {
         GossipsubConfig {
             history_length: self.history_length,
@@ -173,6 +184,7 @@ impl GossipsubConfigBuilder {
             heartbeat_interval: self.heartbeat_interval,
             fanout_ttl: self.fanout_ttl,
             max_gossip_size: self.max_gossip_size,
+            inactivity_timeout: self.inactivity_timeout,
         }
     }
 }

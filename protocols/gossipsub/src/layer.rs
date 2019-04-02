@@ -924,7 +924,10 @@ where
     type OutEvent = GossipsubEvent;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
-        OneShotHandler::new(ProtocolConfig::new(self.config.max_gossip_size))
+        OneShotHandler::new(
+            ProtocolConfig::new(self.config.max_gossip_size),
+            self.config.inactivity_timeout,
+        )
     }
 
     fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {

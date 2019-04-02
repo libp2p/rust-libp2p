@@ -66,5 +66,6 @@ pub mod protocol;
 
 mod addresses;
 mod behaviour;
+mod kad_hash;
 mod protobuf_structs;
 mod query;
