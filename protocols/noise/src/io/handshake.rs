@@ -23,7 +23,7 @@
 mod payload;
 
 use crate::error::NoiseError;
-use crate::protocol::{Protocol, PublicKey};
+use crate::protocol::{Protocol, PublicKey, KeypairIdentity};
 use libp2p_core::identity;
 use futures::{future, Async, Future, future::FutureResult, Poll};
 use std::{mem, io};
@@ -33,17 +33,6 @@ use protobuf::Message;
 use super::NoiseOutput;
 
 /// A future performing a Noise handshake pattern.
-///
-/// In the context of libp2p, an authenticated handshake is a handshake establishing
-/// the authenticity of a remote's [public identity key](identity::PublicKey).
-///
-/// All authenticated handshakes are currently based in turn on authenticated
-/// Noise handshakes, i.e. involving static DH keys, in order to allow one or
-/// both parties to omit signatures in a handshake if their public identity key is
-/// [linked to](Protocol::linked) (e.g. is the same as) their static DH public key.
-///
-/// An authenticated handshake _succeeds_ if the future resolves with a
-/// [`RemoteIdentity::IdentityKey`].
 pub struct Handshake<T, C>(
     Box<dyn Future<
         Item = <Handshake<T, C> as Future>::Item,
@@ -92,8 +81,9 @@ pub enum RemoteIdentity<C> {
 /// > **Note**: Even if a remote's public identity key is known a priori,
 /// > unless the authenticity of the key is [linked](Protocol::linked) to
 /// > the authenticity of a remote's static DH public key, an authenticated
-/// > handshake will still create and send signatures over the static DH
-/// > public keys.
+/// > handshake will still send the associated signature of the provided
+/// > local [`KeypairIdentity`] in order for the remote to verify that the static
+/// > DH public key is authentic w.r.t. the known public identity key.
 pub enum IdentityExchange {
     /// Send the local public identity to the remote.
     ///
@@ -137,14 +127,13 @@ where
     /// initiator <-{id}- responder
     /// ```
     pub fn rt1_initiator(
-        id_keys: identity::Keypair,
-        dh_pubkey: PublicKey<C>,
         io: T,
         session: Result<snow::Session, NoiseError>,
-        id_exchange: IdentityExchange
+        identity: KeypairIdentity,
+        identity_x: IdentityExchange
     ) -> Handshake<T, C> {
         Handshake(Box::new(
-            State::new(id_keys, dh_pubkey, io, session, id_exchange)
+            State::new(io, session, identity, identity_x)
                 .and_then(State::send_identity)
                 .and_then(State::recv_identity)
                 .and_then(State::finish)))
@@ -167,14 +156,13 @@ where
     /// initiator <-{id}- responder
     /// ```
     pub fn rt1_responder(
-        id_keys: identity::Keypair,
-        dh_pubkey: PublicKey<C>,
         io: T,
         session: Result<snow::Session, NoiseError>,
-        id_exchange: IdentityExchange,
+        identity: KeypairIdentity,
+        identity_x: IdentityExchange,
     ) -> Handshake<T, C> {
         Handshake(Box::new(
-            State::new(id_keys, dh_pubkey, io, session, id_exchange)
+            State::new(io, session, identity, identity_x)
                 .and_then(State::recv_identity)
                 .and_then(State::send_identity)
                 .and_then(State::finish)))
@@ -199,14 +187,13 @@ where
     /// initiator -{id}-> responder
     /// ```
     pub fn rt15_initiator(
-        id_keys: identity::Keypair,
-        dh_pubkey: PublicKey<C>,
         io: T,
         session: Result<snow::Session, NoiseError>,
-        id_exchange: IdentityExchange
+        identity: KeypairIdentity,
+        identity_x: IdentityExchange
     ) -> Handshake<T, C> {
         Handshake(Box::new(
-            State::new(id_keys, dh_pubkey, io, session, id_exchange)
+            State::new(io, session, identity, identity_x)
                 .and_then(State::send_empty)
                 .and_then(State::recv_identity)
                 .and_then(State::send_identity)
@@ -232,14 +219,13 @@ where
     /// initiator -{id}-> responder
     /// ```
     pub fn rt15_responder(
-        id_keys: identity::Keypair,
-        dh_pubkey: PublicKey<C>,
         io: T,
         session: Result<snow::Session, NoiseError>,
-        id_exchange: IdentityExchange
+        identity: KeypairIdentity,
+        identity_x: IdentityExchange
     ) -> Handshake<T, C> {
         Handshake(Box::new(
-            State::new(id_keys, dh_pubkey, io, session, id_exchange)
+            State::new(io, session, identity, identity_x)
                 .and_then(State::recv_empty)
                 .and_then(State::send_identity)
                 .and_then(State::recv_identity)
@@ -251,28 +237,27 @@ where
 // Internal
 
 /// Handshake state.
-struct State<T, C> {
+struct State<T> {
     /// The underlying I/O resource.
     io: NoiseOutput<T>,
-    /// The local node's identity keypair.
-    id_keys: identity::Keypair,
-    /// The local node's static DH public key.
-    dh_pubkey: PublicKey<C>,
+    /// The associated public identity of the local node's static DH keypair,
+    /// which can be sent to the remote as part of an authenticated handshake.
+    identity: KeypairIdentity,
     /// The received signature over the remote's static DH public key, if any.
     dh_remote_pubkey_sig: Option<Vec<u8>>,
     /// The known or received public identity key of the remote, if any.
     id_remote_pubkey: Option<identity::PublicKey>,
     /// Whether to send the public identity key of the local node to the remote.
-    send_id: bool,
+    send_identity: bool,
 }
 
-impl<T: io::Read, C> io::Read for State<T, C> {
+impl<T: io::Read> io::Read for State<T> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.io.read(buf)
     }
 }
 
-impl<T: io::Write, C> io::Write for State<T, C> {
+impl<T: io::Write> io::Write for State<T> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.io.write(buf)
     }
@@ -281,53 +266,52 @@ impl<T: io::Write, C> io::Write for State<T, C> {
     }
 }
 
-impl<T: AsyncRead, C> AsyncRead for State<T, C> {}
+impl<T: AsyncRead> AsyncRead for State<T> {}
 
-impl<T: AsyncWrite, C> AsyncWrite for State<T, C> {
+impl<T: AsyncWrite> AsyncWrite for State<T> {
     fn shutdown(&mut self) -> Poll<(), io::Error> {
         self.io.shutdown()
     }
 }
 
-impl<T, C> State<T, C> {
+impl<T> State<T> {
     /// Initializes the state for a new Noise handshake, using the given local
     /// identity keypair and local DH static public key. The handshake messages
     /// will be sent and received on the given I/O resource and using the
     /// provided session for cryptographic operations according to the chosen
     /// Noise handshake pattern.
     fn new(
-        id: identity::Keypair,
-        dh: PublicKey<C>,
         io: T,
-        ss: Result<snow::Session, NoiseError>,
-        id_exchange: IdentityExchange
+        session: Result<snow::Session, NoiseError>,
+        identity: KeypairIdentity,
+        identity_x: IdentityExchange
     ) -> FutureResult<Self, NoiseError> {
-        let (id_remote_pubkey, send_id) = match id_exchange {
+        let (id_remote_pubkey, send_identity) = match identity_x {
             IdentityExchange::Mutual => (None, true),
             IdentityExchange::Send { remote } => (Some(remote), true),
             IdentityExchange::Receive => (None, false),
             IdentityExchange::None { remote } => (Some(remote), false)
         };
-        future::result(ss.map(|s|
+        future::result(session.map(|s|
             State {
-                id_keys: id,
-                dh_pubkey: dh,
+                identity,
                 io: NoiseOutput::new(io, s),
                 dh_remote_pubkey_sig: None,
                 id_remote_pubkey,
-                send_id
+                send_identity
             }
         ))
     }
 }
 
-impl<T, C> State<T, C>
-where
-    C: Protocol<C> + AsRef<[u8]>
+impl<T> State<T>
 {
     /// Finish a handshake, yielding the established remote identity and the
     /// [`NoiseOutput`] for communicating on the encrypted channel.
-    fn finish(self) -> FutureResult<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError> {
+    fn finish<C>(self) -> FutureResult<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>
+    where
+        C: Protocol<C> + AsRef<[u8]>
+    {
         let dh_remote_pubkey = match self.io.session.get_remote_static() {
             None => None,
             Some(k) => match C::public_from_bytes(k) {
@@ -355,26 +339,26 @@ where
     }
 }
 
-impl<T, C> State<T, C> {
+impl<T> State<T> {
     /// Creates a future that sends a Noise handshake message with an empty payload.
-    fn send_empty(self) -> SendEmpty<T, C> {
+    fn send_empty(self) -> SendEmpty<T> {
         SendEmpty { state: SendState::Write(self) }
     }
 
     /// Creates a future that expects to receive a Noise handshake message with an empty payload.
-    fn recv_empty(self) -> RecvEmpty<T, C> {
+    fn recv_empty(self) -> RecvEmpty<T> {
         RecvEmpty { state: RecvState::Read(self) }
     }
 
     /// Creates a future that sends a Noise handshake message with a payload identifying
     /// the local node to the remote.
-    fn send_identity(self) -> SendIdentity<T, C> {
+    fn send_identity(self) -> SendIdentity<T> {
         SendIdentity { state: SendIdentityState::Init(self) }
     }
 
     /// Creates a future that expects to receive a Noise handshake message with a
     /// payload identifying the remote.
-    fn recv_identity(self) -> RecvIdentity<T, C> {
+    fn recv_identity(self) -> RecvIdentity<T> {
         RecvIdentity { state: RecvIdentityState::Init(self) }
     }
 }
@@ -387,21 +371,21 @@ impl<T, C> State<T, C> {
 /// A future for receiving a Noise handshake message with an empty payload.
 ///
 /// Obtained from [`Handshake::recv_empty`].
-struct RecvEmpty<T, C> {
-    state: RecvState<T, C>
+struct RecvEmpty<T> {
+    state: RecvState<T>
 }
 
-enum RecvState<T, C> {
-    Read(State<T, C>),
+enum RecvState<T> {
+    Read(State<T>),
     Done
 }
 
-impl<T, C> Future for RecvEmpty<T, C>
+impl<T> Future for RecvEmpty<T>
 where
     T: AsyncRead
 {
     type Error = NoiseError;
-    type Item = State<T, C>;
+    type Item = State<T>;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match mem::replace(&mut self.state, RecvState::Done) {
@@ -422,22 +406,22 @@ where
 /// A future for sending a Noise handshake message with an empty payload.
 ///
 /// Obtained from [`Handshake::send_empty`].
-struct SendEmpty<T, C> {
-    state: SendState<T, C>
+struct SendEmpty<T> {
+    state: SendState<T>
 }
 
-enum SendState<T, C> {
-    Write(State<T, C>),
-    Flush(State<T, C>),
+enum SendState<T> {
+    Write(State<T>),
+    Flush(State<T>),
     Done
 }
 
-impl<T, C> Future for SendEmpty<T, C>
+impl<T> Future for SendEmpty<T>
 where
     T: AsyncWrite
 {
     type Error = NoiseError;
-    type Item = State<T, C>;
+    type Item = State<T>;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
@@ -468,23 +452,23 @@ where
 /// identifying the remote.
 ///
 /// Obtained from [`Handshake::recv_identity`].
-struct RecvIdentity<T, C> {
-    state: RecvIdentityState<T, C>
+struct RecvIdentity<T> {
+    state: RecvIdentityState<T>
 }
 
-enum RecvIdentityState<T, C> {
-    Init(State<T, C>),
-    ReadPayloadLen(nio::ReadExact<State<T, C>, [u8; 2]>),
-    ReadPayload(nio::ReadExact<State<T, C>, Vec<u8>>),
+enum RecvIdentityState<T> {
+    Init(State<T>),
+    ReadPayloadLen(nio::ReadExact<State<T>, [u8; 2]>),
+    ReadPayload(nio::ReadExact<State<T>, Vec<u8>>),
     Done
 }
 
-impl<T, C> Future for RecvIdentity<T, C>
+impl<T> Future for RecvIdentity<T>
 where
     T: AsyncRead,
 {
     type Error = NoiseError;
-    type Item = State<T, C>;
+    type Item = State<T>;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
@@ -536,38 +520,35 @@ where
 /// identifying the local node to the remote.
 ///
 /// Obtained from [`Handshake::send_identity`].
-struct SendIdentity<T, C> {
-    state: SendIdentityState<T, C>
+struct SendIdentity<T> {
+    state: SendIdentityState<T>
 }
 
-enum SendIdentityState<T, C> {
-    Init(State<T, C>),
-    WritePayloadLen(nio::WriteAll<State<T, C>, [u8; 2]>, Vec<u8>),
-    WritePayload(nio::WriteAll<State<T, C>, Vec<u8>>),
-    Flush(State<T, C>),
+enum SendIdentityState<T> {
+    Init(State<T>),
+    WritePayloadLen(nio::WriteAll<State<T>, [u8; 2]>, Vec<u8>),
+    WritePayload(nio::WriteAll<State<T>, Vec<u8>>),
+    Flush(State<T>),
     Done
 }
 
-impl<T, C> Future for SendIdentity<T, C>
+impl<T> Future for SendIdentity<T>
 where
     T: AsyncWrite,
-    C: Protocol<C> + AsRef<[u8]>
 {
     type Error = NoiseError;
-    type Item = State<T, C>;
+    type Item = State<T>;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         loop {
             match mem::replace(&mut self.state, SendIdentityState::Done) {
                 SendIdentityState::Init(st) => {
-                    let sig = C::sign(&st.id_keys, &st.dh_pubkey)?;
                     let mut pb = payload::Identity::new();
-                    if st.send_id {
-                        let pk = st.id_keys.public();
-                        pb.set_pubkey(pk.into_protobuf_encoding());
+                    if st.send_identity {
+                        pb.set_pubkey(st.identity.public.clone().into_protobuf_encoding());
                     }
-                    if let Some(sig) = sig {
-                        pb.set_signature(sig);
+                    if let Some(ref sig) = st.identity.signature {
+                        pb.set_signature(sig.clone());
                     }
                     let pb_bytes = pb.write_to_bytes()?;
                     let len = (pb_bytes.len() as u16).to_be_bytes();

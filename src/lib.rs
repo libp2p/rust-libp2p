@@ -272,9 +272,10 @@ pub fn build_tcp_ws_mplex_yamux(id_keys: identity::Keypair) -> impl Transport<
     ListenerUpgrade = impl Send
 > + Clone {
     let dh_keys = noise::Keypair::<noise::X25519>::from_identity(&id_keys)
-        .unwrap_or_else(noise::Keypair::new);
+        .unwrap_or_else(||
+            noise::Keypair::new().into_authentic(&id_keys).expect("X25519 keypair"));
     CommonTransport::new()
-        .with_upgrade(noise::NoiseConfig::xx(id_keys, dh_keys))
+        .with_upgrade(noise::NoiseConfig::xx(dh_keys))
         .and_then(move |(remote_id, stream), _endpoint| {
             match remote_id {
                 noise::RemoteIdentity::IdentityKey(id_pk) =>

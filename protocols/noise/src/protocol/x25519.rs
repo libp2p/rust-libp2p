@@ -152,7 +152,10 @@ impl Keypair<X25519> {
         Self::from(sk)
     }
 
-    /// Creates an X25519 keypair from an [`identity::Keypair`], if possible.
+    /// Creates an X25519 `Keypair` from an [`identity::Keypair`], if possible.
+    ///
+    /// The returned keypair will be [associated with](KeypairIdentity) the
+    /// given identity keypair.
     ///
     /// Returns `None` if the given identity keypair cannot be used as an X25519 keypair.
     ///
@@ -164,9 +167,19 @@ impl Keypair<X25519> {
     /// > See also:
     /// >
     /// >  * [Noise: Static Key Reuse](http://www.noiseprotocol.org/noise.html#security-considerations)
-    pub fn from_identity(id_keys: &identity::Keypair) -> Option<Keypair<X25519>> {
+    pub fn from_identity(id_keys: &identity::Keypair) -> Option<AuthenticKeypair<X25519>> {
         match id_keys {
-            identity::Keypair::Ed25519(p) => Some(SecretKey::from_ed25519(&p.secret()).into()),
+            identity::Keypair::Ed25519(p) => {
+                let kp = Keypair::from(SecretKey::from_ed25519(&p.secret()));
+                let id = KeypairIdentity {
+                    public: id_keys.public(),
+                    signature: None
+                };
+                Some(AuthenticKeypair {
+                    keypair: kp,
+                    identity: id
+                })
+            }
             _ => None
         }
     }

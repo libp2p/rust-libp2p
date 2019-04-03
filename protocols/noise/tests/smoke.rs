@@ -36,14 +36,14 @@ fn xx() {
         let server_id_public = server_id.public();
         let client_id_public = client_id.public();
 
-        let server_dh = Keypair::<X25519>::new();
+        let server_dh = Keypair::<X25519>::new().into_authentic(&server_id).unwrap();
         let server_transport = TcpConfig::new()
-            .with_upgrade(NoiseConfig::xx(server_id, server_dh))
+            .with_upgrade(NoiseConfig::xx(server_dh))
             .and_then(move |out, _| expect_identity(out, &client_id_public));
 
-        let client_dh = Keypair::<X25519>::new();
+        let client_dh = Keypair::<X25519>::new().into_authentic(&client_id).unwrap();
         let client_transport = TcpConfig::new()
-            .with_upgrade(NoiseConfig::xx(client_id, client_dh))
+            .with_upgrade(NoiseConfig::xx(client_dh))
             .and_then(move |out, _| expect_identity(out, &server_id_public));
 
         run(server_transport, client_transport, message);
@@ -62,14 +62,14 @@ fn ix() {
         let server_id_public = server_id.public();
         let client_id_public = client_id.public();
 
-        let server_dh = Keypair::<X25519>::new();
+        let server_dh = Keypair::<X25519>::new().into_authentic(&server_id).unwrap();
         let server_transport = TcpConfig::new()
-            .with_upgrade(NoiseConfig::ix(server_id, server_dh))
+            .with_upgrade(NoiseConfig::ix(server_dh))
             .and_then(move |out, _| expect_identity(out, &client_id_public));
 
-        let client_dh = Keypair::<X25519>::new();
+        let client_dh = Keypair::<X25519>::new().into_authentic(&client_id).unwrap();
         let client_transport = TcpConfig::new()
-            .with_upgrade(NoiseConfig::ix(client_id, client_dh))
+            .with_upgrade(NoiseConfig::ix(client_dh))
             .and_then(move |out, _| expect_identity(out, &server_id_public));
 
         run(server_transport, client_transport, message);
@@ -88,27 +88,27 @@ fn ik_xx() {
         let client_id = identity::Keypair::generate_ed25519();
         let client_id_public = client_id.public();
 
-        let server_dh = Keypair::<X25519>::new();
+        let server_dh = Keypair::<X25519>::new().into_authentic(&server_id).unwrap();
         let server_dh_public = server_dh.public().clone();
         let server_transport = TcpConfig::new()
             .and_then(move |output, endpoint| {
                 if endpoint.is_listener() {
-                    Either::A(apply_inbound(output, NoiseConfig::ik_listener(server_id, server_dh)))
+                    Either::A(apply_inbound(output, NoiseConfig::ik_listener(server_dh)))
                 } else {
-                    Either::B(apply_outbound(output, NoiseConfig::xx(server_id, server_dh)))
+                    Either::B(apply_outbound(output, NoiseConfig::xx(server_dh)))
                 }
             })
             .and_then(move |out, _| expect_identity(out, &client_id_public));
 
-        let client_dh = Keypair::<X25519>::new();
+        let client_dh = Keypair::<X25519>::new().into_authentic(&client_id).unwrap();
         let server_id_public2 = server_id_public.clone();
         let client_transport = TcpConfig::new()
             .and_then(move |output, endpoint| {
                 if endpoint.is_dialer() {
                     Either::A(apply_outbound(output,
-                        NoiseConfig::ik_dialer(client_id, client_dh, server_id_public, server_dh_public)))
+                        NoiseConfig::ik_dialer(client_dh, server_id_public, server_dh_public)))
                 } else {
-                    Either::B(apply_inbound(output, NoiseConfig::xx(client_id, client_dh)))
+                    Either::B(apply_inbound(output, NoiseConfig::xx(client_dh)))
                 }
             })
             .and_then(move |out, _| expect_identity(out, &server_id_public2));

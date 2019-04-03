@@ -75,33 +75,11 @@ pub trait Protocol<C> {
         false
     }
 
-    /// Authenticates the given DH static public key with the given
-    /// identity keypair by signing it if necessary.
-    ///
-    /// If the public keys are [`linked`](Protocol::linked) `None` is returned,
-    /// otherwise the DH static public key is signed with the identity keypair,
-    /// returning the signature.
-    ///
-    /// This function must return `Ok(None)` if and only if [`verify`] returns `true` when
-    /// given the same static DH public key and the public key of the identity
-    /// keypair without a signature.
-    fn sign(id_keys: &identity::Keypair, dh_pk: &PublicKey<C>)
-        -> Result<Option<Vec<u8>>, NoiseError>
-    where
-        C: AsRef<[u8]>
-    {
-        if Self::linked(&id_keys.public(), dh_pk) {
-            Ok(None)
-        } else {
-            Ok(Some(id_keys.sign(dh_pk.as_ref())?))
-        }
-    }
-
     /// Verifies that a given static DH public key is authentic w.r.t. a
     /// given public identity key in the context of an optional signature.
     ///
     /// The given static DH public key is assumed to already be authentic
-    /// in the sense that posession of a corresponding secret key has been
+    /// in the sense that possession of a corresponding secret key has been
     /// established, as is the case at the end of a Noise handshake involving
     /// static DH keys.
     ///
@@ -109,10 +87,6 @@ pub trait Protocol<C> {
     /// without a signature, otherwise a signature over the static DH public key
     /// must be given and is verified with the public identity key, establishing
     /// the authenticity of the static DH public key w.r.t. the public identity key.
-    ///
-    /// This function must return `true` given no signature if and only if
-    /// [`sign`](Protocol::sign) returns `Ok(None)` when given the same static DH public key
-    /// and the identity keypair corresponding to the public identity key `id_pk`.
     fn verify(id_pk: &identity::PublicKey, dh_pk: &PublicKey<C>, sig: &Option<Vec<u8>>) -> bool
     where
         C: AsRef<[u8]>
@@ -127,7 +101,39 @@ pub trait Protocol<C> {
 #[derive(Clone)]
 pub struct Keypair<T: Zeroize> {
     secret: SecretKey<T>,
-    public: PublicKey<T>
+    public: PublicKey<T>,
+}
+
+/// A DH keypair that is authentic w.r.t. a [`identity::PublicKey`].
+#[derive(Clone)]
+pub struct AuthenticKeypair<T: Zeroize> {
+    keypair: Keypair<T>,
+    identity: KeypairIdentity
+}
+
+impl<T: Zeroize> AuthenticKeypair<T> {
+    /// Extract the public [`KeypairIdentity`] from this `AuthenticKeypair`,
+    /// dropping the DH `Keypair`.
+    pub fn into_identity(self) -> KeypairIdentity {
+        self.identity
+    }
+}
+
+impl<T: Zeroize> std::ops::Deref for AuthenticKeypair<T> {
+    type Target = Keypair<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.keypair
+    }
+}
+
+/// The associated public identity of a DH keypair.
+#[derive(Clone)]
+pub struct KeypairIdentity {
+    /// The public identity key.
+    pub public: identity::PublicKey,
+    /// The signature over the public DH key.
+    pub signature: Option<Vec<u8>>
 }
 
 impl<T: Zeroize> Keypair<T> {
@@ -141,9 +147,20 @@ impl<T: Zeroize> Keypair<T> {
         &self.secret
     }
 
-    /// Convert the keypair into the public key, dropping the secret key.
-    pub fn into_public(self) -> PublicKey<T> {
-        self.public
+    /// Turn this DH keypair into a [`AuthenticKeypair`], i.e. a DH keypair that
+    /// is authentic w.r.t. the given identity keypair, by signing the DH public key.
+    pub fn into_authentic(self, id_keys: &identity::Keypair) -> Result<AuthenticKeypair<T>, NoiseError>
+    where
+        T: AsRef<[u8]>
+    {
+        let sig = id_keys.sign(self.public.as_ref())?;
+
+        let identity = KeypairIdentity {
+            public: id_keys.public(),
+            signature: Some(sig)
+        };
+
+        Ok(AuthenticKeypair { keypair: self, identity })
     }
 }
 
