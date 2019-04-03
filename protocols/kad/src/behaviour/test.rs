@@ -22,7 +22,13 @@
 
 use crate::{Kademlia, KademliaOut};
 use futures::prelude::*;
-use libp2p_core::{upgrade, upgrade::InboundUpgradeExt, upgrade::OutboundUpgradeExt, PeerId, Swarm, Transport};
+use libp2p_core::{
+    upgrade::{self, InboundUpgradeExt, OutboundUpgradeExt},
+    PeerId,
+    Swarm,
+    SwarmEvent,
+    Transport
+};
 use libp2p_core::{nodes::Substream, transport::boxed::Boxed, muxing::StreamMuxerBox};
 use std::io;
 
@@ -73,7 +79,13 @@ fn basic_find_node() {
 
     // Connect second to first.
     {
-        let listen_addr = Swarm::listeners(&swarms[0]).next().unwrap().clone();
+        let listen_addr =
+            if let Ok(Async::Ready(Some(SwarmEvent::NewListenerAddress { listen_addr, .. }))) = swarms[0].poll() {
+                listen_addr
+            } else {
+                panic!("Was expecting the listen address to be reported")
+            };
+
         swarms[1].add_not_connected_address(&first_peer_id, listen_addr);
     }
 
@@ -86,7 +98,7 @@ fn basic_find_node() {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll().unwrap() {
-                        Async::Ready(Some(KademliaOut::FindNodeResult { key, closer_peers })) => {
+                        Async::Ready(Some(SwarmEvent::Behaviour(KademliaOut::FindNodeResult { key, closer_peers }))) => {
                             assert_eq!(key, search_target);
                             assert_eq!(closer_peers.len(), 1);
                             assert_eq!(closer_peers[0], first_peer_id);
@@ -115,13 +127,25 @@ fn direct_query() {
 
     // Connect second to first.
     {
-        let listen_addr = Swarm::listeners(&swarms[0]).next().unwrap().clone();
+        let listen_addr =
+            if let Ok(Async::Ready(Some(SwarmEvent::NewListenerAddress { listen_addr, .. }))) = swarms[0].poll() {
+                listen_addr
+            } else {
+                panic!("Was expecting the listen address to be reported")
+            };
+
         swarms[1].add_not_connected_address(&first_peer_id, listen_addr);
     }
 
     // Connect third to second.
     {
-        let listen_addr = Swarm::listeners(&swarms[1]).next().unwrap().clone();
+        let listen_addr =
+            if let Ok(Async::Ready(Some(SwarmEvent::NewListenerAddress { listen_addr, .. }))) = swarms[1].poll() {
+                listen_addr
+            } else {
+                panic!("Was expecting the listen address to be reported")
+            };
+
         swarms[2].add_not_connected_address(&second_peer_id, listen_addr);
     }
 
@@ -135,7 +159,7 @@ fn direct_query() {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll().unwrap() {
-                        Async::Ready(Some(KademliaOut::FindNodeResult { key, closer_peers })) => {
+                        Async::Ready(Some(SwarmEvent::Behaviour(KademliaOut::FindNodeResult { key, closer_peers }))) => {
                             assert_eq!(key, search_target);
                             assert_eq!(closer_peers.len(), 2);
                             assert!((closer_peers[0] == first_peer_id) != (closer_peers[1] == first_peer_id));
@@ -166,19 +190,37 @@ fn indirect_query() {
 
     // Connect second to first.
     {
-        let listen_addr = Swarm::listeners(&swarms[0]).next().unwrap().clone();
+        let listen_addr =
+            if let Ok(Async::Ready(Some(SwarmEvent::NewListenerAddress { listen_addr, .. }))) = swarms[0].poll() {
+                listen_addr
+            } else {
+                panic!("Was expecting the listen address to be reported")
+            };
+
         swarms[1].add_not_connected_address(&first_peer_id, listen_addr);
     }
 
     // Connect third to second.
     {
-        let listen_addr = Swarm::listeners(&swarms[1]).next().unwrap().clone();
+        let listen_addr =
+            if let Ok(Async::Ready(Some(SwarmEvent::NewListenerAddress { listen_addr, .. }))) = swarms[1].poll() {
+                listen_addr
+            } else {
+                panic!("Was expecting the listen address to be reported")
+            };
+
         swarms[2].add_not_connected_address(&second_peer_id, listen_addr);
     }
 
     // Connect fourth to third.
     {
-        let listen_addr = Swarm::listeners(&swarms[2]).next().unwrap().clone();
+        let listen_addr =
+            if let Ok(Async::Ready(Some(SwarmEvent::NewListenerAddress { listen_addr, .. }))) = swarms[2].poll() {
+                listen_addr
+            } else {
+                panic!("Was expecting the listen address to be reported")
+            };
+
         swarms[3].add_not_connected_address(&third_peer_id, listen_addr);
     }
 
@@ -192,7 +234,7 @@ fn indirect_query() {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll().unwrap() {
-                        Async::Ready(Some(KademliaOut::FindNodeResult { key, closer_peers })) => {
+                        Async::Ready(Some(SwarmEvent::Behaviour(KademliaOut::FindNodeResult { key, closer_peers }))) => {
                             assert_eq!(key, search_target);
                             assert_eq!(closer_peers.len(), 3);
                             assert_eq!(closer_peers.iter().filter(|p| **p == first_peer_id).count(), 1);
@@ -236,7 +278,7 @@ fn unresponsive_not_returned_direct() {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll().unwrap() {
-                        Async::Ready(Some(KademliaOut::FindNodeResult { key, closer_peers })) => {
+                        Async::Ready(Some(SwarmEvent::Behaviour(KademliaOut::FindNodeResult { key, closer_peers }))) => {
                             assert_eq!(key, search_target);
                             assert_eq!(closer_peers.len(), 0);
                             return Ok(Async::Ready(()));
@@ -271,7 +313,13 @@ fn unresponsive_not_returned_indirect() {
 
     // Connect second to first.
     {
-        let listen_addr = Swarm::listeners(&swarms[0]).next().unwrap().clone();
+        let listen_addr =
+            if let Ok(Async::Ready(Some(SwarmEvent::NewListenerAddress { listen_addr, .. }))) = swarms[0].poll() {
+                listen_addr
+            } else {
+                panic!("Was expecting the listen address to be reported")
+            };
+
         swarms[1].add_not_connected_address(&first_peer_id, listen_addr);
     }
 
@@ -285,7 +333,7 @@ fn unresponsive_not_returned_indirect() {
             for swarm in &mut swarms {
                 loop {
                     match swarm.poll().unwrap() {
-                        Async::Ready(Some(KademliaOut::FindNodeResult { key, closer_peers })) => {
+                        Async::Ready(Some(SwarmEvent::Behaviour(KademliaOut::FindNodeResult { key, closer_peers }))) => {
                             assert_eq!(key, search_target);
                             assert_eq!(closer_peers.len(), 1);
                             assert_eq!(closer_peers[0], first_peer_id);

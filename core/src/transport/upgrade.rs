@@ -19,8 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    transport::Transport,
-    transport::TransportError,
+    transport::{Transport, TransportError, ListenerEvent},
     upgrade::{
         OutboundUpgrade,
         InboundUpgrade,
@@ -69,10 +68,10 @@ where
         })
     }
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
-        let (inbound, addr) = self.inner.listen_on(addr)
+    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+        let inbound = self.inner.listen_on(addr)
             .map_err(|err| err.map(TransportUpgradeError::Transport))?;
-        Ok((ListenerStream { stream: inbound, upgrade: self.upgrade }, addr))
+        Ok(ListenerStream { stream: inbound, upgrade: self.upgrade })
     }
 
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
@@ -157,22 +156,24 @@ pub struct ListenerStream<T, U> {
 
 impl<T, U, F> Stream for ListenerStream<T, U>
 where
-    T: Stream<Item = (F, Multiaddr)>,
+    T: Stream<Item = ListenerEvent<F>>,
     F: Future,
     F::Item: AsyncRead + AsyncWrite,
     U: InboundUpgrade<F::Item> + Clone
 {
-    type Item = (ListenerUpgradeFuture<F, U>, Multiaddr);
+    type Item = ListenerEvent<ListenerUpgradeFuture<F, U>>;
     type Error = TransportUpgradeError<T::Error, U::Error>;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         match try_ready!(self.stream.poll().map_err(TransportUpgradeError::Transport)) {
-            Some((x, a)) => {
-                let f = ListenerUpgradeFuture {
-                    future: x,
-                    upgrade: Either::A(Some(self.upgrade.clone()))
-                };
-                Ok(Async::Ready(Some((f, a))))
+            Some(event) => {
+                let event = event.map(move |x| {
+                    ListenerUpgradeFuture {
+                        future: x,
+                        upgrade: Either::A(Some(self.upgrade.clone()))
+                    }
+                });
+                Ok(Async::Ready(Some(event)))
             }
             None => Ok(Async::Ready(None))
         }

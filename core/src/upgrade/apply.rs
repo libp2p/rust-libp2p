@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::nodes::ConnectedPoint;
+use crate::Endpoint;
 use crate::upgrade::{UpgradeInfo, InboundUpgrade, OutboundUpgrade, UpgradeError, ProtocolName};
 use futures::{future::Either, prelude::*};
 use log::debug;
@@ -27,16 +27,15 @@ use std::mem;
 use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Applies an upgrade to the inbound and outbound direction of a connection or substream.
-pub fn apply<C, U>(conn: C, up: U, cp: ConnectedPoint)
+pub fn apply<C, U>(conn: C, up: U, ep: Endpoint)
     -> Either<InboundUpgradeApply<C, U>, OutboundUpgradeApply<C, U>>
 where
     C: AsyncRead + AsyncWrite,
     U: InboundUpgrade<C> + OutboundUpgrade<C>,
 {
-    if cp.is_listener() {
-        Either::A(apply_inbound(conn, up))
-    } else {
-        Either::B(apply_outbound(conn, up))
+    match ep {
+        Endpoint::Listener => Either::A(apply_inbound(conn, up)),
+        Endpoint::Dialer => Either::B(apply_outbound(conn, up))
     }
 }
 

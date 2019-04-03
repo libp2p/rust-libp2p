@@ -271,7 +271,12 @@ mod tests {
     use tokio::runtime::current_thread::Runtime;
     use libp2p_tcp::TcpConfig;
     use futures::{Future, Stream};
-    use libp2p_core::{identity, Transport, upgrade::{apply_outbound, apply_inbound}};
+    use libp2p_core::{
+        identity,
+        Transport,
+        transport::ListenerEvent,
+        upgrade::{apply_outbound, apply_inbound}
+    };
     use std::{io, sync::mpsc, thread};
 
     #[test]
@@ -286,13 +291,22 @@ mod tests {
         let bg_thread = thread::spawn(move || {
             let transport = TcpConfig::new();
 
-            let (listener, addr) = transport
+            let mut listener = transport
                 .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
                 .unwrap();
+
+            let addr = listener.by_ref().wait()
+                .next()
+                .expect("some event")
+                .expect("no error")
+                .into_new_address()
+                .expect("listen address");
+
 
             tx.send(addr).unwrap();
 
             let future = listener
+                .filter_map(ListenerEvent::into_upgrade)
                 .into_future()
                 .map_err(|(err, _)| err)
                 .and_then(|(client, _)| client.unwrap().0)
@@ -321,7 +335,7 @@ mod tests {
 
         let transport = TcpConfig::new();
 
-        let future = transport.dial(rx.recv().unwrap())
+        let future = transport.dial(rx.recv().unwrap().clone())
             .unwrap()
             .and_then(|socket| {
                 apply_outbound(socket, IdentifyProtocolConfig)

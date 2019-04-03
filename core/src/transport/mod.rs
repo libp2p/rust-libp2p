@@ -25,7 +25,7 @@
 //! any desired protocols. The rest of the module defines combinators for
 //! modifying a transport through composition with other transports or protocol upgrades.
 
-use crate::{InboundUpgrade, OutboundUpgrade, nodes::raw_swarm::ConnectedPoint};
+use crate::{InboundUpgrade, OutboundUpgrade, Endpoint};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{error, fmt};
@@ -93,7 +93,7 @@ pub trait Transport {
     /// transport stack. The item must be a [`ListenerUpgrade`](Transport::ListenerUpgrade) future
     /// that resolves to an [`Output`](Transport::Output) value once all protocol upgrades
     /// have been applied.
-    type Listener: Stream<Item = (Self::ListenerUpgrade, Multiaddr), Error = Self::Error>;
+    type Listener: Stream<Item = ListenerEvent<Self::ListenerUpgrade>, Error = Self::Error>;
 
     /// A pending [`Output`](Transport::Output) for an inbound connection,
     /// obtained from the [`Listener`](Transport::Listener) stream.
@@ -110,12 +110,9 @@ pub trait Transport {
     /// obtained from [dialing](Transport::dial).
     type Dial: Future<Item = Self::Output, Error = Self::Error>;
 
-    /// Listens on the given [`Multiaddr`], producing a stream of pending, inbound connections.
-    ///
-    /// > **Note**: The new [`Multiaddr`] that is returned alongside the connection stream
-    /// > is the address that should be advertised to other nodes, as the given address
-    /// > may be subject to changes such as an OS-assigned port number.
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>>
+    /// Listens on the given [`Multiaddr`], producing a stream of pending, inbound connections
+    /// and addresses this transport is listening on (cf. [`ListenerEvent`]).
+    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>>
     where
         Self: Sized;
 
@@ -161,7 +158,7 @@ pub trait Transport {
     fn map<F, O>(self, map: F) -> map::Map<Self, F>
     where
         Self: Sized,
-        F: FnOnce(Self::Output, ConnectedPoint) -> O + Clone
+        F: FnOnce(Self::Output, Endpoint) -> O + Clone
     {
         map::Map::new(self, map)
     }
@@ -217,7 +214,7 @@ pub trait Transport {
     fn and_then<C, F, O>(self, upgrade: C) -> and_then::AndThen<Self, C>
     where
         Self: Sized,
-        C: FnOnce(Self::Output, ConnectedPoint) -> F + Clone,
+        C: FnOnce(Self::Output, Endpoint) -> F + Clone,
         F: IntoFuture<Item = O>
     {
         and_then::AndThen::new(self, upgrade)
@@ -251,6 +248,80 @@ pub trait Transport {
         Self: Sized,
     {
         timeout::TransportTimeout::with_ingoing_timeout(self, timeout)
+    }
+}
+
+/// Event produced by [`Transport::Listener`]s.
+///
+/// Transports are expected to produce `Upgrade` events only for
+/// listen addresses which have previously been announced via
+/// a `NewAddress` event and which have not been invalidated by
+/// an `AddressExpired` event yet.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ListenerEvent<T> {
+    /// The transport is listening on a new additional [`Multiaddr`].
+    NewAddress(Multiaddr),
+    /// An upgrade, consisting of the upgrade future, the listener address and the remote address.
+    Upgrade {
+        /// The upgrade.
+        upgrade: T,
+        /// The listening address which produced this upgrade.
+        listen_addr: Multiaddr,
+        /// The remote address which produced this upgrade.
+        remote_addr: Multiaddr
+    },
+    /// A [`Multiaddr`] is no longer used for listening.
+    AddressExpired(Multiaddr)
+}
+
+impl<T> ListenerEvent<T> {
+    /// In case this [`ListenerEvent`] is an upgrade, apply the given function
+    /// to the upgrade and multiaddress and produce another listener event
+    /// based the the function's result.
+    pub fn map<U>(self, f: impl FnOnce(T) -> U) -> ListenerEvent<U> {
+        match self {
+            ListenerEvent::Upgrade { upgrade, listen_addr, remote_addr } => {
+                ListenerEvent::Upgrade { upgrade: f(upgrade), listen_addr, remote_addr }
+            }
+            ListenerEvent::NewAddress(a) => ListenerEvent::NewAddress(a),
+            ListenerEvent::AddressExpired(a) => ListenerEvent::AddressExpired(a)
+        }
+    }
+
+    /// Try to turn this listener event into upgrade parts.
+    ///
+    /// Returns `None` if the event is not actually an upgrade,
+    /// otherwise the upgrade and the remote address.
+    pub fn into_upgrade(self) -> Option<(T, Multiaddr)> {
+        if let ListenerEvent::Upgrade { upgrade, remote_addr, .. } = self {
+            Some((upgrade, remote_addr))
+        } else {
+            None
+        }
+    }
+
+    /// Try to turn this listener event into the `NewAddress` part.
+    ///
+    /// Returns `None` if the event is not actually a `NewAddress`,
+    /// otherwise the address.
+    pub fn into_new_address(self) -> Option<Multiaddr> {
+        if let ListenerEvent::NewAddress(a) = self {
+            Some(a)
+        } else {
+            None
+        }
+    }
+
+    /// Try to turn this listener event into the `AddressExpired` part.
+    ///
+    /// Returns `None` if the event is not actually a `AddressExpired`,
+    /// otherwise the address.
+    pub fn into_address_expired(self) -> Option<Multiaddr> {
+        if let ListenerEvent::AddressExpired(a) = self {
+            Some(a)
+        } else {
+            None
+        }
     }
 }
 

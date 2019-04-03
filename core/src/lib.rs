@@ -83,9 +83,11 @@ pub use self::muxing::StreamMuxer;
 pub use self::peer_id::PeerId;
 pub use self::protocols_handler::{ProtocolsHandler, ProtocolsHandlerEvent};
 pub use self::identity::PublicKey;
-pub use self::swarm::Swarm;
+pub use self::swarm::{Swarm, SwarmEvent};
 pub use self::transport::Transport;
 pub use self::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, UpgradeError, ProtocolName};
+
+use std::fmt;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Endpoint {
@@ -103,6 +105,43 @@ impl std::ops::Not for Endpoint {
             Endpoint::Dialer => Endpoint::Listener,
             Endpoint::Listener => Endpoint::Dialer
         }
+    }
+}
+
+impl Endpoint {
+    /// Is this endpoint a dialer?
+    pub fn is_dialer(self) -> bool {
+        if let Endpoint::Dialer = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Is this endpoint a listener?
+    pub fn is_listener(self) -> bool {
+        if let Endpoint::Listener = self {
+            true
+        } else {
+            false
+        }
+    }
+}
+
+/// An opaque ID used for identification within a running process.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Id(usize);
+
+impl fmt::Display for Id {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl Id {
+    /// Return `Id` as a `usize`.
+    pub fn as_usize(&self) -> usize {
+        self.0
     }
 }
 

@@ -222,7 +222,12 @@ mod tests {
     use crate::{Identify, IdentifyEvent};
     use futures::prelude::*;
     use libp2p_core::identity;
-    use libp2p_core::{upgrade, upgrade::OutboundUpgradeExt, upgrade::InboundUpgradeExt, Swarm, Transport};
+    use libp2p_core::{
+        upgrade::{self, OutboundUpgradeExt, InboundUpgradeExt},
+        Swarm,
+        SwarmEvent,
+        Transport
+    };
     use std::io;
 
     #[test]
@@ -270,8 +275,16 @@ mod tests {
             Swarm::new(transport, Identify::new("c".to_string(), "d".to_string(), node2_public_key.clone()), local_peer_id)
         };
 
-        let actual_addr = Swarm::listen_on(&mut swarm1, "/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
-        Swarm::dial_addr(&mut swarm2, actual_addr).unwrap();
+        Swarm::listen_on(&mut swarm1, "/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+
+        let swarm1_listen_addr =
+            if let Ok(Async::Ready(Some(SwarmEvent::NewListenerAddress { listen_addr, .. }))) = swarm1.poll() {
+                listen_addr
+            } else {
+                panic!("Was expecting the listen address to be reported")
+            };
+
+        Swarm::dial_addr(&mut swarm2, swarm1_listen_addr).unwrap();
 
         let mut swarm1_good = false;
         let mut swarm2_good = false;
@@ -282,7 +295,7 @@ mod tests {
                 loop {
                     let mut swarm1_not_ready = false;
                     match swarm1.poll().unwrap() {
-                        Async::Ready(Some(IdentifyEvent::Identified { info, .. })) => {
+                        Async::Ready(Some(SwarmEvent::Behaviour(IdentifyEvent::Identified { info, .. }))) => {
                             assert_eq!(info.public_key, node2_public_key);
                             assert_eq!(info.protocol_version, "c");
                             assert_eq!(info.agent_version, "d");
@@ -290,13 +303,13 @@ mod tests {
                             assert!(info.listen_addrs.is_empty());
                             swarm1_good = true;
                         },
-                        Async::Ready(Some(IdentifyEvent::SendBack { result: Ok(()), .. })) => (),
+                        Async::Ready(Some(SwarmEvent::Behaviour(IdentifyEvent::SendBack { result: Ok(()), .. }))) => (),
                         Async::Ready(_) => panic!(),
                         Async::NotReady => swarm1_not_ready = true,
                     }
 
                     match swarm2.poll().unwrap() {
-                        Async::Ready(Some(IdentifyEvent::Identified { info, .. })) => {
+                        Async::Ready(Some(SwarmEvent::Behaviour(IdentifyEvent::Identified { info, .. }))) => {
                             assert_eq!(info.public_key, node1_public_key);
                             assert_eq!(info.protocol_version, "a");
                             assert_eq!(info.agent_version, "b");
@@ -304,7 +317,7 @@ mod tests {
                             assert_eq!(info.listen_addrs.len(), 1);
                             swarm2_good = true;
                         },
-                        Async::Ready(Some(IdentifyEvent::SendBack { result: Ok(()), .. })) => (),
+                        Async::Ready(Some(SwarmEvent::Behaviour(IdentifyEvent::SendBack { result: Ok(()), .. }))) => (),
                         Async::Ready(_) => panic!(),
                         Async::NotReady if swarm1_not_ready => break,
                         Async::NotReady => ()

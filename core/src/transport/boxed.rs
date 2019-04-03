@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{Transport, TransportError};
+use crate::transport::{ListenerEvent, Transport, TransportError};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{error, fmt, sync::Arc};
@@ -38,11 +38,11 @@ where
 }
 
 pub type Dial<O, E> = Box<dyn Future<Item = O, Error = E> + Send>;
-pub type Listener<O, E> = Box<dyn Stream<Item = (ListenerUpgrade<O, E>, Multiaddr), Error = E> + Send>;
+pub type Listener<O, E> = Box<dyn Stream<Item = ListenerEvent<ListenerUpgrade<O, E>>, Error = E> + Send>;
 pub type ListenerUpgrade<O, E> = Box<dyn Future<Item = O, Error = E> + Send>;
 
 trait Abstract<O, E> {
-    fn listen_on(&self, addr: Multiaddr) -> Result<(Listener<O, E>, Multiaddr), TransportError<E>>;
+    fn listen_on(&self, addr: Multiaddr) -> Result<Listener<O, E>, TransportError<E>>;
     fn dial(&self, addr: Multiaddr) -> Result<Dial<O, E>, TransportError<E>>;
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
 }
@@ -55,12 +55,12 @@ where
     T::Listener: Send + 'static,
     T::ListenerUpgrade: Send + 'static,
 {
-    fn listen_on(&self, addr: Multiaddr) -> Result<(Listener<O, E>, Multiaddr), TransportError<E>> {
-        let (listener, new_addr) = Transport::listen_on(self.clone(), addr)?;
-        let fut = listener.map(|(upgrade, addr)| {
-            (Box::new(upgrade) as ListenerUpgrade<O, E>, addr)
-        });
-        Ok((Box::new(fut) as Box<_>, new_addr))
+    fn listen_on(&self, addr: Multiaddr) -> Result<Listener<O, E>, TransportError<E>> {
+        let listener = Transport::listen_on(self.clone(), addr)?;
+        let fut = listener.map(|event| event.map(|upgrade| {
+            Box::new(upgrade) as ListenerUpgrade<O, E>
+        }));
+        Ok(Box::new(fut) as Box<_>)
     }
 
     fn dial(&self, addr: Multiaddr) -> Result<Dial<O, E>, TransportError<E>> {
@@ -68,7 +68,6 @@ where
         Ok(Box::new(fut) as Box<_>)
     }
 
-    #[inline]
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         Transport::nat_traversal(self, server, observed)
     }
@@ -86,7 +85,6 @@ impl<O, E> fmt::Debug for Boxed<O, E> {
 }
 
 impl<O, E> Clone for Boxed<O, E> {
-    #[inline]
     fn clone(&self) -> Self {
         Boxed {
             inner: self.inner.clone(),
@@ -103,17 +101,14 @@ where E: error::Error,
     type ListenerUpgrade = ListenerUpgrade<O, E>;
     type Dial = Dial<O, E>;
 
-    #[inline]
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         self.inner.listen_on(addr)
     }
 
-    #[inline]
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.inner.dial(addr)
     }
 
-    #[inline]
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         self.inner.nat_traversal(server, observed)
     }

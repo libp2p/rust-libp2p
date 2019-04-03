@@ -24,7 +24,7 @@ use crate::protocol::{RemoteInfo, IdentifyProtocolConfig};
 use futures::{future, prelude::*, stream, AndThen, MapErr};
 use libp2p_core::{
     Multiaddr, PeerId, PublicKey, muxing, Transport,
-    transport::{TransportError, upgrade::TransportUpgradeError},
+    transport::{TransportError, ListenerEvent, upgrade::TransportUpgradeError},
     upgrade::{self, OutboundUpgradeApply, UpgradeError}
 };
 use std::io::Error as IoError;
@@ -66,7 +66,7 @@ where
 {
     type Output = (PeerId, TMuxer);
     type Error = TransportUpgradeError<TTrans::Error, IoError>;     // TODO: better than IoError
-    type Listener = stream::Empty<(Self::ListenerUpgrade, Multiaddr), Self::Error>;
+    type Listener = stream::Empty<ListenerEvent<Self::ListenerUpgrade>, Self::Error>;
     type ListenerUpgrade = future::Empty<Self::Output, Self::Error>;
     type Dial = AndThen<
         MapErr<TTrans::Dial, fn(TTrans::Error) -> Self::Error>,
@@ -75,7 +75,7 @@ where
     >;
 
     #[inline]
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         Err(TransportError::MultiaddrNotSupported(addr))
     }
 

@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{Multiaddr, core::Transport, core::transport::TransportError};
+use crate::{Multiaddr, core::{Transport, transport::{ListenerEvent, TransportError}}};
 use futures::{prelude::*, try_ready};
 use lazy_static::lazy_static;
 use parking_lot::Mutex;
@@ -65,21 +65,18 @@ where
     type ListenerUpgrade = BandwidthFuture<TInner::ListenerUpgrade>;
     type Dial = BandwidthFuture<TInner::Dial>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<(Self::Listener, Multiaddr), TransportError<Self::Error>> {
+    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         let sinks = self.sinks;
         self.inner
             .listen_on(addr)
-            .map(|(inner, new_addr)| (BandwidthListener { inner, sinks }, new_addr))
+            .map(move |inner| BandwidthListener { inner, sinks })
     }
 
     fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let sinks = self.sinks;
         self.inner
             .dial(addr)
-            .map(move |fut| BandwidthFuture {
-                inner: fut,
-                sinks,
-            })
+            .map(move |fut| BandwidthFuture { inner: fut, sinks })
     }
 
     fn nat_traversal(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
@@ -95,23 +92,23 @@ pub struct BandwidthListener<TInner> {
 }
 
 impl<TInner, TConn> Stream for BandwidthListener<TInner>
-where TInner: Stream<Item = (TConn, Multiaddr)>,
+where
+    TInner: Stream<Item = ListenerEvent<TConn>>,
 {
-    type Item = (BandwidthFuture<TConn>, Multiaddr);
+    type Item = ListenerEvent<BandwidthFuture<TConn>>;
     type Error = TInner::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let (inner, addr) = match try_ready!(self.inner.poll()) {
+        let event = match try_ready!(self.inner.poll()) {
             Some(v) => v,
             None => return Ok(Async::Ready(None))
         };
 
-        let fut = BandwidthFuture {
-            inner,
-            sinks: self.sinks.clone(),
-        };
+        let event = event.map(|inner| {
+            BandwidthFuture { inner, sinks: self.sinks.clone() }
+        });
 
-        Ok(Async::Ready(Some((fut, addr))))
+        Ok(Async::Ready(Some(event)))
     }
 }
 
