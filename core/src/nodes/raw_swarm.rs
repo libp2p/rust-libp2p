@@ -825,6 +825,40 @@ where
         self.active_nodes.broadcast_event(event)
     }
 
+    /// Returns a list of all the peers we are currently connected to.
+    ///
+    /// Calling `peer()` with each `PeerId` is guaranteed to produce a `PeerConnected`.
+    // TODO: ideally this would return a list of `PeerConnected` structs, but this is quite
+    //       complicated to do in terms of implementation
+    pub fn connected_peers(&self) -> impl Iterator<Item = &TPeerId> {
+        self.active_nodes.connections()
+    }
+
+    /// Returns a list of all the nodes we are currently trying to reach.
+    ///
+    /// Calling `peer()` with each `PeerId` is guaranteed to produce a `PeerPendingConnect`
+    // TODO: ideally this would return a list of `PeerPendingConnect` structs, but this is quite
+    //       complicated to do in terms of implementation
+    pub fn pending_connection_peers(&self) -> impl Iterator<Item = &TPeerId> {
+        self.reach_attempts
+            .out_reach_attempts
+            .keys()
+            .filter(move |p| !self.active_nodes.has_connection(&p))
+    }
+
+    /// Returns the list of addresses we're currently dialing without knowing the `PeerId` of.
+    pub fn unknown_dials(&self) -> impl Iterator<Item = &Multiaddr> {
+        self.reach_attempts
+            .other_reach_attempts
+            .iter()
+            .filter_map(|&(_, ref endpoint)| {
+                match endpoint {
+                    ConnectedPoint::Dialer { address } => Some(address),
+                    ConnectedPoint::Listener { .. } => None,
+                }
+            })
+    }
+
     /// Grants access to a struct that represents a peer.
     #[inline]
     pub fn peer(&mut self, peer_id: TPeerId) -> Peer<'_, TTrans, TInEvent, TOutEvent, THandler, THandlerErr, TPeerId> {
