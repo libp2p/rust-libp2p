@@ -30,11 +30,19 @@ use libp2p_core::swarm::{ConnectedPoint, NetworkBehaviour, NetworkBehaviourActio
 use libp2p_core::{protocols_handler::ProtocolsHandler, Multiaddr, PeerId};
 use multihash::Multihash;
 use smallvec::SmallVec;
-use std::{error, marker::PhantomData, num::NonZeroUsize, time::Duration, time::Instant};
+use std::{convert::From, error, marker::PhantomData, num::NonZeroUsize, time::Duration, time::Instant};
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_timer::Interval;
 
 mod test;
+
+/// Represents an entry or a potential entry in the k-buckets.
+pub enum Entry<'a> {
+    InKademliaConnected{peer_id: &'a PeerId},
+    InKademliaNotConnected,
+    /// Entry is not present in any k-bucket.
+    NotInKademlia,
+}
 
 /// Network behaviour that handles Kademlia.
 pub struct Kademlia<TSubstream> {
@@ -270,6 +278,23 @@ impl<TSubstream> Kademlia<TSubstream> {
     /// Returns an iterator to all the peer IDs in the bucket, without the pending nodes.
     pub fn kbuckets_entries(&self) -> impl Iterator<Item = &PeerId> {
         self.kbuckets.entries_not_pending().map(|(kad_hash, _)| kad_hash.peer_id())
+    }
+
+    // TODO We're taking &mut self only because KBuckets::entry needs it.
+    // We should be able to query without mutability
+    pub fn peer_state<'a>(&mut self, peer_id: &'a PeerId) -> Entry<'a> {
+        let kad_hash = KadHash::from(peer_id.clone());
+
+        match self.kbuckets.entry(&kad_hash) {
+            kbucket::Entry::NotInKbucket(_) => Entry::NotInKademlia,
+            kbucket::Entry::InKbucketConnected(_) => Entry::InKademliaConnected{peer_id: peer_id},
+            kbucket::Entry::InKbucketDisconnected(_) => Entry::InKademliaNotConnected,
+            _ => unimplemented!(),
+        }
+    }
+
+    pub fn peer_states(&mut self) -> impl Iterator<Item = Entry> {
+        self.kbuckets.entries().map(|(kad_hash, _)| Entry::InKademliaConnected{peer_id: kad_hash.peer_id()})
     }
 
     /// Starts an iterative `FIND_NODE` request.

@@ -300,6 +300,15 @@ where
             .map(|node| (&node.id, &node.value))
     }
 
+    /// Returns an iterator to all the peer IDs in the bucket, without the pending nodes.
+    pub fn entries(&self) -> impl Iterator<Item = (&TPeerId, &TVal)> {
+        self.tables
+            .iter()
+            .flat_map(|table| table.pending_node.as_ref().map(|p| (&p.node.id, &p.node.value)))
+            .chain(self.entries_not_pending())
+
+    }
+
     /// Returns an iterator to all the buckets of this table.
     ///
     /// Ordered by proximity to the local node. Closest bucket (with max. one node in it) comes
