@@ -48,4 +48,4 @@ pub mod toggle;
 
 pub use crate::nodes::raw_swarm::ConnectedPoint;
 pub use self::behaviour::{NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess};
-pub use self::swarm::{PollParameters, Swarm, SwarmBuilder};
+pub use self::swarm::{PollParameters, ExpandedSwarm, Swarm, SwarmBuilder};
